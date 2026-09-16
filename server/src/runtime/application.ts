@@ -40,7 +40,7 @@ import type { McpServerFactory } from '@modelcontextprotocol/server';
 
 import { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';
 import { GateManager } from '#engine/gates/gate-manager.js';
-import { ConfigLoader } from '#infra/config/index.js';
+import { ConfigLoader, TransportConfigError } from '#infra/config/index.js';
 import { HookRegistry } from '#infra/hooks/index.js';
 import { Logger } from '#infra/logging/index.js';
 import { McpNotificationEmitter } from '#infra/observability/notifications/index.js';
@@ -163,8 +163,10 @@ export class Application {
 
       this.logger.info('Application startup completed successfully');
     } catch (error) {
-      // The entry point prints a path-setting refusal once; logging it here too repeats it with a stack.
+      // The entry point prints a path-setting or transport-config refusal once; logging it here
+      // too repeats it with a stack.
       if (error instanceof PathSettingError) throw error;
+      if (error instanceof TransportConfigError) throw error;
       if (this.logger) {
         this.logger.error('Error during application startup:', error);
       } else {

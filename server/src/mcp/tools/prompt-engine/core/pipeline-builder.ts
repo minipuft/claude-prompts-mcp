@@ -131,7 +131,9 @@ export class PipelineBuilder {
         mode: identityConfig.mode,
         allowPerRequestOverride: identityConfig.allowPerRequestOverride ?? true,
         launchDefaults: identityConfig.launchDefaults,
-        transportMode: deps.configManager.getConfig().transport,
+        // Not `getConfig().transport` — `Config` carries no such member (transport is
+        // launch-time-only, Ruling R30). `getTransportMode()` is the launch-option-aware read.
+        transportMode: deps.configManager.getTransportMode(),
       };
     }, deps.logger);
 

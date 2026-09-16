@@ -165,7 +165,6 @@ describe('config file -> runtime config mapping', () => {
         reviewTimeoutMinutes: 30,
         cleanupIntervalMinutes: 5,
       },
-      transport: 'stdio',
       versioning: { enabled: true, max_versions: 50, auto_version: true },
       telemetry: {
         enabled: false,

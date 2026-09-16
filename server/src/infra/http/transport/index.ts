@@ -88,8 +88,16 @@ export class TransportRouter {
   }
 
   /**
-   * Determine transport mode from command line arguments or configuration
-   * Priority: CLI args > config.transport > default (stdio)
+   * Determine transport mode from command line arguments, falling back to `configManager`.
+   *
+   * Transport is launch-time-only (Ruling R30): `config.json` itself cannot select it — a
+   * `server.transport` other than `"stdio"` refuses startup at load time, see
+   * `ConfigLoader.loadConfig` — and `ConfigLoader#getTransportMode()` today only ever re-derives
+   * from `--transport` or the default, never a real config value. `configManager.getTransportMode()`
+   * stays a distinct fallback call (not inlined into this method) because `ConfigManager` is an
+   * interface: a caller can supply one whose `getTransportMode()` resolves differently (a test
+   * double, or a future implementation), and this method's job is only to prefer `args` over
+   * whatever that call returns — not to assume how it was derived.
    */
   static determineTransport(args: string[], configManager: ConfigLoader): TransportMode {
     // CLI argument takes highest priority
@@ -101,13 +109,11 @@ export class TransportRouter {
         return value;
       }
       // Use stderr to avoid corrupting STDIO protocol
-      console.error(
-        `[TransportRouter] Invalid --transport value: "${value}". Using config default.`
-      );
+      console.error(`[TransportRouter] Invalid --transport value: "${value}". Using the default.`);
     }
 
-    // Fall back to config value — which is a second way a removed transport can
-    // arrive, so it is checked too rather than trusted.
+    // Fall back to configManager's resolved value — a second way a removed transport could
+    // arrive (from a differently-behaved ConfigManager), so it is checked too rather than trusted.
     const configured = configManager.getTransportMode();
     assertTransportSupported(String(configured), 'config.transport');
     return configured;

@@ -228,8 +228,6 @@ export const DEFAULT_GATES_CONFIG = {
  * Configuration for gates subsystem (top-level config.json shape)
  */
 export interface GatesConfig {
-  /** Directory containing gate definitions (e.g., 'gates' for server/gates/{id}/) */
-  definitionsDirectory?: string;
   /** New-style: directory path */
   directory?: string;
   /** Enable/disable the gate subsystem entirely */
@@ -472,11 +470,6 @@ export interface Config {
   frameworks?: FrameworkSettings;
   /** Chain session lifecycle configuration - LEGACY */
   chainSessions?: ChainSessionConfig;
-  /**
-   * Transport mode: 'stdio' (default), 'streamable-http', or 'both'
-   * STDIO is used by Claude Desktop/CLI, Streamable HTTP for web clients
-   */
-  transport?: TransportMode;
   /** Logging configuration */
   logging?: LoggingConfig;
   /** Tool descriptions configuration */

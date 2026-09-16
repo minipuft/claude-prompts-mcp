@@ -266,7 +266,6 @@ const DEFAULT_CONFIG: Config = {
   gates: DEFAULT_GATES_CONFIG,
   frameworks: DEFAULT_FRAMEWORKS_CONFIG,
   chainSessions: DEFAULT_CHAIN_SESSION_CONFIG,
-  transport: DEFAULT_TRANSPORT_MODE,
   versioning: DEFAULT_VERSIONING_CONFIG,
 };
 
@@ -387,8 +386,9 @@ function normalizeChainSessions(file: AdoptedConfigFile): ChainSessionConfig {
  *
  * `getGatesConfig()` owns this section's defaults, at read time — which is what lets
  * `getConfigValueWithSource` report an unset gates key as `'deferred'` rather than inventing a
- * value for it. The wire-to-internal rename (`directory` -> `definitionsDirectory`) also stays in
- * that getter; moving it here would change the key `system_control config list` prints.
+ * value for it. The old `GatesConfig.definitionsDirectory` wire-to-internal rename that used to
+ * live in that getter is gone (row 4.7): the directory is resolved by `getGatesDirectory()`, and
+ * nothing ever read the internal `GateSystemSettings.definitionsDirectory` field it produced.
  */
 function normalizeGates(file: AdoptedConfigFile): Config['gates'] {
   const gates = file.gates;
@@ -505,10 +505,12 @@ function normalizeAnalysis(analysisConfig: Partial<AnalysisConfig> | undefined):
  * `getConfigValueWithSource` depends on that distinction to label a value `'deferred'` rather than
  * `'default'`.
  *
- * Keys the file may carry that the runtime has no member for — `hooks` (read by the Python hooks
- * straight off the file) and `server.transport` (read by nobody; the transport the runtime uses is
- * `Config.transport`) — are not carried across, and are reported by
- * `getConfigValueWithSource` from the raw-file snapshot instead.
+ * Keys the file may carry that the runtime `Config` has no member for at all — `hooks` (read by
+ * the Python hooks straight off the file) and `server.transport` (refused outright when set to
+ * anything but `"stdio"`, per Ruling R30: transport is a launch-time-only setting, selected by
+ * `--transport` and never by config — see {@link ConfigLoader.loadConfig}) — are not carried
+ * across, and `server.transport` specifically is reported by `getConfigValueWithSource` from the
+ * raw-file snapshot instead.
  */
 function normalizeConfigFile(file: AdoptedConfigFile): Config {
   return {
@@ -528,7 +530,6 @@ function normalizeConfigFile(file: AdoptedConfigFile): Config {
     execution: { judge: file.execution?.judge ?? DEFAULT_EXECUTION_CONFIG.judge ?? true },
     frameworks: normalizeFrameworks(file),
     chainSessions: normalizeChainSessions(file),
-    transport: DEFAULT_TRANSPORT_MODE,
     logging: normalizeLogging(file),
     versioning: normalizeVersioning(file),
     verification: file.verification,
@@ -540,6 +541,51 @@ function normalizeConfigFile(file: AdoptedConfigFile): Config {
 
 /** A 5.0 file that declares nothing: what a missing or unreadable config resolves to. */
 const EMPTY_CONFIG_FILE: ConfigFile = { version: 5 };
+
+/**
+ * A config file that asks for a transport other than `"stdio"` via `server.transport`.
+ *
+ * Transport is launch-time-only (Ruling R30) — only `--transport` selects it, and `Config` carries
+ * no `transport` member for a value here to reach. Unlike an ordinary schema mismatch (which
+ * `checkAgainstSchema` reports and the server runs past, since most typos do not change what the
+ * process is actually doing), a non-`"stdio"` `server.transport` describes an explicit operator
+ * request the server CANNOT satisfy from config: starting anyway would silently serve stdio while
+ * the operator believes they configured HTTP. That asymmetry is why this refuses instead of warns.
+ */
+export class TransportConfigError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TransportConfigError';
+  }
+}
+
+/**
+ * Refuses a raw parsed config file whose `server.transport` names anything but `"stdio"`.
+ *
+ * Runs against the RAW parsed record, before `adoptInertSpellings`/`asConfigFile` — same reason
+ * `checkAgainstSchema` does: this checks what the operator actually wrote, not a shape the loader
+ * has already rewritten. A `server.transport` left at `"stdio"` (or omitted) still exists as an
+ * unrecognized key once the schema stops declaring it, but that half is already covered by the
+ * existing schema-warning path (`checkAgainstSchema` / `warnOnSchemaResult`) — this function only
+ * covers the half that path cannot: a value the server would otherwise silently ignore.
+ */
+function assertServerTransportIsStdio(
+  rawConfig: Record<string, unknown>,
+  configPath: string
+): void {
+  const server = rawConfig['server'];
+  if (server === null || typeof server !== 'object' || Array.isArray(server)) return;
+
+  const transportValue = (server as Record<string, unknown>)['transport'];
+  if (transportValue === undefined || transportValue === 'stdio') return;
+
+  throw new TransportConfigError(
+    `${configPath} sets "server.transport": ${JSON.stringify(transportValue)}, but transport is a ` +
+      'launch-time-only setting (Ruling R30) — config can no longer select it. Remove ' +
+      '"server.transport" from the config file and launch the server with ' +
+      '--transport=streamable-http (or --transport=both) instead.'
+  );
+}
 
 /**
  * Configuration manager class
@@ -634,6 +680,12 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
       const configContent = await readFile(this.configPath, 'utf8');
       const parsedRecord = parseConfigRecord(configContent, this.configPath);
 
+      // Refuses before anything below reads, watches or normalizes this file: a `server.transport`
+      // other than "stdio" can never take effect (transport is launch-time-only, Ruling R30), so
+      // continuing would silently ignore an explicit operator request instead of naming
+      // --transport as the fix.
+      assertServerTransportIsStdio(parsedRecord, this.configPath);
+
       // Checked against the RAW file, before the adoption below: that rewrites inert spellings in
       // place, so a check after it would report the loader's own rewrite and no longer see what
       // the user wrote.
@@ -658,6 +710,11 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
 
       return this.config;
     } catch (error) {
+      // A refused transport setting is an operator error with a complete explanation, not a file
+      // the server failed to read — propagate it rather than falling back to defaults, or the
+      // fallback would silently start the server on the transport the operator refused.
+      if (error instanceof TransportConfigError) throw error;
+
       // Whatever the last check said describes a file this load did not serve.
       this.schemaValidation = undefined;
       this.rawFileConfig = undefined;
@@ -807,11 +864,24 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
   }
 
   /**
-   * Get the transport mode from config
-   * Priority: CLI args (handled by caller) > config.transport > default
+   * The transport the process was launched with.
+   *
+   * Transport is launch-time-only since Ruling R30: `Config` carries no `transport` member (the
+   * config file cannot select it — `loadConfig` refuses a `server.transport` other than
+   * `"stdio"` outright, see {@link assertServerTransportIsStdio}), so there is nothing on
+   * `this.config` to read. `--transport` is scanned here the same way
+   * `TransportRouter.determineTransport` scans it, because a caller holding only a
+   * `ConfigManager` — no direct access to `process.argv`, e.g. the identity-resolution closure in
+   * `pipeline-builder.ts` — still needs the value the process actually launched with, not just the
+   * default.
    */
   getTransportMode(): TransportMode {
-    return this.config.transport ?? DEFAULT_TRANSPORT_MODE;
+    const transportArg = process.argv.find((arg) => arg.startsWith('--transport='));
+    const value = transportArg?.split('=')[1];
+    if (value === 'stdio' || value === 'streamable-http' || value === 'both') {
+      return value;
+    }
+    return DEFAULT_TRANSPORT_MODE;
   }
 
   /**
@@ -873,7 +943,6 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
     const gatesConfig = this.config.gates ?? {};
     return {
       enabled: gatesConfig.enabled ?? DEFAULT_GATES_CONFIG.enabled,
-      definitionsDirectory: gatesConfig.directory ?? DEFAULT_GATES_CONFIG.definitionsDirectory,
       enableFrameworkGates: gatesConfig.frameworkGates ?? DEFAULT_GATES_CONFIG.enableFrameworkGates,
       executeInlineGateDefinitions:
         gatesConfig.executeInlineGateDefinitions ??
