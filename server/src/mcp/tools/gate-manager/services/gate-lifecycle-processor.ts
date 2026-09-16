@@ -6,6 +6,7 @@ import * as path from 'node:path';
 import { ensureTrailingNewline } from './gate-file-writer.js';
 import { gateSnapshotContract } from './gate-snapshot-contract.js';
 import { isPreviewRequest } from '../../shared/preview-action.js';
+import { formatRepairServingLine } from '../../shared/quarantine-report.js';
 
 import type { ToolResponse } from '#shared/types/index.js';
 import type { QuarantinedResource } from '#shared/utils/resource-quarantine.js';
@@ -445,11 +446,11 @@ export class GateLifecycleProcessor {
     await this.ctx.gateManager.reload(String(args.id));
     this.trackChange('modified', String(args.id));
 
-    const writtenPath = path.join(
-      this.ctx.configManager.getGatesDirectory(),
-      String(args.id).toLowerCase(),
-      'gate.yaml'
-    );
+    // The root a gate write resolves through — the same one `resolveRepairTarget` prefers, and the
+    // one `formatRepairOutcome` compares the served stamp against. Named once rather than reached
+    // for twice, so the path reported and the root ranked cannot describe different directories.
+    const writtenRoot = this.ctx.configManager.getGatesDirectory();
+    const writtenPath = path.join(writtenRoot, String(args.id).toLowerCase(), 'gate.yaml');
 
     // Says what was recorded and why it carries no diff. The previous wording — "No version was
     // recorded" — became a lie the moment the record above was added, and a version line is the
@@ -466,16 +467,18 @@ export class GateLifecycleProcessor {
       `🩺 Repair written for quarantined gate '${target.id}'\n\n` +
         `📁 Files written:\n${result.paths?.map((p) => `  - ${p}`).join('\n')}\n\n` +
         versionLine +
-        this.formatRepairOutcome(target, writtenPath)
+        this.formatRepairOutcome(target, writtenPath, writtenRoot)
     );
   }
 
   /**
    * The quarantine record an unqualified `update` on this id means, if any.
    *
-   * Nearest root first: `preferredRepairTarget` prefers the writable primary, matching
-   * `resolveResourceRoots`' precedence, so an operator repairing `foo` means their own copy rather
-   * than the bundled one they cannot write to.
+   * WRITABLE root first: `preferredRepairTarget` prefers the primary because that is the root a
+   * `resource_manager` write lands in, so an operator repairing `foo` means the copy they can
+   * actually edit rather than the bundled one they cannot. NOT precedence — since P4.27 the primary
+   * is outranked by every overlay (`shared/utils/resource-root-lookup.ts` §resourceRootPrecedence),
+   * and this docstring cited that precedence back when the two happened to agree.
    */
   private resolveRepairTarget(id: string): QuarantinedResource | undefined {
     const records = this.ctx.gateManager.getQuarantine().byId(id.toLowerCase());
@@ -484,32 +487,50 @@ export class GateLifecycleProcessor {
   }
 
   /**
-   * Say, in the repair's own response, whether the file actually loads now.
+   * Say, in the repair's own response, what happened to the refused file AND which root serves now.
    *
-   * Three outcomes, not two. The write always lands in the WRITABLE root, and the refused file is
-   * not always there: a broken bundled gate is repaired by writing an overlay, which takes over
-   * the id while the bundled file stays exactly as broken as it was. Reporting that as
-   * "still quarantined" would read as a failed repair, and reporting it as repaired would claim a
-   * file was fixed that was never written.
+   * TWO INDEPENDENT FACTS, and they were fused into one claim. What happened to the refused file
+   * has three outcomes, not two: the write always lands in the WRITABLE root, and the refused file
+   * is not always there — a broken bundled gate is repaired by writing the primary, which leaves
+   * the bundled file exactly as broken as it was. Reporting that as "still quarantined" would read
+   * as a failed repair; reporting it as repaired would claim a file was fixed that was never
+   * written.
+   *
+   * WHICH ROOT SERVES is the second fact, and it does not follow from the first. This branch used
+   * to assert that the written file "takes precedence, so `<id>` now serves your copy", which
+   * P4.27 made false whenever the refused file sits in an overlay: overlays outrank the primary,
+   * so the repair lands in a root that does not answer. `formatRepairServingLine` reads the
+   * loader's own `sourceRoot` stamp back instead of re-deriving the order here.
    */
-  private formatRepairOutcome(target: QuarantinedResource, writtenPath: string): string {
+  private formatRepairOutcome(
+    target: QuarantinedResource,
+    writtenPath: string,
+    writtenRoot: string
+  ): string {
     const stillRefused = this.ctx.gateManager
       .getQuarantine()
       .byId(target.id)
       .some((record) => record.path === target.path);
+    // The root the reload above actually served this id from — the loader's stamp, not a second
+    // derivation of precedence. `list(false)` so a disabled gate still answers the question.
+    const servedFrom = this.ctx.gateManager
+      .list(false)
+      .find((gate) => gate.gateId.toLowerCase() === target.id)
+      ?.getDefinition().sourceRoot;
+    const serving = formatRepairServingLine(target.id, writtenRoot, servedFrom);
 
     if (!stillRefused) {
       return (
-        `\n🩹 **Repaired**: \`${target.path}\` now loads; its quarantine record is cleared and ` +
-        `\`${target.id}\` is served again.\n`
+        `\n🩹 **Repaired**: \`${target.path}\` now loads and its quarantine record is cleared.\n` +
+        serving
       );
     }
 
     if (path.resolve(target.path) !== path.resolve(writtenPath)) {
       return (
         `\n🚧 **The refused file was in another root and was not touched.** This repair wrote ` +
-        `\`${writtenPath}\`, which takes precedence, so \`${target.id}\` now serves your copy. ` +
-        `\`${target.path}\` stays quarantined.\n`
+        `\`${writtenPath}\`; \`${target.path}\` stays quarantined.\n` +
+        serving
       );
     }
 

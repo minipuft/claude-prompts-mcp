@@ -13,6 +13,7 @@ import { describe, expect, it } from '@jest/globals';
 import {
   formatQuarantineSection,
   formatQuarantinedInspect,
+  formatRepairServingLine,
   formatShadowedNote,
   summarizeQuarantine,
 } from '../../../../src/mcp/tools/shared/quarantine-report.js';
@@ -64,7 +65,7 @@ describe('formatQuarantineSection', () => {
     expect(section).toContain('arguments: expected array, received string');
   });
 
-  it('says the repair will change what serves, when a valid definition is shadowing it', () => {
+  it('conditions the repair on rank, when a valid definition is shadowing it', () => {
     const section = formatQuarantineSection(
       summarizeQuarantine([record()], [{ id: 'minimal_prompt', sourceRoot: '/pkg/prompts' }]),
       'prompt'
@@ -72,7 +73,11 @@ describe('formatQuarantineSection', () => {
 
     expect(section).toContain('shadowed');
     expect(section).toContain('/pkg/prompts');
-    expect(section).toContain('will change what serves');
+    // "changes … only if its root outranks that one", not the flat "will change what serves" this
+    // said until P4.35. Since the loaders read past the root that serves, a record here can come
+    // from BELOW the winner, where repairing it changes nothing about what answers.
+    expect(section).toContain('changes what serves only if its root outranks that one');
+    expect(section).not.toContain('will change what serves');
   });
 });
 
@@ -101,6 +106,77 @@ describe('formatShadowedNote', () => {
 
     expect(note).toContain('served from /pkg/resources/prompts');
     expect(note).toContain('/ws/resources/prompts/examples/minimal_prompt/prompt.yaml');
+  });
+
+  it('claims no rank for the refused file, because it has not been given one', () => {
+    const note = formatShadowedNote([record()], '/pkg/resources/prompts');
+
+    // Both sentences were written when the only root that could go quiet was one ABOVE the
+    // winner. P4.35 made the loaders read past the root that served, so a record here can come
+    // from the writable root BELOW it — where the file is neither nearer nor able to change what
+    // serves by being repaired.
+    expect(note).not.toContain('A nearer file');
+    expect(note).toContain('Another file for this id failed to load');
+    expect(note).toContain('only if its root outranks /pkg/resources/prompts');
+    expect(note).not.toContain('will change what');
+  });
+});
+
+/**
+ * The line a repair response adds about which root answers the id AFTER the write.
+ *
+ * WHAT IT REPLACES. Both repair responses told the operator that the repair "wrote `<path>`,
+ * which takes precedence, so `<id>` now serves your copy". A repair lands in the WRITABLE root,
+ * and since P4.27 every overlay outranks that root — so the sentence asserted a rank the write
+ * does not have, and drew a serving conclusion from it. Here the conclusion is an input: the
+ * callers read the loader's own `sourceRoot` stamp back after the reload and pass it in.
+ *
+ * Unit rather than integration for the outranked branch specifically. `handleUpdate` only reaches
+ * its repair path when the registry has no entry for the id, so no root above the write target
+ * can hold a definition that loads — which makes the outranked outcome unreachable from the gate
+ * tool today, and reachable on the framework side only through `getFramework`'s disabled filter.
+ * A renderer that is only correct on the branches currently reachable is one refactor away from
+ * being wrong, so all three are pinned here.
+ */
+describe('formatRepairServingLine', () => {
+  it('says the written copy serves, when the stamp names the root it was written to', () => {
+    const line = formatRepairServingLine(
+      'broken-gate',
+      '/ws/resources/gates',
+      '/ws/resources/gates'
+    );
+
+    expect(line).toContain('`broken-gate` is served from your copy in /ws/resources/gates');
+    expect(line).not.toContain('outranks');
+  });
+
+  it('names the root that outranks the write, and says the copy is NOT what answers', () => {
+    const line = formatRepairServingLine('broken-gate', '/ws/resources/gates', '/ws/gates');
+
+    expect(line).toContain('still served from /ws/gates, which outranks /ws/resources/gates');
+    expect(line).toContain('is NOT what answers');
+    // The two claims this row removed, in the branch that used to make them.
+    expect(line).not.toContain('takes precedence');
+    expect(line).not.toContain('serves your copy');
+  });
+
+  it('says nothing serves the id, rather than picking one of the other two', () => {
+    const line = formatRepairServingLine('broken-gate', '/ws/resources/gates', undefined);
+
+    expect(line).toContain('Nothing currently serves `broken-gate`');
+    expect(line).not.toContain('outranks');
+    expect(line).not.toContain('served from your copy');
+  });
+
+  it('compares roots by resolved path, so a trailing separator is not a different root', () => {
+    const line = formatRepairServingLine(
+      'broken-gate',
+      '/ws/resources/gates/',
+      '/ws/resources/gates'
+    );
+
+    expect(line).toContain('is served from your copy');
+    expect(line).not.toContain('outranks');
   });
 });
 

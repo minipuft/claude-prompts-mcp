@@ -137,6 +137,12 @@ describe('a gate file the loader refused is reachable and repairable (P4.15)', (
     // refusal below. `shared-gate` cannot serve that role — it IS in the registry, from the other
     // root, so an update on it is an ordinary update and not a repair at all.
     writeGate(writable, 'partial-gate', gateYaml('partial-gate', { valid: false }));
+    // P4.34 case 2 — broken in the LOWEST root and absent from every root above it, which is the
+    // only way `handleUpdate` reaches its repair branch with the refused file somewhere other
+    // than the write target (the branch is gated on `has(id)` being false, so no root above may
+    // hold a definition that loads). The repair writes `writable`, and the old wording justified
+    // the outcome by claiming that write "takes precedence" — which it does not, over anything.
+    writeGate(bundled, 'elsewhere-gate', gateYaml('elsewhere-gate', { valid: false }));
 
     const gateManager = await createGateManager(silentLogger(), {
       registryConfig: {
@@ -241,7 +247,7 @@ describe('a gate file the loader refused is reachable and repairable (P4.15)', (
     expect(result.isError).toBe(false);
     expect(result.body).toContain('shared-gate gate');
     // …and the shadow is ANNOUNCED rather than silently substituted (owner ruling 2026-09-09).
-    expect(result.body).toContain('A nearer file for this id failed to load');
+    expect(result.body).toContain('Another file for this id failed to load');
     expect(result.body).toContain(join(writable, 'shared-gate', 'gate.yaml'));
     // …naming the root that is answering, not just "another root" (P4.18). `bundled` is a
     // different temp directory from `writable`, so this fails if the note names the refused
@@ -268,10 +274,43 @@ describe('a gate file the loader refused is reachable and repairable (P4.15)', (
     expect(result.body).toContain('**Version 1** recorded');
     expect(result.body).not.toContain('No version was recorded');
 
+    // POSITIVE CONTROL for the two P4.34 cases below: no root outranks `writable` for this id, so
+    // the repaired copy really is what answers, and the response says exactly that. Without this
+    // line the "is NOT what answers" assertions further down would be satisfied by a response that
+    // never claims anything about serving at all.
+    expect(result.body).toContain(`\`broken-gate\` is served from your copy in ${writable}`);
+
     // The write landed on the file that was broken, not beside it.
     const onDisk = readFileSync(brokenPath, 'utf8');
     expect(onDisk).toContain('repaired through the tool');
     expect(onDisk).not.toContain('not-a-gate-type');
+  });
+
+  it('FALSIFIER (P4.34) — a repair written beside the refused file states which root serves, measured', async () => {
+    const result = await call({
+      action: 'update',
+      id: 'elsewhere-gate',
+      name: 'Repaired Elsewhere Gate',
+      description: 'repaired into the writable root',
+      guidance: 'Repaired guidance body',
+    });
+
+    expect(result.isError).toBe(false);
+    // The refused file is in the lowest root and was not touched — that half is unchanged.
+    expect(result.body).toContain('was in another root and was not touched');
+    expect(result.body).toContain(join(bundled, 'elsewhere-gate', 'gate.yaml'));
+
+    // The claim this row removed: the write does NOT take precedence over anything — it wins here
+    // because the only other root holding the id refused, which is a different fact and is now
+    // read back off the loader's `sourceRoot` stamp instead of asserted.
+    expect(result.body).not.toContain('takes precedence');
+    expect(result.body).not.toContain('now serves your copy');
+    expect(result.body).toContain(`\`elsewhere-gate\` is served from your copy in ${writable}`);
+
+    // POSITIVE CONTROL — the served definition really is the one just written, so the ✅ wording
+    // above is not passing against a response that says it of every repair.
+    const inspected = await call({ action: 'inspect', id: 'elsewhere-gate' });
+    expect(inspected.body).toContain('Repaired Elsewhere Gate');
   });
 
   it('POSITIVE CONTROL — the repaired gate is now served, and inspects as an ordinary gate', async () => {
@@ -589,7 +628,7 @@ describe('a framework file the loader refused is reachable and repairable (P4.15
     expect(result.isError).toBe(false);
     expect(result.body).not.toContain(FRAMEWORK_GUIDANCE_MARKER);
     // …and the shadow is ANNOUNCED rather than silently substituted (owner ruling 2026-09-09).
-    expect(result.body).toContain('A nearer file for this id failed to load');
+    expect(result.body).toContain('Another file for this id failed to load');
     expect(result.body).toContain(join(writable, SHADOWED_ID, 'framework.yaml'));
     // …naming the root that is answering, which for a shadowed SHIPPED framework is the bundled
     // tree (P4.18). Distinct from `writable`, so this fails if the note names the refused root.

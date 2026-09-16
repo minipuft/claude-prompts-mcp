@@ -32,14 +32,17 @@ export interface ResourceRoots {
   /** The package's own directory, when it is a source distinct from the primary. Lowest. */
   bundled: string | undefined;
   /**
-   * The loader's lookup list: every contributing root, HIGHEST precedence first.
+   * The loader's lookup list: EVERY contributing root, highest precedence first — primary included.
    *
-   * Named `additional` for the loader config key it feeds (`additionalGatesDirs` and its two
-   * siblings), which is now a misnomer — the list includes the primary, because the primary is not
-   * the top of the order and a list that omitted it could not say where it sits. Renaming both ends
-   * needs `runtime/module-initializer.ts`, owned elsewhere this slice.
+   * It was called `additional` for the loader config key it feeds (`additionalGatesDirs` and its
+   * two siblings), and that name stopped describing the contents at P4.27: the primary is neither
+   * the top nor the bottom of the order, so a list that omitted it could not say where it sits.
+   * Renamed here, at the producing end. The three config keys keep their names — renaming them
+   * reaches `mcp/tools/prompt-engine/core/prompt-executor.ts` and ~30 test call sites for no
+   * behaviour change, and each loader's config docstring now states that the primary is inside the
+   * list it receives.
    */
-  additional: string[];
+  lookupDirs: string[];
 }
 
 /**
@@ -63,8 +66,8 @@ export function resolveResourceRoots(
   const overlays = pathResolver?.getOverlayResourceDirs(resourceType, primary) ?? [];
   const candidate = pathResolver?.getBundledResourceDir(resourceType);
   const bundled = candidate !== undefined && candidate !== primary ? candidate : undefined;
-  const additional = resourceRootPrecedence({ primary, overlays, bundled });
-  return { primary, overlays, bundled, additional };
+  const lookupDirs = resourceRootPrecedence({ primary, overlays, bundled });
+  return { primary, overlays, bundled, lookupDirs };
 }
 
 /**
@@ -78,7 +81,7 @@ export function resolveResourceRoots(
  * roots, which is the defect this module's header records.
  */
 function orderedResourceRoots(roots: ResourceRoots): string[] {
-  return [...roots.additional].reverse();
+  return [...roots.lookupDirs].reverse();
 }
 
 /**

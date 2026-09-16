@@ -177,12 +177,12 @@ describe('an overlay outranks the primary root for gates, frameworks and styles 
   });
 
   /**
-   * The loader config the composition root builds — `{primary, additional}` under the two keys
+   * The loader config the composition root builds — `{primary, lookupDirs}` under the two keys
    * `loaderDirsConfig` (runtime/module-initializer.ts) maps them to.
    */
   const rootsFor = (
     type: string
-  ): { primary: string | undefined; additional: string[]; overlays: string[] } =>
+  ): { primary: string | undefined; lookupDirs: string[]; overlays: string[] } =>
     resolveResourceRoots(pathResolver, type, primaryPathFor(type));
 
   function primaryPathFor(type: string): string {
@@ -199,7 +199,7 @@ describe('an overlay outranks the primary root for gates, frameworks and styles 
       const roots = rootsFor(type);
       expect(roots.primary).toBe(path.join(workspace, 'resources', type));
       expect(roots.overlays).toEqual([path.join(workspace, type)]);
-      expect(roots.additional).toEqual([
+      expect(roots.lookupDirs).toEqual([
         path.join(workspace, type),
         path.join(workspace, 'resources', type),
         path.join(packageRoot, 'resources', type),
@@ -211,7 +211,7 @@ describe('an overlay outranks the primary root for gates, frameworks and styles 
     const roots = rootsFor('gates');
     const loader = new GateDefinitionLoader({
       gatesDir: roots.primary as string,
-      additionalGatesDirs: roots.additional,
+      additionalGatesDirs: roots.lookupDirs,
     });
 
     expect(loader.loadGate('shadowed')?.name).toBe('FROM OVERLAY');
@@ -226,7 +226,7 @@ describe('an overlay outranks the primary root for gates, frameworks and styles 
     const roots = rootsFor('frameworks');
     const loader = new RuntimeFrameworkLoader({
       frameworksDir: roots.primary as string,
-      additionalFrameworksDirs: roots.additional,
+      additionalFrameworksDirs: roots.lookupDirs,
     });
 
     expect(loader.loadFramework('shadowed')?.name).toBe('FROM OVERLAY');
@@ -240,7 +240,7 @@ describe('an overlay outranks the primary root for gates, frameworks and styles 
     const roots = rootsFor('styles');
     const loader = new StyleDefinitionLoader({
       stylesDir: roots.primary as string,
-      additionalStylesDirs: roots.additional,
+      additionalStylesDirs: roots.lookupDirs,
     });
 
     expect(loader.loadStyle('shadowed')?.name).toBe('FROM OVERLAY');
