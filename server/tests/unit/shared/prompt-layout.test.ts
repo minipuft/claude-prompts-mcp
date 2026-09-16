@@ -26,6 +26,7 @@ import { describe, expect, it } from '@jest/globals';
 
 import {
   isIgnoredPromptEntryName,
+  isReservedPromptDirectoryName,
   isSingleFilePromptName,
   promptIdFromDirectory,
   promptIdFromSingleFile,
@@ -81,6 +82,32 @@ describe('isIgnoredPromptEntryName', () => {
     // The positive control for the prefix being a PREFIX: an id containing an underscore is
     // ordinary, and a walk that matched anywhere in the name would skip most of the shipped tree.
     expect(isIgnoredPromptEntryName(name)).toBe(false);
+  });
+});
+
+/**
+ * THE RESERVED DIRECTORY (P4.33/P4.32).
+ *
+ * `tools/` was documented reserved in the shared module while only `ResourceIndexer` enforced it,
+ * from a literal of its own. The two walks that did not — the loader and the startup baseline —
+ * served and announced `{prompt}/tools/{toolId}` as a prompt id, which is the id a script tool
+ * already answers to.
+ */
+describe('isReservedPromptDirectoryName', () => {
+  it('reserves a prompt directory\u2019s tools/', () => {
+    expect(isReservedPromptDirectoryName('tools')).toBe(true);
+  });
+
+  it.each(['tool', 'toolsy', 'my_tools', 'helpers', 'step_one'])('does not reserve %s', (name) => {
+    // Whole-name match, not prefix or substring: `tools` appears inside ordinary prompt ids, and
+    // a looser rule would un-serve real prompts.
+    expect(isReservedPromptDirectoryName(name)).toBe(false);
+  });
+
+  it('matches case exactly, as the script tool loader does', () => {
+    // `ScriptDefinitionLoader` reads `join(promptDir, 'tools', id)` — an exact-case segment — so a
+    // case-insensitive rule here would reserve a directory that loader never looks in.
+    expect(isReservedPromptDirectoryName('TOOLS')).toBe(false);
   });
 });
 

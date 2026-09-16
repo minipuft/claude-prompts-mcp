@@ -455,11 +455,14 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
   // theirs through `lazyQuarantineView` on every read — so a repair that lands between two syncs
   // is reflected without anything re-registering.
   //
-  // `styleLoader`, not a `StyleManager`: the manager builds its OWN `StyleDefinitionLoader` from
-  // its own config (see `PromptExecutor`), so its collection describes a different root set than
-  // the one `indexerResourceRoots` walks — and `isRefused` is path-keyed, so a record from the
-  // wrong root can never match. The loader this line reads is the same singleton instance
-  // `styleRoots` configured above.
+  // `styleLoader` is THE style loader, not one of two. Until P4.31 `StyleManager` built its own
+  // from a second derivation of the same roots, so its refusal collection described a different
+  // root set than the one `indexerResourceRoots` walks — and `isRefused` is path-keyed, so a
+  // record from the wrong root can never match. Worse, style hot reload registers against the
+  // MANAGER's loader, so every reload after startup refreshed the collection this line does not
+  // read. `StyleManager` now receives this same singleton (`PromptExecutor.initializeStyleManager`
+  // passes `getDefaultStyleDefinitionLoader()`), which is what makes a post-startup repair or
+  // breakage visible here without a restart.
   const indexQuarantine = mergeQuarantineViews(
     trackedQuarantine,
     frameworkLoader.getQuarantine(),

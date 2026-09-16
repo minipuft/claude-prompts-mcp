@@ -47,7 +47,10 @@ import { createGateManager } from '../../../src/engine/gates/gate-manager.js';
 import { createGenericGuide } from '../../../src/engine/frameworks/definitions/generic-framework-guide.js';
 import { FrameworkRegistry } from '../../../src/engine/frameworks/definitions/registry.js';
 import { ScriptToolDefinitionLoader } from '../../../src/modules/automation/core/script-definition-loader.js';
-import { createStyleManager } from '../../../src/modules/formatting/index.js';
+import {
+  createStyleDefinitionLoader,
+  createStyleManager,
+} from '../../../src/modules/formatting/index.js';
 import { HotReloadObserver } from '../../../src/modules/hot-reload/hot-reload-observer.js';
 import { buildWatchTargets } from '../../../src/modules/prompts/prompt-watch-setup.js';
 
@@ -105,9 +108,13 @@ beforeAll(async () => {
     },
   });
 
-  const styleManager = await createStyleManager(logger, {
-    loaderConfig: { stylesDir: stylesPrimary, additionalStylesDirs: [stylesAdditional] },
-  });
+  const styleManager = await createStyleManager(
+    logger,
+    createStyleDefinitionLoader({
+      stylesDir: stylesPrimary,
+      additionalStylesDirs: [stylesAdditional],
+    })
+  );
 
   // FrameworkManager exposes no way to pin its loader's directories, so the registry — the one
   // piece `buildFrameworkAuxiliaryReloadConfig` actually reads — is built directly and wrapped

@@ -17,6 +17,13 @@
  * skipped non-directory entries entirely, so it indexed no single-file prompt at all. Three
  * derivations of one question, wrong in two different directions.
  *
+ * THE DIRECTORY HALF WAS THE LAST COPY STANDING. The opening paragraph above has called `tools/`
+ * reserved since this module was written, while only `ResourceIndexer` enforced it, from an
+ * `entry.name === 'tools'` literal of its own, and the loader held its own inline copy of the
+ * `.`/`_` skip. A rule written in one module and implemented in two others is three chances to
+ * disagree; `isReservedPromptDirectoryName` and `isIgnoredPromptEntryName` are now the single
+ * implementation every walk calls.
+ *
  * WHY IT LIVES IN `shared/utils/` (Layer 0). The three callers are in `modules/` (the loader),
  * `infra/` (the indexer) and `runtime/` (the baseline comparison). `.dependency-cruiser.cjs` makes
  * an `infra/` value-import of `modules/` an `error`, so Layer 0 is the only place all three can
@@ -75,10 +82,39 @@ export function isSingleFilePromptName(fileName: string): boolean {
 }
 
 /**
+ * Directory names inside a prompts tree that hold something other than prompts.
+ *
+ * `tools/` is a prompt's script-tool directory (`{promptId}/tools/{toolId}/tool.yaml`), and a
+ * script tool is already served under a COMPOSITE id — `{promptId}/{toolId}`. A prompt admitted
+ * below it would be served under `{promptId}/tools/{toolId}`, so one directory on disk would
+ * answer to two id schemes and the collision would arrive with the first `tools/` entry that
+ * happens to hold a `prompt.yaml`.
+ */
+const RESERVED_PROMPT_DIRECTORY_NAMES: ReadonlySet<string> = new Set(['tools']);
+
+/**
+ * True when a walk must not descend into this directory and must not read a prompt out of it.
+ *
+ * THE RULE WAS STATED HERE AND IMPLEMENTED ELSEWHERE. This module's own header has called
+ * `tools/` reserved since it was written, while the only walk enforcing it was
+ * `ResourceIndexer.scanResources`, with an `entry.name === 'tools'` literal of its own.
+ * `discoverYamlPrompts` — which DEFINES the served catalog — and `compareResourceBaseline`
+ * recursed straight in, so a `prompt.yaml` under any prompt's `tools/` was served, and announced
+ * in `resource_changes`, under an id belonging to the script-tool namespace. Prose that states a
+ * rule the module does not enforce is one derivation more, not one fewer.
+ *
+ * Takes a bare entry name, for the same reason `isSingleFilePromptName` does: every caller is
+ * mid-`readdir` and holds exactly that.
+ */
+export function isReservedPromptDirectoryName(entryName: string): boolean {
+  return RESERVED_PROMPT_DIRECTORY_NAMES.has(entryName);
+}
+
+/**
  * True when a walk must skip this entry outright — file or directory, at any depth.
  *
- * The loader's own rule, which it applies before it looks at anything else
- * (`discoverYamlPrompts`: "if (entry.name.startsWith('.') || entry.name.startsWith('_')) continue").
+ * The loader's own rule, which it applies before it looks at anything else —
+ * `discoverYamlPrompts` carried this expression inline until it was folded into this predicate.
  * Stated here as its own predicate because it is not a filename convention for prompts — it is a
  * property of the ENTRY, and a walk that applied it to files only would descend into `_drafts/`
  * and announce everything inside it.

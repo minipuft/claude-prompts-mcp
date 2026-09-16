@@ -51,7 +51,6 @@ export {
   createStyleDefinitionLoader,
   getDefaultStyleDefinitionLoader,
   resetDefaultStyleDefinitionLoader,
-  type StyleDefinitionLoaderConfig,
   type StyleLoaderStats,
 } from './core/index.js';
 
