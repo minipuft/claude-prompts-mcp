@@ -217,7 +217,7 @@ export interface GateSystemSettings {
  */
 export const DEFAULT_GATES_CONFIG = {
   enabled: true,
-  definitionsDirectory: 'gates',
+  definitionsDirectory: 'resources/gates',
   enableFrameworkGates: true,
   executeInlineGateDefinitions: false,
   harnessCovers: [] as string[],
@@ -291,20 +291,8 @@ export interface FrameworkSettings {
   dynamicToolDescriptions?: boolean;
   /** Framework a scope falls back to with no persisted state (default: 'CAGEERF') */
   defaultFramework?: string;
-  /** Inject framework guidance every N chain steps (default: 2) */
-  systemPromptFrequency?: number;
-  /** Where to inject system prompt: 'steps', 'gates', or 'both' (default: 'steps') */
-  systemPromptTarget?: InjectionTargetConfig;
-  /** Inject gate criteria every N steps. 0 = first-only (default: 0) */
-  gateGuidanceFrequency?: number;
-  /** Where to inject gate guidance: 'steps', 'gates', or 'both' (default: 'both') */
-  gateGuidanceTarget?: InjectionTargetConfig;
-  /** Include response formatting guidance (true/false, or object for granular control) */
-  styleGuidance?: boolean;
-  /** Inject style guidance every N steps. 0 = first-only (default: 0) */
-  styleGuidanceFrequency?: number;
-  /** Where to inject style guidance: 'steps', 'gates', or 'both' (default: 'steps') */
-  styleGuidanceTarget?: InjectionTargetConfig;
+  /** Injection control for framework content (system prompt, gate guidance, style guidance) */
+  injection?: FrameworkInjectionConfig;
 }
 
 /**
@@ -319,17 +307,6 @@ export interface VerificationConfig {
     maxBudget?: number;
     timeout?: number;
     permissionMode?: 'delegate' | 'ask' | 'deny';
-  };
-}
-
-/**
- * Advanced settings (internal/rarely-changed)
- */
-export interface AdvancedConfig {
-  sessions?: {
-    timeoutMinutes?: number;
-    reviewTimeoutMinutes?: number;
-    cleanupIntervalMinutes?: number;
   };
 }
 
@@ -508,8 +485,6 @@ export interface Config {
   versioning?: VersioningConfig;
   /** New-style: Verification (Ralph Loops) configuration */
   verification?: VerificationConfig;
-  /** New-style: Advanced internal settings */
-  advanced?: AdvancedConfig;
   /** MCP Resources configuration */
   resources?: ResourcesConfig;
 

@@ -121,7 +121,7 @@ describe('config value source labeling (getConfigValueWithSource / listConfigKey
     // `server` is fully merged with `DEFAULT_CONFIG.server` inside `validateAndSetDefaults`, so
     // this resolves to a real value even though the file never set it.
     expect(manager.getConfigValueWithSource('server.name')).toMatchObject({
-      value: 'Claude Custom Prompts',
+      value: 'claude-prompts',
       source: 'default',
     });
   });

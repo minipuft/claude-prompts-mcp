@@ -31,7 +31,6 @@ import {
   Config,
   AnalysisConfig,
   FrameworkInjectionConfig,
-  SemanticAnalysisConfig,
   LLMIntegrationConfig,
   LoggingConfig,
   ResolvedFrameworkConfig,
@@ -39,7 +38,6 @@ import {
   ChainSessionConfig,
   TransportMode,
   VersioningConfig,
-  FrameworkSettings,
   ResourcesConfig,
   TelemetryConfig,
   DEFAULT_VERSIONING_CONFIG,
@@ -217,7 +215,7 @@ const DEFAULT_FRAMEWORKS_CONFIG: ResolvedFrameworkConfig = {
   // their own literal, so the two cannot drift from the configured framework.
   defaultFramework: DEFAULT_FRAMEWORK_ID,
   injection: {
-    systemPrompt: { enabled: true, frequency: 2, target: 'steps' },
+    systemPrompt: { enabled: true, frequency: 3, target: 'steps' },
     gateGuidance: { frequency: 0, target: 'both' },
     styleGuidance: { enabled: true, frequency: 0, target: 'steps' },
   },
@@ -257,9 +255,9 @@ const DEFAULT_TRANSPORT_MODE: TransportMode = 'stdio';
 
 const DEFAULT_CONFIG: Config = {
   server: {
-    name: 'Claude Custom Prompts',
+    name: 'claude-prompts',
     version: '1.0.0',
-    port: 3456,
+    port: 9090,
   },
   prompts: {
     directory: 'resources/prompts',
@@ -290,21 +288,6 @@ type AdoptedConfigFile = Omit<ConfigFile, 'version'> & {
   version?: ConfigFile['version'];
   analysis?: Partial<AnalysisConfig>;
   versioning?: ConfigFileVersioning & { max_versions?: number; auto_version?: boolean };
-};
-
-/**
- * `Config` as this loader resolves it: `frameworks` carries the NESTED `injection` block the
- * runtime reads, which `FrameworkSettings` (core-config.ts) does not declare because it still
- * describes the seven flat 4.x injection keys it replaces.
- *
- * `DEFAULT_CONFIG.frameworks` has carried a nested `injection` at runtime all along — it is
- * assigned `DEFAULT_FRAMEWORKS_CONFIG`, a `ResolvedFrameworkConfig` — so this alias makes an
- * existing runtime shape visible to the compiler rather than inventing one. It collapses to plain
- * `Config` when `FrameworkSettings` declares `injection` and drops the flat keys; that file is
- * owned by a later row of this initiative.
- */
-export type ResolvedConfig = Config & {
-  frameworks?: FrameworkSettings & { injection?: FrameworkInjectionConfig };
 };
 
 /**
@@ -352,7 +335,8 @@ function normalizeInjection(frameworks: ConfigFile['frameworks']): FrameworkInje
   const injection = frameworks?.injection;
   return {
     systemPrompt: {
-      enabled: injection?.systemPrompt?.enabled ?? frameworks?.enabled ?? true,
+      enabled:
+        injection?.systemPrompt?.enabled ?? frameworks?.enabled ?? defaults.systemPrompt.enabled,
       frequency: injection?.systemPrompt?.frequency ?? defaults.systemPrompt.frequency,
       target: injection?.systemPrompt?.target ?? defaults.systemPrompt.target,
     },
@@ -369,7 +353,7 @@ function normalizeInjection(frameworks: ConfigFile['frameworks']): FrameworkInje
 }
 
 /** Framework settings, with the injection block nested rather than reassembled from flat keys. */
-function normalizeFrameworks(file: AdoptedConfigFile): ResolvedConfig['frameworks'] {
+function normalizeFrameworks(file: AdoptedConfigFile): Config['frameworks'] {
   const frameworks = file.frameworks;
   return {
     enabled: frameworks?.enabled ?? true,
@@ -526,7 +510,7 @@ function normalizeAnalysis(analysisConfig: Partial<AnalysisConfig> | undefined):
  * `Config.transport`) — are not carried across, and are reported by
  * `getConfigValueWithSource` from the raw-file snapshot instead.
  */
-function normalizeConfigFile(file: AdoptedConfigFile): ResolvedConfig {
+function normalizeConfigFile(file: AdoptedConfigFile): Config {
   return {
     server: {
       name: file.server?.name ?? DEFAULT_CONFIG.server.name,
@@ -598,7 +582,7 @@ export interface ResourcePathSource {
 }
 
 export class ConfigLoader extends EventEmitter implements ConfigManager {
-  private config: ResolvedConfig;
+  private config: Config;
   private configPath: string;
   // Removed: private toolDescriptionLoader - now injected via dependency injection
   private fileWatcher: FSWatcher | undefined;
@@ -644,7 +628,7 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
   /**
    * Load configuration from file
    */
-  async loadConfig(): Promise<ResolvedConfig> {
+  async loadConfig(): Promise<Config> {
     const previousFrameworks = { ...this.frameworksConfigCache };
     try {
       const configContent = await readFile(this.configPath, 'utf8');
@@ -690,12 +674,8 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
 
   /**
    * Get current configuration.
-   *
-   * `ResolvedConfig`, not `Config`: a caller holding the concrete loader can read
-   * `frameworks.injection`, which the shared `ConfigManager` contract cannot express yet. Every
-   * consumer reaching this through that interface still sees `Config`.
    */
-  getConfig(): ResolvedConfig {
+  getConfig(): Config {
     return this.config;
   }
 
@@ -1027,8 +1007,15 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
       return { mode: 'every' as const, interval: n };
     };
 
-    const systemPromptEnabled = inj?.systemPrompt?.enabled ?? true;
-    const styleEnabled = inj?.styleGuidance?.enabled ?? true;
+    const injectionDefaults =
+      DEFAULT_FRAMEWORKS_CONFIG.injection as Required<FrameworkInjectionConfig>;
+    const systemPromptEnabled =
+      inj?.systemPrompt?.enabled ?? injectionDefaults.systemPrompt.enabled;
+    // `Required<T>` only lifts top-level optionality; `styleGuidance.enabled` stays `boolean |
+    // undefined` in the type even though the literal below always sets it — the trailing `?? true`
+    // is a type-narrowing safety net that can never actually fire, not a second default to drift.
+    const styleEnabled =
+      inj?.styleGuidance?.enabled ?? injectionDefaults.styleGuidance.enabled ?? true;
     const gatesEnabled = this.getGatesConfig().enabled;
 
     return {
@@ -1039,20 +1026,24 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
       },
       'system-prompt': {
         enabled: systemPromptEnabled,
-        frequency: toFrequency(inj?.systemPrompt?.frequency, 'every', 2),
-        target: inj?.systemPrompt?.target ?? 'steps',
+        frequency: toFrequency(
+          inj?.systemPrompt?.frequency,
+          'every',
+          injectionDefaults.systemPrompt.frequency
+        ),
+        target: inj?.systemPrompt?.target ?? injectionDefaults.systemPrompt.target,
       },
       'gate-guidance': {
         ...DEFAULT_INJECTION_CONFIG['gate-guidance'],
         enabled: gatesEnabled,
         frequency: toFrequency(inj?.gateGuidance?.frequency, 'first-only'),
-        target: inj?.gateGuidance?.target ?? 'both',
+        target: inj?.gateGuidance?.target ?? injectionDefaults.gateGuidance.target,
       },
       'style-guidance': {
         ...DEFAULT_INJECTION_CONFIG['style-guidance'],
         enabled: styleEnabled,
         frequency: toFrequency(inj?.styleGuidance?.frequency, 'first-only'),
-        target: inj?.styleGuidance?.target ?? 'steps',
+        target: inj?.styleGuidance?.target ?? injectionDefaults.styleGuidance.target,
       },
     };
   }

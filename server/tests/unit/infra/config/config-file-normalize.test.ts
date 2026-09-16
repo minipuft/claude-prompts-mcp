@@ -72,7 +72,7 @@ describe('config file -> runtime config mapping', () => {
       const { config, cleanup } = await resolve({ version: 5, frameworks: { enabled: true } });
 
       expect(config.frameworks?.injection).toEqual({
-        systemPrompt: { enabled: true, frequency: 2, target: 'steps' },
+        systemPrompt: { enabled: true, frequency: 3, target: 'steps' },
         gateGuidance: { frequency: 0, target: 'both' },
         styleGuidance: { enabled: true, frequency: 0, target: 'steps' },
       });
@@ -88,8 +88,8 @@ describe('config file -> runtime config mapping', () => {
         frameworks: { enabled: true, systemPromptFrequency: 7 },
       });
 
-      expect(config.frameworks?.injection?.systemPrompt?.frequency).toBe(2);
-      expect(manager.getFrameworksConfig().injection?.systemPrompt?.frequency).toBe(2);
+      expect(config.frameworks?.injection?.systemPrompt?.frequency).toBe(3);
+      expect(manager.getFrameworksConfig().injection?.systemPrompt?.frequency).toBe(3);
 
       await cleanup();
     });
@@ -130,10 +130,12 @@ describe('config file -> runtime config mapping', () => {
   describe('a file that declares nothing', () => {
     // Every default value this loader applies, in one place. Written out rather than compared
     // against the module's own constants: a test that reads the same constant the code reads
-    // passes however that constant changes, and aligning these values with the shipped
-    // `config.json` is a later row of this initiative that must be able to see this go red.
+    // passes however that constant changes. These values were aligned with the shipped
+    // `config.json` by plan row 4.6 (`server.name`, `server.port`,
+    // `frameworks.injection.systemPrompt.frequency`) — a future drift between the two goes red
+    // here first.
     const DEFAULTS = {
-      server: { name: 'Claude Custom Prompts', version: '1.0.0', port: 3456 },
+      server: { name: 'claude-prompts', version: '1.0.0', port: 9090 },
       prompts: { directory: 'resources/prompts' },
       analysis: {
         semanticAnalysis: {
@@ -153,7 +155,7 @@ describe('config file -> runtime config mapping', () => {
         dynamicToolDescriptions: true,
         defaultFramework: 'CAGEERF',
         injection: {
-          systemPrompt: { enabled: true, frequency: 2, target: 'steps' },
+          systemPrompt: { enabled: true, frequency: 3, target: 'steps' },
           gateGuidance: { frequency: 0, target: 'both' },
           styleGuidance: { enabled: true, frequency: 0, target: 'steps' },
         },
@@ -256,7 +258,7 @@ describe('config file -> runtime config mapping', () => {
 
       // Rejected at the parse boundary and reported, rather than carried into the mapping as an
       // object with no keys.
-      expect(config.server.port).toBe(3456);
+      expect(config.server.port).toBe(9090);
       expect(consoleError).toHaveBeenCalled();
 
       consoleError.mockRestore();

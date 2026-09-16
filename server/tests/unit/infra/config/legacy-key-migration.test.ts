@@ -61,7 +61,7 @@ describe('legacy config key migration', () => {
       });
 
       expect(config.frameworks?.enabled).toBe(true);
-      expect(config.frameworks?.systemPromptFrequency).not.toBe(7);
+      expect(config.frameworks?.injection?.systemPrompt?.frequency).not.toBe(7);
 
       await cleanup();
     });

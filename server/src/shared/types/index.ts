@@ -63,7 +63,6 @@ import type { ContentAnalysisResult } from './core-config.js';
 import type { StateStoreOptions } from './persistence.js';
 
 export type {
-  AdvancedConfig,
   AnalysisConfig,
   BaseMessageContent,
   ChainSessionConfig,
