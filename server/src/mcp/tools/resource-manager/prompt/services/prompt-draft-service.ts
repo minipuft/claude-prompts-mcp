@@ -129,7 +129,10 @@ export class PromptDraftService {
       systemMessage: args.system_message,
       userMessageTemplate: args.user_message_template,
       arguments: args.arguments ?? [],
-      isChain: args.is_chain ?? (args.chain_steps?.length ?? 0) > 0,
+      // No `isChain`: every writer of this object enumerates the keys it emits
+      // (`buildPromptYamlData`, `canonicalPromptSnapshot`) and neither lists it, and the YAML
+      // loader recomputes it from `chainSteps.length` on read. The key was written here and
+      // read nowhere.
       chainSteps: args.chain_steps ?? [],
       tools: args.tools ?? [],
       gateConfiguration: args.gate_configuration,

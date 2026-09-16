@@ -1,5 +1,6 @@
 /**
- * Every input field a tool handler reads is declared in the schema the tool registers.
+ * Every input field a tool handler reads is declared in the schema the tool registers, and every
+ * schema a tool registers agrees with the contract that documents it.
  *
  * Zod strips undeclared keys before a registered tool callback runs. A handler that reads a field
  * its schema does not declare therefore gets `undefined` over MCP whatever the caller sent, and
@@ -13,6 +14,14 @@
  * destructuring), followed into same-class methods and imported functions that receive the whole
  * object. A use the walker cannot follow is reported rather than skipped, so a read cannot hide
  * behind an unresolved call.
+ *
+ * The second half is contract parity, and it covers EVERY registered tool rather than the one that
+ * had a defect. `tooling/contracts/*.json` is what a reader — human or model — is told the tool
+ * accepts; the registered zod object is what it actually accepts. Nothing tied the two together
+ * except `system_control`, so `resource_manager` published five parameters its contract never
+ * mentioned and `system_control.action` advertised no values at all while its contract declared a
+ * twelve-member enum (measured 2026-09-15). The tool list is read from the `registerTool` calls
+ * that publish it, so a fourth tool is in scope the moment it is registered.
  */
 
 import { describe, expect, it } from '@jest/globals';
@@ -20,13 +29,20 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
+import { z } from 'zod/v4';
 
-import { system_controlParameters } from '../../../src/mcp/contracts/schemas/_generated/system_control.generated.js';
+import {
+  GATE_VERDICT_VALIDATION_MESSAGE,
+  isValidGateVerdict,
+} from '../../../src/engine/gates/core/gate-verdict-contract.js';
+import { buildPromptEngineSchema } from '../../../src/mcp/tools/schemas/prompt-engine.schema.js';
 import { resourceManagerInputSchema } from '../../../src/mcp/tools/schemas/resource-manager.schema.js';
 import { buildSystemControlSchema } from '../../../src/mcp/tools/schemas/system-control.schema.js';
 
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const TOOLS_DIR = path.join(SERVER_ROOT, 'src', 'mcp', 'tools');
+const TOOLS_INDEX = path.join(TOOLS_DIR, 'index.ts');
+const CONTRACTS_DIR = path.join(SERVER_ROOT, 'tooling', 'contracts');
 const SYSTEM_CONTROL_ROUTER = path.join(TOOLS_DIR, 'system-control', 'system-control-router.ts');
 const SYSTEM_CONTROL_HANDLERS = path.join(TOOLS_DIR, 'system-control', 'handlers');
 const RESOURCE_MANAGER_ROUTER = path.join(TOOLS_DIR, 'resource-manager', 'core', 'router.ts');
@@ -330,6 +346,230 @@ function routerConstructedHandlers(): string[] {
  */
 const SYSTEM_CONTROL_DISPATCH = 'actionHandler.execute(…)';
 
+// ---------------------------------------------------------------------------
+// Contract parity
+// ---------------------------------------------------------------------------
+
+interface ContractParameter {
+  readonly name: string;
+  readonly type: string;
+  readonly enum?: readonly string[];
+}
+
+/** The subset of JSON Schema `z.toJSONSchema` emits that this comparison reads. */
+interface SchemaNode {
+  readonly type?: string | readonly string[];
+  readonly enum?: readonly unknown[];
+  readonly const?: unknown;
+  readonly anyOf?: readonly SchemaNode[];
+  readonly oneOf?: readonly SchemaNode[];
+  readonly items?: SchemaNode;
+}
+
+/**
+ * The shape vocabulary both sides are reduced to before comparison.
+ *
+ * Deliberately the OUTER shape plus enum membership, and nothing below that. A contract `type` is
+ * a human-readable string — `array<{name,required?,description?}>`, `{version,nodes[],edges?}` —
+ * and comparing those element shapes would need a type language the contract format does not
+ * have. What is machine-comparable is what a client's JSON Schema validator acts on at the top
+ * level of a parameter, which is exactly this set. The element shapes are not silently dropped:
+ * `element shapes the comparison does not descend into` below asserts the whole list of them, so
+ * a new one is a failure rather than an unnoticed gap.
+ */
+type Kind =
+  | { readonly kind: 'string' | 'number' | 'boolean' | 'object' | 'array' | 'unconstrained' }
+  | { readonly kind: 'enum'; readonly members: readonly string[] }
+  | { readonly kind: 'union'; readonly members: readonly Kind[] };
+
+function renderKind(kind: Kind): string {
+  if (kind.kind === 'enum') return `enum[${[...kind.members].sort().join('|')}]`;
+  if (kind.kind === 'union') return `union[${kind.members.map(renderKind).sort().join('|')}]`;
+  return kind.kind;
+}
+
+/** A contract `type` string reduced to a `Kind`, or undefined when the string names no shape. */
+function contractKind(type: string, members?: readonly string[]): Kind | undefined {
+  if (members !== undefined && members.length > 0) return { kind: 'enum', members };
+
+  const asEnum = /^enum\[(.+)\]$/.exec(type);
+  if (asEnum?.[1] !== undefined) return { kind: 'enum', members: asEnum[1].split('|') };
+
+  const asUnion = /^union\[(.+)\]$/.exec(type);
+  if (asUnion?.[1] !== undefined) {
+    const parts = asUnion[1].split('|').map((part) => contractKind(part));
+    return parts.every((part): part is Kind => part !== undefined)
+      ? { kind: 'union', members: parts }
+      : undefined;
+  }
+
+  if (type === 'string' || type === 'number' || type === 'boolean') return { kind: type };
+  // `record` is the contract's spelling of "object with free keys"; a JSON Schema validator sees
+  // no difference, so both reduce to `object`.
+  if (type === 'object' || type === 'record') return { kind: 'object' };
+  if (/^object<.+>$/.test(type) || /^\{.*\}$/.test(type)) return { kind: 'object' };
+  if (type === 'array' || /^array<.+>$/.test(type)) return { kind: 'array' };
+  return undefined;
+}
+
+/** The element string of an `array<…>` contract type, or undefined for anything else. */
+function contractElement(type: string): string | undefined {
+  return /^array<(.+)>$/.exec(type)?.[1];
+}
+
+function publishedKind(node: SchemaNode): Kind {
+  const variants = node.anyOf ?? node.oneOf;
+  if (variants !== undefined) return { kind: 'union', members: variants.map(publishedKind) };
+  if (node.enum !== undefined && node.enum.length > 0) {
+    return { kind: 'enum', members: node.enum.map((value) => String(value)) };
+  }
+  if (node.const !== undefined) return { kind: 'enum', members: [String(node.const)] };
+
+  const declared = Array.isArray(node.type)
+    ? node.type
+    : node.type === undefined
+      ? []
+      : [node.type];
+  switch (declared.find((entry) => entry !== 'null')) {
+    case 'string':
+      return { kind: 'string' };
+    case 'number':
+    case 'integer':
+      return { kind: 'number' };
+    case 'boolean':
+      return { kind: 'boolean' };
+    case 'array':
+      return { kind: 'array' };
+    case 'object':
+      return { kind: 'object' };
+    default:
+      // `z.unknown()` and `z.any()` emit `{}` — no constraint at all.
+      return { kind: 'unconstrained' };
+  }
+}
+
+/** Tool names this server publishes, read from the `registerTool` calls that publish them. */
+function registeredToolNames(): string[] {
+  const names = new Set<string>();
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      node.expression.name.text === 'registerTool'
+    ) {
+      const first = node.arguments[0];
+      if (first !== undefined && ts.isStringLiteral(first)) names.add(first.text);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(parse(TOOLS_INDEX));
+  return [...names].sort();
+}
+
+/**
+ * Tool contracts on disk, keyed the way `generate-contracts.ts` keys them.
+ *
+ * Read from `tooling/contracts/*.json` rather than from `_generated/*.ts` so the comparison is
+ * against the SSOT an author edits. `validate:contracts` already fails when the two disagree.
+ */
+function toolContracts(): Map<string, ContractParameter[]> {
+  const contracts = new Map<string, ContractParameter[]>();
+  for (const fileName of readdirSync(CONTRACTS_DIR).filter((name) => name.endsWith('.json'))) {
+    const parsed = JSON.parse(readFileSync(path.join(CONTRACTS_DIR, fileName), 'utf-8')) as {
+      tool?: string;
+      toolDescription?: unknown;
+      parameters?: ContractParameter[];
+    };
+    if (parsed.tool === undefined || parsed.toolDescription === undefined) continue;
+    contracts.set(parsed.tool.replace(/-/g, '_'), parsed.parameters ?? []);
+  }
+  return contracts;
+}
+
+/**
+ * The registered zod object per tool, in the WIDEST shape it can be registered in.
+ *
+ * `prompt_engine` narrows its surface when the gate system is disabled, and CLAUDE.md §Public API
+ * Contract defines the contract as the union of every reachable shape — so the widest one (the
+ * builder's default) is the one a contract has to describe.
+ */
+const TOOL_SCHEMAS: Readonly<Record<string, z.ZodObject<z.ZodRawShape>>> = {
+  prompt_engine: buildPromptEngineSchema(isValidGateVerdict, GATE_VERDICT_VALIDATION_MESSAGE),
+  resource_manager: resourceManagerInputSchema,
+  system_control: buildSystemControlSchema(),
+};
+
+function publishedProperties(tool: string): Record<string, SchemaNode> {
+  const schema = TOOL_SCHEMAS[tool];
+  if (schema === undefined) throw new Error(`no schema bound for registered tool ${tool}`);
+  const emitted = z.toJSONSchema(schema, { io: 'input', unrepresentable: 'any' }) as {
+    properties?: Record<string, SchemaNode>;
+  };
+  return emitted.properties ?? {};
+}
+
+/**
+ * Element shapes the comparison deliberately stops above, as measured on 2026-09-15.
+ *
+ * Each entry is `tool.parameter: <contract element> → <published element>`. They are listed
+ * rather than skipped so the boundary is visible and finite: a new divergence fails this test,
+ * and the list shrinks only by making a contract element string and its zod element agree.
+ */
+const UNCOMPARED_ELEMENT_SHAPES = [
+  'prompt_engine.gates: string|{name,description}|gate → union[object|object|string]',
+  'prompt_engine.observations: {type,id,statement,blocking?,target_step_id?,resolution?} → union[object|object]',
+  'resource_manager.chain_steps: step → object',
+  'resource_manager.pass_criteria: string → object',
+  'resource_manager.phases: object → unconstrained',
+  'resource_manager.tools: {id,name,script,description?,runtime?,schema?,trigger?,confirm?,strict?,timeout?} → unconstrained',
+];
+
+/** Parameters whose published outer shape is not the one the contract declares. */
+function typeDisagreements(
+  tool: string,
+  parameters: readonly ContractParameter[],
+  published: Readonly<Record<string, SchemaNode>>
+): string[] {
+  const findings: string[] = [];
+  for (const parameter of parameters) {
+    const node = published[parameter.name];
+    // Both gaps are reported by assertions of their own; reporting them twice would make one
+    // fix look like two.
+    if (node === undefined) continue;
+    const declared = contractKind(parameter.type, parameter.enum);
+    if (declared === undefined) continue;
+
+    const actual = publishedKind(node);
+    if (renderKind(declared) !== renderKind(actual)) {
+      findings.push(
+        `${tool}.${parameter.name}: contract ${renderKind(declared)} ≠ published ${renderKind(actual)}`
+      );
+    }
+  }
+  return findings.sort();
+}
+
+/** Array parameters whose contract element string does not read as the published element shape. */
+function elementDivergences(
+  tool: string,
+  parameters: readonly ContractParameter[],
+  published: Readonly<Record<string, SchemaNode>>
+): string[] {
+  const findings: string[] = [];
+  for (const parameter of parameters) {
+    const element = contractElement(parameter.type);
+    const items = published[parameter.name]?.items;
+    if (element === undefined || items === undefined) continue;
+
+    const declared = contractKind(element);
+    const actual = publishedKind(items);
+    if (declared === undefined || renderKind(declared) !== renderKind(actual)) {
+      findings.push(`${tool}.${parameter.name}: ${element} → ${renderKind(actual)}`);
+    }
+  }
+  return findings.sort();
+}
+
 describe('tool handlers read only fields their registered schema declares', () => {
   describe('system_control', () => {
     const declared = new Set(Object.keys(buildSystemControlSchema().shape));
@@ -353,12 +593,6 @@ describe('tool handlers read only fields their registered schema declares', () =
       expect(reads.unfollowed.map((use) => use.replace(/^[^ ]+ /, ''))).toEqual([
         SYSTEM_CONTROL_DISPATCH,
       ]);
-    });
-
-    it('declares exactly the parameters the contract describes', () => {
-      expect([...declared].sort()).toEqual(
-        system_controlParameters.map((parameter) => parameter.name).sort()
-      );
     });
 
     it('observes reads of each shape it claims to follow', () => {
@@ -397,6 +631,90 @@ describe('tool handlers read only fields their registered schema declares', () =
       expect(
         reads.fields.get('preview_action')?.some((use) => use.includes('preview-action.ts'))
       ).toBe(true);
+    });
+  });
+});
+
+describe('every registered tool publishes the surface its contract describes', () => {
+  const registered = registeredToolNames();
+  const contracts = toolContracts();
+
+  it('finds the tools this server registers', () => {
+    // A guard on the enumeration itself: an AST walk that matched nothing would make every
+    // assertion below vacuously pass.
+    expect(registered.length).toBeGreaterThan(0);
+    expect(registered).toContain('prompt_engine');
+  });
+
+  it('binds a schema to every registered tool', () => {
+    expect(Object.keys(TOOL_SCHEMAS).sort()).toEqual(registered);
+  });
+
+  it('has a contract for every registered tool', () => {
+    expect(registered.filter((tool) => !contracts.has(tool))).toEqual([]);
+  });
+
+  describe.each(registeredToolNames())('%s', (tool) => {
+    const parameters = contracts.get(tool) ?? [];
+    const published = publishedProperties(tool);
+
+    it('declares exactly the parameters the contract describes', () => {
+      expect(Object.keys(published).sort()).toEqual(
+        parameters.map((parameter) => parameter.name).sort()
+      );
+    });
+
+    it('states a shape this comparison can read for every contract parameter', () => {
+      expect(
+        parameters
+          .filter((parameter) => contractKind(parameter.type, parameter.enum) === undefined)
+          .map((parameter) => `${parameter.name}: ${parameter.type}`)
+          .sort()
+      ).toEqual([]);
+    });
+
+    it('publishes the type and the enum members the contract declares', () => {
+      expect(typeDisagreements(tool, parameters, published)).toEqual([]);
+    });
+  });
+
+  it('lists every element shape the comparison does not descend into', () => {
+    expect(
+      registered.flatMap((tool) =>
+        elementDivergences(tool, contracts.get(tool) ?? [], publishedProperties(tool))
+      )
+    ).toEqual(UNCOMPARED_ELEMENT_SHAPES);
+  });
+
+  describe('fails on the mutations it exists to catch', () => {
+    const tool = 'resource_manager';
+    const parameters = contracts.get(tool) ?? [];
+    const published = publishedProperties(tool);
+
+    it('reports a schema key the contract does not declare', () => {
+      const withoutSubject = parameters.filter((parameter) => parameter.name !== 'subject');
+
+      expect(Object.keys(published).sort()).not.toEqual(
+        withoutSubject.map((parameter) => parameter.name).sort()
+      );
+    });
+
+    it('reports a published enum the contract disagrees with', () => {
+      const narrowed = parameters.map((parameter) =>
+        parameter.name === 'action' ? { ...parameter, type: 'string' } : parameter
+      );
+
+      expect(typeDisagreements(tool, narrowed, published)).toEqual([
+        expect.stringContaining('resource_manager.action: contract string ≠ published enum['),
+      ]);
+    });
+
+    it('reports a published type the contract disagrees with', () => {
+      const retyped = { ...published, confirm: { type: 'string' } as SchemaNode };
+
+      expect(typeDisagreements(tool, parameters, retyped)).toEqual([
+        'resource_manager.confirm: contract boolean ≠ published string',
+      ]);
     });
   });
 });

@@ -350,6 +350,29 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
     'A conformance scenario exercising `action:compare` or `action:history`, or an update with ' +
       'skip_version:true asserting no new version was saved.'
   ),
+  // The five entries below became visible to this gate on 2026-09-15, when B.34 declared the
+  // five `resource_manager` parameters the schema had always published and the contract had
+  // never listed. They are not newly uncovered — they were never reachable by this enumeration,
+  // because it walks the contract and the contract did not name them.
+  ...exceptionGroup(
+    'resource_manager',
+    ['chain_step_operation', 'chain_step_index', 'chain_step_data', 'chain_step_order'],
+    'Step-level chain edit field. The corpus creates and updates prompts in ' +
+      'workspace-and-mutations.yaml but never a CHAIN prompt, so there is no multi-step prompt ' +
+      'for these four to target, and the whole sub-protocol is refused without one.',
+    'An isolated-workspace scenario creating a prompt with `chain_steps`, editing one step with ' +
+      '`chain_step_operation`, and reading the step list back to show only that step moved.'
+  ),
+  ...exceptionGroup(
+    'resource_manager',
+    ['subject'],
+    'Gate reminder tag. `inspect` has no read-back path for it (gate-discovery-processor.ts ' +
+      'prints severity, enforcement mode and classification, not subject), so a create-then-' +
+      'inspect row would assert nothing the create returning ok does not already assert.',
+    'An isolated-workspace scenario asserting a subject-tagged reminder is suppressed under a ' +
+      '`gates.harnessCovers` entry naming it and delivered without one — or a `subject` line in ' +
+      'gate `inspect`, which would make the create-then-read-back pattern available.'
+  ),
 ];
 
 /**
