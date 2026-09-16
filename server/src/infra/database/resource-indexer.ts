@@ -35,12 +35,11 @@ import * as yaml from 'js-yaml';
 export type ToolLoaderFn = (promptDir: string, promptId: string) => ScriptToolLoadReport;
 
 import type {
-  JSONSchemaDefinition,
   LoadedScriptTool,
   ScriptToolLoadFailure,
   ScriptToolLoadReport,
 } from '#shared/types/automation.js';
-import type { DatabasePort, ToolIndexEntry } from '#shared/types/persistence.js';
+import type { DatabasePort } from '#shared/types/persistence.js';
 import type { QuarantineView } from '#shared/utils/resource-quarantine.js';
 import type { Logger } from '../logging/index.js';
 
@@ -67,10 +66,6 @@ export interface IndexedResource {
   keywords: string | null;
   indexed_at: string;
 }
-
-// ToolIndexEntry SSOT is in shared/types/persistence.ts (cross-layer contract).
-
-export type { ToolIndexEntry } from '#shared/types/persistence.js';
 
 /**
  * How many directory levels below a resource root the scan descends.
@@ -420,64 +415,6 @@ function extractKeywordsString(metadata: Record<string, unknown> | null): string
   const triggers = metadata['triggers'] as string[] | undefined;
   if (triggers != null && triggers.length > 0) return triggers.join(' ');
   return null;
-}
-
-/**
- * Escape special regex characters in a string for safe use in RegExp constructor.
- */
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-/**
- * Compute relevance score for a resource against a search query.
- *
- * Field weights:
- *   id exact=10, name word=8, name prefix=5,
- *   keywords=4, description word=2, id substring=1
- */
-/** Score a single token against resource fields. */
-function scoreToken(token: string, name: string, keywords: string, desc: string): number {
-  let score = 0;
-  const escaped = escapeRegex(token);
-
-  // Name: exact word boundary
-  if (new RegExp(`\\b${escaped}\\b`).test(name)) {
-    score += 8;
-  } else if (new RegExp(`\\b${escaped}`).test(name)) {
-    score += 5;
-  }
-
-  // Keywords match
-  if (keywords.includes(token)) {
-    score += 4;
-  }
-
-  // Description word match
-  if (new RegExp(`\\b${escaped}\\b`).test(desc)) {
-    score += 2;
-  }
-
-  return score;
-}
-
-function computeRelevanceScore(query: string, resource: IndexedResource): number {
-  const q = query.toLowerCase();
-  const tokens = q.split(/\s+/).filter((t) => t.length >= 2);
-
-  const id = (resource.id ?? '').toLowerCase();
-  const name = (resource.name ?? '').toLowerCase();
-  const desc = (resource.description ?? '').toLowerCase();
-  const keywords = (resource.keywords ?? '').toLowerCase();
-
-  // Exact ID match — highest priority
-  let score = id === q ? 10 : id.includes(q) ? 1 : 0;
-
-  for (const token of tokens) {
-    score += scoreToken(token, name, keywords, desc);
-  }
-
-  return score;
 }
 
 /**
@@ -1157,117 +1094,6 @@ export class ResourceIndexer {
   }
 
   /**
-   * Query resources by type
-   */
-  queryByType(type: IndexedResourceType): IndexedResource[] {
-    return this.db.query<IndexedResource>(
-      'SELECT * FROM resource_index WHERE type = ? ORDER BY id',
-      [type]
-    );
-  }
-
-  /**
-   * Query resources by category
-   */
-  queryByCategory(type: IndexedResourceType, category: string): IndexedResource[] {
-    return this.db.query<IndexedResource>(
-      'SELECT * FROM resource_index WHERE type = ? AND category = ? ORDER BY id',
-      [type, category]
-    );
-  }
-
-  /**
-   * Search resources with relevance-ranked results.
-   *
-   * Uses SQL LIKE for candidate retrieval then application-level scoring
-   * with weighted field matching (name > keywords > description > id).
-   */
-  search(query: string, type?: IndexedResourceType): IndexedResource[] {
-    const candidates = this.fetchCandidates(query, type);
-
-    const scored = candidates.map((r) => ({
-      resource: r,
-      score: computeRelevanceScore(query, r),
-    }));
-
-    return scored
-      .filter((s) => s.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .map((s) => s.resource);
-  }
-
-  /**
-   * Fetch broad candidate set via SQL LIKE matching.
-   * Splits multi-token queries into per-token OR conditions
-   * so each word is matched independently (scoring handles ranking).
-   */
-  private fetchCandidates(query: string, type?: IndexedResourceType): IndexedResource[] {
-    const tokens = query
-      .split(/\s+/)
-      .filter((t) => t.length >= 2)
-      .map((t) => `%${t}%`);
-
-    // Fallback: use full query as single pattern when no valid tokens
-    if (tokens.length === 0) {
-      tokens.push(`%${query}%`);
-    }
-
-    // Build OR clause: each token matched against any field
-    const tokenClauses = tokens.map(
-      () => '(name LIKE ? OR description LIKE ? OR id LIKE ? OR keywords LIKE ?)'
-    );
-    const whereTokens = tokenClauses.join(' OR ');
-    const params = tokens.flatMap((t) => [t, t, t, t]);
-
-    if (type != null) {
-      return this.db.query<IndexedResource>(
-        `SELECT DISTINCT * FROM resource_index WHERE type = ? AND (${whereTokens})`,
-        [type, ...params]
-      );
-    }
-
-    return this.db.query<IndexedResource>(
-      `SELECT DISTINCT * FROM resource_index WHERE ${whereTokens}`,
-      params
-    );
-  }
-
-  /**
-   * Get a specific resource by ID and type
-   */
-  getResource(type: IndexedResourceType, id: string): IndexedResource | null {
-    return this.db.queryOne<IndexedResource>(
-      'SELECT * FROM resource_index WHERE type = ? AND id = ?',
-      [type, id]
-    );
-  }
-
-  /**
-   * Get index statistics
-   */
-  getStats(): Record<IndexedResourceType, number> {
-    const stats: Record<IndexedResourceType, number> = {
-      prompt: 0,
-      gate: 0,
-      framework: 0,
-      style: 0,
-      tool: 0,
-    };
-
-    const rows = this.db.query<{ type: string; count: number }>(
-      'SELECT type, COUNT(*) as count FROM resource_index GROUP BY type'
-    );
-
-    for (const row of rows) {
-      if (row.type in stats) {
-        stats[row.type as IndexedResourceType] = row.count;
-      }
-    }
-
-    return stats;
-  }
-
-  /**
    * Get valid style IDs from the index.
    * Replaces directory-scanning _meta.valid_styles from cache files.
    */
@@ -1370,10 +1196,11 @@ export class ResourceIndexer {
    * WHAT THIS REPLACED, AND WHY THAT WAS HALF RIGHT. The previous code kept the row and counted
    * the tool as a `failure`, arguing that deleting it would make the removal sweep report
    * `removed` for what is really a validation failure. The conflation it named is real — the tool
-   * is still on disk — but keeping the row was the wrong remedy, because `queryTools()` publishes
-   * every row and `skills-sync` reads it, so a tool the loader refused was still advertised as
-   * available. {@link RefusedResource} is the third disposition that did not exist when that
-   * comment was written: the row goes, and it is reported as neither removed nor a sync failure.
+   * is still on disk — but keeping the row was the wrong remedy, because every row in
+   * `resource_index` is what `skills-sync` reads, so a tool the loader refused was still
+   * advertised as available. {@link RefusedResource} is the third disposition that did not exist
+   * when that comment was written: the row goes, and it is reported as neither removed nor a sync
+   * failure.
    *
    * NOT ALSO A `failure`. `failures` means the indexer could not do its job; here it did exactly
    * its job. Counting one event under two dispositions is the conflation this whole family of
@@ -1479,51 +1306,6 @@ export class ResourceIndexer {
     } else {
       result.unchanged++;
     }
-  }
-
-  /**
-   * Query tools in the keyed Record format expected by skills-sync.
-   * Returns Record<string, ToolIndexEntry> keyed by `{promptId}/{toolId}`.
-   */
-  queryTools(): Record<string, ToolIndexEntry> {
-    const rows = this.queryByType('tool');
-    const result: Record<string, ToolIndexEntry> = {};
-
-    for (const row of rows) {
-      if (!row.metadata_json) continue;
-
-      try {
-        const meta = JSON.parse(row.metadata_json) as Record<string, unknown>;
-        const execution = meta['execution'] as ToolIndexEntry['execution'] | undefined;
-
-        result[row.id] = {
-          id: row.id.includes('/') ? (row.id.split('/').pop() ?? row.id) : row.id,
-          name: row.name ?? row.id,
-          runtime: (meta['runtime'] as string) ?? 'auto',
-          inputSchema: (meta['input_schema'] as JSONSchemaDefinition) ?? {},
-          execution: execution ?? { trigger: 'schema_match', confirm: true, strict: false },
-          ...(meta['env'] != null ? { env: meta['env'] as Record<string, string> } : {}),
-          promptId: (meta['prompt_id'] as string) ?? '',
-          category: row.category ?? '',
-          description: row.description ?? '',
-          toolDir: (meta['tool_dir'] as string) ?? '',
-          scriptPath: (meta['script_path'] as string) ?? 'script.py',
-          contentHash: row.content_hash ?? '',
-        };
-      } catch {
-        this.logger.debug(`ResourceIndexer: Failed to parse tool metadata for ${row.id}`);
-      }
-    }
-
-    return result;
-  }
-
-  /**
-   * Clear all indexed resources (for testing or reset)
-   */
-  clear(): void {
-    this.db.run('DELETE FROM resource_index');
-    this.logger.info('ResourceIndexer: Cleared all indexed resources');
   }
 }
 
