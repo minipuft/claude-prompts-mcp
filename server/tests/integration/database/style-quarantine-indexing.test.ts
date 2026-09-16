@@ -30,6 +30,7 @@ import { ResourceIndexer, SqliteEngine } from '../../../src/infra/database/index
 import { StyleDefinitionLoader } from '../../../src/modules/formatting/core/style-definition-loader.js';
 
 import type { QuarantineView } from '../../../src/shared/utils/resource-quarantine.js';
+import { testScratchPath } from '../../helpers/scratch-path.js';
 
 const mockLogger = {
   info: jest.fn() as jest.Mock,
@@ -38,7 +39,7 @@ const mockLogger = {
   debug: jest.fn() as jest.Mock,
 };
 
-const TEST_DIR = path.join(process.cwd(), 'tests/tmp/style-quarantine-indexing');
+const TEST_DIR = testScratchPath('style-quarantine-indexing');
 const RESOURCES_DIR = path.join(TEST_DIR, 'resources');
 /** Must be exactly what `ResourceIndexer.rootsFor('style', 'styles')` derives. */
 const STYLES_DIR = path.join(RESOURCES_DIR, 'styles');

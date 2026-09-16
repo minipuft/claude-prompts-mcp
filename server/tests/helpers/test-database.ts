@@ -15,6 +15,7 @@ import { SqliteEngine, createResourceIndexer } from '../../src/infra/database/in
 
 import type { ResourceIndexer } from '../../src/infra/database/index.js';
 import type { Logger } from '../../src/shared/types/index.js';
+import { testScratchPath } from './scratch-path.js';
 
 /**
  * Create a mock logger with jest.fn() spies.
@@ -45,7 +46,7 @@ export interface TestDatabaseContext {
 export async function createTestDatabaseManager(
   suffix: string = 'default'
 ): Promise<TestDatabaseContext> {
-  const testDir = path.join(process.cwd(), `tests/tmp/db-test-${suffix}-${Date.now()}`);
+  const testDir = testScratchPath(`db-test-${suffix}`);
   await fs.rm(testDir, { recursive: true, force: true });
   await fs.mkdir(testDir, { recursive: true });
 

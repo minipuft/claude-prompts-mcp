@@ -24,6 +24,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, jest } from '@je
 
 import { ResourceIndexer, SqliteEngine } from '../../../src/infra/database/index.js';
 import { PromptLoader } from '../../../src/modules/prompts/loader.js';
+import { testScratchPath } from '../../helpers/scratch-path.js';
 
 const mockLogger = {
   info: jest.fn() as jest.Mock,
@@ -32,7 +33,7 @@ const mockLogger = {
   debug: jest.fn() as jest.Mock,
 };
 
-const TEST_DIR = path.join(process.cwd(), 'tests/tmp/single-file-prompt-indexing');
+const TEST_DIR = testScratchPath('single-file-prompt-indexing');
 const RESOURCES_DIR = path.join(TEST_DIR, 'resources');
 const PROMPTS_DIR = path.join(RESOURCES_DIR, 'prompts');
 const CATEGORY = 'general';

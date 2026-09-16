@@ -29,6 +29,7 @@ import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals
 
 import { loadHistory, saveVersion } from '../../../src/cli-shared/version-history.js';
 import { SqliteEngine } from '../../../src/infra/database/index.js';
+import { testScratchPath } from '../../helpers/scratch-path.js';
 
 const mockLogger = {
   info: jest.fn() as jest.Mock,
@@ -37,7 +38,7 @@ const mockLogger = {
   debug: jest.fn() as jest.Mock,
 };
 
-const testDir = path.join(process.cwd(), 'tests/tmp/cli-schema-ownership');
+const testDir = testScratchPath('cli-schema-ownership');
 const promptDir = path.join(testDir, 'resources', 'prompts', 'general', 'demo');
 
 describe('CLI never owns state.db schema', () => {

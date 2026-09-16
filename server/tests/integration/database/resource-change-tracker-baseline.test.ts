@@ -5,6 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, jest } from '@je
 
 import { SqliteEngine } from '../../../src/infra/database/index.js';
 import { createResourceChangeTracker } from '../../../src/infra/observability/tracking/index.js';
+import { testScratchPath } from '../../helpers/scratch-path.js';
 
 /**
  * Baseline comparison against the tracker's real surface.
@@ -31,7 +32,7 @@ const logger = {
   debug: jest.fn() as jest.Mock,
 };
 
-const TEST_DIR = path.join(process.cwd(), 'tests/tmp/resource-change-tracker-baseline');
+const TEST_DIR = testScratchPath('resource-change-tracker-baseline');
 const RESOURCE_DIR = path.join(TEST_DIR, 'resources');
 
 /** Write a resource file and return the descriptor `compareBaseline` expects. */

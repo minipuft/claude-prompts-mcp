@@ -28,6 +28,7 @@ import * as path from 'node:path';
 import { jest, describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 
 import { SqliteEngine, createResourceIndexer } from '../../../src/infra/database/index.js';
+import { testScratchPath } from '../../helpers/scratch-path.js';
 
 const mockLogger = {
   info: jest.fn() as jest.Mock,
@@ -37,7 +38,7 @@ const mockLogger = {
 };
 
 describe('Resource index bootstrap — syncAll over the bundled tree', () => {
-  const testDir = path.join(process.cwd(), 'tests/tmp/bootstrap-test');
+  const testDir = testScratchPath('bootstrap-test');
   const resourcesDir = path.join(process.cwd(), 'resources');
   let dbManager: SqliteEngine;
 
