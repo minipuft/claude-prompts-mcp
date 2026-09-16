@@ -369,9 +369,18 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: npm
-          cache-dependency-path: server/package-lock.json
+          cache-dependency-path: |
+            server/package-lock.json
+            package-lock.json
 
       - name: Install dependencies
+        run: npm ci --prefer-offline --no-audit
+
+      # The unit suite runs every `*:self-test` script in BOTH manifests, and the root one
+      # (`pr:check:self-test`) lints a title with the root `commitlint`. Without this install the
+      # positive control refuses instead of passing — measured on PR #317, both Node versions.
+      - name: Install dependencies (root workspaces)
+        working-directory: .
         run: npm ci --prefer-offline --no-audit
 
       - name: Download build artifact

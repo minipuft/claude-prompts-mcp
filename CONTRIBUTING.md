@@ -329,21 +329,33 @@ pre-filled from your branch instead of typing into it -- the session that did th
 **edit** the reader's artifact, not author it from inside its own reasoning:
 
 ```bash
-cd server
-npm run pr:body -- --out /tmp/pr-body.md           # skeleton: commit subjects, plan link, open rows, largest diffs
-$EDITOR /tmp/pr-body.md                              # fill every ___ and empty table cell
-node ../scripts/validate-pr-body.mjs --body-file /tmp/pr-body.md --title "feat(scope): outcome"
-gh pr create --title "feat(scope): outcome" --body-file /tmp/pr-body.md
+TITLE="feat(scope): outcome"
+npm run pr:body -- --out /tmp/pr-body.md              # skeleton: commit subjects, plan link, open rows, largest diffs
+$EDITOR /tmp/pr-body.md                               # fill every ___ and empty table cell
+npm run pr:check -- --body-file /tmp/pr-body.md --title "$TITLE"
+gh pr create --title "$TITLE" --body-file /tmp/pr-body.md
 ```
 
 **Note**: `gh pr create --body "..."` BYPASSES the template silently. Use `--body-file`.
 
-The `PR Conventions` workflow runs the same validator on every PR and lints the title with the
-repo's own `commitlint.config.mjs`. It is a **required** context (since 2026-09-02) on every
-non-bot PR; bot PRs (renovate, release-please) are exempt from the authored-body checks because
-their bodies are machine-owned. The validator fails on surviving `___` placeholders, unfilled
-verification rows, and a non-finalized `Plan:` footer. CI also auto-comments a validation summary
-and the changed-file list -- never maintain those by hand.
+**`pr:check` is the whole gate, not half of it.** The `PR Conventions` workflow's gating steps on
+a non-bot PR are two positive controls, the body check, and `commitlint` on the title -- and
+`pr:check` runs every one of them locally, from the repo root, in about a second. Run it before
+`gh pr create`; a green run means that workflow will be green too.
+
+That completeness is enforced, not promised. `scripts/pr-check.mjs` names each workflow step it
+mirrors and `server/tests/unit/scripts/pr-check-ci-parity.test.ts` reads the workflow file and
+fails when the two sets diverge, so a fifth gating step added to CI breaks the suite until the
+local mirror catches up. _Until 2026-09-15 this section named only the body check. The title is
+judged separately -- the script that checks the body says outright that it "does not read the
+title beyond its type" -- so following these instructions exactly still shipped an unchecked
+title, which is how #283 failed on `subject-case` after passing locally._
+
+The `PR Conventions` workflow is a **required** context (since 2026-09-02) on every non-bot PR;
+bot PRs (renovate, release-please) are exempt from the authored-body checks because their bodies
+are machine-owned. The body check fails on surviving `___` placeholders, unfilled verification
+rows, and a non-finalized `Plan:` footer. CI also auto-comments a validation summary and the
+changed-file list -- never maintain those by hand.
 
 **The body is a two-register document.** Reader voice above the fold (the 400-word budget counts
 only this -- fenced blocks, tables, and `<details>` content are exempt); below it, an optional
