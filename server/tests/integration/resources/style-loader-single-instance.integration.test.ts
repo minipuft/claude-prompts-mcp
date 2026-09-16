@@ -255,7 +255,7 @@ describe('one style loader instance, and the hot reload refreshes it (P4.31)', (
     expect(indexedStyleIds()).toEqual(['hotstyle', 'shadowed', 'steady']);
 
     // ---- broken after startup ----
-    writeStyleAndReport(primaryRoot, 'hotstyle', refusedStyle('hotstyle'));
+    writeStyle(primaryRoot, 'hotstyle', refusedStyle('hotstyle'));
 
     // The real reload path, over the real registration. It rejects because the definition no
     // longer loads — that rejection IS the coordinator reporting the failure, and swallowing it
@@ -270,7 +270,7 @@ describe('one style loader instance, and the hot reload refreshes it (P4.31)', (
     expect(indexedStyleIds()).toEqual(['shadowed', 'steady']);
 
     // ---- repaired after startup ----
-    writeStyleAndReport(primaryRoot, 'hotstyle', validStyle('hotstyle', 'HOT AGAIN'));
+    writeStyle(primaryRoot, 'hotstyle', validStyle('hotstyle', 'HOT AGAIN'));
     await reloadConfig!.handler(eventFor(hotStyleFile));
 
     expect(refusedIds()).toEqual(['alwaysbroken']);
@@ -279,9 +279,4 @@ describe('one style loader instance, and the hot reload refreshes it (P4.31)', (
     await syncIndex();
     expect(indexedStyleIds()).toEqual(['hotstyle', 'shadowed', 'steady']);
   });
-
-  /** Write and return the path, so a mid-case edit reads as one statement. */
-  function writeStyleAndReport(root: string, id: string, body: string): string {
-    return writeStyle(root, id, body);
-  }
 });
