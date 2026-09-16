@@ -16,6 +16,13 @@
  *     about a fixture holding one. Its assertion was `> 1`, so it passed, and the leak stayed
  *     invisible until a stricter case landed beside it.
  *
+ *   - `HOME`: a `system_control skills_sync export` writes client skill folders under `$HOME`.
+ *     Measured 2026-09-15 against a temp home: one ordinary export wrote 224 files into
+ *     `$HOME/.claude/skills`, refused by nothing. Every spawn here inherited the developer's real
+ *     home until `buildServerEnv` started requiring an isolated one, so only the absence of such
+ *     a scenario in this suite stood between a green run and a real `~/.claude/skills` overwrite.
+ *     `HOME` is REQUIRED rather than scrubbed — an unset one falls back to the passwd entry.
+ *
  * The scrub list and the builder live in `scripts/lib/hermetic-server-env.js`, because the scripts
  * that spawn the built server (`verify:mcp`, the tool-schema snapshot capture) are plain node and
  * cannot import TypeScript. Every spawn in `tests/e2e` goes through here, every server spawn in
@@ -30,6 +37,9 @@
  * build, not a regression. `verify-mcp-surface.mjs` already carried this exact refusal for its own
  * spawn; `buildServerEnv` below reuses that logic (`scripts/lib/dist-freshness.js`) rather than
  * re-deriving it, so every e2e file gets it for free through this one function.
+ *
+ * Use `createHermeticRoots()` for the `HOME` + `MCP_RUNTIME_ROOT` pair; `startServerWithHttp`
+ * already creates a pair per spawn and tears it down in `killServer`.
  */
 
 import path from 'node:path';
@@ -37,6 +47,11 @@ import { fileURLToPath } from 'node:url';
 
 import { buildServerEnv as buildServerEnvBase } from '../../../scripts/lib/hermetic-server-env.js';
 import { checkDistFreshness } from '../../../scripts/lib/dist-freshness.js';
+
+export {
+  createHermeticRoots,
+  type HermeticRoots,
+} from '../../../scripts/lib/hermetic-server-env.js';
 
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const DIST_ENTRY = path.join(SERVER_ROOT, 'dist', 'index.js');

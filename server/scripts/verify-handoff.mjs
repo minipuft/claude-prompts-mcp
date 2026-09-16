@@ -26,17 +26,21 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { buildServerEnv } from './lib/hermetic-server-env.js';
+import { buildServerEnv, createHermeticRoots } from './lib/hermetic-server-env.js';
 
 const DIST = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'index.js');
 const WS = mkdtempSync(path.join(tmpdir(), 'handoff-drive-'));
+/** Both servers share one pair: the drive's whole point is a second process on the same state. */
+const ROOTS = createHermeticRoots('handoff-drive');
 const PORT_A = 47311;
 const PORT_B = 47312;
 
 function spawnServer(port) {
   const log = openSync(path.join(WS, `server-${port}.log`), 'w');
   // The shared scrub (lib/hermetic-server-env.js); the temp workspace is this drive's own.
-  const env = buildServerEnv({ PORT: String(port), MCP_WORKSPACE: WS });
+  // `MCP_WORKSPACE` stays WS rather than the pair's runtime root — both servers must share ONE
+  // state.db for a handoff to be claimable across them, which is what this drive verifies.
+  const env = buildServerEnv({ PORT: String(port), HOME: ROOTS.home, MCP_WORKSPACE: WS });
   return spawn('node', [DIST, '--transport=streamable-http', '--quiet'], {
     env,
     stdio: ['ignore', log, log],

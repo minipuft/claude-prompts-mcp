@@ -20,17 +20,18 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { describe, expect, it, jest, afterEach } from '@jest/globals';
+import { describe, expect, it, jest, afterEach, beforeEach } from '@jest/globals';
 
 import { SqliteEngine } from '../../../src/infra/database/index.js';
 import { createSimpleLogger } from '../../../src/infra/logging/index.js';
 import { Application } from '../../../src/runtime/application.js';
 import { initializeModules } from '../../../src/runtime/module-initializer.js';
 import type { RuntimeLaunchOptions } from '../../../src/runtime/options.js';
+import { testScratchPath } from '../../helpers/scratch-path.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const SERVER_ROOT = path.resolve(path.dirname(__filename), '..', '..', '..');
-const TMP_ROOT = path.join(process.cwd(), 'tests/tmp/db-lifecycle-posture');
+const TMP_ROOT = testScratchPath('db-lifecycle-posture');
 
 const mockLogger = {
   info: jest.fn() as jest.Mock,
@@ -52,8 +53,19 @@ function buildApp(): Application {
   return new Application(createSimpleLogger('stdio'), runtimeOptions as RuntimeLaunchOptions);
 }
 
+// Every app here names the package as `serverRoot` and no workspace, so its runtime root would
+// fall back to the package directory and startup would leave an empty `server/logs/` behind
+// (found by the tree-state guard, 2026-09-16). `MCP_RUNTIME_ROOT` moves only the writable root.
+let previousRuntimeRoot: string | undefined;
+beforeEach(() => {
+  previousRuntimeRoot = process.env['MCP_RUNTIME_ROOT'];
+  process.env['MCP_RUNTIME_ROOT'] = path.join(TMP_ROOT, 'runtime-root');
+});
+
 afterEach(async () => {
   await SqliteEngine.shutdownInstance();
+  if (previousRuntimeRoot === undefined) delete process.env['MCP_RUNTIME_ROOT'];
+  else process.env['MCP_RUNTIME_ROOT'] = previousRuntimeRoot;
   await fs.rm(TMP_ROOT, { recursive: true, force: true });
 });
 

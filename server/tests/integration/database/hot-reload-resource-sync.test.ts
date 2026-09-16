@@ -42,6 +42,7 @@ import { PromptLoader } from '../../../src/modules/prompts/loader.js';
 import { mergeQuarantineViews } from '../../../src/shared/utils/resource-quarantine.js';
 
 import type { QuarantineView } from '../../../src/shared/utils/resource-quarantine.js';
+import { testScratchPath } from '../../helpers/scratch-path.js';
 
 const mockLogger = {
   info: jest.fn() as jest.Mock,
@@ -50,7 +51,7 @@ const mockLogger = {
   debug: jest.fn() as jest.Mock,
 };
 
-const RELOAD_DIR = path.join(process.cwd(), 'tests/tmp/hot-reload-quarantine-test');
+const RELOAD_DIR = testScratchPath('hot-reload-quarantine-test');
 const RELOAD_RESOURCES = path.join(RELOAD_DIR, 'resources');
 const RELOAD_PROMPTS = path.join(RELOAD_RESOURCES, 'prompts');
 const RELOAD_GATES = path.join(RELOAD_RESOURCES, 'gates');

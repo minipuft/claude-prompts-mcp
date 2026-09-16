@@ -32,13 +32,12 @@
 
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
-import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { buildServerEnv } from './lib/hermetic-server-env.js';
+import { buildServerEnv, createHermeticRoots } from './lib/hermetic-server-env.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER_ROOT = path.resolve(__dirname, '..');
@@ -80,11 +79,11 @@ function reservePort() {
  * a schema missing `gates`, `gate_verdict` and `gate_action` — measured 2026-09-14, an 8-change
  * diff. The committed snapshot is the gates-enabled shape, which only a fresh `state.db` serves.
  */
-function spawnServer(port, runtimeRoot) {
+function spawnServer(port, roots) {
   const env = buildServerEnv({
     PORT: String(port),
     MCP_WORKSPACE: REPO_ROOT,
-    MCP_RUNTIME_ROOT: runtimeRoot,
+    ...roots.env,
   });
 
   return spawn('node', [DIST_ENTRY, '--transport=streamable-http', '--quiet'], {
@@ -294,8 +293,8 @@ async function main() {
 
   const port = await reservePort();
   const baseUrl = `http://127.0.0.1:${port}`;
-  const runtimeRoot = mkdtempSync(path.join(tmpdir(), 'capture-tool-schemas-runtime-'));
-  const server = spawnServer(port, runtimeRoot);
+  const roots = createHermeticRoots('capture-tool-schemas');
+  const server = spawnServer(port, roots);
   let stderr = '';
   server.stderr.on('data', (chunk) => {
     stderr += chunk.toString();
@@ -355,7 +354,7 @@ async function main() {
       server.kill('SIGTERM');
       await once(server, 'exit');
     }
-    rmSync(runtimeRoot, { recursive: true, force: true });
+    roots.cleanup();
   }
 }
 

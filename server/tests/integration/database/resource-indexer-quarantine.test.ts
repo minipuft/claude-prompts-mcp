@@ -28,6 +28,7 @@ import { formatIndexReconciliation } from '../../../src/runtime/resource-invento
 
 import type { RefusedResource } from '../../../src/infra/database/resource-indexer.js';
 import type { QuarantineView } from '../../../src/shared/utils/resource-quarantine.js';
+import { testScratchPath } from '../../helpers/scratch-path.js';
 
 const mockLogger = {
   info: jest.fn() as jest.Mock,
@@ -36,7 +37,7 @@ const mockLogger = {
   debug: jest.fn() as jest.Mock,
 };
 
-const TEST_DIR = path.join(process.cwd(), 'tests/tmp/indexer-quarantine');
+const TEST_DIR = testScratchPath('indexer-quarantine');
 const RESOURCES_DIR = path.join(TEST_DIR, 'resources');
 const PROMPTS_DIR = path.join(RESOURCES_DIR, 'prompts');
 const CATEGORY = 'general';

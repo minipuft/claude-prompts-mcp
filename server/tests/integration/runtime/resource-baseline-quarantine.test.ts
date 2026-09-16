@@ -34,6 +34,7 @@ import { compareResourceBaseline } from '../../../src/runtime/resource-change-tr
 import type { ConfigLoader } from '../../../src/infra/config/index.js';
 import type { ResourceChangeTracker } from '../../../src/infra/observability/tracking/index.js';
 import type { QuarantineView } from '../../../src/shared/utils/resource-quarantine.js';
+import { testScratchPath } from '../../helpers/scratch-path.js';
 
 const logger = {
   info: jest.fn() as jest.Mock,
@@ -42,7 +43,7 @@ const logger = {
   debug: jest.fn() as jest.Mock,
 };
 
-const TEST_DIR = path.join(process.cwd(), 'tests/tmp/resource-baseline-quarantine');
+const TEST_DIR = testScratchPath('resource-baseline-quarantine');
 const PROMPTS_DIR = path.join(TEST_DIR, 'resources', 'prompts');
 const GATES_DIR = path.join(TEST_DIR, 'resources', 'gates');
 const CATEGORY = 'general';

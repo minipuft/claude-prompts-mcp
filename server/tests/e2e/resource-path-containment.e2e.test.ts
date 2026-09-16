@@ -24,7 +24,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { buildServerEnv } from './helpers/child-env.js';
+import { buildServerEnv, createHermeticRoots } from './helpers/child-env.js';
 
 const SERVER_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
@@ -48,9 +48,17 @@ class ContainmentServer {
 
   constructor(readonly workspace: string) {}
 
+  /**
+   * This server's own `HOME` and runtime root, separate from `workspace` on purpose: a
+   * skills_sync export writes client skill folders under `$HOME`, and folding them into the
+   * workspace would put them in the same tree these tests assert about.
+   */
+  private readonly roots = createHermeticRoots('resource-path-containment');
+
   async start(): Promise<void> {
     this.proc = spawn('node', [path.join(SERVER_ROOT, 'dist', 'index.js'), '--transport=stdio'], {
       env: buildServerEnv({
+        ...this.roots.env,
         MCP_RESOURCES_PATH: path.join(this.workspace, 'resources'),
         MCP_WORKSPACE: this.workspace,
         MCP_RUNTIME_ROOT: path.join(this.workspace, 'runtime'),
@@ -123,12 +131,16 @@ class ContainmentServer {
    * exit removes the race; the timeout keeps a wedged child from hanging the run.
    */
   async stop(): Promise<void> {
-    if (this.proc === undefined || this.proc.exitCode !== null) return;
-    await new Promise<void>((resolve) => {
-      this.proc.once('exit', () => resolve());
-      this.proc.kill();
-      setTimeout(resolve, 5_000);
-    });
+    try {
+      if (this.proc === undefined || this.proc.exitCode !== null) return;
+      await new Promise<void>((resolve) => {
+        this.proc.once('exit', () => resolve());
+        this.proc.kill();
+        setTimeout(resolve, 5_000);
+      });
+    } finally {
+      this.roots.cleanup();
+    }
   }
 }
 

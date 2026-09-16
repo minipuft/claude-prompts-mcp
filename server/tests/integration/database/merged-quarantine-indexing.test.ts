@@ -31,6 +31,7 @@ import { PromptLoader } from '../../../src/modules/prompts/loader.js';
 import { mergeQuarantineViews } from '../../../src/shared/utils/resource-quarantine.js';
 
 import type { QuarantineView } from '../../../src/shared/utils/resource-quarantine.js';
+import { testScratchPath } from '../../helpers/scratch-path.js';
 
 const mockLogger = {
   info: jest.fn() as jest.Mock,
@@ -39,7 +40,7 @@ const mockLogger = {
   debug: jest.fn() as jest.Mock,
 };
 
-const TEST_DIR = path.join(process.cwd(), 'tests/tmp/merged-quarantine-indexing');
+const TEST_DIR = testScratchPath('merged-quarantine-indexing');
 const RESOURCES_DIR = path.join(TEST_DIR, 'resources');
 const PROMPTS_DIR = path.join(RESOURCES_DIR, 'prompts');
 const GATES_DIR = path.join(RESOURCES_DIR, 'gates');
