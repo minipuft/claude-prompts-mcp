@@ -49,8 +49,12 @@ export interface ResourceRoots {
  * Resolve the contributing roots for one resource type.
  *
  * Which directories contribute is decided here; their ORDER is decided by
- * `resourceRootPrecedence` in `shared/`, which this and the pipeline's own style loader both call
- * so the two cannot drift. Until P4.27 the three flat-layout loaders resolved `primary ??
+ * `resourceRootPrecedence` in `shared/`. This was one of TWO callers until P4.31 — the pipeline
+ * derived the style roots a second time for a style loader of its own, and the two could only
+ * agree by inspection. That second derivation and the second loader behind it are gone; the
+ * composition root resolves the style roots once, here.
+ *
+ * Until P4.27 the three flat-layout loaders resolved `primary ??
  * additional` and the docstring here justified it as "workspace wins"; that held only while the
  * workspace WAS the primary, so an operator's `<workspace>/gates/foo` lost to
  * `<workspace>/resources/gates/foo` while their `<workspace>/prompts/foo` won. Two answers to one

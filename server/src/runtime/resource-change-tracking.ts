@@ -25,6 +25,7 @@ import {
 import { setResourceChangeLog } from '#shared/core/resource-change-log.js';
 import {
   isIgnoredPromptEntryName,
+  isReservedPromptDirectoryName,
   promptIdFromDirectory,
   promptIdFromSingleFile,
 } from '#shared/utils/prompt-layout.js';
@@ -167,6 +168,11 @@ export async function compareResourceBaseline(
             recordResource(resourceType, promptIdFromSingleFile(promptsPath, entryPath), entryPath);
             continue;
           }
+
+          // A prompt's `tools/` is reserved for script tools, so nothing below it entered the
+          // catalog and nothing below it may be announced as an external change. Same predicate
+          // the loader applies, from the same module.
+          if (isReservedPromptDirectoryName(entry.name)) continue;
 
           recordResource(
             resourceType,

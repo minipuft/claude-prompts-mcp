@@ -29,12 +29,42 @@
  * `scripts` imports that module, and `validate:hermetic-child-env` fails a new one that does
  * neither.
  *
+ * A THIRD silent failure lives at the same chokepoint: every `tests/e2e/*.ts` spawn of the built
+ * server names `dist/index.js`, which does not track `src/` automatically. A stale build makes a
+ * suite fail (or pass) against code that is not running — measured against
+ * `prompt-quarantine.e2e.test.ts`, which failed expecting wording only `src/` had while `dist/`
+ * still served the old string, costing ~20 minutes of triage before the mismatch was traced to a
+ * build, not a regression. `verify-mcp-surface.mjs` already carried this exact refusal for its own
+ * spawn; `buildServerEnv` below reuses that logic (`scripts/lib/dist-freshness.js`) rather than
+ * re-deriving it, so every e2e file gets it for free through this one function.
+ *
  * Use `createHermeticRoots()` for the `HOME` + `MCP_RUNTIME_ROOT` pair; `startServerWithHttp`
  * already creates a pair per spawn and tears it down in `killServer`.
  */
 
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { buildServerEnv as buildServerEnvBase } from '../../../scripts/lib/hermetic-server-env.js';
+import { checkDistFreshness } from '../../../scripts/lib/dist-freshness.js';
+
 export {
-  buildServerEnv,
   createHermeticRoots,
   type HermeticRoots,
 } from '../../../scripts/lib/hermetic-server-env.js';
+
+const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+const DIST_ENTRY = path.join(SERVER_ROOT, 'dist', 'index.js');
+const SRC_DIR = path.join(SERVER_ROOT, 'src');
+
+export function buildServerEnv(overrides: Record<string, string> = {}): NodeJS.ProcessEnv {
+  const freshness = checkDistFreshness(DIST_ENTRY, SRC_DIR);
+  if (!freshness.fresh) {
+    throw new Error(
+      `buildServerEnv: refusing to prepare an environment for a stale ${DIST_ENTRY} — ` +
+        `${freshness.reason}. Every tests/e2e spawn of the built server funnels through here — ` +
+        'run `npm run build` before this suite.'
+    );
+  }
+  return buildServerEnvBase(overrides);
+}

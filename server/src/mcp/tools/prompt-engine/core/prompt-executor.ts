@@ -66,7 +66,11 @@ import {
   createExecutionRecordStore,
 } from '#modules/chains/execution-record-store.js';
 import { createChainSessionStore } from '#modules/chains/manager.js';
-import { StyleManager, createStyleManager } from '#modules/formatting/index.js';
+import {
+  StyleManager,
+  createStyleManager,
+  getDefaultStyleDefinitionLoader,
+} from '#modules/formatting/index.js';
 import { PromptAssetManager } from '#modules/prompts/index.js';
 import { ContentAnalyzer } from '#modules/semantic/content-analyzer.js';
 import { TextReferenceStore, ArgumentHistoryTracker } from '#modules/text-refs/index.js';
@@ -85,7 +89,6 @@ import {
   buildIdentityScope,
   resolveContinuityScopeId,
 } from '#shared/utils/request-identity-scope.js';
-import { resourceRootPrecedence } from '#shared/utils/resource-root-lookup.js';
 
 export class PromptExecutor {
   public readonly inlineGateParser: ReturnType<typeof createSymbolicCommandParser>;
@@ -968,14 +971,18 @@ export class PromptExecutor {
     }
 
     try {
-      const stylesDir = this.configManager.getStylesDirectory();
-      const additionalStylesDirs = this.overlayDirsFor('styles', stylesDir);
-      this.styleManager = await createStyleManager(this.logger, {
-        loaderConfig: {
-          stylesDir,
-          ...(additionalStylesDirs.length > 0 ? { additionalStylesDirs } : {}),
-        },
-      });
+      // THE loader, not a second one configured from a second derivation of the same roots
+      // (P4.31, ruling R22). `runtime/module-initializer.ts` resolves the style roots through
+      // `PathResolver` and configures this singleton before any `McpToolRouter` exists, and the
+      // merged refusal view the resource indexer reads is that instance's. Building a loader here
+      // from `ConfigManager.getStylesDirectory()` plus a locally-recomputed overlay order produced
+      // a second instance holding a second refusal collection — the one style hot reload then
+      // refreshed, while the indexed one stayed frozen at its startup contents. Two derivations of
+      // one question, agreeing only at startup.
+      //
+      // Called with no argument on purpose: the configuring caller is the composition root, and a
+      // second caller passing config would silently win or silently lose depending on order.
+      this.styleManager = await createStyleManager(this.logger, getDefaultStyleDefinitionLoader());
       this.logger.info('[PromptExecutor] StyleManager initialized');
     } catch (error) {
       this.logger.warn('[PromptExecutor] Failed to initialize StyleManager', {
@@ -1006,26 +1013,6 @@ export class PromptExecutor {
    */
   clearScriptToolCache(): void {
     this.workspaceScriptLoader?.clearCache();
-  }
-
-  /**
-   * Every directory `StyleDefinitionLoader` consults for this type, highest precedence first —
-   * workspace overlays, then `primaryDir`, then the bundled package tree.
-   *
-   * ORDERED BY `resourceRootPrecedence`, the same function `runtime/resource-roots.ts` calls, not
-   * by a second combination written here. This method used to perform its own and the two had to
-   * agree by inspection; when the flat-kind loaders moved to overlay-wins at P4.27 this one would
-   * have kept ranking the bundled tree above an operator's own styles, because it omitted
-   * `primaryDir` from the list entirely. `mcp/` still may not import `runtime/` — the shared
-   * statement sits in `shared/`, which both may reach, and the `PathResolver` primitives arrive
-   * here through `ConfigManager.getOverlayResourceDirectories` / `getBundledResourceDirectory`.
-   */
-  private overlayDirsFor(resourceType: string, primaryDir: string): string[] {
-    return resourceRootPrecedence({
-      primary: primaryDir,
-      overlays: this.configManager.getOverlayResourceDirectories(resourceType, primaryDir),
-      bundled: this.configManager.getBundledResourceDirectory(resourceType),
-    });
   }
 
   private resetPipeline(): void {
