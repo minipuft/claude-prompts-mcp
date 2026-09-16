@@ -146,6 +146,7 @@ export class ContentAnalyzer implements ContentAnalyzerPort {
         'Prompt content is not inspected; only its shape is reported',
         'Framework recommendation not available',
         'Chain detection handled by command parser',
+        'Gate suggestion not available; this analyzer has no access to the gate registry',
       ],
       warnings: [],
 
@@ -163,7 +164,11 @@ export class ContentAnalyzer implements ContentAnalyzerPort {
       },
 
       complexity: 'low',
-      suggestedGates: ['basic_validation'],
+      // Never a hardcoded id: this analyzer has no gate registry to resolve one against, so
+      // suggesting a name here would be a name the caller cannot use — `GateAnalyzer` is the
+      // rule-based recommender that names real, registry-backed gates (see
+      // `resource-manager/prompt/analysis/gate-analyzer.ts`).
+      suggestedGates: [],
 
       frameworkRecommendation: {
         shouldUseFramework: false,

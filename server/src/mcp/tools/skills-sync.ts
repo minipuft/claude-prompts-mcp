@@ -13,6 +13,7 @@ import {
   type ResourceType,
   type SkillsSyncOutput,
   type SkillsSyncPaths,
+  type SkillsSyncRunReport,
 } from '#modules/skills-sync/service.js';
 
 export const SKILLS_SYNC_OPERATIONS = [
@@ -255,7 +256,7 @@ export class ConsolidatedSkillsSync {
     };
 
     try {
-      await runSkillsSyncCommand(
+      const report = await runSkillsSyncCommand(
         {
           command: operation,
           client: args.client,
@@ -275,10 +276,19 @@ export class ConsolidatedSkillsSync {
         this.paths
       );
 
-      const text = logs.length > 0 ? logs.join('\n') : `skills_sync ${operation} completed.`;
+      const summary = this.summarizeRunReport(operation, args, report);
+      const text =
+        summary.length > 0
+          ? logs.length > 0
+            ? `${summary}\n\n${logs.join('\n')}`
+            : summary
+          : logs.length > 0
+            ? logs.join('\n')
+            : `skills_sync ${operation} completed.`;
       return createStructuredResponse(text, false, {
         action: operation,
         lines: logs,
+        report,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -294,6 +304,57 @@ export class ConsolidatedSkillsSync {
         }
       );
     }
+  }
+
+  /**
+   * States the run's counts from the report `runSkillsSyncCommand` returns, instead of leaving
+   * the caller to infer what happened from prose log lines or by inspecting folders directly.
+   *
+   * Renders only the fields each command actually populates: `resources` is meaningful for every
+   * command that loads the canonical resource set, `written`/`pruned` only for `export` and
+   * `sync` (the only commands that write managed output), and `drift` only for `diff`. `clone`
+   * populates none of these — it parses one external file rather than loading the resource set —
+   * so it gets no counts line here; its own log output already states what was created.
+   */
+  private summarizeRunReport(
+    operation: Exclude<SkillsSyncOperation, 'status'>,
+    args: SkillsSyncInput,
+    report: SkillsSyncRunReport
+  ): string {
+    const lines: string[] = [];
+    const clientLabel = args.client ?? 'all';
+
+    if (operation === 'export' || operation === 'sync') {
+      lines.push(`Resources loaded: ${report.resources}`);
+      lines.push(
+        report.preview
+          ? `Files written (client: ${clientLabel}): 0 (preview — no files were written)`
+          : `Files written (client: ${clientLabel}): ${report.written}`
+      );
+      if (report.writtenByClient) {
+        for (const [client, count] of Object.entries(report.writtenByClient)) {
+          lines.push(`  - ${client}: ${count}`);
+        }
+      }
+      if (report.pruned > 0) {
+        lines.push(`Managed directories pruned: ${report.pruned}`);
+      }
+    } else if (operation === 'diff') {
+      const driftedCount = (report.drift ?? []).reduce(
+        (sum, group) => sum + group.entries.length,
+        0
+      );
+      lines.push(`Resources loaded: ${report.resources}`);
+      lines.push(`Drifted resources (client: ${clientLabel}): ${driftedCount}`);
+    } else if (operation === 'pull') {
+      lines.push(`Resources loaded: ${report.resources}`);
+    }
+
+    if (report.failures.length > 0) {
+      lines.push(`Failures: ${report.failures.length}`);
+    }
+
+    return lines.join('\n');
   }
 }
 
