@@ -400,39 +400,6 @@ export interface ExecutionContext {
   };
 }
 
-/**
- * System Control argument types
- */
-export interface BaseSystemControlArgs {
-  include_history?: boolean;
-  include_metrics?: boolean;
-  show_details?: boolean;
-  reason?: string;
-  confirm?: boolean;
-  limit?: number;
-  reset_analytics?: boolean;
-  operation?: string;
-}
-
-export type SystemControlAction =
-  | ({ action: 'status' } & Pick<
-      BaseSystemControlArgs,
-      'include_history' | 'include_metrics' | 'operation'
-    >)
-  | ({ action: 'framework'; framework?: string } & Pick<
-      BaseSystemControlArgs,
-      'reason' | 'show_details' | 'operation'
-    >)
-  | ({ action: 'analytics' } & Pick<
-      BaseSystemControlArgs,
-      'include_history' | 'reset_analytics' | 'limit' | 'confirm' | 'operation'
-    >)
-  | ({ action: 'config'; config?: ConfigObject; backup_path?: string } & Pick<
-      BaseSystemControlArgs,
-      'confirm' | 'operation'
-    >)
-  | ({ action: 'maintenance' } & Pick<BaseSystemControlArgs, 'reason' | 'confirm' | 'operation'>);
-
 // ============================================================================
 // REPLACEMENT TYPES FOR Record<string, any>
 // ============================================================================
