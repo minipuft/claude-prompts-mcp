@@ -15,7 +15,7 @@
  * `server/config.schema.json` is generated from this type with ts-json-schema-generator, so:
  * - the sentence an operator's editor shows for a key is the JSDoc sentence on the member here;
  * - a constraint TypeScript cannot carry is a JSDoc tag the generator reads (`@default`,
- *   `@minimum`, `@maximum`, `@pattern`);
+ *   `@minimum`, `@maximum`, `@pattern`, `@asType`);
  * - enums are union literal types;
  * - no object type carries an index signature, so each object emits `additionalProperties: false`.
  *
@@ -23,6 +23,17 @@
  * the value `DEFAULT_CONFIG` (src/infra/config/index.ts) applies; where neither speaks, the value
  * the hand-written schema declared. A member with no `@default` has no default in any of the
  * three — absent means absent.
+ *
+ * `@asType integer` marks a `number` member that must emit JSON Schema `"type": "integer"`.
+ * `ts-json-schema-generator` 2.9.0 turns every TypeScript `number` into `{ type: "number" }`
+ * unconditionally, but with `jsDoc: 'extended'` (already set in `scripts/generate-config-schema.ts`)
+ * `ExtendedAnnotationsReader.getTypeAnnotation` recognizes `asType` natively and overwrites the
+ * emitted `type` with the tag's text — no `extraTags` registration or post-generation rewrite
+ * needed. That native handling has no idea what the member's declared type is, though: it
+ * overwrites `type` for ANY member carrying the tag. `scripts/generate-config-schema.ts`'s
+ * `assertIntegerTagsOnNumberMembers` is the check the library doesn't do — it walks this file's
+ * own AST and fails generation loudly if `@asType` sits on a member whose declared type is not
+ * `number`, rather than silently retyping the wrong field.
  */
 
 import type {
@@ -57,6 +68,7 @@ export interface ConfigFileServer {
   /**
    * Port for the Streamable HTTP transport (ignored for stdio).
    *
+   * @asType integer
    * @default 9090
    */
   port?: number;
@@ -108,6 +120,7 @@ export interface ConfigFileSystemPromptInjection {
    * Inject framework guidance every N chain steps. Higher values reduce token usage at the cost of
    * less frequent framework reinforcement.
    *
+   * @asType integer
    * @default 3
    * @minimum 1
    */
@@ -127,6 +140,7 @@ export interface ConfigFileGateGuidanceInjection {
    * Inject gate criteria every N chain steps. 0 = first step only. Gate review steps always
    * receive guidance regardless of this setting.
    *
+   * @asType integer
    * @default 0
    * @minimum 0
    */
@@ -150,6 +164,7 @@ export interface ConfigFileStyleGuidanceInjection {
   /**
    * Inject style guidance every N chain steps. 0 = first step only. Set to 1 for every step.
    *
+   * @asType integer
    * @default 0
    * @minimum 0
    */
@@ -273,6 +288,7 @@ export interface ConfigFileGates {
    * Estimated tokens of reminder guidance rendered per dispatch. Reminders over the budget render
    * as one line each, in priority order; nothing is dropped. Checks are outside the budget.
    *
+   * @asType integer
    * @default 800
    * @minimum 0
    */
@@ -297,6 +313,7 @@ export interface ConfigFileVerificationIsolation {
   /**
    * Timeout in seconds for each isolation spawn.
    *
+   * @asType integer
    * @default 300
    * @minimum 30
    */
@@ -315,6 +332,7 @@ export interface ConfigFileVerification {
    * Fix attempts within current context before spawning isolation. Set to 0 for immediate
    * isolation.
    *
+   * @asType integer
    * @default 3
    * @minimum 0
    */
@@ -340,6 +358,7 @@ export interface ConfigFileVersioning {
   /**
    * Maximum versions to retain per prompt.
    *
+   * @asType integer
    * @default 50
    * @minimum 1
    */
@@ -361,6 +380,7 @@ export interface ConfigFilePhaseGuards {
   /**
    * Maximum retry attempts before phase guard review expires (enforce mode only).
    *
+   * @asType integer
    * @default 2
    * @minimum 0
    * @maximum 10
@@ -512,6 +532,7 @@ export interface ConfigFileLogsResource {
   /**
    * Maximum log entries to retain in memory.
    *
+   * @asType integer
    * @default 500
    * @minimum 50
    * @maximum 5000
@@ -558,18 +579,21 @@ export interface ConfigFileChainSessions {
   /**
    * Idle session timeout in minutes (default: 24 hours).
    *
+   * @asType integer
    * @default 1440
    */
   timeoutMinutes?: number;
   /**
    * Gate review timeout in minutes.
    *
+   * @asType integer
    * @default 30
    */
   reviewTimeoutMinutes?: number;
   /**
    * Background cleanup frequency in minutes.
    *
+   * @asType integer
    * @default 5
    */
   cleanupIntervalMinutes?: number;
