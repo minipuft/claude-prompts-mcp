@@ -28,12 +28,15 @@ import { join } from 'path';
  * by loading bundle -> primary -> overlays and letting a later result win, and what the resource
  * indexer produces by accumulating in that direction.
  *
- * It lives in `shared/` because its two callers sit in layers that may not import each other:
+ * It lived in `shared/` because its two callers sat in layers that may not import each other:
  * `runtime/resource-roots.ts` (the composition root's three loaders, and the resource indexer via
- * the reverse of this list) and `mcp/.../prompt-executor.ts` (the style loader the pipeline
- * actually renders `#style` from). Those two derived it independently and had to agree by
- * inspection; the second one omitted the primary altogether, which under a first-hit-wins walk
- * ranks the bundled tree above an operator's own styles.
+ * the reverse of this list) and `mcp/.../prompt-executor.ts` (a style loader the pipeline built
+ * for itself). Those two derived the order independently and had to agree by inspection; the
+ * second one omitted the primary altogether, which under a first-hit-wins walk ranks the bundled
+ * tree above an operator's own styles. P4.31 deleted the second caller along with the second
+ * loader — the pipeline now receives the composition root's instance — so `runtime/` is the only
+ * caller today. It stays in `shared/` because that is where a statement about resource layout
+ * belongs and because `mcp/` still may not import `runtime/`, not because two callers need it.
  *
  * The primary is IN the list, not beside it: it is neither the top nor the bottom of the order, so
  * a list that left it out could not say where it goes, and every consumer would have to re-derive
