@@ -69,9 +69,41 @@ const DECLARED = [
   },
 ];
 
+/**
+ * Paths a run DOES create, because of a defect that is not fixed yet — deliberately NOT `DECLARED`.
+ *
+ * `DECLARED` asserts a path belongs to the run. These do not; putting them there would make the
+ * defect read as a design decision. They are reported on every run instead of failing it, and
+ * each names the source anchor of its cause, so `tests/unit/scripts/tree-state-guard.test.ts`
+ * can assert the anchor still exists. The moment the defect is fixed that test fails, and the
+ * entry has to be deleted in the same change — an exception list with no satisfied-exception
+ * check is a place defects go to become permanent.
+ *
+ * `as of` / `flips when` are the two stamps an open marker needs to be checkable later.
+ */
+const KNOWN_LEAKS = [
+  {
+    prefix: 'server/runtime-state/',
+    file: 'src/mcp/tools/prompt-engine/core/pipeline-builder.ts',
+    anchor: "runtimeStateDir: path.join(deps.serverRoot, 'runtime-state')",
+    defect:
+      '`verify-state.db` is placed under `deps.serverRoot` — the PACKAGE directory — instead of ' +
+      'the PathResolver runtime root, so it ignores MCP_RUNTIME_ROOT and MCP_WORKSPACE. The ' +
+      'sixth consumer of the shape ConfigManager.get{Prompts,Frameworks,Gates,Scripts,Styles}' +
+      'Directory() already fixed five times, and the only one still reading serverRoot.',
+    asOf: '2026-09-16',
+    flipsWhen: '`anchor` no longer appears in `file` — then delete this entry',
+  },
+];
+
 /** The declared entry covering `entryPath`, or `undefined`. */
 function declarationFor(entryPath) {
   return DECLARED.find((entry) => entryPath.startsWith(entry.prefix));
+}
+
+/** The known-leak entry covering `entryPath`, or `undefined`. */
+function knownLeakFor(entryPath) {
+  return KNOWN_LEAKS.find((entry) => entryPath.startsWith(entry.prefix));
 }
 
 /** Same jest CLI process runs globalSetup and globalTeardown, so the pid keys the handoff. */
@@ -133,10 +165,13 @@ function classify(before, after) {
 
   const known = new Set(before);
   const fresh = after.filter((line) => !known.has(line)).sort();
+  const isDeclared = (line) => declarationFor(entryPath(line)) !== undefined;
+  const isKnownLeak = (line) => knownLeakFor(entryPath(line)) !== undefined;
   return {
     unreadable: null,
-    leaked: fresh.filter((line) => declarationFor(entryPath(line)) === undefined),
-    declared: fresh.filter((line) => declarationFor(entryPath(line)) !== undefined),
+    leaked: fresh.filter((line) => !isDeclared(line) && !isKnownLeak(line)),
+    declared: fresh.filter(isDeclared),
+    knownLeaks: fresh.filter((line) => !isDeclared(line) && isKnownLeak(line)),
   };
 }
 
@@ -157,6 +192,7 @@ function added() {
 module.exports = {
   REPO_ROOT,
   DECLARED,
+  KNOWN_LEAKS,
   capture,
   added,
   classify,

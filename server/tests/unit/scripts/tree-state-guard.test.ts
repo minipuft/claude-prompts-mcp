@@ -18,22 +18,25 @@
 
 import { afterAll, beforeAll, describe, expect, it } from '@jest/globals';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // A STATIC import, not `createRequire`: `knip` resolves static specifiers, so a dynamic require
 // here would leave every export below reading as dead and push the unused-export ratchet up by
 // four — a test that consumes a symbol only at runtime does not stop it being dead on paper.
 import {
   DECLARED,
+  KNOWN_LEAKS,
   classify,
   declarationFor,
   entryPath,
   listEntries,
 } from '../../helpers/tree-state-guard.cjs';
 
-const guard = { DECLARED, classify, declarationFor, entryPath, listEntries };
+const guard = { DECLARED, KNOWN_LEAKS, classify, declarationFor, entryPath, listEntries };
+const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
 describe('the verdict', () => {
   const BASE = ['!! node_modules', ' M server/src/index.ts'];
@@ -95,6 +98,39 @@ describe('the verdict', () => {
     expect(verdict.unreadable).not.toBeNull();
     expect(verdict.leaked).toEqual([]);
   });
+});
+
+describe('a known leak', () => {
+  const BASE = ['!! node_modules'];
+
+  it('is reported apart from both `leaked` and `declared`', () => {
+    const verdict = guard.classify(BASE, [...BASE, '!! server/runtime-state/']);
+    expect(verdict.leaked).toEqual([]);
+    expect(verdict.declared).toEqual([]);
+    expect(verdict.knownLeaks).toEqual(['!! server/runtime-state/']);
+  });
+
+  it('does not shelter a sibling path that merely shares a prefix word', () => {
+    // `runtime-state/` at the REPO root is the leak the HOME/runtime-root pair fixed; it must stay
+    // a failure, not ride on the server-root entry.
+    const verdict = guard.classify(BASE, [...BASE, '!! runtime-state/']);
+    expect(verdict.leaked).toEqual(['!! runtime-state/']);
+  });
+
+  /**
+   * The satisfied-exception check. Each entry names the source line that causes it; when the
+   * line is gone the defect is fixed, and an entry that outlives its cause would silently excuse
+   * whatever writes to that path NEXT. So this fails, and the fix has to delete the entry.
+   */
+  it.each(guard.KNOWN_LEAKS.map((entry) => [entry.prefix, entry] as const))(
+    '%s still has its cause at HEAD — delete the entry if this fails',
+    (_prefix, entry) => {
+      const source = readFileSync(path.join(SERVER_ROOT, entry.file), 'utf8');
+      expect(source).toContain(entry.anchor);
+      expect(entry.asOf).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(entry.flipsWhen.length).toBeGreaterThan(10);
+    }
+  );
 });
 
 describe('the porcelain path parser', () => {

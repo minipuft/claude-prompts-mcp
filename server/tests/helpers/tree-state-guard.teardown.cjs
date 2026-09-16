@@ -1,4 +1,4 @@
-const { REPO_ROOT, added } = require('./tree-state-guard.cjs');
+const { REPO_ROOT, KNOWN_LEAKS, added } = require('./tree-state-guard.cjs');
 
 /**
  * Fails the run if any suite left something in the working tree that nothing declares.
@@ -14,6 +14,17 @@ module.exports = function globalTeardown() {
       `The tree-state guard could not measure this run: ${result.unreadable}.\n` +
         'A run that cannot be shown clean is not a clean run — see ' +
         'tests/helpers/tree-state-guard.cjs.'
+    );
+  }
+
+  // Known leaks do not fail the run, but they are never silent: a defect that only a source file
+  // remembers is one nobody will fix. `process.stderr` rather than console, so jest's reporter
+  // cannot swallow it.
+  for (const line of result.knownLeaks ?? []) {
+    const entry = KNOWN_LEAKS.find((known) => line.slice(3).startsWith(known.prefix));
+    process.stderr.write(
+      `[tree-state-guard] KNOWN LEAK (not failing this run): ${line}\n` +
+        `  cause: ${entry?.file ?? 'unknown'}\n  flips when: ${entry?.flipsWhen ?? 'unknown'}\n`
     );
   }
 
