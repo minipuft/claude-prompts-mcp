@@ -140,7 +140,11 @@ describe('a gate file the loader refused is reachable and repairable (P4.15)', (
 
     const gateManager = await createGateManager(silentLogger(), {
       registryConfig: {
-        loaderConfig: { gatesDir: writable, additionalGatesDirs: [bundled] },
+        // The production shape since P4.27: `additionalGatesDirs` is the WHOLE lookup order,
+        // highest precedence first, with the primary at its own rank inside it — overlays above,
+        // the bundled tree last. Listing only `[bundled]` would now rank the bundled tree ABOVE
+        // `writable`, which inverts the shadow these cases are about.
+        loaderConfig: { gatesDir: writable, additionalGatesDirs: [writable, bundled] },
       },
     });
 
@@ -470,7 +474,8 @@ describe('a framework file the loader refused is reachable and repairable (P4.15
     // at the resolved roots. Seeding it here is that same call, not a test-only hook.
     getDefaultRuntimeLoader({
       frameworksDir: writable,
-      additionalFrameworksDirs: [bundled],
+      // The whole lookup order, highest first — see the gate suite's twin above.
+      additionalFrameworksDirs: [writable, bundled],
     });
 
     const frameworkManager = await createFrameworkManager(silentLogger());

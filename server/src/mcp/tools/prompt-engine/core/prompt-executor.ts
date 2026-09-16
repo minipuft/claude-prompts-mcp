@@ -85,6 +85,7 @@ import {
   buildIdentityScope,
   resolveContinuityScopeId,
 } from '#shared/utils/request-identity-scope.js';
+import { resourceRootPrecedence } from '#shared/utils/resource-root-lookup.js';
 
 export class PromptExecutor {
   public readonly inlineGateParser: ReturnType<typeof createSymbolicCommandParser>;
@@ -1008,24 +1009,23 @@ export class PromptExecutor {
   }
 
   /**
-   * Every directory `StyleDefinitionLoader` should fall back to beyond `primaryDir`: workspace
-   * overlay candidates, then the bundled package tree last when it is a distinct source —
-   * `StyleDefinitionLoader` itself drops entries that do not exist or duplicate the primary.
+   * Every directory `StyleDefinitionLoader` consults for this type, highest precedence first —
+   * workspace overlays, then `primaryDir`, then the bundled package tree.
    *
-   * Mirrors the combination `runtime/resource-roots.ts`'s `resolveResourceRoots` performs for
-   * `module-initializer.ts`'s own style loader (used only for the startup inventory line, never
-   * fed to the pipeline). Not imported from there: `mcp/` does not reach into `runtime/`, the
-   * application composition boundary. Both derive from the same `PathResolver` primitives,
-   * reached here through `ConfigManager.getOverlayResourceDirectories` /
-   * `getBundledResourceDirectory` — one resolution, two call sites.
+   * ORDERED BY `resourceRootPrecedence`, the same function `runtime/resource-roots.ts` calls, not
+   * by a second combination written here. This method used to perform its own and the two had to
+   * agree by inspection; when the flat-kind loaders moved to overlay-wins at P4.27 this one would
+   * have kept ranking the bundled tree above an operator's own styles, because it omitted
+   * `primaryDir` from the list entirely. `mcp/` still may not import `runtime/` — the shared
+   * statement sits in `shared/`, which both may reach, and the `PathResolver` primitives arrive
+   * here through `ConfigManager.getOverlayResourceDirectories` / `getBundledResourceDirectory`.
    */
   private overlayDirsFor(resourceType: string, primaryDir: string): string[] {
-    const overlays = this.configManager.getOverlayResourceDirectories(resourceType, primaryDir);
-    const bundled = this.configManager.getBundledResourceDirectory(resourceType);
-    if (bundled !== undefined && bundled !== primaryDir && !overlays.includes(bundled)) {
-      return [...overlays, bundled];
-    }
-    return overlays;
+    return resourceRootPrecedence({
+      primary: primaryDir,
+      overlays: this.configManager.getOverlayResourceDirectories(resourceType, primaryDir),
+      bundled: this.configManager.getBundledResourceDirectory(resourceType),
+    });
   }
 
   private resetPipeline(): void {

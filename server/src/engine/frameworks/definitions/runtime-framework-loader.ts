@@ -26,11 +26,8 @@ import {
 import type { FrameworkResourceDefinition } from './framework-definition-types.js';
 
 import { ResourceQuarantine, type QuarantineView } from '#shared/utils/resource-quarantine.js';
-import {
-  loadYamlFileSync,
-  discoverYamlDirectories,
-  discoverNestedYamlDirectories,
-} from '#shared/utils/yaml/index.js';
+import { resourceEntryRoots, resourceLookupOrder } from '#shared/utils/resource-root-lookup.js';
+import { loadYamlFileSync, discoverNestedYamlDirectories } from '#shared/utils/yaml/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -41,7 +38,13 @@ const __dirname = dirname(__filename);
 export interface RuntimeFrameworkLoaderConfig {
   /** Override default frameworks directory */
   frameworksDir?: string;
-  /** Additional directories to scan for framework overlays (workspace resources) */
+  /**
+   * Every other contributing framework directory, HIGHEST precedence first.
+   *
+   * An overlay listed here OUTRANKS `frameworksDir` — see `resourceLookupOrder`. The composition
+   * root places `frameworksDir` itself inside this list, at its own rank; a caller configuring the
+   * loader by hand may omit it, in which case it is consulted last.
+   */
   additionalFrameworksDirs?: string[];
   /** Enable caching of loaded definitions (default: true) */
   enableCache?: boolean;
@@ -95,6 +98,8 @@ export class RuntimeFrameworkLoader {
   private stats = { cacheHits: 0, cacheMisses: 0, loadErrors: 0 };
   private frameworksDir: string;
   private additionalFrameworksDirs: string[];
+  /** Every root this loader consults for an id, highest precedence first. */
+  private readonly lookupDirs: string[];
   private enableCache: boolean;
   private validateOnLoad: boolean;
   private debug: boolean;
@@ -106,6 +111,13 @@ export class RuntimeFrameworkLoader {
 
   constructor(config: RuntimeFrameworkLoaderConfig = {}) {
     this.frameworksDir = config.frameworksDir ?? this.resolveFrameworksDir();
+    // From the RAW list — see the gate loader's twin: the primary's rank IS its position here, and
+    // filtering it out first would drop it behind the bundled tree.
+    this.lookupDirs = resourceLookupOrder(
+      this.frameworksDir,
+      config.additionalFrameworksDirs ?? []
+    );
+    // Reported and watched, not looked up.
     this.additionalFrameworksDirs = (config.additionalFrameworksDirs ?? []).filter(
       (dir) => existsSync(dir) && dir !== this.frameworksDir
     );
@@ -141,10 +153,7 @@ export class RuntimeFrameworkLoader {
 
     this.stats.cacheMisses++;
 
-    // Load from primary directory, then fall through to additional dirs
-    const definition =
-      this.loadFromDir(normalizedId, this.frameworksDir) ??
-      this.loadFromAdditionalDirs(normalizedId);
+    const definition = this.loadFromLookupOrder(normalizedId);
 
     if (!definition) {
       return undefined;
@@ -164,14 +173,11 @@ export class RuntimeFrameworkLoader {
    * @returns Array of framework IDs that have valid entry points
    */
   discoverFrameworks(): string[] {
-    // Primary: flat scan
-    const primaryIds = discoverYamlDirectories(this.frameworksDir, 'framework.yaml');
-    const idSet = new Set(primaryIds.map((id) => id.toLowerCase()));
-
-    // Additional: nested scan (flat + grouped). Primary wins on conflict via Set.
-    for (const dir of this.additionalFrameworksDirs) {
-      const additionalIds = discoverNestedYamlDirectories(dir, 'framework.yaml');
-      for (const id of additionalIds) {
+    // One scan shape for every root — see the gate loader's twin. This answers WHICH ids exist;
+    // `loadFramework` answers which root serves each.
+    const idSet = new Set<string>();
+    for (const dir of this.lookupDirs) {
+      for (const id of discoverNestedYamlDirectories(dir, 'framework.yaml')) {
         idSet.add(id.toLowerCase());
       }
     }
@@ -205,15 +211,7 @@ export class RuntimeFrameworkLoader {
    * @returns True if the framework has a valid entry point
    */
   frameworkExists(id: string): boolean {
-    const normalizedId = id.toLowerCase();
-
-    // Check primary
-    if (existsSync(join(this.frameworksDir, normalizedId, 'framework.yaml'))) {
-      return true;
-    }
-
-    // Check additional dirs (flat + grouped)
-    return this.findInAdditionalDirs(normalizedId) !== undefined;
+    return this.entryRootsFor(id.toLowerCase()).length > 0;
   }
 
   /**
@@ -345,41 +343,24 @@ export class RuntimeFrameworkLoader {
     }
   }
 
-  /**
-   * Attempt to load a framework from additional directories.
-   * Tries flat path first, then scans for grouped nesting.
-   */
-  private loadFromAdditionalDirs(id: string): FrameworkResourceDefinition | undefined {
-    const resolvedDir = this.findInAdditionalDirs(id);
-    if (resolvedDir === undefined) return undefined;
-    return this.loadFromDir(id, resolvedDir);
+  /** The roots holding this id, highest precedence first. */
+  private entryRootsFor(id: string): string[] {
+    return resourceEntryRoots(this.lookupDirs, id, 'framework.yaml');
   }
 
   /**
-   * Find which additional directory contains a framework ID.
-   * Checks flat ({dir}/{id}/framework.yaml) and grouped ({dir}/{group}/{id}/framework.yaml).
+   * Load from the highest-precedence root that both holds this id AND yields a valid definition.
    *
-   * @returns The base directory to pass to loadFromDir, or undefined
+   * The fall-through on a refusal is the property `getQuarantine`'s docstring states: a broken
+   * workspace framework leaves the bundled framework of that id serving. Here it also keeps the
+   * server startable — `FrameworkRegistry.loadBuiltInGuides` throws `FATAL` on an id it cannot
+   * resolve, so collapsing this to "first root that HAS the file" would let one malformed overlay
+   * refuse the boot.
    */
-  private findInAdditionalDirs(id: string): string | undefined {
-    for (const dir of this.additionalFrameworksDirs) {
-      // Flat: {dir}/{id}/framework.yaml
-      if (existsSync(join(dir, id, 'framework.yaml'))) {
-        return dir;
-      }
-
-      // Grouped: {dir}/{group}/{id}/framework.yaml
-      try {
-        const groups = readdirSync(dir, { withFileTypes: true });
-        for (const group of groups) {
-          if (!group.isDirectory()) continue;
-          if (existsSync(join(dir, group.name, id, 'framework.yaml'))) {
-            return join(dir, group.name);
-          }
-        }
-      } catch {
-        // Directory read failure — skip
-      }
+  private loadFromLookupOrder(id: string): FrameworkResourceDefinition | undefined {
+    for (const base of this.entryRootsFor(id)) {
+      const definition = this.loadFromDir(id, base);
+      if (definition !== undefined) return definition;
     }
     return undefined;
   }
