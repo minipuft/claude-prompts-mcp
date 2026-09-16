@@ -439,6 +439,20 @@ export const SUITE = [
       'CHECKED both ways — the self-test drives the predicate over a wired indexer and baseline call (must stay silent), an indexer config omitting `quarantine` and a baseline call missing its fourth argument (both must report; these are the motivating instances), and a `quarantine` named on the line above an unwired config (must still report, since proximity must not launder it); the live tree is the fifth case, and a scan finding no call site at all exits 1 rather than passing on a probe that observed nothing. All three production call sites were individually unwired and each exits 1 — the property-form config, the shorthand-form config, and the positional argument',
   },
   {
+    // `spawn` is a TEXTUAL match, not a behavioural one, for the reason
+    // validate:test-directory-membership already declares it: this script's SPAWN_BINDINGS set
+    // lists the literals 'spawn', 'spawnSync', 'execFile' and 'fork' so it can recognise a test
+    // that drives production in a CHILD process, where an import form says nothing. It spawns no
+    // process itself and imports only node:fs, node:path, node:url and typescript. Declared rather
+    // than worked around, because the detector is a superset by design and omitting a matched
+    // substrate fails.
+    script: 'validate:test-subject-claims',
+    io: 'read',
+    reads: ['file', 'spawn', 'walk'],
+    converse:
+      'CHECKED both ways — the self-test drives the predicate over both P4.29 motivating headers verbatim (a "real modules" list whose three handlers are bound only by `import type`, and an `@lifecycle` line claiming startup wiring from a file that value-imports nothing under src/runtime/ and spawns nothing; each must report, naming the symbol or the claim), and over their rewritten forms, a `create<Subject>` factory standing in for its class, a claimed interface, a startup claim backed by a spawned child, a headerless file and a single-capital export name in prose (all must stay silent). The live tree is the ninth case; it found a third instance (`framework-creation.test.ts` naming the framework manager as "real registration" four lines above naming its registry as mocked), and a scan finding no test file or no src export exits 1 rather than passing on a probe that observed nothing',
+  },
+  {
     script: 'validate:declared-surface',
     io: 'read',
     reads: ['declared'],
