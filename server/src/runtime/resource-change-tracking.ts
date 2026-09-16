@@ -22,6 +22,7 @@ import {
   ResourceChangeTracker,
   TrackedResourceType,
 } from '#infra/observability/tracking/index.js';
+import { setResourceChangeLog } from '#shared/core/resource-change-log.js';
 import {
   isIgnoredPromptEntryName,
   isReservedPromptDirectoryName,
@@ -38,6 +39,11 @@ let trackerInstance: ResourceChangeTracker | undefined;
 /**
  * Initialize the ResourceChangeTracker
  * Should be called once during application startup
+ *
+ * Publishing the instance to `shared/core/resource-change-log.js` is part of initializing it, not
+ * a separate wiring step a caller could forget: mcp/ reads the log through that slot, and a
+ * tracker that is running but unpublished loses every mcp-tool-sourced row while the filesystem
+ * watcher keeps writing — the shape that reads as "tracking works" in a spot check.
  */
 export async function initializeResourceChangeTracker(
   logger: Logger,
@@ -60,14 +66,19 @@ export async function initializeResourceChangeTracker(
   });
 
   await trackerInstance.initialize();
+  setResourceChangeLog(trackerInstance);
   return trackerInstance;
 }
 
 /**
  * Get the initialized tracker instance
  * Returns undefined if not yet initialized
+ *
+ * Module-private since 2026-09-15. The composition root is the only place that should hold the
+ * concrete tracker; every other reader takes `ResourceChangeLogPort` from
+ * `shared/core/resource-change-log.js`. Exporting it is what let mcp/ import this file.
  */
-export function getResourceChangeTracker(): ResourceChangeTracker | undefined {
+function getResourceChangeTracker(): ResourceChangeTracker | undefined {
   return trackerInstance;
 }
 
@@ -298,38 +309,9 @@ export function buildResourceChangeTrackerAuxiliaryReloadConfig(
   };
 }
 
-/**
- * Log an MCP tool change (for use in CRUD handlers)
- * Returns silently if tracker is not initialized
- */
-export async function logMcpToolChange(
-  logger: Logger,
-  params: {
-    operation: 'added' | 'modified' | 'removed';
-    resourceType: TrackedResourceType;
-    resourceId: string;
-    filePath: string;
-    content?: string;
-  }
-): Promise<void> {
-  const tracker = getResourceChangeTracker();
-  if (tracker === undefined) {
-    return;
-  }
-
-  try {
-    await tracker.logChange({
-      source: 'mcp-tool',
-      operation: params.operation,
-      resourceType: params.resourceType,
-      resourceId: params.resourceId,
-      filePath: params.filePath,
-      content: params.content,
-    });
-  } catch (error) {
-    logger.warn(`Failed to log MCP tool change for ${params.resourceId}:`, error);
-  }
-}
+// `logMcpToolChange` moved to `shared/core/resource-change-log.js` on 2026-09-15. Its only callers
+// are in mcp/, and while it lived here they reached the composition root to get at it —
+// the edge `no-imports-into-runtime` now forbids. Behaviour is unchanged.
 
 /**
  * Extract resource ID from a file path

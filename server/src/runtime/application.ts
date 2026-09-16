@@ -7,15 +7,13 @@
  * focused on runtime concerns while delegating execution to the execution engine.
  */
 
-import * as path from 'node:path';
-
 import { McpServer } from '@modelcontextprotocol/server';
 
 // Import all module managers
 import { createRuntimeFoundation } from './context.js';
 import { loadPromptData, loadSkillsSyncExports } from './data-loader.js';
 import { buildHealthReport } from './health.js';
-import { buildHotReloadAuxiliaryConfigs } from './hot-reload-auxiliaries.js';
+import { buildPromptHotReloadOptions } from './hot-reload-auxiliaries.js';
 import {
   publishPromptsChanged,
   publishResourcesChanged,
@@ -23,8 +21,8 @@ import {
 } from './list-change-notifier.js';
 import { initializeModules } from './module-initializer.js';
 import { resolveRuntimeLaunchOptions, RuntimeLaunchOptions } from './options.js';
+import { resyncResourceIndexAfterReload } from './resource-index-resync.js';
 import { registerMcpResources as registerMcpResourcesOn } from './resource-registration.js';
-import { indexerResourceRoots } from './resource-roots.js';
 import { resolveServingUnitScope } from './serving-unit-scope.js';
 import { startServerWithManagers } from './startup-server.js';
 import { TelemetryLifecycle } from './telemetry-lifecycle.js';
@@ -788,46 +786,12 @@ export class Application {
       // meant that boundary never fired while the refresh went on to report
       // "completed successfully" over a stale index.
       if (this.serverRoot) {
-        // Not a skip. An unset view means `initializeModules` never ran, and indexing on ahead
-        // would publish every refused gate, framework and style to the hooks while reporting
-        // "refresh completed successfully" — the failure this row exists to remove. Unreachable
-        // in a served process: the only caller of `fullServerRefresh` is a callback
-        // `initializeModules` itself wires.
-        if (this.indexQuarantine === undefined) {
-          throw new Error(
-            'Resource index re-sync has no quarantine view: initializeModules() must run before a hot reload.'
-          );
-        }
-        const indexQuarantine = this.indexQuarantine;
-        const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
-        const { createResourceIndexer, reportSyncFindings } =
-          await import('#infra/database/resource-indexer.js');
-        const { ScriptToolDefinitionLoader } =
-          await import('#modules/automation/core/script-definition-loader.js');
-        const dbManager = await SqliteEngine.getInstance(this.serverRoot, this.logger);
-        await dbManager.initialize();
-        const resourcesDir =
-          this.pathResolver?.getResourcesPath() ?? path.join(this.serverRoot, 'resources');
-        const scriptLoader = new ScriptToolDefinitionLoader({ validateOnLoad: true });
-        const indexer = createResourceIndexer(dbManager, this.logger, {
-          resourcesDir,
-          resourceRoots: indexerResourceRoots(this.pathResolver),
-          toolLoader: (dir, id) => scriptLoader.loadAllToolsForPromptDetailed(dir, id),
-          // The SAME merged view the startup sync reads, assembled once by `initializeModules`
-          // and handed over in `ModuleInitResult`. This line used to pass the prompt view alone
-          // under a comment claiming the other three joined here; they did not, and the first hot
-          // reload re-indexed every refused gate, framework and style (P4.25).
-          //
-          // Read by reference, so this is the reload path's correction as well as startup's:
-          // `loadAndProcessData()` above has just re-walked every prompt root and replaced that
-          // root's records, so a prompt REPAIRED since the last load is no longer refused here and
-          // indexes as `added` on this very pass. The gate and framework leaves resolve through
-          // their registries on every read, so their auxiliary reloads are reflected too.
-          quarantine: indexQuarantine,
+        await resyncResourceIndexAfterReload({
+          serverRoot: this.serverRoot,
+          pathResolver: this.pathResolver,
+          logger: this.logger,
+          indexQuarantine: this.indexQuarantine,
         });
-        const syncResult = await indexer.syncAll();
-        reportSyncFindings(syncResult, this.logger);
-        this.logger.info('✅ Resource index re-synced after hot-reload.');
       }
 
       // Step 4: Notify MCP clients that the prompt list has changed (proper hot-reload)
@@ -860,20 +824,15 @@ export class Application {
         this.serviceOrchestrator.register({
           name: serviceName,
           start: async () => {
-            const auxiliaryReloads = await buildHotReloadAuxiliaryConfigs({
+            const hotReloadOptions = await buildPromptHotReloadOptions({
               logger: this.logger,
               mcpToolsManager: this.mcpToolsManager,
               gateManager: this.gateManager,
               scriptLoader: this.promptManager.getModules().converter.getScriptToolLoader(),
               promptsDir: this.promptsDirectory ?? undefined,
               configManager: this.configManager,
+              pathResolver: this.pathResolver,
             });
-
-            const hotReloadOptions: Parameters<typeof this.promptManager.startHotReload>[2] = {};
-
-            if (auxiliaryReloads.length > 0) {
-              hotReloadOptions.auxiliaryReloads = auxiliaryReloads;
-            }
 
             await this.promptManager.startHotReload(
               this.promptsDirectory!,

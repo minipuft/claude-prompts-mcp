@@ -104,10 +104,12 @@ const INDEXED_TYPE_DIRS = {
 /**
  * The roots the resource indexer must walk so its rows describe the catalog the loaders serve.
  *
- * The indexer cannot compute this itself: it lives in `infra/` (Layer 1), which
- * `.dependency-cruiser.cjs` forbids from importing `runtime/`. So the runtime resolves the roots
- * and hands them down, which is the correct direction anyway — path policy is not a database
- * concern.
+ * The indexer cannot compute this itself: it lives in `infra/` (Layer 1), which the
+ * `no-imports-into-runtime` rule in `.dependency-cruiser.cjs` forbids from importing `runtime/`.
+ * So the runtime resolves the roots and hands them down, which is the correct direction anyway —
+ * path policy is not a database concern. (That rule is named here because it did not exist when
+ * this comment was written on 2026-08-29: the direction was the intent, and nothing checked it
+ * until 2026-09-15.)
  */
 export function indexerResourceRoots(pathResolver: PathResolver | undefined): ResourceRootMap {
   if (pathResolver === undefined) return {};

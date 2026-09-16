@@ -67,12 +67,29 @@ export function buildWatchTargets(
   options?: {
     frameworkDirectories?: string[];
     auxiliaryDirectories?: string[][];
+    /**
+     * Every other root the prompt loader reads — the bundled tree and any workspace overlay.
+     *
+     * The catalog is composed from all of them at load time, so an edit in any of them changes
+     * what the server serves; watching only the primary meant an edit to a bundled-only or
+     * overlay-only prompt was never observed and the stale body was served until a restart.
+     */
+    promptRoots?: string[];
   }
 ): WatchTarget[] {
   const targets = new Map<string, WatchTarget>();
 
   // Main prompts directory
   targets.set(promptsDir, { path: promptsDir });
+
+  // Every other root the loader composes the catalog from
+  if (options?.promptRoots !== undefined) {
+    for (const dir of options.promptRoots) {
+      if (dir !== '') {
+        targets.set(dir, { path: dir });
+      }
+    }
+  }
 
   // Category directories
   for (const dir of categoryDirs) {
