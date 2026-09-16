@@ -2115,10 +2115,6 @@
         "description": "<present>",
         "type": "string"
       },
-      "backup_path": {
-        "description": "<present>",
-        "type": "string"
-      },
       "category": {
         "description": "<present>",
         "type": "string"
@@ -2135,9 +2131,6 @@
           },
           "operation": {
             "enum": [
-              "get",
-              "set",
-              "list",
               "validate"
             ],
             "type": "string"

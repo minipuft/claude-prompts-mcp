@@ -8,143 +8,117 @@ import type { ToolResponse } from '#shared/types/index.js';
 
 import { handleError as utilsHandleError } from '#shared/utils/index.js';
 
+/** The one remaining nested-config shape: a per-key candidate check, never a write. */
+interface ConfigValidateRequest {
+  key: string;
+  value?: string;
+  operation: 'validate';
+}
+
+/**
+ * MCP config surface after this row: `list`, `keys`, `validate`. `get`, `set`, `reset` and
+ * `restore` do not reach this handler — `get` is held by owner ruling R41 until a generated
+ * config shape resolves most of the 78 schema-declared keys (31 resolve today); writes are
+ * `cpm`-only per R27/R35 and are not coming back. Any other operation is refused by name,
+ * never answered with a listing — that silent substitution (`if (!configRequest) return list`)
+ * is the defect this row removes: it made every malformed or unrecognized call look like a
+ * successful config dump.
+ */
 export class ConfigActionHandler extends ActionHandler {
   async execute(args: any): Promise<ToolResponse> {
-    const operation = args.operation || 'default';
+    const operation = args.operation;
     const configRequest: unknown = args.config;
 
     switch (operation) {
-      case 'restore':
-        return await this.restoreConfig({
-          backup_path: args.backup_path,
-          confirm: args.confirm,
-        });
+      case 'list':
+        return await this.handleConfigList();
+      case 'keys':
+        return await this.handleConfigKeys();
       case 'validate':
         if (configRequest === undefined) {
           return await this.handleSchemaValidate();
         }
-      // falls through: a validate call WITH a config object is handled like get/set/list below
-      case 'get':
-      case 'set':
-      case 'list':
-      case 'default':
+        return await this.handleConfigValidate(configRequest as ConfigValidateRequest);
       default:
-        return await this.manageConfig({
-          config: configRequest as Parameters<typeof this.manageConfig>[0]['config'],
-        });
+        return this.refuseOperation(operation);
     }
   }
 
-  private async restoreConfig(args: {
-    backup_path?: string;
-    confirm?: boolean;
-  }): Promise<ToolResponse> {
-    if (!this.configManager) {
-      throw new Error('Configuration manager not initialized');
-    }
+  private configManagerUnavailable(): ToolResponse {
+    return createStructuredResponse(
+      '❌ **Configuration Manager Unavailable**',
+      { operation: 'config', error: 'config_manager_unavailable' },
+      true
+    );
+  }
 
-    if (!args.confirm) {
+  private refuseOperation(operation: unknown): ToolResponse {
+    const label = typeof operation === 'string' && operation.length > 0 ? operation : '(missing)';
+
+    return createStructuredResponse(
+      [
+        `❌ config operation \`${label}\` is not served over MCP.`,
+        '',
+        'Reads: `list` (whole loaded configuration), `keys` (declared schema keys), `validate`' +
+          ' (the load-time schema check, or a per-key candidate check with' +
+          ' `config: { operation: "validate", key, value }`).',
+        '`get` is held pending a generated config shape (R41) — read one key with' +
+          ' `cpm config get <key>` until it returns.',
+        'Arbitrary writes (naming a key and value) and restore-from-backup are not served over' +
+          ' MCP — use `cpm config set <key> <value>` or `cpm config reset --force`.',
+      ].join('\n'),
+      true,
+      { action: 'config' }
+    );
+  }
+
+  private async handleConfigList(): Promise<ToolResponse> {
+    if (!this.configManager) return this.configManagerUnavailable();
+
+    try {
+      const config = this.configManager.getConfig();
       return this.createMinimalSystemResponse(
-        "❌ Restore cancelled. Set 'confirm: true' to restore configuration.",
-        'restore_config'
+        `📋 **Current Configuration**\n\`\`\`json\n${JSON.stringify(config, null, 2)}\n\`\`\``,
+        'config_list'
       );
-    }
-
-    try {
-      if (!this.safeConfigWriter) {
-        throw new Error('SafeConfigWriter not available');
-      }
-      const result = await this.safeConfigWriter.restoreFromBackup(args.backup_path || '');
-      if (result.success) {
-        return this.createMinimalSystemResponse(
-          '✅ Configuration restored successfully.',
-          'restore_config'
-        );
-      } else {
-        throw new Error(result.message || 'Failed to restore configuration.');
-      }
-    } catch (error) {
-      const result = utilsHandleError(error, 'restore_config', this.logger);
-      return createStructuredResponse(result.message, result.isError, { action: 'restore_config' });
-    }
-  }
-
-  private async manageConfig(args: {
-    config?: {
-      key: string;
-      value?: string;
-      operation: 'get' | 'set' | 'list' | 'validate';
-    };
-  }): Promise<ToolResponse> {
-    const configRequest = args.config;
-
-    if (!this.configManager) {
-      return createStructuredResponse(
-        '❌ **Configuration Manager Unavailable**',
-        { operation: 'config', error: 'config_manager_unavailable' },
-        true
-      );
-    }
-
-    try {
-      if (!configRequest) {
-        return await this.handleConfigList();
-      }
-
-      switch (configRequest.operation) {
-        case 'list':
-          return await this.handleConfigList();
-        case 'get':
-          return await this.handleConfigGet(configRequest.key);
-        case 'set':
-          return await this.handleConfigSet(configRequest.key, configRequest.value || '');
-        case 'validate':
-          return await this.handleConfigValidate(configRequest.key, configRequest.value || '');
-        default:
-          throw new Error(`Unknown config operation: ${configRequest.operation}`);
-      }
     } catch (error) {
       const result = utilsHandleError(error, 'config_management', this.logger);
       return createStructuredResponse(result.message, result.isError, { action: 'config' });
     }
   }
 
-  private async handleConfigList(): Promise<ToolResponse> {
-    const config = this.configManager?.getConfig();
-    return this.createMinimalSystemResponse(
-      `📋 **Current Configuration**\n\`\`\`json\n${JSON.stringify(config, null, 2)}\n\`\`\``,
-      'config_list'
-    );
-  }
+  private async handleConfigKeys(): Promise<ToolResponse> {
+    if (!this.configManager) return this.configManagerUnavailable();
 
-  private async handleConfigGet(key: string): Promise<ToolResponse> {
-    const config = this.configManager?.getConfig();
-    const value = config
-      ? key
-          .split('.')
-          .reduce((obj: any, k) => (obj?.[k] !== undefined ? obj[k] : undefined), config)
-      : undefined;
-    return this.createMinimalSystemResponse(`**${key}**: ${JSON.stringify(value)}`, 'config_get');
-  }
-
-  private async handleConfigSet(key: string, value: string): Promise<ToolResponse> {
-    if (!this.safeConfigWriter) throw new Error('SafeConfigWriter unavailable');
-    const result = await this.safeConfigWriter.updateConfigValue(key, value);
-    if (!result.success) {
-      throw new Error(result.message || result.error);
+    try {
+      const keys = await this.configManager.listConfigKeys();
+      return this.createMinimalSystemResponse(
+        `🔑 **Declared Configuration Keys** (${keys.length})\n\`\`\`\n${keys.join('\n')}\n\`\`\``,
+        'config_keys'
+      );
+    } catch (error) {
+      // listConfigKeys() throws when the schema cannot be enumerated — report that as the
+      // explicit failure it is; never render an empty list, which would read as "zero keys".
+      const result = utilsHandleError(error, 'config_management', this.logger);
+      return createStructuredResponse(result.message, result.isError, { action: 'config' });
     }
-    return this.createMinimalSystemResponse(`✅ Set **${key}** to \`${value}\``, 'config_set');
   }
 
-  private async handleConfigValidate(key: string, value: string): Promise<ToolResponse> {
-    if (!this.configManager) throw new Error('Config manager unavailable');
-    const validation = validateConfigInput(key, value);
-    return this.createMinimalSystemResponse(
-      validation.valid
-        ? `✅ Configuration valid for **${key}**`
-        : `❌ Invalid configuration for **${key}**: ${validation.error}`,
-      'config_validate'
-    );
+  private async handleConfigValidate(configRequest: ConfigValidateRequest): Promise<ToolResponse> {
+    if (!this.configManager) return this.configManagerUnavailable();
+
+    try {
+      const validation = validateConfigInput(configRequest.key, configRequest.value ?? '');
+      return this.createMinimalSystemResponse(
+        validation.valid
+          ? `✅ Configuration valid for **${configRequest.key}**`
+          : `❌ Invalid configuration for **${configRequest.key}**: ${validation.error}`,
+        'config_validate'
+      );
+    } catch (error) {
+      const result = utilsHandleError(error, 'config_management', this.logger);
+      return createStructuredResponse(result.message, result.isError, { action: 'config' });
+    }
   }
 
   /**
