@@ -463,15 +463,17 @@ export type DelegationProfile =
  * Set via CLI flags or config; used as fallback when request lacks identity claims.
  */
 export interface IdentityLaunchDefaults {
+  /** Default organization scope. */
   organizationId?: string;
+  /** Default workspace scope. */
   workspaceId?: string;
-  /** Optional launch-level client routing hint. */
+  /** Authoritative launch-level client family for delegation routing. */
   clientFamily?: ClientFamily;
-  /** Optional launch-level client identifier override (e.g., 'claude-code'). */
+  /** Authoritative launch-level client identifier. */
   clientId?: string;
-  /** Optional launch-level client version hint. */
+  /** Authoritative launch-level client version. */
   clientVersion?: string;
-  /** Optional launch-level delegation profile override. */
+  /** Authoritative launch-level delegation profile. */
   delegationProfile?: DelegationProfile;
 }
 

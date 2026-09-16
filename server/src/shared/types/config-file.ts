@@ -123,8 +123,6 @@ export interface ConfigFileSystemPromptInjection {
 
 /** Gate-guidance injection: the quality criteria a step is asked to satisfy. */
 export interface ConfigFileGateGuidanceInjection {
-  /** Inject gate criteria at all. Gate review steps receive criteria regardless of this setting. */
-  enabled?: boolean;
   /**
    * Inject gate criteria every N chain steps. 0 = first step only. Gate review steps always
    * receive guidance regardless of this setting.
