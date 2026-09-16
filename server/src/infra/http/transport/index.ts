@@ -23,7 +23,6 @@ import { createMcpHandler } from '@modelcontextprotocol/server';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import express from 'express';
 
-import { ConfigLoader } from '../../config/index.js';
 import { Logger } from '../../logging/index.js';
 
 import type { TransportMode } from '#shared/types/index.js';
@@ -88,29 +87,34 @@ export class TransportRouter {
   }
 
   /**
-   * Determine transport mode from command line arguments or configuration
-   * Priority: CLI args > config.transport > default (stdio)
+   * Narrow the transport value the caller already resolved at launch to a supported
+   * `TransportMode`.
+   *
+   * Transport is launch-time-only (Ruling R30): `config.json` itself cannot select it — a
+   * `server.transport` other than `"stdio"` refuses startup at load time, see
+   * `ConfigLoader.loadConfig`. Row 4.13: this used to parse `--transport` out of a raw
+   * `argv`-like array itself (`extractTransportArg`, a second, local copy of the parse
+   * `runtime/cli.ts`'s `parseServerCliArgs` already owns) and fell back to a `configManager`
+   * parameter's `getTransportMode()` when no flag was present. `infra/` cannot import
+   * `parseServerCliArgs` — `runtime/` is the composition root and nothing below it may import it
+   * (`.dependency-cruiser.cjs` `no-imports-into-runtime`) — so the fix is not a shared call, it is
+   * one fewer parse: `resolveRuntimeLaunchOptions` (row 4.12) already resolves `--transport` once,
+   * defaulting to `'stdio'` when the flag is absent (`RuntimeLaunchOptions.transport`), so both
+   * callers (`runtime/context.ts`, `runtime/startup-server.ts`) now hand this method that value
+   * directly instead of `args`/`process.argv`. The `configManager` fallback is gone with it: the
+   * one case it ever answered — "no `--transport` flag was given" — is resolved before this
+   * method runs, by the same default value this method used to fall back to.
    */
-  static determineTransport(args: string[], configManager: ConfigLoader): TransportMode {
-    // CLI argument takes highest priority
-    const transportArg = args.find((arg: string) => arg.startsWith('--transport='));
-    if (transportArg) {
-      const value = transportArg.split('=')[1] ?? '';
-      assertTransportSupported(value, '--transport');
-      if (value === 'stdio' || value === 'streamable-http' || value === 'both') {
-        return value;
-      }
-      // Use stderr to avoid corrupting STDIO protocol
-      console.error(
-        `[TransportRouter] Invalid --transport value: "${value}". Using config default.`
-      );
+  static determineTransport(transport: string): TransportMode {
+    assertTransportSupported(transport, '--transport');
+    if (transport === 'stdio' || transport === 'streamable-http' || transport === 'both') {
+      return transport;
     }
-
-    // Fall back to config value — which is a second way a removed transport can
-    // arrive, so it is checked too rather than trusted.
-    const configured = configManager.getTransportMode();
-    assertTransportSupported(String(configured), 'config.transport');
-    return configured;
+    // Use stderr to avoid corrupting STDIO protocol
+    console.error(
+      `[TransportRouter] Invalid --transport value: "${transport}". Using the default.`
+    );
+    return 'stdio';
   }
 
   /**

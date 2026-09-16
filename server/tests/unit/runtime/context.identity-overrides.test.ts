@@ -25,6 +25,7 @@ function createRuntimeOptions(overrides: Partial<RuntimeLaunchOptions> = {}): Ru
     quiet: true,
     startupTest: false,
     testEnvironment: true,
+    transport: 'stdio',
     paths: {},
     ...overrides,
   };

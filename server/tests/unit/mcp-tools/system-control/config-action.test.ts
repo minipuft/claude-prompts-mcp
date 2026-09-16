@@ -56,7 +56,9 @@ describe('ConfigActionHandler read surface + refusal controls', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(path.join(tmpdir(), 'config-action-'));
     configPath = path.join(tempDir, 'config.json');
-    await writeFile(configPath, JSON.stringify({ gates: { enabled: true } }), 'utf8');
+    // `version` is a required member of the 5.0 document — a fixture without it loads, but the
+    // stored schema result is `invalid`, which is the thing two tests below assert on.
+    await writeFile(configPath, JSON.stringify({ version: 5, gates: { enabled: true } }), 'utf8');
   });
 
   afterEach(async () => {
@@ -134,7 +136,7 @@ describe('ConfigActionHandler read surface + refusal controls', () => {
     test('top-level validate reports the stored invalid result, naming the bad key', async () => {
       await writeFile(
         configPath,
-        JSON.stringify({ gates: { enabled: true, nonsenseKey: true } }),
+        JSON.stringify({ version: 5, gates: { enabled: true, nonsenseKey: true } }),
         'utf8'
       );
       const manager = new ConfigLoader(configPath, undefined, { schemaPath: SCHEMA_PATH });
@@ -170,14 +172,18 @@ describe('ConfigActionHandler read surface + refusal controls', () => {
       await manager.loadConfig();
       const handler = new ConfigActionHandler(makeContext(manager));
 
+      // `'nine'` rather than an out-of-range port: `ConfigFile` declares `server.port` as an
+      // integer with no `@minimum`/`@maximum`, so the generated key table carries no bound to
+      // reject 99 with. Restoring that bound is a one-line-per-tag change to `ConfigFileServer`,
+      // not a second range list in the validator — which is what this row deleted.
       const response = await handler.execute({
         operation: 'validate',
-        config: { operation: 'validate', key: 'server.port', value: '99' },
+        config: { operation: 'validate', key: 'server.port', value: 'nine' },
       });
       const text = textOf(response);
 
       expect(text).toContain('❌ Invalid configuration for **server.port**');
-      expect(text).toContain('Port must be a number between 1024-65535');
+      expect(text).toContain('server.port must be a whole number');
     });
   });
 

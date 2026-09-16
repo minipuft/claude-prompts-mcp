@@ -28,6 +28,7 @@ import type { SkillsSyncPaths } from '#modules/skills-sync/service.js';
 import type { ActionHandler } from './core/action-handler-base.js';
 import type { SystemAnalytics, SystemControlContext } from './core/types.js';
 
+import { type ConfigKey } from '#cli-shared/config-input-validator.js';
 import { FrameworkManager } from '#engine/frameworks/framework-manager.js';
 import { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';
 import { GateStateStore } from '#engine/gates/gate-state-store.js';
@@ -252,11 +253,14 @@ export class ConsolidatedSystemControl implements SystemControlContext {
       return '⚠️ Persistence skipped (config writer unavailable).';
     }
 
-    // Every key here must appear in CONFIG_VALID_KEYS — updateConfigValue rejects anything else
-    // as "Unknown configuration key". Two of the three previously listed did not
+    // Every key here must appear in `CONFIG_VALID_KEYS` (src/cli-shared/_generated/config-keys.ts,
+    // generated from `ConfigFile`) — `updateConfigValue` rejects anything else as "Unknown
+    // configuration key". Two of the three previously listed did not
     // (`frameworks.injection.systemPrompt.enabled` and `gates.enableMethodologyGates`), and the
-    // loop returns on first failure, so persistence aborted before writing anything.
-    const keys = [
+    // loop returns on first failure, so persistence aborted before writing anything. The list is
+    // no longer hand-kept, so a key that stops existing in `ConfigFile` fails the typecheck here
+    // rather than at run time.
+    const keys: ConfigKey[] = [
       'frameworks.enabled',
       'frameworks.dynamicToolDescriptions',
       'gates.frameworkGates',

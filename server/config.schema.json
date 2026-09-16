@@ -1,90 +1,80 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://github.com/minipuft/claude-prompts-mcp/server/config.schema.json",
-  "title": "Claude Prompts MCP Configuration",
-  "description": "Configuration for the Claude Prompts MCP server",
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {
     "$schema": {
       "type": "string",
-      "description": "JSON Schema reference for IDE validation"
+      "description": "JSON Schema reference for IDE validation."
     },
-
+    "version": {
+      "type": "number",
+      "const": 5,
+      "description": "Config file format version. `5` is the shape this file describes; an older file declares its own version and is migrated before it reaches this type."
+    },
     "server": {
       "type": "object",
-      "additionalProperties": false,
-      "description": "Server identity and transport settings",
       "properties": {
         "name": {
           "type": "string",
-          "default": "claude-prompts",
-          "description": "Server name reported to MCP clients"
-        },
-        "version": {
-          "type": "string",
-          "default": "1.0.0",
-          "description": "DEPRECATED — settable via `cpm config set server.version` and reported by GET /health, but unrelated to the package version. Scheduled for removal (plan OQ-2); read the package version instead."
-        },
-        "transport": {
-          "type": "string",
-          "enum": ["stdio", "streamable-http", "both"],
-          "default": "stdio",
-          "description": "Transport protocol: 'stdio' for CLI tools (Claude Code), 'streamable-http' for web clients, 'both' for either"
+          "description": "Server name reported to MCP clients.",
+          "default": "claude-prompts"
         },
         "port": {
           "type": "integer",
+          "description": "Port for the Streamable HTTP transport (ignored for stdio).",
           "default": 9090,
-          "description": "Port for the Streamable HTTP transport (ignored for stdio)"
+          "minimum": 1024,
+          "maximum": 65535
         }
-      }
+      },
+      "additionalProperties": false,
+      "description": "Server identity and transport settings."
     },
-
     "prompts": {
       "type": "object",
-      "additionalProperties": false,
-      "description": "Prompt loading and registration",
       "properties": {
         "directory": {
           "type": "string",
-          "default": "resources/prompts",
-          "description": "Directory containing prompt definitions (relative to server root)"
+          "description": "Directory containing prompt definitions (relative to server root).",
+          "default": "resources/prompts"
         },
         "registerWithMcp": {
           "type": "boolean",
-          "default": true,
-          "description": "Register prompts as MCP resources for client discovery"
+          "description": "Register prompts as MCP resources for client discovery.",
+          "default": true
         }
-      }
+      },
+      "additionalProperties": false,
+      "description": "Prompt loading and registration."
     },
-
     "identity": {
       "type": "object",
-      "additionalProperties": false,
-      "description": "Identity and client-profile resolution for scope isolation and delegation routing",
       "properties": {
         "mode": {
           "type": "string",
-          "enum": ["permissive", "locked"],
-          "default": "permissive",
-          "description": "Identity precedence mode"
+          "enum": [
+            "permissive",
+            "locked"
+          ],
+          "description": "Identity precedence mode.",
+          "default": "permissive"
         },
         "allowPerRequestOverride": {
           "type": "boolean",
-          "default": true,
-          "description": "Allow request claims to override launch defaults based on transport policy"
+          "description": "Allow request claims to override launch defaults based on transport policy.",
+          "default": true
         },
         "launchDefaults": {
           "type": "object",
-          "additionalProperties": false,
-          "description": "Launch-time defaults used when request identity/profile metadata is missing",
           "properties": {
             "organizationId": {
               "type": "string",
-              "description": "Default organization scope"
+              "description": "Default organization scope."
             },
             "workspaceId": {
               "type": "string",
-              "description": "Default workspace scope"
+              "description": "Default workspace scope."
             },
             "clientFamily": {
               "type": "string",
@@ -96,15 +86,15 @@
                 "cursor",
                 "unknown"
               ],
-              "description": "Authoritative launch-level client family for delegation routing"
+              "description": "Authoritative launch-level client family for delegation routing."
             },
             "clientId": {
               "type": "string",
-              "description": "Authoritative launch-level client identifier"
+              "description": "Authoritative launch-level client identifier."
             },
             "clientVersion": {
               "type": "string",
-              "description": "Authoritative launch-level client version"
+              "description": "Authoritative launch-level client version."
             },
             "delegationProfile": {
               "type": "string",
@@ -116,531 +106,536 @@
                 "cursor_agent_v1",
                 "neutral_v1"
               ],
-              "description": "Authoritative launch-level delegation profile"
+              "description": "Authoritative launch-level delegation profile."
             }
-          }
+          },
+          "additionalProperties": false,
+          "description": "Launch-time defaults used when request identity/profile metadata is missing."
         }
-      }
+      },
+      "additionalProperties": false,
+      "description": "Identity and client-profile resolution for scope isolation and delegation routing."
     },
-
     "frameworks": {
       "type": "object",
-      "additionalProperties": false,
-      "description": "Frameworks (CAGEERF, ReACT, etc.) that guide LLM behavior. Controls three injection types: system-prompt (framework phases), gate-guidance (quality criteria), and style-guidance (response formatting).",
       "properties": {
         "enabled": {
           "type": "boolean",
-          "default": true,
-          "description": "Enable framework system"
+          "description": "Enable framework system.",
+          "default": true
         },
         "dynamicToolDescriptions": {
           "type": "boolean",
-          "default": true,
-          "description": "Adapt MCP tool descriptions based on active framework"
+          "description": "Adapt MCP tool descriptions based on active framework.",
+          "default": true
         },
         "defaultFramework": {
           "type": "string",
-          "default": "CAGEERF",
-          "description": "Framework a scope falls back to when it has no persisted state row. Set per project to pin a repo to one framework (e.g. 'RADIANT' for design work). A runtime framework switch overrides this for that scope and persists."
+          "description": "Framework a scope falls back to when it has no persisted state row. Set per project to pin a repo to one framework (e.g. 'RADIANT' for design work). A runtime framework switch overrides this for that scope and persists.",
+          "default": "CAGEERF"
         },
-        "systemPromptFrequency": {
-          "type": "integer",
-          "default": 2,
-          "minimum": 1,
-          "description": "Inject framework guidance every N chain steps. Higher values reduce token usage at the cost of less frequent framework reinforcement."
-        },
-        "systemPromptTarget": {
-          "type": "string",
-          "enum": ["steps", "gates", "both"],
-          "default": "steps",
-          "description": "Where to inject framework guidance: 'steps' (normal execution), 'gates' (gate reviews), or 'both'"
-        },
-        "gateGuidanceFrequency": {
-          "type": "integer",
-          "default": 0,
-          "minimum": 0,
-          "description": "Inject gate criteria every N chain steps. 0 = first step only (default). Gate review steps always receive guidance regardless of this setting."
-        },
-        "gateGuidanceTarget": {
-          "type": "string",
-          "enum": ["steps", "gates", "both"],
-          "default": "both",
-          "description": "Where to inject gate criteria: 'steps' (normal execution), 'gates' (gate reviews), or 'both'"
-        },
-        "styleGuidance": {
-          "type": "boolean",
-          "default": true,
-          "description": "Include response formatting guidance in prompts"
-        },
-        "styleGuidanceFrequency": {
-          "type": "integer",
-          "default": 0,
-          "minimum": 0,
-          "description": "Inject style guidance every N chain steps. 0 = first step only (default). Set to 1 for every step."
-        },
-        "styleGuidanceTarget": {
-          "type": "string",
-          "enum": ["steps", "gates", "both"],
-          "default": "steps",
-          "description": "Where to inject style guidance: 'steps' (normal execution), 'gates' (gate reviews), or 'both'"
+        "injection": {
+          "type": "object",
+          "properties": {
+            "systemPrompt": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Inject framework system-prompt guidance at all.",
+                  "default": true
+                },
+                "frequency": {
+                  "type": "integer",
+                  "description": "Inject framework guidance every N chain steps. Higher values reduce token usage at the cost of less frequent framework reinforcement.",
+                  "default": 3,
+                  "minimum": 1,
+                  "maximum": 100
+                },
+                "target": {
+                  "type": "string",
+                  "enum": [
+                    "steps",
+                    "gates",
+                    "both"
+                  ],
+                  "description": "Where to inject framework guidance: 'steps' (normal execution), 'gates' (gate reviews), or 'both'.",
+                  "default": "steps"
+                }
+              },
+              "additionalProperties": false,
+              "description": "System prompt injection settings."
+            },
+            "gateGuidance": {
+              "type": "object",
+              "properties": {
+                "frequency": {
+                  "type": "integer",
+                  "description": "Inject gate criteria every N chain steps. 0 = first step only. Gate review steps always receive guidance regardless of this setting.",
+                  "default": 0,
+                  "minimum": 0,
+                  "maximum": 100
+                },
+                "target": {
+                  "type": "string",
+                  "enum": [
+                    "steps",
+                    "gates",
+                    "both"
+                  ],
+                  "description": "Where to inject gate criteria: 'steps' (normal execution), 'gates' (gate reviews), or 'both'.",
+                  "default": "both"
+                }
+              },
+              "additionalProperties": false,
+              "description": "Gate guidance injection settings."
+            },
+            "styleGuidance": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Include response formatting guidance in prompts.",
+                  "default": true
+                },
+                "frequency": {
+                  "type": "integer",
+                  "description": "Inject style guidance every N chain steps. 0 = first step only. Set to 1 for every step.",
+                  "default": 0,
+                  "minimum": 0,
+                  "maximum": 100
+                },
+                "target": {
+                  "type": "string",
+                  "enum": [
+                    "steps",
+                    "gates",
+                    "both"
+                  ],
+                  "description": "Where to inject style guidance: 'steps' (normal execution), 'gates' (gate reviews), or 'both'.",
+                  "default": "steps"
+                }
+              },
+              "additionalProperties": false,
+              "description": "Style guidance injection settings."
+            }
+          },
+          "additionalProperties": false,
+          "description": "Injection control for framework content."
         }
-      }
+      },
+      "additionalProperties": false,
+      "description": "Frameworks (CAGEERF, ReACT, etc.) that guide LLM behavior."
     },
-
     "gates": {
       "type": "object",
-      "additionalProperties": false,
-      "description": "Quality gates for validating LLM outputs",
       "properties": {
         "enabled": {
           "type": "boolean",
-          "default": true,
-          "description": "Enable the gate validation system"
+          "description": "Enable the gate validation system.",
+          "default": true
         },
         "directory": {
           "type": "string",
-          "default": "resources/gates",
-          "description": "Directory containing gate definitions"
+          "description": "Directory containing gate definitions.",
+          "default": "resources/gates"
         },
         "frameworkGates": {
           "type": "boolean",
-          "default": true,
-          "description": "Apply framework-specific quality gates"
+          "description": "Apply framework-specific quality gates.",
+          "default": true
         },
         "executeInlineGateDefinitions": {
           "type": "boolean",
-          "default": false,
-          "description": "Execute a prompt's gateConfiguration.inline_gate_definitions block instead of only displaying it. Off by default this release so an operator can watch the 'Dropped inline gate definition' warnings and see which workspace prompts would newly arm a gate; set true to opt in early. The next release makes true the default."
-        },
-        "enforcePendingVerdict": {
-          "type": "boolean",
-          "description": "DEPRECATED — accepted by `cpm config set` but read by no runtime path. Scheduled for removal (plan OQ-3)."
+          "description": "Execute a prompt's gateConfiguration.inline_gate_definitions block instead of only displaying it. Off by default this release so an operator can watch the 'Dropped inline gate definition' warnings and see which workspace prompts would newly arm a gate; set true to opt in early. The next release makes true the default.",
+          "default": false
         },
         "evaluation": {
           "type": "object",
-          "additionalProperties": false,
-          "description": "Judge evaluation defaults. Gates with evaluation.mode 'judge' use context-isolated review via delegation.",
           "properties": {
             "defaultMode": {
               "type": "string",
-              "enum": ["self", "judge"],
-              "default": "self",
-              "description": "Default evaluation mode for all gates: 'self' (same-context review) or 'judge' (context-isolated delegation)"
+              "enum": [
+                "self",
+                "judge"
+              ],
+              "description": "Default evaluation mode for all gates: 'self' (same-context review) or 'judge' (context-isolated delegation).",
+              "default": "self"
             },
             "defaultModel": {
               "type": "string",
-              "description": "Default model hint for judge sub-agents (e.g., 'haiku' for cheap evaluation)"
+              "description": "Default model hint for judge sub-agents (e.g., 'haiku' for cheap evaluation)."
             },
             "strict": {
               "type": "boolean",
-              "default": true,
-              "description": "Default strict mode: use failure-first framing for judge evaluation"
+              "description": "Default strict mode: use failure-first framing for judge evaluation.",
+              "default": true
             }
-          }
+          },
+          "additionalProperties": false,
+          "description": "Judge evaluation defaults."
         },
         "harnessCovers": {
           "type": "array",
           "items": {
             "type": "string",
+            "description": "A reminder subject an installation's harness already covers. Spellings are copied from the Subject column of `resources/gates/_index.md`.",
             "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
           },
-          "default": [],
-          "description": "Reminder subjects this installation's harness already covers (its own rules or hooks). A reminder gate whose `subject` is listed is not rendered; checks are never suppressed. Copy spellings from the Subject column of resources/gates/_index.md."
+          "description": "Reminder subjects this installation's harness already covers (its own rules or hooks). A reminder gate whose `subject` is listed is not rendered; checks are never suppressed.",
+          "default": []
         },
         "reminderTokenBudget": {
           "type": "integer",
-          "minimum": 0,
+          "description": "Estimated tokens of reminder guidance rendered per dispatch. Reminders over the budget render as one line each, in priority order; nothing is dropped. Checks are outside the budget.",
           "default": 800,
-          "description": "Estimated tokens of reminder guidance rendered per dispatch. Reminders over the budget render as one line each, in priority order; nothing is dropped. Checks are outside the budget."
+          "minimum": 0
         }
-      }
+      },
+      "additionalProperties": false,
+      "description": "Quality gates for validating LLM outputs."
     },
-
     "verification": {
       "type": "object",
-      "additionalProperties": false,
-      "description": "Ralph Loops: autonomous verification via shell commands",
       "properties": {
         "inContextAttempts": {
           "type": "integer",
+          "description": "Fix attempts within current context before spawning isolation. Set to 0 for immediate isolation.",
           "default": 3,
           "minimum": 0,
-          "description": "Fix attempts within current context before spawning isolation. Set to 0 for immediate isolation."
+          "maximum": 10
         },
         "isolation": {
           "type": "object",
-          "additionalProperties": false,
-          "description": "Context isolation spawns a fresh Claude CLI to fix issues",
           "properties": {
             "enabled": {
               "type": "boolean",
-              "default": true,
-              "description": "Enable spawning isolated Claude instances after in-context attempts fail"
+              "description": "Enable spawning isolated Claude instances after in-context attempts fail.",
+              "default": true
             },
             "maxBudget": {
               "type": "number",
-              "default": 1.0,
+              "description": "Maximum cost (USD) per isolation spawn.",
+              "default": 1,
               "minimum": 0.01,
-              "description": "Maximum cost (USD) per isolation spawn"
+              "maximum": 10
             },
             "timeout": {
               "type": "integer",
+              "description": "Timeout in seconds for each isolation spawn.",
               "default": 300,
               "minimum": 30,
-              "description": "Timeout in seconds for each isolation spawn"
+              "maximum": 3600
             },
             "permissionMode": {
               "type": "string",
-              "enum": ["delegate", "ask", "deny"],
-              "default": "delegate",
-              "description": "How spawned instance handles permission requests"
+              "enum": [
+                "delegate",
+                "ask",
+                "deny"
+              ],
+              "description": "How spawned instance handles permission requests.",
+              "default": "delegate"
             }
-          }
+          },
+          "additionalProperties": false,
+          "description": "Context isolation settings."
         }
-      }
+      },
+      "additionalProperties": false,
+      "description": "Ralph Loops: autonomous verification via shell commands."
     },
-
     "versioning": {
       "type": "object",
-      "additionalProperties": false,
-      "description": "Prompt version control",
       "properties": {
         "enabled": {
           "type": "boolean",
-          "default": true,
-          "description": "Track prompt versions"
+          "description": "Track prompt versions.",
+          "default": true
         },
         "autoVersion": {
           "type": "boolean",
-          "default": true,
-          "description": "Auto-create versions on prompt changes"
+          "description": "Auto-create versions on prompt changes.",
+          "default": true
         },
         "maxVersions": {
           "type": "integer",
+          "description": "Maximum versions to retain per prompt.",
           "default": 50,
           "minimum": 1,
-          "description": "Maximum versions to retain per prompt"
-        },
-        "max_versions": {
-          "type": "integer",
-          "minimum": 1,
-          "description": "DEPRECATED — the spelling `cpm config set` writes today; read as `maxVersions`. Scheduled for removal when the CLI writes camelCase (plan row 2.2)."
-        },
-        "auto_version": {
-          "type": "boolean",
-          "description": "DEPRECATED — the spelling `cpm config set` writes today; read as `autoVersion`. Scheduled for removal when the CLI writes camelCase (plan row 2.2)."
+          "maximum": 500
         }
-      }
+      },
+      "additionalProperties": false,
+      "description": "Prompt version control."
     },
-
     "phaseGuards": {
       "type": "object",
-      "additionalProperties": false,
-      "description": "Phase guards: deterministic structural validation of LLM output against framework phase definitions (zero LLM cost)",
       "properties": {
         "mode": {
           "type": "string",
-          "enum": ["enforce", "warn", "off"],
-          "default": "enforce",
-          "description": "Enforcement mode: 'enforce' blocks advancement until structural requirements pass, 'warn' logs advisory warnings, 'off' disables phase guards"
+          "enum": [
+            "enforce",
+            "warn",
+            "off"
+          ],
+          "description": "Enforcement mode: 'enforce' blocks advancement until structural requirements pass, 'warn' logs advisory warnings, 'off' disables phase guards.",
+          "default": "enforce"
         },
         "maxRetries": {
           "type": "integer",
+          "description": "Maximum retry attempts before phase guard review expires (enforce mode only).",
           "default": 2,
           "minimum": 0,
-          "maximum": 10,
-          "description": "Maximum retry attempts before phase guard review expires (enforce mode only)"
+          "maximum": 10
         }
-      }
+      },
+      "additionalProperties": false,
+      "description": "Deterministic structural validation of LLM output against framework phase definitions."
     },
-
     "execution": {
       "type": "object",
-      "additionalProperties": false,
-      "description": "Prompt execution behavior",
       "properties": {
         "judge": {
           "type": "boolean",
-          "default": true,
-          "description": "Enable %judge modifier for framework comparison"
+          "description": "Enable %judge modifier for framework comparison.",
+          "default": true
         }
-      }
+      },
+      "additionalProperties": false,
+      "description": "Prompt execution behavior."
     },
-
     "hooks": {
       "type": "object",
-      "additionalProperties": false,
-      "description": "Claude Code hook behavior (affects prompt-suggest.py output)",
       "properties": {
         "expandedOutput": {
           "type": "boolean",
-          "default": false,
-          "description": "Show detailed multi-line output instead of compact single-line. Useful for debugging or verbose mode."
+          "description": "Show detailed multi-line output instead of compact single-line. Useful for debugging or verbose mode. An absent key resolves to `false` in `hooks/lib/config_loader.py`.",
+          "default": true
         }
-      }
+      },
+      "additionalProperties": false,
+      "description": "Claude Code hook behavior (affects prompt-suggest.py output)."
     },
-
     "telemetry": {
       "type": "object",
-      "additionalProperties": false,
-      "description": "OpenTelemetry observability: tracing, metrics, and attribute policy. Separate from resources.observability (MCP resource toggles).",
       "properties": {
         "enabled": {
           "type": "boolean",
-          "default": false,
-          "description": "Master switch for the telemetry subsystem. When false, no OTel SDK is initialized."
+          "description": "Master switch for the telemetry subsystem. When false, no OTel SDK is initialized.",
+          "default": false
         },
         "mode": {
           "type": "string",
-          "enum": ["off", "traces", "full"],
-          "default": "off",
-          "description": "Export mode: 'off' (disabled), 'traces' (spans/events only), 'full' (spans + OTel metrics)"
+          "enum": [
+            "off",
+            "traces",
+            "full"
+          ],
+          "description": "Export mode: 'off' (disabled), 'traces' (spans/events only), 'full' (spans + OTel metrics).",
+          "default": "off"
         },
         "exporterEndpoint": {
           "type": "string",
-          "default": "http://localhost:4318",
-          "description": "OTLP HTTP exporter endpoint URL"
+          "description": "OTLP HTTP exporter endpoint URL.",
+          "default": "http://localhost:4318"
         },
         "samplingRate": {
           "type": "number",
-          "default": 1.0,
-          "minimum": 0.0,
-          "maximum": 1.0,
-          "description": "Head sampling rate for traces (0.0–1.0). 1.0 = sample everything, 0.0 = sample nothing."
+          "description": "Head sampling rate for traces (0.0-1.0). 1.0 = sample everything, 0.0 = sample nothing.",
+          "default": 1,
+          "minimum": 0,
+          "maximum": 1
         },
         "attributePolicy": {
           "type": "object",
-          "additionalProperties": false,
-          "description": "Controls which attributes are included in trace spans and events for data safety.",
           "properties": {
             "businessContext": {
               "type": "boolean",
-              "default": true,
-              "description": "Include safe business-context attributes (cpm.prompt.id, cpm.execution.mode, etc.)"
+              "description": "Include safe business-context attributes (cpm.prompt.id, cpm.execution.mode, etc.).",
+              "default": true
             },
             "rawCommands": {
               "type": "boolean",
-              "default": false,
-              "description": "Include raw command text in traces. WARNING: may contain sensitive data."
+              "description": "Include raw command text in traces. WARNING: may contain sensitive data.",
+              "default": false
             },
             "rawResponses": {
               "type": "boolean",
-              "default": false,
-              "description": "Include raw user responses in traces. WARNING: may contain sensitive data."
+              "description": "Include raw user responses in traces. WARNING: may contain sensitive data.",
+              "default": false
             },
             "allowlist": {
               "type": "array",
-              "items": { "type": "string" },
-              "description": "Custom attribute names to explicitly include in traces"
+              "items": {
+                "type": "string"
+              },
+              "description": "Custom attribute names to explicitly include in traces."
             }
-          }
-        }
-      }
-    },
-
-    "analysis": {
-      "type": "object",
-      "additionalProperties": false,
-      "deprecated": true,
-      "description": "DEPRECATED - no runtime path reads this section. It is still parsed so an existing config.json keeps loading, and is scheduled for removal in the next major. The gate service that consumed it and the LLM side client behind it were both deleted; for model-graded gate evaluation use the '%judge' modifier or gates.evaluation.defaultMode. ConfigManager.getAnalysisConfig() still returns the parsed value and ConfigManager warns once at load when the section is present.",
-      "properties": {
-        "semanticAnalysis": {
-          "type": "object",
+          },
           "additionalProperties": false,
-          "properties": {
-            "llmIntegration": {
-              "type": "object",
-              "additionalProperties": false,
-              "deprecated": true,
-              "description": "DEPRECATED with its parent section - every member is parsed and defaulted, and none is consulted. Modelled on LLMIntegrationConfig in src/shared/types/core-config.ts. There is deliberately no 'mode' member: the CLI used to accept a 'mode' of 'on'|'off' here that no reader consulted. That spelling is gone from both tool surfaces, and ConfigManager still adopts it into 'enabled' for configs already carrying one so the deprecation notice names a single spelling.",
-              "properties": {
-                "enabled": {
-                  "type": "boolean",
-                  "default": false,
-                  "description": "Enable LLM-backed semantic analysis. Changing this requires a restart."
-                },
-                "apiKey": {
-                  "type": ["string", "null"],
-                  "default": null,
-                  "description": "API key for the LLM provider"
-                },
-                "endpoint": {
-                  "type": ["string", "null"],
-                  "default": null,
-                  "description": "Custom endpoint URL; the provider is auto-detected from the URL"
-                },
-                "model": {
-                  "type": "string",
-                  "default": "gpt-4",
-                  "description": "Model name used for analysis requests"
-                },
-                "maxTokens": {
-                  "type": "integer",
-                  "default": 1000,
-                  "minimum": 100,
-                  "description": "Maximum tokens per analysis request"
-                },
-                "temperature": {
-                  "type": "number",
-                  "default": 0.1,
-                  "minimum": 0,
-                  "description": "Temperature for analysis requests"
-                }
-              }
-            }
-          }
+          "description": "Controls which attributes are included in trace spans and events for data safety."
         }
-      }
+      },
+      "additionalProperties": false,
+      "description": "OpenTelemetry observability: tracing, metrics, and attribute policy."
     },
-
     "logging": {
       "type": "object",
-      "additionalProperties": false,
-      "description": "Server logging configuration",
       "properties": {
         "level": {
           "type": "string",
-          "enum": ["error", "warn", "info", "debug"],
-          "default": "info",
-          "description": "Minimum log level"
+          "enum": [
+            "error",
+            "warn",
+            "info",
+            "debug"
+          ],
+          "description": "Minimum log level.",
+          "default": "info"
         },
         "directory": {
           "type": "string",
-          "default": "./logs",
-          "description": "Log file directory"
+          "description": "Log file directory.",
+          "default": "./logs"
         }
-      }
+      },
+      "additionalProperties": false,
+      "description": "Server logging configuration."
     },
-
     "resources": {
       "type": "object",
-      "additionalProperties": false,
-      "description": "MCP resources configuration. Master switch must be enabled for any resources to register.",
       "properties": {
         "registerWithMcp": {
           "type": "boolean",
-          "default": false,
-          "description": "Master switch: register resources with MCP protocol (default: false for token efficiency)"
+          "description": "Master switch: register resources with MCP protocol (default: false for token efficiency).",
+          "default": false
         },
         "prompts": {
           "type": "object",
-          "additionalProperties": false,
-          "description": "Prompt resources (resource://prompt/...)",
           "properties": {
             "enabled": {
               "type": "boolean",
-              "default": true,
-              "description": "Enable prompt resources"
-            },
-            "defaultRegistration": {
-              "type": "boolean",
-              "description": "DEPRECATED — accepted by `cpm config set` but read by no runtime path. Scheduled for removal (plan OQ-3)."
+              "description": "Enable this resource family.",
+              "default": true
             }
-          }
+          },
+          "additionalProperties": false,
+          "description": "Prompt resources (resource://prompt/...)."
         },
         "gates": {
           "type": "object",
-          "additionalProperties": false,
-          "description": "Gate resources (resource://gate/...)",
           "properties": {
             "enabled": {
               "type": "boolean",
-              "default": true,
-              "description": "Enable gate resources"
+              "description": "Enable this resource family.",
+              "default": true
             }
-          }
+          },
+          "additionalProperties": false,
+          "description": "Gate resources (resource://gate/...)."
         },
         "frameworks": {
           "type": "object",
-          "additionalProperties": false,
-          "description": "Framework resources (resource://framework/...)",
           "properties": {
             "enabled": {
               "type": "boolean",
-              "default": true,
-              "description": "Enable framework resources"
+              "description": "Enable this resource family.",
+              "default": true
             }
-          }
+          },
+          "additionalProperties": false,
+          "description": "Framework resources (resource://framework/...)."
         },
         "observability": {
           "type": "object",
-          "additionalProperties": false,
-          "description": "Observability resources (sessions and metrics)",
           "properties": {
             "enabled": {
               "type": "boolean",
-              "default": true,
-              "description": "Enable observability resources"
+              "description": "Enable observability resources.",
+              "default": true
             },
             "sessions": {
               "type": "boolean",
-              "default": true,
-              "description": "Enable session resources (resource://session/...)"
+              "description": "Enable session resources (resource://session/...).",
+              "default": true
             },
             "metrics": {
               "type": "boolean",
-              "default": true,
-              "description": "Enable metrics resources (resource://metrics/...)"
+              "description": "Enable metrics resources (resource://metrics/...).",
+              "default": true
             }
-          }
+          },
+          "additionalProperties": false,
+          "description": "Observability resources (sessions and metrics)."
         },
         "logs": {
           "type": "object",
-          "additionalProperties": false,
-          "description": "Logs resource for debugging and observability",
           "properties": {
             "enabled": {
               "type": "boolean",
-              "default": true,
-              "description": "Enable logs resource (resource://logs/)"
+              "description": "Enable logs resource (resource://logs/).",
+              "default": true
             },
             "maxEntries": {
               "type": "integer",
+              "description": "Maximum log entries to retain in memory.",
               "default": 500,
               "minimum": 50,
-              "maximum": 5000,
-              "description": "Maximum log entries to retain in memory"
+              "maximum": 5000
             },
             "defaultLevel": {
               "type": "string",
-              "enum": ["error", "warn", "info", "debug"],
-              "default": "info",
-              "description": "Minimum level to buffer (entries below this level are not stored)"
+              "enum": [
+                "error",
+                "warn",
+                "info",
+                "debug"
+              ],
+              "description": "Minimum level to buffer (entries below this level are not stored).",
+              "default": "info"
             }
-          }
-        }
-      }
-    },
-
-    "advanced": {
-      "type": "object",
-      "additionalProperties": false,
-      "description": "Internal settings (most users won't need to change)",
-      "properties": {
-        "sessions": {
-          "type": "object",
+          },
           "additionalProperties": false,
-          "description": "Chain session lifecycle management",
-          "properties": {
-            "timeoutMinutes": {
-              "type": "integer",
-              "default": 1440,
-              "description": "Idle session timeout (default: 24 hours)"
-            },
-            "reviewTimeoutMinutes": {
-              "type": "integer",
-              "default": 30,
-              "description": "Gate review timeout"
-            },
-            "cleanupIntervalMinutes": {
-              "type": "integer",
-              "default": 5,
-              "description": "Background cleanup frequency"
-            }
-          }
+          "description": "Logs resource for debugging and observability."
         }
-      }
+      },
+      "additionalProperties": false,
+      "description": "MCP resources configuration."
+    },
+    "chainSessions": {
+      "type": "object",
+      "properties": {
+        "timeoutMinutes": {
+          "type": "integer",
+          "description": "Idle session timeout in minutes (default: 24 hours).",
+          "default": 1440,
+          "minimum": 1,
+          "maximum": 10080
+        },
+        "reviewTimeoutMinutes": {
+          "type": "integer",
+          "description": "Gate review timeout in minutes.",
+          "default": 30,
+          "minimum": 1,
+          "maximum": 10080
+        },
+        "cleanupIntervalMinutes": {
+          "type": "integer",
+          "description": "Background cleanup frequency in minutes.",
+          "default": 5,
+          "minimum": 1,
+          "maximum": 10080
+        }
+      },
+      "additionalProperties": false,
+      "description": "Chain session lifecycle management."
     }
   },
-  "additionalProperties": false
+  "required": [
+    "version"
+  ],
+  "additionalProperties": false,
+  "description": "The contents of a 5.0 `config.json`.\n\nEvery section is optional; `version` is not, because the loader routes on it and a file that does not say which shape it is written in cannot be read as either.",
+  "definitions": {}
 }

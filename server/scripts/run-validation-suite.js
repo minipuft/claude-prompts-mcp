@@ -198,7 +198,7 @@ export const SUITE = [
   {
     script: 'validate:config-schema',
     io: 'read',
-    reads: ['file', 'walk'],
+    reads: ['file', 'spawn', 'walk'],
     converse:
       'CHECKED both ways — the self-test drives the SHIPPED schema with the shipped config (must stay silent; without this positive control every rejection below would pass against a schema that rejects everything), misspelled keys at depth 1 and 2 in three different sections (must report; these are the motivating instances, since before 2026-09-11 `additionalProperties: false` sat at the root only and all 27 subsections accepted anything), a root-level unknown and a wrongly-typed port (must report, proving the per-section change did not displace what already worked). Case 2 asserts the property STRUCTURALLY, so a subsection added later without `additionalProperties: false` fails here; falsified 2026-09-11 by stripping it from the top-level `gates` section (reported `gates`) and by swapping every occurrence for `unevaluatedProperties` (reported all 27 — that keyword is accepted and IGNORED by AJV under draft-07 with strict:false, which is why case 8 bans it outright)',
   },

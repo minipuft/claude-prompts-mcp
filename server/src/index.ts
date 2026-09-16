@@ -8,7 +8,7 @@
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-import { ConfigLoader } from './infra/config/index.js';
+import { ConfigLoader, TransportConfigError } from './infra/config/index.js';
 import { startApplication } from './runtime/application.js';
 import { parseServerCliArgs, type ServerCliArgs } from './runtime/cli.js';
 import { RuntimeLaunchOptions, resolveRuntimeLaunchOptions } from './runtime/options.js';
@@ -762,9 +762,14 @@ async function main(): Promise<void> {
     // Log successful complete initialization
     activeLogger.info('✅ Application initialization completed - all systems operational');
   } catch (error) {
-    // A refused path setting is an operator error with a complete explanation, thrown before
-    // anything starts: print it once, without a stack, and leave nothing to roll back.
+    // A refused path setting or transport config is an operator error with a complete
+    // explanation, thrown before anything starts: print it once, without a stack, and leave
+    // nothing to roll back.
     if (error instanceof PathSettingError) {
+      console.error(error.message);
+      process.exit(1);
+    }
+    if (error instanceof TransportConfigError) {
       console.error(error.message);
       process.exit(1);
     }

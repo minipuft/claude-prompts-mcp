@@ -127,15 +127,15 @@ Set in `server/config.json`:
 ```json
 {
   "hooks": {
-    "expandedOutput": false
+    "expandedOutput": true
   }
 }
 ```
 
-| Mode              | Setting | Example                               |
-| ----------------- | ------- | ------------------------------------- |
-| Compact (default) | `false` | `[>>] diagnose \| scope:"auth"`       |
-| Expanded          | `true`  | Multi-line with full argument details |
+| Mode               | Setting | Example                               |
+| ------------------ | ------- | ------------------------------------- |
+| Expanded (default) | `true`  | Multi-line with full argument details |
+| Compact            | `false` | `[>>] diagnose \| scope:"auth"`       |
 
 ### hooks.json
 

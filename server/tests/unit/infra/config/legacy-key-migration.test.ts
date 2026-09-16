@@ -61,7 +61,7 @@ describe('legacy config key migration', () => {
       });
 
       expect(config.frameworks?.enabled).toBe(true);
-      expect(config.frameworks?.systemPromptFrequency).not.toBe(7);
+      expect(config.frameworks?.injection?.systemPrompt?.frequency).not.toBe(7);
 
       await cleanup();
     });
@@ -244,6 +244,12 @@ describe('legacy config key migration', () => {
 
   // The CLI surface itself. Nine `*.mode` keys had a canonical twin already listed beside them in
   // CONFIG_VALID_KEYS, so the dead half is deleted rather than folded. The three real modes stay.
+  //
+  // The versioning half of this block flipped spelling at 5.0. `CONFIG_VALID_KEYS` is no longer a
+  // hand-kept list: it is generated from `ConfigFile`, where the members are `versioning.maxVersions`
+  // and `versioning.autoVersion`. The snake_case spellings this block used to assert as canonical
+  // were the RUNTIME (`VersioningConfig`) names, which a 4.x file surface happened to share; the
+  // file surface and the runtime shape are separate types now, and the loader maps between them.
   describe('CLI settable-key surface', () => {
     it('no longer offers the inert mode spellings', async () => {
       const { CONFIG_VALID_KEYS } =
@@ -261,13 +267,14 @@ describe('legacy config key migration', () => {
         'verification.isolation.mode',
         'analysis.semanticAnalysis.llmIntegration.mode',
         'versioning.mode',
-        'versioning.maxVersions',
-        'versioning.autoVersion',
       ]) {
         expect(CONFIG_VALID_KEYS).not.toContain(dead);
       }
     });
 
+    // The positive control for the case above: an assertion that a list does not contain N keys
+    // passes just as well against an EMPTY list, so this block would go green if the generated
+    // table lost every key. These are the live spellings the same surface must still accept.
     it('offers a canonical replacement for every key it dropped', async () => {
       const { CONFIG_VALID_KEYS, validateConfigInput } =
         await import('../../../../src/cli-shared/config-input-validator.js');
@@ -283,19 +290,27 @@ describe('legacy config key migration', () => {
         'resources.logs.enabled',
         'verification.isolation.enabled',
         'versioning.enabled',
-        'versioning.auto_version',
+        'versioning.autoVersion',
       ]) {
         expect(CONFIG_VALID_KEYS).toContain(key);
         expect(validateConfigInput(key, 'false')).toMatchObject({ valid: true });
       }
 
-      // The one replacement that is not a boolean: `maxVersions` -> `max_versions` kept its
-      // numeric 1-500 validation, so it is asserted with a number rather than 'false'.
-      expect(CONFIG_VALID_KEYS).toContain('versioning.max_versions');
-      expect(validateConfigInput('versioning.max_versions', '42')).toMatchObject({
+      // The one replacement that is not a boolean, so it is asserted with a number rather than
+      // 'false'. Its lower bound comes from `@minimum 1` on the `ConfigFile` member.
+      expect(CONFIG_VALID_KEYS).toContain('versioning.maxVersions');
+      expect(validateConfigInput('versioning.maxVersions', '42')).toMatchObject({
         valid: true,
         convertedValue: 42,
       });
+      expect(validateConfigInput('versioning.maxVersions', '0')).toMatchObject({ valid: false });
+
+      // The 4.x file spellings are gone from the settable surface, not merely renamed beside it —
+      // a config.json still carrying them is folded by the loader, but nothing can SET them.
+      for (const retiredSpelling of ['versioning.max_versions', 'versioning.auto_version']) {
+        expect(CONFIG_VALID_KEYS).not.toContain(retiredSpelling);
+        expect(validateConfigInput(retiredSpelling, '42')).toMatchObject({ valid: false });
+      }
     });
 
     // The one dropped spelling with NO canonical twin, which is why it is asserted apart from the
@@ -303,11 +318,15 @@ describe('legacy config key migration', () => {
     // like the other nine, but its canonical `enabled` partner has since been retired too: every
     // reader of that section was deleted, so a settable key would write a value nothing consults.
     // The section is still PARSED (a config carrying it keeps loading and gets a deprecation
-    // warning) — it is only the setter surface that is withdrawn, on both tools.
-    it('offers no setter for the retired analysis section, on either surface', async () => {
-      const { CONFIG_VALID_KEYS, validateConfigInput } =
+    // warning) — it is only the setter surface that is withdrawn.
+    //
+    // Previously asserted on both this surface and a `mcp/tools/config-utils` re-export; ruling
+    // R54 (row 4.5) deleted that re-export block — `config-action-handler.ts` already imported
+    // `validateConfigInput` from cli-shared directly, so the second surface was a redundant import
+    // path onto the same implementation, not a second one to keep in sync. One surface now.
+    it('offers no setter for the retired analysis section', async () => {
+      const { CONFIG_RESTART_REQUIRED_KEYS, CONFIG_VALID_KEYS, validateConfigInput } =
         await import('../../../../src/cli-shared/config-input-validator.js');
-      const mcp = await import('../../../../src/mcp/tools/config-utils.js');
 
       const retired = [
         'analysis.semanticAnalysis.llmIntegration.enabled',
@@ -319,13 +338,12 @@ describe('legacy config key migration', () => {
 
       for (const key of retired) {
         expect(CONFIG_VALID_KEYS).not.toContain(key);
-        expect(mcp.CONFIG_VALID_KEYS).not.toContain(key);
         // Not merely absent from the list — the validator rejects it, which is what a user hits.
         expect(validateConfigInput(key, 'false')).toMatchObject({ valid: false });
       }
 
       // A restart-required entry naming a key that cannot be set is its own kind of stale.
-      expect(mcp.CONFIG_RESTART_REQUIRED_KEYS).not.toContain(retired[0]);
+      expect(CONFIG_RESTART_REQUIRED_KEYS).not.toContain(retired[0]);
     });
 
     it('keeps the three modes that a reader actually consults', async () => {
@@ -338,17 +356,29 @@ describe('legacy config key migration', () => {
     });
 
     // generateDefaultConfig was the upstream producer: every `cpm init` seeded `gates.mode: 'on'`,
-    // so a fresh workspace started out with the spelling nothing reads. Pinning it to the
-    // validator means the generator cannot drift from the accepted key set again.
-    it('generates a default config naming only keys the validator accepts', async () => {
+    // so a fresh workspace started out with the spelling nothing reads. Row 4.5 (ruling R46)
+    // retired the generator's leaf-by-leaf restatement altogether: code owns every default now, so
+    // the generated config — like the shipped `config.json` — holds only the two document-level
+    // keys that decide how the file is READ (`$schema`, `version`). Neither is a settable leaf;
+    // `CONFIG_VALID_KEYS` deliberately excludes both (`_generated/config-keys.ts`'s own header
+    // comment says so), so the walk below skips them at the root instead of asserting they are
+    // "valid keys" they were never meant to be. The exact-equality assertion is the anchor a
+    // regression back to a populated generator would trip; the walk + loop still guard any
+    // settable leaf the generator DOES emit from falling outside the accepted key set.
+    it('generates a default config holding only document-level keys, none of them a stale spelling', async () => {
       const { generateDefaultConfig } =
         await import('../../../../src/cli-shared/config-operations.js');
       const { CONFIG_VALID_KEYS } =
         await import('../../../../src/cli-shared/config-input-validator.js');
 
+      const generated = generateDefaultConfig();
+      expect(generated).toEqual({ $schema: './config.schema.json', version: 5 });
+
+      const documentLevelKeys = new Set(['$schema', 'version']);
       const leaves: string[] = [];
       const walk = (node: Record<string, unknown>, prefix: string): void => {
         for (const [key, value] of Object.entries(node)) {
+          if (prefix === '' && documentLevelKeys.has(key)) continue;
           const full = prefix ? `${prefix}.${key}` : key;
           if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
             walk(value as Record<string, unknown>, full);
@@ -357,9 +387,8 @@ describe('legacy config key migration', () => {
           }
         }
       };
-      walk(generateDefaultConfig(), '');
+      walk(generated, '');
 
-      expect(leaves.length).toBeGreaterThan(0);
       for (const leaf of leaves) {
         expect(CONFIG_VALID_KEYS).toContain(leaf);
       }
@@ -481,7 +510,7 @@ describe('reminder guidance config (gates.harnessCovers, gates.reminderTokenBudg
     const configPath = path.join(dir, 'config.json');
     await writeFile(
       configPath,
-      JSON.stringify({ gates: { enabled: true, harnessCover: ['security'] } }),
+      JSON.stringify({ version: 5, gates: { enabled: true, harnessCover: ['security'] } }),
       'utf8'
     );
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
@@ -498,27 +527,25 @@ describe('reminder guidance config (gates.harnessCovers, gates.reminderTokenBudg
   });
 
   // Sibling to the 'persistFrameworkConfig key paths' block above: both new keys must be
-  // reachable from `cpm config set`, not just from a hand-authored config.json.
-  // Both settable-key surfaces — cli-shared (`cpm config set`) and mcp/tools (`system_control`) —
-  // same pattern as the 'offers no setter for the retired analysis section, on either surface'
-  // case above: the coordinator ruled the asymmetry between the two was not intended for this row.
-  it('accepts both keys on both settable-key surfaces (cli-shared and mcp/tools)', async () => {
-    const cli = await import('../../../../src/cli-shared/config-input-validator.js');
-    const mcp = await import('../../../../src/mcp/tools/config-utils.js');
+  // reachable from `cpm config set`. Previously asserted on both cli-shared and a
+  // `mcp/tools/config-utils` re-export; ruling R54 (row 4.5) retired that re-export, so this is
+  // the one settable-key surface (`config-action-handler.ts` already read `validateConfigInput`
+  // from cli-shared directly, never through this module).
+  it('accepts both keys on the settable-key surface', async () => {
+    const { CONFIG_VALID_KEYS, validateConfigInput } =
+      await import('../../../../src/cli-shared/config-input-validator.js');
 
-    for (const surface of [cli, mcp]) {
-      expect(surface.CONFIG_VALID_KEYS).toContain('gates.harnessCovers');
-      expect(surface.validateConfigInput('gates.harnessCovers', 'security,testing')).toMatchObject({
-        valid: true,
-        convertedValue: ['security', 'testing'],
-      });
+    expect(CONFIG_VALID_KEYS).toContain('gates.harnessCovers');
+    expect(validateConfigInput('gates.harnessCovers', 'security,testing')).toMatchObject({
+      valid: true,
+      convertedValue: ['security', 'testing'],
+    });
 
-      expect(surface.CONFIG_VALID_KEYS).toContain('gates.reminderTokenBudget');
-      expect(surface.validateConfigInput('gates.reminderTokenBudget', '300')).toMatchObject({
-        valid: true,
-        convertedValue: 300,
-      });
-    }
+    expect(CONFIG_VALID_KEYS).toContain('gates.reminderTokenBudget');
+    expect(validateConfigInput('gates.reminderTokenBudget', '300')).toMatchObject({
+      valid: true,
+      convertedValue: 300,
+    });
   });
 });
 
@@ -553,7 +580,7 @@ describe('inline gate execution opt-in (gates.executeInlineGateDefinitions)', ()
 
     const validate = async (gates: Record<string, unknown>) => {
       const configPath = path.join(dir, `${Object.keys(gates).join('-')}.json`);
-      await writeFile(configPath, JSON.stringify({ gates }), 'utf8');
+      await writeFile(configPath, JSON.stringify({ version: 5, gates }), 'utf8');
       const manager = new ConfigLoader(configPath, undefined, { schemaPath: SCHEMA_PATH });
       await manager.loadConfig();
       return manager.getSchemaValidation();
@@ -574,21 +601,22 @@ describe('inline gate execution opt-in (gates.executeInlineGateDefinitions)', ()
     await rm(dir, { recursive: true, force: true });
   });
 
-  it('is settable on both surfaces (cli-shared and mcp/tools), unlike an unknown key', async () => {
-    const cli = await import('../../../../src/cli-shared/config-input-validator.js');
-    const mcp = await import('../../../../src/mcp/tools/config-utils.js');
+  // Previously asserted on both cli-shared and a `mcp/tools/config-utils` re-export; ruling R54
+  // (row 4.5) retired that re-export, so this is the one settable-key surface.
+  it('is settable on the settable-key surface, unlike an unknown key', async () => {
+    const { CONFIG_VALID_KEYS, validateConfigInput } =
+      await import('../../../../src/cli-shared/config-input-validator.js');
 
-    for (const surface of [cli, mcp]) {
-      expect(surface.CONFIG_VALID_KEYS).toContain('gates.executeInlineGateDefinitions');
-      expect(
-        surface.validateConfigInput('gates.executeInlineGateDefinitions', 'true')
-      ).toMatchObject({ valid: true, convertedValue: true });
+    expect(CONFIG_VALID_KEYS).toContain('gates.executeInlineGateDefinitions');
+    expect(validateConfigInput('gates.executeInlineGateDefinitions', 'true')).toMatchObject({
+      valid: true,
+      convertedValue: true,
+    });
 
-      // POSITIVE CONTROL for the same two calls.
-      expect(surface.CONFIG_VALID_KEYS).not.toContain('gates.nonsenseKey');
-      expect(surface.validateConfigInput('gates.nonsenseKey', 'true')).toMatchObject({
-        valid: false,
-      });
-    }
+    // POSITIVE CONTROL for the same two calls.
+    expect(CONFIG_VALID_KEYS).not.toContain('gates.nonsenseKey');
+    expect(validateConfigInput('gates.nonsenseKey', 'true')).toMatchObject({
+      valid: false,
+    });
   });
 });

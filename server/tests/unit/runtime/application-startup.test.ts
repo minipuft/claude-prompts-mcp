@@ -63,6 +63,7 @@ describe('Application startup (prompt loading)', () => {
       quiet: true,
       startupTest: false,
       testEnvironment: true,
+      transport: 'stdio',
       paths: {},
     };
     const app = new Application(

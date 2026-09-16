@@ -1,6 +1,7 @@
 #!/usr/bin/env tsx
 /**
- * Validates `server/config.json` against `server/config.schema.json`.
+ * Validates `server/config.json` against `server/config.schema.json`, and validates the SCHEMA
+ * itself against its own generator.
  *
  * WHY THIS EXISTS
  * `config.json` carries `"$schema": "./config.schema.json"`, which buys editor validation.
@@ -11,6 +12,22 @@
  * `config.json` fail the build outright, rather than surface only as a runtime warning. Until it
  * was wired into `validate:all` it was itself unreferenced, which is the same shape it exists to
  * prevent: a declaration with no check standing behind it.
+ *
+ * WHY THE DRIFT CHECK EXISTS
+ * `config.schema.json` is generated from `ConfigFile` by `scripts/generate-config-schema.ts`
+ * (row 4.9), but nothing before this row stopped a hand-edit to the committed schema, or a
+ * forgotten `npm run generate:config-schema` after editing `ConfigFile`, from shipping silently —
+ * the config-validity check below only reads whatever schema happens to be on disk, generated or
+ * not. `checkSchemaDrift` closes that: it calls `generateConfigSchema` (the exact function
+ * `npm run generate:config-schema` calls) into a temp file and compares bytes against the
+ * committed file, so the gate proves the shipped schema IS the generator's output rather than
+ * merely internally self-consistent. Both artifacts of that one generator run are compared — the
+ * schema AND `src/cli-shared/_generated/config-keys.ts`, the leaf key table every config setter
+ * validates against — because a check covering only the schema would go green while the settable
+ * key list sat one `ConfigFile` edit behind. This mirrors the shape `generate-contracts.ts --check` and
+ * `generate-framework-schemas.ts --check` already use for their own generated artifacts — the
+ * project's established drift-gate pattern — adapted to live inside this script (per this row)
+ * rather than as a second flag on the generator.
  *
  * WHY THE SELF-TEST EXISTS
  * Running clean proved almost nothing until 2026-09-11. `additionalProperties: false` sat at the
@@ -43,6 +60,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { generateConfigSchema } from './generate-config-schema.js';
 import { validateConfigAgainstSchema } from '../src/infra/config/config-schema-validator.js';
 
 import type { ConfigSchemaValidationResult } from '../src/shared/types/config-manager.js';
@@ -50,11 +68,61 @@ import type { ConfigSchemaValidationResult } from '../src/shared/types/config-ma
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CONFIG_PATH = path.join(SERVER_ROOT, 'config.json');
 const SCHEMA_PATH = path.join(SERVER_ROOT, 'config.schema.json');
+const KEYS_PATH = path.join(SERVER_ROOT, 'src', 'cli-shared', '_generated', 'config-keys.ts');
 
 type JsonObject = Record<string, unknown>;
 
 async function readJson(filePath: string): Promise<JsonObject> {
   return JSON.parse(await readFile(filePath, 'utf8')) as JsonObject;
+}
+
+interface SchemaDriftResult {
+  readonly drifted: boolean;
+  readonly message?: string;
+}
+
+/**
+ * Regenerates BOTH generated artifacts via `generateConfigSchema` — the same function `main()` in
+ * `generate-config-schema.ts` calls — into a fresh temp directory, and compares their bytes to
+ * `committedSchemaPath` / `committedKeysPath` (defaulting to the real files). Parameterized so
+ * the self-test can point either at a fixture copy instead of the real file.
+ *
+ * The key table is checked here rather than in a gate of its own because it comes out of the same
+ * run: a check that covered only the schema would pass while `CONFIG_VALID_KEYS` — the list every
+ * config setter validates against — sat one `ConfigFile` edit behind.
+ */
+async function checkSchemaDrift(
+  committedSchemaPath: string = SCHEMA_PATH,
+  committedKeysPath: string = KEYS_PATH
+): Promise<SchemaDriftResult> {
+  const tempDir = mkdtempSync(path.join(os.tmpdir(), 'config-schema-drift-'));
+  const regeneratedSchemaPath = path.join(tempDir, 'config.schema.json');
+  const regeneratedKeysPath = path.join(tempDir, 'config-keys.ts');
+  generateConfigSchema(regeneratedSchemaPath, regeneratedKeysPath);
+
+  const comparisons = [
+    { committedPath: committedSchemaPath, regeneratedPath: regeneratedSchemaPath },
+    { committedPath: committedKeysPath, regeneratedPath: regeneratedKeysPath },
+  ];
+
+  const stale: string[] = [];
+  for (const { committedPath, regeneratedPath } of comparisons) {
+    const [committed, regenerated] = await Promise.all([
+      readFile(committedPath, 'utf8'),
+      readFile(regeneratedPath, 'utf8'),
+    ]);
+    if (committed !== regenerated) stale.push(path.relative(SERVER_ROOT, committedPath));
+  }
+
+  if (stale.length === 0) {
+    return { drifted: false };
+  }
+  return {
+    drifted: true,
+    message:
+      `${stale.join(' and ')} ${stale.length === 1 ? 'does' : 'do'} not match what ` +
+      `\`npm run generate:config-schema\` produces from ConfigFile. Run: npm run generate:config-schema`,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -82,7 +150,17 @@ async function validateFixture(
   return validateConfigAgainstSchema(config, fixtureSchemaPath);
 }
 
-/** Deep-clones the shipped config and applies one mutation, so each case starts from a valid file. */
+/**
+ * Deep-clones the shipped config and applies one mutation, so each case starts from a valid file.
+ *
+ * The shipped `server/config.json` carries no sections — row 4.5 (ruling R46) made it exactly
+ * `{$schema, version}`, because code owns every default now and a config.json holds only
+ * OVERRIDES. `shipped` here is therefore that two-key object, not a full example: a case that
+ * needs to mutate a nested key (`c.gates.enabld`, `c.resources.logs.maxEntrys`, …) must build the
+ * section it needs itself (`c.gates ??= {}`) rather than assume `shipped` already populated it —
+ * assigning through an absent parent throws `Cannot set properties of undefined`, it does not
+ * silently no-op.
+ */
 function mutate(shipped: JsonObject, apply: (_config: any) => void): JsonObject {
   const clone = JSON.parse(JSON.stringify(shipped)) as JsonObject;
   apply(clone);
@@ -138,6 +216,7 @@ const SELF_TEST_CASES: readonly SelfTestCase[] = [
       const result = await validateFixture(
         fixtureDir,
         mutate(shipped, (c) => {
+          c.gates ??= {};
           c.gates.enabld = true;
         })
       );
@@ -154,6 +233,8 @@ const SELF_TEST_CASES: readonly SelfTestCase[] = [
       const result = await validateFixture(
         fixtureDir,
         mutate(shipped, (c) => {
+          c.resources ??= {};
+          c.resources.logs ??= {};
           c.resources.logs.maxEntrys = 5;
         })
       );
@@ -170,6 +251,8 @@ const SELF_TEST_CASES: readonly SelfTestCase[] = [
       const result = await validateFixture(
         fixtureDir,
         mutate(shipped, (c) => {
+          c.verification ??= {};
+          c.verification.isolation ??= {};
           c.verification.isolation.tmeout = 9;
         })
       );
@@ -194,6 +277,7 @@ const SELF_TEST_CASES: readonly SelfTestCase[] = [
       const result = await validateFixture(
         fixtureDir,
         mutate(shipped, (c) => {
+          c.server ??= {};
           c.server.port = 'nine';
         })
       );
@@ -231,6 +315,73 @@ const SELF_TEST_CASES: readonly SelfTestCase[] = [
       );
     },
   },
+  {
+    name: 'DRIFT — the committed schema matches what the generator produces',
+    run: async () => {
+      const result = await checkSchemaDrift();
+      assert(
+        !result.drifted,
+        `the committed config.schema.json must match \`npm run generate:config-schema\`'s ` +
+          `output, or the fix-it command the drift check prints is pointing at a fix that would ` +
+          `not actually converge: ${result.message ?? '(no message)'}`
+      );
+    },
+  },
+  {
+    name: 'DRIFT POSITIVE CONTROL — a hand-edited schema copy is detected as stale',
+    run: async (fixtureDir) => {
+      const schema = JSON.parse(await readFile(SCHEMA_PATH, 'utf8')) as JsonObject;
+      const server = (schema['properties'] as JsonObject)['server'] as JsonObject;
+      const port = (server['properties'] as JsonObject)['port'] as JsonObject;
+      port['description'] = 'DRIFT SELF-TEST MUTATION — this text must never match the generator';
+
+      const mutatedPath = path.join(fixtureDir, 'mutated-config.schema.json');
+      writeFileSync(mutatedPath, JSON.stringify(schema, null, 2) + '\n', 'utf8');
+
+      const result = await checkSchemaDrift(mutatedPath);
+      assert(
+        result.drifted,
+        'a hand-edited schema copy (one description changed) must be reported as drifted, or ' +
+          'the drift check is not actually comparing bytes'
+      );
+      assert(
+        result.message?.includes('mutated-config.schema.json') === true,
+        `the drift message must name the stale artifact, got: ${result.message ?? '(none)'}`
+      );
+    },
+  },
+  {
+    // The key table is a SECOND artifact of the same generator run, so the schema half of the
+    // check going green says nothing about it. Without this case, a hand-edit to
+    // `CONFIG_VALID_KEYS` — adding a key no schema leaf backs, or deleting one an operator
+    // relies on — would ship under a passing gate.
+    name: 'DRIFT POSITIVE CONTROL — a hand-edited key table copy is detected as stale',
+    run: async (fixtureDir) => {
+      const committed = await readFile(KEYS_PATH, 'utf8');
+      const mutated = committed.replace(
+        "  'logging.level',",
+        "  'logging.level',\n  'logging.notARealKey',"
+      );
+      assert(
+        mutated !== committed,
+        'the mutation anchor is gone from the key table — this case would measure nothing'
+      );
+
+      const mutatedPath = path.join(fixtureDir, 'mutated-config-keys.ts');
+      writeFileSync(mutatedPath, mutated, 'utf8');
+
+      const result = await checkSchemaDrift(SCHEMA_PATH, mutatedPath);
+      assert(
+        result.drifted,
+        'a hand-edited key table copy (one key added) must be reported as drifted, or the drift ' +
+          'check is comparing only the schema'
+      );
+      assert(
+        result.message?.includes('mutated-config-keys.ts') === true,
+        `the drift message must name the stale artifact, got: ${result.message ?? '(none)'}`
+      );
+    },
+  },
 ];
 
 async function selfTest(): Promise<void> {
@@ -255,6 +406,13 @@ async function selfTest(): Promise<void> {
 }
 
 async function validateShippedConfig(): Promise<void> {
+  const drift = await checkSchemaDrift();
+  if (drift.drifted) {
+    console.error('Config schema is out of date:');
+    console.error(`- ${drift.message}`);
+    process.exit(1);
+  }
+
   const config = await readJson(CONFIG_PATH);
   const result = await validateConfigAgainstSchema(config, SCHEMA_PATH);
 

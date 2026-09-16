@@ -23,7 +23,7 @@ class Config(TypedDict, total=False):
 # Default config values
 DEFAULT_CONFIG: Config = {
     "hooks": {
-        "expandedOutput": False,  # Compact mode by default
+        "expandedOutput": True,  # Matches the shipped server/config.json
     }
 }
 
@@ -57,4 +57,4 @@ def get_hooks_config() -> HooksConfig:
 def is_expanded_output() -> bool:
     """Check if expanded hook output is enabled."""
     hooks_config = get_hooks_config()
-    return hooks_config.get("expandedOutput", False)
+    return hooks_config.get("expandedOutput", True)

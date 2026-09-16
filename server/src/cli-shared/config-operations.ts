@@ -2,8 +2,15 @@
  * Config Operations — Pure file operations for config.json management.
  *
  * Uses only node:fs and node:path. No runtime dependencies.
- * Follows the same atomic-write pattern as SafeConfigWriter but synchronous
- * and without Logger/ConfigManager dependencies.
+ *
+ * THE ONE FILE-SHAPE WRITER
+ * `SafeConfigWriter` (mcp/tools/config-utils.ts) used to carry a second implementation of
+ * read → set one dotted key → write, and its "read" was `configManager.getConfig()` — the
+ * RESOLVED runtime object, not the file. Persisting that wrote back defaults nobody typed and
+ * dropped whatever the loader does not map (`hooks`), so a one-key toggle rewrote the operator's
+ * whole config.json. `SafeConfigWriter` now composes the functions below instead; this file is
+ * where the document shape is read, mutated and written, and the only thing above it is the
+ * schema check and the reload.
  */
 
 import {
@@ -18,10 +25,12 @@ import {
 import { dirname, join, resolve } from 'node:path';
 
 import {
+  CONFIG_KEY_TABLE,
   CONFIG_RESTART_REQUIRED_KEYS,
   CONFIG_VALID_KEYS,
   validateConfigInput,
   type ConfigKey,
+  type ConfigLeafRule,
 } from './config-input-validator.js';
 
 // ── Result types ─────────────────────────────────────────────────────────────
@@ -59,7 +68,8 @@ export interface ConfigValidationResult {
 
 export interface ConfigKeyInfo {
   key: string;
-  type: 'string' | 'number' | 'boolean';
+  /** `integer` leaves report `'number'` — same flattening `ConfigInputValidationResult` uses. */
+  type: 'string' | 'number' | 'boolean' | 'array';
   description: string;
   restartRequired: boolean;
 }
@@ -73,8 +83,16 @@ export function resolveConfigPath(workspace: string): string {
 // ── Read ─────────────────────────────────────────────────────────────────────
 
 export function readConfig(workspace: string): ConfigReadResult {
-  const configPath = resolveConfigPath(workspace);
+  return readConfigFile(resolveConfigPath(workspace));
+}
 
+/**
+ * The config DOCUMENT at `configPath`, exactly as written — no defaults applied, no legacy
+ * spellings folded, no wire keys renamed. Callers that mean to write the file back must read it
+ * through here rather than through a resolved runtime config, or the write persists values the
+ * operator never typed.
+ */
+export function readConfigFile(configPath: string): ConfigReadResult {
   if (!existsSync(configPath)) {
     return {
       success: false,
@@ -115,6 +133,19 @@ export function getConfigValue(config: Record<string, unknown>, key: string): un
 // ── Set value with validation + atomic write + backup ────────────────────────
 
 export function setConfigValue(workspace: string, key: string, value: string): ConfigSetResult {
+  return setConfigValueAtPath(resolveConfigPath(workspace), key, value);
+}
+
+/**
+ * Same as {@link setConfigValue}, addressed by config FILE rather than by workspace. The MCP
+ * writer holds a path (the loader resolved it, possibly from `MCP_CONFIG_PATH`), not a workspace,
+ * so this is the seam the two surfaces share instead of each walking the document itself.
+ */
+export function setConfigValueAtPath(
+  configPath: string,
+  key: string,
+  value: string
+): ConfigSetResult {
   // Validate key and value
   const validation = validateConfigInput(key, value);
   if (!validation.valid) {
@@ -127,7 +158,7 @@ export function setConfigValue(workspace: string, key: string, value: string): C
   }
 
   // Read current config
-  const readResult = readConfig(workspace);
+  const readResult = readConfigFile(configPath);
   if (!readResult.success || !readResult.config) {
     return {
       success: false,
@@ -137,7 +168,6 @@ export function setConfigValue(workspace: string, key: string, value: string): C
     };
   }
 
-  const configPath = readResult.configPath!;
   const config = readResult.config;
 
   // Get previous value
@@ -212,41 +242,28 @@ export function backupConfig(configPath: string): string {
 
 // ── Default config generation ────────────────────────────────────────────────
 
+/**
+ * Row 4.5 (ruling R46): the generator used to hand-restate fifteen leaves, five of them under
+ * spellings `CONFIG_VALID_KEYS` had already retired — `server.transport` (transport is chosen per
+ * launch, not a config key), `frameworks.systemPromptFrequency` /
+ * `frameworks.styleGuidance` (the flat pre-nesting spelling; the current shape is
+ * `frameworks.injection.systemPrompt.frequency` / `.styleGuidance.enabled`), and
+ * `versioning.auto_version` / `versioning.max_versions` (the 4.x snake_case runtime names, not the
+ * 5.0 file spellings `autoVersion` / `maxVersions`). A `cpm init` workspace shipped keys nothing
+ * could set, silently.
+ *
+ * Code owns every default now (`DEFAULT_CONFIG` in `src/infra/config/index.ts`); a config.json —
+ * generated or hand-edited — holds only OVERRIDES. So this generator produces exactly what the
+ * shipped `server/config.json` holds: the two document-level keys that decide how the file is
+ * READ (`$schema` for editor validation, `version` for the loader's shape routing), and nothing a
+ * setting could drift from. `initConfig` below still writes this to disk — a fresh workspace still
+ * needs a `config.json` a reader can find (`runtime/startup.ts` refuses a package root with none)
+ * — it is just no longer a restatement of defaults an operator never typed.
+ */
 export function generateDefaultConfig(): Record<string, unknown> {
-  // Only include keys that are in CONFIG_VALID_KEYS to avoid validation warnings.
-  // Keys like prompts.directory, gates.directory exist in the server's AJV schema
-  // but aren't in the CLI-shared validation set — omit from defaults.
   return {
-    server: {
-      name: 'claude-prompts',
-      transport: 'stdio',
-      port: 9090,
-    },
-    frameworks: {
-      enabled: true,
-      dynamicToolDescriptions: true,
-      systemPromptFrequency: 3,
-      styleGuidance: true,
-    },
-    gates: {
-      enabled: true,
-      frameworkGates: true,
-    },
-    logging: {
-      level: 'info',
-      directory: './logs',
-    },
-    // `mode: 'auto'` / `maxVersions` here previously produced a fresh workspace whose versioning
-    // block no reader consulted — this generator was the upstream producer of the inert spelling,
-    // so every `cpm init` seeded it. `auto` meant enabled with auto-versioning on.
-    versioning: {
-      enabled: true,
-      auto_version: true,
-      max_versions: 50,
-    },
-    execution: {
-      judge: true,
-    },
+    $schema: './config.schema.json',
+    version: 5,
   };
 }
 
@@ -304,11 +321,19 @@ export function validateConfig(workspace: string): ConfigValidationResult {
     };
   }
 
+  return validateConfigDocument(readResult.config);
+}
+
+/**
+ * Checks a whole config DOCUMENT against the generated key table: every leaf that names a known
+ * key must hold a value the table accepts, and a leaf that names nothing is reported as a
+ * warning. The `cpm config validate` command and the MCP config writer both read this, so a
+ * document one surface accepts is a document the other accepts.
+ */
+export function validateConfigDocument(config: Record<string, unknown>): ConfigValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
-  const config = readResult.config;
 
-  // Validate all present keys are known and values are valid
   validateConfigObject(config, '', errors, warnings);
 
   return {
@@ -317,6 +342,14 @@ export function validateConfig(workspace: string): ConfigValidationResult {
     warnings,
   };
 }
+
+/**
+ * Document-level members that are legal in the file but are not settings — `$schema` is the
+ * editor hint and `version` is the file-format discriminator the loader migrates. Both are
+ * deliberately absent from `CONFIG_VALID_KEYS` (see `_generated/config-keys.ts`), so without this
+ * skip a perfectly valid config.json would warn about two of its own keys.
+ */
+const DOCUMENT_META_KEYS: ReadonlySet<string> = new Set(['$schema', 'version']);
 
 function validateConfigObject(
   obj: Record<string, unknown>,
@@ -332,8 +365,7 @@ function validateConfigObject(
       continue;
     }
 
-    // Skip $schema key
-    if (fullKey === '$schema') continue;
+    if (DOCUMENT_META_KEYS.has(fullKey)) continue;
 
     // Check if this is a known leaf key
     if (CONFIG_VALID_KEYS.includes(fullKey as ConfigKey)) {
@@ -355,108 +387,65 @@ function validateConfigObject(
 
 export function getConfigKeyInfo(): ConfigKeyInfo[] {
   return CONFIG_VALID_KEYS.map((key) => {
-    const validation = getKeyTypeInfo(key);
+    const described = describeLeaf(CONFIG_KEY_TABLE[key]);
     return {
       key,
-      type: validation.type,
-      description: validation.description,
+      type: described.type,
+      description: described.description,
       restartRequired: CONFIG_RESTART_REQUIRED_KEYS.includes(key),
     };
   });
 }
 
-function getKeyTypeInfo(key: string): {
-  type: 'string' | 'number' | 'boolean';
-  description: string;
-} {
-  // The three `.mode` keys a reader actually consults. The on/off `.mode` family this function
-  // used to describe by suffix is gone from CONFIG_VALID_KEYS — those subsystems are booleans.
-  if (key === 'identity.mode')
-    return { type: 'string', description: "'permissive', 'strict', or 'locked'" };
-  if (key === 'phaseGuards.mode')
-    return { type: 'string', description: "'enforce', 'warn', or 'off'" };
-  if (key === 'telemetry.mode') return { type: 'string', description: "'on', 'off', or 'auto'" };
+/**
+ * The type and human description a key carries, derived from the generated table rather than from
+ * a hand-kept list of `if (key === …)` branches. That list had gone stale in both directions —
+ * it described `telemetry.mode` as "'on', 'off', or 'auto'" (the real values are off/traces/full)
+ * and `identity.mode` as including 'strict' (retired), while suffix rules like `.maxTokens`
+ * described keys that no longer existed at all.
+ */
+function describeLeaf(rule: ConfigLeafRule): { type: ConfigKeyInfo['type']; description: string } {
+  if (rule.type === 'boolean') return { type: 'boolean', description: 'true or false' };
 
-  // Transport
-  if (key === 'server.transport')
-    return { type: 'string', description: "'stdio', 'streamable-http', or 'both'" };
-
-  // Ports and numbers
-  if (key === 'server.port') return { type: 'number', description: '1024-65535' };
-  if (key === 'frameworks.systemPromptFrequency') return { type: 'number', description: '1-100' };
-  if (key === 'verification.inContextAttempts') return { type: 'number', description: '1-10' };
-  if (key === 'verification.isolation.timeout')
-    return { type: 'number', description: '30-3600 seconds' };
-  if (key === 'verification.isolation.maxBudget')
-    return { type: 'number', description: '>= 0.01 USD' };
-  if (key === 'verification.isolation.permissionMode')
-    return { type: 'string', description: "'delegate', 'ask', or 'deny'" };
-  if (key === 'versioning.max_versions') return { type: 'number', description: '1-500' };
-  if (key === 'resources.logs.maxEntries') return { type: 'number', description: '50-5000' };
-  if (key.endsWith('.maxTokens')) return { type: 'number', description: '1-4000' };
-  if (key.endsWith('.temperature')) return { type: 'number', description: '0-2' };
-
-  // Log levels
-  if (key === 'logging.level' || key === 'resources.logs.defaultLevel') {
-    return { type: 'string', description: "'debug', 'info', 'warn', or 'error'" };
+  if (rule.type === 'array') {
+    const pattern = rule.items?.pattern;
+    return {
+      type: 'array',
+      description:
+        pattern === undefined
+          ? 'comma-separated list'
+          : `comma-separated list, each entry matching ${pattern}`,
+    };
   }
 
-  // Phase Guards
-  if (key === 'phaseGuards.mode')
-    return { type: 'string', description: "'enforce', 'warn', or 'off'" };
-  if (key === 'phaseGuards.maxRetries') return { type: 'number', description: '0-5' };
+  if (rule.type === 'string') {
+    return {
+      type: 'string',
+      description:
+        rule.enum === undefined ? 'text value' : rule.enum.map((value) => `'${value}'`).join(', '),
+    };
+  }
 
-  // Session timeouts
-  if (key.startsWith('advanced.sessions.'))
-    return { type: 'number', description: '1-10080 minutes' };
-
-  // Directories
-  if (key === 'prompts.directory' || key === 'gates.directory')
-    return { type: 'string', description: 'relative directory path' };
-
-  // String values (exact matches not caught by patterns above)
-  if (key === 'server.name') return { type: 'string', description: 'server display name' };
-  if (key === 'logging.directory')
-    return { type: 'string', description: 'relative directory path' };
-  if (key === 'identity.launchDefaults.organizationId')
-    return { type: 'string', description: 'organization identifier' };
-  if (key === 'identity.launchDefaults.workspaceId')
-    return { type: 'string', description: 'workspace identifier' };
-
-  // Booleans
-  const boolKeys = [
-    'gates.enabled',
-    'gates.frameworkGates',
-    'gates.enforcePendingVerdict',
-    'execution.judge',
-    'frameworks.enabled',
-    'frameworks.dynamicToolDescriptions',
-    'frameworks.styleGuidance',
-    'prompts.registerWithMcp',
-    'resources.registerWithMcp',
-    'resources.prompts.defaultRegistration',
-    'resources.prompts.enabled',
-    'resources.gates.enabled',
-    'resources.frameworks.enabled',
-    'resources.observability.enabled',
-    'resources.observability.sessions',
-    'resources.observability.metrics',
-    'resources.logs.enabled',
-    'identity.allowPerRequestOverride',
-    'hooks.expandedOutput',
-    'verification.isolation.enabled',
-    'versioning.enabled',
-    'versioning.auto_version',
-  ];
-  if (boolKeys.includes(key)) return { type: 'boolean', description: 'true or false' };
-
-  // Default: string
-  return { type: 'string', description: 'text value' };
+  const noun = rule.type === 'integer' ? 'whole number' : 'number';
+  const { minimum, maximum } = rule;
+  if (minimum !== undefined && maximum !== undefined) {
+    return { type: 'number', description: `${noun}, ${minimum}-${maximum}` };
+  }
+  if (minimum !== undefined) return { type: 'number', description: `${noun} >= ${minimum}` };
+  if (maximum !== undefined) return { type: 'number', description: `${noun} <= ${maximum}` };
+  return { type: 'number', description: noun };
 }
 
-// ── Internal helpers ─────────────────────────────────────────────────────────
+// ── Document mutation ────────────────────────────────────────────────────────
 
-function applyConfigChange(
+/**
+ * A copy of `config` with exactly one dotted key set, creating intermediate objects as needed.
+ *
+ * Every other key survives, and so does key ORDER: `JSON.parse` preserves insertion order for
+ * non-numeric keys, assigning an existing key leaves it where it was, and a genuinely new section
+ * lands at the end. A reader diffing their config.json after a toggle sees one line change.
+ */
+export function applyConfigChange(
   config: Record<string, unknown>,
   key: string,
   value: unknown

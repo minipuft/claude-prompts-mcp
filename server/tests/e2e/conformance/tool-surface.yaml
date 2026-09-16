@@ -145,7 +145,7 @@ scenarios:
           operation: validate
           config: { operation: validate, key: logging.level, value: verbose }
     expect:
-      text_contains: 'Invalid configuration for **logging.level**: Log level must be: debug, info, warn, or error'
+      text_contains: 'Invalid configuration for **logging.level**: logging.level must be one of: error, warn, info, debug'
 
   - id: sc-injection
     claim_source: 'system_control action: injection — docs/guides/injection-control.md'

@@ -184,8 +184,6 @@ export interface ChainSessionConfig {
 export interface GateSystemSettings {
   /** Enable/disable the gate subsystem entirely */
   enabled: boolean;
-  /** Directory containing gate definitions (e.g., 'gates' for server/gates/{id}/) */
-  definitionsDirectory?: string;
   /** Enable framework-specific gates (auto-added based on active framework) */
   enableFrameworkGates?: boolean;
   /** Execute a prompt's `inline_gate_definitions` instead of only displaying them; default `false`. Retirement contract on the `GatesConfig` field below. */
@@ -217,7 +215,6 @@ export interface GateSystemSettings {
  */
 export const DEFAULT_GATES_CONFIG = {
   enabled: true,
-  definitionsDirectory: 'gates',
   enableFrameworkGates: true,
   executeInlineGateDefinitions: false,
   harnessCovers: [] as string[],
@@ -228,8 +225,6 @@ export const DEFAULT_GATES_CONFIG = {
  * Configuration for gates subsystem (top-level config.json shape)
  */
 export interface GatesConfig {
-  /** Directory containing gate definitions (e.g., 'gates' for server/gates/{id}/) */
-  definitionsDirectory?: string;
   /** New-style: directory path */
   directory?: string;
   /** Enable/disable the gate subsystem entirely */
@@ -291,20 +286,8 @@ export interface FrameworkSettings {
   dynamicToolDescriptions?: boolean;
   /** Framework a scope falls back to with no persisted state (default: 'CAGEERF') */
   defaultFramework?: string;
-  /** Inject framework guidance every N chain steps (default: 2) */
-  systemPromptFrequency?: number;
-  /** Where to inject system prompt: 'steps', 'gates', or 'both' (default: 'steps') */
-  systemPromptTarget?: InjectionTargetConfig;
-  /** Inject gate criteria every N steps. 0 = first-only (default: 0) */
-  gateGuidanceFrequency?: number;
-  /** Where to inject gate guidance: 'steps', 'gates', or 'both' (default: 'both') */
-  gateGuidanceTarget?: InjectionTargetConfig;
-  /** Include response formatting guidance (true/false, or object for granular control) */
-  styleGuidance?: boolean;
-  /** Inject style guidance every N steps. 0 = first-only (default: 0) */
-  styleGuidanceFrequency?: number;
-  /** Where to inject style guidance: 'steps', 'gates', or 'both' (default: 'steps') */
-  styleGuidanceTarget?: InjectionTargetConfig;
+  /** Injection control for framework content (system prompt, gate guidance, style guidance) */
+  injection?: FrameworkInjectionConfig;
 }
 
 /**
@@ -319,17 +302,6 @@ export interface VerificationConfig {
     maxBudget?: number;
     timeout?: number;
     permissionMode?: 'delegate' | 'ask' | 'deny';
-  };
-}
-
-/**
- * Advanced settings (internal/rarely-changed)
- */
-export interface AdvancedConfig {
-  sessions?: {
-    timeoutMinutes?: number;
-    reviewTimeoutMinutes?: number;
-    cleanupIntervalMinutes?: number;
   };
 }
 
@@ -463,15 +435,17 @@ export type DelegationProfile =
  * Set via CLI flags or config; used as fallback when request lacks identity claims.
  */
 export interface IdentityLaunchDefaults {
+  /** Default organization scope. */
   organizationId?: string;
+  /** Default workspace scope. */
   workspaceId?: string;
-  /** Optional launch-level client routing hint. */
+  /** Authoritative launch-level client family for delegation routing. */
   clientFamily?: ClientFamily;
-  /** Optional launch-level client identifier override (e.g., 'claude-code'). */
+  /** Authoritative launch-level client identifier. */
   clientId?: string;
-  /** Optional launch-level client version hint. */
+  /** Authoritative launch-level client version. */
   clientVersion?: string;
-  /** Optional launch-level delegation profile override. */
+  /** Authoritative launch-level delegation profile. */
   delegationProfile?: DelegationProfile;
 }
 
@@ -493,11 +467,6 @@ export interface Config {
   frameworks?: FrameworkSettings;
   /** Chain session lifecycle configuration - LEGACY */
   chainSessions?: ChainSessionConfig;
-  /**
-   * Transport mode: 'stdio' (default), 'streamable-http', or 'both'
-   * STDIO is used by Claude Desktop/CLI, Streamable HTTP for web clients
-   */
-  transport?: TransportMode;
   /** Logging configuration */
   logging?: LoggingConfig;
   /** Tool descriptions configuration */
@@ -506,8 +475,6 @@ export interface Config {
   versioning?: VersioningConfig;
   /** New-style: Verification (Ralph Loops) configuration */
   verification?: VerificationConfig;
-  /** New-style: Advanced internal settings */
-  advanced?: AdvancedConfig;
   /** MCP Resources configuration */
   resources?: ResourcesConfig;
 
