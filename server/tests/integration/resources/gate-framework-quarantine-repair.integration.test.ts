@@ -104,6 +104,15 @@ function writeGate(root: string, id: string, body: string): string {
 describe('a gate file the loader refused is reachable and repairable (P4.15)', () => {
   let writable: string;
   let bundled: string;
+  /**
+   * A root that OUTRANKS the writable one — the shape P4.27 introduced and P4.34 is about.
+   *
+   * `writable` is where every repair lands, and since P4.27 it is no longer the top of the lookup
+   * order: a workspace overlay sits above it. Without a root in that position the repair response's
+   * claim that the write "takes precedence" cannot be falsified here, because every root in this
+   * fixture trailed the one being written.
+   */
+  let outranking: string;
   let dbRoot: string;
   let dbManager: SqliteEngine;
   let handler: GateToolHandler;
@@ -119,6 +128,7 @@ describe('a gate file the loader refused is reachable and repairable (P4.15)', (
     errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     writable = mkdtempSync(join(tmpdir(), 'gate-repair-writable-'));
     bundled = mkdtempSync(join(tmpdir(), 'gate-repair-bundled-'));
+    outranking = mkdtempSync(join(tmpdir(), 'gate-repair-overlay-'));
     dbRoot = mkdtempSync(join(tmpdir(), 'gate-repair-db-'));
 
     writeGate(writable, 'healthy-gate', gateYaml('healthy-gate', { valid: true }));
@@ -137,6 +147,11 @@ describe('a gate file the loader refused is reachable and repairable (P4.15)', (
     // refusal below. `shared-gate` cannot serve that role — it IS in the registry, from the other
     // root, so an update on it is an ordinary update and not a repair at all.
     writeGate(writable, 'partial-gate', gateYaml('partial-gate', { valid: false }));
+    // P4.35 case — valid in the root that OUTRANKS the write target, broken in the write target
+    // itself. The overlay serves, so under first-hit-wins the writable root was never opened and
+    // its broken file was invisible on every surface.
+    writeGate(outranking, 'outranked-gate', gateYaml('outranked-gate', { valid: true }));
+    writeGate(writable, 'outranked-gate', gateYaml('outranked-gate', { valid: false }));
     // P4.34 case 2 — broken in the LOWEST root and absent from every root above it, which is the
     // only way `handleUpdate` reaches its repair branch with the refused file somewhere other
     // than the write target (the branch is gated on `has(id)` being false, so no root above may
@@ -150,7 +165,10 @@ describe('a gate file the loader refused is reachable and repairable (P4.15)', (
         // highest precedence first, with the primary at its own rank inside it — overlays above,
         // the bundled tree last. Listing only `[bundled]` would now rank the bundled tree ABOVE
         // `writable`, which inverts the shadow these cases are about.
-        loaderConfig: { gatesDir: writable, additionalGatesDirs: [writable, bundled] },
+        loaderConfig: {
+          gatesDir: writable,
+          additionalGatesDirs: [outranking, writable, bundled],
+        },
       },
     });
 
@@ -176,6 +194,7 @@ describe('a gate file the loader refused is reachable and repairable (P4.15)', (
     errorSpy.mockRestore();
     rmSync(writable, { recursive: true, force: true });
     rmSync(bundled, { recursive: true, force: true });
+    rmSync(outranking, { recursive: true, force: true });
     rmSync(dbRoot, { recursive: true, force: true });
   });
 
@@ -284,6 +303,26 @@ describe('a gate file the loader refused is reachable and repairable (P4.15)', (
     const onDisk = readFileSync(brokenPath, 'utf8');
     expect(onDisk).toContain('repaired through the tool');
     expect(onDisk).not.toContain('not-a-gate-type');
+  });
+
+  it('FALSIFIER (P4.35) — a file refused in the WRITABLE root is announced while a higher root serves', async () => {
+    const outrankedPath = join(writable, 'outranked-gate', 'gate.yaml');
+
+    // The record exists at all only because the loader now reads past the root that served. Under
+    // first-hit-wins `outranking` answered and `writable` was never opened, so this file produced
+    // no warning, no list entry and no repair target — in the one root an operator edits.
+    const listed = await call({ action: 'list', enabled_only: false });
+    expect(listed.body).toContain(outrankedPath);
+    expect(listed.body).toContain(`\`outranked-gate\` is currently served from ${outranking}`);
+
+    // POSITIVE CONTROL — the served definition is unaffected: the id still resolves, from the root
+    // that legitimately won, and the announcement rides along with it rather than replacing it.
+    const inspected = await call({ action: 'inspect', id: 'outranked-gate' });
+    expect(inspected.isError).toBe(false);
+    expect(inspected.body).toContain('outranked-gate gate');
+    expect(inspected.body).toContain('Another file for this id failed to load');
+    expect(inspected.body).toContain(outrankedPath);
+    expect(inspected.body).toContain(`served from ${outranking}`);
   });
 
   it('FALSIFIER (P4.34) — a repair written beside the refused file states which root serves, measured', async () => {
