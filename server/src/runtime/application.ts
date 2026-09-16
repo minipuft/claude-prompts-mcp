@@ -15,7 +15,7 @@ import { McpServer } from '@modelcontextprotocol/server';
 import { createRuntimeFoundation } from './context.js';
 import { loadPromptData, loadSkillsSyncExports } from './data-loader.js';
 import { buildHealthReport } from './health.js';
-import { buildHotReloadAuxiliaryConfigs } from './hot-reload-auxiliaries.js';
+import { buildPromptHotReloadOptions } from './hot-reload-auxiliaries.js';
 import {
   publishPromptsChanged,
   publishResourcesChanged,
@@ -24,7 +24,7 @@ import {
 import { initializeModules } from './module-initializer.js';
 import { resolveRuntimeLaunchOptions, RuntimeLaunchOptions } from './options.js';
 import { registerMcpResources as registerMcpResourcesOn } from './resource-registration.js';
-import { indexerResourceRoots, resolveResourceRoots } from './resource-roots.js';
+import { indexerResourceRoots } from './resource-roots.js';
 import { resolveServingUnitScope } from './serving-unit-scope.js';
 import { startServerWithManagers } from './startup-server.js';
 import { TelemetryLifecycle } from './telemetry-lifecycle.js';
@@ -873,32 +873,15 @@ export class Application {
         this.serviceOrchestrator.register({
           name: serviceName,
           start: async () => {
-            const auxiliaryReloads = await buildHotReloadAuxiliaryConfigs({
+            const hotReloadOptions = await buildPromptHotReloadOptions({
               logger: this.logger,
               mcpToolsManager: this.mcpToolsManager,
               gateManager: this.gateManager,
               scriptLoader: this.promptManager.getModules().converter.getScriptToolLoader(),
               promptsDir: this.promptsDirectory ?? undefined,
               configManager: this.configManager,
+              pathResolver: this.pathResolver,
             });
-
-            const hotReloadOptions: Parameters<typeof this.promptManager.startHotReload>[2] = {};
-
-            if (auxiliaryReloads.length > 0) {
-              hotReloadOptions.auxiliaryReloads = auxiliaryReloads;
-            }
-
-            // Watch every root the prompt catalog is composed from, resolved by the same helper
-            // the framework, gate and style loaders are configured from — one derivation of
-            // "which directories contribute this resource type", not a second copy of it.
-            const promptRoots = resolveResourceRoots(
-              this.pathResolver,
-              'prompts',
-              this.promptsDirectory
-            );
-            if (promptRoots.additional.length > 0) {
-              hotReloadOptions.promptRoots = promptRoots.additional;
-            }
 
             await this.promptManager.startHotReload(
               this.promptsDirectory!,
