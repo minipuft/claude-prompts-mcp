@@ -10,7 +10,7 @@ import { readFile } from 'fs/promises';
 import os from 'node:os';
 import path from 'path';
 
-import { validateConfigAgainstSchema } from './config-schema-validator.js';
+import { getParsedConfigSchema, validateConfigAgainstSchema } from './config-schema-validator.js';
 import { createLogger, getDefaultLoggerConfig } from '../logging/index.js';
 
 const logger = createLogger(
@@ -476,14 +476,14 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
   }
 
   /**
-   * The dot-path keys the packaged `config.schema.json` declares. Re-reads and re-parses the
-   * schema on every call rather than caching: `config-schema-validator.ts` already owns an
-   * mtime-keyed compiled-validator cache for the same file, but it caches an AJV `ValidateFunction`
-   * and exposes no accessor for the underlying schema object, so there is no cache to extend
-   * without also editing that module.
+   * The dot-path keys the packaged `config.schema.json` declares. Reads the parsed schema through
+   * `getParsedConfigSchema` (`config-schema-validator.ts`), the same mtime-keyed cache entry the
+   * compiled AJV validator is drawn from — one read, one parse, one invalidation rule shared by
+   * both consumers, instead of this method re-reading and re-parsing the file on every call.
    *
    * Rejects rather than returning an empty array: no schema path, an unreadable file, and invalid
-   * JSON are all "cannot enumerate", never "zero keys declared".
+   * JSON are all "cannot enumerate", never "zero keys declared" — `getParsedConfigSchema` throws
+   * on the latter two, and this wraps that failure with the schema path for context.
    */
   async listConfigKeys(): Promise<string[]> {
     if (this.schemaPath === undefined) {
@@ -492,23 +492,12 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
       );
     }
 
-    let schemaContent: string;
-    try {
-      schemaContent = await readFile(this.schemaPath, 'utf8');
-    } catch (error) {
-      throw new Error(
-        `listConfigKeys: could not read the config schema at ${this.schemaPath}: ${
-          error instanceof Error ? error.message : String(error)
-        }`
-      );
-    }
-
     let schema: unknown;
     try {
-      schema = JSON.parse(schemaContent);
+      schema = await getParsedConfigSchema(this.schemaPath);
     } catch (error) {
       throw new Error(
-        `listConfigKeys: could not parse the config schema at ${this.schemaPath}: ${
+        `listConfigKeys: could not load the config schema at ${this.schemaPath}: ${
           error instanceof Error ? error.message : String(error)
         }`
       );

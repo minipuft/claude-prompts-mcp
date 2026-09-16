@@ -22,8 +22,8 @@
  * directory (`config-schema-warning.test.ts`, `legacy-key-migration.test.ts`).
  */
 
-import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
-import { mkdtemp, rm, writeFile } from 'fs/promises';
+import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { copyFile, mkdtemp, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -134,6 +134,67 @@ describe('config value source labeling (getConfigValueWithSource / listConfigKey
     expect(manager.getConfigValueWithSource('logging.level')).toMatchObject({
       value: 'debug',
       source: 'environment',
+    });
+  });
+
+  // The cache-sharing gate (row 2.12): `listConfigKeys()` used to re-read and re-parse
+  // config.schema.json on every call. It now goes through `getParsedConfigSchema`
+  // (config-schema-validator.ts), the same mtime-keyed cache entry the compiled AJV validator is
+  // drawn from — this proves that by counting actual `readFile` calls, not by trusting that "it
+  // calls the new function" implies "it shares the cache".
+  //
+  // A plain `jest.spyOn`/`jest.mock('node:fs/promises', ...)` cannot observe this: under Jest's
+  // native-ESM mode (`--experimental-vm-modules`), a statically-imported module's bindings are
+  // real ES module bindings, already linked before any in-file `jest.mock()` call runs — measured
+  // here (spyOn threw "Cannot assign to read only property 'readFile'"; a hoisted `jest.mock`
+  // left the real function in place, uninstrumented). `jest.unstable_mockModule` plus a dynamic
+  // `import()` performed AFTER registering it is the mechanism that actually intercepts a
+  // built-in: the dynamic import re-links `index.ts` (and, transitively,
+  // `config-schema-validator.ts`) against the mocked module instead of the real one.
+  describe('schema cache sharing (config-schema-validator.ts owns one read/parse per schemaPath)', () => {
+    afterEach(() => {
+      // Isolated per test: a fresh module graph next time, so this never leaks into the
+      // statically-imported `ConfigLoader` the rest of this file uses.
+      jest.resetModules();
+    });
+
+    it('reads and parses config.schema.json once across two listConfigKeys() calls on the same schema path', async () => {
+      const actualFsPromises = jest.requireActual(
+        'node:fs/promises'
+      ) as typeof import('node:fs/promises');
+      // A spy that still calls through to the real implementation — reads stay real, only the
+      // call count is being observed.
+      const readFileMock = jest.fn(actualFsPromises.readFile);
+
+      jest.resetModules();
+      jest.unstable_mockModule('node:fs/promises', () => ({
+        ...actualFsPromises,
+        readFile: readFileMock,
+      }));
+
+      // A fresh, mock-linked copy of the module under test — NOT the `ConfigLoader` statically
+      // imported at the top of this file, which is already bound to the real `node:fs/promises`
+      // and would not see this mock.
+      const { ConfigLoader: IsolatedConfigLoader } =
+        await import('../../../../src/infra/config/index.js');
+
+      const isolatedSchemaPath = path.join(tempDir, 'isolated.config.schema.json');
+      await copyFile(SCHEMA_PATH, isolatedSchemaPath);
+      const isolatedManager = new IsolatedConfigLoader(configPath, undefined, {
+        schemaPath: isolatedSchemaPath,
+      });
+
+      await isolatedManager.listConfigKeys();
+      await isolatedManager.listConfigKeys();
+
+      const schemaReadCallCount = readFileMock.mock.calls.filter(
+        (call) => call[0] === isolatedSchemaPath
+      ).length;
+
+      // THE assertion this test exists to make: two calls, ONE underlying file read. A
+      // `listConfigKeys()` that bypasses the shared cache (re-reading + re-parsing on every
+      // call — the pre-row behavior) reads twice and fails this at 2.
+      expect(schemaReadCallCount).toBe(1);
     });
   });
 });
