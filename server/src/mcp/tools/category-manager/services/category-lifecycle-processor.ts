@@ -129,6 +129,14 @@ export class CategoryLifecycleProcessor {
       declared
     );
 
+    // One projection of the write serves the version's diff summary and the update's own diff. It
+    // is resolved from the plan the writer applies, with the payload the writer is handed below,
+    // so both name the file the write lands in and the lines that change there. Read before the
+    // write, because the projection's "before" side is the file as it still is.
+    const diffResult = this.ctx.textDiffService.generateFileChangeDiff(
+      await this.ctx.categoryFileService.projectCategoryWrite(categoryData)
+    );
+
     // Auto-versioning runs as the writer transaction's `commit` step, not ahead of it (P4.2 /
     // SF-3). Inlined rather than extracted to a helper on purpose — `validate:mutation-atomicity`
     // reads the record's position lexically.
@@ -138,11 +146,6 @@ export class CategoryLifecycleProcessor {
       this.ctx.versionHistoryService.isAutoVersionEnabled() && !skipVersion
         ? {
             commit: async (): Promise<void> => {
-              const diffForVersion = this.ctx.textDiffService.generateObjectDiff(
-                beforeState,
-                afterState,
-                `${id}/${CATEGORY_YAML_FILENAME}`
-              );
               const versionResult = await this.ctx.versionHistoryService.recordEditResult(
                 'category',
                 id,
@@ -150,7 +153,7 @@ export class CategoryLifecycleProcessor {
                 afterState,
                 {
                   description: 'Update via resource_manager',
-                  diff_summary: `+${diffForVersion.stats.additions}/-${diffForVersion.stats.deletions}`,
+                  diff_summary: `+${diffResult.stats.additions}/-${diffResult.stats.deletions}`,
                 }
               );
               versionSaved = versionResult.version;
@@ -168,12 +171,6 @@ export class CategoryLifecycleProcessor {
     }
 
     await this.ctx.onRefresh?.();
-
-    const diffResult = this.ctx.textDiffService.generateObjectDiff(
-      beforeState,
-      afterState,
-      `${id}/${CATEGORY_YAML_FILENAME}`
-    );
 
     let response =
       `✅ Category '${id}' updated successfully\n\n` +

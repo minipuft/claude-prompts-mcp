@@ -4,6 +4,7 @@ import { mkdir, readdir, readFile, rmdir, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 
 import type { ConfigManager, Logger } from '#shared/types/index.js';
+import type { FileContentChange } from '../../resource-manager/prompt/analysis/object-diff-generator.js';
 import type { CategoryCreationData } from '../core/types.js';
 
 import { CATEGORY_YAML_DECLARED_KEYS } from '#modules/prompts/category-yaml-keys.js';
@@ -122,6 +123,22 @@ export interface CategoryFileWriteResult {
   verificationFailure?: ResourceVerificationFailurePayload;
 }
 
+/**
+ * Everything one category write puts on disk, resolved before anything is written.
+ *
+ * `writeCategoryFiles` applies it and `projectCategoryWrite` reports it. A diff built any other
+ * way — the recorded fields rendered as one `category.yaml`, say — describes no file on disk:
+ * `buildCategoryYaml` decides the document's key order and carries the preserved keys forward
+ * from the file itself, and a comparison of two field maps can see neither (tutorial-rework B.20).
+ */
+interface CategoryWritePlan {
+  categoriesRoot: string;
+  categoryDir: string;
+  yamlPath: string;
+  /** `category.yaml` alone, as the exact bytes the write leaves. A category has no second file. */
+  files: Array<{ relativePath: string; content: string }>;
+}
+
 export class CategoryFileWriter {
   private readonly logger: Logger;
   private readonly configManager: ConfigManager;
@@ -161,18 +178,17 @@ export class CategoryFileWriter {
     data: CategoryCreationData,
     options: ResourceWriteCommitOptions = {}
   ): Promise<CategoryFileWriteResult> {
-    const root = this.categoriesRoot();
-    let categoryDir: string;
+    // Every byte this write lands is decided here, before the transaction opens; the mutation
+    // below applies the plan and decides nothing of its own, which is what keeps
+    // `projectCategoryWrite` reporting the same file and the same contents.
+    let plan: CategoryWritePlan;
     try {
-      categoryDir = this.categoryDir(root, data.id);
+      plan = await this.planCategoryWrite(data);
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
-    const yamlPath = path.join(categoryDir, CATEGORY_YAML_FILENAME);
+    const { categoryDir, yamlPath } = plan;
 
-    // Read BEFORE the mutation starts — an update overwrites this same path, and a create has
-    // nothing here yet.
-    const existingYaml = await readCategoryYamlDocument(yamlPath, this.logger);
     const directoryExisted = existsSync(categoryDir);
 
     const transactionResult = await this.mutationTransaction.run({
@@ -194,9 +210,11 @@ export class CategoryFileWriter {
         // prompt write does (P1.2), because for a category the subtree is other resources.
         await mkdir(categoryDir, { recursive: true });
 
-        const yamlData = this.buildCategoryYaml(data, existingYaml);
-        await writeFile(yamlPath, serializeYaml(yamlData, { sortKeys: false }), 'utf8');
-        paths.push(yamlPath);
+        for (const file of plan.files) {
+          const filePath = path.join(categoryDir, file.relativePath);
+          await writeFile(filePath, file.content, 'utf8');
+          paths.push(filePath);
+        }
 
         return { paths };
       },
@@ -242,6 +260,66 @@ export class CategoryFileWriter {
     }
 
     return { success: true, paths: transactionResult.result?.paths ?? [] };
+  }
+
+  /**
+   * What `writeCategoryFiles(data)` would change on disk, file by file, without writing anything.
+   *
+   * Resolves the plan that method applies, so the file and its contents are exactly that call's.
+   * The path is relative to the prompts root — `<id>/category.yaml` — and it is the only path this
+   * ever names: a category write touches the declaration and none of the prompts the directory
+   * holds, so neither does its diff. A category with no declaration in the WRITABLE root yet — a
+   * create, or a category so far served only from the bundled tree — has no prior content, because
+   * the write authors its declaration here rather than editing the bundled one.
+   *
+   * Mirrors `projectGateWrite` and `projectFrameworkWrite`; it takes no `suppliedKeys` because a
+   * category write has one file and nothing to narrow to.
+   */
+  async projectCategoryWrite(data: CategoryCreationData): Promise<FileContentChange[]> {
+    const plan = await this.planCategoryWrite(data);
+    const prefix = path.relative(plan.categoriesRoot, plan.categoryDir);
+
+    const changes: FileContentChange[] = [];
+    for (const file of plan.files) {
+      const priorPath = path.join(plan.categoryDir, file.relativePath);
+      const relativePath = path.join(prefix, file.relativePath).split(path.sep).join('/');
+      changes.push({
+        path: relativePath,
+        previousPath: relativePath,
+        before: existsSync(priorPath) ? await readFile(priorPath, 'utf8') : null,
+        after: file.content,
+      });
+    }
+    return changes;
+  }
+
+  /**
+   * Resolve the file one category write lands, reading the disk but writing nothing.
+   *
+   * The single place that content is decided, so `writeCategoryFiles` and `projectCategoryWrite`
+   * share one answer. Throws when `data.id` escapes the prompts root — `categoryDir` is the
+   * containment check, and both callers are responsible for a caller-supplied id.
+   */
+  private async planCategoryWrite(data: CategoryCreationData): Promise<CategoryWritePlan> {
+    const categoriesRoot = this.categoriesRoot();
+    const categoryDir = this.categoryDir(categoriesRoot, data.id);
+    const yamlPath = path.join(categoryDir, CATEGORY_YAML_FILENAME);
+
+    // Read BEFORE anything is written — an update overwrites this same path, and a create has
+    // nothing here yet. This read is also what a projection reports as the file's prior state.
+    const existingYaml = await readCategoryYamlDocument(yamlPath, this.logger);
+
+    return {
+      categoriesRoot,
+      categoryDir,
+      yamlPath,
+      files: [
+        {
+          relativePath: CATEGORY_YAML_FILENAME,
+          content: serializeYaml(this.buildCategoryYaml(data, existingYaml), { sortKeys: false }),
+        },
+      ],
+    };
   }
 
   private buildCategoryYaml(
