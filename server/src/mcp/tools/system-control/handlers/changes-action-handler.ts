@@ -4,11 +4,11 @@ import { ActionHandler } from '../core/action-handler-base.js';
 
 import type { ToolResponse, ChangeSource, TrackedResourceType } from '#shared/types/index.js';
 
-import { getResourceChangeTracker } from '#runtime/resource-change-tracking.js';
+import { getResourceChangeLog } from '#shared/core/resource-change-log.js';
 
 export class ChangesActionHandler extends ActionHandler {
   async execute(args: any): Promise<ToolResponse> {
-    const tracker = getResourceChangeTracker();
+    const tracker = getResourceChangeLog();
 
     if (tracker === undefined) {
       return this.createMinimalSystemResponse(
@@ -28,7 +28,7 @@ export class ChangesActionHandler extends ActionHandler {
   }
 
   private async listChanges(args: Record<string, unknown>): Promise<ToolResponse> {
-    const tracker = getResourceChangeTracker();
+    const tracker = getResourceChangeLog();
     if (tracker === undefined) {
       throw new Error('Resource change tracker not initialized');
     }
