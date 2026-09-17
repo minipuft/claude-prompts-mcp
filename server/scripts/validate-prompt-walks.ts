@@ -29,7 +29,8 @@
  * !isIgnoredPromptEntryName(name))`. So a call whose argument carries a marker (a literal, a marker
  * constant, or a callback that references one) makes the LISTER a walk. The lister is resolved in
  * the same file by name, or across files through a named import. Relative specifiers and the
- * server's `#alias/*` imports are both resolved.
+ * server's `#alias/*` imports are both resolved. The cli's `@shared/*` alias is not followed for
+ * this; the required-import test matches `prompt-layout` under any specifier.
  *
  * Only the innermost walk is reported: a walk whose callees include another walk is a caller of
  * that walk, not a second one.
@@ -72,8 +73,8 @@
  *      follows named imports only: a namespace import (`ws.discover(...)`) or a re-export is not
  *      followed.
  *   4. MARKERS BUILT AT RUNTIME. `'prompt' + '.yaml'`, or a filename read from a config table
- *      (`config.entryFile`), is invisible. That is why the cli's walk is found through `init.ts`'s
- *      literal call, not through `list.ts`.
+ *      (`config.entryFile`), is invisible. `list.ts` passes its entry file that way, so the cli's
+ *      walk is found through the layout predicates it calls, and `init.ts`'s literal call.
  *   5. ADOPTION IS NOT CORRECT USE. The check proves the import exists, not that the walk applies
  *      the predicate at the right depth. `tests/integration/prompts/` pins behaviour.
  *
@@ -81,9 +82,8 @@
  * for it, which is the shape it detects. It is a scope boundary, not an exception: it walks no
  * prompts tree.
  *
- * DECLARED EXCEPTIONS, one table, each entry waiving named predicates with a reason. The `cpm`
- * CLI's walk mirrors both rules instead of importing them, and the loader's per-category walk
- * never stands at the prompts root. Each entry is anchored by path. It fails closed when the file
+ * DECLARED EXCEPTIONS, one table, each entry waiving named predicates with a reason. The watcher
+ * lists only the prompts root, and the loader's per-category walk never stands there. Each entry is anchored by path. It fails closed when the file
  * disappears, and it fails as stale when the file stops being a walk or starts importing a
  * predicate it waives.
  *
@@ -126,22 +126,6 @@ const READDIR_NAMES: ReadonlySet<string> = new Set(['readdir', 'readdirSync']);
  * repo-relative path, then by the predicate waived.
  */
 const EXCEPTIONS: ReadonlyMap<string, ReadonlyMap<string, string>> = new Map([
-  [
-    'cli/src/lib/workspace.ts',
-    new Map([
-      [
-        RESERVED_PREDICATE,
-        'the standalone `cpm` CLI (`cli/package.json`, Node >=18.18) keeps its prompts walk free ' +
-          'of server imports; it applies no reserved-name rule below the category level',
-      ],
-      [
-        CATEGORY_PREDICATE,
-        'the standalone `cpm` CLI mirrors the category rule in its own ' +
-          '`isExcludedCategoryDirectoryName`, and `cli/tests/integration/' +
-          'category-directory-rule.test.ts` compares the mirror with the canonical predicate',
-      ],
-    ]),
-  ],
   [
     'server/src/modules/prompts/prompt-watch-setup.ts',
     new Map([
