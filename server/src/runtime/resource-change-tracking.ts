@@ -24,6 +24,7 @@ import {
 } from '#infra/observability/tracking/index.js';
 import { setResourceChangeLog } from '#shared/core/resource-change-log.js';
 import {
+  isExcludedCategoryDirectoryName,
   isIgnoredPromptEntryName,
   isReservedPromptDirectoryName,
   promptIdFromDirectory,
@@ -169,11 +170,16 @@ export async function compareResourceBaseline(
             continue;
           }
 
-          // A prompt's `tools/` is reserved for script tools, so nothing below it entered the
-          // catalog and nothing below it may be announced as an external change. Same predicate
-          // the loader applies, from the same module. Below the root only: at the prompts root
-          // `tools` is an ordinary category, which the loader serves and this walk must announce.
-          if (dir !== promptsPath && isReservedPromptDirectoryName(entry.name)) continue;
+          // At the root every directory is a category candidate, and the loader's category rule
+          // decides: nothing below `backup/` or `node_modules/` is served, so nothing there is
+          // announced. Below the root, a prompt's `tools/` is reserved for script tools, so nothing
+          // below it entered the catalog either. At the root `tools` is an ordinary category,
+          // which the loader serves and this walk must announce.
+          const skipped =
+            dir === promptsPath
+              ? isExcludedCategoryDirectoryName(entry.name)
+              : isReservedPromptDirectoryName(entry.name);
+          if (skipped) continue;
 
           recordResource(
             resourceType,

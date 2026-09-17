@@ -54,6 +54,26 @@ export interface ResourceEntry {
   dir: string;
 }
 
+/** Root-level directory names that are never a prompt category. See the predicate below. */
+const EXCLUDED_CATEGORY_DIRECTORY_NAMES: ReadonlySet<string> = new Set(['backup', 'node_modules']);
+
+/**
+ * True when a directory directly under the prompts root is NOT a category.
+ *
+ * A MIRROR. The canonical rule is `isExcludedCategoryDirectoryName` in
+ * `server/src/shared/utils/prompt-layout.ts`, which the server's loader, indexer, watcher and
+ * validators all call. This file restates it rather than importing it, and
+ * `cli/tests/integration/category-directory-rule.test.ts` compares the two name by name, so
+ * changing one without the other fails that test.
+ */
+export function isExcludedCategoryDirectoryName(entryName: string): boolean {
+  return (
+    entryName.startsWith('.') ||
+    entryName.startsWith('_') ||
+    EXCLUDED_CATEGORY_DIRECTORY_NAMES.has(entryName)
+  );
+}
+
 /**
  * Discover resource directories and return both ID and full path.
  *
@@ -79,6 +99,9 @@ export function discoverResourcePaths(
 
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
+      // In a grouped layout every root directory is a category, and the server serves nothing
+      // from an excluded one. Flat layouts (gates, frameworks, styles) have no categories.
+      if (nested && isExcludedCategoryDirectoryName(entry.name)) continue;
 
       const childDir = join(baseDir, entry.name);
 

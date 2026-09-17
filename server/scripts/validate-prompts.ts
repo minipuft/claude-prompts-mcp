@@ -38,6 +38,7 @@ import * as yaml from 'js-yaml';
 import { normalizeInlineGateDefinitions } from '../src/modules/prompts/yaml-prompt-loader.js';
 import { validatePromptYaml } from '../src/modules/prompts/prompt-schema.js';
 import {
+  isExcludedCategoryDirectoryName,
   isIgnoredPromptEntryName,
   isReservedPromptDirectoryName,
 } from '../src/shared/utils/prompt-layout.js';
@@ -126,8 +127,9 @@ function findStaleExceptions(files: string[]): string[] {
  *
  * The skips are the loader's, read from `prompt-layout.ts` rather than restated. Without them this
  * walk schema-checked files nothing serves: a `prompt.yaml` under a prompt's reserved `tools/`, or
- * anywhere below `_drafts/`, could fail CI as a prompt no MCP surface ever answers. `tools` is
- * reserved only BELOW the root — at the root it is an ordinary category, which the loader serves.
+ * anywhere below `_drafts/` or a root-level `backup/`, could fail CI as a prompt no MCP surface
+ * ever answers. At the root the loader's category rule decides; `tools` is reserved only BELOW the
+ * root — at the root it is an ordinary category, which the loader serves.
  */
 function findPromptFiles(dir: string, found: string[] = [], depth = 0): string[] {
   let entries;
@@ -140,7 +142,11 @@ function findPromptFiles(dir: string, found: string[] = [], depth = 0): string[]
     if (isIgnoredPromptEntryName(entry.name)) continue;
     const full = join(dir, entry.name);
     if (entry.isDirectory()) {
-      if (depth > 0 && isReservedPromptDirectoryName(entry.name)) continue;
+      const skipped =
+        depth === 0
+          ? isExcludedCategoryDirectoryName(entry.name)
+          : isReservedPromptDirectoryName(entry.name);
+      if (skipped) continue;
       findPromptFiles(full, found, depth + 1);
     } else if (entry.name === 'prompt.yaml') found.push(full);
   }
@@ -547,14 +553,26 @@ if (SELF_TEST) {
   //   tools/leaf                  vs general/tools/leaf       — `tools` at depth 0 vs depth 1
   //   general/host/helpers/leaf   vs general/host/tools/leaf  — reserved name at depth 2
   //   general/drafts/leaf         vs general/_drafts/leaf     — `_` prefix on a directory
+  //   backups/leaf                vs backup/leaf              — an excluded category name
+  //   node_module/leaf            vs node_modules/leaf        — the other excluded category name
+  //   general/backup/leaf         vs backup/leaf              — excluded at the root only
   const walkDir = mkdtempSync(join(tmpdir(), 'validate-prompts-walk-selftest-'));
   const walkWalked = [
     'tools/leaf',
     'general/host',
     'general/host/helpers/leaf',
     'general/drafts/leaf',
+    'backups/leaf',
+    'node_module/leaf',
+    'general/backup/leaf',
   ];
-  const walkSkipped = ['general/tools/leaf', 'general/host/tools/leaf', 'general/_drafts/leaf'];
+  const walkSkipped = [
+    'general/tools/leaf',
+    'general/host/tools/leaf',
+    'general/_drafts/leaf',
+    'backup/leaf',
+    'node_modules/leaf',
+  ];
   for (const rel of [...walkWalked, ...walkSkipped]) {
     mkdirSync(join(walkDir, rel), { recursive: true });
     writeFileSync(join(walkDir, rel, 'prompt.yaml'), 'id: leaf\n', 'utf8');

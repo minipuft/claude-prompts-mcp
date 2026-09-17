@@ -45,6 +45,7 @@ import type { Logger } from '../logging/index.js';
 
 import { computeContentHash } from '#shared/utils/hash.js';
 import {
+  isExcludedCategoryDirectoryName,
   isIgnoredPromptEntryName,
   isReservedPromptDirectoryName,
   isSingleFilePromptName,
@@ -970,7 +971,11 @@ export class ResourceIndexer {
    * framework and style loaders (`discoverNestedYamlDirectories`) skip neither name, so applying
    * them to those types would hide a resource their own loader serves.
    *
-   * - {@link isIgnoredPromptEntryName} at every depth. This walk used to apply it to FILES only,
+   * - {@link isExcludedCategoryDirectoryName} at the root, where every directory is a category
+   *   candidate. It is the loader's own category rule, so a `backup/` or `node_modules/` directory
+   *   the loader never serves is not indexed either. This walk used to apply only the `.`/`_`
+   *   half there, and indexed every prompt under `backup/`.
+   * - {@link isIgnoredPromptEntryName} below the root. This walk used to apply it to FILES only,
    *   so it descended into `_drafts/` and indexed what it found while the loader served none of
    *   it — the defect that predicate's own docstring names.
    * - {@link isReservedPromptDirectoryName} below the root only. `tools/` is reserved INSIDE a
@@ -980,8 +985,8 @@ export class ResourceIndexer {
    */
   private skipsPromptDirectory(type: IndexedResourceType, name: string, depth: number): boolean {
     if (type !== 'prompt') return false;
-    if (isIgnoredPromptEntryName(name)) return true;
-    return depth > 0 && isReservedPromptDirectoryName(name);
+    if (depth === 0) return isExcludedCategoryDirectoryName(name);
+    return isIgnoredPromptEntryName(name) || isReservedPromptDirectoryName(name);
   }
 
   /**
