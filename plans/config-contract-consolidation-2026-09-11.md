@@ -14,12 +14,12 @@ tags: [config, schema, validation, cli, contracts]
 **Owner**: minipuft
 **Created**: 2026-09-11
 
-## Now (2026-09-16, step 4 cut)
+## Now (2026-09-16, PR #325 open)
 
-- **Goal**: one owner for `config.json`'s shape. Steps 1–3 merged (#307, #312, #322 = `914b068c`). Step 4 is branch `feat/config-4x-translation`, cut from `main` `914b068c` in the main checkout (notes R56), `feat(config)!`.
-- **Slice**: T6 rows 6.1–6.8 all ✓ (6.3 e7100216 · 6.1 a3b66aad · 6.4 519b9c3a · 6.5 a2e3a94f · 6.2 e10ede8e · 6.8 d713e4d2+3fd3087e · 6.7 d5f64444 · 6.6 84f48d15). Boundary on this snapshot: knip baseline re-measured; `validate:all`, `test:all`, `verify:mcp` running; live drive done — the 4.x fixture draws one notice naming 13 renamed and 2 dropped keys, its `list` is byte-identical to the 5.0 twin's (114 lines), `get` answers `frameworks.injection.systemPrompt.frequency = 3` / `versioning.maxVersions = 50` as `file`, `gates.directory` is refused naming `keys`, and an execution records `workspace_id = server` (derived) where `--workspace-id ctl-probe` records `ctl-probe` (R62 control).
-- **Next decision**: when the suite is green, `pr:check`, push, open the PR (`publish: push+merge`), watch CI, squash-merge; then step 5 (`config.jsonc`, R34) on a fresh branch.
-- **Constraint in force**: no edit to a projected `CLAUDE.md` section (AGENTS.md is 32767/32768, F-T4-31; handbook facts go to `CONTRIBUTING.md` or a non-projected section). Rulings R56–R59 fix the design; a worker that hits a gap returns it under `concerns`. Unit tests need `NODE_OPTIONS="--experimental-vm-modules"`; every test-adding row runs `typecheck:tests:ratchet`. #232 stays held (R31); row 2.16's survey precedes any `persist` extension.
+- **Goal**: one owner for `config.json`'s shape. Steps 1–3 merged (#307, #312, #322). Step 4 is PR #325 (https://github.com/minipuft/claude-prompts-mcp/pull/325), `feat(config)!`, branch `feat/config-4x-translation`, head `7ca89d9e` (main `01cbb368` merged in; conflicts resolved by regeneration, patch replay for the changelog, branch side for the notes).
+- **Slice**: T6 rows 6.1–6.8 all ✓. Boundary on the merged snapshot: `validate:all` 67/67 (7ca89d9e) · `test:all` unit 3688 / integration 980 / e2e 276, 0 failed (7b81bb8a plus a plan-only fix) · `verify:mcp` 18/18 · knip baseline re-measured 1174 → 1158 · live drive: the 4.x fixture draws one notice naming 13 renamed and 2 dropped keys, its `list` is byte-identical to the 5.0 twin's (114 lines), `get` answers under the 5.0 names as `file`, `gates.directory` refused naming `keys`, an execution records `workspace_id = server` where `--workspace-id ctl-probe` records `ctl-probe` (R62). `git diff origin/main --name-only` holds only `server/`, `docs/`, `CHANGELOG.md` and this plan.
+- **Next decision**: squash-merge #325 when the required checks pass and `mergeStateStatus` is CLEAN (`publish: push+merge`); then retire the branch, and cut step 5 (`config.jsonc`, R34) on a fresh branch from `main`; step 6 (`$id`, R29) after; #232 stays held (R31); row 2.16's survey before any `persist` extension.
+- **Constraint in force**: no edit to a projected `CLAUDE.md` section (AGENTS.md 32767/32768, F-T4-31; F-T4-53 names the paragraph now stale). Two other sessions work in this repo's worktrees (R56 holds); the peer's plan-table rule landed in #324 and this plan passes it.
 
 ## Why this exists
 
