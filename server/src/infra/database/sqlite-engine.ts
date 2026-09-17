@@ -343,7 +343,7 @@ export class SqliteEngine implements DatabasePort {
       throw new Error(
         `SqliteEngine is already open at ${SqliteEngine.instance.dbPath}, but a later caller ` +
           `requested ${requested}. Every caller must resolve state.db through the same ` +
-          `PathResolver (getStateDatabasePath / ConfigManager.getRuntimeStateDirectory).`
+          `PathResolver (getStateDatabasePath, directly or through ConfigManager).`
       );
     }
     return SqliteEngine.instance;

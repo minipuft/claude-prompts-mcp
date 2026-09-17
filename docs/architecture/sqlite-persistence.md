@@ -172,8 +172,10 @@ package directory — and the hook finds it from the `state.db` it locates.
 **Every `SqliteEngine.getInstance` call names its `dbPath`.** The path is required and has no
 package-relative default; the composition root resolves it once through
 `PathResolver.getStateDatabasePath()`, and the engine refuses a later caller that names a different
-file. `validate:db-claim-order` fails on a call without one, and on any `runtime-state` path
-composed outside `runtime/paths.ts`.
+file. Code outside `runtime/` reads the same path from `ConfigManager.getStateDatabasePath()`
+rather than joining `state.db` itself. `validate:db-claim-order` fails on a call without a
+`dbPath`, and on any `runtime-state` or `state.db` path segment composed outside
+`runtime/paths.ts`.
 
 **No module outside `SqliteEngine.applySchema()` may create a table in `state.db`.** The CLI used
 to carry its own `ensure_schema()` predating the scope columns, so a `cpm` invocation before the

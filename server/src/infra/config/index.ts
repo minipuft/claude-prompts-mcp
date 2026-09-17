@@ -631,6 +631,11 @@ export interface ResourcePathSource {
    * workspace). On the port because `mcp/` places state files there and cannot import `runtime/`.
    */
   getRuntimeStatePath(): string;
+  /**
+   * The server's `state.db`, inside {@link getRuntimeStatePath}. On the port so no caller joins the
+   * file name itself: two derivations of one path agree only until one of them changes.
+   */
+  getStateDatabasePath(): string;
 }
 
 export class ConfigLoader extends EventEmitter implements ConfigManager {
@@ -1310,13 +1315,26 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
    * source the honest answer is "unknown", so this throws rather than guessing.
    */
   getRuntimeStateDirectory(): string {
+    return this.requireRuntimeStateSource().getRuntimeStatePath();
+  }
+
+  /**
+   * The server's `state.db` — the path every `SqliteEngine.getInstance` call names. Read from the
+   * path source rather than joined here, so `PathResolver` is the one place that names the file.
+   * Throws without a path source, for the reason {@link getRuntimeStateDirectory} gives.
+   */
+  getStateDatabasePath(): string {
+    return this.requireRuntimeStateSource().getStateDatabasePath();
+  }
+
+  private requireRuntimeStateSource(): ResourcePathSource {
     if (this.resourcePaths === undefined) {
       throw new Error(
         'ConfigLoader has no path source, so runtime state has no location. Construct it with the ' +
           'PathResolver (runtime/context.ts does) before anything reads or writes runtime state.'
       );
     }
-    return this.resourcePaths.getRuntimeStatePath();
+    return this.resourcePaths;
   }
 
   // Removed: ToolDescriptionLoader methods - now handled via dependency injection in runtime/application.ts

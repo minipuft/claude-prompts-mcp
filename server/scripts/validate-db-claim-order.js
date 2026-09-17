@@ -26,12 +26,16 @@
  *   2. Every `getInstance` call site under `src/` names `dbPath`. No exceptions: the signature
  *      requires it, so a site without one is a cast around the type, not a design. (Before B.62
  *      this rule carried an `ACCEPTED_INHERITORS` list; B.62 satisfied all of it.)
- *   3. **No `runtime-state` path segment is composed outside `runtime/paths.ts`.** A string literal
- *      naming it — `'runtime-state'`, `"…/runtime-state/…"`, a template ending `/runtime-state` —
- *      is how both defects above were spelled, and it is spelled that way whatever variable it is
- *      joined to, so the rule keys on the SEGMENT, not on the name `serverRoot`. A module that needs
- *      the directory asks `PathResolver.getRuntimeStatePath()` (in `runtime/`) or
- *      `ConfigManager.getRuntimeStateDirectory()` (anywhere else). Readers that only DISCOVER an
+ *   3. **No runtime state path segment — `runtime-state` or `state.db` — is composed outside
+ *      `runtime/paths.ts`.** A string literal naming one — `'runtime-state'`, `"…/state.db"`, a
+ *      template ending `/runtime-state` — is how both defects above were spelled, and it is spelled
+ *      that way whatever variable it is joined to, so the rule keys on the SEGMENT, not on the name
+ *      `serverRoot`. `state.db` is in the list because a second hand-join of the file name onto a
+ *      correctly resolved directory is still a second derivation of one path, and B.62 briefly had
+ *      one. A module that needs the directory asks `PathResolver.getRuntimeStatePath()` (in
+ *      `runtime/`) or `ConfigManager.getRuntimeStateDirectory()`; one that needs the database asks
+ *      `getStateDatabasePath()` on either. `'verify-state.db'` is a different file and does not
+ *      match: the segment must start at a quote, backtick or `/`. Readers that only DISCOVER an
  *      existing runtime-state directory are declared in `RUNTIME_STATE_READERS`, audited by the
  *      shared `lib/exception-hygiene.js` harness — an entry whose file stopped naming the segment
  *      is `satisfied` and must be deleted; one the `git grep … -- src` scan cannot reach is
@@ -58,12 +62,14 @@ const INITIALIZER = path.join(SRC, 'runtime', 'module-initializer.ts');
 
 const CLAIM_FN = 'claimStateDatabase';
 const CALL = 'SqliteEngine.getInstance(';
-const SEGMENT = 'runtime-state';
+/** Path segments only the owner may compose. `.` is escaped where the pattern is built. */
+const SEGMENTS = ['runtime-state', 'state.db'];
+const SEGMENT_LABEL = SEGMENTS.join(' / ');
 /** The one module that composes the runtime state directory. */
 const RUNTIME_STATE_OWNER = 'src/runtime/paths.ts';
 
 /**
- * Files that name the `runtime-state` segment to FIND an existing directory, never to place one.
+ * Files that name a runtime state segment to FIND an existing path, never to place one.
  *
  * `closedBy` names what would let the entry be deleted rather than leaving it as a permanent
  * bypass wearing a temporary label.
@@ -138,15 +144,21 @@ export function orderViolations(source) {
 }
 
 /**
- * Rule 3's predicate: lines in `source` whose code names the `runtime-state` path segment.
+ * Rule 3's predicate: lines in `source` whose code names a runtime state path segment.
  *
- * A segment is `runtime-state` bounded on the left by a quote, backtick or `/`, and on the right by
- * a quote, backtick, `/` or end of line. Prose such as `root for runtime-state/ and logs/` does not
- * match: a space is not a path boundary.
+ * A segment is one of `SEGMENTS` bounded on the left by a quote or `/`, and on the right by a
+ * quote, backtick, `/` or end of line. Prose such as `root for runtime-state/ and logs/` or
+ * `state.db at ${path}` does not match — a space is not a path boundary — and neither does
+ * `'verify-state.db'`, whose `state.db` follows a `-`. A backtick is NOT a left boundary: inside a
+ * description string it opens a markdown code span (the generated `resource_manager` schema says
+ * "`state.db` is one file shared by every project"), and a template literal composes a path with a
+ * `/` before the segment, which is matched. Unclaimed: a template literal holding ONLY the segment,
+ * passed to a join — `` path.join(dir, `state.db`) `` — is not seen.
  */
 export function runtimeStateSegmentLines(source) {
   const lines = [];
-  const pattern = new RegExp(`['"\`/]${SEGMENT}(?=['"\`/]|$)`, 'gm');
+  const alternatives = SEGMENTS.map((segment) => segment.replaceAll('.', '\\.')).join('|');
+  const pattern = new RegExp(`['"/](?:${alternatives})(?=['"\`/]|$)`, 'gm');
   for (const match of source.matchAll(pattern)) {
     if (onCommentLine(source, match.index)) continue;
     const line = lineOf(source, match.index);
@@ -196,7 +208,10 @@ export function classifyEntry(facts) {
     return { verdict: VERDICT.UNREACHABLE, detail: 'outside the git-tracked src/ scan' };
   }
   if (!facts.namesSegment) {
-    return { verdict: VERDICT.SATISFIED, detail: `no code line in it names ${SEGMENT} any more` };
+    return {
+      verdict: VERDICT.SATISFIED,
+      detail: `no code line in it names ${SEGMENT_LABEL} any more`,
+    };
   }
   return { verdict: VERDICT.LOAD_BEARING };
 }
@@ -218,16 +233,17 @@ function run() {
   // Rule 3.
   const declared = new Set(RUNTIME_STATE_READERS.map((e) => e.file));
   const seenNaming = new Set();
-  for (const rel of trackedFilesContaining(SEGMENT)) {
+  for (const rel of new Set(SEGMENTS.flatMap((segment) => trackedFilesContaining(segment)))) {
     const lines = runtimeStateSegmentLines(readFileSync(path.join(SERVER, rel), 'utf8'));
     if (lines.length === 0) continue;
     seenNaming.add(rel);
     if (rel === RUNTIME_STATE_OWNER || declared.has(rel)) continue;
     for (const line of lines) {
       violations.push(
-        `${rel}:${line}: composes a ${SEGMENT} path outside ${RUNTIME_STATE_OWNER}. Runtime state ` +
-          'belongs under the runtime root — ask PathResolver.getRuntimeStatePath() (runtime/) or ' +
-          'ConfigManager.getRuntimeStateDirectory(); never join it to the package directory.'
+        `${rel}:${line}: composes a ${SEGMENT_LABEL} path outside ${RUNTIME_STATE_OWNER}. ` +
+          'Runtime state belongs under the runtime root, named once — ask ' +
+          'getRuntimeStatePath() / getStateDatabasePath() (PathResolver in runtime/) or ' +
+          'getRuntimeStateDirectory() / getStateDatabasePath() (ConfigManager); never join it yourself.'
       );
     }
   }
@@ -257,7 +273,7 @@ function run() {
 
   console.log(
     `✔ runtime state placement: ${CLAIM_FN}() opens state.db first, every getInstance names ` +
-      `dbPath, and ${SEGMENT} is composed only in ${RUNTIME_STATE_OWNER} ` +
+      `dbPath, and ${SEGMENT_LABEL} is composed only in ${RUNTIME_STATE_OWNER} ` +
       `(${RUNTIME_STATE_READERS.length} declared reader(s)).`
   );
   return 0;
@@ -278,17 +294,22 @@ function selfTest() {
     },
     {
       name: "the live B.62 defect — path.join(deps.serverRoot, 'runtime-state') — is rejected",
-      source: `const store = create(logger, {\n  runtimeStateDir: path.join(deps.serverRoot, '${SEGMENT}'),\n});\n`,
+      source: `const store = create(logger, {\n  runtimeStateDir: path.join(deps.serverRoot, 'runtime-state'),\n});\n`,
       rule: runtimeStateSegmentLines,
     },
     {
       name: "the latent B.62 defect — 'runtime-state', 'state.db' — is rejected",
-      source: `this.dbPath = config.dbPath ?? path.join(serverRoot, '${SEGMENT}', 'state.db');\n`,
+      source: `this.dbPath = config.dbPath ?? path.join(serverRoot, 'runtime-state', 'state.db');\n`,
+      rule: runtimeStateSegmentLines,
+    },
+    {
+      name: "a hand-joined 'state.db' onto a resolved directory is rejected",
+      source: `const p = path.join(config.getRuntimeStateDirectory(), "state.db");\n`,
       rule: runtimeStateSegmentLines,
     },
     {
       name: 'a template-literal composition is rejected',
-      source: 'const dir = `${root}/' + SEGMENT + '`;\n',
+      source: 'const dir = `${root}/runtime-state`;\nconst db = `${dir}/state.db`;\n',
       rule: runtimeStateSegmentLines,
     },
   ];
@@ -315,10 +336,13 @@ function selfTest() {
     [
       'the segment inside comments and prose',
       runtimeStateSegmentLines(
-        ` * runtimeStateDir: path.join(serverRoot, '${SEGMENT}')\n` +
-          `  // was path.join(serverRoot, '${SEGMENT}')\n` +
-          `  const help = 'Writable root for ${SEGMENT}/ and relative logs/';\n` +
-          `  const ok = config.getRuntimeStateDirectory();\n`
+        ` * runtimeStateDir: path.join(serverRoot, 'runtime-state')\n` +
+          `  // was path.join(serverRoot, 'runtime-state', 'state.db')\n` +
+          `  const help = 'Writable root for runtime-state/ and relative logs/';\n` +
+          `  const err = \`state.db at \${dbPath} is locked\`;\n` +
+          `  const verify = path.join(dir, 'verify-state.db');\n` +
+          "  const doc = '`state.db` is one file shared by every project';\n" +
+          `  const ok = config.getStateDatabasePath();\n`
       ),
     ],
   ];

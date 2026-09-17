@@ -39,6 +39,8 @@ function resolverAt(root: string): ResourcePathSource {
     getOverlayResourceDirs: (resourceType: string) => [path.join(root, 'overlay', resourceType)],
     // Outside `root` entirely: runtime state lives under the runtime root, not beside resources.
     getRuntimeStatePath: () => path.join(root, '..', 'runtime-root', 'runtime-state'),
+    // A file name the loader could not produce by joining, so a hand-join is caught.
+    getStateDatabasePath: () => path.join(root, '..', 'runtime-root', 'db', 'resolver-state.db'),
   };
 }
 
@@ -213,6 +215,19 @@ describe('prompt write destination', () => {
       // Unlike the five resource directories there is no config-relative fallback: the config
       // file's directory is the package for every default install.
       expect(() => manager.getRuntimeStateDirectory()).toThrow(/no path source/);
+      expect(() => manager.getStateDatabasePath()).toThrow(/no path source/);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('reads the state database path from the path source instead of joining it', async () => {
+    const { manager, cleanup } = await loaderWith(resolverAt('/somewhere/else/resources'));
+
+    try {
+      expect(manager.getStateDatabasePath()).toBe(
+        path.join('/somewhere/else/runtime-root', 'db', 'resolver-state.db')
+      );
     } finally {
       await cleanup();
     }
