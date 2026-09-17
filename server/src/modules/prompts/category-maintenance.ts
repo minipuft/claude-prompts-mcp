@@ -11,6 +11,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
 import {
+  isExcludedCategoryDirectoryName,
   isIgnoredPromptEntryName,
   isReservedPromptDirectoryName,
   isSingleFilePromptName,
@@ -27,8 +28,8 @@ export interface CategoryResult {
  *
  * Extracted from `PromptLoader.loadFromDirectories` Phase 1 at P4.7 and CALLED from there, so
  * there is one definition of "what counts as a category directory" rather than two. The tool
- * layer's `list` and `inspect` need the same answer the loader gives; a second copy of the
- * dot/underscore/`backup` filter would drift the day either side gained a rule.
+ * layer's `list` and `inspect` need the same answer the loader gives. The name rule itself is
+ * `isExcludedCategoryDirectoryName`, which every other walk of the prompts root calls too.
  *
  * Sorted, so a listing is stable across filesystems — `readdirSync` order is not specified.
  */
@@ -39,13 +40,7 @@ export function discoverCategoryDirectories(promptsDir: string): string[] {
 
   try {
     return readdirSync(promptsDir, { withFileTypes: true })
-      .filter(
-        (entry) =>
-          entry.isDirectory() &&
-          !entry.name.startsWith('.') &&
-          !entry.name.startsWith('_') &&
-          entry.name !== 'backup'
-      )
+      .filter((entry) => entry.isDirectory() && !isExcludedCategoryDirectoryName(entry.name))
       .map((entry) => entry.name)
       .sort();
   } catch {

@@ -23,6 +23,7 @@ import { computeContentHash } from '#shared/utils/hash.js';
 import { loadHistory } from '#cli-shared/version-history.js';
 import { assertUsableDirectorySetting } from '#shared/utils/path-setting.js';
 import {
+  isExcludedCategoryDirectoryName,
   isIgnoredPromptEntryName,
   isReservedPromptDirectoryName,
 } from '#shared/utils/prompt-layout.js';
@@ -1493,13 +1494,14 @@ async function collectResourceDirs(
  * The skip rules are the loader's, from `#shared/utils/prompt-layout.js`. Two levels deep, this
  * walk never reached a prompt's own `tools/`, but without the rules it took `_drafts/` as a
  * category and a category-level `tools/` as a prompt. Each then failed `loadPromptIR` and was
- * reported as a skipped prompt the server never served.
+ * reported as a skipped prompt the server never served. A category is decided by the loader's
+ * category rule, so a root-level `backup/` or `node_modules/` is not exported either.
  */
 async function collectPromptDirs(
   roots: readonly string[]
 ): Promise<Map<string, { category: string; id: string; dir: string }>> {
   const prompts = new Map<string, { category: string; id: string; dir: string }>();
-  const isCategory = (name: string): boolean => !isIgnoredPromptEntryName(name);
+  const isCategory = (name: string): boolean => !isExcludedCategoryDirectoryName(name);
   const isPromptDir = (name: string): boolean =>
     !isIgnoredPromptEntryName(name) && !isReservedPromptDirectoryName(name);
   for (const root of roots) {

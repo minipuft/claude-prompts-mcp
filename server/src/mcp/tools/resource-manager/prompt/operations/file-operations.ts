@@ -20,6 +20,7 @@ import type { ToolDefinitionInput } from '../../core/types.js';
 import type { FileContentChange } from '../analysis/object-diff-generator.js';
 
 import {
+  discoverCategoryDirectories,
   findYamlPromptInCategory,
   hasYamlPromptsInCategory,
   deleteYamlPrompt,
@@ -649,7 +650,7 @@ export class FileOperations {
     promptId: string,
     excludeDir: string
   ): string | null {
-    for (const categoryDir of this.discoverCategoryDirectories(promptsDir)) {
+    for (const categoryDir of this.categoryDirectoryPaths(promptsDir)) {
       const found = findYamlPromptInCategory(categoryDir, promptId);
       if (found !== null && found.format === 'directory' && found.path !== excludeDir) {
         return found.path;
@@ -693,7 +694,7 @@ export class FileOperations {
    * under whatever category it was authored in, which the caller is in the middle of changing.
    */
   private findExistingPromptFile(promptsDir: string, promptId: string): string | null {
-    for (const categoryDir of this.discoverCategoryDirectories(promptsDir)) {
+    for (const categoryDir of this.categoryDirectoryPaths(promptsDir)) {
       const found = findYamlPromptInCategory(categoryDir, promptId);
       if (found !== null && found.format === 'file') {
         return found.path;
@@ -740,7 +741,7 @@ export class FileOperations {
    */
   async deletePromptImplementation(id: string): Promise<OperationResult> {
     const promptsDir = this.configManager.getResolvedPromptsDirectory();
-    const categoryDirs = this.discoverCategoryDirectories(promptsDir);
+    const categoryDirs = this.categoryDirectoryPaths(promptsDir);
 
     // Find the prompt first to determine the transaction target
     let targetDir: string | null = null;
@@ -861,27 +862,14 @@ export class FileOperations {
   }
 
   /**
-   * Discover category directories in the prompts folder
+   * The category directories under the prompts root, as absolute paths.
+   *
+   * The loader's own scan, not a copy of it. This method held a private copy of the name filter,
+   * so a write or delete could find a prompt the loader had never served, and would disagree the
+   * day either copy changed.
    */
-  private discoverCategoryDirectories(promptsDir: string): string[] {
-    if (!existsSync(promptsDir)) {
-      return [];
-    }
-
-    try {
-      const entries = readdirSync(promptsDir, { withFileTypes: true });
-      return entries
-        .filter(
-          (entry) =>
-            entry.isDirectory() &&
-            !entry.name.startsWith('.') &&
-            !entry.name.startsWith('_') &&
-            entry.name !== 'backup'
-        )
-        .map((entry) => path.join(promptsDir, entry.name));
-    } catch {
-      return [];
-    }
+  private categoryDirectoryPaths(promptsDir: string): string[] {
+    return discoverCategoryDirectories(promptsDir).map((name) => path.join(promptsDir, name));
   }
 
   /**
