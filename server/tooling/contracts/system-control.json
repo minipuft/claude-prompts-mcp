@@ -5,11 +5,7 @@
   "toolDescription": {
     "description": "⚙️ SYSTEM CONTROL: Retrieves system status, switches frameworks, manages gates, and provides analytics.\n\nACTIONS: status | framework | gates | analytics | config | maintenance | guide | injection | session | changes | execution_history | skills_sync\n\nReturns: Current state, configurations, or operation confirmations.",
     "shortDescription": "System administration",
-    "category": "system",
-    "frameworkAware": {
-      "enabled": "⚙️ SYSTEM CONTROL [FRAMEWORK]: Status includes active framework context. Guide reflects current framework.",
-      "disabled": "⚙️ SYSTEM CONTROL: Standard system status without framework context."
-    }
+    "category": "system"
   },
   "parameters": [
     {
