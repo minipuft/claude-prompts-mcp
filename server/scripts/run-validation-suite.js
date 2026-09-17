@@ -95,6 +95,17 @@ export const SUITE = [
     converse: 'unexamined',
   },
   {
+    // The METHOD layer knip 6 cannot see (it has no `classMembers` issue type). Beside the knip
+    // ratchet because a reader of that green needs this one to know what it did not cover.
+    // `spawn` is TEXTUAL: the regeneration hint strings carry `npm run`; the script starts no
+    // process. Declared rather than worked around, as validate:test-directory-membership does.
+    script: 'validate:unreached-methods',
+    io: 'read',
+    reads: ['file', 'spawn'],
+    converse:
+      'CHECKED both ways — a finding absent from the baseline fails naming file:line, and a baseline entry no longer found (deleted or now called) fails as stale. Positive control 2026-09-16: the live scan named ResourceIndexer.getValidStyles and getValidFrameworks before P4.46 deleted them; the self-test holds a one-caller twin, a same-named method on another class, a structural port, an implemented interface and a generic one. UNCHECKED and known — computed access (`obj[name]()`) and string-dispatched entry points read as unreached (false findings, never false silence)',
+  },
+  {
     // First, because every step after it is only as trustworthy as the tree it ran against.
     // A drifted node_modules is how a knip-ratchet baseline got measured with knip 6.32.1 and
     // committed against the lockfile's 6.32.2 (2026-08-19).

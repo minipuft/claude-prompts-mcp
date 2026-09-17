@@ -49,7 +49,7 @@
  *
  * SCOPE: knip counts unused FILES, EXPORTS, TYPES and DEPENDENCIES. It cannot see an instance
  * method nobody calls on a class that is itself used — knip 6 has no `classMembers` issue type —
- * so a green run here does not mean "no dead code".
+ * so a green run here does not mean "no dead code"; `validate:unreached-methods` owns that class.
  *
  * Usage:
  * - Update baseline (intentional): `npm run knip-ratchet:baseline`
@@ -67,7 +67,7 @@ import { fileURLToPath } from 'node:url';
 /** Printed beside every green result, so the result is not read as covering more than it does. */
 const SCOPE_NOTE =
   '[knip-ratchet] Scope: unused files, exports, types and dependencies only. knip cannot see an ' +
-  'uncalled instance method on a class that is itself used.';
+  'uncalled instance method on a class that is itself used; validate:unreached-methods covers that.';
 
 const BASELINE_PATH = path.resolve(process.cwd(), '.knip-ratchet-baseline.json');
 const KNIP_CONFIG_PATH = path.resolve(process.cwd(), 'knip.json');
