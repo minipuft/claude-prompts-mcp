@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-17T02:53:09.145Z",
-  "total": 235,
+  "generatedAt": "2026-09-17T02:58:07.357Z",
+  "total": 233,
   "methods": [
     "Application.getCurrentFrameworkInfo",
     "Application.initializeModules",
@@ -180,8 +180,6 @@
     "ResourceChangeTracker.getAllHashes",
     "ResourceChangeTracker.getResourceHash",
     "ResourceChangeTracker.getStats",
-    "ResourceIndexer.getValidFrameworks",
-    "ResourceIndexer.getValidStyles",
     "ResourceLoader.clearCache",
     "ResourceLoader.load",
     "ResourceQuarantine.clear",
