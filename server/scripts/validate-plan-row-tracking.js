@@ -252,6 +252,69 @@ function isSeparatorRow(line) {
   return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
 }
 
+/**
+ * Rule 4 — a table row following a blank line must open a genuinely new table, or it is a break.
+ *
+ * `statusColumnByLine` resets `current` to `undefined` on any non-`|` line and only recovers it
+ * on the next header+separator pair. A blank line inserted MID-TABLE (rather than after the
+ * table's last row) therefore reads to that parser as "table ended", and every row after it gets
+ * no status column — `planRowStates` then drops the row outright rather than misreading it. That
+ * is exactly the P4.50 defect: a writeback inserted new rows before the paragraph following the
+ * table instead of after the table's last row, the blank line that used to close the table landed
+ * between two rows instead, and 34 of 49 rows vanished from row tracking for five days with every
+ * other gate green (`6d8da146`).
+ *
+ * A blank line ALSO legitimately separates two adjacent, unrelated tables — that is not a break,
+ * because the second table declares its own header + separator and is not depending on the first
+ * table's column layout. So the rule is not "no blank line before a table row"; it is "a table row
+ * after a blank line, whose own block does not open with header + separator, immediately preceded
+ * (before the blank run) by another table row" — the precise shape `statusColumnByLine` cannot
+ * parse as a table of its own.
+ *
+ * Runs over every plan the same way rule 1 does — this is a parse-structure defect, not a
+ * lifecycle one, so it is not gated on `status: active`.
+ *
+ * @returns {{violations: string[]}}
+ */
+export function auditTableContiguity(planPath, content) {
+  const lines = content.split('\n');
+  const violations = [];
+
+  for (const [index, line] of lines.entries()) {
+    if (line.trim() !== '') continue;
+    // Only the first blank line of a run marks the boundary — later blanks in the same run
+    // would otherwise re-detect the identical break and report it once per blank line.
+    if (index > 0 && lines[index - 1].trim() === '') continue;
+
+    let prev = index - 1;
+    while (prev >= 0 && lines[prev].trim() === '') prev -= 1;
+    if (prev < 0 || !lines[prev].trim().startsWith('|')) continue; // nothing table-shaped before
+
+    let next = index + 1;
+    while (next < lines.length && lines[next].trim() === '') next += 1;
+    if (next >= lines.length || !lines[next].trim().startsWith('|')) continue; // no table after
+
+    if (isSeparatorRow(lines[next])) continue; // malformed, but not this rule's concern
+
+    // A genuinely new table opens with its own header + separator pair.
+    const afterNext = lines[next + 1];
+    const opensNewTable =
+      afterNext !== undefined && afterNext.trim().startsWith('|') && isSeparatorRow(afterNext);
+    if (opensNewTable) continue;
+
+    const rowId = (cellsOf(lines[next])[0] ?? '').replace(/[*`]/g, '').trim() || '(no id cell)';
+    violations.push(
+      `${planPath}:${next + 1}: a table row follows a blank line with no header+separator pair ` +
+        'of its own, and the row before the blank was itself a table row. A human reads this as a ' +
+        `continuation; the row parser reads it as "table ended" and silently drops row ${rowId} ` +
+        'and everything after it from row tracking. Remove the blank line, or give this block its ' +
+        'own `| ... |` header and `| --- | ... |` separator if it is truly a new table.'
+    );
+  }
+
+  return { violations };
+}
+
 /** The header cell that names the status column. `St` is this repo's convention; `Status` is spelled out elsewhere. */
 const STATUS_HEADER = /^(?:st|status)$/i;
 
@@ -486,14 +549,17 @@ function run() {
   const doneViolations = [];
   const openViolations = [];
   const closedViolations = [];
+  const contiguityViolations = [];
   const planTexts = new Map();
   let skipped = 0;
   let checked = 0;
   let stamped = 0;
   let gradedPlans = 0;
   let closedStamped = 0;
+  let plansChecked = 0;
 
   for (const plan of planFiles()) {
+    plansChecked += 1;
     const content = readFileSync(path.join(REPO, plan), 'utf8');
     planTexts.set(plan, content);
 
@@ -510,9 +576,22 @@ function run() {
     const closed = auditClosedRows(plan, content);
     closedViolations.push(...closed.violations);
     closedStamped += closed.stamped;
+
+    const contiguity = auditTableContiguity(plan, content);
+    contiguityViolations.push(...contiguity.violations);
   }
 
   const exceptionAudit = auditGrandfathered(planTexts);
+
+  if (contiguityViolations.length > 0) {
+    console.error(`✖ Plan tables split by a blank line (${contiguityViolations.length}):`);
+    for (const violation of contiguityViolations) console.error(`  - ${violation}`);
+    console.error(
+      '\nA blank line inserted mid-table reads as "table ended" to the row parser, which then ' +
+        'drops every row after it from row tracking without ever failing — this is the P4.50 ' +
+        'defect that hid 34 of 49 rows for five days.'
+    );
+  }
 
   if (doneViolations.length > 0) {
     console.error(
@@ -548,7 +627,11 @@ function run() {
   const exceptionProblems = reportExceptionAudit('plan-row-tracking', exceptionAudit);
 
   if (
-    doneViolations.length + openViolations.length + closedViolations.length + exceptionProblems >
+    doneViolations.length +
+      openViolations.length +
+      closedViolations.length +
+      contiguityViolations.length +
+      exceptionProblems >
     0
   )
     return 1;
@@ -561,7 +644,8 @@ function run() {
       `(${skipped} not on disk — renamed, deleted, or external; not decidable here); ` +
       `${stamped} ${OPEN_MARK} row(s) stamped across ${gradedPlans} active plan(s) ` +
       `(${GRANDFATHERED_OPEN_ROWS.length} grandfathered); ` +
-      `${closedStamped} ${CLOSED_MARK} row(s) stamped.`
+      `${closedStamped} ${CLOSED_MARK} row(s) stamped; ` +
+      `${plansChecked} plan(s) checked for table contiguity.`
   );
   return 0;
 }
@@ -761,6 +845,43 @@ function selfTest() {
     '---\ntitle: "t"\ndate: 2026-08-12\nstatus: reference\ntags: []\n---\n| 1.1 | ⊘ | x |',
     false
   );
+
+  // ---- Rule 4: a blank line must not split a table without its own header+separator -----------
+  const contiguityCase = (name, text, expectFail) => {
+    const { violations } = auditTableContiguity('plans/fake.md', text);
+    const failed = violations.length > 0;
+    if (failed !== expectFail) {
+      console.error(
+        `✖ self-test: "${name}" — expected ${expectFail ? 'a finding' : 'clean'}, got the opposite`
+      );
+      failures += 1;
+    } else {
+      console.log(`✔ self-test: ${name}`);
+    }
+  };
+
+  contiguityCase(
+    'a split table — a blank line lands mid-table with no header of its own — is caught (P4.50)',
+    '| # | St | Change |\n| --- | --- | --- |\n| 1.1 | ✓ | thing |\n\n| 1.2 | ☐ | thing two |',
+    true
+  );
+  contiguityCase(
+    'two adjacent, genuinely separate tables — the second opens its own header+separator — pass',
+    '| # | St | Change |\n| --- | --- | --- |\n| 1.1 | ✓ | thing |\n\n' +
+      '| Foo | Bar |\n| --- | --- |\n| a | b |',
+    false
+  );
+  contiguityCase(
+    'a whole table with no blank line inside it passes',
+    '| # | St | Change |\n| --- | --- | --- |\n| 1.1 | ✓ | thing |\n| 1.2 | ☐ | thing two |',
+    false
+  );
+  contiguityCase(
+    'a blank line between prose and a table it introduces is not a break — nothing table-shaped precedes it',
+    'Some prose.\n\n| # | St | Change |\n| --- | --- | --- |\n| 1.1 | ☐ | thing |',
+    false
+  );
+
   // Synthetic fixture: the live GRANDFATHERED_OPEN_ROWS list is empty in the healthy steady
   // state (2026-08-13: its one entry retired the day its closedBy arrived), so the self-test
   // carries its own entry.

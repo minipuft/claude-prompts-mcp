@@ -95,6 +95,17 @@ export const SUITE = [
     converse: 'unexamined',
   },
   {
+    // The METHOD layer knip 6 cannot see (it has no `classMembers` issue type). Beside the knip
+    // ratchet because a reader of that green needs this one to know what it did not cover.
+    // `spawn` is TEXTUAL: the regeneration hint strings carry `npm run`; the script starts no
+    // process. Declared rather than worked around, as validate:test-directory-membership does.
+    script: 'validate:unreached-methods',
+    io: 'read',
+    reads: ['file', 'spawn'],
+    converse:
+      'CHECKED both ways — a finding absent from the baseline fails naming file:line, and a baseline entry no longer found (deleted or now called) fails as stale. Positive control 2026-09-16: the live scan named ResourceIndexer.getValidStyles and getValidFrameworks before P4.46 deleted them; the self-test holds a one-caller twin, a same-named method on another class, a structural port, an implemented interface and a generic one. UNCHECKED and known — computed access (`obj[name]()`) and string-dispatched entry points read as unreached (false findings, never false silence)',
+  },
+  {
     // First, because every step after it is only as trustworthy as the tree it ran against.
     // A drifted node_modules is how a knip-ratchet baseline got measured with knip 6.32.1 and
     // committed against the lockfile's 6.32.2 (2026-08-19).
@@ -428,6 +439,13 @@ export const SUITE = [
       'CHECKED both ways — the self-test drives the comparator with an agreeing set (must stay silent), a framework on disk but undeclared (must report; this is the motivating instance, since an undeclared shipped framework was deletable from the bundled tree), a declared id with no directory (must report, because the registry loads every shipped id fail-fast), and both together; the live set is compared against this checkout as a fifth case',
   },
   {
+    script: 'validate:framework-tool-descriptions',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse:
+      'CHECKED both ways — the self-test drives the rules with guidance naming one enum value in prose (must stay silent), a restated ACTIONS pipe list (must report; this is the motivating instance, since four bundled frameworks served 7 of 15 resource_manager actions), a label whose last word is a contract label and a restated tool heading, a quoted enum list in a parameter, a parameter and a tool no contract declares, a composition that replaces the contract text (must report) beside the real one (must stay silent), and a contract pipe list that agrees with its enum (silent) or omits and adds values (both reported); the live frameworks and contracts are the final case, and a run that finds no contract, no framework, or no toolDescriptions entry exits 1 rather than passing on a probe that observed nothing',
+  },
+  {
     script: 'validate:mutation-atomicity',
     io: 'read',
     reads: ['file', 'walk'],
@@ -477,11 +495,33 @@ export const SUITE = [
       'CHECKED both ways — the self-test runs each predicate over a real `dry_run` declaration, JSON key, CLI flag and HTTP route (must match), the replacement parameter and two comments explaining the removal (must not), and the inline-code gap that made an earlier prose rule flag two true sentences; the satisfied-exception arm fails an exemption whose file no longer contains the word',
   },
   {
+    // `spawn` is a TEXTUAL match, not a behavioural one: the self-test embeds the pre-fix
+    // fixture's own error string verbatim, which contains the literal `npm run build`. The
+    // script starts no process and imports only node:fs, node:path and node:url. Declared rather
+    // than reworded around, for the reason validate:hermetic-child-env and
+    // validate:test-directory-membership already declare it: the detector is textual by design
+    // and omitting a matched substrate fails.
+    script: 'validate:dist-freshness-consumers',
+    io: 'read',
+    reads: ['file', 'spawn', 'walk'],
+    converse:
+      'CHECKED both ways — the self-test drives the predicate over the real pre-fix `verify-unknown-interrupt.mjs` text (direct-chain `statSync(DIST).mtimeMs`, must report), its fixed replacement (must not, since it has no local stat/mtime call), a twin that keeps the pre-fix shape but adds the import (must be exempted, and the suppressed finding is asserted so the exemption is proven to fire on the shape and not on an absence of one), `dist-freshness.js`’s own shape exempted by path only, and a false-positive control drawn from `validate-preview-vocabulary.js` (mentions `dist` as a skip-list entry, stats an unrelated `full`, must not report); the live tree is the sixth case. A control also ran the CLI end-to-end against the pre-fix file swapped into place (exit 1, naming the line) and restored (exit 0). NOT resolved: a generic `newestMtime`-shaped walker called elsewhere with a dist-flavored argument, where the function body itself never mentions `dist` — stated as a blind spot in the file header rather than silently claimed closed',
+  },
+  {
     script: 'validate:prompts',
     io: 'read',
     reads: ['file', 'walk'],
     converse:
-      "CHECKED both ways — the self-test asserts a valid prompt is NOT reported alongside a prompt with an empty description and a gate missing `guidance`, both of which must be; it runs the loader's own `validatePromptYaml` and `normalizeInlineGateDefinitions` rather than reimplementing either, so it cannot drift into accepting what the server drops; it also asserts that a gate declaring no `activation` block is reported unless its id appears in a prompt's `gateConfiguration.include` or a chain step's `inlineGateIds` — an opt-in gate nobody opts into is dead, and `--self-test` covers all four activation/inclusion combinations",
+      "CHECKED both ways — the self-test asserts a valid prompt is NOT reported alongside a prompt with an empty description and a gate missing `guidance`, both of which must be; it runs the loader's own `validatePromptYaml` and `normalizeInlineGateDefinitions` rather than reimplementing either, so it cannot drift into accepting what the server drops; it also asserts that a gate declaring no `activation` block is reported unless its id appears in a prompt's `gateConfiguration.include` or a chain step's `inlineGateIds` — an opt-in gate nobody opts into is dead, and `--self-test` covers all four activation/inclusion combinations; it also walks a fixture tree in which every skipped path (`tools` below the root, `_drafts`) has a twin differing only in that name or depth, and asserts the walked set exactly",
+  },
+  {
+    // After `validate:prompts`, whose walk is one of the sites this step requires to share the
+    // loader's skip rules.
+    script: 'validate:prompt-walks',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse:
+      "CHECKED both ways — the self-test drives 19 fixtures, and each silent case differs from a reporting one in ONE identifier: `'gate.yaml'` for `'prompt.yaml'`, a homonym module for `prompt-layout`, `import type` for `import`, `.some()` for `.length`, a callback naming no layout predicate. A two-module case proves a lister called with `'prompt.yaml'` from another file is a walk and the same call with `'gate.yaml'` is not; the live tree is the last case. Positive controls on 2026-09-16: removing the `isReservedPromptDirectoryName` import from each of the loader, the baseline walk, the indexer, `validate-prompts.ts`, `category-maintenance.ts` and `skills-sync/service.ts`, one at a time, reported that file; renaming the one exception's path reported it as naming no file. NOT checked: a walk that names no marker anywhere, or reaches its listing only through a callee without passing the marker (header §WHAT IT CANNOT SEE), and whether an adopted predicate is applied at the right depth — `tests/integration/prompts/` pins that",
   },
   {
     script: 'validate:agent-plugins',

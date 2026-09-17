@@ -1,6 +1,6 @@
 {
   "version": "3.0.0",
-  "lastUpdated": "2026-09-17T02:42:40.562Z",
+  "lastUpdated": "2026-09-17T04:34:57.377Z",
   "generatedFrom": "contracts",
   "tools": {
     "prompt_engine": {
@@ -30,17 +30,13 @@
         "workflow": "Submit a structured multi-step run instead of a command string. MUTUALLY EXCLUSIVE with 'command' and 'chain_id' — a call carrying more than one is rejected, never resolved by precedence. SHAPE: `{version:1, nodes:[{id:'kebab-case', promptId:'...', stepName?:'...', args?:{}, inputMapping?:{}, outputMapping?:{}, visibility?:{withhold?:[...], expose?:[...]}, subagentModel?:'heavy'|'standard'|'fast', agentType?:'...', framework?:'...', retries?:0, inlineGateIds?:['gate-id'], inlineGateCriteria?:['raw :: token'], delegated?:<boolean>}], edges?:[{from:'node-a', to:'node-b'}], gates?:[<same shapes as the 'gates' parameter>], budget?:{maxNodes?:<=32, maxFanOut?:<=8, maxInsertions?:<=3, declaredCostCeiling?:<number>, pauseOnBlocking?:<boolean, default false>}}`. Full field reference: docs/reference/workflow-ir.md.",
         "remainder": "Rewrite the rest of a RUNNING chain when a blocking unknown has invalidated its shape. SHAPE: `{mode:'replace'|'append', nodes:[<Workflow IR nodes — same shape as workflow.nodes>], edges?:[{from,to}]}`. 'replace' discards every node strictly AFTER the current one and puts these in their place; 'append' adds them strictly after the current remainder and keeps it. The current node is never touched by either mode. Requires 'chain_id'. You author the alternative; the server only validates it — same node/edge schemas, same structural caps as a `workflow` submission, and rejection is all-or-nothing."
       },
-      "frameworkAware": {
-        "enabled": "🚀 PROMPT ENGINE [FRAMEWORK]: Returns prompts with framework guidance injected. You apply the framework yourself.",
-        "disabled": "🚀 PROMPT ENGINE: Returns prompts without framework injection. Raw template expansion only."
-      },
       "triggerExamples": [
         "User: '>>analyze this code' → prompt_engine(command: '>>analyze this code')",
         "User: 'fix tests' → prompt_engine(command: '>>fix-bug :: verify:\"npm test\" :full')"
       ]
     },
     "resource_manager": {
-      "description": "🗂️ RESOURCE MANAGER: CRUD for prompts, gates, frameworks, categories.\n\nresource_manager(resource_type, action, id?, name?, description?)\n\nTYPES: prompt | gate | framework | category\nACTIONS: create | validate | preview | update | delete | list | inspect | reload | guide | switch | history | rollback | compare\n\nPROMPT AUTHORING: validate a complete draft without mutation, then create. Valid prompt content is user_message_template OR chain_steps OR system_message.\n\nPROMPT MAINTENANCE: inspect detail:\"full\" -> preview preview_action:\"update\" -> update with expected_version from the receipt -> verify the returned write receipt.\n\nVERSIONING: history (view versions), rollback (restore), compare (diff versions)\n\nCREATION GUIDES:\n• >>create_framework - Framework creation with validation\n• >>create_gate - Quality gate creation\n• >>create_prompt - Prompt/chain creation",
+      "description": "🗂️ RESOURCE MANAGER: CRUD for prompts, gates, frameworks, categories.\n\nresource_manager(resource_type, action, id?, name?, description?)\n\nTYPES: prompt | gate | framework | category\nACTIONS: create | validate | preview | update | delete | list | inspect | reload | analyze_type | analyze_gates | guide | switch | history | rollback | compare\n\nPROMPT AUTHORING: validate a complete draft without mutation, then create. Valid prompt content is user_message_template OR chain_steps OR system_message.\n\nPROMPT MAINTENANCE: inspect detail:\"full\" -> preview preview_action:\"update\" -> update with expected_version from the receipt -> verify the returned write receipt.\n\nVERSIONING: history (view versions), rollback (restore), compare (diff versions)\n\nCREATION GUIDES:\n• >>create_framework - Framework creation with validation\n• >>create_gate - Quality gate creation\n• >>create_prompt - Prompt/chain creation",
       "shortDescription": "Manage prompts, gates, and frameworks",
       "category": "management",
       "parameters": {
@@ -53,10 +49,6 @@
         "confirm": "Required `true` for destructive actions — `delete` and `rollback` both refuse without it. Deletion cannot be undone: rollback cannot restore a deleted prompt.",
         "reason": "Audit reason for reload/delete/switch operations.",
         "expected_version": "[Prompt update] Optimistic concurrency token. Refuses the update before any write/version when the current recorded version differs. Read it from inspect/validate/create/update structured receipts. Cannot be combined with skip_version:true and requires versioning enabled."
-      },
-      "frameworkAware": {
-        "enabled": "🗂️ RESOURCE MANAGER [FRAMEWORK]: Operations reflect active framework context.",
-        "disabled": "🗂️ RESOURCE MANAGER: Standard resource lifecycle operations."
       }
     },
     "system_control": {
@@ -96,10 +88,6 @@
         "file": "For skills_sync clone: path to the source SKILL.md file. Required for clone.",
         "category": "For skills_sync clone: target category for prompt resources. Default: general.",
         "force": "For skills_sync clone: overwrite an existing resource directory."
-      },
-      "frameworkAware": {
-        "enabled": "⚙️ SYSTEM CONTROL [FRAMEWORK]: Status includes active framework context. Guide reflects current framework.",
-        "disabled": "⚙️ SYSTEM CONTROL: Standard system status without framework context."
       }
     }
   }

@@ -9,11 +9,7 @@
     "triggerExamples": [
       "User: '>>analyze this code' \u2192 prompt_engine(command: '>>analyze this code')",
       "User: 'fix tests' \u2192 prompt_engine(command: '>>fix-bug :: verify:\"npm test\" :full')"
-    ],
-    "frameworkAware": {
-      "enabled": "\ud83d\ude80 PROMPT ENGINE [FRAMEWORK]: Returns prompts with framework guidance injected. You apply the framework yourself.",
-      "disabled": "\ud83d\ude80 PROMPT ENGINE: Returns prompts without framework injection. Raw template expansion only."
-    }
+    ]
   },
   "parameters": [
     {

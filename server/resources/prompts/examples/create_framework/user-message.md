@@ -427,7 +427,7 @@ Framework creation requires 100% score. All 5 tiers must be complete.
 
 | Field                | Type   | Requirement                                                       |
 | -------------------- | ------ | ----------------------------------------------------------------- |
-| `tool_descriptions`  | object | ≥1 tool override                                                  |
+| `tool_descriptions`  | object | ≥1 tool entry of framework guidance (see Requirements)            |
 | `quality_indicators` | object | ≥2 phases with `keywords` and `patterns`                          |
 | `execution_flow`     | object | `preProcessingSteps`, `postProcessingSteps`, or `validationSteps` |
 | `judge_prompt`       | string | Judge prompt content for `%judge` modifier                        |
@@ -538,9 +538,9 @@ Framework creation requires 100% score. All 5 tiers must be complete.
   },
   "tool_descriptions": {
     "prompt_engine": {
-      "description": "🚀 PROMPT ENGINE [YOUR_FRAMEWORK]: Custom description",
+      "description": "What YOUR_FRAMEWORK adds when this tool is used",
       "parameters": {
-        "command": "Custom parameter guidance"
+        "command": "What YOUR_FRAMEWORK adds to this parameter"
       }
     }
   },
@@ -556,5 +556,6 @@ Framework creation requires 100% score. All 5 tiers must be complete.
 - processing_steps: Ordered with `frameworkBasis` linking to phase
 - processing_steps: Include `marker` + `assertions` for deterministic phase verification (at least on required phases)
 - execution_steps: With `dependencies` array (empty for first step)
+- tool_descriptions: Guidance only. The server appends it after the tool's own description under an `ACTIVE FRAMEWORK [TYPE]:` heading, so do not repeat the tool's name, actions, resource types, syntax, or modifiers — the server already serves them, and a copy goes stale when they change
 
 {% endif %}

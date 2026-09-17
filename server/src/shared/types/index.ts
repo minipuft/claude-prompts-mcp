@@ -182,14 +182,6 @@ export interface ToolDescription {
   parameters?: Record<string, ToolParameter | string>;
   shortDescription?: string;
   category?: string;
-  frameworkAware?: {
-    enabled?: string;
-    disabled?: string;
-    parametersEnabled?: Record<string, ToolParameter | string>;
-    parametersDisabled?: Record<string, ToolParameter | string>;
-    frameworks?: Record<string, string>;
-    frameworkParameters?: Record<string, Record<string, ToolParameter | string>>;
-  };
 }
 
 export interface ToolDescriptionsConfig {
