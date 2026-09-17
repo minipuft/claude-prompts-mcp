@@ -37,7 +37,6 @@ interface ToolDescriptionsConfig {
       category: string;
       triggerExamples?: string[];
       parameters: Record<string, string | { type: string; description: string }>;
-      frameworkAware: { enabled: string; disabled: string };
     }
   >;
 }
@@ -199,7 +198,6 @@ function generateToolDescriptions(
       shortDescription: contract.toolDescription.shortDescription,
       category: contract.toolDescription.category,
       parameters: params,
-      frameworkAware: contract.toolDescription.frameworkAware,
     };
 
     // Include triggerExamples if present in contract
@@ -364,7 +362,6 @@ function runSelfTest(): void {
       description: 'Fixture description.',
       shortDescription: 'Fixture.',
       category: 'system',
-      frameworkAware: { enabled: 'enabled', disabled: 'disabled' },
     },
   };
   if (resolveContractPosture(withToolDescription).kind !== 'tool') {

@@ -45,12 +45,10 @@ gates:
 toolDescriptions:
   prompt_engine:
     description: >-
-      🌊 PROMPT ENGINE [LIQUESCENT]: Creative concept design through loose
-      connections. Dissolve→Flow→Crystallize→Scout→Iterate→Manifest.
+      Creative concept design through loose connections: Dissolve → Flow → Crystallize → Scout →
+      Iterate → Manifest.
     parameters:
-      command: >-
-        The creative direction or concept to explore through LIQUESCENT
-        framework
+      command: "Carry the creative direction or concept to explore in the prompt's arguments."
 frameworkGates:
   - id: dissolve_openness
     name: Dissolve Openness

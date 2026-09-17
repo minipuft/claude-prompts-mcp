@@ -3,13 +3,9 @@
   "version": 1,
   "summary": "Unified resource management for prompts, gates, frameworks, and prompt categories. Use resource_type to specify the resource kind, then action for the operation.",
   "toolDescription": {
-    "description": "\ud83d\uddc2\ufe0f RESOURCE MANAGER: CRUD for prompts, gates, frameworks, categories.\n\nresource_manager(resource_type, action, id?, name?, description?)\n\nTYPES: prompt | gate | framework | category\nACTIONS: create | validate | preview | update | delete | list | inspect | reload | guide | switch | history | rollback | compare\n\nPROMPT AUTHORING: validate a complete draft without mutation, then create. Valid prompt content is user_message_template OR chain_steps OR system_message.\n\nPROMPT MAINTENANCE: inspect detail:\"full\" -> preview preview_action:\"update\" -> update with expected_version from the receipt -> verify the returned write receipt.\n\nVERSIONING: history (view versions), rollback (restore), compare (diff versions)\n\nCREATION GUIDES:\n\u2022 >>create_framework - Framework creation with validation\n\u2022 >>create_gate - Quality gate creation\n\u2022 >>create_prompt - Prompt/chain creation",
+    "description": "\ud83d\uddc2\ufe0f RESOURCE MANAGER: CRUD for prompts, gates, frameworks, categories.\n\nresource_manager(resource_type, action, id?, name?, description?)\n\nTYPES: prompt | gate | framework | category\nACTIONS: create | validate | preview | update | delete | list | inspect | reload | analyze_type | analyze_gates | guide | switch | history | rollback | compare\n\nPROMPT AUTHORING: validate a complete draft without mutation, then create. Valid prompt content is user_message_template OR chain_steps OR system_message.\n\nPROMPT MAINTENANCE: inspect detail:\"full\" -> preview preview_action:\"update\" -> update with expected_version from the receipt -> verify the returned write receipt.\n\nVERSIONING: history (view versions), rollback (restore), compare (diff versions)\n\nCREATION GUIDES:\n\u2022 >>create_framework - Framework creation with validation\n\u2022 >>create_gate - Quality gate creation\n\u2022 >>create_prompt - Prompt/chain creation",
     "shortDescription": "Manage prompts, gates, and frameworks",
-    "category": "management",
-    "frameworkAware": {
-      "enabled": "\ud83d\uddc2\ufe0f RESOURCE MANAGER [FRAMEWORK]: Operations reflect active framework context.",
-      "disabled": "\ud83d\uddc2\ufe0f RESOURCE MANAGER: Standard resource lifecycle operations."
-    }
+    "category": "management"
   },
   "parameters": [
     {
