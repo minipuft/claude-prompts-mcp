@@ -155,6 +155,8 @@
     "validate:test-subject-claims:self-test": "tsx scripts/validate-test-subject-claims.ts --self-test",
     "validate:preview-vocabulary": "node scripts/validate-preview-vocabulary.js",
     "validate:preview-vocabulary:self-test": "node scripts/validate-preview-vocabulary.js --self-test",
+    "validate:dist-freshness-consumers": "node scripts/validate-dist-freshness-consumers.js",
+    "validate:dist-freshness-consumers:self-test": "node scripts/validate-dist-freshness-consumers.js --self-test",
     "validate:prompts": "tsx scripts/validate-prompts.ts",
     "validate:prompts:self-test": "tsx scripts/validate-prompts.ts --self-test",
     "validate:no-methodology-vocab": "node scripts/validate-no-methodology-vocab.js",
