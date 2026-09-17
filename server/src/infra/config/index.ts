@@ -207,9 +207,14 @@ const DEFAULT_IDENTITY_CONFIG: IdentityConfig = {
  * `DEFAULT_GATES_CONFIG` is the cross-layer runtime shape (`GateSystemSettings`, internal
  * spelling); this is the config-file-shaped section `Config.gates` carries, so the one rename the
  * pair makes visible — `enableFrameworkGates` in, `frameworkGates` out — happens once, here.
- * `directory` and `evaluation.defaultMode` are the only two values with no prior home in code:
- * `getGatesDirectory()` resolves the gates path through `PathResolver` and never reads this
- * field, and `judge-prompt-builder.ts` already falls back to the same `'self'`.
+ * `evaluation.defaultMode` has no prior home in code: `judge-prompt-builder.ts` already falls
+ * back to the same `'self'`.
+ *
+ * `directory` is a hardcoded placeholder, not a resolved default: `ConfigFile['gates']` no longer
+ * declares the key (it never had a reader — `getGatesDirectory()` resolves the gates path through
+ * `PathResolver` and has never read this field), but `GatesConfig.directory` on the runtime type
+ * (`core-config.ts`) is still required, so this literal exists only to satisfy that type. Making
+ * `GatesConfig.directory` optional, or removing it, retires this literal too — out of scope here.
  */
 const DEFAULT_GATES_SECTION: Config['gates'] = {
   enabled: DEFAULT_GATES_CONFIG.enabled,
@@ -321,9 +326,11 @@ function normalizeChainSessions(file: ConfigFile): ChainSessionConfig {
  * Gates, resolved leaf by leaf against {@link DEFAULT_GATES_SECTION}.
  *
  * The wire-to-internal rename lives in `getGatesConfig()`, which is now pure name mapping:
- * `frameworkGates` here becomes `enableFrameworkGates` there. `directory` is resolved for the
- * config surface only — `getGatesDirectory()` answers "where do gates live" through
- * `PathResolver` and has never read this field.
+ * `frameworkGates` here becomes `enableFrameworkGates` there. `directory` is not resolved from
+ * the file at all — `ConfigFile['gates']` carries no such key, since `getGatesDirectory()`
+ * answers "where do gates live" through `PathResolver` and has never read it — so this always
+ * takes the `DEFAULT_GATES_SECTION` placeholder; see that constant's doc for why the field
+ * remains.
  *
  * `evaluation.strict` and `evaluation.defaultModel` are deliberately left unresolved; see the
  * `GatesConfig.evaluation` doc for why `strict` cannot be folded into a constant.
@@ -333,7 +340,7 @@ function normalizeGates(file: ConfigFile): Config['gates'] {
   const evaluation = gates?.evaluation;
   return {
     enabled: gates?.enabled ?? DEFAULT_GATES_SECTION.enabled,
-    directory: gates?.directory ?? DEFAULT_GATES_SECTION.directory,
+    directory: DEFAULT_GATES_SECTION.directory,
     frameworkGates: gates?.frameworkGates ?? DEFAULT_GATES_SECTION.frameworkGates,
     executeInlineGateDefinitions:
       gates?.executeInlineGateDefinitions ?? DEFAULT_GATES_SECTION.executeInlineGateDefinitions,

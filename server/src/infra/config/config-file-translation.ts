@@ -160,7 +160,8 @@ const MOVES: readonly TranslationMove[] = [
  * `server.transport` is launch-time-only (ruling R30) and is REFUSED before this function runs
  * when it names anything but `"stdio"`, so what reaches here is the harmless spelling;
  * `gates.enforcePendingVerdict` and `resources.prompts.defaultRegistration` lost their readers;
- * `analysis` is the retired semantic-LLM sidecar.
+ * `analysis` is the retired semantic-LLM sidecar; `gates.directory` never had a reader either —
+ * `getGatesDirectory()` has always resolved the gates path through `PathResolver`, not this key.
  */
 const DROPS: ReadonlyArray<readonly string[]> = [
   ['server', 'version'],
@@ -168,6 +169,7 @@ const DROPS: ReadonlyArray<readonly string[]> = [
   ['gates', 'enforcePendingVerdict'],
   ['resources', 'prompts', 'defaultRegistration'],
   ['analysis'],
+  ['gates', 'directory'],
 ];
 
 /** True for a plain JSON object — the only thing a dot-path may be walked through. */

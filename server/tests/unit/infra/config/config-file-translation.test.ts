@@ -93,7 +93,6 @@ const HAND_BUILT_5X_TWIN = {
   phaseGuards: { mode: 'enforce', maxRetries: 2 },
   execution: { judge: true },
   gates: {
-    directory: 'resources/gates',
     enabled: true,
     evaluation: { defaultMode: 'self' },
     frameworkGates: true,
@@ -201,7 +200,7 @@ describe('4.x -> 5.0 config file translation', () => {
       ]);
       // `server.version`, `gates.enforcePendingVerdict`, `resources.prompts.defaultRegistration`
       // and `analysis` are also dropped when present; this file carries none of them.
-      expect(dropped).toEqual(['server.transport']);
+      expect(dropped).toEqual(['server.transport', 'gates.directory']);
     });
 
     it('does not mutate the record it was given', () => {
