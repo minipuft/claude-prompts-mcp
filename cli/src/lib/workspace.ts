@@ -1,6 +1,12 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
+import {
+  isExcludedCategoryDirectoryName,
+  isIgnoredPromptEntryName,
+  isReservedPromptDirectoryName,
+} from '@shared/utils/prompt-layout.js';
+
 import { TYPE_CONFIG } from './types.js';
 import type { ResourceType } from './types.js';
 
@@ -54,26 +60,6 @@ export interface ResourceEntry {
   dir: string;
 }
 
-/** Root-level directory names that are never a prompt category. See the predicate below. */
-const EXCLUDED_CATEGORY_DIRECTORY_NAMES: ReadonlySet<string> = new Set(['backup', 'node_modules']);
-
-/**
- * True when a directory directly under the prompts root is NOT a category.
- *
- * A MIRROR. The canonical rule is `isExcludedCategoryDirectoryName` in
- * `server/src/shared/utils/prompt-layout.ts`, which the server's loader, indexer, watcher and
- * validators all call. This file restates it rather than importing it, and
- * `cli/tests/integration/category-directory-rule.test.ts` compares the two name by name, so
- * changing one without the other fails that test.
- */
-export function isExcludedCategoryDirectoryName(entryName: string): boolean {
-  return (
-    entryName.startsWith('.') ||
-    entryName.startsWith('_') ||
-    EXCLUDED_CATEGORY_DIRECTORY_NAMES.has(entryName)
-  );
-}
-
 /**
  * Discover resource directories and return both ID and full path.
  *
@@ -83,7 +69,8 @@ export function isExcludedCategoryDirectoryName(entryName: string): boolean {
  *
  * @param baseDir - Root directory to scan (e.g., `resources/prompts`)
  * @param entryFile - Entry point filename (e.g., `prompt.yaml`)
- * @param nested - If true, scan two levels deep (flat + grouped)
+ * @param nested - True for the grouped prompts layout (`{category}/{id}/`),
+ *   false for a flat `{id}/` layout (gates, frameworks, styles)
  */
 export function discoverResourcePaths(
   baseDir: string,
@@ -92,45 +79,51 @@ export function discoverResourcePaths(
 ): ResourceEntry[] {
   if (!existsSync(baseDir)) return [];
 
-  const results: ResourceEntry[] = [];
-
   try {
-    const entries = readdirSync(baseDir, { withFileTypes: true });
-
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      // In a grouped layout every root directory is a category, and the server serves nothing
-      // from an excluded one. Flat layouts (gates, frameworks, styles) have no categories.
-      if (nested && isExcludedCategoryDirectoryName(entry.name)) continue;
-
-      const childDir = join(baseDir, entry.name);
-
-      // Level 1 (flat): baseDir/{id}/{entryFile}
-      if (existsSync(join(childDir, entryFile))) {
-        results.push({ id: entry.name, dir: childDir });
-        continue;
-      }
-
-      if (!nested) continue;
-
-      // Level 2 (grouped): baseDir/{group}/{id}/{entryFile}
-      try {
-        const groupEntries = readdirSync(childDir, { withFileTypes: true });
-        for (const child of groupEntries) {
-          if (!child.isDirectory()) continue;
-          const nestedDir = join(childDir, child.name);
-          if (existsSync(join(nestedDir, entryFile))) {
-            results.push({ id: child.name, dir: nestedDir });
-          }
-        }
-      } catch {
-        // Group directory unreadable — skip
-      }
-    }
+    return nested
+      ? discoverGroupedPaths(baseDir, entryFile)
+      : discoverFlatPaths(baseDir, entryFile);
   } catch {
     return [];
   }
+}
 
+/** `{baseDir}/{id}/{entryFile}`. Flat layouts have no categories and no skip rules. */
+function discoverFlatPaths(baseDir: string, entryFile: string): ResourceEntry[] {
+  return readdirSync(baseDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && existsSync(join(baseDir, entry.name, entryFile)))
+    .map((entry) => ({ id: entry.name, dir: join(baseDir, entry.name) }));
+}
+
+/**
+ * `{baseDir}/{category}/{id}/{entryFile}`, with the server loader's rules from
+ * `prompt-layout.ts`, so `cpm` lists and validates only what the server serves.
+ *
+ * - Every directory at the root is a category unless
+ *   `isExcludedCategoryDirectoryName` says otherwise. A root directory holding
+ *   its own `prompt.yaml` is still only a category: the loader serves no prompt
+ *   from the root, so that file is not listed.
+ * - Below the root, `_`/`.` entries are ignored and `tools/` is reserved for
+ *   script tools.
+ */
+function discoverGroupedPaths(baseDir: string, entryFile: string): ResourceEntry[] {
+  const results: ResourceEntry[] = [];
+  for (const category of readdirSync(baseDir, { withFileTypes: true })) {
+    if (!category.isDirectory() || isExcludedCategoryDirectoryName(category.name)) continue;
+    const categoryDir = join(baseDir, category.name);
+    let children;
+    try {
+      children = readdirSync(categoryDir, { withFileTypes: true });
+    } catch {
+      continue; // an unreadable category contributes nothing
+    }
+    for (const child of children) {
+      if (!child.isDirectory() || isIgnoredPromptEntryName(child.name)) continue;
+      if (isReservedPromptDirectoryName(child.name)) continue;
+      const dir = join(categoryDir, child.name);
+      if (existsSync(join(dir, entryFile))) results.push({ id: child.name, dir });
+    }
+  }
   return results;
 }
 
