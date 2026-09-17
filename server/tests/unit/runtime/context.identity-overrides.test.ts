@@ -5,6 +5,16 @@ import { applyRuntimeIdentityOverrides } from '../../../src/runtime/context.js';
 import type { Config } from '../../../src/shared/types/index.js';
 import type { RuntimeLaunchOptions } from '../../../src/runtime/options.js';
 
+import {
+  DEFAULT_PROMPTS_CONFIG,
+  DEFAULT_VERSIONING_CONFIG,
+  DEFAULT_TELEMETRY_CONFIG,
+} from '../../../src/shared/types/core-config.js';
+
+// Every section is resolved at load (row 6.2 / R57), so a fixture typed `Config` has to carry
+// all of them — not just the two this suite exercises. Values mirror the loader's own defaults
+// (`src/infra/config/index.ts` DEFAULT_*_CONFIG constants) so a fixture drifting from what the
+// loader actually resolves is a fixture bug, not a passing test.
 function createBaseConfig(): Config {
   return {
     server: {
@@ -12,9 +22,39 @@ function createBaseConfig(): Config {
       version: '1.0.0',
       port: 3456,
     },
-    prompts: {
-      directory: 'resources/prompts',
+    prompts: DEFAULT_PROMPTS_CONFIG,
+    gates: {
+      directory: 'resources/gates',
+      enabled: true,
+      frameworkGates: true,
+      executeInlineGateDefinitions: false,
+      evaluation: { defaultMode: 'self' },
+      harnessCovers: [],
+      reminderTokenBudget: 800,
     },
+    phaseGuards: { mode: 'enforce', maxRetries: 2 },
+    execution: { judge: true },
+    frameworks: {
+      enabled: true,
+      dynamicToolDescriptions: true,
+      defaultFramework: 'CAGEERF',
+      injection: {
+        systemPrompt: { enabled: true, frequency: 3, target: 'steps' },
+        gateGuidance: { frequency: 0, target: 'both' },
+        styleGuidance: { enabled: true, frequency: 0, target: 'steps' },
+      },
+    },
+    chainSessions: {
+      sessionTimeoutMinutes: 24 * 60,
+      reviewTimeoutMinutes: 30,
+      cleanupIntervalMinutes: 5,
+    },
+    logging: { directory: './logs', level: 'info' },
+    versioning: DEFAULT_VERSIONING_CONFIG,
+    verification: {},
+    resources: {},
+    telemetry: DEFAULT_TELEMETRY_CONFIG,
+    identity: { mode: 'permissive', allowPerRequestOverride: true, launchDefaults: {} },
   };
 }
 
@@ -37,7 +77,7 @@ const deriveNothing = (): undefined => undefined;
 const deriveProject = () => ({ value: 'derived-project', source: 'cwd' as const });
 
 describe('applyRuntimeIdentityOverrides', () => {
-  test('applies runtime client defaults when config has no identity section', () => {
+  test('applies runtime client defaults when config carries no launch defaults', () => {
     const config = createBaseConfig();
     const runtimeOptions = createRuntimeOptions({
       identityDefaults: {
@@ -49,7 +89,11 @@ describe('applyRuntimeIdentityOverrides', () => {
 
     applyRuntimeIdentityOverrides(config, runtimeOptions, deriveNothing);
 
+    // mode/allowPerRequestOverride pass through unchanged from the base fixture: the loader
+    // always resolves them, so nothing in this call ever fabricates or drops them.
     expect(config.identity).toEqual({
+      mode: 'permissive',
+      allowPerRequestOverride: true,
       launchDefaults: {
         clientFamily: 'codex',
         clientId: 'codex-cli',
@@ -101,7 +145,11 @@ describe('applyRuntimeIdentityOverrides', () => {
 
   test('config workspaceId outranks the derived one', () => {
     const config = createBaseConfig();
-    config.identity = { launchDefaults: { workspaceId: 'workspace-from-config' } };
+    config.identity = {
+      mode: 'permissive',
+      allowPerRequestOverride: true,
+      launchDefaults: { workspaceId: 'workspace-from-config' },
+    };
 
     const derived = applyRuntimeIdentityOverrides(config, createRuntimeOptions(), deriveProject);
 
@@ -112,7 +160,11 @@ describe('applyRuntimeIdentityOverrides', () => {
 
   test('CLI workspaceId outranks both config and the derived one', () => {
     const config = createBaseConfig();
-    config.identity = { launchDefaults: { workspaceId: 'workspace-from-config' } };
+    config.identity = {
+      mode: 'permissive',
+      allowPerRequestOverride: true,
+      launchDefaults: { workspaceId: 'workspace-from-config' },
+    };
     const runtimeOptions = createRuntimeOptions({
       identityDefaults: { workspaceId: 'workspace-from-cli' },
     });
@@ -124,7 +176,11 @@ describe('applyRuntimeIdentityOverrides', () => {
 
   test('a blank configured workspaceId does not suppress derivation', () => {
     const config = createBaseConfig();
-    config.identity = { launchDefaults: { workspaceId: '   ' } };
+    config.identity = {
+      mode: 'permissive',
+      allowPerRequestOverride: true,
+      launchDefaults: { workspaceId: '   ' },
+    };
 
     applyRuntimeIdentityOverrides(config, createRuntimeOptions(), deriveProject);
 

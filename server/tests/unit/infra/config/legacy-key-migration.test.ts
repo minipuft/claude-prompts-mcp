@@ -160,7 +160,7 @@ describe('legacy config key migration', () => {
       const { config, cleanup } = await loadConfigFrom({ gates: { mode: 'off' } });
 
       expect(config.gates?.enabled).toBe(false);
-      expect((config.gates as Record<string, unknown> | undefined)?.mode).toBeUndefined();
+      expect((config.gates as unknown as Record<string, unknown>).mode).toBeUndefined();
 
       await cleanup();
     });
@@ -171,7 +171,9 @@ describe('legacy config key migration', () => {
     it('leaves the same spelling alone in a `version: 5` file', async () => {
       const { config, cleanup } = await loadConfigFrom({ version: 5, gates: { mode: 'off' } });
 
-      expect(config.gates?.enabled).toBeUndefined();
+      // `gates.mode` reaches no reader under version 5 (nothing translates it) — the loader
+      // still resolves `enabled` to its own default, true, rather than leaving it unset.
+      expect(config.gates.enabled).toBe(true);
 
       await cleanup();
     });
@@ -200,7 +202,7 @@ describe('legacy config key migration', () => {
       });
 
       expect(config.gates?.enabled).toBe(true);
-      expect((config.gates as Record<string, unknown> | undefined)?.mode).toBeUndefined();
+      expect((config.gates as unknown as Record<string, unknown>).mode).toBeUndefined();
 
       await cleanup();
     });
@@ -214,7 +216,7 @@ describe('legacy config key migration', () => {
 
       expect(config.telemetry?.mode).toBe('off');
       expect(config.phaseGuards?.mode).toBe('warn');
-      expect((config.identity as Record<string, unknown> | undefined)?.mode).toBe('strict');
+      expect((config.identity as unknown as Record<string, unknown>).mode).toBe('strict');
 
       await cleanup();
     });
