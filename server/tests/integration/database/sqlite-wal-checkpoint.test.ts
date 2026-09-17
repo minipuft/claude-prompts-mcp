@@ -68,7 +68,9 @@ describe('WAL checkpoint on shutdown', () => {
   });
 
   it('truncates a grown WAL when the engine shuts down', async () => {
-    const engine = await SqliteEngine.getInstance(testDir, mockLogger as any);
+    const engine = await SqliteEngine.getInstance(mockLogger as any, {
+      dbPath: path.join(testDir, 'runtime-state', 'state.db'),
+    });
     await engine.initialize();
 
     growWal(engine);
@@ -83,7 +85,9 @@ describe('WAL checkpoint on shutdown', () => {
   });
 
   it('still closes the database when the checkpoint fails', async () => {
-    const engine = await SqliteEngine.getInstance(testDir, mockLogger as any);
+    const engine = await SqliteEngine.getInstance(mockLogger as any, {
+      dbPath: path.join(testDir, 'runtime-state', 'state.db'),
+    });
     await engine.initialize();
     growWal(engine);
 

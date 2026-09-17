@@ -70,7 +70,9 @@ describe('DirectChainRunRegistry handoff transfer', () => {
 
   beforeAll(async () => {
     tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'handoff-'));
-    engine = await SqliteEngine.getInstance(tmpRoot, createLogger() as any);
+    engine = await SqliteEngine.getInstance(createLogger() as any, {
+      dbPath: path.join(tmpRoot, 'runtime-state', 'state.db'),
+    });
     await engine.initialize();
     donor = new DirectChainRunRegistry(engine);
     claimer = new DirectChainRunRegistry(engine);

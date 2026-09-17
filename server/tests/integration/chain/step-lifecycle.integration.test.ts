@@ -713,7 +713,9 @@ describe('a mutated run survives a cold load (P4 row 4.2 / F10)', () => {
   beforeAll(async () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'p4-cold-load-'));
     logger = createLogger();
-    engine = await SqliteEngine.getInstance(tmpDir, logger);
+    engine = await SqliteEngine.getInstance(logger, {
+      dbPath: path.join(tmpDir, 'runtime-state', 'state.db'),
+    });
     await engine.initialize();
   });
 

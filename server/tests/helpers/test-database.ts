@@ -51,7 +51,9 @@ export async function createTestDatabaseManager(
   await fs.mkdir(testDir, { recursive: true });
 
   const logger = createMockLogger();
-  const dbManager = await SqliteEngine.getInstance(testDir, logger);
+  const dbManager = await SqliteEngine.getInstance(logger, {
+    dbPath: path.join(testDir, 'runtime-state', 'state.db'),
+  });
   await dbManager.initialize();
 
   return {
@@ -83,7 +85,9 @@ export async function createTestDatabaseManager(
  * the `SqliteEngine` singleton does not leak into the next test.
  */
 export async function seedStateDbSchema(serverRoot: string): Promise<void> {
-  const engine = await SqliteEngine.getInstance(serverRoot, createMockLogger());
+  const engine = await SqliteEngine.getInstance(createMockLogger(), {
+    dbPath: path.join(serverRoot, 'runtime-state', 'state.db'),
+  });
   await engine.initialize();
   await engine.shutdown();
 }

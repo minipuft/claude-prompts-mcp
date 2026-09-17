@@ -210,7 +210,9 @@ describe('Version History Workflow Integration', () => {
     // Temp dir first: the SQLite engine is created inside it so teardown removes both.
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'version-workflow-test-'));
 
-    dbManager = await SqliteEngine.getInstance(tempDir, mockLogger as unknown as Logger);
+    dbManager = await SqliteEngine.getInstance(mockLogger as unknown as Logger, {
+      dbPath: path.join(tempDir, 'runtime-state', 'state.db'),
+    });
     await dbManager.initialize();
 
     versionHistoryService = new VersionHistoryService({

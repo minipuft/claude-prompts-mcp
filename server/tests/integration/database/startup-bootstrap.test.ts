@@ -56,7 +56,9 @@ describe('Resource index bootstrap — syncAll over the bundled tree', () => {
 
   it('should populate resource_index with all resource types after syncAll + persist', async () => {
     // Seeds the shared `dbManager` the two cases below read.
-    dbManager = await SqliteEngine.getInstance(testDir, mockLogger as any);
+    dbManager = await SqliteEngine.getInstance(mockLogger as any, {
+      dbPath: path.join(testDir, 'runtime-state', 'state.db'),
+    });
     await dbManager.initialize();
 
     const indexer = createResourceIndexer(dbManager, mockLogger as any, { resourcesDir });
@@ -86,7 +88,9 @@ describe('Resource index bootstrap — syncAll over the bundled tree', () => {
     await dbManager.shutdown();
 
     // Create a fresh SqliteEngine — simulates how Python hooks read state.db
-    const freshManager = await SqliteEngine.getInstance(testDir, mockLogger as any);
+    const freshManager = await SqliteEngine.getInstance(mockLogger as any, {
+      dbPath: path.join(testDir, 'runtime-state', 'state.db'),
+    });
     await freshManager.initialize();
 
     // Query the raw resource_index table directly (like Python hooks do)

@@ -31,6 +31,8 @@ const mockConfigManager: ConfigManager = {
   getFrameworksConfig: jest.fn().mockReturnValue({}),
   getChainSessionConfig: jest.fn().mockReturnValue(undefined),
   getServerRoot: jest.fn().mockReturnValue(process.cwd()),
+  // Never the package directory: an unwritable path makes any unexpected write fail loudly.
+  getRuntimeStateDirectory: jest.fn().mockReturnValue('/nonexistent-runtime-root/runtime-state'),
   getSchemaValidation: () => undefined,
   getConfigValueWithSource: jest.fn().mockReturnValue({
     key: 'server.port',

@@ -31,7 +31,9 @@ describe('ResourceIndexer — live server resources', () => {
     await fs.rm(testDir, { recursive: true, force: true });
     await fs.mkdir(testDir, { recursive: true });
 
-    dbManager = await SqliteEngine.getInstance(testDir, mockLogger as any);
+    dbManager = await SqliteEngine.getInstance(mockLogger as any, {
+      dbPath: path.join(testDir, 'runtime-state', 'state.db'),
+    });
     await dbManager.initialize();
 
     indexer = new ResourceIndexer(dbManager, mockLogger as any, {

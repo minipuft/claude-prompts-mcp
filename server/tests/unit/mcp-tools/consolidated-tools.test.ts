@@ -64,6 +64,8 @@ describe('Consolidated MCP tool factories', () => {
         enableDynamicToolDescriptions: false,
       }),
       getServerRoot: () => process.cwd(),
+      // Never the package directory: an unwritable path makes any unexpected write fail loudly.
+      getRuntimeStateDirectory: () => '/nonexistent-runtime-root/runtime-state',
       getVersioningConfig: () => ({
         enabled: true,
         max_versions: 50,

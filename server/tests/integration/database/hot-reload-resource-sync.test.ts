@@ -123,7 +123,9 @@ describe('Hot-Reload Resource Sync: the refusal record survives a second sync', 
   beforeAll(async () => {
     await fs.rm(RELOAD_DIR, { recursive: true, force: true });
     await fs.mkdir(RELOAD_DIR, { recursive: true });
-    dbManager = await SqliteEngine.getInstance(RELOAD_DIR, mockLogger as any);
+    dbManager = await SqliteEngine.getInstance(mockLogger as any, {
+      dbPath: path.join(RELOAD_DIR, 'runtime-state', 'state.db'),
+    });
     await dbManager.initialize();
   });
 

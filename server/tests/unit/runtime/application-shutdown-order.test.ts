@@ -182,7 +182,9 @@ describe('Application.shutdown() teardown order', () => {
   it('tears every subsystem down in the recorded sequence, database last', async () => {
     const dbDir = path.join(TMP_ROOT, 'order');
     await fs.mkdir(dbDir, { recursive: true });
-    const engine = await SqliteEngine.getInstance(dbDir, silentLogger() as never);
+    const engine = await SqliteEngine.getInstance(silentLogger() as never, {
+      dbPath: path.join(dbDir, 'runtime-state', 'state.db'),
+    });
     await engine.initialize();
 
     const { app, order } = wireRecorders();

@@ -64,7 +64,9 @@ describe('Shared Workspace Continuity', () => {
   beforeAll(async () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'workspace-continuity-'));
     logger = createLogger();
-    dbManager = await SqliteEngine.getInstance(tmpDir, logger);
+    dbManager = await SqliteEngine.getInstance(logger, {
+      dbPath: path.join(tmpDir, 'runtime-state', 'state.db'),
+    });
     await dbManager.initialize();
   });
 
@@ -98,9 +100,13 @@ describe('Shared Workspace Continuity', () => {
       },
       logger
     );
-    const manager = await createFrameworkStateStore(logger, tmpDir, {
-      stateStore: frameworkStore,
-    });
+    const manager = await createFrameworkStateStore(
+      logger,
+      path.join(tmpDir, 'runtime-state', 'state.db'),
+      {
+        stateStore: frameworkStore,
+      }
+    );
 
     const sharedScope = SHARED_WORKSPACE_CLIENTS[0];
     const sharedBefore = manager.getCurrentState(sharedScope).activeFramework.toLowerCase();
@@ -154,20 +160,28 @@ describe('Shared Workspace Continuity', () => {
     const project = { workspaceId: 'project-restart' };
 
     // First process: switch with no explicit scope, so it lands on the process default.
-    const first = await createFrameworkStateStore(logger, tmpDir, {
-      stateStore: makeStore(),
-      defaultScope: project,
-    });
+    const first = await createFrameworkStateStore(
+      logger,
+      path.join(tmpDir, 'runtime-state', 'state.db'),
+      {
+        stateStore: makeStore(),
+        defaultScope: project,
+      }
+    );
     await first.switchFramework({ targetFramework: 'react', reason: 'first-run' });
     await first.shutdown();
 
     // Second process, same project. Reading the unscoped row here instead of the project's own
     // would report the config default and silently discard the switch above.
-    const second = await createFrameworkStateStore(logger, tmpDir, {
-      stateStore: makeStore(),
-      defaultFramework: () => 'cageerf',
-      defaultScope: project,
-    });
+    const second = await createFrameworkStateStore(
+      logger,
+      path.join(tmpDir, 'runtime-state', 'state.db'),
+      {
+        stateStore: makeStore(),
+        defaultFramework: () => 'cageerf',
+        defaultScope: project,
+      }
+    );
     expect(second.getCurrentState().activeFramework.toLowerCase()).toBe('react');
 
     await second.shutdown();
@@ -189,10 +203,14 @@ describe('Shared Workspace Continuity', () => {
       },
       logger
     );
-    const stateStore = await createFrameworkStateStore(logger, tmpDir, {
-      stateStore: frameworkStore,
-      defaultFramework: () => 'radiant',
-    });
+    const stateStore = await createFrameworkStateStore(
+      logger,
+      path.join(tmpDir, 'runtime-state', 'state.db'),
+      {
+        stateStore: frameworkStore,
+        defaultFramework: () => 'radiant',
+      }
+    );
 
     const busy = SHARED_WORKSPACE_CLIENTS[0]!;
     await stateStore.switchFramework({ targetFramework: 'react', reason: 'busy-switch' }, busy);
@@ -222,9 +240,13 @@ describe('Shared Workspace Continuity', () => {
       },
       logger
     );
-    const stateStore = await createFrameworkStateStore(logger, tmpDir, {
-      stateStore: frameworkStore,
-    });
+    const stateStore = await createFrameworkStateStore(
+      logger,
+      path.join(tmpDir, 'runtime-state', 'state.db'),
+      {
+        stateStore: frameworkStore,
+      }
+    );
 
     // Exercises the manager → store chain, which is where scope used to be dropped.
     const manager = await createFrameworkManager(logger);

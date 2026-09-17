@@ -797,7 +797,6 @@ export class Application {
       // "completed successfully" over a stale index.
       if (this.serverRoot) {
         await syncResourceIndex({
-          serverRoot: this.serverRoot,
           pathResolver: this.pathResolver,
           logger: this.logger,
           indexQuarantine: this.indexQuarantine,

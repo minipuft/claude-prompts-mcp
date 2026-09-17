@@ -16,6 +16,8 @@
  * - Improved maintainability and clear separation of concerns
  */
 
+import * as path from 'node:path';
+
 import { McpServer } from '@modelcontextprotocol/server';
 
 import { CategoryToolHandler, createCategoryToolHandler } from './category-manager/index.js';
@@ -232,7 +234,8 @@ export class McpToolRouter {
     // The launch workspace is the key a toggle with no identity is written under, so it is the
     // scope a pre-isolation `default` row is adopted into (see `GateStateStore`).
     const launchWorkspaceId = this.configManager.getConfig().identity?.launchDefaults?.workspaceId;
-    this.gateStateStore = createGateStateStore(this.logger, this.configManager.getServerRoot(), {
+    const stateDbPath = path.join(this.configManager.getRuntimeStateDirectory(), 'state.db');
+    this.gateStateStore = createGateStateStore(this.logger, stateDbPath, {
       ...(launchWorkspaceId != null ? { defaultScope: { workspaceId: launchWorkspaceId } } : {}),
     });
     await this.gateStateStore.initialize();

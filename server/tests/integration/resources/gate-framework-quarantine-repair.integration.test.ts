@@ -184,7 +184,9 @@ describe('a gate file the loader refused is reachable and repairable (P4.15)', (
 
     // A REAL `version_history` table, because P4.20's claim is that a row lands in a durable table
     // nothing regenerates. A stub store would assert that the code called something.
-    dbManager = await SqliteEngine.getInstance(dbRoot, silentLogger());
+    dbManager = await SqliteEngine.getInstance(silentLogger(), {
+      dbPath: join(dbRoot, 'runtime-state', 'state.db'),
+    });
     await dbManager.initialize();
     handler.setDatabasePort(dbManager);
   }, 30_000);
@@ -621,7 +623,9 @@ describe('a framework file the loader refused is reachable and repairable (P4.15
 
     // A REAL `version_history` table — see the gate suite's twin for why a stub will not do.
     dbRoot = mkdtempSync(join(tmpdir(), 'fw-repair-db-'));
-    dbManager = await SqliteEngine.getInstance(dbRoot, silentLogger());
+    dbManager = await SqliteEngine.getInstance(silentLogger(), {
+      dbPath: join(dbRoot, 'runtime-state', 'state.db'),
+    });
     await dbManager.initialize();
     handler.setDatabasePort(dbManager);
   }, 30_000);

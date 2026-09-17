@@ -13,8 +13,6 @@
  *                 └── PipelineStage[] (22 stages)
  */
 
-import * as path from 'node:path';
-
 import type { GateService } from '#engine/gates/services/gate-service-interface.js';
 import type { PipelineDependencies } from './pipeline-dependencies.js';
 
@@ -347,8 +345,10 @@ export class PipelineBuilder {
       debug: false,
       gateSystemEnabled: () => deps.lightweightGateSystem.isGateSystemEnabled(),
     });
+    // The runtime root, not the package: the Python Stop hook finds this file beside `state.db`,
+    // and a package-relative one ignored MCP_RUNTIME_ROOT and was wiped by every plugin update.
     const verifyActiveStateStore = createVerifyActiveStateStore(deps.logger, {
-      runtimeStateDir: path.join(deps.serverRoot, 'runtime-state'),
+      runtimeStateDir: deps.configManager.getRuntimeStateDirectory(),
     });
     const shellVerificationStage = createShellVerificationStage(
       shellVerifyExecutor,

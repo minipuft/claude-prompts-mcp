@@ -1101,7 +1101,6 @@ export class PromptExecutor {
 
       const builder = new PipelineBuilder({
         logger: this.logger,
-        serverRoot: this.serverRoot,
         configManager: this.configManager,
         parsingSystem: this.parsingSystem,
         executionPlanner: this.executionPlanner,

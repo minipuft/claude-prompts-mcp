@@ -164,8 +164,16 @@ file directly with its own `DatabaseSync` — the `cpm` binary has no server pro
 through. Tier 6.1 removed the `spawnSync('python3', …)` round-trip and the divergent DDL it
 carried, but **not** the second writer, which is declared as an accepted foreign writer.
 
-There are also two other database files: `hooks-state.db` (Python) and `verify-state.db` (declared
-in code, never written — Tier 6.2).
+There are also two other database files: `hooks-state.db` (Python) and `verify-state.db`, which the
+shell verification stage writes in `loop:true` mode and the Python Stop hook reads. It lives beside
+`state.db` in the runtime state directory — `ConfigManager.getRuntimeStateDirectory()`, never the
+package directory — and the hook finds it from the `state.db` it locates.
+
+**Every `SqliteEngine.getInstance` call names its `dbPath`.** The path is required and has no
+package-relative default; the composition root resolves it once through
+`PathResolver.getStateDatabasePath()`, and the engine refuses a later caller that names a different
+file. `validate:db-claim-order` fails on a call without one, and on any `runtime-state` path
+composed outside `runtime/paths.ts`.
 
 **No module outside `SqliteEngine.applySchema()` may create a table in `state.db`.** The CLI used
 to carry its own `ensure_schema()` predating the scope columns, so a `cpm` invocation before the

@@ -286,8 +286,13 @@ type DurableSnapshot = Map<string, Array<Record<string, unknown>>>;
  * Database configuration options
  */
 export interface DatabaseConfig {
-  /** Path to the database file (default: runtime-state/state.db) */
-  dbPath?: string;
+  /**
+   * Path to the database file. Required, with no default: the only defaultable anchor an engine
+   * could see is the package directory, which is read-only under a sandboxed MCP child and
+   * replaced by every Claude Code plugin update. The composition root resolves it through
+   * `PathResolver.getStateDatabasePath()` and hands it down.
+   */
+  dbPath: string;
   /** Enable verbose SQL logging */
   verbose?: boolean;
 }
@@ -307,40 +312,38 @@ export class SqliteEngine implements DatabasePort {
   private readonly verbose: boolean;
   private initialized: boolean = false;
 
-  private constructor(serverRoot: string, logger: Logger, config: DatabaseConfig = {}) {
+  private constructor(logger: Logger, config: DatabaseConfig) {
+    if (config.dbPath.trim() === '') {
+      // `new DatabaseSync('')` opens an anonymous temporary database, so an empty path would
+      // persist nothing while every write reported success.
+      throw new Error('SqliteEngine requires a non-empty dbPath.');
+    }
     this.logger = logger;
     this.verbose = config.verbose ?? false;
-
-    // Set paths
-    this.dbPath = config.dbPath ?? path.join(serverRoot, 'runtime-state', 'state.db');
+    this.dbPath = config.dbPath;
   }
 
   /**
    * Get or create the SqliteEngine singleton
    *
-   * A singleton drops the config of every call after the first. Five of the six call sites pass
-   * no `dbPath` and fall back to `serverRoot` — the PACKAGE directory — while the sixth passes
-   * the PathResolver-derived runtime path. Which one ran first therefore decided where
-   * `state.db` lived, and the tracker happening to initialize early is the only reason
-   * `MCP_WORKSPACE` was honored at all. Ordering is not a place to keep an invariant, so a
-   * later caller that disagrees about the path is named rather than silently ignored.
+   * A singleton drops the config of every call after the first, so every caller names the path it
+   * expects and a later caller that disagrees is refused rather than silently served another file.
+   * Until B.62 `dbPath` was optional and fell back to `serverRoot/runtime-state/state.db` — the
+   * PACKAGE directory — and six call sites relied on the composition root having opened the
+   * engine first with the right path. Which one ran first decided where `state.db` lived.
    */
-  static async getInstance(
-    serverRoot: string,
-    logger: Logger,
-    config?: DatabaseConfig
-  ): Promise<SqliteEngine> {
+  static async getInstance(logger: Logger, config: DatabaseConfig): Promise<SqliteEngine> {
     if (!SqliteEngine.instance) {
-      SqliteEngine.instance = new SqliteEngine(serverRoot, logger, config);
+      SqliteEngine.instance = new SqliteEngine(logger, config);
       return SqliteEngine.instance;
     }
 
-    const requested = config?.dbPath;
-    if (requested !== undefined && requested !== SqliteEngine.instance.dbPath) {
+    const requested = config.dbPath;
+    if (requested !== SqliteEngine.instance.dbPath) {
       throw new Error(
         `SqliteEngine is already open at ${SqliteEngine.instance.dbPath}, but a later caller ` +
-          `requested ${requested}. The composition root must claim the singleton with the ` +
-          `PathResolver-derived path before any consumer calls getInstance().`
+          `requested ${requested}. Every caller must resolve state.db through the same ` +
+          `PathResolver (getStateDatabasePath / ConfigManager.getRuntimeStateDirectory).`
       );
     }
     return SqliteEngine.instance;

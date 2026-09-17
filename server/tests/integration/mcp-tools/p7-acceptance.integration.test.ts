@@ -110,7 +110,9 @@ async function createHarness(workspaceDir: string): Promise<Harness> {
   // read and write the FIRST harness's rows for this workspace's `PROMPT_ID`, aliasing what
   // should be two independent `version_history` tables.
   await SqliteEngine.shutdownInstance();
-  const engine = await SqliteEngine.getInstance(workspaceDir, logger);
+  const engine = await SqliteEngine.getInstance(logger, {
+    dbPath: join(workspaceDir, 'runtime-state', 'state.db'),
+  });
   await engine.initialize();
   const history = new VersionHistoryService({
     logger,
@@ -430,7 +432,9 @@ describe('P7 acceptance — create records version 1', () => {
     const fileOperations = new FileOperations({ logger, configManager });
 
     await SqliteEngine.shutdownInstance();
-    engine = await SqliteEngine.getInstance(workspaceDir, logger);
+    engine = await SqliteEngine.getInstance(logger, {
+      dbPath: join(workspaceDir, 'runtime-state', 'state.db'),
+    });
     await engine.initialize();
     const history = new VersionHistoryService({
       logger,

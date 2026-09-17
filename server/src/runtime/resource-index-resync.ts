@@ -9,11 +9,9 @@
  * startup caller passes in as `afterSync` — so the difference is a parameter, not a second copy.
  *
  * A module of its own rather than a private method: the composition root already assembles
- * `serverRoot`, `pathResolver`, `logger` and the quarantine view for this exact call, so passing
- * them in is a parameter list, not a service boundary crossed.
+ * `pathResolver`, `logger` and the quarantine view for this exact call, so passing them in is a
+ * parameter list, not a service boundary crossed.
  */
-
-import * as path from 'node:path';
 
 import { indexerResourceRoots } from './resource-roots.js';
 
@@ -23,8 +21,8 @@ import type { QuarantineView } from '#shared/utils/resource-quarantine.js';
 import type { PathResolver } from './paths.js';
 
 export interface ResourceIndexSyncParams {
-  serverRoot: string;
-  pathResolver: PathResolver | undefined;
+  /** Where the resources are read from AND where `state.db` is — one resolver for both. */
+  pathResolver: PathResolver;
   logger: Logger;
   /**
    * The merged refusal record `initializeModules` assembles once and returns in
@@ -47,7 +45,7 @@ export interface ResourceIndexSyncParams {
  * wiring broke, not that a legitimate state was reached.
  */
 export async function syncResourceIndex(params: ResourceIndexSyncParams): Promise<void> {
-  const { serverRoot, pathResolver, logger, indexQuarantine, afterSync } = params;
+  const { pathResolver, logger, indexQuarantine, afterSync } = params;
 
   if (indexQuarantine === undefined) {
     throw new Error(
@@ -60,12 +58,13 @@ export async function syncResourceIndex(params: ResourceIndexSyncParams): Promis
     await import('#infra/database/resource-indexer.js');
   const { ScriptToolDefinitionLoader } =
     await import('#modules/automation/core/script-definition-loader.js');
-  const dbManager = await SqliteEngine.getInstance(serverRoot, logger);
+  const dbManager = await SqliteEngine.getInstance(logger, {
+    dbPath: pathResolver.getStateDatabasePath(),
+  });
   await dbManager.initialize();
-  const resourcesDir = pathResolver?.getResourcesPath() ?? path.join(serverRoot, 'resources');
   const scriptLoader = new ScriptToolDefinitionLoader({ validateOnLoad: true });
   const indexer = createResourceIndexer(dbManager, logger, {
-    resourcesDir,
+    resourcesDir: pathResolver.getResourcesPath(),
     resourceRoots: indexerResourceRoots(pathResolver),
     toolLoader: (dir, id) => scriptLoader.loadAllToolsForPromptDetailed(dir, id),
     // ONE merged view for both walks. The reload walk used to pass the prompt view alone under a

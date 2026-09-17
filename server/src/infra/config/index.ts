@@ -626,6 +626,11 @@ export interface ResourcePathSource {
    * imported. Without it, reload could only ever see one directory.
    */
   getOverlayResourceDirs(resourceType: string, primaryDir?: string): string[];
+  /**
+   * The writable `runtime-state/` directory under the runtime root (`MCP_RUNTIME_ROOT`, else the
+   * workspace). On the port because `mcp/` places state files there and cannot import `runtime/`.
+   */
+  getRuntimeStatePath(): string;
 }
 
 export class ConfigLoader extends EventEmitter implements ConfigManager {
@@ -1291,6 +1296,27 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
 
     const configDir = path.dirname(this.configPath);
     return path.join(configDir, 'resources', 'styles');
+  }
+
+  /**
+   * The runtime state directory — where `state.db` and `verify-state.db` live.
+   *
+   * Sixth instance of the defect the five directory getters above fixed, with one difference: it
+   * has NO config-relative fallback. Those fall back to the config file's directory because a
+   * resource tree beside the config is a real layout; runtime state beside the config is the
+   * PACKAGE directory for every default install, which is read-only under a sandboxed MCP child
+   * and replaced by every Claude Code plugin update. Before B.62 `verify-state.db` was placed
+   * there (`path.join(serverRoot, 'runtime-state')`), ignoring `MCP_RUNTIME_ROOT`. Without a path
+   * source the honest answer is "unknown", so this throws rather than guessing.
+   */
+  getRuntimeStateDirectory(): string {
+    if (this.resourcePaths === undefined) {
+      throw new Error(
+        'ConfigLoader has no path source, so runtime state has no location. Construct it with the ' +
+          'PathResolver (runtime/context.ts does) before anything reads or writes runtime state.'
+      );
+    }
+    return this.resourcePaths.getRuntimeStatePath();
   }
 
   // Removed: ToolDescriptionLoader methods - now handled via dependency injection in runtime/application.ts

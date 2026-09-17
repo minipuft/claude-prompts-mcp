@@ -37,6 +37,8 @@ function resolverAt(root: string): ResourcePathSource {
     // instead of the overlay set is the defect P6.1 fixed, and a stub returning the same
     // path either way could not tell them apart.
     getOverlayResourceDirs: (resourceType: string) => [path.join(root, 'overlay', resourceType)],
+    // Outside `root` entirely: runtime state lives under the runtime root, not beside resources.
+    getRuntimeStatePath: () => path.join(root, '..', 'runtime-root', 'runtime-state'),
   };
 }
 
@@ -184,6 +186,33 @@ describe('prompt write destination', () => {
 
     try {
       expect(manager.getStylesDirectory()).toBe(path.join(dir, 'resources', 'styles'));
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('resolves the runtime state directory through the path source', async () => {
+    const { manager, dir, cleanup } = await loaderWith(resolverAt('/somewhere/else/resources'));
+
+    try {
+      // The sixth instance, and the one B.62 fixed: `verify-state.db` was placed under the
+      // config file's directory — the package — and ignored MCP_RUNTIME_ROOT.
+      expect(manager.getRuntimeStateDirectory()).toBe(
+        path.join('/somewhere/else/runtime-root', 'runtime-state')
+      );
+      expect(manager.getRuntimeStateDirectory().startsWith(dir)).toBe(false);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('refuses to guess a runtime state directory without a path source', async () => {
+    const { manager, cleanup } = await loaderWith();
+
+    try {
+      // Unlike the five resource directories there is no config-relative fallback: the config
+      // file's directory is the package for every default install.
+      expect(() => manager.getRuntimeStateDirectory()).toThrow(/no path source/);
     } finally {
       await cleanup();
     }
