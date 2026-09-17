@@ -122,12 +122,12 @@ prompt_engine(command: "%clean >>my_prompt")
 
 When a framework is active, the server adds guidance at multiple levels:
 
-| Layer                         | What                                          | Where                       |
-| ----------------------------- | --------------------------------------------- | --------------------------- |
-| **System prompt guidance**    | Phase descriptions and reasoning instructions | Prepended to system prompt  |
-| **Framework gates**           | Per-phase quality validation criteria         | Added to gate review        |
-| **Tool description overlays** | Framework-branded tool descriptions           | Visible in MCP tool listing |
-| **Phase guards**              | Structural assertions on output sections      | Post-execution verification |
+| Layer                         | What                                                   | Where                       |
+| ----------------------------- | ------------------------------------------------------ | --------------------------- |
+| **System prompt guidance**    | Phase descriptions and reasoning instructions          | Prepended to system prompt  |
+| **Framework gates**           | Per-phase quality validation criteria                  | Added to gate review        |
+| **Tool description guidance** | Framework guidance appended to each tool's description | Visible in MCP tool listing |
+| **Phase guards**              | Structural assertions on output sections               | Post-execution verification |
 
 <details>
 <summary><strong>Example: CAGEERF system prompt injection</strong></summary>
@@ -146,6 +146,8 @@ Apply the C.A.G.E.E.R.F framework systematically:
 ```
 
 </details>
+
+A framework's `toolDescriptions` entry is guidance, not a replacement. The server serves each tool's own description first — its actions, resource types and syntax — and appends the active framework's text after it under an `ACTIVE FRAMEWORK [TYPE]:` heading. Write only what the framework adds; a copied action list or syntax block goes stale when the tool changes, and `npm run validate:framework-tool-descriptions` rejects one in a bundled framework.
 
 ---
 
