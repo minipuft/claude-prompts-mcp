@@ -27,7 +27,6 @@ const CONFIG_SOURCE_DESCRIPTIONS: Record<ConfigValueSource, string> = {
   file: 'the config file sets this value',
   default: 'built-in default; the file does not set it',
   environment: 'an environment variable overrides the file and default',
-  deferred: 'the file does not set it and no value has been resolved yet',
 };
 
 /**
@@ -152,12 +151,15 @@ export class ConfigActionHandler extends ActionHandler {
       }
 
       const { value, source } = this.configManager.getConfigValueWithSource(key);
+      // `JSON.stringify(undefined)` is the JS value `undefined`, which the template would coerce
+      // to the bare word — honest, but not JSON, and indistinguishable from a key whose value is
+      // the string "undefined" (F-T4-37). A key with no default in any layer says so in prose.
+      const headline =
+        value === undefined
+          ? `🔎 **${key}** is not set`
+          : `🔎 **${key}** = ${JSON.stringify(value)}`;
       return this.createMinimalSystemResponse(
-        [
-          `🔎 **${key}** = ${JSON.stringify(value)}`,
-          '',
-          `source: ${source} (${CONFIG_SOURCE_DESCRIPTIONS[source]})`,
-        ].join('\n'),
+        [headline, '', `source: ${source} (${CONFIG_SOURCE_DESCRIPTIONS[source]})`].join('\n'),
         'config_get'
       );
     } catch (error) {

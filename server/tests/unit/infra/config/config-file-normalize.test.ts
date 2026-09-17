@@ -155,10 +155,22 @@ describe('config file -> runtime config mapping', () => {
     // here first.
     const DEFAULTS = {
       server: { name: 'claude-prompts', version: '1.0.0', port: 9090 },
-      prompts: { directory: 'resources/prompts' },
+      prompts: { directory: 'resources/prompts', registerWithMcp: true },
       // No `analysis`: the section is not a config key any more, so the loader defaults nothing
       // for it and `Config.analysis` stays unset.
       execution: { judge: true },
+      gates: {
+        enabled: true,
+        directory: 'resources/gates',
+        frameworkGates: true,
+        executeInlineGateDefinitions: false,
+        // `strict` and `defaultModel` are present-and-undefined on purpose; see
+        // `GatesConfig.evaluation` for why `strict` is not folded into a constant.
+        evaluation: { defaultMode: 'self', defaultModel: undefined, strict: undefined },
+        harnessCovers: [],
+        reminderTokenBudget: 800,
+      },
+      phaseGuards: { mode: 'enforce', maxRetries: 2 },
       frameworks: {
         enabled: true,
         dynamicToolDescriptions: true,
@@ -174,7 +186,20 @@ describe('config file -> runtime config mapping', () => {
         reviewTimeoutMinutes: 30,
         cleanupIntervalMinutes: 5,
       },
+      logging: { directory: './logs', level: 'info' },
       versioning: { enabled: true, max_versions: 50, auto_version: true },
+      verification: {
+        inContextAttempts: 3,
+        isolation: { enabled: true, maxBudget: 1, timeout: 300, permissionMode: 'delegate' },
+      },
+      resources: {
+        registerWithMcp: false,
+        prompts: { enabled: true },
+        gates: { enabled: true },
+        frameworks: { enabled: true },
+        observability: { enabled: true, sessions: true, metrics: true },
+        logs: { enabled: true, maxEntries: 500, defaultLevel: 'info' },
+      },
       telemetry: {
         enabled: false,
         mode: 'off',
@@ -182,16 +207,17 @@ describe('config file -> runtime config mapping', () => {
         samplingRate: 1.0,
         attributePolicy: { businessContext: true, rawCommands: false, rawResponses: false },
       },
+      identity: { mode: 'permissive', allowPerRequestOverride: true, launchDefaults: {} },
     };
 
     it('resolves to the loader defaults, and to nothing else', async () => {
       const { config, cleanup } = await resolve({});
 
       expect(config).toEqual(DEFAULTS);
-      // The sections this loader has never defaulted at load time stay absent, which is what
-      // lets `getConfigValueWithSource` report them as 'deferred' rather than inventing a value.
+      // Row 6.2 / R57: every section the schema declares is now PRESENT after a load, so `get`
+      // and `list` answer with the value the server uses rather than with a deferral.
       for (const section of ['gates', 'resources', 'logging', 'identity', 'verification']) {
-        expect(config[section as 'gates']).toBeUndefined();
+        expect(config[section as 'gates']).toBeDefined();
       }
 
       await cleanup();
@@ -214,7 +240,10 @@ describe('config file -> runtime config mapping', () => {
     });
   });
 
-  describe('sections the file owns are carried across, not defaulted', () => {
+  // Row 6.2 falsified this block's previous claim ("carried across, not defaulted"): these
+  // sections ARE defaulted now, at load time. What still has to hold is the pair — a file that
+  // speaks wins, a file that says nothing gets the default, and the two are distinguishable.
+  describe('sections the file owns win; the ones it omits resolve to the loader defaults', () => {
     it('passes gates, resources and logging through as written', async () => {
       const { config, cleanup } = await resolve({
         version: 5,
@@ -233,6 +262,44 @@ describe('config file -> runtime config mapping', () => {
         logs: { maxEntries: 50 },
       });
       expect(config.logging).toEqual({ directory: '/var/log/cpm', level: 'debug' });
+
+      await cleanup();
+    });
+
+    // The other half, and the positive control for the case above: the same three sections, left
+    // unmentioned, resolve to exactly what a file declaring nothing resolves to. Compared against
+    // the empty file's own resolution rather than against a restated literal, so the two cannot
+    // drift.
+    it('defaults gates, resources and logging when the file omits them', async () => {
+      const { config, cleanup } = await resolve({ version: 5 });
+      const { config: emptyConfig, cleanup: cleanupEmpty } = await resolve({});
+
+      expect(config.gates).toEqual(emptyConfig.gates);
+      expect(config.resources).toEqual(emptyConfig.resources);
+      expect(config.logging).toEqual(emptyConfig.logging);
+      // Leaf values, not just structural equality — the section is only "defaulted" if the
+      // values are the ones the defaults declare.
+      expect(config.gates.enabled).toBe(true);
+      expect(config.resources.registerWithMcp).toBe(false);
+      expect(config.logging).toEqual({ directory: './logs', level: 'info' });
+
+      await cleanupEmpty();
+      await cleanup();
+    });
+
+    // A half-set section resolves its unset leaves rather than leaving them absent — the case
+    // that used to reach a getter as `undefined` and get defaulted there.
+    it('fills the leaves a half-set section leaves out', async () => {
+      const { config, cleanup } = await resolve({
+        version: 5,
+        gates: { enabled: false },
+        logging: { level: 'debug' },
+      });
+
+      expect(config.gates.enabled).toBe(false);
+      expect(config.gates.reminderTokenBudget).toBe(800);
+      expect(config.gates.frameworkGates).toBe(true);
+      expect(config.logging).toEqual({ directory: './logs', level: 'debug' });
 
       await cleanup();
     });

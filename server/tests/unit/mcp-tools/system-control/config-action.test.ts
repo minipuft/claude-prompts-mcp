@@ -224,6 +224,45 @@ describe('ConfigActionHandler read surface + refusal controls', () => {
       expect(text).toContain('source: default');
     });
 
+    // Row 6.2: `gates` is one of the sections that used to stay absent from the loaded config
+    // until `getGatesConfig()` defaulted it at read time, so `get` on a never-set gates key
+    // answered with a label and no value. It now answers with the value the server uses.
+    test('a never-set key in a once-deferred section answers its resolved default', async () => {
+      const manager = new ConfigLoader(configPath, undefined, { schemaPath: SCHEMA_PATH });
+      await manager.loadConfig();
+      const handler = new ConfigActionHandler(makeContext(manager));
+
+      const response = await handler.execute({
+        operation: 'get',
+        config: { operation: 'get', key: 'gates.frameworkGates' },
+      });
+      const text = textOf(response);
+
+      expect(response.isError).toBe(false);
+      expect(text).toContain('**gates.frameworkGates** = true');
+      expect(text).toContain('source: default');
+      expect(text).not.toContain('deferred');
+    });
+
+    // F-T4-37: `JSON.stringify(undefined)` is the JS value `undefined`, which the template used to
+    // coerce to the bare word — honest, but not JSON. A key with no default in any layer says so.
+    test('a key with no default in any layer reads as prose, never as the token `undefined`', async () => {
+      const manager = new ConfigLoader(configPath, undefined, { schemaPath: SCHEMA_PATH });
+      await manager.loadConfig();
+      const handler = new ConfigActionHandler(makeContext(manager));
+
+      const response = await handler.execute({
+        operation: 'get',
+        config: { operation: 'get', key: 'telemetry.attributePolicy.allowlist' },
+      });
+      const text = textOf(response);
+
+      expect(response.isError).toBe(false);
+      expect(text).toContain('**telemetry.attributePolicy.allowlist** is not set');
+      expect(text).not.toContain('= undefined');
+      expect(text).toContain('source: default');
+    });
+
     test('a key the schema does not declare is refused, naming `keys`', async () => {
       const manager = new ConfigLoader(configPath, undefined, { schemaPath: SCHEMA_PATH });
       await manager.loadConfig();

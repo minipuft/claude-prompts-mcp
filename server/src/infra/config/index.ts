@@ -22,13 +22,21 @@ const logger = createLogger(
   })
 );
 
-import type { ConfigFileTranslation } from './config-file-translation.js';
 import type { ConfigFile } from '#shared/types/config-file.js';
 import type {
   ConfigSchemaValidationResult,
   ConfigValueWithSource,
 } from '#shared/types/config-manager.js';
+import type { ConfigFileTranslation } from './config-file-translation.js';
 
+// Imported from the defining module rather than the barrel: all four are new to this file in row
+// 6.2 and the barrel does not re-export the first three.
+import {
+  DEFAULT_PROMPTS_CONFIG,
+  type IdentityConfig,
+  type PhaseGuardsConfig,
+  type ServerConfig,
+} from '#shared/types/core-config.js';
 import {
   Config,
   FrameworkInjectionConfig,
@@ -40,6 +48,7 @@ import {
   VersioningConfig,
   ResourcesConfig,
   TelemetryConfig,
+  VerificationConfig,
   DEFAULT_VERSIONING_CONFIG,
   DEFAULT_TELEMETRY_CONFIG,
   DEFAULT_GATES_CONFIG,
@@ -147,19 +156,69 @@ const DEFAULT_RESOURCES_CONFIG: ResourcesConfig = {
  */
 const DEFAULT_TRANSPORT_MODE: TransportMode = 'stdio';
 
-const DEFAULT_CONFIG: Config = {
-  server: {
-    name: 'claude-prompts',
-    version: '1.0.0',
-    port: 9090,
+const DEFAULT_SERVER_CONFIG: ServerConfig = {
+  name: 'claude-prompts',
+  version: '1.0.0',
+  port: 9090,
+};
+
+const DEFAULT_LOGGING_CONFIG: LoggingConfig = {
+  directory: './logs',
+  level: 'info',
+};
+
+const DEFAULT_PHASE_GUARDS_CONFIG: PhaseGuardsConfig = {
+  mode: 'enforce',
+  maxRetries: 2,
+};
+
+/**
+ * Verification (Ralph Loops) defaults.
+ *
+ * Nothing outside this loader reads `Config.verification` today (`rg -n "\.verification\b" src`
+ * returns this file only), so `config.schema.json`'s `@default` tags were the sole statement of
+ * these values and no code default existed to disagree with them. They are restated here so the
+ * section resolves like every other one.
+ */
+const DEFAULT_VERIFICATION_CONFIG: VerificationConfig = {
+  inContextAttempts: 3,
+  isolation: {
+    enabled: true,
+    maxBudget: 1,
+    timeout: 300,
+    permissionMode: 'delegate',
   },
-  prompts: {
-    directory: 'resources/prompts',
-  },
-  gates: DEFAULT_GATES_CONFIG,
-  frameworks: DEFAULT_FRAMEWORKS_CONFIG,
-  chainSessions: DEFAULT_CHAIN_SESSION_CONFIG,
-  versioning: DEFAULT_VERSIONING_CONFIG,
+};
+
+/**
+ * Identity defaults. `mode` and `allowPerRequestOverride` are the same pair
+ * `toIdentityContext` still falls back to for its non-production callers — kept equal on purpose,
+ * and noted at that site.
+ */
+const DEFAULT_IDENTITY_CONFIG: IdentityConfig = {
+  mode: 'permissive',
+  allowPerRequestOverride: true,
+  launchDefaults: {},
+};
+
+/**
+ * The gates SECTION default, derived from {@link DEFAULT_GATES_CONFIG} rather than restating it.
+ *
+ * `DEFAULT_GATES_CONFIG` is the cross-layer runtime shape (`GateSystemSettings`, internal
+ * spelling); this is the config-file-shaped section `Config.gates` carries, so the one rename the
+ * pair makes visible — `enableFrameworkGates` in, `frameworkGates` out — happens once, here.
+ * `directory` and `evaluation.defaultMode` are the only two values with no prior home in code:
+ * `getGatesDirectory()` resolves the gates path through `PathResolver` and never reads this
+ * field, and `judge-prompt-builder.ts` already falls back to the same `'self'`.
+ */
+const DEFAULT_GATES_SECTION: Config['gates'] = {
+  enabled: DEFAULT_GATES_CONFIG.enabled,
+  directory: 'resources/gates',
+  frameworkGates: DEFAULT_GATES_CONFIG.enableFrameworkGates,
+  executeInlineGateDefinitions: DEFAULT_GATES_CONFIG.executeInlineGateDefinitions,
+  evaluation: { defaultMode: 'self' },
+  harnessCovers: DEFAULT_GATES_CONFIG.harnessCovers,
+  reminderTokenBudget: DEFAULT_GATES_CONFIG.reminderTokenBudget,
 };
 
 /**
@@ -259,64 +318,110 @@ function normalizeChainSessions(file: ConfigFile): ChainSessionConfig {
 }
 
 /**
- * Gates, carried across key by key and NOT defaulted here.
+ * Gates, resolved leaf by leaf against {@link DEFAULT_GATES_SECTION}.
  *
- * `getGatesConfig()` owns this section's defaults, at read time — which is what lets
- * `getConfigValueWithSource` report an unset gates key as `'deferred'` rather than inventing a
- * value for it. The old wire-to-internal rename that used to live in that getter (the gate
- * definitions-directory field on the internal settings shape) is gone (row 4.7, field deleted row
- * 4.12): the directory is resolved by `getGatesDirectory()`, and nothing ever read the field the
- * old rename produced.
+ * The wire-to-internal rename lives in `getGatesConfig()`, which is now pure name mapping:
+ * `frameworkGates` here becomes `enableFrameworkGates` there. `directory` is resolved for the
+ * config surface only — `getGatesDirectory()` answers "where do gates live" through
+ * `PathResolver` and has never read this field.
+ *
+ * `evaluation.strict` and `evaluation.defaultModel` are deliberately left unresolved; see the
+ * `GatesConfig.evaluation` doc for why `strict` cannot be folded into a constant.
  */
 function normalizeGates(file: ConfigFile): Config['gates'] {
   const gates = file.gates;
-  if (gates === undefined) return undefined;
+  const evaluation = gates?.evaluation;
   return {
-    enabled: gates.enabled,
-    directory: gates.directory,
-    frameworkGates: gates.frameworkGates,
-    executeInlineGateDefinitions: gates.executeInlineGateDefinitions,
-    evaluation: gates.evaluation,
-    harnessCovers: gates.harnessCovers,
-    reminderTokenBudget: gates.reminderTokenBudget,
+    enabled: gates?.enabled ?? DEFAULT_GATES_SECTION.enabled,
+    directory: gates?.directory ?? DEFAULT_GATES_SECTION.directory,
+    frameworkGates: gates?.frameworkGates ?? DEFAULT_GATES_SECTION.frameworkGates,
+    executeInlineGateDefinitions:
+      gates?.executeInlineGateDefinitions ?? DEFAULT_GATES_SECTION.executeInlineGateDefinitions,
+    evaluation: {
+      defaultMode: evaluation?.defaultMode ?? DEFAULT_GATES_SECTION.evaluation.defaultMode,
+      defaultModel: evaluation?.defaultModel,
+      strict: evaluation?.strict,
+    },
+    harnessCovers: gates?.harnessCovers ?? DEFAULT_GATES_SECTION.harnessCovers,
+    reminderTokenBudget: gates?.reminderTokenBudget ?? DEFAULT_GATES_SECTION.reminderTokenBudget,
   };
 }
 
 /**
- * Phase guards, carried across only when the file sets the section.
+ * Phase guards, resolved whether or not the file sets the section.
  *
- * The two leaf defaults are the ones every reader already falls back to when the section is absent
- * (`pipeline-builder.ts`, `19-phase-guard-verification-stage.ts`), applied here so a half-set
- * section resolves to a number rather than to `undefined` — that stage computes
- * `maxRetries + 1`.
+ * These are the two values `pipeline-builder.ts` and `19-phase-guard-verification-stage.ts` each
+ * used to fall back to on their own; resolving here is what let those literals go.
  */
 function normalizePhaseGuards(file: ConfigFile): Config['phaseGuards'] {
   const phaseGuards = file.phaseGuards;
-  if (phaseGuards === undefined) return undefined;
-  return { mode: phaseGuards.mode ?? 'enforce', maxRetries: phaseGuards.maxRetries ?? 2 };
+  return {
+    mode: phaseGuards?.mode ?? DEFAULT_PHASE_GUARDS_CONFIG.mode,
+    maxRetries: phaseGuards?.maxRetries ?? DEFAULT_PHASE_GUARDS_CONFIG.maxRetries,
+  };
+}
+
+/** Logging, resolved here rather than inside `getLoggingConfig()`, which now only applies `LOG_LEVEL`. */
+function normalizeLogging(file: ConfigFile): Config['logging'] {
+  const logging = file.logging;
+  return {
+    directory: logging?.directory ?? DEFAULT_LOGGING_CONFIG.directory,
+    level: logging?.level ?? DEFAULT_LOGGING_CONFIG.level,
+  };
+}
+
+/** MCP resource toggles, resolved leaf by leaf against {@link DEFAULT_RESOURCES_CONFIG}. */
+function normalizeResources(file: ConfigFile): Config['resources'] {
+  const resources = file.resources;
+  const def = DEFAULT_RESOURCES_CONFIG;
+  return {
+    registerWithMcp: resources?.registerWithMcp ?? def.registerWithMcp,
+    prompts: { enabled: resources?.prompts?.enabled ?? def.prompts?.enabled },
+    gates: { enabled: resources?.gates?.enabled ?? def.gates?.enabled },
+    frameworks: { enabled: resources?.frameworks?.enabled ?? def.frameworks?.enabled },
+    observability: {
+      enabled: resources?.observability?.enabled ?? def.observability?.enabled,
+      sessions: resources?.observability?.sessions ?? def.observability?.sessions,
+      metrics: resources?.observability?.metrics ?? def.observability?.metrics,
+    },
+    logs: {
+      enabled: resources?.logs?.enabled ?? def.logs?.enabled,
+      maxEntries: resources?.logs?.maxEntries ?? def.logs?.maxEntries,
+      defaultLevel: resources?.logs?.defaultLevel ?? def.logs?.defaultLevel,
+    },
+  };
 }
 
 /**
- * Logging, carried across only when the file sets the section — `getLoggingConfig()` owns the
- * absent case, with the same two values used here for a half-set one.
+ * Verification, resolved leaf by leaf against {@link DEFAULT_VERIFICATION_CONFIG} — previously the
+ * one section carried across raw, straight off the file.
  */
-function normalizeLogging(file: ConfigFile): Config['logging'] {
-  const logging = file.logging;
-  if (logging === undefined) return undefined;
-  return { directory: logging.directory ?? './logs', level: logging.level ?? 'info' };
+function normalizeVerification(file: ConfigFile): VerificationConfig {
+  const verification = file.verification;
+  const def = DEFAULT_VERIFICATION_CONFIG;
+  return {
+    inContextAttempts: verification?.inContextAttempts ?? def.inContextAttempts,
+    isolation: {
+      enabled: verification?.isolation?.enabled ?? def.isolation?.enabled,
+      maxBudget: verification?.isolation?.maxBudget ?? def.isolation?.maxBudget,
+      timeout: verification?.isolation?.timeout ?? def.isolation?.timeout,
+      permissionMode: verification?.isolation?.permissionMode ?? def.isolation?.permissionMode,
+    },
+  };
 }
 
-/** MCP resource toggles, carried across; `getResourcesConfig()` owns their defaults. */
-function normalizeResources(file: ConfigFile): Config['resources'] {
-  const resources = file.resources;
-  if (resources === undefined) return undefined;
+/**
+ * Identity, resolved leaf by leaf. `launchDefaults` is carried across as written — every leaf
+ * inside it is genuinely default-less (a workspace id nobody set has no value to invent) — but
+ * the object itself is always present, so `runtimeOptions` can merge into it without a guard.
+ */
+function normalizeIdentity(file: ConfigFile): IdentityConfig {
+  const identity = file.identity;
   return {
-    registerWithMcp: resources.registerWithMcp,
-    prompts: resources.prompts,
-    gates: resources.gates,
-    frameworks: resources.frameworks,
-    observability: resources.observability,
-    logs: resources.logs,
+    mode: identity?.mode ?? DEFAULT_IDENTITY_CONFIG.mode,
+    allowPerRequestOverride:
+      identity?.allowPerRequestOverride ?? DEFAULT_IDENTITY_CONFIG.allowPerRequestOverride,
+    launchDefaults: identity?.launchDefaults ?? { ...DEFAULT_IDENTITY_CONFIG.launchDefaults },
   };
 }
 
@@ -355,11 +460,14 @@ function normalizeTelemetry(file: ConfigFile): TelemetryConfig {
  * boundary, and the reason the loader no longer casts one shape to the other.
  *
  * Pure: its inputs are the file and this module's `DEFAULT_*` constants, and it mutates neither.
- * Sections this loader has never defaulted at load time (`gates`, `resources`, `logging`,
- * `identity`, `verification`, `phaseGuards`) are carried across only when the file sets them, so
- * an absent key stays absent and its OWNING getter still applies the default at read time —
- * `getConfigValueWithSource` depends on that distinction to label a value `'deferred'` rather than
- * `'default'`.
+ *
+ * **Every section resolves here** (row 6.2 / Ruling R57). There is no longer a class of key that
+ * stays absent until its owning getter defaults it at read time, which is what let
+ * `getConfigValueWithSource` retire the `'deferred'` label: a key the file does not set now
+ * answers with the value the server actually uses, labelled `'default'`. The only values still
+ * absent after this runs are the ones with no default in any layer — `config.schema.json` carries
+ * no `@default` for them either — and `gates.evaluation.strict`, whose only code default is a
+ * function of the resolved mode rather than a constant.
  *
  * Keys the file may carry that the runtime `Config` has no member for at all — `hooks`, read by
  * the Python hooks straight off the file — are not carried across. `server.transport` is not among
@@ -373,31 +481,40 @@ function normalizeTelemetry(file: ConfigFile): TelemetryConfig {
 function normalizeConfigFile(file: ConfigFile): Config {
   return {
     server: {
-      name: file.server?.name ?? DEFAULT_CONFIG.server.name,
+      name: file.server?.name ?? DEFAULT_SERVER_CONFIG.name,
       // Not a file key: the server's own version is the package's, never an operator's choice.
-      version: DEFAULT_CONFIG.server.version,
-      port: file.server?.port ?? DEFAULT_CONFIG.server.port,
+      version: DEFAULT_SERVER_CONFIG.version,
+      port: file.server?.port ?? DEFAULT_SERVER_CONFIG.port,
     },
     prompts: {
-      directory: file.prompts?.directory ?? DEFAULT_CONFIG.prompts.directory,
-      registerWithMcp: file.prompts?.registerWithMcp,
+      directory: file.prompts?.directory ?? DEFAULT_PROMPTS_CONFIG.directory,
+      registerWithMcp: file.prompts?.registerWithMcp ?? DEFAULT_PROMPTS_CONFIG.registerWithMcp,
     },
     gates: normalizeGates(file),
     phaseGuards: normalizePhaseGuards(file),
-    execution: { judge: file.execution?.judge ?? DEFAULT_EXECUTION_CONFIG.judge ?? true },
+    execution: { judge: file.execution?.judge ?? DEFAULT_EXECUTION_CONFIG.judge },
     frameworks: normalizeFrameworks(file),
     chainSessions: normalizeChainSessions(file),
     logging: normalizeLogging(file),
     versioning: normalizeVersioning(file),
-    verification: file.verification,
+    verification: normalizeVerification(file),
     resources: normalizeResources(file),
     telemetry: normalizeTelemetry(file),
-    identity: file.identity,
+    identity: normalizeIdentity(file),
   };
 }
 
 /** A 5.0 file that declares nothing: what a missing or unreadable config resolves to. */
 const EMPTY_CONFIG_FILE: ConfigFile = { version: 5 };
+
+/**
+ * The defaults, as one object — literally what an empty 5.0 file resolves to.
+ *
+ * Not a hand-written second statement of the same values: it is the mapping's own output, so a
+ * default added to a section constant cannot fail to appear here, and the config a `ConfigLoader`
+ * serves before its first `loadConfig()` is the same shape a loaded one serves.
+ */
+const DEFAULT_CONFIG: Config = normalizeConfigFile(EMPTY_CONFIG_FILE);
 
 /**
  * A config file that asks for a transport other than `"stdio"` via `server.transport`.
@@ -622,10 +739,17 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
    * (an unset or invalid env var falls through to the file/default walk below, same as those
    * getters already do).
    *
-   * Below that: `'file'` when the raw file set it, `'default'` when the file didn't but
-   * `normalizeConfigFile` resolved a real value at load time, and `'deferred'` — see
-   * {@link ConfigValueSource} — when neither did, because the key's section is one this loader
-   * never writes back and only its owning getter defaults at read time.
+   * Below that: `'file'` when the raw file set it, `'default'` otherwise — and `'default'` now
+   * carries the value the server actually uses, because `normalizeConfigFile` resolves every
+   * section at load time (row 6.2 / R57). The `'deferred'` label this method used to return is
+   * gone with the state it named.
+   *
+   * A `'default'` answer whose `value` is `undefined` is still possible, and now means exactly
+   * one thing: the key has no default in any layer (`config.schema.json` declares no `@default`
+   * for it either) — `gates.evaluation.defaultModel`, `telemetry.attributePolicy.allowlist`, the
+   * `identity.launchDefaults.*` leaves, `gates.evaluation.strict`, and `hooks.expandedOutput`,
+   * which `Config` has no member for. `config-value-source.test.ts` pins that set as a literal,
+   * so a NEW undefined answer is a red test rather than a label.
    */
   getConfigValueWithSource(key: string): ConfigValueWithSource {
     if (key === 'server.port' && process.env['PORT']) {
@@ -659,21 +783,10 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
       return { key, value: mergedValue !== undefined ? mergedValue : rawValue, source: 'file' };
     }
 
-    // Neither the file nor `normalizeConfigFile` produced a value: `gates`, `resources`,
-    // `logging`, `identity`, `verification`, `phaseGuards` and `hooks` are carried across only
-    // when the file sets them (unlike `server`/`prompts`/`analysis`/`frameworks`/`chainSessions`/
-    // `execution`/`versioning`/`telemetry`, which always resolve to a concrete value here), so a
-    // key living in one of those sections stays genuinely absent from `this.config` until its
-    // OWNING getter
-    // applies a default at read time (e.g. `gates.enabled` inside `getGatesConfig()`). Reporting
-    // `'default'` with an `undefined` value here would be indistinguishable from a default that IS
-    // `undefined` by design (`getPromptsRegisterWithMcp()`, `telemetry.attributePolicy.allowlist`)
-    // — exactly the false-confidence case `getConfigValueWithSource` exists to end. `'deferred'`
-    // names the state honestly instead of guessing at a value no layer has produced yet.
-    if (mergedValue === undefined) {
-      return { key, value: undefined, source: 'deferred' };
-    }
-
+    // The file did not set it, so whatever `normalizeConfigFile` resolved IS the default — and
+    // it resolves every section, so this is the value the server uses rather than a placeholder
+    // some getter will replace later. `undefined` here is no longer ambiguous: it means the key
+    // has no default in any layer, which is a property of the key, not of the load.
     return { key, value: mergedValue, source: 'default' };
   }
 
@@ -724,11 +837,12 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
   }
 
   /**
-   * Get global registerWithMcp default from prompts config
-   * Returns undefined if not specified (allowing downstream defaults)
+   * The global MCP-registration default for prompts. Always a boolean: the loader resolves the
+   * key, so `modules/prompts/converter.ts` no longer needs a fallback of its own for the
+   * production path.
    */
-  getPromptsRegisterWithMcp(): boolean | undefined {
-    return this.config.prompts?.registerWithMcp;
+  getPromptsRegisterWithMcp(): boolean {
+    return this.config.prompts.registerWithMcp;
   }
 
   /**
@@ -770,12 +884,8 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
    * Supports LOG_LEVEL env var to override configured log level
    */
   getLoggingConfig(): LoggingConfig {
-    const defaultLogging: LoggingConfig = {
-      directory: './logs',
-      level: 'info',
-    };
-
-    const configLogging = this.config.logging || defaultLogging;
+    // Already resolved at load time — this getter owns the environment override and nothing else.
+    const configLogging = this.config.logging;
 
     // Override log level from LOG_LEVEL environment variable if present
     const envLogLevel = process.env['LOG_LEVEL'];
@@ -805,14 +915,13 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
    * Reads from frameworks config section
    */
   getFrameworksConfig(): ResolvedFrameworkConfig {
+    // Projection only: `ResolvedFrameworkConfig` is the `frameworks` section minus `enabled`,
+    // which `normalizeInjection` has already folded into `injection.systemPrompt.enabled`.
     const frameworks = this.config.frameworks;
     return {
-      dynamicToolDescriptions:
-        frameworks?.dynamicToolDescriptions ?? DEFAULT_FRAMEWORKS_CONFIG.dynamicToolDescriptions,
-      defaultFramework: frameworks?.defaultFramework ?? DEFAULT_FRAMEWORKS_CONFIG.defaultFramework,
-      // Already nested and fully defaulted by `normalizeInjection`; the fallback covers a manager
-      // asked for its config before its first load.
-      injection: frameworks?.injection ?? DEFAULT_FRAMEWORKS_CONFIG.injection,
+      dynamicToolDescriptions: frameworks.dynamicToolDescriptions,
+      defaultFramework: frameworks.defaultFramework,
+      injection: frameworks.injection,
     };
   }
 
@@ -821,16 +930,15 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
    * Reads from gates config section with new property names
    */
   getGatesConfig(): GateSystemSettings {
-    const gatesConfig = this.config.gates ?? {};
+    // Name mapping only: the config-file spelling `frameworkGates` becomes the internal
+    // `enableFrameworkGates`. Every value is already resolved by `normalizeGates`.
+    const gatesConfig = this.config.gates;
     return {
-      enabled: gatesConfig.enabled ?? DEFAULT_GATES_CONFIG.enabled,
-      enableFrameworkGates: gatesConfig.frameworkGates ?? DEFAULT_GATES_CONFIG.enableFrameworkGates,
-      executeInlineGateDefinitions:
-        gatesConfig.executeInlineGateDefinitions ??
-        DEFAULT_GATES_CONFIG.executeInlineGateDefinitions,
-      harnessCovers: gatesConfig.harnessCovers ?? DEFAULT_GATES_CONFIG.harnessCovers,
-      reminderTokenBudget:
-        gatesConfig.reminderTokenBudget ?? DEFAULT_GATES_CONFIG.reminderTokenBudget,
+      enabled: gatesConfig.enabled,
+      enableFrameworkGates: gatesConfig.frameworkGates,
+      executeInlineGateDefinitions: gatesConfig.executeInlineGateDefinitions,
+      harnessCovers: gatesConfig.harnessCovers,
+      reminderTokenBudget: gatesConfig.reminderTokenBudget,
     };
   }
 
@@ -839,99 +947,42 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
    * Reads from the root `chainSessions` config section
    */
   getChainSessionConfig(): ChainSessionConfig {
-    const sessions = this.config.chainSessions;
-    return {
-      sessionTimeoutMinutes:
-        sessions?.sessionTimeoutMinutes ?? DEFAULT_CHAIN_SESSION_CONFIG.sessionTimeoutMinutes,
-      reviewTimeoutMinutes:
-        sessions?.reviewTimeoutMinutes ?? DEFAULT_CHAIN_SESSION_CONFIG.reviewTimeoutMinutes,
-      cleanupIntervalMinutes:
-        sessions?.cleanupIntervalMinutes ?? DEFAULT_CHAIN_SESSION_CONFIG.cleanupIntervalMinutes,
-    };
+    return this.config.chainSessions;
   }
 
   /**
    * Get execution strategy configuration
    */
   getExecutionConfig(): ExecutionConfig {
-    const judgeValue = this.config.execution?.judge;
-    if (judgeValue !== undefined) {
-      return { judge: judgeValue };
-    }
-    return { judge: DEFAULT_EXECUTION_CONFIG.judge ?? true };
+    return this.config.execution;
   }
 
   /**
    * Get judge enabled status (convenience method)
    */
   isJudgeEnabled(): boolean {
-    return this.getExecutionConfig().judge ?? true;
+    return this.getExecutionConfig().judge;
   }
 
   /**
    * Get versioning configuration for resource history tracking
    */
   getVersioningConfig(): VersioningConfig {
-    const versioningConfig: Partial<VersioningConfig> = this.config.versioning ?? {};
-    return {
-      enabled: versioningConfig.enabled ?? DEFAULT_VERSIONING_CONFIG.enabled,
-      max_versions: versioningConfig.max_versions ?? DEFAULT_VERSIONING_CONFIG.max_versions,
-      auto_version: versioningConfig.auto_version ?? DEFAULT_VERSIONING_CONFIG.auto_version,
-    };
+    return this.config.versioning;
   }
 
   /**
    * Get MCP resources configuration
    */
   getResourcesConfig(): ResourcesConfig {
-    const cfg = this.config.resources ?? {};
-    const def = DEFAULT_RESOURCES_CONFIG;
-    return {
-      registerWithMcp: cfg.registerWithMcp ?? def.registerWithMcp,
-      prompts: {
-        enabled: cfg.prompts?.enabled ?? def.prompts?.enabled ?? true,
-      },
-      gates: {
-        enabled: cfg.gates?.enabled ?? def.gates?.enabled ?? true,
-      },
-      frameworks: {
-        enabled: cfg.frameworks?.enabled ?? def.frameworks?.enabled ?? true,
-      },
-      observability: {
-        enabled: cfg.observability?.enabled ?? def.observability?.enabled ?? true,
-        sessions: cfg.observability?.sessions ?? def.observability?.sessions ?? true,
-        metrics: cfg.observability?.metrics ?? def.observability?.metrics ?? true,
-      },
-      logs: {
-        enabled: cfg.logs?.enabled ?? def.logs?.enabled ?? true,
-        maxEntries: cfg.logs?.maxEntries ?? def.logs?.maxEntries ?? 500,
-        defaultLevel: cfg.logs?.defaultLevel ?? def.logs?.defaultLevel ?? 'info',
-      },
-    };
+    return this.config.resources;
   }
 
   /**
    * Get OpenTelemetry configuration with safe defaults.
    */
   getTelemetryConfig(): TelemetryConfig {
-    const cfg: Partial<TelemetryConfig> = this.config.telemetry ?? {};
-    return {
-      enabled: cfg.enabled ?? DEFAULT_TELEMETRY_CONFIG.enabled,
-      mode: cfg.mode ?? DEFAULT_TELEMETRY_CONFIG.mode,
-      exporterEndpoint: cfg.exporterEndpoint ?? DEFAULT_TELEMETRY_CONFIG.exporterEndpoint,
-      samplingRate: cfg.samplingRate ?? DEFAULT_TELEMETRY_CONFIG.samplingRate,
-      attributePolicy: {
-        businessContext:
-          cfg.attributePolicy?.businessContext ??
-          DEFAULT_TELEMETRY_CONFIG.attributePolicy.businessContext,
-        rawCommands:
-          cfg.attributePolicy?.rawCommands ?? DEFAULT_TELEMETRY_CONFIG.attributePolicy.rawCommands,
-        rawResponses:
-          cfg.attributePolicy?.rawResponses ??
-          DEFAULT_TELEMETRY_CONFIG.attributePolicy.rawResponses,
-        allowlist: cfg.attributePolicy?.allowlist,
-      },
-    };
+    return this.config.telemetry;
   }
 
   /**
