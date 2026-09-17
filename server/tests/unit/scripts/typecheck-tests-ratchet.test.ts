@@ -180,3 +180,64 @@ describe('typecheck-tests-ratchet compare (pre-existing check() logic)', () => {
     expect(vanished).toEqual([{ file: 'tests/unit/gone.test.ts', baseline: 2 }]);
   });
 });
+
+/**
+ * Row B.67: `check()` now fails on a decrease, not just an increase — a ratchet nobody
+ * tightens is a floor. These pin `compare`'s `decreases` finding, which is exactly the signal
+ * `handleCheck()` reads to decide pass/fail (see the FAIL branch in typecheck-tests-ratchet.js),
+ * the same way the pre-existing describe block above pins `regressions`/`vanished` without
+ * invoking the process-spawning `handleCheck()` itself.
+ */
+describe('typecheck-tests-ratchet compare decrease detection (row B.67)', () => {
+  it('reports a decrease and names the file', () => {
+    const { regressions, vanished, decreases } = compare(
+      { byFile: { 'tests/unit/example.test.ts': 5 } },
+      { byFile: { 'tests/unit/example.test.ts': 2 } }
+    );
+
+    expect(decreases).toEqual([{ file: 'tests/unit/example.test.ts', baseline: 5, current: 2 }]);
+    expect(regressions).toEqual([]);
+    expect(vanished).toEqual([]);
+  });
+
+  it('a baseline equal to the measured count produces no decreases, regressions, or vanished', () => {
+    const { regressions, vanished, decreases } = compare(
+      { byFile: { 'tests/unit/steady.test.ts': 3 } },
+      { byFile: { 'tests/unit/steady.test.ts': 3 } }
+    );
+
+    expect(decreases).toEqual([]);
+    expect(regressions).toEqual([]);
+    expect(vanished).toEqual([]);
+  });
+
+  it('an increase still fails alongside an unrelated decrease', () => {
+    const { regressions, decreases } = compare(
+      {
+        byFile: {
+          'tests/unit/up.test.ts': 1,
+          'tests/unit/down.test.ts': 5,
+        },
+      },
+      {
+        byFile: {
+          'tests/unit/up.test.ts': 2,
+          'tests/unit/down.test.ts': 2,
+        },
+      }
+    );
+
+    expect(regressions).toEqual([{ file: 'tests/unit/up.test.ts', baseline: 1, current: 2 }]);
+    expect(decreases).toEqual([{ file: 'tests/unit/down.test.ts', baseline: 5, current: 2 }]);
+  });
+
+  it('a file whose errors drop to 0 leaves byFile entirely and is vanished, not doubled as a decrease', () => {
+    const { vanished, decreases } = compare(
+      { byFile: { 'tests/unit/fixed.test.ts': 3 } },
+      { byFile: {} }
+    );
+
+    expect(vanished).toEqual([{ file: 'tests/unit/fixed.test.ts', baseline: 3 }]);
+    expect(decreases).toEqual([]);
+  });
+});

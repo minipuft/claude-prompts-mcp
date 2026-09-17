@@ -39,6 +39,12 @@ export interface VanishedFile {
   baseline: number;
 }
 
+export interface FileDecrease {
+  file: string;
+  baseline: number;
+  current: number;
+}
+
 /** Parse repeatable `--allow-increase <file> <reason>` pairs from the argv tail. */
 export declare function parseAllowIncreaseArgs(argv: string[]): Map<string, string>;
 
@@ -58,8 +64,8 @@ export declare function buildOverrideLog(
   generatedAt: string
 ): { overrideLog: OverrideLogEntry[]; unused: string[] };
 
-/** The pre-existing `check()` comparison: per-file regressions and vanished files. */
+/** `check()`'s comparison: per-file regressions, vanished files, and decreases (row B.67). */
 export declare function compare(
   baseline: { byFile?: ByFile },
   current: { byFile?: ByFile }
-): { regressions: FileRegression[]; vanished: VanishedFile[] };
+): { regressions: FileRegression[]; vanished: VanishedFile[]; decreases: FileDecrease[] };
