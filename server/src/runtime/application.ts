@@ -436,8 +436,8 @@ export class Application {
       // workspace-scoped. `ctx` is the only scope signal available here: the
       // schema is built now, before any call has been dispatched, so the
       // per-call `extra` the rest of the server reads does not exist yet.
-      const launchDefaults = this.configManager.getConfig().identity?.launchDefaults;
-      const scope = resolveServingUnitScope(ctx, launchDefaults?.workspaceId);
+      const launchDefaults = this.configManager.getConfig().identity.launchDefaults;
+      const scope = resolveServingUnitScope(ctx, launchDefaults.workspaceId);
       // `stage` is what the failure names, so a request that cannot be served
       // says which step failed instead of carrying a bare message from
       // somewhere inside it. The error is rethrown, never swallowed: the SDK

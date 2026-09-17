@@ -72,7 +72,7 @@ export class IdentityResolutionStage extends BasePipelineStage {
   readonly name = 'IdentityResolution';
 
   constructor(
-    private readonly identityOptionsProvider: () => RequestIdentityResolverOptions | null,
+    private readonly identityOptionsProvider: () => RequestIdentityResolverOptions,
     logger: Logger
   ) {
     super(logger);
@@ -85,10 +85,10 @@ export class IdentityResolutionStage extends BasePipelineStage {
     const identityOptions = this.identityOptionsProvider();
     const requestHint = extractClientProfileHintFromOptions(context.mcpRequest.options);
     const effectiveOptions: RequestIdentityResolverOptions = {
-      mode: identityOptions?.mode ?? 'permissive',
-      allowPerRequestOverride: identityOptions?.allowPerRequestOverride ?? true,
-      launchDefaults: identityOptions?.launchDefaults,
-      transportMode: identityOptions?.transportMode,
+      mode: identityOptions.mode,
+      allowPerRequestOverride: identityOptions.allowPerRequestOverride,
+      launchDefaults: identityOptions.launchDefaults,
+      transportMode: identityOptions.transportMode,
       ...(requestHint != null ? { requestClientProfileHint: requestHint } : {}),
     };
     const identityContext = resolveRequestIdentityContext(sdkExtra, effectiveOptions);

@@ -1,6 +1,6 @@
 {
   "version": "3.0.0",
-  "lastUpdated": "2026-09-17T02:18:17.901Z",
+  "lastUpdated": "2026-09-17T04:34:57.377Z",
   "generatedFrom": "contracts",
   "tools": {
     "prompt_engine": {
@@ -57,7 +57,7 @@
       "category": "system",
       "parameters": {
         "action": "The operation to perform: status (runtime overview), framework (switch/enable/disable frameworks), gates (manage quality gates), analytics (usage metrics), config (read-only: list/keys/validate — writes go through the `cpm` CLI), maintenance (restart), guide (get recommendations), injection (session overrides for injected guidance), session (manage execution sessions — list/clear/inspect; cancel moved to prompt_engine), changes (resource change audit log), execution_history (chain execution ledger, newest first), skills_sync (export canonical resources to client skill packages — set operation to status|export|sync|diff|pull|clone).",
-        "operation": "Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list; analytics view/reset/history; config list/keys/validate; maintenance restart; injection status/override/reset; session list/clear/inspect; changes list; execution_history list; skills_sync status/export/sync/diff/pull/clone).",
+        "operation": "Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list; analytics view/reset/history; config list/keys/get/validate; maintenance restart; injection status/override/reset; session list/clear/inspect; changes list; execution_history list; skills_sync status/export/sync/diff/pull/clone).",
         "session_id": "Target session ID or chain ID for session operations.",
         "framework": "Target framework for switch operations. Use system_control(action:'framework', operation:'list') to see available frameworks.",
         "reason": "Audit reason for framework/gate toggles or admin actions.",
@@ -70,7 +70,7 @@
         "search_query": "Filter gates by keyword (matches ID, name, or description). Use with gates:list action.",
         "confirm": "Required `true` for operations that replace or discard state: analytics reset and maintenance restart. Each refuses without it.",
         "limit": "Maximum entries to return, for analytics history, changes list and execution_history list.",
-        "config": "For config validate only: `{ key, value, operation: \"validate\" }` checks whether `value` would be valid for `key`, without writing it. Omit `config` and set the top-level `operation` to `list` (whole loaded configuration), `keys` (declared schema keys) or `validate` (load-time schema check).",
+        "config": "For config `get`: `{ operation: \"get\", key }` returns that key's effective value and source. For config `validate` only: `{ key, value, operation: \"validate\" }` checks whether `value` would be valid for `key`, without writing it. Omit `config` and set the top-level `operation` to `list` (whole loaded configuration), `keys` (declared schema keys) or `validate` (load-time schema check).",
         "type": "For injection override: the injection type to override.",
         "enabled": "For injection override: `true` turns the injection on, `false` turns it off. Required.",
         "scope": "Read by two actions with different values. skills_sync: `user` (default) or `project` client directories. injection override: `session` (default), `chain` or `step`. Each action refuses the other's values.",

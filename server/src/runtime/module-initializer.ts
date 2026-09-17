@@ -303,7 +303,7 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
     try {
       // Read here rather than at the FrameworkStateStore site below: the tracker is
       // constructed first, and a value read after construction never reaches it.
-      const trackerWorkspaceId = configManager.getConfig().identity?.launchDefaults?.workspaceId;
+      const trackerWorkspaceId = configManager.getConfig().identity.launchDefaults.workspaceId;
       resourceChangeTracker = await initializeResourceChangeTracker(
         logger,
         serverRoot,
@@ -352,7 +352,7 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
   const currentFrameworkConfig = configManager.getFrameworksConfig();
   // Read before construction: the store seeds its in-memory default state from this value,
   // so supplying it afterwards would leave the seed on the built-in fallback.
-  const workspaceId = configManager.getConfig().identity?.launchDefaults?.workspaceId;
+  const workspaceId = configManager.getConfig().identity.launchDefaults.workspaceId;
   const frameworkStateStore = await createFrameworkStateStore(logger, frameworkStateRoot, {
     // Read through the config manager each time, not copied now: it reloads `config.json` when
     // the file changes, so the fallback follows an edited `frameworks.defaultFramework` exactly as

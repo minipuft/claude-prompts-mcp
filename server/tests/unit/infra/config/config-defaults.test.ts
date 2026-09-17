@@ -9,32 +9,21 @@
  * default that only the schema and this loader's own default ever compared against each other);
  * this pins the result so a future drift goes red here first.
  *
- * Compared through the `ConfigManager` READER surface, not through raw `getConfig()`: several
- * sections (`gates`, `resources`, `logging`) are deliberately carried across RAW at load time and
- * defaulted only by their OWNING getter (`getGatesConfig()`, etc — see the `'deferred'` vs
- * `'default'` distinction documented on `ConfigValueSource` in `config-manager.ts`). A raw
- * `getConfig()` comparison would show a populated object (shipped file sets the section) against
- * `undefined` (an empty file never sets it) for those sections regardless of whether the leaf
- * VALUES agree — that is a structural fact of the loader, not a claim about defaults. The getter
- * surface is what a real consumer reads, so it is the level at which "the shipped file holds no
- * override" is actually testable.
+ * Compared at BOTH levels, which row 6.2 is what made possible. The raw `getConfig()` comparison
+ * is the whole claim in one assertion: since every section resolves at load time, the shipped file
+ * and an empty one produce deep-equal runtime configs, sections included. It used to be untestable
+ * — `gates`, `resources`, `logging`, `phaseGuards`, `verification` and `identity` were carried
+ * across raw, so the two sides differed structurally (a populated object against `undefined`)
+ * regardless of whether the leaf VALUES agreed, and `prompts.registerWithMcp` had no
+ * `ConfigManager`-layer default at all because its effective `true` lived three layers down in
+ * `modules/prompts/converter.ts`. The getter-surface comparison is kept beside it: it is what a
+ * real consumer reads, and it also covers the two getters that are not a projection of `Config`
+ * (`getGatesConfig()`'s rename, `getInjectionConfig()`'s shape translation).
  *
- * Deliberately excluded, and why:
- * - `prompts.registerWithMcp` (`getPromptsRegisterWithMcp()`): has no default at the
- *   `ConfigManager` layer at all — it returns `undefined` absent a file value. The effective
- *   default (`true`) is a hard-coded fallback three layers down, in
- *   `modules/prompts/converter.ts` (`resolveRegisterWithMcp`, step 4), invisible to this loader.
- *   Shipped `true` therefore does not equal empty-file `undefined` at THIS layer even though
- *   runtime behaviour is identical; folding it into a `ConfigManager`-level default would flip its
- *   `getConfigValueWithSource` label from `'deferred'` to `'default'`, a bigger change than this
- *   row makes.
- * - `phaseGuards`, `verification`, `identity`: no `ConfigManager` getter exists for any of the
- *   three — consumers read `Config` directly and carry their own literal default (e.g.
- *   `pipeline-builder.ts`'s own `?? 'enforce'`), so there is no getter-level claim to make here.
- * - `getPort()` / `getLoggingConfig()`'s env-override branches (`PORT`, `LOG_LEVEL`): both getters
- *   are exercised through `getServerConfig().port` and the logging snapshot below instead, with
- *   `LOG_LEVEL` cleared for the duration, so an ambient env var in the runner cannot make this
- *   flaky. `config-value-source.test.ts` owns the override behaviour itself.
+ * Still not compared: `getPort()` / `getLoggingConfig()`'s env-override branches (`PORT`,
+ * `LOG_LEVEL`). Both getters are exercised through `getServerConfig().port` and the logging
+ * snapshot below instead, with `LOG_LEVEL` cleared for the duration, so an ambient env var in the
+ * runner cannot make this flaky. `config-value-source.test.ts` owns the override behaviour itself.
  */
 
 import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
@@ -75,7 +64,8 @@ async function loadShipped() {
 function snapshot(manager: ConfigLoader) {
   return {
     server: manager.getServerConfig(),
-    promptsDirectory: manager.getPromptsConfig()?.directory,
+    promptsDirectory: manager.getPromptsConfig().directory,
+    promptsRegisterWithMcp: manager.getPromptsRegisterWithMcp(),
     transport: manager.getTransportMode(),
     logging: manager.getLoggingConfig(),
     frameworks: manager.getFrameworksConfig(),
@@ -107,6 +97,8 @@ describe('config defaults, aligned to the shipped config.json (row 4.6)', () => 
     const { manager: emptyManager, cleanup } = await loadFrom({ version: 5 });
 
     try {
+      // Raw `Config`, section for section — the comparison row 6.2 made possible.
+      expect(shippedManager.getConfig()).toEqual(emptyManager.getConfig());
       expect(snapshot(shippedManager)).toEqual(snapshot(emptyManager));
     } finally {
       await cleanup();
@@ -121,6 +113,8 @@ describe('config defaults, aligned to the shipped config.json (row 4.6)', () => 
     });
 
     try {
+      expect(overrideManager.getConfig()).not.toEqual(baselineManager.getConfig());
+
       const baseline = snapshot(baselineManager);
       const override = snapshot(overrideManager);
 

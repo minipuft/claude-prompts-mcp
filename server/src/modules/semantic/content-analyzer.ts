@@ -30,8 +30,9 @@ const CACHE_EXPIRY_MS = 300000; // 5 minutes
  * It used to be constructed with `SemanticAnalysisConfig`, stored it, and exposed it through
  * `getConfig`/`updateConfig` — but read no field from it. The last real read (a model-integration
  * term in the cache key) went with the LLM side client, and both accessors had zero callers
- * outside tests. The `analysis.semanticAnalysis` config section is still parsed and still warns at
- * startup; it simply no longer reaches this class, because it never fed a decision here.
+ * outside tests. The `analysis.semanticAnalysis` config section was removed in 5.0 — a 4.x file
+ * carrying it is dropped on load with a notice — and it never reached this class anyway, because
+ * it never fed a decision here.
  */
 export class ContentAnalyzer implements ContentAnalyzerPort {
   private logger: Logger;

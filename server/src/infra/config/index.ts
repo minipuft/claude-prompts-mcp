@@ -10,6 +10,7 @@ import { readFile } from 'fs/promises';
 import os from 'node:os';
 import path from 'path';
 
+import { translateConfigFile } from './config-file-translation.js';
 import { getParsedConfigSchema, validateConfigAgainstSchema } from './config-schema-validator.js';
 import { createLogger, getDefaultLoggerConfig } from '../logging/index.js';
 
@@ -21,17 +22,24 @@ const logger = createLogger(
   })
 );
 
-import type { ConfigFile, ConfigFileVersioning } from '#shared/types/config-file.js';
+import type { ConfigFile } from '#shared/types/config-file.js';
 import type {
   ConfigSchemaValidationResult,
   ConfigValueWithSource,
 } from '#shared/types/config-manager.js';
+import type { ConfigFileTranslation } from './config-file-translation.js';
 
+// Imported from the defining module rather than the barrel: all four are new to this file in row
+// 6.2 and the barrel does not re-export the first three.
+import {
+  DEFAULT_PROMPTS_CONFIG,
+  type IdentityConfig,
+  type PhaseGuardsConfig,
+  type ServerConfig,
+} from '#shared/types/core-config.js';
 import {
   Config,
-  AnalysisConfig,
   FrameworkInjectionConfig,
-  LLMIntegrationConfig,
   LoggingConfig,
   ResolvedFrameworkConfig,
   ExecutionConfig,
@@ -40,6 +48,7 @@ import {
   VersioningConfig,
   ResourcesConfig,
   TelemetryConfig,
+  VerificationConfig,
   DEFAULT_VERSIONING_CONFIG,
   DEFAULT_TELEMETRY_CONFIG,
   DEFAULT_GATES_CONFIG,
@@ -51,71 +60,6 @@ import {
 import { DEFAULT_FRAMEWORK_ID } from '#shared/utils/constants.js';
 // Removed: ToolDescriptionLoader import to break circular dependency
 // Now injected via dependency injection pattern
-
-/**
- * Config keys the CLI accepted and no reader ever consulted.
- *
- * `cpm enable gates` wrote `gates.mode: "on"` and reported success; every runtime reader
- * consulted `gates.enabled`. The write path (`config-operations.ts` `applyConfigChange`) assigns
- * dot-keys verbatim, so there was never a translation step and the two spellings never met — the
- * command silently changed nothing, for all ten subsystems it advertises. The camelCase versioning
- * pair is the same failure on a different axis: the CLI took `maxVersions`, the runtime reads
- * `max_versions`.
- *
- * The inert spelling is gone from the CLI surface, so nothing writes these any more. This fold
- * exists only for `config.json` files already on disk carrying one.
- *
- * RETIREMENT CONDITION: delete this table and its call when no supported upgrade path starts from
- * a config written before the CLI surface was corrected — i.e. one full major cycle. The three
- * modes a reader *does* consult (`telemetry.mode`, `phaseGuards.mode`, `identity.mode`) are
- * deliberately absent; folding those would destroy live settings.
- */
-const INERT_SPELLINGS: ReadonlyArray<{
-  path: readonly string[];
-  from: string;
-  to: string;
-  /** `on`/`off` becomes a boolean; the camelCase pair carries its value across unchanged. */
-  coerce: 'onOff' | 'passthrough';
-}> = [
-  { path: ['gates'], from: 'mode', to: 'enabled', coerce: 'onOff' },
-  { path: ['frameworks'], from: 'mode', to: 'enabled', coerce: 'onOff' },
-  // `resources` has no top-level `enabled` — `registerWithMcp` is that section's master switch.
-  { path: ['resources'], from: 'mode', to: 'registerWithMcp', coerce: 'onOff' },
-  { path: ['resources', 'prompts'], from: 'mode', to: 'enabled', coerce: 'onOff' },
-  { path: ['resources', 'gates'], from: 'mode', to: 'enabled', coerce: 'onOff' },
-  { path: ['resources', 'frameworks'], from: 'mode', to: 'enabled', coerce: 'onOff' },
-  { path: ['resources', 'observability'], from: 'mode', to: 'enabled', coerce: 'onOff' },
-  { path: ['resources', 'logs'], from: 'mode', to: 'enabled', coerce: 'onOff' },
-  { path: ['verification', 'isolation'], from: 'mode', to: 'enabled', coerce: 'onOff' },
-  // This entry outlives its target on purpose. `analysis.semanticAnalysis` is deprecated and no
-  // longer settable from either tool surface, but it is still parsed for one cycle, so a config
-  // written with the inert `mode` spelling must still normalize to the one key the deprecation
-  // warning names — otherwise a user is told to remove a section whose spelling we refused to
-  // recognize. It retires WITH the section, not on the schedule above.
-  {
-    path: ['analysis', 'semanticAnalysis', 'llmIntegration'],
-    from: 'mode',
-    to: 'enabled',
-    coerce: 'onOff',
-  },
-  { path: ['versioning'], from: 'mode', to: 'enabled', coerce: 'onOff' },
-  { path: ['versioning'], from: 'maxVersions', to: 'max_versions', coerce: 'passthrough' },
-  { path: ['versioning'], from: 'autoVersion', to: 'auto_version', coerce: 'passthrough' },
-];
-
-/** Walks `path`, returning the containing object only if every segment is a live object. */
-function resolveContainer(
-  root: Record<string, unknown>,
-  segments: readonly string[]
-): Record<string, unknown> | undefined {
-  let current: Record<string, unknown> = root;
-  for (const segment of segments) {
-    const next = current[segment];
-    if (next === null || typeof next !== 'object' || Array.isArray(next)) return undefined;
-    current = next as Record<string, unknown>;
-  }
-  return current;
-}
 
 /**
  * Walks a dot-path key (`"server.port"`) over an arbitrary value tree, returning the leaf or
@@ -166,49 +110,8 @@ function collectSchemaKeys(schemaNode: unknown, prefix = ''): string[] {
 const VALID_LOG_LEVELS: string[] = ['DEBUG', 'INFO', 'WARN', 'ERROR'];
 
 /**
- * Adopts each inert spelling into its canonical key, then deletes the inert one so a config sees
- * exactly one spelling per concept. The canonical key wins when both are present — an explicit
- * canonical value is the newer intent, and the inert one never did anything anyway.
- *
- * Mutates in place: it runs against the loaded config before defaults, which is the only point
- * where the distinction between "absent" and "defaulted" still exists.
- */
-function adoptInertSpellings(root: Record<string, unknown>): void {
-  for (const { path: segments, from, to, coerce } of INERT_SPELLINGS) {
-    const container = resolveContainer(root, segments);
-    if (!container || !(from in container)) continue;
-
-    if (!(to in container) || container[to] === undefined) {
-      const raw = container[from];
-      if (coerce === 'onOff') {
-        // Anything that is not the literal 'on'/'off' the CLI validated is dropped rather than
-        // guessed at: a wrong boolean here silently flips a subsystem.
-        if (raw === 'on' || raw === 'off') container[to] = raw === 'on';
-      } else {
-        container[to] = raw;
-      }
-    }
-
-    delete container[from];
-  }
-}
-
-/**
  * Default configuration values
  */
-const DEFAULT_ANALYSIS_CONFIG: AnalysisConfig = {
-  semanticAnalysis: {
-    llmIntegration: {
-      enabled: false,
-      apiKey: null,
-      endpoint: null,
-      model: 'gpt-4',
-      maxTokens: 1000,
-      temperature: 0.1,
-    },
-  },
-};
-
 const DEFAULT_FRAMEWORKS_CONFIG: ResolvedFrameworkConfig = {
   dynamicToolDescriptions: true,
   // FrameworkManager and FrameworkStateStore both receive this value rather than carrying
@@ -222,7 +125,7 @@ const DEFAULT_FRAMEWORKS_CONFIG: ResolvedFrameworkConfig = {
 };
 
 const DEFAULT_CHAIN_SESSION_CONFIG: ChainSessionConfig = {
-  sessionTimeoutMinutes: 24 * 60,
+  timeoutMinutes: 24 * 60,
   reviewTimeoutMinutes: 30,
   cleanupIntervalMinutes: 5,
 };
@@ -253,40 +156,72 @@ const DEFAULT_RESOURCES_CONFIG: ResourcesConfig = {
  */
 const DEFAULT_TRANSPORT_MODE: TransportMode = 'stdio';
 
-const DEFAULT_CONFIG: Config = {
-  server: {
-    name: 'claude-prompts',
-    version: '1.0.0',
-    port: 9090,
-  },
-  prompts: {
-    directory: 'resources/prompts',
-  },
-  analysis: DEFAULT_ANALYSIS_CONFIG,
-  gates: DEFAULT_GATES_CONFIG,
-  frameworks: DEFAULT_FRAMEWORKS_CONFIG,
-  chainSessions: DEFAULT_CHAIN_SESSION_CONFIG,
-  versioning: DEFAULT_VERSIONING_CONFIG,
+const DEFAULT_SERVER_CONFIG: ServerConfig = {
+  name: 'claude-prompts',
+  version: '1.0.0',
+  port: 9090,
+};
+
+const DEFAULT_LOGGING_CONFIG: LoggingConfig = {
+  directory: './logs',
+  level: 'info',
+};
+
+const DEFAULT_PHASE_GUARDS_CONFIG: PhaseGuardsConfig = {
+  mode: 'enforce',
+  maxRetries: 2,
 };
 
 /**
- * What actually reaches {@link normalizeConfigFile}: the 5.0 `ConfigFile` shape plus the two
- * things the steps before it leave on a parsed file.
+ * Verification (Ralph Loops) defaults.
  *
- * - `analysis` is the deprecated section `ConfigFile` deliberately omits — it is no longer a 5.0
- *   key, and this loader still parses it for one cycle so an existing config keeps its values
- *   (see {@link ConfigLoader.warnAnalysisSectionDeprecated}).
- * - `versioning.max_versions` / `versioning.auto_version` are what `adoptInertSpellings` WRITES:
- *   the file spells that pair camelCase, every runtime reader spells it snake_case, and the fold
- *   runs before this type is applied.
- * - `version` is optional here and required on `ConfigFile`: a file already on disk may predate
- *   the key entirely, and translating such a file into the 5.0 shape is a later step of this
- *   initiative. Until it lands, an undeclared version means "read what is there".
+ * Nothing outside this loader reads `Config.verification` today (`rg -n "\.verification\b" src`
+ * returns this file only), so `config.schema.json`'s `@default` tags were the sole statement of
+ * these values and no code default existed to disagree with them. They are restated here so the
+ * section resolves like every other one.
  */
-type AdoptedConfigFile = Omit<ConfigFile, 'version'> & {
-  version?: ConfigFile['version'];
-  analysis?: Partial<AnalysisConfig>;
-  versioning?: ConfigFileVersioning & { max_versions?: number; auto_version?: boolean };
+const DEFAULT_VERIFICATION_CONFIG: VerificationConfig = {
+  inContextAttempts: 3,
+  isolation: {
+    enabled: true,
+    maxBudget: 1,
+    timeout: 300,
+    permissionMode: 'delegate',
+  },
+};
+
+/**
+ * Identity defaults. `mode` and `allowPerRequestOverride` are the same pair
+ * `toIdentityContext` still falls back to for its non-production callers — kept equal on purpose,
+ * and noted at that site.
+ */
+const DEFAULT_IDENTITY_CONFIG: IdentityConfig = {
+  mode: 'permissive',
+  allowPerRequestOverride: true,
+  launchDefaults: {},
+};
+
+/**
+ * The gates SECTION default, derived from {@link DEFAULT_GATES_CONFIG} rather than restating it.
+ *
+ * `DEFAULT_GATES_CONFIG` is the cross-layer runtime shape (`GateSystemSettings`, internal
+ * spelling); this is the config-file-shaped section `Config.gates` carries, so the one rename the
+ * pair makes visible — `enableFrameworkGates` in, `frameworkGates` out — happens once, here.
+ * `evaluation.defaultMode` has no prior home in code: `judge-prompt-builder.ts` already falls
+ * back to the same `'self'`.
+ *
+ * Row 6.6 removed `directory` from `GatesConfig` (`core-config.ts`): it was a hardcoded
+ * placeholder with no reader — `ConfigFile['gates']` never declared the key, and
+ * `getGatesDirectory()` resolves the gates path through `PathResolver` instead — kept alive only
+ * because the runtime type required it.
+ */
+const DEFAULT_GATES_SECTION: Config['gates'] = {
+  enabled: DEFAULT_GATES_CONFIG.enabled,
+  frameworkGates: DEFAULT_GATES_CONFIG.enableFrameworkGates,
+  executeInlineGateDefinitions: DEFAULT_GATES_CONFIG.executeInlineGateDefinitions,
+  evaluation: { defaultMode: 'self' },
+  harnessCovers: DEFAULT_GATES_CONFIG.harnessCovers,
+  reminderTokenBudget: DEFAULT_GATES_CONFIG.reminderTokenBudget,
 };
 
 /**
@@ -315,9 +250,13 @@ function parseConfigRecord(content: string, configPath: string): Record<string, 
  * `ConfigFile` except `version` is optional and {@link normalizeConfigFile} reads each one through
  * `??` against a default — a key of the wrong type resolves to the value the file holds, exactly
  * as it did before, and a key the file omits resolves to the default.
+ *
+ * `version` included: {@link translateConfigFile} stamps `5` onto every 4.x file it translates and
+ * leaves a declared version alone, so a file carrying the WRONG version still reaches here. Nothing
+ * below reads the member — the schema's `const 5` is what reports it to the operator.
  */
-function asConfigFile(parsed: Record<string, unknown>): AdoptedConfigFile {
-  return parsed;
+function asConfigFile(parsed: Record<string, unknown>): ConfigFile {
+  return parsed as unknown as ConfigFile;
 }
 
 /**
@@ -352,7 +291,7 @@ function normalizeInjection(frameworks: ConfigFile['frameworks']): FrameworkInje
 }
 
 /** Framework settings, with the injection block nested rather than reassembled from flat keys. */
-function normalizeFrameworks(file: AdoptedConfigFile): Config['frameworks'] {
+function normalizeFrameworks(file: ConfigFile): Config['frameworks'] {
   const frameworks = file.frameworks;
   return {
     enabled: frameworks?.enabled ?? true,
@@ -366,14 +305,13 @@ function normalizeFrameworks(file: AdoptedConfigFile): Config['frameworks'] {
 /**
  * Chain session lifetimes, read from the file's ROOT `chainSessions`.
  *
- * The rename the mapping makes visible: the file says `timeoutMinutes`, the runtime reads
- * `sessionTimeoutMinutes`. A cast could not have caught that; this signature does.
+ * File and runtime share one spelling now (row 6.6: `timeoutMinutes` on both), so this is pure
+ * defaulting rather than a rename a cast could not have caught.
  */
-function normalizeChainSessions(file: AdoptedConfigFile): ChainSessionConfig {
+function normalizeChainSessions(file: ConfigFile): ChainSessionConfig {
   const sessions = file.chainSessions;
   return {
-    sessionTimeoutMinutes:
-      sessions?.timeoutMinutes ?? DEFAULT_CHAIN_SESSION_CONFIG.sessionTimeoutMinutes,
+    timeoutMinutes: sessions?.timeoutMinutes ?? DEFAULT_CHAIN_SESSION_CONFIG.timeoutMinutes,
     reviewTimeoutMinutes:
       sessions?.reviewTimeoutMinutes ?? DEFAULT_CHAIN_SESSION_CONFIG.reviewTimeoutMinutes,
     cleanupIntervalMinutes:
@@ -382,84 +320,130 @@ function normalizeChainSessions(file: AdoptedConfigFile): ChainSessionConfig {
 }
 
 /**
- * Gates, carried across key by key and NOT defaulted here.
+ * Gates, resolved leaf by leaf against {@link DEFAULT_GATES_SECTION}.
  *
- * `getGatesConfig()` owns this section's defaults, at read time — which is what lets
- * `getConfigValueWithSource` report an unset gates key as `'deferred'` rather than inventing a
- * value for it. The old wire-to-internal rename that used to live in that getter (the gate
- * definitions-directory field on the internal settings shape) is gone (row 4.7, field deleted row
- * 4.12): the directory is resolved by `getGatesDirectory()`, and nothing ever read the field the
- * old rename produced.
+ * The wire-to-internal rename lives in `getGatesConfig()`, which is now pure name mapping:
+ * `frameworkGates` here becomes `enableFrameworkGates` there. There is no `directory` leaf any
+ * more (row 6.6) — `ConfigFile['gates']` never carried the key, and `getGatesDirectory()` answers
+ * "where do gates live" through `PathResolver` instead.
+ *
+ * `evaluation.strict` and `evaluation.defaultModel` are deliberately left unresolved; see the
+ * `GatesConfig.evaluation` doc for why `strict` cannot be folded into a constant.
  */
-function normalizeGates(file: AdoptedConfigFile): Config['gates'] {
+function normalizeGates(file: ConfigFile): Config['gates'] {
   const gates = file.gates;
-  if (gates === undefined) return undefined;
+  const evaluation = gates?.evaluation;
   return {
-    enabled: gates.enabled,
-    directory: gates.directory,
-    frameworkGates: gates.frameworkGates,
-    executeInlineGateDefinitions: gates.executeInlineGateDefinitions,
-    evaluation: gates.evaluation,
-    harnessCovers: gates.harnessCovers,
-    reminderTokenBudget: gates.reminderTokenBudget,
+    enabled: gates?.enabled ?? DEFAULT_GATES_SECTION.enabled,
+    frameworkGates: gates?.frameworkGates ?? DEFAULT_GATES_SECTION.frameworkGates,
+    executeInlineGateDefinitions:
+      gates?.executeInlineGateDefinitions ?? DEFAULT_GATES_SECTION.executeInlineGateDefinitions,
+    evaluation: {
+      defaultMode: evaluation?.defaultMode ?? DEFAULT_GATES_SECTION.evaluation.defaultMode,
+      defaultModel: evaluation?.defaultModel,
+      strict: evaluation?.strict,
+    },
+    harnessCovers: gates?.harnessCovers ?? DEFAULT_GATES_SECTION.harnessCovers,
+    reminderTokenBudget: gates?.reminderTokenBudget ?? DEFAULT_GATES_SECTION.reminderTokenBudget,
   };
 }
 
 /**
- * Phase guards, carried across only when the file sets the section.
+ * Phase guards, resolved whether or not the file sets the section.
  *
- * The two leaf defaults are the ones every reader already falls back to when the section is absent
- * (`pipeline-builder.ts`, `19-phase-guard-verification-stage.ts`), applied here so a half-set
- * section resolves to a number rather than to `undefined` — that stage computes
- * `maxRetries + 1`.
+ * These are the two values `pipeline-builder.ts` and `19-phase-guard-verification-stage.ts` each
+ * used to fall back to on their own; resolving here is what let those literals go.
  */
-function normalizePhaseGuards(file: AdoptedConfigFile): Config['phaseGuards'] {
+function normalizePhaseGuards(file: ConfigFile): Config['phaseGuards'] {
   const phaseGuards = file.phaseGuards;
-  if (phaseGuards === undefined) return undefined;
-  return { mode: phaseGuards.mode ?? 'enforce', maxRetries: phaseGuards.maxRetries ?? 2 };
-}
-
-/**
- * Logging, carried across only when the file sets the section — `getLoggingConfig()` owns the
- * absent case, with the same two values used here for a half-set one.
- */
-function normalizeLogging(file: AdoptedConfigFile): Config['logging'] {
-  const logging = file.logging;
-  if (logging === undefined) return undefined;
-  return { directory: logging.directory ?? './logs', level: logging.level ?? 'info' };
-}
-
-/** MCP resource toggles, carried across; `getResourcesConfig()` owns their defaults. */
-function normalizeResources(file: AdoptedConfigFile): Config['resources'] {
-  const resources = file.resources;
-  if (resources === undefined) return undefined;
   return {
-    registerWithMcp: resources.registerWithMcp,
-    prompts: resources.prompts,
-    gates: resources.gates,
-    frameworks: resources.frameworks,
-    observability: resources.observability,
-    logs: resources.logs,
+    mode: phaseGuards?.mode ?? DEFAULT_PHASE_GUARDS_CONFIG.mode,
+    maxRetries: phaseGuards?.maxRetries ?? DEFAULT_PHASE_GUARDS_CONFIG.maxRetries,
+  };
+}
+
+/** Logging, resolved here rather than inside `getLoggingConfig()`, which now only applies `LOG_LEVEL`. */
+function normalizeLogging(file: ConfigFile): Config['logging'] {
+  const logging = file.logging;
+  return {
+    directory: logging?.directory ?? DEFAULT_LOGGING_CONFIG.directory,
+    level: logging?.level ?? DEFAULT_LOGGING_CONFIG.level,
+  };
+}
+
+/** MCP resource toggles, resolved leaf by leaf against {@link DEFAULT_RESOURCES_CONFIG}. */
+function normalizeResources(file: ConfigFile): Config['resources'] {
+  const resources = file.resources;
+  const def = DEFAULT_RESOURCES_CONFIG;
+  return {
+    registerWithMcp: resources?.registerWithMcp ?? def.registerWithMcp,
+    prompts: { enabled: resources?.prompts?.enabled ?? def.prompts?.enabled },
+    gates: { enabled: resources?.gates?.enabled ?? def.gates?.enabled },
+    frameworks: { enabled: resources?.frameworks?.enabled ?? def.frameworks?.enabled },
+    observability: {
+      enabled: resources?.observability?.enabled ?? def.observability?.enabled,
+      sessions: resources?.observability?.sessions ?? def.observability?.sessions,
+      metrics: resources?.observability?.metrics ?? def.observability?.metrics,
+    },
+    logs: {
+      enabled: resources?.logs?.enabled ?? def.logs?.enabled,
+      maxEntries: resources?.logs?.maxEntries ?? def.logs?.maxEntries,
+      defaultLevel: resources?.logs?.defaultLevel ?? def.logs?.defaultLevel,
+    },
   };
 }
 
 /**
- * Versioning, reading the snake_case spelling `adoptInertSpellings` writes and the camelCase one
- * the file declares — in that order, because the fold has already run and the canonical key wins.
+ * Verification, resolved leaf by leaf against {@link DEFAULT_VERIFICATION_CONFIG} — previously the
+ * one section carried across raw, straight off the file.
  */
-function normalizeVersioning(file: AdoptedConfigFile): VersioningConfig {
+function normalizeVerification(file: ConfigFile): VerificationConfig {
+  const verification = file.verification;
+  const def = DEFAULT_VERIFICATION_CONFIG;
+  return {
+    inContextAttempts: verification?.inContextAttempts ?? def.inContextAttempts,
+    isolation: {
+      enabled: verification?.isolation?.enabled ?? def.isolation?.enabled,
+      maxBudget: verification?.isolation?.maxBudget ?? def.isolation?.maxBudget,
+      timeout: verification?.isolation?.timeout ?? def.isolation?.timeout,
+      permissionMode: verification?.isolation?.permissionMode ?? def.isolation?.permissionMode,
+    },
+  };
+}
+
+/**
+ * Identity, resolved leaf by leaf. `launchDefaults` is carried across as written — every leaf
+ * inside it is genuinely default-less (a workspace id nobody set has no value to invent) — but
+ * the object itself is always present, so `runtimeOptions` can merge into it without a guard.
+ */
+function normalizeIdentity(file: ConfigFile): IdentityConfig {
+  const identity = file.identity;
+  return {
+    mode: identity?.mode ?? DEFAULT_IDENTITY_CONFIG.mode,
+    allowPerRequestOverride:
+      identity?.allowPerRequestOverride ?? DEFAULT_IDENTITY_CONFIG.allowPerRequestOverride,
+    launchDefaults: identity?.launchDefaults ?? { ...DEFAULT_IDENTITY_CONFIG.launchDefaults },
+  };
+}
+
+/**
+ * Versioning, reading the camelCase spelling the 5.0 file declares — the runtime shares it too
+ * now (row 6.6), so this is pure defaulting rather than a rename. A 4.x file spelling this pair
+ * snake_case is folded into the camelCase one by {@link translateConfigFile} before it reaches
+ * here, so there is one spelling per concept at this point rather than two read in precedence
+ * order.
+ */
+function normalizeVersioning(file: ConfigFile): VersioningConfig {
   const versioning = file.versioning;
   return {
     enabled: versioning?.enabled ?? DEFAULT_VERSIONING_CONFIG.enabled,
-    max_versions:
-      versioning?.max_versions ?? versioning?.maxVersions ?? DEFAULT_VERSIONING_CONFIG.max_versions,
-    auto_version:
-      versioning?.auto_version ?? versioning?.autoVersion ?? DEFAULT_VERSIONING_CONFIG.auto_version,
+    maxVersions: versioning?.maxVersions ?? DEFAULT_VERSIONING_CONFIG.maxVersions,
+    autoVersion: versioning?.autoVersion ?? DEFAULT_VERSIONING_CONFIG.autoVersion,
   };
 }
 
 /** Telemetry, merged over the safe defaults — the same fold the loader has always applied. */
-function normalizeTelemetry(file: AdoptedConfigFile): TelemetryConfig {
+function normalizeTelemetry(file: ConfigFile): TelemetryConfig {
   const telemetry = file.telemetry;
   return {
     ...DEFAULT_TELEMETRY_CONFIG,
@@ -472,76 +456,65 @@ function normalizeTelemetry(file: AdoptedConfigFile): TelemetryConfig {
 }
 
 /**
- * The deprecated `analysis` section, merged with its defaults.
- *
- * Parsed-and-ignored, not parsed-and-dropped: nothing reads the result any more, but `config.json`
- * is declared public API surface, so a config that sets the section keeps its values through the
- * deprecation cycle. Removal is the breaking act.
- */
-function normalizeAnalysis(analysisConfig: Partial<AnalysisConfig> | undefined): AnalysisConfig {
-  const defaults = DEFAULT_ANALYSIS_CONFIG.semanticAnalysis.llmIntegration;
-  const llm: Partial<LLMIntegrationConfig> = analysisConfig?.semanticAnalysis?.llmIntegration ?? {};
-  return {
-    semanticAnalysis: {
-      llmIntegration: {
-        enabled: llm.enabled ?? defaults.enabled,
-        apiKey: llm.apiKey ?? defaults.apiKey,
-        endpoint: llm.endpoint ?? defaults.endpoint,
-        model: llm.model ?? defaults.model,
-        maxTokens: llm.maxTokens ?? defaults.maxTokens,
-        temperature: llm.temperature ?? defaults.temperature,
-      },
-    },
-  };
-}
-
-/**
  * Maps a config FILE onto the resolved runtime `Config`. The one function that crosses that
  * boundary, and the reason the loader no longer casts one shape to the other.
  *
  * Pure: its inputs are the file and this module's `DEFAULT_*` constants, and it mutates neither.
- * Sections this loader has never defaulted at load time (`gates`, `resources`, `logging`,
- * `identity`, `verification`, `phaseGuards`) are carried across only when the file sets them, so
- * an absent key stays absent and its OWNING getter still applies the default at read time —
- * `getConfigValueWithSource` depends on that distinction to label a value `'deferred'` rather than
- * `'default'`.
  *
- * Keys the file may carry that the runtime `Config` has no member for at all — `hooks` (read by
- * the Python hooks straight off the file) and `server.transport` (refused outright when set to
- * anything but `"stdio"`, per Ruling R30: transport is a launch-time-only setting, selected by
- * `--transport` and never by config — see {@link ConfigLoader.loadConfig}) — are not carried
- * across, and `server.transport` specifically is reported by `getConfigValueWithSource` from the
- * raw-file snapshot instead.
+ * **Every section resolves here** (row 6.2 / Ruling R57). There is no longer a class of key that
+ * stays absent until its owning getter defaults it at read time, which is what let
+ * `getConfigValueWithSource` retire the `'deferred'` label: a key the file does not set now
+ * answers with the value the server actually uses, labelled `'default'`. The only values still
+ * absent after this runs are the ones with no default in any layer — `config.schema.json` carries
+ * no `@default` for them either — and `gates.evaluation.strict`, whose only code default is a
+ * function of the resolved mode rather than a constant.
+ *
+ * Keys the file may carry that the runtime `Config` has no member for at all — `hooks`, read by
+ * the Python hooks straight off the file — are not carried across. `server.transport` is not among
+ * them any more: a value other than `"stdio"` is refused before this runs (Ruling R30, transport is
+ * launch-time-only), and the harmless spelling is dropped by {@link translateConfigFile}, so no
+ * `transport` key survives to reach this mapping.
+ *
+ * `Config.analysis` is left unset on purpose. The section is no longer a config key at all: a 4.x
+ * file carrying it has it dropped, with a notice naming the replacement.
  */
-function normalizeConfigFile(file: AdoptedConfigFile): Config {
+function normalizeConfigFile(file: ConfigFile): Config {
   return {
     server: {
-      name: file.server?.name ?? DEFAULT_CONFIG.server.name,
+      name: file.server?.name ?? DEFAULT_SERVER_CONFIG.name,
       // Not a file key: the server's own version is the package's, never an operator's choice.
-      version: DEFAULT_CONFIG.server.version,
-      port: file.server?.port ?? DEFAULT_CONFIG.server.port,
+      version: DEFAULT_SERVER_CONFIG.version,
+      port: file.server?.port ?? DEFAULT_SERVER_CONFIG.port,
     },
     prompts: {
-      directory: file.prompts?.directory ?? DEFAULT_CONFIG.prompts.directory,
-      registerWithMcp: file.prompts?.registerWithMcp,
+      directory: file.prompts?.directory ?? DEFAULT_PROMPTS_CONFIG.directory,
+      registerWithMcp: file.prompts?.registerWithMcp ?? DEFAULT_PROMPTS_CONFIG.registerWithMcp,
     },
-    analysis: normalizeAnalysis(file.analysis),
     gates: normalizeGates(file),
     phaseGuards: normalizePhaseGuards(file),
-    execution: { judge: file.execution?.judge ?? DEFAULT_EXECUTION_CONFIG.judge ?? true },
+    execution: { judge: file.execution?.judge ?? DEFAULT_EXECUTION_CONFIG.judge },
     frameworks: normalizeFrameworks(file),
     chainSessions: normalizeChainSessions(file),
     logging: normalizeLogging(file),
     versioning: normalizeVersioning(file),
-    verification: file.verification,
+    verification: normalizeVerification(file),
     resources: normalizeResources(file),
     telemetry: normalizeTelemetry(file),
-    identity: file.identity,
+    identity: normalizeIdentity(file),
   };
 }
 
 /** A 5.0 file that declares nothing: what a missing or unreadable config resolves to. */
 const EMPTY_CONFIG_FILE: ConfigFile = { version: 5 };
+
+/**
+ * The defaults, as one object — literally what an empty 5.0 file resolves to.
+ *
+ * Not a hand-written second statement of the same values: it is the mapping's own output, so a
+ * default added to a section constant cannot fail to appear here, and the config a `ConfigLoader`
+ * serves before its first `loadConfig()` is the same shape a loaded one serves.
+ */
+const DEFAULT_CONFIG: Config = normalizeConfigFile(EMPTY_CONFIG_FILE);
 
 /**
  * A config file that asks for a transport other than `"stdio"` via `server.transport`.
@@ -563,12 +536,13 @@ export class TransportConfigError extends Error {
 /**
  * Refuses a raw parsed config file whose `server.transport` names anything but `"stdio"`.
  *
- * Runs against the RAW parsed record, before `adoptInertSpellings`/`asConfigFile` — same reason
- * `checkAgainstSchema` does: this checks what the operator actually wrote, not a shape the loader
- * has already rewritten. A `server.transport` left at `"stdio"` (or omitted) still exists as an
- * unrecognized key once the schema stops declaring it, but that half is already covered by the
- * existing schema-warning path (`checkAgainstSchema` / `warnOnSchemaResult`) — this function only
- * covers the half that path cannot: a value the server would otherwise silently ignore.
+ * Runs against the RAW parsed record, BEFORE {@link translateConfigFile}: the translation drops
+ * `server.transport` outright, so a check placed after it would see nothing and a 4.x file asking
+ * for HTTP would start on stdio in silence. Refusing first is what keeps that operator request
+ * answered — with the flag that satisfies it — rather than translated away.
+ *
+ * A `server.transport` left at `"stdio"` (or omitted) needs no report at all: the translation drops
+ * it as a key 5.0 removed, and names it in the one translation notice.
  */
 function assertServerTransportIsStdio(
   rawConfig: Record<string, unknown>,
@@ -636,8 +610,8 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
   private watching: boolean = false;
   private reloadDebounceTimer: NodeJS.Timeout | undefined;
   private frameworksConfigCache: ResolvedFrameworkConfig;
-  /** Deprecation notices are per-process, not per-load — file watching re-enters `loadConfig`. */
-  private warnedAnalysisDeprecated = false;
+  /** Translation notices are per-process, not per-load — file watching re-enters `loadConfig`. */
+  private warnedTranslation = false;
   /**
    * The package's own `config.schema.json`, injected by the composition root. Never read from the
    * config's `$schema`, which is an editor hint. Undefined means the file is not schema-checked.
@@ -646,17 +620,17 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
   /** The schema check of the last successful parse; undefined when none ran or the load failed. */
   private schemaValidation: ConfigSchemaValidationResult | undefined;
   /**
-   * Status + errors of the last result that WARNED. Unlike `warnedAnalysisDeprecated` this is not
+   * Status + errors of the last result that WARNED. Unlike `warnedTranslation` this is not
    * once-per-process: hot reload re-enters `loadConfig`, so an unchanged file must stay quiet while
    * a new mistake must still be reported. Cleared by a valid load, so a reintroduced error warns.
    */
   private lastWarnedSchemaSignature: string | undefined;
   /**
-   * A snapshot of the parsed config FILE, taken before `adoptInertSpellings` rewrites it in place
-   * — that fold renames keys and deletes the old spelling, so without this copy nothing
-   * distinguishes "the file set this key" from "the loader put it there". Undefined when no file
-   * has been successfully parsed (constructed but never loaded, or the last `loadConfig` fell back
-   * to the defaults). Read only by `getConfigValueWithSource`.
+   * A snapshot of the config FILE as the rest of the process sees it — the 5.0 shape, after
+   * {@link translateConfigFile}. Without this copy nothing distinguishes "the file set this key"
+   * from "the loader defaulted it". Undefined when no file has been successfully parsed
+   * (constructed but never loaded, or the last `loadConfig` fell back to the defaults). Read only
+   * by `getConfigValueWithSource`.
    */
   private rawFileConfig: Record<string, unknown> | undefined;
   /**
@@ -696,23 +670,24 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
       // --transport as the fix.
       assertServerTransportIsStdio(parsedRecord, this.configPath);
 
-      // Checked against the RAW file, before the adoption below: that rewrites inert spellings in
-      // place, so a check after it would report the loader's own rewrite and no longer see what
-      // the user wrote.
-      await this.checkAgainstSchema(parsedRecord);
+      // A file that declares no `version` was written against the 4.x shape: it is translated here,
+      // in memory, and everything below reads one shape. `version: 5` (or any other declared
+      // value) passes through untouched.
+      const translation = translateConfigFile(parsedRecord);
+      this.warnConfigFileTranslated(translation);
 
-      // Snapshot before `adoptInertSpellings` mutates the parsed record: that fold renames keys
-      // and deletes the old spelling, and this copy is the only record of what the file itself
-      // declared. Read only by `getConfigValueWithSource`.
-      this.rawFileConfig = structuredClone(parsedRecord);
+      // Checked against the TRANSLATED file, not the raw one (ruling R33): a 4.x key the
+      // translation handled is not drift the operator has to act on, and reporting it would tell
+      // them to fix a file the server just read correctly. What the schema still reports is what
+      // the translation could NOT account for — a typo, or a key from no shape at all.
+      await this.checkAgainstSchema(translation.file);
 
-      // Runs before the mapping, not inside it: an adopted value must be visible to the defaulting
-      // below, or the default overwrites what the user actually asked for.
-      adoptInertSpellings(parsedRecord);
+      // Snapshot of the translated file, which is the shape every reader below sees — so
+      // `getConfigValueWithSource` labels a user's 4.x key `'file'` under its 5.0 name rather than
+      // under a spelling nothing else in the process uses.
+      this.rawFileConfig = structuredClone(translation.file);
 
-      const file = asConfigFile(parsedRecord);
-      // Announced from the FILE, so a config that never mentions the section stays silent.
-      if (file.analysis) this.warnAnalysisSectionDeprecated(file.analysis);
+      const file = asConfigFile(translation.file);
 
       this.config = normalizeConfigFile(file);
 
@@ -764,10 +739,17 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
    * (an unset or invalid env var falls through to the file/default walk below, same as those
    * getters already do).
    *
-   * Below that: `'file'` when the raw file set it, `'default'` when the file didn't but
-   * `normalizeConfigFile` resolved a real value at load time, and `'deferred'` — see
-   * {@link ConfigValueSource} — when neither did, because the key's section is one this loader
-   * never writes back and only its owning getter defaults at read time.
+   * Below that: `'file'` when the raw file set it, `'default'` otherwise — and `'default'` now
+   * carries the value the server actually uses, because `normalizeConfigFile` resolves every
+   * section at load time (row 6.2 / R57). The `'deferred'` label this method used to return is
+   * gone with the state it named.
+   *
+   * A `'default'` answer whose `value` is `undefined` is still possible, and now means exactly
+   * one thing: the key has no default in any layer (`config.schema.json` declares no `@default`
+   * for it either) — `gates.evaluation.defaultModel`, `telemetry.attributePolicy.allowlist`, the
+   * `identity.launchDefaults.*` leaves, `gates.evaluation.strict`, and `hooks.expandedOutput`,
+   * which `Config` has no member for. `config-value-source.test.ts` pins that set as a literal,
+   * so a NEW undefined answer is a red test rather than a label.
    */
   getConfigValueWithSource(key: string): ConfigValueWithSource {
     if (key === 'server.port' && process.env['PORT']) {
@@ -792,30 +774,19 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
     const mergedValue = readDotPath(this.config, key);
 
     if (rawValue !== undefined) {
-      // Legacy-spelling exception: `adoptInertSpellings` renames a handful of keys inside
-      // `this.config` (e.g. `gates.mode` -> `gates.enabled`) and deletes the old spelling, so the
-      // OLD path can be present in `rawFileConfig` (the file, snapshotted before the rename) yet
-      // resolve to `undefined` on the merged side under that same old path. There is no discarded
-      // default to fall back to here — the raw value IS what the rename carried forward under a
-      // different key — so this is the one case where the raw file's own value is reported.
+      // The snapshot is post-translation, so a 4.x spelling the operator wrote is present here
+      // under its 5.0 name and nowhere else — the legacy-spelling case this fallback used to
+      // exist for (`gates.mode` present raw, `undefined` merged) can no longer arise.
+      // What remains is the narrower one it also always covered: a key the runtime `Config` has
+      // no member for at all — `hooks.expandedOutput`, read by the Python hooks straight off the
+      // file. The file set it, so reporting `undefined` would show a live setting as unset.
       return { key, value: mergedValue !== undefined ? mergedValue : rawValue, source: 'file' };
     }
 
-    // Neither the file nor `normalizeConfigFile` produced a value: `gates`, `resources`,
-    // `logging`, `identity`, `verification`, `phaseGuards` and `hooks` are carried across only
-    // when the file sets them (unlike `server`/`prompts`/`analysis`/`frameworks`/`chainSessions`/
-    // `execution`/`versioning`/`telemetry`, which always resolve to a concrete value here), so a
-    // key living in one of those sections stays genuinely absent from `this.config` until its
-    // OWNING getter
-    // applies a default at read time (e.g. `gates.enabled` inside `getGatesConfig()`). Reporting
-    // `'default'` with an `undefined` value here would be indistinguishable from a default that IS
-    // `undefined` by design (`getPromptsRegisterWithMcp()`, `telemetry.attributePolicy.allowlist`)
-    // — exactly the false-confidence case `getConfigValueWithSource` exists to end. `'deferred'`
-    // names the state honestly instead of guessing at a value no layer has produced yet.
-    if (mergedValue === undefined) {
-      return { key, value: undefined, source: 'deferred' };
-    }
-
+    // The file did not set it, so whatever `normalizeConfigFile` resolved IS the default — and
+    // it resolves every section, so this is the value the server uses rather than a placeholder
+    // some getter will replace later. `undefined` here is no longer ambiguous: it means the key
+    // has no default in any layer, which is a property of the key, not of the load.
     return { key, value: mergedValue, source: 'default' };
   }
 
@@ -866,11 +837,12 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
   }
 
   /**
-   * Get global registerWithMcp default from prompts config
-   * Returns undefined if not specified (allowing downstream defaults)
+   * The global MCP-registration default for prompts. Always a boolean: the loader resolves the
+   * key, so `modules/prompts/converter.ts` no longer needs a fallback of its own for the
+   * production path.
    */
-  getPromptsRegisterWithMcp(): boolean | undefined {
-    return this.config.prompts?.registerWithMcp;
+  getPromptsRegisterWithMcp(): boolean {
+    return this.config.prompts.registerWithMcp;
   }
 
   /**
@@ -912,12 +884,8 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
    * Supports LOG_LEVEL env var to override configured log level
    */
   getLoggingConfig(): LoggingConfig {
-    const defaultLogging: LoggingConfig = {
-      directory: './logs',
-      level: 'info',
-    };
-
-    const configLogging = this.config.logging || defaultLogging;
+    // Already resolved at load time — this getter owns the environment override and nothing else.
+    const configLogging = this.config.logging;
 
     // Override log level from LOG_LEVEL environment variable if present
     const envLogLevel = process.env['LOG_LEVEL'];
@@ -947,14 +915,13 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
    * Reads from frameworks config section
    */
   getFrameworksConfig(): ResolvedFrameworkConfig {
+    // Projection only: `ResolvedFrameworkConfig` is the `frameworks` section minus `enabled`,
+    // which `normalizeInjection` has already folded into `injection.systemPrompt.enabled`.
     const frameworks = this.config.frameworks;
     return {
-      dynamicToolDescriptions:
-        frameworks?.dynamicToolDescriptions ?? DEFAULT_FRAMEWORKS_CONFIG.dynamicToolDescriptions,
-      defaultFramework: frameworks?.defaultFramework ?? DEFAULT_FRAMEWORKS_CONFIG.defaultFramework,
-      // Already nested and fully defaulted by `normalizeInjection`; the fallback covers a manager
-      // asked for its config before its first load.
-      injection: frameworks?.injection ?? DEFAULT_FRAMEWORKS_CONFIG.injection,
+      dynamicToolDescriptions: frameworks.dynamicToolDescriptions,
+      defaultFramework: frameworks.defaultFramework,
+      injection: frameworks.injection,
     };
   }
 
@@ -963,16 +930,15 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
    * Reads from gates config section with new property names
    */
   getGatesConfig(): GateSystemSettings {
-    const gatesConfig = this.config.gates ?? {};
+    // Name mapping only: the config-file spelling `frameworkGates` becomes the internal
+    // `enableFrameworkGates`. Every value is already resolved by `normalizeGates`.
+    const gatesConfig = this.config.gates;
     return {
-      enabled: gatesConfig.enabled ?? DEFAULT_GATES_CONFIG.enabled,
-      enableFrameworkGates: gatesConfig.frameworkGates ?? DEFAULT_GATES_CONFIG.enableFrameworkGates,
-      executeInlineGateDefinitions:
-        gatesConfig.executeInlineGateDefinitions ??
-        DEFAULT_GATES_CONFIG.executeInlineGateDefinitions,
-      harnessCovers: gatesConfig.harnessCovers ?? DEFAULT_GATES_CONFIG.harnessCovers,
-      reminderTokenBudget:
-        gatesConfig.reminderTokenBudget ?? DEFAULT_GATES_CONFIG.reminderTokenBudget,
+      enabled: gatesConfig.enabled,
+      enableFrameworkGates: gatesConfig.frameworkGates,
+      executeInlineGateDefinitions: gatesConfig.executeInlineGateDefinitions,
+      harnessCovers: gatesConfig.harnessCovers,
+      reminderTokenBudget: gatesConfig.reminderTokenBudget,
     };
   }
 
@@ -981,99 +947,42 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
    * Reads from the root `chainSessions` config section
    */
   getChainSessionConfig(): ChainSessionConfig {
-    const sessions = this.config.chainSessions;
-    return {
-      sessionTimeoutMinutes:
-        sessions?.sessionTimeoutMinutes ?? DEFAULT_CHAIN_SESSION_CONFIG.sessionTimeoutMinutes,
-      reviewTimeoutMinutes:
-        sessions?.reviewTimeoutMinutes ?? DEFAULT_CHAIN_SESSION_CONFIG.reviewTimeoutMinutes,
-      cleanupIntervalMinutes:
-        sessions?.cleanupIntervalMinutes ?? DEFAULT_CHAIN_SESSION_CONFIG.cleanupIntervalMinutes,
-    };
+    return this.config.chainSessions;
   }
 
   /**
    * Get execution strategy configuration
    */
   getExecutionConfig(): ExecutionConfig {
-    const judgeValue = this.config.execution?.judge;
-    if (judgeValue !== undefined) {
-      return { judge: judgeValue };
-    }
-    return { judge: DEFAULT_EXECUTION_CONFIG.judge ?? true };
+    return this.config.execution;
   }
 
   /**
    * Get judge enabled status (convenience method)
    */
   isJudgeEnabled(): boolean {
-    return this.getExecutionConfig().judge ?? true;
+    return this.getExecutionConfig().judge;
   }
 
   /**
    * Get versioning configuration for resource history tracking
    */
   getVersioningConfig(): VersioningConfig {
-    const versioningConfig: Partial<VersioningConfig> = this.config.versioning ?? {};
-    return {
-      enabled: versioningConfig.enabled ?? DEFAULT_VERSIONING_CONFIG.enabled,
-      max_versions: versioningConfig.max_versions ?? DEFAULT_VERSIONING_CONFIG.max_versions,
-      auto_version: versioningConfig.auto_version ?? DEFAULT_VERSIONING_CONFIG.auto_version,
-    };
+    return this.config.versioning;
   }
 
   /**
    * Get MCP resources configuration
    */
   getResourcesConfig(): ResourcesConfig {
-    const cfg = this.config.resources ?? {};
-    const def = DEFAULT_RESOURCES_CONFIG;
-    return {
-      registerWithMcp: cfg.registerWithMcp ?? def.registerWithMcp,
-      prompts: {
-        enabled: cfg.prompts?.enabled ?? def.prompts?.enabled ?? true,
-      },
-      gates: {
-        enabled: cfg.gates?.enabled ?? def.gates?.enabled ?? true,
-      },
-      frameworks: {
-        enabled: cfg.frameworks?.enabled ?? def.frameworks?.enabled ?? true,
-      },
-      observability: {
-        enabled: cfg.observability?.enabled ?? def.observability?.enabled ?? true,
-        sessions: cfg.observability?.sessions ?? def.observability?.sessions ?? true,
-        metrics: cfg.observability?.metrics ?? def.observability?.metrics ?? true,
-      },
-      logs: {
-        enabled: cfg.logs?.enabled ?? def.logs?.enabled ?? true,
-        maxEntries: cfg.logs?.maxEntries ?? def.logs?.maxEntries ?? 500,
-        defaultLevel: cfg.logs?.defaultLevel ?? def.logs?.defaultLevel ?? 'info',
-      },
-    };
+    return this.config.resources;
   }
 
   /**
    * Get OpenTelemetry configuration with safe defaults.
    */
   getTelemetryConfig(): TelemetryConfig {
-    const cfg: Partial<TelemetryConfig> = this.config.telemetry ?? {};
-    return {
-      enabled: cfg.enabled ?? DEFAULT_TELEMETRY_CONFIG.enabled,
-      mode: cfg.mode ?? DEFAULT_TELEMETRY_CONFIG.mode,
-      exporterEndpoint: cfg.exporterEndpoint ?? DEFAULT_TELEMETRY_CONFIG.exporterEndpoint,
-      samplingRate: cfg.samplingRate ?? DEFAULT_TELEMETRY_CONFIG.samplingRate,
-      attributePolicy: {
-        businessContext:
-          cfg.attributePolicy?.businessContext ??
-          DEFAULT_TELEMETRY_CONFIG.attributePolicy.businessContext,
-        rawCommands:
-          cfg.attributePolicy?.rawCommands ?? DEFAULT_TELEMETRY_CONFIG.attributePolicy.rawCommands,
-        rawResponses:
-          cfg.attributePolicy?.rawResponses ??
-          DEFAULT_TELEMETRY_CONFIG.attributePolicy.rawResponses,
-        allowlist: cfg.attributePolicy?.allowlist,
-      },
-    };
+    return this.config.telemetry;
   }
 
   /**
@@ -1296,22 +1205,51 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
   // Removed: ToolDescriptionLoader methods - now handled via dependency injection in runtime/application.ts
 
   /**
-   * Emit the `analysis` deprecation notice at most once per process.
+   * Emit the 4.x -> 5.0 translation notice at most once per process.
    *
-   * Fires only when a config file actually carries the section — the defaulted case is silent,
-   * because a user who never wrote the key has nothing to act on. Names the replacement rather
-   * than only the removal: a warning that says "stop doing X" without saying what to do instead
-   * reads as breakage.
+   * Fires only when the translation actually moved or dropped something — a 4.x file whose every
+   * key is already spelled the 5.0 way has nothing for the operator to act on, and a `version: 5`
+   * file is never translated at all, so both stay silent. Once per process, not once per load:
+   * file watching re-enters `loadConfig`, and a notice that repeats per reload becomes noise the
+   * operator filters out, which is how a deprecation goes unread.
+   *
+   * Names every pair and every dropped key rather than summarising: the operator's next act is to
+   * rewrite `config.json`, and a count tells them nothing about which lines to change.
    */
-  private warnAnalysisSectionDeprecated(analysisConfig: Partial<AnalysisConfig>): void {
-    if (this.warnedAnalysisDeprecated || !analysisConfig.semanticAnalysis) return;
-    this.warnedAnalysisDeprecated = true;
-    logger.warn(
-      '[CONFIG] `analysis.semanticAnalysis` is deprecated and no longer read by any runtime path. ' +
-        'It is still parsed so existing configs keep loading, and will be removed in the next major. ' +
-        'For model-graded gate evaluation use the `%judge` modifier or `gates.evaluation.defaultMode`. ' +
-        'Remove the `analysis` section from config.json to silence this notice.'
+  private warnConfigFileTranslated(translation: ConfigFileTranslation): void {
+    if (this.warnedTranslation) return;
+    if (translation.translated.length === 0 && translation.dropped.length === 0) return;
+    this.warnedTranslation = true;
+
+    const parts: string[] = [
+      `[CONFIG] ${this.configPath} declares no "version", so it was read as a 4.x config file and ` +
+        'translated to the 5.0 shape in memory. The file on disk is unchanged.',
+    ];
+
+    if (translation.translated.length > 0) {
+      const pairs = translation.translated.map((pair) => `${pair.from} -> ${pair.to}`).join(', ');
+      parts.push(`Renamed: ${pairs}.`);
+    }
+
+    if (translation.dropped.length > 0) {
+      parts.push(`Dropped (5.0 has no such key): ${translation.dropped.join(', ')}.`);
+    }
+
+    if (translation.dropped.includes('analysis')) {
+      // Names the replacement rather than only the removal: a notice that says "stop doing X"
+      // without saying what to do instead reads as breakage.
+      parts.push(
+        'The `analysis` section was removed; for model-graded gate evaluation use the `%judge` ' +
+          'modifier or `gates.evaluation.defaultMode`.'
+      );
+    }
+
+    parts.push(
+      'Rewrite config.json in the 5.0 spellings with "version": 5 and it is read as written, ' +
+        'silencing this notice. This translation is removed in 6.0.0.'
     );
+
+    logger.warn(parts.join(' '));
   }
 
   /**

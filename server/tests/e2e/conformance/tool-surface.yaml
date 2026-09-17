@@ -98,14 +98,29 @@ scenarios:
         args: { action: config, operation: keys }
     expect: { text_contains: '**Declared Configuration Keys**' }
 
-  - id: sc-config-get-refused
+  - id: sc-config-get
     claim_source: >-
-      system_control contract — config `get` no longer reaches MCP: it is held pending a
-      generated config shape (owner ruling R41) and refused by name rather than answered.
+      system_control contract — config `get` (row 6.3, owner ruling R59): `config: { operation:
+      "get", key }` returns that key's effective value and source.
     requests:
       - tool: system_control
-        args: { action: config, operation: get }
-    expect: { error_contains: 'config operation `get` is not served over MCP.' }
+        args:
+          action: config
+          operation: get
+          config: { operation: get, key: server.name }
+    expect: { text_contains: 'claude-prompts' }
+
+  - id: sc-config-get-unknown-key
+    claim_source: >-
+      system_control contract — config `get` refuses a key the schema does not declare, naming
+      `keys` rather than answering it.
+    requests:
+      - tool: system_control
+        args:
+          action: config
+          operation: get
+          config: { operation: get, key: server.nope }
+    expect: { error_contains: 'keys' }
 
   - id: sc-config-write-refused
     claim_source: >-

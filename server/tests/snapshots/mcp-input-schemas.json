@@ -2146,7 +2146,8 @@
           },
           "operation": {
             "enum": [
-              "validate"
+              "validate",
+              "get"
             ],
             "type": "string"
           },
