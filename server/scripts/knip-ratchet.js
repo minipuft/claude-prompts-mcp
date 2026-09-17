@@ -47,6 +47,10 @@
  * orphan would never be reported by knip or counted here. The roots are read from `knip.json`
  * itself, so a new glob of that shape is covered without editing this file.
  *
+ * SCOPE: knip counts unused FILES, EXPORTS, TYPES and DEPENDENCIES. It cannot see an instance
+ * method nobody calls on a class that is itself used — knip 6 has no `classMembers` issue type —
+ * so a green run here does not mean "no dead code".
+ *
  * Usage:
  * - Update baseline (intentional): `npm run knip-ratchet:baseline`
  * - Check (default in CI):          `npm run validate:knip-ratchet`
@@ -59,6 +63,11 @@ import path from 'node:path';
 import process from 'node:process';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+
+/** Printed beside every green result, so the result is not read as covering more than it does. */
+const SCOPE_NOTE =
+  '[knip-ratchet] Scope: unused files, exports, types and dependencies only. knip cannot see an ' +
+  'uncalled instance method on a class that is itself used.';
 
 const BASELINE_PATH = path.resolve(process.cwd(), '.knip-ratchet-baseline.json');
 const KNIP_CONFIG_PATH = path.resolve(process.cwd(), 'knip.json');
@@ -412,7 +421,7 @@ async function handleCheck() {
 
   if (regressions.length === 0 && vanished.length === 0 && orphans.length === 0) {
     console.log(
-      `[knip-ratchet] OK: ${current.totals.findings} findings (no regressions)${decreaseLines.join('\n')}`
+      `[knip-ratchet] OK: ${current.totals.findings} findings (no regressions)${decreaseLines.join('\n')}\n${SCOPE_NOTE}`
     );
     return;
   }
