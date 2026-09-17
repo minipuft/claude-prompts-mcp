@@ -428,6 +428,13 @@ export const SUITE = [
       'CHECKED both ways — the self-test drives the comparator with an agreeing set (must stay silent), a framework on disk but undeclared (must report; this is the motivating instance, since an undeclared shipped framework was deletable from the bundled tree), a declared id with no directory (must report, because the registry loads every shipped id fail-fast), and both together; the live set is compared against this checkout as a fifth case',
   },
   {
+    script: 'validate:framework-tool-descriptions',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse:
+      'CHECKED both ways — the self-test drives the rules with guidance naming one enum value in prose (must stay silent), a restated ACTIONS pipe list (must report; this is the motivating instance, since four bundled frameworks served 7 of 15 resource_manager actions), a label whose last word is a contract label and a restated tool heading, a quoted enum list in a parameter, a parameter and a tool no contract declares, a composition that replaces the contract text (must report) beside the real one (must stay silent), and a contract pipe list that agrees with its enum (silent) or omits and adds values (both reported); the live frameworks and contracts are the final case, and a run that finds no contract, no framework, or no toolDescriptions entry exits 1 rather than passing on a probe that observed nothing',
+  },
+  {
     script: 'validate:mutation-atomicity',
     io: 'read',
     reads: ['file', 'walk'],

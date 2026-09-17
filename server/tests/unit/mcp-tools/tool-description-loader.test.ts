@@ -3,7 +3,10 @@ import { EventEmitter, once } from 'events';
 import { describe, expect, it, beforeEach, jest } from '@jest/globals';
 
 import { createToolDescriptionLoader } from '../../../src/mcp/tools/tool-description-loader.js';
-import { resetDefaultRuntimeLoader } from '../../../src/engine/frameworks/definitions/index.js';
+import {
+  getDefaultRuntimeLoader,
+  resetDefaultRuntimeLoader,
+} from '../../../src/engine/frameworks/definitions/index.js';
 
 import type { FrameworkStateStore } from '../../../src/engine/frameworks/framework-state-store.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
@@ -77,6 +80,16 @@ const makeLogger = (): Logger =>
     debug: jest.fn(),
   }) as unknown as Logger;
 
+type ContractToolName = keyof typeof toolDescriptionsContract.tools;
+const CONTRACT_TOOLS = Object.keys(toolDescriptionsContract.tools) as ContractToolName[];
+
+const contractParameterText = (tool: ContractToolName, parameter: string): string => {
+  const entry = (toolDescriptionsContract.tools[tool].parameters as Record<string, unknown>)[
+    parameter
+  ];
+  return typeof entry === 'string' ? entry : (entry as { description: string }).description;
+};
+
 const baseFrameworksConfig: ResolvedFrameworkConfig = {
   dynamicToolDescriptions: true,
   // Matches DEFAULT_FRAMEWORK_ID (src/shared/utils/constants.ts) and the 'CAGEERF' active
@@ -142,5 +155,105 @@ describe('ToolDescriptionLoader (framework-aware active config)', () => {
     expect(cageerfDescription).toContain('[CAGEERF]');
     expect(reactDescription).toContain('[ReACT]');
     expect(reactDescription).not.toBe(cageerfDescription);
+  });
+
+  // B.64: a framework's `toolDescriptions` entry used to REPLACE the contract text, and the
+  // contract's own `frameworkAware` variants replaced it for every other framework. Measured
+  // 2026-09-16 on a live server: resource_manager named 8 of its 15 actions under CAGEERF and 0
+  // under FOCUS, while its input schema accepted all 15. These pin the composition instead.
+  describe('composition keeps the contract text', () => {
+    const loadManager = async (frameworks = baseFrameworksConfig) => {
+      const configManager = new FakeConfigManager(frameworks) as unknown as ConfigManager;
+      const manager = createToolDescriptionLoader(makeLogger(), configManager);
+      manager.setFrameworkStateStore(
+        new FakeFrameworkStateStore() as unknown as FrameworkStateStore
+      );
+      await manager.initialize();
+      return manager;
+    };
+
+    const bundledFrameworks = (): string[] => getDefaultRuntimeLoader().discoverFrameworks();
+
+    it('finds bundled frameworks to compose', () => {
+      // Guards the derivation below: an empty list would pass every assertion over it vacuously.
+      expect(bundledFrameworks().length).toBeGreaterThan(0);
+    });
+
+    it('serves every tool under every bundled framework starting with its contract text', async () => {
+      const manager = await loadManager();
+      for (const framework of bundledFrameworks()) {
+        for (const tool of CONTRACT_TOOLS) {
+          const served = manager.getDescription(tool, true, framework);
+          expect({
+            framework,
+            tool,
+            startsWithContract: served.startsWith(
+              toolDescriptionsContract.tools[tool].description.trimEnd()
+            ),
+          }).toEqual({ framework, tool, startsWithContract: true });
+        }
+      }
+    });
+
+    it('appends the active framework guidance after the contract text', async () => {
+      const manager = await loadManager();
+      const contract = toolDescriptionsContract.tools.resource_manager.description.trimEnd();
+      const served = manager.getDescription('resource_manager', true, 'CAGEERF');
+
+      expect(served.startsWith(`${contract}\n\nACTIVE FRAMEWORK [CAGEERF]: `)).toBe(true);
+      expect(served.length).toBeGreaterThan(contract.length);
+    });
+
+    it('serves the contract text alone when the framework system is disabled', async () => {
+      const manager = await loadManager();
+      for (const tool of CONTRACT_TOOLS) {
+        expect(manager.getDescription(tool, false, 'CAGEERF')).toBe(
+          toolDescriptionsContract.tools[tool].description
+        );
+      }
+    });
+
+    it('serves the contract text alone when dynamic descriptions are off', async () => {
+      const manager = await loadManager({
+        ...baseFrameworksConfig,
+        dynamicToolDescriptions: false,
+      });
+      expect(manager.getDescription('resource_manager', true, 'CAGEERF')).toBe(
+        toolDescriptionsContract.tools.resource_manager.description
+      );
+      expect(manager.getParameterDescription('system_control', 'action', true, 'CAGEERF')).toBe(
+        contractParameterText('system_control', 'action')
+      );
+    });
+
+    it('appends parameter guidance after the contract parameter text', async () => {
+      const manager = await loadManager();
+      const contract = contractParameterText('system_control', 'action');
+      const served = manager.getParameterDescription('system_control', 'action', true, 'CAGEERF');
+
+      expect(served?.startsWith(`${contract}\n\nACTIVE FRAMEWORK [CAGEERF]: `)).toBe(true);
+      expect(manager.getParameterDescription('system_control', 'action', false, 'CAGEERF')).toBe(
+        contract
+      );
+    });
+
+    it('composes the active config once, so a switch does not stack guidance', async () => {
+      const configManager = new FakeConfigManager(baseFrameworksConfig) as unknown as ConfigManager;
+      const store = new FakeFrameworkStateStore();
+      const manager = createToolDescriptionLoader(makeLogger(), configManager);
+      manager.setFrameworkStateStore(store as unknown as FrameworkStateStore);
+      await manager.initialize();
+
+      const changed = once(manager, 'descriptions-changed');
+      store.switchFramework('ReACT', 'test switch');
+      await changed;
+
+      const active = manager.getDescription('resource_manager');
+      expect(active.startsWith(toolDescriptionsContract.tools.resource_manager.description)).toBe(
+        true
+      );
+      expect(active.match(/ACTIVE FRAMEWORK \[/g)).toHaveLength(1);
+      expect(active).toContain('ACTIVE FRAMEWORK [ReACT]');
+    });
   });
 });
