@@ -245,9 +245,10 @@ describe('config file -> runtime config mapping', () => {
 
       // The deprecation cycle is over: the section is removed by the 4.x translation, announced
       // once, and resolves to nothing at all — not to the section's own defaults, which would be
-      // indistinguishable from a config that set them.
-      expect(config.analysis).toBeUndefined();
-      expect(manager.getConfig().analysis).toBeUndefined();
+      // indistinguishable from a config that set them. `Config` no longer declares the field, so
+      // this checks for the key's absence at runtime rather than reading a typed member.
+      expect('analysis' in config).toBe(false);
+      expect('analysis' in manager.getConfig()).toBe(false);
 
       warn.mockRestore();
       await cleanup();

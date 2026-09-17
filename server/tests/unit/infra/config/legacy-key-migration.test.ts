@@ -448,8 +448,9 @@ describe('legacy config key migration', () => {
       const config = await manager.loadConfig();
 
       // Dropped, not parsed-and-ignored: the deprecation cycle is over and the section resolves
-      // to nothing at all.
-      expect(config.analysis).toBeUndefined();
+      // to nothing at all. `Config` no longer declares the field, so this checks for the key's
+      // absence at runtime rather than reading a typed member.
+      expect('analysis' in config).toBe(false);
 
       const notices = translationNotices();
       expect(notices).toHaveLength(1);

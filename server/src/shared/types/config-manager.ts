@@ -7,8 +7,6 @@
 
 import type {
   Config,
-  AnalysisConfig,
-  SemanticAnalysisConfig,
   LoggingConfig,
   ResolvedFrameworkConfig,
   GateSystemSettings,
@@ -101,9 +99,9 @@ export interface ConfigManager {
 
   // ── Domain config getters ────────────────────────────────────────────
 
-  // No `getAnalysisConfig` / `getSemanticAnalysisConfig`: the deprecated
-  // `analysis.semanticAnalysis` section is still parsed and defaulted at load (and warns once),
-  // but nothing reads the parsed value any more — the analyzer that took it never read a field.
+  // No `getAnalysisConfig` / `getSemanticAnalysisConfig`: the `analysis.semanticAnalysis` section
+  // was removed in 5.0. A 4.x file carrying it is dropped on load with a translation notice —
+  // `Config` no longer declares the field at all.
   getLoggingConfig(): LoggingConfig;
   getFrameworksConfig(): ResolvedFrameworkConfig;
   getGatesConfig(): GateSystemSettings;
