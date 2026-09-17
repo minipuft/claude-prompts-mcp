@@ -187,9 +187,112 @@ describe('ConfigActionHandler read surface + refusal controls', () => {
     });
   });
 
-  // The point of this row: `get`, `set`, `reset`/`restore` never reach a per-operation handler —
-  // one generic refusal answers all of them, and a request naming NO operation at all must land
-  // on that same refusal rather than falling through to a listing. Asserted on `isError`, not on
+  // Row 6.3 / R59: `get` returns one key's effective value and source, via the same nested
+  // `config` object `validate`'s per-key check already uses.
+  describe('get', () => {
+    test('a key the file sets answers labelled `file`, with the file value', async () => {
+      const manager = new ConfigLoader(configPath, undefined, { schemaPath: SCHEMA_PATH });
+      await manager.loadConfig();
+      const handler = new ConfigActionHandler(makeContext(manager));
+
+      const response = await handler.execute({
+        operation: 'get',
+        config: { operation: 'get', key: 'gates.enabled' },
+      });
+      const text = textOf(response);
+
+      expect(response.isError).toBe(false);
+      expect(text).toContain('**gates.enabled**');
+      expect(text).toContain('true');
+      expect(text).toContain('source: file');
+    });
+
+    test('a key the file omits answers the resolved default, labelled `default`', async () => {
+      const manager = new ConfigLoader(configPath, undefined, { schemaPath: SCHEMA_PATH });
+      await manager.loadConfig();
+      const handler = new ConfigActionHandler(makeContext(manager));
+
+      const response = await handler.execute({
+        operation: 'get',
+        config: { operation: 'get', key: 'server.name' },
+      });
+      const text = textOf(response);
+
+      expect(response.isError).toBe(false);
+      expect(text).toContain('**server.name**');
+      expect(text).toContain('claude-prompts');
+      expect(text).toContain('source: default');
+    });
+
+    // Row 6.2: `gates` is one of the sections that used to stay absent from the loaded config
+    // until `getGatesConfig()` defaulted it at read time, so `get` on a never-set gates key
+    // answered with a label and no value. It now answers with the value the server uses.
+    test('a never-set key in a once-deferred section answers its resolved default', async () => {
+      const manager = new ConfigLoader(configPath, undefined, { schemaPath: SCHEMA_PATH });
+      await manager.loadConfig();
+      const handler = new ConfigActionHandler(makeContext(manager));
+
+      const response = await handler.execute({
+        operation: 'get',
+        config: { operation: 'get', key: 'gates.frameworkGates' },
+      });
+      const text = textOf(response);
+
+      expect(response.isError).toBe(false);
+      expect(text).toContain('**gates.frameworkGates** = true');
+      expect(text).toContain('source: default');
+      expect(text).not.toContain('deferred');
+    });
+
+    // F-T4-37: `JSON.stringify(undefined)` is the JS value `undefined`, which the template used to
+    // coerce to the bare word — honest, but not JSON. A key with no default in any layer says so.
+    test('a key with no default in any layer reads as prose, never as the token `undefined`', async () => {
+      const manager = new ConfigLoader(configPath, undefined, { schemaPath: SCHEMA_PATH });
+      await manager.loadConfig();
+      const handler = new ConfigActionHandler(makeContext(manager));
+
+      const response = await handler.execute({
+        operation: 'get',
+        config: { operation: 'get', key: 'telemetry.attributePolicy.allowlist' },
+      });
+      const text = textOf(response);
+
+      expect(response.isError).toBe(false);
+      expect(text).toContain('**telemetry.attributePolicy.allowlist** is not set');
+      expect(text).not.toContain('= undefined');
+      expect(text).toContain('source: default');
+    });
+
+    test('a key the schema does not declare is refused, naming `keys`', async () => {
+      const manager = new ConfigLoader(configPath, undefined, { schemaPath: SCHEMA_PATH });
+      await manager.loadConfig();
+      const handler = new ConfigActionHandler(makeContext(manager));
+
+      const response = await handler.execute({
+        operation: 'get',
+        config: { operation: 'get', key: 'server.nope' },
+      });
+      const text = textOf(response);
+
+      expect(response.isError).toBe(true);
+      expect(text).toContain('server.nope');
+      expect(text).toContain('keys');
+    });
+
+    test('no key is refused, never answered from a bare `get`', async () => {
+      const manager = new ConfigLoader(configPath, undefined, { schemaPath: SCHEMA_PATH });
+      await manager.loadConfig();
+      const handler = new ConfigActionHandler(makeContext(manager));
+
+      const response = await handler.execute({ operation: 'get' });
+
+      expect(response.isError).toBe(true);
+    });
+  });
+
+  // The point of this row: `set`, `reset`/`restore` never reach a per-operation handler — one
+  // generic refusal answers all of them, and a request naming NO operation at all must land on
+  // that same refusal rather than falling through to a listing. Asserted on `isError`, not on
   // message text, so a reworded refusal message cannot silently drop the guard.
   describe('refusal controls', () => {
     let manager: ConfigLoader;
@@ -200,7 +303,6 @@ describe('ConfigActionHandler read surface + refusal controls', () => {
     });
 
     test.each([
-      ['get', { operation: 'get', key: 'server.port' }],
       ['set', { operation: 'set', key: 'server.port', value: '9090' }],
       ['restore', { operation: 'restore' }],
       ['reset', { operation: 'reset' }],

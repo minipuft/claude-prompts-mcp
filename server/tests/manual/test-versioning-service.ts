@@ -36,8 +36,8 @@ const logger: Logger = {
 class TestConfigProvider {
   private config: VersioningConfig = {
     enabled: true,
-    max_versions: 5,
-    auto_version: true,
+    maxVersions: 5,
+    autoVersion: true,
   };
 
   getVersioningConfig(): VersioningConfig {
@@ -49,7 +49,7 @@ class TestConfigProvider {
   }
 
   setMaxVersions(max: number): void {
-    this.config.max_versions = max;
+    this.config.maxVersions = max;
   }
 }
 

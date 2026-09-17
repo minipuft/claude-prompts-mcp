@@ -1,22 +1,20 @@
 /**
- * Config value source labeling — the fourth state.
+ * Config value source labeling — three states, and one pinned list of absences.
  *
  * `getConfigValueWithSource(key)` reports where an effective config value came from: `'file'`,
- * `'default'`, `'environment'`, or `'deferred'`. `normalizeConfigFile` resolves a real value for
- * only a handful of sections (`server`, `prompts`, `analysis`, `frameworks`, `chainSessions`,
- * `execution`, `versioning`, `telemetry`) — every OTHER schema-declared
- * key (`gates`, `resources`, `logging`, `identity`, `verification`, `phaseGuards`, `hooks`, plus a
- * few genuinely default-less leaves inside the sections that ARE written back, e.g.
- * `prompts.registerWithMcp` and `telemetry.attributePolicy.allowlist`) stays `undefined` in the
- * loaded config until its OWNING getter defaults it at read time (`gates.enabled` inside
- * `getGatesConfig()`, for instance). Before this row, that state answered
- * `{ value: undefined, source: 'default' }` — indistinguishable from a default that legitimately
- * IS `undefined`.
+ * `'default'`, or `'environment'`. There is no fourth label: since row 6.2 / Ruling R57
+ * `normalizeConfigFile` resolves EVERY section at load time, so a key the file omits answers with
+ * the value the server actually uses. The `'deferred'` label this file used to enumerate named the
+ * state where a section stayed absent from `Config` until its owning getter defaulted it at read
+ * time — that state no longer exists.
+ *
+ * What replaces it is stricter. A `'default'` answer may still carry `value: undefined`, but only
+ * for a key with no default in ANY layer, and the whole set is pinned as a literal below: a NEW
+ * undefined answer is a red test naming the key, not a label that quietly absorbs it.
  *
  * This enumerates every key `listConfigKeys()` reports (schema-driven, not a hand-written list —
  * the point is to close the CLASS, not one instance of it) against a loader fed a config file that
- * sets almost nothing, and asserts none of them lands on that ambiguous
- * `{ value: undefined, source: 'default' }` shape.
+ * sets almost nothing.
  *
  * Same temp-file + injected-schema-path construction as the `ConfigLoader` siblings in this
  * directory (`config-schema-warning.test.ts`, `legacy-key-migration.test.ts`).
@@ -35,6 +33,44 @@ import { ConfigLoader } from '../../../../src/infra/config/index.js';
 const __filename = fileURLToPath(import.meta.url);
 const SERVER_ROOT = path.resolve(path.dirname(__filename), '..', '..', '..', '..');
 const SCHEMA_PATH = path.join(SERVER_ROOT, 'config.schema.json');
+
+/**
+ * Every schema-declared key whose effective value is `undefined` under the fixture below, MEASURED
+ * against the loader rather than predicted from the schema. Sorted, compared as a set, exact.
+ *
+ * Three kinds of entry live here, and the difference is the point:
+ *
+ * 1. **No default in any layer.** `config.schema.json` carries no `@default` for them either, so
+ *    absent IS the effective value: the six `identity.launchDefaults.*` leaves,
+ *    `gates.evaluation.defaultModel`, `telemetry.attributePolicy.allowlist`.
+ * 2. **`gates.evaluation.strict`** — the one key row 6.2 deliberately declined to resolve. Its
+ *    only code default (`judge-prompt-builder.ts`) is `mode === 'judge'`, a function of the
+ *    resolved mode rather than a constant, and folding the schema's `true` in would change what a
+ *    `mode: 'self'` gate does. Named on `GatesConfig.evaluation`.
+ * 3. **`hooks.expandedOutput`** — a file key `Config` has no member for at all (the Python hooks
+ *    read it straight off the file). It is the one entry left of the row 6.2 findings: the other
+ *    three were RENAMES (the file said `versioning.maxVersions` / `versioning.autoVersion` /
+ *    `chainSessions.timeoutMinutes`, the runtime held `max_versions` / `auto_version` /
+ *    `sessionTimeoutMinutes`, and the dot-walk over `Config` missed a value the server very much
+ *    used — 50, true, 1440). Ruling R40 declined a file-name → runtime-name map for those; row 6.6
+ *    renamed the runtime type to match the file instead, so all three now resolve and are gone
+ *    from this list — see `answers versioning and chainSessions with their resolved values` below.
+ *
+ * Shrinking this list is progress; it still has to be done deliberately, which is why the
+ * comparison is equality and not containment.
+ */
+const KEYS_WITH_NO_EFFECTIVE_VALUE = [
+  'gates.evaluation.defaultModel',
+  'gates.evaluation.strict',
+  'hooks.expandedOutput',
+  'identity.launchDefaults.clientFamily',
+  'identity.launchDefaults.clientId',
+  'identity.launchDefaults.clientVersion',
+  'identity.launchDefaults.delegationProfile',
+  'identity.launchDefaults.organizationId',
+  'identity.launchDefaults.workspaceId',
+  'telemetry.attributePolicy.allowlist',
+];
 
 describe('config value source labeling (getConfigValueWithSource / listConfigKeys)', () => {
   let tempDir: string;
@@ -63,42 +99,36 @@ describe('config value source labeling (getConfigValueWithSource / listConfigKey
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  // THE gate for the class: every schema-declared key answers with either a defined value, or the
-  // 'deferred' label — never a bare `undefined` under 'default'. Iterates the schema's own
-  // enumeration rather than a hand-picked key list, so a future section that starts defaulting
-  // only inside its getter (instead of inside `validateAndSetDefaults`) trips this automatically.
-  it('never reports an undefined value under source "default", for any schema-declared key', async () => {
+  // THE gate for the class: every schema-declared key answers with one of the three real labels,
+  // and the keys that answer with no value at all are EXACTLY the pinned set. Iterates the
+  // schema's own enumeration rather than a hand-picked key list, so a section that stops resolving
+  // a leaf at load time trips this automatically, naming the leaf.
+  it('answers every schema-declared key with a real source, and leaves exactly the pinned keys unset', async () => {
     const keys = await manager.listConfigKeys();
     // Sanity: the schema declares dozens of leaf keys — a near-empty result would mean
     // `listConfigKeys()` itself broke, not that the config has few keys.
     expect(keys.length).toBeGreaterThan(50);
 
-    const bySource: Record<string, number> = { file: 0, default: 0, environment: 0, deferred: 0 };
+    const bySource: Record<string, number> = { file: 0, default: 0, environment: 0 };
+    const unset: string[] = [];
 
     for (const key of keys) {
       const result = manager.getConfigValueWithSource(key);
+      expect(['file', 'default', 'environment']).toContain(result.source);
       bySource[result.source] = (bySource[result.source] ?? 0) + 1;
-
-      if (result.source === 'default') {
-        // The one assertion this whole test exists to make: a defaulted value must be a REAL
-        // value, never the ambiguous "defaulted to undefined".
-        expect(result.value).not.toBeUndefined();
-      }
-      if (result.source === 'deferred') {
-        // 'deferred' never invents a value — it is a label for the absence of one.
-        expect(result.value).toBeUndefined();
-      }
+      if (result.value === undefined) unset.push(key);
     }
 
+    // The claim the row exists to make: an absent value is now a property of the KEY, enumerated
+    // above, not a state a whole section can drift into.
+    expect(unset.sort()).toEqual([...KEYS_WITH_NO_EFFECTIVE_VALUE].sort());
+
     // Every bucket should be non-empty for this fixture — a zero here would mean the fixture
-    // stopped exercising one of the four paths, silently narrowing what this test covers.
+    // stopped exercising one of the three paths, silently narrowing what this test covers.
     expect(bySource['file']).toBeGreaterThan(0);
     expect(bySource['default']).toBeGreaterThan(0);
     expect(bySource['environment']).toBe(2); // server.port, logging.level — the only two overrides
-    expect(bySource['deferred']).toBeGreaterThan(0);
-    expect(
-      bySource['file'] + bySource['default'] + bySource['environment'] + bySource['deferred']
-    ).toBe(keys.length);
+    expect(bySource['file'] + bySource['default'] + bySource['environment']).toBe(keys.length);
   });
 
   it('reports the one key the file explicitly set as "file"', () => {
@@ -108,17 +138,64 @@ describe('config value source labeling (getConfigValueWithSource / listConfigKey
     });
   });
 
-  it('reports a key whose section this loader never writes back as "deferred", not "default"', () => {
-    // `resources` is never touched by `validateAndSetDefaults` — only `getResourcesConfig()`
-    // defaults it, at read time. This is the shape a bare `undefined`/'default' used to hide.
+  // The three cases that used to answer 'deferred'. Each now answers with the value the server
+  // actually uses — asserted on the VALUE, not just the label, because a label nobody can check
+  // against a value is what the row retired.
+  it('reports a key in a section the file never mentions as "default", carrying the resolved value', () => {
     expect(manager.getConfigValueWithSource('resources.registerWithMcp')).toMatchObject({
-      value: undefined,
-      source: 'deferred',
+      value: false,
+      source: 'default',
+    });
+    expect(manager.getConfigValueWithSource('gates.frameworkGates')).toMatchObject({
+      value: true,
+      source: 'default',
+    });
+    expect(manager.getConfigValueWithSource('logging.directory')).toMatchObject({
+      value: './logs',
+      source: 'default',
+    });
+    expect(manager.getConfigValueWithSource('phaseGuards.maxRetries')).toMatchObject({
+      value: 2,
+      source: 'default',
+    });
+    expect(manager.getConfigValueWithSource('verification.isolation.permissionMode')).toMatchObject(
+      { value: 'delegate', source: 'default' }
+    );
+    expect(manager.getConfigValueWithSource('identity.mode')).toMatchObject({
+      value: 'permissive',
+      source: 'default',
+    });
+    // F-T4-15: the effective default used to live in `modules/prompts/converter.ts`, three layers
+    // below anything the config surface could see.
+    expect(manager.getConfigValueWithSource('prompts.registerWithMcp')).toMatchObject({
+      value: true,
+      source: 'default',
+    });
+  });
+
+  // Row 6.6: the runtime `Config` used to spell these three fields differently from the schema
+  // path the dot-walk reads (`max_versions`/`auto_version`/`sessionTimeoutMinutes` at runtime vs
+  // `maxVersions`/`autoVersion`/`timeoutMinutes` on the schema path), so `readDotPath` found
+  // nothing and each answered `undefined` — the three entries `KEYS_WITH_NO_EFFECTIVE_VALUE` no
+  // longer carries. Renaming the runtime type to match closes the gap: each now answers the
+  // resolved default value the server actually uses.
+  it('answers versioning and chainSessions with their resolved values, not as no-value keys', () => {
+    expect(manager.getConfigValueWithSource('versioning.maxVersions')).toMatchObject({
+      value: 50,
+      source: 'default',
+    });
+    expect(manager.getConfigValueWithSource('versioning.autoVersion')).toMatchObject({
+      value: true,
+      source: 'default',
+    });
+    expect(manager.getConfigValueWithSource('chainSessions.timeoutMinutes')).toMatchObject({
+      value: 1440,
+      source: 'default',
     });
   });
 
   it('still reports a key whose section IS written back at load time as "default"', () => {
-    // `server` is fully merged with `DEFAULT_CONFIG.server` inside `validateAndSetDefaults`, so
+    // `server` is fully merged with `DEFAULT_SERVER_CONFIG` inside `normalizeConfigFile`, so
     // this resolves to a real value even though the file never set it.
     expect(manager.getConfigValueWithSource('server.name')).toMatchObject({
       value: 'claude-prompts',
@@ -134,6 +211,38 @@ describe('config value source labeling (getConfigValueWithSource / listConfigKey
     expect(manager.getConfigValueWithSource('logging.level')).toMatchObject({
       value: 'debug',
       source: 'environment',
+    });
+  });
+
+  // The snapshot `getConfigValueWithSource` labels from is taken AFTER the 4.x translation, so a
+  // key the operator wrote in a 4.x spelling is reported under its 5.0 name. Before that order was
+  // fixed, the raw snapshot held the 4.x spelling and the merged config held the 5.0 one, and
+  // neither name answered with both a value and a 'file' label.
+  describe('a 4.x file is labelled under its 5.0 key names', () => {
+    it('reports a translated flat key as "file" under the nested 5.0 name', async () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const fourXPath = path.join(tempDir, 'four-x.json');
+      await writeFile(
+        fourXPath,
+        JSON.stringify({ frameworks: { enabled: true, systemPromptFrequency: 7 } }),
+        'utf8'
+      );
+
+      const fourXManager = new ConfigLoader(fourXPath, undefined, { schemaPath: SCHEMA_PATH });
+      await fourXManager.loadConfig();
+
+      expect(
+        fourXManager.getConfigValueWithSource('frameworks.injection.systemPrompt.frequency')
+      ).toMatchObject({ value: 7, source: 'file' });
+      // The 4.x spelling is not a config key at all any more — it is not in the schema, so it is
+      // not enumerable, and asking for it answers with no value rather than inventing one. (The
+      // handler refuses an undeclared key before it ever gets here; this is the loader's own
+      // answer for a path nothing declares.)
+      expect(
+        fourXManager.getConfigValueWithSource('frameworks.systemPromptFrequency')
+      ).toMatchObject({ value: undefined, source: 'default' });
+
+      warn.mockRestore();
     });
   });
 

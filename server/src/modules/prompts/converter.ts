@@ -16,18 +16,20 @@ import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { PromptArgument, Logger } from '#shared/types/index.js';
 import type { PromptData } from './types.js';
 
+import { DEFAULT_PROMPTS_CONFIG } from '#shared/types/core-config.js';
 import { isChainPrompt } from '#shared/utils/chainUtils.js';
 
 /**
  * Resolve the registerWithMcp value using the priority chain:
  * 1. Prompt-level override (highest priority)
  * 2. Category-level default (from _categoryRegisterWithMcp)
- * 3. Global config default (from config.json prompts.registerWithMcp)
- * 4. Hard-coded default: true (register with MCP)
+ * 3. Global config default (`config.json` `prompts.registerWithMcp`, already resolved by the
+ *    config loader — so there is no fourth rung, and no literal here for the config surface to be
+ *    unable to see)
  */
 function resolveRegisterWithMcp(
   promptData: PromptData & { _categoryRegisterWithMcp?: boolean },
-  globalRegisterWithMcp?: boolean
+  globalRegisterWithMcp: boolean
 ): boolean {
   // 1. Prompt-level override takes precedence
   if (promptData.registerWithMcp !== undefined) {
@@ -38,11 +40,7 @@ function resolveRegisterWithMcp(
     return promptData._categoryRegisterWithMcp;
   }
   // 3. Global config default
-  if (globalRegisterWithMcp !== undefined) {
-    return globalRegisterWithMcp;
-  }
-  // 4. Hard-coded default: register with MCP
-  return true;
+  return globalRegisterWithMcp;
 }
 
 /**
@@ -69,16 +67,24 @@ function resolveMcpPromptMode(
 export class PromptConverter {
   private logger: Logger;
   private loader: PromptLoader;
-  private globalRegisterWithMcp: boolean | undefined;
+  private globalRegisterWithMcp: boolean;
   private scriptToolLoader: ScriptToolDefinitionLoader;
 
-  constructor(logger: Logger, loader?: PromptLoader, globalRegisterWithMcp?: boolean) {
+  /**
+   * `globalRegisterWithMcp` defaults to the ONE declared default for the key
+   * ({@link DEFAULT_PROMPTS_CONFIG}), not to a literal restated here — a converter built without
+   * a config manager (test harnesses) then behaves exactly as one built with a loader that
+   * resolved the key from an empty file. `PromptsModule` always passes the resolved value.
+   */
+  constructor(
+    logger: Logger,
+    loader?: PromptLoader,
+    globalRegisterWithMcp: boolean = DEFAULT_PROMPTS_CONFIG.registerWithMcp
+  ) {
     this.logger = logger;
     this.loader = loader || new PromptLoader(logger);
     this.scriptToolLoader = createScriptToolDefinitionLoader({ debug: false });
-    if (globalRegisterWithMcp !== undefined) {
-      this.globalRegisterWithMcp = globalRegisterWithMcp;
-    }
+    this.globalRegisterWithMcp = globalRegisterWithMcp;
   }
 
   /**
@@ -90,12 +96,11 @@ export class PromptConverter {
   }
 
   /**
-   * Set the global registerWithMcp default value
+   * Set the global registerWithMcp default value. Takes a resolved boolean — "leave it alone" is
+   * expressed by not calling this, not by passing `undefined`.
    */
-  setGlobalRegisterWithMcp(value: boolean | undefined): void {
-    if (value !== undefined) {
-      this.globalRegisterWithMcp = value;
-    }
+  setGlobalRegisterWithMcp(value: boolean): void {
+    this.globalRegisterWithMcp = value;
   }
 
   /**

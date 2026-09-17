@@ -14,15 +14,9 @@ const createLogger = () => ({
   debug: jest.fn(),
 });
 
-const createConfigLoader = (llmEnabled: boolean) =>
+const createConfigLoader = () =>
   ({
-    getConfig: () => ({
-      analysis: {
-        semanticAnalysis: {
-          llmIntegration: { enabled: llmEnabled },
-        },
-      },
-    }),
+    getConfig: () => ({}),
     loadConfig: jest.fn(async () => ({})),
   }) as any;
 
@@ -40,23 +34,16 @@ const samplePrompt: ConvertedPrompt = {
 };
 
 describe('GateServiceFactory', () => {
-  // Selection is unconditional. Both cases assert the same outcome on purpose: feeding the
-  // llm-enabled config shape is the point, because that is the input that would divert if a
-  // second service were ever wired back in, and this is the case that would fail.
-  test('returns the compositional service when the retired llm flag is off', () => {
-    const factory = new GateServiceFactory(createLogger(), createConfigLoader(false), fakeRenderer);
-
-    expect(factory.createGateService()).toBeInstanceOf(CompositionalGateService);
-  });
-
-  test('returns the compositional service even when the retired llm flag is on', () => {
-    const factory = new GateServiceFactory(createLogger(), createConfigLoader(true), fakeRenderer);
+  // Selection is unconditional: the factory takes no config-driven branch any more, since the
+  // retired llm-integration flag it used to read is gone from Config entirely.
+  test('returns the compositional service', () => {
+    const factory = new GateServiceFactory(createLogger(), createConfigLoader(), fakeRenderer);
 
     expect(factory.createGateService()).toBeInstanceOf(CompositionalGateService);
   });
 
   test('hotReload rereads config and returns a fresh compositional service', async () => {
-    const configLoader = createConfigLoader(true);
+    const configLoader = createConfigLoader();
     const factory = new GateServiceFactory(createLogger(), configLoader, fakeRenderer);
 
     const first = factory.createGateService();
