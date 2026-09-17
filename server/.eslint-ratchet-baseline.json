@@ -1,35 +1,35 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-16T16:20:58.962Z",
+  "generatedAt": "2026-09-17T04:37:57.958Z",
   "eslintTarget": "src,scripts,eslint-rules",
   "totals": {
-    "errors": 2974,
-    "warnings": 840
+    "errors": 2922,
+    "warnings": 799
   },
   "byRule": {
-    "@typescript-eslint/no-explicit-any": {
-      "errors": 281,
+    "@typescript-eslint/strict-boolean-expressions": {
+      "errors": 1952,
       "warnings": 0
     },
     "sonarjs/cognitive-complexity": {
       "errors": 0,
-      "warnings": 88
-    },
-    "@typescript-eslint/strict-boolean-expressions": {
-      "errors": 1983,
-      "warnings": 0
+      "warnings": 83
     },
     "@typescript-eslint/no-non-null-assertion": {
       "errors": 0,
-      "warnings": 97
+      "warnings": 82
     },
     "@typescript-eslint/no-unnecessary-condition": {
-      "errors": 407,
+      "errors": 401,
       "warnings": 0
     },
     "max-params": {
       "errors": 0,
       "warnings": 7
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "errors": 276,
+      "warnings": 0
     },
     "@typescript-eslint/explicit-module-boundary-types": {
       "errors": 56,
@@ -37,18 +37,18 @@
     },
     "@typescript-eslint/no-unsafe-assignment": {
       "errors": 0,
-      "warnings": 189
+      "warnings": 178
     },
     "@typescript-eslint/no-unsafe-member-access": {
       "errors": 0,
-      "warnings": 384
+      "warnings": 374
     },
     "@typescript-eslint/prefer-nullish-coalescing": {
-      "errors": 175,
+      "errors": 167,
       "warnings": 0
     },
     "@typescript-eslint/no-unused-vars": {
-      "errors": 17,
+      "errors": 15,
       "warnings": 0
     },
     "import-x/order": {
