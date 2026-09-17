@@ -37,6 +37,11 @@ import * as yaml from 'js-yaml';
 
 import { normalizeInlineGateDefinitions } from '../src/modules/prompts/yaml-prompt-loader.js';
 import { validatePromptYaml } from '../src/modules/prompts/prompt-schema.js';
+import {
+  isExcludedCategoryDirectoryName,
+  isIgnoredPromptEntryName,
+  isReservedPromptDirectoryName,
+} from '../src/shared/utils/prompt-layout.js';
 import { isCanonicalPromptId, isKebabId } from '../src/shared/utils/resource-ids.js';
 import type { Logger } from '../src/shared/types/index.js';
 
@@ -116,8 +121,17 @@ function findStaleExceptions(files: string[]): string[] {
   });
 }
 
-/** Every `prompt.yaml` beneath the root, at any depth — nested chain steps live deeper. */
-function findPromptFiles(dir: string, found: string[] = []): string[] {
+/**
+ * Every `prompt.yaml` beneath the root that the loader would serve, at any depth — nested chain
+ * steps live deeper.
+ *
+ * The skips are the loader's, read from `prompt-layout.ts` rather than restated. Without them this
+ * walk schema-checked files nothing serves: a `prompt.yaml` under a prompt's reserved `tools/`, or
+ * anywhere below `_drafts/` or a root-level `backup/`, could fail CI as a prompt no MCP surface
+ * ever answers. At the root the loader's category rule decides; `tools` is reserved only BELOW the
+ * root — at the root it is an ordinary category, which the loader serves.
+ */
+function findPromptFiles(dir: string, found: string[] = [], depth = 0): string[] {
   let entries;
   try {
     entries = readdirSync(dir, { withFileTypes: true });
@@ -125,9 +139,16 @@ function findPromptFiles(dir: string, found: string[] = []): string[] {
     return found;
   }
   for (const entry of entries) {
+    if (isIgnoredPromptEntryName(entry.name)) continue;
     const full = join(dir, entry.name);
-    if (entry.isDirectory()) findPromptFiles(full, found);
-    else if (entry.name === 'prompt.yaml') found.push(full);
+    if (entry.isDirectory()) {
+      const skipped =
+        depth === 0
+          ? isExcludedCategoryDirectoryName(entry.name)
+          : isReservedPromptDirectoryName(entry.name);
+      if (skipped) continue;
+      findPromptFiles(full, found, depth + 1);
+    } else if (entry.name === 'prompt.yaml') found.push(full);
   }
   return found;
 }
@@ -527,6 +548,46 @@ if (SELF_TEST) {
   if (flaggedHasActivation)
     failures.push('a gate declaring its own activation block was wrongly reported as orphan');
 
+  // Walk fixtures — every skipped path has a TWIN the walk must still find, differing only in the
+  // identifier the skip keys on, so "nothing under tools/" cannot pass on a walk that found nothing:
+  //   tools/leaf                  vs general/tools/leaf       — `tools` at depth 0 vs depth 1
+  //   general/host/helpers/leaf   vs general/host/tools/leaf  — reserved name at depth 2
+  //   general/drafts/leaf         vs general/_drafts/leaf     — `_` prefix on a directory
+  //   backups/leaf                vs backup/leaf              — an excluded category name
+  //   node_module/leaf            vs node_modules/leaf        — the other excluded category name
+  //   general/backup/leaf         vs backup/leaf              — excluded at the root only
+  const walkDir = mkdtempSync(join(tmpdir(), 'validate-prompts-walk-selftest-'));
+  const walkWalked = [
+    'tools/leaf',
+    'general/host',
+    'general/host/helpers/leaf',
+    'general/drafts/leaf',
+    'backups/leaf',
+    'node_module/leaf',
+    'general/backup/leaf',
+  ];
+  const walkSkipped = [
+    'general/tools/leaf',
+    'general/host/tools/leaf',
+    'general/_drafts/leaf',
+    'backup/leaf',
+    'node_modules/leaf',
+  ];
+  for (const rel of [...walkWalked, ...walkSkipped]) {
+    mkdirSync(join(walkDir, rel), { recursive: true });
+    writeFileSync(join(walkDir, rel, 'prompt.yaml'), 'id: leaf\n', 'utf8');
+  }
+  const walked = findPromptFiles(walkDir)
+    .map((file) => relative(walkDir, dirname(file)).split(/[/\\]/).join('/'))
+    .sort();
+  rmSync(walkDir, { recursive: true, force: true });
+  const expectedWalk = [...walkWalked].sort();
+  if (JSON.stringify(walked) !== JSON.stringify(expectedWalk))
+    failures.push(
+      `the prompt walk disagreed with the loader: expected ${JSON.stringify(expectedWalk)}, ` +
+        `walked ${JSON.stringify(walked)}`
+    );
+
   if (failures.length > 0) {
     console.error(
       `validate:prompts --self-test FAILED\n${failures.map((f) => `  - ${f}`).join('\n')}`
@@ -535,7 +596,8 @@ if (SELF_TEST) {
   }
   console.log(
     'validate:prompts --self-test OK — accepts a valid prompt, catches both defect kinds, ' +
-      'and flags an orphan gate without false-positiving on activation/include/inlineGateIds'
+      'flags an orphan gate without false-positiving on activation/include/inlineGateIds, ' +
+      'and walks only the prompt directories the loader serves'
   );
   process.exit(0);
 }

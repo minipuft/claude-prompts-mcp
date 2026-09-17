@@ -20,17 +20,16 @@ Severity is set by observed contributor failure rather than by how wrong the tex
 six map to a specific thing that went wrong in one external contribution, which is the argument for
 the wider scope over the three-item patch.
 
-| ID  | Finding                                            | Location              | Observed failure                                                      | Status                                                                |
-| --- | -------------------------------------------------- | --------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| F1  | `start:sse` does not exist                         | `CONTRIBUTING.md:227` | #204 verified STDIO only; the bug was on both transports              | ✓ 2026-08-16 · both sites now name start:stdio + start:development    |
-| F2  | `npm run format` does not exist                    | commands table        | none observed                                                         | ✓ 2026-08-16 · now validate:format (format:fix was dead too, see F7b) |
-| F3  | `npm run test:jest` does not exist                 | `CONTRIBUTING.md:73`  | none observed                                                         | ✓ 2026-08-16 · alias dropped; npm test declared unit-only             |
-| F4  | Minimum Validation omits `typecheck:tests:ratchet` | `CONTRIBUTING.md:245` | 9 type errors passed both `typecheck` and Jest, 2026-08-16            | ✓ 2026-08-16 · Minimum Validation names four scripts                  |
-| F5  | No route to where tests live or the ESM flag       | `CONTRIBUTING.md:271` | #204 author had to ask where a test should go                         | ✓ 2026-08-16 · names tests/unit/<domain>/ and the ESM flag            |
-| F6  | Decision Matrix omits `lint:ratchet`               | `CONTRIBUTING.md:222` | #204 introduced 2 ratchet violations; the author ran exactly this row | ✓ 2026-08-16 · row defers to Minimum Validation                       |
-
-| F7a | Documented pre-push sequence matched no step in `.husky/pre-push` | `:296-303` | discovered during T1.6 | ✓ 2026-08-16 · replaced with the real 8-step route |
-| F7b | `format:fix` does not exist either | commands table | missed by the audit's own regex | ✓ 2026-08-16 · removed |
+| ID  | Finding                                                           | Location              | Observed failure                                                      | Status                                                                |
+| --- | ----------------------------------------------------------------- | --------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| F1  | `start:sse` does not exist                                        | `CONTRIBUTING.md:227` | #204 verified STDIO only; the bug was on both transports              | ✓ 2026-08-16 · both sites now name start:stdio + start:development    |
+| F2  | `npm run format` does not exist                                   | commands table        | none observed                                                         | ✓ 2026-08-16 · now validate:format (format:fix was dead too, see F7b) |
+| F3  | `npm run test:jest` does not exist                                | `CONTRIBUTING.md:73`  | none observed                                                         | ✓ 2026-08-16 · alias dropped; npm test declared unit-only             |
+| F4  | Minimum Validation omits `typecheck:tests:ratchet`                | `CONTRIBUTING.md:245` | 9 type errors passed both `typecheck` and Jest, 2026-08-16            | ✓ 2026-08-16 · Minimum Validation names four scripts                  |
+| F5  | No route to where tests live or the ESM flag                      | `CONTRIBUTING.md:271` | #204 author had to ask where a test should go                         | ✓ 2026-08-16 · names tests/unit/<domain>/ and the ESM flag            |
+| F6  | Decision Matrix omits `lint:ratchet`                              | `CONTRIBUTING.md:222` | #204 introduced 2 ratchet violations; the author ran exactly this row | ✓ 2026-08-16 · row defers to Minimum Validation                       |
+| F7a | Documented pre-push sequence matched no step in `.husky/pre-push` | `:296-303`            | discovered during T1.6                                                | ✓ 2026-08-16 · replaced with the real 8-step route                    |
+| F7b | `format:fix` does not exist either                                | commands table        | missed by the audit's own regex                                       | ✓ 2026-08-16 · removed                                                |
 
 **Root cause, common to all six.** CONTRIBUTING is unverified prose about an executable system.
 Every comparable contract here has a gate: `validate:suite-membership` for script membership,
