@@ -140,6 +140,8 @@
     "validate:declared-surface:self-test": "tsx scripts/validate-declared-surface.ts --self-test",
     "validate:shipped-frameworks": "tsx scripts/validate-shipped-frameworks.ts",
     "validate:shipped-frameworks:self-test": "tsx scripts/validate-shipped-frameworks.ts --self-test",
+    "validate:framework-tool-descriptions": "tsx scripts/validate-framework-tool-descriptions.ts",
+    "validate:framework-tool-descriptions:self-test": "tsx scripts/validate-framework-tool-descriptions.ts --self-test",
     "validate:mutation-atomicity": "tsx scripts/validate-mutation-atomicity.ts",
     "validate:mutation-atomicity:self-test": "tsx scripts/validate-mutation-atomicity.ts --self-test",
     "validate:refusal-aware-consumers": "tsx scripts/validate-refusal-aware-consumers.ts",
