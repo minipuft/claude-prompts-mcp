@@ -19,6 +19,12 @@ an execution arc, two decision sets and a design. At ~1,200 lines it held five d
 finished and stable; the work it uncovered is not. Splitting on that seam gives each half a
 lifecycle it can actually reach.
 
+## Now
+
+_Rewritten 2026-09-16._ The open-rows slice runs on `feat/p4-open-rows` (from `914b068c`). It covers
+P4.43–P4.50 under rulings R25–R30 (§P4). Six workers each own one task: T1 P4.49 · T2 P4.47+P4.48 ·
+T3 P4.43 · T4 P4.44 · T5 P4.45+P4.46 · T6 P4.50. Nothing is pushed until the owner approves this PR.
+
 ## What already landed (do not redo)
 
 D8 Arc 1 — read and write now agree about where a resource lives. Eleven commits on
@@ -501,6 +507,39 @@ Ruled BEFORE dispatch, because a question ruled after dispatch is N workers gues
 - **P4.38 is confirmed and slightly worse than written.** `SHARED` is guarded at line 537
   (`toBeGreaterThan(0)`); the `isolated` describe at line 559 has no such case at all, so its
   `it.each` at 589 generates zero tests silently.
+
+### Rulings R25–R30 (open-rows slice, 2026-09-16)
+
+Ruled before dispatching P4.43–P4.50, on `914b068c`. R23 and R24 stand as written in P4.47.
+
+- **R25 (P4.47 + P4.48) — one worker, P4.47 first.** Both rows edit `resource-indexer.ts` and
+  `validate-prompts.ts`, and P4.48's check would fail `validate-prompts.ts` until P4.47(c) makes it use
+  the shared predicates. The four walks that are only shielded by depth ADOPT the shared predicates.
+  Depth is not an exception. The one declared exception is `cli/src/lib/workspace.ts`, which is a
+  separate package. The exception is anchored by path and fails closed when that file disappears. The
+  three "is this a category" copies are measured, not fixed. If they disagree, that is a new row.
+- **R26 (P4.49) — the loader returns the validator's output, defaults included.** Styles have no
+  write path (`resource_type` has no `style` member), so no read-back can write a defaulted value to
+  disk as if it were authored. The worker lists every reader of a loaded style. If any reader needs
+  the authored-only form, the worker stops and returns that as a concern.
+- **R27 (P4.43) — `verify-unknown-interrupt.mjs` imports `checkDistFreshness`, and a check owns the
+  class.** The check keys on shape: a script that reads an mtime under `dist` and under `src`
+  without importing `dist-freshness.js`. `dist-freshness.js` itself is the one exemption, named by
+  path.
+- **R28 (P4.44) — report the failure, keep the control flow.** The inner catch stays, because it is
+  what guarantees the database close. Each teardown failure also reaches stderr directly, on the
+  channel the server's other operator messages use, so it is visible under STDIO. The exit code does
+  not change in this row.
+- **R29 (P4.45 + P4.46) — (c) always; (b) as a bounded attempt.** The worker states knip's scope beside
+  `validate:knip-ratchet`. It then tries (b) as a ts-morph reference check over public methods of
+  classes in `src/`, ratcheted like knip, with a 90 s runtime budget. The positive control is that
+  the check names `getValidStyles` and `getValidFrameworks` BEFORE P4.46 deletes them. If the check
+  cannot meet the budget, or its false positives cannot be baselined, the worker ships (c) plus the
+  deletions and returns (b) as a concern. The planner then kills (b) with the measured reason.
+- **R30 (P4.50) — the check lives in `validate-plan-row-tracking.js`.** It is the gate that already
+  owns plan tables, so no new script. A table row that follows a blank line and has no
+  header+separator pair of its own is a break. The error names the plan, the line and the first
+  dropped row. It is verified against this file with the `6d8da146` break restored.
 
 ### Findings (P4 batch B)
 
