@@ -122,8 +122,8 @@ const MOVES: readonly TranslationMove[] = [
   },
   // The inert `mode` spellings. The three modes a reader DOES consult (`telemetry.mode`,
   // `phaseGuards.mode`, `identity.mode`) are deliberately absent — folding those would destroy
-  // live settings. `analysis.semanticAnalysis.llmIntegration.mode` is absent for a different
-  // reason: the whole section is dropped below, so there is nothing to fold it into.
+  // live settings. The deprecated analysis section's inert mode spelling is absent for a
+  // different reason: the whole section is dropped below, so there is nothing to fold it into.
   { from: ['gates', 'mode'], to: ['gates', 'enabled'], coerce: 'onOff' },
   { from: ['frameworks', 'mode'], to: ['frameworks', 'enabled'], coerce: 'onOff' },
   // `resources` has no top-level `enabled` — `registerWithMcp` is that section's master switch.
