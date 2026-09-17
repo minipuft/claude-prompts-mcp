@@ -212,7 +212,7 @@ export class PromptExecutor {
     const chainSessionOptions = {
       ...(sessionConfig
         ? {
-            defaultSessionTimeoutMs: sessionConfig.sessionTimeoutMinutes * 60 * 1000,
+            defaultSessionTimeoutMs: sessionConfig.timeoutMinutes * 60 * 1000,
             reviewSessionTimeoutMs: sessionConfig.reviewTimeoutMinutes * 60 * 1000,
             cleanupIntervalMs: sessionConfig.cleanupIntervalMinutes * 60 * 1000,
           }

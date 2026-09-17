@@ -24,7 +24,6 @@ function createBaseConfig(): Config {
     },
     prompts: DEFAULT_PROMPTS_CONFIG,
     gates: {
-      directory: 'resources/gates',
       enabled: true,
       frameworkGates: true,
       executeInlineGateDefinitions: false,
@@ -45,7 +44,7 @@ function createBaseConfig(): Config {
       },
     },
     chainSessions: {
-      sessionTimeoutMinutes: 24 * 60,
+      timeoutMinutes: 24 * 60,
       reviewTimeoutMinutes: 30,
       cleanupIntervalMinutes: 5,
     },

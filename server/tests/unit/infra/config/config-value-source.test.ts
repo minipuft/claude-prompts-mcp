@@ -47,20 +47,19 @@ const SCHEMA_PATH = path.join(SERVER_ROOT, 'config.schema.json');
  *    only code default (`judge-prompt-builder.ts`) is `mode === 'judge'`, a function of the
  *    resolved mode rather than a constant, and folding the schema's `true` in would change what a
  *    `mode: 'self'` gate does. Named on `GatesConfig.evaluation`.
- * 3. **Keys `Config` cannot answer under the name the schema declares** — findings of row 6.2,
- *    recorded here rather than papered over. `hooks.expandedOutput` is a file key `Config` has no
- *    member for at all (the Python hooks read it straight off the file). The other three are
- *    RENAMES: the file says `versioning.maxVersions` / `versioning.autoVersion` /
- *    `chainSessions.timeoutMinutes`, the runtime holds `max_versions` / `auto_version` /
- *    `sessionTimeoutMinutes`, and the dot-walk over `Config` therefore misses a value the server
- *    very much does use (50, true, 1440). Resolving those needs a file-name → runtime-name map,
- *    which Ruling R40 declined once already — an owner call, not a loader change.
+ * 3. **`hooks.expandedOutput`** — a file key `Config` has no member for at all (the Python hooks
+ *    read it straight off the file). It is the one entry left of the row 6.2 findings: the other
+ *    three were RENAMES (the file said `versioning.maxVersions` / `versioning.autoVersion` /
+ *    `chainSessions.timeoutMinutes`, the runtime held `max_versions` / `auto_version` /
+ *    `sessionTimeoutMinutes`, and the dot-walk over `Config` missed a value the server very much
+ *    used — 50, true, 1440). Ruling R40 declined a file-name → runtime-name map for those; row 6.6
+ *    renamed the runtime type to match the file instead, so all three now resolve and are gone
+ *    from this list — see `answers versioning and chainSessions with their resolved values` below.
  *
  * Shrinking this list is progress; it still has to be done deliberately, which is why the
  * comparison is equality and not containment.
  */
 const KEYS_WITH_NO_EFFECTIVE_VALUE = [
-  'chainSessions.timeoutMinutes',
   'gates.evaluation.defaultModel',
   'gates.evaluation.strict',
   'hooks.expandedOutput',
@@ -71,8 +70,6 @@ const KEYS_WITH_NO_EFFECTIVE_VALUE = [
   'identity.launchDefaults.organizationId',
   'identity.launchDefaults.workspaceId',
   'telemetry.attributePolicy.allowlist',
-  'versioning.autoVersion',
-  'versioning.maxVersions',
 ];
 
 describe('config value source labeling (getConfigValueWithSource / listConfigKeys)', () => {
@@ -172,6 +169,27 @@ describe('config value source labeling (getConfigValueWithSource / listConfigKey
     // below anything the config surface could see.
     expect(manager.getConfigValueWithSource('prompts.registerWithMcp')).toMatchObject({
       value: true,
+      source: 'default',
+    });
+  });
+
+  // Row 6.6: the runtime `Config` used to spell these three fields differently from the schema
+  // path the dot-walk reads (`max_versions`/`auto_version`/`sessionTimeoutMinutes` at runtime vs
+  // `maxVersions`/`autoVersion`/`timeoutMinutes` on the schema path), so `readDotPath` found
+  // nothing and each answered `undefined` — the three entries `KEYS_WITH_NO_EFFECTIVE_VALUE` no
+  // longer carries. Renaming the runtime type to match closes the gap: each now answers the
+  // resolved default value the server actually uses.
+  it('answers versioning and chainSessions with their resolved values, not as no-value keys', () => {
+    expect(manager.getConfigValueWithSource('versioning.maxVersions')).toMatchObject({
+      value: 50,
+      source: 'default',
+    });
+    expect(manager.getConfigValueWithSource('versioning.autoVersion')).toMatchObject({
+      value: true,
+      source: 'default',
+    });
+    expect(manager.getConfigValueWithSource('chainSessions.timeoutMinutes')).toMatchObject({
+      value: 1440,
       source: 'default',
     });
   });

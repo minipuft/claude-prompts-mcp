@@ -223,9 +223,9 @@ describe('4.x -> 5.0 config file translation', () => {
       // moved nine of ten keys would satisfy any per-key assertion the author happened to write.
       expect(old.config).toEqual(twin.config);
       // Anchors the comparison to real values, so it cannot be satisfied by two defaulted configs.
-      expect(old.config.chainSessions?.sessionTimeoutMinutes).toBe(1440);
+      expect(old.config.chainSessions?.timeoutMinutes).toBe(1440);
       expect(old.config.frameworks?.injection?.systemPrompt?.frequency).toBe(3);
-      expect(old.config.versioning?.max_versions).toBe(50);
+      expect(old.config.versioning?.maxVersions).toBe(50);
 
       warn.mockRestore();
       await old.cleanup();

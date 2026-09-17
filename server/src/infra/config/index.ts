@@ -125,7 +125,7 @@ const DEFAULT_FRAMEWORKS_CONFIG: ResolvedFrameworkConfig = {
 };
 
 const DEFAULT_CHAIN_SESSION_CONFIG: ChainSessionConfig = {
-  sessionTimeoutMinutes: 24 * 60,
+  timeoutMinutes: 24 * 60,
   reviewTimeoutMinutes: 30,
   cleanupIntervalMinutes: 5,
 };
@@ -210,15 +210,13 @@ const DEFAULT_IDENTITY_CONFIG: IdentityConfig = {
  * `evaluation.defaultMode` has no prior home in code: `judge-prompt-builder.ts` already falls
  * back to the same `'self'`.
  *
- * `directory` is a hardcoded placeholder, not a resolved default: `ConfigFile['gates']` no longer
- * declares the key (it never had a reader — `getGatesDirectory()` resolves the gates path through
- * `PathResolver` and has never read this field), but `GatesConfig.directory` on the runtime type
- * (`core-config.ts`) is still required, so this literal exists only to satisfy that type. Making
- * `GatesConfig.directory` optional, or removing it, retires this literal too — out of scope here.
+ * Row 6.6 removed `directory` from `GatesConfig` (`core-config.ts`): it was a hardcoded
+ * placeholder with no reader — `ConfigFile['gates']` never declared the key, and
+ * `getGatesDirectory()` resolves the gates path through `PathResolver` instead — kept alive only
+ * because the runtime type required it.
  */
 const DEFAULT_GATES_SECTION: Config['gates'] = {
   enabled: DEFAULT_GATES_CONFIG.enabled,
-  directory: 'resources/gates',
   frameworkGates: DEFAULT_GATES_CONFIG.enableFrameworkGates,
   executeInlineGateDefinitions: DEFAULT_GATES_CONFIG.executeInlineGateDefinitions,
   evaluation: { defaultMode: 'self' },
@@ -307,14 +305,13 @@ function normalizeFrameworks(file: ConfigFile): Config['frameworks'] {
 /**
  * Chain session lifetimes, read from the file's ROOT `chainSessions`.
  *
- * The rename the mapping makes visible: the file says `timeoutMinutes`, the runtime reads
- * `sessionTimeoutMinutes`. A cast could not have caught that; this signature does.
+ * File and runtime share one spelling now (row 6.6: `timeoutMinutes` on both), so this is pure
+ * defaulting rather than a rename a cast could not have caught.
  */
 function normalizeChainSessions(file: ConfigFile): ChainSessionConfig {
   const sessions = file.chainSessions;
   return {
-    sessionTimeoutMinutes:
-      sessions?.timeoutMinutes ?? DEFAULT_CHAIN_SESSION_CONFIG.sessionTimeoutMinutes,
+    timeoutMinutes: sessions?.timeoutMinutes ?? DEFAULT_CHAIN_SESSION_CONFIG.timeoutMinutes,
     reviewTimeoutMinutes:
       sessions?.reviewTimeoutMinutes ?? DEFAULT_CHAIN_SESSION_CONFIG.reviewTimeoutMinutes,
     cleanupIntervalMinutes:
@@ -326,11 +323,9 @@ function normalizeChainSessions(file: ConfigFile): ChainSessionConfig {
  * Gates, resolved leaf by leaf against {@link DEFAULT_GATES_SECTION}.
  *
  * The wire-to-internal rename lives in `getGatesConfig()`, which is now pure name mapping:
- * `frameworkGates` here becomes `enableFrameworkGates` there. `directory` is not resolved from
- * the file at all — `ConfigFile['gates']` carries no such key, since `getGatesDirectory()`
- * answers "where do gates live" through `PathResolver` and has never read it — so this always
- * takes the `DEFAULT_GATES_SECTION` placeholder; see that constant's doc for why the field
- * remains.
+ * `frameworkGates` here becomes `enableFrameworkGates` there. There is no `directory` leaf any
+ * more (row 6.6) — `ConfigFile['gates']` never carried the key, and `getGatesDirectory()` answers
+ * "where do gates live" through `PathResolver` instead.
  *
  * `evaluation.strict` and `evaluation.defaultModel` are deliberately left unresolved; see the
  * `GatesConfig.evaluation` doc for why `strict` cannot be folded into a constant.
@@ -340,7 +335,6 @@ function normalizeGates(file: ConfigFile): Config['gates'] {
   const evaluation = gates?.evaluation;
   return {
     enabled: gates?.enabled ?? DEFAULT_GATES_SECTION.enabled,
-    directory: DEFAULT_GATES_SECTION.directory,
     frameworkGates: gates?.frameworkGates ?? DEFAULT_GATES_SECTION.frameworkGates,
     executeInlineGateDefinitions:
       gates?.executeInlineGateDefinitions ?? DEFAULT_GATES_SECTION.executeInlineGateDefinitions,
@@ -433,19 +427,18 @@ function normalizeIdentity(file: ConfigFile): IdentityConfig {
 }
 
 /**
- * Versioning, reading the camelCase spelling the 5.0 file declares.
- *
- * The rename the mapping makes visible, same class as `chainSessions`: the file says `maxVersions`,
- * the runtime reads `max_versions`. A 4.x file spelling that pair snake_case is folded into the
- * camelCase one by {@link translateConfigFile} before it reaches here, so there is one spelling per
- * concept at this point rather than two read in precedence order.
+ * Versioning, reading the camelCase spelling the 5.0 file declares — the runtime shares it too
+ * now (row 6.6), so this is pure defaulting rather than a rename. A 4.x file spelling this pair
+ * snake_case is folded into the camelCase one by {@link translateConfigFile} before it reaches
+ * here, so there is one spelling per concept at this point rather than two read in precedence
+ * order.
  */
 function normalizeVersioning(file: ConfigFile): VersioningConfig {
   const versioning = file.versioning;
   return {
     enabled: versioning?.enabled ?? DEFAULT_VERSIONING_CONFIG.enabled,
-    max_versions: versioning?.maxVersions ?? DEFAULT_VERSIONING_CONFIG.max_versions,
-    auto_version: versioning?.autoVersion ?? DEFAULT_VERSIONING_CONFIG.auto_version,
+    maxVersions: versioning?.maxVersions ?? DEFAULT_VERSIONING_CONFIG.maxVersions,
+    autoVersion: versioning?.autoVersion ?? DEFAULT_VERSIONING_CONFIG.autoVersion,
   };
 }
 

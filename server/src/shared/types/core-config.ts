@@ -146,7 +146,7 @@ export interface ExecutionConfig {
  */
 export interface ChainSessionConfig {
   /** Minutes before idle chain sessions expire */
-  sessionTimeoutMinutes: number;
+  timeoutMinutes: number;
   /** Minutes before pending gate reviews expire */
   reviewTimeoutMinutes: number;
   /** Minutes between background cleanup sweeps */
@@ -206,8 +206,6 @@ export const DEFAULT_GATES_CONFIG = {
  * and are marked there.
  */
 export interface GatesConfig {
-  /** New-style: directory path */
-  directory: string;
   /** Enable/disable the gate subsystem entirely */
   enabled: boolean;
   /**
@@ -322,9 +320,9 @@ export interface VersioningConfig {
   /** Enable/disable version tracking globally */
   enabled: boolean;
   /** Maximum versions to retain per resource (FIFO pruning) */
-  max_versions: number;
+  maxVersions: number;
   /** Auto-save version on updates (can be overridden per-call) */
-  auto_version: boolean;
+  autoVersion: boolean;
 }
 
 /**
@@ -332,8 +330,8 @@ export interface VersioningConfig {
  */
 export const DEFAULT_VERSIONING_CONFIG: VersioningConfig = {
   enabled: true,
-  max_versions: 50,
-  auto_version: true,
+  maxVersions: 50,
+  autoVersion: true,
 };
 
 // ===== Telemetry Configuration Types =====

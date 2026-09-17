@@ -117,10 +117,10 @@ describe('config file -> runtime config mapping', () => {
         chainSessions: { timeoutMinutes: 90, reviewTimeoutMinutes: 11, cleanupIntervalMinutes: 2 },
       });
 
-      // `timeoutMinutes` on the file, `sessionTimeoutMinutes` at runtime: the rename the mapping
-      // makes visible and the cast could not.
+      // `timeoutMinutes` on both the file and the runtime now (row 6.6) — pure defaulting, no
+      // rename left for a cast to have missed.
       expect(config.chainSessions).toEqual({
-        sessionTimeoutMinutes: 90,
+        timeoutMinutes: 90,
         reviewTimeoutMinutes: 11,
         cleanupIntervalMinutes: 2,
       });
@@ -140,7 +140,7 @@ describe('config file -> runtime config mapping', () => {
         advanced: { sessions: { timeoutMinutes: 90 } },
       });
 
-      expect(manager.getChainSessionConfig().sessionTimeoutMinutes).toBe(1440);
+      expect(manager.getChainSessionConfig().timeoutMinutes).toBe(1440);
 
       await cleanup();
     });
@@ -161,7 +161,6 @@ describe('config file -> runtime config mapping', () => {
       execution: { judge: true },
       gates: {
         enabled: true,
-        directory: 'resources/gates',
         frameworkGates: true,
         executeInlineGateDefinitions: false,
         // `strict` and `defaultModel` are present-and-undefined on purpose; see
@@ -182,12 +181,12 @@ describe('config file -> runtime config mapping', () => {
         },
       },
       chainSessions: {
-        sessionTimeoutMinutes: 1440,
+        timeoutMinutes: 1440,
         reviewTimeoutMinutes: 30,
         cleanupIntervalMinutes: 5,
       },
       logging: { directory: './logs', level: 'info' },
-      versioning: { enabled: true, max_versions: 50, auto_version: true },
+      versioning: { enabled: true, maxVersions: 50, autoVersion: true },
       verification: {
         inContextAttempts: 3,
         isolation: { enabled: true, maxBudget: 1, timeout: 300, permissionMode: 'delegate' },
@@ -247,14 +246,13 @@ describe('config file -> runtime config mapping', () => {
     it('passes gates, resources and logging through as written', async () => {
       const { config, cleanup } = await resolve({
         version: 5,
-        gates: { enabled: false, directory: 'my-gates', harnessCovers: ['security'] },
+        gates: { enabled: false, harnessCovers: ['security'] },
         resources: { registerWithMcp: true, logs: { maxEntries: 50 } },
         logging: { directory: '/var/log/cpm', level: 'debug' },
       });
 
       expect(config.gates).toMatchObject({
         enabled: false,
-        directory: 'my-gates',
         harnessCovers: ['security'],
       });
       expect(config.resources).toMatchObject({

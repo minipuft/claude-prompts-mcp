@@ -231,8 +231,8 @@ describe('legacy config key migration', () => {
         versioning: { enabled: true, max_versions: 42, auto_version: false },
       });
 
-      expect(manager.getVersioningConfig().max_versions).toBe(42);
-      expect(manager.getVersioningConfig().auto_version).toBe(false);
+      expect(manager.getVersioningConfig().maxVersions).toBe(42);
+      expect(manager.getVersioningConfig().autoVersion).toBe(false);
 
       await cleanup();
     });
@@ -243,8 +243,8 @@ describe('legacy config key migration', () => {
         versioning: { enabled: true, maxVersions: 42, autoVersion: false },
       });
 
-      expect(manager.getVersioningConfig().max_versions).toBe(42);
-      expect(manager.getVersioningConfig().auto_version).toBe(false);
+      expect(manager.getVersioningConfig().maxVersions).toBe(42);
+      expect(manager.getVersioningConfig().autoVersion).toBe(false);
 
       await cleanup();
     });
@@ -256,7 +256,7 @@ describe('legacy config key migration', () => {
 
       // The 4.x key is consumed and reported, but an explicit 5.0 value is the newer intent and
       // the 4.x one never reached a reader anyway.
-      expect(manager.getVersioningConfig().max_versions).toBe(42);
+      expect(manager.getVersioningConfig().maxVersions).toBe(42);
 
       await cleanup();
     });
