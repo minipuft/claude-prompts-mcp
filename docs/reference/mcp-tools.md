@@ -1117,20 +1117,20 @@ system_control(action:"gates", operation:"list")
 
 ### Actions
 
-| Action              | Operations                                          | Parameters                                                                                                            | Purpose                                                                                                                 |
-| ------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `status`            | —                                                   | `show_details`, `include_history`, `include_metrics`                                                                  | Runtime overview                                                                                                        |
-| `framework`         | `list`, `switch`, `enable`, `disable`               | `framework`, `reason`, `persist`, `show_details`                                                                      | Framework management                                                                                                    |
-| `gates`             | `list`, `enable`, `disable`, `status`, `health`     | `search_query`, `reason`, `persist`                                                                                   | Gate management                                                                                                         |
-| `analytics`         | `view`, `history`, `reset`                          | `include_history`; `limit` for history; `confirm: true` for reset                                                     | Execution metrics                                                                                                       |
-| `config`            | `list`, `keys`, `validate`                          | `config: { key, value?, operation: "validate" }` for a per-key candidate check                                        | Read-only: whole configuration, declared schema keys, or a validity check — see [Config Operations](#config-operations) |
-| `maintenance`       | `restart`                                           | `confirm: true`, `reason`                                                                                             | Server restart                                                                                                          |
-| `guide`             | —                                                   | `topic`, `include_planned`                                                                                            | Operation overview                                                                                                      |
-| `injection`         | `status`, `override`, `reset`                       | `type`, `enabled`, `scope`, `scope_id`, `expires_in_ms` for override                                                  | Session injection overrides                                                                                             |
-| `changes`           | `list`                                              | `source`, `resource_type`, `since`, `limit`                                                                           | Resource change audit log                                                                                               |
-| `session`           | `list`, `inspect`, `clear`                          | `session_id`, `show_details`                                                                                          | Chain session lifecycle                                                                                                 |
-| `execution_history` | `list`                                              | `limit`                                                                                                               | Chain execution ledger                                                                                                  |
-| `skills_sync`       | `status`, `export`, `sync`, `diff`, `pull`, `clone` | `client`, `scope`, `resource_type`, `id`, `preview`, `preview_detail`, `prune`, `output`, `file`, `category`, `force` | Export canonical resources as client skills — [Skills Sync](../guides/skills-sync.md)                                   |
+| Action              | Operations                                          | Parameters                                                                                                            | Purpose                                                                                                                                  |
+| ------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `status`            | —                                                   | `show_details`, `include_history`, `include_metrics`                                                                  | Runtime overview                                                                                                                         |
+| `framework`         | `list`, `switch`, `enable`, `disable`               | `framework`, `reason`, `persist`, `show_details`                                                                      | Framework management                                                                                                                     |
+| `gates`             | `list`, `enable`, `disable`, `status`, `health`     | `search_query`, `reason`, `persist`                                                                                   | Gate management                                                                                                                          |
+| `analytics`         | `view`, `history`, `reset`                          | `include_history`; `limit` for history; `confirm: true` for reset                                                     | Execution metrics                                                                                                                        |
+| `config`            | `list`, `keys`, `get`, `validate`                   | `config: { key, value?, operation }` for `get` (one key's value + source) or `validate` (a per-key candidate check)   | Read-only: whole configuration, declared schema keys, one key's value, or a validity check — see [Config Operations](#config-operations) |
+| `maintenance`       | `restart`                                           | `confirm: true`, `reason`                                                                                             | Server restart                                                                                                                           |
+| `guide`             | —                                                   | `topic`, `include_planned`                                                                                            | Operation overview                                                                                                                       |
+| `injection`         | `status`, `override`, `reset`                       | `type`, `enabled`, `scope`, `scope_id`, `expires_in_ms` for override                                                  | Session injection overrides                                                                                                              |
+| `changes`           | `list`                                              | `source`, `resource_type`, `since`, `limit`                                                                           | Resource change audit log                                                                                                                |
+| `session`           | `list`, `inspect`, `clear`                          | `session_id`, `show_details`                                                                                          | Chain session lifecycle                                                                                                                  |
+| `execution_history` | `list`                                              | `limit`                                                                                                               | Chain execution ledger                                                                                                                   |
+| `skills_sync`       | `status`, `export`, `sync`, `diff`, `pull`, `clone` | `client`, `scope`, `resource_type`, `id`, `preview`, `preview_detail`, `prune`, `output`, `file`, `category`, `force` | Export canonical resources as client skills — [Skills Sync](../guides/skills-sync.md)                                                    |
 
 Every parameter is declared in the tool's input schema, which drops any field it does not declare
 before the action runs. Two names are shared across actions with different values: `scope` is
@@ -1141,8 +1141,9 @@ change log records only `prompt` and `gate`. Each action refuses a value that be
 ### Config Operations
 
 Read-only over MCP: `list` (the whole loaded configuration), `keys` (the dot-path keys the
-packaged `config.schema.json` declares), and `validate` (the load-time schema check, or a per-key
-candidate check via the nested `config` object).
+packaged `config.schema.json` declares), `get` (one key's effective value and where it came from),
+and `validate` (the load-time schema check, or a per-key candidate check via the nested `config`
+object).
 
 ```bash
 # The whole loaded configuration
@@ -1151,6 +1152,9 @@ system_control(action:"config", operation:"list")
 # Every dot-path key the schema declares
 system_control(action:"config", operation:"keys")
 
+# One key's effective value and source
+system_control(action:"config", operation:"get", config:{key:"server.name", operation:"get"})
+
 # The check the server already ran against config.json at load time
 system_control(action:"config", operation:"validate")
 
@@ -1158,11 +1162,16 @@ system_control(action:"config", operation:"validate")
 system_control(action:"config", operation:"validate", config:{key:"logging.level", value:"debug", operation:"validate"})
 ```
 
-`get`, `set`, `reset`, and `restore` are not served here. Any other operation — or a request naming
-none at all — is refused by name rather than answered with a listing, which is what a malformed
-request used to fall back to. Read a single key with `cpm config get <key>` until a generated
-config shape lets `get` return over MCP; change one with `cpm config set <key> <value>` or reset
-with `cpm config reset --force`.
+`get` answers with the key, its effective value as JSON, and a `source` — `file` (the config file
+sets it), `default` (the built-in default; the file does not set it), `environment` (an
+environment variable overrides the file and default), or `deferred` (the file does not set it and
+no value has been resolved yet). A key `keys` does not list is refused, naming `keys` as the way to
+see what is declared; a `get` with no key is refused the same way.
+
+`set`, `reset`, and `restore` are not served here. Any other operation — or a request naming none
+at all — is refused by name rather than answered with a listing, which is what a malformed request
+used to fall back to. Change a value with `cpm config set <key> <value>` or reset with
+`cpm config reset --force`.
 
 This is not "configuration cannot be written over MCP": `system_control(action:"gates"|"framework",
 operation:"enable"|"disable", persist:true)` still records that one setting in `config.json`. The
