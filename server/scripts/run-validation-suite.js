@@ -477,6 +477,19 @@ export const SUITE = [
       'CHECKED both ways — the self-test runs each predicate over a real `dry_run` declaration, JSON key, CLI flag and HTTP route (must match), the replacement parameter and two comments explaining the removal (must not), and the inline-code gap that made an earlier prose rule flag two true sentences; the satisfied-exception arm fails an exemption whose file no longer contains the word',
   },
   {
+    // `spawn` is a TEXTUAL match, not a behavioural one: the self-test embeds the pre-fix
+    // fixture's own error string verbatim, which contains the literal `npm run build`. The
+    // script starts no process and imports only node:fs, node:path and node:url. Declared rather
+    // than reworded around, for the reason validate:hermetic-child-env and
+    // validate:test-directory-membership already declare it: the detector is textual by design
+    // and omitting a matched substrate fails.
+    script: 'validate:dist-freshness-consumers',
+    io: 'read',
+    reads: ['file', 'spawn', 'walk'],
+    converse:
+      'CHECKED both ways — the self-test drives the predicate over the real pre-fix `verify-unknown-interrupt.mjs` text (direct-chain `statSync(DIST).mtimeMs`, must report), its fixed replacement (must not, since it has no local stat/mtime call), a twin that keeps the pre-fix shape but adds the import (must be exempted, and the suppressed finding is asserted so the exemption is proven to fire on the shape and not on an absence of one), `dist-freshness.js`’s own shape exempted by path only, and a false-positive control drawn from `validate-preview-vocabulary.js` (mentions `dist` as a skip-list entry, stats an unrelated `full`, must not report); the live tree is the sixth case. A control also ran the CLI end-to-end against the pre-fix file swapped into place (exit 1, naming the line) and restored (exit 0). NOT resolved: a generic `newestMtime`-shaped walker called elsewhere with a dist-flavored argument, where the function body itself never mentions `dist` — stated as a blind spot in the file header rather than silently claimed closed',
+  },
+  {
     script: 'validate:prompts',
     io: 'read',
     reads: ['file', 'walk'],
