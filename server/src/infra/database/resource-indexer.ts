@@ -1100,28 +1100,6 @@ export class ResourceIndexer {
   }
 
   /**
-   * Get valid style IDs from the index.
-   * Replaces directory-scanning _meta.valid_styles from cache files.
-   */
-  getValidStyles(): string[] {
-    const rows = this.db.query<{ id: string }>(
-      "SELECT id FROM resource_index WHERE type = 'style' ORDER BY id"
-    );
-    return rows.map((r) => r.id.toLowerCase());
-  }
-
-  /**
-   * Get valid framework IDs from the index.
-   * Replaces directory-scanning _meta.valid_frameworks from cache files.
-   */
-  getValidFrameworks(): string[] {
-    const rows = this.db.query<{ id: string }>(
-      "SELECT id FROM resource_index WHERE type = 'framework' ORDER BY id"
-    );
-    return rows.map((r) => r.id.toLowerCase());
-  }
-
-  /**
    * Sync script tools from prompt directories.
    *
    * Tools are nested inside prompts: prompts/{category}/{id}/tools/{toolId}/
