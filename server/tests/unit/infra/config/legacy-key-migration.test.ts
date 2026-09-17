@@ -4,7 +4,8 @@
  * The methodology -> framework vocabulary sweep renamed two config sections and one key. All
  * fail SILENTLY when absent: the old key is read as undefined and the default takes over, so a
  * user who had deliberately turned something off finds it back on with no error emitted. These
- * tests pin the adoption because `tsc` cannot see it — the shape is only bound at load time.
+ * tests pin the 4.x -> 5.0 translation because `tsc` cannot see it — the shape is only bound at
+ * load time.
  */
 
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
@@ -145,12 +146,17 @@ describe('legacy config key migration', () => {
     });
   });
 
-  // The inert `mode` spelling. `cpm enable gates` wrote `gates.mode: "on"` while every runtime
-  // reader consulted `gates.enabled`, so the command reported success and changed nothing. The
-  // write path assigns dot-keys verbatim (config-operations.ts applyConfigChange), so there was
-  // never a translation step — the two spellings simply never met.
-  describe('inert `mode` spelling -> canonical boolean', () => {
-    it('adopts a deliberate disable written as gates.mode', async () => {
+  // The inert `mode` spelling, now a 4.x FILE spelling. `cpm enable gates` wrote
+  // `gates.mode: "on"` while every runtime reader consulted `gates.enabled`, so the command
+  // reported success and changed nothing. The write path assigns dot-keys verbatim
+  // (config-operations.ts applyConfigChange), so there was never a translation step — the two
+  // spellings simply never met.
+  //
+  // Every fixture below deliberately omits `version`: that is what makes it a 4.x file, and the
+  // only thing that makes it translated. Each asserts the RESOLVED runtime value, which is the
+  // only thing that separates "translated" from "accepted and ignored".
+  describe('a 4.x `mode` spelling translates to its canonical boolean', () => {
+    it('translates a deliberate disable written as gates.mode', async () => {
       const { config, cleanup } = await loadConfigFrom({ gates: { mode: 'off' } });
 
       expect(config.gates?.enabled).toBe(false);
@@ -159,16 +165,13 @@ describe('legacy config key migration', () => {
       await cleanup();
     });
 
-    it('adopts an enable written as the llmIntegration mode', async () => {
-      const { config, cleanup } = await loadConfigFrom({
-        analysis: { semanticAnalysis: { llmIntegration: { mode: 'on' } } },
-      });
+    // The twin that makes every case in this block evidence about the VERSION key: the same
+    // fixture under `version: 5` is not a 4.x file, so nothing is translated and `gates.mode`
+    // reaches no reader.
+    it('leaves the same spelling alone in a `version: 5` file', async () => {
+      const { config, cleanup } = await loadConfigFrom({ version: 5, gates: { mode: 'off' } });
 
-      expect(config.analysis?.semanticAnalysis?.llmIntegration?.enabled).toBe(true);
-      expect(
-        (config.analysis?.semanticAnalysis?.llmIntegration as Record<string, unknown> | undefined)
-          ?.mode
-      ).toBeUndefined();
+      expect(config.gates?.enabled).toBeUndefined();
 
       await cleanup();
     });
@@ -217,11 +220,24 @@ describe('legacy config key migration', () => {
     });
   });
 
-  // Same class, different spelling axis: the CLI accepted camelCase while the runtime read
-  // snake_case, so `cpm config set versioning.maxVersions 42` was equally inert.
-  describe('camelCase versioning keys -> snake_case', () => {
-    it('adopts maxVersions and autoVersion', async () => {
+  // Same class, different spelling axis — and the direction flipped at 5.0. The 4.x FILE spelled
+  // this pair snake_case (which was the RUNTIME `VersioningConfig` name it happened to share);
+  // the 5.0 file spells it camelCase, and the loader maps between the two shapes.
+  describe('a 4.x snake_case versioning pair translates to camelCase', () => {
+    it('translates max_versions and auto_version', async () => {
       const { manager, cleanup } = await loadConfigFrom({
+        versioning: { enabled: true, max_versions: 42, auto_version: false },
+      });
+
+      expect(manager.getVersioningConfig().max_versions).toBe(42);
+      expect(manager.getVersioningConfig().auto_version).toBe(false);
+
+      await cleanup();
+    });
+
+    it('reads the 5.0 spelling as written, translated or not', async () => {
+      const { manager, cleanup } = await loadConfigFrom({
+        version: 5,
         versioning: { enabled: true, maxVersions: 42, autoVersion: false },
       });
 
@@ -231,12 +247,14 @@ describe('legacy config key migration', () => {
       await cleanup();
     });
 
-    it('prefers the canonical spelling when both are present', async () => {
+    it('prefers the canonical 5.0 spelling when both are present', async () => {
       const { manager, cleanup } = await loadConfigFrom({
         versioning: { enabled: true, max_versions: 7, maxVersions: 42 },
       });
 
-      expect(manager.getVersioningConfig().max_versions).toBe(7);
+      // The 4.x key is consumed and reported, but an explicit 5.0 value is the newer intent and
+      // the 4.x one never reached a reader anyway.
+      expect(manager.getVersioningConfig().max_versions).toBe(42);
 
       await cleanup();
     });
@@ -395,12 +413,12 @@ describe('legacy config key migration', () => {
     });
   });
 
-  // Deprecation, not migration: there is nothing to adopt the `analysis` section INTO. Its
-  // replacement is a different mechanism (the `%judge` modifier), so the section is kept parsed
-  // for one cycle and announced rather than folded. `config.json` is declared public API surface,
-  // so a config that sets it has to keep loading — the warning is what makes that honest instead
-  // of merely silent.
-  describe('deprecated `analysis` section', () => {
+  // Removal, not migration: there is nothing to translate the `analysis` section INTO. Its
+  // replacement is a different mechanism (the `%judge` modifier), so the 4.x translation drops it
+  // and the notice names that replacement. `config.json` is declared public API surface, so a
+  // config that still sets it has to keep LOADING — dropping the section is what makes the
+  // removal honest instead of merely silent, and the notice is what makes it actionable.
+  describe('a 4.x `analysis` section is dropped with one notice', () => {
     let warnSpy: jest.SpiedFunction<typeof console.warn>;
 
     beforeEach(() => {
@@ -413,65 +431,90 @@ describe('legacy config key migration', () => {
       warnSpy.mockRestore();
     });
 
-    const analysisWarnings = (): string[] =>
+    /**
+     * The 4.x translation notice, isolated from every other warning line. Keyed on the sentence
+     * only this notice carries — the schema-mismatch lines share the `[CONFIG]` prefix.
+     */
+    const translationNotices = (): string[] =>
       warnSpy.mock.calls
         .map((call) => String(call[0]))
-        .filter((line) => line.includes('analysis.semanticAnalysis'));
+        .filter((line) => line.includes('translated to the 5.0 shape'));
 
-    it('warns when a config still carries the section', async () => {
+    it('drops the section and names it, plus its replacement, in one notice', async () => {
       const { manager, cleanup } = await managerFor({
         analysis: { semanticAnalysis: { llmIntegration: { enabled: true } } },
       });
 
-      await manager.loadConfig();
+      const config = await manager.loadConfig();
 
-      const warnings = analysisWarnings();
-      expect(warnings).toHaveLength(1);
-      // Naming the replacement is the point: a deprecation that only says "stop" reads as breakage.
-      expect(warnings[0]).toContain('deprecated');
-      expect(warnings[0]).toContain('%judge');
+      // Dropped, not parsed-and-ignored: the deprecation cycle is over and the section resolves
+      // to nothing at all.
+      expect(config.analysis).toBeUndefined();
+
+      const notices = translationNotices();
+      expect(notices).toHaveLength(1);
+      expect(notices[0]).toContain('analysis');
+      // Naming the replacement is the point: a removal that only says "stop" reads as breakage.
+      expect(notices[0]).toContain('%judge');
+      expect(notices[0]).toContain('gates.evaluation.defaultMode');
 
       await cleanup();
     });
 
-    it('still loads the section rather than rejecting it', async () => {
+    it('still LOADS a config that carries the section, rather than refusing it', async () => {
       const { manager, cleanup } = await managerFor({
+        gates: { enabled: false },
         analysis: { semanticAnalysis: { llmIntegration: { enabled: true, model: 'gpt-4o' } } },
       });
 
       const config = await manager.loadConfig();
 
-      // Parsed-and-ignored, not parsed-and-dropped: an existing config keeps its values through
-      // the deprecation cycle. This is what makes the removal — not this tier — the breaking act.
-      expect(config.analysis?.semanticAnalysis?.llmIntegration?.enabled).toBe(true);
-      expect(config.analysis?.semanticAnalysis?.llmIntegration?.model).toBe('gpt-4o');
+      // `config.json` is declared public API surface: the rest of the file keeps working, which
+      // is what makes the dropped section a notice rather than an outage.
+      expect(config.gates?.enabled).toBe(false);
 
       await cleanup();
     });
 
-    it('warns once per process, not once per load', async () => {
+    it('notices once per process, not once per load', async () => {
       const { manager, cleanup } = await managerFor({
         analysis: { semanticAnalysis: { llmIntegration: { enabled: false } } },
       });
 
       // File watching re-enters loadConfig on every external edit; a notice that repeats per
-      // reload becomes noise the operator filters out, which is how a deprecation goes unread.
+      // reload becomes noise the operator filters out, which is how a removal goes unread.
       await manager.loadConfig();
       await manager.loadConfig();
       await manager.loadConfig();
 
-      expect(analysisWarnings()).toHaveLength(1);
+      expect(translationNotices()).toHaveLength(1);
 
       await cleanup();
     });
 
-    it('stays silent for a config that never mentions the section', async () => {
+    it('stays silent for a `version: 5` file carrying the section', async () => {
+      const { manager, cleanup } = await managerFor({
+        version: 5,
+        analysis: { semanticAnalysis: { llmIntegration: { enabled: true } } },
+      });
+
+      await manager.loadConfig();
+
+      // A file that declares its version is never translated, so there is nothing to report —
+      // the schema check owns the undeclared `analysis` key from here.
+      expect(translationNotices()).toHaveLength(0);
+
+      await cleanup();
+    });
+
+    it('stays silent for a 4.x config that never mentions the section', async () => {
       const { manager, cleanup } = await managerFor({ gates: { enabled: true } });
 
       await manager.loadConfig();
 
-      // The defaulted case must not warn: a user who never wrote the key has nothing to act on.
-      expect(analysisWarnings()).toHaveLength(0);
+      // Nothing translated and nothing dropped: a user who never wrote a 4.x key has nothing to
+      // act on, so a version-less file is not reported merely for being version-less.
+      expect(translationNotices()).toHaveLength(0);
 
       await cleanup();
     });

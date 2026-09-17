@@ -88,6 +88,57 @@ describe('config schema validation warnings', () => {
     expect(manager.getSchemaValidation()).toMatchObject({ status: 'valid', valid: true });
   });
 
+  /**
+   * The 4.x translation notice, isolated from the schema lines above — both carry `[CONFIG]`, so
+   * the filter keys on the sentence only the translation notice holds.
+   */
+  const translationNotices = (): string[] =>
+    warnSpy.mock.calls
+      .map((call) => String(call[0]))
+      .filter((line) => line.includes('translated to the 5.0 shape'));
+
+  /**
+   * The ORDER of the load steps, which is what ruling R33 fixed: translate, THEN check.
+   *
+   * A 4.x key the translation handled is not drift the operator has to act on — reporting it would
+   * tell them to fix a file the server just read correctly. The `version: 5` twin is the control
+   * that makes this a statement about the ORDER rather than about the schema: the identical keys
+   * in a file that declares its version are not translated, and are reported by name.
+   *
+   * MUTATION (measured): move `checkAgainstSchema` above `translateConfigFile` in
+   * `ConfigLoader.loadConfig` and the first case fails at 2 schema warnings instead of 0.
+   */
+  it('reports nothing schema-wise for a 4.x file, and by name for its version-5 twin', async () => {
+    const fourX = {
+      frameworks: { enabled: true, systemPromptFrequency: 7 },
+      advanced: { sessions: { timeoutMinutes: 90 } },
+    };
+
+    await writeFile(configPath, JSON.stringify(fourX), 'utf8');
+    const fourXManager = new ConfigLoader(configPath, undefined, { schemaPath: SCHEMA_PATH });
+    await fourXManager.loadConfig();
+
+    expect(schemaWarnings()).toHaveLength(0);
+    expect(fourXManager.getSchemaValidation()).toMatchObject({ status: 'valid', valid: true });
+    // Not silent, though — silence would hide a file that needs rewriting before 6.0.0.
+    const notices = translationNotices();
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toContain('systemPromptFrequency');
+    expect(notices[0]).toContain('advanced.sessions.timeoutMinutes');
+
+    warnSpy.mockClear();
+    await writeFile(configPath, JSON.stringify({ ...fourX, version: 5 }), 'utf8');
+    const fiveXManager = new ConfigLoader(configPath, undefined, { schemaPath: SCHEMA_PATH });
+    await fiveXManager.loadConfig();
+
+    const warnings = schemaWarnings();
+    expect(warnings).toHaveLength(2);
+    expect(warnings.some((line) => line.includes('systemPromptFrequency'))).toBe(true);
+    expect(warnings.some((line) => line.includes('advanced'))).toBe(true);
+    expect(fiveXManager.getSchemaValidation()).toMatchObject({ status: 'invalid', valid: false });
+    expect(translationNotices()).toHaveLength(0);
+  });
+
   // One ConfigLoader instance, driven through the full measured sequence: typo, unchanged
   // reload, a second typo, a fix, the typo reintroduced, broken JSON, then two schemaPath-less
   // manager variants. Each step rewrites the same temp config.json before reloading.

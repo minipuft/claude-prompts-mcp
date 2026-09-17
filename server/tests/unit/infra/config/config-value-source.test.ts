@@ -3,7 +3,7 @@
  *
  * `getConfigValueWithSource(key)` reports where an effective config value came from: `'file'`,
  * `'default'`, `'environment'`, or `'deferred'`. `normalizeConfigFile` resolves a real value for
- * only a handful of sections (`server`, `prompts`, `analysis`, `frameworks`, `chainSessions`,
+ * only a handful of sections (`server`, `prompts`, `frameworks`, `chainSessions`,
  * `execution`, `versioning`, `telemetry`) — every OTHER schema-declared
  * key (`gates`, `resources`, `logging`, `identity`, `verification`, `phaseGuards`, `hooks`, plus a
  * few genuinely default-less leaves inside the sections that ARE written back, e.g.
@@ -134,6 +134,36 @@ describe('config value source labeling (getConfigValueWithSource / listConfigKey
     expect(manager.getConfigValueWithSource('logging.level')).toMatchObject({
       value: 'debug',
       source: 'environment',
+    });
+  });
+
+  // The snapshot `getConfigValueWithSource` labels from is taken AFTER the 4.x translation, so a
+  // key the operator wrote in a 4.x spelling is reported under its 5.0 name. Before that order was
+  // fixed, the raw snapshot held the 4.x spelling and the merged config held the 5.0 one, and
+  // neither name answered with both a value and a 'file' label.
+  describe('a 4.x file is labelled under its 5.0 key names', () => {
+    it('reports a translated flat key as "file" under the nested 5.0 name', async () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const fourXPath = path.join(tempDir, 'four-x.json');
+      await writeFile(
+        fourXPath,
+        JSON.stringify({ frameworks: { enabled: true, systemPromptFrequency: 7 } }),
+        'utf8'
+      );
+
+      const fourXManager = new ConfigLoader(fourXPath, undefined, { schemaPath: SCHEMA_PATH });
+      await fourXManager.loadConfig();
+
+      expect(
+        fourXManager.getConfigValueWithSource('frameworks.injection.systemPrompt.frequency')
+      ).toMatchObject({ value: 7, source: 'file' });
+      // The 4.x spelling is not a config key at all any more — it is not in the schema, so it is
+      // not enumerable, and asking for it answers 'deferred' rather than inventing a value.
+      expect(
+        fourXManager.getConfigValueWithSource('frameworks.systemPromptFrequency')
+      ).toMatchObject({ value: undefined, source: 'deferred' });
+
+      warn.mockRestore();
     });
   });
 

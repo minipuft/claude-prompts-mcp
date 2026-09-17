@@ -80,11 +80,26 @@ describe('config file -> runtime config mapping', () => {
       await cleanup();
     });
 
-    // The 4.x flat spelling is no longer read. INTERIM until the 4->5 translation lands (step 4);
-    // flips when a version-less file is translated — at that point this fixture resolves to 7
-    // again, through the translation rather than through the loader, and this case inverts.
-    it('ignores the flat `systemPromptFrequency`, resolving to the default instead', async () => {
+    // The flip this case's previous stamp named: a version-less file IS a 4.x file, so the flat
+    // spelling resolves to 7 again — through `translateConfigFile`, not through this mapping,
+    // which never sees the flat key.
+    it('resolves the flat `systemPromptFrequency` of a version-less 4.x file to 7', async () => {
       const { config, manager, cleanup } = await resolve({
+        frameworks: { enabled: true, systemPromptFrequency: 7 },
+      });
+
+      expect(config.frameworks?.injection?.systemPrompt?.frequency).toBe(7);
+      expect(manager.getFrameworksConfig().injection?.systemPrompt?.frequency).toBe(7);
+
+      await cleanup();
+    });
+
+    // The twin that makes the case above evidence about the VERSION key rather than about the
+    // flat spelling: the identical `frameworks` block under `version: 5` is not translated, so
+    // the flat key reaches no reader and the default stands.
+    it('ignores the same flat key in a `version: 5` file, resolving to the default', async () => {
+      const { config, manager, cleanup } = await resolve({
+        version: 5,
         frameworks: { enabled: true, systemPromptFrequency: 7 },
       });
 
@@ -114,13 +129,17 @@ describe('config file -> runtime config mapping', () => {
       await cleanup();
     });
 
-    it('no longer reads `advanced.sessions`', async () => {
+    // True of a `version: 5` file specifically, which is why the fixture declares the version: the
+    // wrapper named nothing and is gone from the 5.0 file shape, so a file that says it is written
+    // in that shape and still carries `advanced` resolves to the default rather than to 90. A
+    // version-less file carrying the same key is a 4.x file and IS translated — the sibling case
+    // in `config-file-translation.test.ts` pins that half.
+    it('no longer reads `advanced.sessions` from a `version: 5` file', async () => {
       const { manager, cleanup } = await resolve({
+        version: 5,
         advanced: { sessions: { timeoutMinutes: 90 } },
       });
 
-      // The wrapper named nothing and is gone from the file shape; a config still carrying it
-      // resolves to the default rather than to 90.
       expect(manager.getChainSessionConfig().sessionTimeoutMinutes).toBe(1440);
 
       await cleanup();
@@ -137,18 +156,8 @@ describe('config file -> runtime config mapping', () => {
     const DEFAULTS = {
       server: { name: 'claude-prompts', version: '1.0.0', port: 9090 },
       prompts: { directory: 'resources/prompts' },
-      analysis: {
-        semanticAnalysis: {
-          llmIntegration: {
-            enabled: false,
-            apiKey: null,
-            endpoint: null,
-            model: 'gpt-4',
-            maxTokens: 1000,
-            temperature: 0.1,
-          },
-        },
-      },
+      // No `analysis`: the section is not a config key any more, so the loader defaults nothing
+      // for it and `Config.analysis` stays unset.
       execution: { judge: true },
       frameworks: {
         enabled: true,
@@ -228,19 +237,17 @@ describe('config file -> runtime config mapping', () => {
       await cleanup();
     });
 
-    it('keeps the values of the deprecated `analysis` section', async () => {
+    it('drops the retired `analysis` section rather than keeping its values', async () => {
       const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-      const { config, cleanup } = await resolve({
+      const { config, manager, cleanup } = await resolve({
         analysis: { semanticAnalysis: { llmIntegration: { enabled: true, model: 'gpt-4o' } } },
       });
 
-      // `ConfigFile` omits the section — it is not a 5.0 key — but a config already carrying it
-      // keeps its values through the deprecation cycle, which is what makes REMOVAL the
-      // breaking act rather than this row.
-      expect(config.analysis?.semanticAnalysis?.llmIntegration).toMatchObject({
-        enabled: true,
-        model: 'gpt-4o',
-      });
+      // The deprecation cycle is over: the section is removed by the 4.x translation, announced
+      // once, and resolves to nothing at all — not to the section's own defaults, which would be
+      // indistinguishable from a config that set them.
+      expect(config.analysis).toBeUndefined();
+      expect(manager.getConfig().analysis).toBeUndefined();
 
       warn.mockRestore();
       await cleanup();

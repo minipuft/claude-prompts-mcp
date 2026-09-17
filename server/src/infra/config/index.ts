@@ -10,6 +10,7 @@ import { readFile } from 'fs/promises';
 import os from 'node:os';
 import path from 'path';
 
+import { translateConfigFile } from './config-file-translation.js';
 import { getParsedConfigSchema, validateConfigAgainstSchema } from './config-schema-validator.js';
 import { createLogger, getDefaultLoggerConfig } from '../logging/index.js';
 
@@ -21,7 +22,8 @@ const logger = createLogger(
   })
 );
 
-import type { ConfigFile, ConfigFileVersioning } from '#shared/types/config-file.js';
+import type { ConfigFileTranslation } from './config-file-translation.js';
+import type { ConfigFile } from '#shared/types/config-file.js';
 import type {
   ConfigSchemaValidationResult,
   ConfigValueWithSource,
@@ -29,9 +31,7 @@ import type {
 
 import {
   Config,
-  AnalysisConfig,
   FrameworkInjectionConfig,
-  LLMIntegrationConfig,
   LoggingConfig,
   ResolvedFrameworkConfig,
   ExecutionConfig,
@@ -51,71 +51,6 @@ import {
 import { DEFAULT_FRAMEWORK_ID } from '#shared/utils/constants.js';
 // Removed: ToolDescriptionLoader import to break circular dependency
 // Now injected via dependency injection pattern
-
-/**
- * Config keys the CLI accepted and no reader ever consulted.
- *
- * `cpm enable gates` wrote `gates.mode: "on"` and reported success; every runtime reader
- * consulted `gates.enabled`. The write path (`config-operations.ts` `applyConfigChange`) assigns
- * dot-keys verbatim, so there was never a translation step and the two spellings never met — the
- * command silently changed nothing, for all ten subsystems it advertises. The camelCase versioning
- * pair is the same failure on a different axis: the CLI took `maxVersions`, the runtime reads
- * `max_versions`.
- *
- * The inert spelling is gone from the CLI surface, so nothing writes these any more. This fold
- * exists only for `config.json` files already on disk carrying one.
- *
- * RETIREMENT CONDITION: delete this table and its call when no supported upgrade path starts from
- * a config written before the CLI surface was corrected — i.e. one full major cycle. The three
- * modes a reader *does* consult (`telemetry.mode`, `phaseGuards.mode`, `identity.mode`) are
- * deliberately absent; folding those would destroy live settings.
- */
-const INERT_SPELLINGS: ReadonlyArray<{
-  path: readonly string[];
-  from: string;
-  to: string;
-  /** `on`/`off` becomes a boolean; the camelCase pair carries its value across unchanged. */
-  coerce: 'onOff' | 'passthrough';
-}> = [
-  { path: ['gates'], from: 'mode', to: 'enabled', coerce: 'onOff' },
-  { path: ['frameworks'], from: 'mode', to: 'enabled', coerce: 'onOff' },
-  // `resources` has no top-level `enabled` — `registerWithMcp` is that section's master switch.
-  { path: ['resources'], from: 'mode', to: 'registerWithMcp', coerce: 'onOff' },
-  { path: ['resources', 'prompts'], from: 'mode', to: 'enabled', coerce: 'onOff' },
-  { path: ['resources', 'gates'], from: 'mode', to: 'enabled', coerce: 'onOff' },
-  { path: ['resources', 'frameworks'], from: 'mode', to: 'enabled', coerce: 'onOff' },
-  { path: ['resources', 'observability'], from: 'mode', to: 'enabled', coerce: 'onOff' },
-  { path: ['resources', 'logs'], from: 'mode', to: 'enabled', coerce: 'onOff' },
-  { path: ['verification', 'isolation'], from: 'mode', to: 'enabled', coerce: 'onOff' },
-  // This entry outlives its target on purpose. `analysis.semanticAnalysis` is deprecated and no
-  // longer settable from either tool surface, but it is still parsed for one cycle, so a config
-  // written with the inert `mode` spelling must still normalize to the one key the deprecation
-  // warning names — otherwise a user is told to remove a section whose spelling we refused to
-  // recognize. It retires WITH the section, not on the schedule above.
-  {
-    path: ['analysis', 'semanticAnalysis', 'llmIntegration'],
-    from: 'mode',
-    to: 'enabled',
-    coerce: 'onOff',
-  },
-  { path: ['versioning'], from: 'mode', to: 'enabled', coerce: 'onOff' },
-  { path: ['versioning'], from: 'maxVersions', to: 'max_versions', coerce: 'passthrough' },
-  { path: ['versioning'], from: 'autoVersion', to: 'auto_version', coerce: 'passthrough' },
-];
-
-/** Walks `path`, returning the containing object only if every segment is a live object. */
-function resolveContainer(
-  root: Record<string, unknown>,
-  segments: readonly string[]
-): Record<string, unknown> | undefined {
-  let current: Record<string, unknown> = root;
-  for (const segment of segments) {
-    const next = current[segment];
-    if (next === null || typeof next !== 'object' || Array.isArray(next)) return undefined;
-    current = next as Record<string, unknown>;
-  }
-  return current;
-}
 
 /**
  * Walks a dot-path key (`"server.port"`) over an arbitrary value tree, returning the leaf or
@@ -166,49 +101,8 @@ function collectSchemaKeys(schemaNode: unknown, prefix = ''): string[] {
 const VALID_LOG_LEVELS: string[] = ['DEBUG', 'INFO', 'WARN', 'ERROR'];
 
 /**
- * Adopts each inert spelling into its canonical key, then deletes the inert one so a config sees
- * exactly one spelling per concept. The canonical key wins when both are present — an explicit
- * canonical value is the newer intent, and the inert one never did anything anyway.
- *
- * Mutates in place: it runs against the loaded config before defaults, which is the only point
- * where the distinction between "absent" and "defaulted" still exists.
- */
-function adoptInertSpellings(root: Record<string, unknown>): void {
-  for (const { path: segments, from, to, coerce } of INERT_SPELLINGS) {
-    const container = resolveContainer(root, segments);
-    if (!container || !(from in container)) continue;
-
-    if (!(to in container) || container[to] === undefined) {
-      const raw = container[from];
-      if (coerce === 'onOff') {
-        // Anything that is not the literal 'on'/'off' the CLI validated is dropped rather than
-        // guessed at: a wrong boolean here silently flips a subsystem.
-        if (raw === 'on' || raw === 'off') container[to] = raw === 'on';
-      } else {
-        container[to] = raw;
-      }
-    }
-
-    delete container[from];
-  }
-}
-
-/**
  * Default configuration values
  */
-const DEFAULT_ANALYSIS_CONFIG: AnalysisConfig = {
-  semanticAnalysis: {
-    llmIntegration: {
-      enabled: false,
-      apiKey: null,
-      endpoint: null,
-      model: 'gpt-4',
-      maxTokens: 1000,
-      temperature: 0.1,
-    },
-  },
-};
-
 const DEFAULT_FRAMEWORKS_CONFIG: ResolvedFrameworkConfig = {
   dynamicToolDescriptions: true,
   // FrameworkManager and FrameworkStateStore both receive this value rather than carrying
@@ -262,31 +156,10 @@ const DEFAULT_CONFIG: Config = {
   prompts: {
     directory: 'resources/prompts',
   },
-  analysis: DEFAULT_ANALYSIS_CONFIG,
   gates: DEFAULT_GATES_CONFIG,
   frameworks: DEFAULT_FRAMEWORKS_CONFIG,
   chainSessions: DEFAULT_CHAIN_SESSION_CONFIG,
   versioning: DEFAULT_VERSIONING_CONFIG,
-};
-
-/**
- * What actually reaches {@link normalizeConfigFile}: the 5.0 `ConfigFile` shape plus the two
- * things the steps before it leave on a parsed file.
- *
- * - `analysis` is the deprecated section `ConfigFile` deliberately omits — it is no longer a 5.0
- *   key, and this loader still parses it for one cycle so an existing config keeps its values
- *   (see {@link ConfigLoader.warnAnalysisSectionDeprecated}).
- * - `versioning.max_versions` / `versioning.auto_version` are what `adoptInertSpellings` WRITES:
- *   the file spells that pair camelCase, every runtime reader spells it snake_case, and the fold
- *   runs before this type is applied.
- * - `version` is optional here and required on `ConfigFile`: a file already on disk may predate
- *   the key entirely, and translating such a file into the 5.0 shape is a later step of this
- *   initiative. Until it lands, an undeclared version means "read what is there".
- */
-type AdoptedConfigFile = Omit<ConfigFile, 'version'> & {
-  version?: ConfigFile['version'];
-  analysis?: Partial<AnalysisConfig>;
-  versioning?: ConfigFileVersioning & { max_versions?: number; auto_version?: boolean };
 };
 
 /**
@@ -315,9 +188,13 @@ function parseConfigRecord(content: string, configPath: string): Record<string, 
  * `ConfigFile` except `version` is optional and {@link normalizeConfigFile} reads each one through
  * `??` against a default — a key of the wrong type resolves to the value the file holds, exactly
  * as it did before, and a key the file omits resolves to the default.
+ *
+ * `version` included: {@link translateConfigFile} stamps `5` onto every 4.x file it translates and
+ * leaves a declared version alone, so a file carrying the WRONG version still reaches here. Nothing
+ * below reads the member — the schema's `const 5` is what reports it to the operator.
  */
-function asConfigFile(parsed: Record<string, unknown>): AdoptedConfigFile {
-  return parsed;
+function asConfigFile(parsed: Record<string, unknown>): ConfigFile {
+  return parsed as unknown as ConfigFile;
 }
 
 /**
@@ -352,7 +229,7 @@ function normalizeInjection(frameworks: ConfigFile['frameworks']): FrameworkInje
 }
 
 /** Framework settings, with the injection block nested rather than reassembled from flat keys. */
-function normalizeFrameworks(file: AdoptedConfigFile): Config['frameworks'] {
+function normalizeFrameworks(file: ConfigFile): Config['frameworks'] {
   const frameworks = file.frameworks;
   return {
     enabled: frameworks?.enabled ?? true,
@@ -369,7 +246,7 @@ function normalizeFrameworks(file: AdoptedConfigFile): Config['frameworks'] {
  * The rename the mapping makes visible: the file says `timeoutMinutes`, the runtime reads
  * `sessionTimeoutMinutes`. A cast could not have caught that; this signature does.
  */
-function normalizeChainSessions(file: AdoptedConfigFile): ChainSessionConfig {
+function normalizeChainSessions(file: ConfigFile): ChainSessionConfig {
   const sessions = file.chainSessions;
   return {
     sessionTimeoutMinutes:
@@ -391,7 +268,7 @@ function normalizeChainSessions(file: AdoptedConfigFile): ChainSessionConfig {
  * 4.12): the directory is resolved by `getGatesDirectory()`, and nothing ever read the field the
  * old rename produced.
  */
-function normalizeGates(file: AdoptedConfigFile): Config['gates'] {
+function normalizeGates(file: ConfigFile): Config['gates'] {
   const gates = file.gates;
   if (gates === undefined) return undefined;
   return {
@@ -413,7 +290,7 @@ function normalizeGates(file: AdoptedConfigFile): Config['gates'] {
  * section resolves to a number rather than to `undefined` — that stage computes
  * `maxRetries + 1`.
  */
-function normalizePhaseGuards(file: AdoptedConfigFile): Config['phaseGuards'] {
+function normalizePhaseGuards(file: ConfigFile): Config['phaseGuards'] {
   const phaseGuards = file.phaseGuards;
   if (phaseGuards === undefined) return undefined;
   return { mode: phaseGuards.mode ?? 'enforce', maxRetries: phaseGuards.maxRetries ?? 2 };
@@ -423,14 +300,14 @@ function normalizePhaseGuards(file: AdoptedConfigFile): Config['phaseGuards'] {
  * Logging, carried across only when the file sets the section — `getLoggingConfig()` owns the
  * absent case, with the same two values used here for a half-set one.
  */
-function normalizeLogging(file: AdoptedConfigFile): Config['logging'] {
+function normalizeLogging(file: ConfigFile): Config['logging'] {
   const logging = file.logging;
   if (logging === undefined) return undefined;
   return { directory: logging.directory ?? './logs', level: logging.level ?? 'info' };
 }
 
 /** MCP resource toggles, carried across; `getResourcesConfig()` owns their defaults. */
-function normalizeResources(file: AdoptedConfigFile): Config['resources'] {
+function normalizeResources(file: ConfigFile): Config['resources'] {
   const resources = file.resources;
   if (resources === undefined) return undefined;
   return {
@@ -444,22 +321,24 @@ function normalizeResources(file: AdoptedConfigFile): Config['resources'] {
 }
 
 /**
- * Versioning, reading the snake_case spelling `adoptInertSpellings` writes and the camelCase one
- * the file declares — in that order, because the fold has already run and the canonical key wins.
+ * Versioning, reading the camelCase spelling the 5.0 file declares.
+ *
+ * The rename the mapping makes visible, same class as `chainSessions`: the file says `maxVersions`,
+ * the runtime reads `max_versions`. A 4.x file spelling that pair snake_case is folded into the
+ * camelCase one by {@link translateConfigFile} before it reaches here, so there is one spelling per
+ * concept at this point rather than two read in precedence order.
  */
-function normalizeVersioning(file: AdoptedConfigFile): VersioningConfig {
+function normalizeVersioning(file: ConfigFile): VersioningConfig {
   const versioning = file.versioning;
   return {
     enabled: versioning?.enabled ?? DEFAULT_VERSIONING_CONFIG.enabled,
-    max_versions:
-      versioning?.max_versions ?? versioning?.maxVersions ?? DEFAULT_VERSIONING_CONFIG.max_versions,
-    auto_version:
-      versioning?.auto_version ?? versioning?.autoVersion ?? DEFAULT_VERSIONING_CONFIG.auto_version,
+    max_versions: versioning?.maxVersions ?? DEFAULT_VERSIONING_CONFIG.max_versions,
+    auto_version: versioning?.autoVersion ?? DEFAULT_VERSIONING_CONFIG.auto_version,
   };
 }
 
 /** Telemetry, merged over the safe defaults — the same fold the loader has always applied. */
-function normalizeTelemetry(file: AdoptedConfigFile): TelemetryConfig {
+function normalizeTelemetry(file: ConfigFile): TelemetryConfig {
   const telemetry = file.telemetry;
   return {
     ...DEFAULT_TELEMETRY_CONFIG,
@@ -467,30 +346,6 @@ function normalizeTelemetry(file: AdoptedConfigFile): TelemetryConfig {
     attributePolicy: {
       ...DEFAULT_TELEMETRY_CONFIG.attributePolicy,
       ...telemetry?.attributePolicy,
-    },
-  };
-}
-
-/**
- * The deprecated `analysis` section, merged with its defaults.
- *
- * Parsed-and-ignored, not parsed-and-dropped: nothing reads the result any more, but `config.json`
- * is declared public API surface, so a config that sets the section keeps its values through the
- * deprecation cycle. Removal is the breaking act.
- */
-function normalizeAnalysis(analysisConfig: Partial<AnalysisConfig> | undefined): AnalysisConfig {
-  const defaults = DEFAULT_ANALYSIS_CONFIG.semanticAnalysis.llmIntegration;
-  const llm: Partial<LLMIntegrationConfig> = analysisConfig?.semanticAnalysis?.llmIntegration ?? {};
-  return {
-    semanticAnalysis: {
-      llmIntegration: {
-        enabled: llm.enabled ?? defaults.enabled,
-        apiKey: llm.apiKey ?? defaults.apiKey,
-        endpoint: llm.endpoint ?? defaults.endpoint,
-        model: llm.model ?? defaults.model,
-        maxTokens: llm.maxTokens ?? defaults.maxTokens,
-        temperature: llm.temperature ?? defaults.temperature,
-      },
     },
   };
 }
@@ -506,14 +361,16 @@ function normalizeAnalysis(analysisConfig: Partial<AnalysisConfig> | undefined):
  * `getConfigValueWithSource` depends on that distinction to label a value `'deferred'` rather than
  * `'default'`.
  *
- * Keys the file may carry that the runtime `Config` has no member for at all — `hooks` (read by
- * the Python hooks straight off the file) and `server.transport` (refused outright when set to
- * anything but `"stdio"`, per Ruling R30: transport is a launch-time-only setting, selected by
- * `--transport` and never by config — see {@link ConfigLoader.loadConfig}) — are not carried
- * across, and `server.transport` specifically is reported by `getConfigValueWithSource` from the
- * raw-file snapshot instead.
+ * Keys the file may carry that the runtime `Config` has no member for at all — `hooks`, read by
+ * the Python hooks straight off the file — are not carried across. `server.transport` is not among
+ * them any more: a value other than `"stdio"` is refused before this runs (Ruling R30, transport is
+ * launch-time-only), and the harmless spelling is dropped by {@link translateConfigFile}, so no
+ * `transport` key survives to reach this mapping.
+ *
+ * `Config.analysis` is left unset on purpose. The section is no longer a config key at all: a 4.x
+ * file carrying it has it dropped, with a notice naming the replacement.
  */
-function normalizeConfigFile(file: AdoptedConfigFile): Config {
+function normalizeConfigFile(file: ConfigFile): Config {
   return {
     server: {
       name: file.server?.name ?? DEFAULT_CONFIG.server.name,
@@ -525,7 +382,6 @@ function normalizeConfigFile(file: AdoptedConfigFile): Config {
       directory: file.prompts?.directory ?? DEFAULT_CONFIG.prompts.directory,
       registerWithMcp: file.prompts?.registerWithMcp,
     },
-    analysis: normalizeAnalysis(file.analysis),
     gates: normalizeGates(file),
     phaseGuards: normalizePhaseGuards(file),
     execution: { judge: file.execution?.judge ?? DEFAULT_EXECUTION_CONFIG.judge ?? true },
@@ -563,12 +419,13 @@ export class TransportConfigError extends Error {
 /**
  * Refuses a raw parsed config file whose `server.transport` names anything but `"stdio"`.
  *
- * Runs against the RAW parsed record, before `adoptInertSpellings`/`asConfigFile` — same reason
- * `checkAgainstSchema` does: this checks what the operator actually wrote, not a shape the loader
- * has already rewritten. A `server.transport` left at `"stdio"` (or omitted) still exists as an
- * unrecognized key once the schema stops declaring it, but that half is already covered by the
- * existing schema-warning path (`checkAgainstSchema` / `warnOnSchemaResult`) — this function only
- * covers the half that path cannot: a value the server would otherwise silently ignore.
+ * Runs against the RAW parsed record, BEFORE {@link translateConfigFile}: the translation drops
+ * `server.transport` outright, so a check placed after it would see nothing and a 4.x file asking
+ * for HTTP would start on stdio in silence. Refusing first is what keeps that operator request
+ * answered — with the flag that satisfies it — rather than translated away.
+ *
+ * A `server.transport` left at `"stdio"` (or omitted) needs no report at all: the translation drops
+ * it as a key 5.0 removed, and names it in the one translation notice.
  */
 function assertServerTransportIsStdio(
   rawConfig: Record<string, unknown>,
@@ -636,8 +493,8 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
   private watching: boolean = false;
   private reloadDebounceTimer: NodeJS.Timeout | undefined;
   private frameworksConfigCache: ResolvedFrameworkConfig;
-  /** Deprecation notices are per-process, not per-load — file watching re-enters `loadConfig`. */
-  private warnedAnalysisDeprecated = false;
+  /** Translation notices are per-process, not per-load — file watching re-enters `loadConfig`. */
+  private warnedTranslation = false;
   /**
    * The package's own `config.schema.json`, injected by the composition root. Never read from the
    * config's `$schema`, which is an editor hint. Undefined means the file is not schema-checked.
@@ -646,17 +503,17 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
   /** The schema check of the last successful parse; undefined when none ran or the load failed. */
   private schemaValidation: ConfigSchemaValidationResult | undefined;
   /**
-   * Status + errors of the last result that WARNED. Unlike `warnedAnalysisDeprecated` this is not
+   * Status + errors of the last result that WARNED. Unlike `warnedTranslation` this is not
    * once-per-process: hot reload re-enters `loadConfig`, so an unchanged file must stay quiet while
    * a new mistake must still be reported. Cleared by a valid load, so a reintroduced error warns.
    */
   private lastWarnedSchemaSignature: string | undefined;
   /**
-   * A snapshot of the parsed config FILE, taken before `adoptInertSpellings` rewrites it in place
-   * — that fold renames keys and deletes the old spelling, so without this copy nothing
-   * distinguishes "the file set this key" from "the loader put it there". Undefined when no file
-   * has been successfully parsed (constructed but never loaded, or the last `loadConfig` fell back
-   * to the defaults). Read only by `getConfigValueWithSource`.
+   * A snapshot of the config FILE as the rest of the process sees it — the 5.0 shape, after
+   * {@link translateConfigFile}. Without this copy nothing distinguishes "the file set this key"
+   * from "the loader defaulted it". Undefined when no file has been successfully parsed
+   * (constructed but never loaded, or the last `loadConfig` fell back to the defaults). Read only
+   * by `getConfigValueWithSource`.
    */
   private rawFileConfig: Record<string, unknown> | undefined;
   /**
@@ -696,23 +553,24 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
       // --transport as the fix.
       assertServerTransportIsStdio(parsedRecord, this.configPath);
 
-      // Checked against the RAW file, before the adoption below: that rewrites inert spellings in
-      // place, so a check after it would report the loader's own rewrite and no longer see what
-      // the user wrote.
-      await this.checkAgainstSchema(parsedRecord);
+      // A file that declares no `version` was written against the 4.x shape: it is translated here,
+      // in memory, and everything below reads one shape. `version: 5` (or any other declared
+      // value) passes through untouched.
+      const translation = translateConfigFile(parsedRecord);
+      this.warnConfigFileTranslated(translation);
 
-      // Snapshot before `adoptInertSpellings` mutates the parsed record: that fold renames keys
-      // and deletes the old spelling, and this copy is the only record of what the file itself
-      // declared. Read only by `getConfigValueWithSource`.
-      this.rawFileConfig = structuredClone(parsedRecord);
+      // Checked against the TRANSLATED file, not the raw one (ruling R33): a 4.x key the
+      // translation handled is not drift the operator has to act on, and reporting it would tell
+      // them to fix a file the server just read correctly. What the schema still reports is what
+      // the translation could NOT account for — a typo, or a key from no shape at all.
+      await this.checkAgainstSchema(translation.file);
 
-      // Runs before the mapping, not inside it: an adopted value must be visible to the defaulting
-      // below, or the default overwrites what the user actually asked for.
-      adoptInertSpellings(parsedRecord);
+      // Snapshot of the translated file, which is the shape every reader below sees — so
+      // `getConfigValueWithSource` labels a user's 4.x key `'file'` under its 5.0 name rather than
+      // under a spelling nothing else in the process uses.
+      this.rawFileConfig = structuredClone(translation.file);
 
-      const file = asConfigFile(parsedRecord);
-      // Announced from the FILE, so a config that never mentions the section stays silent.
-      if (file.analysis) this.warnAnalysisSectionDeprecated(file.analysis);
+      const file = asConfigFile(translation.file);
 
       this.config = normalizeConfigFile(file);
 
@@ -792,12 +650,12 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
     const mergedValue = readDotPath(this.config, key);
 
     if (rawValue !== undefined) {
-      // Legacy-spelling exception: `adoptInertSpellings` renames a handful of keys inside
-      // `this.config` (e.g. `gates.mode` -> `gates.enabled`) and deletes the old spelling, so the
-      // OLD path can be present in `rawFileConfig` (the file, snapshotted before the rename) yet
-      // resolve to `undefined` on the merged side under that same old path. There is no discarded
-      // default to fall back to here — the raw value IS what the rename carried forward under a
-      // different key — so this is the one case where the raw file's own value is reported.
+      // The snapshot is post-translation, so a 4.x spelling the operator wrote is present here
+      // under its 5.0 name and nowhere else — the legacy-spelling case this fallback used to
+      // exist for (`gates.mode` present raw, `undefined` merged) can no longer arise.
+      // What remains is the narrower one it also always covered: a key the runtime `Config` has
+      // no member for at all — `hooks.expandedOutput`, read by the Python hooks straight off the
+      // file. The file set it, so reporting `undefined` would show a live setting as unset.
       return { key, value: mergedValue !== undefined ? mergedValue : rawValue, source: 'file' };
     }
 
@@ -1296,22 +1154,51 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
   // Removed: ToolDescriptionLoader methods - now handled via dependency injection in runtime/application.ts
 
   /**
-   * Emit the `analysis` deprecation notice at most once per process.
+   * Emit the 4.x -> 5.0 translation notice at most once per process.
    *
-   * Fires only when a config file actually carries the section — the defaulted case is silent,
-   * because a user who never wrote the key has nothing to act on. Names the replacement rather
-   * than only the removal: a warning that says "stop doing X" without saying what to do instead
-   * reads as breakage.
+   * Fires only when the translation actually moved or dropped something — a 4.x file whose every
+   * key is already spelled the 5.0 way has nothing for the operator to act on, and a `version: 5`
+   * file is never translated at all, so both stay silent. Once per process, not once per load:
+   * file watching re-enters `loadConfig`, and a notice that repeats per reload becomes noise the
+   * operator filters out, which is how a deprecation goes unread.
+   *
+   * Names every pair and every dropped key rather than summarising: the operator's next act is to
+   * rewrite `config.json`, and a count tells them nothing about which lines to change.
    */
-  private warnAnalysisSectionDeprecated(analysisConfig: Partial<AnalysisConfig>): void {
-    if (this.warnedAnalysisDeprecated || !analysisConfig.semanticAnalysis) return;
-    this.warnedAnalysisDeprecated = true;
-    logger.warn(
-      '[CONFIG] `analysis.semanticAnalysis` is deprecated and no longer read by any runtime path. ' +
-        'It is still parsed so existing configs keep loading, and will be removed in the next major. ' +
-        'For model-graded gate evaluation use the `%judge` modifier or `gates.evaluation.defaultMode`. ' +
-        'Remove the `analysis` section from config.json to silence this notice.'
+  private warnConfigFileTranslated(translation: ConfigFileTranslation): void {
+    if (this.warnedTranslation) return;
+    if (translation.translated.length === 0 && translation.dropped.length === 0) return;
+    this.warnedTranslation = true;
+
+    const parts: string[] = [
+      `[CONFIG] ${this.configPath} declares no "version", so it was read as a 4.x config file and ` +
+        'translated to the 5.0 shape in memory. The file on disk is unchanged.',
+    ];
+
+    if (translation.translated.length > 0) {
+      const pairs = translation.translated.map((pair) => `${pair.from} -> ${pair.to}`).join(', ');
+      parts.push(`Renamed: ${pairs}.`);
+    }
+
+    if (translation.dropped.length > 0) {
+      parts.push(`Dropped (5.0 has no such key): ${translation.dropped.join(', ')}.`);
+    }
+
+    if (translation.dropped.includes('analysis')) {
+      // Names the replacement rather than only the removal: a notice that says "stop doing X"
+      // without saying what to do instead reads as breakage.
+      parts.push(
+        'The `analysis` section was removed; for model-graded gate evaluation use the `%judge` ' +
+          'modifier or `gates.evaluation.defaultMode`.'
+      );
+    }
+
+    parts.push(
+      'Rewrite config.json in the 5.0 spellings with "version": 5 and it is read as written, ' +
+        'silencing this notice. This translation is removed in 6.0.0.'
     );
+
+    logger.warn(parts.join(' '));
   }
 
   /**
