@@ -45,6 +45,7 @@ import type { Logger } from '../logging/index.js';
 
 import { computeContentHash } from '#shared/utils/hash.js';
 import {
+  isIgnoredPromptEntryName,
   isReservedPromptDirectoryName,
   isSingleFilePromptName,
   singleFilePromptBaseName,
@@ -951,9 +952,7 @@ export class ResourceIndexer {
         await this.scanSingleFilePrompt({ entry, dir, type, root, depth, results, result });
         continue;
       }
-      // The reserved-directory rule, read from the module that states it rather than from a
-      // literal here. This walk was the only one enforcing it while the other two recursed in.
-      if (!entry.isDirectory() || isReservedPromptDirectoryName(entry.name)) continue;
+      if (!entry.isDirectory() || this.skipsPromptDirectory(type, entry.name, depth)) continue;
 
       const subDir = path.join(dir, entry.name);
       const found = await this.readResourceDir(subDir, root, yamlFile);
@@ -962,6 +961,27 @@ export class ResourceIndexer {
         await this.scanResources(subDir, type, results, result, root, depth + 1);
       }
     }
+  }
+
+  /**
+   * True when the prompt loader would not descend into this directory, so neither may the index.
+   *
+   * Both rules come from `#shared/utils/prompt-layout.js` and both are PROMPT rules: the gate,
+   * framework and style loaders (`discoverNestedYamlDirectories`) skip neither name, so applying
+   * them to those types would hide a resource their own loader serves.
+   *
+   * - {@link isIgnoredPromptEntryName} at every depth. This walk used to apply it to FILES only,
+   *   so it descended into `_drafts/` and indexed what it found while the loader served none of
+   *   it — the defect that predicate's own docstring names.
+   * - {@link isReservedPromptDirectoryName} below the root only. `tools/` is reserved INSIDE a
+   *   category, where script tools live; at the prompts root `tools` is an ordinary category name,
+   *   and `discoverCategoryDirectories` serves it. Skipping it at depth 0 made a whole served
+   *   category invisible to `resource_index`.
+   */
+  private skipsPromptDirectory(type: IndexedResourceType, name: string, depth: number): boolean {
+    if (type !== 'prompt') return false;
+    if (isIgnoredPromptEntryName(name)) return true;
+    return depth > 0 && isReservedPromptDirectoryName(name);
   }
 
   /**

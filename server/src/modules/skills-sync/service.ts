@@ -22,6 +22,10 @@ import { deriveGateTier, formatCheckLine, type GateTier } from '#engine/gates/co
 import { computeContentHash } from '#shared/utils/hash.js';
 import { loadHistory } from '#cli-shared/version-history.js';
 import { assertUsableDirectorySetting } from '#shared/utils/path-setting.js';
+import {
+  isIgnoredPromptEntryName,
+  isReservedPromptDirectoryName,
+} from '#shared/utils/prompt-layout.js';
 import type { GateActivationContext, GateActivationRules } from '#engine/gates/types/index.js';
 import type { ArtifactKind } from '#engine/gates/utils/artifact-kinds.js';
 import type { DatabasePort } from '#shared/types/persistence.js';
@@ -1483,14 +1487,24 @@ async function collectResourceDirs(
   return dirs;
 }
 
-/** Prompt directories across every root, keyed by `category/id`, the identity the server merges on. */
+/**
+ * Prompt directories across every root, keyed by `category/id`, the identity the server merges on.
+ *
+ * The skip rules are the loader's, from `#shared/utils/prompt-layout.js`. Two levels deep, this
+ * walk never reached a prompt's own `tools/`, but without the rules it took `_drafts/` as a
+ * category and a category-level `tools/` as a prompt. Each then failed `loadPromptIR` and was
+ * reported as a skipped prompt the server never served.
+ */
 async function collectPromptDirs(
   roots: readonly string[]
 ): Promise<Map<string, { category: string; id: string; dir: string }>> {
   const prompts = new Map<string, { category: string; id: string; dir: string }>();
+  const isCategory = (name: string): boolean => !isIgnoredPromptEntryName(name);
+  const isPromptDir = (name: string): boolean =>
+    !isIgnoredPromptEntryName(name) && !isReservedPromptDirectoryName(name);
   for (const root of roots) {
-    for (const [category, categoryDir] of await collectResourceDirs([root])) {
-      for (const [id, dir] of await collectResourceDirs([categoryDir])) {
+    for (const [category, categoryDir] of await collectResourceDirs([root], isCategory)) {
+      for (const [id, dir] of await collectResourceDirs([categoryDir], isPromptDir)) {
         prompts.set(`${category}/${id}`, { category, id, dir });
       }
     }
@@ -4698,8 +4712,13 @@ async function cloneCommand(
       : [];
   const stepDirEntries =
     resourceType === 'prompt' && existsSync(companionResourcesDir)
-      ? (await readdir(companionResourcesDir, { withFileTypes: true })).filter((entry) =>
-          entry.isDirectory()
+      ? (await readdir(companionResourcesDir, { withFileTypes: true })).filter(
+          // Each entry becomes a step directory INSIDE the new prompt, where `tools/` is reserved
+          // for script tools and `_`/`.` entries are never served — the loader's rules, shared.
+          (entry) =>
+            entry.isDirectory() &&
+            !isIgnoredPromptEntryName(entry.name) &&
+            !isReservedPromptDirectoryName(entry.name)
         )
       : [];
 

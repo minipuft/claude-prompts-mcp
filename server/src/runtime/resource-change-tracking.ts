@@ -171,8 +171,9 @@ export async function compareResourceBaseline(
 
           // A prompt's `tools/` is reserved for script tools, so nothing below it entered the
           // catalog and nothing below it may be announced as an external change. Same predicate
-          // the loader applies, from the same module.
-          if (isReservedPromptDirectoryName(entry.name)) continue;
+          // the loader applies, from the same module. Below the root only: at the prompts root
+          // `tools` is an ordinary category, which the loader serves and this walk must announce.
+          if (dir !== promptsPath && isReservedPromptDirectoryName(entry.name)) continue;
 
           recordResource(
             resourceType,

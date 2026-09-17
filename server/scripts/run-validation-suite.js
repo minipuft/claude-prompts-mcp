@@ -492,7 +492,16 @@ export const SUITE = [
     io: 'read',
     reads: ['file', 'walk'],
     converse:
-      "CHECKED both ways — the self-test asserts a valid prompt is NOT reported alongside a prompt with an empty description and a gate missing `guidance`, both of which must be; it runs the loader's own `validatePromptYaml` and `normalizeInlineGateDefinitions` rather than reimplementing either, so it cannot drift into accepting what the server drops; it also asserts that a gate declaring no `activation` block is reported unless its id appears in a prompt's `gateConfiguration.include` or a chain step's `inlineGateIds` — an opt-in gate nobody opts into is dead, and `--self-test` covers all four activation/inclusion combinations",
+      "CHECKED both ways — the self-test asserts a valid prompt is NOT reported alongside a prompt with an empty description and a gate missing `guidance`, both of which must be; it runs the loader's own `validatePromptYaml` and `normalizeInlineGateDefinitions` rather than reimplementing either, so it cannot drift into accepting what the server drops; it also asserts that a gate declaring no `activation` block is reported unless its id appears in a prompt's `gateConfiguration.include` or a chain step's `inlineGateIds` — an opt-in gate nobody opts into is dead, and `--self-test` covers all four activation/inclusion combinations; it also walks a fixture tree in which every skipped path (`tools` below the root, `_drafts`) has a twin differing only in that name or depth, and asserts the walked set exactly",
+  },
+  {
+    // After `validate:prompts`, whose walk is one of the sites this step requires to share the
+    // loader's skip rules.
+    script: 'validate:prompt-walks',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse:
+      "CHECKED both ways — the self-test drives 19 fixtures, and each silent case differs from a reporting one in ONE identifier: `'gate.yaml'` for `'prompt.yaml'`, a homonym module for `prompt-layout`, `import type` for `import`, `.some()` for `.length`, a callback naming no layout predicate. A two-module case proves a lister called with `'prompt.yaml'` from another file is a walk and the same call with `'gate.yaml'` is not; the live tree is the last case. Positive controls on 2026-09-16: removing the `isReservedPromptDirectoryName` import from each of the loader, the baseline walk, the indexer, `validate-prompts.ts`, `category-maintenance.ts` and `skills-sync/service.ts`, one at a time, reported that file; renaming the one exception's path reported it as naming no file. NOT checked: a walk that names no marker anywhere, or reaches its listing only through a callee without passing the marker (header §WHAT IT CANNOT SEE), and whether an adopted predicate is applied at the right depth — `tests/integration/prompts/` pins that",
   },
   {
     script: 'validate:agent-plugins',

@@ -6,9 +6,16 @@
  * No JSON registry files are used.
  */
 
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, type Dirent } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+
+import {
+  isIgnoredPromptEntryName,
+  isReservedPromptDirectoryName,
+  isSingleFilePromptName,
+  singleFilePromptBaseName,
+} from '#shared/utils/prompt-layout.js';
 
 export interface CategoryResult {
   effectiveCategory: string;
@@ -58,8 +65,42 @@ export interface YamlPromptInfo {
 }
 
 /**
+ * The prompt one entry of a category directory declares, or `undefined` for an entry the loader
+ * does not serve. The skip rules are `#shared/utils/prompt-layout.js`'s.
+ */
+function promptFromCategoryEntry(categoryDir: string, entry: Dirent): YamlPromptInfo | undefined {
+  if (isIgnoredPromptEntryName(entry.name)) return undefined;
+
+  if (entry.isDirectory()) {
+    if (isReservedPromptDirectoryName(entry.name)) return undefined;
+    // Directory pattern: {prompt_id}/prompt.yaml
+    const promptDir = path.join(categoryDir, entry.name);
+    return existsSync(path.join(promptDir, 'prompt.yaml'))
+      ? { id: entry.name, path: promptDir, format: 'directory' }
+      : undefined;
+  }
+
+  if (entry.isFile() && isSingleFilePromptName(entry.name)) {
+    // File pattern: {prompt_id}.yaml (reserved filenames are not prompts)
+    return {
+      id: singleFilePromptBaseName(entry.name),
+      path: path.join(categoryDir, entry.name),
+      format: 'file',
+    };
+  }
+
+  return undefined;
+}
+
+/**
  * Discover YAML prompts in a category directory.
  * Supports both directory format ({id}/prompt.yaml) and file format ({id}.yaml).
+ *
+ * One level deep, so it never reached a prompt's `tools/`. That made its own copy of the skip
+ * rules harmless only by depth, and the copy still disagreed with the loader: it listed
+ * `_draft.yaml`, `tool.yaml` and a `tools/` or `_drafts/` directory holding a `prompt.yaml`, none
+ * of which the loader serves. The rules now come from `#shared/utils/prompt-layout.js`, as the
+ * loader's do.
  *
  * @param categoryDir - Path to the category directory
  * @returns Array of discovered YAML prompts with their paths and formats
@@ -76,36 +117,12 @@ export function discoverYamlPromptsInCategory(categoryDir: string): YamlPromptIn
     const entries = readdirSync(categoryDir, { withFileTypes: true });
 
     for (const entry of entries) {
-      if (entry.name.startsWith('.')) continue;
-
-      if (entry.isDirectory()) {
-        // Directory pattern: {prompt_id}/prompt.yaml
-        const promptYamlPath = path.join(categoryDir, entry.name, 'prompt.yaml');
-        if (existsSync(promptYamlPath)) {
-          seenIds.add(entry.name);
-          discoveries.push({
-            id: entry.name,
-            path: path.join(categoryDir, entry.name),
-            format: 'directory',
-          });
-        }
-      } else if (
-        entry.isFile() &&
-        entry.name.endsWith('.yaml') &&
-        entry.name !== 'prompts.yaml' &&
-        entry.name !== 'category.yaml'
-      ) {
-        // File pattern: {prompt_id}.yaml (skip metadata files)
-        const promptId = entry.name.replace(/\.yaml$/, '');
-        // Skip if directory version exists
-        if (!seenIds.has(promptId)) {
-          discoveries.push({
-            id: promptId,
-            path: path.join(categoryDir, entry.name),
-            format: 'file',
-          });
-        }
-      }
+      const found = promptFromCategoryEntry(categoryDir, entry);
+      if (found === undefined) continue;
+      // Directory takes precedence over a file with the same id
+      if (found.format === 'file' && seenIds.has(found.id)) continue;
+      if (found.format === 'directory') seenIds.add(found.id);
+      discoveries.push(found);
     }
   } catch (error) {
     // Ignore errors for inaccessible directories
