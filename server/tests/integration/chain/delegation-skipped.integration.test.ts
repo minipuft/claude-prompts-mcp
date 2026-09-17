@@ -296,7 +296,6 @@ describe('delegation_skipped telemetry (S8), driven the way a client drives it',
       .mockImplementation(() => {}) as unknown as jest.SpiedFunction<() => void>;
 
     sessionStore = new ChainSessionStore(logger, new StubTextReferenceStore() as any, {
-      serverRoot: '/tmp/test-delegation-skipped-integration',
       cleanupIntervalMs: 60_000,
     });
 

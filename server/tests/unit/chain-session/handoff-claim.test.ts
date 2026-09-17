@@ -198,7 +198,7 @@ describe('ChainSessionStore handoff verbs', () => {
     return new ChainSessionStore(
       createLogger(),
       new StubTextReferenceStore() as any,
-      { serverRoot: '/tmp/handoff-store', cleanupIntervalMs: 1000 },
+      { cleanupIntervalMs: 1000 },
       undefined,
       registry
     );

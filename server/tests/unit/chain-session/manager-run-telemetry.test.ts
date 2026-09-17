@@ -64,7 +64,6 @@ describe('run telemetry counters', () => {
       .mockImplementation(() => {}) as unknown as jest.SpiedFunction<() => void>;
 
     manager = new ChainSessionStore(createLogger(), new StubTextReferenceStore() as any, {
-      serverRoot: '/tmp/test-run-telemetry',
       cleanupIntervalMs: 1000,
     });
     await manager.createSession('sess-tel', 'chain-tel', 3);
@@ -154,7 +153,6 @@ describe('getRunTelemetry derivation', () => {
       .mockImplementation(() => {}) as unknown as jest.SpiedFunction<() => void>;
 
     manager = new ChainSessionStore(createLogger(), new StubTextReferenceStore() as any, {
-      serverRoot: '/tmp/test-run-telemetry-derivation',
       cleanupIntervalMs: 1000,
     });
     await manager.createSession('sess-derive', 'chain-derive', 4);

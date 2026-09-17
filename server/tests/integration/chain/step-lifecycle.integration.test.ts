@@ -352,7 +352,6 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
       .mockImplementation(() => {}) as unknown as jest.SpiedFunction<() => void>;
 
     sessionStore = new ChainSessionStore(logger, new StubTextReferenceStore() as any, {
-      serverRoot: '/tmp/test-step-lifecycle-integration',
       cleanupIntervalMs: 60_000,
     });
 

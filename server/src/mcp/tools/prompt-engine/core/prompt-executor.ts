@@ -156,7 +156,6 @@ export class PromptExecutor {
   private readonly workspaceScope: StateStoreOptions | undefined;
 
   private convertedPrompts: ConvertedPrompt[] = [];
-  private readonly serverRoot: string;
 
   constructor(
     logger: Logger,
@@ -186,15 +185,6 @@ export class PromptExecutor {
     this.inlineGateParser = createSymbolicCommandParser(logger);
     this.mcpToolsManager = mcpToolsManager;
     this.promptGuidanceService = promptGuidanceService;
-
-    const resolvedServerRoot =
-      typeof configManager.getServerRoot === 'function' ? configManager.getServerRoot() : undefined;
-    if (!resolvedServerRoot) {
-      throw new Error(
-        'PromptExecutor requires serverRoot: configManager.getServerRoot() returned undefined'
-      );
-    }
-    this.serverRoot = resolvedServerRoot;
 
     const sessionConfig = configManager.getChainSessionConfig?.();
     // Read before either store is constructed: `applyRuntimeIdentityOverrides` has already
@@ -232,7 +222,6 @@ export class PromptExecutor {
     this.chainSessionStore = createChainSessionStore(
       logger,
       textReferenceStore,
-      this.serverRoot,
       chainSessionOptions,
       this.argumentHistoryTracker
     );
@@ -298,8 +287,8 @@ export class PromptExecutor {
     this.referenceResolver = new PromptReferenceResolver(this.logger, convertedPrompts);
     // Create script reference resolver with workspace loader. `getScriptsDirectory()` resolves
     // through `PathResolver` (workspace `resources/scripts/` when a custom workspace is
-    // configured, the package tree only as the no-resolver fallback) — `this.serverRoot` is
-    // always the package root and never saw a workspace script.
+    // configured, the package tree only as the no-resolver fallback) — the package root this
+    // used to read never saw a workspace script.
     const scriptLoader = new WorkspaceScriptLoader({
       workspaceScriptsPath: this.configManager.getScriptsDirectory(),
     });
