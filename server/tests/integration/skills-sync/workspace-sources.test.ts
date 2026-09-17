@@ -165,6 +165,31 @@ describe('skills sync reads the workspace over the bundled tree', () => {
     expect(existsSync(path.join(outputDir, 'workspace_prompt'))).toBe(false);
   });
 
+  it('skips the directories the loader skips, and exports each twin', async () => {
+    // Each skipped entry has a twin differing only in the name the rule keys on (P4.48):
+    // `_drafts` vs `drafts` as a category, and `tools` vs `toolbox` as a prompt directory.
+    await writePrompt(packageRoot, 'drafts', 'in_drafts');
+    await writePrompt(packageRoot, '_drafts', 'in_hidden');
+    await writePrompt(packageRoot, 'general', 'toolbox');
+    await writePrompt(packageRoot, 'general', 'tools');
+    await writeConfig(packageRoot, outputDir);
+
+    const { out, report } = await run({
+      command: 'export',
+      client: 'claude-code',
+      scope: 'user',
+      resourceType: 'prompt',
+      preview: true,
+    });
+
+    const previewed = out.logs
+      .filter((line) => line.endsWith('/SKILL.md'))
+      .map((line) => line.replace('  [preview] ', ''))
+      .sort();
+    expect(previewed).toEqual(['in_drafts/SKILL.md', 'toolbox/SKILL.md']);
+    expect(report.resources).toBe(2);
+  });
+
   it('exports the workspace copy of a prompt the package also ships', async () => {
     await writePrompt(packageRoot, 'general', 'shared_prompt', { description: 'bundled copy' });
     await writePrompt(workspace, 'general', 'shared_prompt', { description: 'workspace copy' });
