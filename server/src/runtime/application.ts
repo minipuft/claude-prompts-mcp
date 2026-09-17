@@ -693,31 +693,27 @@ export class Application {
   }
 
   /**
-   * Report a subsystem teardown failure on both the logger and stderr directly.
+   * Report a subsystem teardown failure.
    *
-   * `logger.warn` still records it for the log file and ring buffer -- its call shape is
-   * pinned by `application-shutdown-order.test.ts` and is left unchanged here. Whether that
-   * call also reaches the console depends on `infra/logging`'s own STDIO/CI gating and on
-   * `configuredLevel`, both internal to a logger this class does not own, and on `this.logger`
-   * existing at all: it is optional-chained because `startup()` may not have assigned one yet.
-   * The `Logger` interface (`shared/types/index.ts`) exposes `info`/`warn`/`error`/`debug`
-   * only, with no way to ask whether a level will reach the console, so there is no seam to
-   * query or suppress that mirror from here.
-   *
-   * The direct write below is therefore unconditional and independent of all of that --
-   * the same pre-logger channel `runtime/paths.ts` and `runtime/startup.ts` already use for
-   * operator messages that must land regardless of logger state, because STDIO owns only
-   * stdout for the protocol and stderr is always free. On a real, default-configured server
-   * this can print the failure twice (the logger's own `[WARN]` line plus the `[Application]`
-   * line below); that duplication is accepted -- it fails loud and the two lines are
-   * distinguishable by prefix, never silent -- rather than reintroducing a dependency on the
-   * logger's gating this row exists to stop trusting. Call this once per failure, from the
-   * shared teardown paths only, so no single failure prints more than twice.
+   * `this.logger` is guaranteed set on every reachable path to `shutdown()`: `startApplication`
+   * only returns an `Application` (so only lets `src/index.ts` obtain one to call `.shutdown()`
+   * on) after `startup()` -- and therefore `initializeFoundation()`'s `this.logger =
+   * foundation.logger` assignment -- has already resolved; every direct constructor caller in
+   * this repo (`tests/unit/runtime/*.test.ts`) passes a logger in; and `createApplication` has
+   * no caller anywhere in `src/` or `cli/` besides `startApplication` itself. Measured
+   * 2026-09-16 for P4.44 (`plans/technical-debt/resource-surface-consolidation-2026-08-27.md`,
+   * ruling R28 amendment) -- a direct stderr write was tried first and reverted once this held:
+   * `logger.warn` already reaches stderr under STDIO outside CI (`infra/logging/index.ts`,
+   * fixed by #307/e50095ac), so a second, unconditional channel only duplicated every teardown
+   * failure on a default deployment for a `this.logger === undefined` case that cannot occur.
+   * The `this.logger?.` optional chain stays for the type (`private logger!: Logger` still
+   * predates a runtime guarantee), but if a future caller ever reaches this with no logger, the
+   * failure silently drops -- the same way `startup()`'s own `catch` treats a pre-foundation
+   * failure at present. Falsifies if a new caller obtains an `Application` before `startup()`
+   * resolves, or `createApplication` gains an external caller.
    */
   private reportTeardownFailure(label: string, error: unknown): void {
     this.logger?.warn(`Error shutting down ${label}:`, error);
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`[Application] Failed to shut down ${label}: ${message}\n`);
   }
 
   /**
