@@ -672,7 +672,7 @@ export class Application {
     try {
       await this.telemetryLifecycle.shutdown();
     } catch (error) {
-      this.logger?.warn('Error shutting down telemetry:', error);
+      this.reportTeardownFailure('telemetry', error);
     }
   }
 
@@ -690,6 +690,34 @@ export class Application {
 
     this.logger?.debug('Shutting down server manager...');
     this.serverLifecycle.shutdown();
+  }
+
+  /**
+   * Report a subsystem teardown failure on both the logger and stderr directly.
+   *
+   * `logger.warn` still records it for the log file and ring buffer -- its call shape is
+   * pinned by `application-shutdown-order.test.ts` and is left unchanged here. Whether that
+   * call also reaches the console depends on `infra/logging`'s own STDIO/CI gating and on
+   * `configuredLevel`, both internal to a logger this class does not own, and on `this.logger`
+   * existing at all: it is optional-chained because `startup()` may not have assigned one yet.
+   * The `Logger` interface (`shared/types/index.ts`) exposes `info`/`warn`/`error`/`debug`
+   * only, with no way to ask whether a level will reach the console, so there is no seam to
+   * query or suppress that mirror from here.
+   *
+   * The direct write below is therefore unconditional and independent of all of that --
+   * the same pre-logger channel `runtime/paths.ts` and `runtime/startup.ts` already use for
+   * operator messages that must land regardless of logger state, because STDIO owns only
+   * stdout for the protocol and stderr is always free. On a real, default-configured server
+   * this can print the failure twice (the logger's own `[WARN]` line plus the `[Application]`
+   * line below); that duplication is accepted -- it fails loud and the two lines are
+   * distinguishable by prefix, never silent -- rather than reintroducing a dependency on the
+   * logger's gating this row exists to stop trusting. Call this once per failure, from the
+   * shared teardown paths only, so no single failure prints more than twice.
+   */
+  private reportTeardownFailure(label: string, error: unknown): void {
+    this.logger?.warn(`Error shutting down ${label}:`, error);
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`[Application] Failed to shut down ${label}: ${message}\n`);
   }
 
   /**
@@ -715,7 +743,7 @@ export class Application {
     try {
       await candidate.shutdown();
     } catch (error) {
-      this.logger?.warn(`Error shutting down ${label}:`, error);
+      this.reportTeardownFailure(label, error);
     }
   }
 

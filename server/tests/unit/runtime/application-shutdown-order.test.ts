@@ -244,3 +244,87 @@ describe('Application.shutdown() error posture', () => {
     expect(logger.error).toHaveBeenCalledWith('Error during shutdown:', expect.any(Error));
   });
 });
+
+/**
+ * Wire a real `SqliteEngine` instance into `order`, the same way the teardown-order test
+ * above does, so a full run can be compared against `EXPECTED_ORDER` as one value instead of
+ * a slice -- P4.44 (`plans/technical-debt/resource-surface-consolidation-2026-08-27.md`)
+ * asks specifically for the database close to stay reached, not just for the failing step to
+ * be skipped over.
+ */
+async function mountRealDatabase(subdir: string, order: string[]): Promise<void> {
+  const dbDir = path.join(TMP_ROOT, subdir);
+  await fs.mkdir(dbDir, { recursive: true });
+  const engine = await SqliteEngine.getInstance(dbDir, silentLogger() as never);
+  await engine.initialize();
+
+  const realEngineShutdown = engine.shutdown.bind(engine);
+  engine.shutdown = async (): Promise<void> => {
+    order.push('database');
+    await realEngineShutdown();
+  };
+}
+
+/**
+ * P4.44 (ruling R28): the inner catch in `shutdownIfSupported`/`shutdownTelemetry` stays --
+ * it is what guarantees the database close is always reached -- but each teardown failure
+ * must ALSO reach stderr directly, on the channel `runtime/paths.ts` and `runtime/startup.ts`
+ * already use for operator messages that do not depend on the logger. `Application` calls
+ * `process.stderr.write` directly rather than through `logger.warn` for this, so the spy
+ * below targets the `process.stderr` object's `write` property -- not a builtin module
+ * namespace, which Jest's ESM runner cannot intercept ([[feedback_jest_esm_builtin_mocking]]).
+ */
+describe('Application.shutdown() teardown visibility (P4.44)', () => {
+  it('is observed by a spy on process.stderr.write (positive control)', () => {
+    const stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      process.stderr.write('__p4_44_positive_control__\n');
+      expect(stderrSpy).toHaveBeenCalledWith('__p4_44_positive_control__\n');
+    } finally {
+      stderrSpy.mockRestore();
+    }
+  });
+
+  it('writes a stderr line naming the failing subsystem, and the database close is still reached', async () => {
+    const { app, order } = wireRecorders({ failing: 'frameworkStateStore' });
+    await mountRealDatabase('visibility-failing', order);
+
+    const stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      await app.shutdown();
+
+      // (b) the full sequence, compared as one value -- the failing step did not strand the
+      // database close.
+      expect(order).toEqual(EXPECTED_ORDER);
+
+      // (a) stderr names the failing subsystem.
+      const teardownLines = stderrSpy.mock.calls
+        .map((call) => String(call[0]))
+        .filter((line) => line.startsWith('[Application] Failed to shut down'));
+      expect(teardownLines).toEqual([
+        '[Application] Failed to shut down framework state manager: frameworkStateStore failed\n',
+      ]);
+    } finally {
+      stderrSpy.mockRestore();
+    }
+  });
+
+  it('control: writes no teardown-failure line when nothing throws', async () => {
+    const { app, order } = wireRecorders();
+    await mountRealDatabase('visibility-control', order);
+
+    const stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      await app.shutdown();
+
+      expect(order).toEqual(EXPECTED_ORDER);
+
+      const teardownLines = stderrSpy.mock.calls
+        .map((call) => String(call[0]))
+        .filter((line) => line.startsWith('[Application] Failed to shut down'));
+      expect(teardownLines).toEqual([]);
+    } finally {
+      stderrSpy.mockRestore();
+    }
+  });
+});
