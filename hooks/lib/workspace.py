@@ -95,9 +95,10 @@ def get_runtime_state_dir(fallback: Path) -> Path:
     """Get the runtime-state directory for transient state files."""
     workspace = get_workspace_root()
     if workspace:
-        # Hook-owned state (hooks-state.db, verify-state.db). Kept under
+        # Hook-owned state (hooks-state.db, session files). Kept under
         # {workspace}/server/runtime-state so existing session rows survive;
-        # the SERVER's state.db location is get_state_db_path(), not this.
+        # the SERVER's files (state.db, verify-state.db) are located through
+        # get_state_db_path(), not this.
         return workspace / "server" / "runtime-state"
     return fallback
 

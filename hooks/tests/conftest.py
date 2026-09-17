@@ -45,8 +45,15 @@ def tmp_workspace(tmp_path):
 
 @pytest.fixture
 def patch_workspace(tmp_workspace, monkeypatch):
-    """Patch workspace resolution to use tmp_workspace."""
+    """Patch workspace resolution to use tmp_workspace.
+
+    The runtime-root variables are cleared too: verify-state.db and state.db are
+    found through them first, so an ambient value would point a test at a real
+    server's files.
+    """
     monkeypatch.setenv("MCP_WORKSPACE", str(tmp_workspace["root"]))
+    for ambient in ("MCP_RUNTIME_ROOT", "CLAUDE_PLUGIN_DATA"):
+        monkeypatch.delenv(ambient, raising=False)
     return tmp_workspace
 
 
