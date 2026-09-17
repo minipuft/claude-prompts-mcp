@@ -10,16 +10,13 @@ import {
   initializeResourceChangeTracker,
   compareResourceBaseline,
 } from './resource-change-tracking.js';
+import { syncResourceIndex } from './resource-index-resync.js';
 import {
   formatIndexReconciliation,
   formatResourceInventory,
   type ResourceInventory,
 } from './resource-inventory.js';
-import {
-  indexerResourceRoots,
-  resolveResourceRoots,
-  type ResourceRoots,
-} from './resource-roots.js';
+import { resolveResourceRoots, type ResourceRoots } from './resource-roots.js';
 import { resolveSkillsSyncPaths } from './skills-sync-paths.js';
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
@@ -226,6 +223,27 @@ function toolsDatabaseWiringError(serverRoot: string | undefined, error: unknown
 function logResourceInventory(logger: Logger, inventory: ResourceInventory): void {
   for (const line of formatResourceInventory(inventory)) {
     logger.info(line);
+  }
+}
+
+/**
+ * Warn about every prompt the startup index and the loaded catalog disagree on.
+ *
+ * The index and the catalog are two derivations of one question; compare them rather than assuming
+ * they agree, which is how they came to disagree by 41 prompts unnoticed. Passed to
+ * `syncResourceIndex` as its `afterSync` step by the startup sync only.
+ */
+function logIndexReconciliation(
+  logger: Logger,
+  database: DatabasePort,
+  convertedPrompts: ConvertedPrompt[]
+): void {
+  const indexedPromptIds = database
+    .query<{ id: string }>("SELECT id FROM resource_index WHERE type = 'prompt'")
+    .map((row) => row.id);
+  const loadedPromptIds = convertedPrompts.map((prompt) => prompt.id);
+  for (const line of formatIndexReconciliation(loadedPromptIds, indexedPromptIds)) {
+    logger.warn(line);
   }
 }
 
@@ -562,39 +580,16 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
   // Index resources to SQLite for hook consumption (prompt-suggest, etc.)
   if (serverRoot !== undefined && serverRoot !== '') {
     try {
-      const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
-      const { createResourceIndexer, reportSyncFindings } =
-        await import('#infra/database/resource-indexer.js');
-      const { ScriptToolDefinitionLoader } =
-        await import('#modules/automation/core/script-definition-loader.js');
-      const dbManager = await SqliteEngine.getInstance(serverRoot, logger);
-      await dbManager.initialize();
-      const resourcesDir = pathResolver?.getResourcesPath() ?? path.join(serverRoot, 'resources');
-      const scriptLoader = new ScriptToolDefinitionLoader({ validateOnLoad: true });
-      const indexer = createResourceIndexer(dbManager, logger, {
-        resourcesDir,
-        resourceRoots: indexerResourceRoots(pathResolver),
-        toolLoader: (dir, id) => scriptLoader.loadAllToolsForPromptDetailed(dir, id),
+      await syncResourceIndex({
+        serverRoot,
+        pathResolver,
+        logger,
         // Assembled above and returned to `Application`, so this walk and the hot-reload walk
-        // read one view rather than two that can drift. All four directory-form kinds are in it
-        // (P4.16 closed `style`, the last kind the indexer walked with no refusal record at all);
-        // the change tracker's narrower merge is `trackedQuarantine`, which this one extends.
-        quarantine: indexQuarantine,
+        // read one view rather than two that can drift. The change tracker's narrower merge is
+        // `trackedQuarantine`, which this one extends.
+        indexQuarantine,
+        afterSync: (database) => logIndexReconciliation(logger, database, convertedPrompts),
       });
-      const syncResult = await indexer.syncAll();
-      reportSyncFindings(syncResult, logger);
-      // The index and the catalog are two derivations of one question; compare them rather than
-      // assuming they agree, which is how they came to disagree by 41 prompts unnoticed.
-      const indexedPromptIds = dbManager
-        .query<{ id: string }>("SELECT id FROM resource_index WHERE type = 'prompt'")
-        .map((row) => row.id);
-      for (const line of formatIndexReconciliation(
-        convertedPrompts.map((prompt) => prompt.id),
-        indexedPromptIds
-      )) {
-        logger.warn(line);
-      }
-      if (isVerbose) logger.info('✅ ResourceIndexer synced to SQLite');
     } catch (error) {
       // `resource_index` is what the Python hooks read; a stale one makes prompt-suggest
       // recommend resources that no longer exist.

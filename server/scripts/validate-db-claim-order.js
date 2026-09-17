@@ -16,7 +16,8 @@
  *
  * WHAT IT CHECKS
  *   1. `claimStateDatabase(...)` is actually called in module-initializer.ts, and its call site
- *      precedes every other `getInstance` call in that file. This is a SOURCE-ORDER assertion
+ *      precedes every other inheriting `getInstance` call in that file — including a call to an
+ *      inheriting helper another module exports (an entry's `via`). This is a SOURCE-ORDER assertion
  *      because the property being protected is source order — a runtime test would have to
  *      reconstruct the whole composition root to observe it.
  *   2. Every `getInstance` call site repo-wide either supplies `dbPath` or is a declared
@@ -64,18 +65,15 @@ const CALL = 'SqliteEngine.getInstance(';
 const ACCEPTED_INHERITORS = [
   {
     file: 'src/runtime/resource-index-resync.ts',
+    // Called from module-initializer.ts for the startup sync, so rule 1 treats a call to it there
+    // as an inheriting call site and pins it after the claim. Until B.58 the startup copy of this
+    // body lived in module-initializer.ts itself, where rule 1 read it directly.
+    via: 'syncResourceIndex',
     reason:
-      'resyncResourceIndexAfterReload — called from Application#fullServerRefresh on hot reload, ' +
-      'long after startup has claimed. Moved out of application.ts intact when that file crossed ' +
-      'the max-lines ratchet',
-    closedBy:
-      'threading the resolved dbPath through the resyncResourceIndexAfterReload params, or ' +
-      'removing the refresh path',
-  },
-  {
-    file: 'src/runtime/module-initializer.ts',
-    reason: 'tool-index and script-loader blocks, both after claimStateDatabase in this file',
-    closedBy: 'rule 1 already pins the ordering; delete if these sites gain an explicit dbPath',
+      'syncResourceIndex — the startup sync, called from initializeModules after ' +
+      'claimStateDatabase (rule 1 pins that order through `via`), and the hot-reload re-sync, ' +
+      'called from Application#fullServerRefresh long after startup has claimed',
+    closedBy: 'threading the resolved dbPath through the syncResourceIndex params',
   },
   {
     file: 'src/engine/gates/gate-state-store.ts',
@@ -121,8 +119,40 @@ export function callSites(source) {
   return sites;
 }
 
-/** Rule 1, as a pure function so the self-test can drive it with fabricated sources. */
-export function orderViolations(source) {
+/**
+ * Lines in `source` that CALL the function `name` — the definition and comment lines excluded.
+ *
+ * An accepted inheritor that lives in another module is still an inheriting call site of the
+ * composition root: a call to it from module-initializer.ts opens the singleton exactly as an
+ * inline `getInstance` would. Rule 1 reads these lines alongside the direct call sites, so moving a
+ * body out of module-initializer.ts does not move it out of the ordering check.
+ */
+export function helperCallLines(source, name) {
+  const lines = [];
+  const call = `${name}(`;
+  let from = 0;
+  for (;;) {
+    const at = source.indexOf(call, from);
+    if (at === -1) break;
+    from = at + call.length;
+    const lineStart = source.lastIndexOf('\n', at) + 1;
+    const before = source.slice(lineStart, at);
+    // Comment lines illustrate; `function name(` defines. Neither calls.
+    if (/^\s*(\*|\/\/)/.test(before) || /\bfunction\s+$/.test(before)) continue;
+    // `fooName(` must not count as a call to `Name(`.
+    if (/[\w$]$/.test(before)) continue;
+    lines.push(source.slice(0, at).split('\n').length);
+  }
+  return lines;
+}
+
+/**
+ * Rule 1, as a pure function so the self-test can drive it with fabricated sources.
+ *
+ * @param {string} source module-initializer.ts
+ * @param {string[]} viaNames inheriting helpers other modules export (`ACCEPTED_INHERITORS[].via`)
+ */
+export function orderViolations(source, viaNames = []) {
   const claimAt = source.indexOf(`await ${CLAIM_FN}(`);
   if (claimAt === -1) {
     return [
@@ -133,13 +163,23 @@ export function orderViolations(source) {
   const claimLine = source.slice(0, claimAt).split('\n').length;
 
   // The call inside claimStateDatabase itself is the claim; every OTHER site must follow it.
-  return callSites(source)
+  const direct = callSites(source)
     .filter((s) => !s.suppliesDbPath && s.line < claimLine)
     .map(
       (s) =>
         `module-initializer.ts:${s.line}: SqliteEngine.getInstance() with no dbPath runs BEFORE ` +
         `${CLAIM_FN}() at line ${claimLine} — it would claim the singleton first`
     );
+  const viaHelpers = viaNames.flatMap((name) =>
+    helperCallLines(source, name)
+      .filter((line) => line < claimLine)
+      .map(
+        (line) =>
+          `module-initializer.ts:${line}: ${name}() inherits the singleton's path and runs ` +
+          `BEFORE ${CLAIM_FN}() at line ${claimLine} — it would claim the singleton first`
+      )
+  );
+  return [...direct, ...viaHelpers];
 }
 
 /** Files under src/ containing a real call site, via git (fast, and respects tracked files). */
@@ -182,7 +222,8 @@ export function classifyEntry(facts) {
 }
 
 function run() {
-  const violations = [...orderViolations(readFileSync(INITIALIZER, 'utf8'))];
+  const viaNames = ACCEPTED_INHERITORS.flatMap((e) => (e.via !== undefined ? [e.via] : []));
+  const violations = [...orderViolations(readFileSync(INITIALIZER, 'utf8'), viaNames)];
 
   const declared = new Map(ACCEPTED_INHERITORS.map((e) => [e.file, e]));
   const seenInheriting = new Set();
@@ -247,6 +288,11 @@ function selfTest() {
       source: `async function initializeModules() {\n  const early = await ${CALL}serverRoot, logger);\n  await ${CLAIM_FN}(p, s, l);\n}\n`,
       rule: orderViolations,
     },
+    {
+      name: 'an inheriting helper called BEFORE the claim is rejected',
+      source: `async function initializeModules() {\n  await syncIt({ serverRoot });\n  await ${CLAIM_FN}(p, s, l);\n}\n`,
+      rule: (source) => orderViolations(source, ['syncIt']),
+    },
   ];
 
   let failures = 0;
@@ -261,8 +307,11 @@ function selfTest() {
   }
 
   // The correct ordering must PASS, or the cases above only prove nothing ever validates.
-  const good = `async function initializeModules() {\n  await ${CLAIM_FN}(p, s, l);\n  const db = await ${CALL}serverRoot, logger);\n}\n`;
-  if (orderViolations(good).length > 0) {
+  const good =
+    `import { syncIt } from './sync.js';\n// syncIt( in a comment is not a call\n` +
+    `async function initializeModules() {\n  await ${CLAIM_FN}(p, s, l);\n` +
+    `  const db = await ${CALL}serverRoot, logger);\n  await syncIt({ serverRoot });\n}\n`;
+  if (orderViolations(good, ['syncIt']).length > 0) {
     console.error('✖ self-test: correct ordering was rejected');
     failures += 1;
   } else {
