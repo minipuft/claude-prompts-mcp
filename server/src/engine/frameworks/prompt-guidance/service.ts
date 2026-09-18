@@ -309,27 +309,6 @@ export class PromptGuidanceService {
   }
 
   /**
-   * Enable or disable the guidance system
-   */
-  setGuidanceEnabled(enabled: boolean): void {
-    this.config.systemPromptInjection.enabled = enabled;
-    this.config.templateEnhancement.enabled = enabled;
-
-    this.logger.info(`Prompt guidance system ${enabled ? 'enabled' : 'disabled'}`);
-  }
-
-  /**
-   * Update service configuration
-   */
-  updateConfig(config: Partial<PromptGuidanceServiceConfig>): void {
-    this.config = { ...this.config, ...config };
-
-    this.templateEnhancer.updateConfig(config.templateEnhancement || {});
-
-    this.logger.debug('PromptGuidanceService configuration updated');
-  }
-
-  /**
    * Shutdown the service
    */
   async shutdown(): Promise<void> {
@@ -344,25 +323,10 @@ export class PromptGuidanceService {
   }
 
   /**
-   * Set framework manager for guidance operations
-   */
-  setFrameworkManager(frameworkManager: FrameworkManager): void {
-    this.frameworkManager = frameworkManager;
-    this.logger.debug('FrameworkManager set for PromptGuidanceService');
-  }
-
-  /**
    * Check if service is initialized
    */
   isInitialized(): boolean {
     return this.initialized;
-  }
-
-  /**
-   * Get current configuration
-   */
-  getConfig(): PromptGuidanceServiceConfig {
-    return { ...this.config };
   }
 
   /**

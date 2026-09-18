@@ -222,44 +222,11 @@ export class FrameworkRegistry {
   }
 
   /**
-   * Get guide entries with metadata
-   */
-  getGuideEntries(enabledOnly: boolean = true): FrameworkGuideEntry[] {
-    this.ensureInitialized();
-
-    const entries: FrameworkGuideEntry[] = [];
-    for (const [_, entry] of this.guides) {
-      if (!enabledOnly || entry.enabled) {
-        entries.push(entry);
-      }
-    }
-
-    return entries;
-  }
-
-  /**
    * Check if a guide is registered
    */
   hasGuide(guideId: string): boolean {
     this.ensureInitialized();
     return this.guides.has(guideId.toLowerCase());
-  }
-
-  /**
-   * Enable or disable a framework guide
-   */
-  setGuideEnabled(guideId: string, enabled: boolean): boolean {
-    this.ensureInitialized();
-
-    const entry = this.guides.get(guideId.toLowerCase());
-    if (entry) {
-      entry.enabled = enabled;
-      this.logger.info(`Framework guide '${guideId}' ${enabled ? 'enabled' : 'disabled'}`);
-      return true;
-    }
-
-    this.logger.warn(`Cannot ${enabled ? 'enable' : 'disable'} guide '${guideId}': not found`);
-    return false;
   }
 
   /**
@@ -280,38 +247,6 @@ export class FrameworkRegistry {
     this.guides.delete(normalizedId);
     this.logger.info(`Framework guide '${guideId}' unregistered from registry`);
     return true;
-  }
-
-  /**
-   * Get registry statistics
-   */
-  getRegistryStats() {
-    this.ensureInitialized();
-
-    const entries = Array.from(this.guides.values());
-    const enabledCount = entries.filter((e) => e.enabled).length;
-    const builtInCount = entries.filter((e) => e.isBuiltIn).length;
-
-    // Count by source
-    const sourceDistribution: Record<FrameworkSource, number> = {
-      'yaml-runtime': 0,
-      custom: 0,
-    };
-    for (const entry of entries) {
-      sourceDistribution[entry.source]++;
-    }
-
-    return {
-      totalGuides: entries.length,
-      enabledGuides: enabledCount,
-      builtInGuides: builtInCount,
-      customGuides: entries.length - builtInCount,
-      sourceDistribution,
-      averageLoadTime:
-        entries.reduce((sum, e) => sum + e.metadata.loadTime, 0) / entries.length || 0,
-      initialized: this.initialized,
-      runtimeLoaderStats: this.runtimeLoader?.getStats() ?? null,
-    };
   }
 
   /**
