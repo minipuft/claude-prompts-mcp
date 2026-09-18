@@ -8,6 +8,8 @@ import { GATE_VERDICT_REQUIRED_FORMAT } from '../../../src/engine/gates/core/gat
 import type { LightweightGateDefinition } from '../../../src/engine/gates/types.js';
 import type { GateDefinitionProvider } from '../../../src/engine/gates/core/gate-loader.js';
 
+import { DEFAULT_GATES_CONFIG } from '../../../src/shared/types/core-config.js';
+
 /**
  * Integration test: Judge gate evaluation pipeline wiring.
  *
@@ -106,7 +108,15 @@ function createStageWithGates(
     chainSessionStore,
     loader,
     mockLogger,
-    () => ({ evaluation: configEvaluation }),
+    () => ({
+      directory: 'resources/gates',
+      enabled: true,
+      frameworkGates: DEFAULT_GATES_CONFIG.enableFrameworkGates,
+      executeInlineGateDefinitions: DEFAULT_GATES_CONFIG.executeInlineGateDefinitions,
+      evaluation: { defaultMode: 'self', ...configEvaluation },
+      harnessCovers: DEFAULT_GATES_CONFIG.harnessCovers,
+      reminderTokenBudget: DEFAULT_GATES_CONFIG.reminderTokenBudget,
+    }),
     // Production wires this from PipelineBuilder. Absent, shell_verify criteria now fail
     // closed and say so rather than silently contributing nothing, so a test that means to
     // exercise them has to supply one. UNSAFE_ALLOW_ALL: these run real commands.

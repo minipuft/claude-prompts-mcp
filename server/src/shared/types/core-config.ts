@@ -22,8 +22,23 @@ export interface PromptsConfig {
   /** Path to the prompts directory */
   directory: string;
   /** Global default for MCP registration. Category/prompt overrides take precedence. */
-  registerWithMcp?: boolean;
+  registerWithMcp: boolean;
 }
+
+/**
+ * The prompts section every reader gets when config.json says nothing.
+ *
+ * Lives here, in Layer 0, rather than inside `ConfigManager`, for the same reason
+ * {@link DEFAULT_GATES_CONFIG} does: two layers read it. `infra/config` resolves the section with
+ * it at load time, and `modules/prompts/converter.ts` falls back to `registerWithMcp` when a
+ * `PromptConverter` is constructed without a config manager at all (test harnesses). While the
+ * converter carried its own `true` literal, the loader could not report `prompts.registerWithMcp`
+ * as a resolved default — the effective value lived three layers below the config surface.
+ */
+export const DEFAULT_PROMPTS_CONFIG: PromptsConfig = {
+  directory: 'resources/prompts',
+  registerWithMcp: true,
+};
 
 // ===== Configuration Types =====
 
@@ -46,45 +61,6 @@ export interface ServerConfig {
  * - 'both': Run STDIO and Streamable HTTP simultaneously
  */
 export type TransportMode = 'stdio' | 'streamable-http' | 'both';
-
-/**
- * LLM provider for semantic analysis
- */
-export type LLMProvider = 'openai' | 'anthropic' | 'custom';
-
-/**
- * LLM integration configuration
- */
-export interface LLMIntegrationConfig {
-  /** Whether LLM integration is enabled */
-  enabled: boolean;
-  /** API key for the LLM provider */
-  apiKey: string | null;
-  /** Custom endpoint URL for the LLM provider (provider auto-detected from URL) */
-  endpoint: string | null;
-  /** Model name to use */
-  model: string;
-  /** Maximum tokens for analysis requests */
-  maxTokens: number;
-  /** Temperature for analysis requests */
-  temperature: number;
-}
-
-/**
- * Semantic analysis configuration
- */
-export interface SemanticAnalysisConfig {
-  /** LLM integration configuration */
-  llmIntegration: LLMIntegrationConfig;
-}
-
-/**
- * Analysis system configuration
- */
-export interface AnalysisConfig {
-  /** Semantic analysis configuration */
-  semanticAnalysis: SemanticAnalysisConfig;
-}
 
 /**
  * Logging system configuration
@@ -162,7 +138,7 @@ export interface ResolvedFrameworkConfig {
  */
 export interface ExecutionConfig {
   /** Enable judge mode (LLM-driven step selection) */
-  judge?: boolean;
+  judge: boolean;
 }
 
 /**
@@ -170,7 +146,7 @@ export interface ExecutionConfig {
  */
 export interface ChainSessionConfig {
   /** Minutes before idle chain sessions expire */
-  sessionTimeoutMinutes: number;
+  timeoutMinutes: number;
   /** Minutes before pending gate reviews expire */
   reviewTimeoutMinutes: number;
   /** Minutes between background cleanup sweeps */
@@ -222,20 +198,23 @@ export const DEFAULT_GATES_CONFIG = {
 } satisfies GateSystemSettings;
 
 /**
- * Configuration for gates subsystem (top-level config.json shape)
+ * The gates section of the RESOLVED runtime config.
+ *
+ * Every member the loader resolves is required: `normalizeConfigFile` fills each one from the
+ * file or from {@link DEFAULT_GATES_CONFIG}, so a reader never sees `undefined` here and the
+ * compiler is what catches a leaf the loader forgot. The two exceptions sit inside `evaluation`
+ * and are marked there.
  */
 export interface GatesConfig {
-  /** New-style: directory path */
-  directory?: string;
   /** Enable/disable the gate subsystem entirely */
-  enabled?: boolean;
+  enabled: boolean;
   /**
    * Resolved internal spelling. `ConfigManager` folds the config.json key into this, so
    * consumers read only this field and never the wire key below.
    */
   enableFrameworkGates?: boolean;
   /** config.json key: enable framework-specific quality gates */
-  frameworkGates?: boolean;
+  frameworkGates: boolean;
   /**
    * Execute a prompt's `inline_gate_definitions` instead of only displaying them.
    *
@@ -252,17 +231,25 @@ export interface GatesConfig {
    *   together with the `executeInlineGateDefinitions === true` branches. A knob parked at its
    *   baked value is a parallel system with a nicer name.
    */
-  executeInlineGateDefinitions?: boolean;
+  executeInlineGateDefinitions: boolean;
   /** Judge evaluation defaults — gates with `evaluation.mode: 'judge'` use context-isolated review */
-  evaluation?: {
-    defaultMode?: 'self' | 'judge';
+  evaluation: {
+    defaultMode: 'self' | 'judge';
+    /** No default in any layer — a judge model is named or it is not. */
     defaultModel?: string;
+    /**
+     * Deliberately unresolved at load time. The only code default is
+     * `judge-prompt-builder.ts`'s `mode === 'judge'`, which is a FUNCTION of the resolved mode
+     * rather than a constant, so folding a constant in here would change what a `mode: 'self'`
+     * gate does. `config.schema.json` documents `true`; the two disagree, and picking one is an
+     * owner call, not a loader change.
+     */
     strict?: boolean;
   };
   /** Reminder subjects this installation's harness already covers; a reminder gate whose `subject` is listed is not rendered (checks are never suppressed) */
-  harnessCovers?: string[];
+  harnessCovers: string[];
   /** Estimated tokens of reminder guidance rendered per dispatch; reminders over budget render as one line each, in priority order */
-  reminderTokenBudget?: number;
+  reminderTokenBudget: number;
 }
 
 /**
@@ -281,13 +268,13 @@ export interface PhaseGuardsConfig {
  */
 export interface FrameworkSettings {
   /** Enable framework system */
-  enabled?: boolean;
+  enabled: boolean;
   /** Adapt MCP tool descriptions based on active framework */
-  dynamicToolDescriptions?: boolean;
+  dynamicToolDescriptions: boolean;
   /** Framework a scope falls back to with no persisted state (default: 'CAGEERF') */
-  defaultFramework?: string;
+  defaultFramework: string;
   /** Injection control for framework content (system prompt, gate guidance, style guidance) */
-  injection?: FrameworkInjectionConfig;
+  injection: FrameworkInjectionConfig;
 }
 
 /**
@@ -333,9 +320,9 @@ export interface VersioningConfig {
   /** Enable/disable version tracking globally */
   enabled: boolean;
   /** Maximum versions to retain per resource (FIFO pruning) */
-  max_versions: number;
+  maxVersions: number;
   /** Auto-save version on updates (can be overridden per-call) */
-  auto_version: boolean;
+  autoVersion: boolean;
 }
 
 /**
@@ -343,8 +330,8 @@ export interface VersioningConfig {
  */
 export const DEFAULT_VERSIONING_CONFIG: VersioningConfig = {
   enabled: true,
-  max_versions: 50,
-  auto_version: true,
+  maxVersions: 50,
+  autoVersion: true,
 };
 
 // ===== Telemetry Configuration Types =====
@@ -449,47 +436,66 @@ export interface IdentityLaunchDefaults {
   delegationProfile?: DelegationProfile;
 }
 
+/**
+ * Identity and workspace scoping, as the RESOLVED runtime config carries it.
+ *
+ * `launchDefaults` stays a possibly-empty object rather than an optional member: "no launch
+ * defaults" and "an empty set of launch defaults" are the same state to every reader
+ * (`normalizeLaunchDefaults` produces the same result from both), and one of the two spellings
+ * would otherwise have to be defended at every call site.
+ */
+export interface IdentityConfig {
+  /** Policy mode: 'permissive' (accept overrides) or 'locked' (enforce defaults) */
+  mode: IdentityPolicyMode;
+  /** Allow per-request identity overrides from tokens/headers */
+  allowPerRequestOverride: boolean;
+  /** Launch-time identity defaults for workspace/organization scoping; `{}` when none are set */
+  launchDefaults: IdentityLaunchDefaults;
+}
+
+/**
+ * The fully RESOLVED runtime configuration.
+ *
+ * Every section the config schema declares is required, because `normalizeConfigFile` resolves
+ * every one of them at load time — from the file where it speaks, from this module's `DEFAULT_*`
+ * constants where it does not. That is what lets `getConfigValueWithSource` answer any declared
+ * key with the value the server actually uses, and what lets each `ConfigManager` getter be pure
+ * name mapping instead of a second, invisible layer of defaulting.
+ *
+ * Do NOT confuse this with `ConfigFile` (./config-file.js), the on-disk shape, where every member
+ * except `version` is optional.
+ */
 export interface Config {
   /** Server configuration */
   server: ServerConfig;
   /** Prompts subsystem configuration */
   prompts: PromptsConfig;
-  /** Analysis system configuration */
-  analysis?: AnalysisConfig;
   /** Gates system configuration (quality validation) */
-  gates?: GatesConfig;
+  gates: GatesConfig;
   /** Phase guard enforcement for framework structural validation */
-  phaseGuards?: PhaseGuardsConfig;
+  phaseGuards: PhaseGuardsConfig;
   /** Execution strategy configuration (judge mode, etc.) */
-  execution?: ExecutionConfig;
-  /** Framework feature configuration (injection, tool descriptions) - LEGACY */
-  /** New-style: Framework configuration */
-  frameworks?: FrameworkSettings;
-  /** Chain session lifecycle configuration - LEGACY */
-  chainSessions?: ChainSessionConfig;
+  execution: ExecutionConfig;
+  /** Framework feature configuration (injection, tool descriptions) */
+  frameworks: FrameworkSettings;
+  /** Chain session lifecycle configuration */
+  chainSessions: ChainSessionConfig;
   /** Logging configuration */
-  logging?: LoggingConfig;
-  /** Tool descriptions configuration */
+  logging: LoggingConfig;
+  /** Tool descriptions configuration. Not a config-file key — set by tooling, never by the loader. */
   toolDescriptions?: ToolDescriptionsOptions;
   /** Version history configuration for resources */
-  versioning?: VersioningConfig;
-  /** New-style: Verification (Ralph Loops) configuration */
-  verification?: VerificationConfig;
+  versioning: VersioningConfig;
+  /** Verification (Ralph Loops) configuration */
+  verification: VerificationConfig;
   /** MCP Resources configuration */
-  resources?: ResourcesConfig;
+  resources: ResourcesConfig;
 
   /** OpenTelemetry observability configuration (tracing, metrics, attribute policy) */
-  telemetry?: TelemetryConfig;
+  telemetry: TelemetryConfig;
 
   /** Identity and workspace scoping configuration */
-  identity?: {
-    /** Policy mode: 'permissive' (accept overrides) or 'locked' (enforce defaults) */
-    mode?: IdentityPolicyMode;
-    /** Allow per-request identity overrides from tokens/headers (default: true) */
-    allowPerRequestOverride?: boolean;
-    /** Launch-time identity defaults for workspace/organization scoping */
-    launchDefaults?: IdentityLaunchDefaults;
-  };
+  identity: IdentityConfig;
 }
 
 // ===== Message Types =====

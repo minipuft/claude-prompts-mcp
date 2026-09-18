@@ -21,6 +21,7 @@ import {
   validateFrameworkSchema,
   validatePhasesSchema,
   type FrameworkSchemaValidationResult,
+  type PhasesFileYaml,
 } from './framework-schema.js';
 
 import type { FrameworkResourceDefinition } from './framework-definition-types.js';
@@ -535,9 +536,20 @@ export class RuntimeFrameworkLoader {
    *
    * Extracted from `loadFromDir` rather than left inline: validate-then-validate-phases is a
    * decision with its own nesting, and folding it into the walk pushed that method further over
-   * the cognitive-complexity limit. Returning the reason rather than recording it keeps the single
-   * exit rule intact — this method writes nothing, so `refuse` remains the one place a refusal is
-   * recorded. Mirrors `GateDefinitionLoader.validationRefusal`.
+   * the cognitive-complexity limit. Mirrors `GateDefinitionLoader.validationRefusal`.
+   *
+   * NOT side-effect-free on the phases side (P4.51, mirrors P4.49's style-loader fix). On success,
+   * `definition.phases` is replaced with `validatePhasesSchema`'s defaulted output —
+   * `ExecutionStepSchema.dependencies` is the only `.default(` in `framework-schema.ts`, and it
+   * lives here, not on the top-level `FrameworkSchema` (which has none, so `definition` itself is
+   * left as the raw parse — nothing there is a schema default to lose). Before this, an execution
+   * step that omitted `dependencies:` carried `undefined`, not the schema's own `[]`; validation
+   * passed either way, so the only symptom was `step-generator.ts`'s `step.dependencies || []`
+   * guard doing quiet work no schema-following author should have needed. Both `FrameworkSchema`
+   * and `PhasesFileSchema` are `.passthrough()`, so swapping in the parsed output does not drop an
+   * authored field — a per-step object (`ExecutionStepSchema`/`ProcessingStepSchema`) is NOT
+   * passthrough and does strip an undeclared key, but `step-generator.ts` only ever reads the
+   * declared fields off a step, so nothing downstream observes the difference.
    */
   private validationRefusal(
     definition: FrameworkResourceDefinition,
@@ -582,6 +594,11 @@ export class RuntimeFrameworkLoader {
         phasesValidation.warnings.join('; ')
       );
     }
+    if (phasesValidation.data) {
+      definition.phases = phasesValidation.data as NonNullable<
+        FrameworkResourceDefinition['phases']
+      >;
+    }
     return undefined;
   }
 
@@ -603,7 +620,7 @@ export class RuntimeFrameworkLoader {
    * duplicate order, min_length > max_length) that ship in
    * `validatePhasesSchema` but were never wired to a caller (F1).
    */
-  private validatePhases(phases: unknown): FrameworkSchemaValidationResult {
+  private validatePhases(phases: unknown): FrameworkSchemaValidationResult<PhasesFileYaml> {
     return validatePhasesSchema(phases);
   }
 }

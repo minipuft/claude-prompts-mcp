@@ -173,6 +173,21 @@ describe('the change tracker spans operator roots, one file per id', () => {
     expect(rowsFor('step_one')).toEqual([]);
   });
 
+  it('reads a file event by the walk rules at the prompts root and below it', async () => {
+    // Each skipped path has a twin differing in the one name the rule keys on: `tools` is a
+    // category at the root and reserved inside one; `backup` is excluded, `backups` is served.
+    const cases: Array<[string, string, boolean]> = [
+      ['tools/root_tools_leaf', 'root_tools_leaf', true],
+      ['general/tools/nested_tools_leaf', 'nested_tools_leaf', false],
+      ['backups/kept_copy', 'kept_copy', true],
+      ['backup/old_copy', 'old_copy', false],
+    ];
+    for (const [relativeDir, id, logged] of cases) {
+      await fileEvent(await writePrompt(PRIMARY, relativeDir, id), 'added');
+      expect([id, rowsFor(id).map((row) => row.operation)]).toEqual([id, logged ? ['added'] : []]);
+    }
+  });
+
   it('reconciles a removal that no file event reported', async () => {
     const soloFile = await writePrompt(OVERLAY, 'general/solo', 'OVERLAY-ONLY');
     await writePrompt(PRIMARY, 'general/kept', 'KEPT');

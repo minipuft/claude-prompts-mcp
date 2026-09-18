@@ -30,6 +30,7 @@ import {
 } from '#infra/observability/tracking/index.js';
 import { setResourceChangeLog } from '#shared/core/resource-change-log.js';
 import {
+  isExcludedCategoryDirectoryName,
   isIgnoredPromptEntryName,
   isReservedPromptDirectoryName,
   promptIdFromDirectory,
@@ -208,6 +209,22 @@ async function scanGateRoot(root: string, record: RecordResource): Promise<void>
 }
 
 /**
+ * Whether a walk skips the directory `name` found inside `dir`, by the loader's rules.
+ *
+ * At a prompts root every directory is a category candidate, and the loader's category rule
+ * decides: nothing below `backup/` or `node_modules/` is served, so nothing there is announced.
+ * Below the root, a prompt's `tools/` is reserved for script tools, so nothing below it entered
+ * the catalog either. At the root `tools` is an ordinary category, which the loader serves and
+ * this walk must announce. One predicate for the baseline walk and the watcher's event reading, so
+ * the two cannot disagree about which directories hold resources.
+ */
+function isSkippedPromptDirectory(root: string, dir: string, name: string): boolean {
+  return dir === root
+    ? isExcludedCategoryDirectoryName(name)
+    : isIgnoredPromptEntryName(name) || isReservedPromptDirectoryName(name);
+}
+
+/**
  * Walk a prompts tree the way the loader walks it.
  *
  * THREE QUESTIONS, ALL OF THEM ANSWERED IN `#shared/utils/prompt-layout.js`: which entries to
@@ -242,10 +259,7 @@ async function scanPromptTree(
         continue;
       }
 
-      // A prompt's `tools/` is reserved for script tools, so nothing below it entered the
-      // catalog and nothing below it may be announced as an external change. Same predicate
-      // the loader applies, from the same module.
-      if (isReservedPromptDirectoryName(entry.name)) continue;
+      if (isSkippedPromptDirectory(root, dir, entry.name)) continue;
 
       record('prompt', promptIdFromDirectory(root, entryPath), path.join(entryPath, 'prompt.yaml'));
       // Gates keep their directory name as their id: the gate layout is flat
@@ -320,8 +334,13 @@ function promptTreeResourceAt(
     .relative(root, dir)
     .split(path.sep)
     .filter((segment) => segment !== '');
-  const skipped = segments.some(
-    (segment) => isIgnoredPromptEntryName(segment) || isReservedPromptDirectoryName(segment)
+  // Each segment is judged where the walk would meet it: the first at the root, the rest below.
+  const skipped = segments.some((segment, index) =>
+    isSkippedPromptDirectory(
+      root,
+      index === 0 ? root : path.join(root, ...segments.slice(0, index)),
+      segment
+    )
   );
   const fileName = path.basename(filePath);
   if (skipped || isIgnoredPromptEntryName(fileName)) return undefined;

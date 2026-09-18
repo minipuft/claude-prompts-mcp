@@ -56,7 +56,7 @@ const silentLogger = (): Logger =>
  */
 function stubConfig(overrides: Record<string, unknown>): ConfigManager {
   return {
-    getVersioningConfig: () => ({ enabled: true, auto_version: true, max_versions: 10 }),
+    getVersioningConfig: () => ({ enabled: true, autoVersion: true, maxVersions: 10 }),
     getConfig: () => ({}),
     ...overrides,
   } as unknown as ConfigManager;

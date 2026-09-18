@@ -3,6 +3,8 @@ import * as path from 'node:path';
 
 import type { Logger } from '#shared/types/index.js';
 
+import { isExcludedCategoryDirectoryName } from '#shared/utils/prompt-layout.js';
+
 /** Minimal interface for checking YAML prompt presence in a directory. */
 export interface YamlPromptChecker {
   hasYamlPrompts(dir: string): boolean;
@@ -33,13 +35,8 @@ export async function discoverPromptDirectories(
     const entries = await fs.readdir(promptsDir, { withFileTypes: true });
 
     for (const entry of entries) {
-      if (
-        entry.isDirectory() &&
-        entry.name !== 'node_modules' &&
-        entry.name !== 'backup' &&
-        !entry.name.startsWith('.') &&
-        !entry.name.startsWith('_')
-      ) {
+      // The loader's category rule, so the watcher observes exactly the categories it serves.
+      if (entry.isDirectory() && !isExcludedCategoryDirectoryName(entry.name)) {
         const fullPath = path.join(promptsDir, entry.name);
         const hasYaml = checker.hasYamlPrompts(fullPath);
 

@@ -38,7 +38,6 @@ export const CONFIG_VALID_KEYS = [
   'frameworks.injection.systemPrompt.enabled',
   'frameworks.injection.systemPrompt.frequency',
   'frameworks.injection.systemPrompt.target',
-  'gates.directory',
   'gates.enabled',
   'gates.evaluation.defaultMode',
   'gates.evaluation.defaultModel',
@@ -158,9 +157,6 @@ export const CONFIG_KEY_TABLE: Readonly<Record<ConfigKey, ConfigLeafRule>> = {
   'frameworks.injection.systemPrompt.target': {
     type: 'string',
     enum: ['steps', 'gates', 'both'],
-  },
-  'gates.directory': {
-    type: 'string',
   },
   'gates.enabled': {
     type: 'boolean',

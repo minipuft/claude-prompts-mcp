@@ -3,26 +3,40 @@
 import { ActionHandler } from '../core/action-handler-base.js';
 import { createStructuredResponse } from '../core/response-utils.js';
 
+import type { ConfigValueSource } from '#shared/types/config-manager.js';
 import type { ToolResponse } from '#shared/types/index.js';
 
 import { validateConfigInput } from '#cli-shared/config-input-validator.js';
 import { handleError as utilsHandleError } from '#shared/utils/index.js';
 
-/** The one remaining nested-config shape: a per-key candidate check, never a write. */
+/** The one remaining nested-config write-adjacent shape: a per-key candidate check, never a write. */
 interface ConfigValidateRequest {
   key: string;
   value?: string;
   operation: 'validate';
 }
 
+/** The nested-config shape for a single-key read (row 6.3 / R59): never a write. */
+interface ConfigGetRequest {
+  key: string;
+  operation: 'get';
+}
+
+/** One plain sentence per {@link ConfigValueSource} label, shown after `source:` in a `get` reply. */
+const CONFIG_SOURCE_DESCRIPTIONS: Record<ConfigValueSource, string> = {
+  file: 'the config file sets this value',
+  default: 'built-in default; the file does not set it',
+  environment: 'an environment variable overrides the file and default',
+};
+
 /**
- * MCP config surface after this row: `list`, `keys`, `validate`. `get`, `set`, `reset` and
- * `restore` do not reach this handler — `get` is held by owner ruling R41 until a generated
- * config shape resolves most of the 78 schema-declared keys (31 resolve today); writes are
- * `cpm`-only per R27/R35 and are not coming back. Any other operation is refused by name,
- * never answered with a listing — that silent substitution (`if (!configRequest) return list`)
- * is the defect this row removes: it made every malformed or unrecognized call look like a
- * successful config dump.
+ * MCP config surface after this row: `list`, `keys`, `get`, `validate`. `set`, `reset` and
+ * `restore` do not reach this handler — writes stay `cpm`-only per R27/R35 and are not coming
+ * back over MCP. `get` returned in row 6.3 (R59), inside owner ruling R41, answering one key's
+ * effective value and source via `config: { operation: "get", key }`. Any other operation is
+ * refused by name, never answered with a listing — that silent substitution
+ * (`if (!configRequest) return list`) is the defect this row removes: it made every malformed or
+ * unrecognized call look like a successful config dump.
  */
 export class ConfigActionHandler extends ActionHandler {
   async execute(args: any): Promise<ToolResponse> {
@@ -34,6 +48,8 @@ export class ConfigActionHandler extends ActionHandler {
         return await this.handleConfigList();
       case 'keys':
         return await this.handleConfigKeys();
+      case 'get':
+        return await this.handleConfigGet(configRequest as ConfigGetRequest | undefined);
       case 'validate':
         if (configRequest === undefined) {
           return await this.handleSchemaValidate();
@@ -59,11 +75,10 @@ export class ConfigActionHandler extends ActionHandler {
       [
         `❌ config operation \`${label}\` is not served over MCP.`,
         '',
-        'Reads: `list` (whole loaded configuration), `keys` (declared schema keys), `validate`' +
-          ' (the load-time schema check, or a per-key candidate check with' +
+        'Reads: `list` (whole loaded configuration), `keys` (declared schema keys), `get`' +
+          ' (one key\'s effective value and source, via `config: { operation: "get", key }`),' +
+          ' `validate` (the load-time schema check, or a per-key candidate check with' +
           ' `config: { operation: "validate", key, value }`).',
-        '`get` is held pending a generated config shape (R41) — read one key with' +
-          ' `cpm config get <key>` until it returns.',
         'Arbitrary writes (naming a key and value) and restore-from-backup are not served over' +
           ' MCP — use `cpm config set <key> <value>` or `cpm config reset --force`.',
       ].join('\n'),
@@ -99,6 +114,55 @@ export class ConfigActionHandler extends ActionHandler {
     } catch (error) {
       // listConfigKeys() throws when the schema cannot be enumerated — report that as the
       // explicit failure it is; never render an empty list, which would read as "zero keys".
+      const result = utilsHandleError(error, 'config_management', this.logger);
+      return createStructuredResponse(result.message, result.isError, { action: 'config' });
+    }
+  }
+
+  /**
+   * One key's effective value and source (row 6.3 / R59). The unknown-key refusal only fires
+   * once `listConfigKeys()` has resolved — a schema-enumeration failure (no schema injected)
+   * surfaces through the `catch` below as that error, never as "key not found".
+   */
+  private async handleConfigGet(
+    configRequest: ConfigGetRequest | undefined
+  ): Promise<ToolResponse> {
+    if (!this.configManager) return this.configManagerUnavailable();
+
+    if (configRequest === undefined) {
+      return createStructuredResponse(
+        '❌ config `get` requires `config: { operation: "get", key }`.',
+        true,
+        { action: 'config' }
+      );
+    }
+
+    const { key } = configRequest;
+
+    try {
+      const declaredKeys = await this.configManager.listConfigKeys();
+      if (!declaredKeys.includes(key)) {
+        return createStructuredResponse(
+          `❌ **${key}** is not a declared configuration key. See` +
+            ' `system_control(action: "config", operation: "keys")`.',
+          true,
+          { action: 'config' }
+        );
+      }
+
+      const { value, source } = this.configManager.getConfigValueWithSource(key);
+      // `JSON.stringify(undefined)` is the JS value `undefined`, which the template would coerce
+      // to the bare word — honest, but not JSON, and indistinguishable from a key whose value is
+      // the string "undefined" (F-T4-37). A key with no default in any layer says so in prose.
+      const headline =
+        value === undefined
+          ? `🔎 **${key}** is not set`
+          : `🔎 **${key}** = ${JSON.stringify(value)}`;
+      return this.createMinimalSystemResponse(
+        [headline, '', `source: ${source} (${CONFIG_SOURCE_DESCRIPTIONS[source]})`].join('\n'),
+        'config_get'
+      );
+    } catch (error) {
       const result = utilsHandleError(error, 'config_management', this.logger);
       return createStructuredResponse(result.message, result.isError, { action: 'config' });
     }

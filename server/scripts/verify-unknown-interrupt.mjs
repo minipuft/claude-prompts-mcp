@@ -30,44 +30,30 @@
  */
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdtempSync, openSync, readdirSync, statSync } from 'node:fs';
+import { mkdtempSync, openSync } from 'node:fs';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { buildServerEnv, createHermeticRoots } from './lib/hermetic-server-env.js';
+import { checkDistFreshness } from './lib/dist-freshness.js';
 
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = path.join(SERVER_ROOT, 'dist', 'index.js');
 const WS = mkdtempSync(path.join(tmpdir(), 'unknown-interrupt-drive-'));
 
-/** Newest mtime under a directory. Staleness must never be under-reported. */
-function newestMtime(dir) {
-  let newest = 0;
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name);
-    const mtime = entry.isDirectory() ? newestMtime(full) : statSync(full).mtimeMs;
-    if (mtime > newest) newest = mtime;
-  }
-  return newest;
-}
-
+/**
+ * Staleness must never be under-reported — comparison lives in `lib/dist-freshness.js`, shared
+ * with `verify-mcp-surface.mjs` and `tests/e2e/helpers/child-env.ts`.
+ */
 function refuseStaleDist() {
-  let distMtime;
-  try {
-    distMtime = statSync(DIST).mtimeMs;
-  } catch {
-    console.error(`✗ ${DIST} missing — run \`npm run build\` first`);
+  const result = checkDistFreshness(DIST, path.join(SERVER_ROOT, 'src'));
+  if (!result.fresh) {
+    console.error(`✗ ${result.reason}`);
     process.exit(1);
   }
-  const srcMtime = newestMtime(path.join(SERVER_ROOT, 'src'));
-  if (srcMtime > distMtime) {
-    const lagMin = Math.round((srcMtime - distMtime) / 60_000);
-    console.error(`✗ dist/ is stale — src is ${lagMin} min newer. Run \`npm run build\` first.`);
-    process.exit(1);
-  }
-  console.log(`✓ dist/ current — built ${new Date(distMtime).toISOString().slice(11, 19)}`);
+  console.log(`✓ dist/ current — built ${new Date(result.builtAt).toISOString().slice(11, 19)}`);
 }
 
 function reservePort() {
