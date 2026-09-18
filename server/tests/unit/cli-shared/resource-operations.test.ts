@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from '@jest/globals';
 import { existsSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -85,6 +86,38 @@ describe('resource-operations', () => {
       expect(result.validation?.valid).toBe(false);
       expect(readYaml(dir, 'style.yaml')).toContain('enabled: true');
     });
+
+    it('rolls back and rethrows when the mutation itself throws', () => {
+      const dir = join(tempDir, 'style-c');
+      writeResource(
+        dir,
+        'style.yaml',
+        [
+          'id: style-c',
+          'name: Style C',
+          'description: test style',
+          'guidanceFile: guidance.md',
+          'enabled: true',
+        ].join('\n')
+      );
+      const before = hashFile(join(dir, 'style.yaml'));
+
+      expect(() =>
+        runValidatedMutation({
+          resourceType: 'styles',
+          location: dirLocation(dir, 'style.yaml'),
+          // A mutation that writes a partial change and then blows up before returning: the
+          // helper cannot see a `moved` location for a throw, so this exercises the path that
+          // must still restore the pre-mutation snapshot from the original resource root.
+          mutate: () => {
+            writeFileSync(join(dir, 'style.yaml'), 'id: style-c\nenabled: CORRUPTED\n', 'utf8');
+            throw new Error('mutation exploded mid-write');
+          },
+        })
+      ).toThrow('mutation exploded mid-write');
+
+      expect(hashFile(join(dir, 'style.yaml'))).toBe(before);
+    });
   });
 
   afterEach(() => {
@@ -100,6 +133,10 @@ describe('resource-operations', () => {
 
   function readYaml(dir: string, entryFile: string): string {
     return readFileSync(join(dir, entryFile), 'utf8');
+  }
+
+  function hashFile(path: string): string {
+    return createHash('sha256').update(readFileSync(path)).digest('hex');
   }
 
   function dirLocation(dir: string, entryFile: string): ResourceLocation {

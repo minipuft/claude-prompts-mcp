@@ -240,13 +240,32 @@ function rollbackMutation(snapshotPath: string, mutatedPath: string, originalPat
   restoreResource(snapshotPath, originalPath);
 }
 
-function executeMutation<TMutation extends ResourceMutationResult>(
-  mutate: () => TMutation
-): { operation?: TMutation; error?: string } {
+/**
+ * Roll back a mutation that threw, then let the original error keep propagating.
+ *
+ * A throw from `mutate` never returns a `moved` location, so the target is always the resource's
+ * original path -- the one the snapshot was taken from. `restoreResource` handles both a
+ * still-in-place partial write and a vanished original the same way: remove whatever is there now,
+ * recreate it from the snapshot.
+ *
+ * The rollback itself touches disk and can fail (permissions, disk full). That failure must never
+ * replace or swallow the mutation's own error -- that is the one the caller needs to act on -- so
+ * it is logged here and `mutateError` is rethrown unchanged by the caller either way.
+ */
+function rollbackAfterThrow(
+  snapshot: { dir: string },
+  originalPath: string,
+  mutateError: unknown
+): void {
   try {
-    return { operation: mutate() };
-  } catch (error) {
-    return { error: error instanceof Error ? error.message : String(error) };
+    restoreResource(snapshot.dir, originalPath);
+  } catch (rollbackError) {
+    const mutateMessage = mutateError instanceof Error ? mutateError.message : String(mutateError);
+    console.error(
+      `runValidatedMutation: rollback after a failed mutation also failed; the resource tree ` +
+        `may hold a partial write. Mutation error: ${mutateMessage}`,
+      rollbackError
+    );
   }
 }
 
@@ -263,6 +282,17 @@ function validateMutationResult(
   return validator(options.resourceType, declaredResourceId(location), location.file);
 }
 
+/**
+ * Run `mutate`, validate its result, and roll back on either kind of failure.
+ *
+ * A validation failure and a throw from `mutate` are rolled back the same way: the resource tree
+ * is restored from the pre-mutation snapshot. They are reported differently, because only one of
+ * them is this helper's to report. A validation failure is an ordinary result -- it comes back as
+ * `{ success: false, rolledBack: true, ... }` for the caller to handle. A throw is not swallowed
+ * into that shape: it is rethrown after rollback, unchanged, because this helper is not the catch
+ * boundary (architecture.md) -- the caller decides how to report an exception, this helper only
+ * guarantees the tree is not left holding a partial write when one happens.
+ */
 export function runValidatedMutation<TMutation extends ResourceMutationResult>(
   options: ValidatedMutationOptions<TMutation>
 ): ValidatedMutationResult<TMutation> {
@@ -271,18 +301,15 @@ export function runValidatedMutation<TMutation extends ResourceMutationResult>(
   const snapshot = validateMutation ? createMutationSnapshot(resourceRoot(options.location)) : null;
 
   try {
-    const executed = executeMutation(options.mutate);
-    if (executed.error !== undefined) {
-      return {
-        success: false,
-        operation: {
-          success: false,
-          error: executed.error,
-        } as TMutation,
-        error: executed.error,
-      };
+    let operation: TMutation;
+    try {
+      operation = options.mutate();
+    } catch (mutateError) {
+      if (snapshot !== null) {
+        rollbackAfterThrow(snapshot, resourceRoot(options.location), mutateError);
+      }
+      throw mutateError;
     }
-    const operation = executed.operation as TMutation;
 
     if (!operation.success) {
       return {
