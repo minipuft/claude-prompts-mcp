@@ -4,7 +4,7 @@
  *
  * The index is what every Python hook reads. When it describes a smaller catalog than the loaders
  * serve, a prompt is executable and simultaneously unknown to the prompt router — which is exactly
- * what happened (measured 2026-08-29): 119 prompts served, 78 indexed, and `>>strategicImplement`
+ * what happened (measured 2026-08-29): 119 prompts served, 78 indexed, and `>>strategic_implement`
  * answered "Unknown prompt".
  *
  * Three independent causes, one per describe block below. Each assertion here fails against the

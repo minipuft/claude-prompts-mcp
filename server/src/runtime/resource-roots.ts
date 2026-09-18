@@ -11,7 +11,7 @@
  * That divergence is the defect this module exists to prevent. Measured 2026-08-29 against a live
  * STDIO server: the loaders served 119 prompts across 16 categories while `resource_index` held
  * 78 across 11, because the indexer walked only the primary root. Every Python hook reads the
- * index, so `strategicImplement` and `design_muse` — bundled, loaded, executable — did not exist
+ * index, so `strategic_implement` and `design_muse` — bundled, loaded, executable — did not exist
  * as far as the prompt router was concerned.
  *
  * Callers that need precedence-ordered directories use {@link orderedResourceRoots}; callers

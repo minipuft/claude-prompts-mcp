@@ -146,7 +146,7 @@ try {
   await b.init();
 
   const start = await a.call({
-    command: '>>strategicImplement task:"handoff live drive"',
+    command: '>>strategic_implement task:"handoff live drive"',
   });
   const chainId = (start.text.match(/chain_id="(chain-[^"]+)"/) || [])[1];
   check('A starts a run', Boolean(chainId) && !start.isError, chainId);

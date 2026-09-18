@@ -73,10 +73,9 @@ interface Problem {
  */
 const CONVENTION_EXCEPTIONS = new Map<string, string>([
   [
-    'development/strategicImplement',
-    'P5.12 — rename deferred; ~252 references across 4 repositories and a global skill name',
+    'general/diagnosisCard',
+    'P5.12 — personal-library id, not in this tree; renamed to diagnosis_card where it lives',
   ],
-  ['general/diagnosisCard', 'P5.12 — same arc as strategicImplement'],
 ]);
 
 /**

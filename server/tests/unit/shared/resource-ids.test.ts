@@ -73,8 +73,8 @@ describe('the convention predicates', () => {
     expect(isCanonicalPromptId('deep_analysis/initial_scan')).toBe(true);
   });
 
-  it('rejects the two shapes actually found in the corpus', () => {
-    expect(isCanonicalPromptId('strategicImplement')).toBe(false); // camelCase
+  it('rejects the two wrong shapes the corpus has held', () => {
+    expect(isCanonicalPromptId('releasePlanner')).toBe(false); // camelCase
     expect(isCanonicalPromptId('dev-workflow')).toBe(false); // kebab
   });
 
