@@ -24,32 +24,60 @@ describe('resource-scaffold', () => {
   });
 
   describe('resourceExists', () => {
-    it('returns false for nonexistent prompt', () => {
-      expect(resourceExists(tempDir, 'prompts', 'nope')).toBe(false);
+    it('returns undefined for nonexistent prompt', () => {
+      expect(resourceExists(tempDir, 'prompts', 'nope')).toBeUndefined();
     });
 
-    it('returns true for existing prompt with category', () => {
+    it('returns the directory-form path for an existing prompt with category', () => {
       const dir = join(tempDir, 'general', 'my-prompt');
       mkdirSync(dir, { recursive: true });
       writeFileSync(join(dir, 'prompt.yaml'), 'id: my-prompt');
 
-      expect(resourceExists(tempDir, 'prompts', 'my-prompt', 'general')).toBe(true);
+      expect(resourceExists(tempDir, 'prompts', 'my-prompt', 'general')).toBe(
+        join(dir, 'prompt.yaml')
+      );
     });
 
-    it('returns true for existing gate (flat)', () => {
+    it('returns the directory-form path for an existing gate (flat)', () => {
       const dir = join(tempDir, 'my-gate');
       mkdirSync(dir, { recursive: true });
       writeFileSync(join(dir, 'gate.yaml'), 'id: my-gate');
 
-      expect(resourceExists(tempDir, 'gates', 'my-gate')).toBe(true);
+      expect(resourceExists(tempDir, 'gates', 'my-gate')).toBe(join(dir, 'gate.yaml'));
     });
 
-    it('returns false for wrong category', () => {
+    it('returns undefined for wrong category', () => {
       const dir = join(tempDir, 'tools', 'my-prompt');
       mkdirSync(dir, { recursive: true });
       writeFileSync(join(dir, 'prompt.yaml'), 'id: my-prompt');
 
-      expect(resourceExists(tempDir, 'prompts', 'my-prompt', 'general')).toBe(false);
+      expect(resourceExists(tempDir, 'prompts', 'my-prompt', 'general')).toBeUndefined();
+    });
+
+    it('returns the single-file path when only the file form exists (P4.63)', () => {
+      const category = join(tempDir, 'general');
+      mkdirSync(category, { recursive: true });
+      writeFileSync(join(category, 'x.yaml'), 'id: x');
+
+      expect(resourceExists(tempDir, 'prompts', 'x', 'general')).toBe(join(category, 'x.yaml'));
+    });
+
+    it('creates cleanly when only an unrelated single-file id exists', () => {
+      const category = join(tempDir, 'general');
+      mkdirSync(category, { recursive: true });
+      writeFileSync(join(category, 'y.yaml'), 'id: y');
+
+      expect(resourceExists(tempDir, 'prompts', 'x', 'general')).toBeUndefined();
+    });
+
+    it('reports the directory form when an id is spelled both ways, as the loader would serve it', () => {
+      const category = join(tempDir, 'general');
+      const dir = join(category, 'twin');
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'prompt.yaml'), 'id: twin');
+      writeFileSync(join(category, 'twin.yaml'), 'id: twin');
+
+      expect(resourceExists(tempDir, 'prompts', 'twin', 'general')).toBe(join(dir, 'prompt.yaml'));
     });
   });
 
