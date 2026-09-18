@@ -23,6 +23,9 @@ export * from './metrics.js';
 // Injection control types and defaults (cross-cutting: infra/config + engine/injection)
 export * from './injection.js';
 
+// system_control action vocabulary (cross-cutting: engine/tool-routing + mcp/system-control)
+export * from './system-control.js';
+
 // Chain session types (cross-cutting: engine + modules + mcp)
 export {
   type ChainSession,

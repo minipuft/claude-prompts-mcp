@@ -1,5 +1,5 @@
 // @lifecycle canonical - Routes MCP tool invocations to implementations.
-import type { SystemControlActionId } from '#mcp/metadata/definitions/system-control.js';
+import type { SystemControlActionId } from '#shared/types/system-control.js';
 
 /**
  * A routed call, discriminated on `targetTool` so a consumer switching on it narrows
@@ -10,10 +10,13 @@ import type { SystemControlActionId } from '#mcp/metadata/definitions/system-con
  * runs for it (row B.61). Every OTHER variant keeps the pre-existing `Record<string, any>` shape
  * — only `system_control`'s action id needed tightening.
  *
- * `SystemControlActionId` is a type-only import from `mcp/`, so `engine/` (this module's layer)
- * pulls no runtime value across the boundary — `validate:arch`'s `engine-cross-layer-type-only`
- * rule allows exactly this (warn, not error): the alternative is a second, hand-copied action-id
- * union living in `engine/`, which is the drift SSOT search exists to avoid.
+ * `SystemControlActionId` lives in `shared/types/system-control.ts` (row B.61 follow-up), not
+ * `mcp/metadata/`: the layer hierarchy is shared(L0) -> infra(L1) -> engine(L2) -> modules(L3) ->
+ * mcp(L4) (row B.35, PR #316), and this module (`engine/`) importing from `mcp/` — even
+ * type-only — was an upward edge `validate:arch`'s `engine-cross-layer-type-only` rule caught
+ * (warn, not error, but still a layer violation with no reason to keep once a downward path
+ * existed). `shared/` is where a vocabulary more than one layer needs already lives —
+ * `ApiRouterPort`/`ResourceChangeLogPort` and `INJECTION_TYPES` are the precedent.
  */
 export type RoutedToolCall =
   | {

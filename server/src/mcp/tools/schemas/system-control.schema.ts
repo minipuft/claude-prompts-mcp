@@ -18,11 +18,11 @@ import {
   system_controlParameters,
   type system_controlParamName,
 } from '../../contracts/schemas/_generated/system_control.generated.js';
-import { SYSTEM_CONTROL_ACTION_IDS } from '../../metadata/definitions/system-control.js';
 
 import type { DescriptionResolver } from './prompt-engine.schema.js';
 
 import { INJECTION_TYPES } from '#shared/types/injection.js';
+import { SYSTEM_CONTROL_ACTION_IDS } from '#shared/types/system-control.js';
 
 const identity: DescriptionResolver = (_name, fallback) => fallback;
 

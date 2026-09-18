@@ -1,9 +1,5 @@
 // @lifecycle canonical - Thin router for system_control MCP tool actions.
 
-import {
-  SYSTEM_CONTROL_ACTION_IDS,
-  type SystemControlActionId,
-} from '../../metadata/definitions/system-control.js';
 import { recordActionInvocation } from '../../metadata/usage-tracker.js';
 import { SafeConfigWriter, createSafeConfigWriter } from '../config-utils.js';
 import { createStructuredResponse } from './core/response-utils.js';
@@ -42,6 +38,10 @@ import {
   type DatabasePort,
   StateStoreOptions,
 } from '#shared/types/index.js';
+import {
+  SYSTEM_CONTROL_ACTION_IDS,
+  type SystemControlActionId,
+} from '#shared/types/system-control.js';
 import { resolveRequestIdentity } from '#shared/utils/request-identity-resolver.js';
 import {
   buildIdentityScope,
