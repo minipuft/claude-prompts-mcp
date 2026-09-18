@@ -8,6 +8,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
+import { overlayDecidedYamlKeys } from '../../../shared/yaml-key-overlay.js';
 import { OperationResult, PromptResourceDependencies } from '../core/types.js';
 import { validateCategoryName } from '../utils/validation.js';
 
@@ -209,36 +210,6 @@ export function decidedPromptYamlKeys(
     }
   }
   return decided;
-}
-
-/**
- * Apply the writer's values for the keys this write decides to the document already on disk.
- *
- * The disk document is the base, not the writer's output: the writer builds values only for the
- * keys it models, so a document rebuilt from those values deletes every other key the file
- * declared — `artifacts`, `edges`, `budget`, and anything the schema's `.passthrough()` admits.
- * Starting from the file keeps each of those, keeps each undecided key's authored value verbatim
- * (argument key order included), and keeps the file's top-level key order; a decided key the
- * writer left unset is removed, and one the file did not have lands after the file's own keys in
- * the writer's order — which, with no file, is exactly the document the writer built. Pure.
- */
-export function overlayDecidedPromptYamlKeys(
-  existingYaml: Record<string, unknown> | undefined,
-  written: Record<string, unknown>,
-  decidedKeys: ReadonlySet<string>
-): Record<string, unknown> {
-  const document: Record<string, unknown> = { ...existingYaml };
-  for (const key of decidedKeys) {
-    if (written[key] === undefined) {
-      delete document[key];
-    }
-  }
-  for (const [key, value] of Object.entries(written)) {
-    if (decidedKeys.has(key) && value !== undefined) {
-      document[key] = value;
-    }
-  }
-  return document;
 }
 
 /**
@@ -1019,7 +990,7 @@ export class FileOperations {
     if (writesYaml) {
       const existingYaml =
         priorYamlPath !== null ? await this.readExistingPromptYaml(priorYamlPath) : undefined;
-      const promptYamlData = overlayDecidedPromptYamlKeys(
+      const promptYamlData = overlayDecidedYamlKeys(
         existingYaml,
         this.buildPromptYamlData(
           promptData as Record<string, unknown>,
