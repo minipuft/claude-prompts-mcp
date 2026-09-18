@@ -712,3 +712,93 @@ class TestClaudePluginDataStateDb:
             monkeypatch.delenv(leaked, raising=False)
 
         assert workspace.get_state_db_path() == runtime_db
+
+
+class TestVerifyStateBesideStateDb:
+    """The server writes verify-state.db beside its state.db, under its runtime root
+    (B.62). The hook used to resolve it separately, as {workspace}/server/runtime-state,
+    which under the Claude Code plugin is the install directory — a place the server
+    stopped writing to, so the Stop hook would never see a loop the server started.
+    """
+
+    ROOTS = (
+        "MCP_WORKSPACE",
+        "MCP_RUNTIME_ROOT",
+        "CLAUDE_PLUGIN_ROOT",
+        "CLAUDE_PLUGIN_DATA",
+        "PLUGIN_ROOT",
+        "GEMINI_EXTENSION_PATH",
+        "extensionPath",
+    )
+
+    @pytest.fixture(autouse=True)
+    def _clean_roots(self, tmp_path, monkeypatch):
+        for leaked in self.ROOTS:
+            monkeypatch.delenv(leaked, raising=False)
+        # A workspace root inside tmp_path even for a test that sets none: with no root at all,
+        # workspace resolution falls back to this repository, and the fallback branch creates
+        # server/runtime-state there.
+        (tmp_path / "unset-install").mkdir()
+        monkeypatch.setenv("CLAUDE_PLUGIN_ROOT", str(tmp_path / "unset-install"))
+
+    @staticmethod
+    def _seed_state_db(root):
+        (root / "runtime-state").mkdir(parents=True)
+        (root / "runtime-state" / "state.db").touch()
+        return root / "runtime-state"
+
+    def test_plugin_shape_reads_the_data_directory_not_the_install(self, tmp_path, monkeypatch):
+        import verify_active_store
+
+        (tmp_path / "install" / "server" / "runtime-state").mkdir(parents=True)
+        data_state = self._seed_state_db(tmp_path / "data")
+        monkeypatch.setenv("CLAUDE_PLUGIN_ROOT", str(tmp_path / "install"))
+        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "data"))
+
+        assert verify_active_store.get_verify_state_db_path() == data_state / "verify-state.db"
+
+    def test_mcp_runtime_root_is_where_the_server_wrote_it(self, tmp_path, monkeypatch):
+        import verify_active_store
+
+        workspace_root = tmp_path / "ws"
+        (workspace_root / "server").mkdir(parents=True)
+        runtime_state = self._seed_state_db(tmp_path / "rt")
+        monkeypatch.setenv("MCP_WORKSPACE", str(workspace_root))
+        monkeypatch.setenv("MCP_RUNTIME_ROOT", str(tmp_path / "rt"))
+
+        assert verify_active_store.get_verify_state_db_path() == runtime_state / "verify-state.db"
+
+    def test_a_row_the_server_wrote_is_the_row_the_hook_loads(self, tmp_path, monkeypatch):
+        import json
+        import sqlite3
+
+        import verify_active_store
+
+        runtime_state = self._seed_state_db(tmp_path / "data")
+        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "data"))
+        conn = sqlite3.connect(str(runtime_state / "verify-state.db"))
+        conn.execute(
+            "CREATE TABLE verify_active_state (session_id TEXT PRIMARY KEY, state_json TEXT NOT NULL, updated_at TEXT NOT NULL)"
+        )
+        conn.execute(
+            "INSERT INTO verify_active_state VALUES (?, ?, datetime('now'))",
+            ("client-1", json.dumps({"sessionId": "client-1", "config": {"command": "npm test"}})),
+        )
+        conn.commit()
+        conn.close()
+
+        loaded = verify_active_store.load_verify_active_state("client-1")
+        assert loaded is not None
+        assert loaded["config"]["command"] == "npm test"
+
+    def test_without_a_server_state_db_the_hook_owned_directory_is_used(self, tmp_path, monkeypatch):
+        import verify_active_store
+
+        workspace_root = tmp_path / "ws"
+        (workspace_root / "server").mkdir(parents=True)
+        monkeypatch.setenv("MCP_WORKSPACE", str(workspace_root))
+
+        assert (
+            verify_active_store.get_verify_state_db_path()
+            == workspace_root / "server" / "runtime-state" / "verify-state.db"
+        )

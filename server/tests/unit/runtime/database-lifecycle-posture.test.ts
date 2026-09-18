@@ -73,7 +73,9 @@ describe('Application shutdown closes the database (5.2)', () => {
   it('closes an open engine', async () => {
     const dbDir = path.join(TMP_ROOT, 'closes');
     await fs.mkdir(dbDir, { recursive: true });
-    const engine = await SqliteEngine.getInstance(dbDir, mockLogger as any);
+    const engine = await SqliteEngine.getInstance(mockLogger as any, {
+      dbPath: path.join(dbDir, 'runtime-state', 'state.db'),
+    });
     await engine.initialize();
     expect(engine.isInitialized()).toBe(true);
 
@@ -87,7 +89,9 @@ describe('Application shutdown closes the database (5.2)', () => {
   it('closes the database AFTER the subsystems that may still write', async () => {
     const dbDir = path.join(TMP_ROOT, 'ordering');
     await fs.mkdir(dbDir, { recursive: true });
-    const engine = await SqliteEngine.getInstance(dbDir, mockLogger as any);
+    const engine = await SqliteEngine.getInstance(mockLogger as any, {
+      dbPath: path.join(dbDir, 'runtime-state', 'state.db'),
+    });
     await engine.initialize();
 
     const order: string[] = [];
@@ -138,7 +142,9 @@ describe('Database init failure fails startup (5.3)', () => {
       runtimeOptions: { verbose: false },
       configManager: { getConfig: () => ({}) },
       serverRoot: brokenRoot,
-      pathResolver: { getRuntimeStatePath: () => path.join(brokenRoot, 'runtime-state') },
+      pathResolver: {
+        getStateDatabasePath: () => path.join(brokenRoot, 'runtime-state', 'state.db'),
+      },
     };
 
     // Everything after the tracker — framework store, gate manager, MCP registration —

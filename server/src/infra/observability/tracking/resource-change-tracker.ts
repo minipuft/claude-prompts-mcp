@@ -76,10 +76,8 @@ export interface ResourceChangeTrackerConfig {
    * settable, range-validated (50-5000), and consumed by nothing.
    */
   maxEntries: number;
-  /** Server root directory (for SqliteEngine singleton) */
-  serverRoot: string;
-  /** Explicit writable SQLite path decided by the runtime composition root. */
-  dbPath?: string;
+  /** Writable SQLite path decided by the runtime composition root (`PathResolver`). */
+  dbPath: string;
   /** Whether to track prompts */
   trackPrompts: boolean;
   /** Whether to track gates */
@@ -97,9 +95,12 @@ export interface ResourceChangeTrackerConfig {
   defaultScope?: StateStoreOptions;
 }
 
-const DEFAULT_CONFIG: ResourceChangeTrackerConfig = {
+/** What a caller must supply: the database path, which has no default, and optionally the rest. */
+type ResourceChangeTrackerOptions = Partial<ResourceChangeTrackerConfig> &
+  Pick<ResourceChangeTrackerConfig, 'dbPath'>;
+
+const DEFAULT_CONFIG: Omit<ResourceChangeTrackerConfig, 'dbPath'> = {
   maxEntries: 1000,
-  serverRoot: '',
   trackPrompts: true,
   trackGates: true,
 };
@@ -116,13 +117,9 @@ export class ResourceChangeTracker implements ResourceChangeLogPort {
   private hashStore?: SqliteStateStore<Record<string, string>>;
   private initialized: boolean = false;
 
-  constructor(logger: Logger, config: Partial<ResourceChangeTrackerConfig> = {}) {
+  constructor(logger: Logger, config: ResourceChangeTrackerOptions) {
     this.logger = logger;
     this.config = { ...DEFAULT_CONFIG, ...config };
-
-    if (this.config.serverRoot === '') {
-      throw new Error('ResourceChangeTracker requires serverRoot configuration');
-    }
   }
 
   /**
@@ -136,9 +133,7 @@ export class ResourceChangeTracker implements ResourceChangeLogPort {
     this.logger.debug('ResourceChangeTracker: Initializing...');
 
     // Initialize SqliteEngine and hash store (idempotent — no-op if already initialized)
-    this.dbManager = await SqliteEngine.getInstance(this.config.serverRoot, this.logger, {
-      ...(this.config.dbPath !== undefined ? { dbPath: this.config.dbPath } : {}),
-    });
+    this.dbManager = await SqliteEngine.getInstance(this.logger, { dbPath: this.config.dbPath });
     await this.dbManager.initialize();
 
     this.hashStore = new SqliteStateStore<Record<string, string>>(
@@ -536,7 +531,7 @@ export class ResourceChangeTracker implements ResourceChangeLogPort {
  */
 export function createResourceChangeTracker(
   logger: Logger,
-  config: Partial<ResourceChangeTrackerConfig> = {}
+  config: ResourceChangeTrackerOptions
 ): ResourceChangeTracker {
   return new ResourceChangeTracker(logger, config);
 }

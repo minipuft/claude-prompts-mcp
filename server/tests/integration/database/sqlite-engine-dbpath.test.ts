@@ -3,14 +3,14 @@
  * SqliteEngine dbPath ownership
  *
  * `getInstance` is a singleton accessor, so it drops the config of every call after the first.
- * Five of its six call sites pass no `dbPath` and fall back to `path.join(serverRoot, ...)` —
- * the PACKAGE directory — while the composition root passes the PathResolver-derived runtime
- * path. Whichever ran first therefore decided where `state.db` lived, and `MCP_WORKSPACE` was
- * honored only because ResourceChangeTracker happened to initialize early.
+ * Until B.62 `dbPath` was optional and fell back to `path.join(serverRoot, 'runtime-state', ...)`
+ * — the PACKAGE directory — so whichever caller ran first decided where `state.db` lived. The
+ * path is now required, and there is no package-relative default left to fall back to.
  *
- * These tests pin the two halves of the fix: a later no-dbPath caller inherits the claimed path
- * rather than relocating the database, and a later caller that genuinely disagrees is told so
- * instead of being silently ignored.
+ * These tests pin the three halves of that: the database lands exactly where the caller named it
+ * and nowhere else, a later caller that disagrees is told so instead of being silently served
+ * another file, and an empty path — which `node:sqlite` would open as an anonymous temporary
+ * database — is refused.
  */
 
 import * as fs from 'node:fs/promises';
@@ -45,43 +45,36 @@ describe('SqliteEngine dbPath ownership', () => {
     await fs.rm(testDir, { recursive: true, force: true });
   });
 
-  it('keeps the claimed path when a later caller supplies no dbPath', async () => {
-    const claimed = await SqliteEngine.getInstance(packageRoot, mockLogger as never, {
-      dbPath: claimedDbPath,
-    });
+  it('opens the database exactly where the caller named it, and nowhere else', async () => {
+    const claimed = await SqliteEngine.getInstance(mockLogger as never, { dbPath: claimedDbPath });
     await claimed.initialize();
 
-    // This is the shape of the five bypassing call sites: serverRoot only, no dbPath.
-    const later = await SqliteEngine.getInstance(packageRoot, mockLogger as never);
-
-    expect(later).toBe(claimed);
-    // The database exists where the composition root put it...
     await fs.access(claimedDbPath);
-    // ...and the package-relative location the bypassing callers would have used is untouched.
-    await expect(fs.access(path.join(packageRoot, 'runtime-state', 'state.db'))).rejects.toThrow();
+    // The package-relative location the removed fallback used is untouched.
+    await expect(fs.access(path.join(packageRoot, 'runtime-state'))).rejects.toThrow();
   });
 
   it('throws when a later caller requests a different dbPath', async () => {
-    const claimed = await SqliteEngine.getInstance(packageRoot, mockLogger as never, {
-      dbPath: claimedDbPath,
-    });
+    const claimed = await SqliteEngine.getInstance(mockLogger as never, { dbPath: claimedDbPath });
     await claimed.initialize();
 
     const conflicting = path.join(packageRoot, 'runtime-state', 'state.db');
     await expect(
-      SqliteEngine.getInstance(packageRoot, mockLogger as never, { dbPath: conflicting })
+      SqliteEngine.getInstance(mockLogger as never, { dbPath: conflicting })
     ).rejects.toThrow(/already open at/);
   });
 
   it('accepts a later caller that requests the same dbPath', async () => {
-    const claimed = await SqliteEngine.getInstance(packageRoot, mockLogger as never, {
-      dbPath: claimedDbPath,
-    });
+    const claimed = await SqliteEngine.getInstance(mockLogger as never, { dbPath: claimedDbPath });
     await claimed.initialize();
 
-    const same = await SqliteEngine.getInstance(packageRoot, mockLogger as never, {
-      dbPath: claimedDbPath,
-    });
+    const same = await SqliteEngine.getInstance(mockLogger as never, { dbPath: claimedDbPath });
     expect(same).toBe(claimed);
+  });
+
+  it('refuses an empty dbPath rather than opening an anonymous database', async () => {
+    await expect(SqliteEngine.getInstance(mockLogger as never, { dbPath: '  ' })).rejects.toThrow(
+      /non-empty dbPath/
+    );
   });
 });

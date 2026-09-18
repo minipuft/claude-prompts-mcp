@@ -126,7 +126,7 @@ describe('chain_sessions hook projection — byte parity', () => {
     const store = new ChainSessionStore(
       createLogger(),
       new StubTextReferenceStore() as any,
-      { serverRoot: `/tmp/test-hookview-${suffix}`, cleanupIntervalMs: 1000 },
+      { cleanupIntervalMs: 1000 },
       undefined,
       new InMemoryRunRegistry()
     );
@@ -393,7 +393,6 @@ describe('chain session store — DatabasePort at construction', () => {
 
   const constructWithPort = (port: DatabasePort, logger: Logger): ChainSessionStore =>
     new ChainSessionStore(logger, new StubTextReferenceStore() as any, {
-      serverRoot: '/tmp/test-construction-port',
       cleanupIntervalMs: 1000,
       databasePort: port,
     });

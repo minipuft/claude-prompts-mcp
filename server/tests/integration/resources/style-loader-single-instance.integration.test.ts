@@ -170,7 +170,9 @@ describe('one style loader instance, and the hot reload refreshes it (P4.31)', (
       routerResolvingTo(styleManager)
     );
 
-    dbManager = await SqliteEngine.getInstance(path.join(tmpRoot, 'state'), mockLogger as never);
+    dbManager = await SqliteEngine.getInstance(mockLogger as never, {
+      dbPath: path.join(path.join(tmpRoot, 'state'), 'runtime-state', 'state.db'),
+    });
     await dbManager.initialize();
   });
 

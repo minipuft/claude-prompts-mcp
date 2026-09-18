@@ -203,7 +203,9 @@ describe('Gate versioning through the real write path', () => {
     gatesDir = path.join(tempDir, 'gates');
     await fs.mkdir(gatesDir, { recursive: true });
 
-    dbManager = await SqliteEngine.getInstance(tempDir, mockLogger as unknown as Logger);
+    dbManager = await SqliteEngine.getInstance(mockLogger as unknown as Logger, {
+      dbPath: path.join(tempDir, 'runtime-state', 'state.db'),
+    });
     await dbManager.initialize();
 
     versionHistoryService = new VersionHistoryService({
@@ -845,7 +847,9 @@ describe('Framework versioning through the real write path', () => {
     mockLogger = new MockLogger();
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'framework-versioning-test-'));
 
-    dbManager = await SqliteEngine.getInstance(tempDir, mockLogger as unknown as Logger);
+    dbManager = await SqliteEngine.getInstance(mockLogger as unknown as Logger, {
+      dbPath: path.join(tempDir, 'runtime-state', 'state.db'),
+    });
     await dbManager.initialize();
 
     versionHistoryService = new VersionHistoryService({
@@ -1157,7 +1161,9 @@ describe('Prompt rollback refusal writes no version rows', () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'prompt-refusal-test-'));
     promptsDir = path.join(tempDir, 'prompts');
 
-    dbManager = await SqliteEngine.getInstance(tempDir, mockLogger as unknown as Logger);
+    dbManager = await SqliteEngine.getInstance(mockLogger as unknown as Logger, {
+      dbPath: path.join(tempDir, 'runtime-state', 'state.db'),
+    });
     await dbManager.initialize();
 
     versionHistoryService = new VersionHistoryService({
@@ -1336,7 +1342,9 @@ describe('gate registry coherence — production-shaped refresh (F17)', () => {
     gatesDir = path.join(tempDir, 'gates');
     await fs.mkdir(gatesDir, { recursive: true });
 
-    dbManager = await SqliteEngine.getInstance(tempDir, mockLogger as unknown as Logger);
+    dbManager = await SqliteEngine.getInstance(mockLogger as unknown as Logger, {
+      dbPath: path.join(tempDir, 'runtime-state', 'state.db'),
+    });
     await dbManager.initialize();
 
     registry = new DriftableGateRegistry(gatesDir);
@@ -1850,7 +1858,9 @@ describe('framework registry coherence — production-shaped refresh (G2)', () =
     frameworksDir = path.join(tempDir, 'resources', 'frameworks');
     await fs.mkdir(frameworksDir, { recursive: true });
 
-    dbManager = await SqliteEngine.getInstance(tempDir, mockLogger as unknown as Logger);
+    dbManager = await SqliteEngine.getInstance(mockLogger as unknown as Logger, {
+      dbPath: path.join(tempDir, 'runtime-state', 'state.db'),
+    });
     await dbManager.initialize();
     versionHistoryService = new VersionHistoryService({
       logger: mockLogger as unknown as Logger,

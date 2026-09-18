@@ -62,7 +62,9 @@ describe('Retention enforcement (6.4)', () => {
   beforeEach(async () => {
     await fs.rm(testDir, { recursive: true, force: true });
     await fs.mkdir(testDir, { recursive: true });
-    engine = await SqliteEngine.getInstance(testDir, mockLogger as any);
+    engine = await SqliteEngine.getInstance(mockLogger as any, {
+      dbPath: path.join(testDir, 'runtime-state', 'state.db'),
+    });
     await engine.initialize();
   });
 
@@ -145,7 +147,9 @@ describe('Retention enforcement (6.4)', () => {
     seedChanges(engine, cap + 10);
     await engine.shutdown();
 
-    const reopened = await SqliteEngine.getInstance(testDir, mockLogger as any);
+    const reopened = await SqliteEngine.getInstance(mockLogger as any, {
+      dbPath: path.join(testDir, 'runtime-state', 'state.db'),
+    });
     await reopened.initialize();
 
     expect(countOf(reopened, 'resource_changes')).toBe(cap);

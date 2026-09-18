@@ -198,6 +198,11 @@ export class PathResolver {
     return this.cache.runtimeState;
   }
 
+  /** The server's SQLite database — the one path every `SqliteEngine.getInstance` call names. */
+  getStateDatabasePath(): string {
+    return join(this.getRuntimeStatePath(), 'state.db');
+  }
+
   /** Resolve a configured log directory beneath the writable runtime root. */
   getLogsPath(configuredDirectory = './logs'): string {
     if (isAbsolute(configuredDirectory)) return configuredDirectory;

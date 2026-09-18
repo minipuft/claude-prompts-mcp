@@ -139,7 +139,7 @@ describe('ChainSessionStore + ArgumentHistoryTracker (integration)', () => {
     const manager = new ChainSessionStore(
       logger,
       textReference as any,
-      { serverRoot: tmpRoot, cleanupIntervalMs: 1000 },
+      { cleanupIntervalMs: 1000 },
       tracker
     );
     manager.setDatabasePort(mockDb);

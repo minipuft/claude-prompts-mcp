@@ -84,7 +84,9 @@ describe('CLI never owns state.db schema', () => {
 
     // The regression: with a CLI-authored version_history present, this threw
     // `no such column: workspace_id` from applySchema and the server could not start.
-    const engine = await SqliteEngine.getInstance(testDir, mockLogger as any);
+    const engine = await SqliteEngine.getInstance(mockLogger as any, {
+      dbPath: path.join(testDir, 'runtime-state', 'state.db'),
+    });
     await expect(engine.initialize()).resolves.toBeUndefined();
 
     const columns = engine
@@ -95,7 +97,9 @@ describe('CLI never owns state.db schema', () => {
   });
 
   it('round-trips history once the engine has created the schema', async () => {
-    const engine = await SqliteEngine.getInstance(testDir, mockLogger as any);
+    const engine = await SqliteEngine.getInstance(mockLogger as any, {
+      dbPath: path.join(testDir, 'runtime-state', 'state.db'),
+    });
     await engine.initialize();
     await engine.shutdown();
 

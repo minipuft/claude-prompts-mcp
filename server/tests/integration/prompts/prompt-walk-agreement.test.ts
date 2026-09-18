@@ -112,7 +112,9 @@ describe('prompt walks agree about the prompts root and about _-prefixed directo
   beforeAll(async () => {
     await fs.rm(TEST_DIR, { recursive: true, force: true });
     await fs.mkdir(TEST_DIR, { recursive: true });
-    dbManager = await SqliteEngine.getInstance(TEST_DIR, logger as never);
+    dbManager = await SqliteEngine.getInstance(logger as never, {
+      dbPath: path.join(TEST_DIR, 'runtime-state', 'state.db'),
+    });
     await dbManager.initialize();
   });
 
@@ -160,7 +162,7 @@ describe('prompt walks agree about the prompts root and about _-prefixed directo
   it('the startup baseline announces exactly what the catalog serves', async () => {
     const tracker = createResourceChangeTracker(logger as never, {
       maxEntries: 1000,
-      serverRoot: TEST_DIR,
+      dbPath: path.join(TEST_DIR, 'runtime-state', 'state.db'),
     });
     await tracker.initialize();
 
