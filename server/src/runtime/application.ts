@@ -10,6 +10,7 @@
 import { McpServer } from '@modelcontextprotocol/server';
 
 // Import all module managers
+import { CoalescingReloadRunner } from './coalescing-reload-runner.js';
 import { createRuntimeFoundation } from './context.js';
 import { loadPromptData, loadSkillsSyncExports } from './data-loader.js';
 import { buildHealthReport } from './health.js';
@@ -91,7 +92,7 @@ export class Application {
   private _convertedPrompts: ConvertedPrompt[] = [];
   private promptsDirectory?: string;
   private hotReloadInitialized = false;
-  private promptReloadInProgress: Promise<void> | undefined;
+  private promptReloads = new CoalescingReloadRunner((event) => this.reloadPromptsFromDisk(event));
   private promptHotReloadHandler = (event: HotReloadEvent) => this.handlePromptHotReload(event);
 
   private memoryOptimizationInterval: NodeJS.Timeout | undefined;
@@ -894,78 +895,68 @@ export class Application {
       return;
     }
 
-    if (this.promptReloadInProgress) {
-      this.logger.warn(`Hot reload already running; skipping event: ${event.reason}`);
-      return;
+    // Never dropped: an event landing while a reload runs is folded into one reload after it.
+    // A failure propagates to the observer callback's catch in `PromptAssetManager`.
+    await this.promptReloads.submit(event);
+  }
+
+  private async reloadPromptsFromDisk(event: HotReloadEvent): Promise<void> {
+    this.logger.info(
+      `🔥 Hot reload event received (${event.type}): ${
+        event.reason
+      } [${event.affectedFiles.join(', ')}]`
+    );
+
+    const result = await reloadPromptData({
+      configManager: this.configManager,
+      promptManager: this.promptManager,
+      mcpToolsManager: this.mcpToolsManager,
+    });
+
+    // Resolve the exported-prompt set from the reloaded content BEFORE publishing
+    // anything a per-request shell reads. `createMcpServerFactory` builds a fresh
+    // `McpServer` per HTTP request and registers straight from `_convertedPrompts` plus
+    // whatever export set is current at that moment; an `await` sitting between those two
+    // writes let a request land in between and filter fresh content against the export
+    // set the PREVIOUS reload left behind. `loadPromptData` (startup, and the manual
+    // `fullServerRefresh` path) never had this gap, because it resolves the export set
+    // before returning and the caller only publishes afterward — this path publishes and
+    // resolves in the opposite order, which is the defect. Every write below runs
+    // synchronously once the export set is known, closing the window.
+    const exportedPromptIds = await loadSkillsSyncExports(
+      this.pathResolver,
+      this.logger,
+      result.convertedPrompts.map((prompt) => `${prompt.category}/${prompt.id}`)
+    );
+
+    this._promptsData = result.promptsData;
+    this._convertedPrompts = result.convertedPrompts;
+    this._categories = result.categories;
+    this.promptsDirectory = result.promptsDirectory;
+
+    if (this.apiRouter) {
+      this.apiRouter.updateData(this._promptsData, this._categories, this._convertedPrompts);
     }
 
-    const reloadPromise = (async () => {
-      try {
-        this.logger.info(
-          `🔥 Hot reload event received (${event.type}): ${
-            event.reason
-          } [${event.affectedFiles.join(', ')}]`
-        );
+    this.promptManager.setExportedPromptIds(exportedPromptIds);
 
-        const result = await reloadPromptData({
-          configManager: this.configManager,
-          promptManager: this.promptManager,
-          mcpToolsManager: this.mcpToolsManager,
-        });
+    // Content refresh alone updates every already-bound handler, on every
+    // shell, because handlers resolve through the live map at call time.
+    // Re-binding still matters for ids that did not exist when the serving
+    // shell was built; the dedup guard makes it a no-op for the rest.
+    const count = await this.promptManager.registerAllPrompts(
+      this._convertedPrompts,
+      this.mcpServer
+    );
+    this.logger.info(`🔁 Refreshed prompts after hot reload (${count} newly bound).`);
+    publishPromptsChanged(this.listChangeTargets());
 
-        // Resolve the exported-prompt set from the reloaded content BEFORE publishing
-        // anything a per-request shell reads. `createMcpServerFactory` builds a fresh
-        // `McpServer` per HTTP request and registers straight from `_convertedPrompts` plus
-        // whatever export set is current at that moment; an `await` sitting between those two
-        // writes let a request land in between and filter fresh content against the export
-        // set the PREVIOUS reload left behind. `loadPromptData` (startup, and the manual
-        // `fullServerRefresh` path) never had this gap, because it resolves the export set
-        // before returning and the caller only publishes afterward — this path publishes and
-        // resolves in the opposite order, which is the defect. Every write below runs
-        // synchronously once the export set is known, closing the window.
-        const exportedPromptIds = await loadSkillsSyncExports(
-          this.pathResolver,
-          this.logger,
-          result.convertedPrompts.map((prompt) => `${prompt.category}/${prompt.id}`)
-        );
+    // Prompt resources project `_convertedPrompts`, so a reload changes the
+    // resource list too. Prompts were already announced above; resources
+    // were the half that had no producer.
+    this.notifyResourcesChanged();
 
-        this._promptsData = result.promptsData;
-        this._convertedPrompts = result.convertedPrompts;
-        this._categories = result.categories;
-        this.promptsDirectory = result.promptsDirectory;
-
-        if (this.apiRouter) {
-          this.apiRouter.updateData(this._promptsData, this._categories, this._convertedPrompts);
-        }
-
-        this.promptManager.setExportedPromptIds(exportedPromptIds);
-
-        // Content refresh alone updates every already-bound handler, on every
-        // shell, because handlers resolve through the live map at call time.
-        // Re-binding still matters for ids that did not exist when the serving
-        // shell was built; the dedup guard makes it a no-op for the rest.
-        const count = await this.promptManager.registerAllPrompts(
-          this._convertedPrompts,
-          this.mcpServer
-        );
-        this.logger.info(`🔁 Refreshed prompts after hot reload (${count} newly bound).`);
-        publishPromptsChanged(this.listChangeTargets());
-
-        // Prompt resources project `_convertedPrompts`, so a reload changes the
-        // resource list too. Prompts were already announced above; resources
-        // were the half that had no producer.
-        this.notifyResourcesChanged();
-
-        this.logger.info('✅ Prompt data refreshed from filesystem changes.');
-      } catch (error) {
-        this.logger.error('❌ Prompt hot reload failed:', error);
-      } finally {
-        this.promptReloadInProgress = undefined;
-      }
-    })();
-
-    this.promptReloadInProgress = reloadPromise;
-    await reloadPromise;
+    this.logger.info('✅ Prompt data refreshed from filesystem changes.');
   }
 
   /**
