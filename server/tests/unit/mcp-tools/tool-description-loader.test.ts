@@ -120,7 +120,12 @@ describe('ToolDescriptionLoader (framework-aware active config)', () => {
     // whatever the contract lists, so this fails if the two ever diverge in either direction.
     const contractToolNames = Object.keys(toolDescriptionsContract.tools);
     expect(contractToolNames.length).toBeGreaterThan(0);
-    expect(manager.getAvailableTools().slice().sort()).toEqual(contractToolNames.slice().sort());
+    // getAvailableTools() was deleted as unreached (P4.52/R36); its coverage moves onto the live
+    // getDescription() path — every contract tool must resolve to real text, not the "not found"
+    // fallback, which is what would happen if the loaded set diverged from the contract.
+    for (const toolName of contractToolNames) {
+      expect(manager.getDescription(toolName)).not.toBe(`Tool: ${toolName}`);
+    }
     expect(manager.getDescription('prompt_engine')).toBe(
       toolDescriptionsContract.tools.prompt_engine.description
     );

@@ -371,38 +371,6 @@ export class ResponseFormatter implements SimpleResponseFormatter, ResponseForma
   }
 
   /**
-   * Format chain execution response
-   */
-  public formatChainResponse(
-    response: unknown,
-    chainId: string,
-    currentStep: number,
-    totalSteps: number,
-    executionContext?: FormatterExecutionContext
-  ): ToolResponse {
-    try {
-      this.logger.debug('🔗 [ResponseFormatter] Formatting chain response', {
-        chainId,
-        currentStep,
-        totalSteps,
-        executionType: executionContext?.executionType,
-      });
-
-      const toolResponse = normalizeToolResponse(response, false);
-
-      this.logger.debug('✅ [ResponseFormatter] Chain response formatted successfully');
-      return toolResponse;
-    } catch (error) {
-      this.logger.error('❌ [ResponseFormatter] Chain response formatting failed', {
-        chainId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-
-      return this.formatErrorResponse(error, executionContext);
-    }
-  }
-
-  /**
    * Track execution for analytics
    */
   private trackExecution(executionContext: FormatterExecutionContext): void {

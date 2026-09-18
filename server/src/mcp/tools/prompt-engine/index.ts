@@ -24,6 +24,3 @@ export type {
 } from './core/types.js';
 
 export { ResponseFormatter } from './processors/response-formatter.js';
-
-// Utility functions (internal use)
-export { PromptClassifier } from './utils/classification.js';

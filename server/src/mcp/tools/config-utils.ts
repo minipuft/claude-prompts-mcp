@@ -2,8 +2,9 @@
 /**
  * Configuration Utilities for Safe Config Management
  *
- * Provides atomic config operations with backup/rollback capabilities
- * for secure configuration management in system_control tool.
+ * Provides atomic config operations with automatic backup for secure configuration
+ * management in system_control tool. Restoring a backup has no caller (measured
+ * 2026-09-17, P4.52/R36) and was removed with `getConfigPath()`, which had none either.
  *
  * NO KEY LIST, NO VALIDATOR, NO SECOND WRITER, NO RE-EXPORT (ruling R54)
  * This file used to define its own `CONFIG_VALID_KEYS` (24 keys against cli-shared's 60) and its
@@ -22,8 +23,6 @@
  * reads the DOCUMENT through `#cli-shared/config-operations.js`, sets one dotted key, and writes
  * it back; `getConfig()` is never consulted on the write path.
  */
-
-import { access, copyFile } from 'node:fs/promises';
 
 import {
   CONFIG_RESTART_REQUIRED_KEYS,
@@ -64,7 +63,7 @@ export interface ConfigBackup {
 
 /**
  * Safe Configuration Writer
- * Provides atomic config operations with automatic backup and rollback
+ * Provides atomic config operations with automatic backup
  */
 export class SafeConfigWriter {
   private logger: Logger;
@@ -174,47 +173,10 @@ export class SafeConfigWriter {
   }
 
   /**
-   * Restore configuration from backup
-   */
-  async restoreFromBackup(backupPath: string): Promise<ConfigWriteResult> {
-    try {
-      // Verify backup exists
-      await access(backupPath);
-
-      // Restore the backup
-      await copyFile(backupPath, this.configPath);
-
-      // Reload configuration
-      await this.configManager.loadConfig();
-
-      this.logger.info(`Configuration restored from backup: ${backupPath}`);
-
-      return {
-        success: true,
-        message: `Configuration successfully restored from backup`,
-      };
-    } catch (error) {
-      this.logger.error(`Failed to restore from backup ${backupPath}:`, error);
-      return {
-        success: false,
-        message: `Failed to restore configuration: ${error}`,
-        error: String(error),
-      };
-    }
-  }
-
-  /**
    * Check if a configuration key requires server restart
    */
   private requiresRestart(key: string): boolean {
     return CONFIG_RESTART_REQUIRED_KEYS.includes(key as ConfigKey);
-  }
-
-  /**
-   * Get the configuration file path for debugging/info purposes
-   */
-  getConfigPath(): string {
-    return this.configPath;
   }
 }
 
