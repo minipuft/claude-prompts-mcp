@@ -199,7 +199,6 @@ describe('run telemetry, session counters through the ledger', () => {
       .mockImplementation(() => {}) as unknown as jest.SpiedFunction<() => void>;
 
     sessionStore = new ChainSessionStore(createLogger(), new StubTextReferenceStore() as any, {
-      serverRoot: '/tmp/test-run-telemetry-integration',
       cleanupIntervalMs: 1000,
     });
   });

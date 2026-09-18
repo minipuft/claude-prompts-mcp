@@ -232,7 +232,8 @@ export class McpToolRouter {
     // The launch workspace is the key a toggle with no identity is written under, so it is the
     // scope a pre-isolation `default` row is adopted into (see `GateStateStore`).
     const launchWorkspaceId = this.configManager.getConfig().identity.launchDefaults.workspaceId;
-    this.gateStateStore = createGateStateStore(this.logger, this.configManager.getServerRoot(), {
+    const stateDbPath = this.configManager.getStateDatabasePath();
+    this.gateStateStore = createGateStateStore(this.logger, stateDbPath, {
       ...(launchWorkspaceId != null ? { defaultScope: { workspaceId: launchWorkspaceId } } : {}),
     });
     await this.gateStateStore.initialize();

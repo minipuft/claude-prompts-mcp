@@ -1,41 +1,50 @@
 #!/usr/bin/env node
 
 /**
- * Guards the one invariant that keeps `state.db` where the PathResolver put it.
+ * Guards the invariant that keeps runtime state where the PathResolver put it.
  *
  * WHY THIS EXISTS
- * `SqliteEngine.getInstance` is a singleton accessor: it keeps the config of whichever call
- * arrives FIRST and silently discards every later one. Five of its seven call sites pass no
- * `dbPath` and fall back to `path.join(serverRoot, 'runtime-state', 'state.db')` — the PACKAGE
- * directory, which is read-only under a sandboxed MCP child and invisible to the workspace
- * either way. Only the composition root knows the resolved runtime path.
+ * Runtime state — `state.db`, `verify-state.db` — belongs under the runtime root
+ * (`MCP_RUNTIME_ROOT`, else the workspace), which `PathResolver.getRuntimeStatePath()` resolves.
+ * It was placed from the PACKAGE directory instead, in two shapes, until B.62 (2026-09-16):
  *
- * So the location of the database is decided by CALL ORDER, and call order is not a thing any
- * type or test naturally pins. Before Tier 0.1 it was correct by accident: `ResourceChangeTracker`
- * happened to initialize first and is one of the two sites that passes the resolved path.
+ *   - `SqliteEngine.getInstance` took an optional `dbPath` and fell back to
+ *     `path.join(serverRoot, 'runtime-state', 'state.db')`. Six call sites relied on the
+ *     composition root having opened the singleton first with the right path, so the database's
+ *     location was decided by CALL ORDER. Four passed no `dbPath`; two passed one that could be
+ *     `undefined`.
+ *   - `pipeline-builder.ts` placed `verify-state.db` at `path.join(deps.serverRoot,
+ *     'runtime-state')` — live, ignoring `MCP_RUNTIME_ROOT`, and under the Claude Code plugin in
+ *     the install directory every update replaces.
+ *
+ * The package directory is read-only under a sandboxed MCP child and invisible to the workspace.
  *
  * WHAT IT CHECKS
- *   1. `claimStateDatabase(...)` is actually called in module-initializer.ts, and its call site
- *      precedes every other `getInstance` call in that file. This is a SOURCE-ORDER assertion
- *      because the property being protected is source order — a runtime test would have to
- *      reconstruct the whole composition root to observe it.
- *   2. Every `getInstance` call site repo-wide either supplies `dbPath` or is a declared
- *      inheritor. A NEW site that omits `dbPath` without being declared is a finding: it is
- *      exactly the shape that can win the race and relocate the database.
- *   3. **Exception hygiene**, via the shared `lib/exception-hygiene.js` harness — every
- *      `ACCEPTED_INHERITORS` entry must name what retires it (`closedBy`) AND still suppress a
- *      real finding. A declared inheritor that now supplies `dbPath` is `satisfied` and must be
- *      deleted; one naming a file that is gone is `subject-missing`; one the `git grep … -- src`
- *      scan cannot reach is `unreachable` and must NOT be deleted until the scan is widened. An
- *      exception list only ever grows otherwise, and a green run stops meaning what it says
- *      (cleanup-standards.md § A Suppression Outlives What It Suppressed).
+ *   1. `claimStateDatabase(...)` is called in module-initializer.ts, and no `getInstance` call that
+ *      omits `dbPath` precedes it. The composition root opens the database first; the rest of
+ *      startup was written against that order.
+ *   2. Every `getInstance` call site under `src/` names `dbPath`. No exceptions: the signature
+ *      requires it, so a site without one is a cast around the type, not a design. (Before B.62
+ *      this rule carried an `ACCEPTED_INHERITORS` list; B.62 satisfied all of it.)
+ *   3. **No runtime state path segment — `runtime-state` or `state.db` — is composed outside
+ *      `runtime/paths.ts`.** A string literal naming one — `'runtime-state'`, `"…/state.db"`, a
+ *      template ending `/runtime-state` — is how both defects above were spelled, and it is spelled
+ *      that way whatever variable it is joined to, so the rule keys on the SEGMENT, not on the name
+ *      `serverRoot`. `state.db` is in the list because a second hand-join of the file name onto a
+ *      correctly resolved directory is still a second derivation of one path, and B.62 briefly had
+ *      one. A module that needs the directory asks `PathResolver.getRuntimeStatePath()` (in
+ *      `runtime/`) or `ConfigManager.getRuntimeStateDirectory()`; one that needs the database asks
+ *      `getStateDatabasePath()` on either. `'verify-state.db'` is a different file and does not
+ *      match: the segment must start at a quote, backtick or `/`. Readers that only DISCOVER an
+ *      existing runtime-state directory are declared in `RUNTIME_STATE_READERS`, audited by the
+ *      shared `lib/exception-hygiene.js` harness — an entry whose file stopped naming the segment
+ *      is `satisfied` and must be deleted; one the `git grep … -- src` scan cannot reach is
+ *      `unreachable` and must NOT be deleted until the scan is widened.
  *
  * WHAT IT DOES NOT CLAIM
- * This does not prove the defect was ever reachable in production. It was not, measured
- * 2026-08-09: `context.ts` declares `serverRoot: string` and `resolvePackageRoot` throws rather
- * than returning empty, so the tracker block always runs. This gate protects a LATENT hazard —
- * its value is that reordering the composition root, or adding a sixth inheriting call site
- * upstream of the claim, now fails here instead of silently moving the database.
+ * Comment lines are skipped, so a path composed on a line that starts with `*` or `//` is not seen.
+ * The scan reads git-tracked `src/**` only; `scripts/`, `tests/` and the Python hooks are outside
+ * it (the hooks resolve the same directory in `hooks/lib/workspace.py`).
  *
  * `--self-test` proves each rule can still fail.
  */
@@ -53,44 +62,38 @@ const INITIALIZER = path.join(SRC, 'runtime', 'module-initializer.ts');
 
 const CLAIM_FN = 'claimStateDatabase';
 const CALL = 'SqliteEngine.getInstance(';
+/** Path segments only the owner may compose. `.` is escaped where the pattern is built. */
+const SEGMENTS = ['runtime-state', 'state.db'];
+const SEGMENT_LABEL = SEGMENTS.join(' / ');
+/** The one module that composes the runtime state directory. */
+const RUNTIME_STATE_OWNER = 'src/runtime/paths.ts';
 
 /**
- * Call sites that deliberately inherit the claimed path instead of supplying their own.
+ * Files that name a runtime state segment to FIND an existing path, never to place one.
  *
- * Each is downstream of the composition-root claim, so inheriting is correct — but each is also
- * a site that WOULD relocate the database if it ever ran first. `closedBy` names what would let
- * the entry be deleted rather than leaving it as a permanent bypass wearing a temporary label.
+ * `closedBy` names what would let the entry be deleted rather than leaving it as a permanent
+ * bypass wearing a temporary label.
  */
-const ACCEPTED_INHERITORS = [
+const RUNTIME_STATE_READERS = [
   {
-    file: 'src/runtime/resource-index-resync.ts',
+    file: 'src/cli-shared/version-history.ts',
     reason:
-      'resyncResourceIndexAfterReload — called from Application#fullServerRefresh on hot reload, ' +
-      'long after startup has claimed. Moved out of application.ts intact when that file crossed ' +
-      'the max-lines ratchet',
+      'resolveStateDbPath — the standalone CLI has no PathResolver, so it walks up from a ' +
+      'resource directory and returns the first runtime-state/ that already exists (existsSync-' +
+      'gated). It creates nothing, and a directory it finds is one the server placed',
     closedBy:
-      'threading the resolved dbPath through the resyncResourceIndexAfterReload params, or ' +
-      'removing the refresh path',
-  },
-  {
-    file: 'src/runtime/module-initializer.ts',
-    reason: 'tool-index and script-loader blocks, both after claimStateDatabase in this file',
-    closedBy: 'rule 1 already pins the ordering; delete if these sites gain an explicit dbPath',
-  },
-  {
-    file: 'src/engine/gates/gate-state-store.ts',
-    reason: 'constructed inside initializeModules, after the claim',
-    closedBy: 'passing the resolved path into the store like ResourceChangeTracker does',
-  },
-  {
-    file: 'src/engine/frameworks/framework-state-store.ts',
-    reason:
-      'constructed inside initializeModules, after the claim. NOTE: its root comes from ' +
-      'configManager.getServerRoot(), NOT the PathResolver — so if it ever ran first it would ' +
-      'claim a genuinely different directory, not merely an unresolved one',
-    closedBy: 'passing the resolved path into the store like ResourceChangeTracker does',
+      'the CLI resolving the runtime root through the same MCP_RUNTIME_ROOT -> MCP_WORKSPACE ' +
+      'chain PathResolver uses, instead of discovering it on disk',
   },
 ];
+
+/** Whether the text before `at` on its line makes the occurrence a comment. */
+function onCommentLine(source, at) {
+  const lineStart = source.lastIndexOf('\n', at) + 1;
+  return /^\s*(\*|\/\/|\/\*)/.test(source.slice(lineStart, at));
+}
+
+const lineOf = (source, at) => source.slice(0, at).split('\n').length;
 
 /** Every `SqliteEngine.getInstance(` call in `source`, with its line and whether it names dbPath. */
 export function callSites(source) {
@@ -102,8 +105,7 @@ export function callSites(source) {
     from = at + CALL.length;
 
     // Skip doc-comment occurrences — they are illustrations, not call sites.
-    const lineStart = source.lastIndexOf('\n', at) + 1;
-    if (/^\s*\*/.test(source.slice(lineStart, at))) continue;
+    if (onCommentLine(source, at)) continue;
 
     // Walk to the matching close paren so `dbPath` is searched in THIS call, not the next one.
     let depth = 1;
@@ -114,7 +116,7 @@ export function callSites(source) {
       i += 1;
     }
     sites.push({
-      line: source.slice(0, at).split('\n').length,
+      line: lineOf(source, at),
       suppliesDbPath: source.slice(from, i).includes('dbPath'),
     });
   }
@@ -127,46 +129,76 @@ export function orderViolations(source) {
   if (claimAt === -1) {
     return [
       `module-initializer.ts: ${CLAIM_FN}() is never called — the composition root no longer ` +
-        'claims the SqliteEngine singleton, so state.db location reverts to call order',
+        'opens the SqliteEngine singleton ahead of its consumers',
     ];
   }
-  const claimLine = source.slice(0, claimAt).split('\n').length;
+  const claimLine = lineOf(source, claimAt);
 
-  // The call inside claimStateDatabase itself is the claim; every OTHER site must follow it.
   return callSites(source)
     .filter((s) => !s.suppliesDbPath && s.line < claimLine)
     .map(
       (s) =>
         `module-initializer.ts:${s.line}: SqliteEngine.getInstance() with no dbPath runs BEFORE ` +
-        `${CLAIM_FN}() at line ${claimLine} — it would claim the singleton first`
+        `${CLAIM_FN}() at line ${claimLine}`
     );
 }
 
-/** Files under src/ containing a real call site, via git (fast, and respects tracked files). */
-function filesWithCallSites() {
-  const out = execFileSync('git', ['grep', '-l', '--fixed-strings', CALL, '--', 'src'], {
-    cwd: SERVER,
-    encoding: 'utf8',
-  });
+/**
+ * Rule 3's predicate: lines in `source` whose code names a runtime state path segment.
+ *
+ * A segment is one of `SEGMENTS` bounded on the left by a quote or `/`, and on the right by a
+ * quote, backtick, `/` or end of line. Prose such as `root for runtime-state/ and logs/` or
+ * `state.db at ${path}` does not match — a space is not a path boundary — and neither does
+ * `'verify-state.db'`, whose `state.db` follows a `-`. A backtick is NOT a left boundary: inside a
+ * description string it opens a markdown code span (the generated `resource_manager` schema says
+ * "`state.db` is one file shared by every project"), and a template literal composes a path with a
+ * `/` before the segment, which is matched. Unclaimed: a template literal holding ONLY the segment,
+ * passed to a join — `` path.join(dir, `state.db`) `` — is not seen.
+ */
+export function runtimeStateSegmentLines(source) {
+  const lines = [];
+  const alternatives = SEGMENTS.map((segment) => segment.replaceAll('.', '\\.')).join('|');
+  const pattern = new RegExp(`['"/](?:${alternatives})(?=['"\`/]|$)`, 'gm');
+  for (const match of source.matchAll(pattern)) {
+    if (onCommentLine(source, match.index)) continue;
+    const line = lineOf(source, match.index);
+    if (!lines.includes(line)) lines.push(line);
+  }
+  return lines;
+}
+
+/** Git-tracked `.ts` files under `src/` containing `needle` (fast, respects tracked files). */
+function trackedFilesContaining(needle) {
+  let out;
+  try {
+    out = execFileSync('git', ['grep', '-l', '--fixed-strings', needle, '--', 'src'], {
+      cwd: SERVER,
+      encoding: 'utf8',
+    });
+  } catch (error) {
+    // `git grep` exits 1 for "no match", which is a real answer here, not a failure.
+    if (error.status === 1) return [];
+    throw error;
+  }
   return out.split('\n').filter((f) => f.endsWith('.ts'));
 }
 
-/** Exactly the reach of `filesWithCallSites()`: git-tracked files under `src/`, call site or not. */
+/** Exactly the reach of `trackedFilesContaining()`: git-tracked files under `src/`. */
 function trackedSourceFiles() {
   const out = execFileSync('git', ['ls-files', '--', 'src'], { cwd: SERVER, encoding: 'utf8' });
   return new Set(out.split('\n').filter(Boolean));
 }
 
 /**
- * Classifies one accepted inheritor against the question this gate actually asks: does the file it
- * names STILL have a `getInstance` call site that inherits the claimed path?
+ * Classifies one declared runtime-state reader against the question rule 3 asks: does the file it
+ * names STILL name the segment?
  *
  * `unreachable` is a distinct verdict here and must not be folded into `satisfied`. The scan is
  * `git grep … -- src`, so an entry naming a file that exists but is untracked, or that lives
- * outside `src/`, is inert because nothing looked at it — deleting it would re-arm the very call
- * site it declares the moment the scan widens (exception-hygiene.js § UNREACHABLE).
+ * outside `src/`, is inert because nothing looked at it — deleting it would re-arm the very site
+ * it declares the moment the scan widens (exception-hygiene.js § UNREACHABLE).
  *
- * @param {{ exists: boolean, reachable: boolean, inheriting: boolean }} facts
+ * @param {{ exists: boolean, reachable: boolean, namesSegment: boolean }} facts
  */
 export function classifyEntry(facts) {
   if (!facts.exists) {
@@ -175,8 +207,11 @@ export function classifyEntry(facts) {
   if (!facts.reachable) {
     return { verdict: VERDICT.UNREACHABLE, detail: 'outside the git-tracked src/ scan' };
   }
-  if (!facts.inheriting) {
-    return { verdict: VERDICT.SATISFIED, detail: 'every call site in it now supplies dbPath' };
+  if (!facts.namesSegment) {
+    return {
+      verdict: VERDICT.SATISFIED,
+      detail: `no code line in it names ${SEGMENT_LABEL} any more`,
+    };
   }
   return { verdict: VERDICT.LOAD_BEARING };
 }
@@ -184,42 +219,51 @@ export function classifyEntry(facts) {
 function run() {
   const violations = [...orderViolations(readFileSync(INITIALIZER, 'utf8'))];
 
-  const declared = new Map(ACCEPTED_INHERITORS.map((e) => [e.file, e]));
-  const seenInheriting = new Set();
-
-  for (const rel of filesWithCallSites()) {
+  // Rule 2.
+  for (const rel of trackedFilesContaining(CALL)) {
     const sites = callSites(readFileSync(path.join(SERVER, rel), 'utf8'));
-    const inheriting = sites.filter((s) => !s.suppliesDbPath);
-    if (inheriting.length === 0) continue;
-    seenInheriting.add(rel);
-    if (!declared.has(rel)) {
+    for (const site of sites.filter((s) => !s.suppliesDbPath)) {
       violations.push(
-        `${rel}: ${inheriting.length} getInstance call(s) with no dbPath and no declared ` +
-          'inheritor entry. A site that omits dbPath relocates state.db if it ever runs first — ' +
-          'either pass the resolved path, or declare it in ACCEPTED_INHERITORS with a closedBy.'
+        `${rel}:${site.line}: SqliteEngine.getInstance() names no dbPath. The signature requires ` +
+          'one — resolve it through PathResolver.getStateDatabasePath() rather than casting.'
       );
     }
   }
 
-  // Exception hygiene — the shared definition, not a private idea of "still true". This replaces
-  // the hand-rolled satisfied-only loop: `closedBy` was being declared (the form half) with
-  // nothing auditing it (the truth half), which is what claude/require-exception-audit flags.
+  // Rule 3.
+  const declared = new Set(RUNTIME_STATE_READERS.map((e) => e.file));
+  const seenNaming = new Set();
+  for (const rel of new Set(SEGMENTS.flatMap((segment) => trackedFilesContaining(segment)))) {
+    const lines = runtimeStateSegmentLines(readFileSync(path.join(SERVER, rel), 'utf8'));
+    if (lines.length === 0) continue;
+    seenNaming.add(rel);
+    if (rel === RUNTIME_STATE_OWNER || declared.has(rel)) continue;
+    for (const line of lines) {
+      violations.push(
+        `${rel}:${line}: composes a ${SEGMENT_LABEL} path outside ${RUNTIME_STATE_OWNER}. ` +
+          'Runtime state belongs under the runtime root, named once — ask ' +
+          'getRuntimeStatePath() / getStateDatabasePath() (PathResolver in runtime/) or ' +
+          'getRuntimeStateDirectory() / getStateDatabasePath() (ConfigManager); never join it yourself.'
+      );
+    }
+  }
+
   const tracked = trackedSourceFiles();
   const audit = auditExceptions({
     gate: 'db-claim-order',
-    entries: ACCEPTED_INHERITORS,
+    entries: RUNTIME_STATE_READERS,
     describe: (entry) => entry.file,
     closedBy: (entry) => entry.closedBy,
     classify: (entry) =>
       classifyEntry({
         exists: existsSync(path.join(SERVER, entry.file)),
         reachable: tracked.has(entry.file),
-        inheriting: seenInheriting.has(entry.file),
+        namesSegment: seenNaming.has(entry.file),
       }),
   });
 
   if (violations.length > 0) {
-    console.error(`✖ state.db claim-order validation failed (${violations.length}):`);
+    console.error(`✖ runtime state placement validation failed (${violations.length}):`);
     for (const v of violations) console.error(`  - ${v}`);
   }
 
@@ -228,8 +272,9 @@ function run() {
   if (violations.length > 0 || exceptionProblems > 0) return 1;
 
   console.log(
-    `✔ state.db claim order: ${CLAIM_FN}() precedes all inheriting call sites; ` +
-      `${ACCEPTED_INHERITORS.length} declared inheritor(s), all still inheriting.`
+    `✔ runtime state placement: ${CLAIM_FN}() opens state.db first, every getInstance names ` +
+      `dbPath, and ${SEGMENT_LABEL} is composed only in ${RUNTIME_STATE_OWNER} ` +
+      `(${RUNTIME_STATE_READERS.length} declared reader(s)).`
   );
   return 0;
 }
@@ -239,13 +284,33 @@ function selfTest() {
   const cases = [
     {
       name: 'a missing claimStateDatabase() call is rejected',
-      source: `async function initializeModules() {\n  const db = await ${CALL}serverRoot, logger);\n}\n`,
+      source: `async function initializeModules() {\n  const db = await ${CALL}logger, { dbPath });\n}\n`,
       rule: orderViolations,
     },
     {
-      name: 'an inheriting call BEFORE the claim is rejected',
-      source: `async function initializeModules() {\n  const early = await ${CALL}serverRoot, logger);\n  await ${CLAIM_FN}(p, s, l);\n}\n`,
+      name: 'a call naming no dbPath BEFORE the claim is rejected',
+      source: `async function initializeModules() {\n  const early = await ${CALL}logger);\n  await ${CLAIM_FN}(p, l);\n}\n`,
       rule: orderViolations,
+    },
+    {
+      name: "the live B.62 defect — path.join(deps.serverRoot, 'runtime-state') — is rejected",
+      source: `const store = create(logger, {\n  runtimeStateDir: path.join(deps.serverRoot, 'runtime-state'),\n});\n`,
+      rule: runtimeStateSegmentLines,
+    },
+    {
+      name: "the latent B.62 defect — 'runtime-state', 'state.db' — is rejected",
+      source: `this.dbPath = config.dbPath ?? path.join(serverRoot, 'runtime-state', 'state.db');\n`,
+      rule: runtimeStateSegmentLines,
+    },
+    {
+      name: "a hand-joined 'state.db' onto a resolved directory is rejected",
+      source: `const p = path.join(config.getRuntimeStateDirectory(), "state.db");\n`,
+      rule: runtimeStateSegmentLines,
+    },
+    {
+      name: 'a template-literal composition is rejected',
+      source: 'const dir = `${root}/runtime-state`;\nconst db = `${dir}/state.db`;\n',
+      rule: runtimeStateSegmentLines,
     },
   ];
 
@@ -260,45 +325,66 @@ function selfTest() {
     }
   }
 
-  // The correct ordering must PASS, or the cases above only prove nothing ever validates.
-  const good = `async function initializeModules() {\n  await ${CLAIM_FN}(p, s, l);\n  const db = await ${CALL}serverRoot, logger);\n}\n`;
-  if (orderViolations(good).length > 0) {
-    console.error('✖ self-test: correct ordering was rejected');
-    failures += 1;
-  } else {
-    console.log('✔ self-test: correct ordering is accepted');
+  // The correct shapes must PASS, or the cases above only prove nothing ever validates.
+  const accepted = [
+    [
+      'correct ordering',
+      orderViolations(
+        `async function initializeModules() {\n  await ${CLAIM_FN}(p, l);\n  const db = await ${CALL}logger);\n}\n`
+      ),
+    ],
+    [
+      'the segment inside comments and prose',
+      runtimeStateSegmentLines(
+        ` * runtimeStateDir: path.join(serverRoot, 'runtime-state')\n` +
+          `  // was path.join(serverRoot, 'runtime-state', 'state.db')\n` +
+          `  const help = 'Writable root for runtime-state/ and relative logs/';\n` +
+          `  const err = \`state.db at \${dbPath} is locked\`;\n` +
+          `  const verify = path.join(dir, 'verify-state.db');\n` +
+          "  const doc = '`state.db` is one file shared by every project';\n" +
+          `  const ok = config.getStateDatabasePath();\n`
+      ),
+    ],
+  ];
+  for (const [name, found] of accepted) {
+    if (found.length > 0) {
+      console.error(`✖ self-test: ${name} was rejected`);
+      failures += 1;
+    } else {
+      console.log(`✔ self-test: ${name} is accepted`);
+    }
   }
 
   // dbPath detection must distinguish the two call shapes, or rule 2 is noise.
-  const withPath = callSites(`await ${CALL}root, logger, { dbPath: p });`);
-  const withoutPath = callSites(`await ${CALL}root, logger);`);
+  const withPath = callSites(`await ${CALL}logger, { dbPath: p });`);
+  const withoutPath = callSites(`await ${CALL}logger, config);`);
   if (!withPath[0]?.suppliesDbPath || withoutPath[0]?.suppliesDbPath) {
     console.error('✖ self-test: dbPath detection does not distinguish the two call shapes');
     failures += 1;
   } else {
-    console.log('✔ self-test: dbPath detection distinguishes supplied from inherited');
+    console.log('✔ self-test: dbPath detection distinguishes supplied from absent');
   }
 
   // Exception hygiene must separate the four non-passing verdicts, or the audit is one bit.
   const verdicts = [
     [
-      'a live inheritor is load-bearing',
-      { exists: true, reachable: true, inheriting: true },
+      'a live reader is load-bearing',
+      { exists: true, reachable: true, namesSegment: true },
       VERDICT.LOAD_BEARING,
     ],
     [
-      'an entry whose file stopped inheriting is satisfied',
-      { exists: true, reachable: true, inheriting: false },
+      'an entry whose file stopped naming the segment is satisfied',
+      { exists: true, reachable: true, namesSegment: false },
       VERDICT.SATISFIED,
     ],
     [
       'an entry naming a missing file is subject-missing',
-      { exists: false, reachable: false, inheriting: false },
+      { exists: false, reachable: false, namesSegment: false },
       VERDICT.SUBJECT_MISSING,
     ],
     [
       'an entry outside the scan is unreachable, NOT satisfied',
-      { exists: true, reachable: false, inheriting: false },
+      { exists: true, reachable: false, namesSegment: false },
       VERDICT.UNREACHABLE,
     ],
   ];

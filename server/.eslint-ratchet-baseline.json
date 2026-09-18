@@ -1,66 +1,62 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-17T03:35:02.458Z",
+  "generatedAt": "2026-09-18T03:14:05.089Z",
   "eslintTarget": "src,scripts,eslint-rules",
   "totals": {
-    "errors": 2923,
-    "warnings": 800
+    "errors": 2815,
+    "warnings": 776
   },
   "byRule": {
     "@typescript-eslint/strict-boolean-expressions": {
-      "errors": 1954,
+      "errors": 1894,
       "warnings": 0
     },
     "sonarjs/cognitive-complexity": {
       "errors": 0,
-      "warnings": 84
+      "warnings": 82
     },
     "@typescript-eslint/no-non-null-assertion": {
       "errors": 0,
-      "warnings": 82
+      "warnings": 79
     },
     "@typescript-eslint/no-unnecessary-condition": {
-      "errors": 400,
+      "errors": 394,
       "warnings": 0
     },
     "max-params": {
       "errors": 0,
       "warnings": 7
     },
-    "@typescript-eslint/no-explicit-any": {
-      "errors": 276,
-      "warnings": 0
-    },
-    "@typescript-eslint/explicit-module-boundary-types": {
-      "errors": 56,
-      "warnings": 0
-    },
-    "@typescript-eslint/no-unsafe-assignment": {
-      "errors": 0,
-      "warnings": 178
-    },
-    "@typescript-eslint/no-unsafe-member-access": {
-      "errors": 0,
-      "warnings": 374
-    },
     "@typescript-eslint/prefer-nullish-coalescing": {
-      "errors": 167,
-      "warnings": 0
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "errors": 15,
+      "errors": 156,
       "warnings": 0
     },
     "import-x/order": {
       "errors": 6,
       "warnings": 0
     },
+    "@typescript-eslint/explicit-module-boundary-types": {
+      "errors": 51,
+      "warnings": 0
+    },
+    "@typescript-eslint/no-unsafe-assignment": {
+      "errors": 0,
+      "warnings": 171
+    },
     "@typescript-eslint/no-unsafe-call": {
       "errors": 0,
       "warnings": 29
     },
+    "@typescript-eslint/no-unsafe-member-access": {
+      "errors": 0,
+      "warnings": 362
+    },
     "@typescript-eslint/explicit-function-return-type": {
-      "errors": 26,
+      "errors": 24,
+      "warnings": 0
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "errors": 254,
       "warnings": 0
     },
     "max-depth": {
@@ -69,6 +65,10 @@
     },
     "@typescript-eslint/prefer-optional-chain": {
       "errors": 1,
+      "warnings": 0
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "errors": 13,
       "warnings": 0
     },
     "no-useless-escape": {

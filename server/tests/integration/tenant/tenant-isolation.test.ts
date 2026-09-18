@@ -26,7 +26,9 @@ describe('Tenant Isolation', () => {
   beforeAll(async () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'tenant-isolation-'));
     logger = createLogger();
-    dbManager = await SqliteEngine.getInstance(tmpDir, logger);
+    dbManager = await SqliteEngine.getInstance(logger, {
+      dbPath: path.join(tmpDir, 'runtime-state', 'state.db'),
+    });
     await dbManager.initialize();
   });
 

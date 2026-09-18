@@ -137,7 +137,6 @@ describe('mid-chain blocking-unknown interrupt (rows 2.1-2.3)', () => {
       .mockImplementation(() => {}) as unknown as jest.SpiedFunction<() => void>;
 
     store = new ChainSessionStore(createLogger(), new StubTextReferenceStore() as never, {
-      serverRoot: '/tmp/test-unknown-interrupt-flow',
       cleanupIntervalMs: 60_000,
     });
     await store.createSession('sess-1', 'chain-demo#1', 3, {}, { nodes: NODES });

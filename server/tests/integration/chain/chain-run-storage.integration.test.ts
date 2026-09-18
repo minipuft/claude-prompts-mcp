@@ -65,7 +65,9 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
   beforeAll(async () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'chain-run-storage-'));
     logger = createLogger();
-    engine = await SqliteEngine.getInstance(tmpDir, logger);
+    engine = await SqliteEngine.getInstance(logger, {
+      dbPath: path.join(tmpDir, 'runtime-state', 'state.db'),
+    });
     await engine.initialize();
   });
 

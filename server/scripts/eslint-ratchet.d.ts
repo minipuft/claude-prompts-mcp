@@ -42,6 +42,13 @@ export interface VanishedRule {
   warnings: number;
 }
 
+export interface RuleDecrease {
+  ruleId: string;
+  type: 'errors' | 'warnings';
+  baseline: number;
+  current: number;
+}
+
 /** Parse repeatable `--allow-increase <ruleId> <reason>` pairs from the argv tail. */
 export declare function parseAllowIncreaseArgs(argv: string[]): Map<string, string>;
 
@@ -61,8 +68,8 @@ export declare function buildOverrideLog(
   generatedAt: string
 ): { overrideLog: OverrideLogEntry[]; unused: string[] };
 
-/** The pre-existing `check()` comparison: per-rule regressions and vanished rules. */
+/** `check()`'s comparison: per-rule regressions, vanished rules, and decreases (row B.67). */
 export declare function compareSummaries(
   baseline: { byRule?: ByRule },
   current: { byRule?: ByRule }
-): { regressions: RuleRegression[]; vanished: VanishedRule[] };
+): { regressions: RuleRegression[]; vanished: VanishedRule[]; decreases: RuleDecrease[] };

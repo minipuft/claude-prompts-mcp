@@ -6,7 +6,10 @@
  * while the existing backlog is paid down.
  *
  * The ratchet compares the current lint error/warn counts (by ruleId) against a committed
- * baseline and fails if any rule count increases.
+ * baseline and fails if any rule count increases OR decreases. A decrease means the ceiling is
+ * stale — `check` refuses to pass a run that measures below its own baseline, naming every rule
+ * that dropped and the one command (`npm run lint:ratchet:baseline`) that locks the lower count
+ * in. Lowering a baseline never needs `--allow-increase`; only a rise does.
  *
  * Usage:
  * - Update baseline (intentional): `npm run lint:ratchet:baseline`
@@ -104,25 +107,33 @@ function summarizeEslintReport(results) {
 /**
  * Compare a baseline summary against the current one.
  *
- * Returns two independent findings:
+ * Returns three independent findings:
  *
  * - `regressions` — a rule's count went UP. The original purpose of the ratchet.
  * - `vanished`    — a rule the baseline knew about produced no report at all.
+ * - `decreases`   — a rule's count went DOWN but the rule still reports (possibly at 0 on one
+ *   of errors/warnings while the other stays nonzero). `check()` FAILS on these (row B.67):
+ *   a ratchet that only watches for increases is a floor once debt is paid down and nobody
+ *   regenerates the baseline, so a later PR can reintroduce up to that same amount of debt and
+ *   still pass. Surfaced per (ruleId, type) rather than per rule, matching `regressions`.
  *
- * The second exists because the first cannot see it. A rule that stops running reports
- * zero, and `0 > N` is false, so a plugin that was renamed, removed, or silently failed
- * to load reads as an improvement and the totals drop. That is indistinguishable from
- * progress if you only watch the totals — which is exactly how a lint rule can quietly
- * stop protecting anything while CI stays green.
+ * The `vanished` finding exists because `regressions` cannot see a rule that stops running
+ * entirely. A rule that stops running reports zero, and `0 > N` is false, so a plugin that was
+ * renamed, removed, or silently failed to load reads as an improvement and the totals drop. That
+ * is indistinguishable from progress if you only watch the totals — which is exactly how a lint
+ * rule can quietly stop protecting anything while CI stays green.
  *
- * A rule also vanishes when every one of its violations is genuinely fixed, and counts
- * alone cannot separate that from a rule that died. Both are reported, because both
- * require the baseline to be updated deliberately rather than drifting; the printed
- * message names both readings so the reader can tell which one they are looking at.
+ * A rule also vanishes when every one of its violations is genuinely fixed, and counts alone
+ * cannot separate that from a rule that died. Both are reported, because both require the
+ * baseline to be updated deliberately rather than drifting; the printed message names both
+ * readings so the reader can tell which one they are looking at. A vanished rule is a decrease of
+ * everything it tracked, so it is reported once here — as `vanished`, not also as `decreases` —
+ * rather than doubled across both findings.
  */
 export function compareSummaries(baseline, current) {
   const regressions = [];
   const vanished = [];
+  const decreases = [];
 
   const allRuleIds = new Set([
     ...Object.keys(baseline.byRule ?? {}),
@@ -143,10 +154,18 @@ export function compareSummaries(baseline, current) {
         errors: baselineCounts.errors,
         warnings: baselineCounts.warnings,
       });
+      continue;
     }
 
     if (currentCounts.errors > baselineCounts.errors) {
       regressions.push({
+        ruleId,
+        type: 'errors',
+        baseline: baselineCounts.errors,
+        current: currentCounts.errors,
+      });
+    } else if (currentCounts.errors < baselineCounts.errors) {
+      decreases.push({
         ruleId,
         type: 'errors',
         baseline: baselineCounts.errors,
@@ -161,10 +180,17 @@ export function compareSummaries(baseline, current) {
         baseline: baselineCounts.warnings,
         current: currentCounts.warnings,
       });
+    } else if (currentCounts.warnings < baselineCounts.warnings) {
+      decreases.push({
+        ruleId,
+        type: 'warnings',
+        baseline: baselineCounts.warnings,
+        current: currentCounts.warnings,
+      });
     }
   }
 
-  return { regressions, vanished };
+  return { regressions, vanished, decreases };
 }
 
 async function loadJson(filePath) {
@@ -372,15 +398,15 @@ async function handleCheck() {
   const results = await loadJson(reportPath);
   const current = summarizeEslintReport(results);
 
-  const { regressions, vanished } = compareSummaries(baseline, current);
-  if (regressions.length === 0 && vanished.length === 0) {
+  const { regressions, vanished, decreases } = compareSummaries(baseline, current);
+  if (regressions.length === 0 && vanished.length === 0 && decreases.length === 0) {
     console.log(
       `[eslint-ratchet] OK: ${current.totals.errors} errors, ${current.totals.warnings} warnings (no regressions)`
     );
     return;
   }
 
-  const problems = regressions.length + vanished.length;
+  const problems = regressions.length + vanished.length + decreases.length;
   const lines = [`[eslint-ratchet] FAIL: ${problems} rule problems detected.`];
 
   if (regressions.length > 0) {
@@ -412,6 +438,24 @@ async function handleCheck() {
       '     still in the code and nothing is watching it. Restore the rule before re-baselining.',
       'Renaming a plugin is case 2 even though it looks like case 1: rename the baseline keys',
       'in place so the counts carry over, rather than regenerating.'
+    );
+  }
+
+  if (decreases.length > 0) {
+    lines.push(
+      '',
+      'Rules that decreased (the ceiling is stale — lowering it is always free, never needs',
+      '--allow-increase):',
+      ...decreases
+        .sort((a, b) => a.ruleId.localeCompare(b.ruleId) || a.type.localeCompare(b.type))
+        .map(
+          (d) =>
+            `- ${d.ruleId} (${d.type}): baseline=${d.baseline} current=${d.current} (-${
+              d.baseline - d.current
+            })`
+        ),
+      '',
+      'Run: npm run lint:ratchet:baseline'
     );
   }
 
