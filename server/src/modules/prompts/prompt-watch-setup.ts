@@ -58,14 +58,13 @@ export async function discoverPromptDirectories(
 }
 
 /**
- * Build a deduplicated map of watch targets from prompt directories,
- * framework directories, and auxiliary reload directories.
+ * Build a deduplicated map of watch targets from prompt directories and auxiliary reload
+ * directories (framework, gate, style, script tools, change tracking).
  */
 export function buildWatchTargets(
   promptsDir: string,
   categoryDirs: WatchTarget[],
   options?: {
-    frameworkDirectories?: string[];
     auxiliaryDirectories?: string[][];
     /**
      * Every other root the prompt loader reads — the bundled tree and any workspace overlay.
@@ -98,15 +97,6 @@ export function buildWatchTargets(
       target.category = dir.category;
     }
     targets.set(dir.path, target);
-  }
-
-  // Framework directories
-  if (options?.frameworkDirectories) {
-    for (const dir of options.frameworkDirectories) {
-      if (dir) {
-        targets.set(dir, { path: dir });
-      }
-    }
   }
 
   // Auxiliary reload directories

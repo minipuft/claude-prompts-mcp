@@ -110,7 +110,6 @@ export class HotReloadObserver {
   private config: HotReloadConfig;
   private fileObserver: FileObserver;
   private onReloadCallback: ((event: HotReloadEvent) => Promise<void>) | undefined;
-  private onFrameworkReloadCallback: ((event: HotReloadEvent) => Promise<void>) | undefined;
   private auxiliaryReloads: AuxiliaryReloadConfig[] = [];
   private stats: HotReloadStats;
   private isStarted: boolean = false;
@@ -217,16 +216,10 @@ export class HotReloadObserver {
   }
 
   /**
-   * Set the callback for framework reload events
-   * This callback is invoked when framework YAML files change
-   */
-  setFrameworkReloadCallback(callback: (event: HotReloadEvent) => Promise<void>): void {
-    this.onFrameworkReloadCallback = callback;
-    this.logger.debug('HotReloadObserver: Framework reload callback registered');
-  }
-
-  /**
-   * Register auxiliary reload handlers (e.g., framework, gate) with their watch directories.
+   * Register auxiliary reload handlers (framework, gate, style, script tools, change tracking)
+   * with their watch directories. This is the ONE path a framework file takes: there is no
+   * dedicated framework callback, because a second route would handle every framework event
+   * twice — and while it sat unwired, it turned each framework edit into an extra prompt reload.
    * Directories must also be passed to watchDirectories by the caller.
    */
   setAuxiliaryReloads(reloads: AuxiliaryReloadConfig[]): void {
@@ -293,10 +286,6 @@ export class HotReloadObserver {
       this.handleFileChange(event);
     });
 
-    this.fileObserver.on('frameworkFileChange', (event: FileChangeEvent) => {
-      this.handleFrameworkFileChange(event);
-    });
-
     this.fileObserver.on('watcherError', (error: { directoryPath: string; error: Error }) => {
       this.logger.error(`File watcher error for ${error.directoryPath}:`, error.error);
     });
@@ -324,56 +313,6 @@ export class HotReloadObserver {
     } else {
       this.processFileChangeImmediate(event);
     }
-  }
-
-  /**
-   * Handle framework file change events
-   * These are processed separately from regular file changes to enable
-   * targeted framework reload without affecting prompt system
-   */
-  private async handleFrameworkFileChange(event: FileChangeEvent): Promise<void> {
-    this.stats.filesChanged++;
-    const frameworkId = event.frameworkId ?? this.extractFrameworkId(event.filePath);
-
-    this.logger.info(
-      `🔧 Framework file change detected: ${event.type} - ${event.filename}` +
-        (frameworkId ? ` (framework: ${frameworkId})` : '')
-    );
-
-    // Map FileChangeType to FileChangeOperation (filter out 'renamed' as it becomes 'added' or 'removed')
-    const changeType = this.mapToChangeOperation(event.type);
-
-    const hotReloadEvent: HotReloadEvent = {
-      type: 'framework_changed',
-      reason: `Framework file ${event.type}: ${event.filename}`,
-      affectedFiles: [event.filePath],
-      timestamp: event.timestamp,
-      requiresFullReload: false, // Framework changes typically don't need full reload
-      changeType,
-      ...(frameworkId ? { frameworkId } : {}),
-    };
-
-    // Use dedicated framework callback if available, otherwise fall through to general reload
-    if (this.onFrameworkReloadCallback) {
-      try {
-        await this.onFrameworkReloadCallback(hotReloadEvent);
-        this.logger.info(`✅ Framework ${frameworkId ?? 'unknown'} reloaded successfully`);
-      } catch (error) {
-        this.logger.error(`❌ Failed to reload framework ${frameworkId ?? 'unknown'}:`, error);
-      }
-    } else {
-      // Fallback to regular reload processing
-      await this.processReloadEvent(hotReloadEvent);
-    }
-  }
-
-  /**
-   * Extract framework ID from file path
-   */
-  private extractFrameworkId(filePath: string): string | undefined {
-    const normalizedPath = filePath.replace(/\\/g, '/');
-    const match = normalizedPath.match(/\/frameworks\/([^/]+)\//);
-    return match?.[1]?.toLowerCase();
   }
 
   /**
@@ -414,8 +353,8 @@ export class HotReloadObserver {
       //
       // `FileObserver` extracts it from the path when it classifies a framework file, and the
       // framework reload handler refuses an event without one ("missing frameworkId, skipping").
-      // Auxiliary events are the ONLY path framework files take — `setFrameworkReloadCallback`
-      // is not wired — so dropping the id here meant every framework edit and every framework
+      // Auxiliary events are the ONLY path framework files take (see `setAuxiliaryReloads`),
+      // so dropping the id here meant every framework edit and every framework
       // deletion was observed by the watcher, logged as a file event, and then discarded: an
       // edited `framework.yaml` kept serving its previous guidance, and a deleted framework
       // stayed selected, until a restart.

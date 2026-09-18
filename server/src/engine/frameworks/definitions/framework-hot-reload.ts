@@ -50,7 +50,7 @@ export interface FrameworkHotReloadStats {
 export interface FrameworkHotReloadRegistration {
   /** Directories that should be watched for framework changes */
   directories: string[];
-  /** Bound handler for use with HotReloadObserver.setFrameworkReloadCallback */
+  /** Bound handler, wired as an auxiliary reload by `buildFrameworkAuxiliaryReloadConfig` (runtime) */
   handler: (event: HotReloadEvent) => Promise<void>;
   /** Coordinator instance handling cache clear + re-register */
   coordinator: FrameworkHotReloadCoordinator;
@@ -62,15 +62,9 @@ export interface FrameworkHotReloadRegistration {
  * Coordinates between the file watching system and framework registry to
  * enable seamless hot reload of framework definitions.
  *
- * @example
- * ```typescript
- * const coordinator = new FrameworkHotReloadCoordinator(logger, registry, loader);
- *
- * // Register with hot reload manager
- * hotReloadObserver.setFrameworkReloadCallback(
- *   (event) => coordinator.handleFrameworkChange(event)
- * );
- * ```
+ * Wiring goes through the auxiliary-reload mechanism, the same as gates and styles:
+ * `buildFrameworkAuxiliaryReloadConfig` (runtime) turns a registration into an
+ * `AuxiliaryReloadConfig` that `HotReloadObserver.setAuxiliaryReloads` accepts.
  */
 /**
  * Internal config type with required defaults but optional callbacks
