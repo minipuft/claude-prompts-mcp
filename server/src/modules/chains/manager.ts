@@ -177,7 +177,6 @@ export type SessionClearedCallback = (
 ) => void | Promise<void>;
 
 export interface ChainSessionStoreOptions {
-  serverRoot?: string;
   defaultSessionTimeoutMs?: number;
   reviewSessionTimeoutMs?: number;
   cleanupIntervalMs?: number;
@@ -2809,17 +2808,8 @@ export type {
 export function createChainSessionStore(
   logger: Logger,
   textReferenceStore: TextReferenceStore,
-  serverRoot: string,
-  options?: Omit<ChainSessionStoreOptions, 'serverRoot'>,
+  options: ChainSessionStoreOptions = {},
   argumentHistoryTracker?: ArgumentHistoryTracker
 ): ChainSessionStore {
-  return new ChainSessionStore(
-    logger,
-    textReferenceStore,
-    {
-      serverRoot,
-      ...options,
-    },
-    argumentHistoryTracker
-  );
+  return new ChainSessionStore(logger, textReferenceStore, options, argumentHistoryTracker);
 }

@@ -96,7 +96,9 @@ describe('compareResourceBaseline refusal awareness', () => {
   beforeAll(async () => {
     await fs.rm(TEST_DIR, { recursive: true, force: true });
     await fs.mkdir(TEST_DIR, { recursive: true });
-    dbManager = await SqliteEngine.getInstance(TEST_DIR, logger as never);
+    dbManager = await SqliteEngine.getInstance(logger as never, {
+      dbPath: path.join(TEST_DIR, 'runtime-state', 'state.db'),
+    });
     await dbManager.initialize();
   });
 
@@ -118,7 +120,7 @@ describe('compareResourceBaseline refusal awareness', () => {
     // one across cases would carry the previous case's cache into this one's first comparison.
     tracker = createResourceChangeTracker(logger as never, {
       maxEntries: 1000,
-      serverRoot: TEST_DIR,
+      dbPath: path.join(TEST_DIR, 'runtime-state', 'state.db'),
     });
     await tracker.initialize();
   });

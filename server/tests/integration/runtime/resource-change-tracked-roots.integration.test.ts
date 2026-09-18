@@ -45,6 +45,7 @@ const PRIMARY = path.join(WORKSPACE, 'resources', 'prompts');
 const OVERLAY = path.join(WORKSPACE, 'prompts');
 const GATES = path.join(WORKSPACE, 'resources', 'gates');
 const BUNDLED = path.join(PACKAGE_ROOT, 'resources', 'prompts');
+const DB_PATH = path.join(TEST_DIR, 'runtime-state', 'state.db');
 
 const configManager = {
   getResolvedPromptsDirectory: () => PRIMARY,
@@ -75,9 +76,9 @@ describe('the change tracker spans operator roots, one file per id', () => {
     await mkdir(GATES, { recursive: true });
     process.env['MCP_WORKSPACE'] = WORKSPACE;
     delete process.env['MCP_RESOURCES_PATH'];
-    dbManager = await SqliteEngine.getInstance(TEST_DIR, logger);
+    dbManager = await SqliteEngine.getInstance(logger, { dbPath: DB_PATH });
     await dbManager.initialize();
-    tracker = await initializeResourceChangeTracker(logger, TEST_DIR);
+    tracker = await initializeResourceChangeTracker(logger, DB_PATH);
     const built = buildResourceChangeTrackerAuxiliaryReloadConfig(
       logger,
       configManager,

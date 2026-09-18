@@ -69,7 +69,9 @@ describe('GateStateStore (persistence)', () => {
 
   beforeAll(async () => {
     tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gate-state-'));
-    dbManager = await SqliteEngine.getInstance(tmpRoot, createLogger() as any);
+    dbManager = await SqliteEngine.getInstance(createLogger() as any, {
+      dbPath: path.join(tmpRoot, 'runtime-state', 'state.db'),
+    });
     await dbManager.initialize();
   });
 

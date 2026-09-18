@@ -4,25 +4,19 @@
  * Reuses existing managers without duplicating orchestration inside Application.
  */
 
-import * as path from 'node:path';
-
 import {
   initializeResourceChangeTracker,
   compareResourceBaseline,
   trackedResourceRoots,
   type TrackedResourceRoots,
 } from './resource-change-tracking.js';
+import { syncResourceIndex } from './resource-index-resync.js';
 import {
   formatIndexReconciliation,
   formatResourceInventory,
   type ResourceInventory,
 } from './resource-inventory.js';
-import {
-  existingOverlays,
-  indexerResourceRoots,
-  resolveResourceRoots,
-  type ResourceRoots,
-} from './resource-roots.js';
+import { existingOverlays, resolveResourceRoots, type ResourceRoots } from './resource-roots.js';
 import { resolveSkillsSyncPaths } from './skills-sync-paths.js';
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
@@ -80,10 +74,10 @@ export interface ModuleInitParams {
   textReferenceStore: TextReferenceStore;
   mcpServer: McpServer;
   callbacks: ModuleInitCallbacks;
-  /** Server root for runtime state directories */
+  /** Package root; its presence is what says persistence is configured at all. */
   serverRoot?: string;
-  /** Path resolver for workspace-derived resource overlays */
-  pathResolver?: PathResolver;
+  /** Path resolver for workspace-derived resource overlays and the runtime state location */
+  pathResolver: PathResolver;
   /** Hook registry for pipeline event emissions */
   hookRegistry?: HookRegistryPort;
   /** Notification emitter for MCP client notifications */
@@ -108,28 +102,17 @@ export interface ModuleInitResult {
 }
 
 /**
- * Claim the SqliteEngine singleton with the resolved runtime path before any consumer can
- * construct it from `serverRoot`.
+ * Open the SqliteEngine singleton at the resolved runtime path before anything else touches it.
  *
- * `getInstance` keeps the config of whichever call arrives first, and five of its six call sites
- * pass no `dbPath` — falling back to the PACKAGE directory, which is read-only under a sandboxed
- * MCP child and invisible to the workspace either way. `MCP_WORKSPACE` was honored only because
- * ResourceChangeTracker happened to initialize early and is the one site that passes the
- * PathResolver-derived path. Claiming it here makes that an invariant rather than an ordering
- * accident; the divergence guard in `SqliteEngine.getInstance` names any later disagreement.
- *
- * Extracted rather than inlined: `initializeModules` is already at cognitive complexity 53, and
- * the lint ratchet counts violations, not the number inside one — an inline `if` would have
- * pushed it to 54 with every gate still green.
+ * Every `getInstance` call names its `dbPath` since B.62, and the engine refuses a later caller
+ * that names a different one, so this claim no longer decides WHERE `state.db` lives. It decides
+ * WHEN: the composition root opens the database first, ahead of every consumer, which is the
+ * startup order the rest of `initializeModules` was written against.
+ * `validate:db-claim-order` pins that this call still happens.
  */
-async function claimStateDatabase(
-  runtimeDbPath: string | undefined,
-  serverRoot: string | undefined,
-  logger: Logger
-): Promise<void> {
-  if (runtimeDbPath === undefined) return;
+async function claimStateDatabase(runtimeDbPath: string, logger: Logger): Promise<void> {
   const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
-  await SqliteEngine.getInstance(serverRoot ?? '', logger, { dbPath: runtimeDbPath });
+  await SqliteEngine.getInstance(logger, { dbPath: runtimeDbPath });
 }
 
 /**
@@ -183,21 +166,18 @@ async function compareBaselineAndReport(
  * Opened BEFORE the tools are built, so `PromptExecutor` hands the port to its chain session store
  * at construction. That store starts initializing in its constructor; when the port arrived later
  * through `setDatabasePort`, every start warned "persistence disabled" for a store that went on to
- * persist. Takes the same `runtimeDbPath` that `claimStateDatabase` claimed the singleton with and
- * supplies it to `getInstance` here too, so this call opens the same singleton at the same path
- * rather than merely relying on it already being open.
+ * persist. Takes the same `runtimeDbPath` that `claimStateDatabase` claimed the singleton with, so
+ * this call opens the same singleton at the same path.
  */
 async function openToolsDatabase(
-  runtimeDbPath: string | undefined,
+  runtimeDbPath: string,
   serverRoot: string | undefined,
   logger: Logger
 ): Promise<DatabasePort | undefined> {
   if (serverRoot === undefined || serverRoot === '') return undefined;
   try {
     const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
-    const dbManager = await SqliteEngine.getInstance(serverRoot, logger, {
-      dbPath: runtimeDbPath,
-    });
+    const dbManager = await SqliteEngine.getInstance(logger, { dbPath: runtimeDbPath });
     await dbManager.initialize();
     return dbManager;
   } catch (error) {
@@ -229,6 +209,27 @@ function toolsDatabaseWiringError(serverRoot: string | undefined, error: unknown
 function logResourceInventory(logger: Logger, inventory: ResourceInventory): void {
   for (const line of formatResourceInventory(inventory)) {
     logger.info(line);
+  }
+}
+
+/**
+ * Warn about every prompt the startup index and the loaded catalog disagree on.
+ *
+ * The index and the catalog are two derivations of one question; compare them rather than assuming
+ * they agree, which is how they came to disagree by 41 prompts unnoticed. Passed to
+ * `syncResourceIndex` as its `afterSync` step by the startup sync only.
+ */
+function logIndexReconciliation(
+  logger: Logger,
+  database: DatabasePort,
+  convertedPrompts: ConvertedPrompt[]
+): void {
+  const indexedPromptIds = database
+    .query<{ id: string }>("SELECT id FROM resource_index WHERE type = 'prompt'")
+    .map((row) => row.id);
+  const loadedPromptIds = convertedPrompts.map((prompt) => prompt.id);
+  for (const line of formatIndexReconciliation(loadedPromptIds, indexedPromptIds)) {
+    logger.warn(line);
   }
 }
 
@@ -294,12 +295,9 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
 
   // Initialize Resource Change Tracker early (for audit logging)
   let resourceChangeTracker: ResourceChangeTracker | undefined;
-  const runtimeDbPath =
-    pathResolver !== undefined
-      ? path.join(pathResolver.getRuntimeStatePath(), 'state.db')
-      : undefined;
+  const runtimeDbPath = pathResolver.getStateDatabasePath();
 
-  await claimStateDatabase(runtimeDbPath, serverRoot, logger);
+  await claimStateDatabase(runtimeDbPath, logger);
 
   if (serverRoot !== undefined && serverRoot !== '') {
     if (isVerbose) logger.info('🔄 Initializing Resource Change Tracker...');
@@ -309,7 +307,6 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
       const trackerWorkspaceId = configManager.getConfig().identity.launchDefaults.workspaceId;
       resourceChangeTracker = await initializeResourceChangeTracker(
         logger,
-        serverRoot,
         runtimeDbPath,
         trackerWorkspaceId != null ? { workspaceId: trackerWorkspaceId } : undefined
       );
@@ -323,7 +320,7 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
       // swallowing it started the server with no audit trail while reporting success.
       const msg = error instanceof Error ? error.message : String(error);
       throw new Error(
-        `Failed to initialize ResourceChangeTracker (state.db at ${runtimeDbPath ?? '<unresolved>'}): ${msg}`,
+        `Failed to initialize ResourceChangeTracker (state.db at ${runtimeDbPath}): ${msg}`,
         { cause: error }
       );
     }
@@ -341,22 +338,18 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
   const frameworkRoots = resolveResourceRoots(
     pathResolver,
     'frameworks',
-    pathResolver?.getFrameworksPath()
+    pathResolver.getFrameworksPath()
   );
   const frameworkLoader = getDefaultRuntimeLoader(
     loaderDirsConfig(frameworkRoots, 'frameworksDir', 'additionalFrameworksDirs')
   );
 
   if (isVerbose) logger.info('🔄 Initializing Framework State Manager...');
-  const frameworkStateRoot =
-    typeof configManager.getServerRoot === 'function'
-      ? configManager.getServerRoot()
-      : path.dirname(configManager.getConfigPath());
   const currentFrameworkConfig = configManager.getFrameworksConfig();
   // Read before construction: the store seeds its in-memory default state from this value,
   // so supplying it afterwards would leave the seed on the built-in fallback.
   const workspaceId = configManager.getConfig().identity.launchDefaults.workspaceId;
-  const frameworkStateStore = await createFrameworkStateStore(logger, frameworkStateRoot, {
+  const frameworkStateStore = await createFrameworkStateStore(logger, runtimeDbPath, {
     // Read through the config manager each time, not copied now: it reloads `config.json` when
     // the file changes, so the fallback follows an edited `frameworks.defaultFramework` exactly as
     // the delete refusal in `resource_manager` does, without a restart.
@@ -380,7 +373,7 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
   // resolved through `getGatesPath()` since Arc 1. The two only agreed on a default install. It
   // also made the startup inventory report a root the gates had not been read from: measured
   // 2026-08-28, `gates: 25 — <workspace>/resources/gates` for a directory holding one gate.
-  const gateRoots = resolveResourceRoots(pathResolver, 'gates', pathResolver?.getGatesPath());
+  const gateRoots = resolveResourceRoots(pathResolver, 'gates', pathResolver.getGatesPath());
   const gateManager = await createGateManager(logger, {
     registryConfig: {
       loaderConfig: loaderDirsConfig(gateRoots, 'gatesDir', 'additionalGatesDirs'),
@@ -416,7 +409,7 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
 
   // Initialize the style loader with PathResolver-resolved dirs, for the same reason as the
   // framework loader above: PathResolver is the SSOT for directory resolution and enables overlays.
-  const styleRoots = resolveResourceRoots(pathResolver, 'styles', pathResolver?.getStylesPath());
+  const styleRoots = resolveResourceRoots(pathResolver, 'styles', pathResolver.getStylesPath());
   const styleLoader = getDefaultStyleDefinitionLoader(
     loaderDirsConfig(styleRoots, 'stylesDir', 'additionalStylesDirs')
   );
@@ -565,39 +558,15 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
   // Index resources to SQLite for hook consumption (prompt-suggest, etc.)
   if (serverRoot !== undefined && serverRoot !== '') {
     try {
-      const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
-      const { createResourceIndexer, reportSyncFindings } =
-        await import('#infra/database/resource-indexer.js');
-      const { ScriptToolDefinitionLoader } =
-        await import('#modules/automation/core/script-definition-loader.js');
-      const dbManager = await SqliteEngine.getInstance(serverRoot, logger);
-      await dbManager.initialize();
-      const resourcesDir = pathResolver?.getResourcesPath() ?? path.join(serverRoot, 'resources');
-      const scriptLoader = new ScriptToolDefinitionLoader({ validateOnLoad: true });
-      const indexer = createResourceIndexer(dbManager, logger, {
-        resourcesDir,
-        resourceRoots: indexerResourceRoots(pathResolver),
-        toolLoader: (dir, id) => scriptLoader.loadAllToolsForPromptDetailed(dir, id),
+      await syncResourceIndex({
+        pathResolver,
+        logger,
         // Assembled above and returned to `Application`, so this walk and the hot-reload walk
-        // read one view rather than two that can drift. All four directory-form kinds are in it
-        // (P4.16 closed `style`, the last kind the indexer walked with no refusal record at all);
-        // the change tracker's narrower merge is `trackedQuarantine`, which this one extends.
-        quarantine: indexQuarantine,
+        // read one view rather than two that can drift. The change tracker's narrower merge is
+        // `trackedQuarantine`, which this one extends.
+        indexQuarantine,
+        afterSync: (database) => logIndexReconciliation(logger, database, convertedPrompts),
       });
-      const syncResult = await indexer.syncAll();
-      reportSyncFindings(syncResult, logger);
-      // The index and the catalog are two derivations of one question; compare them rather than
-      // assuming they agree, which is how they came to disagree by 41 prompts unnoticed.
-      const indexedPromptIds = dbManager
-        .query<{ id: string }>("SELECT id FROM resource_index WHERE type = 'prompt'")
-        .map((row) => row.id);
-      for (const line of formatIndexReconciliation(
-        convertedPrompts.map((prompt) => prompt.id),
-        indexedPromptIds
-      )) {
-        logger.warn(line);
-      }
-      if (isVerbose) logger.info('✅ ResourceIndexer synced to SQLite');
     } catch (error) {
       // `resource_index` is what the Python hooks read; a stale one makes prompt-suggest
       // recommend resources that no longer exist.
@@ -609,7 +578,7 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
       // consistency, not because a test can currently reach it. The unchecked
       // `SyncResult.errors` is a separate silent-failure channel, out of Tier 5's scope.
       const msg = error instanceof Error ? error.message : String(error);
-      throw new Error(`Failed to sync resource index (serverRoot ${serverRoot}): ${msg}`, {
+      throw new Error(`Failed to sync resource index (state.db at ${runtimeDbPath}): ${msg}`, {
         cause: error,
       });
     }

@@ -43,7 +43,9 @@ describe('SQLite State Backend', () => {
 
   describe('SqliteEngine', () => {
     it('should initialize and create state.db', async () => {
-      dbManager = await SqliteEngine.getInstance(testDir, mockLogger as any);
+      dbManager = await SqliteEngine.getInstance(mockLogger as any, {
+        dbPath: path.join(testDir, 'runtime-state', 'state.db'),
+      });
       await dbManager.initialize();
 
       // Verify state.db was created (node:sqlite writes directly to disk)
@@ -199,7 +201,9 @@ describe('Schema version bump', () => {
     await fs.rm(testDir, { recursive: true, force: true });
     await fs.mkdir(testDir, { recursive: true });
 
-    engine = await SqliteEngine.getInstance(testDir, mockLogger as any);
+    engine = await SqliteEngine.getInstance(mockLogger as any, {
+      dbPath: path.join(testDir, 'runtime-state', 'state.db'),
+    });
     await engine.initialize();
 
     // A durable row: a resource snapshot backing rollback. Exists nowhere else.
@@ -252,7 +256,9 @@ describe('Schema version bump', () => {
     engine.run(`INSERT INTO schema_version (version) VALUES (?)`, [1]);
     await engine.shutdown();
 
-    engine = await SqliteEngine.getInstance(testDir, mockLogger as any);
+    engine = await SqliteEngine.getInstance(mockLogger as any, {
+      dbPath: path.join(testDir, 'runtime-state', 'state.db'),
+    });
     await engine.initialize();
   });
 

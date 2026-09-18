@@ -102,35 +102,56 @@ describe('the verdict', () => {
 
 describe('a known leak', () => {
   const BASE = ['!! node_modules'];
+  // Fabricated: the list is empty since B.62 fixed its one entry, and the mechanism must still
+  // route a declared leak correctly the next time one is needed.
+  const FAKE_LEAK = {
+    prefix: 'server/leaky-dir/',
+    file: 'src/index.ts',
+    anchor: 'unused',
+    defect: 'fabricated for this test',
+    asOf: '2026-09-16',
+    flipsWhen: 'never — test fixture',
+  };
 
   it('is reported apart from both `leaked` and `declared`', () => {
-    const verdict = guard.classify(BASE, [...BASE, '!! server/runtime-state/']);
+    const verdict = guard.classify(BASE, [...BASE, '!! server/leaky-dir/'], [FAKE_LEAK]);
     expect(verdict.leaked).toEqual([]);
     expect(verdict.declared).toEqual([]);
-    expect(verdict.knownLeaks).toEqual(['!! server/runtime-state/']);
+    expect(verdict.knownLeaks).toEqual(['!! server/leaky-dir/']);
   });
 
   it('does not shelter a sibling path that merely shares a prefix word', () => {
-    // `runtime-state/` at the REPO root is the leak the HOME/runtime-root pair fixed; it must stay
-    // a failure, not ride on the server-root entry.
-    const verdict = guard.classify(BASE, [...BASE, '!! runtime-state/']);
-    expect(verdict.leaked).toEqual(['!! runtime-state/']);
+    const verdict = guard.classify(BASE, [...BASE, '!! leaky-dir/'], [FAKE_LEAK]);
+    expect(verdict.leaked).toEqual(['!! leaky-dir/']);
+  });
+
+  /**
+   * B.62's regression pin. `server/runtime-state/` was the one known leak — `verify-state.db`
+   * placed under the package directory — and the fix deleted its entry, so a run that writes there
+   * again is a plain failure rather than a reported-and-excused one.
+   */
+  it('reports server/runtime-state/ as a leak now that nothing excuses it', () => {
+    const verdict = guard.classify(BASE, [...BASE, '!! server/runtime-state/']);
+    expect(verdict.leaked).toEqual(['!! server/runtime-state/']);
+    expect(verdict.knownLeaks).toEqual([]);
   });
 
   /**
    * The satisfied-exception check. Each entry names the source line that causes it; when the
    * line is gone the defect is fixed, and an entry that outlives its cause would silently excuse
    * whatever writes to that path NEXT. So this fails, and the fix has to delete the entry.
+   *
+   * A loop rather than `it.each`, which refuses an empty table — and the table is empty whenever
+   * no leak is open, which is the state this check exists to reach.
    */
-  it.each(guard.KNOWN_LEAKS.map((entry) => [entry.prefix, entry] as const))(
-    '%s still has its cause at HEAD — delete the entry if this fails',
-    (_prefix, entry) => {
+  it('every entry still has its cause at HEAD — delete the entry if this fails', () => {
+    for (const entry of guard.KNOWN_LEAKS) {
       const source = readFileSync(path.join(SERVER_ROOT, entry.file), 'utf8');
       expect(source).toContain(entry.anchor);
       expect(entry.asOf).toMatch(/^\d{4}-\d{2}-\d{2}$/);
       expect(entry.flipsWhen.length).toBeGreaterThan(10);
     }
-  );
+  });
 });
 
 describe('the porcelain path parser', () => {

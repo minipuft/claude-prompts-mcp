@@ -54,8 +54,7 @@ let trackerInstance: ResourceChangeTracker | undefined;
  */
 export async function initializeResourceChangeTracker(
   logger: Logger,
-  serverRoot: string,
-  dbPath?: string,
+  dbPath: string,
   defaultScope?: StateStoreOptions
 ): Promise<ResourceChangeTracker> {
   if (trackerInstance !== undefined) {
@@ -64,8 +63,7 @@ export async function initializeResourceChangeTracker(
   }
 
   trackerInstance = createResourceChangeTracker(logger, {
-    serverRoot,
-    ...(dbPath !== undefined ? { dbPath } : {}),
+    dbPath,
     maxEntries: 1000,
     trackPrompts: true,
     trackGates: true,

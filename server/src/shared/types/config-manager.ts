@@ -129,6 +129,10 @@ export interface ConfigManager {
    */
   getBundledResourceDirectory(resourceType: string): string | undefined;
   getOverlayResourceDirectories(resourceType: string, primaryDir?: string): string[];
+  /** The writable runtime state directory (`state.db`, `verify-state.db`). Never the package. */
+  getRuntimeStateDirectory(): string;
+  /** The server's `state.db`, inside the runtime state directory. */
+  getStateDatabasePath(): string;
 
   // ── Config reload ────────────────────────────────────────────────────
 
