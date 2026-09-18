@@ -26,7 +26,12 @@ describe('discoverResourcePaths imported from source', () => {
 
   it('lists a grouped prompt', () => {
     expect(discoverResourcePaths(root, 'prompt.yaml', true)).toEqual([
-      { id: 'greet', dir: join(root, 'general', 'greet') },
+      {
+        id: 'greet',
+        form: 'dir',
+        dir: join(root, 'general', 'greet'),
+        file: join(root, 'general', 'greet', 'prompt.yaml'),
+      },
     ]);
   });
 });

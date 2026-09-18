@@ -38,7 +38,11 @@ const DEFAULT_MAX_VERSIONS = 50;
 
 type ResourceType = 'prompt' | 'gate' | 'framework' | 'style';
 
-interface ResourceRef {
+/**
+ * Which resource a history call is about. Pass it whenever the caller knows the id, because the
+ * fallback derivation below reads only the path's last segment.
+ */
+export interface HistoryResourceRef {
   resourceType: ResourceType;
   resourceId: string;
 }
@@ -86,7 +90,14 @@ interface HistoryResponse {
   snapshot?: Record<string, unknown>;
 }
 
-function resolveResourceRef(resourceDir: string): ResourceRef | null {
+/**
+ * Guess the resource a path belongs to from its LAST segment. That is the id only for a directory
+ * sitting directly in its kind's root or category. A nested prompt is served under its path below
+ * the category (`chain/step`), and a single-file prompt's last segment is `{id}.yaml`, so for those
+ * this guess names a different resource. A caller that holds the id passes a
+ * {@link HistoryResourceRef} instead, which is what `cpm` does for every history read and delete.
+ */
+function resolveResourceRef(resourceDir: string): HistoryResourceRef | null {
   const normalized = normalize(resourceDir).replace(/\\/g, '/');
   const segments = normalized.split('/').filter((segment) => segment !== '');
   const id = segments.length > 0 ? segments[segments.length - 1] : undefined;
@@ -489,9 +500,10 @@ function isNonEmptyString(value: string | undefined): value is string {
 function createRequest(
   resourceDir: string,
   action: HistoryRequest['action'],
-  overrides?: Partial<Pick<HistoryRequest, 'resource_type' | 'resource_id'>>
+  overrides?: Partial<Pick<HistoryRequest, 'resource_type' | 'resource_id'>>,
+  knownRef?: HistoryResourceRef
 ): Partial<HistoryRequest> | null {
-  const ref = resolveResourceRef(resourceDir);
+  const ref = knownRef ?? resolveResourceRef(resourceDir);
   const dbPath = resolveStateDbPath(resourceDir);
   const resourceType = overrides?.resource_type ?? ref?.resourceType;
   const resourceId = overrides?.resource_id ?? ref?.resourceId;
@@ -508,8 +520,8 @@ function createRequest(
 
 // ── Read operations ─────────────────────────────────────────────────────────
 
-export function loadHistory(resourceDir: string): HistoryFile | null {
-  const request = createRequest(resourceDir, 'load_history');
+export function loadHistory(resourceDir: string, ref?: HistoryResourceRef): HistoryFile | null {
+  const request = createRequest(resourceDir, 'load_history', undefined, ref);
   if (request === null) {
     return null;
   }
@@ -535,14 +547,15 @@ export function getVersion(resourceDir: string, version: number): VersionEntry |
 export function compareVersions(
   resourceDir: string,
   fromVersion: number,
-  toVersion: number
+  toVersion: number,
+  ref?: HistoryResourceRef
 ): {
   success: boolean;
   from?: VersionEntry;
   to?: VersionEntry;
   error?: string;
 } {
-  const request = createRequest(resourceDir, 'compare_versions');
+  const request = createRequest(resourceDir, 'compare_versions', undefined, ref);
   if (request === null) {
     return { success: false, error: 'Unable to resolve resource DB path' };
   }
@@ -673,8 +686,8 @@ export function rollbackVersion(
  * it entirely. It is live and load-bearing: `deleteResourceDir` calls it, so removing a resource
  * directory purges its history.
  */
-export function deleteVersionRows(resourceDir: string): boolean {
-  const request = createRequest(resourceDir, 'delete_history');
+export function deleteVersionRows(resourceDir: string, ref?: HistoryResourceRef): boolean {
+  const request = createRequest(resourceDir, 'delete_history', undefined, ref);
   if (request === null) {
     return false;
   }
