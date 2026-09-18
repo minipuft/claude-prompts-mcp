@@ -34,7 +34,6 @@ export {
 } from './runtime-framework-loader.js';
 export type {
   RuntimeFrameworkLoaderConfig,
-  LoaderStats,
   FrameworkSchemaValidationResult as FrameworkDraftValidationResult,
 } from './runtime-framework-loader.js';
 

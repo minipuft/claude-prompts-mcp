@@ -126,45 +126,6 @@ export class VerifyActiveStateStore {
     }
   }
 
-  /**
-   * Read current verify-active state (for Stop hook use).
-   *
-   * @returns The current state, or null if no active verification
-   */
-  async readState(sessionId?: string): Promise<VerifyActiveState | null> {
-    try {
-      return this.withDb((db) => {
-        const row =
-          sessionId !== undefined
-            ? db
-                .prepare('SELECT state_json FROM verify_active_state WHERE session_id = ?')
-                .get(sessionId)
-            : db.prepare('SELECT state_json FROM verify_active_state LIMIT 1').get();
-
-        if (row === undefined) {
-          return null;
-        }
-
-        const raw = (row as Record<string, unknown>)['state_json'];
-        if (typeof raw !== 'string' || raw.trim() === '') {
-          return null;
-        }
-        return JSON.parse(raw) as VerifyActiveState;
-      });
-    } catch (error) {
-      this.logger.warn('[VerifyActiveStateStore] Failed to read verify-state.db:', error);
-      return null;
-    }
-  }
-
-  /**
-   * Check if there's an active verification pending.
-   */
-  async hasActiveVerification(): Promise<boolean> {
-    const state = await this.readState();
-    return state !== null;
-  }
-
   // === Private: SQLite helpers ===
 
   /**

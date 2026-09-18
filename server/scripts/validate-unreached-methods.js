@@ -47,6 +47,16 @@
  * names it with `--allow-increase <Class.method> "<reason>"`, and the reason is written into the
  * baseline's `overrideLog` — the same ceiling rule `knip-ratchet.js` enforces per category.
  *
+ * KEPT-ON-PURPOSE REASONS. An optional `reasons` map, `{ "Class.method": "why" }`, records why a
+ * survivor stays unreached instead of getting deleted — an owner API kept for an external or
+ * dynamic caller, for example. It is documentation, not an exemption: a reasoned entry still
+ * counts toward the ratchet and still fails the check like any other baseline entry if it stops
+ * appearing. What IS enforced is the reverse direction — a `reasons` key naming a method no
+ * longer in `methods` is a stale exception the same way an unmarked baseline entry is
+ * (`cleanup-standards.md` "A Status Outlives What It Described"), and `check` fails on it by
+ * name. Regenerating the baseline drops a reason automatically once its method is gone, the same
+ * way a stale baseline entry drops — no flag needed.
+ *
  * Usage:
  * - Check (default, in validate:all):  `npm run validate:unreached-methods`
  * - Update baseline (intentional):     `npm run unreached-methods:baseline`
@@ -247,6 +257,14 @@ export function findUnauthorizedAdditions(added, overrides) {
   return [...new Set(added)].filter((key) => !overrides.has(key)).sort();
 }
 
+/** `reasons` keys that name no entry in `methods` — a stale exception (cleanup-standards.md). */
+export function findStaleReasonKeys(reasons, methods) {
+  const methodSet = new Set(methods);
+  return Object.keys(reasons ?? {})
+    .filter((key) => !methodSet.has(key))
+    .sort();
+}
+
 // ---------------------------------------------------------------------------------------------
 // Modes
 // ---------------------------------------------------------------------------------------------
@@ -303,11 +321,20 @@ async function handleUpdateBaseline(argv) {
     }
   }
 
+  // A reason drops automatically once its method is gone — the same free cleanup a stale
+  // baseline entry gets. What is NOT free is a reason surviving for a method the writer never
+  // re-added; `findStaleReasonKeys` is what `check` uses to catch that by hand-editing instead.
+  const currentKeySet = new Set(currentKeys);
+  const carriedReasons = Object.fromEntries(
+    Object.entries(previous?.reasons ?? {}).filter(([key]) => currentKeySet.has(key))
+  );
+
   const baseline = {
     schemaVersion: 1,
     generatedAt,
     total: currentKeys.length,
     methods: currentKeys,
+    ...(Object.keys(carriedReasons).length > 0 ? { reasons: carriedReasons } : {}),
     ...(overrideLog.length > 0 ? { overrideLog } : {}),
   };
   await writeFile(BASELINE_PATH, `${JSON.stringify(baseline, null, 2)}\n`, 'utf8');
@@ -318,6 +345,17 @@ async function handleUpdateBaseline(argv) {
 
 async function handleCheck() {
   const baseline = await loadBaselineOrThrow();
+  const staleReasonKeys = findStaleReasonKeys(baseline.reasons, baseline.methods ?? []);
+  if (staleReasonKeys.length > 0) {
+    throw new Error(
+      [
+        `${TAG} FAIL: ${staleReasonKeys.length} "reasons" entry(ies) name a baseline method that no longer exists:`,
+        ...staleReasonKeys.map((key) => `- ${key}`),
+        '',
+        'Drop the stale reason, or restore the baseline entry it explains.',
+      ].join('\n')
+    );
+  }
   const scan = scanRepository();
   const { added, stale } = compareToBaseline(
     baseline.methods ?? [],
@@ -466,6 +504,19 @@ function runSelfTest() {
   check(
     'a named override authorizes that entry and no other',
     findUnauthorizedAdditions(['D.w', 'E.v'], new Map([['D.w', 'reason']])).join() === 'E.v'
+  );
+  check(
+    'a reason naming an entry no longer in the baseline is stale',
+    findStaleReasonKeys({ 'A.x': 'kept on purpose', 'Z.gone': 'stale' }, ['A.x', 'B.y']).join() ===
+      'Z.gone'
+  );
+  check(
+    'reasons matching every baseline entry produce no stale keys',
+    findStaleReasonKeys({ 'A.x': 'kept on purpose' }, ['A.x', 'B.y']).length === 0
+  );
+  check(
+    'no reasons map produces no stale keys',
+    findStaleReasonKeys(undefined, ['A.x']).length === 0
   );
   check(
     'parseAllowIncreaseArgs reads repeatable pairs and rejects an incomplete one',

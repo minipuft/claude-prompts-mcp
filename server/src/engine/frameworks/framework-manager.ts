@@ -12,7 +12,7 @@
  */
 
 import { FrameworkRegistry, createFrameworkRegistry } from './definitions/index.js';
-import { SHIPPED_FRAMEWORK_IDS, isShippedFrameworkId } from './definitions/shipped-frameworks.js';
+import { isShippedFrameworkId } from './definitions/shipped-frameworks.js';
 import { substituteTemplateVariables } from './prompt-guidance/template-variables.js';
 import {
   FrameworkDefinition,
@@ -433,17 +433,6 @@ export class FrameworkManager extends BaseResourceHandler<
   }
 
   /**
-   * Check if a framework exists and is enabled
-   *
-   * @param id - Framework identifier (case-insensitive)
-   * @returns true if framework exists and is enabled
-   */
-  isFrameworkEnabled(id: string): boolean {
-    const framework = this.getFramework(id);
-    return framework?.enabled ?? false;
-  }
-
-  /**
    * Get list of framework IDs
    *
    * @param enabledOnly - Only return enabled frameworks (default: false)
@@ -468,11 +457,6 @@ export class FrameworkManager extends BaseResourceHandler<
    */
   isShippedFramework(id: string): boolean {
     return isShippedFrameworkId(id);
-  }
-
-  /** The shipped set, for callers that need to name it rather than test one id. */
-  getShippedFrameworkIds(): readonly string[] {
-    return SHIPPED_FRAMEWORK_IDS;
   }
 
   /**
@@ -527,14 +511,6 @@ export class FrameworkManager extends BaseResourceHandler<
   getFrameworkGuide(frameworkId: string): FrameworkGuide | undefined {
     this.ensureInitialized();
     return this.frameworkRegistry!.getGuide(frameworkId.toLowerCase());
-  }
-
-  /**
-   * List available framework guides
-   */
-  listFrameworkGuides(): FrameworkGuide[] {
-    this.ensureInitialized();
-    return this.frameworkRegistry!.getAllGuides(true);
   }
 
   /**
