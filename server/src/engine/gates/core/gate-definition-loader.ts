@@ -120,11 +120,12 @@ export class GateDefinitionLoader {
     // Built from the RAW list, before the filter below: the primary's rank is a position in that
     // list, and filtering it out first would drop it to the end — behind the bundled tree.
     this.lookupDirs = resourceLookupOrder(this.gatesDir, config.additionalGatesDirs ?? []);
-    // Reported and watched, not looked up. Keeps its long-standing meaning — the directories
-    // BESIDE the primary that actually exist — so `getWatchDirectories()` neither repeats the
-    // primary nor hands the watcher a path that is not there.
+    // Reported and watched, not looked up: the directories BESIDE the primary, so
+    // `getWatchDirectories()` does not repeat it. Absent ones stay in — a workspace overlay created
+    // while the server runs must be watched, and the observer arms on it once it appears. Filtering
+    // by existence here, once, left such an overlay unwatched until a restart.
     this.additionalGatesDirs = (config.additionalGatesDirs ?? []).filter(
-      (dir) => existsSync(dir) && dir !== this.gatesDir
+      (dir) => dir !== this.gatesDir
     );
     this.enableCache = config.enableCache ?? true;
     this.debug = config.debug ?? false;

@@ -18,6 +18,8 @@
  * feeding a loader's `{primary, additional[]}` shape use {@link ResourceRoots} directly.
  */
 
+import { existsSync } from 'node:fs';
+
 import type { ResourceRootMap } from '#infra/database/resource-indexer.js';
 import type { PathResolver } from './paths.js';
 
@@ -27,7 +29,13 @@ import { resourceRootPrecedence } from '#shared/utils/resource-root-lookup.js';
 export interface ResourceRoots {
   /** The writable root: where a `resource_manager` write lands, and what the inventory reports. */
   primary: string | undefined;
-  /** Workspace directories layered over the primary. Highest precedence, later entry wins. */
+  /**
+   * Workspace directories layered over the primary. Highest precedence, later entry wins.
+   *
+   * Includes a candidate that does not exist yet: every consumer of this set fixes it once, at
+   * startup, and an overlay created later must still be read and watched. An absent root reads
+   * as empty. Report only the ones that exist ({@link existingOverlays}).
+   */
   overlays: string[];
   /** The package's own directory, when it is a source distinct from the primary. Lowest. */
   bundled: string | undefined;
@@ -67,11 +75,16 @@ export function resolveResourceRoots(
   resourceType: string,
   primary: string | undefined
 ): ResourceRoots {
-  const overlays = pathResolver?.getOverlayResourceDirs(resourceType, primary) ?? [];
+  const overlays = pathResolver?.getOverlayResourceCandidates(resourceType, primary) ?? [];
   const candidate = pathResolver?.getBundledResourceDir(resourceType);
   const bundled = candidate !== undefined && candidate !== primary ? candidate : undefined;
   const lookupDirs = resourceRootPrecedence({ primary, overlays, bundled });
   return { primary, overlays, bundled, lookupDirs };
+}
+
+/** The overlays that exist right now — what an inventory line may honestly report. */
+export function existingOverlays(roots: ResourceRoots): string[] {
+  return roots.overlays.filter((dir) => existsSync(dir));
 }
 
 /**

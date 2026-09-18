@@ -31,8 +31,8 @@ import { createResourceChangeTracker } from '../../../src/infra/observability/tr
 import { PromptLoader } from '../../../src/modules/prompts/loader.js';
 import { compareResourceBaseline } from '../../../src/runtime/resource-change-tracking.js';
 
-import type { ConfigLoader } from '../../../src/infra/config/index.js';
 import type { ResourceChangeTracker } from '../../../src/infra/observability/tracking/index.js';
+import type { TrackedResourceRoots } from '../../../src/runtime/resource-change-tracking.js';
 import type { QuarantineView } from '../../../src/shared/utils/resource-quarantine.js';
 import { testScratchPath } from '../../helpers/scratch-path.js';
 
@@ -49,16 +49,13 @@ const GATES_DIR = path.join(TEST_DIR, 'resources', 'gates');
 const CATEGORY = 'general';
 
 /**
- * The two config accessors `compareResourceBaseline` reads, and nothing else.
+ * The roots `compareResourceBaseline` walks: one prompts root and one gates root.
  *
- * Both resolve through `PathResolver` in production, which is the same resolver the prompt loader
- * reads — the reason the two walks agree on a path at all. Naming one directory here preserves
- * that relationship rather than papering over it.
+ * Both resolve through `PathResolver` in production (`trackedResourceRoots`), which is the same
+ * resolver the prompt loader reads — the reason the two walks agree on a path at all. Naming one
+ * directory each here preserves that relationship rather than papering over it.
  */
-const configStub = {
-  getResolvedPromptsDirectory: () => PROMPTS_DIR,
-  getGatesDirectory: () => GATES_DIR,
-} as unknown as ConfigLoader;
+const trackedRoots: TrackedResourceRoots = { prompt: [PROMPTS_DIR], gate: [GATES_DIR] };
 
 const validPrompt = (id: string): string =>
   [
@@ -145,7 +142,12 @@ describe('compareResourceBaseline refusal awareness', () => {
     // Fixture control: the loader really refused exactly one of the two files.
     expect(quarantine.list().map((record) => record.id)).toEqual(['broken_prompt']);
 
-    const result = await compareResourceBaseline(tracker, configStub, logger as never, quarantine);
+    const result = await compareResourceBaseline(
+      tracker,
+      trackedRoots,
+      logger as never,
+      quarantine
+    );
 
     expect(result.refused).toBe(1);
     // The absence...
@@ -161,7 +163,7 @@ describe('compareResourceBaseline refusal awareness', () => {
 
     // Pre-P4.14 behaviour as a live control: the walk reads the file, so it reports an addition
     // for a prompt the catalog never accepted.
-    const result = await compareResourceBaseline(tracker, configStub, logger as never);
+    const result = await compareResourceBaseline(tracker, trackedRoots, logger as never);
 
     expect(result.added).toBe(1);
     expect(result.refused).toBe(0);
@@ -172,7 +174,7 @@ describe('compareResourceBaseline refusal awareness', () => {
     await writePrompt('drifting_prompt', validPrompt('drifting_prompt'));
     const first = await compareResourceBaseline(
       tracker,
-      configStub,
+      trackedRoots,
       logger as never,
       await loadAndQuarantine()
     );
@@ -181,7 +183,7 @@ describe('compareResourceBaseline refusal awareness', () => {
     await writePrompt('drifting_prompt', refusedPrompt('drifting_prompt'));
     const second = await compareResourceBaseline(
       tracker,
-      configStub,
+      trackedRoots,
       logger as never,
       await loadAndQuarantine()
     );
@@ -196,13 +198,18 @@ describe('compareResourceBaseline refusal awareness', () => {
 
   it('logs added when a never-valid file is repaired, because it was never cached', async () => {
     await writePrompt('repairable', refusedPrompt('repairable'));
-    await compareResourceBaseline(tracker, configStub, logger as never, await loadAndQuarantine());
+    await compareResourceBaseline(
+      tracker,
+      trackedRoots,
+      logger as never,
+      await loadAndQuarantine()
+    );
     expect(operationsFor('repairable')).toEqual([]);
 
     await writePrompt('repairable', validPrompt('repairable'));
     const repaired = await compareResourceBaseline(
       tracker,
-      configStub,
+      trackedRoots,
       logger as never,
       await loadAndQuarantine()
     );
@@ -240,7 +247,7 @@ describe('compareResourceBaseline refusal awareness', () => {
 
       const result = await compareResourceBaseline(
         tracker,
-        configStub,
+        trackedRoots,
         logger as never,
         loader.getQuarantine()
       );
@@ -271,7 +278,7 @@ describe('compareResourceBaseline refusal awareness', () => {
 
       const result = await compareResourceBaseline(
         tracker,
-        configStub,
+        trackedRoots,
         logger as never,
         await loadAndQuarantine()
       );
@@ -295,7 +302,7 @@ describe('compareResourceBaseline refusal awareness', () => {
 
       const result = await compareResourceBaseline(
         tracker,
-        configStub,
+        trackedRoots,
         logger as never,
         loader.getQuarantine()
       );
@@ -321,7 +328,7 @@ describe('compareResourceBaseline refusal awareness', () => {
 
       const result = await compareResourceBaseline(
         tracker,
-        configStub,
+        trackedRoots,
         logger as never,
         loader.getQuarantine()
       );
@@ -365,7 +372,7 @@ describe('compareResourceBaseline refusal awareness', () => {
 
       const result = await compareResourceBaseline(
         tracker,
-        configStub,
+        trackedRoots,
         logger as never,
         loader.getQuarantine()
       );
@@ -386,7 +393,7 @@ describe('compareResourceBaseline refusal awareness', () => {
       await writePrompt(stepDir, validPrompt('step_one'));
       await compareResourceBaseline(
         tracker,
-        configStub,
+        trackedRoots,
         logger as never,
         await loadAndQuarantine()
       );
@@ -394,7 +401,7 @@ describe('compareResourceBaseline refusal awareness', () => {
       await writePrompt(stepDir, `${validPrompt('step_one')}# edited outside the server\n`);
       const second = await compareResourceBaseline(
         tracker,
-        configStub,
+        trackedRoots,
         logger as never,
         await loadAndQuarantine()
       );
@@ -428,7 +435,7 @@ describe('compareResourceBaseline refusal awareness', () => {
 
       const result = await compareResourceBaseline(
         tracker,
-        configStub,
+        trackedRoots,
         logger as never,
         loader.getQuarantine()
       );
@@ -441,15 +448,25 @@ describe('compareResourceBaseline refusal awareness', () => {
 
   it('logs modified when a previously-valid file is broken and then repaired', async () => {
     await writePrompt('round_trip', validPrompt('round_trip'));
-    await compareResourceBaseline(tracker, configStub, logger as never, await loadAndQuarantine());
+    await compareResourceBaseline(
+      tracker,
+      trackedRoots,
+      logger as never,
+      await loadAndQuarantine()
+    );
 
     await writePrompt('round_trip', refusedPrompt('round_trip'));
-    await compareResourceBaseline(tracker, configStub, logger as never, await loadAndQuarantine());
+    await compareResourceBaseline(
+      tracker,
+      trackedRoots,
+      logger as never,
+      await loadAndQuarantine()
+    );
 
     await writePrompt('round_trip', `${validPrompt('round_trip')}# repaired\n`);
     const repaired = await compareResourceBaseline(
       tracker,
-      configStub,
+      trackedRoots,
       logger as never,
       await loadAndQuarantine()
     );
