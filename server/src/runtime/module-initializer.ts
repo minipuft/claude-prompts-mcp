@@ -9,6 +9,8 @@ import * as path from 'node:path';
 import {
   initializeResourceChangeTracker,
   compareResourceBaseline,
+  trackedResourceRoots,
+  type TrackedResourceRoots,
 } from './resource-change-tracking.js';
 import {
   formatIndexReconciliation,
@@ -152,14 +154,14 @@ async function claimStateDatabase(
  */
 async function compareBaselineAndReport(
   tracker: ResourceChangeTracker,
-  configManager: ConfigLoader,
+  roots: TrackedResourceRoots,
   logger: Logger,
   quarantine: QuarantineView,
   isVerbose: boolean
 ): Promise<void> {
   const { added, modified, removed, refused } = await compareResourceBaseline(
     tracker,
-    configManager,
+    roots,
     logger,
     quarantine
   );
@@ -405,7 +407,7 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
   if (resourceChangeTracker !== undefined) {
     await compareBaselineAndReport(
       resourceChangeTracker,
-      configManager,
+      trackedResourceRoots(configManager, pathResolver),
       logger,
       trackedQuarantine,
       isVerbose

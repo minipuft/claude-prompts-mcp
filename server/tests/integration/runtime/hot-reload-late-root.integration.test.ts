@@ -36,10 +36,12 @@ import { HotReloadObserver } from '../../../src/modules/hot-reload/hot-reload-ob
 import { buildFrameworkAuxiliaryReloadConfig } from '../../../src/runtime/framework-hot-reload.js';
 import { buildGateAuxiliaryReloadConfig } from '../../../src/runtime/gate-hot-reload.js';
 import { PathResolver } from '../../../src/runtime/paths.js';
+import { trackedResourceRoots } from '../../../src/runtime/resource-change-tracking.js';
 import { resolveResourceRoots } from '../../../src/runtime/resource-roots.js';
 import { testScratchPath } from '../../helpers/scratch-path.js';
 
 import type { FrameworkManager } from '../../../src/engine/frameworks/framework-manager.js';
+import type { ConfigLoader } from '../../../src/infra/config/index.js';
 import type { McpToolRouter } from '../../../src/mcp/tools/index.js';
 import type { AuxiliaryReloadConfig } from '../../../src/modules/hot-reload/hot-reload-observer.js';
 import type { HotReloadEvent, Logger } from '../../../src/shared/types/index.js';
@@ -249,7 +251,7 @@ describe('a directory created after the watch armed is reconciled', () => {
 });
 
 describe('an overlay that does not exist yet is still a root', () => {
-  it('is in the lookup order and the loader watch list', async () => {
+  it('is in the lookup order, the loader watch list, and the change tracker roots — but no bundled tree is tracked', async () => {
     const packageRoot = await scratch('late-root-package');
     const workspace = await scratch('late-root-workspace');
     for (const type of ['prompts', 'gates', 'frameworks', 'styles']) {
@@ -311,5 +313,14 @@ describe('an overlay that does not exist yet is still a root', () => {
     expect(watched[0]).toContain(path.join(workspace, 'gates'));
     expect(watched[1]).toContain(path.join(workspace, 'frameworks'));
     expect(watched[2]).toContain(path.join(workspace, 'styles'));
+
+    const configManager = {
+      getResolvedPromptsDirectory: () => path.join(workspace, 'resources', 'prompts'),
+      getGatesDirectory: () => path.join(workspace, 'resources', 'gates'),
+    } as unknown as ConfigLoader;
+    expect(trackedResourceRoots(configManager, resolver)).toEqual({
+      prompt: [path.join(workspace, 'prompts'), path.join(workspace, 'resources', 'prompts')],
+      gate: [path.join(workspace, 'gates'), path.join(workspace, 'resources', 'gates')],
+    });
   });
 });
