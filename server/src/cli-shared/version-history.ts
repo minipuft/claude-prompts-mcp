@@ -39,8 +39,14 @@ const DEFAULT_MAX_VERSIONS = 50;
 type ResourceType = 'prompt' | 'gate' | 'framework' | 'style';
 
 /**
- * Which resource a history call is about. Pass it whenever the caller knows the id, because the
- * fallback derivation below reads only the path's last segment.
+ * Which resource a history call is about: its type and the id it is served under — for a nested
+ * prompt the composite `chain/step`, never its last segment.
+ *
+ * Every read, compare, delete and rename takes one, and none of them derives it from the path they
+ * are given, which is only used to find `state.db`. A path cannot name a resource: a nested step's
+ * last segment is another prompt's id, a single-file prompt's is `{id}.yaml`, and a workspace
+ * sitting under a directory named `prompts` made a gate read as a prompt. The derivation that did
+ * this was deleted once every caller could pass the ref instead.
  */
 export interface HistoryResourceRef {
   resourceType: ResourceType;
@@ -88,36 +94,6 @@ interface HistoryResponse {
   saved_version?: number;
   restored_version?: number;
   snapshot?: Record<string, unknown>;
-}
-
-/**
- * Guess the resource a path belongs to from its LAST segment. That is the id only for a directory
- * sitting directly in its kind's root or category. A nested prompt is served under its path below
- * the category (`chain/step`), and a single-file prompt's last segment is `{id}.yaml`, so for those
- * this guess names a different resource. A caller that holds the id passes a
- * {@link HistoryResourceRef} instead, which is what `cpm` does for every history read and delete.
- */
-function resolveResourceRef(resourceDir: string): HistoryResourceRef | null {
-  const normalized = normalize(resourceDir).replace(/\\/g, '/');
-  const segments = normalized.split('/').filter((segment) => segment !== '');
-  const id = segments.length > 0 ? segments[segments.length - 1] : undefined;
-  if (id === undefined || id === '') {
-    return null;
-  }
-
-  if (segments.includes('prompts')) {
-    return { resourceType: 'prompt', resourceId: id };
-  }
-  if (segments.includes('gates')) {
-    return { resourceType: 'gate', resourceId: id };
-  }
-  if (segments.includes('frameworks')) {
-    return { resourceType: 'framework', resourceId: id };
-  }
-  if (segments.includes('styles')) {
-    return { resourceType: 'style', resourceId: id };
-  }
-  return null;
 }
 
 function resolveStateDbPath(resourceDir: string): string | null {
@@ -235,6 +211,13 @@ interface HistoryRow {
 }
 
 const ENTRY_COLUMNS = 'version, snapshot, diff_summary, description, created_at';
+
+/**
+ * Matches a resource id and every id below it; binds the id twice. Appending `/` to the column
+ * makes the id itself and its descendants one prefix test: `chain` and `chain/step` both start
+ * `chain/`, and `chain_other` does not.
+ */
+const SUBTREE_MATCH = `substr(resource_id || '/', 1, length(?) + 1) = ? || '/'`;
 
 function toEntry(row: HistoryRow): VersionEntry {
   return {
@@ -471,11 +454,15 @@ function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): 
       };
     }
 
+    // Delete and rename act on the id AND every id below it (`id/…`). A chain directory holds its
+    // steps, whose history is keyed `chain/step`; removing or renaming the directory removes or
+    // renames them too, so their rows go with it rather than staying behind under ids nothing
+    // serves. The prefix carries the `/`, so `chain_other` is not below `chain`.
     case 'delete_history': {
       db.prepare(
         `DELETE FROM version_history
-         WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?`
-      ).run(tenantId, request.resource_type, request.resource_id);
+         WHERE tenant_id = ? AND resource_type = ? AND ${SUBTREE_MATCH}`
+      ).run(tenantId, request.resource_type, request.resource_id, request.resource_id);
       return { success: true };
     }
 
@@ -485,9 +472,16 @@ function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): 
         return { success: false, error: 'new_resource_id is required' };
       }
       db.prepare(
-        `UPDATE version_history SET resource_id = ?
-         WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?`
-      ).run(newResourceId, tenantId, request.resource_type, request.resource_id);
+        `UPDATE version_history SET resource_id = ? || substr(resource_id, length(?) + 1)
+         WHERE tenant_id = ? AND resource_type = ? AND ${SUBTREE_MATCH}`
+      ).run(
+        newResourceId,
+        request.resource_id,
+        tenantId,
+        request.resource_type,
+        request.resource_id,
+        request.resource_id
+      );
       return { success: true };
     }
   }
@@ -497,22 +491,22 @@ function isNonEmptyString(value: string | undefined): value is string {
   return value !== undefined && value !== '';
 }
 
+/**
+ * The request for one history operation. `resourceDir` only locates `state.db`; which rows the
+ * operation touches is `ref`, always, because a path cannot say which resource it holds.
+ */
 function createRequest(
   resourceDir: string,
   action: HistoryRequest['action'],
-  overrides?: Partial<Pick<HistoryRequest, 'resource_type' | 'resource_id'>>,
-  knownRef?: HistoryResourceRef
+  ref: HistoryResourceRef
 ): Partial<HistoryRequest> | null {
-  const ref = knownRef ?? resolveResourceRef(resourceDir);
   const dbPath = resolveStateDbPath(resourceDir);
-  const resourceType = overrides?.resource_type ?? ref?.resourceType;
-  const resourceId = overrides?.resource_id ?? ref?.resourceId;
-  if (dbPath === null || !isNonEmptyString(resourceType) || !isNonEmptyString(resourceId)) {
+  if (dbPath === null || !isNonEmptyString(ref.resourceType) || !isNonEmptyString(ref.resourceId)) {
     return null;
   }
   return {
-    resource_type: resourceType,
-    resource_id: resourceId,
+    resource_type: ref.resourceType,
+    resource_id: ref.resourceId,
     db_path: dbPath,
     action,
   };
@@ -520,8 +514,8 @@ function createRequest(
 
 // ── Read operations ─────────────────────────────────────────────────────────
 
-export function loadHistory(resourceDir: string, ref?: HistoryResourceRef): HistoryFile | null {
-  const request = createRequest(resourceDir, 'load_history', undefined, ref);
+export function loadHistory(resourceDir: string, ref: HistoryResourceRef): HistoryFile | null {
+  const request = createRequest(resourceDir, 'load_history', ref);
   if (request === null) {
     return null;
   }
@@ -532,8 +526,12 @@ export function loadHistory(resourceDir: string, ref?: HistoryResourceRef): Hist
   return result.history ?? null;
 }
 
-export function getVersion(resourceDir: string, version: number): VersionEntry | null {
-  const request = createRequest(resourceDir, 'get_version');
+export function getVersion(
+  resourceDir: string,
+  version: number,
+  ref: HistoryResourceRef
+): VersionEntry | null {
+  const request = createRequest(resourceDir, 'get_version', ref);
   if (request === null) {
     return null;
   }
@@ -548,14 +546,14 @@ export function compareVersions(
   resourceDir: string,
   fromVersion: number,
   toVersion: number,
-  ref?: HistoryResourceRef
+  ref: HistoryResourceRef
 ): {
   success: boolean;
   from?: VersionEntry;
   to?: VersionEntry;
   error?: string;
 } {
-  const request = createRequest(resourceDir, 'compare_versions', undefined, ref);
+  const request = createRequest(resourceDir, 'compare_versions', ref);
   if (request === null) {
     return { success: false, error: 'Unable to resolve resource DB path' };
   }
@@ -579,10 +577,7 @@ export function saveVersion(
   snapshot: Record<string, unknown>,
   options?: SaveVersionOptions
 ): SaveVersionResult {
-  const request = createRequest(resourceDir, 'save_version', {
-    resource_type: resourceType,
-    resource_id: resourceId,
-  });
+  const request = createRequest(resourceDir, 'save_version', { resourceType, resourceId });
   if (request === null) {
     return { success: false, error: 'Unable to resolve resource DB path' };
   }
@@ -617,10 +612,7 @@ export function recordEditResult(
   producedSnapshot: Record<string, unknown>,
   options?: SaveVersionOptions
 ): SaveVersionResult & { bridged: boolean } {
-  const request = createRequest(resourceDir, 'record_edit_result', {
-    resource_type: resourceType,
-    resource_id: resourceId,
-  });
+  const request = createRequest(resourceDir, 'record_edit_result', { resourceType, resourceId });
   if (request === null) {
     return { success: false, error: 'Unable to resolve resource DB path', bridged: false };
   }
@@ -651,10 +643,7 @@ export function rollbackVersion(
   targetVersion: number,
   currentSnapshot: Record<string, unknown>
 ): RollbackResult & { snapshot?: Record<string, unknown> } {
-  const request = createRequest(resourceDir, 'rollback', {
-    resource_type: resourceType,
-    resource_id: resourceId,
-  });
+  const request = createRequest(resourceDir, 'rollback', { resourceType, resourceId });
   if (request === null) {
     return { success: false, error: 'Unable to resolve resource DB path' };
   }
@@ -678,7 +667,8 @@ export function rollbackVersion(
 }
 
 /**
- * Delete every `version_history` row for the resource that owns `resourceDir`.
+ * Delete every `version_history` row for `ref`, and for every id below it (`ref.resourceId/…`):
+ * a chain's steps go with the chain. `resourceDir` only locates `state.db`.
  *
  * Named for what it does, not for the storage model it predates. It was `deleteHistoryFile` until
  * 2026-08-17 — a name from the retired JSON-sidecar era — which sent anyone grepping
@@ -686,8 +676,8 @@ export function rollbackVersion(
  * it entirely. It is live and load-bearing: `deleteResourceDir` calls it, so removing a resource
  * directory purges its history.
  */
-export function deleteVersionRows(resourceDir: string, ref?: HistoryResourceRef): boolean {
-  const request = createRequest(resourceDir, 'delete_history', undefined, ref);
+export function deleteVersionRows(resourceDir: string, ref: HistoryResourceRef): boolean {
+  const request = createRequest(resourceDir, 'delete_history', ref);
   if (request === null) {
     return false;
   }
@@ -695,16 +685,21 @@ export function deleteVersionRows(resourceDir: string, ref?: HistoryResourceRef)
   return result.success;
 }
 
-export function renameHistoryResource(resourceDir: string, oldId: string, newId: string): boolean {
-  const request = createRequest(resourceDir, 'rename_history', {
-    resource_id: oldId,
-  });
+/**
+ * Re-key `from`'s history to `newId`, and every id below it with it: renaming chain `a` to `b`
+ * carries `a/step` to `b/step`. `resourceDir` only locates `state.db`.
+ */
+export function renameHistoryResource(
+  resourceDir: string,
+  from: HistoryResourceRef,
+  newId: string
+): boolean {
+  const request = createRequest(resourceDir, 'rename_history', from);
   if (request === null) {
     return false;
   }
   const result = runSqlite({
     ...(request as HistoryRequest),
-    resource_id: oldId,
     new_resource_id: newId,
   });
   return result.success;

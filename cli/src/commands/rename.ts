@@ -1,4 +1,4 @@
-import { renameResource, runValidatedMutation } from '@cli-shared/index.js';
+import { renameHistoryResource, renameResource, runValidatedMutation } from '@cli-shared/index.js';
 import {
   resolveWorkspace,
   findResource,
@@ -6,7 +6,7 @@ import {
   scanReferences,
 } from '../lib/workspace.js';
 import { output, icons, color } from '../lib/output.js';
-import { TYPE_MAP, singularName } from '../lib/types.js';
+import { TYPE_MAP, historyRef, singularName } from '../lib/types.js';
 import { printValidationFailure } from '../lib/resource-validation.js';
 
 interface RenameOptions {
@@ -81,6 +81,11 @@ export async function rename(options: RenameOptions): Promise<number> {
     return 1;
   }
   const result = mutation.operation;
+
+  // History follows only a rename that stuck: one that validation rolled back returned above with
+  // its files where they were, and its rows must still be where the files are. Keyed by the
+  // composite id, so a chain's steps (`chain/step`) move with it.
+  renameHistoryResource(result.newPath!, historyRef(type, match.id), options.newId!);
 
   const refs = scanReferences(workspace, options.oldId!);
 

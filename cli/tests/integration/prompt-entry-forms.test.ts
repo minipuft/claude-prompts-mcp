@@ -257,5 +257,49 @@ describe('cpm and the two prompt forms', () => {
       expect(rowCount('chain/step_moved')).toBe(2);
       expect(rowCount('step_dir')).toBe(3);
     });
+
+    it('carries every step’s history, and the chain’s step references, to a renamed chain', () => {
+      writeFile(
+        at('chain', 'prompt.yaml'),
+        body('chain') + 'chainSteps:\n' +
+          '  - promptId: chain/step_dir\n    stepName: Nested\n' +
+          '  - promptId: step_dir\n    stepName: Top level\n',
+      );
+      seed('chain', 1);
+
+      const { status } = cpm(['rename', 'prompt', 'chain', 'renamed', '--workspace', workspace]);
+
+      expect(status).toBe(0);
+      expect(rowCount('renamed')).toBe(1);
+      expect(rowCount('renamed/step_dir')).toBe(2);
+      expect(rowCount('chain/step_dir')).toBe(0);
+      expect(rowCount('step_dir')).toBe(3);
+      const chainFile = readFileSync(at('renamed', 'prompt.yaml'), 'utf8');
+      expect(chainFile).toContain('promptId: renamed/step_dir\n');
+      expect(chainFile).toContain('promptId: step_dir\n');
+    });
+
+    it('removes every step’s history with a deleted chain, and only theirs', () => {
+      seed('chain', 1);
+
+      const { status } = cpm(['delete', 'prompt', 'chain', '--force', '--workspace', workspace]);
+
+      expect(status).toBe(0);
+      expect(rowCount('chain')).toBe(0);
+      expect(rowCount('chain/step_dir')).toBe(0);
+      expect(rowCount('step_dir')).toBe(3);
+    });
+
+    it('leaves the history where the files are when validation rolls a rename back', () => {
+      writeFile(at('single_dir', 'prompt.yaml'), body('single_dir') + 'arguments: 5\n');
+      seed('single_dir', 2);
+
+      const { status } = cpm(['rename', 'prompt', 'single_dir', 'renamed', '--workspace', workspace]);
+
+      expect(status).toBe(1);
+      expect(existsSync(at('single_dir', 'prompt.yaml'))).toBe(true);
+      expect(rowCount('single_dir')).toBe(2);
+      expect(rowCount('renamed')).toBe(0);
+    });
   });
 });

@@ -9,6 +9,8 @@ import {
   deleteResourceDir,
   resourceExists,
 } from '../../../src/cli-shared/resource-scaffold.js';
+import { loadHistory, saveVersion } from '../../../src/cli-shared/version-history.js';
+import { seedStateDbSchema } from '../../helpers/test-database.js';
 
 describe('resource-scaffold', () => {
   let tempDir: string;
@@ -190,13 +192,34 @@ describe('resource-scaffold', () => {
     });
   });
 
+  describe('a create that fails validation', () => {
+    it('removes its files and leaves the history stored under that id', async () => {
+      // A create writes no history, so rows already under this id belong to an earlier resource
+      // of the same name (`resource_manager` keeps a deleted prompt's rows); cleanup must not
+      // erase them.
+      await seedStateDbSchema(tempDir);
+      const ref = { resourceType: 'prompt' as const, resourceId: 'reused' };
+      saveVersion(tempDir, ref.resourceType, ref.resourceId, { id: 'reused' });
+
+      const result = createResourceDir(tempDir, 'prompts', 'reused', { name: '' });
+
+      expect(result.success).toBe(false);
+      expect(result.rolledBack).toBe(true);
+      expect(existsSync(join(tempDir, 'general', 'reused'))).toBe(false);
+      expect(loadHistory(tempDir, ref)?.versions).toHaveLength(1);
+    });
+  });
+
   describe('deleteResourceDir', () => {
     it('deletes existing resource directory', () => {
       const result = createResourceDir(tempDir, 'gates', 'to-delete');
       expect(result.success).toBe(true);
       expect(existsSync(result.path!)).toBe(true);
 
-      const deleteResult = deleteResourceDir(result.path!);
+      const deleteResult = deleteResourceDir(result.path!, {
+        resourceType: 'gate',
+        resourceId: 'to-delete',
+      });
       expect(deleteResult.success).toBe(true);
       expect(existsSync(result.path!)).toBe(false);
     });
@@ -207,13 +230,16 @@ describe('resource-scaffold', () => {
       writeFileSync(join(dir, 'gate.yaml'), 'id: x');
       writeFileSync(join(dir, '.history.json'), '{}');
 
-      const result = deleteResourceDir(dir);
+      const result = deleteResourceDir(dir, { resourceType: 'gate', resourceId: 'with-history' });
       expect(result.success).toBe(true);
       expect(existsSync(dir)).toBe(false);
     });
 
     it('errors when directory does not exist', () => {
-      const result = deleteResourceDir(join(tempDir, 'nonexistent'));
+      const result = deleteResourceDir(join(tempDir, 'nonexistent'), {
+        resourceType: 'gate',
+        resourceId: 'nonexistent',
+      });
       expect(result.success).toBe(false);
       expect(result.error).toContain('does not exist');
     });

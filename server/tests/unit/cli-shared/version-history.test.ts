@@ -11,9 +11,11 @@ import {
   recordEditResult,
   rollbackVersion,
   deleteVersionRows,
+  renameHistoryResource,
   formatHistoryTable,
 } from '../../../src/cli-shared/version-history.js';
 import type { HistoryFile } from '../../../src/modules/versioning/types.js';
+import type { HistoryResourceRef } from '../../../src/cli-shared/version-history.js';
 import { seedStateDbSchema } from '../../helpers/test-database.js';
 
 const SAMPLE_HISTORY: HistoryFile = {
@@ -44,6 +46,9 @@ const SAMPLE_HISTORY: HistoryFile = {
     },
   ],
 };
+
+const PROMPT_REF: HistoryResourceRef = { resourceType: 'prompt', resourceId: 'test-prompt' };
+const GATE_REF: HistoryResourceRef = { resourceType: 'gate', resourceId: 'my-gate' };
 
 function seedPromptHistory(resourceDir: string): void {
   saveVersion(
@@ -100,12 +105,12 @@ describe('version-history', () => {
 
   describe('loadHistory', () => {
     it('returns null when no history exists', () => {
-      expect(loadHistory(promptDir)).toBeNull();
+      expect(loadHistory(promptDir, PROMPT_REF)).toBeNull();
     });
 
     it('reads stored SQLite history', () => {
       seedPromptHistory(promptDir);
-      const result = loadHistory(promptDir);
+      const result = loadHistory(promptDir, PROMPT_REF);
       expect(result).not.toBeNull();
       expect(result!.current_version).toBe(3);
       expect(result!.versions).toHaveLength(3);
@@ -116,14 +121,14 @@ describe('version-history', () => {
   describe('getVersion', () => {
     it('returns specific version entry', () => {
       seedPromptHistory(promptDir);
-      const entry = getVersion(promptDir, 2);
+      const entry = getVersion(promptDir, 2, PROMPT_REF);
       expect(entry).not.toBeNull();
       expect(entry!.description).toBe('Simplified');
     });
 
     it('returns null for nonexistent version', () => {
       seedPromptHistory(promptDir);
-      expect(getVersion(promptDir, 99)).toBeNull();
+      expect(getVersion(promptDir, 99, PROMPT_REF)).toBeNull();
     });
   });
 
@@ -133,14 +138,14 @@ describe('version-history', () => {
     });
 
     it('returns both entries on success', () => {
-      const result = compareVersions(promptDir, 1, 3);
+      const result = compareVersions(promptDir, 1, 3, PROMPT_REF);
       expect(result.success).toBe(true);
       expect(result.from!.version).toBe(1);
       expect(result.to!.version).toBe(3);
     });
 
     it('errors when from version is missing', () => {
-      const result = compareVersions(promptDir, 99, 3);
+      const result = compareVersions(promptDir, 99, 3, PROMPT_REF);
       expect(result.success).toBe(false);
       expect(result.error).toContain('99');
     });
@@ -152,7 +157,7 @@ describe('version-history', () => {
       expect(result.success).toBe(true);
       expect(result.version).toBe(1);
 
-      const history = loadHistory(promptDir);
+      const history = loadHistory(promptDir, PROMPT_REF);
       expect(history).not.toBeNull();
       expect(history!.current_version).toBe(1);
       expect(history!.versions).toHaveLength(1);
@@ -167,7 +172,7 @@ describe('version-history', () => {
       expect(result.success).toBe(true);
       expect(result.version).toBe(4);
 
-      const history = loadHistory(promptDir);
+      const history = loadHistory(promptDir, PROMPT_REF);
       expect(history!.current_version).toBe(4);
       expect(history!.versions).toHaveLength(4);
       expect(history!.versions[0]?.version).toBe(4);
@@ -185,7 +190,7 @@ describe('version-history', () => {
         }
       );
       expect(result.success).toBe(true);
-      const history = loadHistory(gateDir);
+      const history = loadHistory(gateDir, GATE_REF);
       expect(history!.versions[0]?.description).toBe('Custom desc');
       expect(history!.versions[0]?.diff_summary).toBe('+2/-1');
     });
@@ -194,7 +199,7 @@ describe('version-history', () => {
       for (let i = 0; i < 51; i += 1) {
         saveVersion(promptDir, 'prompt', 'test-prompt', { id: 'test-prompt', version: i + 1 });
       }
-      const history = loadHistory(promptDir);
+      const history = loadHistory(promptDir, PROMPT_REF);
       expect(history!.versions).toHaveLength(50);
       expect(history!.versions[0]?.version).toBe(51);
     });
@@ -219,12 +224,12 @@ describe('version-history', () => {
       expect(result.snapshot).toBeDefined();
       expect(result.snapshot!.description).toBe('v1 description');
 
-      const history = loadHistory(promptDir);
+      const history = loadHistory(promptDir, PROMPT_REF);
       expect(history!.current_version).toBe(5);
-      const bridged = getVersion(promptDir, 4);
+      const bridged = getVersion(promptDir, 4, PROMPT_REF);
       expect(bridged!.snapshot).toEqual(currentSnapshot);
       expect(bridged!.description).toContain('Bridge');
-      const restored = getVersion(promptDir, 5);
+      const restored = getVersion(promptDir, 5, PROMPT_REF);
       expect(restored!.description).toBe('Rollback to v1');
     });
 
@@ -234,17 +239,17 @@ describe('version-history', () => {
       const result = rollbackVersion(promptDir, 'prompt', 'test-prompt', 1, currentSnapshot);
 
       expect(result.saved_version).toBe(4);
-      const restored = getVersion(promptDir, 4);
+      const restored = getVersion(promptDir, 4, PROMPT_REF);
       expect(restored!.snapshot).toEqual({ id: 'test-prompt', description: 'v1 description' });
       expect(restored!.description).toBe('Rollback to v1');
     });
 
     it('errors when target version does not exist, and consumes no version number', () => {
-      const before = loadHistory(promptDir)!.current_version;
+      const before = loadHistory(promptDir, PROMPT_REF)!.current_version;
       const result = rollbackVersion(promptDir, 'prompt', 'test-prompt', 99, {});
       expect(result.success).toBe(false);
       expect(result.error).toContain('99');
-      expect(loadHistory(promptDir)!.current_version).toBe(before);
+      expect(loadHistory(promptDir, PROMPT_REF)!.current_version).toBe(before);
     });
   });
 
@@ -263,11 +268,11 @@ describe('version-history', () => {
       expect(result.bridged).toBe(true);
       expect(result.version).toBe(2);
 
-      const bridge = getVersion(promptDir, 1);
+      const bridge = getVersion(promptDir, 1, PROMPT_REF);
       expect(bridge!.snapshot).toEqual(priorLive);
       expect(bridge!.description).toContain('Bridge');
 
-      const newest = getVersion(promptDir, 2);
+      const newest = getVersion(promptDir, 2, PROMPT_REF);
       expect(newest!.snapshot).toEqual(produced);
       expect(newest!.description).toBe('Update via resource_manager');
     });
@@ -292,23 +297,83 @@ describe('version-history', () => {
 
       expect(result.bridged).toBe(false);
       expect(result.version).toBe(3);
-      const newest = getVersion(promptDir, 3);
+      const newest = getVersion(promptDir, 3, PROMPT_REF);
       expect(newest!.snapshot).toEqual(secondProduced);
 
-      const history = loadHistory(promptDir);
+      const history = loadHistory(promptDir, PROMPT_REF);
       expect(history!.versions).toHaveLength(3);
     });
   });
 
   describe('deleteVersionRows', () => {
     it('returns true when history does not exist', () => {
-      expect(deleteVersionRows(promptDir)).toBe(true);
+      expect(deleteVersionRows(promptDir, PROMPT_REF)).toBe(true);
     });
 
     it('deletes existing history rows', () => {
       seedPromptHistory(promptDir);
-      expect(deleteVersionRows(promptDir)).toBe(true);
-      expect(loadHistory(promptDir)).toBeNull();
+      expect(deleteVersionRows(promptDir, PROMPT_REF)).toBe(true);
+      expect(loadHistory(promptDir, PROMPT_REF)).toBeNull();
+    });
+  });
+
+  describe('a chain and its steps', () => {
+    // Twins that differ in ONE identifier each: the step `c/s` and the top-level prompt `s`; the
+    // chain `c` and `c_other`, which shares its first letter but is not below it; the prompt `c`
+    // and the gate `c`.
+    const prompt = (resourceId: string): HistoryResourceRef => ({
+      resourceType: 'prompt',
+      resourceId,
+    });
+    const versionsOf = (ref: HistoryResourceRef): number =>
+      loadHistory(promptDir, ref)?.versions.length ?? 0;
+
+    beforeEach(() => {
+      const seed = (ref: HistoryResourceRef, count: number): void => {
+        for (let v = 1; v <= count; v += 1) {
+          saveVersion(promptDir, ref.resourceType, ref.resourceId, { v });
+        }
+      };
+      seed(prompt('c'), 1);
+      seed(prompt('c/s'), 2);
+      seed(prompt('s'), 3);
+      seed(prompt('c_other'), 4);
+      seed({ resourceType: 'gate', resourceId: 'c' }, 5);
+    });
+
+    it('reads a step under its composite id, not its last segment', () => {
+      expect(versionsOf(prompt('c/s'))).toBe(2);
+      expect(versionsOf(prompt('s'))).toBe(3);
+    });
+
+    it('deletes a chain with its steps and nothing beside it', () => {
+      expect(deleteVersionRows(promptDir, prompt('c'))).toBe(true);
+
+      expect(versionsOf(prompt('c'))).toBe(0);
+      expect(versionsOf(prompt('c/s'))).toBe(0);
+      expect(versionsOf(prompt('s'))).toBe(3);
+      expect(versionsOf(prompt('c_other'))).toBe(4);
+      expect(versionsOf({ resourceType: 'gate', resourceId: 'c' })).toBe(5);
+    });
+
+    it('renames a chain with its steps and nothing beside it', () => {
+      expect(renameHistoryResource(promptDir, prompt('c'), 'd')).toBe(true);
+
+      expect(versionsOf(prompt('d'))).toBe(1);
+      expect(versionsOf(prompt('d/s'))).toBe(2);
+      expect(versionsOf(prompt('c'))).toBe(0);
+      expect(versionsOf(prompt('c/s'))).toBe(0);
+      expect(versionsOf(prompt('s'))).toBe(3);
+      expect(versionsOf(prompt('c_other'))).toBe(4);
+      expect(versionsOf({ resourceType: 'gate', resourceId: 'c' })).toBe(5);
+    });
+
+    it('renames a step alone, leaving its chain and its top-level twin', () => {
+      expect(renameHistoryResource(promptDir, prompt('c/s'), 'c/t')).toBe(true);
+
+      expect(versionsOf(prompt('c/t'))).toBe(2);
+      expect(versionsOf(prompt('c'))).toBe(1);
+      expect(versionsOf(prompt('s'))).toBe(3);
     });
   });
 

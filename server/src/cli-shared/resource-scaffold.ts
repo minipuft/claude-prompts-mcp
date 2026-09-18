@@ -340,6 +340,10 @@ function validateAndFinalize(
 /**
  * Clean up a newly-created resource directory on failure.
  * Only removes if the directory didn't exist before creation.
+ *
+ * Files only. A create writes no history, so there is none of its own to remove, and rows already
+ * stored under this id belong to an earlier resource of the same name: `resource_manager` keeps a
+ * deleted prompt's history, so a failed create must not be what erases it.
  */
 function cleanupCreatedDir(
   resourceDir: string,
@@ -350,22 +354,26 @@ function cleanupCreatedDir(
     return { success: true };
   }
 
-  const result = deleteResourceDir(resourceDir);
+  try {
+    rmSync(resourceDir, { recursive: true, force: true });
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
   if (type === 'prompts') {
     cleanupEmptyPromptCategory(resourceDir);
   }
-  return result;
+  return { success: true };
 }
 
 /**
  * Delete a resource directory and its version history.
  *
- * `ref` names the history to delete. Without it the id is guessed from the directory's last
- * segment, which is right only for a resource sitting directly in its root or category.
+ * `ref` names the history to delete: the resource's type and the id it is served under. The rows of
+ * every id below it go too, so deleting a chain directory takes its steps' history with its steps.
  */
 export function deleteResourceDir(
   resourceDir: string,
-  ref?: HistoryResourceRef
+  ref: HistoryResourceRef
 ): { success: boolean; error?: string } {
   try {
     if (!existsSync(resourceDir)) {
