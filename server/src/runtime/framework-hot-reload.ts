@@ -58,6 +58,12 @@ export function buildFrameworkAuxiliaryReloadConfig(
         }
         await registration.handler({ ...event, frameworkId });
       },
+      reconcile: async () => {
+        const removed = await registration.coordinator.reconcile();
+        if (removed.length > 0) {
+          logger.info(`Framework reconciliation unregistered: ${removed.join(', ')}`);
+        }
+      },
     };
   } catch (error) {
     logger.warn(

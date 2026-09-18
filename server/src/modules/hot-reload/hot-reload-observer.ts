@@ -10,6 +10,7 @@ import {
   FileChangeEvent,
   FileObserver,
   FileObserverConfig,
+  LATE_DIRECTORY_ARMED,
   createFileObserver,
 } from './file-observer.js';
 
@@ -65,6 +66,22 @@ export interface AuxiliaryReloadConfig {
   directories: string[];
   handler: (event: HotReloadEvent) => Promise<void>;
   match?: (event: FileChangeEvent) => boolean;
+  /**
+   * Bring what this registration holds in line with the disk, after `root` — one of its
+   * directories, or a directory containing or inside one — was created while the server ran.
+   *
+   * Required, not optional: per-file events cannot carry this. Between a directory appearing and
+   * its watcher finishing the first scan, an entry can be written and removed with no event
+   * either way, while the server already holds it — a `resource_manager` create registers its
+   * entry directly. Only the owner knows what it holds, so every registration states how it
+   * reconciles, and one that holds nothing says so in its own implementation.
+   */
+  reconcile: (root: string) => Promise<void>;
+}
+
+/** True when one path is the other, or contains it. */
+function pathsOverlap(a: string, b: string): boolean {
+  return a === b || a.startsWith(`${b}${path.sep}`) || b.startsWith(`${a}${path.sep}`);
 }
 
 /**
@@ -110,7 +127,6 @@ export class HotReloadObserver {
   private config: HotReloadConfig;
   private fileObserver: FileObserver;
   private onReloadCallback: ((event: HotReloadEvent) => Promise<void>) | undefined;
-  private onFrameworkReloadCallback: ((event: HotReloadEvent) => Promise<void>) | undefined;
   private auxiliaryReloads: AuxiliaryReloadConfig[] = [];
   private stats: HotReloadStats;
   private isStarted: boolean = false;
@@ -217,16 +233,10 @@ export class HotReloadObserver {
   }
 
   /**
-   * Set the callback for framework reload events
-   * This callback is invoked when framework YAML files change
-   */
-  setFrameworkReloadCallback(callback: (event: HotReloadEvent) => Promise<void>): void {
-    this.onFrameworkReloadCallback = callback;
-    this.logger.debug('HotReloadObserver: Framework reload callback registered');
-  }
-
-  /**
-   * Register auxiliary reload handlers (e.g., framework, gate) with their watch directories.
+   * Register auxiliary reload handlers (framework, gate, style, script tools, change tracking)
+   * with their watch directories. This is the ONE path a framework file takes: there is no
+   * dedicated framework callback, because a second route would handle every framework event
+   * twice — and while it sat unwired, it turned each framework edit into an extra prompt reload.
    * Directories must also be passed to watchDirectories by the caller.
    */
   setAuxiliaryReloads(reloads: AuxiliaryReloadConfig[]): void {
@@ -293,8 +303,8 @@ export class HotReloadObserver {
       this.handleFileChange(event);
     });
 
-    this.fileObserver.on('frameworkFileChange', (event: FileChangeEvent) => {
-      this.handleFrameworkFileChange(event);
+    this.fileObserver.on(LATE_DIRECTORY_ARMED, (directoryPath: string) => {
+      void this.reconcileLateDirectory(directoryPath);
     });
 
     this.fileObserver.on('watcherError', (error: { directoryPath: string; error: Error }) => {
@@ -327,53 +337,38 @@ export class HotReloadObserver {
   }
 
   /**
-   * Handle framework file change events
-   * These are processed separately from regular file changes to enable
-   * targeted framework reload without affecting prompt system
+   * Reconcile everything a directory created after startup could have changed unobserved.
+   *
+   * Every auxiliary registration whose directories overlap it compares what it holds against the
+   * disk, and the prompt catalog reloads in full — prompt reload always rebuilds from every root,
+   * so that IS its reconciliation. Each owner runs even if another throws: one failed
+   * reconciliation must not leave a sibling type stale.
    */
-  private async handleFrameworkFileChange(event: FileChangeEvent): Promise<void> {
-    this.stats.filesChanged++;
-    const frameworkId = event.frameworkId ?? this.extractFrameworkId(event.filePath);
+  private async reconcileLateDirectory(directoryPath: string): Promise<void> {
+    const root = path.normalize(directoryPath);
+    this.logger.info(`🔁 HotReloadObserver: reconciling ${root} (created after startup)`);
 
-    this.logger.info(
-      `🔧 Framework file change detected: ${event.type} - ${event.filename}` +
-        (frameworkId ? ` (framework: ${frameworkId})` : '')
-    );
-
-    // Map FileChangeType to FileChangeOperation (filter out 'renamed' as it becomes 'added' or 'removed')
-    const changeType = this.mapToChangeOperation(event.type);
-
-    const hotReloadEvent: HotReloadEvent = {
-      type: 'framework_changed',
-      reason: `Framework file ${event.type}: ${event.filename}`,
-      affectedFiles: [event.filePath],
-      timestamp: event.timestamp,
-      requiresFullReload: false, // Framework changes typically don't need full reload
-      changeType,
-      ...(frameworkId ? { frameworkId } : {}),
-    };
-
-    // Use dedicated framework callback if available, otherwise fall through to general reload
-    if (this.onFrameworkReloadCallback) {
-      try {
-        await this.onFrameworkReloadCallback(hotReloadEvent);
-        this.logger.info(`✅ Framework ${frameworkId ?? 'unknown'} reloaded successfully`);
-      } catch (error) {
-        this.logger.error(`❌ Failed to reload framework ${frameworkId ?? 'unknown'}:`, error);
+    for (const reload of this.auxiliaryReloads) {
+      if (!reload.directories.some((dir) => pathsOverlap(dir, root))) {
+        continue;
       }
-    } else {
-      // Fallback to regular reload processing
-      await this.processReloadEvent(hotReloadEvent);
+      try {
+        await reload.reconcile(root);
+      } catch (error) {
+        this.logger.error(
+          `[HotReloadObserver] Reconcile failed for ${reload.id} at ${root}`,
+          error
+        );
+      }
     }
-  }
 
-  /**
-   * Extract framework ID from file path
-   */
-  private extractFrameworkId(filePath: string): string | undefined {
-    const normalizedPath = filePath.replace(/\\/g, '/');
-    const match = normalizedPath.match(/\/frameworks\/([^/]+)\//);
-    return match?.[1]?.toLowerCase();
+    await this.processReloadEvent({
+      type: 'reload_required',
+      reason: `reconciling ${root}, created after startup`,
+      affectedFiles: [root],
+      timestamp: Date.now(),
+      requiresFullReload: true,
+    });
   }
 
   /**
@@ -414,8 +409,8 @@ export class HotReloadObserver {
       //
       // `FileObserver` extracts it from the path when it classifies a framework file, and the
       // framework reload handler refuses an event without one ("missing frameworkId, skipping").
-      // Auxiliary events are the ONLY path framework files take — `setFrameworkReloadCallback`
-      // is not wired — so dropping the id here meant every framework edit and every framework
+      // Auxiliary events are the ONLY path framework files take (see `setAuxiliaryReloads`),
+      // so dropping the id here meant every framework edit and every framework
       // deletion was observed by the watcher, logged as a file event, and then discarded: an
       // edited `framework.yaml` kept serving its previous guidance, and a deleted framework
       // stayed selected, until a restart.

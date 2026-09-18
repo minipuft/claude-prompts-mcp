@@ -446,6 +446,28 @@ export class ResourceChangeTracker implements ResourceChangeLogPort {
   }
 
   /**
+   * Log a removal for every cached resource absent from `present`, comparing no content.
+   *
+   * The reconciliation half of {@link compareBaseline}, for a folder that appeared while the
+   * server ran: its present files arrive as watcher events, but an entry written and removed
+   * before the folder was watched arrives as nothing, while its `added` row stands.
+   *
+   * @returns the number of removals logged
+   */
+  async sweepRemovals(
+    present: ReadonlyArray<{ resourceType: TrackedResourceType; resourceId: string }>
+  ): Promise<number> {
+    if (!this.initialized) {
+      await this.initialize();
+    }
+    return this.logRemovals(
+      new Set(
+        present.map((resource) => this.getCacheKey(resource.resourceType, resource.resourceId))
+      )
+    );
+  }
+
+  /**
    * Log a removal for every cached resource the current walk did not see, and return the count.
    *
    * Extracted from `compareBaseline` so that method stays under the cognitive-complexity limit

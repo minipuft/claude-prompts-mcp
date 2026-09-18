@@ -1293,11 +1293,13 @@ system_control(action:"changes", operation:"list", limit:10)
 
 **Change Sources:**
 
-| Source       | Meaning                                    |
-| ------------ | ------------------------------------------ |
-| `filesystem` | Hot-reload detected file change            |
-| `mcp-tool`   | Created/updated via `resource_manager`     |
-| `external`   | Changed while server was down (on startup) |
+| Source       | Meaning                                                                                                       |
+| ------------ | ------------------------------------------------------------------------------------------------------------- |
+| `filesystem` | Hot-reload detected file change                                                                               |
+| `mcp-tool`   | Created/updated via `resource_manager`                                                                        |
+| `external`   | Changed while server was down (on startup), or removed before a folder created while it ran was first watched |
+
+**Which folders are tracked:** your primary prompts and gates folders, and every workspace overlay (`<workspace>/prompts`, `<workspace>/gates`) — including one created while the server runs. A resource that exists in more than one of them is recorded once, for the copy that is served, so editing a copy another folder overrides records nothing. The bundled catalog is tracked only when it is your primary folder (no workspace configured): it changes only when the package is updated.
 
 **Why this matters:** Debug sync issues between your editor and the server. Track which prompts changed during a session. Audit who modified what before a deploy.
 
