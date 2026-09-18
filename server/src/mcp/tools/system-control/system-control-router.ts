@@ -1,9 +1,5 @@
 // @lifecycle canonical - Thin router for system_control MCP tool actions.
 
-import {
-  SYSTEM_CONTROL_ACTION_IDS,
-  type SystemControlActionId,
-} from '../../metadata/definitions/system-control.js';
 import { recordActionInvocation } from '../../metadata/usage-tracker.js';
 import { SafeConfigWriter, createSafeConfigWriter } from '../config-utils.js';
 import { createStructuredResponse } from './core/response-utils.js';
@@ -25,6 +21,7 @@ import type { PromptGuidanceService } from '#engine/frameworks/prompt-guidance/i
 import type { GateGuidanceRenderer } from '#engine/gates/guidance/GateGuidanceRenderer.js';
 import type { ExecutionRecordStore } from '#modules/chains/execution-record-store.js';
 import type { SkillsSyncPaths } from '#modules/skills-sync/service.js';
+import type { SystemControlInput } from '../schemas/system-control.schema.js';
 import type { ActionHandler } from './core/action-handler-base.js';
 import type { SystemAnalytics, SystemControlContext } from './core/types.js';
 
@@ -41,6 +38,10 @@ import {
   type DatabasePort,
   StateStoreOptions,
 } from '#shared/types/index.js';
+import {
+  SYSTEM_CONTROL_ACTION_IDS,
+  type SystemControlActionId,
+} from '#shared/types/system-control.js';
 import { resolveRequestIdentity } from '#shared/utils/request-identity-resolver.js';
 import {
   buildIdentityScope,
@@ -339,10 +340,7 @@ export class ConsolidatedSystemControl implements SystemControlContext {
 
   // ── Action dispatch ─────────────────────────────────────────────────
 
-  async handleAction(
-    args: { action: string; [key: string]: any },
-    extra: any
-  ): Promise<ToolResponse> {
+  async handleAction(args: SystemControlInput, extra: any): Promise<ToolResponse> {
     const { action } = args;
     this.logger.info(`⚙️ System Control: Executing action "${action}"`);
 
@@ -350,6 +348,12 @@ export class ConsolidatedSystemControl implements SystemControlContext {
     recordActionInvocation('system_control', action, 'received');
 
     try {
+      // `args: SystemControlInput` already guarantees `action` is a real action id for every
+      // TYPED caller (`registerTool`'s zod-validated callback, and `PromptExecutor.routeToTool`
+      // since row B.61). This check stays for the caller a type cannot stop: `handleAction` is a
+      // public method callable directly (as the test suite does) with an `as any`/`as unknown`
+      // escape hatch, and the message here is what such a caller sees instead of whatever the
+      // wrong action handler would have done with an id it does not recognize.
       if (!isSystemControlActionId(action)) {
         recordActionInvocation('system_control', action, 'unknown', {
           error: `Unknown action: ${action}`,

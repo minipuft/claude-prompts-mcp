@@ -231,23 +231,6 @@ const operations: ActionDescriptor[] = [
   },
 ];
 
-export const SYSTEM_CONTROL_ACTION_IDS = [
-  'status',
-  'framework',
-  'gates',
-  'analytics',
-  'config',
-  'maintenance',
-  'guide',
-  'injection',
-  'session',
-  'changes',
-  'execution_history',
-  'skills_sync',
-] as const;
-
-export type SystemControlActionId = (typeof SYSTEM_CONTROL_ACTION_IDS)[number];
-
 const systemControlContract = {
   tool: 'system_control',
   version: 1,
