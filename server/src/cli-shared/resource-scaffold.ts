@@ -244,18 +244,34 @@ function cleanupEmptyPromptCategory(resourceDir: string): void {
 // ── Public API ──────────────────────────────────────────────────────────────
 
 /**
- * Check if a resource already exists at the expected path.
+ * The path already holding this id in this category, in whichever form the loader would see
+ * first — or `undefined` when neither exists.
+ *
+ * Checks BOTH forms a prompt can take, not just the directory one: the loader's directory-wins
+ * rule (`prompt-layout.ts`) means `{cat}/{id}.yaml` and `{cat}/{id}/prompt.yaml` name the SAME
+ * id, so a check that tested only the directory let `create` write a directory beside an existing
+ * single-file prompt — the loader then serves the new empty directory in the file's place, and
+ * the file goes on existing, unserved, until someone notices. Gates, frameworks and styles have no
+ * single-file form (`prompt-layout.ts` — only prompts do), so the directory path is the only one
+ * that applies to them.
  */
 export function resourceExists(
   baseDir: string,
   type: ResourceType,
   id: string,
   category?: string
-): boolean {
-  if (type === 'prompts' && category !== undefined && category !== '') {
-    return existsSync(join(baseDir, category, id, ENTRY_FILES[type]));
+): string | undefined {
+  const parentDir =
+    type === 'prompts' && category !== undefined && category !== ''
+      ? join(baseDir, category)
+      : baseDir;
+  const dirPath = join(parentDir, id, ENTRY_FILES[type]);
+  if (existsSync(dirPath)) return dirPath;
+  if (type === 'prompts') {
+    const filePath = join(parentDir, `${id}.yaml`);
+    if (existsSync(filePath)) return filePath;
   }
-  return existsSync(join(baseDir, id, ENTRY_FILES[type]));
+  return undefined;
 }
 
 /**

@@ -10,6 +10,7 @@ import {
   promptIdFromDirectory,
   promptIdFromSingleFile,
 } from '@shared/utils/prompt-layout.js';
+import { parseYaml } from '@shared/utils/yaml/index.js';
 
 import { TYPE_CONFIG } from './types.js';
 import type { ResourceType } from './types.js';
@@ -198,12 +199,100 @@ export interface ReferenceHit {
 }
 
 /**
- * Scan all YAML entry files in a workspace for references to a given ID.
- * Skips the resource's own `id:` line to avoid self-matches.
+ * Escape a literal string for embedding in a `RegExp`.
+ *
+ * `resource-operations.ts` carries its own private copy for the same purpose (building an
+ * id-boundary pattern). Not shared: that module sits in `server/`, scanned by the server's own
+ * knip ratchet, which counts a symbol exported ONLY for a cross-package consumer in `cli/` as an
+ * unused export — it cannot see the import on this side of the package boundary. Two lines
+ * duplicated is cheaper than a ratchet false-positive on every future `server/` change.
+ */
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * The reference syntaxes `scanReferences` counts, decided against what the bundled tree actually
+ * writes (`rg '>>[a-z_]' resources/prompts --glob '*.md'`, `chainSteps[].promptId` in every chain):
+ *
+ * - `>>id` — the delegation/invocation token a `.md` template names another prompt with
+ *   (`Invoke >>create_gate`, `>>your_prompt`).
+ * - `promptId: id` — the YAML key a `chainSteps` entry names a step or a shared prompt by, bare or
+ *   quoted, optionally list-prefixed (`- promptId: 'foo'`).
+ *
+ * A bare `id:` line — a resource naming ITSELF, foreign or self — is deliberately not a reference
+ * syntax: neither pattern can match it, so unlike the substring scan this replaced, no separate
+ * self-id skip is needed to keep a resource's own declaration out of its own hit list.
+ *
+ * Both patterns require an id BOUNDARY after the match (`(?![A-Za-z0-9_])`), so scanning for `foo`
+ * does not match `foo_bar` — `foo_bar`'s own `- promptId: foo_bar` line no longer misreports as a
+ * reference to `foo` the way a plain `.includes(targetId)` did.
+ */
+function referencePatterns(targetId: string): readonly RegExp[] {
+  const escaped = escapeRegExp(targetId);
+  const boundary = '(?![A-Za-z0-9_])';
+  return [
+    new RegExp(`>>${escaped}${boundary}`),
+    new RegExp(`^\\s*(?:-\\s*)?promptId:\\s*['"]?${escaped}${boundary}`),
+  ];
+}
+
+/**
+ * Every file the loader would read for one resource: its entry file, plus each file a top-level
+ * `*File` key in that entry points to (`systemMessageFile`, `userMessageTemplateFile` on a prompt;
+ * `guidanceFile` on a gate or style; `phasesFile`/`judgePromptFile` on a framework — the same
+ * convention `yaml-prompt-loader.ts` and its gate/framework/style siblings resolve relative to the
+ * resource's own directory). A single-file prompt (`form: 'file'`) has no directory to hold a
+ * companion file — the loader only reads `*File` keys "for directory format" — so it contributes
+ * only itself.
+ */
+function filesToScan(res: ResourceLocation): readonly string[] {
+  if (res.form === 'file') return [res.file];
+
+  let entryData: Record<string, unknown> | undefined;
+  try {
+    entryData = parseYaml<Record<string, unknown>>(readFileSync(res.file, 'utf8')).data;
+  } catch {
+    entryData = undefined;
+  }
+
+  const companions = Object.entries(entryData ?? {})
+    .filter(
+      (entry): entry is [string, string] => entry[0].endsWith('File') && typeof entry[1] === 'string'
+    )
+    .map(([, relativePath]) => join(res.dir, relativePath))
+    .filter((path) => existsSync(path));
+
+  return [...new Set([res.file, ...companions])];
+}
+
+function scanFileForReferences(
+  file: string,
+  patterns: readonly RegExp[],
+  hits: ReferenceHit[]
+): void {
+  try {
+    const lines = readFileSync(file, 'utf8').split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]!;
+      if (patterns.some((pattern) => pattern.test(line))) {
+        hits.push({ file, line: i + 1, content: line.trim() });
+      }
+    }
+  } catch {
+    // Unreadable file — skip
+  }
+}
+
+/**
+ * Scan every file the loader would read for each resource in a workspace — entry YAML, its
+ * `*File`-pointed companions, and (for prompts) every nested chain step's own files — for a
+ * reference to `targetId` in one of the syntaxes {@link referencePatterns} names.
  */
 export function scanReferences(workspace: string, targetId: string): ReferenceHit[] {
   const hits: ReferenceHit[] = [];
   const allTypes: ResourceType[] = ['prompts', 'gates', 'frameworks', 'styles'];
+  const patterns = referencePatterns(targetId);
 
   for (const type of allTypes) {
     const config = TYPE_CONFIG[type];
@@ -216,18 +305,8 @@ export function scanReferences(workspace: string, targetId: string): ReferenceHi
 
     const resources = discoverResourcePaths(baseDir, config.entryFile, config.nested);
     for (const res of resources) {
-      const yamlPath = res.file;
-      try {
-        const content = readFileSync(yamlPath, 'utf8');
-        const lines = content.split('\n');
-        for (let i = 0; i < lines.length; i++) {
-          const line = lines[i]!;
-          if (line.includes(targetId) && !line.match(/^id:\s/)) {
-            hits.push({ file: yamlPath, line: i + 1, content: line.trim() });
-          }
-        }
-      } catch {
-        // Unreadable file — skip
+      for (const file of filesToScan(res)) {
+        scanFileForReferences(file, patterns, hits);
       }
     }
   }

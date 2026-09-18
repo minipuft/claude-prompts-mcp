@@ -110,6 +110,30 @@ describe('cpm and the two prompt forms', () => {
     });
   });
 
+  describe('create', () => {
+    it('refuses when the single-file form already exists (P4.63)', () => {
+      // `x.yaml` exists as a single-file prompt; `create` must refuse by name rather than write
+      // `x/prompt.yaml` beside it, which the loader would then serve in its place.
+      writeFile(at('x.yaml'), body('x'));
+
+      const { status, stderr } = cpm(['create', 'prompt', 'x', '--category', 'general', '--workspace', workspace]);
+
+      expect(status).toBe(1);
+      expect(stderr).toContain('already exists');
+      expect(stderr).toContain(at('x.yaml'));
+      expect(existsSync(at('x'))).toBe(false);
+    });
+
+    it('creates cleanly when only an unrelated single-file id exists', () => {
+      writeFile(at('y.yaml'), body('y'));
+
+      const { status } = cpm(['create', 'prompt', 'x', '--category', 'general', '--workspace', workspace]);
+
+      expect(status).toBe(0);
+      expect(existsSync(at('x', 'prompt.yaml'))).toBe(true);
+    });
+  });
+
   describe('delete', () => {
     it('removes a single-file prompt and nothing else in its category', () => {
       const { status } = cpm(['delete', 'prompt', 'single', '--force', '--workspace', workspace]);
