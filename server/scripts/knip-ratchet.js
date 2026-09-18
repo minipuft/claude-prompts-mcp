@@ -14,7 +14,8 @@
  * `typecheck-tests-ratchet.js` already solved for lint and test-type debt.
  *
  * SAME SHAPE AS `eslint-ratchet.js`: run the tool's JSON reporter, sum findings PER CATEGORY,
- * compare against a committed baseline, and fail only when a category's count increases.
+ * compare against a committed baseline, and fail when a category's count increases OR
+ * decreases — the latter means the committed ceiling is stale (row B.67).
  * Categories are knip's own issue-type vocabulary (`exports`, `types`, `files`, `duplicates`,
  * `dependencies`, `unlisted`, ...) derived from whatever keys the report actually contains —
  * not a hardcoded list — so a knip upgrade that adds a category is counted rather than
@@ -34,11 +35,12 @@
  * new debt, and running the real `knip` binary in a unit-test-shaped check would make the test
  * as slow and as environment-dependent as the gate it is supposed to protect.
  *
- * DECREASES ARE REPORTED EXPLICITLY, unlike `eslint-ratchet.js`/`typecheck-tests-ratchet.js`
- * (neither prints anything when a rule/file's count drops). A ratchet nobody tightens is a
- * floor wearing a ratchet's name, so `check` always surfaces every category whose count
- * dropped since the baseline was recorded, with the regeneration command, whether or not the
- * run otherwise passes.
+ * DECREASES FAIL THE CHECK (row B.67), the same as `eslint-ratchet.js` and
+ * `typecheck-tests-ratchet.js`. A ratchet that only watches for increases is a floor once debt
+ * is paid down and nobody regenerates the baseline: a later PR can reintroduce up to that same
+ * amount of debt in a category and still pass. `check` names every category whose count dropped
+ * since the baseline was recorded, plus the one regeneration command, and refuses to pass until
+ * `update-baseline` locks the lower count in — which it always accepts, with no override.
  *
  * ORPHANED DECLARATIONS FAIL THE CHECK, naming the file. `knip.json` credits every hand-written
  * `.d.ts` under `scripts/` and `eslint-rules/` as used, through recursive entry globs, because tsc
@@ -157,8 +159,8 @@ function summarizeKnipReport(issues) {
  *   entry reaching zero — the same "0 is not greater than N" blind spot `eslint-ratchet.js`
  *   guards against for a lint rule that stops loading.
  * - `decreases`   — a category's count went DOWN but the key still reports (possibly at 0).
- *   Surfaced on every run, pass or fail, so the baseline gets tightened instead of sitting as
- *   a permanent ceiling.
+ *   `check()` FAILS on these (row B.67) so the baseline gets tightened in the same change that
+ *   paid the debt down, instead of sitting as a permanent ceiling nobody lowers.
  */
 export function compareSummaries(baseline, current) {
   const regressions = [];
@@ -402,31 +404,19 @@ async function handleCheck() {
   const { regressions, vanished, decreases } = compareSummaries(baseline, current);
   const orphans = await findOrphanedDeclarationsOnDisk();
 
-  const decreaseLines =
+  if (
+    regressions.length === 0 &&
+    vanished.length === 0 &&
+    orphans.length === 0 &&
     decreases.length === 0
-      ? []
-      : [
-          '',
-          `${decreases.length} categor${decreases.length === 1 ? 'y' : 'ies'} improved since the baseline was recorded:`,
-          ...decreases
-            .sort((a, b) => a.category.localeCompare(b.category))
-            .map(
-              (d) =>
-                `- ${d.category}: baseline=${d.baseline} current=${d.current} (-${d.baseline - d.current})`
-            ),
-          '',
-          'A ratchet nobody tightens is a floor, not a ratchet — run ' +
-            '`npm run knip-ratchet:baseline` to lock these in.',
-        ];
-
-  if (regressions.length === 0 && vanished.length === 0 && orphans.length === 0) {
+  ) {
     console.log(
-      `[knip-ratchet] OK: ${current.totals.findings} findings (no regressions)${decreaseLines.join('\n')}\n${SCOPE_NOTE}`
+      `[knip-ratchet] OK: ${current.totals.findings} findings (no regressions)\n${SCOPE_NOTE}`
     );
     return;
   }
 
-  const problems = regressions.length + vanished.length + orphans.length;
+  const problems = regressions.length + vanished.length + orphans.length + decreases.length;
   const lines = [`[knip-ratchet] FAIL: ${problems} problem(s) detected.`];
 
   if (orphans.length > 0) {
@@ -463,7 +453,21 @@ async function handleCheck() {
     );
   }
 
-  lines.push(...decreaseLines);
+  if (decreases.length > 0) {
+    lines.push(
+      '',
+      `${decreases.length} categor${decreases.length === 1 ? 'y' : 'ies'} decreased (the ceiling ` +
+        'is stale — lowering it is always free, never needs --allow-increase):',
+      ...decreases
+        .sort((a, b) => a.category.localeCompare(b.category))
+        .map(
+          (d) =>
+            `- ${d.category}: baseline=${d.baseline} current=${d.current} (-${d.baseline - d.current})`
+        ),
+      '',
+      'Run: npm run knip-ratchet:baseline'
+    );
+  }
 
   console.error(lines.join('\n'));
   process.exitCode = 1;

@@ -89,20 +89,20 @@ repo/
 <details>
 <summary><strong>Available Scripts</strong> (run inside <code>server/</code>)</summary>
 
-| Command                                     | Description                                                  |
-| ------------------------------------------- | ------------------------------------------------------------ |
-| `npm run build`                             | esbuild bundle to `dist/index.js`                            |
-| `npm run typecheck`                         | Strict TypeScript checks without emit                        |
-| `npm run lint` / `lint:fix`                 | ESLint validation + autofix                                  |
-| `npm run lint:ratchet`                      | Fail if ESLint violations increased                          |
-| `npm run validate:format`                   | Prettier check on every tracked JSON/MD/YAML (repo + server) |
-| `npm run validate:all`                      | Full validation suite (deps + architecture)                  |
-| `npm run validate:arch`                     | Dependency Cruiser architecture rules                        |
-| `npm test`                                  | Unit suite only (see `test:integration`)                     |
-| `npm run test:integration`                  | Integration tests only                                       |
-| `npm run test:coverage`                     | Coverage report (target: >80%)                               |
-| `npm run generate:contracts`                | Regenerate MCP schemas from contracts                        |
-| `npm run start:stdio` / `start:development` | STDIO / Streamable HTTP for manual testing                   |
+| Command                                     | Description                                                                     |
+| ------------------------------------------- | ------------------------------------------------------------------------------- |
+| `npm run build`                             | esbuild bundle to `dist/index.js`                                               |
+| `npm run typecheck`                         | Strict TypeScript checks without emit                                           |
+| `npm run lint` / `lint:fix`                 | ESLint validation + autofix                                                     |
+| `npm run lint:ratchet`                      | Fail if ESLint violations increased, or decreased without lowering the baseline |
+| `npm run validate:format`                   | Prettier check on every tracked JSON/MD/YAML (repo + server)                    |
+| `npm run validate:all`                      | Full validation suite (deps + architecture)                                     |
+| `npm run validate:arch`                     | Dependency Cruiser architecture rules                                           |
+| `npm test`                                  | Unit suite only (see `test:integration`)                                        |
+| `npm run test:integration`                  | Integration tests only                                                          |
+| `npm run test:coverage`                     | Coverage report (target: >80%)                                                  |
+| `npm run generate:contracts`                | Regenerate MCP schemas from contracts                                           |
+| `npm run start:stdio` / `start:development` | STDIO / Streamable HTTP for manual testing                                      |
 
 </details>
 

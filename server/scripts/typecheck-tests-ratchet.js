@@ -10,7 +10,10 @@
  * `tsconfig.test.json` closes the visibility gap but reports a large existing backlog,
  * so it cannot simply be added to CI. This ratchet does what `eslint-ratchet.js` does
  * for lint: compare per-file diagnostic counts against a committed baseline and fail
- * only when a count increases, allowing the backlog to be paid down incrementally.
+ * when a count increases OR decreases, allowing the backlog to be paid down
+ * incrementally while refusing to let a stale (too-high) ceiling sit unnoticed. A
+ * decrease names the file and the one command (`npm run typecheck:tests:ratchet:baseline`)
+ * that locks the lower count in; lowering never needs `--allow-increase`, only a rise does.
  *
  * Usage:
  * - Update baseline (intentional): `npm run typecheck:tests:ratchet:baseline`
@@ -158,9 +161,14 @@ function summarize(tscOutput) {
  * Compare a baseline against the current run.
  *
  * `regressions` — a file's count went up, or a file not in the baseline reported at all.
- * `vanished`    — a file the baseline tracked produced no diagnostics.
+ * `vanished`    — a file the baseline tracked produced no diagnostics at all.
+ * `decreases`   — a file's count went down but the file still reports (a lower, nonzero
+ *   count). `check()` FAILS on these (row B.67): a ratchet that only watches for increases
+ *   is a ceiling nobody lowers, so a later file can regain up to that same amount of debt
+ *   and still pass. A file whose count reaches exactly 0 leaves `byFile` entirely (see
+ *   `summarize()`), so that case is `vanished`, not `decreases` — reported once, not doubled.
  *
- * The second finding exists for the same reason it does in `eslint-ratchet.js`: zero is
+ * The `vanished` finding exists for the same reason it does in `eslint-ratchet.js`: zero is
  * not greater than N, so a file that stops being checked reads as a file that was fixed.
  * A test file can leave the compiler's view by being renamed, deleted, or dropped from
  * the `include` globs, and the totals fall in every case. Both readings are reported
@@ -171,6 +179,7 @@ function summarize(tscOutput) {
 export function compare(baseline, current) {
   const regressions = [];
   const vanished = [];
+  const decreases = [];
 
   const baselineByFile = baseline.byFile ?? {};
   const currentByFile = current.byFile ?? {};
@@ -178,15 +187,21 @@ export function compare(baseline, current) {
   for (const file of new Set([...Object.keys(baselineByFile), ...Object.keys(currentByFile)])) {
     const before = baselineByFile[file] ?? 0;
     const after = currentByFile[file] ?? 0;
+    const stillReports = Object.hasOwn(currentByFile, file);
+
+    if (before > 0 && !stillReports) {
+      vanished.push({ file, baseline: before });
+      continue;
+    }
 
     if (after > before) {
       regressions.push({ file, baseline: before, current: after });
-    } else if (before > 0 && !Object.hasOwn(currentByFile, file)) {
-      vanished.push({ file, baseline: before });
+    } else if (after < before) {
+      decreases.push({ file, baseline: before, current: after });
     }
   }
 
-  return { regressions, vanished };
+  return { regressions, vanished, decreases };
 }
 
 async function loadJson(filePath) {
@@ -394,8 +409,8 @@ async function handleCheck() {
   assertParsed(summary, fatals, output, exitCode);
   assertNoFatals(fatals);
 
-  const { regressions, vanished } = compare(baseline, summary);
-  if (regressions.length === 0 && vanished.length === 0) {
+  const { regressions, vanished, decreases } = compare(baseline, summary);
+  if (regressions.length === 0 && vanished.length === 0 && decreases.length === 0) {
     console.log(
       `[typecheck-tests-ratchet] OK: ${summary.totals.errors} errors in tests/ (no regressions)`
     );
@@ -403,7 +418,9 @@ async function handleCheck() {
   }
 
   const lines = [
-    `[typecheck-tests-ratchet] FAIL: ${regressions.length + vanished.length} file problems detected.`,
+    `[typecheck-tests-ratchet] FAIL: ${
+      regressions.length + vanished.length + decreases.length
+    } file problems detected.`,
   ];
 
   if (regressions.length > 0) {
@@ -436,6 +453,22 @@ async function handleCheck() {
       `     in ${PROJECT}). Its type debt is still there and nothing is watching it.`,
       'A rename is case 2 even though it looks like case 1: move the baseline key rather',
       'than regenerating, so the count carries over to the new path.'
+    );
+  }
+
+  if (decreases.length > 0) {
+    lines.push(
+      '',
+      'Files whose type errors decreased (the ceiling is stale — lowering it is always free,',
+      'never needs --allow-increase):',
+      ...decreases
+        .sort((a, b) => a.file.localeCompare(b.file))
+        .map(
+          (d) =>
+            `- ${d.file}: baseline=${d.baseline} current=${d.current} (-${d.baseline - d.current})`
+        ),
+      '',
+      'Run: npm run typecheck:tests:ratchet:baseline'
     );
   }
 
