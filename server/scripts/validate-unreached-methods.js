@@ -47,6 +47,16 @@
  * names it with `--allow-increase <Class.method> "<reason>"`, and the reason is written into the
  * baseline's `overrideLog` — the same ceiling rule `knip-ratchet.js` enforces per category.
  *
+ * KEPT ON PURPOSE (R36, `plans/technical-debt/resource-surface-consolidation-2026-08-27.md`).
+ * Not every unreached method is dead: one may implement a declared interface member nothing
+ * else calls, or be a documented extension point. Such a method stays in `methods` (it IS still
+ * unreached) and gets a one-line note in the sibling `reasons` map: `{"Class.method": "why"}`.
+ * `reasons` is optional and hand-authored — `update-baseline` only ever carries it forward
+ * unchanged, the same posture as `overrideLog`. The check fails when a `reasons` key names an
+ * entry no longer in `methods`: the exception's condition stopped holding (method deleted,
+ * renamed, or reached), and cleanup-standards.md's satisfied-exception check means that is a
+ * finding, not something regeneration silently drops for you.
+ *
  * Usage:
  * - Check (default, in validate:all):  `npm run validate:unreached-methods`
  * - Update baseline (intentional):     `npm run unreached-methods:baseline`
@@ -247,6 +257,22 @@ export function findUnauthorizedAdditions(added, overrides) {
   return [...new Set(added)].filter((key) => !overrides.has(key)).sort();
 }
 
+/**
+ * Reasons naming an entry no longer in `methods`. A kept-on-purpose method
+ * (R36) is still an unreached method — it stays in the baseline with a
+ * `reasons["Class.method"]` note beside it. Once the method is deleted, gains
+ * a real caller, or is renamed, its baseline entry drops out of `methods` on
+ * the next regeneration, but the `reasons` map is carried forward untouched
+ * (same posture as `overrideLog`) — an orphaned reason is a finding, not a
+ * silent cleanup, matching `cleanup-standards.md`'s satisfied-exception check.
+ */
+export function findOrphanedReasons(methodKeys, reasons) {
+  const methodSet = new Set(methodKeys);
+  return Object.keys(reasons ?? {})
+    .filter((key) => !methodSet.has(key))
+    .sort();
+}
+
 // ---------------------------------------------------------------------------------------------
 // Modes
 // ---------------------------------------------------------------------------------------------
@@ -303,11 +329,14 @@ async function handleUpdateBaseline(argv) {
     }
   }
 
+  const reasons = previous?.reasons ?? {};
+
   const baseline = {
     schemaVersion: 1,
     generatedAt,
     total: currentKeys.length,
     methods: currentKeys,
+    ...(Object.keys(reasons).length > 0 ? { reasons } : {}),
     ...(overrideLog.length > 0 ? { overrideLog } : {}),
   };
   await writeFile(BASELINE_PATH, `${JSON.stringify(baseline, null, 2)}\n`, 'utf8');
@@ -323,9 +352,10 @@ async function handleCheck() {
     baseline.methods ?? [],
     scan.unreached.map((f) => f.key)
   );
+  const orphanedReasons = findOrphanedReasons(baseline.methods ?? [], baseline.reasons);
   const summary = `${scan.unreached.length} unreached of ${scan.candidateCount} public instance methods, ${scan.elapsedMs} ms`;
 
-  if (added.length === 0 && stale.length === 0) {
+  if (added.length === 0 && stale.length === 0 && orphanedReasons.length === 0) {
     console.log(`${TAG} OK: ${summary} (matches baseline)`);
     return;
   }
@@ -348,6 +378,13 @@ async function handleCheck() {
       ...stale.map((key) => `- ${key}`),
       '',
       '  npm run unreached-methods:baseline'
+    );
+  }
+  if (orphanedReasons.length > 0) {
+    lines.push(
+      '',
+      'reasons[] names an entry no longer in methods[] — drop the stale reason or restore the entry:',
+      ...orphanedReasons.map((key) => `- ${key}: ${baseline.reasons[key]}`)
     );
   }
   console.error(lines.join('\n'));
@@ -466,6 +503,19 @@ function runSelfTest() {
   check(
     'a named override authorizes that entry and no other',
     findUnauthorizedAdditions(['D.w', 'E.v'], new Map([['D.w', 'reason']])).join() === 'E.v'
+  );
+  check(
+    'a reason naming an entry no longer in the baseline is orphaned',
+    findOrphanedReasons(['A.x', 'B.y'], { 'A.x': 'kept on purpose', 'C.z': 'stale' }).join() ===
+      'C.z'
+  );
+  check(
+    'a reason naming a real baseline entry is not orphaned',
+    findOrphanedReasons(['A.x'], { 'A.x': 'kept on purpose' }).length === 0
+  );
+  check(
+    'no reasons at all is never orphaned',
+    findOrphanedReasons(['A.x'], undefined).length === 0
   );
   check(
     'parseAllowIncreaseArgs reads repeatable pairs and rejects an incomplete one',
