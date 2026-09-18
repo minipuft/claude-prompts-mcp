@@ -49,20 +49,6 @@ describe('GateGuidanceRenderer (loader integration)', () => {
     expect(guidance).toContain('Alpha Gate');
   });
 
-  test('getAvailableGates delegates to the provided loader when available', async () => {
-    const loader = createMockLoader();
-    (loader.listAvailableGates as jest.Mock).mockResolvedValue(['gate.alpha']);
-
-    const renderer = new GateGuidanceRenderer(logger as any, {
-      gateLoader: loader as any,
-    });
-
-    const gates = await renderer.getAvailableGates();
-
-    expect(loader.listAvailableGates).toHaveBeenCalled();
-    expect(gates).toEqual(['gate.alpha']);
-  });
-
   test('renders inline guidance sections before framework guidance', async () => {
     const loader = createMockLoader();
     (loader.loadGate as jest.Mock).mockImplementation(async (gateId: string) => {

@@ -59,24 +59,6 @@ export interface GateDefinitionLoaderConfig {
   debug?: boolean;
 }
 
-/**
- * Statistics from the loader
- */
-export interface GateLoaderStats {
-  /** Number of cached definitions */
-  cacheSize: number;
-  /** Cache hit count */
-  cacheHits: number;
-  /** Cache miss count */
-  cacheMisses: number;
-  /** Number of load errors encountered */
-  loadErrors: number;
-  /** Primary gates directory */
-  gatesDir: string;
-  /** Additional overlay directories */
-  additionalGatesDirs: string[];
-}
-
 // Re-export validation types
 export type { GateSchemaValidationResult } from './gate-schema.js';
 
@@ -211,16 +193,6 @@ export class GateDefinitionLoader {
   }
 
   /**
-   * Check if a gate exists
-   *
-   * @param id - Gate ID to check
-   * @returns True if the gate has a valid entry point
-   */
-  gateExists(id: string): boolean {
-    return this.entryRootsFor(id.toLowerCase()).length > 0;
-  }
-
-  /**
    * Clear the cache (all or specific ID)
    *
    * @param id - Optional specific ID to clear; if omitted, clears all
@@ -231,20 +203,6 @@ export class GateDefinitionLoader {
     } else {
       this.cache.clear();
     }
-  }
-
-  /**
-   * Get loader statistics
-   */
-  getStats(): GateLoaderStats {
-    return {
-      cacheSize: this.cache.size,
-      cacheHits: this.stats.cacheHits,
-      cacheMisses: this.stats.cacheMisses,
-      loadErrors: this.stats.loadErrors,
-      gatesDir: this.gatesDir,
-      additionalGatesDirs: this.additionalGatesDirs,
-    };
   }
 
   /**

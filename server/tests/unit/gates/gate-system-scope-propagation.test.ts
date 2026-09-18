@@ -19,8 +19,12 @@ import type { StateStoreOptions } from '../../../src/shared/types/persistence.js
  * **Reduced 2026-08-19.** There used to be a second seam, `recordValidation` after validating,
  * exercised through `validateContent`. Both that method and `GateValidator` behind it were
  * deleted as superseded — every criteria type is enforced by a pipeline stage instead — so the
- * metric had no producer to propagate scope from. The enabled-check is the seam that remains,
- * and it is reached through `getGuidanceText`.
+ * metric had no producer to propagate scope from. The enabled-check is the seam that remains.
+ *
+ * **Narrowed further 2026-09-17.** `getGuidanceText` — the guidance-serving wrapper this test
+ * used to call to reach the enabled-check indirectly — had no production caller of its own and
+ * was deleted as dead code (R36, unreached-methods baseline). The seam is `isGateSystemEnabled()`
+ * itself, called directly; `getGuidanceText` was never more than a pass-through to it here.
  *
  * Classification: Unit. The store is a spy because the assertion IS the argument it receives;
  * a real SQLite store would move the observation one layer away from the defect.
@@ -55,20 +59,20 @@ const createGateSystem = () => {
 };
 
 describe('LightweightGateSystem scope propagation', () => {
-  test('passes the configured workspace scope when reading gate-system state', async () => {
+  test('passes the configured workspace scope when reading gate-system state', () => {
     const gateSystem = createGateSystem();
     const spy = createSpyStore();
 
     gateSystem.setGateStateStore(spy.store, { workspaceId: 'ws-alpha' });
 
-    await gateSystem.getGuidanceText(['some-gate'], {});
+    gateSystem.isGateSystemEnabled();
 
     expect(spy.enabledScopes.length).toBeGreaterThan(0);
     // Not `undefined`: reading unscoped is what made one workspace's gate toggle visible to all.
     expect(spy.enabledScopes[0]).toEqual({ workspaceId: 'ws-alpha' });
   });
 
-  test('omits scope when none is configured, rather than inventing one', async () => {
+  test('omits scope when none is configured, rather than inventing one', () => {
     const gateSystem = createGateSystem();
     const spy = createSpyStore();
 
@@ -76,7 +80,7 @@ describe('LightweightGateSystem scope propagation', () => {
     // store's own default instead of fabricating a workspace id the caller never supplied.
     gateSystem.setGateStateStore(spy.store);
 
-    await gateSystem.getGuidanceText(['some-gate'], {});
+    gateSystem.isGateSystemEnabled();
 
     expect(spy.enabledScopes[0]).toBeUndefined();
   });
