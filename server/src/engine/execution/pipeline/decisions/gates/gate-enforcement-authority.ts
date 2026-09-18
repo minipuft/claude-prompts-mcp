@@ -12,9 +12,9 @@ import type { ChainSessionService, GateReviewPrompt } from '#shared/types/index.
 import type {
   ActionResult,
   CreateReviewOptions,
-  GateVerdict,
   EnforcementMode,
   GateAction,
+  GateVerdict,
   ParsedVerdict,
   PendingGateReview,
   ReviewOutcome,
@@ -143,6 +143,16 @@ export class GateEnforcementAuthority {
    * Called alongside parseVerdict() — overall verdict drives PASS/FAIL,
    * gate verdicts provide granular delivery tracking.
    *
+   * KEPT ON PURPOSE (P4.52/R36): the deliberate read side of `renderGateVerdict`
+   * (gate-verdict-renderer.ts) — its `PER_GATE_HEADER` constant is documented as "Block
+   * header the per-gate parser looks for (gate-enforcement-authority.ts)", naming this
+   * method by file. Both sides are round-trip tested for losslessness (unit test in
+   * gate-verdict-renderer.test.ts, integration test in
+   * structured-gate-verdict-flow.test.ts). No pipeline stage currently acts on the parsed
+   * per-gate detail for an enforcement decision — GateVerdictProcessor reads only the
+   * overall verdict — which is a wiring gap for the plan owner to judge, not dead code:
+   * the render side still actively produces this block for a documented reader.
+   *
    * @param raw - Raw response containing GATE_VERDICTS block
    * @returns Array of parsed gate verdicts (empty if no block found)
    */
@@ -202,16 +212,6 @@ export class GateEnforcementAuthority {
    */
   isRetryLimitExceeded(sessionId: string): boolean {
     return this.chainSessionStore.isRetryLimitExceeded(sessionId);
-  }
-
-  /**
-   * Get pending gate review for a session.
-   *
-   * @param sessionId - Session to check
-   * @returns Pending review or undefined
-   */
-  getPendingReview(sessionId: string): PendingGateReview | undefined {
-    return this.chainSessionStore.getPendingGateReview(sessionId);
   }
 
   /**
@@ -530,14 +530,5 @@ export class GateEnforcementAuthority {
    */
   async setPendingReview(sessionId: string, review: PendingGateReview): Promise<void> {
     await this.chainSessionStore.setPendingGateReview(sessionId, review);
-  }
-
-  /**
-   * Clear pending gate review from a session.
-   *
-   * @param sessionId - Session to update
-   */
-  async clearPendingReview(sessionId: string): Promise<void> {
-    await this.chainSessionStore.clearPendingGateReview(sessionId);
   }
 }

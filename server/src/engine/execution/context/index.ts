@@ -4,7 +4,6 @@
  *
  * Centralizes all execution context infrastructure exports:
  * - ExecutionContext: Pipeline state carrier
- * - ContextResolver: Template variable resolution
  * - Context types: Interfaces for pipeline state
  */
 
@@ -18,13 +17,3 @@ export type {
   SessionContext,
   ExecutionResults,
 } from './context-types.js';
-
-// ContextResolver - template variable resolution
-export {
-  ContextResolver,
-  createContextResolver,
-  type ContextResolution,
-  type ContextProvider,
-  type ContextSource,
-  type ContextAggregationOptions,
-} from './context-resolver.js';

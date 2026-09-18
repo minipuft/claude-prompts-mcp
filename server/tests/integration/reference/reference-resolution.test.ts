@@ -101,15 +101,7 @@ describe('PromptReferenceResolver', () => {
     });
   });
 
-  describe('hasReferences', () => {
-    test('returns true when template contains references', () => {
-      expect(resolver.hasReferences('{{ref:intro}}')).toBe(true);
-    });
-
-    test('returns false when template has no references', () => {
-      expect(resolver.hasReferences('{{normal}} variable')).toBe(false);
-    });
-  });
+  // hasReferences() was deleted at P4.52 — zero production callers, tests included.
 
   describe('resolveReference', () => {
     test('resolves simple reference with context', async () => {

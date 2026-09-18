@@ -74,20 +74,6 @@ export class SessionOverrideResolver {
   }
 
   /**
-   * Clear a specific override.
-   */
-  clearOverride(type: InjectionType): boolean {
-    const existed = this.state.overrides.has(type);
-    this.state.overrides.delete(type);
-
-    if (existed) {
-      this.logger.info('[SessionOverrideResolver] Override cleared', { type });
-    }
-
-    return existed;
-  }
-
-  /**
    * Clear all overrides.
    */
   clearAllOverrides(): number {
@@ -97,22 +83,6 @@ export class SessionOverrideResolver {
     this.logger.info('[SessionOverrideResolver] All overrides cleared', { count });
 
     return count;
-  }
-
-  /**
-   * Get a specific override.
-   */
-  getOverride(type: InjectionType): InjectionRuntimeOverride | undefined {
-    const override = this.state.overrides.get(type);
-
-    // Check if expired
-    if (override?.expiresAt && Date.now() > override.expiresAt) {
-      this.state.overrides.delete(type);
-      this.logger.debug('[SessionOverrideResolver] Override expired', { type });
-      return undefined;
-    }
-
-    return override;
   }
 
   /**
@@ -127,14 +97,6 @@ export class SessionOverrideResolver {
     }
 
     return new Map(this.state.overrides);
-  }
-
-  /**
-   * Get override history for debugging.
-   */
-  getHistory(limit?: number): InjectionRuntimeOverride[] {
-    const history = [...this.state.history];
-    return limit ? history.slice(-limit) : history;
   }
 
   /**
@@ -184,21 +146,6 @@ export class SessionOverrideResolver {
       }),
       historyCount: this.state.history.length,
     };
-  }
-
-  /**
-   * Convert overrides to a format usable by InjectionDecisionInput.
-   */
-  toDecisionInputFormat(): Partial<Record<InjectionType, boolean>> {
-    const result: Partial<Record<InjectionType, boolean>> = {};
-
-    for (const [type, override] of this.getAllOverrides()) {
-      if (override.enabled !== undefined) {
-        result[type] = override.enabled;
-      }
-    }
-
-    return result;
   }
 }
 
