@@ -174,6 +174,74 @@ export interface PromptWriteIntent {
 }
 
 /**
+ * The `prompt.yaml` keys a write of each `promptData` key decides, where they differ from the key
+ * itself. A message is two keys in the file: the `*File` pointer the writer emits, and the inline
+ * form a flat or hand-authored prompt may declare instead. Deciding one without the other would
+ * leave the file naming two sources for one message.
+ */
+const PROMPT_YAML_KEYS_BY_DATA_KEY: Readonly<Record<string, readonly string[]>> = {
+  systemMessage: ['systemMessageFile', 'systemMessage'],
+  userMessageTemplate: ['userMessageTemplateFile', 'userMessageTemplate'],
+};
+
+/**
+ * Which `prompt.yaml` keys this write is allowed to change (P4.57).
+ *
+ * Every other key stays exactly as the file declares it, including keys the writer has no model
+ * for at all. `ownsEveryModeledKey` is a write with no prior directory: the writer produces the
+ * message files itself, so it must decide their pointers too, even under a narrowed scope.
+ */
+export function decidedPromptYamlKeys(
+  suppliedKeys: ReadonlySet<string>,
+  writeIntent: PromptWriteIntent,
+  ownsEveryModeledKey: boolean
+): Set<string> {
+  const dataKeys = ownsEveryModeledKey
+    ? [...ALL_PROMPT_DATA_KEYS]
+    : [...suppliedKeys, ...writeIntent.unsetKeys];
+  if (writeIntent.removedToolIds.length > 0) {
+    dataKeys.push('tools');
+  }
+  const decided = new Set<string>(['id']);
+  for (const dataKey of dataKeys) {
+    for (const yamlKey of PROMPT_YAML_KEYS_BY_DATA_KEY[dataKey] ?? [dataKey]) {
+      decided.add(yamlKey);
+    }
+  }
+  return decided;
+}
+
+/**
+ * Apply the writer's values for the keys this write decides to the document already on disk.
+ *
+ * The disk document is the base, not the writer's output: the writer builds values only for the
+ * keys it models, so a document rebuilt from those values deletes every other key the file
+ * declared — `artifacts`, `edges`, `budget`, and anything the schema's `.passthrough()` admits.
+ * Starting from the file keeps each of those, keeps each undecided key's authored value verbatim
+ * (argument key order included), and keeps the file's top-level key order; a decided key the
+ * writer left unset is removed, and one the file did not have lands after the file's own keys in
+ * the writer's order — which, with no file, is exactly the document the writer built. Pure.
+ */
+export function overlayDecidedPromptYamlKeys(
+  existingYaml: Record<string, unknown> | undefined,
+  written: Record<string, unknown>,
+  decidedKeys: ReadonlySet<string>
+): Record<string, unknown> {
+  const document: Record<string, unknown> = { ...existingYaml };
+  for (const key of decidedKeys) {
+    if (written[key] === undefined) {
+      delete document[key];
+    }
+  }
+  for (const [key, value] of Object.entries(written)) {
+    if (decidedKeys.has(key) && value !== undefined) {
+      document[key] = value;
+    }
+  }
+  return document;
+}
+
+/**
  * "This call removes nothing" — the default for every write path except a tool `update` carrying
  * `unset` or `tool_operation`. Named rather than inlined so the signatures taking it read as
  * deliberately empty rather than accidentally unpassed.
@@ -951,11 +1019,15 @@ export class FileOperations {
     if (writesYaml) {
       const existingYaml =
         priorYamlPath !== null ? await this.readExistingPromptYaml(priorYamlPath) : undefined;
-      const promptYamlData = this.buildPromptYamlData(
-        promptData as Record<string, unknown>,
+      const promptYamlData = overlayDecidedPromptYamlKeys(
         existingYaml,
-        suppliedKeys,
-        writeIntent
+        this.buildPromptYamlData(
+          promptData as Record<string, unknown>,
+          existingYaml,
+          suppliedKeys,
+          writeIntent
+        ),
+        decidedPromptYamlKeys(suppliedKeys, writeIntent, isFreshDirectory)
       );
       files.push({
         relativePath: 'prompt.yaml',
