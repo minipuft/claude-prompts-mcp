@@ -311,10 +311,10 @@ export class ConsolidatedSkillsSync {
    * the caller to infer what happened from prose log lines or by inspecting folders directly.
    *
    * Renders only the fields each command actually populates: `resources` is meaningful for every
-   * command that loads the canonical resource set, `written`/`pruned` only for `export` and
-   * `sync` (the only commands that write managed output), and `drift` only for `diff`. `clone`
-   * populates none of these — it parses one external file rather than loading the resource set —
-   * so it gets no counts line here; its own log output already states what was created.
+   * command that loads the canonical resource set, `pruned` only for `export` and `sync`, `drift`
+   * only for `diff`, and `written` for every command that writes files — `export`/`sync`/`pull`
+   * break it out by client via `writtenByClient`, `clone` does not (it parses one external file
+   * rather than loading a per-client resource set, so it never populates `resources` either).
    */
   private summarizeRunReport(
     operation: Exclude<SkillsSyncOperation, 'status'>,
@@ -348,6 +348,22 @@ export class ConsolidatedSkillsSync {
       lines.push(`Drifted resources (client: ${clientLabel}): ${driftedCount}`);
     } else if (operation === 'pull') {
       lines.push(`Resources loaded: ${report.resources}`);
+      lines.push(
+        report.preview
+          ? `Files written (client: ${clientLabel}): 0 (preview — no files were written)`
+          : `Files written (client: ${clientLabel}): ${report.written}`
+      );
+      if (report.writtenByClient) {
+        for (const [client, count] of Object.entries(report.writtenByClient)) {
+          lines.push(`  - ${client}: ${count}`);
+        }
+      }
+    } else if (operation === 'clone') {
+      lines.push(
+        report.preview
+          ? `Files written: 0 (preview — no files were written)`
+          : `Files written: ${report.written}`
+      );
     }
 
     if (report.failures.length > 0) {
