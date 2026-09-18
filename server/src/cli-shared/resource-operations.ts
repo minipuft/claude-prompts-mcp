@@ -18,12 +18,13 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   renameSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, dirname, join } from 'node:path';
+import { basename, dirname, join, relative } from 'node:path';
 
 import {
   type ResourceValidationResult,
@@ -90,27 +91,65 @@ function occupantOf(parentDir: string, name: string): string | undefined {
 }
 
 /**
- * Relocate a resource and rewrite one line of its YAML, as one step.
+ * Relocate a resource and rewrite its YAML, as one step.
  *
- * The target is checked by the caller before this runs, so nothing is written on a refused
- * target. The rename happens first and the rewrite second; if the rewrite throws, the rename is
- * undone, so a failure leaves the resource where it was with the content it had.
+ * `rewrites` maps a file's path relative to the resource root (`''` for a single-file resource) to
+ * its new content; the entry file is always one of them. The target is checked by the caller
+ * before this runs, so nothing is written on a refused target. The rename happens first and the
+ * rewrites second; if a rewrite throws, the files already written get their old content back and
+ * the rename is undone, so a failure leaves the resource where it was with the content it had.
  */
 function relocateWithRewrite(
   location: ResourceLocation,
   newRoot: string,
-  content: string
+  rewrites: ReadonlyMap<string, { before: string; after: string }>
 ): ResourceLocation {
   const moved = relocate(location, newRoot);
   mkdirSync(dirname(newRoot), { recursive: true });
   renameSync(resourceRoot(location), newRoot);
+  const written: Array<[string, string]> = [];
   try {
-    writeFileSync(moved.file, content, 'utf8');
+    for (const [relativePath, { before, after }] of rewrites) {
+      const target = join(newRoot, relativePath);
+      writeFileSync(target, after, 'utf8');
+      written.push([target, before]);
+    }
   } catch (error) {
+    for (const [target, before] of written) {
+      writeFileSync(target, before, 'utf8');
+    }
     renameSync(newRoot, resourceRoot(location));
     throw error;
   }
   return moved;
+}
+
+/** Every YAML file a resource owns: the single file, or each `.yaml` anywhere in its directory. */
+function ownedYamlFiles(location: ResourceLocation): string[] {
+  if (location.form === 'file') {
+    return [location.file];
+  }
+  const nested = readdirSync(location.dir, { recursive: true, encoding: 'utf8' })
+    .filter((entry) => entry.endsWith('.yaml'))
+    .map((entry) => join(location.dir, entry));
+  return [location.file, ...nested.filter((file) => file !== location.file)];
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Point a renamed prompt's own step references at the new id.
+ *
+ * A chain names its steps by composite id (`promptId: chain/step`), and those ids are paths below
+ * the chain's directory, so renaming the chain changes every one of them. Only references to ids
+ * below the renamed one are rewritten, and only in files the renamed resource owns: a reference
+ * from anywhere else is another resource's content, which `cpm rename` reports and leaves alone.
+ */
+function rewriteStepReferences(content: string, oldId: string, newId: string): string {
+  const pattern = new RegExp(`^(\\s*(?:-\\s+)?promptId:\\s*['"]?)${escapeRegExp(oldId)}/`, 'gm');
+  return content.replace(pattern, `$1${newId}/`);
 }
 
 // ── Result types ────────────────────────────────────────────────────────────
@@ -297,15 +336,41 @@ function invalidIdSegment(name: string): string | undefined {
 }
 
 /**
- * Rename a resource: its path and its `id:` line change together.
+ * Every file a rename rewrites, keyed by its path relative to the resource root: the entry file
+ * with its new `id:` line, and any owned YAML whose step references name an id below `oldId`.
+ */
+function planRenameRewrites(
+  location: ResourceLocation,
+  renamedEntry: string,
+  oldId: string,
+  newId: string
+): Map<string, { before: string; after: string }> {
+  const root = resourceRoot(location);
+  const rewrites = new Map<string, { before: string; after: string }>();
+  for (const file of ownedYamlFiles(location)) {
+    const isEntry = file === location.file;
+    const before = readFileSync(file, 'utf8');
+    const after = rewriteStepReferences(isEntry ? renamedEntry : before, oldId, newId);
+    if (after !== before) {
+      rewrites.set(relative(root, file), { before, after });
+    }
+  }
+  return rewrites;
+}
+
+/**
+ * Rename a resource: its path, its `id:` line and its own step references change together.
  *
  * Only the LAST segment of an id can change. A nested prompt's id is its path below the category
  * (`chain/step`), so renaming `chain/step` to `other/step` would be a move into another chain,
  * which this refuses by name rather than performing half of it. The `id:` written is the new last
  * segment, the one the loader validates the file against.
  *
- * The target is checked before anything is written, and the rewrite of `id:` is undone with the
- * rename if it fails, so a refused or failed rename leaves the resource untouched. Uses string
+ * A chain's `chainSteps` name its steps as `chain/step`, so they are rewritten to the new id in
+ * every YAML file the resource owns (a nested chain names its own steps the same way).
+ *
+ * The target is checked before anything is written, and every rewrite is undone with the rename
+ * if one fails, so a refused or failed rename leaves the resource untouched. Uses string
  * replacement to preserve YAML comments.
  *
  * Files only. Version history is re-keyed by the caller once the rename has also passed
@@ -346,11 +411,13 @@ export function renameResource(
     }
 
     const newRoot = rootIn(parentDir, newName, location.form);
-    const moved = relocateWithRewrite(
+    const rewrites = planRenameRewrites(
       location,
-      newRoot,
-      content.replace(idPattern, `$1${newName}`)
+      content.replace(idPattern, `$1${newName}`),
+      oldId,
+      newId
     );
+    const moved = relocateWithRewrite(location, newRoot, rewrites);
 
     return { success: true, oldPath: resourceRoot(location), newPath: newRoot, moved };
   } catch (error) {
@@ -421,7 +488,12 @@ export function movePromptCategory(
     const moved = relocateWithRewrite(
       location,
       newRoot,
-      content.replace(catPattern, `$1${newCategory}`)
+      new Map([
+        [
+          relative(resourceRoot(location), location.file),
+          { before: content, after: content.replace(catPattern, `$1${newCategory}`) },
+        ],
+      ])
     );
 
     return { success: true, oldPath: resourceRoot(location), newPath: newRoot, moved, oldCategory };

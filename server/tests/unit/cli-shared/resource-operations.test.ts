@@ -151,6 +151,74 @@ describe('resource-operations', () => {
       expect(loadHistory(result.newPath!, ref)?.versions).toHaveLength(1);
     });
 
+    it("points a renamed chain's own step references at the new id", () => {
+      // `chain/step` and `chain_other/step` differ in one identifier: only the first is below the
+      // renamed chain. `step` is a top-level prompt of the same name as the step.
+      const dir = join(tempDir, 'chain');
+      writeResource(
+        dir,
+        'prompt.yaml',
+        [
+          'id: chain',
+          'chainSteps:',
+          '  - promptId: chain/step',
+          '    stepName: Mine',
+          "  - promptId: 'chain/nested'",
+          '  - promptId: chain_other/step',
+          '  - promptId: step',
+        ].join('\n')
+      );
+      writeResource(join(dir, 'step'), 'prompt.yaml', 'id: step');
+      writeResource(
+        join(dir, 'nested'),
+        'prompt.yaml',
+        ['id: nested', 'chainSteps:', '  - promptId: chain/nested/leaf'].join('\n')
+      );
+      writeFileSync(join(dir, 'nested', 'leaf.yaml'), 'id: leaf\n', 'utf8');
+
+      const result = renameResource(dirLocation(dir, 'prompt.yaml'), 'chain', 'renamed');
+      expect(result.success).toBe(true);
+
+      const root = join(tempDir, 'renamed');
+      expect(readYaml(root, 'prompt.yaml')).toBe(
+        [
+          'id: renamed',
+          'chainSteps:',
+          '  - promptId: renamed/step',
+          '    stepName: Mine',
+          "  - promptId: 'renamed/nested'",
+          '  - promptId: chain_other/step',
+          '  - promptId: step',
+        ].join('\n')
+      );
+      expect(readYaml(join(root, 'nested'), 'prompt.yaml')).toContain(
+        'promptId: renamed/nested/leaf'
+      );
+      expect(readYaml(join(root, 'step'), 'prompt.yaml')).toBe('id: step');
+    });
+
+    it("rewrites a renamed step's own references and not its chain's", () => {
+      const chain = join(tempDir, 'chain');
+      writeResource(
+        chain,
+        'prompt.yaml',
+        ['id: chain', 'chainSteps:', '  - promptId: chain/step'].join('\n')
+      );
+      const step = join(chain, 'step');
+      writeResource(
+        step,
+        'prompt.yaml',
+        ['id: step', 'chainSteps:', '  - promptId: chain/step/leaf'].join('\n')
+      );
+
+      const result = renameResource(dirLocation(step, 'prompt.yaml'), 'chain/step', 'chain/moved');
+      expect(result.success).toBe(true);
+
+      expect(readYaml(join(chain, 'moved'), 'prompt.yaml')).toContain('promptId: chain/moved/leaf');
+      // Another resource's content: `cpm rename` reports it as a reference, it does not edit it.
+      expect(readYaml(chain, 'prompt.yaml')).toContain('promptId: chain/step');
+    });
+
     it('errors when target directory exists', () => {
       const dir = join(tempDir, 'source');
       writeResource(dir, 'gate.yaml', 'id: source');

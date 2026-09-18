@@ -212,6 +212,13 @@ interface HistoryRow {
 
 const ENTRY_COLUMNS = 'version, snapshot, diff_summary, description, created_at';
 
+/**
+ * Matches a resource id and every id below it; binds the id twice. Appending `/` to the column
+ * makes the id itself and its descendants one prefix test: `chain` and `chain/step` both start
+ * `chain/`, and `chain_other` does not.
+ */
+const SUBTREE_MATCH = `substr(resource_id || '/', 1, length(?) + 1) = ? || '/'`;
+
 function toEntry(row: HistoryRow): VersionEntry {
   return {
     version: Number(row.version),
@@ -447,11 +454,15 @@ function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): 
       };
     }
 
+    // Delete and rename act on the id AND every id below it (`id/…`). A chain directory holds its
+    // steps, whose history is keyed `chain/step`; removing or renaming the directory removes or
+    // renames them too, so their rows go with it rather than staying behind under ids nothing
+    // serves. The prefix carries the `/`, so `chain_other` is not below `chain`.
     case 'delete_history': {
       db.prepare(
         `DELETE FROM version_history
-         WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?`
-      ).run(tenantId, request.resource_type, request.resource_id);
+         WHERE tenant_id = ? AND resource_type = ? AND ${SUBTREE_MATCH}`
+      ).run(tenantId, request.resource_type, request.resource_id, request.resource_id);
       return { success: true };
     }
 
@@ -461,9 +472,16 @@ function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): 
         return { success: false, error: 'new_resource_id is required' };
       }
       db.prepare(
-        `UPDATE version_history SET resource_id = ?
-         WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?`
-      ).run(newResourceId, tenantId, request.resource_type, request.resource_id);
+        `UPDATE version_history SET resource_id = ? || substr(resource_id, length(?) + 1)
+         WHERE tenant_id = ? AND resource_type = ? AND ${SUBTREE_MATCH}`
+      ).run(
+        newResourceId,
+        request.resource_id,
+        tenantId,
+        request.resource_type,
+        request.resource_id,
+        request.resource_id
+      );
       return { success: true };
     }
   }
@@ -649,7 +667,8 @@ export function rollbackVersion(
 }
 
 /**
- * Delete every `version_history` row for `ref`. `resourceDir` only locates `state.db`.
+ * Delete every `version_history` row for `ref`, and for every id below it (`ref.resourceId/…`):
+ * a chain's steps go with the chain. `resourceDir` only locates `state.db`.
  *
  * Named for what it does, not for the storage model it predates. It was `deleteHistoryFile` until
  * 2026-08-17 — a name from the retired JSON-sidecar era — which sent anyone grepping
@@ -666,7 +685,10 @@ export function deleteVersionRows(resourceDir: string, ref: HistoryResourceRef):
   return result.success;
 }
 
-/** Re-key `from`'s history to `newId`. `resourceDir` only locates `state.db`. */
+/**
+ * Re-key `from`'s history to `newId`, and every id below it with it: renaming chain `a` to `b`
+ * carries `a/step` to `b/step`. `resourceDir` only locates `state.db`.
+ */
 export function renameHistoryResource(
   resourceDir: string,
   from: HistoryResourceRef,

@@ -368,7 +368,8 @@ function cleanupCreatedDir(
 /**
  * Delete a resource directory and its version history.
  *
- * `ref` names the history to delete: the resource's type and the id it is served under.
+ * `ref` names the history to delete: the resource's type and the id it is served under. The rows of
+ * every id below it go too, so deleting a chain directory takes its steps' history with its steps.
  */
 export function deleteResourceDir(
   resourceDir: string,

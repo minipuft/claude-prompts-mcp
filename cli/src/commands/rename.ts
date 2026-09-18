@@ -84,7 +84,7 @@ export async function rename(options: RenameOptions): Promise<number> {
 
   // History follows only a rename that stuck: one that validation rolled back returned above with
   // its files where they were, and its rows must still be where the files are. Keyed by the
-  // composite id the resource is served under.
+  // composite id, so a chain's steps (`chain/step`) move with it.
   renameHistoryResource(result.newPath!, historyRef(type, match.id), options.newId!);
 
   const refs = scanReferences(workspace, options.oldId!);

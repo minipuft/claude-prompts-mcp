@@ -11,6 +11,7 @@ import {
   recordEditResult,
   rollbackVersion,
   deleteVersionRows,
+  renameHistoryResource,
   formatHistoryTable,
 } from '../../../src/cli-shared/version-history.js';
 import type { HistoryFile } from '../../../src/modules/versioning/types.js';
@@ -313,6 +314,66 @@ describe('version-history', () => {
       seedPromptHistory(promptDir);
       expect(deleteVersionRows(promptDir, PROMPT_REF)).toBe(true);
       expect(loadHistory(promptDir, PROMPT_REF)).toBeNull();
+    });
+  });
+
+  describe('a chain and its steps', () => {
+    // Twins that differ in ONE identifier each: the step `c/s` and the top-level prompt `s`; the
+    // chain `c` and `c_other`, which shares its first letter but is not below it; the prompt `c`
+    // and the gate `c`.
+    const prompt = (resourceId: string): HistoryResourceRef => ({
+      resourceType: 'prompt',
+      resourceId,
+    });
+    const versionsOf = (ref: HistoryResourceRef): number =>
+      loadHistory(promptDir, ref)?.versions.length ?? 0;
+
+    beforeEach(() => {
+      const seed = (ref: HistoryResourceRef, count: number): void => {
+        for (let v = 1; v <= count; v += 1) {
+          saveVersion(promptDir, ref.resourceType, ref.resourceId, { v });
+        }
+      };
+      seed(prompt('c'), 1);
+      seed(prompt('c/s'), 2);
+      seed(prompt('s'), 3);
+      seed(prompt('c_other'), 4);
+      seed({ resourceType: 'gate', resourceId: 'c' }, 5);
+    });
+
+    it('reads a step under its composite id, not its last segment', () => {
+      expect(versionsOf(prompt('c/s'))).toBe(2);
+      expect(versionsOf(prompt('s'))).toBe(3);
+    });
+
+    it('deletes a chain with its steps and nothing beside it', () => {
+      expect(deleteVersionRows(promptDir, prompt('c'))).toBe(true);
+
+      expect(versionsOf(prompt('c'))).toBe(0);
+      expect(versionsOf(prompt('c/s'))).toBe(0);
+      expect(versionsOf(prompt('s'))).toBe(3);
+      expect(versionsOf(prompt('c_other'))).toBe(4);
+      expect(versionsOf({ resourceType: 'gate', resourceId: 'c' })).toBe(5);
+    });
+
+    it('renames a chain with its steps and nothing beside it', () => {
+      expect(renameHistoryResource(promptDir, prompt('c'), 'd')).toBe(true);
+
+      expect(versionsOf(prompt('d'))).toBe(1);
+      expect(versionsOf(prompt('d/s'))).toBe(2);
+      expect(versionsOf(prompt('c'))).toBe(0);
+      expect(versionsOf(prompt('c/s'))).toBe(0);
+      expect(versionsOf(prompt('s'))).toBe(3);
+      expect(versionsOf(prompt('c_other'))).toBe(4);
+      expect(versionsOf({ resourceType: 'gate', resourceId: 'c' })).toBe(5);
+    });
+
+    it('renames a step alone, leaving its chain and its top-level twin', () => {
+      expect(renameHistoryResource(promptDir, prompt('c/s'), 'c/t')).toBe(true);
+
+      expect(versionsOf(prompt('c/t'))).toBe(2);
+      expect(versionsOf(prompt('c'))).toBe(1);
+      expect(versionsOf(prompt('s'))).toBe(3);
     });
   });
 
