@@ -456,6 +456,7 @@ describe('Pipeline Wide-Event Root Span Enrichment', () => {
 
     const rootSpan = exporter.getFinishedSpans().find((s) => s.name === 'prompt_engine.request')!;
     expect(rootSpan.attributes['cpm.scope.source']).toBe('default');
+    expect(rootSpan.attributes['cpm.scope.continuity_source']).toBe('default');
   });
 
   // Regression for P4.70: `cpm.scope.source` used to read the deleted `state.scope.source`
@@ -488,6 +489,42 @@ describe('Pipeline Wide-Event Root Span Enrichment', () => {
 
     const rootSpan = exporter.getFinishedSpans().find((s) => s.name === 'prompt_engine.request')!;
     expect(rootSpan.attributes['cpm.scope.source']).toBe('header');
+  });
+
+  // `cpm.scope.continuity_source` reads `workspaceSource` specifically, not the combined
+  // `identitySource` `cpm.scope.source` reports — `resolveContinuityScopeId`
+  // (request-identity-scope.ts) resolves the continuity key from `workspaceId` first, so the
+  // source that matters for state isolation is the workspace's, not "whichever of org/workspace
+  // resolved most authoritatively". This test sets organizationSource to a higher-priority
+  // source than workspaceSource so the two attributes provably diverge — a test that always
+  // asserted them equal could not tell continuity_source apart from a copy of scope.source.
+  test('root span reports the workspace source for continuity, distinct from the combined scope source', async () => {
+    const pipeline = createPipeline({
+      stageOverrides: {
+        IdentityResolution: createStage('IdentityResolution', (context) => {
+          context.state.identity.resolved = true;
+          context.state.identity.continuityScopeId = 'workspace-b';
+          context.state.identity.context = {
+            identity: {
+              organizationId: 'org-b',
+              workspaceId: 'workspace-b',
+              identitySource: 'token',
+            },
+            organizationId: 'org-b',
+            workspaceId: 'workspace-b',
+            continuityScopeId: 'workspace-b',
+            identitySource: 'token',
+            organizationSource: 'token',
+            workspaceSource: 'launch-default',
+          } as any;
+        }),
+      },
+    });
+    await pipeline.execute({ command: 'test-continuity-source' });
+
+    const rootSpan = exporter.getFinishedSpans().find((s) => s.name === 'prompt_engine.request')!;
+    expect(rootSpan.attributes['cpm.scope.source']).toBe('token');
+    expect(rootSpan.attributes['cpm.scope.continuity_source']).toBe('launch-default');
   });
 
   test('marks early exit on root span', async () => {
