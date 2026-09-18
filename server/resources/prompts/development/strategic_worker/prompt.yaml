@@ -10,7 +10,7 @@ description: >-
   headings — done, concerns, deviations, findings, feedback — as the whole of the
   channel back, since the planner cannot read a worker's transcript. Edits only
   the files the row names, moves no git refs, and leaves no TODO behind.
-  Dispatched by >>strategicImplement; a compiled delegated node carries this id.
+  Dispatched by >>strategic_implement; a compiled delegated node carries this id.
 category: development
 systemMessageFile: system-message.md
 userMessageTemplateFile: user-message.md

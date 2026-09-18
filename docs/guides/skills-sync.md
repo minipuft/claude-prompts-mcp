@@ -211,7 +211,7 @@ render — as the prose `## Quality Gates` section described below, with no hook
 With `enforceGateHooks: true`:
 
 ```
-strategicImplement/
+strategic_implement/
   SKILL.md              # frontmatter `hooks:` block → Stop → gate-review.py
   hooks/gate-review.py  # self-contained; no plugin required
   gates/<id>/guidance.md

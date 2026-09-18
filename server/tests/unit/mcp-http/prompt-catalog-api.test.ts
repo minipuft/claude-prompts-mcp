@@ -17,7 +17,7 @@ const configManager = {} as ConfigManager;
 
 function prompt(overrides: Partial<ConvertedPrompt> = {}): ConvertedPrompt {
   return {
-    id: 'strategicImplement',
+    id: 'strategic_implement',
     name: 'Strategic Implementation',
     description: 'Implement a planned change',
     category: 'development',
@@ -89,13 +89,13 @@ describe('prompt catalog HTTP API', () => {
   it('keeps the unauthenticated detail route metadata-only and returns not-found', async () => {
     const origin = await start([prompt({ systemMessage: 'Use the approved plan.' })]);
 
-    const detailResponse = await fetch(`${origin}/prompts/strategicImplement`);
+    const detailResponse = await fetch(`${origin}/prompts/strategic_implement`);
     const detail = (await detailResponse.json()) as Record<string, unknown>;
     const missingResponse = await fetch(`${origin}/prompts/missing`);
 
     expect(detailResponse.status).toBe(200);
     expect(detail).toMatchObject({
-      id: 'strategicImplement',
+      id: 'strategic_implement',
       composerInputArgument: 'task',
     });
     expect(detail).not.toHaveProperty('userMessageTemplate');
@@ -135,7 +135,7 @@ describe('prompt catalog HTTP API', () => {
       expect(Array.isArray(body.prompts)).toBe(true);
       expect(body.prompts).toHaveLength(2);
       expect(body.prompts[0]).toMatchObject({
-        id: 'strategicImplement',
+        id: 'strategic_implement',
         name: 'Strategic Implementation',
         category: 'development',
         composerInputArgument: 'task',
@@ -173,7 +173,7 @@ describe('prompt catalog HTTP API', () => {
   it('fails closed when authenticated catalog detail is not configured', async () => {
     const origin = await start([prompt()]);
 
-    const response = await fetch(`${origin}/api/v1/catalog/prompts/strategicImplement`);
+    const response = await fetch(`${origin}/api/v1/catalog/prompts/strategic_implement`);
 
     expect(response.status).toBe(503);
     expect(response.headers.get('cache-control')).toBe('no-store');
@@ -188,11 +188,13 @@ describe('prompt catalog HTTP API', () => {
       'catalog-read-token'
     );
 
-    const unauthorizedResponse = await fetch(`${origin}/api/v1/catalog/prompts/strategicImplement`);
+    const unauthorizedResponse = await fetch(
+      `${origin}/api/v1/catalog/prompts/strategic_implement`
+    );
     const badTokenResponse = await fetch(`${origin}/api/v1/catalog/prompts/missing`, {
       headers: { authorization: 'Bearer wrong-token' },
     });
-    const detailResponse = await fetch(`${origin}/api/v1/catalog/prompts/strategicImplement`, {
+    const detailResponse = await fetch(`${origin}/api/v1/catalog/prompts/strategic_implement`, {
       headers: { authorization: 'Bearer catalog-read-token' },
     });
 
@@ -203,7 +205,7 @@ describe('prompt catalog HTTP API', () => {
     expect(detailResponse.status).toBe(200);
     expect(detailResponse.headers.get('cache-control')).toBe('no-store');
     await expect(detailResponse.json()).resolves.toMatchObject({
-      summary: { id: 'strategicImplement' },
+      summary: { id: 'strategic_implement' },
       userMessageTemplate: 'Implement {{ task }}',
       systemMessage: 'Use the approved plan.',
     });
@@ -215,7 +217,7 @@ describe('prompt catalog HTTP API', () => {
   it('refuses a mutating tool route with no write token configured', async () => {
     const origin = await start([prompt()]);
 
-    const deleteResponse = await fetch(`${origin}/api/v1/tools/prompts/strategicImplement`, {
+    const deleteResponse = await fetch(`${origin}/api/v1/tools/prompts/strategic_implement`, {
       method: 'DELETE',
     });
     const reloadResponse = await fetch(`${origin}/api/v1/tools/reload_prompts`, {
@@ -229,10 +231,10 @@ describe('prompt catalog HTTP API', () => {
   it('authenticates mutating tool routes before the handler runs', async () => {
     const origin = await start([prompt()], null, { catalogWriteToken: 'write-token' });
 
-    const noToken = await fetch(`${origin}/api/v1/tools/prompts/strategicImplement`, {
+    const noToken = await fetch(`${origin}/api/v1/tools/prompts/strategic_implement`, {
       method: 'DELETE',
     });
-    const wrongToken = await fetch(`${origin}/api/v1/tools/prompts/strategicImplement`, {
+    const wrongToken = await fetch(`${origin}/api/v1/tools/prompts/strategic_implement`, {
       method: 'DELETE',
       headers: { authorization: 'Bearer nope' },
     });
@@ -245,7 +247,7 @@ describe('prompt catalog HTTP API', () => {
     // Least privilege: the read token is held by rendering adapters and must not delete.
     const origin = await start([prompt()], 'read-token', { catalogWriteToken: 'write-token' });
 
-    const response = await fetch(`${origin}/api/v1/tools/prompts/strategicImplement`, {
+    const response = await fetch(`${origin}/api/v1/tools/prompts/strategic_implement`, {
       method: 'DELETE',
       headers: { authorization: 'Bearer read-token' },
     });
@@ -256,7 +258,7 @@ describe('prompt catalog HTTP API', () => {
   it('rejects a present-but-unlisted Origin with 403 across every route', async () => {
     const origin = await start([prompt()]);
 
-    for (const route of ['/health', '/prompts', '/api/v1/catalog/prompts/strategicImplement']) {
+    for (const route of ['/health', '/prompts', '/api/v1/catalog/prompts/strategic_implement']) {
       const response = await fetch(`${origin}${route}`, {
         headers: { origin: 'https://evil.example.com' },
       });
