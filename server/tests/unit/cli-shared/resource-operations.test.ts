@@ -135,8 +135,10 @@ describe('resource-operations', () => {
       expect(content).toContain('# This is a comment');
     });
 
-    it('updates history file resource_id', async () => {
+    it('leaves version history for its caller to re-key once validation has passed', async () => {
       // Engine-owned DDL; the CLI no longer bootstraps it (see version-history.ts runSqlite).
+      // `cpm rename` re-keys history after `runValidatedMutation` succeeds, so a rename that
+      // validation rolls back cannot leave the rows under an id the files no longer carry.
       await seedStateDbSchema(tempDir);
       const dir = join(tempDir, 'resources', 'gates', 'hist-res');
       writeResource(dir, 'gate.yaml', 'id: hist-res\nname: Test');
@@ -145,8 +147,8 @@ describe('resource-operations', () => {
       const result = renameResource(dirLocation(dir, 'gate.yaml'), 'hist-res', 'renamed-res');
       expect(result.success).toBe(true);
 
-      const history = loadHistory(result.newPath!);
-      expect(history?.resource_id).toBe('renamed-res');
+      const ref = { resourceType: 'gate' as const, resourceId: 'hist-res' };
+      expect(loadHistory(result.newPath!, ref)?.versions).toHaveLength(1);
     });
 
     it('errors when target directory exists', () => {

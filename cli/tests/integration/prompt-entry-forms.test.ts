@@ -257,5 +257,17 @@ describe('cpm and the two prompt forms', () => {
       expect(rowCount('chain/step_moved')).toBe(2);
       expect(rowCount('step_dir')).toBe(3);
     });
+
+    it('leaves the history where the files are when validation rolls a rename back', () => {
+      writeFile(at('single_dir', 'prompt.yaml'), body('single_dir') + 'arguments: 5\n');
+      seed('single_dir', 2);
+
+      const { status } = cpm(['rename', 'prompt', 'single_dir', 'renamed', '--workspace', workspace]);
+
+      expect(status).toBe(1);
+      expect(existsSync(at('single_dir', 'prompt.yaml'))).toBe(true);
+      expect(rowCount('single_dir')).toBe(2);
+      expect(rowCount('renamed')).toBe(0);
+    });
   });
 });

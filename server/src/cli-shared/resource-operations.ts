@@ -30,7 +30,6 @@ import {
   type ResourceValidationType,
   validateResourceFile,
 } from './resource-validation.js';
-import { renameHistoryResource } from './version-history.js';
 
 import { isExcludedCategoryDirectoryName } from '#shared/utils/prompt-layout.js';
 import { loadYamlFileSync, serializeYaml } from '#shared/utils/yaml/index.js';
@@ -298,7 +297,7 @@ function invalidIdSegment(name: string): string | undefined {
 }
 
 /**
- * Rename a resource: its path and its `id:` line change together, and history follows.
+ * Rename a resource: its path and its `id:` line change together.
  *
  * Only the LAST segment of an id can change. A nested prompt's id is its path below the category
  * (`chain/step`), so renaming `chain/step` to `other/step` would be a move into another chain,
@@ -308,6 +307,10 @@ function invalidIdSegment(name: string): string | undefined {
  * The target is checked before anything is written, and the rewrite of `id:` is undone with the
  * rename if it fails, so a refused or failed rename leaves the resource untouched. Uses string
  * replacement to preserve YAML comments.
+ *
+ * Files only. Version history is re-keyed by the caller once the rename has also passed
+ * validation (`renameHistoryResource`), because a rename that validation rolls back must leave
+ * the history where the files went back to.
  */
 export function renameResource(
   location: ResourceLocation,
@@ -348,9 +351,6 @@ export function renameResource(
       newRoot,
       content.replace(idPattern, `$1${newName}`)
     );
-
-    // Update SQLite version history resource_id if present
-    renameHistoryResource(newRoot, oldId, newId);
 
     return { success: true, oldPath: resourceRoot(location), newPath: newRoot, moved };
   } catch (error) {

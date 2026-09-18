@@ -17,7 +17,9 @@ import {
   type SkillsSyncOptions,
   type SkillsSyncOutput,
 } from '../../../src/modules/skills-sync/service.js';
+import { saveVersion } from '../../../src/cli-shared/version-history.js';
 import { resolveSkillsSyncPaths } from '../../../src/runtime/skills-sync-paths.js';
+import { seedStateDbSchema } from '../../helpers/test-database.js';
 
 function silentOutput(): SkillsSyncOutput & { logs: string[]; warns: string[] } {
   const logs: string[] = [];
@@ -372,6 +374,39 @@ describe('sync and diff commands end to end (F11)', () => {
       transaction: async (fn: () => unknown) => await fn(),
     };
   }
+
+  it("records each resource's own history version, even under a directory named prompts", async () => {
+    // Twins that differ in ONE identifier, the resource type: the gate `twin` and a prompt `twin`
+    // with more history. The server root sits under a directory named `prompts`, so a lookup that
+    // derives the resource from the gate's path reads it as a prompt and records 3, not 2.
+    serverRoot = path.join(tmpDir, 'prompts', 'server');
+    process.env['MCP_SERVER_ROOT'] = serverRoot;
+    await mkdir(serverRoot, { recursive: true });
+    await writeFile(
+      path.join(serverRoot, 'skills-sync.yaml'),
+      yaml.dump({
+        registrations: { 'claude-code': 'all' },
+        overrides: { 'claude-code': { outputDir: { user: outputDir, project: outputDir } } },
+      })
+    );
+    await writeGate('twin', 'Twin');
+    await writePrompt('solo');
+    await seedStateDbSchema(serverRoot);
+    const gateDir = path.join(serverRoot, 'resources', 'gates', 'twin');
+    for (let v = 1; v <= 2; v += 1) saveVersion(gateDir, 'gate', 'twin', { v });
+    for (let v = 1; v <= 3; v += 1) saveVersion(gateDir, 'prompt', 'twin', { v });
+    saveVersion(gateDir, 'prompt', 'solo', { v: 1 });
+
+    const dbManager = manifestDatabase();
+    await run({ command: 'sync', dbManager: dbManager as never });
+
+    const versions = Object.fromEntries(
+      dbManager
+        .query('SELECT * FROM skills_sync_manifests', ['claude-code', 'user'])
+        .map((row) => [row['resource_key'], row['version']])
+    );
+    expect(versions).toEqual({ 'gate:twin': 2, 'prompt:general/solo': 1 });
+  });
 
   it('diff fills the same drift report from a saved manifest', async () => {
     // Positive control for the block above: the manifest path must keep answering the JSON
