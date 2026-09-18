@@ -116,18 +116,6 @@ export class ArgumentParser {
   private strategies: ProcessingStrategy[];
   private schemaValidator: ArgumentSchemaValidator;
 
-  // Processing statistics
-  // TODO: Wire stats to MetricsCollector for telemetry dashboard
-  // These are tracked but not yet exposed via system_control analytics
-  private stats = {
-    totalProcessed: 0,
-    successfulProcessing: 0,
-    validationFailures: 0,
-    typeCoercions: 0,
-    defaultsApplied: 0,
-    contextResolutions: 0,
-  };
-
   constructor(logger: Logger) {
     this.logger = logger;
     this.strategies = this.initializeStrategies();
@@ -161,8 +149,6 @@ export class ArgumentParser {
     promptData: PromptDefinition,
     context: ExecutionContext = {}
   ): Promise<ArgumentParsingResult> {
-    this.stats.totalProcessed++;
-
     this.logger.debug(
       `Processing arguments for prompt "${promptData.id}": "${rawArgs.substring(0, 100)}..."`
     );
@@ -176,13 +162,9 @@ export class ArgumentParser {
       // Apply validation and enrichment
       const enrichedResult = await this.enrichResult(result, promptData, context);
 
-      this.stats.successfulProcessing++;
-      this.updateProcessingStats(enrichedResult);
-
       this.logger.debug(`Arguments processed successfully using strategy: ${strategy.name}`);
       return enrichedResult;
     } catch (error) {
-      this.stats.validationFailures++;
       this.logger.error(`Argument processing failed for prompt ${promptData.id}:`, error);
       throw error;
     }
@@ -836,36 +818,6 @@ export class ArgumentParser {
     }
 
     return result;
-  }
-
-  /**
-   * Update processing statistics
-   */
-  private updateProcessingStats(result: ArgumentParsingResult): void {
-    this.stats.defaultsApplied += result.metadata.appliedDefaults.length;
-    this.stats.typeCoercions += result.metadata.typeCoercions.length;
-    this.stats.contextResolutions += Object.keys(result.metadata.contextSources).length;
-  }
-
-  /**
-   * Get processing statistics
-   */
-  getStats(): typeof this.stats {
-    return { ...this.stats };
-  }
-
-  /**
-   * Reset statistics
-   */
-  resetStats(): void {
-    this.stats = {
-      totalProcessed: 0,
-      successfulProcessing: 0,
-      validationFailures: 0,
-      typeCoercions: 0,
-      defaultsApplied: 0,
-      contextResolutions: 0,
-    };
   }
 }
 
