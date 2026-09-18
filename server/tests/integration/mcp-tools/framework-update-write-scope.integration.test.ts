@@ -348,14 +348,15 @@ describe('a framework edit keeps everything it was not asked to change (tutorial
       // no other file did. MUTATION KILLED: restoring the pre-B.65 phases planner (a stored
       // phases file was merged and planned whether or not the merge changed it) turns the 11
       // framework.yaml rows and the judge_prompt row red, because phases.yaml comes back
-      // re-serialized. Measured: 16 of 25 tests red, the 12 rows plus the description, rollback
+      // re-serialized. Measured: 16 of 26 tests red, the 12 rows plus the description, rollback
       // and both naming-nothing tests.
       expect(changedFiles(before, readFrameworkDir(frameworksDir))).toEqual([...changes].sort());
 
       // MUTATION KILLED: restoring `yamlData['version'] ??= '1.0.0'` in `buildFrameworkYamlData`
       // turns all 19 rows red. The rows that write framework.yaml read 1.0.0 here, and the rest
       // fail the comparison above, because the reset puts framework.yaml into their plan.
-      // Measured: 23 of 25 tests red; only the contract-coverage test and the create test pass.
+      // Measured: 23 of 26 tests red; the contract-coverage, create and disabled-framework tests
+      // pass.
       expect(storedVersion(frameworksDir)).toBe(STORED_VERSION);
     }
   );
@@ -406,11 +407,35 @@ describe('a framework edit keeps everything it was not asked to change (tutorial
       // Closes the class rather than the site: any value the writer supplies on its own (a
       // default, a re-asserted id, a reference already declared) makes this plan a file.
       // MUTATION KILLED: restoring `data.enabled ?? true` turns the `false` case red, and restoring
-      // the version default turns both red. The `false` case is asserted on the writer directly:
-      // `handleUpdate` refuses a disabled framework before it reaches the writer.
+      // the version default turns both red. With `enabled: true` stored, the old default merged
+      // `true` over `true` and changed nothing, which is why the `false` case exists.
       expect(await writer.projectFrameworkWrite({ id: FRAMEWORK_ID }, existing)).toEqual([]);
     }
   );
+
+  test('a description edit leaves a disabled framework disabled', async () => {
+    const frameworksDir = seedHandAuthored();
+    const frameworkYamlPath = join(frameworksDir, FRAMEWORK_ID, 'framework.yaml');
+    writeFileSync(
+      frameworkYamlPath,
+      readFileSync(frameworkYamlPath, 'utf8').replace('enabled: true', 'enabled: false'),
+      'utf8'
+    );
+    const harness = createHarness(frameworksDir);
+
+    const result = await harness.lifecycle.handleUpdate({
+      action: 'update',
+      id: FRAMEWORK_ID,
+      description: 'Updated description',
+    } as FrameworkManagerInput);
+    expect(result.isError).toBe(false);
+
+    // MUTATION KILLED: restoring `data.enabled ?? true` re-enables the framework here.
+    const updated = parseYamlOrThrow<Record<string, unknown>>(
+      readFileSync(frameworkYamlPath, 'utf8')
+    );
+    expect(updated).toMatchObject({ enabled: false, description: 'Updated description' });
+  });
 
   test('a rollback restores the recorded fields without resetting the version or touching the phases and judge files', async () => {
     const frameworksDir = seedHandAuthored();
