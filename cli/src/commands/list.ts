@@ -1,4 +1,3 @@
-import { join } from 'node:path';
 import { loadYamlFileSync } from '@cli-shared/index.js';
 import { resolveWorkspace, resolveResourceDir, discoverResourcePaths } from '../lib/workspace.js';
 import { output } from '../lib/output.js';
@@ -35,9 +34,8 @@ export async function list(options: ListOptions): Promise<number> {
 
   const items: Record<string, unknown>[] = [];
 
-  for (const { id, dir } of resources) {
-    const filePath = join(dir, config.entryFile);
-    const data = loadYamlFileSync<Record<string, unknown>>(filePath);
+  for (const { id, file } of resources) {
+    const data = loadYamlFileSync<Record<string, unknown>>(file);
 
     items.push({
       id,

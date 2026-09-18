@@ -94,6 +94,8 @@ cpm list styles
 
 Displays a table with id, name, category (prompts only), and description. Use `--json` for machine-readable output.
 
+Prompts are listed exactly as the server loads them: a directory (`{category}/{id}/prompt.yaml`) or a single file (`{category}/{id}.yaml`), at any depth below the category, under the id the server serves — the path below the category, so a chain step is `deep_analysis/deep_dive`. Every command that takes a prompt id takes that id.
+
 ### inspect
 
 Inspect a specific resource by type and ID.
@@ -158,7 +160,7 @@ cpm delete style analytical --force
 | `-w, --workspace <path>` | Workspace directory          |
 | `--json`                 | JSON output                  |
 
-Without `--force`, prints what would be deleted and exits 1. Exit codes: `0` deleted, `1` missing `--force` or error.
+Without `--force`, prints what would be deleted and exits 1. A directory prompt is deleted with its directory (a chain with its steps); a single-file prompt is deleted as that one file, never the category around it. Exit codes: `0` deleted, `1` missing `--force` or error.
 
 ### history
 
@@ -205,7 +207,7 @@ Exit codes: `0` success, `1` version not found or error.
 
 ### rename
 
-Rename a resource (changes directory name and `id:` field in YAML).
+Rename a resource (changes its directory or file name and the `id:` field in YAML together).
 
 ```bash
 cpm rename prompt old-name new-name --workspace server
@@ -218,6 +220,8 @@ cpm rename framework old-method new-method
 | `--no-validate`          | Skip post-rename schema validation |
 | `-w, --workspace <path>` | Workspace directory                |
 | `--json`                 | JSON output                        |
+
+Only the last segment of an id can change: `cpm rename prompt deep_analysis/deep_dive deep_analysis/dive` renames the step in place, while a new id under another chain is refused. The target is checked before anything is written, so a refused rename leaves the resource untouched. `--json` reports `oldPath`/`newPath`, which name a file for a single-file prompt.
 
 Prints a warning with an `rg` command to help find cross-references that may need updating. Exit codes: `0` renamed, `1` not found or target exists.
 
@@ -237,7 +241,7 @@ cpm move prompt helper --category development --json
 | `-w, --workspace <path>` | Workspace directory              |
 | `--json`                 | JSON output                      |
 
-Only prompts have categories — other resource types should use `rename` instead. Prints a warning about chain step references (`category/id` format). Exit codes: `0` moved, `1` error.
+Only prompts have categories — other resource types should use `rename` instead. A single-file prompt moves as a file; a prompt nested inside a chain is refused, because it moves with its chain. `--json` reports `oldPath`/`newPath`. Prints a warning about chain step references (`category/id` format). Exit codes: `0` moved, `1` error.
 
 ### toggle
 

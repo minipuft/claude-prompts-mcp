@@ -39,11 +39,9 @@ export async function linkGateCmd(options: LinkGateOptions): Promise<number> {
 
   const mutation = runValidatedMutation({
     resourceType: 'prompts',
-    resourceId: options.promptId,
-    resourceDir: promptMatch.dir,
-    entryFile: 'prompt.yaml',
+    location: promptMatch,
     validate: !options.noValidate,
-    mutate: () => linkGate(promptMatch.dir, 'prompt.yaml', options.gateId!, options.remove),
+    mutate: () => linkGate(promptMatch.file, options.gateId!, options.remove),
   });
 
   if (!mutation.success) {

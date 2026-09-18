@@ -9,7 +9,9 @@ import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:
 import { dirname, join } from 'node:path';
 
 import { type ResourceValidationResult, validateResourceFile } from './resource-validation.js';
-import { deleteVersionRows } from './version-history.js';
+import { deleteVersionRows, type HistoryResourceRef } from './version-history.js';
+
+import type { ResourceLocation } from './resource-operations.js';
 
 type ResourceType = 'prompts' | 'gates' | 'frameworks' | 'styles';
 
@@ -357,15 +359,49 @@ function cleanupCreatedDir(
 
 /**
  * Delete a resource directory and its version history.
+ *
+ * `ref` names the history to delete. Without it the id is guessed from the directory's last
+ * segment, which is right only for a resource sitting directly in its root or category.
  */
-export function deleteResourceDir(resourceDir: string): { success: boolean; error?: string } {
+export function deleteResourceDir(
+  resourceDir: string,
+  ref?: HistoryResourceRef
+): { success: boolean; error?: string } {
   try {
     if (!existsSync(resourceDir)) {
       return { success: false, error: `Directory does not exist: ${resourceDir}` };
     }
 
-    deleteVersionRows(resourceDir);
+    deleteVersionRows(resourceDir, ref);
     rmSync(resourceDir, { recursive: true, force: true });
+    return { success: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { success: false, error: message };
+  }
+}
+
+/**
+ * Delete one resource, in whichever form it takes, and its version history.
+ *
+ * A directory-form resource goes with its directory, as `deleteResourceDir` always did. A
+ * single-file prompt goes as that FILE and nothing else: the directory around it is a category or a
+ * chain, holding other prompts. Removing it non-recursively means a location that somehow named a
+ * directory as its file fails instead of emptying one.
+ */
+export function deleteResource(
+  location: ResourceLocation,
+  ref: HistoryResourceRef
+): { success: boolean; error?: string } {
+  if (location.form === 'dir') {
+    return deleteResourceDir(location.dir, ref);
+  }
+  try {
+    if (!existsSync(location.file)) {
+      return { success: false, error: `File does not exist: ${location.file}` };
+    }
+    deleteVersionRows(location.file, ref);
+    rmSync(location.file);
     return { success: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
