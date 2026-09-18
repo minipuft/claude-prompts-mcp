@@ -46,7 +46,6 @@ export interface PipelineMcpToolsAccess {
 export interface PipelineDependencies {
   // ── Core Infrastructure ──
   logger: Logger;
-  serverRoot: string;
   configManager: ConfigManager;
 
   // ── Parsing & Planning ──

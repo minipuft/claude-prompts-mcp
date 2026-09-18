@@ -21,7 +21,7 @@ import {
 } from './list-change-notifier.js';
 import { initializeModules } from './module-initializer.js';
 import { resolveRuntimeLaunchOptions, RuntimeLaunchOptions } from './options.js';
-import { resyncResourceIndexAfterReload } from './resource-index-resync.js';
+import { syncResourceIndex } from './resource-index-resync.js';
 import { registerMcpResources as registerMcpResourcesOn } from './resource-registration.js';
 import { resolveServingUnitScope } from './serving-unit-scope.js';
 import { startServerWithManagers } from './startup-server.js';
@@ -820,8 +820,7 @@ export class Application {
       // meant that boundary never fired while the refresh went on to report
       // "completed successfully" over a stale index.
       if (this.serverRoot) {
-        await resyncResourceIndexAfterReload({
-          serverRoot: this.serverRoot,
+        await syncResourceIndex({
           pathResolver: this.pathResolver,
           logger: this.logger,
           indexQuarantine: this.indexQuarantine,

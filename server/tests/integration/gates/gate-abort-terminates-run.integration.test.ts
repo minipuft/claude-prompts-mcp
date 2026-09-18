@@ -64,7 +64,9 @@ describe('gate_action:"abort" terminates the run', () => {
   beforeAll(async () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gate-abort-'));
     logger = createLogger();
-    engine = await SqliteEngine.getInstance(tmpDir, logger);
+    engine = await SqliteEngine.getInstance(logger, {
+      dbPath: path.join(tmpDir, 'runtime-state', 'state.db'),
+    });
     await engine.initialize();
   });
 

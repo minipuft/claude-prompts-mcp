@@ -300,7 +300,6 @@ describe('a delegated step resumed through the real blueprint restore (Tier 2 ro
       .mockImplementation(() => {}) as unknown as jest.SpiedFunction<() => void>;
 
     sessionStore = new ChainSessionStore(logger, new StubTextReferenceStore() as any, {
-      serverRoot: '/tmp/test-delegated-resume-brief',
       cleanupIntervalMs: 60_000,
     });
 

@@ -107,7 +107,9 @@ describe('a prompt directory’s tools/ is reserved in every walk', () => {
   beforeAll(async () => {
     await fs.rm(TEST_DIR, { recursive: true, force: true });
     await fs.mkdir(TEST_DIR, { recursive: true });
-    dbManager = await SqliteEngine.getInstance(TEST_DIR, logger as never);
+    dbManager = await SqliteEngine.getInstance(logger as never, {
+      dbPath: path.join(TEST_DIR, 'runtime-state', 'state.db'),
+    });
     await dbManager.initialize();
   });
 
@@ -159,7 +161,7 @@ describe('a prompt directory’s tools/ is reserved in every walk', () => {
   it('the startup baseline announces the twin beside tools/ and nothing inside it', async () => {
     const tracker = createResourceChangeTracker(logger as never, {
       maxEntries: 1000,
-      serverRoot: TEST_DIR,
+      dbPath: path.join(TEST_DIR, 'runtime-state', 'state.db'),
     });
     await tracker.initialize();
 

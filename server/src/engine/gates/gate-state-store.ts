@@ -101,25 +101,31 @@ export interface GateSystemEvents {
 export class GateStateStore extends EventEmitter {
   private scopedStates: Map<string, GateSystemState> = new Map();
   private logger: Logger;
-  private readonly serverRoot: string;
+  /** The server's `state.db`; undefined exactly when a `stateStore` was injected instead. */
+  private readonly stateDbPath: string | undefined;
   private stateStore?: SqliteStateStore<PersistedGateSystemState>;
   private healthCheckInterval?: NodeJS.Timeout;
   private readonly defaultScope?: StateStoreOptions;
 
+  /**
+   * @param stateStoreOrDbPath an injected store, or the path of the server's `state.db` to open
+   *   one against. Required: before B.62 it was optional and an absent value opened
+   *   `runtime-state/state.db` relative to whatever the process's working directory was.
+   */
   constructor(
     logger: Logger,
-    stateStoreOrDir?: SqliteStateStore<PersistedGateSystemState> | string,
+    stateStoreOrDbPath: SqliteStateStore<PersistedGateSystemState> | string,
     options: GateStateStoreOptions = {}
   ) {
     super();
     this.logger = logger;
     this.defaultScope = options.defaultScope;
 
-    if (stateStoreOrDir instanceof SqliteStateStore) {
-      this.stateStore = stateStoreOrDir;
-      this.serverRoot = '';
+    if (stateStoreOrDbPath instanceof SqliteStateStore) {
+      this.stateStore = stateStoreOrDbPath;
+      this.stateDbPath = undefined;
     } else {
-      this.serverRoot = stateStoreOrDir ?? '';
+      this.stateDbPath = stateStoreOrDbPath;
     }
 
     // Initialize default scope state
@@ -280,7 +286,11 @@ export class GateStateStore extends EventEmitter {
   private async ensureStateStore(): Promise<SqliteStateStore<PersistedGateSystemState>> {
     // Initialize SQLite state store if not injected via constructor
     if (!this.stateStore) {
-      const dbManager = await SqliteEngine.getInstance(this.serverRoot, this.logger);
+      if (this.stateDbPath === undefined) {
+        // The constructor sets exactly one of the two, so this is a broken invariant, not a state.
+        throw new Error('GateStateStore has neither an injected store nor a state.db path.');
+      }
+      const dbManager = await SqliteEngine.getInstance(this.logger, { dbPath: this.stateDbPath });
       this.stateStore = new SqliteStateStore<PersistedGateSystemState>(
         dbManager,
         {
@@ -533,8 +543,8 @@ export class GateStateStore extends EventEmitter {
  */
 export function createGateStateStore(
   logger: Logger,
-  stateStoreOrDir?: SqliteStateStore<PersistedGateSystemState> | string,
+  stateStoreOrDbPath: SqliteStateStore<PersistedGateSystemState> | string,
   options: GateStateStoreOptions = {}
 ): GateStateStore {
-  return new GateStateStore(logger, stateStoreOrDir, options);
+  return new GateStateStore(logger, stateStoreOrDbPath, options);
 }

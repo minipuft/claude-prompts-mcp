@@ -131,15 +131,16 @@ export class FrameworkStateStore extends EventEmitter {
     errorCount: 0,
   };
   private isInitialized: boolean = false;
-  private readonly serverRoot: string;
+  /** The server's `state.db`, opened when no `stateStore` was injected. */
+  private readonly stateDbPath: string;
   private readonly readDefaultFramework: () => string;
   private readonly defaultScope?: StateStoreOptions;
   private stateStore?: SqliteStateStore<PersistedFrameworkState>;
 
-  constructor(logger: Logger, serverRoot: string, options: FrameworkStateStoreOptions = {}) {
+  constructor(logger: Logger, stateDbPath: string, options: FrameworkStateStoreOptions = {}) {
     super();
     this.logger = logger;
-    this.serverRoot = serverRoot;
+    this.stateDbPath = stateDbPath;
     this.readDefaultFramework = options.defaultFramework ?? (() => DEFAULT_FRAMEWORK_ID);
     this.defaultScope = options.defaultScope;
 
@@ -262,7 +263,7 @@ export class FrameworkStateStore extends EventEmitter {
   private async loadPersistedState(scope?: StateStoreOptions): Promise<void> {
     // Initialize SQLite state store if not injected via constructor
     if (!this.stateStore) {
-      const dbManager = await SqliteEngine.getInstance(this.serverRoot, this.logger);
+      const dbManager = await SqliteEngine.getInstance(this.logger, { dbPath: this.stateDbPath });
       await dbManager.initialize();
       this.stateStore = new SqliteStateStore<PersistedFrameworkState>(
         dbManager,
@@ -822,10 +823,10 @@ export class FrameworkStateStore extends EventEmitter {
  */
 export async function createFrameworkStateStore(
   logger: Logger,
-  serverRoot: string,
+  stateDbPath: string,
   options: FrameworkStateStoreOptions = {}
 ): Promise<FrameworkStateStore> {
-  const manager = new FrameworkStateStore(logger, serverRoot, options);
+  const manager = new FrameworkStateStore(logger, stateDbPath, options);
   await manager.initialize();
   return manager;
 }

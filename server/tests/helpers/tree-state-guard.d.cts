@@ -36,7 +36,11 @@ export declare const DECLARED: readonly DeclaredPath[];
 export declare const KNOWN_LEAKS: readonly KnownLeak[];
 export declare function capture(): void;
 export declare function added(): TreeStateVerdict;
-export declare function classify(before: string[] | null, after: string[] | null): TreeStateVerdict;
+export declare function classify(
+  before: string[] | null,
+  after: string[] | null,
+  knownLeaks?: readonly KnownLeak[]
+): TreeStateVerdict;
 export declare function listEntries(cwd?: string): string[] | null;
 export declare function entryPath(line: string): string;
 export declare function declarationFor(entryPath: string): DeclaredPath | undefined;

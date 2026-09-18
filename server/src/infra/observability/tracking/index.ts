@@ -8,7 +8,7 @@
  * import { createResourceChangeTracker } from './tracking/index.js';
  *
  * const tracker = createResourceChangeTracker(logger, {
- *   runtimeStateDir: './runtime-state',
+ *   dbPath: pathResolver.getStateDatabasePath(),
  *   maxEntries: 1000,
  * });
  *
