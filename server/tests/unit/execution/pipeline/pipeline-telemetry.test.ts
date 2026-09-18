@@ -458,6 +458,38 @@ describe('Pipeline Wide-Event Root Span Enrichment', () => {
     expect(rootSpan.attributes['cpm.scope.source']).toBe('default');
   });
 
+  // Regression for P4.70: `cpm.scope.source` used to read the deleted `state.scope.source`
+  // field, which nothing wrote in production and which therefore always reported the
+  // constant `'default'`. It now reads `state.identity.context?.identitySource` — the field
+  // IdentityResolutionStage actually populates. This test stands in for that stage by setting
+  // `state.identity.context` directly, so a real (non-default) source must reach the span.
+  test('root span reports the real scope source for a scoped execution', async () => {
+    const pipeline = createPipeline({
+      stageOverrides: {
+        IdentityResolution: createStage('IdentityResolution', (context) => {
+          context.state.identity.resolved = true;
+          context.state.identity.continuityScopeId = 'workspace-a';
+          context.state.identity.context = {
+            identity: {
+              organizationId: 'org-a',
+              workspaceId: 'workspace-a',
+              identitySource: 'header',
+            },
+            organizationId: 'org-a',
+            workspaceId: 'workspace-a',
+            continuityScopeId: 'workspace-a',
+            identitySource: 'header',
+            organizationSource: 'header',
+          } as any;
+        }),
+      },
+    });
+    await pipeline.execute({ command: 'test-scope-real' });
+
+    const rootSpan = exporter.getFinishedSpans().find((s) => s.name === 'prompt_engine.request')!;
+    expect(rootSpan.attributes['cpm.scope.source']).toBe('header');
+  });
+
   test('marks early exit on root span', async () => {
     const pipeline = createPipeline({
       stageOverrides: {

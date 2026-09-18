@@ -123,10 +123,6 @@ export class ExecutionContext {
         resolved: false,
         continuityScopeId: 'default',
       },
-      scope: {
-        continuityScopeId: 'default',
-        source: 'default',
-      },
       gates: {
         temporaryGateIds: [],
         frameworkGateIds: [],

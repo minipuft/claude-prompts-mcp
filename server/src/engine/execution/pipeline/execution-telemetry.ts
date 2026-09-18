@@ -130,6 +130,6 @@ function buildExecutionAttributes(context: ExecutionContext): Attributes {
     'cpm.chain.id': context.sessionContext?.chainId ?? '',
     'cpm.framework.id': context.frameworkContext?.selectedFramework.id ?? '',
     'cpm.framework.enabled': Boolean(context.frameworkContext),
-    'cpm.scope.source': context.state.scope.source,
+    'cpm.scope.source': context.state.identity.context?.identitySource ?? 'default',
   };
 }
