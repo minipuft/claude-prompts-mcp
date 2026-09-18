@@ -22,10 +22,17 @@ lifecycle it can actually reach.
 ## Now
 
 _Rewritten 2026-09-17._ The remaining-rows slice runs on `feat/rsc-remaining` (from `8f9960eb`).
-Merged: P5.17, P6.4 and P4.56. P6.5 was found already closed by #302, and P3 is killed (R32).
-Dispatching now: the in-repo half of the P5.12 rename (R33), P4.55 (R35), and the first P4.52
-batches (R36). Next come the `~/.claude` and downstream-repo halves of R33, then P5.16 (R34) and
-P5.13. Pushing to `opencode-prompts` and `gemini-prompts` needs its own owner approval.
+
+- **Merged:** P5.17, P6.4, P4.56, and the in-repo half of P5.12. P6.5 was found already closed; P3 is
+  killed (R32).
+- **Running:** P4.55 (R35), P4.52 for engine/execution and for gates+frameworks (R36), and P4.57.
+- **Ordering constraint on the `~/.claude` half of R33 and on P5.16 (R34).** The live `>>` commands
+  are served by `server/dist` in the main checkout, which the config session owns. Its tree does not
+  have `strategic_implement` until this PR merges and that `dist` is rebuilt. So the ~42
+  `strategicImplement` references (23 files) and the ~127 `dev-workflow` references (60 files) in
+  `~/.claude` switch in ONE step after the merge, together with the skill re-export. Switching
+  earlier points the global rules at a prompt the live server does not serve.
+- **Downstream repos** need their own push approval.
 
 ## What already landed (do not redo)
 
