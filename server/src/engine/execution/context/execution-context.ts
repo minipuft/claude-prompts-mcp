@@ -7,7 +7,6 @@ import { McpToolRequestValidator } from '../validation/request-validator.js';
 import type { StateStoreOptions } from '#infra/database/stores/interface.js';
 import type { Logger } from '#infra/logging/index.js';
 import type { ToolResponse, McpToolRequest } from '#shared/types/index.js';
-import type { RequestIdentitySource } from '#shared/types/request-identity.js';
 import type { ParsedCommand, SessionContext, ExecutionResults } from './context-types.js';
 import type { InitializedScriptState, PipelineInternalState } from './internal-state.js';
 import type { FrameworkExecutionContext } from '../../frameworks/types/index.js';
@@ -219,15 +218,6 @@ export class ExecutionContext {
     return Boolean(this.sessionContext?.pendingReview);
   }
 
-  getContinuityScopeId(): string {
-    return this.state.scope.continuityScopeId;
-  }
-
-  setContinuityScopeId(scopeId: string, source: RequestIdentitySource): void {
-    this.state.scope.continuityScopeId = scopeId;
-    this.state.scope.source = source;
-  }
-
   /**
    * Builds StateStoreOptions from the resolved identity scope.
    *
@@ -303,28 +293,6 @@ export class ExecutionContext {
   }
 
   /**
-   * Returns executionPlan with runtime validation.
-   * Throws if called before ExecutionPlanningStage completes.
-   */
-  requireExecutionPlan(): ExecutionPlan {
-    if (!this.executionPlan) {
-      throw new Error('ExecutionPlan not available - ExecutionPlanningStage not executed');
-    }
-    return this.executionPlan;
-  }
-
-  /**
-   * Returns sessionContext with runtime validation.
-   * Throws if called for non-chain execution or before SessionManagementStage.
-   */
-  requireSessionContext(): SessionContext {
-    if (!this.sessionContext) {
-      throw new Error('SessionContext not available - required for chain execution');
-    }
-    return this.sessionContext;
-  }
-
-  /**
    * Returns convertedPrompt from parsedCommand with validation.
    * Throws if not available (indicates single prompt execution without resolved prompt).
    */
@@ -369,16 +337,6 @@ export class ExecutionContext {
       this.parsedCommand?.commandType === 'single' &&
       this.parsedCommand.convertedPrompt !== undefined
     );
-  }
-
-  /**
-   * Type guard for checking if symbolic operators are present.
-   * Useful for conditional execution logic based on operator presence.
-   */
-  hasSymbolicOperators(): this is ExecutionContext & {
-    parsedCommand: ParsedCommand & { format: 'symbolic' };
-  } {
-    return this.parsedCommand?.format === 'symbolic';
   }
 }
 
