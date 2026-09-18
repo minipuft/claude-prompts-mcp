@@ -266,4 +266,96 @@ describe('ShellVerificationStage', () => {
       expect(executor.execute).not.toHaveBeenCalled();
     });
   });
+
+  // OQ-10: VerifyActiveStateStore.writeState/clearState now throw on a persistence failure
+  // instead of logging and swallowing it. These tests prove the stage is not a second place
+  // that catches — the failure must reach whatever awaits `stage.execute()` (in production,
+  // the pipeline's single error boundary), not be absorbed here and reported as a pass.
+  describe('verify-loop persistence failures propagate, not get swallowed', () => {
+    test('a writeState failure while arming the loop propagates out of execute()', async () => {
+      const executor = createMockExecutor(true);
+      const stateManager = createMockStateManager();
+      (stateManager.writeState as jest.Mock).mockRejectedValue(
+        new Error('Failed to arm verify-loop state for session test-session: disk full')
+      );
+      const stage = new ShellVerificationStage(
+        executor,
+        stateManager,
+        createMockSessionService(),
+        createLogger()
+      );
+
+      const context = new ExecutionContext({ command: '>>chain', user_response: 'fixed code' });
+      context.state.gates.pendingShellVerification = {
+        gateId: 'shell-verify-inline',
+        shellVerify: { command: 'npm test', loop: true },
+        attemptCount: 1,
+        maxAttempts: 5,
+        previousResults: [],
+      };
+
+      // The caller (here, the test itself standing in for the pipeline) receives the
+      // failure as a rejection rather than the stage returning a normal (misleading) result.
+      await expect(stage.execute(context)).rejects.toThrow(/could not be armed|Failed to arm/);
+
+      // Not run: the write failure happens before the command executes.
+      expect(executor.execute).not.toHaveBeenCalled();
+    });
+
+    test('a clearState failure on verification pass propagates out of execute()', async () => {
+      const executor = createMockExecutor(true);
+      const stateManager = createMockStateManager();
+      (stateManager.clearState as jest.Mock).mockRejectedValue(
+        new Error('Failed to clear verify-loop state for session test-session: disk full')
+      );
+      const stage = new ShellVerificationStage(
+        executor,
+        stateManager,
+        createMockSessionService(),
+        createLogger()
+      );
+
+      const context = new ExecutionContext({ command: '>>chain', user_response: 'fixed code' });
+      context.state.gates.pendingShellVerification = {
+        gateId: 'shell-verify-inline',
+        shellVerify: { command: 'npm test', loop: true },
+        attemptCount: 1,
+        maxAttempts: 5,
+        previousResults: [],
+      };
+
+      // The stage must not report the pass while the loop record is left stale — the
+      // rejection is what tells the caller the clear did not happen.
+      await expect(stage.execute(context)).rejects.toThrow(/could not be cleared|Failed to clear/);
+    });
+
+    test('a clearState failure on escalation propagates instead of returning the escalation reply', async () => {
+      const executor = createMockExecutor(false);
+      const stateManager = createMockStateManager();
+      (stateManager.clearState as jest.Mock).mockRejectedValue(
+        new Error('Failed to clear verify-loop state for session test-session: disk full')
+      );
+      const stage = new ShellVerificationStage(
+        executor,
+        stateManager,
+        createMockSessionService(),
+        createLogger()
+      );
+
+      const context = new ExecutionContext({ command: '>>chain', user_response: 'attempt fix' });
+      context.state.gates.pendingShellVerification = {
+        gateId: 'shell-verify-inline',
+        shellVerify: { command: 'npm test', loop: true },
+        attemptCount: 4, // next failure reaches maxAttempts → escalation path
+        maxAttempts: 5,
+        previousResults: [],
+      };
+
+      // Before this fix, the escalation reply below would have been returned to the
+      // caller — claiming the loop was handled — while verify-state.db still said
+      // otherwise. Now the reply never forms; the failure does instead.
+      await expect(stage.execute(context)).rejects.toThrow(/could not be cleared|Failed to clear/);
+      expect(context.response).toBeUndefined();
+    });
+  });
 });
