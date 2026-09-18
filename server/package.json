@@ -151,6 +151,8 @@
     "validate:refusal-aware-consumers:self-test": "tsx scripts/validate-refusal-aware-consumers.ts --self-test",
     "validate:serving-claims": "tsx scripts/validate-serving-claims.ts",
     "validate:serving-claims:self-test": "tsx scripts/validate-serving-claims.ts --self-test",
+    "validate:reload-assertions": "tsx scripts/validate-reload-assertions.ts",
+    "validate:reload-assertions:self-test": "tsx scripts/validate-reload-assertions.ts --self-test",
     "validate:prompt-walks": "tsx scripts/validate-prompt-walks.ts",
     "validate:prompt-walks:self-test": "tsx scripts/validate-prompt-walks.ts --self-test",
     "validate:test-subject-claims": "tsx scripts/validate-test-subject-claims.ts",
