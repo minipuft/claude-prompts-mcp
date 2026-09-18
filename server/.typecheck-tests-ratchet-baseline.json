@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-17T05:11:13.997Z",
+  "generatedAt": "2026-09-18T03:23:34.802Z",
   "project": "tsconfig.test.json",
   "scope": "tests/",
   "totals": {
-    "errors": 359
+    "errors": 357
   },
   "byCode": {
     "TS18046": 3,
@@ -13,7 +13,7 @@
     "TS2307": 5,
     "TS2322": 50,
     "TS2339": 34,
-    "TS2345": 92,
+    "TS2345": 90,
     "TS2353": 41,
     "TS2367": 1,
     "TS2416": 1,
@@ -58,7 +58,7 @@
     "tests/unit/execution/parsers/command-parser.test.ts": 1,
     "tests/unit/execution/parsers/verify-parsing.test.ts": 1,
     "tests/unit/execution/parsers/xml-encoding-workaround.test.ts": 1,
-    "tests/unit/execution/parsing-system.test.ts": 2,
+    "tests/unit/execution/parsing-system.test.ts": 1,
     "tests/unit/execution/pipeline/command-parsing-stage.test.ts": 16,
     "tests/unit/execution/pipeline/framework-stage.test.ts": 20,
     "tests/unit/execution/pipeline/gate-enhancement-stage.test.ts": 12,
@@ -82,7 +82,7 @@
     "tests/unit/execution/validation/command-type-discriminant.test.ts": 2,
     "tests/unit/frameworks/framework-validator.test.ts": 1,
     "tests/unit/gates/gate-review-session-continuity.test.ts": 1,
-    "tests/unit/gates/guidance/gate-guidance-renderer.test.ts": 7,
+    "tests/unit/gates/guidance/gate-guidance-renderer.test.ts": 6,
     "tests/unit/gates/services/gate-services.test.ts": 2,
     "tests/unit/gates/services/gate-shell-verify-runner.test.ts": 3,
     "tests/unit/mcp-tools/framework-manager/completeness-validation.test.ts": 24,
