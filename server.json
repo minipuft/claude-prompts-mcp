@@ -6,13 +6,13 @@
     "url": "https://github.com/minipuft/claude-prompts-mcp",
     "source": "github"
   },
-  "version": "4.0.1",
+  "version": "5.0.0",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "claude-prompts",
-      "version": "4.0.1",
+      "version": "5.0.0",
       "transport": {
         "type": "stdio"
       }
