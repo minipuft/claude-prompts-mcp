@@ -409,6 +409,12 @@ function contractKind(type: string, members?: readonly string[]): Kind | undefin
   if (type === 'object' || type === 'record') return { kind: 'object' };
   if (/^object<.+>$/.test(type) || /^\{.*\}$/.test(type)) return { kind: 'object' };
   if (type === 'array' || /^array<.+>$/.test(type)) return { kind: 'array' };
+  // `unknown` is the contract's spelling of a zod element with no shape constraint at all
+  // (`z.unknown()`/`z.any()`) — the same "no constraint" fact `publishedKind` reports as
+  // `unconstrained` for a schema node with no usable `type`. Only meaningful as an ARRAY
+  // ELEMENT (a top-level `unknown` parameter would be indistinguishable from an undeclared
+  // type), which is the only place this is used today (`resource_manager.tools`, `.phases`).
+  if (type === 'unknown') return { kind: 'unconstrained' };
   return undefined;
 }
 
@@ -509,20 +515,18 @@ function publishedProperties(tool: string): Record<string, SchemaNode> {
 }
 
 /**
- * Element shapes the comparison deliberately stops above, as measured on 2026-09-15.
+ * Element shapes the comparison could not read as of 2026-09-15 — six entries, one per row of
+ * `resource_manager.pass_criteria/tools/phases/chain_steps` and `prompt_engine.gates/observations`
+ * (closed the same day the grammar grew `union[...]` and `unknown` to express them).
  *
- * Each entry is `tool.parameter: <contract element> → <published element>`. They are listed
- * rather than skipped so the boundary is visible and finite: a new divergence fails this test,
- * and the list shrinks only by making a contract element string and its zod element agree.
+ * Kept as a live list rather than deleted with the six: the comparison still stops at ONE array
+ * element deep (`Kind` above descends no further), so a future parameter whose contract element
+ * string cannot yet be expressed lands here rather than silently passing. Each entry is
+ * `tool.parameter: <contract element> → <published element>`; the list shrinks only by making a
+ * contract element string and its zod element agree, and grows only when a genuinely new element
+ * shape needs a grammar addition first.
  */
-const UNCOMPARED_ELEMENT_SHAPES = [
-  'prompt_engine.gates: string|{name,description}|gate → union[object|object|string]',
-  'prompt_engine.observations: {type,id,statement,blocking?,target_step_id?,resolution?} → union[object|object]',
-  'resource_manager.chain_steps: step → object',
-  'resource_manager.pass_criteria: string → object',
-  'resource_manager.phases: object → unconstrained',
-  'resource_manager.tools: {id,name,script,description?,runtime?,schema?,trigger?,confirm?,strict?,timeout?} → unconstrained',
-];
+const UNCOMPARED_ELEMENT_SHAPES: readonly string[] = [];
 
 /** Parameters whose published outer shape is not the one the contract declares. */
 function typeDisagreements(
@@ -714,6 +718,16 @@ describe('every registered tool publishes the surface its contract describes', (
 
       expect(typeDisagreements(tool, parameters, retyped)).toEqual([
         'resource_manager.confirm: contract boolean ≠ published string',
+      ]);
+    });
+
+    it('reports an array element type the contract disagrees with', () => {
+      const narrowed = parameters.map((parameter) =>
+        parameter.name === 'pass_criteria' ? { ...parameter, type: 'array<string>' } : parameter
+      );
+
+      expect(elementDivergences(tool, narrowed, published)).toEqual([
+        'resource_manager.pass_criteria: string → object',
       ]);
     });
   });
