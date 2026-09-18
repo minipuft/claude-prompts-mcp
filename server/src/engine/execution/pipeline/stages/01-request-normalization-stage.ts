@@ -6,12 +6,14 @@ import { BasePipelineStage } from '../stage.js';
 import type { Logger } from '#infra/logging/index.js';
 import type { ChainSessionRouterPort, ToolResponse } from '#shared/types/index.js';
 import type { ExecutionContext } from '../../context/index.js';
+import type { RoutedToolCall } from '../routing/tool-routing.js';
 
-type ToolRouter = (
-  targetTool: string,
-  params: Record<string, any>,
-  originalCommand: string
-) => Promise<ToolResponse>;
+/**
+ * One parameter, not three: `RoutedToolCall` is discriminated on `targetTool`, and a caller
+ * (`PromptExecutor.routeToTool`) switching on that field needs `translatedParams` to narrow
+ * along with it — three positional parameters cannot correlate that way in TypeScript.
+ */
+type ToolRouter = (call: RoutedToolCall) => Promise<ToolResponse>;
 
 /**
  * Pipeline Stage 01: Request Normalization
@@ -192,16 +194,12 @@ Note: When continuing a chain, the 'command' parameter is optional - the system 
     }
 
     const routing = detectToolRoutingCommand(command);
-    if (!routing.requiresRouting || !routing.targetTool || !routing.translatedParams) {
+    if (!routing.requiresRouting) {
       return false;
     }
 
     try {
-      const response = await this.toolRouter(
-        routing.targetTool,
-        routing.translatedParams,
-        routing.originalCommand ?? command
-      );
+      const response = await this.toolRouter(routing);
       context.setResponse(response);
       this.logExit({ handledBy: 'tool-routing', target: routing.targetTool });
       return true;

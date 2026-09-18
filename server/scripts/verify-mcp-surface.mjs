@@ -587,13 +587,18 @@ const WRONG_BUT_WELL_FORMED = {
     ')\nSelection source: registrations\nConfigured registrations: 4\n\nClients:\n- claude-code: scoped (2), no manifest entries\n- cursor: unregistered, no manifest entries\n',
 };
 
-/** Where the action registry lives. Parsed, not imported — this file must stay dependency-free. */
+/**
+ * Where the action registry lives. Parsed, not imported — this file must stay dependency-free.
+ *
+ * Moved from mcp/metadata/definitions/system-control.ts to shared/types/system-control.ts (row
+ * B.61 follow-up): that module's layer sat above engine/, so a routed system_control call could
+ * only be typed against it with an upward cross-layer import.
+ */
 const SYSTEM_CONTROL_ACTIONS_SOURCE = path.join(
   SERVER_ROOT,
   'src',
-  'mcp',
-  'metadata',
-  'definitions',
+  'shared',
+  'types',
   'system-control.ts'
 );
 
