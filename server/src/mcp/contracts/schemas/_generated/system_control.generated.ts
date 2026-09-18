@@ -78,7 +78,7 @@ export const system_controlParameters: ToolParameter[] = [
     name: 'operation',
     type: 'string',
     description:
-      'Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list; analytics view/reset/history; config list/keys/validate; maintenance restart; injection status/override/reset; session list/clear/inspect; changes list; execution_history list; skills_sync status/export/sync/diff/pull/clone).',
+      'Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list; analytics view/reset/history; config list/keys/get/validate; maintenance restart; injection status/override/reset; session list/clear/inspect; changes list; execution_history list; skills_sync status/export/sync/diff/pull/clone).',
     status: 'working',
     compatibility: 'canonical',
   },
@@ -179,7 +179,7 @@ export const system_controlParameters: ToolParameter[] = [
     name: 'config',
     type: 'object',
     description:
-      'For config validate only: `{ key, value, operation: "validate" }` checks whether `value` would be valid for `key`, without writing it. Omit `config` and set the top-level `operation` to `list` (whole loaded configuration), `keys` (declared schema keys) or `validate` (load-time schema check).',
+      'For config `get`: `{ operation: "get", key }` returns that key\'s effective value and source. For config `validate` only: `{ key, value, operation: "validate" }` checks whether `value` would be valid for `key`, without writing it. Omit `config` and set the top-level `operation` to `list` (whole loaded configuration), `keys` (declared schema keys) or `validate` (load-time schema check).',
     status: 'working',
     compatibility: 'canonical',
   },
@@ -394,7 +394,7 @@ export const system_controlCommands: ToolCommand[] = [
   {
     id: 'config',
     summary:
-      'Configuration operations, read-only (list/keys/validate). Writes go through the `cpm` CLI.',
+      'Configuration operations, read-only (list/keys/get/validate). Writes go through the `cpm` CLI.',
     parameters: ['action', 'operation', 'config', 'reason'],
     status: 'working',
   },

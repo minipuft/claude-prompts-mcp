@@ -67,7 +67,7 @@ const GATE_ID = 'versioning-probe';
 /** Minimal versioning config provider — versioning enabled, auto-version on. */
 class TestVersioningConfigProvider implements VersioningConfigProvider {
   getVersioningConfig() {
-    return { enabled: true, max_versions: 10, auto_version: true };
+    return { enabled: true, maxVersions: 10, autoVersion: true };
   }
   getServerRoot(): string {
     return process.cwd();

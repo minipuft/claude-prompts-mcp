@@ -203,8 +203,8 @@ describe('Version History Workflow Integration', () => {
     mockLogger = new MockLogger();
     mockConfigProvider = new MockVersioningConfigProvider({
       enabled: true,
-      max_versions: 10,
-      auto_version: true,
+      maxVersions: 10,
+      autoVersion: true,
     });
 
     // Temp dir first: the SQLite engine is created inside it so teardown removes both.
@@ -528,7 +528,7 @@ describe('Version History Workflow Integration', () => {
       expect(history!.versions).toHaveLength(2);
 
       // Disable auto-versioning mid-session
-      mockConfigProvider.setConfig({ auto_version: false });
+      mockConfigProvider.setConfig({ autoVersion: false });
 
       // This update should NOT create a version
       await manager.update({ name: 'v3' });
@@ -537,7 +537,7 @@ describe('Version History Workflow Integration', () => {
       expect(history!.versions).toHaveLength(2); // No new version
 
       // Re-enable
-      mockConfigProvider.setConfig({ auto_version: true });
+      mockConfigProvider.setConfig({ autoVersion: true });
 
       await manager.update({ name: 'v4' });
 
@@ -545,9 +545,9 @@ describe('Version History Workflow Integration', () => {
       expect(history!.versions).toHaveLength(3); // New version created
     });
 
-    it('should apply max_versions limit dynamically', async () => {
+    it('should apply maxVersions limit dynamically', async () => {
       // Start with high limit
-      mockConfigProvider.setConfig({ max_versions: 100 });
+      mockConfigProvider.setConfig({ maxVersions: 100 });
 
       const manager = new SimulatedResourceManager({
         versionHistoryService,
@@ -565,7 +565,7 @@ describe('Version History Workflow Integration', () => {
       expect(history!.versions).toHaveLength(5);
 
       // Reduce limit to 3
-      mockConfigProvider.setConfig({ max_versions: 3 });
+      mockConfigProvider.setConfig({ maxVersions: 3 });
 
       // Next update should trigger pruning
       await manager.update({ name: 'v6' });

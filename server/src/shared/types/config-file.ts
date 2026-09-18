@@ -5,8 +5,7 @@
  * `ConfigFile` is what a 5.0 `config.json` CONTAINS on disk. `Config` (./core-config.js) is a
  * different thing: the RESOLVED runtime shape a reader gets after the config loader has applied
  * defaults, folded legacy spellings into current ones, and renamed wire keys to internal ones
- * (`gates.directory` becomes `definitionsDirectory`; the flat `frameworks.systemPromptFrequency`
- * becomes `injection.systemPrompt.frequency`).
+ * (`chainSessions.timeoutMinutes` becomes `chainSessions.sessionTimeoutMinutes`).
  *
  * Conflating the two is what this file exists to stop, so `ConfigFile` deliberately does not
  * extend `Config` and a parsed file is not a cast target for it. A loader MAPS, key by key, and
@@ -246,7 +245,9 @@ interface ConfigFileGateEvaluation {
   /**
    * Default strict mode: use failure-first framing for judge evaluation.
    *
-   * @default true
+   * Absent, its effective default is not a constant: `resolveJudgeConfig`
+   * (`judge-prompt-builder.ts`) falls back to `true` exactly when the evaluation mode is
+   * `'judge'`, and to `false` otherwise.
    */
   strict?: boolean;
 }
@@ -259,12 +260,6 @@ interface ConfigFileGates {
    * @default true
    */
   enabled?: boolean;
-  /**
-   * Directory containing gate definitions.
-   *
-   * @default "resources/gates"
-   */
-  directory?: string;
   /**
    * Apply framework-specific quality gates.
    *

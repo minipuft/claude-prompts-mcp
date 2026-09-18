@@ -117,7 +117,7 @@ async function createHarness(workspaceDir: string): Promise<Harness> {
   const history = new VersionHistoryService({
     logger,
     configManager: {
-      getVersioningConfig: () => ({ enabled: true, max_versions: 25, auto_version: true }),
+      getVersioningConfig: () => ({ enabled: true, maxVersions: 25, autoVersion: true }),
       getServerRoot: () => workspaceDir,
     } as never,
     dbManager: engine,
@@ -439,7 +439,7 @@ describe('P7 acceptance — create records version 1', () => {
     const history = new VersionHistoryService({
       logger,
       configManager: {
-        getVersioningConfig: () => ({ enabled: true, max_versions: 25, auto_version: true }),
+        getVersioningConfig: () => ({ enabled: true, maxVersions: 25, autoVersion: true }),
         getServerRoot: () => workspaceDir,
       } as never,
       dbManager: engine,

@@ -50,9 +50,9 @@ export function applyRuntimeIdentityOverrides(
 ): ProjectScopeDerivation | undefined {
   const hasIdentityModeOverride = runtimeOptions.identityMode != null;
 
-  const identityConfig = config.identity ?? {};
+  const identityConfig = config.identity;
   const mergedLaunchDefaults = {
-    ...(identityConfig.launchDefaults ?? {}),
+    ...identityConfig.launchDefaults,
     ...(runtimeOptions.identityDefaults ?? {}),
   };
 
@@ -168,7 +168,7 @@ export async function createRuntimeFoundation(
 
   // State isolation depends entirely on this id, and a wrong one fails silently by
   // sharing state between projects — so report it and its source unconditionally.
-  const activeScopeId = configManager.getConfig().identity?.launchDefaults?.workspaceId;
+  const activeScopeId = configManager.getConfig().identity.launchDefaults.workspaceId;
   logger.info(
     `Project scope id: ${activeScopeId ?? 'default'} (source: ${
       derivedProjectScope?.source ?? 'explicit configuration'

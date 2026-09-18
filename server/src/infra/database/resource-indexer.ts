@@ -45,6 +45,8 @@ import type { Logger } from '../logging/index.js';
 
 import { computeContentHash } from '#shared/utils/hash.js';
 import {
+  isExcludedCategoryDirectoryName,
+  isIgnoredPromptEntryName,
   isReservedPromptDirectoryName,
   isSingleFilePromptName,
   singleFilePromptBaseName,
@@ -951,9 +953,7 @@ export class ResourceIndexer {
         await this.scanSingleFilePrompt({ entry, dir, type, root, depth, results, result });
         continue;
       }
-      // The reserved-directory rule, read from the module that states it rather than from a
-      // literal here. This walk was the only one enforcing it while the other two recursed in.
-      if (!entry.isDirectory() || isReservedPromptDirectoryName(entry.name)) continue;
+      if (!entry.isDirectory() || this.skipsPromptDirectory(type, entry.name, depth)) continue;
 
       const subDir = path.join(dir, entry.name);
       const found = await this.readResourceDir(subDir, root, yamlFile);
@@ -962,6 +962,31 @@ export class ResourceIndexer {
         await this.scanResources(subDir, type, results, result, root, depth + 1);
       }
     }
+  }
+
+  /**
+   * True when the prompt loader would not descend into this directory, so neither may the index.
+   *
+   * Both rules come from `#shared/utils/prompt-layout.js` and both are PROMPT rules: the gate,
+   * framework and style loaders (`discoverNestedYamlDirectories`) skip neither name, so applying
+   * them to those types would hide a resource their own loader serves.
+   *
+   * - {@link isExcludedCategoryDirectoryName} at the root, where every directory is a category
+   *   candidate. It is the loader's own category rule, so a `backup/` or `node_modules/` directory
+   *   the loader never serves is not indexed either. This walk used to apply only the `.`/`_`
+   *   half there, and indexed every prompt under `backup/`.
+   * - {@link isIgnoredPromptEntryName} below the root. This walk used to apply it to FILES only,
+   *   so it descended into `_drafts/` and indexed what it found while the loader served none of
+   *   it — the defect that predicate's own docstring names.
+   * - {@link isReservedPromptDirectoryName} below the root only. `tools/` is reserved INSIDE a
+   *   category, where script tools live; at the prompts root `tools` is an ordinary category name,
+   *   and `discoverCategoryDirectories` serves it. Skipping it at depth 0 made a whole served
+   *   category invisible to `resource_index`.
+   */
+  private skipsPromptDirectory(type: IndexedResourceType, name: string, depth: number): boolean {
+    if (type !== 'prompt') return false;
+    if (depth === 0) return isExcludedCategoryDirectoryName(name);
+    return isIgnoredPromptEntryName(name) || isReservedPromptDirectoryName(name);
   }
 
   /**
@@ -1097,28 +1122,6 @@ export class ResourceIndexer {
   private async removeResource(type: IndexedResourceType, id: string): Promise<void> {
     this.db.run('DELETE FROM resource_index WHERE id = ? AND type = ?', [id, type]);
     this.logger.debug(`ResourceIndexer: Removed ${type}/${id}`);
-  }
-
-  /**
-   * Get valid style IDs from the index.
-   * Replaces directory-scanning _meta.valid_styles from cache files.
-   */
-  getValidStyles(): string[] {
-    const rows = this.db.query<{ id: string }>(
-      "SELECT id FROM resource_index WHERE type = 'style' ORDER BY id"
-    );
-    return rows.map((r) => r.id.toLowerCase());
-  }
-
-  /**
-   * Get valid framework IDs from the index.
-   * Replaces directory-scanning _meta.valid_frameworks from cache files.
-   */
-  getValidFrameworks(): string[] {
-    const rows = this.db.query<{ id: string }>(
-      "SELECT id FROM resource_index WHERE type = 'framework' ORDER BY id"
-    );
-    return rows.map((r) => r.id.toLowerCase());
   }
 
   /**

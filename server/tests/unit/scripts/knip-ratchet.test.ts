@@ -148,3 +148,54 @@ describe('knip-ratchet compareSummaries (pre-existing check() logic)', () => {
     expect(vanished).toEqual([{ category: 'retiring', baseline: 3 }]);
   });
 });
+
+/**
+ * Row B.67: `check()` now fails on a decrease, not just an increase — a ratchet nobody
+ * tightens is a floor. `compareSummaries`'s `decreases` finding already existed (it drove the
+ * pre-B.67 advisory-only print in `handleCheck()`); these pin that it is the exact signal the
+ * post-B.67 `handleCheck()` FAIL branch reads, the same way the describe block above pins
+ * `regressions`/`vanished` without invoking the process-spawning `handleCheck()` itself.
+ */
+describe('knip-ratchet compareSummaries decrease detection (row B.67)', () => {
+  it('reports a decrease and names the category', () => {
+    const { regressions, vanished, decreases } = compareSummaries(
+      { byCategory: { types: 678 } },
+      { byCategory: { types: 670 } }
+    );
+
+    expect(decreases).toEqual([{ category: 'types', baseline: 678, current: 670 }]);
+    expect(regressions).toEqual([]);
+    expect(vanished).toEqual([]);
+  });
+
+  it('a baseline equal to the measured count produces no decreases, regressions, or vanished', () => {
+    const { regressions, vanished, decreases } = compareSummaries(
+      { byCategory: { exports: 42 } },
+      { byCategory: { exports: 42 } }
+    );
+
+    expect(decreases).toEqual([]);
+    expect(regressions).toEqual([]);
+    expect(vanished).toEqual([]);
+  });
+
+  it('an increase still fails alongside an unrelated decrease', () => {
+    const { regressions, decreases } = compareSummaries(
+      { byCategory: { exports: 10, types: 678 } },
+      { byCategory: { exports: 12, types: 670 } }
+    );
+
+    expect(regressions).toEqual([{ category: 'exports', baseline: 10, current: 12 }]);
+    expect(decreases).toEqual([{ category: 'types', baseline: 678, current: 670 }]);
+  });
+
+  it('a category that drops to 0 findings is vanished, not double-counted as a decrease', () => {
+    const { vanished, decreases } = compareSummaries(
+      { byCategory: { files: 3 } },
+      { byCategory: {} }
+    );
+
+    expect(vanished).toEqual([{ category: 'files', baseline: 3 }]);
+    expect(decreases).toEqual([]);
+  });
+});

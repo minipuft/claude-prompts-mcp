@@ -332,10 +332,13 @@ Reports "already enabled/disabled" without writing when the value is unchanged. 
 > which run in the client's own subagent rather than through an outbound API call — so no API key
 > is configured or stored.
 >
-> **A `config.json` that still carries the `analysis` section keeps loading.** The section is
-> parsed and ignored for one deprecation cycle, and the server warns once at startup naming the
-> replacement. Only the ability to _set_ it from `cpm` or `system_control` is withdrawn. Delete the
-> section to silence the warning; it is removed entirely in the next major.
+> **Removed in 5.0: the `analysis` section itself.** It is gone from `config.schema.json`, not just
+> unsettable. A `config.json` with no `version` key that still carries
+> `analysis.semanticAnalysis.llmIntegration.*` is read as a 4.x file and translated on load: the
+> section is dropped, and named in the one-time notice alongside every other renamed or dropped
+> key. A file already declaring `"version": 5` that still carries `analysis` is flagged by the
+> ordinary schema check instead. Delete the section (or add `"version": 5` and drop it) to silence
+> either warning.
 
 > **Changed in 3.1.2.** These nine keys were previously `*.mode` holding `"on"`/`"off"`, which no
 > reader consulted — the command reported success and changed nothing. A `config.json` still

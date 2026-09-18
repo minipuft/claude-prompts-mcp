@@ -121,13 +121,16 @@ export class PipelineBuilder {
     const lifecycleStage = new ExecutionLifecycleStage(temporaryGateRegistry, deps.logger);
 
     const identityResolutionStage = new IdentityResolutionStage(() => {
+      // No "did the operator configure identity?" guard any more: the loader resolves the whole
+      // section (row 6.2 / R57), so `mode` is always set and the guard that used to stand here
+      // could only ever be false. It was not inert — a config with launch defaults but no
+      // explicit `identity.mode` (what `applyRuntimeIdentityOverrides` produces for every
+      // ordinary launch) took the `null` branch, and the stage then resolved identity with NO
+      // launch defaults and NO transport, discarding the derived workspace id.
       const identityConfig = deps.configManager.getConfig().identity;
-      if (!identityConfig?.mode) {
-        return null;
-      }
       return {
         mode: identityConfig.mode,
-        allowPerRequestOverride: identityConfig.allowPerRequestOverride ?? true,
+        allowPerRequestOverride: identityConfig.allowPerRequestOverride,
         launchDefaults: identityConfig.launchDefaults,
         // Not `getConfig().transport` — `Config` carries no such member (transport is
         // launch-time-only, Ruling R30). `getTransportMode()` is the launch-option-aware read.
@@ -376,8 +379,9 @@ export class PipelineBuilder {
     // Phase guard verification stage
     const phaseGuardVerificationStage = createPhaseGuardVerificationStage(
       () => deps.frameworkManager,
-      () =>
-        deps.configManager.getConfig().phaseGuards ?? { mode: 'enforce' as const, maxRetries: 2 },
+      // Resolved by the config loader, not here: the literal that used to sit on this line was
+      // one of three statements of the same pair (row 6.2 / R57).
+      () => deps.configManager.getConfig().phaseGuards,
       deps.chainSessionStore,
       deps.logger
     );

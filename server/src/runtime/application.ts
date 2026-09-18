@@ -436,8 +436,8 @@ export class Application {
       // workspace-scoped. `ctx` is the only scope signal available here: the
       // schema is built now, before any call has been dispatched, so the
       // per-call `extra` the rest of the server reads does not exist yet.
-      const launchDefaults = this.configManager.getConfig().identity?.launchDefaults;
-      const scope = resolveServingUnitScope(ctx, launchDefaults?.workspaceId);
+      const launchDefaults = this.configManager.getConfig().identity.launchDefaults;
+      const scope = resolveServingUnitScope(ctx, launchDefaults.workspaceId);
       // `stage` is what the failure names, so a request that cannot be served
       // says which step failed instead of carrying a bare message from
       // somewhere inside it. The error is rethrown, never swallowed: the SDK
@@ -672,7 +672,7 @@ export class Application {
     try {
       await this.telemetryLifecycle.shutdown();
     } catch (error) {
-      this.logger?.warn('Error shutting down telemetry:', error);
+      this.reportTeardownFailure('telemetry', error);
     }
   }
 
@@ -690,6 +690,30 @@ export class Application {
 
     this.logger?.debug('Shutting down server manager...');
     this.serverLifecycle.shutdown();
+  }
+
+  /**
+   * Report a subsystem teardown failure.
+   *
+   * `this.logger` is guaranteed set on every reachable path to `shutdown()`: `startApplication`
+   * only returns an `Application` (so only lets `src/index.ts` obtain one to call `.shutdown()`
+   * on) after `startup()` -- and therefore `initializeFoundation()`'s `this.logger =
+   * foundation.logger` assignment -- has already resolved; every direct constructor caller in
+   * this repo (`tests/unit/runtime/*.test.ts`) passes a logger in; and `createApplication` has
+   * no caller anywhere in `src/` or `cli/` besides `startApplication` itself. Measured
+   * 2026-09-16 for P4.44 (`plans/technical-debt/resource-surface-consolidation-2026-08-27.md`,
+   * ruling R28 amendment) -- a direct stderr write was tried first and reverted once this held:
+   * `logger.warn` already reaches stderr under STDIO outside CI (`infra/logging/index.ts`,
+   * fixed by #307/e50095ac), so a second, unconditional channel only duplicated every teardown
+   * failure on a default deployment for a `this.logger === undefined` case that cannot occur.
+   * The `this.logger?.` optional chain stays for the type (`private logger!: Logger` still
+   * predates a runtime guarantee), but if a future caller ever reaches this with no logger, the
+   * failure silently drops -- the same way `startup()`'s own `catch` treats a pre-foundation
+   * failure at present. Falsifies if a new caller obtains an `Application` before `startup()`
+   * resolves, or `createApplication` gains an external caller.
+   */
+  private reportTeardownFailure(label: string, error: unknown): void {
+    this.logger?.warn(`Error shutting down ${label}:`, error);
   }
 
   /**
@@ -715,7 +739,7 @@ export class Application {
     try {
       await candidate.shutdown();
     } catch (error) {
-      this.logger?.warn(`Error shutting down ${label}:`, error);
+      this.reportTeardownFailure(label, error);
     }
   }
 

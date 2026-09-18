@@ -210,8 +210,8 @@ export class MockConfigManager {
   getVersioningConfig() {
     return {
       enabled: true,
-      max_versions: 50,
-      auto_version: true,
+      maxVersions: 50,
+      autoVersion: true,
     };
   }
 

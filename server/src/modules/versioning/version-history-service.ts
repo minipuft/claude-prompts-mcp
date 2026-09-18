@@ -124,7 +124,7 @@ export class VersionHistoryService {
 
   isAutoVersionEnabled(): boolean {
     const config = this.getConfig();
-    return config.enabled && config.auto_version;
+    return config.enabled && config.autoVersion;
   }
 
   /**
@@ -188,7 +188,7 @@ export class VersionHistoryService {
         [tenantId, resourceType, resourceId]
       );
 
-      if (count && count.cnt > config.max_versions) {
+      if (count && count.cnt > config.maxVersions) {
         db.run(
           `DELETE FROM version_history WHERE id NOT IN (
             SELECT id FROM version_history
@@ -199,13 +199,13 @@ export class VersionHistoryService {
             tenantId,
             resourceType,
             resourceId,
-            config.max_versions,
+            config.maxVersions,
             tenantId,
             resourceType,
             resourceId,
           ]
         );
-        this.logger.debug(`Pruned history for ${resourceId} to ${config.max_versions} versions`);
+        this.logger.debug(`Pruned history for ${resourceId} to ${config.maxVersions} versions`);
       }
 
       this.logger.debug(`Saved version ${newVersion} for ${resourceType}/${resourceId}`);

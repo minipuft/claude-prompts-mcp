@@ -246,3 +246,51 @@ describe('Application.shutdown() error posture', () => {
     expect(logger.error).toHaveBeenCalledWith('Error during shutdown:', expect.any(Error));
   });
 });
+
+/**
+ * Wire a real `SqliteEngine` instance into `order`, the same way the teardown-order test
+ * above does, so a full run can be compared against `EXPECTED_ORDER` as one value instead of
+ * a slice -- P4.44 (`plans/technical-debt/resource-surface-consolidation-2026-08-27.md`)
+ * asks specifically for the database close to stay reached, not just for the failing step to
+ * be skipped over.
+ */
+async function mountRealDatabase(subdir: string, order: string[]): Promise<void> {
+  const dbDir = path.join(TMP_ROOT, subdir);
+  await fs.mkdir(dbDir, { recursive: true });
+  const engine = await SqliteEngine.getInstance(silentLogger() as never, {
+    dbPath: path.join(dbDir, 'runtime-state', 'state.db'),
+  });
+  await engine.initialize();
+
+  const realEngineShutdown = engine.shutdown.bind(engine);
+  engine.shutdown = async (): Promise<void> => {
+    order.push('database');
+    await realEngineShutdown();
+  };
+}
+
+/**
+ * P4.44 / ruling R28 amendment: a direct, unconditional `process.stderr.write` was tried and
+ * reverted -- `this.logger` is guaranteed set on every reachable path to `shutdown()` (see
+ * `Application.reportTeardownFailure`'s doc comment for the measurement), so a second channel
+ * only duplicated every teardown failure on a default deployment for a case that cannot occur.
+ * What is left to pin: a failing subsystem's teardown reaches the operator through
+ * `logger.warn` (unchanged call shape) AND does not strand the database close behind it --
+ * compared as one sequence, the same way the teardown-order test above does, rather than the
+ * `.slice()` the error-posture test above uses (which never wires a real database and so never
+ * observes whether the close was reached at all).
+ */
+describe('Application.shutdown() teardown visibility (P4.44)', () => {
+  it('reports a failing subsystem through logger.warn and still reaches the database close', async () => {
+    const { app, order, logger } = wireRecorders({ failing: 'frameworkStateStore' });
+    await mountRealDatabase('visibility-failing', order);
+
+    await app.shutdown();
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Error shutting down framework state manager:',
+      expect.any(Error)
+    );
+    expect(order).toEqual(EXPECTED_ORDER);
+  });
+});
