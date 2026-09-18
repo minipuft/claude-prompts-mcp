@@ -231,7 +231,7 @@ export class McpToolRouter {
     // Initialize gate system manager for runtime gate control
     // The launch workspace is the key a toggle with no identity is written under, so it is the
     // scope a pre-isolation `default` row is adopted into (see `GateStateStore`).
-    const launchWorkspaceId = this.configManager.getConfig().identity?.launchDefaults?.workspaceId;
+    const launchWorkspaceId = this.configManager.getConfig().identity.launchDefaults.workspaceId;
     this.gateStateStore = createGateStateStore(this.logger, this.configManager.getServerRoot(), {
       ...(launchWorkspaceId != null ? { defaultScope: { workspaceId: launchWorkspaceId } } : {}),
     });

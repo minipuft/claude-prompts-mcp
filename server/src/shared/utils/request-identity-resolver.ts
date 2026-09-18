@@ -898,6 +898,12 @@ export function toIdentityContext(
     ...(clientProfile != null ? { clientProfile } : {}),
     provenance: {
       transport: options.transport ?? 'stdio',
+      // These two fallbacks are kept EQUAL to the config loader's `DEFAULT_IDENTITY_CONFIG`
+      // (`infra/config/index.ts`) on purpose, and are not dead: `resolveRequestIdentityContext`,
+      // the only production caller, always passes both — but `toIdentityContext` is exported and
+      // called directly by tests with no options at all, so the pair is what makes those calls
+      // mean the same thing as a default launch. Row 6.2 measured that split rather than
+      // requiring the values here.
       policyMode: options.mode ?? 'permissive',
       allowPerRequestOverride: options.allowPerRequestOverride ?? true,
       workspaceSource,

@@ -27,6 +27,7 @@ const mockConfigManager: ConfigManager = {
     server: { name: 'test', version: '1.0.0' },
     gates: {},
     frameworks: {},
+    identity: { mode: 'permissive', allowPerRequestOverride: true, launchDefaults: {} },
   }),
   getFrameworksConfig: jest.fn().mockReturnValue({}),
   getChainSessionConfig: jest.fn().mockReturnValue(undefined),

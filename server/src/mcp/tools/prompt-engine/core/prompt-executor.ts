@@ -201,7 +201,7 @@ export class PromptExecutor {
     // Read before either store is constructed: `applyRuntimeIdentityOverrides` has already
     // populated this during runtime bootstrap (deriving from cwd when nothing explicit was
     // given), and a value read after construction never reaches the constructed store.
-    const launchWorkspaceId = configManager.getConfig().identity?.launchDefaults?.workspaceId;
+    const launchWorkspaceId = configManager.getConfig().identity.launchDefaults.workspaceId;
     const workspaceScope =
       launchWorkspaceId != null ? { workspaceId: launchWorkspaceId } : undefined;
 
@@ -213,7 +213,7 @@ export class PromptExecutor {
     const chainSessionOptions = {
       ...(sessionConfig
         ? {
-            defaultSessionTimeoutMs: sessionConfig.sessionTimeoutMinutes * 60 * 1000,
+            defaultSessionTimeoutMs: sessionConfig.timeoutMinutes * 60 * 1000,
             reviewSessionTimeoutMs: sessionConfig.reviewTimeoutMinutes * 60 * 1000,
             cleanupIntervalMs: sessionConfig.cleanupIntervalMinutes * 60 * 1000,
           }

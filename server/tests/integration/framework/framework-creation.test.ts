@@ -51,8 +51,8 @@ const createMockConfigManager = (): ConfigManager =>
     getInjectionConfig: jest.fn().mockReturnValue(null),
     getVersioningConfig: jest.fn().mockReturnValue({
       enabled: true,
-      max_versions: 50,
-      auto_version: true,
+      maxVersions: 50,
+      autoVersion: true,
     }),
     shutdown: jest.fn(),
   }) as unknown as ConfigManager;

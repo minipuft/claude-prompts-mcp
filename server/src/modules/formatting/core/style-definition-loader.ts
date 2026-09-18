@@ -342,26 +342,50 @@ export class StyleDefinitionLoader {
     }
 
     try {
-      // Load main style.yaml
-      const definition = loadYamlFileSync<LoadedStyleDefinition>(entryPath, {
+      // Load main style.yaml — untyped until validated, like the gate loader's untrusted raw
+      // record: nothing has checked it yet, so naming it with the definition type here would be
+      // a claim the parse below actually earns.
+      const raw = loadYamlFileSync<Record<string, unknown>>(entryPath, {
         required: true,
       });
 
-      if (!definition) {
+      if (!raw) {
         this.stats.loadErrors++;
         sink.record({ id, path: entryPath, error: 'style.yaml parsed to no definition' });
         return undefined;
       }
 
-      // Inline referenced files (guidance.md)
-      this.inlineReferencedFiles(definition, styleDir);
+      // Inline referenced files (guidance.md) before validation, so `guidance` is checked
+      // whether it was written inline or pulled from the sidecar file.
+      this.inlineReferencedFiles(raw as StyleDefinitionYaml, styleDir);
 
-      const refusal = this.refusalReason(definition, id);
-      if (refusal !== undefined) {
-        this.stats.loadErrors++;
-        sink.record({ id, path: entryPath, error: refusal });
-        console.error(`[StyleDefinitionLoader] Validation failed for '${id}':`, refusal);
-        return undefined;
+      let definition: LoadedStyleDefinition;
+      if (this.validateOnLoad) {
+        const validation = this.validateDefinition(raw as StyleDefinitionYaml, id);
+        if (!validation.valid || !validation.data) {
+          this.stats.loadErrors++;
+          const error = validation.errors.join('; ');
+          sink.record({ id, path: entryPath, error });
+          console.error(`[StyleDefinitionLoader] Validation failed for '${id}':`, error);
+          return undefined;
+        }
+        if (validation.warnings.length > 0 && this.debug) {
+          console.warn(
+            `[StyleDefinitionLoader] Warnings for '${id}':`,
+            validation.warnings.join('; ')
+          );
+        }
+        // The validator's OUTPUT, defaults included — not the raw parse (P4.49, ruling R26).
+        // Before this fix, a style that omitted `priority`/`enabled`/`enhancementMode` carried
+        // `undefined` for each: validation passed, the schema's default was computed and thrown
+        // away, and `StyleManager.isStyleActive`'s `if (!style.enabled) return false` read that
+        // `undefined` as disabled even though the schema's own default is `enabled: true`.
+        definition = validation.data;
+      } else {
+        // `validateOnLoad: false` skips the schema parse entirely, and a default is a PRODUCT of
+        // that parse — there is no defaulted form to hand back without running it. The raw YAML
+        // is the only available answer on this path, unchanged from before this fix.
+        definition = raw as LoadedStyleDefinition;
       }
 
       if (this.debug) {
@@ -427,24 +451,6 @@ export class StyleDefinitionLoader {
       // Remove the file reference after inlining
       delete (definition as Record<string, unknown>)['guidanceFile'];
     }
-  }
-
-  /**
-   * Why this definition may not enter the catalog, or `undefined` when it may.
-   *
-   * One question, one answer: the caller records a refusal and needs the reason as text, and
-   * threading the whole `StyleSchemaValidationResult` out meant the caller re-derived "is this
-   * valid" from two fields. Warnings are emitted here because they belong to the same read and
-   * nothing outside acts on them.
-   */
-  private refusalReason(definition: StyleDefinitionYaml, id: string): string | undefined {
-    if (!this.validateOnLoad) return undefined;
-    const validation = this.validateDefinition(definition, id);
-    if (!validation.valid) return validation.errors.join('; ');
-    if (validation.warnings.length > 0 && this.debug) {
-      console.warn(`[StyleDefinitionLoader] Warnings for '${id}':`, validation.warnings.join('; '));
-    }
-    return undefined;
   }
 
   /**

@@ -3,7 +3,7 @@
 /**
  * Flags optional fields on pipeline state interfaces that have readers and no writers.
  *
- * THE DECLARED-BUT-NEVER-CONSUMED FAMILY. This gate is one of FOUR covering the same failure
+ * THE DECLARED-BUT-NEVER-CONSUMED FAMILY. This gate is one of FIVE covering the same failure
  * shape at different layers: a value and its consumer both exist and never meet, so the feature
  * looks implemented, is measured as covered, and silently does nothing.
  *
@@ -11,6 +11,7 @@
  * ordering is the useful part — a defect belongs to the FIRST layer at which the chain breaks:
  *
  *   1. EXPORT     `validate:knip-ratchet`        — declared, never imported
+ *   1b. METHOD    `validate:unreached-methods`   — a public method on a live class, never called
  *   2. COLUMN     `validate:no-phantom-columns`  — declared and indexed, no writer names it
  *   3. FIELD      `validate:state-field-writers` — an optional TS field with readers and no
  *                                                  writer, including dependency seams that

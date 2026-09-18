@@ -165,6 +165,41 @@ describe('skills sync reads the workspace over the bundled tree', () => {
     expect(existsSync(path.join(outputDir, 'workspace_prompt'))).toBe(false);
   });
 
+  it('skips the directories the loader skips, and exports each twin', async () => {
+    // Each skipped entry has a twin differing only in the name the rule keys on (P4.48, P4.53):
+    // `_drafts` vs `drafts`, `backup` vs `backups` and `node_modules` vs `node_module` as a
+    // category, and `tools` vs `toolbox` as a prompt directory.
+    await writePrompt(packageRoot, 'drafts', 'in_drafts');
+    await writePrompt(packageRoot, '_drafts', 'in_hidden');
+    await writePrompt(packageRoot, 'backups', 'in_backups');
+    await writePrompt(packageRoot, 'backup', 'in_backup');
+    await writePrompt(packageRoot, 'node_module', 'in_node_module');
+    await writePrompt(packageRoot, 'node_modules', 'in_node_modules');
+    await writePrompt(packageRoot, 'general', 'toolbox');
+    await writePrompt(packageRoot, 'general', 'tools');
+    await writeConfig(packageRoot, outputDir);
+
+    const { out, report } = await run({
+      command: 'export',
+      client: 'claude-code',
+      scope: 'user',
+      resourceType: 'prompt',
+      preview: true,
+    });
+
+    const previewed = out.logs
+      .filter((line) => line.endsWith('/SKILL.md'))
+      .map((line) => line.replace('  [preview] ', ''))
+      .sort();
+    expect(previewed).toEqual([
+      'in_backups/SKILL.md',
+      'in_drafts/SKILL.md',
+      'in_node_module/SKILL.md',
+      'toolbox/SKILL.md',
+    ]);
+    expect(report.resources).toBe(4);
+  });
+
   it('exports the workspace copy of a prompt the package also ships', async () => {
     await writePrompt(packageRoot, 'general', 'shared_prompt', { description: 'bundled copy' });
     await writePrompt(workspace, 'general', 'shared_prompt', { description: 'workspace copy' });

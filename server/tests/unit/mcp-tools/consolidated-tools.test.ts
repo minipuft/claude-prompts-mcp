@@ -55,6 +55,7 @@ describe('Consolidated MCP tool factories', () => {
         gates: {
           definitionsDirectory: 'gates',
         },
+        identity: { mode: 'permissive', allowPerRequestOverride: true, launchDefaults: {} },
       }),
       getPromptsDirectory: () => '/test/prompts',
       getResolvedPromptsDirectory: () => '/test/prompts',
@@ -66,8 +67,8 @@ describe('Consolidated MCP tool factories', () => {
       getServerRoot: () => process.cwd(),
       getVersioningConfig: () => ({
         enabled: true,
-        max_versions: 50,
-        auto_version: true,
+        maxVersions: 50,
+        autoVersion: true,
       }),
       on: () => {},
     };

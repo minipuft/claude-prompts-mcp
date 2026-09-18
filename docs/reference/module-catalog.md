@@ -10,8 +10,8 @@ remains in `server/.dependency-cruiser.cjs`.
 
 | Module | Source path | Kind | Lifecycle | Description | Docs | Public entry | Observed dependencies | Imported by |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `server-source` | `src` | application | canonical | Server source composition root. | — | `index.ts` | infra-config<br>infra-logging<br>runtime<br>shared-utils | — |
-| `cli-shared` | `src/cli-shared` | adapter | canonical | Shared implementation used by the standalone CLI integration surface. | — | `index.ts` | engine-frameworks<br>engine-gates<br>formatting<br>prompts<br>resources<br>shared-utils<br>versioning | mcp-tools<br>skills-sync |
+| `server-source` | `src` | application | canonical | Server source composition root. | — | `index.ts` | cli-shared<br>infra-config<br>infra-logging<br>runtime<br>shared-utils | — |
+| `cli-shared` | `src/cli-shared` | adapter | canonical | Shared implementation used by the standalone CLI integration surface. | — | `index.ts` | engine-frameworks<br>engine-gates<br>formatting<br>prompts<br>resources<br>shared-utils<br>versioning | mcp-tools<br>server-source<br>skills-sync |
 | `execution-engine` | `src/engine` | layer | canonical | Client-guided execution, framework, and gate decision logic. | — | — | — | — |
 | `engine-execution` | `src/engine/execution` | domain | canonical | Parses commands and coordinates the staged client-guided execution pipeline. | — | — | chains<br>engine-frameworks<br>engine-gates<br>infra-database<br>infra-logging<br>shared-types<br>shared-utils<br>workflow-ir | automation<br>chains<br>engine-frameworks<br>engine-gates<br>mcp-http<br>mcp-tools<br>prompts<br>runtime<br>semantic<br>workflow-ir |
 | `engine-frameworks` | `src/engine/frameworks` | domain | canonical | Loads, validates, selects, and applies reasoning frameworks. | — | — | engine-execution<br>infra-database<br>infra-logging<br>shared-core<br>shared-types<br>shared-utils | cli-shared<br>engine-execution<br>mcp-tools<br>resources<br>runtime |
@@ -233,6 +233,7 @@ flowchart LR
   module_runtime --> module_text_references
   module_semantic --> module_engine_execution
   module_semantic -. type .-> module_shared_types
+  module_server_source --> module_cli_shared
   module_server_source --> module_infra_config
   module_server_source -. type .-> module_infra_logging
   module_server_source --> module_runtime

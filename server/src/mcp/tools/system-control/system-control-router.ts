@@ -407,7 +407,7 @@ export class ConsolidatedSystemControl implements SystemControlContext {
       extra && typeof extra === 'object'
         ? resolveContinuityScopeId(resolveRequestIdentity(extra as Record<string, unknown>))
         : 'default';
-    const launchWorkspaceId = this.configManager?.getConfig().identity?.launchDefaults?.workspaceId;
+    const launchWorkspaceId = this.configManager?.getConfig().identity.launchDefaults.workspaceId;
     const workspaceId = requestScopeId !== 'default' ? requestScopeId : launchWorkspaceId;
 
     return buildIdentityScope({ continuityScopeId: requestScopeId, workspaceId });

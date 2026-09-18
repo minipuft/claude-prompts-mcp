@@ -124,6 +124,36 @@ export function isIgnoredPromptEntryName(entryName: string): boolean {
 }
 
 /**
+ * Directory names at the prompts ROOT that are never a category, on top of the ignored prefixes.
+ *
+ * `backup` is where earlier tooling parked copies of a prompts tree; `node_modules` appears when a
+ * prompt library is itself a package. Neither holds prompts anyone meant to serve.
+ */
+const EXCLUDED_CATEGORY_DIRECTORY_NAMES: ReadonlySet<string> = new Set(['backup', 'node_modules']);
+
+/**
+ * True when a directory directly under the prompts root is NOT a category, so a walk must neither
+ * serve, index, announce, validate, watch nor export anything below it.
+ *
+ * THE ROOT RULE HAD FIVE COPIES AND THREE ANSWERS. The loader's category scan (and a private copy
+ * of it in the resource tool's file operations) excluded `.`/`_` names and `backup`. The watcher
+ * excluded those plus `node_modules`, so a `node_modules` category was served but never watched.
+ * The indexer, the startup baseline, `validate:prompts`, skills-sync and the `cpm` CLI excluded
+ * no `backup`, so a `backup/` category was indexed, announced, validated and exported while no
+ * MCP surface served it. Measured 2026-09-16.
+ *
+ * Root only. Below a category, `backup` and `node_modules` are ordinary names, and the rules there
+ * are {@link isIgnoredPromptEntryName} and {@link isReservedPromptDirectoryName}. Conversely
+ * `tools` IS a category at the root, so this predicate does not include the reserved names.
+ *
+ * `cli/src/lib/workspace.ts` mirrors this rule, because the standalone CLI cannot import server
+ * source; its tests compare the mirror against this function.
+ */
+export function isExcludedCategoryDirectoryName(entryName: string): boolean {
+  return isIgnoredPromptEntryName(entryName) || EXCLUDED_CATEGORY_DIRECTORY_NAMES.has(entryName);
+}
+
+/**
  * The id segment a single-file prompt contributes: its basename without the extension.
  *
  * The caller prepends whatever path prefix its own layout implies (`{folder}/{id}` for a nested

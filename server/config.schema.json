@@ -235,11 +235,6 @@
           "description": "Enable the gate validation system.",
           "default": true
         },
-        "directory": {
-          "type": "string",
-          "description": "Directory containing gate definitions.",
-          "default": "resources/gates"
-        },
         "frameworkGates": {
           "type": "boolean",
           "description": "Apply framework-specific quality gates.",
@@ -268,8 +263,7 @@
             },
             "strict": {
               "type": "boolean",
-              "description": "Default strict mode: use failure-first framing for judge evaluation.",
-              "default": true
+              "description": "Default strict mode: use failure-first framing for judge evaluation.\n\nAbsent, its effective default is not a constant: `resolveJudgeConfig` (`judge-prompt-builder.ts`) falls back to `true` exactly when the evaluation mode is `'judge'`, and to `false` otherwise."
             }
           },
           "additionalProperties": false,

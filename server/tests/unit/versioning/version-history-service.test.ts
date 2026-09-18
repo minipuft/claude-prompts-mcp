@@ -62,8 +62,8 @@ describe('VersionHistoryService', () => {
     mockConfigProvider = new MockVersioningConfigProvider(
       {
         enabled: true,
-        max_versions: 5,
-        auto_version: true,
+        maxVersions: 5,
+        autoVersion: true,
       },
       dbCtx.testDir
     );
@@ -95,7 +95,7 @@ describe('VersionHistoryService', () => {
     });
 
     it('should reflect partial config updates', () => {
-      mockConfigProvider.setConfig({ max_versions: 100 });
+      mockConfigProvider.setConfig({ maxVersions: 100 });
       expect(service.isEnabled()).toBe(true);
     });
   });
@@ -135,7 +135,7 @@ describe('VersionHistoryService', () => {
       expect(history!.versions[1].version).toBe(1);
     });
 
-    it('should prune old versions when exceeding max_versions', async () => {
+    it('should prune old versions when exceeding maxVersions', async () => {
       for (let i = 1; i <= 6; i++) {
         await service.saveVersion('prompt', 'test-prompt', { version: i });
       }
@@ -279,9 +279,10 @@ describe('VersionHistoryService', () => {
 
   /**
    * `config.json` ships `versioning.autoVersion` / `maxVersions` (camelCase) while
-   * `VersioningConfig` declares `auto_version` / `max_versions`. The spellings never met, so the
-   * whole block was inert; the defaults coincided with the shipped values, which is why it had no
-   * live symptom.
+   * `VersioningConfig` used to declare `auto_version` / `max_versions`. The spellings never met
+   * before `normalizeVersioning` learned to map one onto the other, so the whole block was inert;
+   * the defaults coincided with the shipped values, which is why it had no live symptom. Row 6.6
+   * renamed the runtime type to match the file too, closing the gap from both sides.
    *
    * These drive a REAL `ConfigLoader` into a real service, because that is the only place the two
    * spellings are joined — a mocked provider returns whatever the test hands it and would pass

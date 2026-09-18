@@ -66,15 +66,12 @@ import type { ContentAnalysisResult } from './core-config.js';
 import type { StateStoreOptions } from './persistence.js';
 
 export type {
-  AnalysisConfig,
   BaseMessageContent,
   ChainSessionConfig,
   Config,
   ExecutionConfig,
   FrameworkInjectionConfig,
   ResolvedFrameworkConfig,
-  LLMIntegrationConfig,
-  LLMProvider,
   LoggingConfig,
   Message,
   MessageContent,
@@ -82,7 +79,6 @@ export type {
   FrameworkSettings,
   PromptsConfig,
   ResourcesConfig,
-  SemanticAnalysisConfig,
   ServerConfig,
   TextMessageContent,
   ToolDescriptionsOptions,

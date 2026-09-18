@@ -204,3 +204,79 @@ describe('eslint-ratchet compareSummaries (pre-existing check() logic)', () => {
     expect(vanished).toEqual([{ ruleId: 'rule-gone', errors: 2, warnings: 0 }]);
   });
 });
+
+/**
+ * Row B.67: `check()` now fails on a decrease, not just an increase — a ratchet nobody
+ * tightens is a floor. These pin `compareSummaries`'s `decreases` finding, which is exactly
+ * the signal `handleCheck()` reads to decide pass/fail (see the FAIL branch in
+ * eslint-ratchet.js), the same way the pre-existing describe block above pins `regressions`
+ * and `vanished` without invoking the process-spawning `handleCheck()` itself.
+ */
+describe('eslint-ratchet compareSummaries decrease detection (row B.67)', () => {
+  it('reports a decrease and names the rule and the metric that dropped', () => {
+    const baseline = { byRule: { 'rule-down': { errors: 5, warnings: 0 } } };
+    const current = { byRule: { 'rule-down': { errors: 2, warnings: 0 } } };
+
+    const { regressions, vanished, decreases } = compareSummaries(baseline, current);
+    expect(decreases).toEqual([{ ruleId: 'rule-down', type: 'errors', baseline: 5, current: 2 }]);
+    expect(regressions).toEqual([]);
+    expect(vanished).toEqual([]);
+  });
+
+  it('a baseline equal to the measured count produces no decreases, regressions, or vanished', () => {
+    const baseline = { byRule: { 'rule-steady': { errors: 3, warnings: 1 } } };
+    const current = { byRule: { 'rule-steady': { errors: 3, warnings: 1 } } };
+
+    const { regressions, vanished, decreases } = compareSummaries(baseline, current);
+    expect(decreases).toEqual([]);
+    expect(regressions).toEqual([]);
+    expect(vanished).toEqual([]);
+  });
+
+  it('an increase still fails alongside an unrelated decrease', () => {
+    const baseline = {
+      byRule: {
+        'rule-up': { errors: 1, warnings: 0 },
+        'rule-down': { errors: 5, warnings: 0 },
+      },
+    };
+    const current = {
+      byRule: {
+        'rule-up': { errors: 2, warnings: 0 },
+        'rule-down': { errors: 2, warnings: 0 },
+      },
+    };
+
+    const { regressions, decreases } = compareSummaries(baseline, current);
+    expect(regressions).toEqual([{ ruleId: 'rule-up', type: 'errors', baseline: 1, current: 2 }]);
+    expect(decreases).toEqual([{ ruleId: 'rule-down', type: 'errors', baseline: 5, current: 2 }]);
+  });
+
+  it('a rule whose count drops to 0 on every metric is vanished, not double-counted as a decrease', () => {
+    const baseline = { byRule: { 'rule-fixed': { errors: 3, warnings: 0 } } };
+    const current = { byRule: {} };
+
+    const { vanished, decreases } = compareSummaries(baseline, current);
+    expect(vanished).toEqual([{ ruleId: 'rule-fixed', errors: 3, warnings: 0 }]);
+    expect(decreases).toEqual([]);
+  });
+
+  it('a rule whose errors drop to 0 while warnings stay nonzero is a decrease, not vanished', () => {
+    const baseline = { byRule: { 'rule-mixed': { errors: 3, warnings: 2 } } };
+    const current = { byRule: { 'rule-mixed': { errors: 0, warnings: 2 } } };
+
+    const { vanished, decreases } = compareSummaries(baseline, current);
+    expect(vanished).toEqual([]);
+    expect(decreases).toEqual([{ ruleId: 'rule-mixed', type: 'errors', baseline: 3, current: 0 }]);
+  });
+
+  it('the __unknown__ bucket is decrease-checked like any other rule', () => {
+    const baseline = { byRule: { __unknown__: { errors: 0, warnings: 5 } } };
+    const current = { byRule: { __unknown__: { errors: 0, warnings: 2 } } };
+
+    const { decreases } = compareSummaries(baseline, current);
+    expect(decreases).toEqual([
+      { ruleId: '__unknown__', type: 'warnings', baseline: 5, current: 2 },
+    ]);
+  });
+});
