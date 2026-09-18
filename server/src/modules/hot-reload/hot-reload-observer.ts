@@ -10,6 +10,7 @@ import {
   FileChangeEvent,
   FileObserver,
   FileObserverConfig,
+  LATE_DIRECTORY_ARMED,
   createFileObserver,
 } from './file-observer.js';
 
@@ -65,6 +66,22 @@ export interface AuxiliaryReloadConfig {
   directories: string[];
   handler: (event: HotReloadEvent) => Promise<void>;
   match?: (event: FileChangeEvent) => boolean;
+  /**
+   * Bring what this registration holds in line with the disk, after `root` — one of its
+   * directories, or a directory containing or inside one — was created while the server ran.
+   *
+   * Required, not optional: per-file events cannot carry this. Between a directory appearing and
+   * its watcher finishing the first scan, an entry can be written and removed with no event
+   * either way, while the server already holds it — a `resource_manager` create registers its
+   * entry directly. Only the owner knows what it holds, so every registration states how it
+   * reconciles, and one that holds nothing says so in its own implementation.
+   */
+  reconcile: (root: string) => Promise<void>;
+}
+
+/** True when one path is the other, or contains it. */
+function pathsOverlap(a: string, b: string): boolean {
+  return a === b || a.startsWith(`${b}${path.sep}`) || b.startsWith(`${a}${path.sep}`);
 }
 
 /**
@@ -286,6 +303,10 @@ export class HotReloadObserver {
       this.handleFileChange(event);
     });
 
+    this.fileObserver.on(LATE_DIRECTORY_ARMED, (directoryPath: string) => {
+      void this.reconcileLateDirectory(directoryPath);
+    });
+
     this.fileObserver.on('watcherError', (error: { directoryPath: string; error: Error }) => {
       this.logger.error(`File watcher error for ${error.directoryPath}:`, error.error);
     });
@@ -313,6 +334,41 @@ export class HotReloadObserver {
     } else {
       this.processFileChangeImmediate(event);
     }
+  }
+
+  /**
+   * Reconcile everything a directory created after startup could have changed unobserved.
+   *
+   * Every auxiliary registration whose directories overlap it compares what it holds against the
+   * disk, and the prompt catalog reloads in full — prompt reload always rebuilds from every root,
+   * so that IS its reconciliation. Each owner runs even if another throws: one failed
+   * reconciliation must not leave a sibling type stale.
+   */
+  private async reconcileLateDirectory(directoryPath: string): Promise<void> {
+    const root = path.normalize(directoryPath);
+    this.logger.info(`🔁 HotReloadObserver: reconciling ${root} (created after startup)`);
+
+    for (const reload of this.auxiliaryReloads) {
+      if (!reload.directories.some((dir) => pathsOverlap(dir, root))) {
+        continue;
+      }
+      try {
+        await reload.reconcile(root);
+      } catch (error) {
+        this.logger.error(
+          `[HotReloadObserver] Reconcile failed for ${reload.id} at ${root}`,
+          error
+        );
+      }
+    }
+
+    await this.processReloadEvent({
+      type: 'reload_required',
+      reason: `reconciling ${root}, created after startup`,
+      affectedFiles: [root],
+      timestamp: Date.now(),
+      requiresFullReload: true,
+    });
   }
 
   /**

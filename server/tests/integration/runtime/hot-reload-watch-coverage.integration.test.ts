@@ -351,6 +351,7 @@ describe('an auxiliary event carries what its handler needs', () => {
         handler: async (event) => {
           seen.push(event);
         },
+        reconcile: async () => {},
       },
     ]);
 

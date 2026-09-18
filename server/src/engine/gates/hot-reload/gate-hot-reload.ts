@@ -155,6 +155,29 @@ export class GateHotReloadCoordinator {
   }
 
   /**
+   * Unregister every runtime gate whose definition is no longer in any root.
+   *
+   * The deletion half of a reconciliation, mirroring `FrameworkHotReloadCoordinator.reconcile`: a
+   * gate created and removed before its folder was watched was registered by its create and never
+   * announced as gone. Only `yaml-runtime` entries are considered, so a `temporary` gate or one
+   * registered in code is never mistaken for a missing file.
+   *
+   * @returns the ids that were unregistered
+   */
+  async reconcile(): Promise<string[]> {
+    const removed: string[] = [];
+    for (const entry of this.registry.getGuideEntries(false)) {
+      const gateId = entry.guide.gateId.toLowerCase();
+      if (entry.source !== 'yaml-runtime' || this.loader.gateExists(gateId)) {
+        continue;
+      }
+      await this.handleGateDeletion(gateId);
+      removed.push(gateId);
+    }
+    return removed;
+  }
+
+  /**
    * Handle gate deletion - unregister from registry
    */
   private async handleGateDeletion(gateId: string): Promise<void> {

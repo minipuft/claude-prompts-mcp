@@ -139,6 +139,30 @@ export class FrameworkHotReloadCoordinator {
   }
 
   /**
+   * Unregister every runtime framework whose definition is no longer in any root.
+   *
+   * The deletion half of a reconciliation, which is the half per-file events cannot deliver: a
+   * framework created and removed before its folder was watched was registered by its create and
+   * never announced as gone. Present definitions need no pass here — a newly watched folder
+   * reports every file in it. Only `yaml-runtime` entries are considered, so a guide registered
+   * in code is never mistaken for a missing file.
+   *
+   * @returns the ids that were unregistered
+   */
+  async reconcile(): Promise<string[]> {
+    const removed: string[] = [];
+    for (const entry of this.registry.getGuideEntries(false)) {
+      const frameworkId = entry.guide.frameworkId.toLowerCase();
+      if (entry.source !== 'yaml-runtime' || this.loader.frameworkExists(frameworkId)) {
+        continue;
+      }
+      await this.handleFrameworkDeletion(frameworkId);
+      removed.push(frameworkId);
+    }
+    return removed;
+  }
+
+  /**
    * Handle framework deletion - unregister from registry and notify framework manager
    */
   private async handleFrameworkDeletion(frameworkId: string): Promise<void> {

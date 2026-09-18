@@ -306,6 +306,9 @@ export function buildResourceChangeTrackerAuxiliaryReloadConfig(
       // Only track YAML files
       return event.filePath.endsWith('.yaml') || event.filePath.endsWith('.yml');
     },
+    // Reconciles nothing yet: this registration still records the primary roots alone, and the
+    // walk its removal sweep needs is replaced when it learns every operator root.
+    reconcile: async () => {},
   };
 }
 

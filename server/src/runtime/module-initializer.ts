@@ -16,6 +16,7 @@ import {
   type ResourceInventory,
 } from './resource-inventory.js';
 import {
+  existingOverlays,
   indexerResourceRoots,
   resolveResourceRoots,
   type ResourceRoots,
@@ -245,7 +246,7 @@ function resourceInventoryOf(
     resource,
     root: roots.primary,
     count,
-    overlays: roots.overlays,
+    overlays: existingOverlays(roots),
     ...(roots.bundled !== undefined ? { base: roots.bundled } : {}),
   };
 }

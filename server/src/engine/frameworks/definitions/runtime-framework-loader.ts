@@ -123,9 +123,9 @@ export class RuntimeFrameworkLoader {
       this.frameworksDir,
       config.additionalFrameworksDirs ?? []
     );
-    // Reported and watched, not looked up.
+    // Reported and watched, not looked up — absent ones included, as in the gate loader's twin.
     this.additionalFrameworksDirs = (config.additionalFrameworksDirs ?? []).filter(
-      (dir) => existsSync(dir) && dir !== this.frameworksDir
+      (dir) => dir !== this.frameworksDir
     );
     this.enableCache = config.enableCache ?? true;
     this.validateOnLoad = config.validateOnLoad ?? true;
