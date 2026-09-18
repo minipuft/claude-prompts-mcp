@@ -123,6 +123,15 @@ function buildGateAttributes(context: ExecutionContext): Attributes {
   };
 }
 
+/**
+ * `cpm.scope.source` reports the best of `organizationSource`/`workspaceSource`
+ * (`resolveIdentitySource`); `cpm.scope.continuity_source` reports `workspaceSource`
+ * specifically, because `resolveContinuityScopeId`'s precedence (`request-identity-scope.ts`)
+ * resolves the continuity/state-isolation key from `workspaceId` before `organizationId`. The
+ * two can disagree — e.g. organization resolved from a token while workspace fell back to
+ * `'default'` — which is the query this attribute exists to answer: "was the key that actually
+ * scoped this request's state store real, or a fallback?"
+ */
 function buildExecutionAttributes(context: ExecutionContext): Attributes {
   return {
     'cpm.chain.is_chain': context.isChainExecution(),
@@ -131,5 +140,6 @@ function buildExecutionAttributes(context: ExecutionContext): Attributes {
     'cpm.framework.id': context.frameworkContext?.selectedFramework.id ?? '',
     'cpm.framework.enabled': Boolean(context.frameworkContext),
     'cpm.scope.source': context.state.identity.context?.identitySource ?? 'default',
+    'cpm.scope.continuity_source': context.state.identity.context?.workspaceSource ?? 'default',
   };
 }
