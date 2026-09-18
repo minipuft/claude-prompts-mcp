@@ -2,4 +2,5 @@
 export {
   detectToolRoutingCommand,
   type ToolRoutingResult,
+  type RoutedToolCall,
 } from '#engine/execution/pipeline/routing/tool-routing.js';

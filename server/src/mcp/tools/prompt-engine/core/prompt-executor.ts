@@ -21,6 +21,7 @@ import { renderPromptEngineGuide } from '../utils/guide.js';
 
 import type { ParsingSystem } from '#engine/execution/parsers/index.js';
 import type { PromptExecutionPipeline } from '#engine/execution/pipeline/index.js';
+import type { RoutedToolCall } from '#engine/execution/pipeline/routing/tool-routing.js';
 import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { GateManager } from '#engine/gates/gate-manager.js';
 import type { ScriptToolRuntime } from '#engine/gates/services/script-tool-criterion-runner.js';
@@ -826,48 +827,61 @@ export class PromptExecutor {
     });
   }
 
-  private async routeToTool(
-    targetTool: string,
-    params: Record<string, any>,
-    originalCommand: string
-  ): Promise<ToolResponse> {
+  /**
+   * `call` is discriminated on `targetTool` (row B.61): switching on it narrows
+   * `call.translatedParams` along with it, so the `system_control` branch's
+   * `handleAction(call.translatedParams, {})` is checked against `SystemControlActionId` at
+   * compile time instead of erasing to `Record<string, any>` before it gets there — this is the
+   * in-process caller that skips the MCP SDK's schema validation `system_control`'s registered
+   * `registerTool` callback gets for free.
+   */
+  private async routeToTool(call: RoutedToolCall): Promise<ToolResponse> {
     if (!this.mcpToolsManager) {
       throw new Error('MCP tool registry unavailable');
     }
 
     try {
-      switch (targetTool) {
+      switch (call.targetTool) {
         case 'resource_manager': {
           const resourceHandler = this.mcpToolsManager.getResourceManagerHandler?.();
           if (resourceHandler) {
-            return resourceHandler(params, {});
+            return resourceHandler(call.translatedParams, {});
           }
-          return this.buildPromptListFallback(params?.['search_query']);
+          return this.buildPromptListFallback(call.translatedParams?.['search_query']);
         }
         case 'system_control':
           if (this.mcpToolsManager.systemControl) {
-            return this.mcpToolsManager.systemControl.handleAction(params, {});
+            return this.mcpToolsManager.systemControl.handleAction(call.translatedParams, {});
           }
           break;
         case 'prompt_engine_guide':
-          return this.generatePromptEngineGuide(params?.['goal']);
+          return this.generatePromptEngineGuide(call.translatedParams?.['goal']);
         case 'prompt_engine_invalid_command':
           return this.responseFormatter.formatErrorResponse(
             'Commands must start with a real prompt id after `>>`. Use resource_manager(resource_type:"prompt", action:"list") to find valid ids before executing.'
           );
-        default:
-          break;
+        default: {
+          // Exhaustive by construction: `RoutedToolCall` names every `targetTool` this router
+          // dispatches, so a fifth variant added there without a case here fails typecheck
+          // instead of falling through silently (CLAUDE.md § Correction-Triggered Learning —
+          // the shape this row exists to close was exactly a case nothing checked).
+          const unreachable: never = call;
+          throw new Error(`Unknown target tool: ${JSON.stringify(unreachable)}`);
+        }
       }
 
-      throw new Error(`Unknown target tool: ${targetTool}`);
+      // Reached only via the `system_control` case's `break` above, when the manager itself is
+      // unavailable — every OTHER case returns. Named separately from the `default` throw so this
+      // message does not claim "unknown" about a tool this switch does recognize.
+      throw new Error(`system_control manager unavailable for target tool: ${call.targetTool}`);
     } catch (error) {
       const message =
         error instanceof Error
-          ? `Tool routing failed (${targetTool}): ${error.message}`
-          : `Tool routing failed (${targetTool}): ${String(error)}`;
+          ? `Tool routing failed (${call.targetTool}): ${error.message}`
+          : `Tool routing failed (${call.targetTool}): ${String(error)}`;
       this.logger.error('[PromptExecutor] Tool routing failed', {
-        targetTool,
-        originalCommand,
+        targetTool: call.targetTool,
+        originalCommand: call.originalCommand,
         error,
       });
       return this.responseFormatter.formatErrorResponse(message);

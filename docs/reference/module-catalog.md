@@ -13,7 +13,7 @@ remains in `server/.dependency-cruiser.cjs`.
 | `server-source` | `src` | application | canonical | Server source composition root. | — | `index.ts` | infra-config<br>infra-logging<br>runtime<br>shared-utils | — |
 | `cli-shared` | `src/cli-shared` | adapter | canonical | Shared implementation used by the standalone CLI integration surface. | — | `index.ts` | engine-frameworks<br>engine-gates<br>formatting<br>prompts<br>resources<br>shared-utils<br>versioning | mcp-tools<br>skills-sync |
 | `execution-engine` | `src/engine` | layer | canonical | Client-guided execution, framework, and gate decision logic. | — | — | — | — |
-| `engine-execution` | `src/engine/execution` | domain | canonical | Parses commands and coordinates the staged client-guided execution pipeline. | — | — | chains<br>engine-frameworks<br>engine-gates<br>infra-database<br>infra-logging<br>shared-types<br>shared-utils<br>workflow-ir | automation<br>chains<br>engine-frameworks<br>engine-gates<br>mcp-http<br>mcp-tools<br>prompts<br>runtime<br>semantic<br>workflow-ir |
+| `engine-execution` | `src/engine/execution` | domain | canonical | Parses commands and coordinates the staged client-guided execution pipeline. | — | — | chains<br>engine-frameworks<br>engine-gates<br>infra-database<br>infra-logging<br>mcp-metadata<br>shared-types<br>shared-utils<br>workflow-ir | automation<br>chains<br>engine-frameworks<br>engine-gates<br>mcp-http<br>mcp-tools<br>prompts<br>runtime<br>semantic<br>workflow-ir |
 | `engine-frameworks` | `src/engine/frameworks` | domain | canonical | Loads, validates, selects, and applies reasoning frameworks. | — | — | engine-execution<br>infra-database<br>infra-logging<br>shared-core<br>shared-types<br>shared-utils | cli-shared<br>engine-execution<br>mcp-tools<br>resources<br>runtime |
 | `engine-gates` | `src/engine/gates` | domain | canonical | Selects, enhances, and evaluates quality-gate guidance. | — | — | engine-execution<br>infra-database<br>infra-logging<br>shared-core<br>shared-types<br>shared-utils | cli-shared<br>engine-execution<br>formatting<br>mcp-tools<br>prompts<br>resources<br>runtime<br>skills-sync |
 | `engine-interfaces` | `src/engine/interfaces` | protocol | canonical | Contracts exposed by the execution engine to collaborating layers. | — | — | — | — |
@@ -27,7 +27,7 @@ remains in `server/.dependency-cruiser.cjs`.
 | `mcp-boundary` | `src/mcp` | layer | canonical | Model Context Protocol contracts, transports, metadata, and tool adapters. | — | — | — | — |
 | `mcp-contracts` | `src/mcp/contracts` | protocol | canonical | Defines runtime-facing MCP contract metadata and generated schemas. | — | — | mcp-metadata | mcp-metadata<br>mcp-tools |
 | `mcp-http` | `src/mcp/http` | protocol | canonical | Implements the Streamable HTTP MCP transport boundary. | — | — | engine-execution<br>mcp-tools<br>prompts<br>shared-types<br>shared-utils | runtime |
-| `mcp-metadata` | `src/mcp/metadata` | protocol | canonical | Builds MCP server and capability metadata. | `server/src/mcp/metadata/README.md` | — | mcp-contracts<br>shared-types<br>shared-utils | mcp-contracts<br>mcp-tools |
+| `mcp-metadata` | `src/mcp/metadata` | protocol | canonical | Builds MCP server and capability metadata. | `server/src/mcp/metadata/README.md` | — | mcp-contracts<br>shared-types<br>shared-utils | engine-execution<br>mcp-contracts<br>mcp-tools |
 | `mcp-tools` | `src/mcp/tools` | protocol | canonical | Registers and routes the three public MCP tools. | — | `index.ts` | automation<br>chains<br>cli-shared<br>engine-execution<br>engine-frameworks<br>engine-gates<br>formatting<br>mcp-contracts<br>mcp-metadata<br>prompts<br>resources<br>semantic<br>shared-core<br>shared-types<br>shared-utils<br>skills-sync<br>text-references<br>versioning<br>workflow-ir | mcp-http<br>runtime |
 | `application-modules` | `src/modules` | layer | canonical | Feature modules that own prompt, chain, resource, and authoring behavior. | — | — | — | — |
 | `automation` | `src/modules/automation` | domain | canonical | Owns automation-oriented resource and workflow behavior. | — | — | engine-execution<br>hot-reload<br>shared-types<br>shared-utils | mcp-tools<br>prompts<br>resources<br>runtime |
@@ -132,6 +132,7 @@ flowchart LR
   module_engine_execution --> module_engine_gates
   module_engine_execution -. type .-> module_infra_database
   module_engine_execution --> module_infra_logging
+  module_engine_execution -. type .-> module_mcp_metadata
   module_engine_execution --> module_shared_types
   module_engine_execution --> module_shared_utils
   module_engine_execution -. type .-> module_workflow_ir

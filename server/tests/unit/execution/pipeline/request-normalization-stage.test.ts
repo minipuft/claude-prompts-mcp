@@ -62,7 +62,15 @@ describe('RequestNormalizationStage', () => {
 
     await stage.execute(context);
 
-    expect(router).toHaveBeenCalledWith('system_control', { action: 'guide' }, 'help');
+    // One discriminated-union argument since row B.61, not three positional ones — switching on
+    // `targetTool` is what lets the router narrow `translatedParams` against
+    // `SystemControlActionId` at compile time (`ToolRouter` in the stage under test).
+    expect(router).toHaveBeenCalledWith({
+      requiresRouting: true,
+      targetTool: 'system_control',
+      translatedParams: { action: 'guide' },
+      originalCommand: 'help',
+    });
     expect(context.response).toBe(routedResponse);
   });
 

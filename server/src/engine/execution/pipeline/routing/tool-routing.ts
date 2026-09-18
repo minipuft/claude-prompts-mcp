@@ -1,10 +1,47 @@
 // @lifecycle canonical - Routes MCP tool invocations to implementations.
-export interface ToolRoutingResult {
-  requiresRouting: boolean;
-  targetTool?: string;
-  translatedParams?: Record<string, any>;
-  originalCommand?: string;
-}
+import type { SystemControlActionId } from '#mcp/metadata/definitions/system-control.js';
+
+/**
+ * A routed call, discriminated on `targetTool` so a consumer switching on it narrows
+ * `translatedParams` along with it — the property TypeScript needs to catch a `system_control`
+ * caller sending an action id outside `SYSTEM_CONTROL_ACTION_IDS` at compile time, closing the
+ * gap an in-process caller (`PromptExecutor.routeToTool`) has: it calls
+ * `ConsolidatedSystemControl.handleAction` directly, so the MCP SDK's schema validation never
+ * runs for it (row B.61). Every OTHER variant keeps the pre-existing `Record<string, any>` shape
+ * — only `system_control`'s action id needed tightening.
+ *
+ * `SystemControlActionId` is a type-only import from `mcp/`, so `engine/` (this module's layer)
+ * pulls no runtime value across the boundary — `validate:arch`'s `engine-cross-layer-type-only`
+ * rule allows exactly this (warn, not error): the alternative is a second, hand-copied action-id
+ * union living in `engine/`, which is the drift SSOT search exists to avoid.
+ */
+export type RoutedToolCall =
+  | {
+      requiresRouting: true;
+      targetTool: 'resource_manager';
+      translatedParams: Record<string, any>;
+      originalCommand: string;
+    }
+  | {
+      requiresRouting: true;
+      targetTool: 'system_control';
+      translatedParams: Record<string, any> & { action: SystemControlActionId };
+      originalCommand: string;
+    }
+  | {
+      requiresRouting: true;
+      targetTool: 'prompt_engine_guide';
+      translatedParams: Record<string, any>;
+      originalCommand: string;
+    }
+  | {
+      requiresRouting: true;
+      targetTool: 'prompt_engine_invalid_command';
+      translatedParams: Record<string, any>;
+      originalCommand: string;
+    };
+
+export type ToolRoutingResult = { requiresRouting: false } | RoutedToolCall;
 
 const LIST_PROMPTS_PATTERN = /^(>>|\/)?listprompts?(\s.+)?$/i;
 const HELP_PATTERN = /^(>>|\/)?help(?:\s+(.*))?$/i;
