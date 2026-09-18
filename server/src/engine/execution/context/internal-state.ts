@@ -5,7 +5,6 @@ import type {
   ScriptExecutionResult,
   ToolResponse,
 } from '#shared/types/index.js';
-import type { RequestIdentitySource } from '#shared/types/request-identity.js';
 import type { PendingShellVerification, ShellVerifyResult } from '../../gates/shell/index.js';
 import type { GateEnforcementMode } from '../../gates/types.js';
 import type { InjectionState } from '../pipeline/decisions/injection/index.js';
@@ -126,17 +125,6 @@ export interface PipelineInternalState {
     context?: RequestIdentityContext;
     /** Composite scope ID for state store isolation (e.g., "org:ws" or "default") */
     continuityScopeId: string;
-  };
-
-  /**
-   * State related to Continuity Scope (tenant isolation).
-   * Populated by IdentityResolutionStage, consumed by state managers.
-   */
-  scope: {
-    /** Resolved continuity scope ID (workspace → organization → 'default') */
-    continuityScopeId: string;
-    /** Source of the scope value */
-    source: RequestIdentitySource | 'default';
   };
 
   /**

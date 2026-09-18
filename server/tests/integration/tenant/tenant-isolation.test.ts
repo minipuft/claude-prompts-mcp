@@ -42,14 +42,14 @@ describe('Tenant Isolation', () => {
   describe('ExecutionContext continuity scope support', () => {
     // getContinuityScopeId()/setContinuityScopeId() were deleted at P4.52: zero production
     // callers, and their only test coverage was this describe block testing itself. The
-    // `state.scope` field they wrote stays — `execution-telemetry.ts` still reads
-    // `state.scope.source` for the `cpm.scope.source` attribute — so its default shape is
-    // still worth asserting.
+    // duplicate `state.scope` field they wrote was deleted at P4.70 — `execution-telemetry.ts`
+    // now reads `state.identity.context?.identitySource` for the `cpm.scope.source` attribute,
+    // so `state.identity`'s default shape is what stays worth asserting.
     test('tenant state is initialized in pipeline state', () => {
       const ctx = new ExecutionContext({ command: 'test' }, logger);
 
-      expect(ctx.state.scope).toBeDefined();
-      expect(ctx.state.scope.continuityScopeId).toBe('default');
+      expect(ctx.state.identity).toBeDefined();
+      expect(ctx.state.identity.continuityScopeId).toBe('default');
     });
   });
 
