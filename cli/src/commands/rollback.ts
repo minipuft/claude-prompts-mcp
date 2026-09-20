@@ -85,12 +85,22 @@ export async function rollback(options: RollbackOptions): Promise<number> {
   //
   // Keys the snapshot omits therefore keep their current values, and the caller is told which ones
   // so a partial restore is not reported as a full one.
+  //
+  // A snapshot key may also be SPELLED differently from the entry file's own key, because the
+  // server restores by handing the snapshot to a writer that translates on the way out and this
+  // command has no writer in between. Renamed rather than excluded: the value is genuinely
+  // restorable, and merging it under the payload spelling wrote a second key beside the real one
+  // — a duplicate the loader ignores, on an operation the operator reads as "this file is now
+  // version N".
   const notRestored: string[] = [];
   if (result.snapshot) {
     const { writeFileSync } = await import('node:fs');
     const excluded = new Set(config.snapshotKeysNotInEntryFile ?? []);
+    const renames = config.snapshotKeyToEntryKey ?? {};
     const restorable = Object.fromEntries(
-      Object.entries(result.snapshot).filter(([key]) => !excluded.has(key)),
+      Object.entries(result.snapshot)
+        .filter(([key]) => !excluded.has(key))
+        .map(([key, value]) => [renames[key] ?? key, value]),
     );
 
     for (const key of Object.keys(currentData)) {
