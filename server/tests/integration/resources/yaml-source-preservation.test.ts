@@ -203,6 +203,25 @@ describe('resource writes preserve the source they did not edit', () => {
     expect(commentCount(written.content)).toBe(commentCount(source));
   });
 
+  /**
+   * The case the source-token path cannot express, and must not pretend to.
+   *
+   * `retries: "3"` is a QUOTED string. Asking for the number `3` is a scalar-for-scalar change,
+   * so it reaches the source-token path — which cannot write it, because putting `3` inside those
+   * quotes leaves a string on disk and the edit would report success having changed nothing. The
+   * write has to come out as a real number by some other route.
+   */
+  test('an edit the source-token path cannot express is applied, not skipped', () => {
+    const source = `# tuned by hand\nid: retry-gate\nretries: "3"\n`;
+    const parsed = parseYaml<Record<string, unknown>>(source);
+    const written = serializeYamlPreservingSource({ ...parsed.data!, retries: 3 }, source);
+
+    const reloaded = parseYaml<Record<string, unknown>>(written.content);
+    expect(reloaded.success).toBe(true);
+    expect(reloaded.data!['retries']).toBe(3);
+    expect(commentCount(written.content)).toBe(commentCount(source));
+  });
+
   test('no prior file renders from scratch rather than failing', () => {
     const written = serializeYamlPreservingSource({ id: 'fresh', name: 'Fresh' }, undefined);
     expect(written.fidelity).toBe('created');
