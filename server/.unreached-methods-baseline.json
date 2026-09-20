@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-20T02:42:27.730Z",
+  "generatedAt": "2026-09-20T02:55:24.137Z",
   "total": 230,
   "methods": [
     "Application.getCurrentFrameworkInfo",
