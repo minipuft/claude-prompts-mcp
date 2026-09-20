@@ -205,6 +205,20 @@ export class StepCaptureService {
    * from), NULL everywhere else — partial population BY ROW TYPE. Exactly one row per captured
    * step: gate retries re-enter `captureStep` and take its completed-non-placeholder early
    * return before reaching this.
+   *
+   * It is also the ONLY append that fires on a call carrying a `gate_verdict`, which is why
+   * `gateVerdicts` binds here (P4.76). Measured against a hermetic server on 2026-09-20, not
+   * reasoned about: of the five `executionRecordStore.append()` sites, this is the one that
+   * runs when the client answers the step and submits the verdict in one call — the shape the
+   * server's own footer advertises (`user_response="..." gate_verdict="..."`). Stage 16 runs
+   * `processPendingReviewVerdict` before `captureStep`, so the verdicts are on request state by
+   * the time this reads them.
+   *
+   * ☐ The SPLIT shape is not covered (as of 2026-09-20 · flips when a verdict-only call is
+   * observed to append a row): when the response is sent on one call and the verdict on a
+   * later one, this row is already written and `captureStep` early-returns, so NO append fires
+   * on the verdict call at all and those verdicts reach no record. Closing that needs a new
+   * verdict-time row, which is a record-shape decision rather than a binding.
    */
   private ledgerCapturedStep(
     context: ExecutionContext,
@@ -232,6 +246,11 @@ export class StepCaptureService {
       capturedResponse: responseContent,
     });
 
+    // Omitted rather than bound to `[]` when the call carried no per-gate detail: the column
+    // already defaults to `'[]'`, and writing it explicitly would make "ungated step" and
+    // "reviewer said nothing per-gate" the same row.
+    const gateVerdicts = context.state.gates.perGateVerdicts;
+
     const capturedAt = Date.now();
     this.executionRecordStore.append({
       sessionId,
@@ -244,6 +263,7 @@ export class StepCaptureService {
       startedAt: capturedAt,
       completedAt: capturedAt,
       ...(delegationSkipped !== undefined ? { delegationSkipped } : {}),
+      ...(gateVerdicts !== undefined ? { gateVerdicts } : {}),
       scope: context.getScopeOptions(),
     });
   }
