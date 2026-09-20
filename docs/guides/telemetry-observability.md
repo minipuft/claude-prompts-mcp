@@ -81,6 +81,15 @@ Clients also receive these as MCP notifications: `notifications/chain/step_compl
 `failed` or `cancelled`) and `notifications/framework/changed`. `validate:hook-producers`
 fails the build if any registerable event loses its producer again.
 
+> [!IMPORTANT]
+> **Notifications reach clients over STDIO only.** `McpNotificationEmitter` pushes through the
+> one server instance bound at startup, which `serveStdio` pins for the connection's lifetime.
+> Streamable HTTP builds a fresh server per request and has no long-lived instance to push
+> from; its only publish channel is the handler's `subscriptions/listen` notifier, which
+> carries list-changed and resource-updated events and nothing else. An HTTP client sees the
+> span events (telemetry is unaffected) but receives no gate, chain or framework notification.
+> Giving HTTP a channel for them is open work, not a defect in this wiring.
+
 ### Attributes
 
 Safe business-context attributes on trace spans (all prefixed `cpm.*`):

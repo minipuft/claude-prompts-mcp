@@ -127,8 +127,16 @@ export class McpNotificationEmitter implements McpNotificationEmitterPort {
    */
   private send(method: string, params: unknown): void {
     if (!this.canSend()) {
-      this.logger.debug('[McpNotificationEmitter] Cannot send notification - no server', {
+      // Names WHICH conjunct failed. The old message said "no server" for both, and a server
+      // WAS set — the bound object simply had no `notification()`, because SDK v2 moved it onto
+      // `McpServer.server`. Anyone grepping the old line looked for a missing `setServer` call
+      // that was not missing, which is how this survived every gate.
+      this.logger.warn('[McpNotificationEmitter] Notification dropped', {
         method,
+        reason:
+          this.server === undefined
+            ? 'no server bound — setServer was never called'
+            : 'the bound server exposes no notification() — bind the inner Server, not McpServer',
       });
       return;
     }
