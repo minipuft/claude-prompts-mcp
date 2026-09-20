@@ -106,9 +106,9 @@ export class RuntimeFrameworkLoader {
       this.frameworksDir,
       config.additionalFrameworksDirs ?? []
     );
-    // Reported and watched, not looked up.
+    // Reported and watched, not looked up — absent ones included, as in the gate loader's twin.
     this.additionalFrameworksDirs = (config.additionalFrameworksDirs ?? []).filter(
-      (dir) => existsSync(dir) && dir !== this.frameworksDir
+      (dir) => dir !== this.frameworksDir
     );
     this.enableCache = config.enableCache ?? true;
     this.validateOnLoad = config.validateOnLoad ?? true;
@@ -172,6 +172,16 @@ export class RuntimeFrameworkLoader {
     }
 
     return Array.from(idSet).sort();
+  }
+
+  /**
+   * Check if a framework exists
+   *
+   * @param id - Framework ID to check
+   * @returns True if the framework has a valid entry point
+   */
+  frameworkExists(id: string): boolean {
+    return this.entryRootsFor(id.toLowerCase()).length > 0;
   }
 
   /**

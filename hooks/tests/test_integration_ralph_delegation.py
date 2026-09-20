@@ -425,8 +425,14 @@ class TestEdgeCases:
         assert "Shell Verification FAILED" in output["reason"]
         assert "Delegation" not in output["reason"]
 
-    def test_pass_on_first_try_clears_state(self):
-        """Verification passing on first attempt clears state and allows stop."""
+    def test_pass_on_first_try_clears_state(self, patch_workspace):
+        """Verification passing on first attempt clears state and allows stop.
+
+        The `passed` branch opportunistically runs the real (unpatched) cleanup_stale_rows /
+        cleanup_old_sessions / cleanup_old_ralph_sessions — patch_workspace keeps their workspace
+        resolution inside tmp_path instead of the self-resolved checkout root (found by the
+        tree-state guard, 2026-09-19; see hooks/tests/tree_state_guard.py).
+        """
         pass_result = {
             "passed": True,
             "exitCode": 0,

@@ -51,6 +51,12 @@ export function buildGateAuxiliaryReloadConfig(
         };
         await registration.handler(gateEvent);
       },
+      reconcile: async () => {
+        const removed = await registration.coordinator.reconcile();
+        if (removed.length > 0) {
+          logger.info(`Gate reconciliation unregistered: ${removed.join(', ')}`);
+        }
+      },
     };
   } catch (error) {
     logger.warn('Failed to configure gate hot reload; continuing without gate reload:', error);

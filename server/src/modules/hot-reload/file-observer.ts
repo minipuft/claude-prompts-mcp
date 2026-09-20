@@ -157,6 +157,12 @@ const DEFAULT_CONFIG: FileObserverConfig = {
 const PENDING_DIRECTORY_POLL_MS = 1000;
 
 /**
+ * Emitted with the directory path once a directory that did not exist when it was registered has
+ * appeared AND its watcher finished the initial scan. Listeners reconcile what they hold from it.
+ */
+export const LATE_DIRECTORY_ARMED = 'lateDirectoryArmed';
+
+/**
  * FileObserver class
  * Provides robust file system watching with event-driven architecture
  */
@@ -324,13 +330,15 @@ export class FileObserver extends EventEmitter {
         throw new Error(`Path is not a directory: ${directoryPath}`);
       }
 
+      const createdLate = this.directoriesCreatedLate.has(directoryPath);
+
       // Configure chokidar options
       const watchOptions: ChokidarOptions = {
         persistent: true,
         // A directory created after startup may already hold files written, or edited, before its
         // watcher armed; the poll can trail the write by a second. Reporting them lets that edit
         // reload instead of being absorbed into the watcher's starting snapshot.
-        ignoreInitial: !this.directoriesCreatedLate.has(directoryPath),
+        ignoreInitial: !createdLate,
         followSymlinks: true,
         depth: this.config.recursive ? undefined : 0,
         ignored: this.config.ignoredPatterns,
@@ -344,6 +352,19 @@ export class FileObserver extends EventEmitter {
       };
 
       const watcher = chokidar.watch(directoryPath, watchOptions);
+
+      // A directory that appeared after it was registered had a window — the pending poll, then
+      // this watcher's initial scan — in which nothing observed it. `ignoreInitial: false` above
+      // reports what is there once the scan runs, but nothing can report what was written AND
+      // removed inside the window, and the server may already hold it: a `resource_manager`
+      // create registers its entry directly. So once the scan is done, the directory is announced
+      // for reconciliation, and the owners compare what they hold against the disk. A shorter
+      // poll would only narrow the window.
+      if (createdLate) {
+        watcher.once('ready', () => {
+          this.emit(LATE_DIRECTORY_ARMED, directoryPath);
+        });
+      }
 
       // Handle chokidar events
       watcher
@@ -601,21 +622,10 @@ export class FileObserver extends EventEmitter {
 
     this.logger.info(`🔄 FileObserver: File ${event.type}: ${event.filename}`);
 
-    // Emit specific event types
+    // One event, classified by its flags. `HotReloadObserver` is this class's only owner and
+    // routes on `isPromptFile`/`isConfigFile`/`isAuxiliaryFile`; per-type events named after those
+    // flags had no listener anywhere.
     this.emit('fileChange', event);
-    this.emit(`file:${event.type}`, event);
-
-    if (event.isPromptFile) {
-      this.emit('promptFileChange', event);
-    }
-
-    if (event.isConfigFile) {
-      this.emit('configFileChange', event);
-    }
-
-    if (event.isFrameworkFile) {
-      this.emit('frameworkFileChange', event);
-    }
   }
 
   /**

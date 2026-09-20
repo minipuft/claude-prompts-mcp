@@ -88,6 +88,12 @@ export class VerifyActiveStateStore {
       },
     };
 
+    // Throws rather than swallowing: a write that silently failed here left the Stop hook
+    // reading a stale or missing row while the pipeline reply claimed the loop was armed.
+    // ShellVerificationStage does not catch this, so it reaches the pipeline's single error
+    // boundary (PromptExecutionPipeline.executePipelineStages), which the prompt_engine tool
+    // handler reports through the `:: verify` reply — matching the shape framework-state-store
+    // (`enableFrameworkSystem`/`disableFrameworkSystem`) already applies to its own save.
     try {
       this.withDb((db) => {
         const stmt = db.prepare(
@@ -98,8 +104,12 @@ export class VerifyActiveStateStore {
       });
       this.logger.debug('[VerifyActiveStateStore] Wrote verify-state.db row for Stop hook');
     } catch (error) {
-      // Non-fatal - log warning but don't fail verification
-      this.logger.warn('[VerifyActiveStateStore] Failed to write verify-state.db:', error);
+      throw new Error(
+        `Failed to arm verify-loop state for session ${sessionId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        { cause: error }
+      );
     }
   }
 
@@ -112,6 +122,10 @@ export class VerifyActiveStateStore {
    * - User chooses skip/abort
    */
   async clearState(sessionId?: string): Promise<void> {
+    // Throws for the same reason writeState above does: a clear that silently failed left
+    // verify-state.db pointing at a stale iteration while the caller believed the loop had
+    // ended (pass, escalation, or session teardown) — the Stop hook would keep blocking on a
+    // verification the pipeline had already moved past.
     try {
       this.withDb((db) => {
         if (sessionId !== undefined) {
@@ -122,8 +136,52 @@ export class VerifyActiveStateStore {
       });
       this.logger.debug('[VerifyActiveStateStore] Cleared verify-state.db row');
     } catch (error) {
-      this.logger.warn('[VerifyActiveStateStore] Failed to clear verify-state.db:', error);
+      throw new Error(
+        `Failed to clear verify-loop state${sessionId !== undefined ? ` for session ${sessionId}` : ''}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        { cause: error }
+      );
     }
+  }
+
+  /**
+   * Read current verify-active state (for Stop hook use).
+   *
+   * @returns The current state, or null if no active verification
+   */
+  async readState(sessionId?: string): Promise<VerifyActiveState | null> {
+    try {
+      return this.withDb((db) => {
+        const row =
+          sessionId !== undefined
+            ? db
+                .prepare('SELECT state_json FROM verify_active_state WHERE session_id = ?')
+                .get(sessionId)
+            : db.prepare('SELECT state_json FROM verify_active_state LIMIT 1').get();
+
+        if (row === undefined) {
+          return null;
+        }
+
+        const raw = (row as Record<string, unknown>)['state_json'];
+        if (typeof raw !== 'string' || raw.trim() === '') {
+          return null;
+        }
+        return JSON.parse(raw) as VerifyActiveState;
+      });
+    } catch (error) {
+      this.logger.warn('[VerifyActiveStateStore] Failed to read verify-state.db:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Check if there's an active verification pending.
+   */
+  async hasActiveVerification(): Promise<boolean> {
+    const state = await this.readState();
+    return state !== null;
   }
 
   // === Private: SQLite helpers ===

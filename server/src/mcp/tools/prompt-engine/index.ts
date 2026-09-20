@@ -17,10 +17,6 @@ export {
 } from './core/prompt-executor.js';
 
 // Type definitions
-export type {
-  FormatterExecutionContext,
-  SimpleResponseFormatter,
-  PromptClassification,
-} from './core/types.js';
+export type { FormatterExecutionContext, SimpleResponseFormatter } from './core/types.js';
 
 export { ResponseFormatter } from './processors/response-formatter.js';

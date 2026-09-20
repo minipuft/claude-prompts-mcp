@@ -474,6 +474,91 @@ scenarios:
     # prompt is still here to prove it.
     expect: { text_contains: 'conformance_preview_survives' }
 
+  - id: prompt-chain-step-update-edits-only-that-step
+    claim_source: >-
+      resource_manager contract — `chain_step_operation: "update"` "overlays `chain_step_data`
+      onto the step at `chain_step_index`, the per-step analogue of `argument_updates`" (P2.4).
+      Omitted fields keep the step's current value, so a sibling step is untouched. `chain_step_data`
+      is schema-validated as a full step (same shape as one `chain_steps` entry), so `promptId` is
+      resupplied unchanged alongside the field actually being overlaid.
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: create
+          id: conformance_chain_step_update
+          name: Conformance Chain Step Update
+          category: examples
+          description: created by the conformance corpus
+          user_message_template: CONFORMANCE_CHAIN_STEP_UPDATE_BODY
+          chain_steps:
+            - promptId: minimal_prompt
+              stepName: Step One
+            - promptId: minimal_prompt
+              stepName: Step Two
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: update
+          id: conformance_chain_step_update
+          chain_step_operation: update
+          chain_step_index: 1
+          chain_step_data: { promptId: minimal_prompt, stepName: Step Two Updated }
+      - tool: resource_manager
+        args: { resource_type: prompt, action: reload, id: conformance_chain_step_update }
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: inspect
+          id: conformance_chain_step_update
+          detail: full
+    # One substring spanning both rendered step lines: step 1's line is BYTE-IDENTICAL to what
+    # `create` produced, immediately followed by step 2's line carrying the overlay. A `chain_step_
+    # operation:"update"` that touched the wrong step, or replaced the whole array, could not
+    # produce this exact contiguous pair.
+    expect:
+      text_contains: "1. `minimal_prompt` - Step One\n2. `minimal_prompt` - Step Two Updated"
+
+  - id: prompt-chain-step-reorder-permutes-existing-steps
+    claim_source: >-
+      resource_manager contract — `chain_step_operation: "reorder"` applies `chain_step_order`,
+      "a permutation of [0..n-1] for the current step count."
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: create
+          id: conformance_chain_step_reorder
+          name: Conformance Chain Step Reorder
+          category: examples
+          description: created by the conformance corpus
+          user_message_template: CONFORMANCE_CHAIN_STEP_REORDER_BODY
+          chain_steps:
+            - promptId: minimal_prompt
+              stepName: Step Alpha
+            - promptId: minimal_prompt
+              stepName: Step Beta
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: update
+          id: conformance_chain_step_reorder
+          chain_step_operation: reorder
+          chain_step_order: [1, 0]
+      - tool: resource_manager
+        args: { resource_type: prompt, action: reload, id: conformance_chain_step_reorder }
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: inspect
+          id: conformance_chain_step_reorder
+          detail: full
+    # `create` put Alpha first and Beta second; the permutation [1,0] swaps them. Asserting the
+    # swapped ORDER (Beta then Alpha) — not just that both names are present — is what only a
+    # correctly applied reorder can produce.
+    expect:
+      text_contains: "1. `minimal_prompt` - Step Beta\n2. `minimal_prompt` - Step Alpha"
+
   - id: gate-update-preview-is-refused-by-name
     claim_source: >-
       resource_manager contract — `preview_action` is validated per resource type. A gate has no

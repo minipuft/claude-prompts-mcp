@@ -96,6 +96,12 @@ export function buildScriptAuxiliaryReloadConfig(
         }
         return event.filePath !== '' ? isScriptToolFile(event.filePath) : false;
       },
+      // A workspace script removed unobserved stays in the workspace cache just as a prompt-local
+      // one stays in the loader's, so both are dropped.
+      reconcile: async () => {
+        await registration.reconcile();
+        workspaceScripts?.clearWorkspaceCache();
+      },
     };
   } catch (error) {
     logger.warn(

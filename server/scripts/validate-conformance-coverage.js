@@ -225,8 +225,11 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
       'validation passes and server/skills-sync.yaml has loaded — a gitignored file, absent in CI ' +
       "and holding the developer's own registrations locally. The conformance servers inherit the " +
       'real HOME, so a scenario that got that far would read real client skill folders, and write ' +
-      'them if `preview` ever stopped arriving. The other skills_sync parameters are covered by ' +
-      'option-validation refusals in tool-surface.yaml, which stop before that point.',
+      'them if `preview` ever stopped arriving. The other skills_sync parameters are exercised in ' +
+      'tool-surface.yaml only via scenarios that deliberately pair each one with an incompatible ' +
+      'command, so THOSE specific calls are refused before reaching real HOME — option validation ' +
+      'does not refuse skills_sync calls in general: an ordinary, well-formed one (an export, say) ' +
+      'passes validation and writes for real. One such export was measured writing 224 files.',
     'A conformance server with a temp HOME and a fixture skills-sync.yaml, running `diff` or a ' +
       '`preview: true` export filtered by `id`.'
   ),
@@ -270,9 +273,11 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
       'arguments',
       'argument_updates',
       'patch',
-      'chain_steps',
       'gate_configuration',
       'injection',
+      // `chain_steps` was removed from this list on 2026-09-16: the row B.60 chain-step-edit
+      // scenarios in workspace-and-mutations.yaml `create` with `chain_steps` set, and this
+      // check's own satisfied-exception arm is what caught it still being listed.
       // `register_with_mcp` and `mcp_prompt_mode` were removed from this list at P4.7
       // (2026-09-11). They were never prompt-only: `loader.ts` has read both off `category.yaml`
       // since long before anything could write one, and P4.7 made `resource_type: category` the
@@ -350,28 +355,33 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
     'A conformance scenario exercising `action:compare` or `action:history`, or an update with ' +
       'skip_version:true asserting no new version was saved.'
   ),
-  // The five entries below became visible to this gate on 2026-09-15, when B.34 declared the
-  // five `resource_manager` parameters the schema had always published and the contract had
-  // never listed. They are not newly uncovered — they were never reachable by this enumeration,
-  // because it walks the contract and the contract did not name them.
-  ...exceptionGroup(
-    'resource_manager',
-    ['chain_step_operation', 'chain_step_index', 'chain_step_data', 'chain_step_order'],
-    'Step-level chain edit field. The corpus creates and updates prompts in ' +
-      'workspace-and-mutations.yaml but never a CHAIN prompt, so there is no multi-step prompt ' +
-      'for these four to target, and the whole sub-protocol is refused without one.',
-    'An isolated-workspace scenario creating a prompt with `chain_steps`, editing one step with ' +
-      '`chain_step_operation`, and reading the step list back to show only that step moved.'
-  ),
+  // Five `resource_manager` parameters became visible to this gate on 2026-09-15, when B.34
+  // declared the ones the schema had always published and the contract had never listed. They
+  // were not newly uncovered — they were never reachable by this enumeration, because it walks
+  // the contract and the contract did not name them. Four of the five (the chain_step_* group)
+  // were retired 2026-09-16 by `prompt-chain-step-update-edits-only-that-step` and
+  // `prompt-chain-step-reorder-permutes-existing-steps` in workspace-and-mutations.yaml; `subject`
+  // remains below.
   ...exceptionGroup(
     'resource_manager',
     ['subject'],
-    'Gate reminder tag. `inspect` has no read-back path for it (gate-discovery-processor.ts ' +
-      'prints severity, enforcement mode and classification, not subject), so a create-then-' +
-      'inspect row would assert nothing the create returning ok does not already assert.',
-    'An isolated-workspace scenario asserting a subject-tagged reminder is suppressed under a ' +
-      '`gates.harnessCovers` entry naming it and delivered without one — or a `subject` line in ' +
-      'gate `inspect`, which would make the create-then-read-back pattern available.'
+    'Gate reminder tag, and its one declared runtime effect is `GateGuidanceRenderer` ' +
+      'suppressing a reminder-tier gate (no evaluated `pass_criteria` — gate-tier.ts) whose ' +
+      '`subject` appears in `gates.harnessCovers` (core-config.ts). `inspect` has no read-back ' +
+      'path for `subject` either (gate-discovery-processor.ts prints severity, enforcement mode ' +
+      'and classification, not subject), so a create-then-inspect row would assert nothing the ' +
+      'create returning ok does not already assert. Proving the suppression effect needs ' +
+      '`gates.harnessCovers` to differ between two executions of the reminder, and ' +
+      '`system_control config` refuses arbitrary writes over MCP by design (config-action-' +
+      'handler.ts — writes are `cpm`-only, rulings R27/R35), so no conformance scenario can ' +
+      'toggle it mid-run.',
+    "A `gates.harnessCovers` entry baked into `buildIsolatedWorkspace()`'s config.json — same " +
+      'precedent as the `resources.registerWithMcp` patch already there — naming one fixed ' +
+      'subject, paired with two isolated-workspace scenarios: one tagging a reminder-tier gate ' +
+      'with that subject, attaching it to a prompt, and executing to show the guidance text ' +
+      'ABSENT; the other tagging a DIFFERENT, uncovered subject and executing to show it ' +
+      'PRESENT. Needs a runner change (the config bake), not only a new scenario — not ' +
+      'attempted here.'
   ),
 ];
 

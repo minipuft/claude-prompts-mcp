@@ -12,7 +12,7 @@
  */
 import { describe, expect, it } from '@jest/globals';
 
-import { SYSTEM_CONTROL_ACTION_IDS } from '../../../src/mcp/metadata/definitions/system-control.js';
+import { SYSTEM_CONTROL_ACTION_IDS } from '../../../src/shared/types/system-control.js';
 import {
   SKILLS_SYNC_OPERATIONS,
   type SkillsSyncInput,

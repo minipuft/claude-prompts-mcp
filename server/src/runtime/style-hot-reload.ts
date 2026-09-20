@@ -55,6 +55,7 @@ export async function buildStyleAuxiliaryReloadConfig(
         };
         await registration.handler(styleEvent);
       },
+      reconcile: () => registration.coordinator.reconcile(),
     };
   } catch (error) {
     logger.warn('Failed to configure style hot reload; continuing without style reload:', error);

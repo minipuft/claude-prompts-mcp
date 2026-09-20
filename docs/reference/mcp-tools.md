@@ -903,8 +903,8 @@ resource_manager(
   name:"Source Verification",
   type:"validation",
   description:"Ensures all claims are properly sourced",
-  guidance:"All factual claims must cite sources. No unsourced statistics.",
-  pass_criteria:["All claims have citations", "Sources are authoritative"]
+  guidance:"All factual claims must cite sources; sources must be authoritative. No unsourced statistics.",
+  pass_criteria:[{type:"inline_guidance"}]
 )
 
 # Update a gate
@@ -1070,8 +1070,9 @@ directory is refused rather than silently served under the directory's name.
 | `persist`                | Save switch to config (for `switch` action) |
 
 **Framework advanced parameters.** All eleven were accepted before they were documented; they are
-now declared in the tool schema, so a client can read each one's shape from the contract. Six land
-in `framework.yaml`, five in `phases.yaml` — which matters when reasoning about a partial write.
+now declared in the tool schema, so a client can read each one's shape from the contract. Four land
+in `framework.yaml`, six in `phases.yaml` and one in its own file, which matters when reasoning
+about a partial write.
 
 | Parameter                     | Lands in         | Purpose                                                                             |
 | ----------------------------- | ---------------- | ----------------------------------------------------------------------------------- |
@@ -1086,6 +1087,13 @@ in `framework.yaml`, five in `phases.yaml` — which matters when reasoning abou
 | `template_enhancements`       | `phases.yaml`    | System/user prompt additions and contextual hints                                   |
 | `execution_flow`              | `phases.yaml`    | Pre/post/validation hooks around execution                                          |
 | `quality_indicators`          | `phases.yaml`    | Per-phase keywords and patterns for compliance scoring                              |
+
+**What a framework `update` keeps.** Everything the call does not change. A field you omit keeps
+its stored value, and so does `version`: no parameter sets it, and only `create` writes `1.0.0`. A
+file whose content the update does not change is not written at all, so its comments and
+formatting survive. An edit to `quality_indicators` rewrites `phases.yaml` and leaves
+`framework.yaml` byte-identical. A file the update does change is rewritten whole, and loses its
+comments.
 
 </details>
 
@@ -1285,11 +1293,13 @@ system_control(action:"changes", operation:"list", limit:10)
 
 **Change Sources:**
 
-| Source       | Meaning                                    |
-| ------------ | ------------------------------------------ |
-| `filesystem` | Hot-reload detected file change            |
-| `mcp-tool`   | Created/updated via `resource_manager`     |
-| `external`   | Changed while server was down (on startup) |
+| Source       | Meaning                                                                                                       |
+| ------------ | ------------------------------------------------------------------------------------------------------------- |
+| `filesystem` | Hot-reload detected file change                                                                               |
+| `mcp-tool`   | Created/updated via `resource_manager`                                                                        |
+| `external`   | Changed while server was down (on startup), or removed before a folder created while it ran was first watched |
+
+**Which folders are tracked:** your primary prompts and gates folders, and every workspace overlay (`<workspace>/prompts`, `<workspace>/gates`) — including one created while the server runs. A resource that exists in more than one of them is recorded once, for the copy that is served, so editing a copy another folder overrides records nothing. The bundled catalog is tracked only when it is your primary folder (no workspace configured): it changes only when the package is updated.
 
 **Why this matters:** Debug sync issues between your editor and the server. Track which prompts changed during a session. Audit who modified what before a deploy.
 

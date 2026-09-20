@@ -222,6 +222,26 @@ export class FrameworkRegistry {
   }
 
   /**
+   * Get guide entries with metadata
+   *
+   * Unlike `getAllGuides`, an entry carries its `source`, which is what lets the reconciliation
+   * pass in `FrameworkHotReloadCoordinator.reconcile()` tell a `yaml-runtime` guide backed by a
+   * file from one registered in code.
+   */
+  getGuideEntries(enabledOnly: boolean = true): FrameworkGuideEntry[] {
+    this.ensureInitialized();
+
+    const entries: FrameworkGuideEntry[] = [];
+    for (const [_, entry] of this.guides) {
+      if (!enabledOnly || entry.enabled) {
+        entries.push(entry);
+      }
+    }
+
+    return entries;
+  }
+
+  /**
    * Check if a guide is registered
    */
   hasGuide(guideId: string): boolean {

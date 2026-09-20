@@ -617,10 +617,11 @@ export interface SkillsSyncRunReport {
   preview: boolean;
   /** Resources loaded from canonical YAML */
   resources: number;
-  /** Files written (0 on a preview) */
+  /** Files written (0 on a preview) — populated by `export`, `sync`, `pull`, and `clone` */
   written: number;
   /**
-   * `written`, broken out by client — `export` and `sync` only. Absent rather than
+   * `written`, broken out by client — `export`, `sync`, and `pull` only; `clone` has no client
+   * dimension (it parses one external file, not a per-client output tree). Absent rather than
    * empty for every other command, same reasoning as `drift`: a command that never
    * writes a file per client should not read as "wrote zero for each of them".
    */
@@ -4419,6 +4420,9 @@ async function pullCommand(
       const scopedResources = filterResourcesForScope(resources, scope, selection, ignoreSelection);
 
       let pullCount = 0;
+      // Set, not a counter: a resource whose name AND description both changed writes the same
+      // prompt.yaml twice in this loop, and the report must match the filesystem, not the call count.
+      const scopeWrittenPaths = new Set<string>();
 
       for (const ir of scopedResources) {
         // Only pull the main SKILL.md, not tool files
@@ -4602,12 +4606,14 @@ async function pullCommand(
             const doc = yaml.load(yamlContent) as Record<string, unknown>;
             doc[change.section] = change.newContent;
             await writeFile(yamlPath, yaml.dump(doc, { lineWidth: 120 }));
+            scopeWrittenPaths.add(yamlPath);
             output.log(`    wrote ${change.section} → ${yamlPath}`);
             wroteAny = true;
           } else {
             // Write prose file (system-message.md, user-message.md, guidance.md)
             const filePath = path.join(resourceDir, change.file);
             await writeFile(filePath, change.newContent);
+            scopeWrittenPaths.add(filePath);
             output.log(`    wrote ${change.file} → ${filePath}`);
             wroteAny = true;
           }
@@ -4619,6 +4625,13 @@ async function pullCommand(
         output.log(`${clientId} (${scope}): no prose changes to pull`);
       } else {
         output.log(`\n${clientId} (${scope}): pulled ${pullCount} resource(s)`);
+      }
+
+      report.written += scopeWrittenPaths.size;
+      if (scopeWrittenPaths.size > 0) {
+        report.writtenByClient = report.writtenByClient ?? {};
+        report.writtenByClient[clientId] =
+          (report.writtenByClient[clientId] ?? 0) + scopeWrittenPaths.size;
       }
     }
   }
@@ -4711,6 +4724,10 @@ async function cloneCommand(
 
   const verificationService = new ResourceVerificationService();
   const mutationTransaction = new ResourceMutationTransaction();
+  // Set, not a counter: primaryYamlPath is rewritten up to three times (base doc, then again once
+  // for gateConfiguration, once for chainSteps) and the report must count the file once, matching
+  // what actually landed on disk.
+  const writtenPaths = new Set<string>();
   const skillDir = path.dirname(filePath);
   const companionGatesDir = path.join(skillDir, 'gates');
   const companionResourcesDir = path.join(skillDir, 'resources');
@@ -4796,6 +4813,7 @@ async function cloneCommand(
 
       const primaryYamlPath = path.join(targetDir, yamlFileName);
       await writeFile(primaryYamlPath, yaml.dump(yamlDoc, { lineWidth: 120 }));
+      writtenPaths.add(primaryYamlPath);
       output.log(`  wrote ${yamlFileName}`);
       localValidationTargets.push({
         resourceType: resourceVerificationType,
@@ -4804,11 +4822,15 @@ async function cloneCommand(
       });
 
       if (systemMessage) {
-        await writeFile(path.join(targetDir, 'system-message.md'), systemMessage);
+        const systemMessagePath = path.join(targetDir, 'system-message.md');
+        await writeFile(systemMessagePath, systemMessage);
+        writtenPaths.add(systemMessagePath);
         output.log(`  wrote system-message.md`);
       }
       if (userMessage) {
-        await writeFile(path.join(targetDir, 'user-message.md'), userMessage);
+        const userMessagePath = path.join(targetDir, 'user-message.md');
+        await writeFile(userMessagePath, userMessage);
+        writtenPaths.add(userMessagePath);
         output.log(`  wrote user-message.md`);
       }
 
@@ -4816,7 +4838,9 @@ async function cloneCommand(
         const guidanceContent = isClaudeCode
           ? reverseCompileTemplate(parsed.guidanceContent, reverseArgs)
           : reverseCompilePlaintext(parsed.guidanceContent);
-        await writeFile(path.join(targetDir, 'guidance.md'), guidanceContent);
+        const guidancePath = path.join(targetDir, 'guidance.md');
+        await writeFile(guidancePath, guidanceContent);
+        writtenPaths.add(guidancePath);
         output.log(`  wrote guidance.md`);
       }
 
@@ -4839,6 +4863,7 @@ async function cloneCommand(
           if (gateYaml) {
             const gateYamlPath = path.join(gateTargetDir, 'gate.yaml');
             await writeFile(gateYamlPath, gateYaml);
+            writtenPaths.add(gateYamlPath);
             output.log(`  wrote gates/${gateId}/gate.yaml`);
             localValidationTargets.push({
               resourceType: 'gates',
@@ -4851,7 +4876,9 @@ async function cloneCommand(
             path.join(companionGatesDir, gateId, 'guidance.md')
           );
           if (gateGuidance) {
-            await writeFile(path.join(gateTargetDir, 'guidance.md'), gateGuidance);
+            const gateGuidancePath = path.join(gateTargetDir, 'guidance.md');
+            await writeFile(gateGuidancePath, gateGuidance);
+            writtenPaths.add(gateGuidancePath);
             output.log(`  wrote gates/${gateId}/guidance.md`);
           }
         }
@@ -4865,6 +4892,7 @@ async function cloneCommand(
             (yamlDoc['gateConfiguration'] as Record<string, unknown>)['inline'] = inlineCriteria;
           }
           await writeFile(primaryYamlPath, yaml.dump(yamlDoc, { lineWidth: 120 }));
+          writtenPaths.add(primaryYamlPath);
           output.log(`  updated ${yamlFileName} with gateConfiguration`);
         }
 
@@ -4884,6 +4912,7 @@ async function cloneCommand(
           if (stepYaml) {
             const stepYamlPath = path.join(stepTargetDir, 'prompt.yaml');
             await writeFile(stepYamlPath, stepYaml);
+            writtenPaths.add(stepYamlPath);
             output.log(`  wrote resources/${stepId}/prompt.yaml`);
 
             let stepPromptId = stepId;
@@ -4914,14 +4943,18 @@ async function cloneCommand(
             path.join(companionResourcesDir, stepId, 'system-message.md')
           );
           if (stepSys) {
-            await writeFile(path.join(stepTargetDir, 'system-message.md'), stepSys);
+            const stepSysPath = path.join(stepTargetDir, 'system-message.md');
+            await writeFile(stepSysPath, stepSys);
+            writtenPaths.add(stepSysPath);
             output.log(`  wrote resources/${stepId}/system-message.md`);
           }
           const stepUser = await readOptionalFile(
             path.join(companionResourcesDir, stepId, 'user-message.md')
           );
           if (stepUser) {
-            await writeFile(path.join(stepTargetDir, 'user-message.md'), stepUser);
+            const stepUserPath = path.join(stepTargetDir, 'user-message.md');
+            await writeFile(stepUserPath, stepUser);
+            writtenPaths.add(stepUserPath);
             output.log(`  wrote resources/${stepId}/user-message.md`);
           }
         }
@@ -4929,6 +4962,7 @@ async function cloneCommand(
         if (chainSteps.length > 0) {
           yamlDoc['chainSteps'] = chainSteps;
           await writeFile(primaryYamlPath, yaml.dump(yamlDoc, { lineWidth: 120 }));
+          writtenPaths.add(primaryYamlPath);
           output.log(`  updated ${yamlFileName} with chainSteps`);
         }
       }
@@ -4973,6 +5007,7 @@ async function cloneCommand(
     throw new Error(transactionResult.error ?? 'Clone failed');
   }
 
+  report.written += writtenPaths.size;
   output.log(`\nImported ${resourceType} "${resourceId}" → ${targetDir}`);
 }
 

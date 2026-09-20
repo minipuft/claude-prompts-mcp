@@ -283,8 +283,9 @@ export const resource_managerParameters: ToolParameter[] = [
   },
   {
     name: 'chain_steps',
-    type: 'array<step>',
-    description: '[Prompt] Chain steps definition for multi-step prompts.',
+    type: 'array<object>',
+    description:
+      '[Prompt] Chain steps definition for multi-step prompts. Each entry: promptId and stepName required; optional id (kebab-case, minted from stepName when omitted), args, inputMapping, outputMapping, visibility, subagentModel, agentType, framework, retries, inlineGateIds, inlineGateCriteria, delegated. Extra keys pass through uninterpreted.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
@@ -327,9 +328,9 @@ export const resource_managerParameters: ToolParameter[] = [
   },
   {
     name: 'tools',
-    type: 'array<{id,name,script,description?,runtime?,schema?,trigger?,confirm?,strict?,timeout?}>',
+    type: 'array<unknown>',
     description:
-      '[Prompt] Script tools to create with the prompt. Each tool creates files in tools/{id}/ subdirectory. Required: id, name, script. Optional: description, runtime (python|node|shell|auto), schema (JSON Schema object), trigger (schema_match|explicit|always|never), confirm, strict, timeout.',
+      '[Prompt] Script tools to create with the prompt. Each tool creates files in tools/{id}/ subdirectory. Required: id, name, script. Optional: description, runtime (python|node|shell|auto), schema (JSON Schema object), trigger (schema_match|explicit|always|never), confirm, strict, timeout. Element shape is not constrained at this boundary — it is validated against the script tool schema when written.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
@@ -484,8 +485,9 @@ export const resource_managerParameters: ToolParameter[] = [
   },
   {
     name: 'pass_criteria',
-    type: 'array<string>',
-    description: '[Gate] Structured pass criteria definitions.',
+    type: 'array<object>',
+    description:
+      "[Gate] Structured pass criteria definitions. Each entry is an object, not a bare string: optional type (inline_guidance|framework_compliance|shell_verify|script_tool) plus the fields that type reads — framework compliance's framework/min_compliance_score/severity/quality_indicators, shell verification's shell_command/shell_timeout/shell_working_dir/shell_env/shell_max_attempts/shell_preset/shell_stdin_source/shell_response_env_var, or script tool's script_tool_id/script_tool_input/script_tool_timeout/script_tool_working_dir.",
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
@@ -525,9 +527,9 @@ export const resource_managerParameters: ToolParameter[] = [
   },
   {
     name: 'phases',
-    type: 'array<object>',
+    type: 'array<unknown>',
     description:
-      '[Framework] Phase definitions: id, name, description, prompts. The advanced fields this description used to fold in are declared as their own parameters below.',
+      '[Framework] Phase definitions: id, name, description, prompts. The advanced fields this description used to fold in are declared as their own parameters below. Element shape is not constrained at this boundary; the framework loader rejects a malformed entry when phases.yaml is read back.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,

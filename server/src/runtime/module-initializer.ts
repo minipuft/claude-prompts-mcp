@@ -7,6 +7,8 @@
 import {
   initializeResourceChangeTracker,
   compareResourceBaseline,
+  trackedResourceRoots,
+  type TrackedResourceRoots,
 } from './resource-change-tracking.js';
 import { syncResourceIndex } from './resource-index-resync.js';
 import {
@@ -14,7 +16,7 @@ import {
   formatResourceInventory,
   type ResourceInventory,
 } from './resource-inventory.js';
-import { resolveResourceRoots, type ResourceRoots } from './resource-roots.js';
+import { existingOverlays, resolveResourceRoots, type ResourceRoots } from './resource-roots.js';
 import { resolveSkillsSyncPaths } from './skills-sync-paths.js';
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
@@ -135,14 +137,14 @@ async function claimStateDatabase(runtimeDbPath: string, logger: Logger): Promis
  */
 async function compareBaselineAndReport(
   tracker: ResourceChangeTracker,
-  configManager: ConfigLoader,
+  roots: TrackedResourceRoots,
   logger: Logger,
   quarantine: QuarantineView,
   isVerbose: boolean
 ): Promise<void> {
   const { added, modified, removed, refused } = await compareResourceBaseline(
     tracker,
-    configManager,
+    roots,
     logger,
     quarantine
   );
@@ -247,7 +249,7 @@ function resourceInventoryOf(
     resource,
     root: roots.primary,
     count,
-    overlays: roots.overlays,
+    overlays: existingOverlays(roots),
     ...(roots.bundled !== undefined ? { base: roots.bundled } : {}),
   };
 }
@@ -398,7 +400,7 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
   if (resourceChangeTracker !== undefined) {
     await compareBaselineAndReport(
       resourceChangeTracker,
-      configManager,
+      trackedResourceRoots(configManager, pathResolver),
       logger,
       trackedQuarantine,
       isVerbose

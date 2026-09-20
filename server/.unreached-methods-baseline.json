@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-18T03:05:47.885Z",
-  "total": 113,
+  "generatedAt": "2026-09-20T04:09:20.830Z",
+  "total": 114,
   "methods": [
     "Application.getCurrentFrameworkInfo",
     "Application.initializeModules",
@@ -112,6 +112,7 @@
     "TelemetryLifecycle.getRuntime",
     "TelemetryLifecycle.isEnabled",
     "TransportRouter.isStdio",
+    "VerifyActiveStateStore.hasActiveVerification",
     "VersionHistoryService.deleteHistory",
     "VersionHistoryService.rollback",
     "WorkspaceScriptLoader.discoverWorkspaceScripts",
