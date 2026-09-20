@@ -7,7 +7,10 @@
  * stop being in the file after the first toggle, and every other gate stays green.
  *
  * The backup half matters for the same reason: a backup whose name lost the `.jsonc` extension
- * would restore as a file a strict reader rejects, so the round-trip is asserted on bytes.
+ * would be unusable as a restore source, so its bytes and extension are asserted directly.
+ * `restoreFromBackup` itself was deleted (P4.81, 2026-09-20) -- no caller has existed since
+ * PR #312 retired `system_control config restore`; the backup this test checks currently has
+ * no reader.
  *
  * Classification: Unit (temp directory, no server; `ConfigManager` is a stub whose only job is to
  * record that the reload happened).
@@ -81,17 +84,12 @@ describe('SafeConfigWriter', () => {
     expect(reloads).toBe(1);
   });
 
-  it('backs the file up under its own extension, and the backup restores byte for byte', async () => {
+  it('backs the file up under its own extension, byte for byte', async () => {
     const writer = writerFor('config.jsonc', COMMENTED_CONFIG);
 
     const result = await writer.updateConfigValue('gates.enabled', 'true');
     expect(result.backupPath).toContain('config.jsonc.backup.');
     expect(readFileSync(result.backupPath as string, 'utf8')).toBe(COMMENTED_CONFIG);
-
-    const restore = await writer.restoreFromBackup(result.backupPath as string);
-
-    expect(restore.success).toBe(true);
-    expect(readFileSync(writer.getConfigPath(), 'utf8')).toBe(COMMENTED_CONFIG);
   });
 
   it('refuses when the workspace holds both config names, naming both paths', async () => {
