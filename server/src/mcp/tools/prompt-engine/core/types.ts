@@ -102,18 +102,6 @@ export interface SimpleResponseFormatter {
 }
 
 /**
- * Prompt classification interface for execution strategy
- */
-export interface PromptClassification {
-  executionType: 'single' | 'chain';
-  requiresExecution: boolean;
-  confidence: number;
-  reasoning: string[];
-  suggestedGates: string[];
-  framework?: string;
-}
-
-/**
  * Chain execution strategy result
  */
 export interface ChainExecutionStrategy {
