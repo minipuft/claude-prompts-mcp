@@ -293,6 +293,17 @@ describe('chain lifecycle events reach their registered consumers', () => {
   let loadSpy: jest.SpiedFunction<() => Promise<void>>;
   let schedulerSpy: jest.SpiedFunction<() => void>;
 
+  /**
+   * The store's persistence and scheduler are private; this suite is about what the store
+   * ANNOUNCES after a save resolves, not about the save. Narrowing the prototype to just the
+   * three members being stubbed keeps that visible instead of hiding it behind `any`.
+   */
+  type StubbedStoreInternals = {
+    saveSessions: () => Promise<void>;
+    loadSessions: () => Promise<void>;
+    startCleanupScheduler: () => void;
+  };
+
   beforeEach(() => {
     const created = createInMemoryDb();
     db = created.db;
@@ -321,13 +332,16 @@ describe('chain lifecycle events reach their registered consumers', () => {
     hookRegistry.registerChainHooks(consumer);
 
     saveSpy = jest
-      .spyOn(ChainSessionStore.prototype as never, 'saveSessions')
+      .spyOn(ChainSessionStore.prototype as unknown as StubbedStoreInternals, 'saveSessions')
       .mockResolvedValue(undefined) as unknown as jest.SpiedFunction<() => Promise<void>>;
     loadSpy = jest
-      .spyOn(ChainSessionStore.prototype as never, 'loadSessions')
+      .spyOn(ChainSessionStore.prototype as unknown as StubbedStoreInternals, 'loadSessions')
       .mockResolvedValue(undefined) as unknown as jest.SpiedFunction<() => Promise<void>>;
     schedulerSpy = jest
-      .spyOn(ChainSessionStore.prototype as never, 'startCleanupScheduler')
+      .spyOn(
+        ChainSessionStore.prototype as unknown as StubbedStoreInternals,
+        'startCleanupScheduler'
+      )
       .mockImplementation(() => {}) as unknown as jest.SpiedFunction<() => void>;
 
     sessionStore = new ChainSessionStore(logger, new StubTextReferenceStore() as never, {
