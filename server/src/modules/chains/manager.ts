@@ -1143,6 +1143,66 @@ export class ChainSessionStore implements ChainSessionService {
   }
 
   /**
+   * Update an existing step result (e.g., replace placeholder with LLM output)
+   *
+   * Restored 2026-09-20 (P4.52 reimplementation probe): `updateSessionState` above answers a
+   * near-identical question (update a step's result + metadata, transition state, persist) and
+   * is the one 18-execution-stage/step-capture-service actually call. Two methods answering the
+   * same job — one live, one not — is evidence of a defect, not proof this one is surplus.
+   * Deleting it also would have orphaned `TextReferenceStore.getChainStepMetadata`, whose only
+   * production caller was this method — a class outside this row's scope. Left un-wired pending
+   * an owner decision on which of the two should be canonical.
+   */
+  async updateStepResult(
+    sessionId: string,
+    nodeId: string,
+    stepResult: string,
+    stepMetadata?: Record<string, any>
+  ): Promise<boolean> {
+    const session = this.activeSessions.get(sessionId);
+    if (!session) {
+      if (this.logger) {
+        this.logger.warn(`Attempted to update result for non-existent session: ${sessionId}`);
+      }
+      return false;
+    }
+
+    const existingMetadata =
+      this.textReferenceStore.getChainStepMetadata(session.chainId, nodeId) || {};
+
+    const mergedMetadata = {
+      ...existingMetadata,
+      ...(stepMetadata || {}),
+      isPlaceholder: stepMetadata?.['isPlaceholder'] ?? false,
+      updatedAt: Date.now(),
+    };
+
+    const isPlaceholder = mergedMetadata.isPlaceholder;
+
+    // Update step state: if we're replacing a placeholder with real content, transition to RESPONSE_CAPTURED
+    if (!isPlaceholder) {
+      this.setStepState(sessionId, nodeId, 'responded', false);
+      this.logger?.debug(
+        `[StepLifecycle] Step ${nodeId} updated with real response, state transitioned to responded`
+      );
+    }
+
+    await this.persistStepResult(
+      session,
+      nodeId,
+      stepResult,
+      mergedMetadata,
+      mergedMetadata.isPlaceholder
+    );
+
+    session.lastActivity = Date.now();
+    session.state.lastUpdated = Date.now();
+
+    await this.saveSessions();
+    return true;
+  }
+
+  /**
    * Mark a step as COMPLETED and advance the step counter
    * This should be called AFTER the step response has been captured and validated
    */

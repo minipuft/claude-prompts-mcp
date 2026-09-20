@@ -538,37 +538,6 @@ export class HotReloadObserver {
   }
 
   /**
-   * Get current statistics
-   */
-  getStats(): HotReloadStats {
-    return {
-      ...this.stats,
-      fileObserverStats: this.fileObserver.getStats(),
-    };
-  }
-
-  /**
-   * Get current configuration
-   */
-  getConfig(): HotReloadConfig {
-    return { ...this.config };
-  }
-
-  /**
-   * Check if hot reload manager is running
-   */
-  isRunning(): boolean {
-    return this.isStarted;
-  }
-
-  /**
-   * Get watched directories
-   */
-  getWatchedDirectories(): string[] {
-    return Array.from(this.watchedDirectories);
-  }
-
-  /**
    * Framework pre-reload processing
    *  Basic framework cache invalidation and analysis
    */

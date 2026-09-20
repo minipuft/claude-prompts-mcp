@@ -765,27 +765,6 @@ export class FileObserver extends EventEmitter {
   }
 
   /**
-   * Get current configuration
-   */
-  getConfig(): FileObserverConfig {
-    return { ...this.config };
-  }
-
-  /**
-   * Get list of watched directories
-   */
-  getWatchedDirectories(): string[] {
-    return Array.from(this.watchers.keys());
-  }
-
-  /**
-   * Check if FileObserver is running
-   */
-  isRunning(): boolean {
-    return this.isStarted;
-  }
-
-  /**
    * Analyze framework impact of file changes
    *  Basic analysis without complex framework dependencies
    */

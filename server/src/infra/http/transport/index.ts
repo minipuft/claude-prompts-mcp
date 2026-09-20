@@ -53,7 +53,6 @@ function assertTransportSupported(value: string, source: string): void {
  * Transport types supported by the server
  */
 export enum TransportType {
-  STDIO = 'stdio',
   STREAMABLE_HTTP = 'streamable-http',
   BOTH = 'both',
 }
