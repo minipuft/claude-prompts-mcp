@@ -250,6 +250,17 @@ export class ResponseAssembler {
       '',
     ];
 
+    // Why each one failed, from the reviewer's own per-gate entry. Without this the block names
+    // the gates and says nothing about them, which on a five-gate review is the same as naming
+    // none (P4.75). Absent per-gate detail, nothing is added and the block is unchanged.
+    const failedVerdicts = this.resolveFailedGateVerdicts(context);
+    if (failedVerdicts.size > 0) {
+      for (const [gateId, rationale] of failedVerdicts) {
+        sections.push(`- \`${gateId}\` — ${rationale}`);
+      }
+      sections.push('');
+    }
+
     if (gateInstructions !== '') {
       sections.push('---');
       sections.push('');
@@ -302,9 +313,14 @@ export class ResponseAssembler {
     const blockedGateIds = context.state.gates.blockedGateIds ?? [];
     const retryLimitExceeded = context.state.gates.retryLimitExceeded === true;
 
+    // The reviewer's own words for a gate it marked FAIL, when this call carried a per-gate
+    // block. The literal below survives only where no such entry exists — it says why the
+    // response is blocked, which is a different statement from why the gate failed, and it was
+    // the whole of `reason` until the per-gate detail had a reader (P4.75).
+    const failedVerdicts = this.resolveFailedGateVerdicts(context);
     const failedGates: Array<{ id: string; reason: string }> = blockedGateIds.map((id) => ({
       id,
-      reason: 'Gate failed (blockResponseOnFail enabled)',
+      reason: failedVerdicts.get(id) ?? 'Gate failed (blockResponseOnFail enabled)',
     }));
 
     const sessionRetryInfo = context.sessionContext?.pendingReview;
@@ -746,7 +762,51 @@ export class ResponseAssembler {
       this.resolveCheckResults(context)
     );
 
-    return `\n---\n\n**${header}**${attemptInfo}\n\n${gatesLine}\n\nReview your output above against the gates, then submit:\n\n\`\`\`\nchain_id="${chainId}"\ngate_verdict=${structuredTemplate}\n\`\`\`\n\nSet \`"overall": "FAIL"\` and say what needs improvement if the gates are not met. Rationales are single-line.\n\nA legacy string form is still accepted: \`gate_verdict="GATE_REVIEW: PASS - [assessment]"\`.`;
+    return `\n---\n\n**${header}**${attemptInfo}\n\n${gatesLine}${this.buildFailedGateSummary(context)}\n\nReview your output above against the gates, then submit:\n\n\`\`\`\nchain_id="${chainId}"\ngate_verdict=${structuredTemplate}\n\`\`\`\n\nSet \`"overall": "FAIL"\` and say what needs improvement if the gates are not met. Rationales are single-line.\n\nA legacy string form is still accepted: \`gate_verdict="GATE_REVIEW: PASS - [assessment]"\`.`;
+  }
+
+  /**
+   * The gates the reviewer just marked FAIL, in its own words (P4.75).
+   *
+   * Added above the verdict template because without it a retry reply is the SAME full N-gate
+   * template the first attempt showed: the submitter has to re-derive which two of five it
+   * failed by re-reading its own echoed prior response. Naming them costs one block and makes
+   * the retry addressable.
+   *
+   * Empty string when this call carried no per-gate detail — an overall-only verdict, a PASS,
+   * or no verdict at all — so every existing reply renders byte-identical.
+   */
+  private buildFailedGateSummary(context: ExecutionContext): string {
+    const failed = this.resolveFailedGateVerdicts(context);
+    if (failed.size === 0) {
+      return '';
+    }
+
+    const lines = [...failed].map(([gateId, rationale]) => `- \`${gateId}\` — ${rationale}`);
+    return `\n\n**Gates you marked FAIL:**\n\n${lines.join('\n')}`;
+  }
+
+  /**
+   * Rationale per gate the reviewer marked FAIL on this call, keyed by gate id.
+   *
+   * Reads `context.state.gates.perGateVerdicts`, which `GateVerdictProcessor` wrote from the
+   * submission being processed in this same request — never an instance field, so STDIO (one
+   * server per connection) and Streamable HTTP (a fresh server per request) render the same
+   * reply from the same source.
+   *
+   * A FAIL entry whose rationale is empty still appears: the gate id is the fact worth
+   * carrying, and dropping the entry would make a terse reviewer look like a silent one.
+   */
+  private resolveFailedGateVerdicts(context: ExecutionContext): ReadonlyMap<string, string> {
+    const failed = new Map<string, string>();
+    for (const entry of context.state.gates.perGateVerdicts ?? []) {
+      if (entry.verdict !== 'FAIL') {
+        continue;
+      }
+      const rationale = entry.rationale ?? '';
+      failed.set(entry.gateId, rationale.length > 0 ? rationale : 'no rationale given');
+    }
+    return failed;
   }
 
   /**

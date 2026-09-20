@@ -152,9 +152,13 @@ function renderReminders(reminders: GateVerdictReminders | undefined): string | 
  * Read a rendered `REMINDERS:` line back into the submission's `reminders` field.
  *
  * The other half of the lossless pair above, and kept in this module beside it for that reason:
- * the per-gate block parser lives on `GateEnforcementAuthority` because per-gate verdicts are
- * enforcement input, whereas this line is an attestation with no enforcement branch — splitting
- * the render and the parse across two modules is what lets a format drift from its reader.
+ * splitting the render and the parse across two modules is what lets a format drift from its
+ * reader.
+ *
+ * Its production reader is `GateEnforcementAuthority.readReminderAttestation`, which folds the
+ * line into the same gate-id-keyed `GateVerdictSummary` record the per-gate block produces,
+ * marked `tier: 'reminder'` so a self-declared attestation is never counted as an evaluated
+ * result (P4.78). Until then this had none, and the line was written for nobody.
  *
  * @returns the parsed field, or `undefined` when the text carries no `REMINDERS:` line.
  */

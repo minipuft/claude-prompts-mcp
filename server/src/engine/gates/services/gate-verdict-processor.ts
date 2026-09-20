@@ -350,6 +350,17 @@ export class GateVerdictProcessor {
       return { passClearedThisCall: false, earlyExit: false, userResponse };
     }
 
+    // Read the per-gate block BEFORE anything branches on the overall verdict: this is the only
+    // call that holds both the submission and the gate list it was advertised against, and the
+    // clear path deletes the pending review a few lines below. Entries land on request state,
+    // where the assembler names the failing gates and the capture service persists them.
+    this.recordPerGateVerdicts(
+      context,
+      verdictPayload.raw,
+      capturedGateIds,
+      session.pendingGateReview.attemptCount
+    );
+
     // Checked BEFORE the outcome is recorded, not after: recording spends a retry attempt, and a
     // verdict the engine will not accept must not cost the submitter one.
     const refusal = this.refuseVerdictAgainstRecordedFailure(
@@ -616,6 +627,41 @@ export class GateVerdictProcessor {
       sessionContext.currentNodeId = advanced.nodeId;
     }
     delete sessionContext.pendingReview;
+  }
+
+  /**
+   * Put the submission's per-gate verdicts on request state, keyed by gate id.
+   *
+   * The authority owns the parse because it owns the `index → gateId` join; this method owns
+   * only WHEN it happens and WHERE the result lands, which is the processor's domain
+   * (verdict processing) under the ownership matrix.
+   *
+   * Nothing is written when the submission carried no per-gate block — an overall-only verdict
+   * is valid and leaving the field undefined is what tells the assembler and the capture
+   * service there is nothing extra to say. The field is never set to `[]`, so "the reviewer
+   * said nothing per-gate" and "the reviewer failed gate X" stay distinguishable.
+   */
+  private recordPerGateVerdicts(
+    context: ExecutionContext,
+    raw: string,
+    gateIds: readonly string[],
+    attempt: number
+  ): void {
+    const authority = context.gateEnforcement;
+    if (authority === undefined || gateIds.length === 0) {
+      return;
+    }
+
+    const entries = authority.parseGateVerdicts(raw, gateIds, attempt);
+    if (entries.length === 0) {
+      return;
+    }
+
+    context.state.gates.perGateVerdicts = entries;
+    context.diagnostics.info('GateVerdictProcessor', 'Per-gate verdicts recorded', {
+      failed: entries.filter((entry) => entry.verdict === 'FAIL').map((entry) => entry.gateId),
+      total: entries.length,
+    });
   }
 
   /**

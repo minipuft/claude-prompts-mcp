@@ -6,15 +6,19 @@ import {
   type VerdictPattern,
 } from '../../../../gates/config/index.js';
 import { DEFAULT_RETRY_LIMIT } from '../../../../gates/constants.js';
+import { parseGateVerdictReminders } from '../../../../gates/core/gate-verdict-renderer.js';
 
 import type { Logger } from '#infra/logging/index.js';
-import type { ChainSessionService, GateReviewPrompt } from '#shared/types/index.js';
+import type {
+  ChainSessionService,
+  GateReviewPrompt,
+  GateVerdictSummary,
+} from '#shared/types/index.js';
 import type {
   ActionResult,
   CreateReviewOptions,
   EnforcementMode,
   GateAction,
-  GateVerdict,
   ParsedVerdict,
   PendingGateReview,
   ReviewOutcome,
@@ -139,50 +143,134 @@ export class GateEnforcementAuthority {
   }
 
   /**
-   * Parse per-gate verdicts from a GATE_VERDICTS (or legacy CRITERION_VERDICTS) block.
-   * Called alongside parseVerdict() — overall verdict drives PASS/FAIL,
-   * gate verdicts provide granular delivery tracking.
+   * Parse per-gate verdicts from a GATE_VERDICTS (or legacy CRITERION_VERDICTS) block into
+   * the shared {@link GateVerdictSummary} record, keyed by gate id.
    *
-   * KEPT ON PURPOSE (P4.52/R36): the deliberate read side of `renderGateVerdict`
-   * (gate-verdict-renderer.ts) — its `PER_GATE_HEADER` constant is documented as "Block
-   * header the per-gate parser looks for (gate-enforcement-authority.ts)", naming this
-   * method by file. Both sides are round-trip tested for losslessness (unit test in
-   * gate-verdict-renderer.test.ts, integration test in
-   * structured-gate-verdict-flow.test.ts). No pipeline stage currently acts on the parsed
-   * per-gate detail for an enforcement decision — GateVerdictProcessor reads only the
-   * overall verdict — which is a wiring gap for the plan owner to judge, not dead code:
-   * the render side still actively produces this block for a documented reader.
+   * Called alongside parseVerdict() — the overall verdict drives PASS/FAIL, these entries say
+   * WHICH gate the reviewer failed, which is what `GateVerdictProcessor` puts on
+   * `context.state.gates.perGateVerdicts` and what `ExecutionRecordStore` persists.
    *
-   * @param raw - Raw response containing GATE_VERDICTS block
-   * @returns Array of parsed gate verdicts (empty if no block found)
+   * **This is the only place `index` exists.** The submitted `[n]` is a position in the gate
+   * list THIS review advertised, which is meaningless to anything that does not hold that list;
+   * the id is not. Resolving here, where `review.gateIds` is in hand, means no downstream reader
+   * ever has to carry the list around to interpret a verdict — the same key `GateCheckResult`
+   * already uses, so the reviewer's opinion and the engine's ground truth are joinable.
+   *
+   * An index outside the advertised list is DROPPED with a diagnostic, never clamped and never
+   * guessed: attributing a FAIL to the wrong gate is worse than not recording it, and a guess
+   * would make the resulting record indistinguishable from a correct one.
+   *
+   * @param raw - Raw response containing a GATE_VERDICTS block
+   * @param gateIds - The gate list this review advertised, in the order it advertised them
+   * @param attempt - Review attempt this submission answers, recorded on each entry
+   * @returns Gate-id-keyed summaries (empty if no block found or none resolved)
    */
-  parseGateVerdicts(raw: string): GateVerdict[] {
+  parseGateVerdicts(
+    raw: string,
+    gateIds: readonly string[],
+    attempt?: number
+  ): GateVerdictSummary[] {
     if (!raw) {
       return [];
     }
+
+    const timestamp = Date.now();
+    const summaries: GateVerdictSummary[] = [
+      ...this.readReminderAttestation(raw, gateIds, timestamp, attempt),
+    ];
 
     const block = raw.match(
       /(?:CRITERION_VERDICTS|GATE_VERDICTS):\s*\n((?:\[?\d+\]?\s*(?:PASS|FAIL).*\n?)*)/i
     );
     if (!block?.[1]) {
+      return summaries;
+    }
+
+    for (const line of block[1].trim().split('\n')) {
+      const match = line.match(/\[?(\d+)\]?\s*(PASS|FAIL)\s*[-–—:]\s*(.*)/i);
+      if (!match) {
+        continue;
+      }
+
+      const index = parseInt(match[1]!, 10);
+      const gateId = gateIds[index - 1];
+      if (gateId === undefined) {
+        this.logger.warn(
+          `[GateEnforcementAuthority] Per-gate verdict [${index}] names no advertised gate ` +
+            `(the review advertised ${gateIds.length}); entry dropped.`
+        );
+        continue;
+      }
+
+      summaries.push({
+        gateId,
+        verdict: match[2]!.toUpperCase() === 'PASS' ? 'PASS' : 'FAIL',
+        rationale: match[3]!.trim(),
+        timestamp,
+        ...(attempt !== undefined ? { attempt } : {}),
+      });
+    }
+
+    return summaries;
+  }
+
+  /**
+   * Fold the `REMINDERS:` line into the same gate-id-keyed record as the per-gate block.
+   *
+   * `parseGateVerdictReminders` was the render half's reader and had none of its own: the line
+   * was produced, round-trip tested, and consumed by nothing (P4.78). This is where it earns a
+   * reader, and the reason it can share `GateVerdictSummary` without lying is `tier` — a
+   * reminder is self-declared, so it is recorded as an attestation and counted separately from
+   * an evaluated check, never averaged into the same pass rate.
+   *
+   * A `not_applicable` entry is still `PASS`: the reviewer is asserting the gate does not bind,
+   * which is not a failure, and the reason it gave is the rationale. The PASS/FAIL union is
+   * deliberately not widened for it — a third member would reach every reader of the record for
+   * a distinction only this branch makes, and the `tier` + rationale already carry it.
+   *
+   * An id the review never advertised is dropped with a diagnostic, exactly as an out-of-range
+   * index is: an attestation about a gate that was not under review is not a fact about it.
+   */
+  private readReminderAttestation(
+    raw: string,
+    gateIds: readonly string[],
+    timestamp: number,
+    attempt?: number
+  ): GateVerdictSummary[] {
+    const reminders = parseGateVerdictReminders(raw);
+    if (reminders === undefined) {
       return [];
     }
 
-    return block[1]
-      .trim()
-      .split('\n')
-      .map((line) => {
-        const match = line.match(/\[?(\d+)\]?\s*(PASS|FAIL)\s*[-–—:]\s*(.*)/i);
-        if (!match) {
-          return null;
-        }
-        return {
-          index: parseInt(match[1]!, 10),
-          passed: match[2]!.toUpperCase() === 'PASS',
-          rationale: match[3]!.trim(),
-        };
-      })
-      .filter((v): v is GateVerdict => v !== null);
+    const advertised = new Set(gateIds);
+    const entries: GateVerdictSummary[] = [];
+
+    const record = (gateId: string, rationale: string): void => {
+      if (!advertised.has(gateId)) {
+        this.logger.warn(
+          `[GateEnforcementAuthority] Reminder attestation names "${gateId}", which this ` +
+            'review did not advertise; entry dropped.'
+        );
+        return;
+      }
+      entries.push({
+        gateId,
+        verdict: 'PASS',
+        rationale,
+        timestamp,
+        tier: 'reminder',
+        ...(attempt !== undefined ? { attempt } : {}),
+      });
+    };
+
+    for (const gateId of reminders.satisfied) {
+      record(gateId, 'attested satisfied');
+    }
+    for (const exemption of reminders.not_applicable) {
+      record(exemption.id, `not applicable: ${exemption.reason}`);
+    }
+
+    return entries;
   }
 
   /**

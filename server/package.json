@@ -60,6 +60,8 @@
     "validate:unreached-methods": "node scripts/validate-unreached-methods.js check",
     "unreached-methods:baseline": "node scripts/validate-unreached-methods.js update-baseline",
     "validate:unreached-methods:self-test": "node scripts/validate-unreached-methods.js --self-test",
+    "validate:unread-parsers": "node scripts/validate-unread-parsers.js",
+    "validate:unread-parsers:self-test": "node scripts/validate-unread-parsers.js --self-test",
     "validate:lockfile-sync": "node scripts/validate-lockfile-sync.js",
     "validate:lockfile-sync:self-test": "node scripts/validate-lockfile-sync.js --self-test",
     "validate:test-directory-membership": "node scripts/validate-test-directory-membership.js",

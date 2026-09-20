@@ -1266,6 +1266,34 @@ them; they exist so history is available to reason about later. The line is omit
 session with no terminal record yet, and for records written before these fields existed — an
 absent line means "not measured", never "zero".
 
+#### Per-gate verdict lines
+
+`gates fired` counts submissions and never says which gate held the run up. A record whose step
+was reviewed with a `per_gate` list now renders one indented line per graded gate under it:
+
+```
+- `completed` step 1 · draft · 2026-09-20T12:00:00.000Z · 41ms
+  - ✓ `api-documentation` PASS — contract annotated
+  - ✗ `test-coverage` FAIL (attempt 2) — error path untested
+  - ≡ `style-guide` PASS — attested satisfied
+```
+
+`≡` marks a **reminder-tier** gate: one with no evaluator, which the reviewer attested to via the
+verdict's `reminders` field rather than being graded against. It is recorded because the
+attestation is a fact worth auditing, and marked differently because it is not a check that
+passed.
+
+The gate id is the one the review advertised, resolved from the submitted `[n]` position at the
+parse boundary; an index naming no advertised gate is dropped rather than guessed, so it appears
+nowhere. A record whose review carried no `per_gate` list renders exactly as before — including
+every record written before this was recorded, so an existing ledger is unchanged.
+
+`system_control(action:"analytics")` reads the same rows: **Gate Validations** is the number of
+ledger records carrying at least one verdict, and a **Per-Gate Outcomes** list breaks it into
+passed/failed per gate id. Reminder attestations are counted separately, as **Reminder
+Attestations**, and never inside a gate's pass rate. Both sections are omitted when no record
+carries what they report.
+
 ### Session Operations
 
 ```bash
