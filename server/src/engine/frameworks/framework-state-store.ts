@@ -25,6 +25,9 @@ import { Logger } from '#infra/logging/index.js';
 import { DEFAULT_FRAMEWORK_ID } from '#shared/utils/constants.js';
 import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
 
+/** The `kv_state` discriminator every framework state row is written under. */
+const FRAMEWORK_STATE_KEY = 'framework';
+
 /**
  * Persisted framework state (saved to file)
  */
@@ -211,6 +214,7 @@ export class FrameworkStateStore extends EventEmitter {
 
     // Load persisted state before setting up framework manager
     await this.loadPersistedState();
+    this.loadRemainingScopes();
 
     this.logger.info('Initializing Framework State Manager...');
 
@@ -269,7 +273,7 @@ export class FrameworkStateStore extends EventEmitter {
         dbManager,
         {
           tableName: 'kv_state',
-          key: 'framework',
+          key: FRAMEWORK_STATE_KEY,
           stateColumn: 'state',
           defaultState: () => ({
             version: '1.0.0',
@@ -334,6 +338,62 @@ export class FrameworkStateStore extends EventEmitter {
 
     this.logger.info('📁 No framework state found, using defaults');
     await this.saveStateToFile(scope);
+  }
+
+  /**
+   * Read back every scope other than this process's own, once, at startup.
+   *
+   * {@link loadPersistedState} loads one scope, and `getOrCreateScopedState` builds a fresh
+   * default for any other without consulting SQLite — it is synchronous, so it cannot. One
+   * process serving several workspaces over HTTP therefore answered every one of them with
+   * defaults, and a toggle or switch written under a workspace survived in `state.db` and was
+   * never read again. `GateStateStore.loadPersistedStates` loads every row for the same reason.
+   *
+   * The row's `tenant_id` is the in-memory key: `SqliteStateStore.save` writes
+   * `resolveContinuityScopeId` of the scope there, which is what `resolveStateKey` computes.
+   */
+  private loadRemainingScopes(): void {
+    // An injected store (tests, shared engines) need not be SQL-backed.
+    if (this.stateStore == null || typeof this.stateStore.query !== 'function') {
+      this.logger.debug('Framework state store is not SQL-backed; skipping cross-scope load');
+      return;
+    }
+
+    try {
+      const rows = this.stateStore.query<{ tenant_id: string; state: unknown }>(
+        `SELECT tenant_id, state FROM ${this.stateStore.getTableName()} WHERE key = ?`,
+        [FRAMEWORK_STATE_KEY]
+      );
+
+      for (const row of rows) {
+        if (this.scopedStates.has(row.tenant_id)) continue;
+
+        const persisted: unknown =
+          typeof row.state === 'string' ? JSON.parse(row.state) : row.state;
+        if (!this.isValidPersistedState(persisted)) {
+          this.logger.warn(
+            `⚠️ Invalid framework state format for scope '${row.tenant_id}', using defaults`
+          );
+          continue;
+        }
+
+        // The resolved scope id read back out of the column `resolveContinuityScopeId` wrote,
+        // which reads `continuityScopeId` first — so this round-trips exactly, and no
+        // `workspaceId` is recoverable from it. `GateStateStore.loadPersistedStates` does the
+        // same for the same reason.
+        const state = this.getOrCreateScopedState({ continuityScopeId: row.tenant_id });
+        state.frameworkSystemEnabled = persisted.frameworkSystemEnabled;
+        state.activeFramework = persisted.activeFramework;
+        state.switchedAt = new Date(persisted.lastSwitchedAt);
+        state.switchReason = persisted.switchReason;
+      }
+    } catch (error) {
+      this.logger.warn(
+        `⚠️ Failed to load framework state for other scopes: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
   }
 
   /**
@@ -617,9 +677,9 @@ export class FrameworkStateStore extends EventEmitter {
   /**
    * Get framework system health
    */
-  getSystemHealth(): FrameworkSystemHealth {
+  getSystemHealth(scope?: StateStoreOptions): FrameworkSystemHealth {
     this.ensureInitialized();
-    const defaultState = this.getOrCreateScopedState();
+    const defaultState = this.getOrCreateScopedState(scope);
 
     const issues: string[] = [];
     let status: 'healthy' | 'degraded' | 'error' = 'healthy';
@@ -668,10 +728,14 @@ export class FrameworkStateStore extends EventEmitter {
   }
 
   /**
-   * Reset switching performance metrics
+   * Reset switching performance metrics.
+   *
+   * @param scope the caller's continuity scope. `system_control analytics reset_metrics`
+   *   reports the scoped state back, so resetting a different one would answer with
+   *   counters it never touched.
    */
-  resetMetrics(): void {
-    const defaultState = this.getOrCreateScopedState();
+  resetMetrics(scope?: StateStoreOptions): void {
+    const defaultState = this.getOrCreateScopedState(scope);
     this.switchingMetrics = {
       totalSwitches: 0,
       successfulSwitches: 0,
@@ -690,11 +754,18 @@ export class FrameworkStateStore extends EventEmitter {
   }
 
   /**
-   * Enable the framework system
+   * Enable the framework system for one continuity scope.
+   *
+   * @param scope the caller's scope, as {@link switchFramework} and
+   *   `GateStateStore.enableGateSystem` take it. Omit to use this process's own project.
+   *   Without it, `system_control framework enable` arriving over HTTP from one workspace
+   *   read that workspace's state to decide whether the toggle was a no-op and then wrote
+   *   the launch workspace's row — so the caller was told the system was enabled while its
+   *   own scope stayed disabled and an unrelated project's flipped.
    */
-  async enableFrameworkSystem(reason?: string): Promise<void> {
+  async enableFrameworkSystem(reason?: string, scope?: StateStoreOptions): Promise<void> {
     this.ensureInitialized();
-    const defaultState = this.getOrCreateScopedState();
+    const defaultState = this.getOrCreateScopedState(scope);
 
     if (defaultState.frameworkSystemEnabled) {
       this.logger.info('Framework system is already enabled');
@@ -710,21 +781,23 @@ export class FrameworkStateStore extends EventEmitter {
     // Persistence throws so the caller can decide. Catching here reported the
     // toggle as applied while the database still held the old value, and the
     // success line below was printed either way.
-    await this.saveStateToFile();
+    await this.saveStateToFile(scope);
 
     this.logger.info(`✅ Framework system enabled: ${enableReason}`);
 
     // Emit events
     this.emit('framework-system-toggled', true, enableReason);
-    this.emit('health-changed', this.getSystemHealth());
+    this.emit('health-changed', this.getSystemHealth(scope));
   }
 
   /**
-   * Disable the framework system
+   * Disable the framework system for one continuity scope.
+   *
+   * @param scope as {@link enableFrameworkSystem} takes it, for the same reason.
    */
-  async disableFrameworkSystem(reason?: string): Promise<void> {
+  async disableFrameworkSystem(reason?: string, scope?: StateStoreOptions): Promise<void> {
     this.ensureInitialized();
-    const defaultState = this.getOrCreateScopedState();
+    const defaultState = this.getOrCreateScopedState(scope);
 
     if (!defaultState.frameworkSystemEnabled) {
       this.logger.info('Framework system is already disabled');
@@ -739,31 +812,41 @@ export class FrameworkStateStore extends EventEmitter {
 
     // Persistence throws so the caller can decide, exactly as the enable path
     // above does. Both used to swallow it and report success regardless.
-    await this.saveStateToFile();
+    await this.saveStateToFile(scope);
 
     this.logger.info(`🚫 Framework system disabled: ${disableReason}`);
 
     // Emit events
     this.emit('framework-system-toggled', false, disableReason);
-    this.emit('health-changed', this.getSystemHealth());
+    this.emit('health-changed', this.getSystemHealth(scope));
   }
 
   /**
-   * Check if framework system is enabled
+   * Check if framework system is enabled.
+   *
+   * @param scope the scope to read. Omit to read this process's own project, which is what
+   *   the execution path does — the same asymmetry `GateManager.isSystemEnabled` has.
    */
-  isFrameworkSystemEnabled(): boolean {
+  isFrameworkSystemEnabled(scope?: StateStoreOptions): boolean {
     this.ensureInitialized();
-    return this.getOrCreateScopedState().frameworkSystemEnabled;
+    return this.getOrCreateScopedState(scope).frameworkSystemEnabled;
   }
 
   /**
    * Set framework system enabled state (for config loading)
+   *
+   * @param scope the scope to toggle; omit to use this process's own project, which is what
+   *   the configuration listener wants.
    */
-  async setFrameworkSystemEnabled(enabled: boolean, reason?: string): Promise<void> {
+  async setFrameworkSystemEnabled(
+    enabled: boolean,
+    reason?: string,
+    scope?: StateStoreOptions
+  ): Promise<void> {
     if (enabled) {
-      await this.enableFrameworkSystem(reason || 'Loaded from configuration');
+      await this.enableFrameworkSystem(reason || 'Loaded from configuration', scope);
     } else {
-      await this.disableFrameworkSystem(reason || 'Loaded from configuration');
+      await this.disableFrameworkSystem(reason || 'Loaded from configuration', scope);
     }
   }
 
