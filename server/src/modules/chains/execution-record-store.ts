@@ -169,21 +169,6 @@ export class ExecutionRecordStore {
     return executionId;
   }
   /**
-   * Return all records for a session ordered by creation (ULID order).
-   * Scope filter is applied when provided so cross-tenant rows are excluded.
-   */
-  queryBySession(sessionId: string, scope?: StateStoreOptions): ExecutionRecord[] {
-    const tenantId = this.resolveTenantId(scope);
-    const rows = this.db.query<ExecutionRecordRow>(
-      `SELECT * FROM execution_records
-       WHERE session_id = ? AND tenant_id = ?
-       ORDER BY execution_id ASC`,
-      [sessionId, tenantId]
-    );
-    return rows.map((row) => this.fromRow(row));
-  }
-
-  /**
    * Return the most recent records for the resolved scope, newest first.
    *
    * Ordering is by `execution_id` rather than by `started_at` because ULIDs are
@@ -202,20 +187,6 @@ export class ExecutionRecordStore {
        ORDER BY execution_id DESC
        LIMIT ?`,
       [tenantId, clampRecentLimit(limit)]
-    );
-    return rows.map((row) => this.fromRow(row));
-  }
-
-  /**
-   * Return all records for a chain ordered by creation (ULID order).
-   */
-  queryByChain(chainId: string, scope?: StateStoreOptions): ExecutionRecord[] {
-    const tenantId = this.resolveTenantId(scope);
-    const rows = this.db.query<ExecutionRecordRow>(
-      `SELECT * FROM execution_records
-       WHERE chain_id = ? AND tenant_id = ?
-       ORDER BY execution_id ASC`,
-      [chainId, tenantId]
     );
     return rows.map((row) => this.fromRow(row));
   }

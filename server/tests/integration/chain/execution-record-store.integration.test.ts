@@ -139,7 +139,7 @@ describe('ExecutionRecordStore (integration)', () => {
 
     expect(executionId).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
 
-    const records = store.queryBySession('sess-int-1');
+    const records = store.queryRecent();
     expect(records).toHaveLength(1);
     expect(records[0]).toMatchObject({
       executionId,
@@ -189,7 +189,8 @@ describe('ExecutionRecordStore (integration)', () => {
       completedAt: t3,
     });
 
-    const records = store.queryBySession('sess-multi');
+    // queryRecent orders newest-first; reverse to check insertion order.
+    const records = [...store.queryRecent()].reverse();
     expect(records).toHaveLength(3);
     expect(records.map((r) => r.status)).toEqual(['working', 'working', 'completed']);
     expect(records.map((r) => r.stepNumber)).toEqual([1, 2, undefined]);
@@ -198,48 +199,6 @@ describe('ExecutionRecordStore (integration)', () => {
     expect(records[2].completedAt).toBe(t3);
     expect(records[0].completedAt).toBeUndefined();
     expect(records[1].completedAt).toBeUndefined();
-  });
-
-  test('AC3: ULID ordering preserves insertion order via queryBySession', () => {
-    const ids: string[] = [];
-    for (let i = 1; i <= 5; i++) {
-      ids.push(
-        store.append({
-          sessionId: 'sess-order',
-          chainId: 'chain-order#1',
-          stepNumber: i,
-          status: 'working',
-          startedAt: Date.now() + i,
-        })
-      );
-    }
-
-    const records = store.queryBySession('sess-order');
-    expect(records.map((r) => r.executionId)).toEqual(ids);
-    expect(records.map((r) => r.stepNumber)).toEqual([1, 2, 3, 4, 5]);
-  });
-
-  test('AC4: queryByChain returns same records as queryBySession via different key', () => {
-    store.append({
-      sessionId: 'sess-by-chain',
-      chainId: 'chain-x#1',
-      stepNumber: 1,
-      status: 'working',
-      startedAt: Date.now(),
-    });
-    store.append({
-      sessionId: 'sess-by-chain',
-      chainId: 'chain-x#1',
-      status: 'completed',
-      startedAt: Date.now() + 1,
-      completedAt: Date.now() + 1,
-    });
-
-    const bySession = store.queryBySession('sess-by-chain');
-    const byChain = store.queryByChain('chain-x#1');
-
-    expect(byChain).toHaveLength(2);
-    expect(byChain.map((r) => r.executionId)).toEqual(bySession.map((r) => r.executionId));
   });
 
   test('AC5: scope (organization_id/workspace_id) round-trips through append + query', () => {
@@ -256,39 +215,13 @@ describe('ExecutionRecordStore (integration)', () => {
       },
     });
 
-    const records = store.queryBySession('sess-scoped', {
+    const records = store.queryRecent(50, {
       continuityScopeId: 'tenant-acme',
     });
 
     expect(records).toHaveLength(1);
     expect(records[0].organizationId).toBe('org-acme');
     expect(records[0].workspaceId).toBe('workspace-prod');
-  });
-
-  test('AC5: queries are tenant-isolated — other tenants do not see this scope’s records', () => {
-    store.append({
-      sessionId: 'sess-shared-id',
-      chainId: 'chain-shared#1',
-      stepNumber: 1,
-      status: 'working',
-      startedAt: Date.now(),
-      scope: { continuityScopeId: 'tenant-a' },
-    });
-    store.append({
-      sessionId: 'sess-shared-id',
-      chainId: 'chain-shared#1',
-      stepNumber: 1,
-      status: 'working',
-      startedAt: Date.now() + 1,
-      scope: { continuityScopeId: 'tenant-b' },
-    });
-
-    const tenantA = store.queryBySession('sess-shared-id', { continuityScopeId: 'tenant-a' });
-    const tenantB = store.queryBySession('sess-shared-id', { continuityScopeId: 'tenant-b' });
-
-    expect(tenantA).toHaveLength(1);
-    expect(tenantB).toHaveLength(1);
-    expect(tenantA[0].executionId).not.toBe(tenantB[0].executionId);
   });
 
   test('append is best-effort — SQL failures log warn but do not throw', () => {
