@@ -292,9 +292,10 @@ export class PromptAssetManager {
       return;
     }
 
+    const categoryManager = this.loader.getCategoryManager();
     this.logger.info('📋 Category breakdown:');
     categories.forEach((category) => {
-      const categoryPrompts = promptsData.filter((p) => p.category === category.id);
+      const categoryPrompts = categoryManager.getPromptsByCategory(promptsData, category.id);
       this.logger.info(`   ${category.name} (${category.id}): ${categoryPrompts.length} prompts`);
     });
 
