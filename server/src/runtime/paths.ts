@@ -502,17 +502,35 @@ export class PathResolver {
    *   - `${workspace}/${resourceType}/`           (e.g., ~/.claude/gates/)
    *   - `${workspace}/resources/${resourceType}/` (e.g., ~/.claude/resources/gates/)
    *
+   * The answer describes the disk NOW, so a caller that re-resolves on every load (prompt reload,
+   * category listing) sees an overlay created since startup. A caller that fixes its roots once —
+   * a loader, the watch set — takes {@link getOverlayResourceCandidates} instead.
+   *
    * @param resourceType - Resource subdirectory name (gates, frameworks, styles, scripts)
    * @param primaryDir - Primary resource dir to exclude from results (dedup)
    * @returns Existing workspace-relative directories not matching primary
    */
   getOverlayResourceDirs(resourceType: string, primaryDir?: string): string[] {
+    return this.getOverlayResourceCandidates(resourceType, primaryDir).filter((dir) =>
+      existsSync(dir)
+    );
+  }
+
+  /**
+   * Every directory that IS an overlay once it exists, whether or not it exists yet.
+   *
+   * For roots fixed at startup. Filtering these by existence once, at startup, is how a workspace
+   * overlay created while the server ran contributed to neither the catalog nor the watch set
+   * until a restart, for all four resource types. Loaders read an absent root as empty, and the
+   * file observer watches it once it appears and reconciles it then.
+   */
+  getOverlayResourceCandidates(resourceType: string, primaryDir?: string): string[] {
     if (!this.isUsingCustomWorkspace()) return [];
 
     const workspace = this.getWorkspace();
     const candidates = [join(workspace, resourceType), join(workspace, 'resources', resourceType)];
 
-    return candidates.filter((dir) => existsSync(dir) && dir !== primaryDir);
+    return candidates.filter((dir) => dir !== primaryDir);
   }
 
   /**

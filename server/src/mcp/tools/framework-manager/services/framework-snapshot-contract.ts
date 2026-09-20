@@ -48,12 +48,11 @@ export const FRAMEWORK_SNAPSHOT_PROJECTED_KEYS = [
 /**
  * Fields a framework snapshot must carry before it can be restored.
  *
- * The test is not "is this field important" but "does the writer INVENT a value when it is
- * absent". `enabled` qualifies and is the reason it is listed: `buildFrameworkYamlData` writes
- * `data.enabled ?? true`, so restoring a snapshot with no `enabled` would merge `enabled: true`
- * over a framework that is currently disabled — a live-value substitution wearing a default's
- * clothing. `id`, `name` and `type` qualify because omitting them merges the CURRENT value
- * forward under a message claiming version N was restored.
+ * The test is not "is this field important" but "would a restore without it report version N
+ * while writing some other value". All four qualify: omitted, the writer keeps the CURRENT value,
+ * because an edit merges over the stored document and supplies no defaults of its own (B.65 moved
+ * `enabled: true` to create-only). That carries the current value forward under a message
+ * claiming version N was restored.
  *
  * Every pre-contract framework row already carries all four, so this set refuses no history that
  * exists today.
@@ -63,9 +62,9 @@ export const FRAMEWORK_REQUIRED_SNAPSHOT_FIELDS = ['id', 'name', 'type', 'enable
 /**
  * Projected fields whose absence leaves the corresponding artifact untouched rather than fabricated.
  *
- * These are safe to omit — the writer falls back to what is already on disk (`system-prompt.md`
- * survives via `?? existingData?.systemPrompt`; unmentioned YAML keys survive the deep merge) —
- * but omitting them means that part of the framework is NOT rolled back, which is why `restore`
+ * These are safe to omit. The writer leaves what is already on disk: `system-prompt.md` is not
+ * written when no content is supplied for it, and unmentioned YAML keys survive the deep merge.
+ * But omitting them means that part of the framework is NOT rolled back, which is why `restore`
  * reports them as `unrecordedFields` instead of returning silently.
  */
 const FRAMEWORK_OPTIONAL_SNAPSHOT_FIELDS = FRAMEWORK_SNAPSHOT_PROJECTED_KEYS.filter(

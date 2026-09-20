@@ -31,6 +31,13 @@ export interface ScriptHotReloadRegistration {
   handler: (event: HotReloadEvent) => Promise<void>;
   /** Pattern matcher for script tool files */
   match: (filePath: string) => boolean;
+  /**
+   * Drop every cached tool definition, so a tool removed before its folder was watched is read
+   * from disk — and found absent — on next use. The whole cache, not the part under the reconciled
+   * root: `clearCache(dir)` matches only `<dir>/tools/`, and a prompt's tools sit levels below a
+   * prompts root. One re-read per tool next used is the cost.
+   */
+  reconcile: () => Promise<void>;
 }
 
 /**
@@ -80,6 +87,10 @@ export function createScriptHotReloadRegistration(
       }
     },
     match: isScriptToolFile,
+    reconcile: async () => {
+      logger.debug('Script hot-reload: clearing every cached tool for reconciliation');
+      scriptLoader.clearCache();
+    },
   };
 }
 
