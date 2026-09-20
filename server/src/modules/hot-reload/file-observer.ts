@@ -59,7 +59,7 @@ export interface FileChangeEvent {
 /**
  * Framework integration capabilities
  */
-export interface FrameworkIntegration {
+interface FrameworkIntegration {
   enabled: boolean;
   analyzeChanges: boolean;
   cacheInvalidation: boolean;
@@ -461,45 +461,6 @@ export class FileObserver extends EventEmitter {
   }
 
   /**
-   * Remove a directory from watching
-   */
-  async unwatchDirectory(directoryPath: string): Promise<void> {
-    const pending = this.pendingDirectories.get(directoryPath);
-    if (pending !== undefined) {
-      clearInterval(pending);
-      this.pendingDirectories.delete(directoryPath);
-      return;
-    }
-
-    const watcher = this.watchers.get(directoryPath);
-    if (!watcher) {
-      this.logger.debug(`Directory not being watched: ${directoryPath}`);
-      return;
-    }
-
-    try {
-      await watcher.close();
-      this.watchers.delete(directoryPath);
-      this.stats.watchersActive = this.watchers.size;
-
-      // Clear any pending debounce timers for this directory
-      const timersToRemove: string[] = [];
-      for (const [key, timer] of this.debounceTimers.entries()) {
-        if (key.startsWith(directoryPath)) {
-          clearTimeout(timer);
-          timersToRemove.push(key);
-        }
-      }
-      timersToRemove.forEach((key) => this.debounceTimers.delete(key));
-
-      this.logger.info(`🚫 FileObserver: Stopped watching directory: ${directoryPath}`);
-    } catch (error) {
-      this.logger.error(`Failed to stop watching directory ${directoryPath}:`, error);
-      throw error;
-    }
-  }
-
-  /**
    * Handle file system events
    */
   private handleFileEvent(
@@ -804,35 +765,6 @@ export class FileObserver extends EventEmitter {
   }
 
   /**
-   * Get current configuration
-   */
-  getConfig(): FileObserverConfig {
-    return { ...this.config };
-  }
-
-  /**
-   * Update configuration
-   */
-  updateConfig(newConfig: Partial<FileObserverConfig>): void {
-    this.config = { ...this.config, ...newConfig };
-    this.logger.info('FileObserver configuration updated');
-  }
-
-  /**
-   * Get list of watched directories
-   */
-  getWatchedDirectories(): string[] {
-    return Array.from(this.watchers.keys());
-  }
-
-  /**
-   * Check if FileObserver is running
-   */
-  isRunning(): boolean {
-    return this.isStarted;
-  }
-
-  /**
    * Analyze framework impact of file changes
    *  Basic analysis without complex framework dependencies
    */
@@ -854,61 +786,6 @@ export class FileObserver extends EventEmitter {
       affectedFrameworks,
       analysisInvalidated,
       performanceImpact,
-    };
-  }
-
-  /**
-   * Enable framework integration
-   */
-  enableFrameworkIntegration(options: Partial<FrameworkIntegration> = {}): void {
-    this.config.frameworkIntegration = {
-      enabled: true,
-      analyzeChanges: true,
-      cacheInvalidation: true,
-      performanceTracking: true,
-      ...options,
-    };
-    this.logger.info('Framework integration enabled for FileObserver');
-  }
-
-  /**
-   * Disable framework integration
-   */
-  disableFrameworkIntegration(): void {
-    this.config.frameworkIntegration = {
-      enabled: false,
-      analyzeChanges: false,
-      cacheInvalidation: false,
-      performanceTracking: false,
-    };
-    this.logger.info('Framework integration disabled for FileObserver');
-  }
-
-  /**
-   * Check if framework integration is enabled
-   */
-  isFrameworkIntegrationEnabled(): boolean {
-    return this.config.frameworkIntegration?.enabled ?? false;
-  }
-
-  /**
-   * Get debug information
-   */
-  getDebugInfo(): {
-    isRunning: boolean;
-    config: FileObserverConfig;
-    stats: FileObserverStats;
-    watchedDirectories: string[];
-    activeDebounceTimers: number;
-    frameworkIntegration: FrameworkIntegration | undefined;
-  } {
-    return {
-      isRunning: this.isRunning(),
-      config: this.getConfig(),
-      stats: this.getStats(),
-      watchedDirectories: this.getWatchedDirectories(),
-      activeDebounceTimers: this.debounceTimers.size,
-      frameworkIntegration: this.config.frameworkIntegration,
     };
   }
 }

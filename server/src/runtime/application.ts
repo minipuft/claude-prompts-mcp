@@ -177,22 +177,6 @@ export class Application {
     }
   }
 
-  /**
-   * Public test methods for GitHub Actions compatibility
-   */
-  async loadConfiguration(): Promise<void> {
-    await this.initializeFoundation();
-  }
-
-  async loadPromptsData(): Promise<void> {
-    await this.loadAndProcessData();
-  }
-
-  // Make initializeModules public for testing
-  async initializeModules(): Promise<void> {
-    return this.initializeModulesPrivate();
-  }
-
   // Expose data for testing
   get config() {
     return this.configManager?.getConfig();
@@ -548,71 +532,6 @@ export class Application {
     this.transportRouter = transportRouter;
     this.apiRouter = apiRouter;
     this.serverLifecycle = serverLifecycle;
-  }
-
-  /**
-   * Switch to a different framework by ID (built-in or custom)
-   * Core functionality: Allow switching between registered frameworks to guide the system
-   */
-  async switchFramework(frameworkId: string): Promise<{ success: boolean; message: string }> {
-    //  Framework switching simplified - basic support only
-
-    try {
-      this.logger.info(`Framework switching to ${frameworkId} ( basic support)`);
-      const result = {
-        success: true,
-        message: `Switched to ${frameworkId}`,
-        newFramework: frameworkId,
-        previousFramework: 'basic',
-      };
-
-      if (result.success) {
-        this.logger.info(`🔄 Framework switched to: ${result.newFramework}`);
-        return {
-          success: true,
-          message: `Successfully switched from ${result.previousFramework} to ${result.newFramework}`,
-        };
-      } else {
-        this.logger.warn(`❌ Framework switch failed: ${result.message}`);
-        return {
-          success: false,
-          message: result.message || 'Unknown error during framework switch',
-        };
-      }
-    } catch (error) {
-      this.logger.error('Framework switch error:', error);
-      return {
-        success: false,
-        message: `Error switching framework: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      };
-    }
-  }
-
-  /**
-   * Get current framework information
-   */
-  getCurrentFrameworkInfo(): {
-    id: string;
-    name: string;
-    availableFrameworks: string[];
-    isHealthy: boolean;
-  } {
-    //  Framework status simplified - basic support only
-    const status = {
-      currentFramework: 'basic',
-      currentFrameworkName: 'Basic Framework',
-      isHealthy: true,
-    };
-    const available = ['basic'];
-
-    return {
-      id: status.currentFramework,
-      name: status.currentFrameworkName,
-      availableFrameworks: available,
-      isHealthy: status.isHealthy,
-    };
   }
 
   /**

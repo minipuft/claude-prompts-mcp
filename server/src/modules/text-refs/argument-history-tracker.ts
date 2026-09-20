@@ -206,6 +206,11 @@ export class ArgumentHistoryTracker {
 
   /**
    * Get latest arguments for a session
+   *
+   * Restored 2026-09-20 (P4.52 reimplementation probe): `buildReviewContext` below
+   * independently derives the identical value (last history entry's `originalArgs`, spread into
+   * a new object) inline instead of calling this method — a live duplicate, not proof this
+   * method is dead. Left un-wired pending an owner decision on which should call the other.
    */
   getLatestArguments(sessionId: string): Record<string, any> | null {
     const history = this.getSessionHistory(sessionId);
@@ -306,34 +311,6 @@ export class ArgumentHistoryTracker {
   }
 
   /**
-   * Clear history for a specific chain
-   */
-  async clearChain(chainId: string): Promise<void> {
-    this.chainHistory.delete(chainId);
-
-    const sessionsToRemove: string[] = [];
-    this.sessionToChain.forEach((cId, sId) => {
-      if (cId === chainId) {
-        sessionsToRemove.push(sId);
-      }
-    });
-    sessionsToRemove.forEach((sId) => this.sessionToChain.delete(sId));
-
-    this.logger.debug(`Cleared argument history for chain ${chainId}`);
-    await this.saveToStore();
-  }
-
-  /**
-   * Clear all history
-   */
-  async clearAll(): Promise<void> {
-    this.chainHistory.clear();
-    this.sessionToChain.clear();
-    this.logger.info('Cleared all argument history');
-    await this.saveToStore();
-  }
-
-  /**
    * Get statistics about tracked history
    */
   getStats(): {
@@ -357,14 +334,6 @@ export class ArgumentHistoryTracker {
       totalSessions,
       averageEntriesPerChain,
     };
-  }
-
-  /**
-   * Check if a session has any tracked history
-   */
-  hasSessionHistory(sessionId: string): boolean {
-    const history = this.getSessionHistory(sessionId);
-    return history.length > 0;
   }
 
   /**

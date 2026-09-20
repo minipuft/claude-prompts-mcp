@@ -1241,13 +1241,6 @@ export class SqliteEngine implements DatabasePort {
   }
 
   /**
-   * Get database file path (for testing/debugging)
-   */
-  getDbPath(): string {
-    return this.dbPath;
-  }
-
-  /**
    * Get current schema version
    */
   getSchemaVersion(): number {

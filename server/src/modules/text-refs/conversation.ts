@@ -52,28 +52,6 @@ export class ConversationStore {
   }
 
   /**
-   * Return a shallow copy of the recorded history.
-   */
-  getConversationHistory(): ConversationHistoryItem[] {
-    return [...this.conversationHistory];
-  }
-
-  /**
-   * Short-hand helper for UIs needing limited history snapshots.
-   */
-  getRecentMessages(count: number = 5): ConversationHistoryItem[] {
-    return this.conversationHistory.slice(-count);
-  }
-
-  /**
-   * Clear all stored conversation entries.
-   */
-  clearHistory(): void {
-    this.conversationHistory = [];
-    this.logger.info('Conversation history cleared');
-  }
-
-  /**
    * Provide high-level stats for diagnostics.
    */
   getConversationStats(): {

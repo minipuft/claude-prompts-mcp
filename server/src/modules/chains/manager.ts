@@ -1222,6 +1222,14 @@ export class ChainSessionStore implements ChainSessionService {
 
   /**
    * Update an existing step result (e.g., replace placeholder with LLM output)
+   *
+   * Restored 2026-09-20 (P4.52 reimplementation probe): `updateSessionState` above answers a
+   * near-identical question (update a step's result + metadata, transition state, persist) and
+   * is the one 18-execution-stage/step-capture-service actually call. Two methods answering the
+   * same job — one live, one not — is evidence of a defect, not proof this one is surplus.
+   * Deleting it also would have orphaned `TextReferenceStore.getChainStepMetadata`, whose only
+   * production caller was this method — a class outside this row's scope. Left un-wired pending
+   * an owner decision on which of the two should be canonical.
    */
   async updateStepResult(
     sessionId: string,
@@ -2599,27 +2607,6 @@ export class ChainSessionStore implements ChainSessionService {
       averageStepsPerChain: totalChains > 0 ? totalSteps / totalChains : 0,
       oldestSessionAge: Date.now() - oldestSessionTime,
     };
-  }
-
-  /**
-   * Validate session integrity
-   */
-  validateSession(sessionId: string): { valid: boolean; issues: string[] } {
-    const session = this.activeSessions.get(sessionId);
-    const issues: string[] = [];
-
-    if (!session) {
-      issues.push('Session not found');
-      return { valid: false, issues };
-    }
-
-    // Check for stale session
-    const hoursSinceActivity = (Date.now() - session.lastActivity) / 3600000;
-    if (hoursSinceActivity > 1) {
-      issues.push(`Session stale: ${hoursSinceActivity.toFixed(1)} hours since last activity`);
-    }
-
-    return { valid: issues.length === 0, issues };
   }
 
   /**

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test, jest } from '@jest/globals';
+import { beforeEach, describe, expect, test, jest } from '@jest/globals';
 
 import { ArgumentHistoryTracker } from '../../../src/modules/text-refs/argument-history-tracker.js';
 
@@ -28,10 +28,6 @@ describe('ArgumentHistoryTracker', () => {
 
   beforeEach(() => {
     tracker = new ArgumentHistoryTracker(createLogger(), 10, createNoopStore());
-  });
-
-  afterEach(async () => {
-    await tracker.clearAll();
   });
 
   test('tracks executions and retrieves chain history', async () => {
