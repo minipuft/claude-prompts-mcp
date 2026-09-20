@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-20T22:22:41.469Z",
-  "total": 74,
+  "generatedAt": "2026-09-20T22:48:25.281Z",
+  "total": 71,
   "methods": [
     "ArgumentHistoryTracker.getLatestArguments",
     "AttributePolicyEnforcer.isAllowed",
@@ -54,7 +54,6 @@
     "PromptMatcher.generateSearchSuggestions",
     "PromptMatcher.highlightSearchTerms",
     "PromptRegistry.executePromptDirectly",
-    "SafeConfigWriter.restoreFromBackup",
     "ScriptToolDefinitionLoader.getStats",
     "ScriptToolDefinitionLoader.loadAllToolsForPrompt",
     "ServerLifecycle.restart",
@@ -72,9 +71,7 @@
     "StyleManager.isStyleCompatible",
     "TelemetryLifecycle.getRuntime",
     "TelemetryLifecycle.isEnabled",
-    "VerifyActiveStateStore.hasActiveVerification",
     "VersionHistoryService.deleteHistory",
-    "VersionHistoryService.rollback",
     "WorkspaceScriptLoader.discoverWorkspaceScripts",
     "WorkspaceScriptLoader.getWorkspaceScriptsPath"
   ],
