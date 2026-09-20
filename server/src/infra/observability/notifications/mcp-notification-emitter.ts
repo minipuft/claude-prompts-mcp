@@ -31,10 +31,16 @@ import type { Logger } from '../../logging/index.js';
 
 /**
  * Minimal MCP server interface for sending notifications.
- * Matches the notification method signature from @modelcontextprotocol/sdk.
+ *
+ * The return type is `void | Promise<void>` because the SDK's is a Promise, and declaring it
+ * `void` here is not a harmless simplification: a `void`-typed call is not awaited, and the
+ * SDK rejects with `SdkError: Not connected` whenever the bound instance has no transport —
+ * which is always, under Streamable HTTP. Measured 2026-09-20: that rejection escaped to
+ * `process.on('unhandledRejection')` and took the whole server down mid-chain, one tick after
+ * the triggering request had already answered `isError: false`.
  */
 export interface McpNotificationServer {
-  notification(params: { method: string; params?: Record<string, unknown> }): void;
+  notification(params: { method: string; params?: Record<string, unknown> }): void | Promise<void>;
 }
 
 // Every notification payload is declared in `shared/types` alongside
@@ -123,7 +129,20 @@ export class McpNotificationEmitter implements McpNotificationEmitterPort {
   // ===== Internal =====
 
   /**
-   * Send a notification via the MCP server.
+   * Send a notification via the MCP server, fire-and-forget.
+   *
+   * The SDK's `notification()` is ASYNC and rejects with `SdkError: Not connected` whenever the
+   * bound instance has no transport. A `try`/`catch` cannot see that — the synchronous call
+   * returns a pending promise and the enclosing block exits clean — so the rejection reaches
+   * `process.on('unhandledRejection')` in `index.ts`, which treats it as fatal and shuts the
+   * server down. Measured 2026-09-20 over Streamable HTTP, where the bound instance is NEVER
+   * connected: the first chain step of the first run killed the process, one tick after that
+   * request had already answered `isError: false`.
+   *
+   * So the promise is settled here, and the success line waits for it. A fire-and-forget
+   * emission needs an attached handler, not an enclosing one: `announceStepComplete` and
+   * `announceRunTerminal` are documented as never a reason to fail the work they observe, and
+   * an unhandled rejection is the one way a best-effort path becomes fatal.
    */
   private send(method: string, params: unknown): void {
     if (!this.canSend()) {
@@ -148,13 +167,27 @@ export class McpNotificationEmitter implements McpNotificationEmitterPort {
           ? (params as Record<string, unknown>)
           : undefined;
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      this.server!.notification({ method, params: notificationParams });
+      const pending = this.server!.notification({ method, params: notificationParams });
+
+      if (pending instanceof Promise) {
+        void pending.then(
+          () => this.logger.debug('[McpNotificationEmitter] Notification sent', { method }),
+          (error: unknown) => this.reportSendFailure(method, error)
+        );
+        return;
+      }
+
       this.logger.debug('[McpNotificationEmitter] Notification sent', { method });
     } catch (error) {
-      this.logger.warn('[McpNotificationEmitter] Failed to send notification', {
-        method,
-        error: error instanceof Error ? error.message : String(error),
-      });
+      this.reportSendFailure(method, error);
     }
+  }
+
+  /** One report for both the synchronous throw and the rejected promise. */
+  private reportSendFailure(method: string, error: unknown): void {
+    this.logger.warn('[McpNotificationEmitter] Failed to send notification', {
+      method,
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 }

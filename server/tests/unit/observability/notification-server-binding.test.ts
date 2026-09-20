@@ -56,6 +56,64 @@ describe('the object McpNotificationEmitter must be bound to', () => {
     expect(emitter.canSend()).toBe(false);
   });
 
+  test('a server whose notification() REJECTS is reported, not left unhandled', async () => {
+    // The SDK's `notification()` is async and rejects with `Not connected` whenever the bound
+    // instance has no transport — always, under Streamable HTTP. An unhandled rejection reaches
+    // `process.on('unhandledRejection')` in index.ts, which shuts the server down: measured
+    // 2026-09-20, the first chain step of the first HTTP run killed the process one tick after
+    // that request had answered isError:false. A synchronous try/catch cannot see it.
+    const logger = { ...noopLogger, warn: jest.fn(), debug: jest.fn() };
+    const emitter = new McpNotificationEmitter(logger);
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown): void => {
+      unhandled.push(reason);
+    };
+    process.on('unhandledRejection', onUnhandled);
+
+    try {
+      emitter.setServer({ notification: async () => Promise.reject(new Error('Not connected')) });
+      emitter.emitChainStepComplete({ chainId: 'c#1', stepIndex: 1, status: 'passed' });
+
+      // Two turns of the microtask queue plus a macrotask: an unhandled rejection is reported
+      // at the end of the turn in which it went unhandled.
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(unhandled).toEqual([]);
+      expect(logger.warn).toHaveBeenCalledWith(
+        '[McpNotificationEmitter] Failed to send notification',
+        expect.objectContaining({
+          method: 'notifications/chain/step_complete',
+          error: 'Not connected',
+        })
+      );
+      // The success line must not claim a send that rejected.
+      expect(logger.debug).not.toHaveBeenCalledWith(
+        '[McpNotificationEmitter] Notification sent',
+        expect.anything()
+      );
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+  });
+
+  test('CONTROL: a resolving server logs the send, and only after it resolves', async () => {
+    const logger = { ...noopLogger, warn: jest.fn(), debug: jest.fn() };
+    const emitter = new McpNotificationEmitter(logger);
+    emitter.setServer({ notification: async () => undefined });
+
+    logger.debug.mockClear();
+    emitter.emitChainStepComplete({ chainId: 'c#1', stepIndex: 1, status: 'passed' });
+    // Synchronously after the call the send has not resolved, so nothing may claim success.
+    expect(logger.debug).not.toHaveBeenCalled();
+
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(logger.debug).toHaveBeenCalledWith('[McpNotificationEmitter] Notification sent', {
+      method: 'notifications/chain/step_complete',
+    });
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
   test('a dropped notification says WHICH conjunct failed, not just "no server"', () => {
     const logger = { ...noopLogger, warn: jest.fn() };
     const emitter = new McpNotificationEmitter(logger);
