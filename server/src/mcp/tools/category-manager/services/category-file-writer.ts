@@ -17,7 +17,11 @@ import {
   type ResourceWriteCommitOptions,
 } from '#modules/resources/services/index.js';
 import { resolveContainedPath } from '#shared/utils/path-containment.js';
-import { parseYaml, serializeYaml } from '#shared/utils/yaml/yaml-parser.js';
+import { parseYaml } from '#shared/utils/yaml/yaml-parser.js';
+import {
+  readYamlSource,
+  serializeYamlPreservingSource,
+} from '#shared/utils/yaml/yaml-document-writer.js';
 
 /** The `category.yaml` file name, in one place so reader and writer cannot disagree about it. */
 export const CATEGORY_YAML_FILENAME = 'category.yaml';
@@ -325,6 +329,7 @@ export class CategoryFileWriter {
     // Read BEFORE anything is written — an update overwrites this same path, and a create has
     // nothing here yet. This read is also what a projection reports as the file's prior state.
     const existingYaml = await readCategoryYamlDocument(yamlPath, this.logger);
+    const existingSource = await readYamlSource(yamlPath);
 
     return {
       categoriesRoot,
@@ -333,14 +338,14 @@ export class CategoryFileWriter {
       files: [
         {
           relativePath: CATEGORY_YAML_FILENAME,
-          content: serializeYaml(
+          content: serializeYamlPreservingSource(
             overlayDecidedYamlKeys(
               existingYaml,
               this.buildCategoryYaml(data, existingYaml),
               CATEGORY_YAML_DECIDED_KEYS
             ),
-            { sortKeys: false }
-          ),
+            existingSource
+          ).content,
         },
       ],
     };

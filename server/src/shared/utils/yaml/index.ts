@@ -33,8 +33,9 @@ export {
 
 // Source-preserving serialization for resource writes
 export {
+  readYamlSource,
+  readYamlSourceSync,
   serializeYamlPreservingSource,
-  type ExistingYamlFile,
   type YamlWriteFidelity,
   type YamlWriteResult,
 } from './yaml-document-writer.js';

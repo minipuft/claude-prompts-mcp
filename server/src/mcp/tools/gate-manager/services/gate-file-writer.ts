@@ -19,8 +19,8 @@ import {
 import { resolveContainedPath } from '#shared/utils/path-containment.js';
 import { parseYaml } from '#shared/utils/yaml/yaml-parser.js';
 import {
+  readYamlSource,
   serializeYamlPreservingSource,
-  type ExistingYamlFile,
 } from '#shared/utils/yaml/yaml-document-writer.js';
 
 /**
@@ -345,13 +345,14 @@ export class GateFileWriter {
     const files: GateWritePlan['files'] = [];
     if (writesYaml) {
       const gateYamlData = overlayDecidedYamlKeys(
-        existingYaml?.data,
-        this.buildGateYaml(data, existingYaml?.data),
+        existingYaml,
+        this.buildGateYaml(data, existingYaml),
         GATE_YAML_DECIDED_KEYS
       );
       files.push({
         relativePath: 'gate.yaml',
-        content: serializeYamlPreservingSource(gateYamlData, existingYaml?.source).content,
+        content: serializeYamlPreservingSource(gateYamlData, await readYamlSource(yamlPath))
+          .content,
       });
     }
     if (writesGuidance) {
@@ -405,7 +406,7 @@ export class GateFileWriter {
    */
   private async readExistingGateYaml(
     gateYamlPath: string
-  ): Promise<ExistingYamlFile<Record<string, unknown>> | undefined> {
+  ): Promise<Record<string, unknown> | undefined> {
     if (!existsSync(gateYamlPath)) {
       return undefined;
     }
@@ -420,7 +421,7 @@ export class GateFileWriter {
         );
         return undefined;
       }
-      return { data: parsed.data, source: raw };
+      return parsed.data;
     } catch (error) {
       this.logger.warn(
         `[GateFileWriter] Could not read existing gate.yaml for field preservation: ${gateYamlPath} (${String(error)})`

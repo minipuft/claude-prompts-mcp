@@ -25,9 +25,45 @@
  * than hidden, so a caller that cares can assert which one ran.
  */
 
+import { readFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+
 import { CST, Composer, Parser, type Document } from 'yaml';
 
 import { serializeYaml } from './yaml-parser.js';
+
+/**
+ * The prior text of a file about to be rewritten, or `undefined` if there is none to preserve.
+ *
+ * Every writer reads its prior file through this rather than widening its own "read the existing
+ * declarations" helper. `readCategoryYamlDocument` alone has four callers and only the write path
+ * needs the source text, so threading it through the parsed-value helpers would be a contract
+ * change in service of a concern three of those callers do not have. A missing or unreadable file
+ * yields `undefined`, which the serializer reads as "no prior layout to preserve".
+ */
+export async function readYamlSource(filePath: string): Promise<string | undefined> {
+  try {
+    return await readFile(filePath, 'utf8');
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * `readYamlSource` for a caller that cannot await.
+ *
+ * The framework writer plans its files from a synchronous method whose result is consumed inside
+ * an object literal, and making that path async would turn a private planning helper's signature
+ * into a change across every caller of the write plan. It already resolves its directories with
+ * `existsSync`, so a synchronous read is the established shape there rather than a new one.
+ */
+export function readYamlSourceSync(filePath: string): string | undefined {
+  try {
+    return readFileSync(filePath, 'utf8');
+  } catch {
+    return undefined;
+  }
+}
 
 /** Which mechanism produced the output — see the module comment for what each guarantees. */
 export type YamlWriteFidelity =
@@ -43,20 +79,6 @@ export type YamlWriteFidelity =
 export interface YamlWriteResult {
   content: string;
   fidelity: YamlWriteFidelity;
-}
-
-/**
- * A resource file a writer read before rewriting it.
- *
- * The writers already parsed the prior file to decide which fields to preserve; they now need its
- * TEXT as well, because that text is what the new contents are edited out of. Carried as one
- * object so a writer cannot read the value and forget the source — passing `undefined` for the
- * source silently reverts that writer to a full re-render, which is the defect this module exists
- * to remove.
- */
-export interface ExistingYamlFile<T> {
-  data: T;
-  source: string;
 }
 
 type YamlPath = readonly (string | number)[];
