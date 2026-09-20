@@ -402,7 +402,11 @@ export class GateVerdictProcessor {
 
       await this.emitGateEvents(context, 'passed', capturedGateIds, verdictPayload.rationale);
     } else {
-      this.handleFailedVerdict(
+      // Awaited, as the `cleared` branch above is. Fired and forgotten, the advisory and
+      // informational handlers cleared the pending review and advanced the step AFTER the
+      // snapshot two lines below had already been taken, so the response reported the step
+      // the run had not moved off — and any failure in either was dropped entirely.
+      await this.handleFailedVerdict(
         context,
         session,
         sessionId,
@@ -463,14 +467,14 @@ export class GateVerdictProcessor {
   /**
    * Handle a FAIL verdict based on enforcement mode.
    */
-  private handleFailedVerdict(
+  private async handleFailedVerdict(
     context: ExecutionContext,
     session: ChainSession,
     sessionId: string,
     sessionContext: SessionContext,
     capturedGateIds: string[],
     verdictPayload: ParsedGateVerdict
-  ): void {
+  ): Promise<void> {
     const pending = this.chainSessionStore.getPendingGateReview(sessionId);
     if (pending !== undefined) {
       sessionContext.pendingReview = pending;
@@ -488,7 +492,7 @@ export class GateVerdictProcessor {
         break;
 
       case 'advisory':
-        this.handleAdvisoryFail(
+        await this.handleAdvisoryFail(
           context,
           session,
           sessionId,
@@ -499,7 +503,7 @@ export class GateVerdictProcessor {
         break;
 
       case 'informational':
-        this.handleInformationalFail(
+        await this.handleInformationalFail(
           context,
           session,
           sessionId,

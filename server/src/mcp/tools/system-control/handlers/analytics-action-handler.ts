@@ -52,7 +52,9 @@ export class AnalyticsActionHandler extends ActionHandler {
     this.resetAnalyticsData();
 
     if (this.frameworkStateStore) {
-      this.frameworkStateStore.resetMetrics();
+      // The caller's workspace, as this handler's status read is scoped. Unscoped, a reset
+      // from one workspace cleared the launch workspace's counters instead.
+      this.frameworkStateStore.resetMetrics(this.requestScope);
     }
 
     let response = `# 🔄 Metrics Reset Completed\n\n`;
