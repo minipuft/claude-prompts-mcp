@@ -540,4 +540,119 @@ describe('version-history', () => {
       expect(recordedTenants()).toHaveLength(1);
     });
   });
+
+  // B.82: `resolveTenantId` only GUESSES the scope — it cannot see the server's own launch cwd,
+  // only `CLAUDE_PROJECT_DIR` if this process happens to share it. When a server derives its scope
+  // from a launch cwd this process never shares (the background-daemon shape: one fixed install
+  // path serving many per-project MCP_WORKSPACE directories), the guess and the server's actual
+  // resolution disagree, and `cpm history`/`cpm rollback` reported "no history" / "Version N not
+  // found" against history that exists (measured: `cpm rollback -w <workspace>` run from an
+  // unrelated cwd with no `CLAUDE_PROJECT_DIR` set). `resolveEffectiveTenantId` corrects the guess
+  // against the db's own `tenant_id` column, which records what the writer actually used.
+  describe('effective tenant correction when the guess disagrees with recorded history', () => {
+    let savedProjectDir: string | undefined;
+
+    beforeEach(() => {
+      savedProjectDir = process.env['CLAUDE_PROJECT_DIR'];
+    });
+
+    afterEach(() => {
+      if (savedProjectDir === undefined) delete process.env['CLAUDE_PROJECT_DIR'];
+      else process.env['CLAUDE_PROJECT_DIR'] = savedProjectDir;
+    });
+
+    function tenantsFor(resourceType: string, resourceId: string): string[] {
+      const db = new DatabaseSync(join(tempDir, 'runtime-state', 'state.db'));
+      try {
+        const rows = db
+          .prepare(
+            'SELECT DISTINCT tenant_id FROM version_history WHERE resource_type = ? AND resource_id = ?'
+          )
+          .all(resourceType, resourceId) as Array<{ tenant_id: string }>;
+        return rows.map((row) => row.tenant_id);
+      } finally {
+        db.close();
+      }
+    }
+
+    it('corrects a read when the guess has no rows but exactly one other tenant does', () => {
+      // "The server" writes under a scope derived from ITS launch cwd.
+      process.env['CLAUDE_PROJECT_DIR'] = '/srv/server-tenant';
+      saveVersion(promptDir, 'prompt', 'test-prompt', { id: 'test-prompt', description: 'v1' });
+      saveVersion(promptDir, 'prompt', 'test-prompt', { id: 'test-prompt', description: 'v2' });
+      expect(tenantsFor('prompt', 'test-prompt')).toEqual(['server-tenant']);
+
+      // "The CLI" runs later from an unrelated cwd.
+      process.env['CLAUDE_PROJECT_DIR'] = '/home/user/cli-tenant';
+
+      const history = loadHistory(promptDir, PROMPT_REF);
+      expect(history).not.toBeNull();
+      expect(history!.current_version).toBe(2);
+      expect(history!.versions).toHaveLength(2);
+    });
+
+    it('rollback records the restored version under the corrected tenant, never a new one', () => {
+      process.env['CLAUDE_PROJECT_DIR'] = '/srv/server-tenant';
+      saveVersion(promptDir, 'prompt', 'test-prompt', { id: 'test-prompt', description: 'v1' });
+      saveVersion(promptDir, 'prompt', 'test-prompt', { id: 'test-prompt', description: 'v2' });
+
+      process.env['CLAUDE_PROJECT_DIR'] = '/home/user/cli-tenant';
+      const result = rollbackVersion(promptDir, 'prompt', 'test-prompt', 1, {
+        id: 'test-prompt',
+        description: 'v2',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.restored_version).toBe(1);
+      // Still exactly one tenant for this resource — the rollback's own write (recordEditResult)
+      // landed in the corrected tenant, not under the CLI's uncorrected guess.
+      expect(tenantsFor('prompt', 'test-prompt')).toEqual(['server-tenant']);
+    });
+
+    it('CONTROL: does not correct — and reports a miss — when two other tenants both hold rows', () => {
+      process.env['CLAUDE_PROJECT_DIR'] = '/srv/tenant-a';
+      saveVersion(promptDir, 'prompt', 'test-prompt', { id: 'test-prompt', description: 'a' });
+
+      process.env['CLAUDE_PROJECT_DIR'] = '/srv/tenant-b';
+      saveVersion(promptDir, 'prompt', 'test-prompt', { id: 'test-prompt', description: 'b' });
+
+      expect(tenantsFor('prompt', 'test-prompt').sort()).toEqual(['tenant-a', 'tenant-b']);
+
+      // A third, unrelated guess: two real candidates exist, so correcting would have to pick one
+      // and silently serve the wrong project's history. It must refuse instead.
+      process.env['CLAUDE_PROJECT_DIR'] = '/home/user/tenant-c';
+      expect(loadHistory(promptDir, PROMPT_REF)).toBeNull();
+    });
+
+    it('CONTROL: a write starts its own tenant rather than joining an existing one it collides with', () => {
+      process.env['CLAUDE_PROJECT_DIR'] = '/srv/tenant-a';
+      saveVersion(promptDir, 'prompt', 'test-prompt', { id: 'test-prompt', description: 'a' });
+
+      // A second, genuinely different, correctly-resolved tenant writes a resource under the SAME
+      // resource_type/resource_id (a shared state.db serving two unrelated projects). Correcting
+      // this write into tenant-a's history — the naive "one candidate exists" rule applied to
+      // writes too — would silently merge two unrelated projects' resources.
+      process.env['CLAUDE_PROJECT_DIR'] = '/srv/tenant-b';
+      const result = saveVersion(promptDir, 'prompt', 'test-prompt', {
+        id: 'test-prompt',
+        description: 'b',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.version).toBe(1); // its own v1, not appended after tenant-a's history
+      expect(tenantsFor('prompt', 'test-prompt').sort()).toEqual(['tenant-a', 'tenant-b']);
+    });
+
+    it('corrects a delete too — cpm delete has the same shape as cpm rollback', () => {
+      process.env['CLAUDE_PROJECT_DIR'] = '/srv/server-tenant';
+      saveVersion(promptDir, 'prompt', 'test-prompt', { id: 'test-prompt', description: 'v1' });
+
+      process.env['CLAUDE_PROJECT_DIR'] = '/home/user/cli-tenant';
+      expect(deleteVersionRows(promptDir, PROMPT_REF)).toBe(true);
+
+      // The rows are gone under the tenant that actually held them, not left behind as an orphan
+      // nothing can reach because the guess never matched them.
+      expect(tenantsFor('prompt', 'test-prompt')).toEqual([]);
+    });
+  });
 });
