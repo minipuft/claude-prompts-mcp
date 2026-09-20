@@ -13,6 +13,7 @@ import warnings
 from pathlib import Path
 
 import pytest
+from tree_state_guard import KNOWN_LEAKS, REPO_ROOT, classify, entry_path, known_leak_reason, list_entries
 
 # Save reference before we wrap it
 _original_patch_object = unittest.mock.patch.object
@@ -21,6 +22,51 @@ _original_patch_object = unittest.mock.patch.object
 HOOKS_LIB = Path(__file__).parent.parent / "lib"
 if str(HOOKS_LIB) not in sys.path:
     sys.path.insert(0, str(HOOKS_LIB))
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _tree_state_guard():
+    """Fails the pytest run if any hook test left something in the working tree.
+
+    See tree_state_guard.py for why this is a gate and not a cleanup, and for the incident that
+    motivated it. Failing from a session-scoped fixture's teardown exits pytest non-zero even
+    when every test passed, which is the point: the leak this catches is invisible to assertions
+    because the tests that cause it are green.
+    """
+    before = list_entries()
+    yield
+    result = classify(before, list_entries())
+
+    if result["unreadable"] is not None:
+        pytest.fail(
+            f"The tree-state guard could not measure this run: {result['unreadable']}.\n"
+            "A run that cannot be shown clean is not a clean run — see "
+            "hooks/tests/tree_state_guard.py.",
+            pytrace=False,
+        )
+
+    # Known leaks do not fail the run, but they are never silent.
+    for line in result.get("known_leaks", []):
+        reason = known_leak_reason(entry_path(line), KNOWN_LEAKS)
+        sys.stderr.write(f"[tree-state-guard] KNOWN LEAK (not failing this run): {line}\n  cause: {reason}\n")
+
+    if not result["leaked"]:
+        return
+
+    pytest.fail(
+        f"{len(result['leaked'])} working-tree entr(ies) appeared during this pytest run that "
+        "nothing declares.\n\n"
+        "A hook test that reaches workspace.get_workspace_root()'s self-resolution fallback (no "
+        "MCP_WORKSPACE / CLAUDE_PLUGIN_ROOT / PLUGIN_ROOT / GEMINI_EXTENSION_PATH set — the CI "
+        "shape) resolves to this checkout. Use the `patch_workspace` fixture (or set MCP_WORKSPACE "
+        "to a tmp_path yourself) before driving any code path that touches session_tracker, "
+        "hook_state_store, task_protocol, cli_spawner, or verify_active_store.\n\n"
+        "If a path genuinely belongs to a generator, add it to DECLARED_SUFFIXES in "
+        "hooks/tests/tree_state_guard.py WITH a reason naming that generator.\n\n"
+        f"Root: {REPO_ROOT}\n" + "\n".join(f"  + {line}" for line in result["leaked"]) + "\n\n"
+        "These entries are still on disk. Remove them before committing.",
+        pytrace=False,
+    )
 
 
 @pytest.fixture
