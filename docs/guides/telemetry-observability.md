@@ -115,13 +115,14 @@ These attributes follow the [wide-event pattern](https://loggingsucks.com/) — 
 
 #### Other Business Attributes
 
-| Attribute                 | Type   | Description                |
-| ------------------------- | ------ | -------------------------- |
-| `cpm.prompt.id`           | string | Resolved prompt identifier |
-| `cpm.operator.types`      | string | Applied operator types     |
-| `cpm.chain.current_step`  | number | Current chain step         |
-| `cpm.chain.total_steps`   | number | Total chain steps          |
-| `cpm.gates.applied_count` | number | Number of applied gates    |
+| Attribute                   | Type   | Description                                                                                             |
+| --------------------------- | ------ | ------------------------------------------------------------------------------------------------------- |
+| `cpm.prompt.id`             | string | Resolved prompt identifier                                                                              |
+| `cpm.operator.types`        | string | Applied operator types                                                                                  |
+| `cpm.chain.current_step`    | number | Current chain step                                                                                      |
+| `cpm.chain.total_steps`     | number | Total chain steps                                                                                       |
+| `cpm.gates.applied_count`   | number | Number of applied gates                                                                                 |
+| `cpm.gates.temporary_count` | number | Number of applied gates that are temporary (request-scoped) rather than framework- or inline-registered |
 
 ### Explicitly Excluded (default)
 
