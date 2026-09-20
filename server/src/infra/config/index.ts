@@ -83,7 +83,8 @@ function readDotPath(root: unknown, key: string): unknown {
  * property carrying its own nested `properties` is a branch (walked, not listed itself);
  * everything else — string/number/boolean/array/tuple-typed leaves — is recorded as one key.
  * `$schema` is excluded: the schema declares it as an allowed property so a config file may carry
- * the editor-hint `"$schema": "./config.schema.json"`, but it is not a config key.
+ * the editor-hint `$schema` value (`CONFIG_SCHEMA_URL` in `_generated/config-template.ts`), but it
+ * is not a config key.
  */
 function collectSchemaKeys(schemaNode: unknown, prefix = ''): string[] {
   if (schemaNode === null || typeof schemaNode !== 'object') return [];

@@ -8,6 +8,14 @@
 // server does not have.
 
 /**
+ * The schema's one published address — the same value the generated schema's own `$id` carries
+ * and this template's live `$schema` line shows. `generateDefaultConfig()`
+ * (`src/cli-shared/config-operations.ts`) reads this constant rather than restating the address,
+ * so a config document written anywhere in the codebase points at one address by construction.
+ */
+export const CONFIG_SCHEMA_URL = 'https://cdn.jsdelivr.net/npm/claude-prompts@5/config.schema.json';
+
+/**
  * A ready-to-edit `config.jsonc`: `$schema` and `version` live, every setting beneath them
  * commented out with its description, its default and its permitted values.
  *
@@ -28,7 +36,7 @@ export const CONFIG_JSONC_TEMPLATE: string = `// Configuration for the claude-pr
 
 {
 //   — JSON Schema reference for IDE validation.
-  "$schema": "./config.schema.json",
+  "$schema": "https://cdn.jsdelivr.net/npm/claude-prompts@5/config.schema.json",
 
 //   — Which shape this config file is written in. \`5\` is the current format, described by every
 //     setting below. A file with no \`version\` at all is read as an older (4.x) file: the server

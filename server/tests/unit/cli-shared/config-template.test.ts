@@ -27,7 +27,10 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from '@jest/globals';
 
 import { CONFIG_VALID_KEYS } from '../../../src/cli-shared/_generated/config-keys.js';
-import { CONFIG_JSONC_TEMPLATE } from '../../../src/cli-shared/_generated/config-template.js';
+import {
+  CONFIG_JSONC_TEMPLATE,
+  CONFIG_SCHEMA_URL,
+} from '../../../src/cli-shared/_generated/config-template.js';
 import { validateConfigAgainstSchema } from '../../../src/infra/config/config-schema-validator.js';
 import { parseConfigText } from '../../../src/shared/utils/config-file-format.js';
 
@@ -155,6 +158,20 @@ function valueAt(document: unknown, dottedKey: string): unknown {
       document
     );
 }
+
+describe('CONFIG_SCHEMA_URL', () => {
+  // Independent of `generate-config-schema.ts`'s own logic: every other assertion touching this
+  // constant reads it back from the generated module, which would pass even if the generator
+  // wrote back whatever it was given. This regex pins the ADDRESS SHAPE on its own terms — a
+  // jsDelivr npm-mirror path, the `claude-prompts` package name, a numeric major, the schema
+  // filename — so a generator bug that produces a syntactically different (but still string)
+  // value fails here even though every reference-based assertion elsewhere would stay green.
+  it('names a jsDelivr npm-mirror address for the claude-prompts package at a numeric major', () => {
+    expect(CONFIG_SCHEMA_URL).toMatch(
+      /^https:\/\/cdn\.jsdelivr\.net\/npm\/claude-prompts@\d+\/config\.schema\.json$/
+    );
+  });
+});
 
 describe('CONFIG_JSONC_TEMPLATE', () => {
   it('parses to exactly the document members it leaves live', () => {

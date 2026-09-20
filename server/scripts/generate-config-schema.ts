@@ -107,10 +107,23 @@ const TEMPLATE_OUTPUT_PATH = path.join(
 );
 
 /**
- * The schema `$id` kept stable across the hand-written and generated files. A later row changes
- * this; this row only changes how the file is produced, not its identity.
+ * The npm package major this schema's published address points at. `claude-prompts` is published
+ * to npm, and jsDelivr mirrors every published npm package at a versioned URL for free — so
+ * `@<major>` in the address below always resolves to whatever that major's latest release
+ * actually shipped, with no hosting of our own to keep alive. Bumped by hand alongside a breaking
+ * `ConfigFile` change; `validate-config-schema.ts`'s window check is what catches this constant
+ * drifting out of step with `server/package.json`'s released major (its comment owns the window
+ * rule, not this one).
  */
-const SCHEMA_ID = 'https://github.com/minipuft/claude-prompts-mcp/server/config.schema.json';
+const CONFIG_SCHEMA_MAJOR = 5;
+
+/**
+ * The schema's canonical, resolvable address — what `$id` in the generated schema carries, and
+ * what every config document's `$schema` hint points at. A GitHub path (this constant's previous
+ * value) 404s: nothing publishes `config.schema.json` at that URL. jsDelivr's npm mirror does,
+ * once the package containing it ships.
+ */
+const SCHEMA_ID = `https://cdn.jsdelivr.net/npm/claude-prompts@${CONFIG_SCHEMA_MAJOR}/config.schema.json`;
 
 /** The JSDoc tag name `ExtendedAnnotationsReader.getTypeAnnotation` recognizes natively. */
 const INTEGER_TAG = 'asType';
@@ -335,7 +348,7 @@ ${keys.map((key) => `  ${quote(key)}: {\n${renderLeafRule(leaves.get(key)!)}\n  
  * pins the two against each other instead, which costs nothing and cannot deadlock.
  */
 const TEMPLATE_DOCUMENT_MEMBERS: Readonly<Record<string, unknown>> = {
-  $schema: './config.schema.json',
+  $schema: SCHEMA_ID,
   version: 5,
 };
 
@@ -582,8 +595,16 @@ const TEMPLATE_GENERATED_HEADER = `${GENERATED_PREAMBLE}//
 `;
 
 /** The whole text of `src/cli-shared/_generated/config-template.ts`. */
-function renderConfigTemplateModule(templateText: string): string {
+function renderConfigTemplateModule(templateText: string, schemaUrl: string): string {
   return `${TEMPLATE_GENERATED_HEADER}
+/**
+ * The schema's one published address — the same value the generated schema's own \`$id\` carries
+ * and this template's live \`$schema\` line shows. \`generateDefaultConfig()\`
+ * (\`src/cli-shared/config-operations.ts\`) reads this constant rather than restating the address,
+ * so a config document written anywhere in the codebase points at one address by construction.
+ */
+export const CONFIG_SCHEMA_URL = ${quote(schemaUrl)};
+
 /**
  * A ready-to-edit \`config.jsonc\`: \`$schema\` and \`version\` live, every setting beneath them
  * commented out with its description, its default and its permitted values.
@@ -633,7 +654,10 @@ export function generateConfigSchema(
   mkdirSync(path.dirname(templateOutputPath), { recursive: true });
   writeFileSync(
     templateOutputPath,
-    renderConfigTemplateModule(renderConfigTemplateText(schema as SchemaNode, leaves.size))
+    renderConfigTemplateModule(
+      renderConfigTemplateText(schema as SchemaNode, leaves.size),
+      SCHEMA_ID
+    )
   );
 }
 

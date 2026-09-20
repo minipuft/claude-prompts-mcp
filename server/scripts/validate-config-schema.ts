@@ -4,7 +4,8 @@
  * itself against its own generator.
  *
  * WHY THIS EXISTS
- * `config.json` carries `"$schema": "./config.schema.json"`, which buys editor validation.
+ * `config.json` carries a `$schema` pointing at the schema's published address (`CONFIG_SCHEMA_URL`
+ * in `_generated/config-template.ts`), which buys editor validation.
  * `ConfigLoader.loadConfig` also calls `validateConfigAgainstSchema` at startup, with the
  * package schema injected from `runtime/context.ts` — but that path reports drift as a
  * `console.warn`, not a rejection, so a hand-edited `config.json` still loads and still starts
@@ -50,6 +51,13 @@
  * reopening the hole. Case 1 is the positive control — without it, every rejection below would
  * pass equally well against a schema that rejects everything.
  *
+ * WHY THE SCHEMA URL CHECK EXISTS
+ * `CONFIG_SCHEMA_URL` names a specific npm major in a jsDelivr address; nothing before this row
+ * checked whether that major still makes sense against what `server/package.json` has actually
+ * shipped, or whether the file the URL points at is even in the published package. `checkSchemaUrlAddress`
+ * (below) is that check; its own doc comment owns the window-rule numbers, so they are not restated
+ * here.
+ *
  * Paths resolve from this file, not `process.cwd()`, so the result does not depend on where it
  * was invoked from.
  *
@@ -66,6 +74,7 @@ import { fileURLToPath } from 'node:url';
 
 import { generateConfigSchema } from './generate-config-schema.js';
 import { generateDefaultConfig } from '../src/cli-shared/config-operations.js';
+import { CONFIG_SCHEMA_URL } from '../src/cli-shared/_generated/config-template.js';
 import { validateConfigAgainstSchema } from '../src/infra/config/config-schema-validator.js';
 
 import type { ConfigSchemaValidationResult } from '../src/shared/types/config-manager.js';
@@ -81,6 +90,7 @@ const TEMPLATE_PATH = path.join(
   '_generated',
   'config-template.ts'
 );
+const PACKAGE_JSON_PATH = path.join(SERVER_ROOT, 'package.json');
 
 type JsonObject = Record<string, unknown>;
 
@@ -140,6 +150,97 @@ async function checkSchemaDrift(
       `${stale.join(' and ')} ${stale.length === 1 ? 'does' : 'do'} not match what ` +
       `\`npm run generate:config-schema\` produces from ConfigFile. Run: npm run generate:config-schema`,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Schema URL address check.
+//
+// `CONFIG_SCHEMA_URL` (`_generated/config-template.ts`) names a jsDelivr npm-mirror address for a
+// SPECIFIC major of the `claude-prompts` package. Two ways that address can be wrong even when the
+// drift check above is green: the major it names has drifted too far from what `package.json` has
+// actually shipped, or the file it points at is not in the published tarball at all.
+// ---------------------------------------------------------------------------
+
+interface PackageJsonLike {
+  readonly version?: unknown;
+  readonly files?: unknown;
+}
+
+interface SchemaUrlCheckResult {
+  readonly ok: boolean;
+  readonly message?: string;
+}
+
+/** The leading `N.` of a semver string, e.g. `"4.0.1"` -> `4`. Throws on anything else. */
+function majorOf(version: string, label: string): number {
+  const match = /^(\d+)\./.exec(version);
+  if (!match) {
+    throw new Error(`${label} is not a parseable semver major: ${JSON.stringify(version)}`);
+  }
+  return Number(match[1]);
+}
+
+/** The `@<major>` segment of a jsDelivr config-schema URL. Throws on any other shape. */
+function schemaUrlMajor(url: string): number {
+  const match = /@(\d+)\/config\.schema\.json$/.exec(url);
+  if (!match) {
+    throw new Error(`cannot find a "@<major>/config.schema.json" suffix in schema URL: ${url}`);
+  }
+  return Number(match[1]);
+}
+
+/**
+ * Checks `schemaUrl` against `packageJson`'s declared version and `files` list.
+ *
+ * WHY THE WINDOW IS `P <= M <= P + 1`, NOT `M === P`
+ * `M` (the URL's major, `CONFIG_SCHEMA_MAJOR` in `generate-config-schema.ts`) is a hand-bumped
+ * constant: it moves the moment a breaking commit changes `ConfigFile`'s shape enough to need a
+ * new npm major. `P` (`package.json`'s major) moves separately and later, on a bot-authored
+ * release PR that cannot regenerate this repo's generated artifacts — so between the breaking
+ * commit landing (M moves first) and that release PR merging (P catches up), M sits exactly one
+ * ahead of P. Today P = 4 (`package.json` version `4.0.1`) and M = 5 — that exact gap — and this
+ * must pass. `M < P` means the constant fell behind an already-shipped release; `M > P + 1` means
+ * it is more than one release ahead. Both are real drift and must fail.
+ */
+function checkSchemaUrlAddress(
+  schemaUrl: string,
+  packageJson: PackageJsonLike
+): SchemaUrlCheckResult {
+  const version = packageJson.version;
+  if (typeof version !== 'string') {
+    return {
+      ok: false,
+      message: `package.json has no "version" string to check ${schemaUrl} against.`,
+    };
+  }
+
+  const packageMajor = majorOf(version, 'package.json "version"');
+  const schemaMajor = schemaUrlMajor(schemaUrl);
+
+  if (schemaMajor < packageMajor || schemaMajor > packageMajor + 1) {
+    return {
+      ok: false,
+      message:
+        `CONFIG_SCHEMA_URL (${schemaUrl}) names major ${schemaMajor}, but server/package.json is ` +
+        `at major ${packageMajor} (version ${version}). Expected ${packageMajor} <= ${schemaMajor} ` +
+        `<= ${packageMajor + 1}. Update CONFIG_SCHEMA_MAJOR in generate-config-schema.ts and run ` +
+        `npm run generate:config-schema, or check whether the release PR bumping package.json's ` +
+        `version is overdue.`,
+    };
+  }
+
+  const files = Array.isArray(packageJson.files) ? packageJson.files : [];
+  if (!files.includes('config.schema.json')) {
+    return {
+      ok: false,
+      message:
+        `server/package.json "files" does not list "config.schema.json", so ${schemaUrl} would ` +
+        `404 once published even though every other check passes. Add "config.schema.json" to ` +
+        `"files" in server/package.json.`,
+    };
+  }
+
+  return { ok: true };
 }
 
 // ---------------------------------------------------------------------------
@@ -454,6 +555,81 @@ const SELF_TEST_CASES: readonly SelfTestCase[] = [
       }
     },
   },
+  {
+    name: 'SCHEMA URL — the shipped major window (real package.json, real CONFIG_SCHEMA_URL) passes',
+    run: async () => {
+      const packageJson = (await readJson(PACKAGE_JSON_PATH)) as PackageJsonLike;
+      const result = checkSchemaUrlAddress(CONFIG_SCHEMA_URL, packageJson);
+      assert(
+        result.ok,
+        `the real CONFIG_SCHEMA_URL and server/package.json must satisfy the window today, or ` +
+          `every case below is testing a scenario that does not currently hold: ${result.message ?? '(no message)'}`
+      );
+    },
+  },
+  {
+    // Fixture-built, never a mutation of the real package.json (that file stays untouched on disk
+    // for every case in this suite) — a schema major two releases ahead of a fixture package major.
+    name: 'SCHEMA URL POSITIVE CONTROL — a major more than one ahead of package.json is rejected',
+    run: async () => {
+      const fixturePackageJson: PackageJsonLike = {
+        version: '4.0.1',
+        files: ['config.schema.json'],
+      };
+      const result = checkSchemaUrlAddress(
+        'https://cdn.jsdelivr.net/npm/claude-prompts@7/config.schema.json',
+        fixturePackageJson
+      );
+      assert(!result.ok, 'a schema URL major two releases ahead of package.json must be rejected');
+      assert(
+        result.message?.includes('7') === true && result.message?.includes('4') === true,
+        `the failure must name both the URL's major and package.json's major, got: ${result.message ?? '(none)'}`
+      );
+    },
+  },
+  {
+    name: 'SCHEMA URL POSITIVE CONTROL — a major that has fallen behind package.json is rejected',
+    run: async () => {
+      const fixturePackageJson: PackageJsonLike = {
+        version: '6.0.0',
+        files: ['config.schema.json'],
+      };
+      const result = checkSchemaUrlAddress(
+        'https://cdn.jsdelivr.net/npm/claude-prompts@5/config.schema.json',
+        fixturePackageJson
+      );
+      assert(
+        !result.ok,
+        'a schema URL major behind an already-shipped package.json release must be rejected'
+      );
+      assert(
+        result.message?.includes('5') === true && result.message?.includes('6') === true,
+        `the failure must name both majors, got: ${result.message ?? '(none)'}`
+      );
+    },
+  },
+  {
+    // A fixture `files` list, never the real package.json — dropping the entry there would break
+    // every published install, which is exactly what this case proves gets caught first.
+    name: 'SCHEMA URL POSITIVE CONTROL — a package.json missing config.schema.json from "files" is rejected',
+    run: async () => {
+      const fixturePackageJson: PackageJsonLike = {
+        version: '4.0.1',
+        files: ['dist/index.js', 'dist/cpm.js'],
+      };
+      const result = checkSchemaUrlAddress(CONFIG_SCHEMA_URL, fixturePackageJson);
+      assert(
+        !result.ok,
+        'a package.json "files" list missing "config.schema.json" must be rejected, or the ' +
+          'published schema URL would 404 with every other check green'
+      );
+      assert(
+        result.message?.includes('config.schema.json') === true &&
+          result.message?.includes('files') === true,
+        `the failure must name the missing entry and the "files" field, got: ${result.message ?? '(none)'}`
+      );
+    },
+  },
 ];
 
 async function selfTest(): Promise<void> {
@@ -501,6 +677,14 @@ async function validateShippedConfig(): Promise<void> {
     for (const error of result.errors) {
       console.error(`- ${error}`);
     }
+    process.exit(1);
+  }
+
+  const packageJson = (await readJson(PACKAGE_JSON_PATH)) as PackageJsonLike;
+  const urlCheck = checkSchemaUrlAddress(CONFIG_SCHEMA_URL, packageJson);
+  if (!urlCheck.ok) {
+    console.error('Config schema URL address check failed:');
+    console.error(`- ${urlCheck.message}`);
     process.exit(1);
   }
 
