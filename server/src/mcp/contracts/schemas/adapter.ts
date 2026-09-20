@@ -44,9 +44,3 @@ export function contractToCommandDescriptors(contract: ToolContract): CommandDes
     issues: [],
   }));
 }
-
-// NOTE: loadGeneratedContract and contractMetadataSchema removed - they loaded
-// from *.metadata.json files which were dead code (never imported at runtime).
-// contractToZodObject and toZodType removed 2026-09-19 - no caller ever built a
-// Zod schema from a contract at runtime; hand-written schemas own validation
-// (see CLAUDE.md "Contract ownership").
