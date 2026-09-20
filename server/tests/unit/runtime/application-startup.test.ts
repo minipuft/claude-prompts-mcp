@@ -72,8 +72,12 @@ describe('Application startup (prompt loading)', () => {
     );
 
     try {
-      await app.loadConfiguration();
-      await app.loadPromptsData();
+      const privateApp = app as unknown as {
+        initializeFoundation: () => Promise<void>;
+        loadAndProcessData: () => Promise<void>;
+      };
+      await privateApp.initializeFoundation();
+      await privateApp.loadAndProcessData();
 
       const diagnostics = await app.getDiagnosticInfo();
       expect(diagnostics.errors).not.toContain('No prompts loaded');
