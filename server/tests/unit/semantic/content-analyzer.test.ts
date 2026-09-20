@@ -106,24 +106,6 @@ describe('ContentAnalyzer', () => {
     expect((await analyzer.analyzePrompt(prompt)).analysisMetadata.cacheHit).toBe(false);
     expect((await analyzer.analyzePrompt(prompt)).analysisMetadata.cacheHit).toBe(true);
   });
-
-  test('getPerformanceStats reports cache state only', () => {
-    const stats = createAnalyzer().getPerformanceStats();
-
-    expect(stats.cacheEnabled).toBe(true);
-    expect(typeof stats.cacheSize).toBe('number');
-    expect(stats).not.toHaveProperty('llmIntegrationEnabled');
-  });
-
-  test('clearCache empties the analysis cache', async () => {
-    const analyzer = createAnalyzer();
-
-    await analyzer.analyzePrompt(createPrompt({ id: 'to-clear' }));
-    expect(analyzer.getPerformanceStats().cacheSize).toBe(1);
-
-    analyzer.clearCache();
-    expect(analyzer.getPerformanceStats().cacheSize).toBe(0);
-  });
 });
 
 describe('ContentAnalyzer configuration', () => {

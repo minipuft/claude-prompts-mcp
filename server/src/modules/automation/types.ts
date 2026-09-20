@@ -22,7 +22,6 @@ export {
   type ScriptToolLoaderConfig,
   type ScriptToolLoadFailure,
   type ScriptToolLoadReport,
-  type ScriptToolLoaderStats,
   type ToolDetectionMatch,
   type ToolMatchReason,
   type ToolPendingConfirmation,

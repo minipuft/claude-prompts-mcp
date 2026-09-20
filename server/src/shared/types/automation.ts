@@ -329,20 +329,6 @@ export interface ScriptToolLoaderConfig {
 }
 
 /**
- * Statistics from the script tool loader.
- */
-export interface ScriptToolLoaderStats {
-  /** Number of cached definitions */
-  cacheSize: number;
-  /** Cache hit count */
-  cacheHits: number;
-  /** Cache miss count */
-  cacheMisses: number;
-  /** Number of load errors encountered */
-  loadErrors: number;
-}
-
-/**
  * Validation result for script tool inputs.
  */
 export interface ScriptInputValidationResult {

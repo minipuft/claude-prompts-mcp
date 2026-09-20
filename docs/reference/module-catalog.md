@@ -15,7 +15,7 @@ remains in `server/.dependency-cruiser.cjs`.
 | `execution-engine` | `src/engine` | layer | canonical | Client-guided execution, framework, and gate decision logic. | — | — | — | — |
 | `engine-execution` | `src/engine/execution` | domain | canonical | Parses commands and coordinates the staged client-guided execution pipeline. | — | — | chains<br>engine-frameworks<br>engine-gates<br>infra-database<br>infra-logging<br>shared-types<br>shared-utils<br>workflow-ir | automation<br>chains<br>engine-frameworks<br>engine-gates<br>mcp-http<br>mcp-tools<br>prompts<br>runtime<br>semantic<br>workflow-ir |
 | `engine-frameworks` | `src/engine/frameworks` | domain | canonical | Loads, validates, selects, and applies reasoning frameworks. | — | — | engine-execution<br>infra-database<br>infra-logging<br>shared-core<br>shared-types<br>shared-utils | cli-shared<br>engine-execution<br>mcp-tools<br>resources<br>runtime |
-| `engine-gates` | `src/engine/gates` | domain | canonical | Selects, enhances, and evaluates quality-gate guidance. | — | — | engine-execution<br>infra-database<br>infra-logging<br>shared-core<br>shared-types<br>shared-utils | cli-shared<br>engine-execution<br>formatting<br>mcp-tools<br>prompts<br>resources<br>runtime<br>skills-sync |
+| `engine-gates` | `src/engine/gates` | domain | canonical | Selects, enhances, and evaluates quality-gate guidance. | — | — | engine-execution<br>infra-database<br>infra-logging<br>shared-core<br>shared-types<br>shared-utils | cli-shared<br>engine-execution<br>mcp-tools<br>prompts<br>resources<br>runtime<br>skills-sync |
 | `engine-interfaces` | `src/engine/interfaces` | protocol | canonical | Contracts exposed by the execution engine to collaborating layers. | — | — | — | — |
 | `infrastructure` | `src/infra` | layer | canonical | Configuration, persistence, transport support, logging, and observability infrastructure. | — | — | — | — |
 | `infra-config` | `src/infra/config` | domain | canonical | Loads and resolves server configuration. | — | `index.ts` | infra-logging<br>shared-types<br>shared-utils | infra-http<br>runtime<br>server-source |
@@ -32,7 +32,7 @@ remains in `server/.dependency-cruiser.cjs`.
 | `application-modules` | `src/modules` | layer | canonical | Feature modules that own prompt, chain, resource, and authoring behavior. | — | — | — | — |
 | `automation` | `src/modules/automation` | domain | canonical | Owns automation-oriented resource and workflow behavior. | — | — | engine-execution<br>hot-reload<br>shared-types<br>shared-utils | mcp-tools<br>prompts<br>resources<br>runtime |
 | `chains` | `src/modules/chains` | domain | canonical | Owns chain sessions, execution records, mutation, and persistence behavior. | — | — | engine-execution<br>shared-types<br>shared-utils<br>text-references | engine-execution<br>mcp-tools |
-| `formatting` | `src/modules/formatting` | domain | canonical | Owns response styles and output formatting behavior. | — | `index.ts` | engine-gates<br>shared-types<br>shared-utils | cli-shared<br>mcp-tools<br>resources<br>runtime |
+| `formatting` | `src/modules/formatting` | domain | canonical | Owns response styles and output formatting behavior. | — | `index.ts` | shared-types<br>shared-utils | cli-shared<br>mcp-tools<br>resources<br>runtime |
 | `hot-reload` | `src/modules/hot-reload` | domain | canonical | Coordinates file observation and registry refresh behavior. | — | — | shared-types<br>shared-utils | automation<br>prompts<br>runtime |
 | `prompts` | `src/modules/prompts` | domain | canonical | Owns prompt discovery, schema, registry, and lifecycle behavior. | — | `index.ts` | automation<br>engine-execution<br>engine-gates<br>hot-reload<br>shared-types<br>shared-utils<br>text-references<br>workflow-ir | cli-shared<br>mcp-http<br>mcp-tools<br>resources<br>runtime |
 | `resources` | `src/modules/resources` | domain | canonical | Owns resource verification and mutation transactions. | — | `index.ts` | automation<br>engine-frameworks<br>engine-gates<br>formatting<br>prompts<br>shared-types<br>shared-utils | cli-shared<br>mcp-tools<br>runtime<br>skills-sync |
@@ -147,7 +147,6 @@ flowchart LR
   module_engine_gates --> module_shared_core
   module_engine_gates --> module_shared_types
   module_engine_gates --> module_shared_utils
-  module_formatting --> module_engine_gates
   module_formatting -. type .-> module_shared_types
   module_formatting --> module_shared_utils
   module_hot_reload -. type .-> module_shared_types

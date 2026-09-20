@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-20T22:23:09.208Z",
+  "generatedAt": "2026-09-20T22:36:10.256Z",
   "eslintTarget": "src,scripts,eslint-rules",
   "totals": {
-    "errors": 2789,
-    "warnings": 770
+    "errors": 2748,
+    "warnings": 766
   },
   "byRule": {
     "@typescript-eslint/strict-boolean-expressions": {
-      "errors": 1876,
+      "errors": 1849,
       "warnings": 0
     },
     "sonarjs/cognitive-complexity": {
@@ -20,7 +20,7 @@
       "warnings": 78
     },
     "@typescript-eslint/no-unnecessary-condition": {
-      "errors": 393,
+      "errors": 387,
       "warnings": 0
     },
     "max-params": {
@@ -28,7 +28,7 @@
       "warnings": 7
     },
     "@typescript-eslint/prefer-nullish-coalescing": {
-      "errors": 156,
+      "errors": 153,
       "warnings": 0
     },
     "import-x/order": {
@@ -36,7 +36,7 @@
       "warnings": 0
     },
     "@typescript-eslint/explicit-module-boundary-types": {
-      "errors": 51,
+      "errors": 49,
       "warnings": 0
     },
     "@typescript-eslint/no-unsafe-assignment": {
@@ -49,14 +49,14 @@
     },
     "@typescript-eslint/no-unsafe-member-access": {
       "errors": 0,
-      "warnings": 360
+      "warnings": 357
     },
     "@typescript-eslint/explicit-function-return-type": {
-      "errors": 24,
+      "errors": 22,
       "warnings": 0
     },
     "@typescript-eslint/no-explicit-any": {
-      "errors": 252,
+      "errors": 251,
       "warnings": 0
     },
     "max-depth": {
@@ -81,7 +81,7 @@
     },
     "@typescript-eslint/no-unsafe-return": {
       "errors": 0,
-      "warnings": 12
+      "warnings": 11
     },
     "@typescript-eslint/no-floating-promises": {
       "errors": 7,
