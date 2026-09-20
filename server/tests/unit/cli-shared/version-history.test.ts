@@ -326,4 +326,102 @@ describe('version-history', () => {
       expect(table).toContain('and 2 more versions');
     });
   });
+
+  // B.70: resolveStateDbPath used to walk up from the resource directory looking for an
+  // existing runtime-state/, ignoring MCP_RUNTIME_ROOT entirely. Under a server started with
+  // MCP_RUNTIME_ROOT pointing somewhere other than the workspace (the Claude Code plugin's
+  // ${CLAUDE_PLUGIN_DATA}, or any operator override), `cpm` history read a different database
+  // from the one the server wrote — or found none at all. These tests seed TWO separate
+  // state.db files (the workspace ancestor `tempDir` already seeded in the outer beforeEach,
+  // plus a second directory standing in for MCP_RUNTIME_ROOT/MCP_WORKSPACE) and show which one
+  // resolveStateDbPath actually reads, so a wrong precedence fails loudly instead of both
+  // candidates looking equally plausible.
+  describe('runtime root resolution honors MCP_RUNTIME_ROOT / MCP_WORKSPACE', () => {
+    const envKeys = ['MCP_RUNTIME_ROOT', 'MCP_WORKSPACE'] as const;
+    const savedEnv: Record<string, string | undefined> = {};
+
+    beforeEach(() => {
+      for (const key of envKeys) savedEnv[key] = process.env[key];
+    });
+
+    afterEach(() => {
+      for (const key of envKeys) {
+        if (savedEnv[key] === undefined) delete process.env[key];
+        else process.env[key] = savedEnv[key];
+      }
+    });
+
+    it('MCP_RUNTIME_ROOT wins over the workspace-ancestor ambient database', async () => {
+      const runtimeRootDir = mkdtempSync(join(tmpdir(), 'cpm-vh-runtime-root-'));
+      try {
+        await seedStateDbSchema(runtimeRootDir);
+        process.env['MCP_RUNTIME_ROOT'] = runtimeRootDir;
+
+        const result = saveVersion(promptDir, 'prompt', 'test-prompt', { id: 'test-prompt' });
+        expect(result.success).toBe(true);
+        expect(loadHistory(promptDir)?.current_version).toBe(1);
+
+        // Positive control: the workspace ancestor (tempDir, seeded by the outer beforeEach)
+        // received nothing — proving the write above actually went to runtimeRootDir and did
+        // not merely also land where the old ancestor walk would have looked.
+        delete process.env['MCP_RUNTIME_ROOT'];
+        expect(loadHistory(promptDir)).toBeNull();
+      } finally {
+        rmSync(runtimeRootDir, { recursive: true, force: true });
+      }
+    });
+
+    it('MCP_WORKSPACE wins over the workspace-ancestor ambient database when MCP_RUNTIME_ROOT is unset', async () => {
+      delete process.env['MCP_RUNTIME_ROOT'];
+      const workspaceDir = mkdtempSync(join(tmpdir(), 'cpm-vh-workspace-'));
+      try {
+        await seedStateDbSchema(workspaceDir);
+        process.env['MCP_WORKSPACE'] = workspaceDir;
+
+        const result = saveVersion(promptDir, 'prompt', 'test-prompt', { id: 'test-prompt' });
+        expect(result.success).toBe(true);
+        expect(loadHistory(promptDir)?.current_version).toBe(1);
+
+        delete process.env['MCP_WORKSPACE'];
+        expect(loadHistory(promptDir)).toBeNull();
+      } finally {
+        rmSync(workspaceDir, { recursive: true, force: true });
+      }
+    });
+
+    it('MCP_RUNTIME_ROOT wins over MCP_WORKSPACE when both are set', async () => {
+      const runtimeRootDir = mkdtempSync(join(tmpdir(), 'cpm-vh-runtime-root-'));
+      const workspaceDir = mkdtempSync(join(tmpdir(), 'cpm-vh-workspace-'));
+      try {
+        await seedStateDbSchema(runtimeRootDir);
+        await seedStateDbSchema(workspaceDir);
+        process.env['MCP_RUNTIME_ROOT'] = runtimeRootDir;
+        process.env['MCP_WORKSPACE'] = workspaceDir;
+
+        const result = saveVersion(promptDir, 'prompt', 'test-prompt', { id: 'test-prompt' });
+        expect(result.success).toBe(true);
+
+        // Read the runtime-root candidate directly (bypassing resolveStateDbPath) to confirm
+        // the write landed there and not in the workspace candidate.
+        delete process.env['MCP_WORKSPACE'];
+        expect(loadHistory(promptDir)?.current_version).toBe(1);
+
+        delete process.env['MCP_RUNTIME_ROOT'];
+        process.env['MCP_WORKSPACE'] = workspaceDir;
+        expect(loadHistory(promptDir)).toBeNull();
+      } finally {
+        rmSync(runtimeRootDir, { recursive: true, force: true });
+        rmSync(workspaceDir, { recursive: true, force: true });
+      }
+    });
+
+    it('falls back to the workspace-ancestor walk when neither variable is set (regression control)', () => {
+      delete process.env['MCP_RUNTIME_ROOT'];
+      delete process.env['MCP_WORKSPACE'];
+
+      const result = saveVersion(promptDir, 'prompt', 'test-prompt', { id: 'test-prompt' });
+      expect(result.success).toBe(true);
+      expect(loadHistory(promptDir)?.current_version).toBe(1);
+    });
+  });
 });

@@ -910,8 +910,8 @@ resource_manager(
   name:"Source Verification",
   type:"validation",
   description:"Ensures all claims are properly sourced",
-  guidance:"All factual claims must cite sources. No unsourced statistics.",
-  pass_criteria:["All claims have citations", "Sources are authoritative"]
+  guidance:"All factual claims must cite sources; sources must be authoritative. No unsourced statistics.",
+  pass_criteria:[{type:"inline_guidance"}]
 )
 
 # Update a gate
