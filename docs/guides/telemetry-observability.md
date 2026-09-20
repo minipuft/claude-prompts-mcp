@@ -61,18 +61,25 @@ Note: `telemetry.mode` and `telemetry.exporterEndpoint` changes require server r
 
 Events are attached to the active root span via the hook system:
 
-| Event Name              | Source          | Status  | Description                          |
-| ----------------------- | --------------- | ------- | ------------------------------------ |
-| `gate.passed`           | Gate evaluation | Active  | Gate passed validation               |
-| `gate.failed`           | Gate evaluation | Active  | Gate failed validation               |
-| `gate.retry_exhausted`  | Gate system     | Active  | All retry attempts consumed          |
-| `gate.response_blocked` | Gate system     | Active  | Response blocked due to gate failure |
-| `chain.step_complete`   | Chain execution | Planned | Chain step finished                  |
-| `chain.complete`        | Chain execution | Planned | Full chain completed                 |
-| `chain.failed`          | Chain execution | Planned | Chain execution failed               |
+| Event Name              | Source          | Status | Description                             |
+| ----------------------- | --------------- | ------ | --------------------------------------- |
+| `gate.passed`           | Gate evaluation | Active | Gate passed validation                  |
+| `gate.failed`           | Gate evaluation | Active | Gate failed validation                  |
+| `gate.retry_exhausted`  | Gate system     | Active | All retry attempts consumed             |
+| `gate.response_blocked` | Gate system     | Active | Response blocked due to gate failure    |
+| `chain.step_complete`   | Step capture    | Active | A chain step's real output was captured |
+| `chain.complete`        | Chain run store | Active | A run reached `completed`               |
+| `chain.failed`          | Chain run store | Active | A run reached `failed` or `cancelled`   |
 
-> [!NOTE]
-> Chain events are defined in the hook registry and observer but not yet emitted by chain operator code. Gate and pipeline stage events are fully active.
+Each chain event fires once, where the owning service records the fact and after its persist
+resolves: `StepCaptureService` for a captured step, and `ChainSessionStore` for the run's
+terminal status. A placeholder capture — the STDIO stand-in for output that has not arrived —
+emits nothing, so `chain.step_complete` counts real step results only.
+
+Clients also receive these as MCP notifications: `notifications/chain/step_complete`,
+`notifications/chain/complete` (whose `status` names the terminal state — `completed`,
+`failed` or `cancelled`) and `notifications/framework/changed`. `validate:hook-producers`
+fails the build if any registerable event loses its producer again.
 
 ### Attributes
 
