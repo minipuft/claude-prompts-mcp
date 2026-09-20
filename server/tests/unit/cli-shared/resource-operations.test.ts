@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from '@jest/globals';
 import { existsSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -9,6 +10,9 @@ import {
   toggleEnabled,
   linkGate,
   runValidatedMutation,
+  declaredResourceId,
+  resourceRoot,
+  type ResourceLocation,
 } from '../../../src/cli-shared/resource-operations.js';
 import { loadHistory, saveVersion } from '../../../src/cli-shared/version-history.js';
 import type { ResourceValidationResult } from '../../../src/cli-shared/resource-validation.js';
@@ -38,10 +42,8 @@ describe('resource-operations', () => {
 
       const result = runValidatedMutation({
         resourceType: 'styles',
-        resourceId: 'style-a',
-        resourceDir: dir,
-        entryFile: 'style.yaml',
-        mutate: () => toggleEnabled(dir, 'style.yaml'),
+        location: dirLocation(dir, 'style.yaml'),
+        mutate: () => toggleEnabled(join(dir, 'style.yaml')),
       });
 
       expect(result.success).toBe(true);
@@ -74,10 +76,8 @@ describe('resource-operations', () => {
 
       const result = runValidatedMutation({
         resourceType: 'styles',
-        resourceId: 'style-b',
-        resourceDir: dir,
-        entryFile: 'style.yaml',
-        mutate: () => toggleEnabled(dir, 'style.yaml'),
+        location: dirLocation(dir, 'style.yaml'),
+        mutate: () => toggleEnabled(join(dir, 'style.yaml')),
         validator: () => forcedFailure,
       });
 
@@ -85,6 +85,38 @@ describe('resource-operations', () => {
       expect(result.rolledBack).toBe(true);
       expect(result.validation?.valid).toBe(false);
       expect(readYaml(dir, 'style.yaml')).toContain('enabled: true');
+    });
+
+    it('rolls back and rethrows when the mutation itself throws', () => {
+      const dir = join(tempDir, 'style-c');
+      writeResource(
+        dir,
+        'style.yaml',
+        [
+          'id: style-c',
+          'name: Style C',
+          'description: test style',
+          'guidanceFile: guidance.md',
+          'enabled: true',
+        ].join('\n')
+      );
+      const before = hashFile(join(dir, 'style.yaml'));
+
+      expect(() =>
+        runValidatedMutation({
+          resourceType: 'styles',
+          location: dirLocation(dir, 'style.yaml'),
+          // A mutation that writes a partial change and then blows up before returning: the
+          // helper cannot see a `moved` location for a throw, so this exercises the path that
+          // must still restore the pre-mutation snapshot from the original resource root.
+          mutate: () => {
+            writeFileSync(join(dir, 'style.yaml'), 'id: style-c\nenabled: CORRUPTED\n', 'utf8');
+            throw new Error('mutation exploded mid-write');
+          },
+        })
+      ).toThrow('mutation exploded mid-write');
+
+      expect(hashFile(join(dir, 'style.yaml'))).toBe(before);
     });
   });
 
@@ -103,6 +135,14 @@ describe('resource-operations', () => {
     return readFileSync(join(dir, entryFile), 'utf8');
   }
 
+  function hashFile(path: string): string {
+    return createHash('sha256').update(readFileSync(path)).digest('hex');
+  }
+
+  function dirLocation(dir: string, entryFile: string): ResourceLocation {
+    return { form: 'dir', dir, file: join(dir, entryFile) };
+  }
+
   // ── renameResource ────────────────────────────────────────────────────
 
   describe('renameResource', () => {
@@ -119,31 +159,101 @@ describe('resource-operations', () => {
         ].join('\n')
       );
 
-      const result = renameResource(dir, 'prompt.yaml', 'old-name', 'new-name');
+      const result = renameResource(dirLocation(dir, 'prompt.yaml'), 'old-name', 'new-name');
 
       expect(result.success).toBe(true);
-      expect(result.newDir).toBe(join(tempDir, 'new-name'));
+      expect(result.newPath).toBe(join(tempDir, 'new-name'));
       expect(existsSync(dir)).toBe(false);
-      expect(existsSync(result.newDir!)).toBe(true);
+      expect(existsSync(result.newPath!)).toBe(true);
 
-      const content = readYaml(result.newDir!, 'prompt.yaml');
+      const content = readYaml(result.newPath!, 'prompt.yaml');
       expect(content).toContain('id: new-name');
       expect(content).toContain('name: Old Name');
       expect(content).toContain('# This is a comment');
     });
 
-    it('updates history file resource_id', async () => {
+    it('leaves version history for its caller to re-key once validation has passed', async () => {
       // Engine-owned DDL; the CLI no longer bootstraps it (see version-history.ts runSqlite).
+      // `cpm rename` re-keys history after `runValidatedMutation` succeeds, so a rename that
+      // validation rolls back cannot leave the rows under an id the files no longer carry.
       await seedStateDbSchema(tempDir);
       const dir = join(tempDir, 'resources', 'gates', 'hist-res');
       writeResource(dir, 'gate.yaml', 'id: hist-res\nname: Test');
       saveVersion(dir, 'gate', 'hist-res', { id: 'hist-res' }, { description: 'init' });
 
-      const result = renameResource(dir, 'gate.yaml', 'hist-res', 'renamed-res');
+      const result = renameResource(dirLocation(dir, 'gate.yaml'), 'hist-res', 'renamed-res');
       expect(result.success).toBe(true);
 
-      const history = loadHistory(result.newDir!);
-      expect(history?.resource_id).toBe('renamed-res');
+      const ref = { resourceType: 'gate' as const, resourceId: 'hist-res' };
+      expect(loadHistory(result.newPath!, ref)?.versions).toHaveLength(1);
+    });
+
+    it("points a renamed chain's own step references at the new id", () => {
+      // `chain/step` and `chain_other/step` differ in one identifier: only the first is below the
+      // renamed chain. `step` is a top-level prompt of the same name as the step.
+      const dir = join(tempDir, 'chain');
+      writeResource(
+        dir,
+        'prompt.yaml',
+        [
+          'id: chain',
+          'chainSteps:',
+          '  - promptId: chain/step',
+          '    stepName: Mine',
+          "  - promptId: 'chain/nested'",
+          '  - promptId: chain_other/step',
+          '  - promptId: step',
+        ].join('\n')
+      );
+      writeResource(join(dir, 'step'), 'prompt.yaml', 'id: step');
+      writeResource(
+        join(dir, 'nested'),
+        'prompt.yaml',
+        ['id: nested', 'chainSteps:', '  - promptId: chain/nested/leaf'].join('\n')
+      );
+      writeFileSync(join(dir, 'nested', 'leaf.yaml'), 'id: leaf\n', 'utf8');
+
+      const result = renameResource(dirLocation(dir, 'prompt.yaml'), 'chain', 'renamed');
+      expect(result.success).toBe(true);
+
+      const root = join(tempDir, 'renamed');
+      expect(readYaml(root, 'prompt.yaml')).toBe(
+        [
+          'id: renamed',
+          'chainSteps:',
+          '  - promptId: renamed/step',
+          '    stepName: Mine',
+          "  - promptId: 'renamed/nested'",
+          '  - promptId: chain_other/step',
+          '  - promptId: step',
+        ].join('\n')
+      );
+      expect(readYaml(join(root, 'nested'), 'prompt.yaml')).toContain(
+        'promptId: renamed/nested/leaf'
+      );
+      expect(readYaml(join(root, 'step'), 'prompt.yaml')).toBe('id: step');
+    });
+
+    it("rewrites a renamed step's own references and not its chain's", () => {
+      const chain = join(tempDir, 'chain');
+      writeResource(
+        chain,
+        'prompt.yaml',
+        ['id: chain', 'chainSteps:', '  - promptId: chain/step'].join('\n')
+      );
+      const step = join(chain, 'step');
+      writeResource(
+        step,
+        'prompt.yaml',
+        ['id: step', 'chainSteps:', '  - promptId: chain/step/leaf'].join('\n')
+      );
+
+      const result = renameResource(dirLocation(step, 'prompt.yaml'), 'chain/step', 'chain/moved');
+      expect(result.success).toBe(true);
+
+      expect(readYaml(join(chain, 'moved'), 'prompt.yaml')).toContain('promptId: chain/moved/leaf');
+      // Another resource's content: `cpm rename` reports it as a reference, it does not edit it.
+      expect(readYaml(chain, 'prompt.yaml')).toContain('promptId: chain/step');
     });
 
     it('errors when target directory exists', () => {
@@ -151,7 +261,7 @@ describe('resource-operations', () => {
       writeResource(dir, 'gate.yaml', 'id: source');
       mkdirSync(join(tempDir, 'target'));
 
-      const result = renameResource(dir, 'gate.yaml', 'source', 'target');
+      const result = renameResource(dirLocation(dir, 'gate.yaml'), 'source', 'target');
       expect(result.success).toBe(false);
       expect(result.error).toContain('already exists');
     });
@@ -160,7 +270,7 @@ describe('resource-operations', () => {
       const dir = join(tempDir, 'no-id');
       writeResource(dir, 'gate.yaml', 'name: No ID\ndescription: test');
 
-      const result = renameResource(dir, 'gate.yaml', 'no-id', 'new-id');
+      const result = renameResource(dirLocation(dir, 'gate.yaml'), 'no-id', 'new-id');
       expect(result.success).toBe(false);
       expect(result.error).toContain("No 'id' field");
     });
@@ -171,10 +281,14 @@ describe('resource-operations', () => {
       const dir = join(tempDir, 'my-complex_id');
       writeResource(dir, 'prompt.yaml', 'id: my-complex_id\nname: Test');
 
-      const result = renameResource(dir, 'prompt.yaml', 'my-complex_id', 'new-complex_id');
+      const result = renameResource(
+        dirLocation(dir, 'prompt.yaml'),
+        'my-complex_id',
+        'new-complex_id'
+      );
       expect(result.success).toBe(true);
 
-      const content = readYaml(result.newDir!, 'prompt.yaml');
+      const content = readYaml(result.newPath!, 'prompt.yaml');
       expect(content).toContain('id: new-complex_id');
       expect(content).not.toContain('my-complex_id');
     });
@@ -191,10 +305,10 @@ describe('resource-operations', () => {
         ].join('\n')
       );
 
-      const result = renameResource(dir, 'prompt.yaml', 'tricky', 'renamed');
+      const result = renameResource(dirLocation(dir, 'prompt.yaml'), 'tricky', 'renamed');
       expect(result.success).toBe(true);
 
-      const content = readYaml(result.newDir!, 'prompt.yaml');
+      const content = readYaml(result.newPath!, 'prompt.yaml');
       // Only the id field should change, not other occurrences
       expect(content).toContain('id: renamed');
       expect(content).toContain('name: A tricky prompt'); // Unchanged
@@ -205,11 +319,11 @@ describe('resource-operations', () => {
       const dir = join(tempDir, 'perms-test');
       writeResource(dir, 'prompt.yaml', 'id: perms-test\nname: Test');
 
-      const result = renameResource(dir, 'prompt.yaml', 'perms-test', 'new-perms');
+      const result = renameResource(dirLocation(dir, 'prompt.yaml'), 'perms-test', 'new-perms');
       expect(result.success).toBe(true);
 
       // Directory should still exist and be accessible
-      const stats = require('node:fs').statSync(result.newDir!);
+      const stats = require('node:fs').statSync(result.newPath!);
       expect(stats.isDirectory()).toBe(true);
     });
 
@@ -219,13 +333,13 @@ describe('resource-operations', () => {
       writeFileSync(join(dir, 'template.md'), '# Template content');
       writeFileSync(join(dir, 'extra.json'), '{"key": "value"}');
 
-      const result = renameResource(dir, 'prompt.yaml', 'multi-file', 'renamed-multi');
+      const result = renameResource(dirLocation(dir, 'prompt.yaml'), 'multi-file', 'renamed-multi');
       expect(result.success).toBe(true);
 
       // All files should be in new location
-      expect(existsSync(join(result.newDir!, 'prompt.yaml'))).toBe(true);
-      expect(existsSync(join(result.newDir!, 'template.md'))).toBe(true);
-      expect(existsSync(join(result.newDir!, 'extra.json'))).toBe(true);
+      expect(existsSync(join(result.newPath!, 'prompt.yaml'))).toBe(true);
+      expect(existsSync(join(result.newPath!, 'template.md'))).toBe(true);
+      expect(existsSync(join(result.newPath!, 'extra.json'))).toBe(true);
 
       // Old location completely gone
       expect(existsSync(dir)).toBe(false);
@@ -246,14 +360,19 @@ describe('resource-operations', () => {
         )
       );
 
-      const result = movePromptCategory(dir, 'prompt.yaml', 'my-prompt', 'tools', promptsBase);
+      const result = movePromptCategory(
+        dirLocation(dir, 'prompt.yaml'),
+        'my-prompt',
+        'tools',
+        promptsBase
+      );
 
       expect(result.success).toBe(true);
       expect(result.oldCategory).toBe('general');
-      expect(result.newDir).toBe(join(promptsBase, 'tools', 'my-prompt'));
+      expect(result.newPath).toBe(join(promptsBase, 'tools', 'my-prompt'));
       expect(existsSync(dir)).toBe(false);
 
-      const content = readYaml(result.newDir!, 'prompt.yaml');
+      const content = readYaml(result.newPath!, 'prompt.yaml');
       expect(content).toContain('category: tools');
       expect(content).toContain('# Comments preserved');
       expect(content).not.toContain('category: general');
@@ -265,8 +384,7 @@ describe('resource-operations', () => {
       writeResource(dir, 'prompt.yaml', 'id: my-prompt\ncategory: general');
 
       const result = movePromptCategory(
-        dir,
-        'prompt.yaml',
+        dirLocation(dir, 'prompt.yaml'),
         'my-prompt',
         'new-category',
         promptsBase
@@ -280,7 +398,12 @@ describe('resource-operations', () => {
       const dir = join(promptsBase, 'general', 'my-prompt');
       writeResource(dir, 'prompt.yaml', 'id: my-prompt\ncategory: general');
 
-      const result = movePromptCategory(dir, 'prompt.yaml', 'my-prompt', 'general', promptsBase);
+      const result = movePromptCategory(
+        dirLocation(dir, 'prompt.yaml'),
+        'my-prompt',
+        'general',
+        promptsBase
+      );
       expect(result.success).toBe(false);
       expect(result.error).toContain('already in category');
     });
@@ -290,7 +413,12 @@ describe('resource-operations', () => {
       const dir = join(promptsBase, 'general', 'no-cat');
       writeResource(dir, 'prompt.yaml', 'id: no-cat\nname: test');
 
-      const result = movePromptCategory(dir, 'prompt.yaml', 'no-cat', 'tools', promptsBase);
+      const result = movePromptCategory(
+        dirLocation(dir, 'prompt.yaml'),
+        'no-cat',
+        'tools',
+        promptsBase
+      );
       expect(result.success).toBe(false);
       expect(result.error).toContain("No 'category' field");
     });
@@ -307,7 +435,7 @@ describe('resource-operations', () => {
         ['id: method', 'enabled: true', '# Keep this comment'].join('\n')
       );
 
-      const result = toggleEnabled(dir, 'framework.yaml');
+      const result = toggleEnabled(join(dir, 'framework.yaml'));
 
       expect(result.success).toBe(true);
       expect(result.previousValue).toBe(true);
@@ -322,7 +450,7 @@ describe('resource-operations', () => {
       const dir = join(tempDir, 'method');
       writeResource(dir, 'framework.yaml', 'id: method\nenabled: false');
 
-      const result = toggleEnabled(dir, 'framework.yaml');
+      const result = toggleEnabled(join(dir, 'framework.yaml'));
 
       expect(result.success).toBe(true);
       expect(result.previousValue).toBe(false);
@@ -336,7 +464,7 @@ describe('resource-operations', () => {
       const dir = join(tempDir, 'no-enable');
       writeResource(dir, 'gate.yaml', 'id: no-enable\nname: test');
 
-      const result = toggleEnabled(dir, 'gate.yaml');
+      const result = toggleEnabled(join(dir, 'gate.yaml'));
       expect(result.success).toBe(false);
       expect(result.error).toContain("No 'enabled' field");
     });
@@ -347,7 +475,7 @@ describe('resource-operations', () => {
       const dir = join(tempDir, 'whitespace');
       writeResource(dir, 'framework.yaml', 'id: whitespace\nenabled: true   \nname: Test');
 
-      const result = toggleEnabled(dir, 'framework.yaml');
+      const result = toggleEnabled(join(dir, 'framework.yaml'));
       expect(result.success).toBe(true);
       expect(result.newValue).toBe(false);
     });
@@ -364,7 +492,7 @@ describe('resource-operations', () => {
         ].join('\n')
       );
 
-      const result = toggleEnabled(dir, 'framework.yaml');
+      const result = toggleEnabled(join(dir, 'framework.yaml'));
       expect(result.success).toBe(true);
 
       const content = readYaml(dir, 'framework.yaml');
@@ -380,7 +508,7 @@ describe('resource-operations', () => {
       const dir = join(tempDir, 'prompt');
       writeResource(dir, 'prompt.yaml', 'id: prompt\nname: Test\ncategory: general');
 
-      const result = linkGate(dir, 'prompt.yaml', 'code-quality');
+      const result = linkGate(join(dir, 'prompt.yaml'), 'code-quality');
 
       expect(result.success).toBe(true);
       expect(result.action).toBe('added');
@@ -399,7 +527,7 @@ describe('resource-operations', () => {
         ['id: prompt', 'gateConfiguration:', '  include:', '    - existing-gate'].join('\n')
       );
 
-      const result = linkGate(dir, 'prompt.yaml', 'new-gate');
+      const result = linkGate(join(dir, 'prompt.yaml'), 'new-gate');
 
       expect(result.success).toBe(true);
       expect(result.include).toEqual(['existing-gate', 'new-gate']);
@@ -413,7 +541,7 @@ describe('resource-operations', () => {
         ['id: prompt', 'gateConfiguration:', '  include:', '    - code-quality'].join('\n')
       );
 
-      const result = linkGate(dir, 'prompt.yaml', 'code-quality');
+      const result = linkGate(join(dir, 'prompt.yaml'), 'code-quality');
       expect(result.success).toBe(false);
       expect(result.error).toContain('already linked');
     });
@@ -428,7 +556,7 @@ describe('resource-operations', () => {
         )
       );
 
-      const result = linkGate(dir, 'prompt.yaml', 'gate-a', true);
+      const result = linkGate(join(dir, 'prompt.yaml'), 'gate-a', true);
 
       expect(result.success).toBe(true);
       expect(result.action).toBe('removed');
@@ -443,7 +571,7 @@ describe('resource-operations', () => {
         ['id: prompt', 'gateConfiguration:', '  include:', '    - only-gate'].join('\n')
       );
 
-      const result = linkGate(dir, 'prompt.yaml', 'only-gate', true);
+      const result = linkGate(join(dir, 'prompt.yaml'), 'only-gate', true);
 
       expect(result.success).toBe(true);
       expect(result.include).toEqual([]);
@@ -456,9 +584,53 @@ describe('resource-operations', () => {
       const dir = join(tempDir, 'prompt');
       writeResource(dir, 'prompt.yaml', 'id: prompt\ncategory: general');
 
-      const result = linkGate(dir, 'prompt.yaml', 'missing-gate', true);
+      const result = linkGate(join(dir, 'prompt.yaml'), 'missing-gate', true);
       expect(result.success).toBe(false);
       expect(result.error).toContain('not linked');
+    });
+  });
+
+  // ── Single-file form ──────────────────────────────────────────────────
+
+  describe('a single-file prompt', () => {
+    const fileLocation = (file: string): ResourceLocation => ({ form: 'file', file });
+
+    it('is rooted at its file and declares its basename', () => {
+      const file = join(tempDir, 'general', 'solo.yaml');
+      expect(resourceRoot(fileLocation(file))).toBe(file);
+      expect(declaredResourceId(fileLocation(file))).toBe('solo');
+    });
+
+    it('a nested directory step declares only its last segment', () => {
+      const dir = join(tempDir, 'general', 'chain', 'step');
+      expect(declaredResourceId(dirLocation(dir, 'prompt.yaml'))).toBe('step');
+    });
+
+    it('rolls a failed mutation back to the file, not its directory', () => {
+      const category = join(tempDir, 'general');
+      mkdirSync(category, { recursive: true });
+      const file = join(category, 'solo.yaml');
+      writeFileSync(file, 'id: solo\ncategory: general\n', 'utf8');
+      writeFileSync(join(category, 'sibling.yaml'), 'id: sibling\n', 'utf8');
+
+      const result = runValidatedMutation({
+        resourceType: 'prompts',
+        location: fileLocation(file),
+        mutate: () => renameResource(fileLocation(file), 'solo', 'renamed'),
+        validator: (resourceType, resourceId, filePath) => ({
+          valid: false,
+          resourceType,
+          resourceId,
+          filePath,
+          errors: [{ code: 'schema_validation_error', path: 'id', message: 'forced' }],
+          warnings: [],
+        }),
+      });
+
+      expect(result.rolledBack).toBe(true);
+      expect(readFileSync(file, 'utf8')).toBe('id: solo\ncategory: general\n');
+      expect(existsSync(join(category, 'renamed.yaml'))).toBe(false);
+      expect(existsSync(join(category, 'sibling.yaml'))).toBe(true);
     });
   });
 });

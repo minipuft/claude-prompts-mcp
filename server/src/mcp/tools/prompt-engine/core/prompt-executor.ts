@@ -363,10 +363,6 @@ export class PromptExecutor {
     this.lightweightGateSystem.setGateStateStore(gateStateStore, this.workspaceScope);
   }
 
-  getLightweightGateSystem(): LightweightGateSystem {
-    return this.lightweightGateSystem;
-  }
-
   getGateGuidanceRenderer(): GateGuidanceRenderer {
     return this.gateGuidanceRenderer;
   }

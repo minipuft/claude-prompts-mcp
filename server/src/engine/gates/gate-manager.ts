@@ -137,21 +137,6 @@ export class GateManager
   // ============================================================================
 
   /**
-   * Set the gate system state manager for synchronization
-   */
-  setStateManager(stateManager: GateStateStore): void {
-    this.stateManager = stateManager;
-    this.logger.debug('GateStateStore synchronized with GateManager');
-  }
-
-  /**
-   * Check if the gate system is enabled
-   */
-  isGateSystemEnabled(): boolean {
-    return this.isSystemEnabled();
-  }
-
-  /**
    * Select gates based on context criteria
    *
    * This is the primary method for getting gates that should be applied

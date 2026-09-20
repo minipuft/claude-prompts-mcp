@@ -71,13 +71,6 @@ export class TemplateEnhancer {
       },
     };
   }
-
-  /**
-   * Update enhancer configuration
-   */
-  updateConfig(config: Partial<TemplateEnhancerConfig>): void {
-    this.config = { ...this.config, ...config };
-  }
 }
 
 /**

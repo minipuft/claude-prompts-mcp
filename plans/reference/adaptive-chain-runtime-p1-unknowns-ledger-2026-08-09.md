@@ -82,30 +82,40 @@ Zero drift across 10 targets; no shims. Corrections Phase 3 carries:
 
 ### Tier 2: Request plumbing — gate: `npm run typecheck`
 
-| 4 | src/mcp/tools/prompt-engine/core/prompt-executor.ts | Include args.observations in McpToolRequest build (:437-447 region) | +5 | 1,2 | rg single build site |
-| 5 | McpToolRequest type (pin via `rg "interface McpToolRequest" src/`) | `observations?: UnknownObservation[]` | +5 | 1 | typecheck |
-| 6 | stages/01-request-normalization-stage.ts | Confirm validator passes param through (expected no-op; allowance only if it rejects unknown keys) | +0-5 | 5 | integration reaches stage 16 |
+| #   | File                                                               | Change                                                                                             | ~Lines | Depends | Verify                       |
+| --- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- | ------ | ------- | ---------------------------- |
+| 4   | src/mcp/tools/prompt-engine/core/prompt-executor.ts                | Include args.observations in McpToolRequest build (:437-447 region)                                | +5     | 1,2     | rg single build site         |
+| 5   | McpToolRequest type (pin via `rg "interface McpToolRequest" src/`) | `observations?: UnknownObservation[]`                                                              | +5     | 1       | typecheck                    |
+| 6   | stages/01-request-normalization-stage.ts                           | Confirm validator passes param through (expected no-op; allowance only if it rejects unknown keys) | +0-5   | 5       | integration reaches stage 16 |
 
 ### Tier 3: Ledger service + persistence — gate: `npm run typecheck && npm test -- --testPathPattern="unknown"`
 
-| 7 | **NEW** src/engine/execution/capture/unknown-observation-processor.ts | Processor class: pure transition validation + manager call; invalid → tool-result error | +120 | 1 | unit transition matrix |
-| 8 | src/modules/chains/manager.ts | Implement applyUnknownObservations (mutate → await saveSessions → throw; posture of updateSessionState :829); add `unknowns_ledger` in getChainContext (:1118-1139, non-empty only) | +60 | 1 | persistence + awaited-throw tests |
+| #   | File                                                                  | Change                                                                                                                                                                              | ~Lines | Depends | Verify                            |
+| --- | --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------- | --------------------------------- |
+| 7   | **NEW** src/engine/execution/capture/unknown-observation-processor.ts | Processor class: pure transition validation + manager call; invalid → tool-result error                                                                                             | +120   | 1       | unit transition matrix            |
+| 8   | src/modules/chains/manager.ts                                         | Implement applyUnknownObservations (mutate → await saveSessions → throw; posture of updateSessionState :829); add `unknowns_ledger` in getChainContext (:1118-1139, non-empty only) | +60    | 1       | persistence + awaited-throw tests |
 
 ### Tier 4: Pipeline wiring — gate: `npm run typecheck && npm run build && npm run verify:mcp`
 
-| 9 | stages/16-response-capture-stage.ts | After verdict processing (~:99-130): read observations → processor.apply(); stage stays thin | +15 | 7,8 | integration: request → ledger entry |
-| 10 | Processor construction site (pin via `rg "new StepCaptureService" src/`) | DI: processor with ChainSessionService + logger into stage 16 | +10 | 7 | clean boot |
+| #   | File                                                                     | Change                                                                                       | ~Lines | Depends | Verify                              |
+| --- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- | ------ | ------- | ----------------------------------- |
+| 9   | stages/16-response-capture-stage.ts                                      | After verdict processing (~:99-130): read observations → processor.apply(); stage stays thin | +15    | 7,8     | integration: request → ledger entry |
+| 10  | Processor construction site (pin via `rg "new StepCaptureService" src/`) | DI: processor with ChainSessionService + logger into stage 16                                | +10    | 7       | clean boot                          |
 
 ### Tier 5: Context rendering — gate: `npm run typecheck && npm run lint:ratchet`
 
-| 11 | src/engine/execution/operators/chain-operator-executor.ts | `buildUnknownsSection` beside buildOriginalIntentSection (:684); called at renderNormalStep (~~:396) + renderGateReviewStep (~~:144); active-blocking first, resolved compact | +45 | 8 | response text contains/omits section correctly |
+| #   | File                                                      | Change                                                                                                                                                                        | ~Lines | Depends | Verify                                         |
+| --- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------- | ---------------------------------------------- |
+| 11  | src/engine/execution/operators/chain-operator-executor.ts | `buildUnknownsSection` beside buildOriginalIntentSection (:684); called at renderNormalStep (~~:396) + renderGateReviewStep (~~:144); active-blocking first, resolved compact | +45    | 8       | response text contains/omits section correctly |
 
 ### Tier 6: Tests, docs, changelog — final gate below
 
-| 12 | **NEW** tests/integration/execution/unknown-ledger-lifecycle.test.ts | Full success-signal drive + invalid-resolve error + persistence across re-read | +180 | 9,11 | test:integration; fails if section removed |
-| 13 | tests/e2e/mcp-server-smoke.test.ts | Assert observations advertised in prompt_engine inputSchema | +10 | 3 | test:ci |
-| 14 | docs/reference/mcp-tools.md + docs/concepts/chains-lifecycle.md | Param + lifecycle + context section | +30 | 11 | docs match driven behavior |
-| 15 | CHANGELOG.md | Unreleased → Added | +2 | 14 | changelog lint |
+| #   | File                                                                 | Change                                                                         | ~Lines | Depends | Verify                                     |
+| --- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------ | ------- | ------------------------------------------ |
+| 12  | **NEW** tests/integration/execution/unknown-ledger-lifecycle.test.ts | Full success-signal drive + invalid-resolve error + persistence across re-read | +180   | 9,11    | test:integration; fails if section removed |
+| 13  | tests/e2e/mcp-server-smoke.test.ts                                   | Assert observations advertised in prompt_engine inputSchema                    | +10    | 3       | test:ci                                    |
+| 14  | docs/reference/mcp-tools.md + docs/concepts/chains-lifecycle.md      | Param + lifecycle + context section                                            | +30    | 11      | docs match driven behavior                 |
+| 15  | CHANGELOG.md                                                         | Unreleased → Added                                                             | +2     | 14      | changelog lint                             |
 
 **Final gate**: `npm run typecheck && npm run lint:ratchet && npm run typecheck:tests:ratchet && npm run test:ci && npm run validate:arch` — then drive the new path live: `verify:mcp` + one real chain run submitting observations (surface-check ≠ end-to-end; verify:mcp has passed structurally-dead builds).
 

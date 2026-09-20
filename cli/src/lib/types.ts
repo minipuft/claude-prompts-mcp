@@ -4,6 +4,8 @@
  * Extracted from list.ts and inspect.ts to eliminate duplication.
  */
 
+import type { HistoryResourceRef } from '@cli-shared/version-history.js';
+
 export type ResourceType = 'prompts' | 'gates' | 'frameworks' | 'styles';
 
 /**
@@ -77,7 +79,7 @@ export function isVersionedType(
 /**
  * Singular display name for a resource type.
  */
-const SINGULAR: Record<ResourceType, string> = {
+const SINGULAR: Record<ResourceType, HistoryResourceRef['resourceType']> = {
   prompts: 'prompt',
   gates: 'gate',
   frameworks: 'framework',
@@ -86,4 +88,14 @@ const SINGULAR: Record<ResourceType, string> = {
 
 export function singularName(type: ResourceType): string {
   return SINGULAR[type];
+}
+
+/**
+ * The `version_history` key for a resource: its singular type and the id it is served under.
+ *
+ * Passed to every history call so the id is the composite one the server records
+ * (`chain/step`), not a guess from the path's last segment.
+ */
+export function historyRef(type: ResourceType, id: string): HistoryResourceRef {
+  return { resourceType: SINGULAR[type], resourceId: id };
 }

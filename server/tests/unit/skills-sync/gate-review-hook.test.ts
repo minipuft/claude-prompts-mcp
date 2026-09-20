@@ -21,8 +21,8 @@ describe('gate-review hook command path', () => {
   };
 
   it('resolves an absolute path for user scope', () => {
-    expect(resolveHookCommandPath(userPlacement, 'strategicImplement')).toBe(
-      '/home/dev/.claude/skills/strategicImplement/hooks/gate-review.py'
+    expect(resolveHookCommandPath(userPlacement, 'strategic_implement')).toBe(
+      '/home/dev/.claude/skills/strategic_implement/hooks/gate-review.py'
     );
   });
 
@@ -30,7 +30,7 @@ describe('gate-review hook command path', () => {
     // A hook command runs in the session's current directory and gets no
     // ${CLAUDE_SKILL_DIR} substitution, so a relative path resolves against
     // whatever directory the user happened to be in.
-    const command = resolveHookCommandPath(userPlacement, 'strategicImplement');
+    const command = resolveHookCommandPath(userPlacement, 'strategic_implement');
     expect(command.startsWith('/')).toBe(true);
     expect(command).not.toMatch(/^\.{1,2}\//);
   });
@@ -42,10 +42,10 @@ describe('gate-review hook command path', () => {
         scope: 'project',
         projectRelativeDir: '.claude/skills',
       },
-      'strategicImplement'
+      'strategic_implement'
     );
     expect(command).toBe(
-      '${CLAUDE_PROJECT_DIR}/.claude/skills/strategicImplement/hooks/gate-review.py'
+      '${CLAUDE_PROJECT_DIR}/.claude/skills/strategic_implement/hooks/gate-review.py'
     );
     // The exporting machine's absolute path must not leak into a committed skill.
     expect(command).not.toContain('/machine/specific/path');

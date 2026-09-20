@@ -3,6 +3,8 @@ import { existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, rmdir, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 
+import { overlayDecidedYamlKeys } from '../../shared/yaml-key-overlay.js';
+
 import type { ConfigManager, Logger } from '#shared/types/index.js';
 import type { FileContentChange } from '../../resource-manager/prompt/analysis/object-diff-generator.js';
 import type { CategoryCreationData } from '../core/types.js';
@@ -44,6 +46,21 @@ export const PRESERVED_CATEGORY_YAML_KEYS = CATEGORY_YAML_DECLARED_KEYS.filter(
 );
 
 export { CATEGORY_YAML_PROJECTED_KEYS };
+
+/**
+ * Every `category.yaml` key a category write decides (P4.67) — the projected keys
+ * `buildCategoryYaml` always writes plus the preserved keys `resolvePreservedCategoryYamlFields`
+ * resolves from the call or the file. For `category.yaml` that is every key `CATEGORY_YAML_DECLARED_KEYS`
+ * names, since there is no excluded set here as there is for gates' `guidance`.
+ *
+ * `CategorySchema` has no `.passthrough()` call, but its default Zod parse mode already strips an
+ * unrecognized key without failing validation, so a hand-authored `category.yaml` may carry one
+ * and `validateCategorySchema` will not refuse it. `buildCategoryYaml`'s output holds no value for
+ * such a key, and BEFORE `overlayDecidedYamlKeys` was introduced here, a document rebuilt from
+ * that output alone dropped it on every write — the same shape already fixed for prompts (P4.57)
+ * and gates (this row).
+ */
+const CATEGORY_YAML_DECIDED_KEYS: ReadonlySet<string> = new Set(CATEGORY_YAML_DECLARED_KEYS);
 
 /**
  * Decide what each preserved key should carry into the rewritten YAML: an explicitly supplied
@@ -316,7 +333,14 @@ export class CategoryFileWriter {
       files: [
         {
           relativePath: CATEGORY_YAML_FILENAME,
-          content: serializeYaml(this.buildCategoryYaml(data, existingYaml), { sortKeys: false }),
+          content: serializeYaml(
+            overlayDecidedYamlKeys(
+              existingYaml,
+              this.buildCategoryYaml(data, existingYaml),
+              CATEGORY_YAML_DECIDED_KEYS
+            ),
+            { sortKeys: false }
+          ),
         },
       ],
     };

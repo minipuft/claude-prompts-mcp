@@ -1,16 +1,25 @@
 /**
- * Config Operations — Pure file operations for config.json management.
+ * Config Operations — Pure file operations for the workspace config file.
  *
- * Uses only node:fs and node:path. No runtime dependencies.
+ * Uses node:fs, node:path and `jsonc-parser`. No runtime dependencies.
  *
  * THE ONE FILE-SHAPE WRITER
  * `SafeConfigWriter` (mcp/tools/config-utils.ts) used to carry a second implementation of
  * read → set one dotted key → write, and its "read" was `configManager.getConfig()` — the
  * RESOLVED runtime object, not the file. Persisting that wrote back defaults nobody typed and
  * dropped whatever the loader does not map (`hooks`), so a one-key toggle rewrote the operator's
- * whole config.json. `SafeConfigWriter` now composes the functions below instead; this file is
+ * whole config file. `SafeConfigWriter` now composes the functions below instead; this file is
  * where the document shape is read, mutated and written, and the only thing above it is the
  * schema check and the reload.
+ *
+ * TWO NAMES, TWO DIALECTS, ONE EDITOR
+ * A workspace's config is `config.jsonc` or `config.json` — the first wins where both are
+ * readable, and holding both is refused rather than guessed at. Every write to a file the user
+ * already owns edits that file's TEXT in place (`jsonc-parser`), never re-serializes a parsed
+ * document: a re-serialized `.jsonc` loses every comment the operator wrote, and a re-serialized
+ * `.json` loses their blank lines and indentation. JSON is a subset of JSONC, so one editor
+ * covers both. Whole-document writes survive only where there is no document yet to preserve —
+ * create and reset.
  */
 
 import {
@@ -22,8 +31,11 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 
+import { applyEdits, modify, type FormattingOptions } from 'jsonc-parser';
+
+import { CONFIG_JSONC_TEMPLATE } from './_generated/config-template.js';
 import {
   CONFIG_KEY_TABLE,
   CONFIG_RESTART_REQUIRED_KEYS,
@@ -32,6 +44,13 @@ import {
   type ConfigKey,
   type ConfigLeafRule,
 } from './config-input-validator.js';
+
+import {
+  USER_CONFIG_FILENAMES,
+  configFileFormat,
+  findWorkspaceConfigFiles,
+  parseConfigText,
+} from '#shared/utils/config-file-format.js';
 
 // ── Result types ─────────────────────────────────────────────────────────────
 
@@ -60,6 +79,14 @@ export interface ConfigInitResult {
   message: string;
 }
 
+export interface ConfigResetResult {
+  success: boolean;
+  configPath: string;
+  backupPath?: string;
+  message: string;
+  error?: string;
+}
+
 export interface ConfigValidationResult {
   valid: boolean;
   errors: string[];
@@ -76,8 +103,51 @@ export interface ConfigKeyInfo {
 
 // ── Path resolution ──────────────────────────────────────────────────────────
 
+/**
+ * The config file a workspace operation acts on.
+ *
+ * Precedence is `config.jsonc` then `config.json`, first existing wins. With NEITHER present the
+ * `config.jsonc` path comes back — the name a create would write — so a caller that reports
+ * "not found" names the file it would have made rather than the older spelling.
+ */
 export function resolveConfigPath(workspace: string): string {
-  return join(resolve(workspace), 'config.json');
+  const workspaceDir = resolve(workspace);
+  return findWorkspaceConfigFiles(workspaceDir)[0] ?? join(workspaceDir, USER_CONFIG_FILENAMES[0]);
+}
+
+/**
+ * THE ONE PLACE that decides a directory holds two configs.
+ *
+ * Both names present means two documents claim to be the config and nothing on disk says which
+ * the server read — so a precedence pick would silently edit one file while the operator watched
+ * the other. Every read and write below asks this first, which is why the refusal reads the same
+ * from `cpm config set`, from a `system_control` toggle, and from `cpm init`.
+ *
+ * @param dir - Directory that may hold config files
+ * @returns The refusal message naming both paths, or `undefined` when at most one name exists
+ */
+function ambiguousConfigError(dir: string): string | undefined {
+  const present = findWorkspaceConfigFiles(dir);
+  if (present.length < 2) {
+    return undefined;
+  }
+  return (
+    `Two config files in one directory: ${present.join(' and ')}. ` +
+    `Keep one — ${USER_CONFIG_FILENAMES[0]} is the 5.0 name, ${USER_CONFIG_FILENAMES[1]} is still read.`
+  );
+}
+
+/**
+ * The same refusal, asked of a FILE the caller already holds.
+ *
+ * Only a path that names a workspace config can be ambiguous. A file the operator named
+ * themselves (`MCP_CONFIG_PATH=/etc/server-a.json`) is the one they meant, whatever else happens
+ * to sit in that directory — refusing it would be answering a question nobody asked.
+ */
+function ambiguousConfigErrorForFile(configPath: string): string | undefined {
+  const name = basename(configPath);
+  const isWorkspaceConfigName = USER_CONFIG_FILENAMES.some((candidate) => candidate === name);
+  return isWorkspaceConfigName ? ambiguousConfigError(dirname(configPath)) : undefined;
 }
 
 // ── Read ─────────────────────────────────────────────────────────────────────
@@ -93,23 +163,31 @@ export function readConfig(workspace: string): ConfigReadResult {
  * operator never typed.
  */
 export function readConfigFile(configPath: string): ConfigReadResult {
+  const ambiguity = ambiguousConfigErrorForFile(configPath);
+  if (ambiguity !== undefined) {
+    return { success: false, configPath, error: ambiguity };
+  }
+
   if (!existsSync(configPath)) {
     return {
       success: false,
       configPath,
-      error: `config.json not found at ${configPath}`,
+      error: `${basename(configPath)} not found at ${configPath}`,
     };
   }
 
   try {
     const content = readFileSync(configPath, 'utf8');
-    const config = JSON.parse(content) as Record<string, unknown>;
+    const config = parseConfigText(content, configFileFormat(configPath)) as Record<
+      string,
+      unknown
+    >;
     return { success: true, config, configPath };
   } catch (error) {
     return {
       success: false,
       configPath,
-      error: `Failed to parse config.json: ${error}`,
+      error: `Failed to parse ${basename(configPath)}: ${error}`,
     };
   }
 }
@@ -163,7 +241,7 @@ export function setConfigValueAtPath(
     return {
       success: false,
       key,
-      message: readResult.error ?? 'Failed to read config.json',
+      message: readResult.error ?? `Failed to read ${basename(configPath)}`,
       error: readResult.error,
     };
   }
@@ -173,20 +251,17 @@ export function setConfigValueAtPath(
   // Get previous value
   const previousValue = getConfigValue(config, key);
 
-  // Apply change via deep-set
-  const updatedConfig = applyConfigChange(config, key, validation.convertedValue);
-
   // Create backup
   const backupPath = backupConfig(configPath);
 
-  // Write atomically
+  // Write atomically, editing only this key's own characters
   try {
-    writeConfigAtomic(configPath, updatedConfig);
+    writeConfigKeyAtomic(configPath, key, validation.convertedValue);
   } catch (error) {
     return {
       success: false,
       key,
-      message: `Failed to write config.json: ${error}`,
+      message: `Failed to write ${basename(configPath)}: ${error}`,
       backupPath,
       error: String(error),
     };
@@ -207,15 +282,58 @@ export function setConfigValueAtPath(
 
 // ── Atomic write ─────────────────────────────────────────────────────────────
 
-export function writeConfigAtomic(configPath: string, config: Record<string, unknown>): void {
+/**
+ * Indentation for text the editor INSERTS. Existing lines keep whatever the operator gave them —
+ * `jsonc-parser` formats only the region it rewrites — so a file indented with four spaces stays
+ * that way everywhere the edit does not reach.
+ */
+const CONFIG_EDIT_FORMATTING: FormattingOptions = {
+  tabSize: 2,
+  insertSpaces: true,
+  eol: '\n',
+};
+
+/**
+ * Write `configPath` with exactly one dotted key changed and nothing else re-rendered.
+ *
+ * The edit is computed against the file's TEXT, so comments, key order, blank lines and every
+ * untouched line's formatting survive a `set` — the whole reason a `.jsonc` config is worth
+ * offering. Setting a key that exists only as a commented-out example inserts the live key and
+ * leaves the comment where it is; nothing here tries to uncomment anything.
+ *
+ * Both dialects go through the same editor: JSON is a subset of JSONC, and re-serializing a
+ * `.json` document would still reflow a file the operator formatted by hand.
+ *
+ * @param configPath - Config file that already exists on disk
+ * @param key - Dotted key path, e.g. `gates.enabled`
+ * @param value - Value to write at that path
+ * @throws {Error} When the file cannot be read, or the edited text does not parse
+ */
+export function writeConfigKeyAtomic(configPath: string, key: string, value: unknown): void {
+  const original = readFileSync(configPath, 'utf8');
+  const edits = modify(original, key.split('.'), value, {
+    formattingOptions: CONFIG_EDIT_FORMATTING,
+  });
+  writeConfigTextAtomic(configPath, applyEdits(original, edits));
+}
+
+/**
+ * Write config TEXT through a temp file and a rename, refusing to publish text that does not
+ * parse in the destination's dialect. The check reads the temp file back rather than the string
+ * in hand, so it measures the bytes that are about to become the config.
+ *
+ * @param configPath - Destination path; its extension decides the dialect checked
+ * @param text - Complete file contents to write
+ * @throws {Error} When the write fails or the written text does not parse
+ */
+function writeConfigTextAtomic(configPath: string, text: string): void {
   const tempPath = `${configPath}.tmp`;
 
   try {
-    const configJson = JSON.stringify(config, null, 2) + '\n';
-    writeFileSync(tempPath, configJson, 'utf8');
+    writeFileSync(tempPath, text, 'utf8');
 
-    // Verify the written file is valid JSON
-    JSON.parse(readFileSync(tempPath, 'utf8'));
+    // Verify the written file parses as the format the destination name declares
+    parseConfigText(readFileSync(tempPath, 'utf8'), configFileFormat(configPath));
 
     // Atomic rename
     renameSync(tempPath, configPath);
@@ -232,8 +350,26 @@ export function writeConfigAtomic(configPath: string, config: Record<string, unk
   }
 }
 
+/**
+ * Write a whole config DOCUMENT, replacing whatever text was there.
+ *
+ * Only for a file with nothing to preserve — a create, or a reset the operator asked for. A
+ * change to a config the operator already owns goes through {@link writeConfigKeyAtomic}, which
+ * keeps their comments and formatting.
+ */
+export function writeConfigAtomic(configPath: string, config: Record<string, unknown>): void {
+  writeConfigTextAtomic(configPath, JSON.stringify(config, null, 2) + '\n');
+}
+
 // ── Backup ───────────────────────────────────────────────────────────────────
 
+/**
+ * Copy the config beside itself, timestamped.
+ *
+ * The backup name keeps the whole source name including its extension
+ * (`config.jsonc.backup.1758…`), so restoring it is a copy back onto a path whose dialect still
+ * matches its bytes — a `.jsonc` backup can never land as a `.json` file a strict reader rejects.
+ */
 export function backupConfig(configPath: string): string {
   const backupPath = `${configPath}.backup.${Date.now()}`;
   copyFileSync(configPath, backupPath);
@@ -256,9 +392,11 @@ export function backupConfig(configPath: string): string {
  * generated or hand-edited — holds only OVERRIDES. So this generator produces exactly what the
  * shipped `server/config.json` holds: the two document-level keys that decide how the file is
  * READ (`$schema` for editor validation, `version` for the loader's shape routing), and nothing a
- * setting could drift from. `initConfig` below still writes this to disk — a fresh workspace still
- * needs a `config.json` a reader can find (`runtime/startup.ts` refuses a package root with none)
- * — it is just no longer a restatement of defaults an operator never typed.
+ * setting could drift from. A fresh workspace still needs a config file a reader can find
+ * (`runtime/startup.ts` refuses a package root with none) — it is just no longer a restatement of
+ * defaults an operator never typed. `initConfig` writes the commented template instead, whose
+ * live members are these same two keys; this document is what a reset of a plain `config.json`
+ * writes, and what the schema validator pins the template against.
  */
 export function generateDefaultConfig(): Record<string, unknown> {
   return {
@@ -269,16 +407,30 @@ export function generateDefaultConfig(): Record<string, unknown> {
 
 // ── Workspace config init ────────────────────────────────────────────────────
 
+/**
+ * Create a workspace config a user can edit.
+ *
+ * What lands is the generated template verbatim: `$schema` and `version` live, every setting
+ * beneath them commented out with its description and default. An existing config of EITHER name
+ * is left alone — a file the operator wrote outranks a file we would like them to have — and the
+ * message says which name was found, so "skipped" is never ambiguous about what it skipped.
+ */
 export function initConfig(targetPath: string): ConfigInitResult {
   const resolvedPath = resolve(targetPath);
-  const configPath = join(resolvedPath, 'config.json');
+  const configPath = join(resolvedPath, USER_CONFIG_FILENAMES[0]);
 
-  if (existsSync(configPath)) {
+  const ambiguity = ambiguousConfigError(resolvedPath);
+  if (ambiguity !== undefined) {
+    return { success: false, created: false, configPath, message: ambiguity };
+  }
+
+  const existing = findWorkspaceConfigFiles(resolvedPath)[0];
+  if (existing !== undefined) {
     return {
       success: true,
       created: false,
-      configPath,
-      message: 'config.json already exists, skipped',
+      configPath: existing,
+      message: `${basename(existing)} already exists, skipped`,
     };
   }
 
@@ -289,24 +441,72 @@ export function initConfig(targetPath: string): ConfigInitResult {
   }
 
   try {
-    const config = generateDefaultConfig();
-    const configJson = JSON.stringify(config, null, 2) + '\n';
-    writeFileSync(configPath, configJson, 'utf8');
+    writeConfigTextAtomic(configPath, CONFIG_JSONC_TEMPLATE);
 
     return {
       success: true,
       created: true,
       configPath,
-      message: `Created config.json at ${configPath}`,
+      message: `Created ${basename(configPath)} at ${configPath}`,
     };
   } catch (error) {
     return {
       success: false,
       created: false,
       configPath,
-      message: `Failed to create config.json: ${error}`,
+      message: `Failed to create ${basename(configPath)}: ${error}`,
     };
   }
+}
+
+// ── Workspace config reset ───────────────────────────────────────────────────
+
+/**
+ * Replace a workspace's config with a fresh default, backing up whatever was there.
+ *
+ * The existing file's NAME is kept — a reset is not a migration, and renaming someone's
+ * `config.json` out from under a tool that points at it would break more than it tidies. So a
+ * `config.jsonc` (or a workspace with no config at all) gets the commented template, and a
+ * `config.json` gets the minimal default document. Exactly one config file exists afterwards,
+ * under the same name as before.
+ *
+ * @param workspace - Workspace directory
+ * @returns Which file was written, where its backup went, and what to tell the user
+ */
+export function resetConfig(workspace: string): ConfigResetResult {
+  const workspaceDir = resolve(workspace);
+  const configPath = resolveConfigPath(workspaceDir);
+
+  const ambiguity = ambiguousConfigError(workspaceDir);
+  if (ambiguity !== undefined) {
+    return { success: false, configPath, message: ambiguity, error: ambiguity };
+  }
+
+  // Nothing to back up when the workspace has no config yet
+  const backupPath = existsSync(configPath) ? backupConfig(configPath) : undefined;
+
+  try {
+    if (configFileFormat(configPath) === 'jsonc') {
+      writeConfigTextAtomic(configPath, CONFIG_JSONC_TEMPLATE);
+    } else {
+      writeConfigAtomic(configPath, generateDefaultConfig());
+    }
+  } catch (error) {
+    return {
+      success: false,
+      configPath,
+      ...(backupPath !== undefined ? { backupPath } : {}),
+      message: `Failed to reset ${basename(configPath)}: ${error}`,
+      error: String(error),
+    };
+  }
+
+  return {
+    success: true,
+    configPath,
+    ...(backupPath !== undefined ? { backupPath } : {}),
+    message: `${basename(configPath)} reset to defaults`,
+  };
 }
 
 // ── Config validation ────────────────────────────────────────────────────────
@@ -316,7 +516,7 @@ export function validateConfig(workspace: string): ConfigValidationResult {
   if (!readResult.success || !readResult.config) {
     return {
       valid: false,
-      errors: [readResult.error ?? 'Failed to read config.json'],
+      errors: [readResult.error ?? `Failed to read ${basename(resolveConfigPath(workspace))}`],
       warnings: [],
     };
   }
@@ -441,9 +641,9 @@ function describeLeaf(rule: ConfigLeafRule): { type: ConfigKeyInfo['type']; desc
 /**
  * A copy of `config` with exactly one dotted key set, creating intermediate objects as needed.
  *
- * Every other key survives, and so does key ORDER: `JSON.parse` preserves insertion order for
- * non-numeric keys, assigning an existing key leaves it where it was, and a genuinely new section
- * lands at the end. A reader diffing their config.json after a toggle sees one line change.
+ * This produces the CANDIDATE document a caller validates before committing to a write; it is not
+ * what reaches disk. The file itself is edited as text ({@link writeConfigKeyAtomic}), because a
+ * document re-serialized from here would carry none of the operator's comments or spacing.
  */
 export function applyConfigChange(
   config: Record<string, unknown>,

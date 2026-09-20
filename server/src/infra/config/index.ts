@@ -57,6 +57,7 @@ import {
   type ConfigManager,
   type GateSystemSettings,
 } from '#shared/types/index.js';
+import { configFileFormat, parseConfigText } from '#shared/utils/config-file-format.js';
 import { DEFAULT_FRAMEWORK_ID } from '#shared/utils/constants.js';
 // Removed: ToolDescriptionLoader import to break circular dependency
 // Now injected via dependency injection pattern
@@ -227,13 +228,17 @@ const DEFAULT_GATES_SECTION: Config['gates'] = {
 /**
  * Parses the config file into a plain object, or throws.
  *
+ * Parsed by `configPath`'s extension — `.jsonc` tolerant of comments and a trailing comma,
+ * everything else strict `JSON.parse` — so the dialect a workspace file is read in follows its
+ * name rather than this loader guessing.
+ *
  * A top-level JSON value that is not an object (`[]`, `"text"`, `5`) is a broken config, not a
  * config with odd keys: it is rejected here, loudly, so `loadConfig`'s catch reports the path and
  * serves the defaults — rather than the old unchecked-cast path, which wrote properties onto a
  * primitive and produced a TypeError from somewhere further in.
  */
 function parseConfigRecord(content: string, configPath: string): Record<string, unknown> {
-  const parsed: unknown = JSON.parse(content);
+  const parsed: unknown = parseConfigText(content, configFileFormat(configPath));
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw new Error(`${configPath} must hold a JSON object at its top level.`);
   }
@@ -1289,8 +1294,8 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
     }
 
     parts.push(
-      'Rewrite config.json in the 5.0 spellings with "version": 5 and it is read as written, ' +
-        'silencing this notice. This translation is removed in 6.0.0.'
+      `Rewrite ${path.basename(this.configPath)} in the 5.0 spellings with "version": 5 and it ` +
+        'is read as written, silencing this notice. This translation is removed in 6.0.0.'
     );
 
     logger.warn(parts.join(' '));

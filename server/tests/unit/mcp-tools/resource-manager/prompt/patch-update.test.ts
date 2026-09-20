@@ -351,7 +351,7 @@ describe('produced-state validation (row 3.5)', () => {
   /**
    * The differential rule. Three shipped prompts carry Handlebars-style `{{#if}}` bodies that no
    * Nunjucks parse accepts (measured 2026-08-12: `creative/lora_profile`,
-   * `general/diagnosisCard`, plus `{{{x}}}` in the same family). A flat syntax gate would refuse
+   * `general/diagnosis_card`, plus `{{{x}}}` in the same family). A flat syntax gate would refuse
    * every future edit to them — including an edit that repairs them.
    */
   test('allows an edit to a prompt whose template was already unparseable', async () => {

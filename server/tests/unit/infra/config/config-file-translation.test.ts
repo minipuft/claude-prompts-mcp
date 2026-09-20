@@ -295,4 +295,111 @@ describe('4.x -> 5.0 config file translation', () => {
       expect(dropped).toEqual(['gates.mode']);
     });
   });
+
+  /**
+   * The loader parses `configPath` by its extension (`configFileFormat` / `parseConfigText`),
+   * ahead of translation, notice, schema check and normalize — none of which know or care whether
+   * the file that fed them was `.jsonc` or `.json`. A version-less `config.jsonc` therefore goes
+   * through the SAME 4.x -> 5.0 translation as its `.json` twin.
+   */
+  describe('the loader parses config text by its file format ahead of translation', () => {
+    it('a version-less 4.x-shaped config.jsonc translates to the same effective config as the .json twin', async () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+      // Values deliberately DIFFERENT from `DEFAULT_CHAIN_SESSION_CONFIG.timeoutMinutes` (1440)
+      // and `DEFAULT_SERVER_CONFIG` (name 'claude-prompts', port 9090): a fixture equal to the
+      // code's own defaults cannot tell "parsed and translated" apart from "failed to parse and
+      // fell back to defaults" — both produce the same effective config.
+      const raw4x = {
+        advanced: {
+          sessions: { timeoutMinutes: 777, reviewTimeoutMinutes: 12, cleanupIntervalMinutes: 3 },
+        },
+        frameworks: { enabled: true, systemPromptFrequency: 9, systemPromptTarget: 'steps' },
+        server: { name: 'jsonc-translation-server', port: 4321 },
+      };
+
+      const dir = await mkdtemp(path.join(tmpdir(), 'cfg-jsonc-translation-'));
+      const jsoncPath = path.join(dir, 'config.jsonc');
+      const jsoncText = [
+        '{',
+        '  // a version-less 4.x-shaped file, comments and a trailing comma included',
+        `  "advanced": ${JSON.stringify(raw4x.advanced)},`,
+        `  "frameworks": ${JSON.stringify(raw4x.frameworks)},`,
+        `  "server": ${JSON.stringify(raw4x.server)},`,
+        '}',
+      ].join('\n');
+      await writeFile(jsoncPath, jsoncText, 'utf8');
+
+      const jsoncManager = new ConfigLoader(jsoncPath);
+      const jsoncConfig = await jsoncManager.loadConfig();
+      const json = await resolveThroughLoader(raw4x);
+
+      expect(jsoncConfig).toEqual(json.config);
+      // Anchors the comparison to values the translation actually moved, none of which equal a
+      // code default, so a fallback-to-defaults would diverge from both sides at once.
+      expect(jsoncConfig.chainSessions?.timeoutMinutes).toBe(777);
+      expect(jsoncConfig.frameworks?.injection?.systemPrompt?.frequency).toBe(9);
+      expect(jsoncConfig.server.name).toBe('jsonc-translation-server');
+      expect(jsoncConfig.server.port).toBe(4321);
+
+      warn.mockRestore();
+      await rm(dir, { recursive: true, force: true });
+      await json.cleanup();
+    });
+
+    it('loads a config.jsonc with comments and a trailing comma, and its values are effective', async () => {
+      const dir = await mkdtemp(path.join(tmpdir(), 'cfg-jsonc-values-'));
+      const configPath = path.join(dir, 'config.jsonc');
+      await writeFile(
+        configPath,
+        [
+          '{',
+          '  // line comment',
+          '  "version": 5,',
+          '  /* block comment */',
+          '  "server": { "name": "jsonc-effective", "port": 4321 },',
+          '}',
+        ].join('\n'),
+        'utf8'
+      );
+
+      const manager = new ConfigLoader(configPath);
+      const config = await manager.loadConfig();
+
+      expect(config.server.name).toBe('jsonc-effective');
+      expect(config.server.port).toBe(4321);
+
+      await rm(dir, { recursive: true, force: true });
+    });
+
+    // POSITIVE CONTROL for the case above: the identical commented, trailing-comma text named
+    // `config.json` instead — strict `JSON.parse` fails it, and `loadConfig`'s catch serves the
+    // built-in defaults rather than the values the comments surrounded.
+    it('POSITIVE CONTROL — the same commented text named config.json fails strict parsing and falls back to defaults', async () => {
+      const dir = await mkdtemp(path.join(tmpdir(), 'cfg-json-control-'));
+      const configPath = path.join(dir, 'config.json');
+      await writeFile(
+        configPath,
+        [
+          '{',
+          '  // line comment',
+          '  "version": 5,',
+          '  "server": { "name": "jsonc-effective", "port": 4321 },',
+          '}',
+        ].join('\n'),
+        'utf8'
+      );
+      const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+      const manager = new ConfigLoader(configPath);
+      const config = await manager.loadConfig();
+
+      expect(config.server.name).not.toBe('jsonc-effective');
+      expect(config.server.port).not.toBe(4321);
+      expect(errorSpy).toHaveBeenCalled();
+
+      errorSpy.mockRestore();
+      await rm(dir, { recursive: true, force: true });
+    });
+  });
 });

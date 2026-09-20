@@ -16,10 +16,18 @@ import type { ConfigSchemaValidationResult } from '../../../../src/shared/types/
 
 import { ConfigActionHandler } from '../../../../src/mcp/tools/system-control/handlers/config-action-handler.js';
 
-/** Stand-in `configManager` exposing only what `ConfigActionHandler` reads. */
-function makeConfigManager(result: ConfigSchemaValidationResult | undefined): ConfigManager {
+/**
+ * Stand-in `configManager` exposing only what `ConfigActionHandler` reads. `configPath` defaults
+ * to `config.jsonc` — the 5.0 name — but is overridable so a test can prove the reply names
+ * whatever file was actually loaded rather than a second hard-coded literal.
+ */
+function makeConfigManager(
+  result: ConfigSchemaValidationResult | undefined,
+  configPath = '/workspace/config.jsonc'
+): ConfigManager {
   return {
     getSchemaValidation: jest.fn(() => result),
+    getConfigPath: jest.fn(() => configPath),
   } as unknown as ConfigManager;
 }
 
@@ -54,8 +62,22 @@ describe('ConfigActionHandler validate (schema path)', () => {
     expect(textOf(response)).not.toContain('matches its schema');
   });
 
-  test('case 2: valid renders the valid text', async () => {
-    const context = makeContext(makeConfigManager({ status: 'valid', valid: true, errors: [] }));
+  test('case 2: valid names the loaded config.jsonc, not a hard-coded config.json', async () => {
+    const context = makeContext(
+      makeConfigManager({ status: 'valid', valid: true, errors: [] }, '/workspace/config.jsonc')
+    );
+
+    const response = await new ConfigActionHandler(context).execute({ operation: 'validate' });
+
+    expect(textOf(response)).toBe('✅ config.jsonc matches its schema.');
+  });
+
+  // POSITIVE CONTROL for case 2: a loader on the strict-JSON dialect gets its own name back too —
+  // without this, a reply that always said "config.jsonc" would pass case 2 for the wrong reason.
+  test('case 2b: valid names the loaded config.json when that is what was loaded', async () => {
+    const context = makeContext(
+      makeConfigManager({ status: 'valid', valid: true, errors: [] }, '/workspace/config.json')
+    );
 
     const response = await new ConfigActionHandler(context).execute({ operation: 'validate' });
 
@@ -78,13 +100,36 @@ describe('ConfigActionHandler validate (schema path)', () => {
     expect(lines).toContain('ENOENT: no such file');
   });
 
-  test('case 4: invalid renders the invalid text with each error on its own line', async () => {
+  test('case 4: invalid names the loaded config.jsonc with each error on its own line', async () => {
     const context = makeContext(
-      makeConfigManager({
-        status: 'invalid',
-        valid: false,
-        errors: ['/gates: must NOT have additional properties (enabld)'],
-      })
+      makeConfigManager(
+        {
+          status: 'invalid',
+          valid: false,
+          errors: ['/gates: must NOT have additional properties (enabld)'],
+        },
+        '/workspace/config.jsonc'
+      )
+    );
+
+    const response = await new ConfigActionHandler(context).execute({ operation: 'validate' });
+    const lines = textOf(response).split('\n');
+
+    expect(lines[0]).toBe('❌ config.jsonc does not match its schema. The server keeps running.');
+    expect(lines).toContain('/gates: must NOT have additional properties (enabld)');
+  });
+
+  // POSITIVE CONTROL for case 4: same shape, the strict-JSON dialect's own name comes back.
+  test('case 4b: invalid names the loaded config.json when that is what was loaded', async () => {
+    const context = makeContext(
+      makeConfigManager(
+        {
+          status: 'invalid',
+          valid: false,
+          errors: ['/gates: must NOT have additional properties (enabld)'],
+        },
+        '/workspace/config.json'
+      )
     );
 
     const response = await new ConfigActionHandler(context).execute({ operation: 'validate' });

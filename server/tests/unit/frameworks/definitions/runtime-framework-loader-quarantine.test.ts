@@ -19,6 +19,25 @@ import { join } from 'node:path';
 
 import { RuntimeFrameworkLoader } from '../../../../src/engine/frameworks/definitions/runtime-framework-loader.js';
 
+import type { FrameworkResourceDefinition } from '../../../../src/engine/frameworks/definitions/framework-definition-types.js';
+
+/**
+ * Discover then load every id, the same shape `FrameworkRegistry.loadBuiltInGuides` runs in
+ * production (`registry.ts`) rather than the loader's own `loadAllFrameworks`, which nothing
+ * calls (R36, unreached-methods baseline) — the quarantine behaviour below is still exercised
+ * through the two methods that ARE live: `discoverFrameworks` and `loadFramework`.
+ */
+function loadAll(loader: RuntimeFrameworkLoader): Map<string, FrameworkResourceDefinition> {
+  const results = new Map<string, FrameworkResourceDefinition>();
+  for (const id of loader.discoverFrameworks()) {
+    const definition = loader.loadFramework(id);
+    if (definition) {
+      results.set(id, definition);
+    }
+  }
+  return results;
+}
+
 /** A framework.yaml that passes `validateFrameworkSchema`. */
 function validFramework(id: string): string {
   return [
@@ -80,7 +99,7 @@ describe('RuntimeFrameworkLoader quarantine (P4.15)', () => {
     const brokenPath = writeFramework(primary, 'brokenfw', schemaInvalidFramework('brokenfw'));
 
     const loader = new RuntimeFrameworkLoader({ frameworksDir: primary });
-    const loaded = loader.loadAllFrameworks();
+    const loaded = loadAll(loader);
 
     expect(loaded.has('brokenfw')).toBe(false);
     const records = loader.getQuarantine().byId('brokenfw');
@@ -100,7 +119,7 @@ describe('RuntimeFrameworkLoader quarantine (P4.15)', () => {
     writeFramework(primary, 'brokenfw', schemaInvalidFramework('brokenfw'));
 
     const loader = new RuntimeFrameworkLoader({ frameworksDir: primary });
-    loader.loadAllFrameworks();
+    loadAll(loader);
 
     // `systemPromptGuidance` is instruction delivered to the client LLM, and this is the file
     // whose content has NOT been checked.
@@ -146,7 +165,7 @@ describe('RuntimeFrameworkLoader quarantine (P4.15)', () => {
     const brokenPath = writeFramework(primary, 'brokenfw', schemaInvalidFramework('brokenfw'));
 
     const loader = new RuntimeFrameworkLoader({ frameworksDir: primary });
-    loader.loadAllFrameworks();
+    loadAll(loader);
     expect(loader.getQuarantine().isRefused(brokenPath)).toBe(true);
 
     writeFileSync(brokenPath, validFramework('brokenfw'));
@@ -170,7 +189,7 @@ describe('RuntimeFrameworkLoader quarantine (P4.15)', () => {
     );
 
     const loader = new RuntimeFrameworkLoader({ frameworksDir: primary });
-    loader.loadAllFrameworks();
+    loadAll(loader);
 
     const records = loader.getQuarantine().byId('phasefw');
     expect(records).toHaveLength(1);

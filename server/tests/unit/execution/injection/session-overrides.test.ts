@@ -59,7 +59,7 @@ describe('SessionOverrideResolver', () => {
       const newOverride = manager.setOverride('system-prompt', false);
 
       expect(newOverride.enabled).toBe(false);
-      const retrieved = manager.getOverride('system-prompt');
+      const retrieved = manager.getAllOverrides().get('system-prompt');
       expect(retrieved?.enabled).toBe(false);
     });
 
@@ -73,48 +73,10 @@ describe('SessionOverrideResolver', () => {
     });
   });
 
-  describe('getOverride', () => {
-    it('should return undefined for non-existent override', () => {
-      const override = manager.getOverride('system-prompt');
-      expect(override).toBeUndefined();
-    });
-
-    it('should return set override', () => {
-      manager.setOverride('gate-guidance', true);
-
-      const override = manager.getOverride('gate-guidance');
-
-      expect(override).toBeDefined();
-      expect(override?.enabled).toBe(true);
-    });
-
-    it('should return undefined for expired override', () => {
-      // Set an override that expires immediately
-      manager.setOverride('system-prompt', true, 'session', undefined, -1000);
-
-      const override = manager.getOverride('system-prompt');
-
-      expect(override).toBeUndefined();
-    });
-  });
-
-  describe('clearOverride', () => {
-    it('should clear existing override and return true', () => {
-      manager.setOverride('system-prompt', true);
-
-      const result = manager.clearOverride('system-prompt');
-
-      expect(result).toBe(true);
-      expect(manager.getOverride('system-prompt')).toBeUndefined();
-    });
-
-    it('should return false for non-existent override', () => {
-      const result = manager.clearOverride('system-prompt');
-
-      expect(result).toBe(false);
-    });
-  });
-
+  // getOverride()/clearOverride() were deleted at P4.52 — zero production callers
+  // (getAllOverrides()/clearAllOverrides() are the only paths any real caller uses), and
+  // their expiry/removal behavior is already covered live-method-first below via
+  // getAllOverrides(), which performs its own expiry cleanup.
   describe('clearAllOverrides', () => {
     it('should clear all overrides and return count', () => {
       manager.setOverride('system-prompt', true);
@@ -124,9 +86,7 @@ describe('SessionOverrideResolver', () => {
       const count = manager.clearAllOverrides();
 
       expect(count).toBe(3);
-      expect(manager.getOverride('system-prompt')).toBeUndefined();
-      expect(manager.getOverride('gate-guidance')).toBeUndefined();
-      expect(manager.getOverride('style-guidance')).toBeUndefined();
+      expect(manager.getAllOverrides().size).toBe(0);
     });
 
     it('should return 0 when no overrides exist', () => {
@@ -156,40 +116,6 @@ describe('SessionOverrideResolver', () => {
       expect(overrides.size).toBe(1);
       expect(overrides.has('system-prompt')).toBe(true);
       expect(overrides.has('gate-guidance')).toBe(false);
-    });
-  });
-
-  describe('getHistory', () => {
-    it('should return all override history', () => {
-      manager.setOverride('system-prompt', true);
-      manager.setOverride('system-prompt', false);
-      manager.setOverride('gate-guidance', true);
-
-      const history = manager.getHistory();
-
-      expect(history.length).toBe(3);
-    });
-
-    it('should limit history when limit provided', () => {
-      manager.setOverride('system-prompt', true);
-      manager.setOverride('system-prompt', false);
-      manager.setOverride('gate-guidance', true);
-
-      const history = manager.getHistory(2);
-
-      expect(history.length).toBe(2);
-    });
-
-    it('should return most recent entries when limited', () => {
-      manager.setOverride('system-prompt', true);
-      manager.setOverride('gate-guidance', false);
-      manager.setOverride('style-guidance', true);
-
-      const history = manager.getHistory(2);
-
-      // Should return the last 2 entries
-      expect(history[0].type).toBe('gate-guidance');
-      expect(history[1].type).toBe('style-guidance');
     });
   });
 
@@ -228,32 +154,11 @@ describe('SessionOverrideResolver', () => {
     });
   });
 
-  describe('toDecisionInputFormat', () => {
-    it('should convert overrides to decision input format', () => {
-      manager.setOverride('system-prompt', false);
-      manager.setOverride('gate-guidance', true);
-
-      const format = manager.toDecisionInputFormat();
-
-      expect(format).toEqual({
-        'system-prompt': false,
-        'gate-guidance': true,
-      });
-    });
-
-    it('should skip overrides with undefined enabled', () => {
-      manager.setOverride('system-prompt', undefined as any);
-
-      const format = manager.toDecisionInputFormat();
-
-      expect(format).toEqual({});
-    });
-
-    it('should return empty object when no overrides', () => {
-      const format = manager.toDecisionInputFormat();
-      expect(format).toEqual({});
-    });
-  });
+  // toDecisionInputFormat() was deleted at P4.52 — zero production callers.
+  // InjectionControlStage feeds decide() through its own private
+  // toSessionOverrideRecord(), which duplicates this method's logic against the Map
+  // getSessionOverrides() already returns rather than calling it (P4.52 finding, not
+  // fixed here: the two return subtly different empty-vs-undefined shapes).
 });
 
 describe('Singleton Functions', () => {

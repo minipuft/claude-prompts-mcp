@@ -22,6 +22,7 @@ import { deriveGateTier, formatCheckLine, type GateTier } from '#engine/gates/co
 import { computeContentHash } from '#shared/utils/hash.js';
 import { loadHistory } from '#cli-shared/version-history.js';
 import { assertUsableDirectorySetting } from '#shared/utils/path-setting.js';
+import { configFileFormat, parseConfigText } from '#shared/utils/config-file-format.js';
 import {
   isExcludedCategoryDirectoryName,
   isIgnoredPromptEntryName,
@@ -108,7 +109,7 @@ export interface SkillsSyncPaths {
   workspace: string | undefined;
   /** Where runtime output such as patch files is written. */
   runtimeStateDir: string;
-  /** The `config.json` the server reads: `--config` or `MCP_CONFIG_PATH`, else the workspace's, else the package's. */
+  /** The `config.jsonc`/`config.json` the server reads: `--config` or `MCP_CONFIG_PATH`, else the workspace's, else the package's. */
   serverConfigPath: string;
   /** Every directory that contributes definitions of a type, lowest precedence first. */
   sourceRoots: Readonly<Record<ResourceType, readonly string[]>>;
@@ -144,21 +145,23 @@ export function getSkillsSyncConfigPath(paths: SkillsSyncPaths): string {
 
 /**
  * `gates.harnessCovers` for this installation (ruling B2, gate-checks-and-reminders), read
- * directly off the `config.json` the server reads (`SkillsSyncPaths.serverConfigPath`), so an
- * export omits the reminders the runtime omits. It goes around `ConfigManager`/`ConfigLoader`: this module
- * lives in `modules/` (Layer 3), and `.dependency-cruiser.cjs`'s `modules-no-infra-static` /
+ * directly off the `config.jsonc`/`config.json` the server reads (`SkillsSyncPaths.serverConfigPath`),
+ * so an export omits the reminders the runtime omits. It goes around `ConfigManager`/`ConfigLoader`:
+ * this module lives in `modules/` (Layer 3), and `.dependency-cruiser.cjs`'s `modules-no-infra-static` /
  * `modules-infra-type-only` rules forbid a static OR type-only import from `infra/` — even for
  * `ConfigManager`'s type. `exportCommand` already reads a config file this same way a few lines
  * down (`readFile(configPath)` for `skills-sync.yaml`), so this mirrors that sibling
- * pattern instead of adding a second parser: one JSON read, one optional field, no schema
- * re-validation. A missing or unparsable `config.json` returns `[]`, the same default
- * `ConfigLoader.getGatesConfig()` falls back to.
+ * pattern instead of adding a second parser: one text read, dialect-parsed by extension via
+ * `parseConfigText`/`configFileFormat` (the one owner of which file is the user's config and how
+ * its text parses), one optional field, no schema re-validation. A missing or unparsable
+ * `config.jsonc`/`config.json` returns `[]`, the same default `ConfigLoader.getGatesConfig()`
+ * falls back to.
  */
 async function resolveHarnessCovers(paths: SkillsSyncPaths): Promise<readonly string[]> {
   try {
     const raw = await readFile(paths.serverConfigPath, 'utf-8');
-    const parsed = JSON.parse(raw) as { gates?: { harnessCovers?: unknown } };
-    const covers = parsed.gates?.harnessCovers;
+    const parsed: unknown = parseConfigText(raw, configFileFormat(paths.serverConfigPath));
+    const covers = (parsed as { gates?: { harnessCovers?: unknown } }).gates?.harnessCovers;
     return Array.isArray(covers)
       ? covers.filter((entry): entry is string => typeof entry === 'string')
       : [];
@@ -3544,8 +3547,12 @@ async function exportCommand(
         // Load version history for the resource
         const firstSourcePath = ir.sourcePaths[0];
         if (!firstSourcePath) continue;
-        const resourceDir = path.dirname(firstSourcePath);
-        const history = loadHistory(resourceDir);
+        // The path only locates state.db; the rows are the IR's own type and id. Read from the
+        // path, a gate under any directory named `prompts` was looked up as a prompt.
+        const history = loadHistory(path.dirname(firstSourcePath), {
+          resourceType: ir.resourceType,
+          resourceId: ir.id,
+        });
 
         manifestEntries.set(resourceKey, {
           resourceId: ir.id,
@@ -3941,8 +3948,12 @@ async function syncCommand(
 
         const firstSourcePath = ir.sourcePaths[0];
         if (!firstSourcePath) continue;
-        const resourceDir = path.dirname(firstSourcePath);
-        const history = loadHistory(resourceDir);
+        // The path only locates state.db; the rows are the IR's own type and id. Read from the
+        // path, a gate under any directory named `prompts` was looked up as a prompt.
+        const history = loadHistory(path.dirname(firstSourcePath), {
+          resourceType: ir.resourceType,
+          resourceId: ir.id,
+        });
 
         manifestEntries.set(resourceKey, {
           resourceId: ir.id,

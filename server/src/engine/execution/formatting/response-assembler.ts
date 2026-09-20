@@ -215,7 +215,7 @@ export class ResponseAssembler {
       sections.push(declaredSectionsBlock);
     }
 
-    // Row 2.4, on THIS path too. Found by the live drive, not by the suite: `>>strategicImplement`
+    // Row 2.4, on THIS path too. Found by the live drive, not by the suite: `>>strategic_implement`
     // is a gated single prompt that gets a session, so it can declare observations, raise an
     // interrupt and reach here — and rendered nothing, while `structuredContent.chain_interrupt`
     // (attached in stage 21, outside the chain/single branch) was correctly present. A payload

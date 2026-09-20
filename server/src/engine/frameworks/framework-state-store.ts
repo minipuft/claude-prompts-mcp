@@ -11,11 +11,7 @@
 import { EventEmitter } from 'events';
 
 import { FrameworkManager, createFrameworkManager } from './framework-manager.js';
-import {
-  FrameworkDefinition,
-  FrameworkExecutionContext,
-  FrameworkSelectionCriteria,
-} from './types/index.js';
+import { FrameworkDefinition, FrameworkSelectionCriteria } from './types/index.js';
 
 import type { StateStoreOptions } from '#infra/database/stores/interface.js';
 
@@ -499,14 +495,6 @@ export class FrameworkStateStore extends EventEmitter {
   }
 
   /**
-   * Get all available frameworks
-   */
-  getAvailableFrameworks(): FrameworkDefinition[] {
-    this.ensureInitialized();
-    return this.frameworkManager!.listFrameworks(true); // Only enabled frameworks
-  }
-
-  /**
    * Get the underlying FrameworkManager for resource access.
    * Returns null if not initialized.
    */
@@ -648,30 +636,6 @@ export class FrameworkStateStore extends EventEmitter {
     this.emit('health-changed', this.getSystemHealth());
 
     return true;
-  }
-
-  /**
-   * Generate execution context using active framework
-   */
-  generateExecutionContext(
-    prompt: any,
-    criteria?: FrameworkSelectionCriteria
-  ): FrameworkExecutionContext | null {
-    this.ensureInitialized();
-    const defaultState = this.getOrCreateScopedState();
-
-    // Return null if framework system is disabled
-    if (!defaultState.frameworkSystemEnabled) {
-      return null;
-    }
-
-    // Use framework manager to generate context with active framework
-    const mergedCriteria: FrameworkSelectionCriteria = {
-      userPreference: defaultState.activeFramework,
-      ...criteria,
-    };
-
-    return this.frameworkManager!.generateExecutionContext(prompt, mergedCriteria);
   }
 
   /**

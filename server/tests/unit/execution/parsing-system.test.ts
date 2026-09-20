@@ -22,7 +22,6 @@ describe('Parsing System Factory', () => {
     expect(parsingSystem).toBeDefined();
     expect(parsingSystem.commandParser).toBeDefined();
     expect(parsingSystem.argumentParser).toBeDefined();
-    expect(parsingSystem.contextResolver).toBeDefined();
 
     expect(mockLogger.info).toHaveBeenCalledWith('Parsing system initialized successfully');
   });
@@ -35,7 +34,6 @@ describe('Parsing System Factory', () => {
       '- Unified command parser with multi-strategy support'
     );
     expect(mockLogger.info).toHaveBeenCalledWith('- Argument parser with validation pipeline');
-    expect(mockLogger.info).toHaveBeenCalledWith('- Context resolver with intelligent fallbacks');
   });
 
   test('should provide functional parsers', async () => {
@@ -62,10 +60,6 @@ describe('Parsing System Factory', () => {
       {}
     );
     expect(argResult).toBeDefined();
-
-    // Test context resolver
-    const contextResult = await parsingSystem.contextResolver.resolveContext([], {}, {});
-    expect(contextResult).toBeDefined();
   });
 
   test('parses multi-line commands while preserving argument payloads', async () => {

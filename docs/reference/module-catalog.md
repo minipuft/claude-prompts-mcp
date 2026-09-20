@@ -33,7 +33,7 @@ remains in `server/.dependency-cruiser.cjs`.
 | `automation` | `src/modules/automation` | domain | canonical | Owns automation-oriented resource and workflow behavior. | — | — | engine-execution<br>hot-reload<br>shared-types<br>shared-utils | mcp-tools<br>prompts<br>resources<br>runtime |
 | `chains` | `src/modules/chains` | domain | canonical | Owns chain sessions, execution records, mutation, and persistence behavior. | — | — | engine-execution<br>shared-types<br>shared-utils<br>text-references | engine-execution<br>mcp-tools |
 | `formatting` | `src/modules/formatting` | domain | canonical | Owns response styles and output formatting behavior. | — | `index.ts` | engine-gates<br>shared-types<br>shared-utils | cli-shared<br>mcp-tools<br>resources<br>runtime |
-| `hot-reload` | `src/modules/hot-reload` | domain | canonical | Coordinates file observation and registry refresh behavior. | — | — | shared-types | automation<br>prompts<br>runtime |
+| `hot-reload` | `src/modules/hot-reload` | domain | canonical | Coordinates file observation and registry refresh behavior. | — | — | shared-types<br>shared-utils | automation<br>prompts<br>runtime |
 | `prompts` | `src/modules/prompts` | domain | canonical | Owns prompt discovery, schema, registry, and lifecycle behavior. | — | `index.ts` | automation<br>engine-execution<br>engine-gates<br>hot-reload<br>shared-types<br>shared-utils<br>text-references<br>workflow-ir | cli-shared<br>mcp-http<br>mcp-tools<br>resources<br>runtime |
 | `resources` | `src/modules/resources` | domain | canonical | Owns resource verification and mutation transactions. | — | `index.ts` | automation<br>engine-frameworks<br>engine-gates<br>formatting<br>prompts<br>shared-types<br>shared-utils | cli-shared<br>mcp-tools<br>runtime<br>skills-sync |
 | `semantic` | `src/modules/semantic` | domain | canonical | Owns semantic indexing and related retrieval behavior. | — | — | engine-execution<br>shared-types | mcp-tools |
@@ -45,7 +45,7 @@ remains in `server/.dependency-cruiser.cjs`.
 | `shared` | `src/shared` | layer | canonical | Foundation types and pure utilities available to every source layer. | — | — | — | — |
 | `shared-core` | `src/shared/core` | shared | canonical | Core abstractions shared without importing upper layers. | — | — | shared-types<br>shared-utils | engine-frameworks<br>engine-gates<br>mcp-tools<br>runtime |
 | `shared-types` | `src/shared/types` | shared | canonical | Cross-layer TypeScript contracts and data shapes. | — | `index.ts` | workflow-ir | automation<br>chains<br>engine-execution<br>engine-frameworks<br>engine-gates<br>formatting<br>hot-reload<br>infra-config<br>infra-database<br>infra-hooks<br>infra-http<br>infra-logging<br>infra-observability<br>mcp-http<br>mcp-metadata<br>mcp-tools<br>prompts<br>resources<br>runtime<br>semantic<br>shared-core<br>shared-utils<br>skills-sync<br>text-references<br>versioning<br>workflow-ir |
-| `shared-utils` | `src/shared/utils` | shared | canonical | Pure cross-layer utility functions. | — | `index.ts` | shared-types | automation<br>chains<br>cli-shared<br>engine-execution<br>engine-frameworks<br>engine-gates<br>formatting<br>infra-config<br>infra-database<br>infra-observability<br>mcp-http<br>mcp-metadata<br>mcp-tools<br>prompts<br>resources<br>runtime<br>server-source<br>shared-core<br>skills-sync<br>text-references<br>versioning |
+| `shared-utils` | `src/shared/utils` | shared | canonical | Pure cross-layer utility functions. | — | `index.ts` | shared-types | automation<br>chains<br>cli-shared<br>engine-execution<br>engine-frameworks<br>engine-gates<br>formatting<br>hot-reload<br>infra-config<br>infra-database<br>infra-observability<br>mcp-http<br>mcp-metadata<br>mcp-tools<br>prompts<br>resources<br>runtime<br>server-source<br>shared-core<br>skills-sync<br>text-references<br>versioning |
 
 ## Domain ownership
 
@@ -151,6 +151,7 @@ flowchart LR
   module_formatting -. type .-> module_shared_types
   module_formatting --> module_shared_utils
   module_hot_reload -. type .-> module_shared_types
+  module_hot_reload --> module_shared_utils
   module_infra_config --> module_infra_logging
   module_infra_config --> module_shared_types
   module_infra_config --> module_shared_utils

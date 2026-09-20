@@ -45,7 +45,7 @@ resource_manager(resource_type:"framework", action:"switch", id:"cageerf")
 > **Off by default.** `resources.registerWithMcp` ships as `false`, because the tools cover the same
 > discovery more cheaply. Until you enable it, `resources/list` returns an empty list and every URI
 > below answers `Resource not found`. Turn it on with `cpm enable resources`, or set
-> `resources.registerWithMcp: true` in `config.json`, then restart the server.
+> `resources.registerWithMcp: true` in `config.jsonc` (`config.json` is also still read), then restart the server.
 
 MCP Resources provide a **read-only, token-efficient** alternative to tool-based list/inspect operations. Use resources when you need to:
 
@@ -242,7 +242,7 @@ prompt_engine(command:">>brainstorm * 5 topic:'startup ideas'")
 prompt_engine(command:">>analyze * 2 --> >>summarize")
 
 # Each iteration uses the same plan_path
-prompt_engine(command:">>strategicImplement * 3 plan_path:'./plan.md'")
+prompt_engine(command:">>strategic_implement * 3 plan_path:'./plan.md'")
 ```
 
 **Varied Arguments per Step (use explicit chain):**
@@ -503,7 +503,7 @@ Full field reference, the linearization rule, and the complete rejection vocabul
 
 #### Compiling a plan tier into a submission
 
-You rarely hand-write a submission. `>>strategicImplement` compiles one from a tier-gated plan
+You rarely hand-write a submission. `>>strategic_implement` compiles one from a tier-gated plan
 file — the table `>>implementation_plan` emits — one tier per submission:
 
 | Plan artifact                   | Compiles to                                                               |
@@ -1170,7 +1170,7 @@ system_control(action:"config", operation:"keys")
 # One key's effective value and source
 system_control(action:"config", operation:"get", config:{key:"server.name", operation:"get"})
 
-# The check the server already ran against config.json at load time
+# The check the server already ran against your config file at load time
 system_control(action:"config", operation:"validate")
 
 # Whether a value would be valid for a key, without writing it
@@ -1189,7 +1189,8 @@ used to fall back to. Change a value with `cpm config set <key> <value>` or rese
 `cpm config reset --force`.
 
 This is not "configuration cannot be written over MCP": `system_control(action:"gates"|"framework",
-operation:"enable"|"disable", persist:true)` still records that one setting in `config.json`. The
+operation:"enable"|"disable", persist:true)` still records that one setting in your config file
+(`config.jsonc`, or `config.json`). The
 boundary is narrower than a blanket read-only surface — a caller cannot name an arbitrary key or
 value to write, or restore a backup; an action can only ask the server to persist its own one
 setting, under a key the server itself chooses and validates.
@@ -1633,7 +1634,7 @@ unreachable.
 
 ### Configuration
 
-Enable/disable in `config.json`:
+Enable/disable in `config.jsonc` (`config.json` is also still read):
 
 ```json
 {
@@ -1787,17 +1788,20 @@ All flags accept both `--flag=value` and `--flag value` formats.
 ```bash
 node dist/index.js --transport stdio \
   --workspace /path/to/workspace \
-  --config /path/to/config.json
+  --config /path/to/config.jsonc
 ```
 
 A path setting the server cannot use stops it before it serves anything, on every transport,
 exiting non-zero with the reason on stderr: the variable or flag, the value, the resolved path,
 what is wrong, and what removing the setting would fall back to. `--config` and `MCP_CONFIG_PATH`
-must name a readable JSON config file; `--workspace`, `MCP_WORKSPACE` and `MCP_RESOURCES_PATH`
-must name an existing directory; and a workspace `config.json`, when one exists, must be a readable
-JSON object. Each of these used to start a server on something else — ignored settings, a freshly
-created empty workspace, the bundled catalog in place of yours — with nothing reporting it. A
-workspace without a `config.json` uses the packaged one, and an empty value counts as unset.
+must name a readable config file, parsed strictly as JSON unless the path ends `.jsonc`, in which
+case comments and a trailing comma are accepted; `--workspace`, `MCP_WORKSPACE` and
+`MCP_RESOURCES_PATH` must name an existing directory; and a workspace config, when one exists, must
+be a readable JSON object. A workspace naming both `config.jsonc` and `config.json` also refuses to
+start, naming both paths — keep one. Each of these used to start a server on something else —
+ignored settings, a freshly created empty workspace, the bundled catalog in place of yours — with
+nothing reporting it. A workspace with no config file uses the packaged one, and an empty value
+counts as unset.
 
 There are no per-resource-type flags. `--prompts`, `--gates`, `--frameworks`, `--styles` and
 `--scripts` were documented here but are parsed nowhere in the server; point `--workspace` (or
@@ -1817,7 +1821,7 @@ There are no per-resource-type flags. `--prompts`, `--gates`, `--frameworks`, `-
 `--transport=sse` was removed with the SDK v2 upgrade and now **exits with an error** naming
 `streamable-http`. It does not fall back to another transport: a removed option that silently
 resolved to something else started the server on a transport nobody asked for and reported
-success. The same check applies to `transport` in `config.json`.
+success. The same check applies to `transport` in your config file.
 
 ### Environment Variables
 
@@ -1825,7 +1829,7 @@ success. The same check applies to `transport` in `config.json`.
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | `MCP_WORKSPACE`             | Workspace root for config resolution; must be an existing directory, or the server refuses to start                 |
 | `MCP_RESOURCES_PATH`        | Base path for all resources (prompts/, gates/, etc.); must be an existing directory, or the server refuses to start |
-| `MCP_CONFIG_PATH`           | Override config.json path; must name a readable JSON file, or the server refuses to start                           |
+| `MCP_CONFIG_PATH`           | Override the config file path (`.jsonc` or `.json`); must name a readable file, or the server refuses to start      |
 | `MCP_SERVER_ROOT`           | Server package root, used by skills export                                                                          |
 | `MCP_SHELL_PRESETS_PATH`    | Override the gate shell-preset definitions file                                                                     |
 | `MCP_VERDICT_PATTERNS_PATH` | Override the gate verdict-pattern definitions file                                                                  |

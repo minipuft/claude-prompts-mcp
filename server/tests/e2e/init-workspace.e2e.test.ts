@@ -19,12 +19,13 @@
 
 import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
 import { spawn } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { CONFIG_JSONC_TEMPLATE } from '../../src/cli-shared/_generated/config-template.js';
 import { buildServerEnv, createHermeticRoots } from './helpers/child-env.js';
 
 const SERVER_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -111,5 +112,30 @@ describe('server --init spawns cli-shared initWorkspace and writes a starter wor
 
     expect(second.exitCode).toBe(1);
     expect(second.stdout).toContain('Workspace already exists');
+  }, 30_000);
+
+  it('also writes config.jsonc, matching the generated template', async () => {
+    const target = path.join(dir, 'config-workspace');
+
+    const run = await runInit([`--init=${target}`]);
+
+    expect(run.exitCode).toBe(0);
+    const configPath = path.join(target, 'config.jsonc');
+    expect(existsSync(configPath)).toBe(true);
+    expect(readFileSync(configPath, 'utf8')).toBe(CONFIG_JSONC_TEMPLATE);
+  }, 30_000);
+
+  it('leaves an existing config.json untouched and writes no config.jsonc (positive control)', async () => {
+    const target = path.join(dir, 'preconfigured-workspace');
+    mkdirSync(target, { recursive: true });
+    const existingConfigPath = path.join(target, 'config.json');
+    const existingConfig = '{"$schema":"./config.schema.json","version":5}';
+    writeFileSync(existingConfigPath, existingConfig, 'utf8');
+
+    const run = await runInit([`--init=${target}`]);
+
+    expect(run.exitCode).toBe(0);
+    expect(readFileSync(existingConfigPath, 'utf8')).toBe(existingConfig);
+    expect(existsSync(path.join(target, 'config.jsonc'))).toBe(false);
   }, 30_000);
 });

@@ -211,7 +211,7 @@ render — as the prose `## Quality Gates` section described below, with no hook
 With `enforceGateHooks: true`:
 
 ```
-strategicImplement/
+strategic_implement/
   SKILL.md              # frontmatter `hooks:` block → Stop → gate-review.py
   hooks/gate-review.py  # self-contained; no plugin required
   gates/<id>/guidance.md
@@ -297,8 +297,9 @@ does: a **check** (a gate with a `shell_verify` or `script_tool` pass criterion)
 `### Checks` as a single command or tool line — for example, a line naming `npm test` — never its
 guidance, since a check is settled by rerunning that command rather than by the reader
 self-attesting it. Every other gate is a **reminder**, and renders under `### Reminders` as the
-criteria table, same as before. An installation's `gates.harnessCovers`, read from the
-`config.json` the server reads (the workspace's when it holds one, else the package's), shapes the
+criteria table, same as before. An installation's `gates.harnessCovers`, read from the config file
+the server reads (`config.jsonc` or `config.json`, the workspace's when it holds one, else the
+package's), shapes the
 export exactly as it shapes the runtime: a reminder whose `subject` is listed is left
 out of the exported skill entirely — no `### Reminders` row, no `gates/{gateId}/gate.yaml` or
 `guidance.md`, and no entry in `gates/index.json` — and the SKILL.md notes how many were omitted

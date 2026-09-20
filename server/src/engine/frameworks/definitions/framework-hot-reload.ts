@@ -244,31 +244,6 @@ export class FrameworkHotReloadCoordinator {
       throw error;
     }
   }
-
-  /**
-   * Get hot reload statistics
-   */
-  getStats(): FrameworkHotReloadStats {
-    return { ...this.stats };
-  }
-
-  /**
-   * Reset statistics
-   */
-  resetStats(): void {
-    this.stats = {
-      reloadsAttempted: 0,
-      reloadsSucceeded: 0,
-      reloadsFailed: 0,
-    };
-  }
-
-  /**
-   * Get the runtime loader being used
-   */
-  getLoader(): RuntimeFrameworkLoader {
-    return this.loader;
-  }
 }
 
 /**
@@ -287,8 +262,9 @@ export function createFrameworkHotReloadRegistration(
   return {
     // Primary directory plus every additional overlay directory the loader was configured with
     // (`getWatchDirectories()`) — mirrors `GateDefinitionLoader` and `StyleDefinitionLoader`'s
-    // registrations. `runtimeLoader.getFrameworksDir()` alone would miss a workspace overlay
-    // directory entirely.
+    // registrations. The primary directory alone (what `getFrameworksDir()` used to return,
+    // before it was deleted as dead code — R36, unreached-methods baseline, 2026-09-17) would
+    // miss a workspace overlay directory entirely.
     directories: runtimeLoader.getWatchDirectories(),
     handler: (event: HotReloadEvent) => coordinator.handleFrameworkChange(event),
     coordinator,

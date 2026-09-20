@@ -183,7 +183,7 @@ describe('a workspace resource directory overlays the bundled tree (P1.0a)', () 
   /**
    * Serving a resource and INDEXING it are two separate derivations, and for a day they disagreed
    * by 41 prompts with nothing failing. `resource_index` is what every Python hook reads, so the
-   * gap was user-visible in the worst way: `>>strategicImplement` answered "Unknown prompt" for a
+   * gap was user-visible in the worst way: `>>strategic_implement` answered "Unknown prompt" for a
    * prompt `prompt_engine` executes.
    *
    * The last case here is the one that closes the CLASS rather than the three instances — it
@@ -199,7 +199,7 @@ describe('a workspace resource directory overlays the bundled tree (P1.0a)', () 
       expect(prompts).toContain('probe_prompt');
       // A bundled prompt the workspace does not carry. Before the fix the indexer walked only the
       // primary root, so every one of these was absent while the server served them.
-      expect(prompts).toContain('strategicImplement');
+      expect(prompts).toContain('strategic_implement');
     });
 
     it('indexes gates, frameworks and styles rather than only prompts', () => {

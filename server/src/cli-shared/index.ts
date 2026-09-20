@@ -185,11 +185,13 @@ export {
   backupConfig,
   generateDefaultConfig,
   initConfig,
+  resetConfig,
   validateConfig,
   getConfigKeyInfo,
   type ConfigReadResult,
   type ConfigSetResult,
   type ConfigInitResult,
+  type ConfigResetResult,
   type ConfigValidationResult,
   type ConfigKeyInfo,
 } from './config-operations.js';

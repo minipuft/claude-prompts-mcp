@@ -122,7 +122,10 @@ Re-injects active chain state after compaction. Recovery is scoped to the chain 
 
 ### Output Format
 
-Set in `server/config.json`:
+Set in your config file (`config.jsonc`, or `config.json`) — hooks resolve `MCP_WORKSPACE`, then
+`${CLAUDE_PLUGIN_DATA}`, then the packaged `server/` directory, trying `config.jsonc` before
+`config.json` in each and using the first file found; an unreadable or malformed file falls back to
+the default below rather than making a hook refuse to run:
 
 ```json
 {

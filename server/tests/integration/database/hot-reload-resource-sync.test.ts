@@ -193,7 +193,11 @@ describe('Hot-Reload Resource Sync: the refusal record survives a second sync', 
     gateLoader = createGateDefinitionLoader({ gatesDir: RELOAD_GATES, enableCache: false });
     gateLoader.loadAllGates();
     frameworkLoader = new RuntimeFrameworkLoader({ frameworksDir: RELOAD_FRAMEWORKS });
-    frameworkLoader.loadAllFrameworks();
+    // `loadAllFrameworks` has no production caller (R36, unreached-methods baseline) — discover
+    // then load per id, the shape `FrameworkRegistry.loadBuiltInGuides` actually runs.
+    for (const id of frameworkLoader.discoverFrameworks()) {
+      frameworkLoader.loadFramework(id);
+    }
     styleLoader = new StyleDefinitionLoader({ stylesDir: RELOAD_STYLES, enableCache: false });
     styleLoader.loadAllStyles();
   }

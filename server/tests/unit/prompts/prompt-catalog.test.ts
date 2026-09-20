@@ -9,7 +9,7 @@ import type { ConvertedPrompt } from '../../../src/engine/execution/types.js';
 
 function prompt(overrides: Partial<ConvertedPrompt> = {}): ConvertedPrompt {
   return {
-    id: 'strategicImplement',
+    id: 'strategic_implement',
     name: 'Strategic Implementation',
     description: 'Implement a planned change',
     category: 'development',

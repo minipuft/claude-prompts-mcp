@@ -130,8 +130,8 @@ Options:
       --gates             Validate gates only
       --frameworks     Validate frameworks only
       --styles            Validate styles only
-      --config            Also validate config.json
-      --all               Validate all types + config.json
+      --config            Also validate config.jsonc
+      --all               Validate all types + config.jsonc
   -w, --workspace <path>  Workspace directory (default: MCP_WORKSPACE or cwd)
       --json              JSON output (exit 0 = valid, 1 = errors)
 
@@ -174,7 +174,8 @@ Examples:
 
 Usage: cpm init [path] [options]
 
-Creates a resources/prompts/ directory with starter prompts.
+Creates a resources/prompts/ directory with starter prompts, and a config.jsonc
+with every setting commented out.
 If path is omitted, initializes in the current directory.
 
 Options:
@@ -402,10 +403,10 @@ Examples:
 Usage: cpm config <subcommand> [options]
 
 Subcommands:
-  list                    Display full config.json
+  list                    Display full config.jsonc
   get <key>               Get a specific config value
   set <key> <value>       Set a config value (with backup + validation)
-  validate                Validate config.json
+  validate                Validate config.jsonc
   reset                   Reset config to defaults (requires --force)
   keys                    List all valid config keys with types
 
@@ -450,7 +451,7 @@ Commands:
   toggle     Toggle enabled state (frameworks, styles)
   link-gate  Link or unlink a gate to a prompt
   guide      Command discovery and help
-  config     Manage workspace configuration (config.json)
+  config     Manage workspace configuration (config.jsonc)
   enable     Enable a subsystem (shorthand for config set)
   disable    Disable a subsystem (shorthand for config set)
 

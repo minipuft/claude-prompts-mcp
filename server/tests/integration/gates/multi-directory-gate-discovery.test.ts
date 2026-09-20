@@ -186,33 +186,6 @@ describe('Multi-Directory Gate Discovery', () => {
     expect(dirs).toEqual([primaryDir, additionalDir]);
   });
 
-  test('gateExists checks both primary and additional directories', () => {
-    const loader = new GateDefinitionLoader({
-      gatesDir: primaryDir,
-      additionalGatesDirs: [additionalDir],
-    });
-
-    // Primary gate
-    expect(loader.gateExists('code-quality')).toBe(true);
-    // Additional grouped gate
-    expect(loader.gateExists('pre-flight-completion')).toBe(true);
-    // Additional flat gate
-    expect(loader.gateExists('standalone')).toBe(true);
-    // Non-existent
-    expect(loader.gateExists('no-such-gate')).toBe(false);
-  });
-
-  test('getStats includes additional directories', () => {
-    const loader = new GateDefinitionLoader({
-      gatesDir: primaryDir,
-      additionalGatesDirs: [additionalDir],
-    });
-
-    const stats = loader.getStats();
-    expect(stats.gatesDir).toBe(primaryDir);
-    expect(stats.additionalGatesDirs).toEqual([additionalDir]);
-  });
-
   test('loads flat gate from additional directory', () => {
     const loader = new GateDefinitionLoader({
       gatesDir: primaryDir,

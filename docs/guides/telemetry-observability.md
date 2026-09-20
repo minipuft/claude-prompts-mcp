@@ -4,7 +4,7 @@ OpenTelemetry-based tracing for the Claude Prompts MCP server. Provides producti
 
 ## Quick Start
 
-Add to `config.json`:
+Add to `config.jsonc` (`config.json` is also still read):
 
 ```json
 {
@@ -90,27 +90,28 @@ Safe business-context attributes on trace spans (all prefixed `cpm.*`):
 
 These attributes follow the [wide-event pattern](https://loggingsucks.com/) — one comprehensive event per request with full business context for incident queries.
 
-| Attribute                    | Type    | Description                         | Incident Query                  |
-| ---------------------------- | ------- | ----------------------------------- | ------------------------------- |
-| `cpm.duration.total_ms`      | number  | Total pipeline duration (ms)        | "Show slow requests"            |
-| `cpm.stages.executed_count`  | number  | Number of stages that ran           | "Pipeline utilization"          |
-| `cpm.stages.skipped`         | string  | Comma-separated skipped stage names | "Why didn't X run?"             |
-| `cpm.stages.slowest`         | string  | Name of the slowest stage           | "What's the bottleneck?"        |
-| `cpm.stages.slowest_ms`      | number  | Duration of slowest stage (ms)      | "How slow was the bottleneck?"  |
-| `cpm.had_early_exit`         | boolean | Whether all stages executed         | "Incomplete executions"         |
-| `cpm.gates.names`            | string  | Comma-separated applied gate IDs    | "Show failures by gate"         |
-| `cpm.gates.passed_count`     | number  | Gates that passed                   | "Gate pass rate"                |
-| `cpm.gates.failed_count`     | number  | Gates that failed                   | "Which gates fail most?"        |
-| `cpm.gates.blocked`          | boolean | Response blocked by gate            | "Show blocked requests"         |
-| `cpm.gates.retry_exhausted`  | boolean | Retry attempts exhausted            | "Retry exhaustion rate"         |
-| `cpm.gates.enforcement_mode` | string  | Gate enforcement mode               | "Enforcement mode distribution" |
-| `cpm.chain.is_chain`         | boolean | Whether this is a chain execution   | "Chain vs single failure rate"  |
-| `cpm.chain.step_index`       | number  | Current chain step number           | "Which step fails?"             |
-| `cpm.chain.id`               | string  | Chain session identifier            | "Chain execution timeline"      |
-| `cpm.framework.id`           | string  | Active framework ID                 | "Failures by framework"         |
-| `cpm.framework.enabled`      | boolean | Whether framework is active         | "Framework adoption"            |
-| `cpm.scope.source`           | string  | Identity scope source               | "Scope distribution"            |
-| `cpm.error.type`             | string  | Error message (on failure only)     | "Error grouping"                |
+| Attribute                     | Type    | Description                                                                          | Incident Query                            |
+| ----------------------------- | ------- | ------------------------------------------------------------------------------------ | ----------------------------------------- |
+| `cpm.duration.total_ms`       | number  | Total pipeline duration (ms)                                                         | "Show slow requests"                      |
+| `cpm.stages.executed_count`   | number  | Number of stages that ran                                                            | "Pipeline utilization"                    |
+| `cpm.stages.skipped`          | string  | Comma-separated skipped stage names                                                  | "Why didn't X run?"                       |
+| `cpm.stages.slowest`          | string  | Name of the slowest stage                                                            | "What's the bottleneck?"                  |
+| `cpm.stages.slowest_ms`       | number  | Duration of slowest stage (ms)                                                       | "How slow was the bottleneck?"            |
+| `cpm.had_early_exit`          | boolean | Whether all stages executed                                                          | "Incomplete executions"                   |
+| `cpm.gates.names`             | string  | Comma-separated applied gate IDs                                                     | "Show failures by gate"                   |
+| `cpm.gates.passed_count`      | number  | Gates that passed                                                                    | "Gate pass rate"                          |
+| `cpm.gates.failed_count`      | number  | Gates that failed                                                                    | "Which gates fail most?"                  |
+| `cpm.gates.blocked`           | boolean | Response blocked by gate                                                             | "Show blocked requests"                   |
+| `cpm.gates.retry_exhausted`   | boolean | Retry attempts exhausted                                                             | "Retry exhaustion rate"                   |
+| `cpm.gates.enforcement_mode`  | string  | Gate enforcement mode                                                                | "Enforcement mode distribution"           |
+| `cpm.chain.is_chain`          | boolean | Whether this is a chain execution                                                    | "Chain vs single failure rate"            |
+| `cpm.chain.step_index`        | number  | Current chain step number                                                            | "Which step fails?"                       |
+| `cpm.chain.id`                | string  | Chain session identifier                                                             | "Chain execution timeline"                |
+| `cpm.framework.id`            | string  | Active framework ID                                                                  | "Failures by framework"                   |
+| `cpm.framework.enabled`       | boolean | Whether framework is active                                                          | "Framework adoption"                      |
+| `cpm.scope.source`            | string  | Identity scope source (best of org/workspace)                                        | "Scope distribution"                      |
+| `cpm.scope.continuity_source` | string  | Source of the workspace id that actually resolves the continuity/state-isolation key | "Was the scoping key real or a fallback?" |
+| `cpm.error.type`              | string  | Error message (on failure only)                                                      | "Error grouping"                          |
 
 #### Other Business Attributes
 

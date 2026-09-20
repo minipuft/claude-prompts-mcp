@@ -1,5 +1,4 @@
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { runValidatedMutation, toggleEnabled, readConfig, getConfigValue } from '@cli-shared/index.js';
 import { resolveWorkspace, findResource, resolveResourceDir, discoverResourcePaths } from '../lib/workspace.js';
 import { output } from '../lib/output.js';
@@ -40,14 +39,11 @@ export async function toggle(options: ToggleOptions): Promise<number> {
     return 1;
   }
 
-  const config = TYPE_CONFIG[type];
   const mutation = runValidatedMutation({
     resourceType: type,
-    resourceId: options.id,
-    resourceDir: match.dir,
-    entryFile: config.entryFile,
+    location: match,
     validate: !options.noValidate,
-    mutate: () => toggleEnabled(match.dir, config.entryFile),
+    mutate: () => toggleEnabled(match.file),
   });
 
   if (!mutation.success) {
@@ -84,8 +80,8 @@ function printAllDisabledAdvisory(workspace: string, type: 'frameworks' | 'style
 
     let anyEnabled = false;
 
-    for (const { dir } of resources) {
-      const content = readFileSync(join(dir, typeConfig.entryFile), 'utf8');
+    for (const { file } of resources) {
+      const content = readFileSync(file, 'utf8');
       if (/enabled:\s*true/i.test(content)) {
         anyEnabled = true;
         break;

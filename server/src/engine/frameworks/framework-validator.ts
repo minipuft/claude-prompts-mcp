@@ -22,11 +22,6 @@ export interface FrameworkValidationOptions {
   context?: Partial<ErrorContext>;
 }
 
-export interface FrameworkExistenceOptions {
-  /** Only consider enabled frameworks */
-  enabledOnly?: boolean;
-}
-
 export interface FrameworkValidationResult {
   normalizedId: string;
   definition: FrameworkDefinition;
@@ -80,22 +75,6 @@ export class FrameworkValidator {
       normalizedId: definition.id,
       definition,
     };
-  }
-
-  /**
-   * Return true when the identifier exists in the registry.
-   */
-  exists(frameworkId: string, options: FrameworkExistenceOptions = {}): boolean {
-    const normalizedId = this.tryNormalize(frameworkId);
-    if (!normalizedId) {
-      return false;
-    }
-
-    if (options.enabledOnly) {
-      return this.frameworkManager.isFrameworkEnabled(normalizedId);
-    }
-
-    return Boolean(this.frameworkManager.getFramework(normalizedId));
   }
 
   /**

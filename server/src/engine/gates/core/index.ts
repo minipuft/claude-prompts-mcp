@@ -10,11 +10,7 @@
 
 import { GateStateStore } from '../gate-state-store.js';
 import { createGateLoader } from './gate-loader.js';
-import {
-  TemporaryGateRegistry,
-  createTemporaryGateRegistry,
-  type TemporaryGateDefinition,
-} from './temporary-gate-registry.js';
+import { TemporaryGateRegistry, createTemporaryGateRegistry } from './temporary-gate-registry.js';
 
 import type { StateStoreOptions } from '#shared/types/persistence.js';
 import type { GateDefinitionProvider } from './gate-loader.js';
@@ -39,7 +35,6 @@ export {
   getDefaultGateDefinitionLoader,
   resetDefaultGateDefinitionLoader,
   type GateDefinitionLoaderConfig,
-  type GateLoaderStats as GateDefinitionLoaderStats,
   type GateSchemaValidationResult,
 } from './gate-definition-loader.js';
 
@@ -94,57 +89,15 @@ export class LightweightGateSystem {
   }
 
   /**
-   * Set temporary gate registry
-   */
-  setTemporaryGateRegistry(temporaryGateRegistry: TemporaryGateRegistry): void {
-    this.temporaryGateRegistry = temporaryGateRegistry;
-  }
-
-  /**
-   * Create a temporary gate
-   */
-  createTemporaryGate(
-    definition: Omit<TemporaryGateDefinition, 'id' | 'created_at'>,
-    scopeId?: string
-  ): string | null {
-    if (!this.temporaryGateRegistry) {
-      return null;
-    }
-    return this.temporaryGateRegistry.createTemporaryGate(definition, scopeId);
-  }
-
-  /**
-   * Get temporary gates for scope
-   */
-  getTemporaryGatesForScope(scope: string, scopeId: string): TemporaryGateDefinition[] {
-    if (!this.temporaryGateRegistry) {
-      return [];
-    }
-    return this.temporaryGateRegistry.getTemporaryGatesForScope(scope, scopeId);
-  }
-
-  /**
-   * Clean up temporary gates for scope
-   */
-  cleanupTemporaryGates(scope: string, scopeId?: string): number {
-    if (!this.temporaryGateRegistry) {
-      return 0;
-    }
-    return this.temporaryGateRegistry.cleanupScope(scope, scopeId);
-  }
-
-  /**
-   * Check if gate system is enabled
-   */
-  /**
    * Whether the gate master switch is on for this instance's workspace.
    *
    * Public because the shell verification executor must read the SAME source
    * this class already short-circuits guidance and validation on. The obvious
-   * alternative, `GateManager.isGateSystemEnabled()`, is not that source: its
-   * `setStateManager()` seam has no production caller, so it falls through to
-   * "no state manager, assume enabled" and answers `true` however the switch is
-   * set. A control built on it would never engage.
+   * alternative, `GateManager.isGateSystemEnabled()`, was never that source: its
+   * `setStateManager()` seam had no production caller, so it fell through to
+   * "no state manager, assume enabled" and answered `true` however the switch was
+   * set. A control built on it would never have engaged — both methods were
+   * removed as dead code (R36, unreached-methods baseline, 2026-09-17).
    */
   isGateSystemEnabled(): boolean {
     // If no gate system manager is set, default to enabled for backwards compatibility
@@ -152,26 +105,6 @@ export class LightweightGateSystem {
       return true;
     }
     return this.gateStateStore.isGateSystemEnabled(this.workspaceScope);
-  }
-
-  /**
-   * Get guidance text for active gates
-   */
-  async getGuidanceText(
-    gateIds: string[],
-    context: {
-      promptCategory?: string;
-      framework?: string;
-      explicitRequest?: boolean;
-    }
-  ): Promise<string[]> {
-    // Check if gate system is enabled
-    if (!this.isGateSystemEnabled()) {
-      return []; // Return empty guidance if gates are disabled
-    }
-
-    const activation = await this.gateLoader.getActiveGates(gateIds, context);
-    return activation.guidanceText;
   }
 
   /**

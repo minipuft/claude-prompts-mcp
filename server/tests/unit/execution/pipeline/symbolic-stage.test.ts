@@ -207,7 +207,7 @@ const createSessionManager = (): jest.Mocked<ChainSessionStore> =>
 describe('Symbolic pipeline coverage', () => {
   test('inline gate and operator validation stages normalize symbolic metadata', async () => {
     const logger = createLogger();
-    const context = new ExecutionContext({ command: 'symbolic chain' });
+    const context = new ExecutionContext({ command: 'symbolic chain' }, logger);
     context.state.session.executionScopeId = 'exec-scope';
     context.parsedCommand = buildParsedCommand();
 
@@ -260,9 +260,12 @@ describe('Symbolic pipeline coverage', () => {
     await operatorStage.execute(context);
 
     expect(context.parsedCommand?.executionPlan?.frameworkOverride).toBe('SCAMPER');
-    expect(context.diagnostics.getByStage('OperatorValidation')).toMatchObject([
-      { level: 'debug', context: { normalizedFrameworkOperators: 1 } },
-    ]);
+    // Nothing in production reads diagnostics back (P4.52); observe the same entry through
+    // the logger side effect DiagnosticAccumulator.add() always performs.
+    expect(logger.debug).toHaveBeenCalledWith(
+      '[OperatorValidation] Normalized framework operators',
+      { normalizedFrameworkOperators: 1 }
+    );
   });
 
   test('session stage stores symbolic blueprint with inline gates', async () => {

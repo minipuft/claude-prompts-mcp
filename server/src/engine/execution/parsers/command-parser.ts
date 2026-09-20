@@ -96,17 +96,6 @@ export class UnifiedCommandParser {
   private strategies: ParsingStrategy[];
   private symbolicParser: SymbolicCommandParser;
 
-  // Parsing statistics for monitoring
-  // TODO: Wire stats to MetricsCollector for telemetry dashboard
-  // These are tracked but not yet exposed via system_control analytics
-  private stats = {
-    totalParses: 0,
-    successfulParses: 0,
-    failedParses: 0,
-    strategyUsage: new Map<string, number>(),
-    averageConfidence: 0,
-  };
-
   /**
    * @param logger - Logger instance
    * @param isRegisteredFramework - Optional lookup, asked on every parse. When provided, only
@@ -173,10 +162,7 @@ export class UnifiedCommandParser {
     command: string,
     availablePrompts: ConvertedPrompt[]
   ): Promise<CommandParseResult> {
-    this.stats.totalParses++;
-
     if (!command || command.trim().length === 0) {
-      this.stats.failedParses++;
       throw new ValidationError('Command cannot be empty');
     }
 
@@ -250,11 +236,6 @@ export class UnifiedCommandParser {
             // Validate that the prompt ID exists and resolve to canonical ID
             result.promptId = await this.validatePromptExists(result.promptId, availablePrompts);
 
-            // Update statistics
-            this.stats.successfulParses++;
-            this.updateStrategyStats(strategy.name);
-            this.updateConfidenceStats(result.confidence);
-
             this.logger.debug(
               `Command parsed successfully using strategy: ${strategy.name} (confidence: ${result.confidence})`
             );
@@ -270,7 +251,6 @@ export class UnifiedCommandParser {
     }
 
     // If no strategy succeeded, provide helpful error message
-    this.stats.failedParses++;
     const errorMessage = this.generateHelpfulError(normalized, availablePrompts);
     throw new ValidationError(errorMessage);
   }
@@ -684,46 +664,6 @@ export class UnifiedCommandParser {
     }
 
     return `Parse error: "${command.slice(0, 50)}${command.length > 50 ? '...' : ''}"`;
-  }
-
-  /**
-   * Update strategy usage statistics
-   */
-  private updateStrategyStats(strategyName: string): void {
-    const current = this.stats.strategyUsage.get(strategyName) || 0;
-    this.stats.strategyUsage.set(strategyName, current + 1);
-  }
-
-  /**
-   * Update confidence statistics
-   */
-  private updateConfidenceStats(confidence: number): void {
-    const totalSuccessful = this.stats.successfulParses;
-    this.stats.averageConfidence =
-      (this.stats.averageConfidence * (totalSuccessful - 1) + confidence) / totalSuccessful;
-  }
-
-  /**
-   * Get parsing statistics for monitoring
-   */
-  getStats(): typeof this.stats {
-    return {
-      ...this.stats,
-      strategyUsage: new Map(this.stats.strategyUsage),
-    };
-  }
-
-  /**
-   * Reset statistics (useful for testing or fresh starts)
-   */
-  resetStats(): void {
-    this.stats = {
-      totalParses: 0,
-      successfulParses: 0,
-      failedParses: 0,
-      strategyUsage: new Map(),
-      averageConfidence: 0,
-    };
   }
 }
 

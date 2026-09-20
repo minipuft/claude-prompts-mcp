@@ -61,24 +61,6 @@ export interface RuntimeFrameworkLoaderConfig {
   debug?: boolean;
 }
 
-/**
- * Statistics from the loader
- */
-export interface LoaderStats {
-  /** Number of cached definitions */
-  cacheSize: number;
-  /** Cache hit count */
-  cacheHits: number;
-  /** Cache miss count */
-  cacheMisses: number;
-  /** Number of load errors encountered */
-  loadErrors: number;
-  /** Frameworks directory being used */
-  frameworksDir: string;
-  /** Additional overlay directories */
-  additionalFrameworksDirs: string[];
-}
-
 // FrameworkSchemaValidationResult is imported from framework-schema.ts
 export type { FrameworkSchemaValidationResult } from './framework-schema.js';
 
@@ -193,25 +175,6 @@ export class RuntimeFrameworkLoader {
   }
 
   /**
-   * Load all available frameworks
-   *
-   * @returns Map of ID to definition for all successfully loaded frameworks
-   */
-  loadAllFrameworks(): Map<string, FrameworkResourceDefinition> {
-    const results = new Map<string, FrameworkResourceDefinition>();
-    const ids = this.discoverFrameworks();
-
-    for (const id of ids) {
-      const definition = this.loadFramework(id);
-      if (definition) {
-        results.set(id, definition);
-      }
-    }
-
-    return results;
-  }
-
-  /**
    * Check if a framework exists
    *
    * @param id - Framework ID to check
@@ -235,20 +198,6 @@ export class RuntimeFrameworkLoader {
   }
 
   /**
-   * Get loader statistics
-   */
-  getStats(): LoaderStats {
-    return {
-      cacheSize: this.cache.size,
-      cacheHits: this.stats.cacheHits,
-      cacheMisses: this.stats.cacheMisses,
-      loadErrors: this.stats.loadErrors,
-      frameworksDir: this.frameworksDir,
-      additionalFrameworksDirs: this.additionalFrameworksDirs,
-    };
-  }
-
-  /**
    * Live view of the framework files that failed to load, across every root read from so far.
    *
    * Never consulted when resolving an id: `loadFramework` reads the catalog side only, so a broken
@@ -256,13 +205,6 @@ export class RuntimeFrameworkLoader {
    */
   getQuarantine(): QuarantineView {
     return this.quarantine;
-  }
-
-  /**
-   * Get the frameworks directory being used
-   */
-  getFrameworksDir(): string {
-    return this.frameworksDir;
   }
 
   /**
