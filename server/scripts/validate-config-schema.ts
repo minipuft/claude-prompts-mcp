@@ -52,9 +52,9 @@
  * pass equally well against a schema that rejects everything.
  *
  * WHY THE SCHEMA URL CHECK EXISTS
- * `CONFIG_SCHEMA_URL` names a specific npm major in a jsDelivr address; nothing before this row
- * checked whether that major still makes sense against what `server/package.json` has actually
- * shipped, or whether the file the URL points at is even in the published package. `checkSchemaUrlAddress`
+ * `CONFIG_SCHEMA_URL` names a specific npm major in a jsDelivr address, and no existing check
+ * verified that major still makes sense against what `server/package.json` has actually shipped,
+ * or that the file the URL points at is even in the published package. `checkSchemaUrlAddress`
  * (below) is that check; its own doc comment owns the window-rule numbers, so they are not restated
  * here.
  *
@@ -198,9 +198,8 @@ function schemaUrlMajor(url: string): number {
  * new npm major. `P` (`package.json`'s major) moves separately and later, on a bot-authored
  * release PR that cannot regenerate this repo's generated artifacts — so between the breaking
  * commit landing (M moves first) and that release PR merging (P catches up), M sits exactly one
- * ahead of P. Today P = 4 (`package.json` version `4.0.1`) and M = 5 — that exact gap — and this
- * must pass. `M < P` means the constant fell behind an already-shipped release; `M > P + 1` means
- * it is more than one release ahead. Both are real drift and must fail.
+ * ahead of P, and that gap must pass. `M < P` means the constant fell behind an already-shipped
+ * release; `M > P + 1` means it is more than one release ahead. Both are real drift and must fail.
  */
 function checkSchemaUrlAddress(
   schemaUrl: string,

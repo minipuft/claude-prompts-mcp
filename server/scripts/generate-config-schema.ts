@@ -643,6 +643,20 @@ export function generateConfigSchema(
     schemaId: SCHEMA_ID,
   }).createSchema('ConfigFile');
 
+  // `allowTrailingCommas` is a vscode-json-languageservice schema extension, not a JSON Schema
+  // keyword — Ajv under this repo's `strict: false` accepts and ignores unknown keywords, so it
+  // changes nothing for the server's own `validateConfigAgainstSchema` path. It is here because
+  // every example line in `CONFIG_JSONC_TEMPLATE` (below) ends with a comma so that uncommenting
+  // ONE line leaves valid JSON, and that line is often the last live property before a closing
+  // brace — which VS Code's JSON language service flags as a trailing-comma warning even under
+  // its own default `.jsonc` settings. The cost: the same keyword also silences that warning for
+  // a strict `config.json`, where `ConfigLoader` (`src/infra/config/index.ts`) parses with plain
+  // `JSON.parse` and a trailing comma is a real, unrecovered parse error — accepted because the
+  // documented "uncomment one line" flow trips the warning on a file the server accepts by
+  // design, which cost more than the editor staying quiet on a `.json` mistake it already refuses
+  // to load.
+  (schema as SchemaNode).allowTrailingCommas = true;
+
   const content = JSON.stringify(schema, null, 2) + '\n';
   writeFileSync(outputPath, content);
 

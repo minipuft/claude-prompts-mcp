@@ -631,5 +631,6 @@
   ],
   "additionalProperties": false,
   "description": "The contents of a 5.0 `config.json`.\n\nEvery section is optional; `version` is not, because the loader routes on it and a file that does not say which shape it is written in cannot be read as either.",
-  "definitions": {}
+  "definitions": {},
+  "allowTrailingCommas": true
 }
