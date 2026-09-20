@@ -10,6 +10,8 @@
  * about what `test` means.
  */
 
+import { USER_CONFIG_FILENAMES } from '#shared/utils/config-file-format.js';
+
 /**
  * The fixed artifact vocabulary (B13). Order is load-bearing: `classifyArtifactPaths` and
  * `resolveDeclaredArtifacts` emit their results in this order, so a declared set reads the same
@@ -82,7 +84,7 @@ export function classifyArtifactPath(path: string): ArtifactKind {
   }
   if (/\.md$/i.test(basename) || normalized.includes('/docs/')) return 'docs';
   if (
-    basename === 'config.json' ||
+    (USER_CONFIG_FILENAMES as readonly string[]).includes(basename) ||
     basename === 'config.schema.json' ||
     /\.config\.(js|ts|mjs|cjs)$/i.test(basename) ||
     /\.ya?ml$/i.test(basename)

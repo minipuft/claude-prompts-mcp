@@ -1,6 +1,6 @@
 {
   "version": "3.0.0",
-  "lastUpdated": "2026-09-17T04:34:57.377Z",
+  "lastUpdated": "2026-09-20T03:33:50.735Z",
   "generatedFrom": "contracts",
   "tools": {
     "prompt_engine": {
@@ -61,7 +61,7 @@
         "session_id": "Target session ID or chain ID for session operations.",
         "framework": "Target framework for switch operations. Use system_control(action:'framework', operation:'list') to see available frameworks.",
         "reason": "Audit reason for framework/gate toggles or admin actions.",
-        "persist": "When true, gate/framework enable/disable changes are also written to config.json.",
+        "persist": "When true, gate/framework enable/disable changes are also written to the workspace config file (config.jsonc, or config.json if that is what exists).",
         "show_details": "Include detailed output (status/analytics/framework/gate reports).",
         "include_history": "Include recorded history where supported.",
         "include_metrics": "Include detailed metrics output (where supported).",

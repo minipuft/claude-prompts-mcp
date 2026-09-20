@@ -495,13 +495,13 @@ A decision table for picking the right `pass_criteria.type` for the check you ac
 
 `system_control(action:"gates", operation:"disable")` turns the gate system off, and `operation:"enable"` turns it back on. While it is off, gate guidance and validation are skipped, and `prompt_engine` stops advertising its `gates`, `gate_verdict` and `gate_action` parameters. A client that never uses gates stops paying tokens for those three parameter descriptions on every tool listing, which is why the switch exists.
 
-**A toggle persists across restarts.** It is saved in `state.db` (`kv_state`, key `gates`) under the workspace the call resolves to: the request's own identity, or, when the request carries none, the launch workspace (`--workspace-id`, then `identity.launchDefaults.workspaceId` in `config.json`, then the basename of `CLAUDE_PROJECT_DIR`, else of the working directory). A server started later with the same runtime root and workspace reads it back at startup and advertises the same schema, on STDIO and Streamable HTTP alike. This matters because the narrowing is the point: a restart that silently restored the three parameters would spend the tokens the toggle was saving, and nothing would say so.
+**A toggle persists across restarts.** It is saved in `state.db` (`kv_state`, key `gates`) under the workspace the call resolves to: the request's own identity, or, when the request carries none, the launch workspace (`--workspace-id`, then `identity.launchDefaults.workspaceId` in your config file, then the basename of `CLAUDE_PROJECT_DIR`, else of the working directory). A server started later with the same runtime root and workspace reads it back at startup and advertises the same schema, on STDIO and Streamable HTTP alike. This matters because the narrowing is the point: a restart that silently restored the three parameters would spend the tokens the toggle was saving, and nothing would say so.
 
 What that does not cover:
 
 - **Servers already running.** Saved toggles are read at startup, so another process on the same `state.db` sees a toggle only after it restarts.
 - **A schema upgrade.** `kv_state` is dropped and recreated when the database schema version changes, and every workspace returns to gates enabled.
-- **`config.json`.** A toggle does not edit it unless the call passes `persist: true`.
+- **Your config file.** A toggle does not edit it unless the call passes `persist: true`; when it does, the edit lands in whichever of `config.jsonc`/`config.json` your workspace already has, in place, comments preserved.
 
 A toggle saved before workspace isolation (2026-08-27) was written under no workspace. It is adopted into the launch workspace the first time a server starts there, provided that workspace has no toggle of its own.
 

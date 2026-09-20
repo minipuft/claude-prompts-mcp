@@ -15,6 +15,8 @@ import chokidar, { type ChokidarOptions, type FSWatcher } from 'chokidar';
 
 import type { ConfigManager, Logger } from '#shared/types/index.js';
 
+import { USER_CONFIG_FILENAMES } from '#shared/utils/config-file-format.js';
+
 /**
  * File change event types
  */
@@ -713,8 +715,9 @@ export class FileObserver extends EventEmitter {
   private isConfigFile(filename: string, fullPath?: string): boolean {
     const basename = path.basename(filename);
 
-    // Standard config files
-    if (basename === 'config.json') {
+    // Standard config files — both dialects (`config.jsonc`, `config.json`); see
+    // `USER_CONFIG_FILENAMES` for which names the workspace config may take.
+    if ((USER_CONFIG_FILENAMES as readonly string[]).includes(basename)) {
       return true;
     }
 

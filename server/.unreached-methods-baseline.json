@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-20T03:07:46.601Z",
-  "total": 229,
+  "generatedAt": "2026-09-20T04:18:40.255Z",
+  "total": 228,
   "methods": [
     "Application.getCurrentFrameworkInfo",
     "Application.initializeModules",
@@ -183,7 +183,6 @@
     "ResponseFormatter.formatChainResponse",
     "RuntimeFrameworkLoader.getFrameworksDir",
     "RuntimeFrameworkLoader.loadAllFrameworks",
-    "SafeConfigWriter.getConfigPath",
     "SafeConfigWriter.restoreFromBackup",
     "ScriptToolDefinitionLoader.getStats",
     "ScriptToolDefinitionLoader.loadAllToolsForPrompt",

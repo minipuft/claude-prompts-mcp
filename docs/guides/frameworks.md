@@ -43,7 +43,7 @@ system_control(action: "framework", operation: "switch", framework: "cageerf")
 A switch persists to the calling project's scope, so different repositories can sit on different
 frameworks at the same time — CAGEERF for a server codebase, RADIANT for a Spicetify theme.
 
-Declare the starting point in that project's `config.json`:
+Declare the starting point in that project's `config.jsonc` (`config.json` is also still read):
 
 ```json
 {
@@ -72,7 +72,7 @@ setting names another framework. If neither the saved selection nor `defaultFram
 registered framework when the server starts, the server refuses to start, and the error names
 `frameworks.defaultFramework`; it does not pick another framework in its place.
 
-The server reads `defaultFramework` each time it needs it, and reloads `config.json` when the file
+The server reads `defaultFramework` each time it needs it, and reloads its config file when it
 changes, so an edit to the setting applies to this fallback and to the delete refusal without a
 restart.
 

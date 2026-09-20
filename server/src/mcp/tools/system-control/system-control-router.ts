@@ -1,5 +1,7 @@
 // @lifecycle canonical - Thin router for system_control MCP tool actions.
 
+import * as path from 'node:path';
+
 import { recordActionInvocation } from '../../metadata/usage-tracker.js';
 import { SafeConfigWriter, createSafeConfigWriter } from '../config-utils.js';
 import { createStructuredResponse } from './core/response-utils.js';
@@ -242,7 +244,7 @@ export class ConsolidatedSystemControl implements SystemControlContext {
       if (!result.success) {
         return `⚠️ Failed to persist gates.enabled: ${result.message || result.error}`;
       }
-      return `📁 Persisted gates.enabled=${enabled} to config.json.`;
+      return `📁 Persisted gates.enabled=${enabled} to ${path.basename(this.safeConfigWriter.getConfigPath())}.`;
     } catch (error) {
       this.logger.warn('Failed to persist gates.enabled', error);
       return `⚠️ Failed to persist gates.enabled: ${error instanceof Error ? error.message : String(error)}`;
@@ -276,7 +278,7 @@ export class ConsolidatedSystemControl implements SystemControlContext {
           return `⚠️ Failed to persist ${key}: ${result.message || result.error}`;
         }
       }
-      return `📁 Persisted framework toggles (${keys.join(', ')}) to ${enabled} in config.json.`;
+      return `📁 Persisted framework toggles (${keys.join(', ')}) to ${enabled} in ${path.basename(this.safeConfigWriter.getConfigPath())}.`;
     } catch (error) {
       this.logger.warn('Failed to persist framework toggles', error);
       return `⚠️ Failed to persist framework toggles: ${error instanceof Error ? error.message : String(error)}`;

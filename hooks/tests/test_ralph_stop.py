@@ -153,16 +153,17 @@ class TestEnsureRalphSessionId:
 
 
 class TestLoadContextIsolationConfig:
-    def test_defaults_when_no_config(self, monkeypatch):
-        # Point to nonexistent config
-        monkeypatch.setattr(hook_mod, "get_config_path", lambda: Path("/nonexistent/config.json"))
+    def test_defaults_when_no_config(self, patch_workspace):
+        # patch_workspace points MCP_WORKSPACE at an empty tmp_path tree and clears
+        # CLAUDE_PLUGIN_DATA -- no config.jsonc/config.json exists anywhere in the
+        # lookup, so load_context_isolation_config falls back to its own defaults.
         config = load_context_isolation_config()
         assert config["enabled"] is True
         assert config["inContextThreshold"] == 3
         assert config["spawnTimeout"] == 300
 
-    def test_reads_custom_config(self, tmp_path, monkeypatch):
-        config_file = tmp_path / "config.json"
+    def test_reads_custom_config(self, patch_workspace):
+        config_file = patch_workspace["root"] / "config.json"
         config_file.write_text(
             json.dumps(
                 {
@@ -176,14 +177,13 @@ class TestLoadContextIsolationConfig:
                 }
             )
         )
-        monkeypatch.setattr(hook_mod, "get_config_path", lambda: config_file)
         config = load_context_isolation_config()
         assert config["enabled"] is True
         assert config["inContextThreshold"] == 5
         assert config["spawnTimeout"] == 600
 
-    def test_disabled_mode(self, tmp_path, monkeypatch):
-        config_file = tmp_path / "config.json"
+    def test_disabled_mode(self, patch_workspace):
+        config_file = patch_workspace["root"] / "config.json"
         config_file.write_text(
             json.dumps(
                 {
@@ -193,14 +193,12 @@ class TestLoadContextIsolationConfig:
                 }
             )
         )
-        monkeypatch.setattr(hook_mod, "get_config_path", lambda: config_file)
         config = load_context_isolation_config()
         assert config["enabled"] is False
 
-    def test_corrupt_config_returns_defaults(self, tmp_path, monkeypatch):
-        config_file = tmp_path / "config.json"
+    def test_corrupt_config_returns_defaults(self, patch_workspace):
+        config_file = patch_workspace["root"] / "config.json"
         config_file.write_text("not valid json")
-        monkeypatch.setattr(hook_mod, "get_config_path", lambda: config_file)
         config = load_context_isolation_config()
         assert config["enabled"] is True
         assert config["inContextThreshold"] == 3

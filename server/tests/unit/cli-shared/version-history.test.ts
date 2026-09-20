@@ -1,7 +1,8 @@
 import { describe, expect, it, beforeEach, afterEach } from '@jest/globals';
-import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { DatabaseSync } from 'node:sqlite';
 
 import {
   loadHistory,
@@ -422,6 +423,56 @@ describe('version-history', () => {
       const result = saveVersion(promptDir, 'prompt', 'test-prompt', { id: 'test-prompt' });
       expect(result.success).toBe(true);
       expect(loadHistory(promptDir)?.current_version).toBe(1);
+    });
+  });
+
+  // The CLI scopes what it writes by the workspace id in the config file beside runtime-state.
+  // That file may now be a config.jsonc, and a reader that still parsed it as strict JSON would
+  // not fail — it would fall back to the environment-derived id and write this process's history
+  // into a different scope from the server's, which reads as "the history is empty".
+  describe('workspace id read from the config beside runtime-state', () => {
+    /** Every tenant the version rows were written under. */
+    function recordedTenants(): string[] {
+      const db = new DatabaseSync(join(tempDir, 'runtime-state', 'state.db'));
+      try {
+        const rows = db.prepare('SELECT DISTINCT tenant_id FROM version_history').all() as Array<{
+          tenant_id: string;
+        }>;
+        return rows.map((row) => row.tenant_id);
+      } finally {
+        db.close();
+      }
+    }
+
+    it('takes the id out of a commented config.jsonc', () => {
+      writeFileSync(
+        join(tempDir, 'config.jsonc'),
+        `// This box serves one project.
+{
+  "identity": {
+    "launchDefaults": {
+      "workspaceId": "hand-scoped-workspace", // must match the server's --workspace-id
+    },
+  },
+}
+`,
+        'utf8'
+      );
+
+      expect(saveVersion(promptDir, 'prompt', 'test-prompt', { id: 'test-prompt' }).success).toBe(
+        true
+      );
+
+      expect(recordedTenants()).toEqual(['hand-scoped-workspace']);
+    });
+
+    it('CONTROL: without that file the rows land under a different tenant', () => {
+      expect(saveVersion(promptDir, 'prompt', 'test-prompt', { id: 'test-prompt' }).success).toBe(
+        true
+      );
+
+      expect(recordedTenants()).not.toEqual(['hand-scoped-workspace']);
+      expect(recordedTenants()).toHaveLength(1);
     });
   });
 });
