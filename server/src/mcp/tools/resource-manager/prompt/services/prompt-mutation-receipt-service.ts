@@ -59,7 +59,15 @@ export class PromptMutationReceiptService {
 
     if (input.fullRestart) {
       setTimeout(() => {
-        void this.context.dependencies.onRestart(input.reason);
+        // The receipt already told the caller `restart_pending`. Detached and uncaught, a
+        // restart that failed left that status true forever and logged nothing anywhere.
+        this.context.dependencies.onRestart(input.reason).catch((error: unknown) => {
+          this.context.dependencies.logger.error(
+            `[PromptMutationReceiptService] Restart after ${input.action} of '${input.id}' failed: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
+        });
       }, 1000);
       refreshResult = { loadedAfterRefresh: null, refreshStatus: 'restart_pending' };
     } else {

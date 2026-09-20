@@ -90,6 +90,45 @@ describe('FrameworkStateStore (persistence)', () => {
     await mgr.shutdown();
   });
 
+  test('two project scopes toggle the framework system independently', async () => {
+    const logger = createLogger();
+    const mgr = await createFrameworkStateStore(logger, stateDbPath, {
+      defaultScope: { workspaceId: 'toggle-alpha' },
+    });
+    const beta = { workspaceId: 'toggle-beta' };
+
+    // This suite's first test left a pre-scoping `default` row that a fresh launch scope
+    // adopts, so put alpha on a row of its own before measuring. Both toggles, so the
+    // second is a real state change whichever value adoption supplied.
+    await mgr.setFrameworkSystemEnabled(true, 'baseline');
+    await mgr.setFrameworkSystemEnabled(false, 'baseline');
+
+    // Both start disabled, so the toggle below is a real state change rather than a no-op
+    // early return — without this the assertions could pass over an inert call.
+    expect(mgr.getCurrentState().frameworkSystemEnabled).toBe(false);
+    expect(mgr.getCurrentState(beta).frameworkSystemEnabled).toBe(false);
+
+    await mgr.enableFrameworkSystem('beta asked for it', beta);
+
+    // Unscoped, this toggle wrote alpha's row: beta stayed disabled while the caller was
+    // told the system was enabled, and an unrelated project flipped.
+    expect(mgr.getCurrentState(beta).frameworkSystemEnabled).toBe(true);
+    expect(mgr.isFrameworkSystemEnabled(beta)).toBe(true);
+    expect(mgr.getCurrentState().frameworkSystemEnabled).toBe(false);
+    expect(mgr.isFrameworkSystemEnabled()).toBe(false);
+
+    await mgr.shutdown();
+
+    // The write must be readable back under the scope it was written for: a restart used to
+    // load only the launch scope and answer every other one with defaults.
+    const restarted = await createFrameworkStateStore(logger, stateDbPath, {
+      defaultScope: { workspaceId: 'toggle-alpha' },
+    });
+    expect(restarted.getCurrentState(beta).frameworkSystemEnabled).toBe(true);
+    expect(restarted.getCurrentState().frameworkSystemEnabled).toBe(false);
+    await restarted.shutdown();
+  });
+
   test('a new project scope adopts the pre-scoping global row instead of resetting', async () => {
     const logger = createLogger();
     // The suite's first test wrote 'react' under the unscoped 'default' row, standing in

@@ -83,3 +83,86 @@ describe('FrameworkActionHandler inspect', () => {
     expect(textOf(response)).not.toContain('methodology_id');
   });
 });
+
+/**
+ * Row B.53: the enable/disable actions read the caller's scope to decide whether the toggle
+ * was a no-op, then wrote with no scope at all — the launch workspace's row. Over HTTP one
+ * process serves several workspaces, so a toggle left the caller's own scope untouched and
+ * flipped an unrelated project's.
+ */
+describe('FrameworkActionHandler framework system toggle', () => {
+  /** A store whose state is keyed by scope, as the real one is. */
+  function makeScopedStore(initial: Record<string, boolean>) {
+    const enabled = { ...initial };
+    const writes: Array<{ enabled: boolean; scope: unknown }> = [];
+    const keyOf = (scope?: { workspaceId?: string }) => scope?.workspaceId ?? 'launch';
+    const store = {
+      getCurrentState: (scope?: { workspaceId?: string }) => ({
+        frameworkSystemEnabled: enabled[keyOf(scope)] ?? false,
+        activeFramework: 'cageerf',
+      }),
+      enableFrameworkSystem: async (_reason?: string, scope?: { workspaceId?: string }) => {
+        enabled[keyOf(scope)] = true;
+        writes.push({ enabled: true, scope });
+      },
+      disableFrameworkSystem: async (_reason?: string, scope?: { workspaceId?: string }) => {
+        enabled[keyOf(scope)] = false;
+        writes.push({ enabled: false, scope });
+      },
+    };
+    return { store, enabled, writes };
+  }
+
+  function makeToggleContext(store: unknown, requestScope: { workspaceId: string }) {
+    const { context } = makeContext();
+    return {
+      ...context,
+      frameworkStateStore: store,
+      requestScope,
+      persistFrameworkConfig: async () => undefined,
+    } as unknown as SystemControlContext;
+  }
+
+  const caller = { workspaceId: 'caller-workspace' };
+
+  test('enable writes the calling workspace and leaves the launch workspace alone', async () => {
+    const { store, enabled, writes } = makeScopedStore({ launch: false });
+
+    await new FrameworkActionHandler(makeToggleContext(store, caller)).execute({
+      operation: 'enable',
+    });
+
+    expect(writes).toHaveLength(1);
+    expect(writes[0]!.scope).toBe(caller);
+    expect(enabled['caller-workspace']).toBe(true);
+    expect(enabled.launch).toBe(false);
+  });
+
+  test('disable writes the calling workspace and leaves the launch workspace alone', async () => {
+    const { store, enabled, writes } = makeScopedStore({
+      launch: true,
+      'caller-workspace': true,
+    });
+
+    await new FrameworkActionHandler(makeToggleContext(store, caller)).execute({
+      operation: 'disable',
+    });
+
+    expect(writes).toHaveLength(1);
+    expect(writes[0]!.scope).toBe(caller);
+    expect(enabled['caller-workspace']).toBe(false);
+    expect(enabled.launch).toBe(true);
+  });
+
+  test('a toggle that is already in the requested state writes nothing', async () => {
+    // Positive control for the two assertions above: the writes they count are real, not
+    // an artefact of a handler that never writes.
+    const { store, writes } = makeScopedStore({ 'caller-workspace': true });
+
+    await new FrameworkActionHandler(makeToggleContext(store, caller)).execute({
+      operation: 'enable',
+    });
+
+    expect(writes).toHaveLength(0);
+  });
+});
