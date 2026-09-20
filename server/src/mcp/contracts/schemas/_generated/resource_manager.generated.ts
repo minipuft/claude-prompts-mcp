@@ -452,7 +452,7 @@ export const resource_managerParameters: ToolParameter[] = [
     name: 'subject',
     type: 'string',
     description:
-      "[Gate] Free kebab-case tag naming what this gate reminds about (e.g. 'code-quality'). An installation's `gates.harnessCovers` (config.json) suppresses reminder-tier gates whose subject it lists; check-tier gates (shell_verify, script_tool) are never suppressed. Lowercase letters, digits and hyphens only.",
+      "[Gate] Free kebab-case tag naming what this gate reminds about (e.g. 'code-quality'). An installation's `gates.harnessCovers` (config.jsonc, or config.json) suppresses reminder-tier gates whose subject it lists; check-tier gates (shell_verify, script_tool) are never suppressed. Lowercase letters, digits and hyphens only.",
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,

@@ -1294,8 +1294,8 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
     }
 
     parts.push(
-      'Rewrite config.json in the 5.0 spellings with "version": 5 and it is read as written, ' +
-        'silencing this notice. This translation is removed in 6.0.0.'
+      `Rewrite ${path.basename(this.configPath)} in the 5.0 spellings with "version": 5 and it ` +
+        'is read as written, silencing this notice. This translation is removed in 6.0.0.'
     );
 
     logger.warn(parts.join(' '));

@@ -435,8 +435,9 @@ export const resourceManagerInputSchema = z
     gate_type: z.enum(['framework', 'category', 'custom']).optional(),
     /**
      * [Gate] Free kebab-case tag naming what this gate reminds about (e.g. `code-quality`).
-     * An installation's `gates.harnessCovers` (config.json) suppresses reminders whose
-     * subject it lists; checks (`shell_verify`/`script_tool`) are never suppressed.
+     * An installation's `gates.harnessCovers` (config.jsonc, or config.json) suppresses
+     * reminders whose subject it lists; checks (`shell_verify`/`script_tool`) are never
+     * suppressed.
      */
     subject: z
       .string()

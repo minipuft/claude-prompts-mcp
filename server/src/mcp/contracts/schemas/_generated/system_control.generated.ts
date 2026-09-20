@@ -108,7 +108,7 @@ export const system_controlParameters: ToolParameter[] = [
     name: 'persist',
     type: 'boolean',
     description:
-      'When true, gate/framework enable/disable changes are also written to config.json.',
+      'When true, gate/framework enable/disable changes are also written to the workspace config file (config.jsonc, or config.json if that is what exists).',
     status: 'working',
     compatibility: 'canonical',
     notes: [

@@ -59,7 +59,8 @@ describe('classifyArtifactPath — the B13 table, first match wins', () => {
     expect(classifyArtifactPath('docs/reference/gate-configuration.json')).toBe('docs');
   });
 
-  test('config: the two config.json names, .config.<js|ts|mjs|cjs>, and yaml outside prompts/gates', () => {
+  test('config: both workspace config dialects, config.schema.json, .config.<js|ts|mjs|cjs>, and yaml outside prompts/gates', () => {
+    expect(classifyArtifactPath('server/config.jsonc')).toBe('config');
     expect(classifyArtifactPath('server/config.json')).toBe('config');
     expect(classifyArtifactPath('server/config.schema.json')).toBe('config');
     expect(classifyArtifactPath('jest.config.mjs')).toBe('config');
@@ -70,8 +71,9 @@ describe('classifyArtifactPath — the B13 table, first match wins', () => {
   test('source: everything the table does not recognise', () => {
     expect(classifyArtifactPath('server/src/engine/gates/gate-manager.ts')).toBe('source');
     expect(classifyArtifactPath('Makefile')).toBe('source');
-    // A plain .json that is not one of the two config names stays source.
+    // A plain .json/.jsonc that is not a recognised config name stays source.
     expect(classifyArtifactPath('server/package.json')).toBe('source');
+    expect(classifyArtifactPath('server/myconfig.jsonc')).toBe('source');
   });
 
   test('backslash paths normalize, and a bare filename is not read as a directory match', () => {
