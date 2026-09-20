@@ -307,14 +307,34 @@ export class ConsolidatedSkillsSync {
   }
 
   /**
+   * "Files written" plus, when the report carries one, its per-client breakdown — the shape
+   * `export`, `sync`, and `pull` all render identically. Pulled out of `summarizeRunReport` so
+   * that shared shape is written once rather than duplicated per branch, which is also what kept
+   * the caller's cognitive complexity under the enforced limit.
+   */
+  private writtenLines(report: SkillsSyncRunReport, clientLabel: string): string[] {
+    const lines: string[] = [
+      report.preview
+        ? `Files written (client: ${clientLabel}): 0 (preview — no files were written)`
+        : `Files written (client: ${clientLabel}): ${report.written}`,
+    ];
+    if (report.writtenByClient != null) {
+      for (const [client, count] of Object.entries(report.writtenByClient)) {
+        lines.push(`  - ${client}: ${count}`);
+      }
+    }
+    return lines;
+  }
+
+  /**
    * States the run's counts from the report `runSkillsSyncCommand` returns, instead of leaving
    * the caller to infer what happened from prose log lines or by inspecting folders directly.
    *
    * Renders only the fields each command actually populates: `resources` is meaningful for every
-   * command that loads the canonical resource set, `written`/`pruned` only for `export` and
-   * `sync` (the only commands that write managed output), and `drift` only for `diff`. `clone`
-   * populates none of these — it parses one external file rather than loading the resource set —
-   * so it gets no counts line here; its own log output already states what was created.
+   * command that loads the canonical resource set, `pruned` only for `export` and `sync`, `drift`
+   * only for `diff`, and `written` for every command that writes files — `export`/`sync`/`pull`
+   * break it out by client via `writtenByClient`, `clone` does not (it parses one external file
+   * rather than loading a per-client resource set, so it never populates `resources` either).
    */
   private summarizeRunReport(
     operation: Exclude<SkillsSyncOperation, 'status'>,
@@ -326,16 +346,7 @@ export class ConsolidatedSkillsSync {
 
     if (operation === 'export' || operation === 'sync') {
       lines.push(`Resources loaded: ${report.resources}`);
-      lines.push(
-        report.preview
-          ? `Files written (client: ${clientLabel}): 0 (preview — no files were written)`
-          : `Files written (client: ${clientLabel}): ${report.written}`
-      );
-      if (report.writtenByClient) {
-        for (const [client, count] of Object.entries(report.writtenByClient)) {
-          lines.push(`  - ${client}: ${count}`);
-        }
-      }
+      lines.push(...this.writtenLines(report, clientLabel));
       if (report.pruned > 0) {
         lines.push(`Managed directories pruned: ${report.pruned}`);
       }
@@ -348,6 +359,13 @@ export class ConsolidatedSkillsSync {
       lines.push(`Drifted resources (client: ${clientLabel}): ${driftedCount}`);
     } else if (operation === 'pull') {
       lines.push(`Resources loaded: ${report.resources}`);
+      lines.push(...this.writtenLines(report, clientLabel));
+    } else {
+      lines.push(
+        report.preview
+          ? `Files written: 0 (preview — no files were written)`
+          : `Files written: ${report.written}`
+      );
     }
 
     if (report.failures.length > 0) {
