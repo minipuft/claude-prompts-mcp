@@ -38,6 +38,7 @@ import {
 import { buildPromptEngineSchema } from '../../../src/mcp/tools/schemas/prompt-engine.schema.js';
 import { resourceManagerInputSchema } from '../../../src/mcp/tools/schemas/resource-manager.schema.js';
 import { buildSystemControlSchema } from '../../../src/mcp/tools/schemas/system-control.schema.js';
+import { PARAMETER_OWNERS } from '../../../src/mcp/tools/resource-manager/core/parameter-ownership.js';
 
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const TOOLS_DIR = path.join(SERVER_ROOT, 'src', 'mcp', 'tools');
@@ -346,6 +347,16 @@ function routerConstructedHandlers(): string[] {
  */
 const SYSTEM_CONTROL_DISPATCH = 'actionHandler.execute(…)';
 
+/**
+ * The one use the walker cannot follow in `resource_manager`, and what bounds it instead.
+ *
+ * `describeParameterRefusal` reads the input by a key drawn from `PARAMETER_OWNERS`, so the walker
+ * sees a computed access and stops. The property this suite protects — every field read is a field
+ * the schema declares — still holds, and is asserted directly below against that table's own keys
+ * rather than taken on trust. An exemption without that assertion would be a hole.
+ */
+const RESOURCE_MANAGER_OWNERSHIP_TABLE_READ = 'sent[parameter]';
+
 // ---------------------------------------------------------------------------
 // Contract parity
 // ---------------------------------------------------------------------------
@@ -626,8 +637,17 @@ describe('tool handlers read only fields their registered schema declares', () =
       expect(undeclared(reads, declared)).toEqual([]);
     });
 
-    it('follows every use of the input', () => {
-      expect(reads.unfollowed).toEqual([]);
+    it('follows every use of the input except the ownership-table lookup', () => {
+      expect(reads.unfollowed.map((use) => use.replace(/^[^ ]+ /, ''))).toEqual([
+        RESOURCE_MANAGER_OWNERSHIP_TABLE_READ,
+      ]);
+    });
+
+    it('declares every field the ownership table can look up', () => {
+      // What the exempted computed access above is allowed to read. Every key it can produce must
+      // be declared, or the exemption would hide exactly the undeclared read this suite exists to
+      // catch.
+      expect(Object.keys(PARAMETER_OWNERS).filter((field) => !declared.has(field))).toEqual([]);
     });
 
     it('observes reads in the router and in the imported preview check', () => {
