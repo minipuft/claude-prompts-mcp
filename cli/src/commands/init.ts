@@ -1,6 +1,7 @@
 import { rmSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { initWorkspace, initConfig, validateResourceFile } from '@cli-shared/index.js';
+import { declaredResourceId } from '@cli-shared/resource-operations.js';
 
 import { output } from '../lib/output.js';
 import { discoverResourcePaths, resolveResourceDir } from '../lib/workspace.js';
@@ -23,8 +24,8 @@ export async function init(options: InitOptions): Promise<number> {
     for (const prompt of promptEntries) {
       const validation = validateResourceFile(
         'prompts',
-        prompt.id,
-        join(prompt.dir, 'prompt.yaml'),
+        declaredResourceId(prompt),
+        prompt.file,
       );
       if (!validation.valid) {
         rmSync(join(workspacePath, 'resources'), { recursive: true, force: true });

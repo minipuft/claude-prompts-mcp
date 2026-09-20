@@ -3,6 +3,8 @@ import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 
+import { overlayDecidedYamlKeys } from '../../shared/yaml-key-overlay.js';
+
 import type { ConfigManager, Logger } from '#shared/types/index.js';
 import type { FileContentChange } from '../../resource-manager/prompt/analysis/object-diff-generator.js';
 import type { GateCreationData } from '../core/types.js';
@@ -71,6 +73,24 @@ export const PRESERVED_GATE_YAML_KEYS = GATE_YAML_DECLARED_KEYS.filter(
 );
 
 export { GATE_YAML_PROJECTED_KEYS, GATE_YAML_EXCLUDED_KEYS };
+
+/**
+ * Every `gate.yaml` key a write of `gate.yaml` decides (P4.67) — the projected keys `buildGateYaml`
+ * always (or conditionally) computes, plus the preserved keys `resolvePreservedGateYamlFields`
+ * resolves from the call or the file. Together that is every `GateDefinitionSchema`-declared key
+ * except `guidance`, which lives in `guidance.md` and is never a `gate.yaml` key at all.
+ *
+ * `GateDefinitionSchema` is `.passthrough()`, so a hand-authored `gate.yaml` may declare a key
+ * this schema does not. `buildGateYaml`'s output holds no value for such a key, and BEFORE
+ * `overlayDecidedYamlKeys` was introduced here, that meant a document rebuilt from that output
+ * alone dropped it on every write. This set is exactly what a `gate.yaml` write is allowed to
+ * move — everything else, declared-but-absent-from-this-write included, passes through from the
+ * file already on disk.
+ */
+const GATE_YAML_DECIDED_KEYS: ReadonlySet<string> = new Set([
+  ...GATE_YAML_PROJECTED_KEYS,
+  ...PRESERVED_GATE_YAML_KEYS,
+]);
 
 /**
  * `GateCreationData` keys whose value lives in `gate.yaml` — the gate-side counterpart of
@@ -320,9 +340,14 @@ export class GateFileWriter {
 
     const files: GateWritePlan['files'] = [];
     if (writesYaml) {
+      const gateYamlData = overlayDecidedYamlKeys(
+        existingYaml,
+        this.buildGateYaml(data, existingYaml),
+        GATE_YAML_DECIDED_KEYS
+      );
       files.push({
         relativePath: 'gate.yaml',
-        content: serializeYaml(this.buildGateYaml(data, existingYaml), { sortKeys: false }),
+        content: serializeYaml(gateYamlData, { sortKeys: false }),
       });
     }
     if (writesGuidance) {

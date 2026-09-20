@@ -279,21 +279,6 @@ export class GenericFrameworkGuide extends BaseFrameworkGuide {
       }
     );
   }
-
-  /**
-   * Get the raw framework definition
-   * Useful for introspection and debugging
-   */
-  getDefinition(): FrameworkResourceDefinition {
-    return this.definition;
-  }
-
-  /**
-   * Get gate configuration for this framework
-   */
-  getGateConfiguration(): { include?: string[]; exclude?: string[] } | undefined {
-    return this.definition.gates;
-  }
 }
 
 /**

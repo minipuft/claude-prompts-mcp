@@ -79,24 +79,10 @@ export class FrameworkDecisionAuthority {
   }
 
   /**
-   * Check if decision has been made.
-   */
-  hasDecided(): boolean {
-    return this.decision !== null;
-  }
-
-  /**
    * Get the cached decision without computing (returns null if not decided).
    */
   getCachedDecision(): FrameworkDecision | null {
     return this.decision;
-  }
-
-  /**
-   * Reset the authority (for testing or request reprocessing).
-   */
-  reset(): void {
-    this.decision = null;
   }
 
   /**

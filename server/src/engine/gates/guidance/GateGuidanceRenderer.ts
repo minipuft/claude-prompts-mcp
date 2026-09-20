@@ -370,36 +370,10 @@ export class GateGuidanceRenderer {
   }
 
   /**
-   * Get available gate IDs (for testing and diagnostics)
-   */
-  async getAvailableGates(): Promise<string[]> {
-    return this.gateLoader.listAvailableGates();
-  }
-
-  /**
    * Get detailed gate definitions for listing/discovery
    */
   async getAvailableGateDefinitions(): Promise<LightweightGateDefinition[]> {
     return this.gateLoader.listAvailableGateDefinitions();
-  }
-
-  /**
-   * Clear cache (for hot-reloading support)
-   */
-  clearCache(): void {
-    this.gateLoader.clearCache();
-    this.logger.debug('[GATE GUIDANCE RENDERER] Delegated cache clear to GateLoader');
-  }
-
-  /**
-   * Get renderer statistics (for monitoring)
-   */
-  getStatistics(): { cachedGates: number; gatesDirectory: string } {
-    const stats = this.gateLoader.getStatistics();
-    return {
-      cachedGates: stats.cachedGates,
-      gatesDirectory: 'loader-managed',
-    };
   }
 }
 

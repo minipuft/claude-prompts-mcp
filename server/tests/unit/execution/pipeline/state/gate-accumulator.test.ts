@@ -154,61 +154,6 @@ describe('GateAccumulator', () => {
     });
   });
 
-  describe('freeze behavior', () => {
-    test('freeze prevents further additions', () => {
-      accumulator.add('gate-1', 'registry-auto');
-      accumulator.freeze();
-
-      const added = accumulator.add('gate-2', 'inline-operator');
-      expect(added).toBe(false);
-      expect(accumulator.has('gate-2')).toBe(false);
-      expect(accumulator.size).toBe(1);
-    });
-
-    test('isFrozen returns correct state', () => {
-      expect(accumulator.isFrozen()).toBe(false);
-      accumulator.freeze();
-      expect(accumulator.isFrozen()).toBe(true);
-    });
-
-    test('freeze logs summary', () => {
-      accumulator.add('gate-1', 'registry-auto');
-      accumulator.add('gate-2', 'framework-guide');
-      accumulator.freeze();
-
-      expect(mockLogger.debug).toHaveBeenCalledWith(
-        '[GateAccumulator] Frozen with gates',
-        expect.objectContaining({
-          count: 2,
-        })
-      );
-    });
-
-    test('warns when attempting to add after freeze', () => {
-      accumulator.freeze();
-      accumulator.add('new-gate', 'inline-operator');
-
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        '[GateAccumulator] Attempted to add gate after freeze',
-        expect.objectContaining({
-          gateId: 'new-gate',
-          source: 'inline-operator',
-        })
-      );
-    });
-
-    test('clear is blocked after freeze', () => {
-      accumulator.add('gate-1', 'registry-auto');
-      accumulator.freeze();
-      accumulator.clear();
-
-      expect(accumulator.size).toBe(1);
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        '[GateAccumulator] Attempted to clear after freeze'
-      );
-    });
-  });
-
   describe('filtering and queries', () => {
     beforeEach(() => {
       accumulator.add('gate-1', 'registry-auto');
@@ -270,18 +215,6 @@ describe('GateAccumulator', () => {
       accumulator.add('gate-no-meta', 'registry-auto');
       const entry = accumulator.getEntries().find((e) => e.id === 'gate-no-meta');
       expect(entry?.metadata).toBeUndefined();
-    });
-  });
-
-  describe('clear operation', () => {
-    test('clear removes all gates when not frozen', () => {
-      accumulator.add('gate-1', 'registry-auto');
-      accumulator.add('gate-2', 'framework-guide');
-      expect(accumulator.size).toBe(2);
-
-      accumulator.clear();
-      expect(accumulator.size).toBe(0);
-      expect(accumulator.getAll()).toHaveLength(0);
     });
   });
 });

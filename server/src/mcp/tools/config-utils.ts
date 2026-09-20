@@ -2,8 +2,9 @@
 /**
  * Configuration Utilities for Safe Config Management
  *
- * Provides atomic config operations with backup/rollback capabilities
- * for secure configuration management in system_control tool.
+ * Provides atomic config operations with automatic backup for secure configuration
+ * management in system_control tool. Restoring a backup has no caller (measured
+ * 2026-09-17, P4.52/R36) and was removed with `getConfigPath()`, which had none either.
  *
  * NO KEY LIST, NO VALIDATOR, NO SECOND WRITER, NO RE-EXPORT (ruling R54)
  * This file used to define its own `CONFIG_VALID_KEYS` (24 keys against cli-shared's 60) and its
@@ -66,7 +67,7 @@ export interface ConfigBackup {
 
 /**
  * Safe Configuration Writer
- * Provides atomic config operations with automatic backup and rollback
+ * Provides atomic config operations with automatic backup
  */
 export class SafeConfigWriter {
   private logger: Logger;

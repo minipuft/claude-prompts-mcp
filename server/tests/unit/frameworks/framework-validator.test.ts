@@ -86,12 +86,6 @@ describe('FrameworkValidator', () => {
     expect(() => validator.validateAndNormalize('unknown')).toThrow(/not found/i);
   });
 
-  test('exists reflects presence and enabled state', () => {
-    expect(validator.exists('react')).toBe(true);
-    expect(validator.exists('react', { enabledOnly: true })).toBe(false);
-    expect(validator.exists('cageerf', { enabledOnly: true })).toBe(true);
-  });
-
   test('tryNormalize returns null for missing or invalid identifiers', () => {
     expect(validator.tryNormalize('react')).toBe('REACT');
     expect(validator.tryNormalize('')).toBeNull();

@@ -467,6 +467,13 @@ export const SUITE = [
       'CHECKED both ways — the self-test drives the predicate over the shipped pre-fix text of every site that motivated it (the two P4.34 repair responses, the category `inspect` line, and both bundled-delete refusals; all five must report) AND over each fixed form plus the sanctioned renderer and a pure report (all must stay silent); the live tree is the eleventh case. The comment blind spot is asserted as a case rather than left implicit, so narrowing it later is a test change and not a silent widening. NOT checked: that a named comparand is the CORRECT one — `takes precedence over the moon` passes, because naming is what makes a claim checkable by a reader and correctness is not lexically decidable',
   },
   {
+    script: 'validate:reload-assertions',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse:
+      "CHECKED both ways — the self-test drives the motivating before/after size comparison after `reloadPromptData` (must report) and twins that each differ in one thing: plus a body read (silent), `loadPromptData` for the reload (silent), plus a `toBe(true)` status (still reports), the size through a local, a same-file helper, a beforeEach hook and a reload builder's `handler` (each reports), the builder alone (silent), and a reload named only by the case title (reports) or only by a describe title (silent — asserted blind spot). The live tree is the last case, and a scan selecting no reload case or no size assertion in one exits 1. Positive controls 2026-09-16 on hot-reload-root-parity.integration.test.ts: replacing the bundled-edit case's body read with `expect(list.length).toBe(3)` reported that case, and deleting the body read beside the size check at the file's last case reported that one; both restored. NOT checked: whether a non-size assertion can actually see content (id presence clears a case), and a reload reached only by writing a watched file and polling",
+  },
+  {
     // `spawn` is a TEXTUAL match, not a behavioural one, for the reason
     // validate:test-directory-membership already declares it: this script's SPAWN_BINDINGS set
     // lists the literals 'spawn', 'spawnSync', 'execFile' and 'fork' so it can recognise a test

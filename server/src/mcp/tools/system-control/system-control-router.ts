@@ -133,11 +133,6 @@ export class ConsolidatedSystemControl implements SystemControlContext {
     }
   }
 
-  setRestartCallback(onRestart: (reason: string) => Promise<void>): void {
-    this.onRestart = onRestart;
-    this.logger.debug('Restart callback configured for system control');
-  }
-
   setToolSurfaceChangedHandler(handler: () => Promise<void>): void {
     this.onToolSurfaceChanged = handler;
   }

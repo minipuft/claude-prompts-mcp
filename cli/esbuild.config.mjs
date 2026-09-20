@@ -75,9 +75,19 @@ const JSONC_PARSER_ESM_ENTRY = resolveEsmEntry('jsonc-parser', SERVER_ROOT);
  * ESM build correctly (see resolveEsmEntry() below / F-T5-17) measured 673,115 B
  * unminified — the dependency itself, not scope creep. BUNDLE_BUDGET_BYTES (shipped,
  * minified) is untouched: measured 339,980 B with the same fix, well under 512,000.
+ *
+ * Raised again 2026-09-20, and this one is a MERGE arithmetic, not either side's growth:
+ * neither parent exceeded 680,000 alone. The resource-surface branch measured 614,157 B
+ * without jsonc-parser, and #338 measured 673,115 B without the branch's `cpm` work
+ * (nested chain steps, single-file prompts, the subtree history operations). Merged:
+ * 682,605 B, over by 2,605. 680,000 was set from a measurement of one parent taken one
+ * day before the other landed, which is the only reason it looked like enough headroom.
+ * jsonc-parser is bundled once — six ESM modules, each emitted a single time — so this is
+ * additive, not a duplicate dependency the merge introduced. BUNDLE_BUDGET_BYTES (shipped,
+ * minified) is again untouched and is the number that governs what users download.
  */
 export const BUNDLE_BUDGET_BYTES = 512_000; // 500KB — shipped (minified)
-export const DEV_BUNDLE_BUDGET_BYTES = 680_000; // 664KB — unminified dev build
+export const DEV_BUNDLE_BUDGET_BYTES = 690_000; // 674KB — unminified dev build
 
 /** Absolute path to the server source tree the CLI shares code with. */
 const SERVER_SRC = join(SERVER_ROOT, 'src');

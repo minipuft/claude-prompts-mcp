@@ -30,10 +30,9 @@
  * ALIAS and folded to the canonical underscore form. No other id type enters the symbolic
  * grammar, so kebab is free everywhere else and matches the wider convention for node/gate ids.
  *
- * The two camelCase prompt ids (`strategicImplement`, `diagnosisCard`) match neither and are a
- * known, deferred exception — see the resource-surface-consolidation plan. They are not
- * grandfathered here: `isCanonicalPromptId` reports them, because a convention with a silent
- * exception is a convention nobody can check.
+ * The two camelCase prompt ids that measurement found have since been renamed to snake_case.
+ * Nothing is grandfathered here: `isCanonicalPromptId` reports any camelCase id, because a
+ * convention with a silent exception is a convention nobody can check.
  */
 
 /**

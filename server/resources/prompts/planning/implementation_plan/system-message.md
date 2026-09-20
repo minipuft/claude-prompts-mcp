@@ -73,7 +73,7 @@ The emitted plan file follows this ownership split (the master plan and implemen
 - **Tier tables with a Status column** (☐/✓/⚠/⊘ — ⊘ = closed, verified, no change required) — the ONLY place work rows live, and the shape the executor COMPILES: row ids become node ids, the Depends column becomes the dependency edges, and a tier's rows become one workflow submission. The four glyphs stay byte-compatible — the plan-hygiene hooks and `validate-phase-header-drift.js` read exactly these
 - **§Open Questions** — each with a status (`OPEN` / `RULED → implementation notes`) and the tier it must precede
 - **§Findings** — phase-scoped ids (`P<n>-F<m>`); a finding that binds a FUTURE phase is additionally promoted to the master plan's Findings Ledger
-- Per-tier **execution records** appended by `>>strategicImplement` at its writeback step, short
+- Per-tier **execution records** appended by `>>strategic_implement` at its writeback step, short
 - NOT in the plan file: full ruling rationales, deviation logs (`DEV-T<tier>-<n>`), validation ledgers — those live in the sibling implementation-notes file
 
 ## Context Persistence

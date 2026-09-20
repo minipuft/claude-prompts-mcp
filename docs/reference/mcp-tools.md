@@ -242,7 +242,7 @@ prompt_engine(command:">>brainstorm * 5 topic:'startup ideas'")
 prompt_engine(command:">>analyze * 2 --> >>summarize")
 
 # Each iteration uses the same plan_path
-prompt_engine(command:">>strategicImplement * 3 plan_path:'./plan.md'")
+prompt_engine(command:">>strategic_implement * 3 plan_path:'./plan.md'")
 ```
 
 **Varied Arguments per Step (use explicit chain):**
@@ -503,7 +503,7 @@ Full field reference, the linearization rule, and the complete rejection vocabul
 
 #### Compiling a plan tier into a submission
 
-You rarely hand-write a submission. `>>strategicImplement` compiles one from a tier-gated plan
+You rarely hand-write a submission. `>>strategic_implement` compiles one from a tier-gated plan
 file — the table `>>implementation_plan` emits — one tier per submission:
 
 | Plan artifact                   | Compiles to                                                               |

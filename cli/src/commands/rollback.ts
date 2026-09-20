@@ -1,4 +1,3 @@
-import { join } from 'node:path';
 import { loadYamlFileSync, serializeYaml, rollbackVersion } from '@cli-shared/index.js';
 import { resolveWorkspace, findResource } from '../lib/workspace.js';
 import { output } from '../lib/output.js';
@@ -47,7 +46,7 @@ export async function rollback(options: RollbackOptions): Promise<number> {
 
   // Load current state as snapshot
   const config = TYPE_CONFIG[type];
-  const yamlPath = join(match.dir, config.entryFile);
+  const yamlPath = match.file;
   const currentData = loadYamlFileSync<Record<string, unknown>>(yamlPath);
 
   if (!currentData) {
@@ -66,7 +65,7 @@ export async function rollback(options: RollbackOptions): Promise<number> {
   }
   const resourceType = singularName(type) as 'prompt' | 'gate' | 'framework';
 
-  const result = rollbackVersion(match.dir, resourceType, options.id, targetVersion, currentData);
+  const result = rollbackVersion(match.file, resourceType, match.id, targetVersion, currentData);
 
   if (!result.success) {
     console.error(result.error ?? 'Rollback failed.');

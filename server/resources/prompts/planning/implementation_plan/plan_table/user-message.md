@@ -41,7 +41,7 @@ plan_table:
   [Repeat for each dependency tier]
 
   Rules:
-  - St(atus) column is REQUIRED and starts ☐ — `>>strategicImplement` and the plan-hygiene hooks read exactly this shape (☐ pending, ✓ done, ⚠ falsified premise, ⊘ closed-no-change); a plan table without it forces every executor to bridge by hand. Stamp every non-✓ row with `(as of YYYY-MM-DD · flips when <observation>)` — an unstamped ☐ means "still open" and "never re-checked" at once, and the row-tracking gate fails on it
+  - St(atus) column is REQUIRED and starts ☐ — `>>strategic_implement` and the plan-hygiene hooks read exactly this shape (☐ pending, ✓ done, ⚠ falsified premise, ⊘ closed-no-change); a plan table without it forces every executor to bridge by hand. Stamp every non-✓ row with `(as of YYYY-MM-DD · flips when <observation>)` — an unstamped ☐ means "still open" and "never re-checked" at once, and the row-tracking gate fails on it
   - Tasks without dependencies can run in parallel
   - New files are RED FLAGS — justify each one
   - Verify column: how to confirm this task works before moving on

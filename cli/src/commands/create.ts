@@ -51,8 +51,9 @@ export async function create(options: CreateOptions): Promise<number> {
     mkdirSync(baseDir, { recursive: true });
   }
 
-  if (resourceExists(baseDir, type, options.id, options.category)) {
-    const msg = `${singularName(type)} '${options.id}' already exists.`;
+  const existingPath = resourceExists(baseDir, type, options.id, options.category);
+  if (existingPath) {
+    const msg = `${singularName(type)} '${options.id}' already exists at ${existingPath}.`;
     if (options.json) {
       output({ error: msg }, { json: true });
     } else {

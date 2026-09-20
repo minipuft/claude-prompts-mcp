@@ -30,7 +30,7 @@
         "@CAGEERF #analytical >>analyze topic:'metrics' --> >>report :: 'cite sources'",
         ">>fix-bug :: verify:'npm test' :full loop:true",
         ">>brainstorm * 5 topic:'product ideas'",
-        ">>strategicImplement * 3 plan_path:'./plan.md'",
+        ">>strategic_implement * 3 plan_path:'./plan.md'",
         ">>research topic:'A' --> >>research topic:'B' --> >>compare",
         ">>validate input:'step1' --> >>validate input:'step2' --> >>synthesize"
       ]

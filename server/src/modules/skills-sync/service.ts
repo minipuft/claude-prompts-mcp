@@ -3547,8 +3547,12 @@ async function exportCommand(
         // Load version history for the resource
         const firstSourcePath = ir.sourcePaths[0];
         if (!firstSourcePath) continue;
-        const resourceDir = path.dirname(firstSourcePath);
-        const history = loadHistory(resourceDir);
+        // The path only locates state.db; the rows are the IR's own type and id. Read from the
+        // path, a gate under any directory named `prompts` was looked up as a prompt.
+        const history = loadHistory(path.dirname(firstSourcePath), {
+          resourceType: ir.resourceType,
+          resourceId: ir.id,
+        });
 
         manifestEntries.set(resourceKey, {
           resourceId: ir.id,
@@ -3944,8 +3948,12 @@ async function syncCommand(
 
         const firstSourcePath = ir.sourcePaths[0];
         if (!firstSourcePath) continue;
-        const resourceDir = path.dirname(firstSourcePath);
-        const history = loadHistory(resourceDir);
+        // The path only locates state.db; the rows are the IR's own type and id. Read from the
+        // path, a gate under any directory named `prompts` was looked up as a prompt.
+        const history = loadHistory(path.dirname(firstSourcePath), {
+          resourceType: ir.resourceType,
+          resourceId: ir.id,
+        });
 
         manifestEntries.set(resourceKey, {
           resourceId: ir.id,

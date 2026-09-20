@@ -76,10 +76,6 @@ export class GateLoader implements GateDefinitionProvider {
     this.temporaryGateRegistry = temporaryGateRegistry;
   }
 
-  setTemporaryGateRegistry(temporaryGateRegistry?: TemporaryGateRegistry): void {
-    this.temporaryGateRegistry = temporaryGateRegistry;
-  }
-
   /**
    * Load a gate definition by ID with caching
    */
