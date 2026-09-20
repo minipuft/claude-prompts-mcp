@@ -8,9 +8,9 @@
 
 import { z } from 'zod/v4';
 
+import { workflowEdgeSchema } from './workflow-ir.schema.js';
 import { PATCH_TARGET_FIELDS } from '../resource-manager/prompt/operations/template-patch.js';
 import { PREVIEWABLE_ACTIONS } from '../shared/preview-action.js';
-import { workflowEdgeSchema } from './workflow-ir.schema.js';
 
 import {
   ArgumentValidationSchema,

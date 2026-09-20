@@ -890,6 +890,27 @@ rather than resolved in an order you cannot see.
 Only the last row destroys a file you sent no replacement for, which is why it is the only
 `update` that requires `confirm:true`.
 
+### Chain edges
+
+A chain may declare `edges` beside its steps — `{from, to}` dependency constraints naming step ids
+(an explicit step `id`, or the kebab slug minted from `stepName`). They are ordering constraints,
+never control flow; see [chain-schema.md](chain-schema.md#edges) for what the loader does with them.
+
+**Edges and steps are one state.** An edge naming a step the chain does not declare, or a cycle, is
+refused and the whole write is rolled back. So a `chain_steps` rewrite that drops a step an edge
+still names must send the corrected `edges` in the same call:
+
+```bash
+resource_manager(
+  resource_type:"prompt", action:"update", id:"my_chain",
+  chain_steps:[{promptId:"research", stepName:"Research"}, {promptId:"draft", stepName:"Draft"}],
+  edges:[{from:"research", to:"draft"}]
+)
+```
+
+To drop every edge and keep the authored step order instead, send `unset:["edges"]`. Omitting
+`edges` PRESERVES whatever the prompt already declares, like every other carried-forward field.
+
 ### Gates
 
 ```bash
@@ -979,27 +1000,28 @@ resource_manager(resource_type:"category", action:"delete", id:"analysis", confi
 
 **Prompt Parameters:**
 
-| Parameter               | Purpose                                                                                                                                  |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `category`              | Prompt category tag                                                                                                                      |
-| `user_message_template` | Prompt body with `{{variables}}`                                                                                                         |
-| `system_message`        | Optional system message                                                                                                                  |
-| `arguments`             | Array of `{name, type?, required?, description?, defaultValue?, validation?}`                                                            |
-| `argument_updates`      | Update-only per-field overlay onto existing arguments by `name` — see [Argument Updates](#argument-updates-partial-argument-edit)        |
-| `patch`                 | Anchored replacements for `update` — see [Patch Mode](#patch-mode-partial-update)                                                        |
-| `preview_action`        | With `action:"preview"`: which mutation to render — `update` (prompt only), `rollback`, or `delete`. Writes nothing, consumes no version |
-| `expected_version`      | Prompt update concurrency token from `inspect`; stale values refuse before versioning or writing                                         |
-| `unset`                 | Update-only: CLEAR the named fields — see [Removing a field](#removing-a-field-unset)                                                    |
-| `chain_steps`           | Chain step definitions                                                                                                                   |
-| `chain_step_operation`  | `add \| remove \| reorder \| update` — omit it to replace the whole array                                                                |
-| `tool_operation`        | Update-only: `add` unions with the current tool binding, `remove` unbinds AND deletes — see [Removing a field](#removing-a-field-unset)  |
-| `tool_ids`              | Tool ids for `tool_operation:"remove"`; refused without it                                                                               |
-| `gate_configuration`    | Gate include/exclude lists                                                                                                               |
-| `injection`             | Prompt-level injection control — `system-prompt`, `gate-guidance`, `style-guidance`                                                      |
-| `register_with_mcp`     | Register as a native MCP prompt — **freezes the prompt against its category/global default**                                             |
-| `mcp_prompt_mode`       | `expand` (plain text) or `launch` (route through `prompt_engine`) — **same freeze**                                                      |
-| `subagent_model`        | `heavy \| standard \| fast` capability hint for `==>` delegated steps                                                                    |
-| `agent_type`            | Default host agent for this prompt's `==>` delegated steps                                                                               |
+| Parameter               | Purpose                                                                                                                                        |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `category`              | Prompt category tag                                                                                                                            |
+| `user_message_template` | Prompt body with `{{variables}}`                                                                                                               |
+| `system_message`        | Optional system message                                                                                                                        |
+| `arguments`             | Array of `{name, type?, required?, description?, defaultValue?, validation?}`                                                                  |
+| `argument_updates`      | Update-only per-field overlay onto existing arguments by `name` — see [Argument Updates](#argument-updates-partial-argument-edit)              |
+| `patch`                 | Anchored replacements for `update` — see [Patch Mode](#patch-mode-partial-update)                                                              |
+| `preview_action`        | With `action:"preview"`: which mutation to render — `update` (prompt only), `rollback`, or `delete`. Writes nothing, consumes no version       |
+| `expected_version`      | Prompt update concurrency token from `inspect`; stale values refuse before versioning or writing                                               |
+| `unset`                 | Update-only: CLEAR the named fields — see [Removing a field](#removing-a-field-unset)                                                          |
+| `chain_steps`           | Chain step definitions                                                                                                                         |
+| `chain_step_operation`  | `add \| remove \| reorder \| update` — omit it to replace the whole array                                                                      |
+| `edges`                 | Chain dependency edges — `{from, to}` naming step ids. Send with `chain_steps` when a rewrite invalidates one; see [Chain edges](#chain-edges) |
+| `tool_operation`        | Update-only: `add` unions with the current tool binding, `remove` unbinds AND deletes — see [Removing a field](#removing-a-field-unset)        |
+| `tool_ids`              | Tool ids for `tool_operation:"remove"`; refused without it                                                                                     |
+| `gate_configuration`    | Gate include/exclude lists                                                                                                                     |
+| `injection`             | Prompt-level injection control — `system-prompt`, `gate-guidance`, `style-guidance`                                                            |
+| `register_with_mcp`     | Register as a native MCP prompt — **freezes the prompt against its category/global default**                                                   |
+| `mcp_prompt_mode`       | `expand` (plain text) or `launch` (route through `prompt_engine`) — **same freeze**                                                            |
+| `subagent_model`        | `heavy \| standard \| fast` capability hint for `==>` delegated steps                                                                          |
+| `agent_type`            | Default host agent for this prompt's `==>` delegated steps                                                                                     |
 
 `type` accepts `string \| number \| boolean \| object \| array`. `required:true` alone does not
 block execution — enforcement only arms when the argument also declares a `validation` block

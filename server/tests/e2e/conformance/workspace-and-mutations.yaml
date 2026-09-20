@@ -561,11 +561,11 @@ scenarios:
 
   # ── P4.65: `edges` is authorable, and an orphaned edge is refused with a remedy ────────────
   #
-  # These three rows are the ONLY place that shows `edges` survives the published MCP schema. Zod
-  # strips undeclared keys before any handler runs, so a unit or integration case calling the
-  # processor directly proves the write path and nothing about arrival: measured 2026-09-20, an
-  # `update` carrying `edges` against a server built before this parameter existed answered
-  # "Prompt Updated", saved a version, and left the file's edges untouched.
+  # These three rows are the ONLY place that drives `edges` over the real route — registered tool,
+  # router, processor, writer — rather than calling the processor directly. Measured 2026-09-20 on
+  # a server built before this parameter existed: an `update` carrying `edges` answered "Prompt
+  # Updated", saved a version, and left the file's edges untouched, because nothing downstream read
+  # the key. Removing `edges` from `UPDATE_FIELDS` reds the second row here and no boundary gate.
   #
   # Each edge endpoint is the kebab-case id minted from `stepName` — "Step A" → `step-a`.
   - id: prompt-chain-edges-orphaned-by-a-step-rewrite-is-refused-with-the-remedy
@@ -654,9 +654,10 @@ scenarios:
           action: inspect
           id: conformance_chain_edges_together
           detail: full
-    # This row is the ARRIVAL proof, and the row above is its positive control: the identical
-    # update WITHOUT `edges` is refused. A schema that stripped `edges` would leave the created
-    # `step-a -> step-c` edge in place, orphan it on this rewrite, and red this row.
+    # This row is the ROUTE proof, and the row above is its positive control: the identical update
+    # WITHOUT `edges` is refused. A route that dropped `edges` anywhere between the tool call and
+    # the writer would leave the created `step-a -> step-c` edge in place, orphan it on this
+    # rewrite, and red this row.
     expect:
       text_contains: "1. `minimal_prompt` - Step A\n2. `minimal_prompt` - Step B"
       text_not_contains: 'Step C'

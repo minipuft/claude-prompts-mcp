@@ -1306,6 +1306,29 @@
         ],
         "type": "string"
       },
+      "edges": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "from": {
+              "minLength": 1,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "type": "string"
+            },
+            "to": {
+              "minLength": 1,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "from",
+            "to"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      },
       "enabled": {
         "type": "boolean"
       },

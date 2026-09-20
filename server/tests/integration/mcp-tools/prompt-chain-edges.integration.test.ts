@@ -11,10 +11,19 @@
  * correct — but before P4.65 `edges` was not a tool parameter, so the only remedy was a hand edit
  * of `prompt.yaml`, which this project forbids. These cases assert the write-path half: a supplied
  * value wins, an omitted one preserves the file's own declaration, `unset` clears, and the refusal
- * names the remedy. They CANNOT show that `edges` survives the published MCP schema — Zod strips
- * undeclared keys before any handler runs, and these cases call the processor directly. That half
- * is driven over `tools/call` by the conformance corpus
- * (`tests/e2e/conformance/workspace-and-mutations.yaml`, the `prompt-chain-edges-*` scenarios).
+ * names the remedy.
+ *
+ * They CANNOT show the route. These cases call the processor directly, so they skip the registered
+ * schema, the router's per-resource-type parameter check, and the transport. That half is driven
+ * over `tools/call` by the conformance corpus (`tests/e2e/conformance/workspace-and-mutations.yaml`,
+ * the `prompt-chain-edges-*` and `gate-refuses-edges-by-name` scenarios), and it is the half that
+ * measurably catches a break: removing `edges` from `UPDATE_FIELDS` reds one conformance row and
+ * none of the boundary gates.
+ *
+ * Note for anyone reasoning about the schema: `resourceManagerInputSchema` is `.passthrough()`, so
+ * an undeclared key is NOT stripped on this tool — declaring `edges` there buys the published
+ * shape (contract parity, `tests/unit/mcp-tools/tool-input-fields.test.ts`) and validation of each
+ * edge object, not arrival.
  */
 
 import { describe, expect, jest, test, beforeEach, afterEach } from '@jest/globals';

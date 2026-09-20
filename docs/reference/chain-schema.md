@@ -61,6 +61,11 @@ Endpoints are the ids `mintNodeIds` derives — an explicit step `id` when decla
 of `stepName`. An endpoint naming no step, or a cycle, fails the prompt's load with the offending
 id named.
 
+`edges` is authorable through `resource_manager` on `create` and `update`, like `chain_steps`. The
+same validation runs on the written file, so a step rewrite that orphans an edge is refused and
+rolled back — send the corrected `edges` in the same call, or `unset: ["edges"]` to drop them all.
+See [Chain edges](mcp-tools.md#chain-edges).
+
 ```yaml
 chainSteps:
   - promptId: research
