@@ -196,6 +196,6 @@ describe('style hot reload wires the pipeline instance and every folder it reads
     await rm(path.join(primary, 'primary_style'), { recursive: true, force: true });
     await config!.handler(eventFor(guidancePath, 'removed'));
 
-    expect(manager.hasStyle('primary_style')).toBe(false);
+    expect(manager.getStyleGuidance('primary_style')).toBeNull();
   });
 });
