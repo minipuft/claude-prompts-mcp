@@ -813,6 +813,54 @@ scenarios:
     expect:
       error_contains: '''artifacts'' is not a parameter of resource_type:"category"'
 
+  # ── R46: a key the contract does not declare is refused, over the real transport ───────────
+  #
+  # `resourceManagerInputSchema` is `.passthrough()`, so an undeclared key ARRIVES — it is not
+  # stripped, and before this it was read by nobody while the call answered success. Driving it
+  # through `tools/call` is the only way to see that: a unit case calling the router hands it the
+  # object directly and never crosses the registered schema at all.
+  - id: resource-manager-refuses-a-key-its-contract-does-not-declare
+    claim_source: >-
+      docs/reference/mcp-tools.md § Undeclared parameters — "a key `resource_manager` does not
+      declare is refused by name". Implemented by describeParameterRefusal (parameter-ownership.ts).
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: update
+          id: conformance_create
+          not_a_parameter: probe-value
+    expect:
+      error_contains: "'not_a_parameter' is not a parameter of resource_manager"
+
+  - id: resource-manager-refuses-a-near-miss-spelling-of-a-real-parameter
+    claim_source: >-
+      docs/reference/mcp-tools.md § Undeclared parameters — the correction names the key. A typo
+      one character from a live parameter is the shape this class actually takes.
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: update
+          id: conformance_create
+          chain_step: []
+    expect:
+      error_contains: "'chain_step' is not a parameter of resource_manager"
+
+  - id: resource-manager-still-accepts-every-declared-parameter-it-is-sent
+    claim_source: >-
+      The positive control for the two rows above: a refusal that fired on everything would
+      satisfy both. The same call minus the undeclared key writes and reports a version.
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: update
+          id: conformance_create
+          description: updated by the R46 control
+    expect:
+      text_contains: '**Prompt Updated**'
+
   - id: gate-update-preview-is-refused-by-name
     claim_source: >-
       resource_manager contract — `preview_action` is validated per resource type. A gate has no

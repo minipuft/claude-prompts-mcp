@@ -3,7 +3,14 @@
  * Resource Manager Input Schema
  *
  * Hand-written replacement for the generated resourceManagerSchema in mcp-schemas.ts.
- * Uses .passthrough() to allow framework fields to flow through for advanced scenarios.
+ *
+ * `.passthrough()` at the bottom of this object is DELIBERATE and load-bearing, and no longer for
+ * the reason it was added. It arrived so eleven framework advanced fields could reach the writer
+ * while the published schema named none of them; that ended at P4.1/P4.5, when all eleven were
+ * declared. It stays because `describeParameterRefusal` (R46) has to SEE an undeclared key in
+ * order to refuse it by name, before dispatch, saying which tool it is not a parameter of. A
+ * `.strict()` object here would reject the same key one layer earlier with a zod message that
+ * names neither — and would put a second refusal path above the one that owns this class.
  */
 
 import { z } from 'zod/v4';

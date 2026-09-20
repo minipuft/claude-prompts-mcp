@@ -38,7 +38,10 @@ import {
 import { buildPromptEngineSchema } from '../../../src/mcp/tools/schemas/prompt-engine.schema.js';
 import { resourceManagerInputSchema } from '../../../src/mcp/tools/schemas/resource-manager.schema.js';
 import { buildSystemControlSchema } from '../../../src/mcp/tools/schemas/system-control.schema.js';
-import { PARAMETER_OWNERS } from '../../../src/mcp/tools/resource-manager/core/parameter-ownership.js';
+import {
+  DECLARED_PARAMETERS,
+  PARAMETER_OWNERS,
+} from '../../../src/mcp/tools/resource-manager/core/parameter-ownership.js';
 
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const TOOLS_DIR = path.join(SERVER_ROOT, 'src', 'mcp', 'tools');
@@ -357,6 +360,21 @@ const SYSTEM_CONTROL_DISPATCH = 'actionHandler.execute(…)';
  */
 const RESOURCE_MANAGER_OWNERSHIP_TABLE_READ = 'sent[parameter]';
 
+/**
+ * The second use the walker cannot follow in `resource_manager`, and what bounds it instead.
+ *
+ * `describeParameterRefusal` enumerates the input's own keys (R46) to refuse one the contract
+ * never declared. The walker sees an unkeyed enumeration and stops, but the property this suite
+ * protects is untouched: the loop reads NAMES and forwards no value, and the only name it lets
+ * through is one in `DECLARED_PARAMETERS`. That set is asserted below to be exactly the schema's
+ * key set — which is the bound, and without it this exemption would be the hole it looks like.
+ *
+ * The scan reads `sent[parameter]` once more, applying the same "was it sent" test the ownership
+ * loop does, which is why `RESOURCE_MANAGER_OWNERSHIP_TABLE_READ` appears TWICE in the expectation
+ * below: same computed access, same bound, second site.
+ */
+const RESOURCE_MANAGER_UNDECLARED_KEY_SCAN = 'Object.keys(…)';
+
 // ---------------------------------------------------------------------------
 // Contract parity
 // ---------------------------------------------------------------------------
@@ -637,10 +655,20 @@ describe('tool handlers read only fields their registered schema declares', () =
       expect(undeclared(reads, declared)).toEqual([]);
     });
 
-    it('follows every use of the input except the ownership-table lookup', () => {
+    it('follows every use of the input except the two enumerations in the refusal', () => {
       expect(reads.unfollowed.map((use) => use.replace(/^[^ ]+ /, ''))).toEqual([
         RESOURCE_MANAGER_OWNERSHIP_TABLE_READ,
+        RESOURCE_MANAGER_UNDECLARED_KEY_SCAN,
+        RESOURCE_MANAGER_OWNERSHIP_TABLE_READ,
       ]);
+    });
+
+    it('bounds the undeclared-key scan: what it accepts IS the schema', () => {
+      // Both directions. A `DECLARED_PARAMETERS` wider than the schema would wave through a key
+      // nothing reads — the defect R46 closes — and one narrower would refuse a published
+      // parameter, which is the same defect pointed the other way.
+      expect([...DECLARED_PARAMETERS].filter((name) => !declared.has(name)).sort()).toEqual([]);
+      expect([...declared].filter((name) => !DECLARED_PARAMETERS.has(name)).sort()).toEqual([]);
     });
 
     it('declares every field the ownership table can look up', () => {

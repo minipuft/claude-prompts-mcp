@@ -890,6 +890,24 @@ rather than resolved in an order you cannot see.
 Only the last row destroys a file you sent no replacement for, which is why it is the only
 `update` that requires `confirm:true`.
 
+### Undeclared parameters
+
+`resource_manager` refuses a key its contract does not declare, naming the key:
+
+```
+'chain_step' is not a parameter of resource_manager.
+```
+
+This is the other half of the per-type refusal above. A parameter that IS declared but belongs to
+another `resource_type` is refused naming the types that read it; a key declared nowhere is refused
+naming only itself — the contract is one `action:"guide"` away, and reprinting seventy names to
+correct one typo buries the correction. Both refusals happen before dispatch, so nothing is written
+and no version is spent.
+
+Until this refusal, an undeclared key was accepted, read by nobody, and the call answered success —
+the same silent no-op that made a `resource_type:"framework"` call with `unset` report a change it
+never made. A misspelled parameter now fails loudly instead of doing nothing quietly.
+
 ### Chain edges
 
 A chain may declare `edges` beside its steps — `{from, to}` dependency constraints naming step ids
