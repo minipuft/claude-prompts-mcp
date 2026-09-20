@@ -29,8 +29,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { parse as parseYaml } from 'yaml';
-
+import { parseYamlOrThrow } from '../../src/shared/utils/yaml/index.js';
 import { buildServerEnv } from './helpers/child-env.js';
 import {
   getAvailablePort,
@@ -115,7 +114,7 @@ const CASES: Record<string, TypeCase> = {
  * files are byte-identical — a normalization named here, not hidden in the assertion.
  */
 function comparableKeys(yamlText: string): string[] {
-  const parsed = parseYaml(yamlText) as Record<string, unknown>;
+  const parsed = parseYamlOrThrow<Record<string, unknown>>(yamlText);
   return Object.entries(parsed)
     .filter(([, value]) => !(Array.isArray(value) && value.length === 0))
     .map(([key]) => key)
@@ -123,7 +122,7 @@ function comparableKeys(yamlText: string): string[] {
 }
 
 const descriptionOf = (yamlText: string): unknown =>
-  (parseYaml(yamlText) as Record<string, unknown>)['description'];
+  parseYamlOrThrow<Record<string, unknown>>(yamlText)['description'];
 
 describe('cpm rollback matches resource_manager rollback (Streamable HTTP)', () => {
   let proc: ChildProcess | null = null;
