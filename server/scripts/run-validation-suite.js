@@ -390,6 +390,13 @@ export const SUITE = [
       'CHECKED — falsified 2026-08-27 by restoring the truncating expression at both surviving producers (serving-unit-scope.ts, prompt-executor.ts); the gate reported both. Its one accepted exception audits as load-bearing, so a green run is not a run that reached nothing',
   },
   {
+    script: 'validate:telemetry-attribute-emitters',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse:
+      'CHECKED — falsified 2026-09-20 by adding a fake SAFE_BUSINESS_ATTRIBUTES entry with no emitter (reported) and by removing the entry (green); a real entry with its emitter deleted also reddens. Blind spot stated in the header: a computed/dynamic key (`attrs[name] = value`) would not match the quoted-key predicate — no producer in this codebase uses that shape today',
+  },
+  {
     script: 'validate:hooks-registered',
     io: 'read',
     reads: ['file', 'walk'],
