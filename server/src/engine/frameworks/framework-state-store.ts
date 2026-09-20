@@ -106,7 +106,6 @@ export interface FrameworkSystemHealth {
 export interface FrameworkStateStoreEvents {
   'framework-switched': (previousFramework: string, newFramework: string, reason: string) => void;
   'framework-error': (framework: string, error: Error) => void;
-  'health-changed': (health: FrameworkSystemHealth) => void;
   'framework-system-toggled': (enabled: boolean, reason: string) => void; // NEW: Framework system enabled/disabled
 }
 
@@ -240,9 +239,6 @@ export class FrameworkStateStore extends EventEmitter {
       this.logger.info(
         `Framework State Manager initialized with active framework: ${this.getOrCreateScopedState().activeFramework}`
       );
-
-      // Emit initial health status
-      this.emit('health-changed', this.getSystemHealth());
     } catch (error) {
       this.logger.error('Failed to initialize Framework State Manager:', error);
       throw error;
@@ -631,9 +627,7 @@ export class FrameworkStateStore extends EventEmitter {
       `✅ Framework switch successful: '${previousFramework}' -> '${request.targetFramework}' (${switchTime.toFixed(1)}ms)`
     );
 
-    // Emit events
     this.emit('framework-switched', previousFramework, request.targetFramework, switchReason);
-    this.emit('health-changed', this.getSystemHealth());
 
     return true;
   }
@@ -749,9 +743,7 @@ export class FrameworkStateStore extends EventEmitter {
 
     this.logger.info(`✅ Framework system enabled: ${enableReason}`);
 
-    // Emit events
     this.emit('framework-system-toggled', true, enableReason);
-    this.emit('health-changed', this.getSystemHealth(scope));
   }
 
   /**
@@ -780,9 +772,7 @@ export class FrameworkStateStore extends EventEmitter {
 
     this.logger.info(`🚫 Framework system disabled: ${disableReason}`);
 
-    // Emit events
     this.emit('framework-system-toggled', false, disableReason);
-    this.emit('health-changed', this.getSystemHealth(scope));
   }
 
   /**
