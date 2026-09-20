@@ -40,7 +40,7 @@ import {
   VIEW_CONTRACTS,
 } from './table-contracts.js';
 
-import type { DatabasePort } from '#shared/types/persistence.js';
+import type { DatabasePort, TransactionMode } from '#shared/types/persistence.js';
 import type { Logger } from '../logging/index.js';
 
 /**
@@ -303,11 +303,17 @@ const DROPPED_AT_VERSION: number = 19;
 /** Rows carried across a schema recreate, keyed by table name. */
 type DurableSnapshot = Map<string, Array<Record<string, unknown>>>;
 
-/** The history key a row belongs to, as one string. */
+/**
+ * The history key a row belongs to, as one string.
+ *
+ * `JSON.stringify` rather than a joined separator: a resource id may contain any character,
+ * so any literal separator can be forged into another history's key — and a NUL one makes this
+ * source file binary to `rg`, which silently blinds every text gate that scans it.
+ */
 function versionHistoryGroupKey(row: Record<string, unknown>): string {
-  return [row['tenant_id'], row['resource_type'], row['resource_id']]
-    .map((part) => String(part ?? ''))
-    .join(' ');
+  return JSON.stringify(
+    [row['tenant_id'], row['resource_type'], row['resource_id']].map((part) => String(part ?? ''))
+  );
 }
 
 /**
@@ -531,10 +537,15 @@ export class SqliteEngine implements DatabasePort {
   }
 
   /**
-   * Begin a transaction
+   * Begin a transaction.
+   *
+   * Defaults to SQLite's DEFERRED, which takes no lock until the first write — so two connections
+   * can both read, and the second to write is refused. A body that reads a value and writes it back
+   * (`MAX(version)` + INSERT) must pass `'immediate'`, which takes the write lock at BEGIN and makes
+   * the pair one unit.
    */
-  beginTransaction(): void {
-    this.run('BEGIN TRANSACTION');
+  beginTransaction(mode: TransactionMode = 'deferred'): void {
+    this.run(mode === 'immediate' ? 'BEGIN IMMEDIATE' : 'BEGIN TRANSACTION');
   }
 
   /**
@@ -554,8 +565,8 @@ export class SqliteEngine implements DatabasePort {
   /**
    * Execute multiple statements in a transaction
    */
-  async transaction<T>(fn: () => T | Promise<T>): Promise<T> {
-    this.beginTransaction();
+  async transaction<T>(fn: () => T | Promise<T>, mode: TransactionMode = 'deferred'): Promise<T> {
+    this.beginTransaction(mode);
     try {
       const result = await fn();
       this.commit();

@@ -40,6 +40,15 @@ export interface StateStore<T> {
 }
 
 /**
+ * Which lock a transaction takes, and when.
+ *
+ * - `deferred` (SQLite's default) — no lock until the first write. Two connections may both read,
+ *   and the second to write is refused; correct only for a body that reads OR writes, not both.
+ * - `immediate` — the write lock is taken at BEGIN, so a read-then-write pair is one atomic unit.
+ */
+export type TransactionMode = 'deferred' | 'immediate';
+
+/**
  * Database access port — consumed by modules that need raw SQL queries.
  *
  * Implemented by SqliteEngine in infra/database/. Modules type against this
@@ -56,10 +65,16 @@ export interface DatabasePort {
   queryOne<T = Record<string, unknown>>(sql: string, params?: unknown[]): T | null;
   /** Execute a SQL statement (no return value) */
   run(sql: string, params?: unknown[]): void;
-  /** Execute multiple statements in a transaction */
-  transaction<T>(fn: () => T | Promise<T>): Promise<T>;
+  /**
+   * Execute multiple statements in a transaction.
+   *
+   * `'immediate'` takes the write lock up front and is required whenever the body READS a value it
+   * then writes back — a deferred transaction lets a second connection commit between the two, so
+   * the write lands on a value that is already stale.
+   */
+  transaction<T>(fn: () => T | Promise<T>, mode?: TransactionMode): Promise<T>;
   /** Begin a manual transaction */
-  beginTransaction(): void;
+  beginTransaction(mode?: TransactionMode): void;
   /** Commit a manual transaction */
   commit(): void;
   /** Rollback a manual transaction */
