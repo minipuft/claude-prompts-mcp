@@ -359,6 +359,13 @@ export const SUITE = [
     converse: 'unexamined',
   },
   {
+    script: 'validate:hook-producers',
+    io: 'read',
+    reads: ['declared'],
+    converse:
+      'CHECKED — the self-test plants an emission whose only callers are the fan-out layer and a test fixture, plus a same-named decoy on an unrelated class, and asserts exactly the orphan is flagged',
+  },
+  {
     script: 'validate:state-field-writers',
     io: 'read',
     reads: ['file'],

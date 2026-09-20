@@ -243,6 +243,11 @@ describe('gate events reach a port-only collaborator', () => {
       },
       emitRetryExhausted: async () => {},
       emitResponseBlocked: async () => {},
+      // Chain emissions satisfy the port; this suite drives gate events only. They are
+      // asserted in tests/integration/hooks/chain-lifecycle-emission.integration.test.ts.
+      emitStepComplete: async () => {},
+      emitChainComplete: async () => {},
+      emitChainFailed: async () => {},
     };
 
     const notifications: McpNotificationEmitterPort = {
@@ -253,6 +258,9 @@ describe('gate events reach a port-only collaborator', () => {
       },
       emitResponseBlocked: () => {},
       emitRetryExhausted: () => {},
+      emitFrameworkChanged: () => {},
+      emitChainStepComplete: () => {},
+      emitChainComplete: () => {},
     };
 
     return { hooks, notifications, gateFailures, notified };

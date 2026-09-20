@@ -550,6 +550,19 @@ export interface HookRegistryPort {
     context: PipelineHookContext
   ): Promise<void>;
   emitResponseBlocked(gateIds: string[], context: PipelineHookContext): Promise<void>;
+  /**
+   * The chain emissions belong here for the same reason the gate ones do: the services that
+   * own the chain lifecycle facts -- `engine/execution/capture` for a step's completion and
+   * `modules/chains` for the run's terminal status -- hold the registry as this port.
+   */
+  emitStepComplete(
+    chainId: string,
+    stepIndex: number,
+    output: string,
+    context: PipelineHookContext
+  ): Promise<void>;
+  emitChainComplete(chainId: string, context: PipelineHookContext): Promise<void>;
+  emitChainFailed(chainId: string, reason: string, context: PipelineHookContext): Promise<void>;
 }
 
 /** Gate failure notification payload. */
@@ -582,6 +595,41 @@ export interface RetryExhaustedNotification {
   maxAttempts: number;
 }
 
+/** Active-framework change notification payload. */
+export interface FrameworkChangedNotification {
+  /** Previous framework ID (if any) */
+  from?: string;
+  /** New framework ID */
+  to: string;
+  /** Reason for the change */
+  reason: string;
+}
+
+/** Chain step complete notification payload. */
+export interface ChainStepCompleteNotification {
+  /** Chain ID */
+  chainId: string;
+  /** Step index that completed (1-based ordinal, matching the rendered step numbering) */
+  stepIndex: number;
+  /** Whether the step passed or failed */
+  status: 'passed' | 'failed';
+}
+
+/** Chain run terminal notification payload. */
+export interface ChainCompleteNotification {
+  /** Chain ID */
+  chainId: string;
+  /** Total steps in the run */
+  totalSteps: number;
+  /**
+   * Terminal run status. Carries `cancelled` as well as `completed`/`failed` because
+   * `cancelled` is one of the three sticky terminal statuses a run can reach
+   * (`TERMINAL_RUN_STATUSES`); collapsing it onto `failed` would tell a client a run
+   * errored when an operator ended it.
+   */
+  status: 'completed' | 'failed' | 'cancelled';
+}
+
 /**
  * MCP notification emitter interface (mcp/ contract).
  * mcp/ stores and forwards to engine/ pipeline stages.
@@ -598,6 +646,12 @@ export interface McpNotificationEmitterPort {
   emitGateFailed(notification: GateFailedNotification): void;
   emitResponseBlocked(notification: ResponseBlockedNotification): void;
   emitRetryExhausted(notification: RetryExhaustedNotification): void;
+  /** `engine/frameworks` holds the emitter as this port and announces a persisted switch. */
+  emitFrameworkChanged(notification: FrameworkChangedNotification): void;
+  /** `engine/execution/capture` announces a captured step. */
+  emitChainStepComplete(notification: ChainStepCompleteNotification): void;
+  /** `modules/chains` announces a run that reached a terminal status. */
+  emitChainComplete(notification: ChainCompleteNotification): void;
 }
 
 // ===== Hot Reload Types =====

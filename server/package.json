@@ -205,6 +205,8 @@
     "release": "npm run build && npm test && npm publish --access public",
     "pack:mcpb": "../scripts/build-extension.sh",
     "pack:mcpb:validate": "npm --prefix .. run mcpb:validate",
+    "validate:hook-producers": "node scripts/validate-hook-producers.js",
+    "validate:hook-producers:self-test": "node scripts/validate-hook-producers.js --self-test",
     "validate:state-field-writers": "node scripts/validate-state-field-writers.js",
     "validate:state-field-writers:self-test": "node scripts/validate-state-field-writers.js --self-test",
     "validate:table-contracts": "tsx scripts/validate-table-contracts.ts",

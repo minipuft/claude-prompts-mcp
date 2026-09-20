@@ -56,14 +56,18 @@ const createMockHookRegistry = (): HookRegistryPort & {
     emitStageError: jest.fn(async (stage: string, error: Error, context: PipelineHookContext) => {
       registry.errorCalls.push({ stage, error, context });
     }),
-    // Gate emissions are part of HookRegistryPort but never reached from the
+    // Gate and chain emissions are part of HookRegistryPort but never reached from the
     // pipeline coordinator, which emits only the per-stage hooks. They are
     // stubbed to satisfy the port, not asserted on — gate emission is covered by
-    // tests/integration/hooks/response-capture-hooks.test.ts.
+    // tests/integration/hooks/response-capture-hooks.test.ts and the chain
+    // emissions by tests/integration/hooks/chain-lifecycle-emission.integration.test.ts.
     emitGateEvaluated: jest.fn(async () => {}),
     emitGateFailed: jest.fn(async () => {}),
     emitRetryExhausted: jest.fn(async () => {}),
     emitResponseBlocked: jest.fn(async () => {}),
+    emitStepComplete: jest.fn(async () => {}),
+    emitChainComplete: jest.fn(async () => {}),
+    emitChainFailed: jest.fn(async () => {}),
   };
   return registry;
 };

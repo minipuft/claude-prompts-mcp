@@ -268,12 +268,11 @@ export class Application {
     // Initialize hook registry and notification emitter
     this.hookRegistry = new HookRegistry(this.logger);
     this.notificationEmitter = new McpNotificationEmitter(this.logger);
-    // McpServer has notification() at runtime - cast to the expected interface
-    // The emitter has canSend() guard that checks typeof notification === 'function'
-    this.notificationEmitter.setServer(
-      this
-        .mcpServer as unknown as import('#infra/observability/notifications/index.js').McpNotificationServer
-    );
+    // `.server`, not the McpServer: SDK v2 moved `notification()` onto the inner `Server`,
+    // and the emitter's `canSend()` reads `typeof server.notification === 'function'` — so
+    // binding the wrapper made every notification a debug-level skip on both transports
+    // (measured 2026-09-20, `Cannot send notification` x5, `Notification sent` x0).
+    this.notificationEmitter.setServer(this.mcpServer.server);
     this.debugLog('HookRegistry and McpNotificationEmitter initialized');
 
     // Initialize telemetry lifecycle (creates runtime + hook observer, does not start SDK yet)
@@ -484,9 +483,7 @@ export class Application {
       const server = (await build(ctx)) as McpServer;
       this.mcpServer = server;
       this.mcpToolsManager.setPinnedServer(server);
-      this.notificationEmitter.setServer(
-        server as unknown as import('#infra/observability/notifications/index.js').McpNotificationServer
-      );
+      this.notificationEmitter.setServer(server.server);
       return server;
     };
   }

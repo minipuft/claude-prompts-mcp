@@ -66,7 +66,7 @@ import {
   ExecutionRecordStore,
   createExecutionRecordStore,
 } from '#modules/chains/execution-record-store.js';
-import { createChainSessionStore } from '#modules/chains/manager.js';
+import { createChainSessionStore, type ChainSessionStore } from '#modules/chains/manager.js';
 import {
   StyleManager,
   createStyleManager,
@@ -105,6 +105,13 @@ export class PromptExecutor {
   private readonly gateReferenceResolver: GateReferenceResolver;
   private readonly gateGuidanceRenderer: GateGuidanceRenderer;
   private readonly chainSessionStore: ChainSessionService;
+  /**
+   * The same instance as `chainSessionStore`, kept at its concrete type for the one call that
+   * is not part of the service contract: `setRunAnnouncementChannels`. A structural `in` check
+   * would type-check too, but it turns a wiring mistake into a silent skip — and a run-terminal
+   * announcement that never fires is precisely the defect this wiring exists to close.
+   */
+  private readonly chainSessionStoreInstance: ChainSessionStore;
   private readonly argumentHistoryTracker: ArgumentHistoryTracker;
 
   /** Execution log writer (Tier 5). Created when setDatabasePort wires the DB. */
@@ -220,12 +227,13 @@ export class PromptExecutor {
       logger.warn('Failed to initialize ArgumentHistoryTracker:', error);
     });
 
-    this.chainSessionStore = createChainSessionStore(
+    this.chainSessionStoreInstance = createChainSessionStore(
       logger,
       textReferenceStore,
       chainSessionOptions,
       this.argumentHistoryTracker
     );
+    this.chainSessionStore = this.chainSessionStoreInstance;
     const temporaryGateRegistry = createTemporaryGateRegistry(logger, {
       maxMemoryGates: 100,
       defaultExpirationMs: 30 * 60 * 1000,
@@ -353,10 +361,28 @@ export class PromptExecutor {
 
   setHookRegistry(hookRegistry: HookRegistryPort): void {
     this.hookRegistry = hookRegistry;
+    this.forwardRunAnnouncementChannels();
   }
 
   setNotificationEmitter(emitter: McpNotificationEmitterPort): void {
     this.notificationEmitter = emitter;
+    this.forwardRunAnnouncementChannels();
+  }
+
+  /**
+   * Hand the chain session store the channels it announces a terminal run status on.
+   *
+   * Re-forwarded from both setters rather than once after both: the composition root sets them
+   * one at a time, and a store that received only the first would announce on one channel for
+   * the life of the process.
+   */
+  private forwardRunAnnouncementChannels(): void {
+    this.chainSessionStoreInstance.setRunAnnouncementChannels({
+      ...(this.hookRegistry !== undefined ? { hookRegistry: this.hookRegistry } : {}),
+      ...(this.notificationEmitter !== undefined
+        ? { notificationEmitter: this.notificationEmitter }
+        : {}),
+    });
   }
 
   setGateStateStore(gateStateStore: any): void {
