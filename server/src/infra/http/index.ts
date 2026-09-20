@@ -274,37 +274,6 @@ export class ServerLifecycle {
   }
 
   /**
-   * Restart the server
-   */
-  async restart(reason: string = 'Manual restart'): Promise<void> {
-    this.logger.info(`Restarting server: ${reason}`);
-
-    try {
-      // Shutdown current server
-      if (this.httpServer !== undefined) {
-        const httpServer = this.httpServer;
-        await new Promise<void>((resolve) => {
-          httpServer.close(() => {
-            this.logger.info('Server closed for restart');
-            resolve();
-          });
-        });
-      }
-
-      // Wait a moment before restarting
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      // Start server again
-      await this.startServer();
-
-      this.logger.info('Server restarted successfully');
-    } catch (error) {
-      this.logger.error('Error during server restart:', error);
-      throw error;
-    }
-  }
-
-  /**
    * Check if server is running
    */
   isRunning(): boolean {
@@ -367,20 +336,6 @@ export class ServerLifecycle {
     }
 
     return status;
-  }
-
-  /**
-   * Get the HTTP server instance
-   */
-  getHttpServer(): Server | undefined {
-    return this.httpServer;
-  }
-
-  /**
-   * Get the port number
-   */
-  getPort(): number {
-    return this.port;
   }
 }
 

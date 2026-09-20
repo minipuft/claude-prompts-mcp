@@ -229,14 +229,6 @@ export class TransportRouter {
   }
 
   /**
-   * Check if STDIO transport should be active
-   * True for 'stdio' or 'both' modes
-   */
-  isStdio(): boolean {
-    return this.transport === TransportType.STDIO || this.transport === TransportType.BOTH;
-  }
-
-  /**
    * Check if Streamable HTTP transport should be active
    * True for 'streamable-http' or 'both' modes
    */
