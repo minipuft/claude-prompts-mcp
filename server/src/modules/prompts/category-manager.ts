@@ -4,10 +4,10 @@
  * Handles category management logic with validation, organization, and relationship tracking
  */
 
-import type { Category, PromptData } from './types.js';
+import type { Category } from './types.js';
 
 // Import category interfaces from prompts/types.ts instead of redefining
-import type { CategoryValidationResult, CategoryStatistics } from './types.js';
+import type { CategoryValidationResult } from './types.js';
 
 import { type Logger } from '#shared/types/index.js';
 
@@ -109,87 +109,6 @@ export class CategoryManager {
     }
 
     return result;
-  }
-
-  /**
-   * Get prompts by category
-   */
-  getPromptsByCategory(prompts: PromptData[], categoryId: string): PromptData[] {
-    return prompts.filter((prompt) => prompt.category === categoryId);
-  }
-
-  /**
-   * Get category statistics
-   */
-  getCategoryStatistics(prompts: PromptData[]): CategoryStatistics {
-    const categoryBreakdown: Array<{ category: Category; promptCount: number }> = [];
-    let totalPrompts = 0;
-
-    for (const category of this.categories) {
-      const categoryPrompts = this.getPromptsByCategory(prompts, category.id);
-      const promptCount = categoryPrompts.length;
-
-      categoryBreakdown.push({
-        category,
-        promptCount,
-      });
-
-      totalPrompts += promptCount;
-    }
-
-    const categoriesWithPrompts = categoryBreakdown.filter((item) => item.promptCount > 0).length;
-    const emptyCategoriesCount = this.categories.length - categoriesWithPrompts;
-    const averagePromptsPerCategory =
-      this.categories.length > 0 ? totalPrompts / this.categories.length : 0;
-
-    return {
-      totalCategories: this.categories.length,
-      categoriesWithPrompts,
-      emptyCategoriesCount,
-      averagePromptsPerCategory,
-      categoryBreakdown,
-    };
-  }
-
-  /**
-   * Check consistency between categories and prompts
-   */
-  checkConsistency(prompts: PromptData[]): {
-    consistent: boolean;
-    issues: string[];
-    orphanedPrompts: PromptData[];
-    emptyCategories: Category[];
-  } {
-    const issues: string[] = [];
-    const orphanedPrompts: PromptData[] = [];
-    const emptyCategories: Category[] = [];
-
-    const categoryIds = new Set(this.categories.map((cat) => cat.id));
-
-    // Find orphaned prompts (prompts with invalid category references)
-    for (const prompt of prompts) {
-      if (prompt.category && !categoryIds.has(prompt.category)) {
-        orphanedPrompts.push(prompt);
-        issues.push(`Prompt '${prompt.id}' references non-existent category: ${prompt.category}`);
-      }
-    }
-
-    // Find empty categories
-    for (const category of this.categories) {
-      const categoryPrompts = this.getPromptsByCategory(prompts, category.id);
-      if (categoryPrompts.length === 0) {
-        emptyCategories.push(category);
-      }
-    }
-
-    const consistent = issues.length === 0 && orphanedPrompts.length === 0;
-
-    return {
-      consistent,
-      issues,
-      orphanedPrompts,
-      emptyCategories,
-    };
   }
 }
 

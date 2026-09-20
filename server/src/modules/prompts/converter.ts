@@ -96,14 +96,6 @@ export class PromptConverter {
   }
 
   /**
-   * Set the global registerWithMcp default value. Takes a resolved boolean — "leave it alone" is
-   * expressed by not calling this, not by passing `undefined`.
-   */
-  setGlobalRegisterWithMcp(value: boolean): void {
-    this.globalRegisterWithMcp = value;
-  }
-
-  /**
    * Convert markdown prompts to JSON structure in memory
    */
   async convertMarkdownPromptsToJson(
@@ -412,33 +404,5 @@ export class PromptConverter {
       isStepResultPattern ||
       placeholder.startsWith('ref:')
     );
-  }
-
-  /**
-   * Get conversion statistics
-   */
-  getConversionStats(
-    originalCount: number,
-    convertedPrompts: ConvertedPrompt[]
-  ): {
-    totalOriginal: number;
-    totalConverted: number;
-    successRate: number;
-    chainPrompts: number;
-    regularPrompts: number;
-    totalArguments: number;
-  } {
-    const chainPrompts = convertedPrompts.filter((p) => isChainPrompt(p)).length;
-    const regularPrompts = convertedPrompts.length - chainPrompts;
-    const totalArguments = convertedPrompts.reduce((sum, p) => sum + p.arguments.length, 0);
-
-    return {
-      totalOriginal: originalCount,
-      totalConverted: convertedPrompts.length,
-      successRate: originalCount > 0 ? convertedPrompts.length / originalCount : 0,
-      chainPrompts,
-      regularPrompts,
-      totalArguments,
-    };
   }
 }

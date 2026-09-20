@@ -72,54 +72,6 @@ export class ConversationStore {
     this.conversationHistory = [];
     this.logger.info('Conversation history cleared');
   }
-
-  /**
-   * Provide high-level stats for diagnostics.
-   */
-  getConversationStats(): {
-    totalMessages: number;
-    userMessages: number;
-    assistantMessages: number;
-    processedTemplates: number;
-    oldestMessage?: number;
-    newestMessage?: number;
-  } {
-    const userMessages = this.conversationHistory.filter((item) => item.role === 'user').length;
-    const assistantMessages = this.conversationHistory.filter(
-      (item) => item.role === 'assistant'
-    ).length;
-    const processedTemplates = this.conversationHistory.filter(
-      (item) => item.isProcessedTemplate
-    ).length;
-
-    const timestamps = this.conversationHistory.map((item) => item.timestamp);
-    const oldestMessage = timestamps.length > 0 ? Math.min(...timestamps) : undefined;
-    const newestMessage = timestamps.length > 0 ? Math.max(...timestamps) : undefined;
-
-    const stats: {
-      totalMessages: number;
-      userMessages: number;
-      assistantMessages: number;
-      processedTemplates: number;
-      oldestMessage?: number;
-      newestMessage?: number;
-    } = {
-      totalMessages: this.conversationHistory.length,
-      userMessages,
-      assistantMessages,
-      processedTemplates,
-    };
-
-    if (oldestMessage !== undefined) {
-      stats.oldestMessage = oldestMessage;
-    }
-
-    if (newestMessage !== undefined) {
-      stats.newestMessage = newestMessage;
-    }
-
-    return stats;
-  }
 }
 
 export function createConversationStore(

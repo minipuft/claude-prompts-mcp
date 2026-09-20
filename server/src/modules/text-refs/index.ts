@@ -172,38 +172,6 @@ export class TextReferenceStore {
     delete this.namedOutputs[chainId];
     this.logger.debug(`[TextReferenceStore] Cleared all step results for chain ${chainId}`);
   }
-
-  /**
-   * Aggregate statistics about stored chains and steps.
-   */
-  getChainStats(): {
-    totalChains: number;
-    totalSteps: number;
-    chainsWithSteps: string[];
-  } {
-    const chainIds = Object.keys(this.chainStepResults);
-    let totalSteps = 0;
-
-    chainIds.forEach((chainId) => {
-      const chainSteps = this.chainStepResults[chainId];
-      if (chainSteps) {
-        totalSteps += Object.keys(chainSteps).length;
-      }
-    });
-
-    return {
-      totalChains: chainIds.length,
-      totalSteps,
-      chainsWithSteps: chainIds,
-    };
-  }
-
-  /**
-   * Canonical stats accessor used by diagnostics.
-   */
-  getStats(): ReturnType<TextReferenceStore['getChainStats']> {
-    return this.getChainStats();
-  }
 }
 
 export { ArgumentHistoryTracker } from './argument-history-tracker.js';
