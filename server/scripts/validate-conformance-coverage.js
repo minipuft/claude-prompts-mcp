@@ -329,8 +329,12 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
     // the P4.11 create-then-read-back gate scenarios above, which both create a gate and so have
     // to supply them — caught by this file's own satisfied-exception audit, not a separate sweep.
     // The renamed `gate_type` gets its own create-then-inspect row (P4.10), asserting the
-    // non-default `framework` classification survives to gate.yaml and back.
-    ['pass_criteria', 'activation', 'retry_config'],
+    // non-default `framework` classification survives to gate.yaml and back. `activation` left
+    // this list 2026-09-20 the same way: the two `subject`/`harnessCovers` scenarios both create
+    // a gate with `activation: { prompt_categories: [...] }` set (how a reminder gate reaches a
+    // prompt without the `gates` parameter this file also carries an exception for) — caught by
+    // this file's own satisfied-exception audit when they were added.
+    ['pass_criteria', 'retry_config'],
     'gate resource_type create/update payload field; the corpus exercises resource_type:gate ' +
       'only via read-only `inspect` on a bundled gate (`resource-manager-gate-inspect`), never ' +
       'create/update.',
@@ -360,29 +364,11 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
   // were not newly uncovered — they were never reachable by this enumeration, because it walks
   // the contract and the contract did not name them. Four of the five (the chain_step_* group)
   // were retired 2026-09-16 by `prompt-chain-step-update-edits-only-that-step` and
-  // `prompt-chain-step-reorder-permutes-existing-steps` in workspace-and-mutations.yaml; `subject`
-  // remains below.
-  ...exceptionGroup(
-    'resource_manager',
-    ['subject'],
-    'Gate reminder tag, and its one declared runtime effect is `GateGuidanceRenderer` ' +
-      'suppressing a reminder-tier gate (no evaluated `pass_criteria` — gate-tier.ts) whose ' +
-      '`subject` appears in `gates.harnessCovers` (core-config.ts). `inspect` has no read-back ' +
-      'path for `subject` either (gate-discovery-processor.ts prints severity, enforcement mode ' +
-      'and classification, not subject), so a create-then-inspect row would assert nothing the ' +
-      'create returning ok does not already assert. Proving the suppression effect needs ' +
-      '`gates.harnessCovers` to differ between two executions of the reminder, and ' +
-      '`system_control config` refuses arbitrary writes over MCP by design (config-action-' +
-      'handler.ts — writes are `cpm`-only, rulings R27/R35), so no conformance scenario can ' +
-      'toggle it mid-run.',
-    "A `gates.harnessCovers` entry baked into `buildIsolatedWorkspace()`'s config.json — same " +
-      'precedent as the `resources.registerWithMcp` patch already there — naming one fixed ' +
-      'subject, paired with two isolated-workspace scenarios: one tagging a reminder-tier gate ' +
-      'with that subject, attaching it to a prompt, and executing to show the guidance text ' +
-      'ABSENT; the other tagging a DIFFERENT, uncovered subject and executing to show it ' +
-      'PRESENT. Needs a runner change (the config bake), not only a new scenario — not ' +
-      'attempted here.'
-  ),
+  // `prompt-chain-step-reorder-permutes-existing-steps` in workspace-and-mutations.yaml. The
+  // fifth, `subject`, was retired 2026-09-20 by
+  // `gate-subject-reminder-suppressed-when-harness-covers-it` and
+  // `gate-subject-reminder-shown-when-harness-does-not-cover-it` in the same file, paired with a
+  // fixed `gates.harnessCovers` entry baked into `buildIsolatedWorkspace()`'s config.json.
 ];
 
 /**
