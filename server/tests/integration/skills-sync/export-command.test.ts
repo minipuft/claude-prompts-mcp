@@ -82,9 +82,11 @@ describe('Export Command Integration', () => {
     savedEnv = {
       MCP_SERVER_ROOT: process.env['MCP_SERVER_ROOT'],
       MCP_RESOURCES_PATH: process.env['MCP_RESOURCES_PATH'],
+      MCP_WORKSPACE: process.env['MCP_WORKSPACE'],
     };
     process.env['MCP_SERVER_ROOT'] = serverRoot;
     delete process.env['MCP_RESOURCES_PATH'];
+    delete process.env['MCP_WORKSPACE'];
   });
 
   afterEach(async () => {
@@ -1482,6 +1484,62 @@ describe('Export Command Integration', () => {
       const skill = await readFile(path.join(outputDir, 'tiered', 'SKILL.md'), 'utf-8');
 
       expect(skill).toContain('check: runs `npm test`');
+      expect(skill).toContain('security-awareness');
+      expect(skill).toContain('code-quality');
+      expect(skill).not.toContain('Omitted');
+    });
+
+    // ── row 7.9: resolveHarnessCovers held its own path in a variable and never named
+    // `config.json`/`config.jsonc`, so the row 7.1 sweep to parseConfigText missed it — a
+    // commented config.jsonc threw inside the catch and silently fell back to `[]` ──────
+
+    /**
+     * A `.jsonc` config, comments and a trailing comma included, at `configPath`. Points
+     * `MCP_WORKSPACE` at a fresh directory (distinct from `serverRoot`/the package root) so
+     * `PathResolver.getConfigPath()` takes the workspace-default branch — the explicit
+     * `--config`/`MCP_CONFIG_PATH` branch validates eagerly and would throw on this file's
+     * comments before `resolveHarnessCovers` ever ran.
+     */
+    async function writeCommentedWorkspaceConfig(
+      fileName: 'config.jsonc' | 'config.json',
+      harnessCovers: string[]
+    ): Promise<string> {
+      const workspaceDir = path.join(tmpDir, `workspace-${fileName}`);
+      await mkdir(workspaceDir, { recursive: true });
+      const configPath = path.join(workspaceDir, fileName);
+      await writeFile(
+        configPath,
+        [
+          '{',
+          '  // gates.harnessCovers, read through a commented config with a trailing comma',
+          '  "gates": {',
+          `    "harnessCovers": ${JSON.stringify(harnessCovers)},`,
+          '  },',
+          '}',
+        ].join('\n')
+      );
+      process.env['MCP_WORKSPACE'] = workspaceDir;
+      return configPath;
+    }
+
+    it('honours gates.harnessCovers read from a commented config.jsonc with a trailing comma', async () => {
+      await writeCommentedWorkspaceConfig('config.jsonc', ['security']);
+      await writeConfig('claude-code');
+      await runExport();
+
+      const skill = await readFile(path.join(outputDir, 'tiered', 'SKILL.md'), 'utf-8');
+      expect(skill).not.toContain('| security-awareness |');
+      expect(skill).toContain(
+        "Omitted 1 reminder(s) this installation's harness covers: security-awareness (security)."
+      );
+    });
+
+    it('POSITIVE CONTROL: the same commented text at a .json path yields the [] fallback', async () => {
+      await writeCommentedWorkspaceConfig('config.json', ['security']);
+      await writeConfig('claude-code');
+      await runExport();
+
+      const skill = await readFile(path.join(outputDir, 'tiered', 'SKILL.md'), 'utf-8');
       expect(skill).toContain('security-awareness');
       expect(skill).toContain('code-quality');
       expect(skill).not.toContain('Omitted');
