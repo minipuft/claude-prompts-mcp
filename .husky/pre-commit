@@ -33,10 +33,10 @@ generator_for_artifact() {
       GEN_SOURCE_RE='^server/(scripts/generate-contracts\.ts|tooling/contracts/.*\.json)$'
       GEN_ARTIFACT_PATHS='server/src/mcp/contracts/schemas/_generated/'
       ;;
-    server/src/cli-shared/_generated/config-keys.ts)
+    server/src/cli-shared/_generated/config-keys.ts|server/src/cli-shared/_generated/config-template.ts)
       GEN_NPM_SCRIPT='generate:config-schema'
       GEN_SOURCE_RE='^server/(scripts/generate-config-schema\.ts|src/shared/types/config-file\.ts)$'
-      GEN_ARTIFACT_PATHS='server/config.schema.json server/src/cli-shared/_generated/config-keys.ts'
+      GEN_ARTIFACT_PATHS='server/config.schema.json server/src/cli-shared/_generated/config-keys.ts server/src/cli-shared/_generated/config-template.ts'
       ;;
     *)
       return 1
@@ -69,7 +69,7 @@ regen_generator_if_source_staged \
 regen_generator_if_source_staged \
   'generate:config-schema' \
   '^server/(scripts/generate-config-schema\.ts|src/shared/types/config-file\.ts)$' \
-  'server/config.schema.json server/src/cli-shared/_generated/config-keys.ts'
+  'server/config.schema.json server/src/cli-shared/_generated/config-keys.ts server/src/cli-shared/_generated/config-template.ts'
 
 # Prevent direct edits to generated files (without a justifying source change).
 # Exception 1: deletions are allowed if the source no longer exists (feature removal).

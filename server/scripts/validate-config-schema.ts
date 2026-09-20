@@ -21,10 +21,14 @@
  * not. `checkSchemaDrift` closes that: it calls `generateConfigSchema` (the exact function
  * `npm run generate:config-schema` calls) into a temp file and compares bytes against the
  * committed file, so the gate proves the shipped schema IS the generator's output rather than
- * merely internally self-consistent. Both artifacts of that one generator run are compared — the
- * schema AND `src/cli-shared/_generated/config-keys.ts`, the leaf key table every config setter
- * validates against — because a check covering only the schema would go green while the settable
- * key list sat one `ConfigFile` edit behind. This mirrors the shape `generate-contracts.ts --check` and
+ * merely internally self-consistent. All three artifacts of that one generator run are compared —
+ * the schema, `src/cli-shared/_generated/config-keys.ts` (the leaf key table every config setter
+ * validates against) and `src/cli-shared/_generated/config-template.ts` (the `config.jsonc` a
+ * fresh workspace is initialized with) — because a check covering only the schema would go green
+ * while the settable key list, or the example file a user edits, sat one `ConfigFile` edit behind.
+ * The template is the one a reader would least suspect: it is prose as much as data, so a stale
+ * copy still parses, still validates, and still documents a default the server stopped using.
+ * This mirrors the shape `generate-contracts.ts --check` and
  * `generate-framework-schemas.ts --check` already use for their own generated artifacts — the
  * project's established drift-gate pattern — adapted to live inside this script (per this row)
  * rather than as a second flag on the generator.
@@ -61,6 +65,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { generateConfigSchema } from './generate-config-schema.js';
+import { generateDefaultConfig } from '../src/cli-shared/config-operations.js';
 import { validateConfigAgainstSchema } from '../src/infra/config/config-schema-validator.js';
 
 import type { ConfigSchemaValidationResult } from '../src/shared/types/config-manager.js';
@@ -69,6 +74,13 @@ const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 const CONFIG_PATH = path.join(SERVER_ROOT, 'config.json');
 const SCHEMA_PATH = path.join(SERVER_ROOT, 'config.schema.json');
 const KEYS_PATH = path.join(SERVER_ROOT, 'src', 'cli-shared', '_generated', 'config-keys.ts');
+const TEMPLATE_PATH = path.join(
+  SERVER_ROOT,
+  'src',
+  'cli-shared',
+  '_generated',
+  'config-template.ts'
+);
 
 type JsonObject = Record<string, unknown>;
 
@@ -82,27 +94,32 @@ interface SchemaDriftResult {
 }
 
 /**
- * Regenerates BOTH generated artifacts via `generateConfigSchema` — the same function `main()` in
- * `generate-config-schema.ts` calls — into a fresh temp directory, and compares their bytes to
- * `committedSchemaPath` / `committedKeysPath` (defaulting to the real files). Parameterized so
- * the self-test can point either at a fixture copy instead of the real file.
+ * Regenerates ALL THREE generated artifacts via `generateConfigSchema` — the same function
+ * `main()` in `generate-config-schema.ts` calls — into a fresh temp directory, and compares their
+ * bytes to `committedSchemaPath` / `committedKeysPath` / `committedTemplatePath` (defaulting to
+ * the real files). Parameterized so the self-test can point any one of them at a fixture copy
+ * instead of the real file.
  *
- * The key table is checked here rather than in a gate of its own because it comes out of the same
- * run: a check that covered only the schema would pass while `CONFIG_VALID_KEYS` — the list every
- * config setter validates against — sat one `ConfigFile` edit behind.
+ * The key table and the `config.jsonc` template are checked here rather than in gates of their
+ * own because they come out of the same run: a check that covered only the schema would pass
+ * while `CONFIG_VALID_KEYS` — the list every config setter validates against — or the example
+ * file `cpm config init` writes sat one `ConfigFile` edit behind.
  */
 async function checkSchemaDrift(
   committedSchemaPath: string = SCHEMA_PATH,
-  committedKeysPath: string = KEYS_PATH
+  committedKeysPath: string = KEYS_PATH,
+  committedTemplatePath: string = TEMPLATE_PATH
 ): Promise<SchemaDriftResult> {
   const tempDir = mkdtempSync(path.join(os.tmpdir(), 'config-schema-drift-'));
   const regeneratedSchemaPath = path.join(tempDir, 'config.schema.json');
   const regeneratedKeysPath = path.join(tempDir, 'config-keys.ts');
-  generateConfigSchema(regeneratedSchemaPath, regeneratedKeysPath);
+  const regeneratedTemplatePath = path.join(tempDir, 'config-template.ts');
+  generateConfigSchema(regeneratedSchemaPath, regeneratedKeysPath, regeneratedTemplatePath);
 
   const comparisons = [
     { committedPath: committedSchemaPath, regeneratedPath: regeneratedSchemaPath },
     { committedPath: committedKeysPath, regeneratedPath: regeneratedKeysPath },
+    { committedPath: committedTemplatePath, regeneratedPath: regeneratedTemplatePath },
   ];
 
   const stale: string[] = [];
@@ -380,6 +397,61 @@ const SELF_TEST_CASES: readonly SelfTestCase[] = [
         result.message?.includes('mutated-config-keys.ts') === true,
         `the drift message must name the stale artifact, got: ${result.message ?? '(none)'}`
       );
+    },
+  },
+  {
+    // The THIRD artifact of the same run, and the one whose staleness hides best: a template one
+    // `ConfigFile` edit behind still parses, still validates, and still reads as authoritative
+    // while documenting a default the server no longer uses.
+    name: 'DRIFT POSITIVE CONTROL — a hand-edited config.jsonc template copy is detected as stale',
+    run: async (fixtureDir) => {
+      const committed = await readFile(TEMPLATE_PATH, 'utf8');
+      const mutated = committed.replace('"port": 9090,', '"port": 9091,');
+      assert(
+        mutated !== committed,
+        'the mutation anchor is gone from the config.jsonc template — this case would measure nothing'
+      );
+
+      const mutatedPath = path.join(fixtureDir, 'mutated-config-template.ts');
+      writeFileSync(mutatedPath, mutated, 'utf8');
+
+      const result = await checkSchemaDrift(SCHEMA_PATH, KEYS_PATH, mutatedPath);
+      assert(
+        result.drifted,
+        'a hand-edited template copy (one example value changed) must be reported as drifted, ' +
+          'or the drift check is not comparing the template at all'
+      );
+      assert(
+        result.message?.includes('mutated-config-template.ts') === true,
+        `the drift message must name the stale artifact, got: ${result.message ?? '(none)'}`
+      );
+    },
+  },
+  {
+    // The template restates `generateDefaultConfig()`'s document members rather than importing
+    // them — importing would make regenerating `_generated/config-keys.ts` depend on that same
+    // file already being on disk, since `config-operations.ts` reaches it through
+    // `config-input-validator.ts`. A restated constant with nothing pinning it is the drift shape
+    // this whole script exists to prevent, so it is pinned here instead of in the generator.
+    name: 'PARITY — the template writes exactly what `cpm config init` writes today',
+    run: async () => {
+      const template = await readFile(TEMPLATE_PATH, 'utf8');
+      const defaults = generateDefaultConfig();
+      assert(
+        Object.keys(defaults).length > 0,
+        'generateDefaultConfig() returned no members — this case would assert nothing'
+      );
+
+      for (const [key, value] of Object.entries(defaults)) {
+        const liveLine = `\n  ${JSON.stringify(key)}: ${JSON.stringify(value)},\n`;
+        assert(
+          template.includes(liveLine),
+          `the config.jsonc template must carry ${JSON.stringify(key)} live with the value ` +
+            `\`cpm config init\` writes (${JSON.stringify(value)}); it does not. Update ` +
+            'TEMPLATE_DOCUMENT_MEMBERS in generate-config-schema.ts and generateDefaultConfig() ' +
+            'together, then regenerate.'
+        );
+      }
     },
   },
 ];
