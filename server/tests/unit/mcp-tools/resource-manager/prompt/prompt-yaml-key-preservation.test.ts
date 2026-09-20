@@ -163,16 +163,14 @@ describe('prompt.yaml keys survive an update that did not name them (P4.57)', ()
     });
 
     /**
-     * OPEN (as of 2026-09-17 · flips when the writer edits `prompt.yaml` as a YAML Document
-     * rather than re-serializing a parsed object). `it.failing` passes while the defect stands
-     * and goes RED the day it is fixed, so this marker cannot outlive what it describes.
+     * CLOSED 2026-09-20 (row P4.64). This was `it.failing` while the writer re-serialized a
+     * parsed object through `js-yaml`, which discards (2) the comment and (4) the folded long
+     * scalar and flow-style `artifacts` before the writer ever sees them.
      *
-     * (2) the comment, (4) the folded long scalar and the flow-style `artifacts` are presentation
-     * that `js-yaml` — the only YAML library this package declares — does not model: its parser
-     * discards comments and style before the writer ever sees the document. Keeping them needs
-     * the `yaml` package's Document API, which is not a declared dependency.
+     * `yaml` is now a declared dependency and the writer edits the file's own source tokens, so
+     * the marker flipped exactly as it said it would and this is an ordinary assertion again.
      */
-    it.failing('(2)(4) leaves every line it was not asked to change byte-identical', async () => {
+    it('(2)(4) leaves every line it was not asked to change byte-identical', async () => {
       await updateDescriptionOnly(id, 'Patched description.');
 
       expect(readFileSync(yamlPath(id), 'utf8')).toBe(
