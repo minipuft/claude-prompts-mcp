@@ -8,7 +8,6 @@ import type {
   VersionEntry,
   HistoryFile,
   SaveVersionResult,
-  RollbackResult,
   SaveVersionOptions,
   ResourceType,
 } from './types.js';
@@ -475,66 +474,6 @@ export class VersionHistoryService {
       producedSnapshot,
       options
     );
-  }
-
-  /**
-   * Rollback to a previous version.
-   *
-   * Go-forward semantics (OQ-P7-3): the target is validated BEFORE anything is written, so a
-   * refused rollback consumes no version number (DEV-T2-6's defect). The restored state is then
-   * recorded as the newest version — a rollback is an edit, and version N holds what edit N
-   * produced. The live pre-rollback state needs no dedicated "Pre-rollback snapshot" row: under
-   * these semantics it is already the previous version, and when it is not (old-era rows,
-   * out-of-band edits) the bridge records it.
-   *
-   * RESTORABILITY is not checked here — only existence. A caller that can reject the snapshot
-   * (because its snapshot contract finds a required field missing) must use
-   * `resolveRollbackTarget` + `commitEdit` instead, so the rejection happens before any write.
-   * This convenience wrapper remains for callers with no such rejection to make.
-   */
-  async rollback(
-    resourceType: ResourceType,
-    resourceId: string,
-    targetVersion: number,
-    currentSnapshot: Record<string, unknown>
-  ): Promise<RollbackResult & { snapshot?: Record<string, unknown> }> {
-    const resolved = await this.resolveRollbackTarget(resourceType, resourceId, targetVersion);
-    if (!resolved.ok) {
-      return { success: false, error: resolved.error };
-    }
-    const targetEntry = resolved.entry;
-
-    try {
-      // Record the RESTORED state as the newest version, bridging the live state first if it is
-      // not already recorded. A persistence failure throws and is caught below — a rollback that
-      // reports failure and restores nothing, with the target validated above so the refusal
-      // path writes no rows at all.
-      const saveResult = await this.commitEdit(
-        resourceType,
-        resourceId,
-        currentSnapshot,
-        targetEntry.snapshot,
-        {
-          description: `Rollback to v${targetVersion}`,
-          diff_summary: '',
-        }
-      );
-
-      this.logger.info(
-        `Rollback ${resourceType}/${resourceId}: recorded v${saveResult.version} (restored from v${targetVersion}${saveResult.bridged ? ', live state bridged' : ''})`
-      );
-
-      return {
-        success: true,
-        saved_version: saveResult.version,
-        restored_version: targetVersion,
-        snapshot: targetEntry.snapshot,
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Rollback failed for ${resourceId}: ${message}`);
-      return { success: false, error: message };
-    }
   }
 
   /**

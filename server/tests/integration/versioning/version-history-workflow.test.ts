@@ -139,24 +139,6 @@ class SimulatedResourceManager {
     return history;
   }
 
-  async rollback(
-    version: number
-  ): Promise<{ success: boolean; restoredState?: Record<string, unknown> }> {
-    const result = await this.versionHistoryService.rollback(
-      this.resourceType,
-      this.resourceId,
-      version,
-      this.currentState
-    );
-
-    if (result.success && result.snapshot) {
-      this.currentState = result.snapshot as Record<string, unknown>;
-      return { success: true, restoredState: this.currentState };
-    }
-
-    return { success: false };
-  }
-
   async compare(fromVersion: number, toVersion: number) {
     const result = await this.versionHistoryService.compareVersions(
       this.resourceType,
@@ -425,53 +407,6 @@ describe('Version History Workflow Integration', () => {
         `SELECT version FROM version_history WHERE tenant_id = 'ws-beta' AND resource_id = 'cross-id' ORDER BY version`
       );
       expect(betaAfter.map((r) => r.version)).toEqual([1, 2]);
-    });
-  });
-
-  describe('Rollback Workflow', () => {
-    it('should rollback to previous version and restore state', async () => {
-      const manager = new SimulatedResourceManager({
-        versionHistoryService,
-        resourceType: 'framework',
-        resourceId: 'custom',
-      });
-
-      // Version history flow:
-      // create: saves v1 { phases: ['analyze'] }
-      // update 1: saves pre-update state as v2 { phases: ['analyze'] }, then updates to ['analyze', 'plan']
-      // update 2: saves pre-update state as v3 { phases: ['analyze', 'plan'] }, then updates to full
-
-      await manager.create({ name: 'Custom Framework', phases: ['analyze'] });
-      await manager.update({ phases: ['analyze', 'plan'] });
-      await manager.update({ phases: ['analyze', 'plan', 'execute'] });
-
-      // Current state should have 3 phases
-      expect(manager.getCurrentState()['phases']).toEqual(['analyze', 'plan', 'execute']);
-
-      // Rollback to v3 (which captured ['analyze', 'plan'] before last update)
-      const rollbackResult = await manager.rollback(3);
-      expect(rollbackResult.success).toBe(true);
-      expect(rollbackResult.restoredState!['phases']).toEqual(['analyze', 'plan']);
-
-      // Manager state should be restored
-      expect(manager.getCurrentState()['phases']).toEqual(['analyze', 'plan']);
-
-      // History should now have 4 versions (rollback creates pre-rollback snapshot)
-      const history = await manager.history();
-      expect(history!.versions.length).toBeGreaterThanOrEqual(4);
-    });
-
-    it('should fail rollback to non-existent version', async () => {
-      const manager = new SimulatedResourceManager({
-        versionHistoryService,
-        resourceType: 'prompt',
-        resourceId: 'test',
-      });
-
-      await manager.create({ name: 'Test' });
-
-      const result = await manager.rollback(999);
-      expect(result.success).toBe(false);
     });
   });
 
