@@ -43,7 +43,7 @@ import { discoverPromptDirectories } from '../../../src/modules/prompts/prompt-w
 import { compareResourceBaseline } from '../../../src/runtime/resource-change-tracking.js';
 import { testScratchPath } from '../../helpers/scratch-path.js';
 
-import type { ConfigLoader } from '../../../src/infra/config/index.js';
+import type { TrackedResourceRoots } from '../../../src/runtime/resource-change-tracking.js';
 
 const logger = {
   info: jest.fn() as jest.Mock,
@@ -58,11 +58,8 @@ const PROMPTS_DIR = path.join(RESOURCES_DIR, 'prompts');
 const GATES_DIR = path.join(RESOURCES_DIR, 'gates');
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 
-/** The two config accessors `compareResourceBaseline` reads, and nothing else. */
-const configStub = {
-  getResolvedPromptsDirectory: () => PROMPTS_DIR,
-  getGatesDirectory: () => GATES_DIR,
-} as unknown as ConfigLoader;
+/** The roots `compareResourceBaseline` walks: one prompts root and one gates root. */
+const trackedRoots: TrackedResourceRoots = { prompt: [PROMPTS_DIR], gate: [GATES_DIR] };
 
 /** A body that loads cleanly; the declared `id` is the directory name, as the schema requires. */
 const promptBody = (id: string): string =>
@@ -166,7 +163,7 @@ describe('prompt walks agree about the prompts root and about _-prefixed directo
     });
     await tracker.initialize();
 
-    const result = await compareResourceBaseline(tracker, configStub, logger as never);
+    const result = await compareResourceBaseline(tracker, trackedRoots, logger as never);
 
     const announced = dbManager
       .query<{ resource_id: string }>(

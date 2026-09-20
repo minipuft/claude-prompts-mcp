@@ -8,6 +8,7 @@
 
 import { existsSync } from 'fs';
 import { cp, mkdir, readFile } from 'node:fs/promises';
+import { isDeepStrictEqual } from 'node:util';
 import { join, relative, sep } from 'path';
 
 import type { ConfigManager, Logger } from '#shared/types/index.js';
@@ -79,6 +80,20 @@ interface FrameworkWritePlan {
 // ============================================================================
 // Service Implementation
 // ============================================================================
+
+/**
+ * Values the writer supplies itself when a CREATE names none. A new framework needs both to load:
+ * the schema requires `version` and `enabled`.
+ *
+ * Never applied to an existing framework, where the stored value is the value. Until
+ * tutorial-rework B.65, `buildFrameworkYamlData` emitted `version: 1.0.0` on every call and the
+ * update merge laid it over the stored one, so a description edit took CAGEERF from 2.0.0 to 1.0.0
+ * (OQ-8: an update keeps everything it was not asked to change).
+ */
+const FRAMEWORK_CREATION_DEFAULTS: Readonly<Record<string, unknown>> = {
+  enabled: true,
+  version: '1.0.0',
+};
 
 /** Which of the two YAML documents a mapped field may be read from. */
 type MappedFieldSource = 'framework' | 'phases';
@@ -535,7 +550,23 @@ export class FrameworkFileWriter {
     };
   }
 
-  /** The files a framework write lands, in write order, as the exact bytes each will hold. */
+  /**
+   * The files a framework write lands, in write order, as the exact bytes each will hold.
+   *
+   * Write-scope narrowing, the framework counterpart of `planGateWrite` and `planPromptFiles`
+   * (tutorial-rework B.28 for gates, B.65 here). A create or a repair (`existingData === null`)
+   * owns the whole framework and lands every file it has content for. An edit of an existing
+   * framework lands a file only when merging the payload into it changes what it holds. Every file
+   * it does not change stays byte-identical, comments and flow style included, because it is never
+   * written. Before B.65 every update re-serialized `framework.yaml` and the phases file, including
+   * a phases file the update never named.
+   *
+   * The test is "the merge changes it" rather than the gate writer's "a key resident in it was
+   * supplied". Both give the same answer for a resident key with a new value. Only this one gives
+   * the right answer for the companion references: a phases edit emits `phasesFile`, which
+   * `framework.yaml` already declares with the same name. Keying on what was supplied would
+   * re-serialize `framework.yaml` for that reference alone.
+   */
   private planFrameworkFiles(
     data: Partial<FrameworkCreationData> & { id: string },
     existingData: ExistingFrameworkData | null,
@@ -562,17 +593,19 @@ export class FrameworkFileWriter {
       ),
     };
 
-    const newFrameworkData = this.buildFrameworkYamlData(data, companionFiles);
-    const finalFrameworkData =
-      existingData !== null
-        ? this.deepMerge(existingData.framework, newFrameworkData)
-        : newFrameworkData;
-    const files: PlannedFrameworkFile[] = [
-      {
+    const files: PlannedFrameworkFile[] = [];
+
+    const frameworkYaml = this.planFrameworkYamlData(
+      data,
+      existingData?.framework ?? null,
+      companionFiles
+    );
+    if (frameworkYaml !== null) {
+      files.push({
         relativePath: 'framework.yaml',
-        content: serializeYaml(finalFrameworkData, { sortKeys: false }),
-      },
-    ];
+        content: serializeYaml(frameworkYaml, { sortKeys: false }),
+      });
+    }
 
     const phasesData = this.planPhasesYamlData(data, existingData?.phases ?? null);
     if (phasesData !== null) {
@@ -582,17 +615,49 @@ export class FrameworkFileWriter {
       });
     }
 
-    const systemPromptContent = data.system_prompt_guidance ?? existingData?.systemPrompt ?? '';
-    if (systemPromptContent !== '') {
-      files.push({ relativePath: 'system-prompt.md', content: systemPromptContent });
+    if (this.changesText(data.system_prompt_guidance, existingData?.systemPrompt ?? null)) {
+      files.push({ relativePath: 'system-prompt.md', content: data.system_prompt_guidance });
     }
 
-    const judgePromptContent = data.judge_prompt ?? existingData?.judgePrompt ?? '';
-    if (judgePromptContent !== '') {
-      files.push({ relativePath: companionFiles.judgePromptFile, content: judgePromptContent });
+    if (this.changesText(data.judge_prompt, existingData?.judgePrompt ?? null)) {
+      files.push({ relativePath: companionFiles.judgePromptFile, content: data.judge_prompt });
     }
 
     return files;
+  }
+
+  /**
+   * The `framework.yaml` document this write lands, or null when it leaves the file as it is.
+   *
+   * On create, the payload plus `FRAMEWORK_CREATION_DEFAULTS` for whatever it left out. On an edit,
+   * the payload merged over the stored document, WITHOUT `id`: the id addresses the framework and
+   * the stored one stays. Null when that merge equals the stored document.
+   */
+  private planFrameworkYamlData(
+    data: Partial<FrameworkCreationData> & { id: string },
+    existingFramework: Record<string, unknown> | null,
+    companionFiles: { phasesFile: string; judgePromptFile: string }
+  ): Record<string, unknown> | null {
+    const supplied = this.buildFrameworkYamlData(data, companionFiles);
+    if (existingFramework === null) {
+      const created = { ...supplied };
+      for (const [key, value] of Object.entries(FRAMEWORK_CREATION_DEFAULTS)) {
+        created[key] ??= value;
+      }
+      return created;
+    }
+
+    const edits = Object.fromEntries(Object.entries(supplied).filter(([key]) => key !== 'id'));
+    const merged = this.deepMerge(existingFramework, edits);
+    return isDeepStrictEqual(merged, existingFramework) ? null : merged;
+  }
+
+  /**
+   * Whether a companion text file is written: the payload supplies non-empty content for it and
+   * that content differs from what the file holds. An empty string writes nothing, as before.
+   */
+  private changesText(supplied: string | undefined, existing: string | null): supplied is string {
+    return supplied !== undefined && supplied !== '' && supplied !== existing;
   }
 
   /**
@@ -616,21 +681,20 @@ export class FrameworkFileWriter {
     return declared;
   }
 
-  /** The merged `phases.yaml` document, or null when the write lands no phases file. */
+  /**
+   * The merged `phases.yaml` document, or null when the write lands no phases file — including
+   * when merging the payload leaves the stored phases document as it is.
+   */
   private planPhasesYamlData(
     data: Partial<FrameworkCreationData>,
     existingPhases: Record<string, unknown> | null
   ): Record<string, unknown> | null {
-    if (!this.needsPhasesFile(data) && existingPhases === null) {
-      return null;
-    }
     const newPhasesData = this.buildPhasesYamlData(data);
-    const hasNewPhasesData = Object.keys(newPhasesData).length > 0;
-    const finalPhasesData =
-      existingPhases !== null && hasNewPhasesData
-        ? this.deepMerge(existingPhases, newPhasesData)
-        : (existingPhases ?? newPhasesData);
-    return Object.keys(finalPhasesData).length > 0 ? finalPhasesData : null;
+    if (existingPhases === null) {
+      return Object.keys(newPhasesData).length > 0 ? newPhasesData : null;
+    }
+    const merged = this.deepMerge(existingPhases, newPhasesData);
+    return isDeepStrictEqual(merged, existingPhases) ? null : merged;
   }
 
   // ==========================================================================
@@ -653,20 +717,12 @@ export class FrameworkFileWriter {
     }
   ): Record<string, unknown> {
     const yamlData: Record<string, unknown> = {};
-    const typeValue = data.type;
 
     // Core fields - id is always required
     yamlData['id'] = data.id.toLowerCase();
 
-    // Only set name if provided (for partial updates)
-    if (data.name !== undefined) {
-      yamlData['name'] = data.name;
-    }
-
-    if (typeValue !== undefined) {
-      yamlData['type'] = typeValue;
-    }
-
+    // Copied only when supplied, in the order a created file lists them.
+    //
     // `description` is read back by `toFrameworkCreationData`, carried in
     // OPTIONAL_FRAMEWORK_FIELDS, and reported in the update diff — but until 2026-08-17 it was
     // never written here, so `resource_manager framework update description:"..."` reported a
@@ -674,16 +730,20 @@ export class FrameworkFileWriter {
     // `writeFrameworkFiles` deep-merges over the existing YAML). Recording it in a version
     // snapshot while no write path could restore it is the same defect one layer up, which is
     // how it surfaced.
-    if (data.description !== undefined) {
-      yamlData['description'] = data.description;
-    }
-
-    // Enabled defaults to true
-    yamlData['enabled'] = data.enabled ?? true;
-
-    // System prompt guidance
-    if (data.system_prompt_guidance !== undefined) {
-      yamlData['systemPromptGuidance'] = data.system_prompt_guidance;
+    //
+    // `enabled` was `data.enabled ?? true` until B.65, which laid `true` over the stored value on
+    // every edit. A create with none still gets `true`, from `FRAMEWORK_CREATION_DEFAULTS`.
+    const suppliedFields: ReadonlyArray<readonly [string, unknown]> = [
+      ['name', data.name],
+      ['type', data.type],
+      ['description', data.description],
+      ['enabled', data.enabled],
+      ['systemPromptGuidance', data.system_prompt_guidance],
+    ];
+    for (const [key, value] of suppliedFields) {
+      if (value !== undefined) {
+        yamlData[key] = value;
+      }
     }
 
     // Check if a phases file is needed
@@ -716,9 +776,8 @@ export class FrameworkFileWriter {
       yamlData['judgePromptFile'] = companionFiles.judgePromptFile;
     }
 
-    // Always set version for new frameworks
-    yamlData['version'] ??= '1.0.0';
-
+    // No `version`: the payload has no field for it. A create gets one from
+    // `FRAMEWORK_CREATION_DEFAULTS`; an edit keeps the stored one (B.65).
     return yamlData;
   }
 

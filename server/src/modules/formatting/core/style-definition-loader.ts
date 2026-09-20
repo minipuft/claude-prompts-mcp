@@ -128,9 +128,9 @@ export class StyleDefinitionLoader {
     // From the RAW list — see the gate loader's twin: the primary's rank IS its position here, and
     // filtering it out first would drop it behind the bundled tree.
     this.lookupDirs = resourceLookupOrder(this.stylesDir, config.additionalStylesDirs ?? []);
-    // Reported and watched, not looked up.
+    // Reported and watched, not looked up — absent ones included, as in the gate loader's twin.
     this.additionalStylesDirs = (config.additionalStylesDirs ?? []).filter(
-      (dir) => existsSync(dir) && dir !== this.stylesDir
+      (dir) => dir !== this.stylesDir
     );
     this.enableCache = config.enableCache ?? true;
     this.validateOnLoad = config.validateOnLoad ?? true;

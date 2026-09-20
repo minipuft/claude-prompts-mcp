@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-18T02:56:08.511Z",
-  "total": 233,
+  "generatedAt": "2026-09-20T01:39:08.373Z",
+  "total": 230,
   "methods": [
     "Application.getCurrentFrameworkInfo",
     "Application.initializeModules",
@@ -75,7 +75,6 @@
     "FrameworkHotReloadCoordinator.resetStats",
     "FrameworkManager.getShippedFrameworkIds",
     "FrameworkManager.listFrameworkGuides",
-    "FrameworkRegistry.getGuideEntries",
     "FrameworkRegistry.getRegistryStats",
     "FrameworkRegistry.setGuideEnabled",
     "FrameworkStateStore.generateExecutionContext",
@@ -89,7 +88,6 @@
     "GateAccumulator.has",
     "GateAccumulator.isBlockingGate",
     "GateAccumulator.isFrozen",
-    "GateDefinitionLoader.gateExists",
     "GateDefinitionLoader.getStats",
     "GateEnforcementAuthority.clearPendingReview",
     "GateEnforcementAuthority.getPendingReview",
@@ -184,7 +182,6 @@
     "ResourceLoader.load",
     "ResourceQuarantine.clear",
     "ResponseFormatter.formatChainResponse",
-    "RuntimeFrameworkLoader.frameworkExists",
     "RuntimeFrameworkLoader.getFrameworksDir",
     "RuntimeFrameworkLoader.loadAllFrameworks",
     "SafeConfigWriter.getConfigPath",

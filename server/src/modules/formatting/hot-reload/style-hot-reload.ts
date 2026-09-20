@@ -146,6 +146,19 @@ export class StyleHotReloadCoordinator {
   }
 
   /**
+   * Drop every cached style definition so the next read comes from disk.
+   *
+   * Styles have no registry: the loader's cache IS what the server serves, so a style created and
+   * removed before its folder was watched stays servable only through that cache. Clearing all of
+   * it is exact — `StyleManager` reads through the loader on every request — and costs one
+   * re-parse per style next used.
+   */
+  async reconcile(): Promise<void> {
+    this.loader.clearCache();
+    this.logger.debug('Style cache cleared for reconciliation');
+  }
+
+  /**
    * Handle style deletion - clear from cache
    * Note: Styles don't have a registry, just a loader cache
    */

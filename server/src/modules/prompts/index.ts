@@ -10,8 +10,6 @@ export * from './registry.js';
 export * from './prompt-schema.js';
 export * from './category-manager.js';
 
-import * as path from 'node:path';
-
 import { PromptConverter } from './converter.js';
 import { PromptLoader } from './loader.js';
 import {
@@ -269,13 +267,9 @@ export class PromptAssetManager {
    * Start automatic file watching for hot reload
    */
   async startHotReload(
-    promptsConfigPath: string,
+    promptsDir: string,
     onReloadCallback?: (event: PromptHotReloadEvent) => Promise<void>,
     options?: {
-      frameworkHotReload?: {
-        handler: (event: PromptHotReloadEvent) => Promise<void>;
-        directories?: string[];
-      };
       auxiliaryReloads?: AuxiliaryReloadConfig[];
       /**
        * Every root the prompt loader reads besides the primary one — the bundled tree and any
@@ -302,11 +296,6 @@ export class PromptAssetManager {
       });
     }
 
-    // Register framework-specific reload callback (keeps manager generic)
-    if (options?.frameworkHotReload?.handler) {
-      this.hotReloadObserver.setFrameworkReloadCallback(options.frameworkHotReload.handler);
-    }
-
     if (options?.auxiliaryReloads) {
       this.hotReloadObserver.setAuxiliaryReloads(options.auxiliaryReloads);
     }
@@ -314,8 +303,12 @@ export class PromptAssetManager {
     // Start monitoring
     await this.hotReloadObserver.start();
 
-    const promptsDir = path.dirname(promptsConfigPath);
-
+    // `promptsDir` IS the prompts root. This parameter used to be a prompts CONFIG FILE path and
+    // was reduced with `path.dirname`; once callers passed the directory itself, that put the
+    // watcher on the root's PARENT — `<workspace>/resources`, or the whole workspace for a legacy
+    // `<workspace>/prompts` — polling every resource type and any runtime state beside them, and
+    // discovering the sibling type folders as "categories" while the real ones went untagged.
+    //
     // Discover categories under EVERY root the loader reads, not just the primary one.
     //
     // The catalog is composed from the bundled tree, the primary root and every workspace
@@ -329,7 +322,6 @@ export class PromptAssetManager {
     }
 
     const watchTargets = buildWatchTargets(promptsDir, categoryDirs, {
-      frameworkDirectories: options?.frameworkHotReload?.directories,
       auxiliaryDirectories: options?.auxiliaryReloads?.map((r) => r.directories),
       ...(options?.promptRoots !== undefined ? { promptRoots: options.promptRoots } : {}),
     });

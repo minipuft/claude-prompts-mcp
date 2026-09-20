@@ -40,6 +40,7 @@ async function buildHotReloadAuxiliaryConfigs(
   context: HotReloadAuxiliaryContext
 ): Promise<AuxiliaryReloadConfig[]> {
   const { logger, mcpToolsManager, gateManager, scriptLoader, promptsDir, configManager } = context;
+  const { pathResolver } = context;
 
   const scriptAux =
     promptsDir !== undefined && scriptLoader !== undefined
@@ -53,7 +54,7 @@ async function buildHotReloadAuxiliaryConfigs(
     buildFrameworkAuxiliaryReloadConfig(logger, mcpToolsManager),
     buildGateAuxiliaryReloadConfig(logger, gateManager),
     scriptAux,
-    buildResourceChangeTrackerAuxiliaryReloadConfig(logger, configManager),
+    buildResourceChangeTrackerAuxiliaryReloadConfig(logger, configManager, pathResolver),
     await buildStyleAuxiliaryReloadConfig(logger, mcpToolsManager),
   ];
 
