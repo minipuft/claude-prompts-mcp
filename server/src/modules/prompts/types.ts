@@ -104,15 +104,3 @@ export interface CategoryStatistics {
     promptCount: number;
   }>;
 }
-
-/**
- * Category-prompt relationship data
- */
-export interface CategoryPromptRelationship {
-  categoryId: string;
-  categoryName: string;
-  promptIds: string[];
-  promptCount: number;
-  hasChains: boolean;
-  hasTemplates: boolean;
-}
