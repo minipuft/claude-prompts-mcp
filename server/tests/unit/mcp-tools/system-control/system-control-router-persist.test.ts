@@ -4,10 +4,10 @@
  * a hard-coded literal, not a read of the write's own target. A workspace running `config.jsonc`
  * got a persist confirmation naming a file it does not have.
  *
- * `safeConfigWriter` is stubbed directly (never a real `ConfigLoader`/`SafeConfigWriter` pair
- * against a temp file): the row this test covers only concerns the message text the router
- * builds around `SafeConfigWriter.getConfigPath()`, not the write mechanics `config-utils.ts` /
- * `config-operations.ts` own.
+ * This file drives `ConsolidatedSystemControl`'s persist replies; `safeConfigWriter` is a
+ * hand-built stand-in supplying `getConfigPath()`, the value the router's message text depends
+ * on. The writer class's own behavior -- `updateConfigValue`, `getConfigPath`, backup/restore --
+ * lives in a sibling file: `safe-config-writer.test.ts` under `tests/unit/mcp-tools/`.
  *
  * Classification: Unit (one router, stubbed `safeConfigWriter`).
  */
