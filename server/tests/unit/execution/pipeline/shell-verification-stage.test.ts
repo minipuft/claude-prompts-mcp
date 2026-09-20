@@ -29,10 +29,18 @@ const createMockExecutor = (passed = true): ShellVerifyExecutor =>
     }),
   }) as unknown as ShellVerifyExecutor;
 
-const createMockStateManager = (): VerifyActiveStateStore =>
+/**
+ * `writeState`/`clearState` overrides take an already-configured mock (rather than a plain
+ * return value) so a caller that needs `mockRejectedValue` can type it explicitly via
+ * `jest.fn<VerifyActiveStateStore['writeState']>()` — the bare `jest.fn()` calls below infer
+ * `never` for their argument in this Jest/TS combination (pre-existing, not fixed here).
+ */
+const createMockStateManager = (
+  overrides: Partial<Pick<VerifyActiveStateStore, 'writeState' | 'clearState'>> = {}
+): VerifyActiveStateStore =>
   ({
-    writeState: jest.fn().mockResolvedValue(undefined),
-    clearState: jest.fn().mockResolvedValue(undefined),
+    writeState: overrides.writeState ?? jest.fn().mockResolvedValue(undefined),
+    clearState: overrides.clearState ?? jest.fn().mockResolvedValue(undefined),
     readState: jest.fn().mockResolvedValue(null),
   }) as unknown as VerifyActiveStateStore;
 
@@ -274,10 +282,13 @@ describe('ShellVerificationStage', () => {
   describe('verify-loop persistence failures propagate, not get swallowed', () => {
     test('a writeState failure while arming the loop propagates out of execute()', async () => {
       const executor = createMockExecutor(true);
-      const stateManager = createMockStateManager();
-      (stateManager.writeState as jest.Mock).mockRejectedValue(
-        new Error('Failed to arm verify-loop state for session test-session: disk full')
-      );
+      const stateManager = createMockStateManager({
+        writeState: jest
+          .fn<VerifyActiveStateStore['writeState']>()
+          .mockRejectedValue(
+            new Error('Failed to arm verify-loop state for session test-session: disk full')
+          ),
+      });
       const stage = new ShellVerificationStage(
         executor,
         stateManager,
@@ -304,10 +315,13 @@ describe('ShellVerificationStage', () => {
 
     test('a clearState failure on verification pass propagates out of execute()', async () => {
       const executor = createMockExecutor(true);
-      const stateManager = createMockStateManager();
-      (stateManager.clearState as jest.Mock).mockRejectedValue(
-        new Error('Failed to clear verify-loop state for session test-session: disk full')
-      );
+      const stateManager = createMockStateManager({
+        clearState: jest
+          .fn<VerifyActiveStateStore['clearState']>()
+          .mockRejectedValue(
+            new Error('Failed to clear verify-loop state for session test-session: disk full')
+          ),
+      });
       const stage = new ShellVerificationStage(
         executor,
         stateManager,
@@ -331,10 +345,13 @@ describe('ShellVerificationStage', () => {
 
     test('a clearState failure on escalation propagates instead of returning the escalation reply', async () => {
       const executor = createMockExecutor(false);
-      const stateManager = createMockStateManager();
-      (stateManager.clearState as jest.Mock).mockRejectedValue(
-        new Error('Failed to clear verify-loop state for session test-session: disk full')
-      );
+      const stateManager = createMockStateManager({
+        clearState: jest
+          .fn<VerifyActiveStateStore['clearState']>()
+          .mockRejectedValue(
+            new Error('Failed to clear verify-loop state for session test-session: disk full')
+          ),
+      });
       const stage = new ShellVerificationStage(
         executor,
         stateManager,
