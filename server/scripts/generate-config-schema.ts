@@ -655,7 +655,7 @@ export function generateConfigSchema(
   // documented "uncomment one line" flow trips the warning on a file the server accepts by
   // design, which cost more than the editor staying quiet on a `.json` mistake it already refuses
   // to load.
-  (schema as SchemaNode).allowTrailingCommas = true;
+  (schema as SchemaNode)['allowTrailingCommas'] = true;
 
   const content = JSON.stringify(schema, null, 2) + '\n';
   writeFileSync(outputPath, content);
