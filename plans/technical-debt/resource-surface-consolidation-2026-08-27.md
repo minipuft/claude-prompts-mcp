@@ -2,7 +2,7 @@
 title: "resource_manager surface consolidation — where resources live and what is authorable"
 date: 2026-08-27
 status: active
-publish: push+merge # owner, 2026-09-20: tail slice, once the full suite and a live drive are green
+publish: push+merge (2026-09-20 · owner ruling · the tail slice and the P4.64 dependency PR, each on a green full suite and live drive)
 tags: []
 ---
 
