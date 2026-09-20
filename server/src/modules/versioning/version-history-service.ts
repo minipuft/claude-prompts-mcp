@@ -168,10 +168,10 @@ export class VersionHistoryService {
       // The prune is inside deliberately — it already ran adjacent to the insert, reads the count
       // this insert produced, and deletes by it.
       //
-      // No retry loop: a contending writer is meant to WAIT on the lock. That waiting is
-      // `busy_timeout`, and this engine's connection sets only `journal_mode=WAL` — so today a
-      // contended BEGIN fails fast instead, surfacing as a thrown save rather than a duplicate.
-      // Choosing that timeout is a separate call from making the pair atomic, which is all this is.
+      // No retry loop, because one is not needed: a contending writer WAITS on the lock. Both
+      // connections to this file set `busy_timeout` from `STATE_DB_BUSY_TIMEOUT_MS`, so the loser
+      // of a race blocks for the few milliseconds the winner's transaction takes and then proceeds.
+      // A retry here would be a second, worse implementation of that wait, in the wrong layer.
       const newVersion = await db.transaction(async () => {
         // Get current max version
         const row = db.queryOne<{ max_version: number | null }>(

@@ -43,6 +43,8 @@ import {
 import type { DatabasePort, TransactionMode } from '#shared/types/persistence.js';
 import type { Logger } from '../logging/index.js';
 
+import { STATE_DB_BUSY_TIMEOUT_MS } from '#shared/utils/runtime-state-location.js';
+
 /**
  * Bump this when changing the embedded schema. Triggers drop-and-recreate.
  *
@@ -462,6 +464,16 @@ export class SqliteEngine implements DatabasePort {
 
       // Enable WAL mode for concurrent reader access (Python hooks, skills-sync CLI)
       this.db.exec('PRAGMA journal_mode=WAL');
+
+      // Wait for a lock another connection holds, rather than failing at once.
+      //
+      // WAL lets readers and one writer coexist; it does not make two writers coexist, and this
+      // file has three openers (this server, `cpm`, the Python hooks). Unset, this connection took
+      // SQLite's default of 0 and lost every race outright — a `version_history` save meeting the
+      // CLI mid-write threw instead of waiting the few milliseconds the CLI needed. The value is
+      // `STATE_DB_BUSY_TIMEOUT_MS`, the same constant the CLI's own connection reads, so the two
+      // cannot drift into disagreeing about how patient this file is.
+      this.db.exec(`PRAGMA busy_timeout = ${STATE_DB_BUSY_TIMEOUT_MS}`);
 
       // Ensure schema is current (creates or recreates if version mismatch)
       this.ensureSchema();

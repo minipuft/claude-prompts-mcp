@@ -41,6 +41,7 @@ import { deriveProjectScopeId } from '#shared/utils/project-scope.js';
 import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
 import {
   RUNTIME_STATE_DIR_NAME,
+  STATE_DB_BUSY_TIMEOUT_MS,
   STATE_DB_FILE_NAME,
 } from '#shared/utils/runtime-state-location.js';
 
@@ -242,7 +243,7 @@ function runSqlite(request: HistoryRequest): HistoryResponse {
   let db: DatabaseSync | undefined;
   try {
     db = new DatabaseSync(request.db_path);
-    db.exec('PRAGMA busy_timeout = 5000');
+    db.exec(`PRAGMA busy_timeout = ${STATE_DB_BUSY_TIMEOUT_MS}`);
     if (!versionHistoryExists(db)) {
       return {
         success: false,
@@ -328,8 +329,8 @@ function latestVersion(db: DatabaseSync, tenantId: string, request: HistoryReque
  * failure; only the lock removes the window. IMMEDIATE and not deferred, because a deferred
  * transaction takes no lock until the write, by which point both readers hold the same stale value.
  *
- * No retry: the second writer waits on the lock (`busy_timeout` is set when this module opens the
- * connection) rather than colliding.
+ * No retry: the second writer waits on the lock rather than colliding. Both connections to this
+ * file set `busy_timeout` from `STATE_DB_BUSY_TIMEOUT_MS`, so the wait is the same on either side.
  */
 function appendVersion(
   db: DatabaseSync,

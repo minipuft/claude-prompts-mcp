@@ -114,8 +114,16 @@ that consumes it run inside one `BEGIN IMMEDIATE`, because the number read is th
 back and a second connection committing between the two makes the INSERT land on a stale maximum.
 `DatabasePort.transaction(fn, 'immediate')` is the shared helper; the default stays `deferred`,
 which takes no lock until the first write and is correct only for a body that reads OR writes. No
-retry loop — a contender waits on the lock, and how long it waits is `busy_timeout`, which the
-engine's own connection does not currently set (the CLI's does, at 5000 ms).
+retry loop — a contender waits on the lock, and how long it waits is `busy_timeout`.
+
+**Both connections set `busy_timeout` from one constant**, `STATE_DB_BUSY_TIMEOUT_MS` in
+`shared/utils/runtime-state-location.ts`, beside the two path segments and for the same reason: the
+CLI opens its own connection and cannot import `runtime/`, so two hand-typed values would drift and
+the pair would disagree about how patient this file is. Unset, a connection takes SQLite's default
+of 0 and loses every race outright — WAL lets readers and one writer coexist, it does not make two
+writers coexist, and this file has three openers. The Python hooks are the third; they open
+read-only and inherit `sqlite3.connect`'s own 5-second default, the same number by coincidence
+rather than by contract, so changing the constant means checking `hooks/lib/db_reader.py` too.
 
 v28 is the worked example of a **real migration** on a durable table. `ensureSchema()` renumbers
 colliding rows between the snapshot and the restore (`renumberDuplicateVersionHistory`,
