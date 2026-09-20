@@ -3,14 +3,12 @@ import {
   getConfigValue,
   setConfigValue,
   validateConfig,
-  generateDefaultConfig,
-  writeConfigAtomic,
   resolveConfigPath,
   getConfigKeyInfo,
-  backupConfig,
+  resetConfig,
   CONFIG_VALID_KEYS,
 } from '@cli-shared/index.js';
-import { existsSync } from 'node:fs';
+import { basename } from 'node:path';
 
 import { output } from '../lib/output.js';
 import { resolveWorkspace } from '../lib/workspace.js';
@@ -39,7 +37,7 @@ export async function config(options: ConfigOptions): Promise<number> {
     console.error('  list       Display full configuration');
     console.error('  get <key>  Get a specific config value');
     console.error('  set <key> <value>  Set a config value');
-    console.error('  validate   Validate config.json');
+    console.error('  validate   Validate config.jsonc');
     console.error('  reset      Reset config to defaults (requires --force)');
     console.error('  keys       List all valid config keys');
     return 1;
@@ -105,10 +103,11 @@ function configGet(options: ConfigOptions): number {
   const value = getConfigValue(result.config, key);
 
   if (value === undefined) {
+    const name = basename(result.configPath ?? resolveConfigPath(workspace));
     if (options.json) {
-      output({ success: false, key, error: `Key '${key}' not found in config` }, { json: true });
+      output({ success: false, key, error: `Key '${key}' not found in ${name}` }, { json: true });
     } else {
-      console.error(`Key '${key}' not found in config.json`);
+      console.error(`Key '${key}' not found in ${name}`);
     }
     return 1;
   }
@@ -169,12 +168,13 @@ function configSet(options: ConfigOptions): number {
 function configValidate(options: ConfigOptions): number {
   const workspace = resolveWorkspace(options.workspace);
   const result = validateConfig(workspace);
+  const name = basename(resolveConfigPath(workspace));
 
   if (options.json) {
     output(result, { json: true });
   } else {
     if (result.valid) {
-      console.log('config.json is valid');
+      console.log(`${name} is valid`);
       if (result.warnings.length > 0) {
         console.log(`\nWarnings (${result.warnings.length}):`);
         for (const w of result.warnings) {
@@ -182,7 +182,7 @@ function configValidate(options: ConfigOptions): number {
         }
       }
     } else {
-      console.error('config.json validation failed:');
+      console.error(`${name} validation failed:`);
       for (const e of result.errors) {
         console.error(`  - ${e}`);
       }
@@ -199,42 +199,30 @@ function configValidate(options: ConfigOptions): number {
 }
 
 function configReset(options: ConfigOptions): number {
-  if (!options.force) {
-    console.error('config reset requires --force to confirm');
-    console.error('This will overwrite your config.json with default values');
-    return 1;
-  }
-
   const workspace = resolveWorkspace(options.workspace);
   const configPath = resolveConfigPath(workspace);
 
-  // Backup existing config if present
-  let backupPath: string | undefined;
-  if (existsSync(configPath)) {
-    backupPath = backupConfig(configPath);
-  }
-
-  try {
-    const defaultConfig = generateDefaultConfig();
-    writeConfigAtomic(configPath, defaultConfig);
-  } catch (error) {
-    if (options.json) {
-      output({ success: false, error: String(error) }, { json: true });
-    } else {
-      console.error(`Failed to reset config: ${error}`);
-    }
+  if (!options.force) {
+    console.error('config reset requires --force to confirm');
+    console.error(`This will overwrite your ${basename(configPath)} with default values`);
     return 1;
   }
 
+  const result = resetConfig(workspace);
+
   if (options.json) {
-    output({ success: true, configPath, backupPath, message: 'Config reset to defaults' }, { json: true });
+    output(result, { json: true });
   } else {
-    console.log('Config reset to defaults');
-    if (backupPath) {
-      console.log(`Backup: ${backupPath}`);
+    if (result.success) {
+      console.log(result.message);
+      if (result.backupPath) {
+        console.log(`Backup: ${result.backupPath}`);
+      }
+    } else {
+      console.error(result.message);
     }
   }
-  return 0;
+  return result.success ? 0 : 1;
 }
 
 function configKeys(options: ConfigOptions): number {
