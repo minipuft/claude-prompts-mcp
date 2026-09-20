@@ -14,6 +14,7 @@ import { FrameworkManager, createFrameworkManager } from './framework-manager.js
 import { FrameworkDefinition, FrameworkSelectionCriteria } from './types/index.js';
 
 import type { StateStoreOptions } from '#infra/database/stores/interface.js';
+import type { McpNotificationEmitterPort } from '#shared/types/index.js';
 
 import { SqliteEngine } from '#infra/database/sqlite-engine.js';
 import { SqliteStateStore } from '#infra/database/stores/sqlite-store.js';
@@ -135,6 +136,7 @@ export class FrameworkStateStore extends EventEmitter {
   private readonly readDefaultFramework: () => string;
   private readonly defaultScope?: StateStoreOptions;
   private stateStore?: SqliteStateStore<PersistedFrameworkState>;
+  private notificationEmitter?: McpNotificationEmitterPort;
 
   constructor(logger: Logger, stateDbPath: string, options: FrameworkStateStoreOptions = {}) {
     super();
@@ -566,6 +568,7 @@ export class FrameworkStateStore extends EventEmitter {
 
     this.logger.warn(switchReason);
     this.emit('framework-switched', previous, defaultFramework, switchReason);
+    this.announceFrameworkChanged(previous, defaultFramework, switchReason);
   }
 
   /**
@@ -634,8 +637,32 @@ export class FrameworkStateStore extends EventEmitter {
     // Emit events
     this.emit('framework-switched', previousFramework, request.targetFramework, switchReason);
     this.emit('health-changed', this.getSystemHealth());
+    this.announceFrameworkChanged(previousFramework, request.targetFramework, switchReason);
 
     return true;
+  }
+
+  /**
+   * Push the active-framework change to connected clients.
+   *
+   * Called from both writers of `activeFramework` — the requested switch above and the
+   * fallback in `switchToDefault` — immediately after that writer's own
+   * `await this.saveStateToFile(scope)` returns, and never before: a client told the framework
+   * changed would render the new one's guidance against state that may still fail to persist
+   * (`saveStateToFile` throws rather than swallowing, per the state mutation contract).
+   *
+   * The fallback is announced for the same reason the requested switch is: from a client's
+   * side they are the same fact, and a silent fallback is how a client keeps attributing
+   * output to the framework it last asked for. `this.emit` is the in-process listener
+   * channel; it reaches no client, which is why this sits beside it rather than inside it.
+   */
+  private announceFrameworkChanged(from: string, to: string, reason: string): void {
+    this.notificationEmitter?.emitFrameworkChanged({ from, to, reason });
+  }
+
+  /** Late-bind the client push channel; built by the composition root after this store. */
+  setNotificationEmitter(emitter: McpNotificationEmitterPort): void {
+    this.notificationEmitter = emitter;
   }
 
   /**

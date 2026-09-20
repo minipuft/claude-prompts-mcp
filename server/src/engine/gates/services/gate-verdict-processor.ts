@@ -3,6 +3,7 @@ import {
   isUnknownInterruptPending,
   resolveEnforcementMode,
 } from '../../execution/pipeline/decisions/index.js';
+import { buildPipelineHookContext } from '../../execution/pipeline/hook-context.js';
 import { parseGateVerdict } from '../core/gate-verdict-contract.js';
 
 import type { Logger } from '#infra/logging/index.js';
@@ -650,21 +651,7 @@ export class GateVerdictProcessor {
    * Create hook execution context from the current execution state.
    */
   private createHookContext(context: ExecutionContext): PipelineHookContext {
-    const executionId =
-      context.sessionContext?.sessionId ??
-      context.state.session.executionScopeId ??
-      `exec-${Date.now().toString(36)}`;
-
-    const frameworkDecision = context.frameworkAuthority.getCachedDecision();
-
-    return {
-      executionId,
-      executionType: context.sessionContext?.isChainExecution ? 'chain' : 'single',
-      chainId: context.sessionContext?.sessionId,
-      currentStep: context.sessionContext?.currentStep,
-      frameworkEnabled: frameworkDecision?.shouldApply ?? false,
-      frameworkId: frameworkDecision?.frameworkId,
-    };
+    return buildPipelineHookContext(context);
   }
 
   /**

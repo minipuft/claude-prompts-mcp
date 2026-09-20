@@ -12,11 +12,16 @@
  * - notifications/gate/retry_exhausted - All retry attempts exhausted
  * - notifications/framework/changed - Active framework changed
  * - notifications/chain/step_complete - Chain step completed
- * - notifications/chain/complete - Entire chain completed
- * - notifications/chain/failed - Chain failed with error
+ * - notifications/chain/complete - A chain run reached a terminal status, which its
+ *   `status` field names ('completed' | 'failed' | 'cancelled'). There is no separate
+ *   `notifications/chain/failed`: one terminal event carrying its outcome means a client
+ *   subscribes once and cannot miss an ending by listening to the wrong method.
  */
 
 import type {
+  ChainCompleteNotification,
+  ChainStepCompleteNotification,
+  FrameworkChangedNotification,
   GateFailedNotification,
   McpNotificationEmitterPort,
   ResponseBlockedNotification,
@@ -32,47 +37,9 @@ export interface McpNotificationServer {
   notification(params: { method: string; params?: Record<string, unknown> }): void;
 }
 
-// The three gate notification payloads are declared in `shared/types` alongside
-// `McpNotificationEmitterPort`, which names them: `engine/gates` builds these
-// values while holding the emitter as the port, so the port has to spell out
-// their shape. The framework and chain payloads below stay local — no other
-// layer constructs them.
-
-/**
- * Framework changed notification payload.
- */
-export interface FrameworkChangedNotification {
-  /** Previous framework ID (if any) */
-  from?: string;
-  /** New framework ID */
-  to: string;
-  /** Reason for the change */
-  reason: string;
-}
-
-/**
- * Chain step complete notification payload.
- */
-export interface ChainStepCompleteNotification {
-  /** Chain ID */
-  chainId: string;
-  /** Step index that completed (0-indexed) */
-  stepIndex: number;
-  /** Whether the step passed or failed */
-  status: 'passed' | 'failed';
-}
-
-/**
- * Chain complete notification payload.
- */
-export interface ChainCompleteNotification {
-  /** Chain ID */
-  chainId: string;
-  /** Total steps executed */
-  totalSteps: number;
-  /** Overall chain status */
-  status: 'completed' | 'failed';
-}
+// Every notification payload is declared in `shared/types` alongside
+// `McpNotificationEmitterPort`, which names them: `engine/` and `modules/` build these
+// values while holding the emitter as the port, so the port has to spell out their shape.
 
 /**
  * MCP Notification Emitter

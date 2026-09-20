@@ -310,7 +310,9 @@ export class PipelineBuilder {
     const stepCaptureService = new StepCaptureService(
       deps.chainSessionStore,
       deps.logger,
-      deps.executionRecordStore
+      deps.executionRecordStore,
+      deps.hookRegistry,
+      deps.notificationEmitter
     );
     const unknownObservationProcessor = new UnknownObservationProcessor(
       deps.chainSessionStore,

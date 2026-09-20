@@ -43,7 +43,13 @@ import type {
   UnknownLedgerEntry,
   UnknownObservation,
 } from '#shared/types/chain-session.js';
-import type { Logger } from '#shared/types/index.js';
+import type {
+  ChainCompleteNotification,
+  HookRegistryPort,
+  Logger,
+  McpNotificationEmitterPort,
+  PipelineHookContext,
+} from '#shared/types/index.js';
 import type { DatabasePort, StateStoreOptions } from '#shared/types/persistence.js';
 
 // Single owner of unknowns-ledger transition rules. Imported rather than restated here so
@@ -248,6 +254,8 @@ export class ChainSessionStore implements ChainSessionService {
     return { ...this.pidScope, ...(this.workspaceScope ?? {}) };
   }
   private initPromise!: Promise<void>;
+  private hookRegistry?: HookRegistryPort;
+  private notificationEmitter?: McpNotificationEmitterPort;
 
   constructor(
     logger: Logger,
@@ -285,6 +293,19 @@ export class ChainSessionStore implements ChainSessionService {
     // Initialize asynchronously — store promise so callers can await it
     this.initPromise = this.initialize();
     this.startCleanupScheduler();
+  }
+
+  /**
+   * Late-bind the run-lifecycle announcement channels (setter injection, matching
+   * `setDatabasePort` above). Both are built by the composition root after this store, so
+   * neither can travel through the constructor.
+   */
+  setRunAnnouncementChannels(channels: {
+    hookRegistry?: HookRegistryPort;
+    notificationEmitter?: McpNotificationEmitterPort;
+  }): void {
+    this.hookRegistry = channels.hookRegistry;
+    this.notificationEmitter = channels.notificationEmitter;
   }
 
   /** Late-bind DatabasePort (setter injection, matching codebase convention). */
@@ -941,6 +962,7 @@ export class ChainSessionStore implements ChainSessionService {
     );
 
     await this.saveSessions();
+    await this.announceRunTerminal(session, target);
     return true;
   }
 
@@ -1051,7 +1073,63 @@ export class ChainSessionStore implements ChainSessionService {
     this.logger.info(`[ChainRunStatus] Cancelled session ${sessionId} (was '${currentStatus}')`);
 
     await this.saveSessions();
+    await this.announceRunTerminal(session, 'cancelled');
     return true;
+  }
+
+  /**
+   * Announce that a run reached a terminal status, to hook consumers and to the client.
+   *
+   * Called from the two methods that WRITE `runStatus` — `transitionRunStatus` and
+   * `cancelChain` — each after its own `saveSessions()` resolves, so a client is never told a
+   * run ended before the row saying so is durable. Both writers return early when the status is
+   * already what is being set and refuse a transition out of a terminal status, which is what
+   * makes this exactly-once per run rather than once per caller: `advanceStep` re-advancing past
+   * the same final node, or a second `cancelChain`, reaches neither call.
+   *
+   * A non-terminal transition announces nothing; `working -> working` is not an event.
+   *
+   * One catch around both channels, matching `GateVerdictProcessor.emitGateEvents`. An
+   * announcement that fails must not turn a persisted terminal status into a failed call —
+   * that would make the run look live to its next caller.
+   */
+  private async announceRunTerminal(session: ChainSession, status: ChainRunStatus): Promise<void> {
+    if (!isTerminalRunStatus(status)) return;
+    if (this.hookRegistry === undefined && this.notificationEmitter === undefined) return;
+
+    // `isTerminalRunStatus` is a boolean predicate over the shared TERMINAL_RUN_STATUSES list,
+    // not a type guard, so the narrowing it just proved has to be restated for the payload.
+    const terminalStatus = status as ChainCompleteNotification['status'];
+    const { chainId } = session;
+    const totalSteps = totalOf(session.state.nodes);
+
+    try {
+      const hookContext: PipelineHookContext = {
+        executionId: session.sessionId,
+        executionType: 'chain',
+        chainId,
+        currentStep: currentOrdinal(session.state.nodes, session.state.currentNodeId),
+        frameworkEnabled: false,
+      };
+
+      if (status === 'completed') {
+        await this.hookRegistry?.emitChainComplete(chainId, hookContext);
+      } else {
+        await this.hookRegistry?.emitChainFailed(chainId, `run ${status}`, hookContext);
+      }
+
+      this.notificationEmitter?.emitChainComplete({
+        chainId,
+        totalSteps,
+        status: terminalStatus,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `[ChainRunStatus] Failed to announce terminal status '${status}' for ${chainId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
   }
 
   /**
