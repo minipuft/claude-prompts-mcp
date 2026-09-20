@@ -152,7 +152,7 @@
     {
       "name": "unset",
       "type": "array<string>",
-      "description": "[Prompt] Update-only: CLEAR these fields, naming them as the tool parameters you would use to set them. Supplying a value SETS it and omitting it PRESERVES it, so before this there was no way to say REMOVE — `system_message: \"\"` set an empty body rather than dropping the key, and for the fields the writer carries forward off disk (`tools`, `injection`, `register_with_mcp`, `mcp_prompt_mode`, `subagent_model`, `agent_type`, `composer`) omission was already the preserve signal. Unsettable: agent_type, arguments, chain_steps, composer, gate_configuration, injection, mcp_prompt_mode, register_with_mcp, subagent_model, system_message, tools. `name`, `category`, `description` and `user_message_template` are refused by name: they stay settable, but a prompt missing one does not load. Unsetting `system_message` also deletes `system-message.md`; unsetting `tools` unbinds without deleting `tools/{id}/`. A field both supplied and unset in one call is refused rather than resolved in an unseen order.",
+      "description": "[Prompt] Update-only: CLEAR these fields, naming them as the tool parameters you would use to set them. Supplying a value SETS it and omitting it PRESERVES it, so before this there was no way to say REMOVE — `system_message: \"\"` set an empty body rather than dropping the key, and for the fields the writer carries forward off disk (`tools`, `injection`, `register_with_mcp`, `mcp_prompt_mode`, `subagent_model`, `agent_type`, `composer`) omission was already the preserve signal. Unsettable: agent_type, arguments, chain_steps, composer, edges, gate_configuration, injection, mcp_prompt_mode, register_with_mcp, subagent_model, system_message, tools. `name`, `category`, `description` and `user_message_template` are refused by name: they stay settable, but a prompt missing one does not load. Unsetting `system_message` also deletes `system-message.md`; unsetting `tools` unbinds without deleting `tools/{id}/`. A field both supplied and unset in one call is refused rather than resolved in an unseen order.",
       "status": "working",
       "includeInDescription": false
     },
@@ -188,6 +188,13 @@
       "name": "chain_step_order",
       "type": "array<number>",
       "description": "[Prompt] New index order for `chain_step_operation: \"reorder\"`. Must be a permutation of [0..n-1] for the current step count; anything else is refused rather than partially applied.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "edges",
+      "type": "array<object<{from:string,to:string}>>",
+      "description": "[Prompt] Dependency edges between this chain's steps, each `{from, to}` naming a step id — an explicit step `id`, or the kebab-case slug minted from `stepName`. Ordering constraints, not control flow: the loader linearizes them into `chainSteps` order at load time. An edge naming a step the chain does not declare, or a cycle, is refused and the write is rolled back — so a `chain_steps` rewrite that drops a step an edge still names must send the corrected `edges` in the SAME call, which is validated as one state. Send `unset: [\"edges\"]` to drop every edge and keep the authored step order.",
       "status": "working",
       "includeInDescription": false
     },

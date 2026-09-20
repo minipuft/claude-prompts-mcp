@@ -559,6 +559,124 @@ scenarios:
     expect:
       text_contains: "1. `minimal_prompt` - Step Beta\n2. `minimal_prompt` - Step Alpha"
 
+  # ── P4.65: `edges` is authorable, and an orphaned edge is refused with a remedy ────────────
+  #
+  # These three rows are the ONLY place that shows `edges` survives the published MCP schema. Zod
+  # strips undeclared keys before any handler runs, so a unit or integration case calling the
+  # processor directly proves the write path and nothing about arrival: measured 2026-09-20, an
+  # `update` carrying `edges` against a server built before this parameter existed answered
+  # "Prompt Updated", saved a version, and left the file's edges untouched.
+  #
+  # Each edge endpoint is the kebab-case id minted from `stepName` — "Step A" → `step-a`.
+  - id: prompt-chain-edges-orphaned-by-a-step-rewrite-is-refused-with-the-remedy
+    claim_source: >-
+      resource_manager contract — `edges`: "An edge naming a step the chain does not declare, or a
+      cycle, is refused and the write is rolled back — so a `chain_steps` rewrite that drops a step
+      an edge still names must send the corrected `edges` in the SAME call."
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: create
+          id: conformance_chain_edges_refusal
+          name: Conformance Chain Edges Refusal
+          category: examples
+          description: created by the conformance corpus
+          user_message_template: CONFORMANCE_CHAIN_EDGES_REFUSAL_BODY
+          chain_steps:
+            - promptId: minimal_prompt
+              stepName: Step A
+            - promptId: minimal_prompt
+              stepName: Step B
+            - promptId: minimal_prompt
+              stepName: Step C
+          edges:
+            - from: step-a
+              to: step-c
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: update
+          id: conformance_chain_edges_refusal
+          chain_steps:
+            - promptId: minimal_prompt
+              stepName: Step A
+            - promptId: minimal_prompt
+              stepName: Step B
+    # The defect names the orphaned endpoint; the remedy names the one call that satisfies it.
+    # Before P4.65 the first half was identical and the second did not exist, because `edges` was
+    # not a parameter at all and the only remedy was a hand edit the project forbids.
+    expect:
+      error_contains: 'send `edges` in the same `resource_manager` update'
+
+  - id: prompt-chain-edges-sent-with-the-step-rewrite-are-validated-as-one-state
+    claim_source: >-
+      resource_manager contract — `edges`: "must send the corrected `edges` in the SAME call, which
+      is validated as one state."
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: create
+          id: conformance_chain_edges_together
+          name: Conformance Chain Edges Together
+          category: examples
+          description: created by the conformance corpus
+          user_message_template: CONFORMANCE_CHAIN_EDGES_TOGETHER_BODY
+          chain_steps:
+            - promptId: minimal_prompt
+              stepName: Step A
+            - promptId: minimal_prompt
+              stepName: Step B
+            - promptId: minimal_prompt
+              stepName: Step C
+          edges:
+            - from: step-a
+              to: step-c
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: update
+          id: conformance_chain_edges_together
+          chain_steps:
+            - promptId: minimal_prompt
+              stepName: Step A
+            - promptId: minimal_prompt
+              stepName: Step B
+          edges:
+            - from: step-a
+              to: step-b
+      - tool: resource_manager
+        args: { resource_type: prompt, action: reload, id: conformance_chain_edges_together }
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: inspect
+          id: conformance_chain_edges_together
+          detail: full
+    # This row is the ARRIVAL proof, and the row above is its positive control: the identical
+    # update WITHOUT `edges` is refused. A schema that stripped `edges` would leave the created
+    # `step-a -> step-c` edge in place, orphan it on this rewrite, and red this row.
+    expect:
+      text_contains: "1. `minimal_prompt` - Step A\n2. `minimal_prompt` - Step B"
+      text_not_contains: 'Step C'
+
+  - id: gate-refuses-edges-by-name
+    claim_source: >-
+      resource_manager contract — `edges` is declared `[Prompt]`, and a parameter a resource type
+      does not read is refused by name before dispatch (parameter-ownership.ts).
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: gate
+          action: update
+          id: conformance_gate_edges
+          edges:
+            - from: step-a
+              to: step-b
+    expect:
+      error_contains: '''edges'' is not a parameter of resource_type:"gate"'
+
   - id: gate-update-preview-is-refused-by-name
     claim_source: >-
       resource_manager contract — `preview_action` is validated per resource type. A gate has no

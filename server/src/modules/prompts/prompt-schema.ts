@@ -683,7 +683,31 @@ export interface PromptYamlValidationResult {
  * exists, so the loader could not order the run at all). Cycle detection IS `linearize`, not a
  * second traversal — one implementation of the ordering rule, shared with the Workflow IR path.
  */
+/**
+ * What to DO about a rejected edge set, appended once to whatever `collectChainEdgeErrors` found.
+ *
+ * Until P4.65 `edges` was not a `resource_manager` parameter, so the refusal above named a defect
+ * whose only remedy was a hand edit of `prompt.yaml` — which this project forbids. The parameter
+ * exists now, and the message says so: the refusal is still loud and still at the cause, and the
+ * reader is told the one call that satisfies it rather than being left to find it.
+ */
+const CHAIN_EDGE_REMEDY =
+  'Chain edges and chain steps are validated as ONE state: send `edges` in the same ' +
+  '`resource_manager` update that changes `chain_steps`, repointing or dropping the edges the ' +
+  'new steps no longer support. `unset: ["edges"]` drops every edge and keeps the authored step ' +
+  'order.';
+
 function collectChainEdgeErrors(
+  steps: ReadonlyArray<{ id?: string; stepName: string; promptId: string }>,
+  edges: ReadonlyArray<{ from: string; to: string }> | undefined
+): string[] {
+  const errors = collectChainEdgeDefects(steps, edges);
+  if (errors.length > 0) errors.push(CHAIN_EDGE_REMEDY);
+  return errors;
+}
+
+/** The defects themselves — an endpoint naming no step, or a cycle. See `collectChainEdgeErrors`. */
+function collectChainEdgeDefects(
   steps: ReadonlyArray<{ id?: string; stepName: string; promptId: string }>,
   edges: ReadonlyArray<{ from: string; to: string }> | undefined
 ): string[] {
