@@ -17,11 +17,11 @@ import {
   type ResourceWriteCommitOptions,
 } from '#modules/resources/services/index.js';
 import { resolveContainedPath } from '#shared/utils/path-containment.js';
-import { parseYaml } from '#shared/utils/yaml/yaml-parser.js';
 import {
   readYamlSource,
   serializeYamlPreservingSource,
 } from '#shared/utils/yaml/yaml-document-writer.js';
+import { parseYaml } from '#shared/utils/yaml/yaml-parser.js';
 
 /** The `category.yaml` file name, in one place so reader and writer cannot disagree about it. */
 export const CATEGORY_YAML_FILENAME = 'category.yaml';

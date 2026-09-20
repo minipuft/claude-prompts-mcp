@@ -22,11 +22,11 @@ import {
 } from '#modules/resources/services/index.js';
 import { safeWriteFile } from '#shared/utils/file-transactions.js';
 import { resolveContainedPath } from '#shared/utils/path-containment.js';
-import { loadYamlFile } from '#shared/utils/yaml/yaml-file-loader.js';
 import {
   readYamlSourceSync,
   serializeYamlPreservingSource,
 } from '#shared/utils/yaml/yaml-document-writer.js';
+import { loadYamlFile } from '#shared/utils/yaml/yaml-file-loader.js';
 
 // ============================================================================
 // Types

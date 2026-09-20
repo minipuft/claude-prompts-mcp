@@ -65,8 +65,13 @@ export function readYamlSourceSync(filePath: string): string | undefined {
   }
 }
 
-/** Which mechanism produced the output — see the module comment for what each guarantees. */
-export type YamlWriteFidelity =
+/**
+ * Which mechanism produced the output — see the module comment for what each guarantees.
+ *
+ * Not exported: it reaches callers through `YamlWriteResult['fidelity']`, and exporting it as
+ * well left a name nothing imported.
+ */
+type YamlWriteFidelity =
   /** No prior file: rendered from scratch. */
   | 'created'
   /** Nothing differed: the source was returned unchanged. */
@@ -130,27 +135,39 @@ function collectDifferences(prev: unknown, next: unknown, path: YamlPath, out: D
   }
 
   if (isPlainObject(prev) && isPlainObject(next)) {
-    const prevKeys = Object.keys(prev);
-    const nextKeys = Object.keys(next);
-
-    // A key order change alone is not a difference worth rewriting the file for: the values are
-    // identical and the authored order is exactly what this module exists to keep.
-    for (const key of nextKeys) {
-      if (!(key in prev)) {
-        out.push({ path: [...path, key], scalarReplacement: false, nextValue: next[key] });
-        continue;
-      }
-      collectDifferences(prev[key], next[key], [...path, key], out);
-    }
-    for (const key of prevKeys) {
-      if (!(key in next)) {
-        out.push({ path: [...path, key], scalarReplacement: false, nextValue: undefined });
-      }
-    }
+    collectMapDifferences(prev, next, path, out);
     return;
   }
 
   out.push({ path, scalarReplacement: false, nextValue: next });
+}
+
+/**
+ * The mapping half of `collectDifferences`.
+ *
+ * A key order change alone is not reported: the values are identical, and the authored order is
+ * exactly what this module exists to keep. A key present on only one side is structural, because
+ * neither adding nor removing a mapping entry is something a scalar token edit can express.
+ */
+function collectMapDifferences(
+  prev: Record<string, unknown>,
+  next: Record<string, unknown>,
+  path: YamlPath,
+  out: Difference[]
+): void {
+  for (const key of Object.keys(next)) {
+    if (key in prev) {
+      collectDifferences(prev[key], next[key], [...path, key], out);
+    } else {
+      out.push({ path: [...path, key], scalarReplacement: false, nextValue: next[key] });
+    }
+  }
+
+  for (const key of Object.keys(prev)) {
+    if (!(key in next)) {
+      out.push({ path: [...path, key], scalarReplacement: false, nextValue: undefined });
+    }
+  }
 }
 
 /**
