@@ -247,7 +247,11 @@ class TestMainDecisions:
         if output:
             assert "Max iterations" in json.dumps(output)
 
-    def test_verification_pass_allows(self):
+    def test_verification_pass_allows(self, patch_workspace):
+        # The `passed` branch opportunistically runs the real (unpatched) cleanup_stale_rows /
+        # cleanup_old_sessions / cleanup_old_ralph_sessions — patch_workspace keeps their
+        # workspace resolution inside tmp_path instead of the self-resolved checkout root
+        # (found by the tree-state guard, 2026-09-19; see tests/tree_state_guard.py).
         verify_state = {
             "config": {"command": "true", "maxIterations": 5, "timeout": 30000},
             "state": {"iteration": 0},
