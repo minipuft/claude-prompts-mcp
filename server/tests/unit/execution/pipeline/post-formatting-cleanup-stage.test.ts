@@ -65,6 +65,48 @@ describe('PostFormattingCleanupStage', () => {
     expect(blueprint.parsedCommand.steps?.[0].inlineGateIds).toEqual(['inline_gate_step']);
   });
 
+  /**
+   * Row B.54: `updateSessionBlueprint` is async and the stage did not await it, so the
+   * `catch` around the call could not see a rejected write — the failure surfaced as an
+   * unhandled rejection with nothing logged, and the exit line reported the blueprint
+   * persisted regardless.
+   */
+  test('a blueprint write that rejects is logged and reported as not persisted', async () => {
+    const stageLogger = {
+      debug: jest.fn(),
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+    } as any;
+    const manager = {
+      updateSessionBlueprint: jest
+        .fn<() => Promise<void>>()
+        .mockRejectedValue(new Error('chain session store is read-only')),
+    } as any;
+
+    const stage = new PostFormattingCleanupStage(manager, null, stageLogger);
+    const context = new ExecutionContext({ command: 'run chain' });
+    context.parsedCommand = { promptId: 'chain-alpha' } as any;
+    context.executionPlan = { strategy: 'chain' } as any;
+    context.sessionContext = { sessionId: 'session-1' } as any;
+
+    await stage.execute(context);
+
+    // Positive control: the write was reached, so the assertions below are about a real
+    // rejection rather than a call that never happened.
+    expect(manager.updateSessionBlueprint).toHaveBeenCalledTimes(1);
+
+    const warned = stageLogger.warn.mock.calls.some(([message]: [string]) =>
+      String(message).includes('Failed to update session blueprint')
+    );
+    expect(warned).toBe(true);
+
+    const exit = stageLogger.debug.mock.calls.find(([message]: [string]) =>
+      String(message).includes('Complete')
+    );
+    expect(exit?.[1]).toMatchObject({ blueprintPersisted: false });
+  });
+
   test('cleans up execution and tracked temporary gate scopes', async () => {
     const registry = { cleanupScope: jest.fn() } as any;
     const stage = new PostFormattingCleanupStage(null, registry, logger);
