@@ -188,6 +188,31 @@ describe('PathResolver refuses an explicit config path it cannot use', () => {
     expect(new PathResolver({ cli: {}, packageRoot }).getConfigPath()).toBe(valid);
   });
 
+  /** Comments and a trailing comma — invalid strict JSON, valid `.jsonc`. */
+  const COMMENTED_CONFIG_TEXT = [
+    '{',
+    '  // a line comment',
+    '  /* a block comment */',
+    '  "logging": { "level": "warn" },',
+    '}',
+  ].join('\n');
+
+  it('accepts an explicit --config/MCP_CONFIG_PATH .jsonc path with comments and a trailing comma', () => {
+    const valid = path.join(dir, 'config.jsonc');
+    writeFileSync(valid, COMMENTED_CONFIG_TEXT);
+    process.env['MCP_CONFIG_PATH'] = valid;
+
+    expect(new PathResolver({ cli: {}, packageRoot }).getConfigPath()).toBe(valid);
+  });
+
+  it('POSITIVE CONTROL — the same commented text named config.json is refused (strict JSON stays strict)', () => {
+    const invalid = path.join(dir, 'config.json');
+    writeFileSync(invalid, COMMENTED_CONFIG_TEXT);
+    process.env['MCP_CONFIG_PATH'] = invalid;
+
+    expect(refusalFor(new PathResolver({ cli: {}, packageRoot }))).toContain('is not valid JSON (');
+  });
+
   it('names the unusable workspace config it would fall back to, rather than sending the operator into a second refusal', () => {
     const workspace = path.join(dir, 'workspace');
     mkdirSync(workspace);
@@ -319,6 +344,37 @@ describe('PathResolver.assertUsablePathSettings refuses an unusable path setting
     } finally {
       chmodSync(config, 0o600);
     }
+  });
+
+  it('resolves config.jsonc before config.json, and loads a commented, trailing-comma-holding one without refusing', () => {
+    const workspace = path.join(dir, 'workspace');
+    mkdirSync(workspace);
+    const jsoncConfig = path.join(workspace, 'config.jsonc');
+    writeFileSync(
+      jsoncConfig,
+      ['{', '  // comment', '  "logging": { "level": "warn" },', '}'].join('\n')
+    );
+    process.env['MCP_WORKSPACE'] = workspace;
+
+    const resolver = new PathResolver({ cli: {}, packageRoot });
+    expect(() => resolver.assertUsablePathSettings()).not.toThrow();
+    expect(resolver.getConfigPath()).toBe(jsoncConfig);
+  });
+
+  it('refuses a workspace holding both config.jsonc and config.json, naming both absolute paths', () => {
+    const workspace = path.join(dir, 'workspace');
+    mkdirSync(workspace);
+    const jsoncConfig = path.join(workspace, 'config.jsonc');
+    const jsonConfig = path.join(workspace, 'config.json');
+    writeFileSync(jsoncConfig, '{}');
+    writeFileSync(jsonConfig, '{}');
+    process.env['MCP_WORKSPACE'] = workspace;
+
+    const message = refusalFor(new PathResolver({ cli: {}, packageRoot }));
+    expect(message).toContain(jsoncConfig);
+    expect(message).toContain(jsonConfig);
+    expect(message).toContain('config.jsonc');
+    expect(message).toContain('config.json');
   });
 
   it('does not refuse a workspace with no config.json, an empty value, or a usable explicit config beside a broken workspace one', () => {

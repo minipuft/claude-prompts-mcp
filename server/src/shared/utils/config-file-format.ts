@@ -4,15 +4,15 @@
  *
  * Single source of truth for two questions every config reader/writer otherwise answers
  * on its own: which filename is the user's workspace config, and how does its text parse.
- * Before this module, six call sites each ran a bare `JSON.parse` (F-T2-5) — six independent
- * format decisions that could drift. Consumers span `infra/config`, `runtime`, `cli-shared`,
- * and the CLI bundle (ruling R31a), which is why this lives in `shared`, not `infra`.
+ * Without it, every call site runs its own bare `JSON.parse` — independent format decisions
+ * that drift from each other. Consumers span `infra/config`, `runtime`, `cli-shared`, and the
+ * CLI bundle, which is why this lives in `shared`, not `infra`.
  *
- * `.jsonc` accepts line/block comments and trailing commas and nothing else beyond JSON —
- * no unquoted keys, no single-quoted strings (rulings R66, R67, R73). `.json` stays strict
- * `JSON.parse`. `json5`, already a dependency elsewhere in this repo, was rejected for this
- * role: it accepts a wider language than an editor's JSONC mode and cannot edit in place,
- * which the write side (row 7.4) needs. `jsonc-parser` covers both halves.
+ * `.jsonc` accepts line/block comments and trailing commas and nothing else beyond JSON — no
+ * unquoted keys, no single-quoted strings. `.json` stays strict `JSON.parse`. `json5`, already
+ * a dependency elsewhere in this repo, was rejected for this role: it accepts a wider language
+ * than an editor's JSONC mode and cannot edit in place, which the write side needs.
+ * `jsonc-parser` covers both halves.
  */
 
 import * as fs from 'node:fs';

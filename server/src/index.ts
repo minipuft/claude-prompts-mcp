@@ -15,6 +15,7 @@ import type { Application } from './runtime/application.js';
 import type { HealthReport } from './runtime/health.js';
 
 import { initWorkspace } from '#cli-shared/workspace-init.js';
+import { findWorkspaceConfigFiles } from '#shared/utils/config-file-format.js';
 import { PathSettingError } from '#shared/utils/path-setting.js';
 
 const EMPTY_HEALTH_REPORT: HealthReport = {
@@ -530,7 +531,10 @@ async function main(): Promise<void> {
         debugLog(`DEBUG: Checking workspace: ${workspace}`);
         debugLog(`DEBUG: Workspace exists: ${fs.existsSync(workspace)}`);
 
-        const configPath = path.join(workspace, 'config.json');
+        // Same precedence PathResolver uses (config.jsonc before config.json); this probe just
+        // reports what it finds rather than resolving the packaged fallback.
+        const configPath =
+          findWorkspaceConfigFiles(workspace)[0] ?? path.join(workspace, 'config.json');
         debugLog(`DEBUG: Config path: ${configPath}`);
         debugLog(`DEBUG: Config exists: ${fs.existsSync(configPath)}`);
 
