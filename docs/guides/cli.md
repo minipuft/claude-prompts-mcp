@@ -75,7 +75,7 @@ cpm validate --styles
 | `--frameworks`           | Validate frameworks only                              |
 | `--styles`               | Validate styles only                                  |
 | `--all`                  | Validate all resource types (default)                 |
-| `--config`               | Also validate `config.json` keys and values           |
+| `--config`               | Also validate your config file's keys and values      |
 | `-w, --workspace <path>` | Workspace directory (default: `MCP_WORKSPACE` or cwd) |
 | `--json`                 | JSON output                                           |
 
@@ -118,9 +118,9 @@ cpm init ./my-workspace
 cpm init --json
 ```
 
-Creates a `resources/prompts/` directory with example prompts (`quick_review`, `explain`, `improve`) and a `config.json` with sensible defaults. Prints setup instructions for Claude Desktop configuration.
+Creates a `resources/prompts/` directory with example prompts (`quick_review`, `explain`, `improve`) and a `config.jsonc` with every setting commented out (see [Configuration](#config) below). Prints setup instructions for Claude Desktop configuration.
 
-If `config.json` already exists, it is preserved. By default, `init` validates generated prompt YAML before returning success. Use `--no-validate` only if you intentionally need to bypass this guard.
+If a `config.jsonc` or `config.json` already exists, it is preserved. By default, `init` validates generated prompt YAML before returning success. Use `--no-validate` only if you intentionally need to bypass this guard.
 
 ### create
 
@@ -281,12 +281,12 @@ Modifies the prompt's `gateConfiguration.include` array. When adding, validates 
 
 ### config
 
-Manage workspace `config.json` (read, write, validate, reset).
+Manage your workspace config file — `config.jsonc` by default, `config.json` still read if that is what your workspace has (read, write, validate, reset).
 
 ```bash
 cpm config list --workspace server                  # Display full config
 cpm config get gates.enabled -w server              # Get a single value
-cpm config set logging.level debug -w server        # Set a value (backup + validate)
+cpm config set logging.level debug -w server        # Set a value (backup + edit in place)
 cpm config validate -w server                       # Validate all keys/values
 cpm config reset --force -w server                  # Reset to defaults
 cpm config keys                                     # List all valid config keys
@@ -303,7 +303,46 @@ cpm config keys                                     # List all valid config keys
 
 Keys use dot-notation (e.g., `gates.enabled`, `server.port`, `logging.level`). The `set` subcommand creates a timestamped backup before writing and warns when a key requires server restart. The `--json` and `-w` flags work with all subcommands.
 
+Every message names the file it acted on, by its real name (`config.jsonc` or `config.json`, whichever your workspace has): `cpm config get` on a missing key reports `Key '<key>' not found in <file>`, `validate` reports `<file> is valid` (or `validation failed:` with the list of problems), and `reset` reports `<file> reset to defaults`.
+
 Exit codes: `0` success, `1` error or validation failure.
+
+#### config.jsonc
+
+`config.jsonc` accepts `//` and `/* */` comments and a trailing comma before `}`/`]` — nothing else beyond JSON. A plain `config.json` is still read if that is what you have; it stays strict JSON, so a comment inside one is a parse error. Within a workspace, `config.jsonc` is tried first, then `config.json`.
+
+`cpm init` writes `config.jsonc` with `$schema` and `"version": 5` live, and every other setting commented out, showing its current value, its default and its permitted values — generated straight from the schema, so the file can never describe a setting the server does not have. An excerpt:
+
+```jsonc
+{
+//   — JSON Schema reference for IDE validation.
+  "$schema": "./config.schema.json",
+
+//   — Which shape this config file is written in. `5` is the current format...
+  "version": 5,
+
+//   — Server identity and transport settings.
+//   "server": {
+//     — Server name reported to MCP clients.
+//     — default: "claude-prompts"
+//     "name": "claude-prompts",
+//   },
+```
+
+To change a setting, uncomment its line and the braces of the section it sits in — every example line already ends with a comma, so uncommenting a single line still parses. A file with nothing uncommented behaves exactly like no file at all.
+
+`cpm config set` edits the file's text in place: only the one key's own characters change, so your comments, key order and formatting all survive. Setting a key that exists only as a commented-out example in the template inserts the live key and leaves the commented example where it was — nothing tries to remove or uncomment it. A persisted `gates`/`framework` toggle from `system_control` (`persist: true`) edits in place the same way.
+
+`cpm config reset --force` backs up the current file first (`config.jsonc.backup.<timestamp>`, or `config.json.backup.<timestamp>`), then writes fresh defaults into the **same file name** — the commented template for a `config.jsonc`, or the minimal `{$schema, version}` document for a `config.json`. It never renames a file.
+
+A workspace holding both `config.jsonc` and `config.json` refuses every `config` subcommand (and server startup) rather than silently preferring one:
+
+```
+Two config files in one directory: <path>/config.jsonc and <path>/config.json. Keep one —
+config.jsonc is the 5.0 name, config.json is still read.
+```
+
+Delete whichever file you are not using to resolve it.
 
 ### enable / disable
 
@@ -394,8 +433,8 @@ cli/
 │   │   ├── validate.ts        # Resource + config validation
 │   │   ├── list.ts            # Resource listing
 │   │   ├── inspect.ts         # Resource inspection
-│   │   ├── init.ts            # Workspace initialization (+ config.json)
-│   │   ├── config.ts          # Config.json management (6 subcommands)
+│   │   ├── init.ts            # Workspace initialization (+ config.jsonc)
+│   │   ├── config.ts          # Config file management (6 subcommands)
 │   │   ├── enable-disable.ts  # Subsystem mode shortcuts
 │   │   ├── create.ts          # Resource creation (scaffold)
 │   │   ├── delete.ts          # Resource deletion

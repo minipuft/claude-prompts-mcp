@@ -14,7 +14,9 @@ import type { Logger } from './infra/logging/index.js';
 import type { Application } from './runtime/application.js';
 import type { HealthReport } from './runtime/health.js';
 
+import { initConfig } from '#cli-shared/config-operations.js';
 import { initWorkspace } from '#cli-shared/workspace-init.js';
+import { findWorkspaceConfigFiles } from '#shared/utils/config-file-format.js';
 import { PathSettingError } from '#shared/utils/path-setting.js';
 
 const EMPTY_HEALTH_REPORT: HealthReport = {
@@ -315,20 +317,23 @@ USAGE:
   node dist/index.js [OPTIONS]
 
 QUICK START:
-  npx claude-prompts --init=~/my-prompts    Create a new workspace with starter prompts
+  npx claude-prompts --init=~/my-prompts    Create a new workspace with starter prompts and a config file
 
   Then add MCP_WORKSPACE to your Claude Desktop config and restart.
   Claude can update your prompts via resource_manager - no manual editing needed!
 
 PATH OPTIONS:
-  --workspace=/path       Base directory for all assets (resources/, config.json, hooks/);
+  --workspace=/path       Base directory for all assets (resources/, config.jsonc, hooks/);
                           the server refuses to start if it is not an existing
-                          directory, or if a config.json there is not a JSON object
-  --config=/path          Direct path to config.json; the server refuses to start
-                          if it is not a readable JSON file
+                          directory, or if a config.jsonc or config.json there is not a
+                          JSON object (config.json is still read if that is what exists)
+  --config=/path          Direct path to your config file (config.jsonc or config.json,
+                          by extension); the server refuses to start if it is not a
+                          readable config file
 
 RUNTIME OPTIONS:
-  --init=/path            Create a new workspace with starter prompts at the specified path
+  --init=/path            Create a new workspace with starter prompts and a config file at the
+                          specified path
   --transport=TYPE        Transport type: stdio (default), streamable-http, or both
   --log-level=LEVEL       Log level: debug, info, warn, error
   --quiet                 Minimal output mode (production-friendly)
@@ -345,8 +350,8 @@ ENVIRONMENT VARIABLES:
                            the server refuses to start if it is not an existing directory
   MCP_RUNTIME_ROOT         Writable root for runtime-state/ and relative logs/
                            (defaults to the workspace)
-  MCP_CONFIG_PATH          Direct path to config.json (same as --config); the server
-                           refuses to start if it is not a readable JSON file
+  MCP_CONFIG_PATH          Direct path to your config file (same as --config); the server
+                           refuses to start if it is not a readable config file
   LOG_LEVEL                Override log level (debug, info, warn, error)
 
 PRIORITY ORDER:
@@ -365,7 +370,7 @@ WORKSPACE STRUCTURE:
       gates/                   - Custom validation gates
       frameworks/           - Custom reasoning frameworks
       styles/                  - Custom output styles
-    config.json                - Server configuration overrides
+    config.jsonc                - Server configuration overrides (config.json also read)
 
 EXAMPLES:
   # Use a custom workspace (overlays custom + bundled resources)
@@ -402,6 +407,40 @@ For more information: https://github.com/minipuft/claude-prompts-mcp
 }
 
 /**
+ * Handle `--init=/path`: create the starter workspace, then the workspace config, and report
+ * both — split out of `validateAndHandleEarlyExit` to keep its own branching under the cognitive
+ * complexity limit.
+ */
+function handleInitFlag(rawPath: string): { shouldExit: true; exitCode: number } {
+  let targetPath = rawPath;
+  if (targetPath.length === 0) {
+    console.error('Error: --init requires a path. Usage: --init=/path/to/workspace');
+    console.error('Example: npx claude-prompts --init=~/my-prompts');
+    return { shouldExit: true, exitCode: 1 };
+  }
+
+  if (targetPath.startsWith('~')) {
+    targetPath = targetPath.replace('~', process.env['HOME'] ?? process.env['USERPROFILE'] ?? '');
+  }
+
+  const result = initWorkspace(targetPath);
+  // eslint-disable-next-line no-console -- --init returns shouldExit and main() exits before startApplication, so no transport exists; measured 2026-09-14: exit 0, no runtime root created
+  console.log(result.message);
+  if (!result.success) {
+    return { shouldExit: true, exitCode: 1 };
+  }
+
+  const configResult = initConfig(targetPath);
+  if (configResult.success) {
+    // eslint-disable-next-line no-console -- same justification as the workspace message above
+    console.log(configResult.message);
+  } else {
+    console.error(configResult.message);
+  }
+  return { shouldExit: true, exitCode: configResult.success ? 0 : 1 };
+}
+
+/**
  * Validate pre-parsed CLI arguments and handle early-exit commands (--help, --init).
  */
 function validateAndHandleEarlyExit(cli: ServerCliArgs): { shouldExit: boolean; exitCode: number } {
@@ -411,21 +450,7 @@ function validateAndHandleEarlyExit(cli: ServerCliArgs): { shouldExit: boolean; 
   }
 
   if (cli.init !== undefined) {
-    let targetPath = cli.init;
-    if (targetPath.length === 0) {
-      console.error('Error: --init requires a path. Usage: --init=/path/to/workspace');
-      console.error('Example: npx claude-prompts --init=~/my-prompts');
-      return { shouldExit: true, exitCode: 1 };
-    }
-
-    if (targetPath.startsWith('~')) {
-      targetPath = targetPath.replace('~', process.env['HOME'] ?? process.env['USERPROFILE'] ?? '');
-    }
-
-    const result = initWorkspace(targetPath);
-    // eslint-disable-next-line no-console -- --init returns shouldExit and main() exits before startApplication, so no transport exists; measured 2026-09-14: exit 0, no runtime root created
-    console.log(result.message);
-    return { shouldExit: true, exitCode: result.success ? 0 : 1 };
+    return handleInitFlag(cli.init);
   }
 
   if (
@@ -530,7 +555,10 @@ async function main(): Promise<void> {
         debugLog(`DEBUG: Checking workspace: ${workspace}`);
         debugLog(`DEBUG: Workspace exists: ${fs.existsSync(workspace)}`);
 
-        const configPath = path.join(workspace, 'config.json');
+        // Same precedence PathResolver uses (config.jsonc before config.json); this probe just
+        // reports what it finds rather than resolving the packaged fallback.
+        const configPath =
+          findWorkspaceConfigFiles(workspace)[0] ?? path.join(workspace, 'config.json');
         debugLog(`DEBUG: Config path: ${configPath}`);
         debugLog(`DEBUG: Config exists: ${fs.existsSync(configPath)}`);
 

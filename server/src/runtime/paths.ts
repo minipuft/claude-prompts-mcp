@@ -20,10 +20,15 @@
  */
 
 import { existsSync, readFileSync, statSync } from 'fs';
-import { join, resolve, isAbsolute } from 'path';
+import { basename, join, resolve, isAbsolute } from 'path';
 
 import type { ServerCliArgs } from './cli.js';
 
+import {
+  configFileFormat,
+  findWorkspaceConfigFiles,
+  parseConfigText,
+} from '#shared/utils/config-file-format.js';
 import {
   assertUsableDirectorySetting,
   describeRemoval,
@@ -105,7 +110,7 @@ function describeUnusableConfigFile(resolved: string): string | undefined {
 
   let parsed: unknown;
   try {
-    parsed = JSON.parse(content);
+    parsed = parseConfigText(content, configFileFormat(resolved));
   } catch (error) {
     return `is not valid JSON (${error instanceof Error ? error.message : String(error)})`;
   }
@@ -269,7 +274,7 @@ export class PathResolver {
    * subfolder at a time, and a malformed workspace config.json booted on built-in defaults.
    *
    * The workspace goes first because it decides both the resources fallback and the default config.
-   * An empty value counts as unset, as it does in the getters, and a workspace with no config.json
+   * An empty value counts as unset, as it does in the getters, and a workspace with no config file
    * still uses the packaged one.
    */
   assertUsablePathSettings(): void {
@@ -296,6 +301,7 @@ export class PathResolver {
 
     this.getConfigPath();
     if (workspace !== undefined && this.readExplicitConfigSource() === undefined) {
+      this.assertSingleWorkspaceConfig(workspace);
       this.assertUsableWorkspaceConfig(workspace);
     }
   }
@@ -318,10 +324,31 @@ export class PathResolver {
     return { label: 'the package root', resolved: this.config.packageRoot };
   }
 
-  /** A config.json the workspace holds must be usable; one it does not hold falls back to the packaged config. */
+  /**
+   * A workspace naming both `config.jsonc` and `config.json` is ambiguous about which one is in
+   * effect — refuse rather than pick the `.jsonc` precedence silently. Named after
+   * {@link assertUsableDirectorySetting} so the workspace itself is refused first when it is not
+   * usable at all, before either of its config files is inspected.
+   */
+  private assertSingleWorkspaceConfig(workspace: WorkspaceSource): void {
+    const found = findWorkspaceConfigFiles(this.getWorkspace());
+    if (found.length < 2) return;
+    const [jsoncPath, jsonPath] = found as [string, string];
+    throw new PathSettingError(
+      formatPathSettingRefusal({
+        setting: workspace,
+        resolved: this.getWorkspace(),
+        problem: `holds both config.jsonc (${jsoncPath}) and config.json (${jsonPath})`,
+        expected: 'a single config file',
+        remedy: `keep config.jsonc, the current name, and remove config.json (also still read)`,
+      })
+    );
+  }
+
+  /** A config file the workspace holds must be usable; one it does not hold falls back to the packaged config. */
   private assertUsableWorkspaceConfig(workspace: WorkspaceSource): void {
-    const { resolved, source } = this.resolveDefaultConfigPath();
-    if (source !== 'workspace config.json') return;
+    const { resolved, origin } = this.resolveDefaultConfigPath();
+    if (origin !== 'workspace') return;
     const problem = describeUnusableConfigFile(resolved);
     if (problem === undefined) return;
     throw new PathSettingError(
@@ -337,18 +364,22 @@ export class PathResolver {
   }
 
   /**
-   * Get config.json path
+   * Get the config file path
    *
    * Priority:
    *   1. --config CLI flag
    *   2. MCP_CONFIG_PATH environment variable
-   *   3. ${workspace}/config.json (if workspace differs from package and file exists)
-   *   4. ${packageRoot}/config.json (default)
+   *   3. ${workspace}/config.jsonc, else ${workspace}/config.json (if workspace differs from
+   *      package and either file exists — `.jsonc` wins when both are present, though
+   *      `assertUsablePathSettings` refuses startup on that ambiguity before this ever runs)
+   *   4. ${packageRoot}/config.json (default — the packaged file keeps its `.json` name)
    *
-   * An explicit path (1 or 2) that is not a readable JSON config file throws `PathSettingError`.
-   * `ConfigLoader.loadConfig` answers an unreadable file with the built-in defaults, which is a
-   * sensible floor for the package's own file and the wrong answer for a path an operator named:
-   * the server booted, served the bundled catalog, and never used the settings asked for.
+   * An explicit path (1 or 2) that is not a readable config file throws `PathSettingError`, parsed
+   * by extension (`.jsonc` tolerant of comments and a trailing comma, everything else strict
+   * JSON) via {@link parseConfigText}. `ConfigLoader.loadConfig` answers an unreadable file with
+   * the built-in defaults, which is a sensible floor for the package's own file and the wrong
+   * answer for a path an operator named: the server booted, served the bundled catalog, and never
+   * used the settings asked for.
    */
   getConfigPath(): string {
     if (this.cache.config) return this.cache.config;
@@ -392,22 +423,34 @@ export class PathResolver {
 
   /** The config an explicit path's removal falls back to, with a caveat when that file is unusable too. */
   private describeDefaultConfigFallback(): PathFallback {
-    const { resolved, source } = this.resolveDefaultConfigPath();
-    if (source !== 'workspace config.json') return { label: 'the packaged default', resolved };
+    const { resolved, origin } = this.resolveDefaultConfigPath();
+    if (origin !== 'workspace') return { label: 'the packaged default', resolved };
     const caveat = describeUnusableConfigFile(resolved);
     return { label: 'the workspace config', resolved, ...(caveat !== undefined && { caveat }) };
   }
 
-  /** Where config resolves when nothing names a path: the workspace file if present, else the package's. */
-  private resolveDefaultConfigPath(): { resolved: string; source: string } {
+  /**
+   * Where config resolves when nothing names a path: the workspace file if present, else the
+   * package's. `origin` is what every caller branches on — `'workspace'` vs `'package'` — kept
+   * separate from `source`, the human-readable label passed to {@link logResolution}, so that
+   * label can name whichever filename was actually found without becoming the thing callers
+   * compare against.
+   */
+  private resolveDefaultConfigPath(): {
+    resolved: string;
+    origin: 'workspace' | 'package';
+    source: string;
+  } {
     const workspace = this.getWorkspace();
-    const workspaceConfig = join(workspace, 'config.json');
-
-    if (workspace !== this.config.packageRoot && existsSync(workspaceConfig)) {
-      return { resolved: workspaceConfig, source: 'workspace config.json' };
+    if (workspace !== this.config.packageRoot) {
+      const [first] = findWorkspaceConfigFiles(workspace);
+      if (first !== undefined) {
+        return { resolved: first, origin: 'workspace', source: `workspace ${basename(first)}` };
+      }
     }
     return {
       resolved: join(this.config.packageRoot, 'config.json'),
+      origin: 'package',
       source: 'package config.json (default)',
     };
   }

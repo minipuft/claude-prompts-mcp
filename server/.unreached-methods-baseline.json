@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-20T04:09:20.830Z",
-  "total": 114,
+  "generatedAt": "2026-09-20T16:58:54.218Z",
+  "total": 115,
   "methods": [
     "Application.getCurrentFrameworkInfo",
     "Application.initializeModules",
@@ -90,6 +90,7 @@
     "ResourceChangeTracker.getAllHashes",
     "ResourceChangeTracker.getResourceHash",
     "ResourceChangeTracker.getStats",
+    "SafeConfigWriter.restoreFromBackup",
     "ScriptToolDefinitionLoader.getStats",
     "ScriptToolDefinitionLoader.loadAllToolsForPrompt",
     "ServerLifecycle.getHttpServer",

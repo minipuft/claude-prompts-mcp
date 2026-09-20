@@ -160,3 +160,23 @@ describe('every event FileObserver emits has a listener', () => {
     expect(emitted.filter((name) => !listened.includes(name))).toEqual([]);
   });
 });
+
+/**
+ * `isConfigFile` used to recognize only `config.json` by name — a workspace running the 5.0
+ * `config.jsonc` dialect had its own config file classified as an ordinary, unwatched change.
+ * Reflection onto the private method rather than a real filesystem watch: the negative cases
+ * (a near-miss name) never emit a `fileChange` event at all, which a behavior-level test could
+ * only observe as a timeout — slow and indistinguishable from a debounce that has not fired yet.
+ */
+describe('isConfigFile recognizes both workspace config dialects', () => {
+  test('config.jsonc and config.json are config files; a near-miss name is not', () => {
+    const observer = createFileObserver(createSimpleLogger('stdio'));
+    const isConfigFile = (filename: string): boolean =>
+      (observer as unknown as { isConfigFile: (name: string) => boolean }).isConfigFile(filename);
+
+    expect(isConfigFile('config.jsonc')).toBe(true);
+    expect(isConfigFile('config.json')).toBe(true);
+    expect(isConfigFile('config.jsonc.bak')).toBe(false);
+    expect(isConfigFile('myconfig.json')).toBe(false);
+  });
+});

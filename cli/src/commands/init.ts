@@ -1,5 +1,5 @@
 import { rmSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { initWorkspace, initConfig, validateResourceFile } from '@cli-shared/index.js';
 import { declaredResourceId } from '@cli-shared/resource-operations.js';
 
@@ -39,11 +39,13 @@ export async function init(options: InitOptions): Promise<number> {
     }
   }
 
-  // Generate config.json alongside resources
+  // Generate the workspace config alongside resources
   let configCreated = false;
+  let configPath: string | undefined;
   if (result.success) {
     const configResult = initConfig(targetPath);
     configCreated = configResult.created;
+    configPath = configResult.configPath;
     if (!configResult.success) {
       console.error(`Warning: ${configResult.message}`);
     }
@@ -53,8 +55,8 @@ export async function init(options: InitOptions): Promise<number> {
     output({ ...result, configCreated }, { json: true });
   } else {
     console.log(result.message);
-    if (configCreated) {
-      console.log('Created config.json with default settings');
+    if (configCreated && configPath) {
+      console.log(`Created ${basename(configPath)} with default settings`);
     }
   }
 

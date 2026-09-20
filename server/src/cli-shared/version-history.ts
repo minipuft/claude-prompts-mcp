@@ -31,6 +31,11 @@ import type {
   SaveVersionOptions,
 } from '#modules/versioning/types.js';
 
+import {
+  configFileFormat,
+  findWorkspaceConfigFiles,
+  parseConfigText,
+} from '#shared/utils/config-file-format.js';
 import { resolveSettingPath } from '#shared/utils/path-setting.js';
 import { deriveProjectScopeId } from '#shared/utils/project-scope.js';
 import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
@@ -169,7 +174,7 @@ function resolveStateDbPath(resourceDir: string): string | null {
  *
  * Must agree with `VersionHistoryService.resolveTenantId()` on the server, which is
  * `resolveContinuityScopeId(scope)` over the launch workspace. Same precedence applied
- * here: an explicit `identity.launchDefaults.workspaceId` in config.json outranks the
+ * here: an explicit `identity.launchDefaults.workspaceId` in the workspace config outranks the
  * environment-derived id, which falls back to `'default'`.
  *
  * **Known limitation, stated rather than hidden**: a server launched with an explicit
@@ -184,16 +189,26 @@ function resolveTenantId(dbPath: string): string {
   return resolveContinuityScopeId({ workspaceId: configured ?? derived });
 }
 
-/** Read `identity.launchDefaults.workspaceId` from the config.json beside runtime-state. */
+/**
+ * Read `identity.launchDefaults.workspaceId` from the config file beside runtime-state.
+ *
+ * Either config name counts, in the same precedence the server reads them, and the text parses in
+ * whichever dialect its extension declares — a workspace id commented around in a `config.jsonc`
+ * would otherwise read as absent and silently scope this process's history to `'default'`.
+ */
 function readConfiguredWorkspaceId(dbPath: string): string | undefined {
-  const configPath = join(dirname(dirname(dbPath)), 'config.json');
+  const configPath = findWorkspaceConfigFiles(dirname(dirname(dbPath)))[0];
   try {
-    if (!existsSync(configPath)) {
+    if (configPath === undefined) {
       return undefined;
     }
-    const parsed: unknown = JSON.parse(readFileSync(configPath, 'utf8'));
-    const workspaceId = (parsed as { identity?: { launchDefaults?: { workspaceId?: unknown } } })
-      ?.identity?.launchDefaults?.workspaceId;
+    const parsed: unknown = parseConfigText(
+      readFileSync(configPath, 'utf8'),
+      configFileFormat(configPath)
+    );
+    const workspaceId = (
+      parsed as { identity?: { launchDefaults?: { workspaceId?: unknown } } } | null
+    )?.identity?.launchDefaults?.workspaceId;
     return typeof workspaceId === 'string' && workspaceId.trim() !== ''
       ? workspaceId.trim()
       : undefined;

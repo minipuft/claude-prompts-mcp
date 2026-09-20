@@ -200,7 +200,7 @@ criterion carrying any of these six fields, naming the field and the fix.
 
 ## Harness coverage and the reminder budget
 
-Two `gates` config keys (`config.json` / `server/config.schema.json`) control how many reminders
+Two `gates` config keys (your `config.jsonc`/`config.json`, checked against `server/config.schema.json`) control how many reminders
 reach the model and at what length, once [`subject`](#subject) has named what each reminder is
 about:
 

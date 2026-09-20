@@ -4,7 +4,7 @@ OpenTelemetry-based tracing for the Claude Prompts MCP server. Provides producti
 
 ## Quick Start
 
-Add to `config.json`:
+Add to `config.jsonc` (`config.json` is also still read):
 
 ```json
 {

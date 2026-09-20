@@ -1,5 +1,7 @@
 // @lifecycle canonical - Handler for configuration management operations.
 
+import * as path from 'node:path';
+
 import { ActionHandler } from '../core/action-handler-base.js';
 import { createStructuredResponse } from '../core/response-utils.js';
 
@@ -204,7 +206,7 @@ export class ConfigActionHandler extends ActionHandler {
 
     if (result.status === 'valid') {
       return this.createMinimalSystemResponse(
-        '✅ config.json matches its schema.',
+        `✅ ${path.basename(this.configManager.getConfigPath())} matches its schema.`,
         'config_validate'
       );
     }
@@ -220,7 +222,7 @@ export class ConfigActionHandler extends ActionHandler {
 
     return this.createMinimalSystemResponse(
       [
-        '❌ config.json does not match its schema. The server keeps running.',
+        `❌ ${path.basename(this.configManager.getConfigPath())} does not match its schema. The server keeps running.`,
         ...result.errors,
       ].join('\n'),
       'config_validate'

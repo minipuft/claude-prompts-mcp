@@ -1,8 +1,10 @@
+import { basename } from 'node:path';
 import {
   createResourceDir,
   resourceExists,
   readConfig,
   getConfigValue,
+  resolveConfigPath,
 } from '@cli-shared/index.js';
 import { resolveWorkspace, resolveResourceDir } from '../lib/workspace.js';
 import { output } from '../lib/output.js';
@@ -113,7 +115,8 @@ function printSubsystemAdvisory(workspace: string, type: string): void {
   const value = getConfigValue(configResult.config, configKey);
   const legacy = getConfigValue(configResult.config, configKey.replace(/\.enabled$/, '.mode'));
   if (value === false || (value === undefined && legacy === 'off')) {
-    console.log(`\nNote: ${configKey} is false in config.json. Resource won't be active until enabled:`);
+    const name = basename(configResult.configPath ?? resolveConfigPath(workspace));
+    console.log(`\nNote: ${configKey} is false in ${name}. Resource won't be active until enabled:`);
     console.log(`  cpm enable ${type}`);
   }
 }

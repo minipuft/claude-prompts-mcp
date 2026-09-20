@@ -619,8 +619,9 @@ export interface ConfigFile {
   /** JSON Schema reference for IDE validation. */
   $schema?: string;
   /**
-   * Config file format version. `5` is the shape this file describes; an older file declares its
-   * own version and is migrated before it reaches this type.
+   * Which shape this config file is written in. `5` is the current format, described by every
+   * setting below. A file with no `version` at all is read as an older (4.x) file: the server
+   * translates it into the 5.0 shape when it loads, without changing anything on disk.
    */
   version: 5;
   /** Server identity and transport settings. */

@@ -1,7 +1,9 @@
+import { basename } from 'node:path';
 import {
   validateResourceFile,
   formatValidationIssues,
   validateConfig,
+  resolveConfigPath,
 } from '@cli-shared/index.js';
 import { declaredResourceId } from '@cli-shared/resource-operations.js';
 import { resolveWorkspace, resolveResourceDir, discoverResourcePaths } from '../lib/workspace.js';
@@ -59,12 +61,12 @@ export async function validate(options: ValidateOptions): Promise<number> {
     }
   }
 
-  // Validate config.json when --config is explicitly passed (not part of --all)
+  // Validate the workspace config when --config is explicitly passed (not part of --all)
   if (flags.config) {
     const configResult = validateConfig(workspace);
     results.push({
       type: 'config',
-      id: 'config.json',
+      id: basename(resolveConfigPath(workspace)),
       valid: configResult.valid,
       errors: configResult.errors,
       warnings: configResult.warnings,

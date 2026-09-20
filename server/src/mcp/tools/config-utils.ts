@@ -20,9 +20,13 @@
  * It also used to WRITE `configManager.getConfig()` back to disk — the RESOLVED runtime object.
  * That persisted defaults nobody typed, and dropped every section the loader does not map onto
  * `Config` (`hooks`), so toggling one boolean rewrote the operator's whole file. The writer now
- * reads the DOCUMENT through `#cli-shared/config-operations.js`, sets one dotted key, and writes
- * it back; `getConfig()` is never consulted on the write path.
+ * reads the DOCUMENT through `#cli-shared/config-operations.js` and edits one key's characters in
+ * the file itself; `getConfig()` is never consulted on the write path. The parsed document is
+ * still built, but only to validate what the file will mean — a write that re-serialized it would
+ * strip every comment out of an operator's `config.jsonc` the first time anyone toggled a gate.
  */
+
+import { access, copyFile } from 'node:fs/promises';
 
 import {
   CONFIG_RESTART_REQUIRED_KEYS,
@@ -34,7 +38,7 @@ import {
   backupConfig,
   readConfigFile,
   validateConfigDocument,
-  writeConfigAtomic,
+  writeConfigKeyAtomic,
 } from '#cli-shared/config-operations.js';
 import { type ConfigManager, type Logger } from '#shared/types/index.js';
 
@@ -117,7 +121,7 @@ export class SafeConfigWriter {
         this.logger.info(`Config backup created: ${backup.backupPath}`);
       }
 
-      // Step 4: Apply the single change, preserving every other key and their order
+      // Step 4: Build the candidate document — what the file will mean once the key is set
       const updatedConfig = applyConfigChange(read.config, key, validation.convertedValue);
 
       // Step 5: Validate the entire updated document
@@ -132,8 +136,9 @@ export class SafeConfigWriter {
         };
       }
 
-      // Step 6: Write the new configuration atomically
-      writeConfigAtomic(this.configPath, updatedConfig);
+      // Step 6: Edit that one key's characters in the file the operator owns — a toggle over MCP
+      // must not cost them the comments and layout they wrote
+      writeConfigKeyAtomic(this.configPath, key, validation.convertedValue);
 
       // Step 7: Reload ConfigManager to use new config
       await this.configManager.loadConfig();
@@ -173,10 +178,47 @@ export class SafeConfigWriter {
   }
 
   /**
+   * Restore configuration from backup
+   */
+  async restoreFromBackup(backupPath: string): Promise<ConfigWriteResult> {
+    try {
+      // Verify backup exists
+      await access(backupPath);
+
+      // Restore the backup
+      await copyFile(backupPath, this.configPath);
+
+      // Reload configuration
+      await this.configManager.loadConfig();
+
+      this.logger.info(`Configuration restored from backup: ${backupPath}`);
+
+      return {
+        success: true,
+        message: `Configuration successfully restored from backup`,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to restore from backup ${backupPath}:`, error);
+      return {
+        success: false,
+        message: `Failed to restore configuration: ${error}`,
+        error: String(error),
+      };
+    }
+  }
+
+  /**
    * Check if a configuration key requires server restart
    */
   private requiresRestart(key: string): boolean {
     return CONFIG_RESTART_REQUIRED_KEYS.includes(key as ConfigKey);
+  }
+
+  /**
+   * Get the configuration file path for debugging/info purposes
+   */
+  getConfigPath(): string {
+    return this.configPath;
   }
 }
 

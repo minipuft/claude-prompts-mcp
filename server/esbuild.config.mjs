@@ -11,6 +11,7 @@
 
 import * as esbuild from 'esbuild';
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -24,6 +25,19 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const CLI_CONFIG = join(__dirname, '..', 'cli', 'esbuild.config.mjs');
 const CLI_ENTRY = join(__dirname, '..', 'cli', 'src', 'index.ts');
 const pkg = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf8'));
+
+// jsonc-parser's `main` field is a UMD build whose factory reaches `require` through
+// a parameter, which esbuild cannot trace statically -- the file it needs
+// (`./impl/format`) is never bundled, so this server bundle failed at RUNTIME, not at
+// build time (F-T5-17). Alias it to the package's own ESM build (`module` field)
+// instead. This duplicates cli/esbuild.config.mjs's resolveEsmEntry() rather than
+// importing it: that helper is pure (no `esbuild` import) but lives behind the same
+// missing-cli/ hazard the comment above describes for CLI_CONFIG, and this alias must
+// be ready before `buildOptions` below, well ahead of the dynamic import.
+const jsoncParserRequire = createRequire(join(__dirname, 'package.json'));
+const jsoncParserPkgPath = jsoncParserRequire.resolve('jsonc-parser/package.json');
+const jsoncParserPkg = JSON.parse(readFileSync(jsoncParserPkgPath, 'utf8'));
+const JSONC_PARSER_ESM_ENTRY = join(dirname(jsoncParserPkgPath), jsoncParserPkg.module);
 
 // Build options
 const isProduction = process.env.NODE_ENV === 'production';
@@ -85,8 +99,13 @@ var __dirname = __pathDirname(__filename);`,
     'process.env.BUILD_TIME': JSON.stringify(new Date().toISOString()),
   },
 
-  // No `alias` block. Subpath imports are declared once in package.json "imports", which
-  // esbuild resolves natively — no second copy of the map to drift out of sync.
+  // Our own subpath imports are still NOT aliased here — they're declared once in
+  // package.json "imports", which esbuild resolves natively, so there is no second map
+  // to drift out of sync. This `alias` entry is a different thing: a third-party
+  // package's ENTRY POINT override (module vs main), not a path alias for our own code.
+  alias: {
+    'jsonc-parser': JSONC_PARSER_ESM_ENTRY,
+  },
 
   // Enable tree-shaking
   treeShaking: true,
@@ -149,9 +168,8 @@ async function build() {
       }
 
       console.log('\nBuilding cpm CLI...');
-      const { createCliBuildOptions, checkCliBundleSize } = await import(
-        pathToFileURL(CLI_CONFIG).href
-      );
+      const { createCliBuildOptions, checkCliBundleSize, assertNoUntraceableRequires } =
+        await import(pathToFileURL(CLI_CONFIG).href);
       const cliOptions = createCliBuildOptions({
         outfile: join(__dirname, 'dist', 'cpm.js'),
         minify: isProduction,
@@ -162,6 +180,12 @@ async function build() {
       // to different budgets, and omitting it silently graded the published bundle
       // against the looser unminified ceiling.
       checkCliBundleSize(cliOptions.outfile, Boolean(cliOptions.minify));
+
+      // Both bins this file produces get the same check: refuse a bundle still
+      // carrying a relative require() of a file that was not emitted next to it
+      // (F-T5-17 — see assertNoUntraceableRequires' doc in cli/esbuild.config.mjs).
+      assertNoUntraceableRequires(buildOptions.outfile);
+      assertNoUntraceableRequires(cliOptions.outfile);
 
       // No declaration emit. This package ships a server binary and Python hooks, not a
       // library — nothing imports it, so the 405 .d.ts files this produced were read by
