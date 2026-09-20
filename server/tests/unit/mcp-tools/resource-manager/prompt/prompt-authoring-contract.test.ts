@@ -10,7 +10,12 @@ import {
   UNSETTABLE_FIELDS,
   UPDATE_FIELDS,
 } from '../../../../../src/mcp/tools/resource-manager/prompt/utils/validation.js';
-import { PromptYamlSchema } from '../../../../../src/modules/prompts/prompt-schema.js';
+import { resourceManagerInputSchema } from '../../../../../src/mcp/tools/schemas/resource-manager.schema.js';
+import { workflowBudgetSchema } from '../../../../../src/mcp/tools/schemas/workflow-ir.schema.js';
+import {
+  PromptArtifactsSchema,
+  PromptYamlSchema,
+} from '../../../../../src/modules/prompts/prompt-schema.js';
 
 import type { PromptResourceContext } from '../../../../../src/mcp/tools/resource-manager/prompt/core/context.js';
 import type { ConfigManager, Logger } from '../../../../../src/shared/types/index.js';
@@ -389,6 +394,16 @@ describe('every prompt.yaml key the loader accepts is classified', () => {
       .map(([parameter]) => parameter);
 
     expect(unclearable).toEqual([]);
+  });
+
+  test("budget and artifacts are validated by the loader's own schemas, not copies", () => {
+    // IDENTITY, not equivalence. The tool's bound on a structural cap has to BE the loader's
+    // bound: a restatement here would be a second place for `DEFAULT_WORKFLOW_CAPS` to drift from,
+    // and it would still refuse an over-cap value — just later, after a write and a rollback,
+    // which no conformance assertion on the refusal TEXT can tell apart from the boundary case.
+    const shape = resourceManagerInputSchema.shape as Record<string, { unwrap?: () => unknown }>;
+    expect(shape['budget']?.unwrap?.()).toBe(workflowBudgetSchema);
+    expect(shape['artifacts']?.unwrap?.()).toBe(PromptArtifactsSchema);
   });
 
   test('the three keys this class was found through are settable and clearable', () => {

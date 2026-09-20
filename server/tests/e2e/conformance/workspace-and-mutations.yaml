@@ -738,11 +738,16 @@ scenarios:
           id: conformance_budget_artifacts
           budget:
             maxInsertions: 99
-    # The number in the message is `DEFAULT_WORKFLOW_CAPS.maxInsertions`, so a tool-side copy that
-    # drifted from the loader's cap would not produce this text. The row above is the positive
-    # control: the same parameter at 1 is accepted and written.
+    # `Invalid arguments for tool resource_manager` is the BOUNDARY's phrasing — nothing was
+    # written and no version spent. Asserting only the cap text would also pass on a loose
+    # boundary schema that let the value through to the post-write check, which refuses it too but
+    # after a write and a rollback; measured 2026-09-20 by replacing `workflowBudgetSchema` here
+    # with `z.record()` and watching this row stay green. The number is
+    # `DEFAULT_WORKFLOW_CAPS.maxInsertions`, so a tool-side copy that drifted from the loader's cap
+    # would not produce this text either. The row above is the positive control: the same
+    # parameter at 1 is accepted and written.
     expect:
-      error_contains: 'expected number to be <=3'
+      error_contains: 'Invalid arguments for tool resource_manager: budget.maxInsertions: Too big: expected number to be <=3'
 
   - id: prompt-budget-with-an-unrecognized-key-is-refused-not-dropped
     claim_source: >-
@@ -757,7 +762,7 @@ scenarios:
           budget:
             maxInsertion: 1
     expect:
-      error_contains: 'Unrecognized key: "maxInsertion"'
+      error_contains: 'Invalid arguments for tool resource_manager: budget: Unrecognized key: "maxInsertion"'
 
   - id: prompt-artifacts-fromargument-must-name-a-declared-argument
     claim_source: >-
