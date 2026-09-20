@@ -19,9 +19,13 @@
  *   d. two connections saving one resource produce contiguous distinct versions and no UNIQUE
  *      failure — the `MAX(version)`-then-INSERT pair is one unit under the write lock. The
  *      interleave is injected at the maximum-version read rather than raced, so the test carries no
- *      timing dependence.
+ *      timing dependence;
+ *   e. a writer meeting a lock held by another PROCESS waits for it and lands, where the same write
+ *      with no timeout is refused — the control that also proves the lock was genuinely held;
+ *   f. the engine's own connection carries that timeout, rather than SQLite's default of 0.
  */
 
+import { spawn } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -36,6 +40,7 @@ import {
   saveVersion,
 } from '../../../src/cli-shared/version-history.js';
 import { testScratchPath } from '../../helpers/scratch-path.js';
+import { STATE_DB_BUSY_TIMEOUT_MS } from '../../../src/shared/utils/runtime-state-location.js';
 
 import type { DatabasePort } from '../../../src/shared/types/persistence.js';
 import type { Logger } from '../../../src/shared/types/index.js';
@@ -360,6 +365,121 @@ describe('version_history uniqueness', () => {
 
       expect(versions).toEqual([1, 2]);
       expect(new Set(versions).size).toBe(versions.length);
+
+      await engine.shutdown();
+    });
+  });
+
+  /**
+   * The lock is only half the contract: a writer that meets a held lock must WAIT for it, not fail.
+   *
+   * That waiting is `busy_timeout`, and it is the difference between the two cases below — the same
+   * write, against the same held lock, with the only change being the timeout on the connection.
+   * `0` (SQLite's default, what this engine's connection had until `STATE_DB_BUSY_TIMEOUT_MS` was
+   * set) is the control: it fails at once, which is what proves the lock is genuinely held and the
+   * probe genuinely observes it.
+   *
+   * The lock is held by a CHILD PROCESS, because a connection blocked on a lock blocks its whole
+   * thread — a holder in this process could never reach its own COMMIT. The child releases only
+   * after this test tells it to, so the ordering is driven by messages rather than by racing:
+   * `RELEASE_DELAY_MS` is how long the child waits after being told, and the write under test
+   * starts before that delay expires, then measures that it really waited. The margins are 16x
+   * (300 ms held against a 5000 ms patience) and the whole sequence is message-ordered.
+   */
+  describe('a writer meeting a held lock', () => {
+    const RELEASE_DELAY_MS = 300;
+
+    /** A child process holding BEGIN IMMEDIATE on `dbPath` until its stdin says to let go. */
+    async function lockHolder(): Promise<{ release: () => void; done: Promise<void> }> {
+      const child = spawn(
+        process.execPath,
+        [
+          '-e',
+          `const { DatabaseSync } = require('node:sqlite');
+           const db = new DatabaseSync(${JSON.stringify(dbPath)});
+           db.exec('PRAGMA busy_timeout = 0');
+           db.exec('BEGIN IMMEDIATE');
+           db.prepare("INSERT INTO version_history (tenant_id, organization_id, workspace_id, resource_type, resource_id, version, snapshot, diff_summary, description, created_at) VALUES ('ws', NULL, 'ws', 'prompt', 'held', 1, '{}', '', 'holder', '2026-01-01T00:00:00.000Z')").run();
+           process.stdout.write('locked\\n');
+           process.stdin.once('data', () => {
+             setTimeout(() => { db.exec('COMMIT'); db.close(); process.exit(0); }, ${RELEASE_DELAY_MS});
+           });`,
+        ],
+        { stdio: ['pipe', 'pipe', 'inherit'] }
+      );
+
+      await new Promise<void>((resolve) => {
+        child.stdout.on('data', (chunk: Buffer) => {
+          if (chunk.toString().includes('locked')) resolve();
+        });
+      });
+
+      return {
+        release: () => child.stdin.write('go\n'),
+        done: new Promise<void>((resolve) => child.on('exit', () => resolve())),
+      };
+    }
+
+    /** Write one row on a fresh connection carrying `timeoutMs`. Returns how long it took. */
+    function writeWith(timeoutMs: number, resourceId: string): number {
+      const db = new DatabaseSync(dbPath);
+      const startedAt = Date.now();
+      try {
+        db.exec(`PRAGMA busy_timeout = ${timeoutMs}`);
+        db.exec('BEGIN IMMEDIATE');
+        db.prepare(
+          `INSERT INTO version_history
+             (tenant_id, organization_id, workspace_id, resource_type, resource_id,
+              version, snapshot, diff_summary, description, created_at)
+           VALUES ('ws', NULL, 'ws', 'prompt', ?, 1, '{}', '', 'waiter', '2026-01-02T00:00:00.000Z')`
+        ).run(resourceId);
+        db.exec('COMMIT');
+      } finally {
+        db.close();
+      }
+      return Date.now() - startedAt;
+    }
+
+    it('is refused with no timeout and waits with the shared one', async () => {
+      const engine = await SqliteEngine.getInstance(logger as never, { dbPath });
+      await engine.initialize();
+      await engine.shutdown();
+
+      const holder = await lockHolder();
+
+      // Control: zero patience, so the held lock refuses the write outright. This is also what
+      // shows the lock IS held — without it, the second case could pass over an unlocked file.
+      expect(() => writeWith(0, 'refused')).toThrow(/busy|locked/i);
+
+      // Subject: the same write, the same held lock, the shared timeout. The child lets go
+      // RELEASE_DELAY_MS after this message, which lands while the write below is already waiting.
+      holder.release();
+      const elapsed = writeWith(STATE_DB_BUSY_TIMEOUT_MS, 'waited');
+      await holder.done;
+
+      expect(elapsed).toBeGreaterThanOrEqual(RELEASE_DELAY_MS / 2);
+      expect(elapsed).toBeLessThan(STATE_DB_BUSY_TIMEOUT_MS);
+
+      const db = new DatabaseSync(dbPath);
+      const ids = (
+        db
+          .prepare(`SELECT resource_id FROM version_history ORDER BY resource_id`)
+          .all() as unknown as Array<{ resource_id: string }>
+      ).map((row) => row.resource_id);
+      db.close();
+
+      // The waiter landed; the refused one never did; the holder's own row committed.
+      expect(ids).toEqual(['held', 'waited']);
+    }, 20000);
+
+    it('opens its own connection with the shared timeout, not SQLite default of 0', async () => {
+      const engine = await SqliteEngine.getInstance(logger as never, { dbPath });
+      await engine.initialize();
+
+      const row = engine.queryOne<{ timeout: number }>('PRAGMA busy_timeout');
+      expect(Number(row?.timeout)).toBe(STATE_DB_BUSY_TIMEOUT_MS);
+      // Positive control: the pragma is readable and is not merely echoing the expectation.
+      expect(STATE_DB_BUSY_TIMEOUT_MS).toBeGreaterThan(0);
 
       await engine.shutdown();
     });
