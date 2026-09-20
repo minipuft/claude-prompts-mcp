@@ -14,11 +14,11 @@ tags: [config, schema, validation, cli, contracts]
 **Owner**: minipuft
 **Created**: 2026-09-11
 
-## Now (2026-09-20, step 6 cut — rows dispatching)
+## Now (2026-09-20, step 6 boundary green — PR opening)
 
-- **Goal**: one owner for `config.json`'s shape. Steps 1–5 merged (#307, #312, #322, #325, #338 `b4fc3d4a`). Step 6 (R29, re-measured as R77–R81) is branch `feat/config-schema-url`, linked worktree `../claude-prompts-mcp-schemaurl` (no dependency change, so the symlinked `node_modules` is safe here).
-- **Slice**: T8 rows 8.1–8.4 dispatching, 8.5 open on the 5.0.0 publish. R29's premise was false as written: `claude-prompts@4.0.1` never shipped `config.schema.json` (jsDelivr 404 on the schema, 200 on `config.json` beside it; `files` gained the schema in #288), so the ruled URL resolves only once 5.0.0 publishes. The row's pre-release check is the packed file list, and the live URL probe is its own open row.
-- **Next decision**: accept handoffs, then the boundary on one snapshot and the PR. A peer session asked on 2026-09-20 for no merges to `main` until `feat/rsc-remaining` lands — merge only after its all-clear. After this step every delivery step is merged and R31's hold on #232 is the owner's to lift.
+- **Goal**: one owner for `config.json`'s shape. Steps 1–5 merged (#307, #312, #322, #325, #338). Step 6 (R29, re-measured as R77–R81) is branch `feat/config-schema-url`, linked worktree `../claude-prompts-mcp-schemaurl`, `main` `02392dbf` (#339) merged in clean.
+- **Slice**: T8 rows 8.1–8.4 and 8.7 ✓, 8.6 ✗ killed, 8.5 open on the 5.0.0 publish. Boundary on one snapshot (4650454e): `validate:all` 68/68 (first run 67/68, `typecheck:scripts`, row 8.7) · `test:all` unit 3919 / integration 1015 / e2e 283, 0 failed · `verify:mcp` 18/18 · `cli/` 114/114 · `pytest hooks/tests` 314 · live drive on a built server and `cpm`: every writer and the schema carry one URL; a config outside the server root carrying that (still 404) URL is validated offline, typo named, clean twin passes; the docs page's precedence claims hold (file over default, `LOG_LEVEL` over file, `--log-level` leaves `source` alone, an invalid `LOG_LEVEL` ignored with a warning, a config transport key refuses); the editor probe reads 0 diagnostics on the fresh and the edited template with its unknown-key control firing.
+- **Next decision**: open the PR; squash-merge when checks pass and `mergeStateStatus` is CLEAN, but only after the resource-surface session reports #337 merged and has been told first (their request, 2026-09-20) — then merge `main` again if it moved. After the merge every delivery step is in, and R31's hold on release PR #232 is the owner's to lift; row 8.5 flips after that publish.
 - **Constraint in force**: no edit to a projected `CLAUDE.md` section (AGENTS.md 32767/32768, F-T4-31). `gh pr create` from this worktree needs the main checkout detached at the branch tip first (F-T4-36). Neither the server nor `cpm` ever fetches the URL (R79).
 
 ## Why this exists
