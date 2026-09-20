@@ -44,6 +44,7 @@ export {
   type GateReviewHistoryEntry,
   type GateReviewExecutionContext,
   type GateReviewPrompt,
+  type GateVerdictSummary,
   type PendingGateReview,
   type FormatterExecutionContext,
   type ChainNode,

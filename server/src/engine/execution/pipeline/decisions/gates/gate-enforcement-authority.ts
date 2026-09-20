@@ -8,13 +8,16 @@ import {
 import { DEFAULT_RETRY_LIMIT } from '../../../../gates/constants.js';
 
 import type { Logger } from '#infra/logging/index.js';
-import type { ChainSessionService, GateReviewPrompt } from '#shared/types/index.js';
+import type {
+  ChainSessionService,
+  GateReviewPrompt,
+  GateVerdictSummary,
+} from '#shared/types/index.js';
 import type {
   ActionResult,
   CreateReviewOptions,
   EnforcementMode,
   GateAction,
-  GateVerdict,
   ParsedVerdict,
   PendingGateReview,
   ReviewOutcome,
@@ -139,24 +142,33 @@ export class GateEnforcementAuthority {
   }
 
   /**
-   * Parse per-gate verdicts from a GATE_VERDICTS (or legacy CRITERION_VERDICTS) block.
-   * Called alongside parseVerdict() — overall verdict drives PASS/FAIL,
-   * gate verdicts provide granular delivery tracking.
+   * Parse per-gate verdicts from a GATE_VERDICTS (or legacy CRITERION_VERDICTS) block into
+   * the shared {@link GateVerdictSummary} record, keyed by gate id.
    *
-   * KEPT ON PURPOSE (P4.52/R36): the deliberate read side of `renderGateVerdict`
-   * (gate-verdict-renderer.ts) — its `PER_GATE_HEADER` constant is documented as "Block
-   * header the per-gate parser looks for (gate-enforcement-authority.ts)", naming this
-   * method by file. Both sides are round-trip tested for losslessness (unit test in
-   * gate-verdict-renderer.test.ts, integration test in
-   * structured-gate-verdict-flow.test.ts). No pipeline stage currently acts on the parsed
-   * per-gate detail for an enforcement decision — GateVerdictProcessor reads only the
-   * overall verdict — which is a wiring gap for the plan owner to judge, not dead code:
-   * the render side still actively produces this block for a documented reader.
+   * Called alongside parseVerdict() — the overall verdict drives PASS/FAIL, these entries say
+   * WHICH gate the reviewer failed, which is what `GateVerdictProcessor` puts on
+   * `context.state.gates.perGateVerdicts` and what `ExecutionRecordStore` persists.
    *
-   * @param raw - Raw response containing GATE_VERDICTS block
-   * @returns Array of parsed gate verdicts (empty if no block found)
+   * **This is the only place `index` exists.** The submitted `[n]` is a position in the gate
+   * list THIS review advertised, which is meaningless to anything that does not hold that list;
+   * the id is not. Resolving here, where `review.gateIds` is in hand, means no downstream reader
+   * ever has to carry the list around to interpret a verdict — the same key `GateCheckResult`
+   * already uses, so the reviewer's opinion and the engine's ground truth are joinable.
+   *
+   * An index outside the advertised list is DROPPED with a diagnostic, never clamped and never
+   * guessed: attributing a FAIL to the wrong gate is worse than not recording it, and a guess
+   * would make the resulting record indistinguishable from a correct one.
+   *
+   * @param raw - Raw response containing a GATE_VERDICTS block
+   * @param gateIds - The gate list this review advertised, in the order it advertised them
+   * @param attempt - Review attempt this submission answers, recorded on each entry
+   * @returns Gate-id-keyed summaries (empty if no block found or none resolved)
    */
-  parseGateVerdicts(raw: string): GateVerdict[] {
+  parseGateVerdicts(
+    raw: string,
+    gateIds: readonly string[],
+    attempt?: number
+  ): GateVerdictSummary[] {
     if (!raw) {
       return [];
     }
@@ -168,21 +180,35 @@ export class GateEnforcementAuthority {
       return [];
     }
 
-    return block[1]
-      .trim()
-      .split('\n')
-      .map((line) => {
-        const match = line.match(/\[?(\d+)\]?\s*(PASS|FAIL)\s*[-–—:]\s*(.*)/i);
-        if (!match) {
-          return null;
-        }
-        return {
-          index: parseInt(match[1]!, 10),
-          passed: match[2]!.toUpperCase() === 'PASS',
-          rationale: match[3]!.trim(),
-        };
-      })
-      .filter((v): v is GateVerdict => v !== null);
+    const timestamp = Date.now();
+    const summaries: GateVerdictSummary[] = [];
+
+    for (const line of block[1].trim().split('\n')) {
+      const match = line.match(/\[?(\d+)\]?\s*(PASS|FAIL)\s*[-–—:]\s*(.*)/i);
+      if (!match) {
+        continue;
+      }
+
+      const index = parseInt(match[1]!, 10);
+      const gateId = gateIds[index - 1];
+      if (gateId === undefined) {
+        this.logger.warn(
+          `[GateEnforcementAuthority] Per-gate verdict [${index}] names no advertised gate ` +
+            `(the review advertised ${gateIds.length}); entry dropped.`
+        );
+        continue;
+      }
+
+      summaries.push({
+        gateId,
+        verdict: match[2]!.toUpperCase() === 'PASS' ? 'PASS' : 'FAIL',
+        rationale: match[3]!.trim(),
+        timestamp,
+        ...(attempt !== undefined ? { attempt } : {}),
+      });
+    }
+
+    return summaries;
   }
 
   /**

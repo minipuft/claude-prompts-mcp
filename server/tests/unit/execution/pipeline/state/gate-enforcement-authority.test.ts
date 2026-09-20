@@ -161,7 +161,14 @@ describe('GateEnforcementAuthority', () => {
   });
 
   describe('parseGateVerdicts', () => {
-    test('parses valid CRITERION_VERDICTS block', () => {
+    /** Strip the wall-clock field so a parse can be compared as a value. */
+    const withoutTimestamp = (entries: ReturnType<typeof authority.parseGateVerdicts>) =>
+      entries.map(({ timestamp, ...rest }) => {
+        expect(typeof timestamp).toBe('number');
+        return rest;
+      });
+
+    test('resolves each entry to the gate id at that advertised position', () => {
       const raw = `Some preamble text.
 
 CRITERION_VERDICTS:
@@ -171,22 +178,68 @@ CRITERION_VERDICTS:
 
 GATE_REVIEW: PASS - Overall good`;
 
-      const result = authority.parseGateVerdicts(raw);
+      const result = authority.parseGateVerdicts(raw, ['alpha', 'beta', 'gamma']);
 
-      expect(result).toEqual([
-        { index: 1, passed: true, rationale: 'All tests pass' },
-        { index: 2, passed: false, rationale: 'Missing error handling' },
-        { index: 3, passed: true, rationale: 'Documentation complete' },
+      expect(withoutTimestamp(result)).toEqual([
+        { gateId: 'alpha', verdict: 'PASS', rationale: 'All tests pass' },
+        { gateId: 'beta', verdict: 'FAIL', rationale: 'Missing error handling' },
+        { gateId: 'gamma', verdict: 'PASS', rationale: 'Documentation complete' },
       ]);
     });
 
+    test('records the review attempt on every entry when one is supplied', () => {
+      const raw = `GATE_VERDICTS:
+[1] FAIL - not yet`;
+
+      expect(withoutTimestamp(authority.parseGateVerdicts(raw, ['alpha'], 2))).toEqual([
+        { gateId: 'alpha', verdict: 'FAIL', rationale: 'not yet', attempt: 2 },
+      ]);
+    });
+
+    test('drops an entry whose index names no advertised gate, and says so', () => {
+      const raw = `GATE_VERDICTS:
+[1] PASS - in range
+[7] FAIL - out of range`;
+
+      const result = authority.parseGateVerdicts(raw, ['alpha', 'beta']);
+
+      // The in-range entry survives; the out-of-range one is dropped rather than
+      // attributed to some other gate.
+      expect(withoutTimestamp(result)).toEqual([
+        { gateId: 'alpha', verdict: 'PASS', rationale: 'in range' },
+      ]);
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('[7]'));
+    });
+
+    test('positive control: the same shape with an in-range index is kept and not warned', () => {
+      // Differs from the case above in ONE character \u2014 the index \u2014 so a dropped entry
+      // can only be the range check, not the parse.
+      const raw = `GATE_VERDICTS:
+[1] PASS - in range
+[2] FAIL - also in range`;
+
+      const result = authority.parseGateVerdicts(raw, ['alpha', 'beta']);
+
+      expect(withoutTimestamp(result)).toEqual([
+        { gateId: 'alpha', verdict: 'PASS', rationale: 'in range' },
+        { gateId: 'beta', verdict: 'FAIL', rationale: 'also in range' },
+      ]);
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+    });
+
     test('returns empty array when no CRITERION_VERDICTS block', () => {
-      const result = authority.parseGateVerdicts('GATE_REVIEW: PASS - Good work');
+      const result = authority.parseGateVerdicts('GATE_REVIEW: PASS - Good work', ['alpha']);
       expect(result).toEqual([]);
     });
 
     test('returns empty array for empty input', () => {
-      expect(authority.parseGateVerdicts('')).toEqual([]);
+      expect(authority.parseGateVerdicts('', ['alpha'])).toEqual([]);
+    });
+
+    test('returns empty array when the review advertised no gates', () => {
+      const raw = `GATE_VERDICTS:
+[1] PASS - orphaned`;
+      expect(authority.parseGateVerdicts(raw, [])).toEqual([]);
     });
 
     test('handles verdicts without brackets', () => {
@@ -194,11 +247,11 @@ GATE_REVIEW: PASS - Overall good`;
 1 PASS - First criterion met
 2 FAIL - Second criterion failed`;
 
-      const result = authority.parseGateVerdicts(raw);
+      const result = authority.parseGateVerdicts(raw, ['alpha', 'beta']);
 
-      expect(result).toEqual([
-        { index: 1, passed: true, rationale: 'First criterion met' },
-        { index: 2, passed: false, rationale: 'Second criterion failed' },
+      expect(withoutTimestamp(result)).toEqual([
+        { gateId: 'alpha', verdict: 'PASS', rationale: 'First criterion met' },
+        { gateId: 'beta', verdict: 'FAIL', rationale: 'Second criterion failed' },
       ]);
     });
 
@@ -207,11 +260,11 @@ GATE_REVIEW: PASS - Overall good`;
 [1] PASS \u2014 em-dash rationale
 [2] FAIL \u2013 en-dash rationale`;
 
-      const result = authority.parseGateVerdicts(raw);
+      const result = authority.parseGateVerdicts(raw, ['alpha', 'beta']);
 
-      expect(result).toEqual([
-        { index: 1, passed: true, rationale: 'em-dash rationale' },
-        { index: 2, passed: false, rationale: 'en-dash rationale' },
+      expect(withoutTimestamp(result)).toEqual([
+        { gateId: 'alpha', verdict: 'PASS', rationale: 'em-dash rationale' },
+        { gateId: 'beta', verdict: 'FAIL', rationale: 'en-dash rationale' },
       ]);
     });
 
@@ -221,10 +274,12 @@ GATE_REVIEW: PASS - Overall good`;
 not a verdict line
 [3] FAIL - Bad`;
 
-      const result = authority.parseGateVerdicts(raw);
+      const result = authority.parseGateVerdicts(raw, ['alpha', 'beta', 'gamma']);
 
       // Regex capture group stops at non-matching line
-      expect(result).toEqual([{ index: 1, passed: true, rationale: 'Good' }]);
+      expect(withoutTimestamp(result)).toEqual([
+        { gateId: 'alpha', verdict: 'PASS', rationale: 'Good' },
+      ]);
     });
 
     test('is case insensitive for verdict values', () => {
@@ -232,11 +287,11 @@ not a verdict line
 [1] pass - lowercase
 [2] Pass - mixed case`;
 
-      const result = authority.parseGateVerdicts(raw);
+      const result = authority.parseGateVerdicts(raw, ['alpha', 'beta']);
 
       expect(result).toHaveLength(2);
-      expect(result[0]?.passed).toBe(true);
-      expect(result[1]?.passed).toBe(true);
+      expect(result[0]?.verdict).toBe('PASS');
+      expect(result[1]?.verdict).toBe('PASS');
     });
 
     test('parses GATE_VERDICTS block (new format)', () => {
@@ -248,11 +303,11 @@ GATE_VERDICTS:
 
 GATE_REVIEW: FAIL - Tests missing`;
 
-      const result = authority.parseGateVerdicts(raw);
+      const result = authority.parseGateVerdicts(raw, ['quality', 'tests']);
 
-      expect(result).toEqual([
-        { index: 1, passed: true, rationale: 'Code quality met' },
-        { index: 2, passed: false, rationale: 'Missing tests' },
+      expect(withoutTimestamp(result)).toEqual([
+        { gateId: 'quality', verdict: 'PASS', rationale: 'Code quality met' },
+        { gateId: 'tests', verdict: 'FAIL', rationale: 'Missing tests' },
       ]);
     });
   });
