@@ -221,9 +221,19 @@ export class GateEnhancementService {
       context.parsedCommand?.promptArgs
     );
 
+    // B.91: ONE category value for this run, read by both the selection below and the render
+    // context further down. They used to read different fields — selection `prompt.category`,
+    // render `executionPlan.category` — and a plan whose category differs from its prompt's
+    // selects a gate at rank 20 and then drops its guidance at render, leaving the model asked to
+    // attest text it was never shown. The chain-step path (`stepResolutionInput` /
+    // `buildStepGateContext`) already reads `prompt.category` on both sides; this is that shape.
+    // The plan's value remains the fallback for a prompt carrying no category of its own.
+    const gateCategory =
+      (prompt.category ?? '').trim().length > 0 ? prompt.category : (executionPlan.category ?? '');
+
     await this.resolveIntoAccumulator(context, {
       prompt,
-      category: prompt.category ?? '',
+      category: gateCategory,
       modifiers: executionPlan.modifiers,
       frameworkId: activeFrameworkId,
       frameworkInjected,
@@ -278,8 +288,10 @@ export class GateEnhancementService {
       if (activeFrameworkId !== undefined) {
         gateCtx.framework = activeFrameworkId;
       }
-      if (executionPlan.category !== undefined) {
-        gateCtx.category = executionPlan.category;
+      // B.91: the same value the selection above asked with. Absent when the run has no category
+      // at all, which `isGateActiveForContext` reads as "this run declared none".
+      if (gateCategory.length > 0) {
+        gateCtx.category = gateCategory;
       }
       // Assigned unconditionally: an empty list and an absent one mean the same thing to
       // `isGateActiveForContext` ("this run declared nothing"), so a guard here would buy a
