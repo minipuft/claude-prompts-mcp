@@ -2,6 +2,7 @@
 title: "resource_manager surface consolidation — where resources live and what is authorable"
 date: 2026-08-27
 status: active
+publish: push+merge # owner, 2026-09-20: tail slice, once the full suite and a live drive are green
 tags: []
 ---
 
@@ -31,9 +32,9 @@ _Rewritten 2026-09-20._ The remaining-rows slice merged as #339 (`02392dbf`). Th
   `AttributePolicyEnforcer.isAllowed` (P4.73 touches them), and the two methods restored during
   the #339 merge, `VerifyActiveStateStore.hasActiveVerification` and
   `SafeConfigWriter.restoreFromBackup`, which `main`'s tests drive (owner call).
-- **Next decision:** the owner's answers on P4.64, P4.71 and the two restored methods.
-- **Constraints in force:** this plan has no `publish:` field, so each push, PR and merge needs the
-  owner's approval. The tutorial session edits `server/src/cli-shared/version-history.ts` (scope
+- **Next decision:** two discovery reports (R41 verdict consumers, R42 lost callers) decide the
+  next rows. P4.64 (R40) starts when a worker slot opens.
+- **Constraints in force:** `publish: push+merge` covers the tail slice. The tutorial session edits `server/src/cli-shared/version-history.ts` (scope
   derivation) while P4.68 edits its write path; whoever merges second re-merges and regenerates the
   four ratchet baselines. The docs release stays held behind #232.
 - **Owner's, not this slice:** the `~/.claude` rename (P5.12 second half), P5.16, then P5.13. The
@@ -615,6 +616,16 @@ Ruled before dispatching P4.43–P4.50, on `914b068c`. R23 and R24 stand as writ
 - **R39 (P4.68, planner 2026-09-20) — fix the producer, then the key, then the restore.** A rename
   or move onto an id with history renumbers the incoming rows after the target's highest version.
   A unique index on `(tenant_id, resource_type, resource_id, version)` ships with `SCHEMA_VERSION` 28. `ensureSchema()` renumbers colliding rows on restore instead of throwing or dropping them.
+- **R40 (P4.64, owner 2026-09-20) — adopt the `yaml` Document API.** A resource write keeps the
+  file's comments and the layout of keys it did not change. The dependency lands in its own PR from
+  a worktree with a real install, because every other worktree shares one `node_modules`.
+- **R41 (P4.71, owner 2026-09-20) — wire a consumer that benefits.** Standardize the shape where
+  other systems need it. A discovery row ranks the consumers and enumerates every verdict shape
+  that is rendered to text and parsed back, before any implementation row is cut.
+- **R42 (restored methods, owner 2026-09-20) — suspect a lost caller before deleting.**
+  `hasActiveVerification`, `restoreFromBackup` and `VersionHistoryService.rollback` /
+  `.deleteHistory` stay out of the P4.52 batches until a history audit says whether each lost its
+  caller, was never wired, or is surplus.
 - **R29 follow-ups (ruled on the P4.45 handoff).** A method called only from tests counts as
   unreached. A stale baseline entry fails the check.
 
