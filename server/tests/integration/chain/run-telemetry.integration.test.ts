@@ -560,6 +560,62 @@ describe('run telemetry, session counters through the ledger', () => {
     expect(text).not.toMatch(/score|complexity index|weight/i);
   });
 
+  /**
+   * P4.77: `gates fired 2 (retries 1)` says a review happened and never which gate held the
+   * run up. Now that a record carries the reviewer's per-gate verdicts (P4.76), the ledger
+   * page names them.
+   */
+  test('execution_history names each graded gate with its verdict and rationale', async () => {
+    await sessionStore.createSession('sess-verdicts', 'chain-tel', 1);
+    recordStore.append({
+      sessionId: 'sess-verdicts',
+      chainId: 'chain-tel',
+      stepNumber: 1,
+      status: 'completed',
+      startedAt: Date.now(),
+      completedAt: Date.now(),
+      gateVerdicts: [
+        {
+          gateId: 'api-documentation',
+          verdict: 'PASS',
+          rationale: 'contract annotated',
+          timestamp: Date.now(),
+        },
+        {
+          gateId: 'test-coverage',
+          verdict: 'FAIL',
+          rationale: 'error path untested',
+          timestamp: Date.now(),
+          attempt: 2,
+        },
+      ],
+    });
+
+    const text = await renderHistory(recordStore);
+
+    expect(text).toContain('✓ `api-documentation` PASS — contract annotated');
+    expect(text).toContain('✗ `test-coverage` FAIL (attempt 2) — error path untested');
+  });
+
+  test('positive control: a record with no verdicts renders the record line unchanged', async () => {
+    // Evidence only because the drive above — same handler, same formatter — does render the
+    // lines. The single difference is the `gateVerdicts` argument.
+    await sessionStore.createSession('sess-plain', 'chain-tel', 1);
+    recordStore.append({
+      sessionId: 'sess-plain',
+      chainId: 'chain-tel',
+      stepNumber: 1,
+      status: 'completed',
+      startedAt: Date.now(),
+      completedAt: Date.now(),
+    });
+
+    const text = await renderHistory(recordStore);
+
+    expect(text).toContain('`completed` step 1');
+    expect(text).not.toMatch(/^ {2}- [✓✗]/m);
+  });
+
   test('a session with only in-flight records renders no telemetry line', async () => {
     await sessionStore.createSession('sess-live', 'chain-tel', 3);
     recordStore.append({

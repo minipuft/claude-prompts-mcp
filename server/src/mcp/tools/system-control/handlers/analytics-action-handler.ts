@@ -114,8 +114,48 @@ export class AnalyticsActionHandler extends ActionHandler {
     return this.createMinimalSystemResponse(response, 'switch_history');
   }
 
+  /**
+   * A gate's pass/fail tally across the ledger page, plus the number of reviewed records.
+   *
+   * `gateValidationCount` had no writer anywhere — it was initialized to `0` here and in the
+   * router and read only by the report, so "Gate Validations: 0" and "Gate Adoption Rate: 0%"
+   * were printed on a server that had run hundreds of gated steps (P4.77). It is now refreshed
+   * from `execution_records`, which since P4.76 carries the reviewer's per-gate verdicts.
+   *
+   * Refreshed on read rather than incremented on write: the ledger already holds every verdict
+   * with its own scope filter, and a second running counter would be a fact with two sources
+   * that drift apart on restart, since the counter is in memory and the ledger is not.
+   */
+  private tallyGateVerdicts(): {
+    reviewedRecords: number;
+    byGate: Map<string, { passed: number; failed: number }>;
+  } {
+    const byGate = new Map<string, { passed: number; failed: number }>();
+    let reviewedRecords = 0;
+
+    for (const record of this.context.executionRecordStore?.queryRecent(
+      undefined,
+      this.requestScope
+    ) ?? []) {
+      const verdicts = record.gateVerdicts;
+      if (verdicts.length === 0) continue;
+      reviewedRecords += 1;
+      for (const verdict of verdicts) {
+        const tally = byGate.get(verdict.gateId) ?? { passed: 0, failed: 0 };
+        if (verdict.verdict === 'PASS') tally.passed += 1;
+        else tally.failed += 1;
+        byGate.set(verdict.gateId, tally);
+      }
+    }
+
+    return { reviewedRecords, byGate };
+  }
+
   private async getAnalytics(args: { include_history?: boolean }): Promise<ToolResponse> {
     const { include_history = false } = args;
+
+    const gateTally = this.tallyGateVerdicts();
+    this.context.systemAnalytics.gateValidationCount = gateTally.reviewedRecords;
 
     const analytics = this.context.systemAnalytics;
     const successRate = this.getSuccessRate();
@@ -149,6 +189,18 @@ export class AnalyticsActionHandler extends ActionHandler {
         ? Math.round((analytics.gateValidationCount / analytics.totalExecutions) * 100)
         : 0
     }%\n`;
+
+    // Per gate, not just a total: a 90% adoption rate over one gate that always passes and one
+    // that always fails is two different systems, and the total cannot tell them apart. Omitted
+    // entirely when no record carries a verdict, so the section appears only once there is
+    // something in it.
+    if (gateTally.byGate.size > 0) {
+      response += '\n**Per-Gate Outcomes** (reviewed steps in the ledger)\n\n';
+      for (const [gateId, tally] of gateTally.byGate) {
+        response += `- \`${gateId}\`: ${tally.passed} passed / ${tally.failed} failed\n`;
+      }
+    }
+    response += '\n';
 
     if (analytics.memoryUsage) {
       response += '## 💾 System Resources\n\n';

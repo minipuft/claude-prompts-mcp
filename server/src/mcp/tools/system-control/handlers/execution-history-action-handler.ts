@@ -114,11 +114,32 @@ function formatRecords(records: readonly ExecutionRecord[]): string {
       lines.push(
         `- \`${record.status}\` ${step}${prompt} · ${new Date(record.startedAt).toISOString()}${elapsed}${error}`
       );
+      lines.push(...formatGateVerdictLines(record));
     }
     lines.push('');
   }
 
   return lines.join('\n');
+}
+
+/**
+ * One indented line per gate the reviewer graded on this record, or nothing at all.
+ *
+ * Empty for every record whose `gateVerdicts` is `[]` — which until P4.76 was every record
+ * ever written, so an existing ledger reads byte-identical and a new one gains the detail.
+ * The gate id is what makes a row actionable: `gates fired 3 (retries 1)` on the summary line
+ * says a review happened, never which gate held the run up.
+ */
+function formatGateVerdictLines(record: ExecutionRecord): string[] {
+  return record.gateVerdicts.map((verdict) => {
+    const icon = verdict.verdict === 'PASS' ? '✓' : '✗';
+    const attempt = verdict.attempt !== undefined ? ` (attempt ${verdict.attempt})` : '';
+    const rationale =
+      verdict.rationale !== undefined && verdict.rationale.length > 0
+        ? ` — ${verdict.rationale}`
+        : '';
+    return `  - ${icon} \`${verdict.gateId}\` ${verdict.verdict}${attempt}${rationale}`;
+  });
 }
 
 /**
