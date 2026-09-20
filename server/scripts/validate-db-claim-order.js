@@ -27,26 +27,33 @@
  *      requires it, so a site without one is a cast around the type, not a design. (Before B.62
  *      this rule carried an `ACCEPTED_INHERITORS` list; B.62 satisfied all of it.)
  *   3. **No runtime state path segment — `runtime-state` or `state.db` — is composed outside the
- *      two declared owners, `runtime/paths.ts` and `shared/utils/runtime-state-location.ts`.** A
- *      string literal naming one — `'runtime-state'`, `"…/state.db"`, a template ending
- *      `/runtime-state` — is how both defects above were spelled, and it is spelled that way
- *      whatever variable it is joined to, so the rule keys on the SEGMENT, not on the name
- *      `serverRoot`. `state.db` is in the list because a second hand-join of the file name onto a
- *      correctly resolved directory is still a second derivation of one path, and B.62 briefly had
- *      one. A module that needs the directory asks `PathResolver.getRuntimeStatePath()` (in
- *      `runtime/`) or `ConfigManager.getRuntimeStateDirectory()`; one that needs the database asks
- *      `getStateDatabasePath()` on either. The second owner exists because the standalone CLI
- *      (`cli-shared/version-history.ts`) needs the same two segment NAMES and cannot import
- *      `runtime/paths.ts` (`cli-shared-no-runtime` in `.dependency-cruiser.cjs`) — it imports the
- *      two exported constants instead of retyping the literals, which is what made B.70's fix
- *      (resolving via `MCP_RUNTIME_ROOT`/`MCP_WORKSPACE` instead of disk discovery) satisfy this
- *      rule without a declared-reader exception. `'verify-state.db'` is a different file and does
- *      not match: the segment must start at a quote, backtick or `/`. A file that only DISCOVERS
- *      an existing runtime-state directory without importing these constants, rather than owning
- *      or being handed the segment names, is declared in `RUNTIME_STATE_READERS`, audited by the
- *      shared `lib/exception-hygiene.js` harness — an entry whose file stopped naming the segment
- *      is `satisfied` and must be deleted; one the `git grep … -- src` scan cannot reach is
- *      `unreachable` and must NOT be deleted until the scan is widened.
+ *      one declared owner, `shared/utils/runtime-state-location.ts`.** A string literal naming
+ *      one — `'runtime-state'`, `"…/state.db"`, a template ending `/runtime-state` — is how both
+ *      defects above were spelled, and it is spelled that way whatever variable it is joined to,
+ *      so the rule keys on the SEGMENT, not on the name `serverRoot`. `state.db` is in the list
+ *      because a second hand-join of the file name onto a correctly resolved directory is still a
+ *      second derivation of one path, and B.62 briefly had one. A module that needs the directory
+ *      asks `PathResolver.getRuntimeStatePath()` (in `runtime/`) or
+ *      `ConfigManager.getRuntimeStateDirectory()`; one that needs the database asks
+ *      `getStateDatabasePath()` on either — both now compose the path from
+ *      `RUNTIME_STATE_DIR_NAME` / `STATE_DB_FILE_NAME` imported from the owner, rather than
+ *      naming either segment themselves. `runtime/paths.ts` was itself a second declared owner
+ *      until B.70's follow-up (2026-09-19): it hand-typed the same two literals the shared module
+ *      was minted to hold, and this rule tolerated both, so the constants could have drifted from
+ *      the literals with nothing to fail. There is one owner now, and `runtime/paths.ts` imports
+ *      it like any other consumer. The owner exists in `shared/` rather than `runtime/` because
+ *      the standalone CLI (`cli-shared/version-history.ts`) needs the same two segment NAMES and
+ *      cannot import `runtime/paths.ts` (`cli-shared-no-runtime` in `.dependency-cruiser.cjs`) —
+ *      it imports the two exported constants instead of retyping the literals, which is what made
+ *      B.70's fix (resolving via `MCP_RUNTIME_ROOT`/`MCP_WORKSPACE` instead of disk discovery)
+ *      satisfy this rule without a declared-reader exception. `'verify-state.db'` is a different
+ *      file and does not match: the segment must start at a quote, backtick or `/`. A file that
+ *      only DISCOVERS an existing runtime-state directory without importing these constants,
+ *      rather than owning or being handed the segment names, is declared in
+ *      `RUNTIME_STATE_READERS`, audited by the shared `lib/exception-hygiene.js` harness — an
+ *      entry whose file stopped naming the segment is `satisfied` and must be deleted; one the
+ *      `git grep … -- src` scan cannot reach is `unreachable` and must NOT be deleted until the
+ *      scan is widened.
  *
  * WHAT IT DOES NOT CLAIM
  * Comment lines are skipped, so a path composed on a line that starts with `*` or `//` is not seen.
@@ -72,16 +79,14 @@ const CALL = 'SqliteEngine.getInstance(';
 /** Path segments only a declared owner may compose. `.` is escaped where the pattern is built. */
 const SEGMENTS = ['runtime-state', 'state.db'];
 const SEGMENT_LABEL = SEGMENTS.join(' / ');
-/** The module that composes the runtime state directory against the resolved runtime root. */
-const RUNTIME_STATE_OWNER = 'src/runtime/paths.ts';
 /**
- * The module that names the same two segments as exported constants, so a consumer that cannot
- * import `runtime/paths.ts` — the standalone CLI, via `cli-shared/version-history.ts` — imports
- * the names instead of retyping the literals. Declared as a second owner, not a reader: this file
- * PLACES the segment names (it is where they are defined), it does not merely discover them.
+ * The one module that names the two segments as exported constants. `runtime/paths.ts` and the
+ * standalone CLI (`cli-shared/version-history.ts`, which cannot import `runtime/paths.ts` — see
+ * the header) both import from here instead of retyping the literals, so there is exactly one
+ * place a hand-typed literal is allowed to live.
  */
-const RUNTIME_STATE_SHARED_NAMES = 'src/shared/utils/runtime-state-location.ts';
-const RUNTIME_STATE_OWNERS = new Set([RUNTIME_STATE_OWNER, RUNTIME_STATE_SHARED_NAMES]);
+const RUNTIME_STATE_OWNER = 'src/shared/utils/runtime-state-location.ts';
+const RUNTIME_STATE_OWNERS = new Set([RUNTIME_STATE_OWNER]);
 
 /**
  * Files that name a runtime state segment to FIND an existing path, never to place one.
@@ -249,7 +254,7 @@ function run() {
           'root, named once — ask getRuntimeStatePath() / getStateDatabasePath() (PathResolver ' +
           'in runtime/) or getRuntimeStateDirectory() / getStateDatabasePath() (ConfigManager); ' +
           'never join it yourself. A consumer that cannot import runtime/paths.ts imports the ' +
-          `segment names from ${RUNTIME_STATE_SHARED_NAMES} instead.`
+          `segment names from ${RUNTIME_STATE_OWNER} instead.`
       );
     }
   }
@@ -359,6 +364,29 @@ function selfTest() {
     } else {
       console.log(`✔ self-test: ${name} is accepted`);
     }
+  }
+
+  // Rule 3's owner set must hold exactly one file, or two literals can drift apart again.
+  // `runtime/paths.ts` was a declared owner until B.70's follow-up (2026-09-19) — this is the
+  // regression control: a literal planted there must now be rejected the same as anywhere else,
+  // since `run()`'s rule-3 loop only exempts a file that is in `RUNTIME_STATE_OWNERS` or
+  // `RUNTIME_STATE_READERS` (empty here), and neither exempts `runtime/paths.ts` any more.
+  if (RUNTIME_STATE_OWNERS.has('src/runtime/paths.ts')) {
+    console.error(
+      '✖ self-test: runtime/paths.ts is still exempt from the literal check — a hand-typed ' +
+        'segment there would no longer fail, defeating the single-owner rule'
+    );
+    failures += 1;
+  } else {
+    console.log('✔ self-test: a planted literal in runtime/paths.ts is rejected (not an owner)');
+  }
+  if (!RUNTIME_STATE_OWNERS.has(RUNTIME_STATE_OWNER)) {
+    console.error(
+      `✖ self-test: the declared owner ${RUNTIME_STATE_OWNER} is not exempt from itself`
+    );
+    failures += 1;
+  } else {
+    console.log(`✔ self-test: the declared owner ${RUNTIME_STATE_OWNER} is exempt from itself`);
   }
 
   // dbPath detection must distinguish the two call shapes, or rule 2 is noise.

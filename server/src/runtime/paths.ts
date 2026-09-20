@@ -33,6 +33,10 @@ import {
   type PathFallback,
   type PathSetting,
 } from '#shared/utils/path-setting.js';
+import {
+  RUNTIME_STATE_DIR_NAME,
+  STATE_DB_FILE_NAME,
+} from '#shared/utils/runtime-state-location.js';
 
 /**
  * CLI flag values parsed from command line arguments
@@ -194,13 +198,13 @@ export class PathResolver {
 
   /** Directory containing SQLite and other mutable runtime state. */
   getRuntimeStatePath(): string {
-    this.cache.runtimeState ??= join(this.getRuntimeRoot(), 'runtime-state');
+    this.cache.runtimeState ??= join(this.getRuntimeRoot(), RUNTIME_STATE_DIR_NAME);
     return this.cache.runtimeState;
   }
 
   /** The server's SQLite database — the one path every `SqliteEngine.getInstance` call names. */
   getStateDatabasePath(): string {
-    return join(this.getRuntimeStatePath(), 'state.db');
+    return join(this.getRuntimeStatePath(), STATE_DB_FILE_NAME);
   }
 
   /** Resolve a configured log directory beneath the writable runtime root. */
