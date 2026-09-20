@@ -42,27 +42,16 @@ describe('Tenant Isolation', () => {
   });
 
   describe('ExecutionContext continuity scope support', () => {
-    test('defaults to "default" tenant', () => {
-      const ctx = new ExecutionContext({ command: 'test' }, logger);
-
-      expect(ctx.getContinuityScopeId()).toBe('default');
-      expect(ctx.state.scope.source).toBe('default');
-    });
-
-    test('allows setting continuity scope ID', () => {
-      const ctx = new ExecutionContext({ command: 'test' }, logger);
-
-      ctx.setContinuityScopeId('tenant-123', 'header');
-
-      expect(ctx.getContinuityScopeId()).toBe('tenant-123');
-      expect(ctx.state.scope.source).toBe('header');
-    });
-
+    // getContinuityScopeId()/setContinuityScopeId() were deleted at P4.52: zero production
+    // callers, and their only test coverage was this describe block testing itself. The
+    // duplicate `state.scope` field they wrote was deleted at P4.70 — `execution-telemetry.ts`
+    // now reads `state.identity.context?.identitySource` for the `cpm.scope.source` attribute,
+    // so `state.identity`'s default shape is what stays worth asserting.
     test('tenant state is initialized in pipeline state', () => {
       const ctx = new ExecutionContext({ command: 'test' }, logger);
 
-      expect(ctx.state.scope).toBeDefined();
-      expect(ctx.state.scope.continuityScopeId).toBe('default');
+      expect(ctx.state.identity).toBeDefined();
+      expect(ctx.state.identity.continuityScopeId).toBe('default');
     });
   });
 

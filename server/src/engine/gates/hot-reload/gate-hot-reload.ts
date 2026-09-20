@@ -342,31 +342,6 @@ export class GateHotReloadCoordinator {
       throw error;
     }
   }
-
-  /**
-   * Get hot reload statistics
-   */
-  getStats(): GateHotReloadStats {
-    return { ...this.stats };
-  }
-
-  /**
-   * Reset statistics
-   */
-  resetStats(): void {
-    this.stats = {
-      reloadsAttempted: 0,
-      reloadsSucceeded: 0,
-      reloadsFailed: 0,
-    };
-  }
-
-  /**
-   * Get the definition loader being used
-   */
-  getLoader(): GateDefinitionLoader {
-    return this.loader;
-  }
 }
 
 /**

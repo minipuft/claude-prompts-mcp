@@ -8,6 +8,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
+import { overlayDecidedYamlKeys } from '../../../shared/yaml-key-overlay.js';
 import { OperationResult, PromptResourceDependencies } from '../core/types.js';
 import { validateCategoryName } from '../utils/validation.js';
 
@@ -171,6 +172,44 @@ export interface PromptWriteIntent {
   toolBinding: 'replace' | 'add';
   /** Tool ids whose `tools/{id}/` directory this write DELETES rather than merely unbinds. */
   removedToolIds: readonly string[];
+}
+
+/**
+ * The `prompt.yaml` keys a write of each `promptData` key decides, where they differ from the key
+ * itself. A message is two keys in the file: the `*File` pointer the writer emits, and the inline
+ * form a flat or hand-authored prompt may declare instead. Deciding one without the other would
+ * leave the file naming two sources for one message.
+ */
+const PROMPT_YAML_KEYS_BY_DATA_KEY: Readonly<Record<string, readonly string[]>> = {
+  systemMessage: ['systemMessageFile', 'systemMessage'],
+  userMessageTemplate: ['userMessageTemplateFile', 'userMessageTemplate'],
+};
+
+/**
+ * Which `prompt.yaml` keys this write is allowed to change (P4.57).
+ *
+ * Every other key stays exactly as the file declares it, including keys the writer has no model
+ * for at all. `ownsEveryModeledKey` is a write with no prior directory: the writer produces the
+ * message files itself, so it must decide their pointers too, even under a narrowed scope.
+ */
+export function decidedPromptYamlKeys(
+  suppliedKeys: ReadonlySet<string>,
+  writeIntent: PromptWriteIntent,
+  ownsEveryModeledKey: boolean
+): Set<string> {
+  const dataKeys = ownsEveryModeledKey
+    ? [...ALL_PROMPT_DATA_KEYS]
+    : [...suppliedKeys, ...writeIntent.unsetKeys];
+  if (writeIntent.removedToolIds.length > 0) {
+    dataKeys.push('tools');
+  }
+  const decided = new Set<string>(['id']);
+  for (const dataKey of dataKeys) {
+    for (const yamlKey of PROMPT_YAML_KEYS_BY_DATA_KEY[dataKey] ?? [dataKey]) {
+      decided.add(yamlKey);
+    }
+  }
+  return decided;
 }
 
 /**
@@ -922,6 +961,37 @@ export class FileOperations {
     // it a valid prompt. `suppliedKeys` narrows an EXISTING prompt's edit surface; it does not
     // narrow what a fresh directory needs to become one.
     const isFreshDirectory = priorDir === null;
+
+    // Read ahead of the `writesYaml` decision below (moved out of the `if (writesYaml)` block
+    // that used to gate it) — P4.66 needs it to answer a question `suppliedKeys` alone cannot:
+    // does the file on disk declare a message INLINE (no `*File` pointer)? Same condition as
+    // before (`priorYamlPath !== null`), so a fresh directory or a plan with no prior yaml still
+    // reads nothing new; every other case now reads what it would have read anyway once
+    // `writesYaml` (below) was decided true, just a few lines earlier.
+    const existingYaml =
+      priorYamlPath !== null ? await this.readExistingPromptYaml(priorYamlPath) : undefined;
+
+    // A supplied `userMessageTemplate`/`systemMessage` whose CURRENT file declares it inline
+    // forces `prompt.yaml` open even though neither is a `PROMPT_YAML_RESIDENT_KEYS` member: the
+    // inline key keeps winning over a rewritten `.md` file until the yaml is rewritten to point at
+    // it (P4.66 — `resource_manager update` patching `user_message_template` on a
+    // hand-authored inline-template prompt wrote `user-message.md` and left the inline key
+    // rendering). A prompt already in file-pointer form — every prompt this writer itself
+    // produces, since `buildPromptYamlData` always emits the pointer once it touches the yaml —
+    // needs no such forcing, which is what keeps the ordinary case byte-identical (write-scope
+    // table below).
+    const declaresInline = (dataKey: 'userMessageTemplate' | 'systemMessage'): boolean => {
+      const fileKey = PROMPT_YAML_KEYS_BY_DATA_KEY[dataKey]?.[0] as string;
+      return (
+        existingYaml !== undefined &&
+        existingYaml[fileKey] === undefined &&
+        existingYaml[dataKey] !== undefined
+      );
+    };
+    const convertsInlineMessage =
+      (suppliedKeys.has('userMessageTemplate') && declaresInline('userMessageTemplate')) ||
+      (suppliedKeys.has('systemMessage') && declaresInline('systemMessage'));
+
     // P2.1: any `unset` forces the `prompt.yaml` rewrite, including `systemMessage` — which is
     // NOT a `PROMPT_YAML_RESIDENT_KEYS` member (its text lives in its own file) but still owns a
     // key IN the yaml, `systemMessageFile`. Without this clause, clearing it narrowed the write
@@ -930,7 +1000,8 @@ export class FileOperations {
     const writesYaml =
       isFreshDirectory ||
       unsetKeys.size > 0 ||
-      PROMPT_YAML_RESIDENT_KEYS.some((key) => suppliedKeys.has(key));
+      PROMPT_YAML_RESIDENT_KEYS.some((key) => suppliedKeys.has(key)) ||
+      convertsInlineMessage;
     const writesUserMessage = isFreshDirectory || suppliedKeys.has('userMessageTemplate');
     // P2.1. `systemMessage` is the one unsettable field with a FILE behind it, so clearing it is
     // two operations, not one: `buildPromptYamlData` drops `systemMessageFile` (its guard is
@@ -943,19 +1014,17 @@ export class FileOperations {
       !removesSystemMessage &&
       (isFreshDirectory || suppliedKeys.has('systemMessage'));
 
-    // Read only when `prompt.yaml` is actually going to be rewritten — field preservation feeds
-    // ONLY that write, and reading it otherwise is I/O a scoped-out update has no use for. This is
-    // also the acceptance mechanism for byte-identity: when `writesYaml` is false, `prompt.yaml`
-    // is never opened by this call at all.
     const files: PlannedPromptFile[] = [];
     if (writesYaml) {
-      const existingYaml =
-        priorYamlPath !== null ? await this.readExistingPromptYaml(priorYamlPath) : undefined;
-      const promptYamlData = this.buildPromptYamlData(
-        promptData as Record<string, unknown>,
+      const promptYamlData = overlayDecidedYamlKeys(
         existingYaml,
-        suppliedKeys,
-        writeIntent
+        this.buildPromptYamlData(
+          promptData as Record<string, unknown>,
+          existingYaml,
+          suppliedKeys,
+          writeIntent
+        ),
+        decidedPromptYamlKeys(suppliedKeys, writeIntent, isFreshDirectory)
       );
       files.push({
         relativePath: 'prompt.yaml',

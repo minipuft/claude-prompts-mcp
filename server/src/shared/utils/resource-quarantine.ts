@@ -14,8 +14,8 @@
  * at `modules/prompts/quarantine.ts` (P4.9). The two sibling loaders are in `engine/` and the two
  * consumers P4.14 names are in `infra/`, and `.dependency-cruiser.cjs` makes both of those an
  * `error`-severity value import from a lower layer into `modules/` — so the collection could not be
- * generalized where it stood. Layer 0 is the only place all five can reach, and `shared/utils`
- * already hosts stateful collections of exactly this shape (`ResourceCache`, `SimpleRegistry`).
+ * generalized where it stood. Layer 0 is the only place all five can reach, and this module hosts
+ * its own stateful collection rather than importing one down from a higher layer.
  * Nothing here imports upward, which is what keeps that true.
  *
  * WHY A SEPARATE COLLECTION RATHER THAN A FLAG. Recording the failure ON the catalog entry would
@@ -210,10 +210,6 @@ export class ResourceQuarantine implements QuarantineView {
     for (const [key, record] of this.records) {
       if (record.type === type && record.root === root) this.records.delete(key);
     }
-  }
-
-  clear(): void {
-    this.records.clear();
   }
 
   list(): readonly QuarantinedResource[] {

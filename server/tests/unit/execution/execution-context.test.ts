@@ -136,7 +136,7 @@ describe('ExecutionContext pipeline state management', () => {
   test('initializes FrameworkDecisionAuthority', () => {
     const context = new ExecutionContext(baseRequest);
     expect(context.frameworkAuthority).toBeInstanceOf(FrameworkDecisionAuthority);
-    expect(context.frameworkAuthority.hasDecided()).toBe(false);
+    expect(context.frameworkAuthority.getCachedDecision()).toBeNull();
   });
 
   test('accepts optional logger for state management', () => {
@@ -170,20 +170,19 @@ describe('ExecutionContext pipeline state management', () => {
   });
 
   test('diagnostics accumulator collects across stages', () => {
-    const context = new ExecutionContext(baseRequest);
+    const context = new ExecutionContext(baseRequest, mockLogger as any);
 
     context.diagnostics.info('Stage1', 'Info message');
     context.diagnostics.warn('Stage2', 'Warning message');
     context.diagnostics.error('Stage3', 'Error message', 'ERR_CODE');
 
+    // Nothing in production reads the accumulator back (P4.52) — `size` is the one
+    // remaining live-observable count; per-entry detail is verified through the
+    // logger side effect `add()` always performs.
     expect(context.diagnostics.size).toBe(3);
-    expect(context.diagnostics.hasErrors()).toBe(true);
-    expect(context.diagnostics.hasWarnings()).toBe(true);
-
-    const summary = context.diagnostics.getSummary();
-    expect(summary.info).toBe(1);
-    expect(summary.warning).toBe(1);
-    expect(summary.error).toBe(1);
+    expect(mockLogger.info).toHaveBeenCalledWith('[Stage1] Info message', {});
+    expect(mockLogger.warn).toHaveBeenCalledWith('[Stage2] Warning message', {});
+    expect(mockLogger.error).toHaveBeenCalledWith('[Stage3] Error message', {});
   });
 
   test('framework authority caches decision', () => {

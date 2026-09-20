@@ -304,17 +304,10 @@ GATE_REVIEW: FAIL - Tests missing`;
     });
   });
 
-  describe('getPendingReview', () => {
-    test('delegates to session manager', () => {
-      const mockReview = { combinedPrompt: 'test', gateIds: ['g1'] };
-      mockSessionManager.getPendingGateReview.mockReturnValue(mockReview);
-
-      const result = authority.getPendingReview('session-1');
-
-      expect(result).toBe(mockReview);
-      expect(mockSessionManager.getPendingGateReview).toHaveBeenCalledWith('session-1');
-    });
-  });
+  // getPendingReview() was deleted at P4.52 — every real caller (step-capture-service.ts,
+  // gate-verdict-processor.ts, 13-session-stage.ts, 20-gate-review-stage.ts, and this
+  // class's own internals) calls chainSessionStore.getPendingGateReview() directly; the
+  // wrapper had zero adopters.
 
   describe('createPendingReview', () => {
     test('creates review with provided options', async () => {
@@ -649,11 +642,7 @@ GATE_REVIEW: FAIL - Tests missing`;
     });
   });
 
-  describe('clearPendingReview', () => {
-    test('delegates to session manager', async () => {
-      await authority.clearPendingReview('session-1');
-
-      expect(mockSessionManager.clearPendingGateReview).toHaveBeenCalledWith('session-1');
-    });
-  });
+  // clearPendingReview() was deleted at P4.52 — every real caller, including this class's
+  // own recordOutcome()/resolveAction() internals, calls
+  // chainSessionStore.clearPendingGateReview() directly; the wrapper had zero adopters.
 });

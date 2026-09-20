@@ -146,8 +146,9 @@ const EXCLUDED_CATEGORY_DIRECTORY_NAMES: ReadonlySet<string> = new Set(['backup'
  * are {@link isIgnoredPromptEntryName} and {@link isReservedPromptDirectoryName}. Conversely
  * `tools` IS a category at the root, so this predicate does not include the reserved names.
  *
- * `cli/src/lib/workspace.ts` mirrors this rule, because the standalone CLI cannot import server
- * source; its tests compare the mirror against this function.
+ * `cli/src/lib/workspace.ts` calls this function itself rather than mirroring it: the CLI reaches
+ * server source through its `@shared/*` alias, and esbuild bundles it into `cpm`, so there is one
+ * rule and no copy to keep in step.
  */
 export function isExcludedCategoryDirectoryName(entryName: string): boolean {
   return isIgnoredPromptEntryName(entryName) || EXCLUDED_CATEGORY_DIRECTORY_NAMES.has(entryName);

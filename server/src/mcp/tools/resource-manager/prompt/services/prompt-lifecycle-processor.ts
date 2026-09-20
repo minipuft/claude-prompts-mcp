@@ -316,8 +316,24 @@ export class PromptLifecycleProcessor {
     // to — reported `Moved prompt '<id>' from '<id>' to 'general'` (nothing moved), and left the
     // broken file exactly as it was. The record supplies the true category and root, so the write
     // lands on the file that is actually broken.
+    // Read once and reused below (`resolveRepairTarget`, the P4.59 refusal): a second
+    // `String(args.id)` call site would be a second unsafe access on the same `any` for no
+    // reason `requestedId` does not already cover.
+    const requestedId = String(args.id);
     const repairTarget =
-      currentPrompt === undefined ? this.resolveRepairTarget(String(args.id)) : undefined;
+      currentPrompt === undefined ? this.resolveRepairTarget(requestedId) : undefined;
+
+    // P4.59 — an id that is neither loaded nor quarantined is refused HERE, before any patch or
+    // diagnosis logic runs. Without this, `updatePrompt` fell through to the same path a repair
+    // uses (`canonicalPromptSnapshot(id, undefined)` — an empty draft, `category: 'general'`) for
+    // an id nobody asked to create, and the first thing to notice was whichever check the empty
+    // draft failed first: a `patch` against `id:"plan_table"` (only addressable as
+    // `implementation_plan/plan_table`) reached `applyTemplatePatches` against an empty
+    // `userMessageTemplate` and refused `anchor_not_found` — a true statement about an anchor
+    // that was never going to exist, pointing at the wrong cause.
+    if (currentPrompt === undefined && repairTarget === undefined) {
+      return this.refuseUnknownPromptId(requestedId);
+    }
     const concurrencyRefusal = await this.checkExpectedVersion(args as PromptResourceInput);
     if (concurrencyRefusal !== undefined) {
       return concurrencyRefusal;
@@ -978,6 +994,32 @@ export class PromptLifecycleProcessor {
     return (
       `\n🚧 **Still quarantined**: \`${repairTarget.path}\` did not load after the write — ` +
       `the prompt remains absent from the catalog.\n`
+    );
+  }
+
+  /**
+   * Refuse an `update` whose id is neither loaded nor quarantined (P4.59) — named as unknown,
+   * ahead of any patch or diagnosis logic that would otherwise reach for content that does not
+   * exist. A bare id that matches the last `/`-segment of exactly one loaded nested chain step is
+   * the id-convention trap this row exists to catch (a step is only addressable by its composite
+   * id, `parent/step`): named as a suggestion. Several matches are listed rather than guessed at.
+   */
+  private refuseUnknownPromptId(id: string): ToolResponse {
+    const nestedMatches = this.getConvertedPrompts()
+      .map((prompt) => prompt.id)
+      .filter((promptId) => promptId.includes('/') && promptId.split('/').pop() === id);
+
+    const suggestion =
+      nestedMatches.length === 1
+        ? `\n\n💡 \`${id}\` is only addressable by its composite id — did you mean \`${nestedMatches[0]}\`?`
+        : nestedMatches.length > 1
+          ? `\n\n💡 \`${id}\` matches several nested steps, each only addressable by its composite ` +
+            `id: ${nestedMatches.map((match) => `\`${match}\``).join(', ')}.`
+          : '';
+
+    return this.blockedUpdate(
+      `❌ **Prompt update blocked**: unknown prompt \`${id}\`. Nothing was written and no ` +
+        `version was consumed.${suggestion}`
     );
   }
 

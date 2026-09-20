@@ -69,7 +69,7 @@ describe('CLI never owns state.db schema', () => {
   it('guard 1: does not even create state.db when the server has never run', async () => {
     // Both a write and a read, because only the write path called ensure_schema.
     expect(saveVersion(promptDir, 'prompt', 'demo', { id: 'demo' }).success).toBe(false);
-    expect(loadHistory(promptDir)).toBeNull();
+    expect(loadHistory(promptDir, { resourceType: 'prompt', resourceId: 'demo' })).toBeNull();
 
     await expect(fs.stat(dbPath())).rejects.toThrow();
   });
@@ -105,6 +105,9 @@ describe('CLI never owns state.db schema', () => {
 
     const saved = saveVersion(promptDir, 'prompt', 'demo', { id: 'demo' }, { description: 'v1' });
     expect(saved.success).toBe(true);
-    expect(loadHistory(promptDir)?.versions[0]?.description).toBe('v1');
+    expect(
+      loadHistory(promptDir, { resourceType: 'prompt', resourceId: 'demo' })?.versions[0]
+        ?.description
+    ).toBe('v1');
   });
 });

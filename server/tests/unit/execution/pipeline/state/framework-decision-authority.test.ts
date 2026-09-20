@@ -21,15 +21,15 @@ describe('FrameworkDecisionAuthority', () => {
   });
 
   describe('initial state', () => {
-    test('hasDecided returns false before first decision', () => {
-      expect(authority.hasDecided()).toBe(false);
-    });
-
     test('getCachedDecision returns null before first decision', () => {
       expect(authority.getCachedDecision()).toBeNull();
     });
   });
 
+  // hasDecided()/reset() were deleted at P4.52 — zero production callers, and the caching
+  // behavior they exposed is already covered live-method-first below: object identity
+  // across two decide() calls, and getCachedDecision() (which stays; response-assembler.ts,
+  // gate-verdict-processor.ts, and 19-phase-guard-verification-stage.ts all call it).
   describe('decision caching', () => {
     test('returns cached decision on subsequent calls', () => {
       const input: FrameworkDecisionInput = {
@@ -40,7 +40,6 @@ describe('FrameworkDecisionAuthority', () => {
       const decision2 = authority.decide(input);
 
       expect(decision1).toBe(decision2); // Same object reference
-      expect(authority.hasDecided()).toBe(true);
     });
 
     test('getCachedDecision returns the cached decision after decide()', () => {
@@ -53,27 +52,6 @@ describe('FrameworkDecisionAuthority', () => {
 
       expect(cached).not.toBeNull();
       expect(cached?.frameworkId).toBe('react');
-    });
-
-    test('reset clears the cached decision', () => {
-      authority.decide({ globalActiveFramework: 'CAGEERF' });
-      expect(authority.hasDecided()).toBe(true);
-
-      authority.reset();
-      expect(authority.hasDecided()).toBe(false);
-      expect(authority.getCachedDecision()).toBeNull();
-    });
-
-    test('decision can be recomputed after reset', () => {
-      const input1: FrameworkDecisionInput = { globalActiveFramework: 'CAGEERF' };
-      const decision1 = authority.decide(input1);
-      expect(decision1.frameworkId).toBe('cageerf');
-
-      authority.reset();
-
-      const input2: FrameworkDecisionInput = { globalActiveFramework: 'ReACT' };
-      const decision2 = authority.decide(input2);
-      expect(decision2.frameworkId).toBe('react');
     });
   });
 

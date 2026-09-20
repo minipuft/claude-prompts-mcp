@@ -4,8 +4,10 @@ Tests for prompt-id display fidelity (2026-08-20).
 Resolution is case-insensitive on both sides -- command-parser.ts folds case to
 find the prompt and then returns `found.id` -- so the folded lookup key is an
 implementation detail. The hook used to print that key, which meant a suggestion
-told the user to type a name that does not exist: `strategicImplement` echoed as
-"strategicimplement", and a typo of `diagnosisCard` suggested "diagnosiscard".
+told the user to type a name that does not exist: a camelCase id such as
+`releasePlanner` echoed as "releaseplanner", and a typo of `reviewCard` suggested
+"reviewcard". The ids below are fixtures, not catalog entries: bundled ids are
+snake_case, but the API still accepts case-bearing ids, so a library can hold one.
 
 The rule these tests pin: DISPLAY RESOLVES THROUGH THE RECORD. `authored_id()`
 takes the record where the caller has one, so there is no folded key available to
@@ -29,14 +31,14 @@ _spec = importlib.util.spec_from_file_location("prompt_suggest", HOOKS_DIR / "pr
 prompt_suggest = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(prompt_suggest)
 
-# Two of the 99 live ids carry case; both are modelled here.
+# Two case-bearing ids, the shape display fidelity exists for.
 CATALOG = {
-    "strategicImplement": {
-        "id": "strategicImplement",
-        "description": "Strategic implementation",
+    "releasePlanner": {
+        "id": "releasePlanner",
+        "description": "Release planner",
         "arguments": [{"name": "task", "type": "string", "required": True}],
     },
-    "diagnosisCard": {"id": "diagnosisCard", "description": "Diagnosis card", "arguments": []},
+    "reviewCard": {"id": "reviewCard", "description": "Review card", "arguments": []},
     "notes": {"id": "notes", "description": "Notes", "arguments": []},
 }
 
@@ -59,7 +61,7 @@ def stub_catalog(monkeypatch):
     monkeypatch.setattr(
         prompt_suggest,
         "fuzzy_match_prompt_id",
-        lambda pid: ["diagnosisCard"] if pid.lower().startswith("diagnosis") else [],
+        lambda pid: ["reviewCard"] if pid.lower().startswith("review") else [],
     )
 
 
@@ -76,14 +78,14 @@ def context_of(out):
 
 class TestAuthoredIdHelper:
     def test_resolves_to_the_registry_spelling(self, stub_catalog):
-        assert prompt_suggest.authored_id("strategicimplement") == "strategicImplement"
-        assert prompt_suggest.authored_id("STRATEGICIMPLEMENT") == "strategicImplement"
+        assert prompt_suggest.authored_id("releaseplanner") == "releasePlanner"
+        assert prompt_suggest.authored_id("RELEASEPLANNER") == "releasePlanner"
 
     def test_prefers_the_record_the_caller_already_has(self, stub_catalog):
         """The structural point: given a record, it must not go looking one up.
         That is what stops a folded key being printed by accident."""
-        record = {"id": "diagnosisCard"}
-        assert prompt_suggest.authored_id("anything-at-all", record) == "diagnosisCard"
+        record = {"id": "reviewCard"}
+        assert prompt_suggest.authored_id("anything-at-all", record) == "reviewCard"
 
     def test_unresolvable_echoes_what_was_typed(self, stub_catalog):
         assert prompt_suggest.authored_id("no_such_prompt") == "no_such_prompt"
@@ -93,28 +95,28 @@ class TestAuthoredIdHelper:
 
 
 class TestEchoUsesAuthoredCasing:
-    @pytest.mark.parametrize("typed", ["strategicImplement", "strategicimplement", "STRATEGICIMPLEMENT"])
+    @pytest.mark.parametrize("typed", ["releasePlanner", "releaseplanner", "RELEASEPLANNER"])
     def test_every_spelling_echoes_the_authored_one(self, stub_catalog, monkeypatch, capsys, typed):
         out = run_hook(monkeypatch, capsys, f">>{typed}")
-        assert "[>> prompt_engine] strategicImplement" in context_of(out)
+        assert "[>> prompt_engine] releasePlanner" in context_of(out)
 
     def test_directive_still_carries_what_the_user_typed(self, stub_catalog, monkeypatch, capsys):
         """The echo is normalised for the reader; the command passed to the
         server stays verbatim, because the server parses it."""
-        ctx = context_of(run_hook(monkeypatch, capsys, ">>strategicimplement"))
-        assert 'command:">>strategicimplement"' in ctx
+        ctx = context_of(run_hook(monkeypatch, capsys, ">>releaseplanner"))
+        assert 'command:">>releaseplanner"' in ctx
 
 
 class TestSuggestionsUseAuthoredCasing:
     def test_typo_suggests_the_spelling_that_exists(self, stub_catalog, monkeypatch, capsys):
         """The row-6 falsifier."""
-        ctx = context_of(run_hook(monkeypatch, capsys, ">>diagnosiscrd"))
-        assert ">>diagnosisCard" in ctx
-        assert ">>diagnosiscard" not in ctx
+        ctx = context_of(run_hook(monkeypatch, capsys, ">>reviewcrd"))
+        assert ">>reviewCard" in ctx
+        assert ">>reviewcard" not in ctx
 
 
 class TestChainStepsUseAuthoredCasing:
     def test_adhoc_chain_steps_resolve(self, stub_catalog, monkeypatch, capsys):
-        ctx = context_of(run_hook(monkeypatch, capsys, ">>strategicimplement --> >>diagnosiscard"))
-        assert "1. strategicImplement" in ctx
-        assert "2. diagnosisCard" in ctx
+        ctx = context_of(run_hook(monkeypatch, capsys, ">>releaseplanner --> >>reviewcard"))
+        assert "1. releasePlanner" in ctx
+        assert "2. reviewCard" in ctx

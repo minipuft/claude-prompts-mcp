@@ -1,7 +1,7 @@
 import { loadHistory, formatHistoryTable } from '@cli-shared/index.js';
 import { resolveWorkspace, findResource } from '../lib/workspace.js';
 import { output } from '../lib/output.js';
-import { TYPE_MAP, singularName } from '../lib/types.js';
+import { TYPE_MAP, historyRef, singularName } from '../lib/types.js';
 
 interface HistoryOptions {
   workspace?: string;
@@ -35,7 +35,7 @@ export async function history(options: HistoryOptions): Promise<number> {
     return 1;
   }
 
-  const historyData = loadHistory(match.dir);
+  const historyData = loadHistory(match.file, historyRef(type, match.id));
 
   if (historyData === null || historyData.versions.length === 0) {
     if (options.json) {

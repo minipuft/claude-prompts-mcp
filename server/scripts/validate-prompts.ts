@@ -63,6 +63,20 @@ interface Problem {
 }
 
 /**
+ * One deferred convention exemption.
+ *
+ * `scope: 'personal-library'` DECLARES that the id lives only outside the scanned root — a real
+ * fact about where the resource is, not something `findStaleExceptions` should have to infer from
+ * absence. Without it, an id absent from the root reads exactly like a tracked id that was renamed
+ * away, and neither is ever retired: absence is evidence for both, so an inferring check has to
+ * treat them the same.
+ */
+interface ConventionException {
+  reason: string;
+  scope?: 'personal-library';
+}
+
+/**
  * Ids that violate the convention and are deferred, not accepted.
  *
  * Keyed by `<category>/<id>` so an exemption covers one prompt, never a shape — exempting
@@ -71,12 +85,14 @@ interface Problem {
  * without deleting its exemption is itself a finding: an exception list nobody prunes becomes a
  * list of things that used to be true.
  */
-const CONVENTION_EXCEPTIONS = new Map<string, string>([
+const CONVENTION_EXCEPTIONS = new Map<string, ConventionException>([
   [
-    'development/strategicImplement',
-    'P5.12 — rename deferred; ~252 references across 4 repositories and a global skill name',
+    'general/diagnosisCard',
+    {
+      reason: 'P5.12 — renamed to diagnosis_card where it lives',
+      scope: 'personal-library',
+    },
   ],
-  ['general/diagnosisCard', 'P5.12 — same arc as strategicImplement'],
 ]);
 
 /**
@@ -109,16 +125,35 @@ function findConventionProblems(file: string, rel: string): Problem[] {
   return problems;
 }
 
-/** An exemption whose prompt is gone, or now satisfies the convention, is a finding. */
-function findStaleExceptions(files: string[]): string[] {
+/**
+ * An exemption whose prompt is gone, or now satisfies the convention, is a finding.
+ *
+ * `root` and `exceptions` are explicit rather than read off the module-level `ROOT` and
+ * `CONVENTION_EXCEPTIONS` so a self-test can drive this against a fixture root and a fixture
+ * exception map instead of the live ones.
+ */
+function findStaleExceptions(
+  files: string[],
+  root: string,
+  exceptions: ReadonlyMap<string, ConventionException>
+): string[] {
   const live = new Set(
-    files.map((f) => `${relative(ROOT, f).split(/[/\\]/)[0] ?? ''}/${basename(dirname(f))}`)
+    files.map((f) => `${relative(root, f).split(/[/\\]/)[0] ?? ''}/${basename(dirname(f))}`)
   );
-  return [...CONVENTION_EXCEPTIONS.keys()].filter((key) => {
-    if (!live.has(key)) return false; // not in THIS root — a personal-library id checked from the package tree
-    const id = key.split('/')[1] ?? '';
-    return isCanonicalPromptId(id);
-  });
+  return [...exceptions.entries()]
+    .filter(([key, exception]) => {
+      const isLive = live.has(key);
+      if (exception.scope === 'personal-library') {
+        // Declared to live only outside this root. Absence here is exactly what the declaration
+        // predicts, so the exemption still applies. Presence contradicts it — the id is tracked
+        // here too, so the exemption needs a real fix rather than a declaration nobody re-checks.
+        return isLive;
+      }
+      if (!isLive) return true; // no scope declared and absent from the root: a renamed-away tracked id
+      const id = key.split('/')[1] ?? '';
+      return isCanonicalPromptId(id);
+    })
+    .map(([key]) => key);
 }
 
 /**
@@ -588,6 +623,43 @@ if (SELF_TEST) {
         `walked ${JSON.stringify(walked)}`
     );
 
+  // Stale-exception fixtures — a declared `scope: 'personal-library'` id must read as NOT stale
+  // while absent (the declaration's normal state) and AS stale once it turns up in this root (the
+  // declaration is now false); an undeclared id absent from the root is a renamed-away tracked id
+  // and must read as stale regardless.
+  const exceptionsDir = mkdtempSync(join(tmpdir(), 'validate-prompts-exceptions-selftest-'));
+  mkdirSync(join(exceptionsDir, 'general', 'personal-present'), { recursive: true });
+  writeFileSync(
+    join(exceptionsDir, 'general', 'personal-present', 'prompt.yaml'),
+    'id: personal-present\n',
+    'utf8'
+  );
+  const exceptionFixtures = new Map<string, ConventionException>([
+    ['legacy/removedPrompt', { reason: 'fixture: renamed-away tracked id, no scope declared' }],
+    [
+      'general/personalOnly',
+      { reason: 'fixture: declared personal-library id, absent here', scope: 'personal-library' },
+    ],
+    [
+      'general/personal-present',
+      { reason: 'fixture: declared personal-library id, present here', scope: 'personal-library' },
+    ],
+  ]);
+  const exceptionFiles = findPromptFiles(exceptionsDir);
+  const staleFound = findStaleExceptions(exceptionFiles, exceptionsDir, exceptionFixtures);
+  rmSync(exceptionsDir, { recursive: true, force: true });
+
+  if (!staleFound.includes('legacy/removedPrompt'))
+    failures.push(
+      'a renamed-away tracked id (no scope, absent from root) was NOT reported as stale'
+    );
+  if (staleFound.includes('general/personalOnly'))
+    failures.push(
+      'a declared personal-library id absent from the root was wrongly reported as stale'
+    );
+  if (!staleFound.includes('general/personal-present'))
+    failures.push('a declared personal-library id present in the root was NOT reported as stale');
+
   if (failures.length > 0) {
     console.error(
       `validate:prompts --self-test FAILED\n${failures.map((f) => `  - ${f}`).join('\n')}`
@@ -597,7 +669,8 @@ if (SELF_TEST) {
   console.log(
     'validate:prompts --self-test OK — accepts a valid prompt, catches both defect kinds, ' +
       'flags an orphan gate without false-positiving on activation/include/inlineGateIds, ' +
-      'and walks only the prompt directories the loader serves'
+      'walks only the prompt directories the loader serves, and tells a declared ' +
+      'personal-library exemption apart from a renamed-away tracked one'
   );
   process.exit(0);
 }
@@ -606,7 +679,7 @@ const problems = run(ROOT);
 const promptFiles = findPromptFiles(ROOT);
 const files = promptFiles.length;
 
-const stale = findStaleExceptions(promptFiles);
+const stale = findStaleExceptions(promptFiles, ROOT, CONVENTION_EXCEPTIONS);
 if (stale.length > 0) {
   console.error(
     'validate:prompts FAILED — convention exemption(s) no longer needed; delete them:\n' +

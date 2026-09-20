@@ -1,10 +1,11 @@
-import { basename, join } from 'node:path';
+import { basename } from 'node:path';
 import {
   validateResourceFile,
   formatValidationIssues,
   validateConfig,
   resolveConfigPath,
 } from '@cli-shared/index.js';
+import { declaredResourceId } from '@cli-shared/resource-operations.js';
 import { resolveWorkspace, resolveResourceDir, discoverResourcePaths } from '../lib/workspace.js';
 import { output, icons } from '../lib/output.js';
 import { type ResourceType, TYPE_CONFIG } from '../lib/types.js';
@@ -47,12 +48,12 @@ export async function validate(options: ValidateOptions): Promise<number> {
     const typeConfig = TYPE_CONFIG[type];
     const resources = discoverResourcePaths(baseDir, typeConfig.entryFile, typeConfig.nested);
 
-    for (const { id, dir } of resources) {
-      const filePath = join(dir, typeConfig.entryFile);
-      const validation = validateResourceFile(type, id, filePath);
+    for (const entry of resources) {
+      // The file declares its id's last segment; the loader checks it against exactly that.
+      const validation = validateResourceFile(type, declaredResourceId(entry), entry.file);
       results.push({
         type,
-        id,
+        id: entry.id,
         valid: validation.valid,
         errors: formatValidationIssues(validation.errors),
         warnings: formatValidationIssues(validation.warnings),

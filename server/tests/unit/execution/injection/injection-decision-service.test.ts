@@ -103,28 +103,6 @@ describe('InjectionDecisionService', () => {
       expect(decision.source).not.toBe('modifier');
     });
 
-    it('should honor runtime override set via setRuntimeOverride', () => {
-      const service = new InjectionDecisionService(DEFAULT_INJECTION_CONFIG, mockLogger);
-
-      // Set runtime override via the service's method
-      service.setRuntimeOverride({
-        type: 'system-prompt',
-        enabled: false,
-        scope: 'session',
-        setAt: Date.now(),
-      });
-
-      const input: InjectionDecisionInput = {
-        injectionType: 'system-prompt',
-        currentStep: 1,
-      };
-
-      const decision = service.decide(input);
-
-      expect(decision.inject).toBe(false);
-      expect(decision.source).toBe('runtime-override');
-    });
-
     it('should honor overrides synced from session manager and clear cached decisions', () => {
       const service = new InjectionDecisionService(DEFAULT_INJECTION_CONFIG, mockLogger);
 
@@ -319,47 +297,9 @@ describe('InjectionDecisionService', () => {
     });
   });
 
-  describe('cache management', () => {
-    it('should reset cached decisions', () => {
-      const service = new InjectionDecisionService(DEFAULT_INJECTION_CONFIG, mockLogger);
-
-      // Make a decision
-      service.decide({
-        injectionType: 'system-prompt',
-        currentStep: 1,
-      });
-
-      expect(service.hasDecided('system-prompt')).toBe(true);
-
-      // Reset cache
-      service.reset();
-
-      expect(service.hasDecided('system-prompt')).toBe(false);
-    });
-
-    it('should cache decisions by type', () => {
-      const service = new InjectionDecisionService(DEFAULT_INJECTION_CONFIG, mockLogger);
-
-      // Make decisions
-      service.decide({ injectionType: 'system-prompt', currentStep: 1 });
-      service.decide({ injectionType: 'gate-guidance', currentStep: 1 });
-
-      expect(service.hasDecided('system-prompt')).toBe(true);
-      expect(service.hasDecided('gate-guidance')).toBe(true);
-      expect(service.hasDecided('style-guidance')).toBe(false);
-    });
-
-    it('should return cached decision without recomputing', () => {
-      const service = new InjectionDecisionService(DEFAULT_INJECTION_CONFIG, mockLogger);
-
-      // Make a decision
-      service.decide({ injectionType: 'system-prompt', currentStep: 1 });
-
-      // Get cached
-      const cached = service.getCachedDecision('system-prompt');
-
-      expect(cached).toBeDefined();
-      expect(cached?.inject).toBe(true);
-    });
-  });
+  // hasDecided()/getCachedDecision()/reset()/setRuntimeOverride()/clearRuntimeOverride()/
+  // clearAllRuntimeOverrides()/getRuntimeOverrides()/getLastInjectionStep() were deleted at
+  // P4.52 — zero production callers (syncRuntimeOverrides() is the bulk-replace path every
+  // real caller uses instead), and the caching behavior this block tested is already
+  // covered live-method-first: object identity across two decide() calls, above.
 });

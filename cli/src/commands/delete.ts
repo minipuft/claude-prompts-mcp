@@ -1,7 +1,8 @@
-import { deleteResourceDir } from '@cli-shared/index.js';
+import { resourceRoot } from '@cli-shared/resource-operations.js';
+import { deleteResource } from '@cli-shared/resource-scaffold.js';
 import { resolveWorkspace, findResource, scanReferences } from '../lib/workspace.js';
 import { output, icons, color } from '../lib/output.js';
-import { TYPE_MAP, singularName } from '../lib/types.js';
+import { TYPE_MAP, historyRef, singularName } from '../lib/types.js';
 
 interface DeleteOptions {
   workspace?: string;
@@ -40,17 +41,21 @@ export async function del(options: DeleteOptions): Promise<number> {
     return 1;
   }
 
+  // What goes: the prompt's own directory, or — for a single-file prompt — that file alone. Never
+  // the directory around a single file, which is a category or a chain holding other prompts.
+  const target = resourceRoot(match);
+
   if (!options.force) {
-    const msg = `Would delete ${singularName(type)} '${options.id}' at ${match.dir}\nUse --force (-f) to confirm deletion.`;
+    const msg = `Would delete ${singularName(type)} '${options.id}' at ${target}\nUse --force (-f) to confirm deletion.`;
     if (options.json) {
-      output({ error: 'Deletion requires --force flag', path: match.dir }, { json: true });
+      output({ error: 'Deletion requires --force flag', path: target }, { json: true });
     } else {
       console.error(msg);
     }
     return 1;
   }
 
-  const result = deleteResourceDir(match.dir);
+  const result = deleteResource(match, historyRef(type, match.id));
 
   if (!result.success) {
     const msg = result.error ?? 'Unknown error';

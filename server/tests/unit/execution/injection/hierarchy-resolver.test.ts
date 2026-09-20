@@ -411,21 +411,6 @@ describe('HierarchyResolver', () => {
     });
   });
 
-  describe('getResolutionPriority', () => {
-    it('should return the resolution priority order', () => {
-      const resolver = new HierarchyResolver(DEFAULT_INJECTION_CONFIG, mockLogger);
-
-      const priority = resolver.getResolutionPriority();
-
-      expect(priority).toContain('runtime-override');
-      expect(priority).toContain('step-config');
-      expect(priority).toContain('chain-config');
-      expect(priority).toContain('category-config');
-      expect(priority).toContain('global-config');
-      expect(priority).toContain('system-default');
-    });
-  });
-
   describe('prompt tier', () => {
     // The prompt tier sits between step and chain. All three of these cases go through a
     // different `findPromptConfig` call site — `resolve`, the frequency walk, and the target
@@ -558,14 +543,9 @@ describe('HierarchyResolver', () => {
       expect(result.config.target).toBe('steps');
     });
 
-    it('reports prompt-config in the documented resolution priority', () => {
-      const resolver = new HierarchyResolver(DEFAULT_INJECTION_CONFIG, mockLogger);
-      const priority = resolver.getResolutionPriority();
-
-      expect(priority).toContain('prompt-config');
-      expect(priority.indexOf('prompt-config')).toBeGreaterThan(priority.indexOf('step-config'));
-      expect(priority.indexOf('prompt-config')).toBeLessThan(priority.indexOf('chain-config'));
-    });
+    // getResolutionPriority() was deleted at P4.52 — zero production callers, and
+    // prompt-config's actual precedence over step/chain/category is already covered
+    // live-method-first by the resolve()-driven tests above and below in this block.
   });
 
   describe('injection types', () => {

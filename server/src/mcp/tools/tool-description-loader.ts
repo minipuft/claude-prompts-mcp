@@ -165,25 +165,6 @@ export class ToolDescriptionLoader extends EventEmitter {
     }
   }
 
-  getStyleResponseFormat(toolName: string, styleId: string): string | undefined {
-    const styleDescs = this.styleDescriptions.get(styleId.toLowerCase());
-    return styleDescs?.[toolName]?.responseFormat;
-  }
-
-  hasFrameworkResponseFormat(toolName: string): boolean {
-    const context = this.getActiveFrameworkContext();
-    const frameworkKey = normalizeFrameworkKey(
-      context.activeFrameworkType ?? context.activeFramework
-    );
-    if (!frameworkKey) return false;
-
-    const tool =
-      this.frameworkDescriptions.get(frameworkKey)?.tools[
-        toolName as keyof FrameworkToolDescriptions
-      ];
-    return Boolean(tool?.responseFormat);
-  }
-
   /**
    * The overlay a caller's framework contributes to one tool, or undefined when there is none —
    * because dynamic descriptions are off, the caller opted out, the framework system is disabled,
@@ -352,14 +333,6 @@ export class ToolDescriptionLoader extends EventEmitter {
     return overlay
       ? composeParameterDescription(contractText, overlay.tool, paramName, overlay.label)
       : contractText;
-  }
-
-  getAvailableTools(): string[] {
-    return Array.from(this.descriptions.keys());
-  }
-
-  isReady(): boolean {
-    return this.isInitialized;
   }
 
   getStats(): {
