@@ -287,39 +287,6 @@ export class EnhancedLogger implements Logger {
     this.addToBuffer(LogLevel.DEBUG, message, args);
   }
 
-  /**
-   * Update transport type (useful when transport is determined after logger creation)
-   */
-  setTransport(transport: string): void {
-    this.transport = transport;
-  }
-
-  /**
-   * Enable or disable debug logging
-   */
-  setDebugEnabled(enabled: boolean): void {
-    this.enableDebug = enabled;
-  }
-
-  /**
-   * Log startup information
-   */
-  logStartupInfo(transport: string, config: any): void {
-    this.info(`Server starting up - Process ID: ${process.pid}`);
-    this.info(`Node version: ${process.version}`);
-    this.info(`Working directory: ${process.cwd()}`);
-    this.info(`Using transport: ${transport}`);
-    this.info(`Command-line arguments: ${JSON.stringify(process.argv)}`);
-    this.debug('Configuration:', JSON.stringify(config, null, 2));
-  }
-
-  /**
-   * Log memory usage information
-   */
-  logMemoryUsage(): void {
-    this.info(`Server process memory usage: ${JSON.stringify(process.memoryUsage())}`);
-  }
-
   // ─────────────────────────────────────────────────────────────────────────────
   // Ring Buffer Methods (for MCP resources access)
   // ─────────────────────────────────────────────────────────────────────────────
