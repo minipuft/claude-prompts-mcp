@@ -2,7 +2,7 @@
 // Do not edit manually — run `npm run generate:config-schema`. `npm run validate:config-schema`
 // fails when this file and the generator disagree.
 //
-// The text `cpm config init` writes as a workspace `config.jsonc`. Every setting it shows, and
+// The text `cpm init` writes as a workspace `config.jsonc`. Every setting it shows, and
 // every description, default and permitted-value list beside it, is read out of the same schema
 // the loader validates against — so the example file a user edits cannot describe a setting the
 // server does not have.

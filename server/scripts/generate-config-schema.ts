@@ -575,7 +575,7 @@ function escapeTemplateLiteral(text: string): string {
 }
 
 const TEMPLATE_GENERATED_HEADER = `${GENERATED_PREAMBLE}//
-// The text \`cpm config init\` writes as a workspace \`config.jsonc\`. Every setting it shows, and
+// The text \`cpm init\` writes as a workspace \`config.jsonc\`. Every setting it shows, and
 // every description, default and permitted-value list beside it, is read out of the same schema
 // the loader validates against — so the example file a user edits cannot describe a setting the
 // server does not have.

@@ -103,7 +103,7 @@ interface SchemaDriftResult {
  * The key table and the `config.jsonc` template are checked here rather than in gates of their
  * own because they come out of the same run: a check that covered only the schema would pass
  * while `CONFIG_VALID_KEYS` — the list every config setter validates against — or the example
- * file `cpm config init` writes sat one `ConfigFile` edit behind.
+ * file `cpm init` writes sat one `ConfigFile` edit behind.
  */
 async function checkSchemaDrift(
   committedSchemaPath: string = SCHEMA_PATH,
@@ -433,7 +433,7 @@ const SELF_TEST_CASES: readonly SelfTestCase[] = [
     // file already being on disk, since `config-operations.ts` reaches it through
     // `config-input-validator.ts`. A restated constant with nothing pinning it is the drift shape
     // this whole script exists to prevent, so it is pinned here instead of in the generator.
-    name: 'PARITY — the template writes exactly what `cpm config init` writes today',
+    name: 'PARITY — the template writes exactly what `cpm init` writes today',
     run: async () => {
       const template = await readFile(TEMPLATE_PATH, 'utf8');
       const defaults = generateDefaultConfig();
@@ -447,7 +447,7 @@ const SELF_TEST_CASES: readonly SelfTestCase[] = [
         assert(
           template.includes(liveLine),
           `the config.jsonc template must carry ${JSON.stringify(key)} live with the value ` +
-            `\`cpm config init\` writes (${JSON.stringify(value)}); it does not. Update ` +
+            `\`cpm init\` writes (${JSON.stringify(value)}); it does not. Update ` +
             'TEMPLATE_DOCUMENT_MEMBERS in generate-config-schema.ts and generateDefaultConfig() ' +
             'together, then regenerate.'
         );

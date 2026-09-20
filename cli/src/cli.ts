@@ -174,7 +174,8 @@ Examples:
 
 Usage: cpm init [path] [options]
 
-Creates a resources/prompts/ directory with starter prompts.
+Creates a resources/prompts/ directory with starter prompts, and a config.jsonc
+with every setting commented out.
 If path is omitted, initializes in the current directory.
 
 Options:
