@@ -317,8 +317,41 @@ function latestVersion(db: DatabaseSync, tenantId: string, request: HistoryReque
   return Number(row?.latest ?? 0);
 }
 
-/** Insert a snapshot at the next version and trim to `max_versions`. */
+/**
+ * Insert a snapshot at the next version and trim to `max_versions`.
+ *
+ * `BEGIN IMMEDIATE` around the whole thing, mirroring `VersionHistoryService.saveVersion`: the
+ * number `latestVersion` reads is the number the INSERT writes back, so a second writer committing
+ * between the two makes this row land on a stale maximum. `state.db` is one file with two accepted
+ * writers — this module and the server — so that connection exists. Since schema v28 the collision
+ * is a UNIQUE violation rather than a silent duplicate, which is the better failure but still a
+ * failure; only the lock removes the window. IMMEDIATE and not deferred, because a deferred
+ * transaction takes no lock until the write, by which point both readers hold the same stale value.
+ *
+ * No retry: the second writer waits on the lock (`busy_timeout` is set when this module opens the
+ * connection) rather than colliding.
+ */
 function appendVersion(
+  db: DatabaseSync,
+  tenantId: string,
+  request: HistoryRequest,
+  snapshot: Record<string, unknown>,
+  description: string,
+  diffSummary: string
+): number {
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    const version = appendVersionRow(db, tenantId, request, snapshot, description, diffSummary);
+    db.exec('COMMIT');
+    return version;
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+}
+
+/** The body of `appendVersion`, which owns the transaction around it. */
+function appendVersionRow(
   db: DatabaseSync,
   tenantId: string,
   request: HistoryRequest,

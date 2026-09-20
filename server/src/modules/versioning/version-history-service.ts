@@ -154,59 +154,44 @@ export class VersionHistoryService {
       const db = this.getDb();
       const tenantId = this.resolveTenantId();
 
-      // Get current max version
-      const row = db.queryOne<{ max_version: number | null }>(
-        `SELECT MAX(version) as max_version FROM version_history
+      // `MAX(version)` and the INSERT that consumes it are ONE unit, under the write lock.
+      //
+      // The number this reads is the number it writes back, so anything committing between the two
+      // makes the INSERT land on a stale maximum. Two rows then share a version — and since schema
+      // v28 that is a UNIQUE violation rather than a silent duplicate, which turns a rare wrong
+      // rollback into a failed save, but only a transaction removes the window. `version_history`
+      // has two accepted writers (this service and `cli-shared/version-history.ts`) against one
+      // file, so the racing connection is a real configuration, not a hypothetical. IMMEDIATE, not
+      // deferred: a deferred transaction takes no lock until the write, by which point both readers
+      // already hold the same stale maximum.
+      //
+      // The prune is inside deliberately — it already ran adjacent to the insert, reads the count
+      // this insert produced, and deletes by it.
+      //
+      // No retry loop: a contending writer is meant to WAIT on the lock. That waiting is
+      // `busy_timeout`, and this engine's connection sets only `journal_mode=WAL` — so today a
+      // contended BEGIN fails fast instead, surfacing as a thrown save rather than a duplicate.
+      // Choosing that timeout is a separate call from making the pair atomic, which is all this is.
+      const newVersion = await db.transaction(async () => {
+        // Get current max version
+        const row = db.queryOne<{ max_version: number | null }>(
+          `SELECT MAX(version) as max_version FROM version_history
          WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?`,
-        [tenantId, resourceType, resourceId]
-      );
-      const currentVersion = row?.max_version ?? 0;
-      const newVersion = currentVersion + 1;
-
-      // Insert new version
-      db.run(
-        `INSERT INTO version_history (tenant_id, organization_id, workspace_id, resource_type, resource_id, version, snapshot, diff_summary, description, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
+          [tenantId, resourceType, resourceId]
+        );
+        const currentVersion = row?.max_version ?? 0;
+        const version = currentVersion + 1;
+        this.insertAndPrune({
+          db,
           tenantId,
-          this.scope?.organizationId ?? null,
-          this.scope?.workspaceId ?? null,
           resourceType,
           resourceId,
-          newVersion,
-          JSON.stringify(snapshot),
-          options?.diff_summary ?? '',
-          options?.description ?? `Version ${newVersion}`,
-          new Date().toISOString(),
-        ]
-      );
-
-      // Prune old versions if exceeding max
-      const count = db.queryOne<{ cnt: number }>(
-        `SELECT COUNT(*) as cnt FROM version_history
-         WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?`,
-        [tenantId, resourceType, resourceId]
-      );
-
-      if (count && count.cnt > config.maxVersions) {
-        db.run(
-          `DELETE FROM version_history WHERE id NOT IN (
-            SELECT id FROM version_history
-            WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?
-            ORDER BY version DESC LIMIT ?
-          ) AND tenant_id = ? AND resource_type = ? AND resource_id = ?`,
-          [
-            tenantId,
-            resourceType,
-            resourceId,
-            config.maxVersions,
-            tenantId,
-            resourceType,
-            resourceId,
-          ]
-        );
-        this.logger.debug(`Pruned history for ${resourceId} to ${config.maxVersions} versions`);
-      }
+          version,
+          snapshot,
+          options,
+        });
+        return version;
+      }, 'immediate');
 
       this.logger.debug(`Saved version ${newVersion} for ${resourceType}/${resourceId}`);
       return { success: true, version: newVersion };
@@ -217,6 +202,58 @@ export class VersionHistoryService {
         `Failed to persist version snapshot for ${resourceType}/${resourceId}: ${message}`,
         { cause: error }
       );
+    }
+  }
+
+  /** The write half of `saveVersion`, run inside its transaction: the row, then the trim. */
+  private insertAndPrune(input: {
+    db: DatabasePort;
+    tenantId: string;
+    resourceType: ResourceType;
+    resourceId: string;
+    version: number;
+    snapshot: Record<string, unknown>;
+    options?: SaveVersionOptions;
+  }): void {
+    const { db, tenantId, resourceType, resourceId, snapshot, options } = input;
+    const newVersion = input.version;
+    const config = this.getConfig();
+
+    // Insert new version
+    db.run(
+      `INSERT INTO version_history (tenant_id, organization_id, workspace_id, resource_type, resource_id, version, snapshot, diff_summary, description, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        tenantId,
+        this.scope?.organizationId ?? null,
+        this.scope?.workspaceId ?? null,
+        resourceType,
+        resourceId,
+        newVersion,
+        JSON.stringify(snapshot),
+        options?.diff_summary ?? '',
+        options?.description ?? `Version ${newVersion}`,
+        new Date().toISOString(),
+      ]
+    );
+
+    // Prune old versions if exceeding max
+    const count = db.queryOne<{ cnt: number }>(
+      `SELECT COUNT(*) as cnt FROM version_history
+         WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?`,
+      [tenantId, resourceType, resourceId]
+    );
+
+    if (count && count.cnt > config.maxVersions) {
+      db.run(
+        `DELETE FROM version_history WHERE id NOT IN (
+            SELECT id FROM version_history
+            WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?
+            ORDER BY version DESC LIMIT ?
+          ) AND tenant_id = ? AND resource_type = ? AND resource_id = ?`,
+        [tenantId, resourceType, resourceId, config.maxVersions, tenantId, resourceType, resourceId]
+      );
+      this.logger.debug(`Pruned history for ${resourceId} to ${config.maxVersions} versions`);
     }
   }
 

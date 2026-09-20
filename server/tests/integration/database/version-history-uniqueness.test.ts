@@ -15,7 +15,11 @@
  *      hand-written SQL so it cannot inherit the new writer's correctness;
  *   b. a rename onto an id with existing history continues after that id's newest version;
  *   c. a duplicate INSERT is refused outright — the positive control for the index, and the gate
- *      that catches a future writer of this shape that nobody enumerated.
+ *      that catches a future writer of this shape that nobody enumerated;
+ *   d. two connections saving one resource produce contiguous distinct versions and no UNIQUE
+ *      failure — the `MAX(version)`-then-INSERT pair is one unit under the write lock. The
+ *      interleave is injected at the maximum-version read rather than raced, so the test carries no
+ *      timing dependence.
  */
 
 import { DatabaseSync } from 'node:sqlite';
@@ -25,12 +29,16 @@ import * as path from 'node:path';
 import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 
 import { SqliteEngine } from '../../../src/infra/database/sqlite-engine.js';
+import { VersionHistoryService } from '../../../src/modules/versioning/version-history-service.js';
 import {
   loadHistory,
   renameHistoryResource,
   saveVersion,
 } from '../../../src/cli-shared/version-history.js';
 import { testScratchPath } from '../../helpers/scratch-path.js';
+
+import type { DatabasePort } from '../../../src/shared/types/persistence.js';
+import type { Logger } from '../../../src/shared/types/index.js';
 
 const logger = {
   info: jest.fn() as jest.Mock,
@@ -234,6 +242,124 @@ describe('version_history uniqueness', () => {
       expect(() => insert('p', 1)).toThrow(/UNIQUE/i);
       // Positive control: the probe above sees the KEY, not merely any second insert.
       expect(() => insert('p', 2)).not.toThrow();
+
+      await engine.shutdown();
+    });
+  });
+
+  /**
+   * `saveVersion` reads `MAX(version)` and writes it back, so a second writer committing between
+   * the two makes the INSERT land on a stale maximum. `state.db` has two accepted writers against
+   * one file, so that connection is a real configuration.
+   *
+   * The interleave is made DETERMINISTIC rather than raced: a `DatabasePort` wrapping the real
+   * engine drives a second connection at the exact moment the service reads the maximum — the one
+   * instant the window is open. Nothing here depends on timing, a sleep, or thread scheduling.
+   * The second connection sets `busy_timeout = 0`, so when the service holds the write lock the
+   * interfering write is refused at once instead of waiting; the test then lets it land afterwards,
+   * which is what a real second writer does when the lock releases.
+   */
+  describe('two connections saving one resource', () => {
+    interface InterferenceLog {
+      refusedDuringWindow: boolean;
+      run: () => void;
+    }
+
+    /** A second connection that appends its own next version, the way the other writer would. */
+    function otherWriter(): InterferenceLog {
+      const log: InterferenceLog = {
+        refusedDuringWindow: false,
+        run: () => {
+          const other = new DatabaseSync(dbPath);
+          try {
+            other.exec('PRAGMA busy_timeout = 0');
+            other.exec('BEGIN IMMEDIATE');
+            const row = other
+              .prepare(
+                `SELECT MAX(version) AS latest FROM version_history
+                 WHERE tenant_id = 'ws' AND resource_type = 'prompt' AND resource_id = 'raced'`
+              )
+              .get() as { latest: number | null } | undefined;
+            other
+              .prepare(
+                `INSERT INTO version_history
+                   (tenant_id, organization_id, workspace_id, resource_type, resource_id,
+                    version, snapshot, diff_summary, description, created_at)
+                 VALUES ('ws', NULL, 'ws', 'prompt', 'raced', ?, '{}', '', 'other writer', ?)`
+              )
+              .run(Number(row?.latest ?? 0) + 1, new Date().toISOString());
+            other.exec('COMMIT');
+          } finally {
+            other.close();
+          }
+        },
+      };
+      return log;
+    }
+
+    it('produces contiguous distinct versions with no UNIQUE failure', async () => {
+      const engine = await SqliteEngine.getInstance(logger as never, { dbPath });
+      await engine.initialize();
+
+      const interference = otherWriter();
+      let fired = false;
+      // Delegates everything to the real engine; the ONE seam is the maximum-version read.
+      const racingPort = {
+        ...engine,
+        isInitialized: () => engine.isInitialized(),
+        initialize: () => engine.initialize(),
+        query: (sql: string, params?: unknown[]) => engine.query(sql, params),
+        run: (sql: string, params?: unknown[]) => engine.run(sql, params),
+        transaction: <T>(fn: () => T | Promise<T>, mode?: 'deferred' | 'immediate') =>
+          engine.transaction(fn, mode),
+        beginTransaction: (mode?: 'deferred' | 'immediate') => engine.beginTransaction(mode),
+        commit: () => engine.commit(),
+        rollback: () => engine.rollback(),
+        queryOne: (sql: string, params?: unknown[]) => {
+          const result = engine.queryOne(sql, params);
+          if (sql.includes('MAX(version)') && !fired) {
+            fired = true;
+            try {
+              interference.run();
+            } catch (error) {
+              // Refused because the service already holds the write lock — the property under test.
+              expect(String(error)).toMatch(/busy|locked/i);
+              interference.refusedDuringWindow = true;
+            }
+          }
+          return result;
+        },
+      } as unknown as DatabasePort;
+
+      const service = new VersionHistoryService({
+        logger: logger as unknown as Logger,
+        configManager: {
+          getVersioningConfig: () => ({ enabled: true, maxVersions: 50, autoVersion: true }),
+          getServerRoot: () => testDir,
+        },
+        dbManager: racingPort,
+        scope: { workspaceId: 'ws' },
+      });
+
+      await service.saveVersion('prompt', 'raced', { step: 1 }, { description: 'first' });
+      expect(fired).toBe(true);
+      expect(interference.refusedDuringWindow).toBe(true);
+
+      // The lock is released, so the other writer lands now — reading the maximum the service wrote.
+      interference.run();
+
+      const db = new DatabaseSync(dbPath);
+      const versions = (
+        db
+          .prepare(
+            `SELECT version FROM version_history WHERE resource_id = 'raced' ORDER BY version`
+          )
+          .all() as unknown as Array<{ version: number }>
+      ).map((row) => row.version);
+      db.close();
+
+      expect(versions).toEqual([1, 2]);
+      expect(new Set(versions).size).toBe(versions.length);
 
       await engine.shutdown();
     });

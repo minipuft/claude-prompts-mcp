@@ -109,6 +109,14 @@ claiming to be v1. The producer moved with the index — a rename now renumbers 
 continue after the target's newest version, in one transaction, and a target with no history is
 re-keyed with its numbers untouched.
 
+Both writers take the key the same way, and each does it atomically: `MAX(version)` and the INSERT
+that consumes it run inside one `BEGIN IMMEDIATE`, because the number read is the number written
+back and a second connection committing between the two makes the INSERT land on a stale maximum.
+`DatabasePort.transaction(fn, 'immediate')` is the shared helper; the default stays `deferred`,
+which takes no lock until the first write and is correct only for a body that reads OR writes. No
+retry loop — a contender waits on the lock, and how long it waits is `busy_timeout`, which the
+engine's own connection does not currently set (the CLI's does, at 5000 ms).
+
 v28 is the worked example of a **real migration** on a durable table. `ensureSchema()` renumbers
 colliding rows between the snapshot and the restore (`renumberDuplicateVersionHistory`,
 deterministic by `created_at` then `id`), keeping every row and every chronology, and logs one line
