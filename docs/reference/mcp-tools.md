@@ -1178,10 +1178,12 @@ system_control(action:"config", operation:"validate", config:{key:"logging.level
 ```
 
 `get` answers with the key, its effective value as JSON, and a `source` — `file` (the config file
-sets it), `default` (the built-in default; the file does not set it), `environment` (an
-environment variable overrides the file and default), or `deferred` (the file does not set it and
-no value has been resolved yet). A key `keys` does not list is refused, naming `keys` as the way to
-see what is declared; a `get` with no key is refused the same way.
+sets it), `default` (the built-in default; the file does not set it and the loader resolves every
+section at load time, so this is the value the server actually uses), or `environment` (an
+environment variable overrides the file and default). There is no fourth label: a key with no
+default in any layer still answers `default` with an `undefined` value, rather than an unresolved
+state. A key `keys` does not list is refused, naming `keys` as the way to see what is declared; a
+`get` with no key is refused the same way.
 
 `set`, `reset`, and `restore` are not served here. Any other operation — or a request naming none
 at all — is refused by name rather than answered with a listing, which is what a malformed request

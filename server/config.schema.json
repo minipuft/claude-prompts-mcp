@@ -1,5 +1,5 @@
 {
-  "$id": "https://github.com/minipuft/claude-prompts-mcp/server/config.schema.json",
+  "$id": "https://cdn.jsdelivr.net/npm/claude-prompts@5/config.schema.json",
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {
@@ -631,5 +631,6 @@
   ],
   "additionalProperties": false,
   "description": "The contents of a 5.0 `config.json`.\n\nEvery section is optional; `version` is not, because the loader routes on it and a file that does not say which shape it is written in cannot be read as either.",
-  "definitions": {}
+  "definitions": {},
+  "allowTrailingCommas": true
 }

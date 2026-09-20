@@ -35,7 +35,7 @@ import { basename, dirname, join, resolve } from 'node:path';
 
 import { applyEdits, modify, type FormattingOptions } from 'jsonc-parser';
 
-import { CONFIG_JSONC_TEMPLATE } from './_generated/config-template.js';
+import { CONFIG_JSONC_TEMPLATE, CONFIG_SCHEMA_URL } from './_generated/config-template.js';
 import {
   CONFIG_KEY_TABLE,
   CONFIG_RESTART_REQUIRED_KEYS,
@@ -400,7 +400,7 @@ export function backupConfig(configPath: string): string {
  */
 export function generateDefaultConfig(): Record<string, unknown> {
   return {
-    $schema: './config.schema.json',
+    $schema: CONFIG_SCHEMA_URL,
     version: 5,
   };
 }

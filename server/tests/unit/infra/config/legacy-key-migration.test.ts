@@ -390,9 +390,11 @@ describe('legacy config key migration', () => {
         await import('../../../../src/cli-shared/config-operations.js');
       const { CONFIG_VALID_KEYS } =
         await import('../../../../src/cli-shared/config-input-validator.js');
+      const { CONFIG_SCHEMA_URL } =
+        await import('../../../../src/cli-shared/_generated/config-template.js');
 
       const generated = generateDefaultConfig();
-      expect(generated).toEqual({ $schema: './config.schema.json', version: 5 });
+      expect(generated).toEqual({ $schema: CONFIG_SCHEMA_URL, version: 5 });
 
       const documentLevelKeys = new Set(['$schema', 'version']);
       const leaves: string[] = [];

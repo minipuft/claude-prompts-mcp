@@ -83,7 +83,10 @@ and the server starts on built-in defaults.
 **Fix**: reinstall the package, or point `MCP_CONFIG_PATH` at a valid config file.
 
 > [!NOTE]
-> For all CLI flags and environment variables, see the [CLI Configuration](../reference/mcp-tools.md#cli-configuration) section in the MCP Tools reference.
+> For the config file lookup order and precedence chain, see the [Configuration
+> Reference](../reference/configuration.md). For all CLI flags and environment variables, see the
+> [CLI Configuration](../reference/mcp-tools.md#cli-configuration) section in the MCP Tools
+> reference.
 
 ---
 
