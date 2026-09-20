@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-20T17:34:39.762Z",
+  "generatedAt": "2026-09-20T22:50:14.157Z",
   "project": "tsconfig.test.json",
   "scope": "tests/",
   "totals": {
-    "errors": 357
+    "errors": 354
   },
   "byCode": {
     "TS18046": 3,
@@ -13,13 +13,13 @@
     "TS2307": 5,
     "TS2322": 50,
     "TS2339": 34,
-    "TS2345": 90,
+    "TS2345": 89,
     "TS2353": 41,
     "TS2367": 1,
     "TS2416": 1,
     "TS2459": 14,
     "TS2551": 8,
-    "TS2554": 20,
+    "TS2554": 18,
     "TS2558": 1,
     "TS2571": 8,
     "TS2694": 6,
@@ -49,7 +49,7 @@
     "tests/integration/scripts/script-tools-workflow.test.ts": 9,
     "tests/integration/versioning/version-history-workflow.test.ts": 1,
     "tests/manual/test-execution-modes.ts": 12,
-    "tests/manual/test-versioning-service.ts": 18,
+    "tests/manual/test-versioning-service.ts": 16,
     "tests/unit/chain-session/chain-session-store.test.ts": 9,
     "tests/unit/execution/execution-context.test.ts": 2,
     "tests/unit/execution/operators/chain-operator-executor.test.ts": 7,
@@ -71,7 +71,7 @@
     "tests/unit/execution/pipeline/prompt-guidance-stage.test.ts": 6,
     "tests/unit/execution/pipeline/request-normalization-stage.test.ts": 3,
     "tests/unit/execution/pipeline/session-stage.test.ts": 4,
-    "tests/unit/execution/pipeline/shell-verification-stage.test.ts": 6,
+    "tests/unit/execution/pipeline/shell-verification-stage.test.ts": 5,
     "tests/unit/execution/pipeline/state/gate-enforcement-authority.test.ts": 3,
     "tests/unit/execution/pipeline/step-execution-stage.test.ts": 13,
     "tests/unit/execution/pipeline/step-response-capture-stage.test.ts": 9,

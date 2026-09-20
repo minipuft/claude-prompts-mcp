@@ -3,8 +3,10 @@
  * Configuration Utilities for Safe Config Management
  *
  * Provides atomic config operations with automatic backup for secure configuration
- * management in system_control tool. Restoring a backup has no caller (measured
- * 2026-09-17, P4.52/R36) and was removed with `getConfigPath()`, which had none either.
+ * management in system_control tool. `restoreFromBackup` had no caller since PR #312
+ * retired `system_control config restore` (2026-09-15) and was deleted here (P4.81,
+ * 2026-09-20). `createConfigBackup` still runs on every write below and its output is
+ * currently unreachable by any action — an open owner question, not fixed by this pass.
  *
  * NO KEY LIST, NO VALIDATOR, NO SECOND WRITER, NO RE-EXPORT (ruling R54)
  * This file used to define its own `CONFIG_VALID_KEYS` (24 keys against cli-shared's 60) and its
@@ -25,8 +27,6 @@
  * still built, but only to validate what the file will mean — a write that re-serialized it would
  * strip every comment out of an operator's `config.jsonc` the first time anyone toggled a gate.
  */
-
-import { access, copyFile } from 'node:fs/promises';
 
 import {
   CONFIG_RESTART_REQUIRED_KEYS,
@@ -174,36 +174,6 @@ export class SafeConfigWriter {
     } catch (error) {
       this.logger.error(`Failed to create config backup:`, error);
       throw new Error(`Backup creation failed: ${error}`, { cause: error });
-    }
-  }
-
-  /**
-   * Restore configuration from backup
-   */
-  async restoreFromBackup(backupPath: string): Promise<ConfigWriteResult> {
-    try {
-      // Verify backup exists
-      await access(backupPath);
-
-      // Restore the backup
-      await copyFile(backupPath, this.configPath);
-
-      // Reload configuration
-      await this.configManager.loadConfig();
-
-      this.logger.info(`Configuration restored from backup: ${backupPath}`);
-
-      return {
-        success: true,
-        message: `Configuration successfully restored from backup`,
-      };
-    } catch (error) {
-      this.logger.error(`Failed to restore from backup ${backupPath}:`, error);
-      return {
-        success: false,
-        message: `Failed to restore configuration: ${error}`,
-        error: String(error),
-      };
     }
   }
 

@@ -6,7 +6,7 @@
  *
  * This file drives `ConsolidatedSystemControl`'s persist replies; `safeConfigWriter` is a
  * hand-built stand-in supplying `getConfigPath()`, the value the router's message text depends
- * on. The writer class's own behavior -- `updateConfigValue`, `getConfigPath`, backup/restore --
+ * on. The writer class's own behavior -- `updateConfigValue`, `getConfigPath`, backup creation --
  * lives in a sibling file: `safe-config-writer.test.ts` under `tests/unit/mcp-tools/`.
  *
  * Classification: Unit (one router, stubbed `safeConfigWriter`).
