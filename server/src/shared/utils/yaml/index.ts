@@ -31,6 +31,14 @@ export {
   type YamlParseResult,
 } from './yaml-parser.js';
 
+// Source-preserving serialization for resource writes
+export {
+  serializeYamlPreservingSource,
+  type ExistingYamlFile,
+  type YamlWriteFidelity,
+  type YamlWriteResult,
+} from './yaml-document-writer.js';
+
 // File operations
 export {
   loadYamlFile,

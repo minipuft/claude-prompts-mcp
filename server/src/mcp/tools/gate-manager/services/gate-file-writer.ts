@@ -17,7 +17,11 @@ import {
   type ResourceWriteCommitOptions,
 } from '#modules/resources/services/index.js';
 import { resolveContainedPath } from '#shared/utils/path-containment.js';
-import { parseYaml, serializeYaml } from '#shared/utils/yaml/yaml-parser.js';
+import { parseYaml } from '#shared/utils/yaml/yaml-parser.js';
+import {
+  serializeYamlPreservingSource,
+  type ExistingYamlFile,
+} from '#shared/utils/yaml/yaml-document-writer.js';
 
 /**
  * gate.yaml keys `buildGateYaml` writes directly from `GateCreationData` — always
@@ -341,13 +345,13 @@ export class GateFileWriter {
     const files: GateWritePlan['files'] = [];
     if (writesYaml) {
       const gateYamlData = overlayDecidedYamlKeys(
-        existingYaml,
-        this.buildGateYaml(data, existingYaml),
+        existingYaml?.data,
+        this.buildGateYaml(data, existingYaml?.data),
         GATE_YAML_DECIDED_KEYS
       );
       files.push({
         relativePath: 'gate.yaml',
-        content: serializeYaml(gateYamlData, { sortKeys: false }),
+        content: serializeYamlPreservingSource(gateYamlData, existingYaml?.source).content,
       });
     }
     if (writesGuidance) {
@@ -401,7 +405,7 @@ export class GateFileWriter {
    */
   private async readExistingGateYaml(
     gateYamlPath: string
-  ): Promise<Record<string, unknown> | undefined> {
+  ): Promise<ExistingYamlFile<Record<string, unknown>> | undefined> {
     if (!existsSync(gateYamlPath)) {
       return undefined;
     }
@@ -416,7 +420,7 @@ export class GateFileWriter {
         );
         return undefined;
       }
-      return parsed.data;
+      return { data: parsed.data, source: raw };
     } catch (error) {
       this.logger.warn(
         `[GateFileWriter] Could not read existing gate.yaml for field preservation: ${gateYamlPath} (${String(error)})`
