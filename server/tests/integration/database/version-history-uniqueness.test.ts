@@ -390,7 +390,11 @@ describe('version_history uniqueness', () => {
     const RELEASE_DELAY_MS = 300;
 
     /** A child process holding BEGIN IMMEDIATE on `dbPath` until its stdin says to let go. */
-    async function lockHolder(): Promise<{ release: () => void; done: Promise<void> }> {
+    async function lockHolder(): Promise<{
+      release: () => void;
+      done: Promise<void>;
+      abandon: () => void;
+    }> {
       const child = spawn(
         process.execPath,
         [
@@ -417,6 +421,9 @@ describe('version_history uniqueness', () => {
       return {
         release: () => child.stdin.write('go\n'),
         done: new Promise<void>((resolve) => child.on('exit', () => resolve())),
+        // Called from a `finally`: a failing assertion would otherwise leave the child holding the
+        // lock forever, and the run would hang instead of reporting the failure.
+        abandon: () => child.kill('SIGKILL'),
       };
     }
 
@@ -447,29 +454,34 @@ describe('version_history uniqueness', () => {
 
       const holder = await lockHolder();
 
-      // Control: zero patience, so the held lock refuses the write outright. This is also what
-      // shows the lock IS held — without it, the second case could pass over an unlocked file.
-      expect(() => writeWith(0, 'refused')).toThrow(/busy|locked/i);
+      try {
+        // Control: zero patience, so the held lock refuses the write outright. This is also what
+        // shows the lock IS held — without it, the second case could pass over an unlocked file.
+        expect(() => writeWith(0, 'refused')).toThrow(/busy|locked/i);
 
-      // Subject: the same write, the same held lock, the shared timeout. The child lets go
-      // RELEASE_DELAY_MS after this message, which lands while the write below is already waiting.
-      holder.release();
-      const elapsed = writeWith(STATE_DB_BUSY_TIMEOUT_MS, 'waited');
-      await holder.done;
+        // Subject: the same write, the same held lock, the shared timeout. The child lets go
+        // RELEASE_DELAY_MS after this message, landing while the write below is already waiting.
+        holder.release();
+        const elapsed = writeWith(STATE_DB_BUSY_TIMEOUT_MS, 'waited');
+        await holder.done;
 
-      expect(elapsed).toBeGreaterThanOrEqual(RELEASE_DELAY_MS / 2);
-      expect(elapsed).toBeLessThan(STATE_DB_BUSY_TIMEOUT_MS);
+        expect(elapsed).toBeGreaterThanOrEqual(RELEASE_DELAY_MS / 2);
+        expect(elapsed).toBeLessThan(STATE_DB_BUSY_TIMEOUT_MS);
 
-      const db = new DatabaseSync(dbPath);
-      const ids = (
-        db
-          .prepare(`SELECT resource_id FROM version_history ORDER BY resource_id`)
-          .all() as unknown as Array<{ resource_id: string }>
-      ).map((row) => row.resource_id);
-      db.close();
+        const db = new DatabaseSync(dbPath);
+        const ids = (
+          db
+            .prepare(`SELECT resource_id FROM version_history ORDER BY resource_id`)
+            .all() as unknown as Array<{ resource_id: string }>
+        ).map((row) => row.resource_id);
+        db.close();
 
-      // The waiter landed; the refused one never did; the holder's own row committed.
-      expect(ids).toEqual(['held', 'waited']);
+        // The waiter landed; the refused one never did; the holder's own row committed.
+        expect(ids).toEqual(['held', 'waited']);
+      } finally {
+        holder.abandon();
+        await holder.done;
+      }
     }, 20000);
 
     it('opens its own connection with the shared timeout, not SQLite default of 0', async () => {

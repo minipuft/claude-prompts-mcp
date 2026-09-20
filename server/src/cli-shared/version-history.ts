@@ -515,22 +515,30 @@ function renameSubtree(
     };
   }
 
-  const moving = db
-    .prepare(
-      `SELECT id, resource_id, version FROM version_history
-       WHERE tenant_id = ? AND resource_type = ? AND ${SUBTREE_MATCH}
-       ORDER BY resource_id, version, id`
-    )
-    .all(tenantId, request.resource_type, oldResourceId, oldResourceId) as unknown as MovingRow[];
-
+  const movingRows = db.prepare(
+    `SELECT id, resource_id, version FROM version_history
+     WHERE tenant_id = ? AND resource_type = ? AND ${SUBTREE_MATCH}
+     ORDER BY resource_id, version, id`
+  );
   const maxVersionAt = db.prepare(
     `SELECT MAX(version) AS latest FROM version_history
      WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?`
   );
   const rekey = db.prepare(`UPDATE version_history SET resource_id = ?, version = ? WHERE id = ?`);
 
+  // Every read is INSIDE the lock, including the one that decides WHICH rows move. It used to sit
+  // above the BEGIN, where a row saved between the select and the lock would have been left behind
+  // under the old id — the whole point of taking the lock up front is that the set this acts on
+  // cannot change under it.
   db.exec('BEGIN IMMEDIATE');
   try {
+    const moving = movingRows.all(
+      tenantId,
+      request.resource_type,
+      oldResourceId,
+      oldResourceId
+    ) as unknown as MovingRow[];
+
     // Per target id: `null` while the target had no history (the rows keep their own numbers), or
     // the last version handed out (each further row continues after it).
     const continueAfter = new Map<string, number | null>();
