@@ -84,6 +84,11 @@ edges:
 write-only fields. A declared cap may only NARROW the server default — a chain asking for a wider
 one fails to load rather than being silently clamped.
 
+`budget` is authorable through `resource_manager` on `create` and `update`, and clearable with
+`unset: ["budget"]`. The tool applies `workflowBudgetSchema` itself, so the narrow-only bound and
+the strict key set are the loader's own: a cap above the server default, or a misspelled key, is
+refused at the call rather than clamped or dropped.
+
 `pauseOnBlocking` (default `false`) decides what a blocking unknown does to the run: `false` raises
 a soft interrupt beside the inserted investigation step and keeps going, `true` HOLDS the run until
 a `gate_action` verb clears it. Declaring it in YAML is what lets a template chain opt into

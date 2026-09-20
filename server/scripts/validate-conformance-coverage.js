@@ -269,8 +269,9 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
     [
       // `system_message` and `tools` were removed from this list on 2026-09-02: the P2.1/P2.3
       // scenarios in workspace-and-mutations.yaml now exercise both, and this check's own
-      // satisfied-exception arm is what caught them still being listed.
-      'arguments',
+      // satisfied-exception arm is what caught them still being listed. `arguments` went the same
+      // way on 2026-09-20: the P4.82 budget/artifacts scenario creates a prompt with a declared
+      // argument, because `artifacts.fromArgument` has to name one.
       'argument_updates',
       'patch',
       'gate_configuration',

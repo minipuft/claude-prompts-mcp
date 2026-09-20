@@ -265,6 +265,19 @@ export interface ResourceManagerInput {
    * fields below.
    */
   edges?: Array<{ from: string; to: string }>;
+  /**
+   * [Prompt] Run-level budget for a chain. Shape and caps come from `workflowBudgetSchema`, which
+   * the tool schema uses directly — a wider type here would describe values the loader rejects.
+   */
+  budget?: {
+    maxNodes?: number;
+    maxFanOut?: number;
+    maxInsertions?: number;
+    declaredCostCeiling?: number;
+    pauseOnBlocking?: boolean;
+  };
+  /** [Prompt] Artifact kinds this run declares. Shape is `PromptArtifactsSchema`. */
+  artifacts?: { produces?: string[]; fromArgument?: string };
   /** [Prompt] Script tools to create with the prompt */
   tools?: ToolDefinitionInput[];
   /** [Prompt] Update-only: union with the current binding (`add`) or unbind and delete (`remove`). */

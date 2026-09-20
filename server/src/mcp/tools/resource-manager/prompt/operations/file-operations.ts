@@ -77,6 +77,12 @@ export const PRESERVED_PROMPT_YAML_KEYS = [
   // — until then `collectChainEdgeErrors` could refuse a `chain_steps` rewrite that orphaned an
   // edge with no tool-side way to correct it.
   'edges',
+  // P4.82. `budget` and `artifacts` ARE carried on `ConvertedPrompt`, unlike `edges` — but
+  // `canonicalPromptSnapshot` does not project them, so the `promptData` an update builds still
+  // arrives without them and the on-disk YAML is still the only fallback. Same precedence rule
+  // as every other key here.
+  'budget',
+  'artifacts',
 ] as const;
 
 /**

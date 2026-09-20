@@ -336,23 +336,11 @@ describe('prompt update optimistic concurrency', () => {
  * each carries the observation that would flip it.
  */
 describe('every prompt.yaml key the loader accepts is classified', () => {
-  /** Keys the WRITER owns: it produces the message files, so it decides their pointers. */
-  const WRITER_OWNED = new Set(['systemMessageFile', 'userMessageTemplateFile']);
-
   /**
-   * Keys no tool parameter writes, each with what would flip it.
-   *
-   * A reader who adds one of these parameters deletes its entry in the same commit — an entry
-   * whose condition no longer holds fails the first test below as an unknown classification would.
+   * Keys the WRITER owns: it produces the message files, so it decides their pointers. A caller
+   * sets the BODY (`system_message`, `user_message_template`) and the writer decides where it goes.
    */
-  const NOT_SETTABLE: Readonly<Record<string, string>> = {
-    // as of 2026-09-20 · flips when a run-level structural cap is authored through the tool
-    // rather than only submitted on a Workflow IR.
-    budget: 'submitted on the Workflow IR path only; no chain has needed an authored cap',
-    // as of 2026-09-20 · flips when a prompt needs its artifact kinds changed without a rewrite
-    // of the whole file, i.e. the first report of a `produces` edit that cannot be made.
-    artifacts: 'declared at authoring time; no edit request has reached the tool surface',
-  };
+  const WRITER_OWNED = new Set(['systemMessageFile', 'userMessageTemplateFile']);
 
   const SETTABLE = new Set<string>([
     // The resource identity — the `id` parameter, not a field overlay.
@@ -362,29 +350,53 @@ describe('every prompt.yaml key the loader accepts is classified', () => {
     ...Object.values(UPDATE_FIELDS),
   ]);
 
-  test('no key is left unclassified', () => {
+  /**
+   * There is deliberately NO third category.
+   *
+   * This gate shipped (P4.65) with two stamped exceptions, `budget` and `artifacts`, each carrying
+   * an as-of date and a falsifier. P4.82 read both against their own documentation — a chain's
+   * budget and a prompt's artifact declaration are things an AUTHOR states, and the docs say so in
+   * those words — so both became settable and the exception list emptied. Re-introducing one means
+   * arguing that a key `PromptYamlSchema` accepts is not authored by the person authoring the
+   * prompt, which is a claim worth making explicitly rather than by adding a row.
+   */
+  test('no key is left unclassified, and nothing is exempt', () => {
     const unclassified = Object.keys(PromptYamlSchema.shape).filter(
-      (key) => !SETTABLE.has(key) && !WRITER_OWNED.has(key) && NOT_SETTABLE[key] === undefined
+      (key) => !SETTABLE.has(key) && !WRITER_OWNED.has(key)
     );
 
     expect(unclassified).toEqual([]);
   });
 
   test('every classification still names a key the loader accepts', () => {
-    // The other direction: a stale entry documents a key that is gone, and a stale
-    // `NOT_SETTABLE` reason is an open marker nothing expires.
+    // The other direction: a stale entry documents a key that is gone.
     const accepted = new Set(Object.keys(PromptYamlSchema.shape));
-    const stale = [...WRITER_OWNED, ...Object.keys(NOT_SETTABLE)].filter(
-      (key) => !accepted.has(key)
-    );
+    const stale = [...WRITER_OWNED, ...SETTABLE].filter((key) => !accepted.has(key));
 
     expect(stale).toEqual([]);
   });
 
-  test('`edges` is settable, and clearable', () => {
-    // The instance that motivated the class. Named rather than left implicit in the sweep above,
-    // because the sweep would stay green if `edges` moved into `NOT_SETTABLE`.
-    expect(UPDATE_FIELDS['edges']).toBe('edges');
-    expect(UNSETTABLE_FIELDS['edges']).toBe('edges');
+  test('every settable prompt.yaml key is also clearable, or is one a prompt cannot load without', () => {
+    // `unset` refuses the four structural fields BY NAME rather than writing a prompt that fails
+    // its next load; everything else optional in the loader's schema must be clearable, or
+    // "supply to set, omit to preserve" leaves it write-once.
+    const STRUCTURAL = new Set(['id', 'name', 'category', 'description', 'userMessageTemplate']);
+    const settableParameters = Object.entries(UPDATE_FIELDS).filter(
+      ([, dataKey]) => !STRUCTURAL.has(dataKey)
+    );
+    const unclearable = settableParameters
+      .filter(([parameter]) => UNSETTABLE_FIELDS[parameter] === undefined)
+      .map(([parameter]) => parameter);
+
+    expect(unclearable).toEqual([]);
+  });
+
+  test('the three keys this class was found through are settable and clearable', () => {
+    // Named rather than left implicit in the sweeps above, which would stay green if any of them
+    // were dropped from both maps at once.
+    for (const key of ['edges', 'budget', 'artifacts']) {
+      expect(UPDATE_FIELDS[key]).toBe(key);
+      expect(UNSETTABLE_FIELDS[key]).toBe(key);
+    }
   });
 });

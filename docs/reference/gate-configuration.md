@@ -125,6 +125,9 @@ artifacts:
   fromArgument: files # name of a declared argument carrying the paths this run touches
 ```
 
+`artifacts` is authorable through `resource_manager` on `create` and `update`, and clearable with
+`unset: ["artifacts"]` — which declares nothing, and is distinct from declaring some other kind.
+
 `produces` and `fromArgument` union. `fromArgument` must name an argument the prompt actually
 declares in its `arguments:` list — the prompt schema refuses to load one that names an
 undeclared argument, catching the typo at authoring time instead of at a silent runtime miss.
