@@ -227,6 +227,8 @@
     "validate:agent-plugins:self-test": "node scripts/validate-agent-plugins.js --self-test",
     "validate:db-claim-order": "node scripts/validate-db-claim-order.js",
     "validate:db-claim-order:self-test": "node scripts/validate-db-claim-order.js --self-test",
+    "validate:category-enumerations": "node scripts/validate-category-enumerations.js",
+    "validate:category-enumerations:self-test": "node scripts/validate-category-enumerations.js --self-test",
     "render:distributions": "node ../scripts/render-distributions.mjs",
     "validate:render-drift": "node ../scripts/render-distributions.mjs --check",
     "validate:render-drift:self-test": "node ../scripts/render-distributions.mjs --self-test",
