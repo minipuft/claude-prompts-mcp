@@ -312,7 +312,7 @@ Exit codes: `0` success, `1` error or validation failure.
 ```jsonc
 {
 //   — JSON Schema reference for IDE validation.
-  "$schema": "./config.schema.json",
+  "$schema": "https://cdn.jsdelivr.net/npm/claude-prompts@5/config.schema.json",
 
 //   — Which shape this config file is written in. `5` is the current format...
   "version": 5,
@@ -339,6 +339,10 @@ config.jsonc is the 5.0 name, config.json is still read.
 ```
 
 Delete whichever file you are not using to resolve it.
+
+For the full file lookup order, how a single value resolves across defaults, the file, environment
+variables and CLI flags, and what the `$schema` line validates, see the [Configuration
+Reference](../reference/configuration.md).
 
 ### enable / disable
 
