@@ -162,7 +162,7 @@ Point your MCP config to `server/dist/index.js`. Transport: `--transport=stdio` 
 
 </details>
 
-**Custom resources**: `--init=~/my-prompts` scaffolds a starter workspace: three example prompts plus `config.json`. Edit them (YAML schema), or have your AI author new prompts, gates, and frameworks via `resource_manager`. Point `MCP_RESOURCES_PATH` at an existing workspace if you already have one in the right shape. See [Custom Resources Guide](docs/guides/custom-resources.md).
+**Custom resources**: `--init=~/my-prompts` scaffolds a starter workspace: three example prompts plus `config.jsonc`. Edit them (YAML schema), or have your AI author new prompts, gates, and frameworks via `resource_manager`. Point `MCP_RESOURCES_PATH` at an existing workspace if you already have one in the right shape. See [Custom Resources Guide](docs/guides/custom-resources.md).
 
 ---
 

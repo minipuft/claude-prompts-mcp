@@ -14,6 +14,7 @@ import type { Logger } from './infra/logging/index.js';
 import type { Application } from './runtime/application.js';
 import type { HealthReport } from './runtime/health.js';
 
+import { initConfig } from '#cli-shared/config-operations.js';
 import { initWorkspace } from '#cli-shared/workspace-init.js';
 import { findWorkspaceConfigFiles } from '#shared/utils/config-file-format.js';
 import { PathSettingError } from '#shared/utils/path-setting.js';
@@ -316,7 +317,7 @@ USAGE:
   node dist/index.js [OPTIONS]
 
 QUICK START:
-  npx claude-prompts --init=~/my-prompts    Create a new workspace with starter prompts
+  npx claude-prompts --init=~/my-prompts    Create a new workspace with starter prompts and a config file
 
   Then add MCP_WORKSPACE to your Claude Desktop config and restart.
   Claude can update your prompts via resource_manager - no manual editing needed!
@@ -331,7 +332,8 @@ PATH OPTIONS:
                           readable config file
 
 RUNTIME OPTIONS:
-  --init=/path            Create a new workspace with starter prompts at the specified path
+  --init=/path            Create a new workspace with starter prompts and a config file at the
+                          specified path
   --transport=TYPE        Transport type: stdio (default), streamable-http, or both
   --log-level=LEVEL       Log level: debug, info, warn, error
   --quiet                 Minimal output mode (production-friendly)
@@ -405,6 +407,40 @@ For more information: https://github.com/minipuft/claude-prompts-mcp
 }
 
 /**
+ * Handle `--init=/path`: create the starter workspace, then the workspace config, and report
+ * both — split out of `validateAndHandleEarlyExit` to keep its own branching under the cognitive
+ * complexity limit.
+ */
+function handleInitFlag(rawPath: string): { shouldExit: true; exitCode: number } {
+  let targetPath = rawPath;
+  if (targetPath.length === 0) {
+    console.error('Error: --init requires a path. Usage: --init=/path/to/workspace');
+    console.error('Example: npx claude-prompts --init=~/my-prompts');
+    return { shouldExit: true, exitCode: 1 };
+  }
+
+  if (targetPath.startsWith('~')) {
+    targetPath = targetPath.replace('~', process.env['HOME'] ?? process.env['USERPROFILE'] ?? '');
+  }
+
+  const result = initWorkspace(targetPath);
+  // eslint-disable-next-line no-console -- --init returns shouldExit and main() exits before startApplication, so no transport exists; measured 2026-09-14: exit 0, no runtime root created
+  console.log(result.message);
+  if (!result.success) {
+    return { shouldExit: true, exitCode: 1 };
+  }
+
+  const configResult = initConfig(targetPath);
+  if (configResult.success) {
+    // eslint-disable-next-line no-console -- same justification as the workspace message above
+    console.log(configResult.message);
+  } else {
+    console.error(configResult.message);
+  }
+  return { shouldExit: true, exitCode: configResult.success ? 0 : 1 };
+}
+
+/**
  * Validate pre-parsed CLI arguments and handle early-exit commands (--help, --init).
  */
 function validateAndHandleEarlyExit(cli: ServerCliArgs): { shouldExit: boolean; exitCode: number } {
@@ -414,21 +450,7 @@ function validateAndHandleEarlyExit(cli: ServerCliArgs): { shouldExit: boolean; 
   }
 
   if (cli.init !== undefined) {
-    let targetPath = cli.init;
-    if (targetPath.length === 0) {
-      console.error('Error: --init requires a path. Usage: --init=/path/to/workspace');
-      console.error('Example: npx claude-prompts --init=~/my-prompts');
-      return { shouldExit: true, exitCode: 1 };
-    }
-
-    if (targetPath.startsWith('~')) {
-      targetPath = targetPath.replace('~', process.env['HOME'] ?? process.env['USERPROFILE'] ?? '');
-    }
-
-    const result = initWorkspace(targetPath);
-    // eslint-disable-next-line no-console -- --init returns shouldExit and main() exits before startApplication, so no transport exists; measured 2026-09-14: exit 0, no runtime root created
-    console.log(result.message);
-    return { shouldExit: true, exitCode: result.success ? 0 : 1 };
+    return handleInitFlag(cli.init);
   }
 
   if (
