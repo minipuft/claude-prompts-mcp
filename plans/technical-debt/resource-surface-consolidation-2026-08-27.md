@@ -21,18 +21,23 @@ lifecycle it can actually reach.
 
 ## Now
 
-_Rewritten 2026-09-17._ The remaining-rows slice runs on `feat/rsc-remaining` (from `8f9960eb`).
+_Rewritten 2026-09-20._ The remaining-rows slice merged as #339 (`02392dbf`). The tail slice runs on
+`feat/rsc-tail` (from `8c991b16`), one worker branch per row under `rsc-tail/*`.
 
-- **Merged:** P5.17, P6.4, P4.56, and the in-repo half of P5.12. P6.5 was found already closed; P3 is
-  killed (R32).
-- **Running:** P4.55 (R35), P4.52 for engine/execution and for gates+frameworks (R36), and P4.57.
-- **Ordering constraint on the `~/.claude` half of R33 and on P5.16 (R34).** The live `>>` commands
-  are served by `server/dist` in the main checkout, which the config session owns. Its tree does not
-  have `strategic_implement` until this PR merges and that `dist` is rebuilt. So the ~42
-  `strategicImplement` references (23 files) and the ~127 `dev-workflow` references (60 files) in
-  `~/.claude` switch in ONE step after the merge, together with the skill re-export. Switching
-  earlier points the global rules at a prompt the live server does not serve.
-- **Downstream repos** need their own push approval.
+- **Goal:** close P4.52, P4.65, P4.68 and P4.73; get owner rulings on P4.64 and P4.71.
+- **Running:** P4.73 (R37), P4.65 (R38), P4.68 (R39), and two P4.52 batches by class list (R36).
+- **Held out of the P4.52 batches:** `GateEnforcementAuthority.parseGateVerdicts` (P4.71),
+  `VersionHistoryService.*` (P4.68 touches it), `TelemetryLifecycle.*` and
+  `AttributePolicyEnforcer.isAllowed` (P4.73 touches them), and the two methods restored during
+  the #339 merge, `VerifyActiveStateStore.hasActiveVerification` and
+  `SafeConfigWriter.restoreFromBackup`, which `main`'s tests drive (owner call).
+- **Next decision:** the owner's answers on P4.64, P4.71 and the two restored methods.
+- **Constraints in force:** this plan has no `publish:` field, so each push, PR and merge needs the
+  owner's approval. The tutorial session edits `server/src/cli-shared/version-history.ts` (scope
+  derivation) while P4.68 edits its write path; whoever merges second re-merges and regenerates the
+  four ratchet baselines. The docs release stays held behind #232.
+- **Owner's, not this slice:** the `~/.claude` rename (P5.12 second half), P5.16, then P5.13. The
+  main checkout's `dist` was rebuilt on 2026-09-20 and serves `strategic_implement`.
 
 ## What already landed (do not redo)
 
@@ -600,6 +605,16 @@ Ruled before dispatching P4.43–P4.50, on `914b068c`. R23 and R24 stand as writ
   category. `rename` works on a nested step. Ids are the loader's composite ids.
 - **R36 (P4.52, owner 2026-09-17) — burn down by module.** At most 8 batches per slice. A method
   kept on purpose gets a stated reason recorded beside its baseline entry.
+- **R37 (P4.73, planner 2026-09-20) — emit where the value is already in scope, else remove.** An
+  attribute whose value is available where the pipeline root span's other attributes are set is
+  emitted there; one that needs new plumbing is removed from the type, the allowlist and the guide.
+  The row closes with a check that fails on an allowlisted attribute with no emitter.
+- **R38 (P4.65, planner 2026-09-20) — `edges` becomes authorable; nothing is pruned silently.**
+  `resource_manager` accepts `edges` on a chain prompt's create and update, along the path
+  `chainSteps` travels. The refusal stays and names the remedy. Additive to the tool contract.
+- **R39 (P4.68, planner 2026-09-20) — fix the producer, then the key, then the restore.** A rename
+  or move onto an id with history renumbers the incoming rows after the target's highest version.
+  A unique index on `(tenant_id, resource_type, resource_id, version)` ships with `SCHEMA_VERSION` 28. `ensureSchema()` renumbers colliding rows on restore instead of throwing or dropping them.
 - **R29 follow-ups (ruled on the P4.45 handoff).** A method called only from tests counts as
   unreached. A stale baseline entry fails the check.
 
