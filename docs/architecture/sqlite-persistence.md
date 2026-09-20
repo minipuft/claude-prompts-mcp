@@ -96,6 +96,26 @@ recreated and its DDL freezes permanently.
 Adding a `NOT NULL` column with no default to a durable table makes the restore throw, naming the
 table. That is intended: the change needs a real migration.
 
+## A Version Number Is an Identity, and Schema v28 Enforces It
+
+`idx_version_history_key` is UNIQUE on `(tenant_id, resource_type, resource_id, version)`. Every
+reader of `version_history` selects by version — `getVersion`, `compareVersions`, `rollback` — so
+two rows sharing one meant a rollback restored whichever row SQLite reached first.
+
+They could. A resource's history rows survive its deletion by design, so an id can carry history
+while nothing serves it, and the CLI's `rename_history` re-keyed a resource onto a new id with a
+bare `UPDATE ... SET resource_id`: renaming onto such an id merged two sequences and left two rows
+claiming to be v1. The producer moved with the index — a rename now renumbers the incoming rows to
+continue after the target's newest version, in one transaction, and a target with no history is
+re-keyed with its numbers untouched.
+
+v28 is the worked example of a **real migration** on a durable table. `ensureSchema()` renumbers
+colliding rows between the snapshot and the restore (`renumberDuplicateVersionHistory`,
+deterministic by `created_at` then `id`), keeping every row and every chronology, and logs one line
+with the count. Without it the restore would hit the new index and abort startup. There is no dual
+write and no flag: a v28 database cannot produce a duplicate, so the migration is a no-op forever
+after, and it needs no `DROPPED_ON_THIS_BUMP` entry because nothing is discarded.
+
 ## `tenant_id` Means Two Things — It Used to Mean Three
 
 The PID meaning got its own name at v20. `chain_sessions` and `chain_runs` now declare

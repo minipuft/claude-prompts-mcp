@@ -440,6 +440,90 @@ function loadRows(db: DatabaseSync, tenantId: string, request: HistoryRequest): 
   };
 }
 
+/** One row about to be re-keyed by a rename, before its new id and version are decided. */
+interface MovingRow {
+  id: number;
+  resource_id: string;
+  version: number;
+}
+
+/**
+ * Re-key `request.resource_id` and everything below it onto `newResourceId`, renumbering.
+ *
+ * **The renumbering is the point.** A resource's `version_history` rows survive its deletion by
+ * design — every delete path says so — so an id can carry history while nothing serves it, and
+ * renaming another resource onto that id merges two sequences. Until schema v28 the merge was a
+ * bare `UPDATE ... SET resource_id`, which left two rows claiming to be v1: `getVersion`,
+ * `compareVersions` and `rollback` all select by version, so they restored whichever row SQLite
+ * reached first. The incoming rows now continue after the target's newest version, keeping their
+ * own order, and a target with no history is re-keyed untouched — "continue after the max" must
+ * stay distinguishable from "always renumber from 1", or a plain rename silently rewrites numbers
+ * the operator has seen.
+ *
+ * One transaction: a partially re-keyed history is a resource whose past is split across two ids.
+ */
+function renameSubtree(
+  db: DatabaseSync,
+  tenantId: string,
+  request: HistoryRequest,
+  newResourceId: string
+): HistoryResponse {
+  const oldResourceId = request.resource_id;
+  if (newResourceId === oldResourceId) {
+    return { success: true };
+  }
+  if (newResourceId.startsWith(`${oldResourceId}/`)) {
+    // Renaming a chain into its own subtree would move rows underneath themselves; the caller's
+    // file rename cannot express it either. Refuse rather than produce an arbitrary re-key.
+    return {
+      success: false,
+      error: `Cannot rename ${oldResourceId} onto ${newResourceId}, which is below it`,
+    };
+  }
+
+  const moving = db
+    .prepare(
+      `SELECT id, resource_id, version FROM version_history
+       WHERE tenant_id = ? AND resource_type = ? AND ${SUBTREE_MATCH}
+       ORDER BY resource_id, version, id`
+    )
+    .all(tenantId, request.resource_type, oldResourceId, oldResourceId) as unknown as MovingRow[];
+
+  const maxVersionAt = db.prepare(
+    `SELECT MAX(version) AS latest FROM version_history
+     WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?`
+  );
+  const rekey = db.prepare(`UPDATE version_history SET resource_id = ?, version = ? WHERE id = ?`);
+
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    // Per target id: `null` while the target had no history (the rows keep their own numbers), or
+    // the last version handed out (each further row continues after it).
+    const continueAfter = new Map<string, number | null>();
+    for (const row of moving) {
+      const targetId = newResourceId + row.resource_id.slice(oldResourceId.length);
+      if (!continueAfter.has(targetId)) {
+        const existing = maxVersionAt.get(tenantId, request.resource_type, targetId) as
+          { latest: number | null } | undefined;
+        const latest = Number(existing?.latest ?? 0);
+        continueAfter.set(targetId, latest === 0 ? null : latest);
+      }
+      const previous = continueAfter.get(targetId) ?? null;
+      const version = previous === null ? row.version : previous + 1;
+      rekey.run(targetId, version, row.id);
+      if (previous !== null) {
+        continueAfter.set(targetId, version);
+      }
+    }
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+
+  return { success: true };
+}
+
 /** Route one request to its SQL. Mirrors the action set the Python helper dispatched. */
 function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): HistoryResponse {
   switch (request.action) {
@@ -534,18 +618,7 @@ function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): 
       if (newResourceId === undefined || newResourceId === '') {
         return { success: false, error: 'new_resource_id is required' };
       }
-      db.prepare(
-        `UPDATE version_history SET resource_id = ? || substr(resource_id, length(?) + 1)
-         WHERE tenant_id = ? AND resource_type = ? AND ${SUBTREE_MATCH}`
-      ).run(
-        newResourceId,
-        request.resource_id,
-        tenantId,
-        request.resource_type,
-        request.resource_id,
-        request.resource_id
-      );
-      return { success: true };
+      return renameSubtree(db, tenantId, request, newResourceId);
     }
   }
 }
