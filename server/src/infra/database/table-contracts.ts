@@ -243,6 +243,12 @@ export const TABLE_CONTRACTS: readonly TableContract[] = [
         closedBy: 'A CLI-to-server transport, or an accepted permanent second writer',
       },
     ],
+    // Its key is `(tenant_id, resource_type, resource_id, version)`, UNIQUE since schema v28
+    // (`idx_version_history_key`). A version number identifies a row within one history and every
+    // reader selects by it, so a duplicate made `rollback` restore whichever row SQLite reached
+    // first. Both writers must therefore place a row at a version no row in that history holds —
+    // which is what the CLI's rename renumbers for.
+    //
     // F6's divergent-DDL half is closed. The old `ensure_schema()` here created version_history
     // without organization_id/workspace_id and wrote no schema_version row, which left the engine
     // taking its "fresh database" path against an existing table — CREATE TABLE IF NOT EXISTS
