@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-20T17:34:44.440Z",
-  "total": 115,
+  "generatedAt": "2026-09-20T21:42:01.545Z",
+  "total": 114,
   "methods": [
     "Application.getCurrentFrameworkInfo",
     "Application.initializeModules",
@@ -50,7 +50,6 @@
     "GateAccumulator.getEntries",
     "GateAccumulator.getEntry",
     "GateAccumulator.has",
-    "GateEnforcementAuthority.parseGateVerdicts",
     "GateStateStore.recordValidation",
     "HookRegistry.emitChainComplete",
     "HookRegistry.emitChainFailed",
@@ -124,7 +123,6 @@
     "GateAccumulator.getBySource": "sole test-observation window for add()'s live dedup/priority-override contract at entry-source granularity; getAll() (live, id-only) can't express it (P4.52/R36)",
     "GateAccumulator.getEntries": "sole test-observation window for add()'s live dedup/priority-override contract at entry-priority/metadata granularity; getAll() (live, id-only) can't express it (P4.52/R36)",
     "GateAccumulator.getEntry": "sole test-observation window for a single entry's live retryLimit metadata written by add(); getAll() (live, id-only) can't express it (P4.52/R36)",
-    "GateAccumulator.has": "sole test-observation window for add()'s live existence-after-dedup contract; kept alongside getEntries/getEntry/getBySource for the same reason (P4.52/R36)",
-    "GateEnforcementAuthority.parseGateVerdicts": "deliberate read side of renderGateVerdict() (gate-verdict-renderer.ts) — its PER_GATE_HEADER constant names this method by file as the intended reader, and both sides are round-trip tested for losslessness; no pipeline stage currently acts on the parsed per-gate detail for an enforcement decision, which is a wiring gap for the plan owner to judge, not dead code (P4.52/R36)"
+    "GateAccumulator.has": "sole test-observation window for add()'s live existence-after-dedup contract; kept alongside getEntries/getEntry/getBySource for the same reason (P4.52/R36)"
   }
 }
