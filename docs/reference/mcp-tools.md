@@ -866,6 +866,13 @@ already the signal to keep the current value, so before `unset` they could not b
 Unsetting `system_message` also deletes `system-message.md`, so no orphan file is left pointing at
 nothing.
 
+**Prompts only.** `unset` is a prompt parameter, and sending it with `resource_type:"gate"`,
+`"framework"` or `"category"` is refused by name before anything is written — removing a field
+from those resources is not implemented, and the call used to answer "updated successfully", spend
+a version, and change nothing. That refusal is not special to `unset`: every parameter the
+tool publishes names the resource types that read it, and sending one to a type that does not read
+it is refused rather than ignored.
+
 **Refused by name:** `name`, `category`, `description`, `user_message_template`. They stay fully
 settable — send a new value to change one — but a prompt missing any of them does not load, so
 clearing them is not offered. Sending a field and unsetting it in the same call is also refused,

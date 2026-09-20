@@ -6,6 +6,7 @@
  * based on the resource_type parameter.
  */
 
+import { describeParameterRefusal } from './parameter-ownership.js';
 import {
   CROSS_WORKSPACE_READ_ACTIONS,
   PROMPT_ONLY_ACTIONS,
@@ -78,14 +79,22 @@ export class ResourceManagerRouter {
       return this.createErrorResponse(validationResult.error ?? 'Invalid action');
     }
 
-    // A preview must name what it would do, and the pair must be one this resource type can
-    // actually preview. Checked ahead of the confirmation guard because a malformed preview should
-    // be told what is wrong with it, not asked to confirm a deletion it never requested. The
-    // per-type check is the load-bearing half: `dry_run` was accepted on gate and framework
-    // `update`, where nothing read it, so those two previews performed the mutation.
-    const previewRefusal = describePreviewRefusal(resource_type, args);
-    if (previewRefusal !== null) {
-      return this.createErrorResponse(previewRefusal);
+    // Two per-type refusals, both about a parameter this resource type does not read, both ahead
+    // of dispatch so no write or version snapshot precedes them.
+    //
+    // `describeParameterRefusal` owns the general case: one flat schema serves four resource
+    // types, so every parameter is accepted for every type at the boundary and only the router
+    // decides which ones a handler ever sees. Each branch below forwards a subset; before this
+    // guard the rest were dropped silently and the handler still answered success — `framework`
+    // + `unset` saved a version and changed nothing.
+    //
+    // `describePreviewRefusal` is the special case its table cannot express: `preview_action` is
+    // valid for every type, and what varies is which OPERATIONS each type can preview. It runs
+    // second because "you sent a parameter this type ignores" is the coarser correction.
+    const requestRefusal =
+      describeParameterRefusal(resource_type, args) ?? describePreviewRefusal(resource_type, args);
+    if (requestRefusal !== null) {
+      return this.createErrorResponse(requestRefusal);
     }
 
     // One confirmation guard for every destructive action, ahead of dispatch. Deliberately above
