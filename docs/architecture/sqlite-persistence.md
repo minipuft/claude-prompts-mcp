@@ -116,6 +116,16 @@ back and a second connection committing between the two makes the INSERT land on
 which takes no lock until the first write and is correct only for a body that reads OR writes. No
 retry loop — a contender waits on the lock, and how long it waits is `busy_timeout`.
 
+**The predicate for which mode a transaction needs is "does it read before its first write".** Only
+then is there a lock to upgrade, and an upgrade race is the one `busy_timeout` cannot rescue, since
+waiting does not resolve it. Measured rather than assumed: the statements
+`ChainManager.persistSessionsOrThrow` issues begin `DELETE, DELETE, SELECT`, so it holds the write
+lock before it reads anything and is correct as `deferred` — `tests/integration/database/
+transaction-lock-mode.integration.test.ts` records that order and fails if a `SELECT` moves to the
+front. `skills-sync`'s manifest batch opens with a `DELETE` for the same reason. An IMMEDIATE lock
+costs readers nothing: under WAL a reader still sees the last committed snapshot, which is what lets
+the Python hooks keep reading while the server writes.
+
 **Both connections set `busy_timeout` from one constant**, `STATE_DB_BUSY_TIMEOUT_MS` in
 `shared/utils/runtime-state-location.ts`, beside the two path segments and for the same reason: the
 CLI opens its own connection and cannot import `runtime/`, so two hand-typed values would drift and
