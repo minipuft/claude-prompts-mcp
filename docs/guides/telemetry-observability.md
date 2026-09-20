@@ -88,7 +88,15 @@ fails the build if any registerable event loses its producer again.
 > from; its only publish channel is the handler's `subscriptions/listen` notifier, which
 > carries list-changed and resource-updated events and nothing else. An HTTP client sees the
 > span events (telemetry is unaffected) but receives no gate, chain or framework notification.
-> Giving HTTP a channel for them is open work, not a defect in this wiring.
+> Giving HTTP a channel for them is open work, not a defect in this wiring. An HTTP run logs one
+> `Failed to send notification` warning per event (`Not connected`) and continues serving.
+
+> [!NOTE]
+> On the final step of a gated chain, `chain/complete` is delivered **before** the last
+> `chain/step_complete`: the PASS verdict advances past the last node, which latches the run
+> terminal, before the step's response is captured. Treat `chain/complete` as "the run ended",
+> not as "no further events". The ordering itself is a defect in advance-on-PASS, filed against
+> `GateVerdictProcessor`.
 
 ### Attributes
 

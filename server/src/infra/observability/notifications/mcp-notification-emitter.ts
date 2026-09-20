@@ -16,6 +16,14 @@
  *   `status` field names ('completed' | 'failed' | 'cancelled'). There is no separate
  *   `notifications/chain/failed`: one terminal event carrying its outcome means a client
  *   subscribes once and cannot miss an ending by listening to the wrong method.
+ *
+ * ORDERING CAVEAT, measured 2026-09-20 and NOT introduced by this wiring: on the final step of
+ * a gated chain, the PASS verdict advances past the last node — latching the run `completed`
+ * and announcing it — before `StepCaptureService` captures that step's response, so
+ * `chain/complete` is delivered ~25ms BEFORE the last `chain/step_complete`. A client that
+ * tears its handler down on `chain/complete` misses the final step event. The defect is in
+ * `GateVerdictProcessor`'s advance-on-PASS running ahead of capture, not here; until it is
+ * fixed, treat `chain/complete` as "the run ended", not as "no further events".
  */
 
 import type {
