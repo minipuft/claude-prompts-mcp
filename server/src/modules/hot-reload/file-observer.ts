@@ -622,21 +622,10 @@ export class FileObserver extends EventEmitter {
 
     this.logger.info(`🔄 FileObserver: File ${event.type}: ${event.filename}`);
 
-    // Emit specific event types
+    // One event, classified by its flags. `HotReloadObserver` is this class's only owner and
+    // routes on `isPromptFile`/`isConfigFile`/`isAuxiliaryFile`; per-type events named after those
+    // flags had no listener anywhere.
     this.emit('fileChange', event);
-    this.emit(`file:${event.type}`, event);
-
-    if (event.isPromptFile) {
-      this.emit('promptFileChange', event);
-    }
-
-    if (event.isConfigFile) {
-      this.emit('configFileChange', event);
-    }
-
-    if (event.isFrameworkFile) {
-      this.emit('frameworkFileChange', event);
-    }
   }
 
   /**
