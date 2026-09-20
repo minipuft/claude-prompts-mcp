@@ -225,8 +225,11 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
       'validation passes and server/skills-sync.yaml has loaded — a gitignored file, absent in CI ' +
       "and holding the developer's own registrations locally. The conformance servers inherit the " +
       'real HOME, so a scenario that got that far would read real client skill folders, and write ' +
-      'them if `preview` ever stopped arriving. The other skills_sync parameters are covered by ' +
-      'option-validation refusals in tool-surface.yaml, which stop before that point.',
+      'them if `preview` ever stopped arriving. The other skills_sync parameters are exercised in ' +
+      'tool-surface.yaml only via scenarios that deliberately pair each one with an incompatible ' +
+      'command, so THOSE specific calls are refused before reaching real HOME — option validation ' +
+      'does not refuse skills_sync calls in general: an ordinary, well-formed one (an export, say) ' +
+      'passes validation and writes for real. One such export was measured writing 224 files.',
     'A conformance server with a temp HOME and a fixture skills-sync.yaml, running `diff` or a ' +
       '`preview: true` export filtered by `id`.'
   ),
