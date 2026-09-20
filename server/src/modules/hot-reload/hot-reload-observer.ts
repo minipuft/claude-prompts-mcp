@@ -27,7 +27,7 @@ export type { HotReloadEventType, FileChangeOperation, HotReloadEvent };
 /**
  * Framework-aware hot reload capabilities
  */
-export interface FrameworkHotReloadCapabilities {
+interface FrameworkHotReloadCapabilities {
   enabled: boolean;
   frameworkAnalysis: boolean;
   performanceMonitoring: boolean;

@@ -59,7 +59,7 @@ export interface FileChangeEvent {
 /**
  * Framework integration capabilities
  */
-export interface FrameworkIntegration {
+interface FrameworkIntegration {
   enabled: boolean;
   analyzeChanges: boolean;
   cacheInvalidation: boolean;
