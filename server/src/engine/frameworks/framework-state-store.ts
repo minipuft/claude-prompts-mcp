@@ -843,19 +843,24 @@ export class FrameworkStateStore extends EventEmitter {
   }
 
   /**
-   * Shutdown the framework state manager and cleanup resources
-   * Prevents async handle leaks by persisting state and removing event listeners
+   * Shutdown the framework state manager and release its listeners.
+   *
+   * It deliberately persists NOTHING. Every field this store writes to SQLite —
+   * `activeFramework`, `frameworkSystemEnabled`, `switchedAt`, `switchReason` — is followed
+   * by an awaited `saveStateToFile(scope)` in the same method that changed it
+   * (`switchFramework`, `selectConfiguredDefault`, `enable`/`disableFrameworkSystem`, the
+   * legacy adoption). There is no state a final save would catch.
+   *
+   * What the old final save DID do was write one scope. It took no argument, so it resolved
+   * to the launch scope and left every other workspace this process serves untouched — a
+   * teardown that looks like a safety net and covers 1 of N. `switchingMetrics` and
+   * `switchHistory` are in-memory only and were never persisted by it either.
+   *
+   * `state-store-teardown-persist.test.ts` holds the invariant: a teardown method writes
+   * nothing, and a mutator writes before it returns.
    */
   async shutdown(): Promise<void> {
     this.logger.info('Shutting down FrameworkStateStore...');
-
-    try {
-      // Persist final state to disk
-      await this.saveStateToFile();
-      this.logger.debug('Framework state persisted during shutdown');
-    } catch (error) {
-      this.logger.warn('Error persisting state during shutdown:', error);
-    }
 
     // Remove all event listeners
     this.removeAllListeners();

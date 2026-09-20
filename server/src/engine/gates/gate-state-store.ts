@@ -460,6 +460,11 @@ export class GateStateStore extends EventEmitter {
    * `20-gate-review-stage.ts`, which now knows every verification outcome and their durations).
    * Delete instead if that is judged not worth wiring — but do it together with the health
    * fields, so no reader is left describing a number nothing computes.
+   *
+   * Reviving it also needs a flush at teardown, because this is the only writer here that
+   * batches: up to nine recorded validations sit in memory unpersisted. {@link cleanup} no
+   * longer saves, and the save it used to make covered the wrong scope anyway — restore one
+   * that iterates `scopedStates`, not one that takes no argument.
    */
   recordValidation(success: boolean, executionTime: number, scope?: StateStoreOptions): void {
     const currentState = this.getOrCreateScopedState(scope);
@@ -524,15 +529,24 @@ export class GateStateStore extends EventEmitter {
   }
 
   /**
-   * Cleanup resources
+   * Cleanup resources.
+   *
+   * It deliberately persists nothing, for the reason
+   * `FrameworkStateStore.shutdown` gives: `enableGateSystem` and `disableGateSystem`
+   * each await `saveStateToFile(scope)` before returning, so no toggle reaches here
+   * unpersisted. The final save that used to sit here took no scope, so it resolved to the
+   * literal `default` key — the pre-isolation bucket that nothing reads for gates except
+   * {@link adoptLegacyGlobalState}. It therefore wrote unchanged default state into the one
+   * key a later start reads as "an operator's pre-isolation choice".
+   *
+   * The one writer a final flush could have served is `recordValidation`, which
+   * batches every tenth call — and it has no caller. Reviving it means restoring a flush
+   * that covers every scope in `scopedStates`, not the `default` one.
    */
   async cleanup(): Promise<void> {
     if (this.healthCheckInterval) {
       clearInterval(this.healthCheckInterval);
     }
-
-    // Final state save
-    await this.saveStateToFile();
 
     this.logger.debug('GateStateStore cleanup completed');
   }
