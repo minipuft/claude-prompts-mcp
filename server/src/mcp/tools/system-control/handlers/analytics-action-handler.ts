@@ -128,10 +128,12 @@ export class AnalyticsActionHandler extends ActionHandler {
    */
   private tallyGateVerdicts(): {
     reviewedRecords: number;
+    attestations: number;
     byGate: Map<string, { passed: number; failed: number }>;
   } {
     const byGate = new Map<string, { passed: number; failed: number }>();
     let reviewedRecords = 0;
+    let attestations = 0;
 
     for (const record of this.context.executionRecordStore?.queryRecent(
       undefined,
@@ -141,6 +143,13 @@ export class AnalyticsActionHandler extends ActionHandler {
       if (verdicts.length === 0) continue;
       reviewedRecords += 1;
       for (const verdict of verdicts) {
+        // A reminder has no evaluator — the reviewer attests to it. Counting one beside an
+        // evaluated check would average a self-declaration into a pass rate, so it is listed
+        // as an attestation and never as a pass.
+        if (verdict.tier === 'reminder') {
+          attestations += 1;
+          continue;
+        }
         const tally = byGate.get(verdict.gateId) ?? { passed: 0, failed: 0 };
         if (verdict.verdict === 'PASS') tally.passed += 1;
         else tally.failed += 1;
@@ -148,7 +157,7 @@ export class AnalyticsActionHandler extends ActionHandler {
       }
     }
 
-    return { reviewedRecords, byGate };
+    return { reviewedRecords, attestations, byGate };
   }
 
   private async getAnalytics(args: { include_history?: boolean }): Promise<ToolResponse> {
@@ -199,6 +208,9 @@ export class AnalyticsActionHandler extends ActionHandler {
       for (const [gateId, tally] of gateTally.byGate) {
         response += `- \`${gateId}\`: ${tally.passed} passed / ${tally.failed} failed\n`;
       }
+    }
+    if (gateTally.attestations > 0) {
+      response += `\n**Reminder Attestations**: ${gateTally.attestations} (self-declared, not graded)\n`;
     }
     response += '\n';
 

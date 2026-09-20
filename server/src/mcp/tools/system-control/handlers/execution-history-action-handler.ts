@@ -132,7 +132,9 @@ function formatRecords(records: readonly ExecutionRecord[]): string {
  */
 function formatGateVerdictLines(record: ExecutionRecord): string[] {
   return record.gateVerdicts.map((verdict) => {
-    const icon = verdict.verdict === 'PASS' ? '✓' : '✗';
+    // A reminder is the reviewer's own word, not a graded result — it gets its own mark so a
+    // reader scanning the page cannot mistake an attestation for a check that passed.
+    const icon = verdict.tier === 'reminder' ? '≡' : verdict.verdict === 'PASS' ? '✓' : '✗';
     const attempt = verdict.attempt !== undefined ? ` (attempt ${verdict.attempt})` : '';
     const rationale =
       verdict.rationale !== undefined && verdict.rationale.length > 0

@@ -6,6 +6,7 @@ import {
   type VerdictPattern,
 } from '../../../../gates/config/index.js';
 import { DEFAULT_RETRY_LIMIT } from '../../../../gates/constants.js';
+import { parseGateVerdictReminders } from '../../../../gates/core/gate-verdict-renderer.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type {
@@ -173,15 +174,17 @@ export class GateEnforcementAuthority {
       return [];
     }
 
+    const timestamp = Date.now();
+    const summaries: GateVerdictSummary[] = [
+      ...this.readReminderAttestation(raw, gateIds, timestamp, attempt),
+    ];
+
     const block = raw.match(
       /(?:CRITERION_VERDICTS|GATE_VERDICTS):\s*\n((?:\[?\d+\]?\s*(?:PASS|FAIL).*\n?)*)/i
     );
     if (!block?.[1]) {
-      return [];
+      return summaries;
     }
-
-    const timestamp = Date.now();
-    const summaries: GateVerdictSummary[] = [];
 
     for (const line of block[1].trim().split('\n')) {
       const match = line.match(/\[?(\d+)\]?\s*(PASS|FAIL)\s*[-–—:]\s*(.*)/i);
@@ -209,6 +212,65 @@ export class GateEnforcementAuthority {
     }
 
     return summaries;
+  }
+
+  /**
+   * Fold the `REMINDERS:` line into the same gate-id-keyed record as the per-gate block.
+   *
+   * `parseGateVerdictReminders` was the render half's reader and had none of its own: the line
+   * was produced, round-trip tested, and consumed by nothing (P4.78). This is where it earns a
+   * reader, and the reason it can share `GateVerdictSummary` without lying is `tier` — a
+   * reminder is self-declared, so it is recorded as an attestation and counted separately from
+   * an evaluated check, never averaged into the same pass rate.
+   *
+   * A `not_applicable` entry is still `PASS`: the reviewer is asserting the gate does not bind,
+   * which is not a failure, and the reason it gave is the rationale. The PASS/FAIL union is
+   * deliberately not widened for it — a third member would reach every reader of the record for
+   * a distinction only this branch makes, and the `tier` + rationale already carry it.
+   *
+   * An id the review never advertised is dropped with a diagnostic, exactly as an out-of-range
+   * index is: an attestation about a gate that was not under review is not a fact about it.
+   */
+  private readReminderAttestation(
+    raw: string,
+    gateIds: readonly string[],
+    timestamp: number,
+    attempt?: number
+  ): GateVerdictSummary[] {
+    const reminders = parseGateVerdictReminders(raw);
+    if (reminders === undefined) {
+      return [];
+    }
+
+    const advertised = new Set(gateIds);
+    const entries: GateVerdictSummary[] = [];
+
+    const record = (gateId: string, rationale: string): void => {
+      if (!advertised.has(gateId)) {
+        this.logger.warn(
+          `[GateEnforcementAuthority] Reminder attestation names "${gateId}", which this ` +
+            'review did not advertise; entry dropped.'
+        );
+        return;
+      }
+      entries.push({
+        gateId,
+        verdict: 'PASS',
+        rationale,
+        timestamp,
+        tier: 'reminder',
+        ...(attempt !== undefined ? { attempt } : {}),
+      });
+    };
+
+    for (const gateId of reminders.satisfied) {
+      record(gateId, 'attested satisfied');
+    }
+    for (const exemption of reminders.not_applicable) {
+      record(exemption.id, `not applicable: ${exemption.reason}`);
+    }
+
+    return entries;
   }
 
   /**

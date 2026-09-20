@@ -1,5 +1,4 @@
 // @lifecycle canonical - Helpers for gate confirmation parsing and normalization.
-import { parseLLMReview } from './llm-review-parser.js';
 import {
   resolveJudgeConfig,
   isJudgeMode,
@@ -270,5 +269,3 @@ export function composeJudgeReviewPrompt(
   const envelope = buildJudgeEnvelope(output, 'Combined Review', combinedId, allCriteria, strict);
   return { hasJudgeGates: true, judgePrompt: renderJudgePrompt(envelope), judgeGateIds, modelHint };
 }
-
-export { parseLLMReview };

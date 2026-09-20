@@ -168,6 +168,72 @@ describe('GateEnforcementAuthority', () => {
         return rest;
       });
 
+    describe('reminder attestations (P4.78)', () => {
+      test('a REMINDERS line folds into the same record, marked as an attestation', () => {
+        const raw = [
+          'GATE_REVIEW: PASS - all good',
+          'REMINDERS: satisfied=style-guide; n/a=security-review(no network code)',
+          '',
+          'GATE_VERDICTS:',
+          '[1] PASS - suite green',
+        ].join('\n');
+
+        const result = authority.parseGateVerdicts(
+          raw,
+          ['test-coverage', 'style-guide', 'security-review'],
+          1
+        );
+
+        expect(withoutTimestamp(result)).toEqual([
+          {
+            gateId: 'style-guide',
+            verdict: 'PASS',
+            rationale: 'attested satisfied',
+            tier: 'reminder',
+            attempt: 1,
+          },
+          {
+            gateId: 'security-review',
+            verdict: 'PASS',
+            rationale: 'not applicable: no network code',
+            tier: 'reminder',
+            attempt: 1,
+          },
+          {
+            gateId: 'test-coverage',
+            verdict: 'PASS',
+            rationale: 'suite green',
+            attempt: 1,
+          },
+        ]);
+      });
+
+      test('a reminder naming a gate the review never advertised is dropped, and said so', () => {
+        const raw = 'GATE_REVIEW: PASS - fine\nREMINDERS: satisfied=not-under-review; n/a=';
+
+        expect(authority.parseGateVerdicts(raw, ['test-coverage'])).toEqual([]);
+        expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('not-under-review'));
+      });
+
+      test('positive control: the same line naming an advertised gate is kept, unwarned', () => {
+        // Differs from the case above in the gate id alone, so a dropped entry can only be the
+        // advertised-list check.
+        const raw = 'GATE_REVIEW: PASS - fine\nREMINDERS: satisfied=test-coverage; n/a=';
+
+        expect(authority.parseGateVerdicts(raw, ['test-coverage'])).toHaveLength(1);
+        expect(mockLogger.warn).not.toHaveBeenCalled();
+      });
+
+      test('a submission with no REMINDERS line records no attestation', () => {
+        const raw = 'GATE_REVIEW: PASS - fine\n\nGATE_VERDICTS:\n[1] PASS - ok';
+
+        const result = authority.parseGateVerdicts(raw, ['test-coverage']);
+
+        expect(result).toHaveLength(1);
+        expect(result[0]?.tier).toBeUndefined();
+      });
+    });
+
     test('resolves each entry to the gate id at that advertised position', () => {
       const raw = `Some preamble text.
 

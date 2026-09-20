@@ -106,6 +106,16 @@ export const SUITE = [
       'CHECKED both ways — a finding absent from the baseline fails naming file:line, and a baseline entry no longer found (deleted or now called) fails as stale. Positive control 2026-09-16: the live scan named ResourceIndexer.getValidStyles and getValidFrameworks before P4.46 deleted them; the self-test holds a one-caller twin, a same-named method on another class, a structural port, an implemented interface and a generic one. UNCHECKED and known — computed access (`obj[name]()`) and string-dispatched entry points read as unreached (false findings, never false silence)',
   },
   {
+    // Beside the method ratchet because it covers the other half of the same family: a
+    // module-level exported FUNCTION nobody calls. No baseline — unlike an owner API kept for a
+    // dynamic caller, a parse half with no reader has no legitimate steady state.
+    script: 'validate:unread-parsers',
+    io: 'read',
+    reads: ['declared'],
+    converse:
+      'CHECKED — the self-test plants a called parser and its uncalled twin in one program and separates them, plus the three shapes that produced false consumers: a re-export (how parseLLMReview looked used), a test-only caller, and a {@link} in a docblock. Positive control 2026-09-20 on the live tree: deleting the single call to parseGateVerdictReminders makes the check fail naming it, and restoring it passes. UNCHECKED and known — a parser reached only by computed access or string dispatch reads as unread (false finding, never false silence)',
+  },
+  {
     // First, because every step after it is only as trustworthy as the tree it ran against.
     // A drifted node_modules is how a knip-ratchet baseline got measured with knip 6.32.1 and
     // committed against the lockfile's 6.32.2 (2026-08-19).

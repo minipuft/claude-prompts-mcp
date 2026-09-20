@@ -70,6 +70,23 @@ describe('analytics reports gate outcomes from the ledger', () => {
     expect(text).toContain('**Gate Adoption Rate**: 50%');
   });
 
+  test('a reminder attestation is counted apart from the graded gates, never inside them', async () => {
+    // A reminder has no evaluator. Folding it into the pass tally would report a self-declared
+    // "yes" as a gate that passed, which is the whole reason `tier` exists (P4.78).
+    const text = await render([
+      record({
+        gateVerdicts: [
+          { gateId: 'test-coverage', verdict: 'FAIL', timestamp: 0 },
+          { gateId: 'style-guide', verdict: 'PASS', timestamp: 0, tier: 'reminder' },
+        ],
+      }),
+    ]);
+
+    expect(text).toContain('- `test-coverage`: 0 passed / 1 failed');
+    expect(text).not.toContain('`style-guide`: 1 passed');
+    expect(text).toContain('**Reminder Attestations**: 1 (self-declared, not graded)');
+  });
+
   test('positive control: records with no verdicts keep the section absent and the count at 0', async () => {
     // The absence is evidence only because the same handler, over the same shape of record
     // WITH verdicts, does render the section — the case above.
