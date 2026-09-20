@@ -609,7 +609,7 @@ describe('version-history', () => {
       expect(tenantsFor('prompt', 'test-prompt')).toEqual(['server-tenant']);
     });
 
-    it('CONTROL: does not correct — and reports a miss — when two other tenants both hold rows', () => {
+    it('does not correct, and REFUSES rather than reads as empty, when two other tenants both hold rows', () => {
       process.env['CLAUDE_PROJECT_DIR'] = '/srv/tenant-a';
       saveVersion(promptDir, 'prompt', 'test-prompt', { id: 'test-prompt', description: 'a' });
 
@@ -619,8 +619,18 @@ describe('version-history', () => {
       expect(tenantsFor('prompt', 'test-prompt').sort()).toEqual(['tenant-a', 'tenant-b']);
 
       // A third, unrelated guess: two real candidates exist, so correcting would have to pick one
-      // and silently serve the wrong project's history. It must refuse instead.
+      // and silently serve the wrong project's history. It must refuse instead — and refuse LOUDLY:
+      // returning null here would be indistinguishable from a resource with no history anywhere,
+      // which is the exact "nothing found" symptom this whole fix exists to remove, just one layer
+      // further out. `null` stays reserved for the genuinely-empty case (control right below).
       process.env['CLAUDE_PROJECT_DIR'] = '/home/user/tenant-c';
+      expect(() => loadHistory(promptDir, PROMPT_REF)).toThrow(/2 other scopes/);
+    });
+
+    it('CONTROL: a genuinely empty history (no tenant anywhere) still reads as empty, not a refusal', () => {
+      // No saveVersion call for this resource under ANY tenant — nothing to be ambiguous between.
+      process.env['CLAUDE_PROJECT_DIR'] = '/home/user/tenant-c';
+      expect(tenantsFor('prompt', 'test-prompt')).toEqual([]);
       expect(loadHistory(promptDir, PROMPT_REF)).toBeNull();
     });
 

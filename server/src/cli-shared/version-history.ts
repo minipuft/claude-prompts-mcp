@@ -112,6 +112,15 @@ interface HistoryResponse {
   saved_version?: number;
   restored_version?: number;
   snapshot?: Record<string, unknown>;
+  /**
+   * Set alongside `success: false` by `load_history` when `resolveEffectiveTenantId` found the
+   * guessed tenant empty AND more than one other tenant holding rows for this resource — refused
+   * rather than guessed between two real candidates. Distinguishes this from every other
+   * `success: false` (missing `state.db`, missing table): those map to `loadHistory` returning
+   * `null`, same as a genuinely empty history; this one must not, or a caller cannot tell
+   * "nothing recorded" from "recorded somewhere this guess could not find".
+   */
+  ambiguous?: true;
 }
 
 /** First of `values` that is set and not all-whitespace, else `undefined`. */
@@ -292,9 +301,13 @@ function runSqlite(request: HistoryRequest): HistoryResponse {
  * derived, it is what the writer — the server — actually used, so reading it is consulting the
  * SSOT directly instead of re-predicting it. Applied only when unambiguous (the guessed tenant has
  * no rows for this exact resource, and exactly one OTHER tenant does): a shared `state.db` can
- * legitimately hold the same `resource_type`/`resource_id` under two unrelated projects, and
- * picking between two real candidates would silently serve the wrong project's history rather than
- * reporting a miss.
+ * legitimately hold the same `resource_type`/`resource_id` under two unrelated projects. Two real
+ * candidates is reported as `ambiguousCandidateCount`, not silently resolved — picking one would
+ * serve the wrong project's history, and returning the guess unlabeled would read exactly like a
+ * genuinely empty history, which is the same "nothing found" symptom this fix exists to remove.
+ * Zero candidates (nobody, anywhere, has ever recorded this resource) is not ambiguous — there is
+ * nothing to be ambiguous BETWEEN — so it returns the guess unlabeled too, and the caller reports
+ * an ordinary empty result.
  *
  * `dispatch` calls this for every action whose SQL can only act on rows that already exist —
  * `load_history`, `get_version`, `compare_versions`, `rollback` (which reads its target before
@@ -312,12 +325,17 @@ function runSqlite(request: HistoryRequest): HistoryResponse {
  * too, but for a different reason: its write path is being edited concurrently elsewhere in this
  * file (row renumbering); correcting it is the same shape and belongs with that change, not this
  * one — tracked as an open gap, not a decision that it should stay uncorrected.
+ *
+ * Only `load_history` currently inspects `ambiguousCandidateCount` and refuses loudly on it
+ * (`dispatch`'s other four callers read `.tenantId` alone, unchanged from before this field
+ * existed) — see that case for why an ambiguous result must not collapse into the same "nothing
+ * found" shape a genuinely empty history produces.
  */
 function resolveEffectiveTenantId(
   db: DatabaseSync,
   guessedTenantId: string,
   request: HistoryRequest
-): string {
+): { tenantId: string; ambiguousCandidateCount?: number } {
   const guessHasRows =
     db
       .prepare(
@@ -325,7 +343,7 @@ function resolveEffectiveTenantId(
       )
       .get(guessedTenantId, request.resource_type, request.resource_id) !== undefined;
   if (guessHasRows) {
-    return guessedTenantId;
+    return { tenantId: guessedTenantId };
   }
 
   const candidates = db
@@ -334,7 +352,13 @@ function resolveEffectiveTenantId(
     )
     .all(request.resource_type, request.resource_id) as { tenant_id: string }[];
   const onlyCandidate = candidates.length === 1 ? candidates[0] : undefined;
-  return onlyCandidate?.tenant_id ?? guessedTenantId;
+  if (onlyCandidate !== undefined) {
+    return { tenantId: onlyCandidate.tenant_id };
+  }
+  if (candidates.length >= 2) {
+    return { tenantId: guessedTenantId, ambiguousCandidateCount: candidates.length };
+  }
+  return { tenantId: guessedTenantId };
 }
 
 function versionHistoryExists(db: DatabaseSync): boolean {
@@ -532,13 +556,27 @@ function loadRows(db: DatabaseSync, tenantId: string, request: HistoryRequest): 
 function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): HistoryResponse {
   switch (request.action) {
     case 'load_history': {
-      const effectiveTenantId = resolveEffectiveTenantId(db, tenantId, request);
-      const history = loadRows(db, effectiveTenantId, request);
+      const resolved = resolveEffectiveTenantId(db, tenantId, request);
+      // An ambiguous resolution must not collapse into the same shape a genuinely empty history
+      // produces below (`success: true, history: null`) — that is the exact symptom this fix
+      // exists to remove, just moved one level down. Refuse by name instead, through the
+      // `success: false` channel every other real failure in this dispatch already uses.
+      if (resolved.ambiguousCandidateCount !== undefined) {
+        return {
+          success: false,
+          error:
+            `${request.resource_type} '${request.resource_id}' has version history under ` +
+            `${resolved.ambiguousCandidateCount} other scopes on this state.db; this process ` +
+            `cannot tell which one you mean. Re-run from the workspace whose history you want.`,
+          ambiguous: true,
+        };
+      }
+      const history = loadRows(db, resolved.tenantId, request);
       return { success: true, history: history.versions.length > 0 ? history : null };
     }
 
     case 'get_version': {
-      const effectiveTenantId = resolveEffectiveTenantId(db, tenantId, request);
+      const effectiveTenantId = resolveEffectiveTenantId(db, tenantId, request).tenantId;
       const row = selectVersion(db, effectiveTenantId, request, Number(request.version));
       return { success: true, entry: row !== undefined ? toEntry(row) : null };
     }
@@ -566,7 +604,7 @@ function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): 
     }
 
     case 'compare_versions': {
-      const effectiveTenantId = resolveEffectiveTenantId(db, tenantId, request);
+      const effectiveTenantId = resolveEffectiveTenantId(db, tenantId, request).tenantId;
       const fromVersion = Number(request.from_version);
       const toVersion = Number(request.to_version);
       const fromRow = selectVersion(db, effectiveTenantId, request, fromVersion);
@@ -593,7 +631,7 @@ function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): 
       // write below — a rollback that read the target from a corrected tenant must record the
       // restored state there too, or the operation splits across two tenants and the next read
       // sees a one-row history instead of a continuation.
-      const effectiveTenantId = resolveEffectiveTenantId(db, tenantId, request);
+      const effectiveTenantId = resolveEffectiveTenantId(db, tenantId, request).tenantId;
       const target = Number(request.target_version);
       const targetRow = selectVersion(db, effectiveTenantId, request, target);
       if (targetRow === undefined) {
@@ -626,7 +664,7 @@ function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): 
       // itself keys on the resource's OWN exact id, not the subtree the DELETE below removes: for
       // a chain that has ever been edited as a whole, its own row exists and names the tenant
       // correctly; a chain versioned only step-by-step is outside what this check can see.
-      const effectiveTenantId = resolveEffectiveTenantId(db, tenantId, request);
+      const effectiveTenantId = resolveEffectiveTenantId(db, tenantId, request).tenantId;
       db.prepare(
         `DELETE FROM version_history
          WHERE tenant_id = ? AND resource_type = ? AND ${SUBTREE_MATCH}`
@@ -682,6 +720,18 @@ function createRequest(
 
 // ── Read operations ─────────────────────────────────────────────────────────
 
+/**
+ * Load a resource's version history.
+ *
+ * Throws only for the `ambiguous` case (`HistoryResponse.ambiguous`, set by `dispatch`'s
+ * `load_history` case) — a resource with recorded history under more than one tenant, where this
+ * process's scope guess matches none of them. `null` stays reserved for every OTHER outcome,
+ * including a genuinely empty history and a missing `state.db`/`version_history` table (both
+ * pre-existing `success: false` cases with no distinguishing field): a caller must be able to
+ * tell "there is nothing to find" from "this process could not tell which of several tenants you
+ * meant", and collapsing the second into the first reproduces the exact "no history" symptom this
+ * correction exists to remove — just one layer further out.
+ */
 export function loadHistory(resourceDir: string, ref: HistoryResourceRef): HistoryFile | null {
   const request = createRequest(resourceDir, 'load_history', ref);
   if (request === null) {
@@ -689,6 +739,9 @@ export function loadHistory(resourceDir: string, ref: HistoryResourceRef): Histo
   }
   const result = runSqlite(request as HistoryRequest);
   if (!result.success) {
+    if (result.ambiguous === true) {
+      throw new Error(result.error ?? 'Ambiguous version history scope.');
+    }
     return null;
   }
   return result.history ?? null;
