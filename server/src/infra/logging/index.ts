@@ -287,6 +287,35 @@ export class EnhancedLogger implements Logger {
     this.addToBuffer(LogLevel.DEBUG, message, args);
   }
 
+  /**
+   * Log startup information
+   *
+   * Restored 2026-09-20 (P4.52 reimplementation probe): `ServerLifecycle.logSystemInfo`
+   * (infra/http/index.ts) independently logs the same pid/node-version/cwd facts inline instead
+   * of calling this method — a live duplicate, not proof this method is dead. Left un-wired
+   * pending an owner decision on which caller should be the canonical one.
+   */
+  logStartupInfo(transport: string, config: any): void {
+    this.info(`Server starting up - Process ID: ${process.pid}`);
+    this.info(`Node version: ${process.version}`);
+    this.info(`Working directory: ${process.cwd()}`);
+    this.info(`Using transport: ${transport}`);
+    this.info(`Command-line arguments: ${JSON.stringify(process.argv)}`);
+    this.debug('Configuration:', JSON.stringify(config, null, 2));
+  }
+
+  /**
+   * Log memory usage information
+   *
+   * Restored 2026-09-20 (P4.52 reimplementation probe): `ServerLifecycle.logSystemInfo`
+   * (infra/http/index.ts) logs the identical `Server process memory usage: ${JSON.stringify(...)}`
+   * string inline instead of calling this method — a live duplicate, not proof this method is
+   * dead. Left un-wired pending an owner decision on which caller should be the canonical one.
+   */
+  logMemoryUsage(): void {
+    this.info(`Server process memory usage: ${JSON.stringify(process.memoryUsage())}`);
+  }
+
   // ─────────────────────────────────────────────────────────────────────────────
   // Ring Buffer Methods (for MCP resources access)
   // ─────────────────────────────────────────────────────────────────────────────
