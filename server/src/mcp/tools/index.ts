@@ -450,20 +450,29 @@ export class McpToolRouter {
   /**
    * Read the runtime state the `prompt_engine` parameter shape depends on.
    *
-   * `isGateSystemEnabled()` is the master switch: with it off, `GateService`
-   * short-circuits guidance and validation for every gate id whatever rank
-   * contributed it, so the three gate parameters cannot affect an execution.
+   * `GateStateStore.isGateSystemEnabled(scope)` is the runtime master switch. With it
+   * off, `LightweightGateSystem.isGateSystemEnabled()` reports false, and the two things
+   * that read it stop: shell verification refuses to run, and the three gate parameters
+   * are withheld here.
+   *
+   * It is NOT the switch that stops gate GUIDANCE being rendered into a prompt. That is
+   * the separate `gates.enabled` config value, read by the gate-enhancement stage —
+   * `system_control gates disable` reaches it only with `persist: true`. Two switches
+   * answer "are gates on?", and this one answers the narrower question. Do not widen this
+   * comment back into "guidance and validation are short-circuited": an earlier revision
+   * said so while naming a `GateService.getGuidanceText`/`validateContent` pair that no
+   * longer exists, which is how the claim survived the code it described.
    *
    * The adjacent `gatesConfig.enableFrameworkGates` switch is deliberately not
    * consulted. It vetoes only the `framework-guide` rank — gates the server
    * loads from the active framework — and leaves client-supplied gates fully
    * functional, so reading it here would withdraw a parameter that still works.
    *
-   * Read from the state store rather than `GateManager.isGateSystemEnabled()`,
-   * which is the same source `GateService` consults. `GateManager` has a
-   * `setStateManager()` seam that nothing calls, so its check falls through to
-   * its "no state manager, assume enabled" default and reports `true` however
-   * the switch is set — a surface built on it would never narrow.
+   * Read from the state store, which is the same source `LightweightGateSystem`
+   * consults. `GateManager` is deliberately not asked: it carried a `stateManager`
+   * field that nothing in `src/` ever wrote, so its check fell through to "no state
+   * manager, assume enabled" and reported `true` however the switch was set. A surface
+   * built on it would never have narrowed. The field and the check were deleted.
    *
    * Read for {@link servingUnitScope}, the workspace this instance serves.
    * Reading unscoped would resolve to the process default while a client's

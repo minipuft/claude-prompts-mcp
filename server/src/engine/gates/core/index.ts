@@ -91,13 +91,19 @@ export class LightweightGateSystem {
   /**
    * Whether the gate master switch is on for this instance's workspace.
    *
-   * Public because the shell verification executor must read the SAME source
-   * this class already short-circuits guidance and validation on. The obvious
-   * alternative, `GateManager.isGateSystemEnabled()`, was never that source: its
-   * `setStateManager()` seam had no production caller, so it fell through to
-   * "no state manager, assume enabled" and answered `true` however the switch was
-   * set. A control built on it would never have engaged — both methods were
-   * removed as dead code (R36, unreached-methods baseline, 2026-09-17).
+   * Public because the shell verification executor must read the SAME source, and it
+   * is the only consumer besides the `prompt_engine` surface builder. `GateManager` was
+   * the obvious alternative and was never that source: it held a `stateManager` field
+   * with no writer anywhere in `src/`, so its check fell through to "no state manager,
+   * assume enabled" and answered `true` however the switch was set. A control built on
+   * it would never have engaged. The seam methods went as dead code (R36,
+   * unreached-methods baseline, 2026-09-17); the field and the check that read it
+   * followed (B.95).
+   *
+   * This switch does not reach gate guidance. A prompt still renders its
+   * `## Inline Gates` block with the switch off — the gate-enhancement stage gates that
+   * on the `gates.enabled` CONFIG value instead, which is a different switch with a
+   * different write path.
    */
   isGateSystemEnabled(): boolean {
     // If no gate system manager is set, default to enabled for backwards compatibility
