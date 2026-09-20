@@ -175,7 +175,7 @@ This ensures spawned instances don't repeat previous mistakes.
 
 ### Configuration
 
-Configure isolation in `server/config.json`:
+Configure isolation in your config file (`config.jsonc`, or `config.json`):
 
 ```json
 {

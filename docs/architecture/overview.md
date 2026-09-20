@@ -726,7 +726,7 @@ Each injection type resolves independently through a 7-level hierarchy. First ma
 ```
 Modifier → Runtime Override → Step Config → Chain Config → Category Config → Global Config → System Default
    ↑              ↑               ↑             ↑              ↑               ↑              ↑
- %clean     system_control    per-step      per-chain     per-category    config.json    hardcoded
+ %clean     system_control    per-step      per-chain     per-category    config.jsonc   hardcoded
 ```
 
 **Key internals**:
