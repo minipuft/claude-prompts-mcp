@@ -6,6 +6,11 @@ import { GateAnalyzer } from '../../../../../src/mcp/tools/resource-manager/prom
 import { ObjectDiffGenerator } from '../../../../../src/mcp/tools/resource-manager/prompt/analysis/object-diff-generator.js';
 import { PromptAnalyzer } from '../../../../../src/mcp/tools/resource-manager/prompt/analysis/prompt-analyzer.js';
 import { PromptLifecycleProcessor } from '../../../../../src/mcp/tools/resource-manager/prompt/services/prompt-lifecycle-processor.js';
+import {
+  UNSETTABLE_FIELDS,
+  UPDATE_FIELDS,
+} from '../../../../../src/mcp/tools/resource-manager/prompt/utils/validation.js';
+import { PromptYamlSchema } from '../../../../../src/modules/prompts/prompt-schema.js';
 
 import type { PromptResourceContext } from '../../../../../src/mcp/tools/resource-manager/prompt/core/context.js';
 import type { ConfigManager, Logger } from '../../../../../src/shared/types/index.js';
@@ -315,5 +320,71 @@ describe('prompt update optimistic concurrency', () => {
     expect(response.isError).toBe(true);
     expect(harness.updatePromptImplementation).not.toHaveBeenCalled();
     expect(harness.recordEditResult).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The class P4.65 belongs to: a `prompt.yaml` key the loader accepts that no tool parameter writes.
+ *
+ * `edges` was one of these. It was schema-valid, load-bearing (`collectChainEdgeErrors` refuses a
+ * chain whose edges no longer match its steps), and unreachable from `resource_manager` — so the
+ * only remedy for a refusal was a hand edit of `prompt.yaml`, which this project forbids. Fixing
+ * `edges` alone would close one instance; this closes the CLASS, by failing when a new key joins
+ * `PromptYamlSchema` without being classified.
+ *
+ * Deliberately a classification, not a "must be settable" rule: two keys legitimately are not, and
+ * each carries the observation that would flip it.
+ */
+describe('every prompt.yaml key the loader accepts is classified', () => {
+  /** Keys the WRITER owns: it produces the message files, so it decides their pointers. */
+  const WRITER_OWNED = new Set(['systemMessageFile', 'userMessageTemplateFile']);
+
+  /**
+   * Keys no tool parameter writes, each with what would flip it.
+   *
+   * A reader who adds one of these parameters deletes its entry in the same commit — an entry
+   * whose condition no longer holds fails the first test below as an unknown classification would.
+   */
+  const NOT_SETTABLE: Readonly<Record<string, string>> = {
+    // as of 2026-09-20 · flips when a run-level structural cap is authored through the tool
+    // rather than only submitted on a Workflow IR.
+    budget: 'submitted on the Workflow IR path only; no chain has needed an authored cap',
+    // as of 2026-09-20 · flips when a prompt needs its artifact kinds changed without a rewrite
+    // of the whole file, i.e. the first report of a `produces` edit that cannot be made.
+    artifacts: 'declared at authoring time; no edit request has reached the tool surface',
+  };
+
+  const SETTABLE = new Set<string>([
+    // The resource identity — the `id` parameter, not a field overlay.
+    'id',
+    // Reaches `promptData` directly from `args.tools` rather than through `UPDATE_FIELDS`.
+    'tools',
+    ...Object.values(UPDATE_FIELDS),
+  ]);
+
+  test('no key is left unclassified', () => {
+    const unclassified = Object.keys(PromptYamlSchema.shape).filter(
+      (key) => !SETTABLE.has(key) && !WRITER_OWNED.has(key) && NOT_SETTABLE[key] === undefined
+    );
+
+    expect(unclassified).toEqual([]);
+  });
+
+  test('every classification still names a key the loader accepts', () => {
+    // The other direction: a stale entry documents a key that is gone, and a stale
+    // `NOT_SETTABLE` reason is an open marker nothing expires.
+    const accepted = new Set(Object.keys(PromptYamlSchema.shape));
+    const stale = [...WRITER_OWNED, ...Object.keys(NOT_SETTABLE)].filter(
+      (key) => !accepted.has(key)
+    );
+
+    expect(stale).toEqual([]);
+  });
+
+  test('`edges` is settable, and clearable', () => {
+    // The instance that motivated the class. Named rather than left implicit in the sweep above,
+    // because the sweep would stay green if `edges` moved into `NOT_SETTABLE`.
+    expect(UPDATE_FIELDS['edges']).toBe('edges');
+    expect(UNSETTABLE_FIELDS['edges']).toBe('edges');
   });
 });

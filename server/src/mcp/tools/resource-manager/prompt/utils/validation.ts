@@ -46,6 +46,13 @@ export const UPDATE_FIELDS: Record<string, string> = {
   mcp_prompt_mode: 'mcpPromptMode',
   subagent_model: 'subagentModel',
   agent_type: 'agentType',
+  // P4.65. `edges` joins the preserved set for the same reason `tools` sits outside this map's
+  // reach: `ConvertedPrompt` carries no `edges` (the loader has already linearized them into
+  // `chainSteps` order), so the caller building `promptData` cannot read the current value and
+  // the writer must fall back to the on-disk YAML. The entry here is what lets an explicitly
+  // supplied value win that fallback — which is the whole remedy for a `chain_steps` rewrite
+  // that invalidates an edge the chain still declares.
+  edges: 'edges',
 };
 
 /**
@@ -81,6 +88,12 @@ export const UNSETTABLE_FIELDS: Record<string, string> = {
   mcp_prompt_mode: 'mcpPromptMode',
   subagent_model: 'subagentModel',
   agent_type: 'agentType',
+  // P4.65. Dropping every edge is a legitimate remedy for a chain whose steps changed — it
+  // restores the authored `chainSteps` order, which is what a chain with no edges already runs
+  // in. Omission is the preserve signal for `edges` like every other key here, so without this
+  // entry there would be no way to say REMOVE: `edges: []` writes an empty list rather than
+  // dropping the key.
+  edges: 'edges',
 };
 
 /** A resolved `unset` list, or the refusal explaining which name stopped it. */

@@ -8,6 +8,7 @@
 
 import { z } from 'zod/v4';
 
+import { workflowEdgeSchema } from './workflow-ir.schema.js';
 import { PATCH_TARGET_FIELDS } from '../resource-manager/prompt/operations/template-patch.js';
 import { PREVIEWABLE_ACTIONS } from '../shared/preview-action.js';
 
@@ -337,6 +338,21 @@ export const resourceManagerInputSchema = z
     chain_step_data: ChainStepSchema.passthrough().optional(),
     /** [Prompt] New index order for reorder operation (permutation of [0..n-1]). */
     chain_step_order: z.array(z.number().int().nonnegative()).optional(),
+    /**
+     * [Prompt] Dependency edges between this chain's steps, addressed by minted node id.
+     *
+     * Same shape and same meaning `PromptYamlSchema.edges` carries (prompt-schema.ts) — ordering
+     * constraints the loader linearizes into `chainSteps` order, never control flow — because the
+     * value goes verbatim into `prompt.yaml`. Reusing `workflowEdgeSchema` rather than restating
+     * `{from, to}` is what keeps a value accepted here from being rejected at load.
+     *
+     * The parameter exists because the validation already did (P4.65): a `chain_steps` rewrite
+     * dropping a step an edge still names is refused and rolled back, and until this parameter
+     * there was no way to correct the edge through the tool at all — the only remedy was a hand
+     * edit of the YAML, which this project forbids. An update carrying both is validated as ONE
+     * state by the post-write verification, which reads the file the write produced.
+     */
+    edges: z.array(workflowEdgeSchema).optional(),
     /** [Prompt] Script tools to create with the prompt. */
     tools: z.array(z.unknown()).optional(),
     /**

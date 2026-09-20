@@ -70,6 +70,7 @@ export const PARAMETER_OWNERS: Readonly<Record<string, readonly ResourceType[]>>
   chain_step_index: ['prompt'],
   chain_step_data: ['prompt'],
   chain_step_order: ['prompt'],
+  edges: ['prompt'],
   tools: ['prompt'],
   gate_configuration: ['prompt'],
   composer: ['prompt'],

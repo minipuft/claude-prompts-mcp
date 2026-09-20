@@ -221,6 +221,7 @@ export class ResourceManagerRouter {
       chain_step_index: args.chain_step_index,
       chain_step_data: args.chain_step_data,
       chain_step_order: args.chain_step_order,
+      edges: args.edges,
       tools: args.tools,
       tool_operation: args.tool_operation,
       tool_ids: args.tool_ids,

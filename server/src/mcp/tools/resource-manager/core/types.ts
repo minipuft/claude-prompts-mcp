@@ -257,6 +257,14 @@ export interface ResourceManagerInput {
   chain_step_data?: Record<string, unknown>;
   /** [Prompt] New index order for reorder operation */
   chain_step_order?: number[];
+  /**
+   * [Prompt] Dependency edges between this chain's steps, each endpoint a step id.
+   *
+   * Written verbatim into `prompt.yaml`, so this shape is `PromptYamlSchema.edges`' shape — a
+   * wider type here would describe values the loader rejects, exactly as for the preserved
+   * fields below.
+   */
+  edges?: Array<{ from: string; to: string }>;
   /** [Prompt] Script tools to create with the prompt */
   tools?: ToolDefinitionInput[];
   /** [Prompt] Update-only: union with the current binding (`add`) or unbind and delete (`remove`). */
