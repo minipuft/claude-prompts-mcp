@@ -148,7 +148,7 @@ describe('ChainSessionStore + ArgumentHistoryTracker (integration)', () => {
 
     // Simulate placeholder then real response for step 1
     await manager.updateSessionState('sess-1', 'n1', 'placeholder', { isPlaceholder: true });
-    await manager.updateStepResult('sess-1', 'n1', 'REAL-OUTPUT-1');
+    await manager.updateSessionState('sess-1', 'n1', 'REAL-OUTPUT-1', { isPlaceholder: false });
     await manager.completeStep('sess-1', 'n1', { preservePlaceholder: false });
     await manager.advanceStep('sess-1', 'n1');
 
