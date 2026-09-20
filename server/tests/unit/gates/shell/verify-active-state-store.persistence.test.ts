@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, jest, test } from '@jest/globals';
 
+import { DatabaseSync } from 'node:sqlite';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -8,6 +9,24 @@ import { createVerifyActiveStateStore } from '../../../../src/engine/gates/shell
 
 import type { PendingShellVerification } from '../../../../src/engine/gates/shell/types.js';
 import type { Logger } from '../../../../src/infra/logging/index.js';
+
+/**
+ * Reads `verify_active_state` the way the real consumer does: raw SQL against the file, not a
+ * TS convenience method. `readState`/`hasActiveVerification` were deleted (P4.81) as surplus —
+ * the Stop hook that reads this table is Python (`hooks/ralph-stop.py`), never this class, so a
+ * TS-side read method served only this test. This helper replaces it for verification purposes.
+ */
+function rowCount(dbPath: string, sessionId: string): number {
+  const db = new DatabaseSync(dbPath);
+  try {
+    const row = db
+      .prepare('SELECT COUNT(*) as count FROM verify_active_state WHERE session_id = ?')
+      .get(sessionId) as { count: number };
+    return row.count;
+  } finally {
+    db.close();
+  }
+}
 
 const createLogger = (): Logger =>
   ({
@@ -43,17 +62,16 @@ describe('VerifyActiveStateStore (persistence)', () => {
   // Positive control: the same store, against a directory it CAN create and write to,
   // must succeed — otherwise the failure cases below would prove nothing about the
   // write path itself, only that something in the harness is broken.
-  test('a write to a usable directory round-trips through read', async () => {
+  test('a write to a usable directory round-trips through the db file', async () => {
     const goodDir = path.join(tmpRoot, 'writable');
     const logger = createLogger();
     const store = createVerifyActiveStateStore(logger, { runtimeStateDir: goodDir });
 
     await expect(store.writeState('session-control', pending)).resolves.toBeUndefined();
-    const state = await store.readState('session-control');
-    expect(state?.sessionId).toBe('session-control');
+    expect(rowCount(store.stateDbPath, 'session-control')).toBe(1);
 
     await expect(store.clearState('session-control')).resolves.toBeUndefined();
-    expect(await store.readState('session-control')).toBeNull();
+    expect(rowCount(store.stateDbPath, 'session-control')).toBe(0);
   });
 
   // `runtimeStateDir` points at a path that already exists as a plain FILE. `fs.mkdirSync`
