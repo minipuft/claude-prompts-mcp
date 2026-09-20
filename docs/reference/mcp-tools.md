@@ -1070,8 +1070,9 @@ directory is refused rather than silently served under the directory's name.
 | `persist`                | Save switch to config (for `switch` action) |
 
 **Framework advanced parameters.** All eleven were accepted before they were documented; they are
-now declared in the tool schema, so a client can read each one's shape from the contract. Six land
-in `framework.yaml`, five in `phases.yaml` — which matters when reasoning about a partial write.
+now declared in the tool schema, so a client can read each one's shape from the contract. Four land
+in `framework.yaml`, six in `phases.yaml` and one in its own file, which matters when reasoning
+about a partial write.
 
 | Parameter                     | Lands in         | Purpose                                                                             |
 | ----------------------------- | ---------------- | ----------------------------------------------------------------------------------- |
@@ -1086,6 +1087,13 @@ in `framework.yaml`, five in `phases.yaml` — which matters when reasoning abou
 | `template_enhancements`       | `phases.yaml`    | System/user prompt additions and contextual hints                                   |
 | `execution_flow`              | `phases.yaml`    | Pre/post/validation hooks around execution                                          |
 | `quality_indicators`          | `phases.yaml`    | Per-phase keywords and patterns for compliance scoring                              |
+
+**What a framework `update` keeps.** Everything the call does not change. A field you omit keeps
+its stored value, and so does `version`: no parameter sets it, and only `create` writes `1.0.0`. A
+file whose content the update does not change is not written at all, so its comments and
+formatting survive. An edit to `quality_indicators` rewrites `phases.yaml` and leaves
+`framework.yaml` byte-identical. A file the update does change is rewritten whole, and loses its
+comments.
 
 </details>
 
