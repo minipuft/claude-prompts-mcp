@@ -53,6 +53,11 @@ export const UPDATE_FIELDS: Record<string, string> = {
   // supplied value win that fallback — which is the whole remedy for a `chain_steps` rewrite
   // that invalidates an edge the chain still declares.
   edges: 'edges',
+  // P4.82. The last two chain/prompt-level keys `PromptYamlSchema` accepted that nothing could
+  // write. Measured 2026-09-20: `update` carrying either answered "Prompt Updated", saved a
+  // version, and left the file unchanged, and `create` carrying both wrote neither.
+  budget: 'budget',
+  artifacts: 'artifacts',
 };
 
 /**
@@ -94,6 +99,11 @@ export const UNSETTABLE_FIELDS: Record<string, string> = {
   // entry there would be no way to say REMOVE: `edges: []` writes an empty list rather than
   // dropping the key.
   edges: 'edges',
+  // P4.82. Both are optional in `PromptYamlSchema`, so their absence is a state the loader
+  // already handles: a chain with no `budget` runs on the server defaults, and a prompt with no
+  // `artifacts` declares nothing — which is deliberately distinct from declaring some other kind.
+  budget: 'budget',
+  artifacts: 'artifacts',
 };
 
 /** A resolved `unset` list, or the refusal explaining which name stopped it. */

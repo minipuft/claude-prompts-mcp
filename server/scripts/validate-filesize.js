@@ -12,6 +12,9 @@
  * - 0: No extreme violations (advisory warnings may exist)
  * - 1: Files exceeding 1000 lines without canonical annotation
  *
+ * Generated contract projections under `_generated/` are reported but never bucketed — see
+ * `isGeneratedProjection`.
+ *
  * Usage:
  *   npm run validate:filesize
  *   node scripts/validate-filesize.js
@@ -28,6 +31,23 @@ const __dirname = path.dirname(__filename);
 const ADVISORY_LIMIT = 500; // Advisory threshold — check responsibility count
 const EXTREME_LIMIT = 1000; // Hard block — likely needs decomposition
 const SRC_DIR = path.join(__dirname, '..', 'src');
+
+/**
+ * Generated contract projections, reported but never bucketed by size.
+ *
+ * A projection holds exactly one responsibility — the contract it was generated from — however
+ * long that contract grows, so its line count carries none of the signal this script exists to
+ * raise. It is also unactionable: `_generated/` is rewritten by `npm run generate:contracts` and
+ * editing it is forbidden, so a violation here names a file nobody can shorten except by deleting
+ * a documented tool parameter. Measured 2026-09-20: two new `resource_manager` parameters took
+ * `resource_manager.generated.ts` past 1000 lines with no edit available that would satisfy it.
+ *
+ * NOT silent — the count is printed below, so a reader can see what was set aside. ESLint's
+ * `max-lines` carries the same exclusion for the same reason (`eslint.config.js`); the two size
+ * gates tell one story about generated output rather than two.
+ */
+const GENERATED_DIR_SEGMENT = `${path.sep}_generated${path.sep}`;
+const isGeneratedProjection = (filePath) => filePath.includes(GENERATED_DIR_SEGMENT);
 
 /**
  * Recursively get all TypeScript files in a directory
@@ -89,11 +109,17 @@ function validateFileSizes() {
   const extremeViolations = [];
   const largeFiles = [];
   const canonicalExemptions = [];
+  const generatedProjections = [];
 
   allFiles.forEach((filePath) => {
     const lineCount = countLines(filePath);
     const relativePath = getRelativePath(filePath);
     const hasCanonical = hasCanonicalAnnotation(filePath);
+
+    if (isGeneratedProjection(filePath)) {
+      generatedProjections.push({ path: relativePath, lines: lineCount });
+      return;
+    }
 
     if (lineCount > EXTREME_LIMIT) {
       if (hasCanonical) {
@@ -141,6 +167,16 @@ function validateFileSizes() {
     if (largeFiles.length > 10) {
       console.log(`  ... and ${largeFiles.length - 10} more`);
     }
+    console.log();
+  }
+
+  if (generatedProjections.length > 0) {
+    console.log(`Generated projections (not size-bucketed): ${generatedProjections.length}\n`);
+    generatedProjections
+      .sort((a, b) => b.lines - a.lines)
+      .forEach(({ path: filePath, lines }) => {
+        console.log(`  ${filePath} (${lines} lines)`);
+      });
     console.log();
   }
 

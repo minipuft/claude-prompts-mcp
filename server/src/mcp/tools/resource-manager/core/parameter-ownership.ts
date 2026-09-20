@@ -71,6 +71,8 @@ export const PARAMETER_OWNERS: Readonly<Record<string, readonly ResourceType[]>>
   chain_step_data: ['prompt'],
   chain_step_order: ['prompt'],
   edges: ['prompt'],
+  budget: ['prompt'],
+  artifacts: ['prompt'],
   tools: ['prompt'],
   gate_configuration: ['prompt'],
   composer: ['prompt'],
@@ -124,13 +126,45 @@ export const PARAMETER_OWNERS: Readonly<Record<string, readonly ResourceType[]>>
 };
 
 /**
- * Why this request sends a parameter the resource type does not read, or `null` when it does not.
+ * Every parameter `resource_manager` declares — the two tables above, unioned.
+ *
+ * The same set `tests/unit/mcp-tools/resource-manager/parameter-ownership.test.ts` already pins
+ * against `resourceManagerInputSchema.shape` in both directions, and
+ * `tests/unit/mcp-tools/tool-input-fields.test.ts` pins that shape against
+ * `tooling/contracts/resource-manager.json`. So this set IS the contract, reached without
+ * importing the schema into the router's own module.
+ */
+export const DECLARED_PARAMETERS: ReadonlySet<string> = new Set<string>([
+  ...COMMON_PARAMETERS,
+  ...Object.keys(PARAMETER_OWNERS),
+]);
+
+/**
+ * Why this request sends a parameter this tool will not read, or `null` when it does not.
+ *
+ * TWO halves of one class, in one function because they are one question — "will anything read
+ * this key?" — and a caller should not have to discover which half caught them:
+ *
+ *   1. DECLARED but owned by other resource types (#337). The key is real; the type is wrong.
+ *   2. UNDECLARED entirely (R46). `resourceManagerInputSchema` is `.passthrough()`, so a key the
+ *      contract never named arrives intact, is read by nobody, and the call answers success — the
+ *      same silent no-op #337 closed for half the class and left open for the other half.
+ *      Measured 2026-09-20 on a server built before P4.65: `update` carrying `edges` answered
+ *      "Prompt Updated", saved version 2, and left the file byte-identical.
+ *
+ * The passthrough is now load-bearing FOR the refusal rather than in spite of it: a `.strict()`
+ * schema would reject the key at the SDK boundary with a zod message that names no resource type
+ * and offers no correction, and it would put the second refusal path this function exists to
+ * avoid one layer above the first. Its original justification — eleven framework advanced fields
+ * that rode it undeclared — was closed at P4.1/P4.5 when all eleven were declared.
  *
  * Returns the message rather than a boolean for the reason `describePreviewRefusal` does: the
- * caller needs the parameter's name and its real owners, not "invalid".
+ * caller needs the parameter's name, not "invalid".
  *
- * Only the FIRST offending parameter is named. A caller who sent two wrong-type parameters almost
- * always sent them for one wrong reason, and naming all of them buries the correction.
+ * Only the FIRST offending parameter is named. A caller who sent two wrong parameters almost
+ * always sent them for one wrong reason, and naming all of them buries the correction. The
+ * undeclared half deliberately lists nothing else: dumping seventy declared names to correct one
+ * typo is noise, and the contract is one `action:"guide"` away.
  */
 export function describeParameterRefusal(resourceType: ResourceType, args: object): string | null {
   // `args` is the validated tool input, an interface without an index signature. The lookup is
@@ -148,6 +182,22 @@ export function describeParameterRefusal(resourceType: ResourceType, args: objec
       `by resource_type:${ownerList}.\n\n` +
       `It was accepted and ignored before, which reported a change that never happened. ` +
       `Re-send it with resource_type:${ownerList}, or drop it from this call.`
+    );
+  }
+
+  for (const parameter of Object.keys(sent)) {
+    if (DECLARED_PARAMETERS.has(parameter)) continue;
+    // "Was it sent", the same test the loop above applies — not "is the key present". JSON has no
+    // `undefined`, so nothing over MCP reaches here this way; an in-process caller building its
+    // argument object with an unset optional field does, and refusing that would be refusing a
+    // key nobody sent. A JSON `null` is still a value, and is still refused.
+    if (sent[parameter] === undefined) continue;
+
+    return (
+      `'${parameter}' is not a parameter of resource_manager.\n\n` +
+      `It was accepted and ignored before, which reported a change that never happened. ` +
+      `Check the spelling, or drop it from this call — ` +
+      `\`resource_type:"prompt", action:"guide"\` lists what this tool accepts.`
     );
   }
 

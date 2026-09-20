@@ -55,6 +55,11 @@ const SEED_VALUES: Record<string, unknown> = {
   // companion below supplies them. `child-two` is the slug `mintNodeIds` derives from
   // `stepName: 'Child Two'`.
   edges: [{ from: 'child', to: 'child-two' }],
+  // A declared structural cap may only NARROW the server default, so every value here is at or
+  // below `DEFAULT_WORKFLOW_CAPS`.
+  budget: { maxInsertions: 1, pauseOnBlocking: true },
+  // `fromArgument` must name a DECLARED argument, so this seed carries one too (companion below).
+  artifacts: { produces: ['plan'], fromArgument: 'topic' },
 };
 
 /**
@@ -65,6 +70,7 @@ const SEED_VALUES: Record<string, unknown> = {
  */
 const SEED_COMPANIONS: Record<string, Record<string, unknown>> = {
   composer: { arguments: SEED_VALUES['arguments'] },
+  artifacts: { arguments: SEED_VALUES['arguments'] },
   edges: {
     chainSteps: [
       { promptId: 'child', stepName: 'Child' },
