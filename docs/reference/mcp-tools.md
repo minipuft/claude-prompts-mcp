@@ -945,15 +945,26 @@ turns the whole class into a loud error at the boundary.
 
 - **Top-level `arguments` keys only.** `_meta` is a client-protocol field carried on `params`,
   beside `arguments`, never inside it, so it is out of reach and needs no exemption.
-- **Nested object keys are a separate axis.** A contract declares parameters, not the shape inside
-  one. Some nested schemas already refuse an unknown key on their own — `workflow` and
-  `remainder` (and every node/edge below them) are strict, as is a prompt's `budget`. Others still
-  strip: `gate_verdict`'s structured form (`per_gate[]`, `reminders`), `observations[]`, an inline
-  gate object, and `system_control`'s `config`.
-- **Published schemas stay open.** `additionalProperties` is not set to `false` in `tools/list`,
-  deliberately: the key has to ARRIVE for the server to name it and suggest a correction. A
-  strict published schema would have the client reject locally with a message naming neither the
-  tool nor the fix.
+- **Nested object keys are covered too, by a different mechanism.** Every object schema reachable
+  from a tool's parameters refuses an unknown key, naming the path it sits at
+  (`arguments.0: Unrecognized key: "requred"`). That is zod's own refusal rather than the
+  suggestion-carrying one above: a nested key is rejected during validation, so the call never
+  reaches the handler that would name a correction. `tests/unit/mcp-tools/nested-object-strictness.test.ts`
+  walks the whole reachable graph and fails on any object that is neither closed nor listed below,
+  so a new nested object cannot join the class unclassified.
+- **Deliberately open, with reasons** — the only objects where an unknown key still survives:
+  - the three tools' top-level parameters, so the refusal above can name the key and suggest a fix;
+  - `chain_steps[]` and `chain_step_data`, because a chain step is an opaque object by decision
+    (contrast the sibling `arguments`, which is a typed contract).
+- **`gate_verdict` is refused but its path is not printed.** It is a union of the structured object
+  and the legacy string, and a union failure is reported as one issue whose sub-issues are nested,
+  so a client sees `gate_verdict: Invalid input`. The safety property holds regardless — a
+  misspelled `passed` is rejected outright, where it used to be dropped and leave the field absent,
+  which reads as FAIL. The legacy string form is unchanged.
+- **Published schemas stay open at the top level.** `additionalProperties` is not set to `false` on
+  a tool's own parameters, deliberately: the key has to ARRIVE for the server to name it and suggest
+  a correction. Nested objects DO publish `additionalProperties: false`, which is what lets a client
+  catch a nested typo before it sends.
 - **Script tools are covered too** — see
   [script-tools.md § Security Model](../guides/script-tools.md#security-model).
 

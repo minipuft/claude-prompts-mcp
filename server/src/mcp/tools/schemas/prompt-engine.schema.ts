@@ -48,7 +48,7 @@ const unknownIdSchema = z
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Unknown id must be kebab-case (e.g. "cache-ttl-unknown")');
 
 /** Opens a ledger entry for a newly-surfaced unknown. */
-export const unknownDiscoveredSchema = z.object({
+export const unknownDiscoveredSchema = z.strictObject({
   type: z.literal('unknown_discovered'),
   id: unknownIdSchema,
   statement: z.string().min(1, 'Unknown statement cannot be empty'),
@@ -70,7 +70,7 @@ export const unknownDiscoveredSchema = z.object({
 });
 
 /** Closes an existing ledger entry. `statement` carries the resolution statement. */
-export const unknownResolvedSchema = z.object({
+export const unknownResolvedSchema = z.strictObject({
   type: z.literal('unknown_resolved'),
   id: unknownIdSchema,
   statement: z.string().min(1, 'Unknown statement cannot be empty'),
@@ -149,7 +149,7 @@ const singleLineRationale = z
   .regex(/^[^\r\n]+$/, 'Rationale must be a single line — no line breaks');
 
 /** One gate's result. `index` is 1-based, matching the advertised gate list. */
-export const gateVerdictEntrySchema = z.object({
+export const gateVerdictEntrySchema = z.strictObject({
   index: z.number().int().positive('Gate index is 1-based'),
   passed: z.boolean(),
   rationale: singleLineRationale,
@@ -181,7 +181,7 @@ const reminderReason = z
   .regex(/^[^;)]+$/, 'Reason may not contain ";" or ")" — both delimit the rendered line');
 
 /** One reminder declared inapplicable. A bare id is not accepted; the reason is the point. */
-export const gateVerdictReminderExemptionSchema = z.object({
+export const gateVerdictReminderExemptionSchema = z.strictObject({
   id: reminderGateId,
   reason: reminderReason,
 });
@@ -194,7 +194,7 @@ export const gateVerdictReminderExemptionSchema = z.object({
  * — present-and-empty renders as `REMINDERS: none`, which is a different statement from the
  * field being absent, and the renderer keeps them distinguishable.
  */
-export const gateVerdictRemindersSchema = z.object({
+export const gateVerdictRemindersSchema = z.strictObject({
   satisfied: z.array(reminderGateId).default([]),
   not_applicable: z.array(gateVerdictReminderExemptionSchema).default([]),
 });
@@ -206,7 +206,7 @@ export const gateVerdictRemindersSchema = z.object({
  * cannot submit an unparseable verdict: there is no format to get wrong, so
  * the five fallback patterns never come into play.
  */
-export const gateVerdictSubmissionSchema = z.object({
+export const gateVerdictSubmissionSchema = z.strictObject({
   overall: z.enum(['PASS', 'FAIL']),
   rationale: singleLineRationale,
   per_gate: z.array(gateVerdictEntrySchema).optional(),
