@@ -92,7 +92,6 @@ export class PromptLifecycleProcessor {
           action: 'validate',
           valid: false,
           errors: result.errors,
-          warnings: result.warnings,
           mutated: false,
         },
         isError: true,
@@ -106,8 +105,7 @@ export class PromptLifecycleProcessor {
           type: 'text' as const,
           text:
             `✅ **Prompt draft valid**: \`${result.draft.canonicalId}\`\n\n` +
-            `Nothing written; no version recorded. Re-send with action:"create" to persist it.` +
-            this.formatWarnings(result.draft.warnings),
+            `Nothing written; no version recorded. Re-send with action:"create" to persist it.`,
         },
       ],
       structuredContent: {
@@ -115,7 +113,6 @@ export class PromptLifecycleProcessor {
         valid: true,
         normalized_id: result.draft.canonicalId,
         draft: result.draft.promptData,
-        warnings: result.draft.warnings,
         current_version: currentVersion,
         mutated: false,
       },
@@ -139,7 +136,6 @@ export class PromptLifecycleProcessor {
           action: 'create',
           valid: false,
           errors: prepared.errors,
-          warnings: prepared.warnings,
           mutated: false,
         },
         isError: true,
@@ -147,7 +143,7 @@ export class PromptLifecycleProcessor {
     }
 
     const promptData = prepared.draft.promptData as any;
-    const { canonicalId, warnings: chainIntegrityWarnings } = prepared.draft;
+    const { canonicalId } = prepared.draft;
     const displayName = String(promptData['name']);
     const description = String(promptData['description']);
 
@@ -271,13 +267,6 @@ export class PromptLifecycleProcessor {
       }
     }
 
-    if (chainIntegrityWarnings.length > 0) {
-      response += `\n⚠️ **Chain Integrity Warnings**:\n`;
-      for (const warning of chainIntegrityWarnings) {
-        response += `- ${warning}\n`;
-      }
-    }
-
     const verification = await this.receiptService.complete({
       action: 'create',
       id: canonicalId,
@@ -300,7 +289,6 @@ export class PromptLifecycleProcessor {
         action: 'create',
         valid: true,
         receipt: verification.receipt,
-        warnings: chainIntegrityWarnings,
         mutated: true,
       },
       isError: !verification.verified,
@@ -585,14 +573,40 @@ export class PromptLifecycleProcessor {
       }
     }
 
-    // Chain step reference validation (non-blocking warnings)
-    let chainIntegrityWarnings: string[] = [];
+    // A step naming a prompt that does not exist is a refusal, not a warning next to a saved
+    // file: the run used to fail at that step one invocation later, far from the write that
+    // introduced it. The chain's own `<chainId>/<step>` children are exempt — the write below
+    // scaffolds exactly those.
+    //
+    // Scoped to steps THIS call authors, which is what `suppliedKeys` means everywhere else in
+    // this method. A caller that sends `edges` or `unset` and no chain-step parameter is not
+    // writing a step, and blocking it would make a chain already broken on disk uneditable —
+    // including by the edit that repairs it. That is the split `diagnosePromptWrite` already
+    // draws below between `blocking` (introduced by this edit) and `preExisting` (logged, not
+    // blocked), applied to the same question one paragraph earlier.
     if (promptData.chainSteps && promptData.chainSteps.length > 0) {
-      const allPromptIds = this.getConvertedPrompts().map((p) => p.id);
-      chainIntegrityWarnings = validateChainStepReferences(
+      // Read the id through `promptFields`, the indexed `Record` this method already uses for
+      // exactly this reason — `promptData` is `any` and a member access on it is unchecked.
+      const chainId = String(promptFields['id']);
+      const chainIntegrity = validateChainStepReferences(
         promptData.chainSteps,
-        allPromptIds
-      ).warnings;
+        chainId,
+        this.getConvertedPrompts().map((p) => p.id)
+      );
+      if (!chainIntegrity.valid) {
+        if (suppliedKeys.has('chainSteps')) {
+          return this.blockedUpdate(
+            `❌ **Prompt update blocked** — a chain step names a prompt that does not exist:\n\n` +
+              `${chainIntegrity.problems.map((problem) => `- ${problem}`).join('\n')}\n\n` +
+              `💡 Nothing was written and no version was consumed. Create the missing prompt, or ` +
+              `nest the step under '${chainId}/' so this call scaffolds it.`
+          );
+        }
+        this.context.dependencies.logger.warn(
+          `Chain '${chainId}' has pre-existing unresolvable chain step(s) (not introduced by ` +
+            `this edit): ${chainIntegrity.problems.join('; ')}`
+        );
+      }
     }
 
     // Reference validation for template changes. A patch changes a template without any full-body
@@ -790,13 +804,6 @@ export class PromptLifecycleProcessor {
       afterAnalysis.suggestions.forEach((suggestion, i) => {
         response += `${i + 1}. ${suggestion}\n`;
       });
-    }
-
-    if (chainIntegrityWarnings.length > 0) {
-      response += `\n⚠️ **Chain Integrity Warnings**:\n`;
-      for (const warning of chainIntegrityWarnings) {
-        response += `- ${warning}\n`;
-      }
     }
 
     const verification = await this.receiptService.complete({
@@ -1160,11 +1167,6 @@ export class PromptLifecycleProcessor {
       `- Current version: \`${receipt.current_version}\`\n` +
       `- Affected files:${files}\n`
     );
-  }
-
-  private formatWarnings(warnings: readonly string[]): string {
-    if (warnings.length === 0) return '';
-    return `\n\nWarnings:\n${warnings.map((warning) => `- ${warning}`).join('\n')}`;
   }
 
   private async handleSystemRefresh(fullRestart: boolean = false, reason: string): Promise<void> {

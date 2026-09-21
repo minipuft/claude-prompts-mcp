@@ -1,5 +1,9 @@
 // @lifecycle canonical - Validates and applies a caller-authored chain remainder (OQ-3, row 2.3).
 import { decideInterrupt, isUnknownInterruptPending } from '../pipeline/decisions/index.js';
+import {
+  createConvertedPromptLookup,
+  workflowPromptInfoLookup,
+} from '../workflow-prompt-lookup.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { WorkflowCaps } from '#modules/workflow-ir/node-schema.js';
@@ -189,17 +193,7 @@ export class RemainderProcessor {
         ...(submission.edges !== undefined ? { edges: submission.edges } : {}),
       },
       {
-        lookupPrompt: (promptId) => {
-          const converted = prompts.find((prompt) => prompt.id === promptId);
-          if (converted === undefined) {
-            return undefined;
-          }
-          return {
-            requiredArguments: converted.arguments
-              .filter((argument) => argument.required === true)
-              .map((argument) => argument.name),
-          };
-        },
+        lookupPrompt: workflowPromptInfoLookup(createConvertedPromptLookup(prompts)),
         caps: { ...this.workflowIr.defaultCaps, maxNodes: remaining },
       }
     );
