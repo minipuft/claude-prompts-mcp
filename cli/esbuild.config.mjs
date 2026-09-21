@@ -113,9 +113,34 @@ const JSONC_PARSER_ESM_ENTRY = resolveEsmEntry("jsonc-parser", SERVER_ROOT);
  *
  * BUNDLE_BUDGET_BYTES (shipped, minified) is again untouched: measured 407,640 B here against
  * 512,000, and it is still the number that governs what users download.
+ *
+ * Raised to 900,000 on 2026-09-20 (row P4.92 / S1.3, owner ruling R60). Two facts, and the
+ * second is the reason the step is 50,000 rather than another 10,000:
+ *
+ *   1. The paragraph above says 845,835 leaves 4,165 B. That measurement predates #343
+ *      (`feat(resources): editing a resource keeps its comments`): `f711401b` measures
+ *      849,743 B, so the real headroom was 257 B, and the stale figure was carried into a
+ *      slice brief and planned against. The number a ceiling is set from expires the moment
+ *      anything merges; only a re-measurement is evidence.
+ *   2. What crossed it: `version_history`'s two writers now share ONE identity rule
+ *      (`hashCanonical`, `shared/utils/hash.ts`), which is what makes a row written by the
+ *      server and a row written by `cpm` comparable. The canonical encoder is 1,709 B of the
+ *      2,722 B delta; the rest is the CLI writer's equality branch and the `recorded` field.
+ *      There is no arrangement of that fix that keeps the encoder out of this bundle, so the
+ *      ceiling is the thing that had to move.
+ *
+ * Measured here after the change: 852,826 B, identical from both workspaces' builds. 900,000
+ * leaves 47,174 B, which is a margin for the remaining hash
+ * unification (`resource_index`, skills-sync, `promptRevision`) rather than slack to spend.
+ * The largest inputs, if this needs reclaiming instead of raising again: `cli/src/cli.ts`
+ * 18.9 KB, `modules/prompts/prompt-schema.ts` 18.3 KB,
+ * `cli-shared/_generated/config-template.ts` 15.0 KB, `engine/gates/core/gate-schema.ts`
+ * 13.7 KB. Re-measure both bundles before quoting any of these.
+ *
+ * BUNDLE_BUDGET_BYTES (shipped, minified) is untouched for the fourth time.
  */
 export const BUNDLE_BUDGET_BYTES = 512_000; // 500KB — shipped (minified)
-export const DEV_BUNDLE_BUDGET_BYTES = 850_000; // 830KB — unminified dev build
+export const DEV_BUNDLE_BUDGET_BYTES = 900_000; // 879KB — unminified dev build
 
 /** Absolute path to the server source tree the CLI shares code with. */
 const SERVER_SRC = join(SERVER_ROOT, "src");
