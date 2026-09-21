@@ -207,13 +207,6 @@ export class SqliteStateStore<T> implements StateStore<T> {
     return this.db.query<R>(sql, params);
   }
 
-  /**
-   * Execute a custom query returning a single result
-   */
-  queryOne<R>(sql: string, params?: unknown[]): R | null {
-    return this.db.queryOne<R>(sql, params);
-  }
-
   private normalizeScopeComponent(value: unknown): string | undefined {
     if (typeof value !== 'string') {
       return undefined;

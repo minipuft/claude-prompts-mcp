@@ -73,7 +73,22 @@ export async function loadPromptsAcrossRoots(
   ) => number,
   logger?: Logger
 ): Promise<PromptRootLoadResult> {
-  const primary = await promptManager.loadAndConvertPrompts(roots.primary, roots.basePath);
+  // The bundled root only contributes when it is a REAL, distinct directory. Skipping this check
+  // would make an absent bundled path load as an empty catalog and merge nothing — silent, and
+  // indistinguishable from a healthy start.
+  const bundledContributes =
+    roots.bundled !== undefined &&
+    roots.bundled !== roots.primary &&
+    (await directoryExists(roots.bundled));
+
+  // An absent primary is an empty root while the bundled tree backs it: a custom workspace's
+  // `resources/prompts/` is created by its first write, and the bundle serves alone until then.
+  // Without a bundle behind it the loader still throws, because nothing at all would be served.
+  // Only absence qualifies — a primary that exists and cannot be read still fails loudly.
+  const primary =
+    bundledContributes && (await pathIsAbsent(roots.primary))
+      ? { promptsData: [], categories: [], convertedPrompts: [], invalid: 0 }
+      : await promptManager.loadAndConvertPrompts(roots.primary, roots.basePath);
 
   let overridden = 0;
   let invalid = primary.invalid;
@@ -83,14 +98,6 @@ export async function loadPromptsAcrossRoots(
     categories: Category[];
     convertedPrompts: ConvertedPrompt[];
   } = primary;
-
-  // The bundled root only contributes when it is a REAL, distinct directory. Skipping this check
-  // would make an absent bundled path load as an empty catalog and merge nothing — silent, and
-  // indistinguishable from a healthy start.
-  const bundledContributes =
-    roots.bundled !== undefined &&
-    roots.bundled !== roots.primary &&
-    (await directoryExists(roots.bundled));
 
   if (bundledContributes && roots.bundled !== undefined) {
     const bundled = await promptManager.loadAndConvertPrompts(roots.bundled, roots.bundled);
@@ -157,10 +164,24 @@ export function mergePromptResults(
     convertedPrompts: ConvertedPrompt[];
   }
 ): number {
-  // Merge categories (ensure overlay categories exist, don't replace existing metadata)
+  // Merge categories, keyed on `id` and with the overlay WINNING — the same two rules the two
+  // prompt merges below follow, and for the same two reasons.
+  //
+  // It was keyed on `name` and the overlay never replaced anything, which is two defects wearing
+  // one line. Keyed on `name`: a category's display name is a free-text label and nothing
+  // enforces its uniqueness, so two categories with different ids and one label collapse into
+  // whichever loaded first — the identity defect this file's own `convertedPrompts` merge
+  // documents at length, left standing at the sibling site. Never replacing: `bundled` is the
+  // MERGE TARGET (see `loadPromptsAcrossRoots`), so `if (!exists) push` gave the LOWEST-precedence
+  // root the final say over category metadata. A workspace `category.yaml` for a category that
+  // also ships bundled was therefore written correctly, loaded correctly, and discarded at merge
+  // — invisible, and precisely the configuration a personal prompt library runs in. Prompts have
+  // followed "same ID = custom wins" since P1.0a; categories now do too.
   for (const overlayCat of overlay.categories) {
-    const exists = target.categories.some((c) => c.name === overlayCat.name);
-    if (!exists) {
+    const existingIdx = target.categories.findIndex((c) => c.id === overlayCat.id);
+    if (existingIdx !== -1) {
+      target.categories[existingIdx] = overlayCat;
+    } else {
       target.categories.push(overlayCat);
     }
   }
@@ -219,5 +240,15 @@ async function directoryExists(candidate: string): Promise<boolean> {
     return (await stat(candidate)).isDirectory();
   } catch {
     return false;
+  }
+}
+
+/** Whether nothing exists at a path. A file, or a path that cannot be read, is not absent. */
+async function pathIsAbsent(candidate: string): Promise<boolean> {
+  try {
+    await stat(candidate);
+    return false;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'ENOENT';
   }
 }

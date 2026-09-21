@@ -120,16 +120,37 @@ function buildGateAttributes(context: ExecutionContext): Attributes {
     'cpm.gates.blocked': gateState.responseBlocked ?? false,
     'cpm.gates.retry_exhausted': gateState.retryLimitExceeded ?? false,
     'cpm.gates.enforcement_mode': gateState.enforcementMode ?? 'standard',
+    // Same sources `buildCommandMetric` (execution-metrics.ts) already reports under
+    // `appliedGates`/`temporaryGatesApplied`: the planner's selected gate list, and how many of
+    // the applied gates are temporary (request-scoped, not framework/inline-registered).
+    'cpm.gates.applied_count': context.executionPlan?.gates.length ?? 0,
+    'cpm.gates.temporary_count': gateState.temporaryGateIds.length,
   };
 }
 
+/**
+ * `cpm.scope.source` reports the best of `organizationSource`/`workspaceSource`
+ * (`resolveIdentitySource`); `cpm.scope.continuity_source` reports `workspaceSource`
+ * specifically, because `resolveContinuityScopeId`'s precedence (`request-identity-scope.ts`)
+ * resolves the continuity/state-isolation key from `workspaceId` before `organizationId`. The
+ * two can disagree — e.g. organization resolved from a token while workspace fell back to
+ * `'default'` — which is the query this attribute exists to answer: "was the key that actually
+ * scoped this request's state store real, or a fallback?"
+ */
 function buildExecutionAttributes(context: ExecutionContext): Attributes {
   return {
     'cpm.chain.is_chain': context.isChainExecution(),
     'cpm.chain.step_index': context.sessionContext?.currentStep ?? 0,
+    'cpm.chain.total_steps': context.sessionContext?.totalSteps ?? 0,
     'cpm.chain.id': context.sessionContext?.chainId ?? '',
     'cpm.framework.id': context.frameworkContext?.selectedFramework.id ?? '',
     'cpm.framework.enabled': Boolean(context.frameworkContext),
-    'cpm.scope.source': context.state.scope.source,
+    'cpm.scope.source': context.state.identity.context?.identitySource ?? 'default',
+    'cpm.scope.continuity_source': context.state.identity.context?.workspaceSource ?? 'default',
+    // `parsedCommand.promptId` and `.operators.operatorTypes` are set by CommandParsingStage
+    // (04-parsing-stage.ts) for both the direct and symbolic parse paths — same fields that
+    // stage already logs on exit.
+    'cpm.prompt.id': context.parsedCommand?.promptId ?? '',
+    'cpm.operator.types': context.parsedCommand?.operators?.operatorTypes.join(',') ?? '',
   };
 }

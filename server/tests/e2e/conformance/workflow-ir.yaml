@@ -225,7 +225,7 @@ scenarios:
             nodes:
               - id: solo
                 promptId: minimal_prompt
-    expect: { error_contains: "cannot be combined with a command string or a resume token" }
+    expect: { error_contains: 'cannot be combined with a command string or a resume token' }
 
   - id: workflow-mutually-exclusive-with-chain-id
     claim_source: >-
@@ -240,4 +240,4 @@ scenarios:
             nodes:
               - id: solo-two
                 promptId: minimal_prompt
-    expect: { error_contains: "cannot be combined with a command string or a resume token" }
+    expect: { error_contains: 'cannot be combined with a command string or a resume token' }

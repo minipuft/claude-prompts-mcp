@@ -56,14 +56,18 @@ const createMockHookRegistry = (): HookRegistryPort & {
     emitStageError: jest.fn(async (stage: string, error: Error, context: PipelineHookContext) => {
       registry.errorCalls.push({ stage, error, context });
     }),
-    // Gate emissions are part of HookRegistryPort but never reached from the
+    // Gate and chain emissions are part of HookRegistryPort but never reached from the
     // pipeline coordinator, which emits only the per-stage hooks. They are
     // stubbed to satisfy the port, not asserted on — gate emission is covered by
-    // tests/integration/hooks/response-capture-hooks.test.ts.
+    // tests/integration/hooks/response-capture-hooks.test.ts and the chain
+    // emissions by tests/integration/hooks/chain-lifecycle-emission.integration.test.ts.
     emitGateEvaluated: jest.fn(async () => {}),
     emitGateFailed: jest.fn(async () => {}),
     emitRetryExhausted: jest.fn(async () => {}),
     emitResponseBlocked: jest.fn(async () => {}),
+    emitStepComplete: jest.fn(async () => {}),
+    emitChainComplete: jest.fn(async () => {}),
+    emitChainFailed: jest.fn(async () => {}),
   };
   return registry;
 };
@@ -434,6 +438,37 @@ describe('Pipeline Wide-Event Root Span Enrichment', () => {
     expect(rootSpan.attributes['cpm.gates.blocked']).toBe(false);
     expect(rootSpan.attributes['cpm.gates.retry_exhausted']).toBe(false);
     expect(rootSpan.attributes['cpm.gates.enforcement_mode']).toBe('standard');
+    expect(rootSpan.attributes['cpm.gates.applied_count']).toBe(0);
+    expect(rootSpan.attributes['cpm.gates.temporary_count']).toBe(0);
+  });
+
+  // P4.73: `cpm.gates.applied_count` and `cpm.gates.temporary_count` were allowlisted and
+  // documented but nothing emitted them. They now read the same sources
+  // `buildCommandMetric` (execution-metrics.ts) already reports under `appliedGates` /
+  // `temporaryGatesApplied` — `context.executionPlan.gates` and
+  // `context.state.gates.temporaryGateIds`, respectively.
+  test('root span counts applied and temporary gates', async () => {
+    const pipeline = createPipeline({
+      stageOverrides: {
+        ExecutionPlanning: createStage('ExecutionPlanning', (context) => {
+          context.executionPlan = {
+            strategy: 'single',
+            gates: ['quality', 'safety'],
+            requiresFramework: false,
+            requiresSession: false,
+          };
+        }),
+        InlineGateExtraction: createStage('InlineGateExtraction', (context) => {
+          context.state.gates.temporaryGateIds.push('quality');
+        }),
+      },
+    });
+
+    await pipeline.execute({ command: 'test-applied-gates' });
+
+    const rootSpan = exporter.getFinishedSpans().find((s) => s.name === 'prompt_engine.request')!;
+    expect(rootSpan.attributes['cpm.gates.applied_count']).toBe(2);
+    expect(rootSpan.attributes['cpm.gates.temporary_count']).toBe(1);
   });
 
   test('root span has chain and framework attributes', async () => {
@@ -445,9 +480,79 @@ describe('Pipeline Wide-Event Root Span Enrichment', () => {
     // Chain/framework (defaults for non-chain execution)
     expect(rootSpan.attributes['cpm.chain.is_chain']).toBe(false);
     expect(rootSpan.attributes['cpm.chain.step_index']).toBe(0);
+    expect(rootSpan.attributes['cpm.chain.total_steps']).toBe(0);
     expect(rootSpan.attributes['cpm.chain.id']).toBe('');
     expect(rootSpan.attributes['cpm.framework.id']).toBe('');
     expect(rootSpan.attributes['cpm.framework.enabled']).toBe(false);
+  });
+
+  // P4.73: `cpm.chain.total_steps` was allowlisted and documented but nothing emitted it.
+  // It now reads `context.sessionContext.totalSteps`, the same field
+  // `SessionManagementStage` populates for a real chain run.
+  test('root span reports total steps for a chain execution', async () => {
+    const pipeline = createPipeline({
+      stageOverrides: {
+        SessionManagement: createStage('SessionManagement', (context) => {
+          context.sessionContext = {
+            sessionId: 'session-a',
+            chainId: 'chain-a',
+            isChainExecution: true,
+            currentStep: 2,
+            totalSteps: 5,
+          };
+        }),
+      },
+    });
+
+    await pipeline.execute({ command: 'test-total-steps' });
+
+    const rootSpan = exporter.getFinishedSpans().find((s) => s.name === 'prompt_engine.request')!;
+    expect(rootSpan.attributes['cpm.chain.total_steps']).toBe(5);
+  });
+
+  // P4.73: `cpm.prompt.id` and `cpm.operator.types` were allowlisted and documented but nothing
+  // emitted them. Both read `context.parsedCommand`, populated by `CommandParsingStage` for
+  // every real request.
+  test('root span reports the resolved prompt id and detected operator types', async () => {
+    const pipeline = createPipeline({
+      stageOverrides: {
+        CommandParsing: createStage('CommandParsing', (context) => {
+          context.parsedCommand = {
+            promptId: 'my-prompt',
+            rawArgs: '',
+            format: 'symbolic',
+            confidence: 1,
+            metadata: {
+              originalCommand: '>>my-prompt @framework:cageerf',
+              parseStrategy: 'symbolic',
+              detectedFormat: 'symbolic',
+              warnings: [],
+            },
+            operators: {
+              hasOperators: true,
+              operatorTypes: ['framework', 'gate'],
+              operators: [],
+              parseComplexity: 'simple',
+            },
+          };
+        }),
+      },
+    });
+
+    await pipeline.execute({ command: 'test-prompt-id' });
+
+    const rootSpan = exporter.getFinishedSpans().find((s) => s.name === 'prompt_engine.request')!;
+    expect(rootSpan.attributes['cpm.prompt.id']).toBe('my-prompt');
+    expect(rootSpan.attributes['cpm.operator.types']).toBe('framework,gate');
+  });
+
+  test('root span reports empty prompt id and operator types when nothing parsed a command', async () => {
+    const pipeline = createPipeline({});
+    await pipeline.execute({ command: 'test-no-parsed-command' });
+
+    const rootSpan = exporter.getFinishedSpans().find((s) => s.name === 'prompt_engine.request')!;
+    expect(rootSpan.attributes['cpm.prompt.id']).toBe('');
+    expect(rootSpan.attributes['cpm.operator.types']).toBe('');
   });
 
   test('root span has scope attribute', async () => {
@@ -456,6 +561,75 @@ describe('Pipeline Wide-Event Root Span Enrichment', () => {
 
     const rootSpan = exporter.getFinishedSpans().find((s) => s.name === 'prompt_engine.request')!;
     expect(rootSpan.attributes['cpm.scope.source']).toBe('default');
+    expect(rootSpan.attributes['cpm.scope.continuity_source']).toBe('default');
+  });
+
+  // Regression for P4.70: `cpm.scope.source` used to read the deleted `state.scope.source`
+  // field, which nothing wrote in production and which therefore always reported the
+  // constant `'default'`. It now reads `state.identity.context?.identitySource` — the field
+  // IdentityResolutionStage actually populates. This test stands in for that stage by setting
+  // `state.identity.context` directly, so a real (non-default) source must reach the span.
+  test('root span reports the real scope source for a scoped execution', async () => {
+    const pipeline = createPipeline({
+      stageOverrides: {
+        IdentityResolution: createStage('IdentityResolution', (context) => {
+          context.state.identity.resolved = true;
+          context.state.identity.continuityScopeId = 'workspace-a';
+          context.state.identity.context = {
+            identity: {
+              organizationId: 'org-a',
+              workspaceId: 'workspace-a',
+              identitySource: 'header',
+            },
+            organizationId: 'org-a',
+            workspaceId: 'workspace-a',
+            continuityScopeId: 'workspace-a',
+            identitySource: 'header',
+            organizationSource: 'header',
+          } as any;
+        }),
+      },
+    });
+    await pipeline.execute({ command: 'test-scope-real' });
+
+    const rootSpan = exporter.getFinishedSpans().find((s) => s.name === 'prompt_engine.request')!;
+    expect(rootSpan.attributes['cpm.scope.source']).toBe('header');
+  });
+
+  // `cpm.scope.continuity_source` reads `workspaceSource` specifically, not the combined
+  // `identitySource` `cpm.scope.source` reports — `resolveContinuityScopeId`
+  // (request-identity-scope.ts) resolves the continuity key from `workspaceId` first, so the
+  // source that matters for state isolation is the workspace's, not "whichever of org/workspace
+  // resolved most authoritatively". This test sets organizationSource to a higher-priority
+  // source than workspaceSource so the two attributes provably diverge — a test that always
+  // asserted them equal could not tell continuity_source apart from a copy of scope.source.
+  test('root span reports the workspace source for continuity, distinct from the combined scope source', async () => {
+    const pipeline = createPipeline({
+      stageOverrides: {
+        IdentityResolution: createStage('IdentityResolution', (context) => {
+          context.state.identity.resolved = true;
+          context.state.identity.continuityScopeId = 'workspace-b';
+          context.state.identity.context = {
+            identity: {
+              organizationId: 'org-b',
+              workspaceId: 'workspace-b',
+              identitySource: 'token',
+            },
+            organizationId: 'org-b',
+            workspaceId: 'workspace-b',
+            continuityScopeId: 'workspace-b',
+            identitySource: 'token',
+            organizationSource: 'token',
+            workspaceSource: 'launch-default',
+          } as any;
+        }),
+      },
+    });
+    await pipeline.execute({ command: 'test-continuity-source' });
+
+    const rootSpan = exporter.getFinishedSpans().find((s) => s.name === 'prompt_engine.request')!;
+    expect(rootSpan.attributes['cpm.scope.source']).toBe('token');
+    expect(rootSpan.attributes['cpm.scope.continuity_source']).toBe('launch-default');
   });
 
   test('marks early exit on root span', async () => {

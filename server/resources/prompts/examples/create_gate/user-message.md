@@ -204,19 +204,19 @@ activation:
 
 ### gate.yaml Fields
 
-| Field             | Type   | Required | Description                                           |
-| ----------------- | ------ | -------- | ----------------------------------------------------- |
-| `id`              | string | Yes      | Lowercase-hyphenated identifier                       |
-| `name`            | string | Yes      | Human-readable name                                   |
-| `type`            | enum   | Yes      | `validation` (pass/fail) or `guidance` (advisory)     |
-| `description`     | string | Yes      | Brief description of what the gate validates          |
-| `guidanceFile`    | string | No       | Path to guidance.md (default: 'guidance.md')          |
-| `guidance`        | string | No       | Inline guidance content (alternative to file)         |
-| `severity`        | enum   | No       | `critical`, `high`, `medium`, `low` (default: medium) |
-| `enforcementMode` | enum   | No       | `blocking`, `advisory`, `informational`               |
-| `pass_criteria`   | array  | No       | Validation criteria definitions                       |
-| `retry_config`    | object | No       | Retry behavior configuration                          |
-| `activation`      | object | No       | When to activate the gate                             |
+| Field             | Type   | Required | Description                                                           |
+| ----------------- | ------ | -------- | --------------------------------------------------------------------- |
+| `id`              | string | Yes      | Lowercase-hyphenated identifier                                       |
+| `name`            | string | Yes      | Human-readable name                                                   |
+| `type`            | enum   | Yes      | `validation` (pass/fail) or `guidance` (advisory)                     |
+| `description`     | string | Yes      | Brief description of what the gate validates                          |
+| `guidance`        | string | No       | Inline guidance content — the gate's guidance.md is written from this |
+| `guidanceFile`    | string | No       | Accepted, not forwarded: resource_manager names the file itself       |
+| `severity`        | enum   | No       | `critical`, `high`, `medium`, `low` (default: medium)                 |
+| `enforcementMode` | enum   | No       | `blocking`, `advisory`, `informational`                               |
+| `pass_criteria`   | array  | No       | Validation criteria definitions                                       |
+| `retry_config`    | object | No       | Retry behavior configuration                                          |
+| `activation`      | object | No       | When to activate the gate                                             |
 
 ### Pass Criteria Types
 
@@ -300,7 +300,7 @@ prompt_engine(
 | Field             | Type   | Description                                           |
 | ----------------- | ------ | ----------------------------------------------------- |
 | `guidance`        | string | Inline guidance content (markdown)                    |
-| `guidanceFile`    | string | Path to guidance.md file                              |
+| `guidanceFile`    | string | Accepted, not forwarded — see the field table above   |
 | `severity`        | enum   | `critical`, `high`, `medium`, `low`                   |
 | `enforcementMode` | enum   | `blocking`, `advisory`, `informational`               |
 | `pass_criteria`   | array  | Validation criteria objects                           |
@@ -352,7 +352,7 @@ prompt_engine(
 
 - Gate IDs: lowercase-hyphenated (e.g., `api-docs`, `test-coverage`)
 - Type: Must be `validation` or `guidance`
-- Either `guidance` (inline) or `guidanceFile` (path to .md file)
+- `guidance` (inline) is what reaches the gate; `guidanceFile` names no content the server can read
 - pass_criteria: At least one criterion for validation gates
 - Regex patterns: Must be valid regular expressions
 

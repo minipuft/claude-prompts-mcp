@@ -15,7 +15,7 @@ import * as net from 'net';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-import { buildServerEnv } from './child-env.js';
+import { buildServerEnv, createHermeticRoots, type HermeticRoots } from './child-env.js';
 
 // ESM equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -41,6 +41,12 @@ export async function getAvailablePort(): Promise<number> {
     server.on('error', reject);
   });
 }
+
+/**
+ * Temp roots created per spawn, keyed by the process that owns them so `killServer` can remove
+ * them without every caller having to thread a cleanup handle through its own teardown.
+ */
+const HERMETIC_ROOTS = new WeakMap<ChildProcess, HermeticRoots>();
 
 /**
  * Spawn MCP server with HTTP transport
@@ -99,10 +105,23 @@ export function startServerWithHttp(
   const callerRedirectsResources =
     callerEnv['MCP_WORKSPACE'] !== undefined || callerEnv['MCP_RESOURCES_PATH'] !== undefined;
 
+  // The two directories this child WRITES into, created as a pair per spawn.
+  //
+  // `HOME` is the leak that lands outside the repository: a `skills_sync export` writes client
+  // skill folders there, 224 files in one ordinary call (measured 2026-09-15). `MCP_RUNTIME_ROOT`
+  // is the leak that lands inside it: without one, the runtime root falls back to the workspace,
+  // which defaults below to PROJECT_ROOT — which is how a fully green `test:e2e` left
+  // `logs/mcp-server.log` and `runtime-state/state.db` at the repo root on every run until now.
+  //
+  // A caller may override either; both default here so a suite that has no opinion cannot leak by
+  // omission. `killServer` removes the pair.
+  const roots = createHermeticRoots('e2e-http-server');
+
   const proc = spawn('node', args, {
     cwd,
     env: buildServerEnv({
       PORT: String(port), // Server uses PORT env var for port
+      ...roots.env,
       ...(callerRedirectsResources
         ? {}
         : {
@@ -117,6 +136,7 @@ export function startServerWithHttp(
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: false, // Keep attached but without stdin
   });
+  HERMETIC_ROOTS.set(proc, roots);
 
   // Log errors for debugging if debug option is enabled
   if (options.debug) {
@@ -299,6 +319,69 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** One JSON-RPC message off a response stream. */
+export interface StreamMessage {
+  id?: number;
+  method?: string;
+  params?: Record<string, unknown>;
+  result?: unknown;
+  error?: unknown;
+}
+
+/** A server-initiated message: a `method` and no `id`. */
+export interface StreamNotification {
+  method: string;
+  params: Record<string, unknown>;
+}
+
+/**
+ * EVERY JSON-RPC message the server wrote on one response, in arrival order.
+ *
+ * `parseJsonOrSse` below answers a different question — "what did this request return" — and
+ * discards the rest of the stream to answer it. That is the right shape for a caller who wants a
+ * result, and the wrong one for anything else on the stream: since notifications ride the
+ * response stream of the call that caused them, a client built on the first-match reader cannot
+ * observe one at all. Twenty-three e2e suites could not see a defect that dropped every
+ * notification the server emitted (P4.88), because none of them had a reader that kept them.
+ *
+ * Additive on purpose: `parseJsonOrSse` and both clients' `request` keep their return shapes.
+ */
+export function allStreamMessages(body: string): StreamMessage[] {
+  const trimmed = body.trim();
+  try {
+    return [JSON.parse(trimmed) as StreamMessage];
+  } catch {
+    // SSE framing — the normal case for this server.
+  }
+
+  const messages: StreamMessage[] = [];
+  for (const line of trimmed.split('\n')) {
+    const lineTrimmed = line.trim();
+    if (lineTrimmed.startsWith('event:') || lineTrimmed.startsWith('id:') || lineTrimmed === '') {
+      continue;
+    }
+    const payload = lineTrimmed.startsWith('data:') ? lineTrimmed.slice(5).trim() : lineTrimmed;
+    try {
+      messages.push(JSON.parse(payload) as StreamMessage);
+    } catch {
+      // Not a JSON-RPC payload line.
+    }
+  }
+  return messages;
+}
+
+/**
+ * The server-initiated messages on one response stream.
+ *
+ * `id === undefined` is the whole test, and it is the JSON-RPC definition of a notification —
+ * not a name prefix, so a new `notifications/*` method needs no change here.
+ */
+export function notificationsOf(body: string): StreamNotification[] {
+  return allStreamMessages(body)
+    .filter((message) => message.method !== undefined && message.id === undefined)
+    .map((message) => ({ method: message.method as string, params: message.params ?? {} }));
+}
+
 /**
  * Parse response body that may be JSON or SSE format
  */
@@ -448,6 +531,45 @@ export class StreamableHttpMcpClient {
   }
 
   /**
+   * Send a request and keep the whole stream: the answer AND every notification the server
+   * pushed on the same response.
+   *
+   * Beside {@link request} rather than replacing it — existing callers keep their return shape.
+   */
+  async requestWithNotifications(
+    method: string,
+    params: Record<string, unknown> = {},
+    requestId: number = 1
+  ): Promise<{ result: unknown; notifications: StreamNotification[]; body: string }> {
+    const headers: Record<string, string> = {
+      Accept: 'application/json, text/event-stream',
+    };
+    if (this.sessionId) {
+      headers['mcp-session-id'] = this.sessionId;
+    }
+
+    const response = await httpPost(
+      `${this.baseUrl}/mcp`,
+      { jsonrpc: '2.0', id: requestId, method, params },
+      headers
+    );
+    if (response.status !== 200) {
+      throw new Error(`Request failed: HTTP ${response.status}: ${response.body}`);
+    }
+
+    const messages = allStreamMessages(response.body);
+    const answer = messages.find((message) => message.id === requestId);
+    if (answer?.error != null) {
+      throw new Error(JSON.stringify(answer.error));
+    }
+    return {
+      result: answer?.result,
+      notifications: notificationsOf(response.body),
+      body: response.body,
+    };
+  }
+
+  /**
    * Close the session
    */
   async close(): Promise<void> {
@@ -529,9 +651,19 @@ export async function sendMcpRequestWithStreamableHttp(
  * Helper to kill a server process and wait for it to exit
  */
 export async function killServer(proc: ChildProcess, timeout = 5000): Promise<void> {
-  if (proc.killed) return;
+  // Runs on the already-killed path too: a caller that kills the process itself still gets the
+  // temp roots removed, and `cleanup()` is idempotent.
+  const removeRoots = () => {
+    HERMETIC_ROOTS.get(proc)?.cleanup();
+    HERMETIC_ROOTS.delete(proc);
+  };
 
-  return new Promise((resolve) => {
+  if (proc.killed) {
+    removeRoots();
+    return;
+  }
+
+  await new Promise<void>((resolve) => {
     const timer = setTimeout(() => {
       proc.kill('SIGKILL');
       resolve();
@@ -544,6 +676,8 @@ export async function killServer(proc: ChildProcess, timeout = 5000): Promise<vo
 
     proc.kill('SIGTERM');
   });
+
+  removeRoots();
 }
 
 export { PROJECT_ROOT, SERVER_PATH };
@@ -666,5 +800,33 @@ export class ModernMcpClient {
     requestId = 1
   ): Promise<unknown> {
     return this.request('tools/call', { name, arguments: args }, requestId, { toolName: name });
+  }
+
+  /**
+   * `tools/call`, keeping every message on the response stream.
+   *
+   * Server notifications ride the stream of the call that caused them, so this is the only shape
+   * of call that can observe one. Additive: {@link callTool} is unchanged.
+   */
+  async callToolWithNotifications(
+    name: string,
+    args: Record<string, unknown> = {},
+    requestId = 1
+  ): Promise<{ result: unknown; notifications: StreamNotification[]; body: string }> {
+    const response = await this.send('tools/call', { name, arguments: args }, requestId, {
+      toolName: name,
+    });
+    if (response.status !== 200) {
+      throw new Error(`Request failed: HTTP ${response.status}: ${response.body}`);
+    }
+    const answer = allStreamMessages(response.body).find((message) => message.id === requestId);
+    if (answer?.error != null) {
+      throw new Error(JSON.stringify(answer.error));
+    }
+    return {
+      result: answer?.result,
+      notifications: notificationsOf(response.body),
+      body: response.body,
+    };
   }
 }

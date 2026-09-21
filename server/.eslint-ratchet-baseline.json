@@ -1,93 +1,89 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-12T03:04:08.504Z",
+  "generatedAt": "2026-09-21T18:14:01.314Z",
   "eslintTarget": "src,scripts,eslint-rules",
   "totals": {
-    "errors": 3200,
-    "warnings": 1020
+    "errors": 2738,
+    "warnings": 765
   },
   "byRule": {
-    "@typescript-eslint/no-explicit-any": {
-      "errors": 312,
+    "@typescript-eslint/strict-boolean-expressions": {
+      "errors": 1840,
       "warnings": 0
     },
     "sonarjs/cognitive-complexity": {
       "errors": 0,
-      "warnings": 96
-    },
-    "@typescript-eslint/strict-boolean-expressions": {
-      "errors": 2108,
-      "warnings": 0
+      "warnings": 81
     },
     "@typescript-eslint/no-non-null-assertion": {
       "errors": 0,
-      "warnings": 112
+      "warnings": 78
     },
     "@typescript-eslint/no-unnecessary-condition": {
-      "errors": 444,
+      "errors": 387,
       "warnings": 0
     },
     "max-params": {
       "errors": 0,
       "warnings": 7
     },
+    "@typescript-eslint/prefer-nullish-coalescing": {
+      "errors": 153,
+      "warnings": 0
+    },
+    "import-x/order": {
+      "errors": 6,
+      "warnings": 0
+    },
     "@typescript-eslint/explicit-module-boundary-types": {
-      "errors": 62,
+      "errors": 49,
       "warnings": 0
     },
     "@typescript-eslint/no-unsafe-assignment": {
       "errors": 0,
-      "warnings": 209
-    },
-    "@typescript-eslint/no-unsafe-member-access": {
-      "errors": 0,
-      "warnings": 431
-    },
-    "@typescript-eslint/prefer-nullish-coalescing": {
-      "errors": 199,
-      "warnings": 0
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "errors": 17,
-      "warnings": 0
+      "warnings": 171
     },
     "@typescript-eslint/no-unsafe-call": {
       "errors": 0,
-      "warnings": 41
+      "warnings": 27
+    },
+    "@typescript-eslint/no-unsafe-member-access": {
+      "errors": 0,
+      "warnings": 357
     },
     "@typescript-eslint/explicit-function-return-type": {
-      "errors": 27,
+      "errors": 22,
+      "warnings": 0
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "errors": 250,
       "warnings": 0
     },
     "max-depth": {
       "errors": 0,
-      "warnings": 30
+      "warnings": 27
     },
     "@typescript-eslint/prefer-optional-chain": {
       "errors": 1,
       "warnings": 0
     },
+    "@typescript-eslint/no-unused-vars": {
+      "errors": 13,
+      "warnings": 0
+    },
     "no-useless-escape": {
-      "errors": 2,
+      "errors": 1,
       "warnings": 0
     },
     "__unknown__": {
       "errors": 0,
       "warnings": 5
     },
-    "@typescript-eslint/no-floating-promises": {
-      "errors": 12,
-      "warnings": 0
-    },
-    "no-console": {
-      "errors": 0,
-      "warnings": 74
-    },
     "@typescript-eslint/no-unsafe-return": {
       "errors": 0,
-      "warnings": 14
+      "warnings": 11
     },
-    "import-x/order": {
+    "@typescript-eslint/no-floating-promises": {
       "errors": 7,
       "warnings": 0
     },

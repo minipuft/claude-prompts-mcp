@@ -183,30 +183,19 @@ argumentSuggestions:
 # Tool description overlays when this framework is active
 toolDescriptions:
   prompt_engine:
-    description: |
-      🌅 PROMPT ENGINE [RADIANT]: CloudySky design-language framework with ground-truth validation.
-
-      WHAT IT RETURNS: Prepared prompt + RADIANT pillar instructions (Reference the Vision → Articulate Goals → Draw the Palette → Infuse Atmosphere & Motion → Anchor to Surfaces → Navigate Constraints → Test in the Living Client).
-      WHAT YOU DO: Restate the pillars and check each visual idea/implementation against them.
-
-      SYNTAX:
-      - >>prompt_id key:"value"              # Run prompt with arguments
-      - >>step1 --> >>step2                  # Chain multiple steps
-      - @RADIANT >>prompt                    # Apply RADIANT framework
-      - :: verify:"npm test" :full           # Shell validation (5 attempts, 5min)
-
-      PRESETS: :fast (1 try), :full (5 tries), :extended (10 tries)
-      MODIFIERS: %clean (no injection), %lean (gates only), %judge (preview)
+    description: >-
+      CloudySky design language. Prepared prompts carry RADIANT pillar instructions (Reference the
+      Vision → Articulate Goals → Draw the Palette → Infuse Atmosphere & Motion → Anchor to Surfaces
+      → Navigate Constraints → Test in the Living Client). Restate the pillars and check each visual
+      idea or implementation against them.
     parameters:
-      command: 'Prompt ID or CloudySky visual idea to expand. Result includes RADIANT pillar guidance for you to apply.'
+      command: >-
+        The resulting prompt includes RADIANT pillar guidance to apply to the CloudySky visual idea.
   resource_manager:
-    description: |
-      🗂️ RESOURCE MANAGER [RADIANT]: Unified CRUD for prompts, gates, and frameworks. Use action:"guide" with your current RADIANT pillar for phase-appropriate recommendations.
-    parameters:
-      resource_type: "Type of resource: 'prompt', 'gate', or 'framework'"
-      action: "Use 'guide' with your current RADIANT pillar for phase-appropriate action recommendations."
+    description: >-
+      Use action:"guide" with your current RADIANT pillar as the goal for pillar-appropriate
+      recommendations.
   system_control:
-    description: |
-      ⚙️ SYSTEM CONTROL [RADIANT]: System administration. Status shows the active RADIANT pillar context.
+    description: Status shows the active RADIANT pillar context.
     parameters:
       action: "Use 'guide' with topic:'framework' for pillar-specific operation guidance."

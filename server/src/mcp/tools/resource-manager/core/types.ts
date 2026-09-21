@@ -11,6 +11,7 @@ import type {
   PromptInjectionConfigYaml,
 } from '#modules/prompts/prompt-schema.js';
 import type { Logger, ToolResponse } from '#shared/types/index.js';
+import type { CategoryToolHandler } from '../../category-manager/index.js';
 import type {
   FrameworkManagerInput,
   FrameworkGate,
@@ -58,9 +59,13 @@ export interface ToolDefinitionInput {
 }
 
 /**
- * Resource types supported by the unified manager
+ * Resource types supported by the unified manager.
+ *
+ * `'category'` joined at P4.7. A prompt category was directory-implied and its `category.yaml`
+ * had zero writers in `src/`, so the only way to author one was by hand — which core principle 1
+ * (MCP Tooling Only) forbids.
  */
-export type ResourceType = 'prompt' | 'gate' | 'framework';
+export type ResourceType = 'prompt' | 'gate' | 'framework' | 'category';
 
 /**
  * All possible actions across resource types
@@ -252,6 +257,27 @@ export interface ResourceManagerInput {
   chain_step_data?: Record<string, unknown>;
   /** [Prompt] New index order for reorder operation */
   chain_step_order?: number[];
+  /**
+   * [Prompt] Dependency edges between this chain's steps, each endpoint a step id.
+   *
+   * Written verbatim into `prompt.yaml`, so this shape is `PromptYamlSchema.edges`' shape — a
+   * wider type here would describe values the loader rejects, exactly as for the preserved
+   * fields below.
+   */
+  edges?: Array<{ from: string; to: string }>;
+  /**
+   * [Prompt] Run-level budget for a chain. Shape and caps come from `workflowBudgetSchema`, which
+   * the tool schema uses directly — a wider type here would describe values the loader rejects.
+   */
+  budget?: {
+    maxNodes?: number;
+    maxFanOut?: number;
+    maxInsertions?: number;
+    declaredCostCeiling?: number;
+    pauseOnBlocking?: boolean;
+  };
+  /** [Prompt] Artifact kinds this run declares. Shape is `PromptArtifactsSchema`. */
+  artifacts?: { produces?: string[]; fromArgument?: string };
   /** [Prompt] Script tools to create with the prompt */
   tools?: ToolDefinitionInput[];
   /** [Prompt] Update-only: union with the current binding (`add`) or unbind and delete (`remove`). */
@@ -272,20 +298,38 @@ export interface ResourceManagerInput {
    * default once set; see the schema for the operator-facing statement of that.
    */
   injection?: PromptInjectionConfigYaml;
+  /**
+   * [Prompt | Category] The MCP-registration default.
+   *
+   * On `resource_type: 'prompt'` it FREEZES the prompt against its category and the global
+   * default. On `resource_type: 'category'` (P4.7) it writes the category-level default those
+   * prompts inherit — the middle layer of the prompt → category → global chain, which had a
+   * reader in `loader.ts` and no writer anywhere in `src/` until P4.7.
+   */
   register_with_mcp?: boolean;
+  /** [Prompt | Category] Native MCP prompt behaviour. Same two levels as `register_with_mcp`. */
   mcp_prompt_mode?: 'expand' | 'launch';
   subagent_model?: 'heavy' | 'standard' | 'fast';
   agent_type?: string;
   execution_hint?: 'single' | 'chain';
-  is_chain?: boolean;
   full_restart?: boolean;
+  /** Read by prompt `guide`: what the caller is trying to do. */
+  goal?: string;
+  /** Read by prompt `guide`: show full details for actions not marked working. */
+  include_legacy?: boolean;
   filter?: string;
-  format?: 'table' | 'json' | 'text';
   detail?: 'summary' | 'full';
   search_query?: string;
 
   // Gate-specific parameters
-  gate_type?: 'validation' | 'guidance';
+  /** Writes the gate.yaml key `type` (P4.10 renamed this from `gate_type`). */
+  type?: 'validation' | 'guidance';
+  /** Writes the gate.yaml key `gate_type` — the framework/category/custom classification. */
+  gate_type?: 'framework' | 'category' | 'custom';
+  /** Free kebab-case tag naming what the gate reminds about; suppressed via `gates.harnessCovers`. */
+  subject?: string;
+  severity?: 'critical' | 'high' | 'medium' | 'low';
+  enforcement_mode?: 'blocking' | 'advisory' | 'informational';
   guidance?: string;
   pass_criteria?: Array<string | GatePassCriteria>;
   activation?: {
@@ -311,7 +355,14 @@ export interface ResourceManagerInput {
   enabled?: boolean;
   persist?: boolean;
 
-  // Advanced framework parameters (not advertised for token efficiency)
+  // Advanced framework parameters.
+  //
+  // These were withheld from the published schema for token efficiency, which made them
+  // settable and undiscoverable at the same time — including `framework_gates`, which
+  // `FrameworkDraftValidator` hard-requires, so the cheapest way to learn the surface was to
+  // provoke its error. Declared in `resourceManagerInputSchema` since P4.1/P4.5; the token
+  // cost is paid in the contract's parameter list, where `includeInDescription: false` keeps
+  // it out of the tool description a client sees on every call.
   framework_gates?: FrameworkGate[];
   template_suggestions?: TemplateSuggestion[];
   framework_elements?: FrameworkElements;
@@ -358,6 +409,7 @@ export interface ResourceManagerDependencies {
   promptResourceHandler: PromptResourceHandlerPort;
   gateManager: GateToolHandler;
   frameworkManager: FrameworkToolHandler;
+  categoryManager: CategoryToolHandler;
 }
 
 /**

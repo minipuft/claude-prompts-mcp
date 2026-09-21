@@ -4,6 +4,15 @@
  *
  * Comprehensive performance tracking and optimization for the MCP server
  * Focuses on execution metrics, memory usage, and system health monitoring
+ *
+ * Restored 2026-09-20 (P4.52 reimplementation probe): nothing in src/, cli/, hooks/, or tests/
+ * constructs `PerformanceMonitor` — it was deleted, then restored once `AnalyticsService`
+ * (infra/observability/metrics/analytics-service.ts) was found doing the same job live: a
+ * `setInterval`-driven periodic collector (`startPerformanceMonitoring` → `recordMemoryUsage`
+ * every 30s) that IS constructed and wired into `mcp/tools/index.ts`. Two collectors answering
+ * "what is current performance" is evidence of a defect (an abandoned first attempt, or a gap
+ * AnalyticsService doesn't cover), not proof this one is surplus — left un-wired pending an
+ * owner decision on which is canonical.
  */
 
 import * as os from 'os';

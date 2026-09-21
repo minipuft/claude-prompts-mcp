@@ -1,7 +1,10 @@
 // @lifecycle canonical - Canonical resource schema verification service for CLI and MCP write paths.
 import { validateScriptToolSchema } from '../../../modules/automation/core/script-schema.js';
 import { validateStyleSchema } from '../../../modules/formatting/core/style-schema.js';
-import { validatePromptYaml } from '../../../modules/prompts/prompt-schema.js';
+import {
+  validateCategorySchema,
+  validatePromptYaml,
+} from '../../../modules/prompts/prompt-schema.js';
 
 import {
   FrameworkGateSchema,
@@ -11,7 +14,15 @@ import {
 import { validateGateSchema } from '#engine/gates/core/gate-schema.js';
 import { loadYamlFileSync } from '#shared/utils/yaml/index.js';
 
-export type ResourceVerificationType = 'prompts' | 'gates' | 'frameworks' | 'styles' | 'tools';
+/**
+ * `'categories'` (P4.7) names the `category.yaml` document, not the category DIRECTORY.
+ *
+ * It is the only member whose subject nothing validates on load — `loader.ts` casts the parsed
+ * YAML with `as Partial<Category>` — so for this type the write-time check is the only check
+ * there is, rather than a second opinion ahead of the loader's.
+ */
+export type ResourceVerificationType =
+  'prompts' | 'gates' | 'frameworks' | 'styles' | 'tools' | 'categories';
 
 export interface ResourceVerificationIssue {
   code: string;
@@ -240,6 +251,8 @@ export class ResourceVerificationService {
     switch (resourceType) {
       case 'prompts':
         return validatePromptYaml(data, expectedId);
+      case 'categories':
+        return validateCategorySchema(data, expectedId);
       case 'gates':
         return validateGateSchema(data, expectedId);
       case 'frameworks':

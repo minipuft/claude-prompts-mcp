@@ -75,7 +75,7 @@ cpm validate --styles
 | `--frameworks`           | Validate frameworks only                              |
 | `--styles`               | Validate styles only                                  |
 | `--all`                  | Validate all resource types (default)                 |
-| `--config`               | Also validate `config.json` keys and values           |
+| `--config`               | Also validate your config file's keys and values      |
 | `-w, --workspace <path>` | Workspace directory (default: `MCP_WORKSPACE` or cwd) |
 | `--json`                 | JSON output                                           |
 
@@ -93,6 +93,8 @@ cpm list styles
 ```
 
 Displays a table with id, name, category (prompts only), and description. Use `--json` for machine-readable output.
+
+Prompts are listed exactly as the server loads them: a directory (`{category}/{id}/prompt.yaml`) or a single file (`{category}/{id}.yaml`), at any depth below the category, under the id the server serves — the path below the category, so a chain step is `deep_analysis/deep_dive`. Every command that takes a prompt id takes that id.
 
 ### inspect
 
@@ -116,9 +118,9 @@ cpm init ./my-workspace
 cpm init --json
 ```
 
-Creates a `resources/prompts/` directory with example prompts (`quick_review`, `explain`, `improve`) and a `config.json` with sensible defaults. Prints setup instructions for Claude Desktop configuration.
+Creates a `resources/prompts/` directory with example prompts (`quick_review`, `explain`, `improve`) and a `config.jsonc` with every setting commented out (see [Configuration](#config) below). Prints setup instructions for Claude Desktop configuration.
 
-If `config.json` already exists, it is preserved. By default, `init` validates generated prompt YAML before returning success. Use `--no-validate` only if you intentionally need to bypass this guard.
+If a `config.jsonc` or `config.json` already exists, it is preserved. By default, `init` validates generated prompt YAML before returning success. Use `--no-validate` only if you intentionally need to bypass this guard.
 
 ### create
 
@@ -140,7 +142,27 @@ cpm create style analytical --name "Analytical" --description "Structured analyt
 | `-w, --workspace <path>` | Workspace directory                  |
 | `--json`                 | JSON output                          |
 
-Exit codes: `0` created, `1` already exists or error.
+**A created gate or framework is recorded as version 1**, with the same description
+`resource_manager create` writes and no prior-state row — there is nothing to bridge, because
+nothing existed. `--json` reports `"recorded"` and `"version"`.
+
+A created **prompt** or **style** records nothing, and says so: `--json` carries
+`"recorded": false` with a `"not_recorded_reason"`, and the text output prints the same sentence.
+The two reasons are different in kind. Styles carry no version rows on either surface — nothing
+records them, so a rollback of one could only ever report "version not found". A prompt is
+blocked: its snapshot is projected from a loader-resolved prompt, and reaching that loader from
+the CLI bundle measured **+59.0 KB** on 2026-09-21, which is 35.5 KB over the dev bundle budget
+and fails the build. Recording a differently-shaped prompt snapshot instead would make every
+subsequent `resource_manager` edit write a bridge row. Use `resource_manager` where a prompt's
+history matters.
+
+A create in a workspace the server has never run in also records nothing — there is no
+`state.db`, and the CLI never authors that schema. The resource is still created, and the reason
+is reported.
+
+Exit codes: `0` created, `1` already exists or error. A create whose version row cannot be
+written is reported as a failure and leaves no files behind: the record runs inside the write's
+transaction, so the directory it captured as absent is removed again.
 
 ### delete
 
@@ -158,7 +180,7 @@ cpm delete style analytical --force
 | `-w, --workspace <path>` | Workspace directory          |
 | `--json`                 | JSON output                  |
 
-Without `--force`, prints what would be deleted and exits 1. Exit codes: `0` deleted, `1` missing `--force` or error.
+Without `--force`, prints what would be deleted and exits 1. A directory prompt is deleted with its directory (a chain with its steps); a single-file prompt is deleted as that one file, never the category around it. Exit codes: `0` deleted, `1` missing `--force` or error.
 
 ### history
 
@@ -197,15 +219,42 @@ Restore a previous resource version.
 ```bash
 cpm rollback prompt action_plan 2 --workspace server
 cpm rollback gate code-quality 1 --json
+cpm rollback gate code-quality 1 --preview
 ```
 
-Saves the current state as a new version before restoring the target version (matching server behavior). The restored snapshot is written back to the resource YAML file.
+Saves the current state as a new version, restores the target version, then records the state that restore PRODUCED as the newest version — the same order the server records an edit in. Both rows carry the resource's bytes as they stood when the row was written, so either state can later be restored byte-exactly.
+
+**A version recorded since schema v29 restores its files byte for byte**, through the same planner `resource_manager rollback` uses: the recorded bytes are written back verbatim, so comments, key order, flow style, line endings, a byte-order mark and every non-ASCII character survive. Files whose recorded bytes already match are not written at all. **A rollback never deletes a file** — one the resource has now that the target version did not record stays, is listed by path, and means the resource is then not byte-identical to that version. A version that recorded no file tree still restores the older way: the recorded fields are merged over the entry file and every other key keeps its current value, which is what `not_restored` reports.
+
+Two states refuse and write nothing rather than restoring something else: a version row whose recorded bytes are missing from the object store, and a recorded path that resolves outside the resource's own directory.
+
+`--preview` resolves exactly the plan a rollback would apply and prints it, writing no file and recording no version. `--json` adds `preview`, `files_written`, `files_unchanged` and `files_left_in_place` beside the existing fields.
+
+For a gate or a framework, both rows carry the SAME projection `resource_manager` records — one
+declaration per resource type, shared by the two surfaces. Rolling back a gate or framework the
+server last wrote therefore adds exactly one row and no "Bridge: prior live state" row, because the
+state being replaced now compares equal to the newest recorded one. A **prompt** rollback still
+bridges: the shared prompt projection takes a loader-resolved prompt, and reaching the prompt loader
+from the CLI bundle measured +59.0 KB against 24.1 KB of headroom (2026-09-21), so `cpm` still
+records a prompt's raw `prompt.yaml` map. ☐ open as of 2026-09-21 · flips when a prompt's authored
+state is reachable from `cli-shared/` within the bundle budget. That bound is about the SNAPSHOT
+only — a prompt's FILES restore byte-exactly like every other type's, because the bytes and the
+projection are different questions and only the projection needs the loader.
+
+Nothing is recorded when the target version is already the current state; `--json` reports that as `"recorded": false` alongside the version number that was already newest. A rollback that cannot write the file records no restored version at all, and a rollback whose version row cannot be written leaves the file byte-identical to what it was.
+
+Three commands record a version: `rollback`, `create` (gates and frameworks) and `toggle`
+(frameworks). `delete` purges the resource's history, `rename` re-keys it onto the new id, and
+`move` leaves it alone (a category move does not change the id history is keyed on). `link-gate`
+edits a prompt and still records nothing, for the measured prompt-projection reason under
+[create](#create) — the MCP server's `resource_manager` does record a version for that edit, so
+use it where the history matters.
 
 Exit codes: `0` success, `1` version not found or error.
 
 ### rename
 
-Rename a resource (changes directory name and `id:` field in YAML).
+Rename a resource (changes its directory or file name and the `id:` field in YAML together).
 
 ```bash
 cpm rename prompt old-name new-name --workspace server
@@ -218,6 +267,8 @@ cpm rename framework old-method new-method
 | `--no-validate`          | Skip post-rename schema validation |
 | `-w, --workspace <path>` | Workspace directory                |
 | `--json`                 | JSON output                        |
+
+Only the last segment of an id can change: `cpm rename prompt deep_analysis/deep_dive deep_analysis/dive` renames the step in place, while a new id under another chain is refused. The target is checked before anything is written, so a refused rename leaves the resource untouched. `--json` reports `oldPath`/`newPath`, which name a file for a single-file prompt.
 
 Prints a warning with an `rg` command to help find cross-references that may need updating. Exit codes: `0` renamed, `1` not found or target exists.
 
@@ -237,7 +288,7 @@ cpm move prompt helper --category development --json
 | `-w, --workspace <path>` | Workspace directory              |
 | `--json`                 | JSON output                      |
 
-Only prompts have categories — other resource types should use `rename` instead. Prints a warning about chain step references (`category/id` format). Exit codes: `0` moved, `1` error.
+Only prompts have categories — other resource types should use `rename` instead. A single-file prompt moves as a file; a prompt nested inside a chain is refused, because it moves with its chain. `--json` reports `oldPath`/`newPath`. Prints a warning about chain step references (`category/id` format). Exit codes: `0` moved, `1` error.
 
 ### toggle
 
@@ -254,7 +305,18 @@ cpm toggle style analytical --json
 | `-w, --workspace <path>` | Workspace directory                |
 | `--json`                 | JSON output                        |
 
-Flips `enabled: true` to `false` (or vice versa). Only frameworks and styles have an `enabled` field. Exit codes: `0` toggled, `1` error.
+Flips `enabled: true` to `false` (or vice versa). Only frameworks and styles have an `enabled` field.
+
+**A toggled framework records the state the flip produced**, as an edit: the state before the
+flip is bridged in first if it was not already the newest recorded row, so it stays
+rollback-reachable. `cpm rollback` to the version before the toggle restores every value and
+comment (the bytes differ by one blank line after the rewritten key — a property of the
+source-preserving serializer, not of the rollback).
+
+A toggled **style** records nothing and says so in `--json` (`"recorded": false` with
+`"not_recorded_reason"`) and in the text: styles carry no version rows on either surface.
+
+Exit codes: `0` toggled, `1` error.
 
 ### link-gate
 
@@ -277,12 +339,12 @@ Modifies the prompt's `gateConfiguration.include` array. When adding, validates 
 
 ### config
 
-Manage workspace `config.json` (read, write, validate, reset).
+Manage your workspace config file — `config.jsonc` by default, `config.json` still read if that is what your workspace has (read, write, validate, reset).
 
 ```bash
 cpm config list --workspace server                  # Display full config
 cpm config get gates.enabled -w server              # Get a single value
-cpm config set logging.level debug -w server        # Set a value (backup + validate)
+cpm config set logging.level debug -w server        # Set a value (backup + edit in place)
 cpm config validate -w server                       # Validate all keys/values
 cpm config reset --force -w server                  # Reset to defaults
 cpm config keys                                     # List all valid config keys
@@ -299,7 +361,66 @@ cpm config keys                                     # List all valid config keys
 
 Keys use dot-notation (e.g., `gates.enabled`, `server.port`, `logging.level`). The `set` subcommand creates a timestamped backup before writing and warns when a key requires server restart. The `--json` and `-w` flags work with all subcommands.
 
+Every message names the file it acted on, by its real name (`config.jsonc` or `config.json`, whichever your workspace has): `cpm config get` on a missing key reports `Key '<key>' not found in <file>`, `validate` reports `<file> is valid` (or `validation failed:` with the list of problems), and `reset` reports `<file> reset to defaults`.
+
 Exit codes: `0` success, `1` error or validation failure.
+
+#### config.jsonc
+
+`config.jsonc` accepts `//` and `/* */` comments and a trailing comma before `}`/`]` — nothing else beyond JSON. A plain `config.json` is still read if that is what you have; it stays strict JSON, so a comment inside one is a parse error. Within a workspace, `config.jsonc` is tried first, then `config.json`.
+
+`cpm init` writes `config.jsonc` with `$schema` and `"version": 5` live, and every other setting commented out, showing its current value, its default and its permitted values — generated straight from the schema, so the file can never describe a setting the server does not have. An excerpt:
+
+```jsonc
+{
+//   — JSON Schema reference for IDE validation.
+  "$schema": "https://cdn.jsdelivr.net/npm/claude-prompts@5/config.schema.json",
+
+//   — Which shape this config file is written in. `5` is the current format...
+  "version": 5,
+
+//   — Server identity and transport settings.
+//   "server": {
+//     — Server name reported to MCP clients.
+//     — default: "claude-prompts"
+//     "name": "claude-prompts",
+//   },
+```
+
+To change a setting, uncomment its line and the braces of the section it sits in — every example line already ends with a comma, so uncommenting a single line still parses. A file with nothing uncommented behaves exactly like no file at all.
+
+`cpm config set` edits the file's text in place: only the one key's own characters change, so your comments, key order and formatting all survive. Setting a key that exists only as a commented-out example in the template inserts the live key and leaves the commented example where it was — nothing tries to remove or uncomment it. A persisted `gates`/`framework` toggle from `system_control` (`persist: true`) edits in place the same way.
+
+`cpm config reset --force` writes fresh defaults into the **same file name** — the commented template for a `config.jsonc`, or the minimal `{$schema, version}` document for a `config.json`. It never renames a file.
+
+### Config versions
+
+Every write to the config file — `cpm config set`, `cpm config reset`, `cpm enable`/`cpm disable`, and a persisted `gates`/`framework` toggle from `system_control` — is recorded as a version carrying the file's exact bytes, comments included.
+
+```bash
+cpm config history                  # Every recorded version, newest first
+cpm config rollback 3 --preview     # What restoring v3 would change; writes nothing
+cpm config rollback 3               # Restore v3's bytes, and record the result as a new version
+```
+
+A write that changes no character records nothing and says so, and a workspace the server has never run in has no `state.db` to record into — the write still happens, and the reason is printed (and carried in `--json` as `recorded` / `recordNote`).
+
+A rollback writes the recorded bytes verbatim, through the same temp-file-and-rename every config write uses, and it is refused — with nothing written — when it cannot: an unknown version number, a version that recorded no bytes, bytes this build no longer accepts as configuration (an old version can predate a bound change), or a recorded `config.jsonc` in a workspace that now holds a `config.json`. Config is the one resource with no projected fallback: its version snapshot holds a filename, a size and a digest, so where the bytes are missing there is nothing to rebuild the document from, and the refusal says so rather than inventing one.
+
+**Removed in 5.0** (breaking): `cpm config set` and `cpm config reset` no longer leave a `config.json[c].backup.<timestamp>` file, and `--json` no longer carries `backupPath`. Nothing ever read those files back. Use `cpm config history` and `cpm config rollback` instead. Backup files already on disk are left exactly where they are.
+
+A workspace holding both `config.jsonc` and `config.json` refuses every `config` subcommand (and server startup) rather than silently preferring one:
+
+```
+Two config files in one directory: <path>/config.jsonc and <path>/config.json. Keep one —
+config.jsonc is the 5.0 name, config.json is still read.
+```
+
+Delete whichever file you are not using to resolve it.
+
+For the full file lookup order, how a single value resolves across defaults, the file, environment
+variables and CLI flags, and what the `$schema` line validates, see the [Configuration
+Reference](../reference/configuration.md).
 
 ### enable / disable
 
@@ -332,10 +453,13 @@ Reports "already enabled/disabled" without writing when the value is unchanged. 
 > which run in the client's own subagent rather than through an outbound API call — so no API key
 > is configured or stored.
 >
-> **A `config.json` that still carries the `analysis` section keeps loading.** The section is
-> parsed and ignored for one deprecation cycle, and the server warns once at startup naming the
-> replacement. Only the ability to _set_ it from `cpm` or `system_control` is withdrawn. Delete the
-> section to silence the warning; it is removed entirely in the next major.
+> **Removed in 5.0: the `analysis` section itself.** It is gone from `config.schema.json`, not just
+> unsettable. A `config.json` with no `version` key that still carries
+> `analysis.semanticAnalysis.llmIntegration.*` is read as a 4.x file and translated on load: the
+> section is dropped, and named in the one-time notice alongside every other renamed or dropped
+> key. A file already declaring `"version": 5` that still carries `analysis` is flagged by the
+> ordinary schema check instead. Delete the section (or add `"version": 5` and drop it) to silence
+> either warning.
 
 > **Changed in 3.1.2.** These nine keys were previously `*.mode` holding `"on"`/`"off"`, which no
 > reader consulted — the command reported success and changed nothing. A `config.json` still
@@ -376,7 +500,7 @@ Within a workspace, it checks `resources/<type>/` first, then `<type>/` as a leg
 
 ## Architecture
 
-The CLI is an esbuild bundle (~306KB) that imports shared logic from `server/src/cli-shared/`. Most commands run self-contained; versioning commands (`history`, `compare`, `rollback`) require `python3`/`python` to query SQLite (`runtime-state/state.db`).
+The CLI is an esbuild bundle (~306KB) that imports shared logic from `server/src/cli-shared/`. Every command runs self-contained: versioning commands (`history`, `compare`, `rollback`) read and write `runtime-state/state.db` through Node's built-in `node:sqlite`, which is why the CLI has no Python requirement.
 
 ```
 cli/
@@ -387,8 +511,8 @@ cli/
 │   │   ├── validate.ts        # Resource + config validation
 │   │   ├── list.ts            # Resource listing
 │   │   ├── inspect.ts         # Resource inspection
-│   │   ├── init.ts            # Workspace initialization (+ config.json)
-│   │   ├── config.ts          # Config.json management (6 subcommands)
+│   │   ├── init.ts            # Workspace initialization (+ config.jsonc)
+│   │   ├── config.ts          # Config file management (6 subcommands)
 │   │   ├── enable-disable.ts  # Subsystem mode shortcuts
 │   │   ├── create.ts          # Resource creation (scaffold)
 │   │   ├── delete.ts          # Resource deletion
@@ -414,8 +538,8 @@ cli/
 
 ### cli-shared Isolation
 
-The `server/src/cli-shared/` barrel re-exports validation schemas, YAML utilities, version-history functions, resource scaffolding, and config operations using only relative imports. A dependency-cruiser rule (`cli-shared-no-runtime`) prevents any transitive dependency on server runtime modules (transport, config, logging).
+The `server/src/cli-shared/` barrel re-exports validation schemas, YAML utilities, version-history functions, resource scaffolding, and config operations. It reaches schema and utility modules in `shared/`, `engine/`, and `modules/` through the usual `#`-subpath specifiers; what it may not reach, at any depth, is `infra/`, `runtime/`, or `mcp/` — transport, config loading, and logging would otherwise land in the CLI's own bundle. The dependency-cruiser rule `cli-shared-no-runtime` enforces that as a `reachable` rule over the whole closure, and `tests/unit/cli-shared/import-isolation.test.ts` cruises the barrel on its own. The rule was added 2026-09-15; this paragraph and the barrel's header had cited it by name before it existed, and described the barrel as using only relative imports, which it never did.
 
-Config validation logic (`CONFIG_VALID_KEYS`, `validateConfigInput`) is extracted to `cli-shared/config-input-validator.ts` and re-exported by the server's `config-utils.ts` for backward compatibility. Config file operations (`readConfig`, `setConfigValue`, `initConfig`, etc.) live in `cli-shared/config-operations.ts` using only `node:fs` and `node:path`.
+Config validation logic (`CONFIG_VALID_KEYS`, `validateConfigInput`) lives in `cli-shared/config-input-validator.ts`, which the CLI's `config` commands read — 59 keys today. The server's `mcp/tools/config-utils.ts` is not a re-export of that file: it defines its own separate `CONFIG_VALID_KEYS`/`validateConfigInput`, a smaller, strict subset (19 keys) used only by the `system_control` config action's per-key `validate` check. A later release generates one list from the `ConfigFile` type instead of hand-maintaining both. Config file operations (`readConfig`, `setConfigValue`, `initConfig`, etc.) live in `cli-shared/config-operations.ts` using only `node:fs` and `node:path`.
 
 Versioning types (`VersionEntry`, `HistoryFile`, etc.) from `modules/versioning/types.ts` are pure interfaces — safe to re-export. Standalone functions in `cli-shared/version-history.ts` mirror `VersionHistoryService` against SQLite state and avoid runtime imports from MCP server modules.

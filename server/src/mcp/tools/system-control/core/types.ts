@@ -6,6 +6,7 @@ import type { PromptGuidanceService } from '#engine/frameworks/prompt-guidance/i
 import type { GateStateStore } from '#engine/gates/gate-state-store.js';
 import type { GateGuidanceRenderer } from '#engine/gates/guidance/GateGuidanceRenderer.js';
 import type { ExecutionRecordStore } from '#modules/chains/execution-record-store.js';
+import type { SkillsSyncPaths } from '#modules/skills-sync/service.js';
 import type {
   StateStoreOptions,
   ConfigManager,
@@ -15,7 +16,6 @@ import type {
   ChainSessionService,
   DatabasePort,
 } from '#shared/types/index.js';
-import type { SafeConfigWriter } from '../../config-utils.js';
 import type { ResponseFormatter } from '../../prompt-engine/processors/response-formatter.js';
 
 /**
@@ -64,8 +64,16 @@ export interface SystemControlContext {
    * `diff` and `prune` cannot see what was exported.
    */
   readonly databasePort?: DatabasePort;
+  /**
+   * Resolves skills-sync's source, write and bundled directories through the running
+   * server's own `PathResolver`, so `--workspace` and `MCP_WORKSPACE` resolve identically
+   * over MCP. Wired unconditionally at startup (`module-initializer.ts`), regardless of
+   * whether persistence is configured, so a missing value here means the composition root
+   * itself regressed -- `SkillsSyncActionHandler` throws rather than falling back to the
+   * environment-only resolution the standalone CLI wrapper uses.
+   */
+  readonly skillsSyncPaths?: () => SkillsSyncPaths;
   readonly configManager?: ConfigManager;
-  readonly safeConfigWriter?: SafeConfigWriter;
   readonly onRestart?: (reason: string) => Promise<void>;
   /**
    * Rebuild and re-advertise the tool surface after a state change that alters

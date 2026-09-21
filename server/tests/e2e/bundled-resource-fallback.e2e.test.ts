@@ -26,7 +26,7 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 
-import { buildServerEnv } from './helpers/child-env.js';
+import { buildServerEnv, createHermeticRoots } from './helpers/child-env.js';
 
 const SERVER_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const PACKAGE_RESOURCES = path.join(SERVER_ROOT, 'resources');
@@ -64,8 +64,11 @@ async function bootAndCapture(workspace: string): Promise<Startup> {
   const runtimeRoot = path.join(workspace, 'runtime');
   await mkdir(runtimeRoot, { recursive: true });
 
+  // The runtime root is this function's own (under `workspace`, which the caller removes); the
+  // pair still supplies `HOME`, which nothing here would otherwise set.
+  const roots = createHermeticRoots('bundled-resource-fallback');
   const proc = spawn('node', [path.join(SERVER_ROOT, 'dist', 'index.js'), '--transport=stdio'], {
-    env: buildServerEnv({ MCP_WORKSPACE: workspace, MCP_RUNTIME_ROOT: runtimeRoot }),
+    env: buildServerEnv({ ...roots.env, MCP_WORKSPACE: workspace, MCP_RUNTIME_ROOT: runtimeRoot }),
     stdio: ['pipe', 'pipe', 'pipe'],
   });
 
@@ -86,6 +89,8 @@ async function bootAndCapture(workspace: string): Promise<Startup> {
       resolve(code);
     });
   });
+
+  roots.cleanup();
 
   const logPath = path.join(runtimeRoot, 'logs', 'mcp-server.log');
   const inventory = await readFile(logPath, 'utf8').catch(() => '');
@@ -178,7 +183,7 @@ describe('a workspace resource directory overlays the bundled tree (P1.0a)', () 
   /**
    * Serving a resource and INDEXING it are two separate derivations, and for a day they disagreed
    * by 41 prompts with nothing failing. `resource_index` is what every Python hook reads, so the
-   * gap was user-visible in the worst way: `>>strategicImplement` answered "Unknown prompt" for a
+   * gap was user-visible in the worst way: `>>strategic_implement` answered "Unknown prompt" for a
    * prompt `prompt_engine` executes.
    *
    * The last case here is the one that closes the CLASS rather than the three instances — it
@@ -194,7 +199,7 @@ describe('a workspace resource directory overlays the bundled tree (P1.0a)', () 
       expect(prompts).toContain('probe_prompt');
       // A bundled prompt the workspace does not carry. Before the fix the indexer walked only the
       // primary root, so every one of these was absent while the server served them.
-      expect(prompts).toContain('strategicImplement');
+      expect(prompts).toContain('strategic_implement');
     });
 
     it('indexes gates, frameworks and styles rather than only prompts', () => {

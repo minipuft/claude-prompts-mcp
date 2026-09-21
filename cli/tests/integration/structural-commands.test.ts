@@ -317,6 +317,44 @@ describe('cpm link-gate', () => {
     expect(content).toContain('gateConfiguration');
   });
 
+  /**
+   * The fixture prompt is machine-written, so it carries nothing a serializer would normalize
+   * away. This replaces it with a HAND-AUTHORED file — a leading comment, a comment between
+   * sections, a needlessly quoted value — and drives the real binary over it.
+   *
+   * Linking changes the length of `gateConfiguration.include`, so this is the structural tier:
+   * the comments must survive even though the document is re-rendered. Before this writer landed,
+   * the same command kept none of them.
+   */
+  it('keeps a hand-authored prompt file\'s comments when it links a gate', () => {
+    const promptPath = join(tmpWs, 'resources/prompts/general/test-prompt/prompt.yaml');
+    const authored = [
+      '# Authored by hand — this ordering is meaningful to a reader.',
+      'id: test-prompt',
+      'name: Test Prompt',
+      'category: "general"',
+      '',
+      '# Folded so it reads as one paragraph when loaded.',
+      'description: >-',
+      '  A test prompt for CLI integration tests.',
+      '',
+      'userMessageTemplateFile: user-message.md',
+      '',
+    ].join('\n');
+    writeFileSync(promptPath, authored, 'utf8');
+
+    const { exitCode } = run(['link-gate', 'test-prompt', 'test-gate', '--workspace', tmpWs]);
+    expect(exitCode).toBe(0);
+
+    const content = readFileSync(promptPath, 'utf8');
+    // The edit was applied...
+    expect(content).toContain('test-gate');
+    // ...and the author's comments came through it.
+    expect(content).toContain('# Authored by hand');
+    expect(content).toContain('# Folded so it reads as one paragraph when loaded.');
+    expect((content.match(/^\s*#/gm) ?? []).length).toBe(2);
+  });
+
   it('unlinks a gate with --remove', () => {
     // First link
     run(['link-gate', 'test-prompt', 'test-gate', '--workspace', tmpWs]);

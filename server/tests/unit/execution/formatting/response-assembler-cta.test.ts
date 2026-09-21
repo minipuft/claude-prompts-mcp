@@ -55,6 +55,8 @@ function createSinglePromptContext(overrides: {
     createdAt: number;
     attemptCount: number;
     maxAttempts: number;
+    gateTiers?: Record<string, 'check' | 'reminder'>;
+    checkResults?: Array<{ gateId: string; passed: boolean; summary: string }>;
   };
   frameworkDecision?: { source: string; frameworkId: string };
   executionPlanOverrides?: Record<string, unknown>;
@@ -633,6 +635,140 @@ describe('ResponseAssembler – operator-aware CTA system', () => {
       // Criteria summaries now rendered alongside gate names
       expect(result).toContain('Check intent');
       expect(result).toContain('Check code');
+    });
+  });
+
+  /**
+   * Ruling B4: `per_gate` is for gates the engine can grade, and everything else takes one
+   * attestation field. A rationale slot per reminder is what nine measured dispatches filled
+   * with "not applicable" five times a run while catching nothing.
+   *
+   * The tier comes off the pending review that `GateReviewStage` recorded: this assembler takes
+   * no gate provider and is synchronous, so a gate with no recorded tier stays `check` — the
+   * pre-B4 shape, which the tests above still assert.
+   */
+  describe('verdict template tiers (check vs reminder)', () => {
+    const mixedReview = {
+      combinedPrompt: 'review',
+      gateIds: ['test-suite', 'code-quality'],
+      prompts: [] as GateReviewPrompt[],
+      createdAt: 1,
+      attemptCount: 0,
+      maxAttempts: 3,
+      gateTiers: { 'test-suite': 'check' as const, 'code-quality': 'reminder' as const },
+    };
+
+    test('a check + a reminder yield one per_gate entry and a reminders field', () => {
+      const context = createSinglePromptContext({
+        accumulatedGateIds: ['test-suite', 'code-quality'],
+        chainId: 'chain-tiers#1',
+        pendingReview: mixedReview,
+      });
+
+      const result = assembler.formatSinglePromptResponse(context, {} as any);
+
+      // Index 1 is the gate's place in the ORIGINAL list, which is what the per-gate parser
+      // matches back against — dropping the reminder must not renumber the survivor.
+      expect(result).toContain('"index": 1');
+      expect(result).not.toContain('"index": 2');
+      expect(result).toContain(
+        '"reminders": {"satisfied": ["code-quality"], "not_applicable": []}'
+      );
+      expect(result).toContain('Checks are recorded by the engine; attest reminders in one field');
+    });
+
+    test('a recorded result pre-fills passed and the rationale slot', () => {
+      const context = createSinglePromptContext({
+        accumulatedGateIds: ['test-suite', 'code-quality'],
+        chainId: 'chain-tiers#2',
+        pendingReview: {
+          ...mixedReview,
+          checkResults: [{ gateId: 'test-suite', passed: false, summary: 'npm test exit 1' }],
+        },
+      });
+
+      const result = assembler.formatSinglePromptResponse(context, {} as any);
+
+      expect(result).toContain('"passed": false');
+      expect(result).toContain('<recorded: npm test exit 1>');
+      expect(result).not.toContain('test-suite: <why>');
+    });
+
+    test('an all-reminder gate list omits per_gate entirely', () => {
+      const context = createSinglePromptContext({
+        accumulatedGateIds: ['code-quality', 'prose-hygiene'],
+        chainId: 'chain-tiers#3',
+        pendingReview: {
+          ...mixedReview,
+          gateIds: ['code-quality', 'prose-hygiene'],
+          gateTiers: { 'code-quality': 'reminder' as const, 'prose-hygiene': 'reminder' as const },
+        },
+      });
+
+      const result = assembler.formatSinglePromptResponse(context, {} as any);
+
+      expect(result).not.toContain('"per_gate"');
+      expect(result).toContain(
+        '"reminders": {"satisfied": ["code-quality", "prose-hygiene"], "not_applicable": []}'
+      );
+    });
+
+    test('a run of leading reminders does not push a later check off the template', () => {
+      const reminderIds = Array.from({ length: 10 }, (_, i) => `reminder-${i + 1}`);
+      const checkId = 'check-11';
+      const gateIds = [...reminderIds, checkId];
+      const gateTiers = {
+        ...Object.fromEntries(reminderIds.map((id) => [id, 'reminder' as const])),
+        [checkId]: 'check' as const,
+      };
+
+      const context = createSinglePromptContext({
+        accumulatedGateIds: gateIds,
+        chainId: 'chain-tiers#4',
+        pendingReview: {
+          ...mixedReview,
+          gateIds,
+          gateTiers,
+        },
+      });
+
+      const result = assembler.formatSinglePromptResponse(context, {} as any);
+
+      // The eleventh gate is a check, so it must still get a per_gate slot at its ORIGINAL
+      // position — even though ten reminders precede it and the pre-fix code sliced to the
+      // first ten of `gateIds` before ever walking to it.
+      expect(result).toContain('"index": 11');
+      const perGateEntries = (result.match(/\{"index":/g) ?? []).length;
+      expect(perGateEntries).toBe(1);
+      // All ten reminders are still attested, in the one `reminders` field.
+      for (const id of reminderIds) {
+        expect(result).toContain(id);
+      }
+    });
+
+    test('twelve check-tier gates still cap per_gate at ten entries', () => {
+      const gateIds = Array.from({ length: 12 }, (_, i) => `check-${i + 1}`);
+      const gateTiers = Object.fromEntries(gateIds.map((id) => [id, 'check' as const]));
+
+      const context = createSinglePromptContext({
+        accumulatedGateIds: gateIds,
+        chainId: 'chain-tiers#5',
+        pendingReview: {
+          ...mixedReview,
+          gateIds,
+          gateTiers,
+        },
+      });
+
+      const result = assembler.formatSinglePromptResponse(context, {} as any);
+
+      const perGateEntries = (result.match(/\{"index":/g) ?? []).length;
+      expect(perGateEntries).toBe(10);
+      for (let i = 1; i <= 10; i++) {
+        expect(result).toContain(`"index": ${i}`);
+      }
+      expect(result).not.toContain('"index": 11');
+      expect(result).not.toContain('"index": 12');
     });
   });
 });

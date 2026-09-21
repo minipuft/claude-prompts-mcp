@@ -38,6 +38,7 @@ import { GateFileWriter } from '../../../src/mcp/tools/gate-manager/services/gat
 import { GateLifecycleProcessor } from '../../../src/mcp/tools/gate-manager/services/gate-lifecycle-processor.js';
 import { GateVersioningProcessor } from '../../../src/mcp/tools/gate-manager/services/gate-versioning-processor.js';
 import { validateFrameworkSchema } from '../../../src/engine/frameworks/definitions/framework-schema.js';
+import { isShippedFrameworkId } from '../../../src/engine/frameworks/definitions/shipped-frameworks.js';
 import { FrameworkDraftValidator } from '../../../src/mcp/tools/framework-manager/services/framework-draft-validator.js';
 import { FrameworkFileWriter } from '../../../src/mcp/tools/framework-manager/services/framework-file-writer.js';
 import { FrameworkLifecycleProcessor } from '../../../src/mcp/tools/framework-manager/services/framework-lifecycle-processor.js';
@@ -45,6 +46,7 @@ import { FrameworkVersioningProcessor } from '../../../src/mcp/tools/framework-m
 import { FileOperations } from '../../../src/mcp/tools/resource-manager/prompt/operations/file-operations.js';
 import { PromptVersioningProcessor } from '../../../src/mcp/tools/resource-manager/prompt/services/prompt-versioning-processor.js';
 import { VersionHistoryService } from '../../../src/modules/versioning/version-history-service.js';
+import { EMPTY_QUARANTINE_VIEW } from '../../../src/shared/utils/resource-quarantine.js';
 import { parseYamlOrThrow } from '../../../src/shared/utils/yaml/yaml-parser.js';
 import { MockLogger } from '../../helpers/test-helpers.js';
 
@@ -65,7 +67,7 @@ const GATE_ID = 'versioning-probe';
 /** Minimal versioning config provider — versioning enabled, auto-version on. */
 class TestVersioningConfigProvider implements VersioningConfigProvider {
   getVersioningConfig() {
-    return { enabled: true, max_versions: 10, auto_version: true };
+    return { enabled: true, maxVersions: 10, autoVersion: true };
   }
   getServerRoot(): string {
     return process.cwd();
@@ -105,6 +107,15 @@ class DiskBackedGateRegistry {
     return this.cache.has(id);
   }
 
+  /**
+   * P4.19 — `handleCreate` and `handleUpdate` both consult the quarantine on the branch where
+   * `has(id)` is false. This double reads gate.yaml directly and has no loader that could refuse
+   * one, so the empty view is the honest answer here.
+   */
+  getQuarantine(): typeof EMPTY_QUARANTINE_VIEW {
+    return EMPTY_QUARANTINE_VIEW;
+  }
+
   get(id: string): GateView | undefined {
     return this.cache.get(id);
   }
@@ -139,6 +150,7 @@ describe('Gate versioning through the real write path', () => {
   let registry: DiskBackedGateRegistry;
   let lifecycle: GateLifecycleProcessor;
   let versioning: GateVersioningProcessor;
+  let gateWriter: GateFileWriter;
   let mockLogger: MockLogger;
 
   /** Row count for this gate's history — the measurement F3's claim is about. */
@@ -191,7 +203,9 @@ describe('Gate versioning through the real write path', () => {
     gatesDir = path.join(tempDir, 'gates');
     await fs.mkdir(gatesDir, { recursive: true });
 
-    dbManager = await SqliteEngine.getInstance(tempDir, mockLogger as unknown as Logger);
+    dbManager = await SqliteEngine.getInstance(mockLogger as unknown as Logger, {
+      dbPath: path.join(tempDir, 'runtime-state', 'state.db'),
+    });
     await dbManager.initialize();
 
     versionHistoryService = new VersionHistoryService({
@@ -207,16 +221,21 @@ describe('Gate versioning through the real write path', () => {
       getBundledResourceDirectory: () => undefined,
     } as unknown as ConfigManager;
 
+    // Held in a variable so a test can fault the WRITE half. The file-writer instance is the only
+    // seam that fails inside the transaction's `mutate()` without asking the filesystem to
+    // cooperate, which is what the forced-write-failure case below needs.
+    gateWriter = new GateFileWriter({
+      logger: mockLogger as unknown as Logger,
+      configManager,
+    });
+
     const ctx: GateResourceContext = {
       logger: mockLogger as unknown as Logger,
       gateManager: registry as unknown as GateResourceContext['gateManager'],
       configManager,
       textDiffService: new ObjectDiffGenerator(),
       versionHistoryService,
-      gateFileService: new GateFileWriter({
-        logger: mockLogger as unknown as Logger,
-        configManager,
-      }),
+      gateFileService: gateWriter,
       onRefresh: async () => {
         await registry.reload(GATE_ID);
       },
@@ -449,16 +468,19 @@ describe('Gate versioning through the real write path', () => {
   });
 
   /**
-   * F18 — steady state is ONE row per edit, not two.
+   * F18 — steady state is ONE row per edit, no bridge row at all.
    *
    * `recordEditResult` bridges the prior live state whenever it does not match the newest recorded
-   * snapshot. That is correct once, at the era transition. It must not happen on every edit — and
-   * it did, because `latestSnapshotMatches` compares `JSON.stringify` (order-sensitive) while the
-   * two projections emitted the same keys in different orders. Nothing about snapshot CONTENT
-   * detects that, which is why the existing assertions were all green while every gate's history
-   * filled with bridge rows.
+   * snapshot. Before this fix, create recorded nothing, so the first update always bridged — correct
+   * once at the era transition, but every edit filled the history with a bridge row because
+   * `latestSnapshotMatches` also had its own key-order bug (`JSON.stringify` is order-sensitive
+   * while the two projections emitted the same keys in different orders).
+   *
+   * Now create records version 1 through the SAME projection (`projectWriteModel` +
+   * `gateSnapshotContract.projectedFields`) the update path uses for `beforeState`/`afterState`, so
+   * the first update's prior-state check finds an exact match and bridges nothing either.
    */
-  it('records one row per edit after the first, not a bridge row every time', async () => {
+  it('records one row per edit, with no bridge row at all', async () => {
     await run({
       action: 'create',
       id: GATE_ID,
@@ -470,18 +492,21 @@ describe('Gate versioning through the real write path', () => {
       // projected key, and the key-order divergence F18 describes only appears once at least one
       // optional key is present — with none, both projections emit the same five required keys in
       // the same order and the test cannot fail. A fixture inside the bound proves nothing.
-      pass_criteria: [{ type: 'inline_guidance', min_length: 10, required_patterns: ['ALPHA'] }],
+      // `type` alone is sufficient: `min_length`/`required_patterns` are refused at load (B9)
+      // and are not part of `GateManagerInput['pass_criteria']`.
+      pass_criteria: [{ type: 'inline_guidance' }],
     } as GateManagerInput);
+
+    const afterCreate = countVersionRows();
+    expect(afterCreate).toBe(1);
 
     await run({
       action: 'update',
       id: GATE_ID,
       description: 'v2 description',
     } as GateManagerInput);
-
-    // The first update bridges: nothing was recorded at create time, so the live pre-edit state is
-    // genuinely unrecorded. From here the newest row already equals the live state.
     const afterFirst = countVersionRows();
+    expect(afterFirst - afterCreate).toBe(1);
 
     await run({
       action: 'update',
@@ -493,7 +518,40 @@ describe('Gate versioning through the real write path', () => {
 
     const history = (await versionHistoryService.loadHistory('gate', GATE_ID))!;
     const bridges = history.versions.filter((v) => v.description.startsWith('Bridge:'));
-    expect(bridges).toHaveLength(1);
+    expect(bridges).toHaveLength(0);
+  });
+
+  /**
+   * The create contract itself: version 1, a create description, and the first update
+   * advances to version 2 with no bridge row.
+   */
+  it('records the created state as version 1, and the first update saves version 2 with no bridge', async () => {
+    await run({
+      action: 'create',
+      id: GATE_ID,
+      name: 'Versioning Probe',
+      type: 'validation',
+      description: 'v1 description',
+      guidance: 'v1 guidance body',
+    } as GateManagerInput);
+
+    const afterCreate = (await versionHistoryService.loadHistory('gate', GATE_ID))!;
+    expect(afterCreate.current_version).toBe(1);
+    expect(afterCreate.versions).toHaveLength(1);
+    expect(afterCreate.versions[0]!.description).not.toContain('Bridge:');
+    expect(afterCreate.versions[0]!.snapshot['description']).toBe('v1 description');
+
+    await run({
+      action: 'update',
+      id: GATE_ID,
+      description: 'v2 description',
+      guidance: 'v2 guidance body',
+    } as GateManagerInput);
+
+    const afterUpdate = (await versionHistoryService.loadHistory('gate', GATE_ID))!;
+    expect(afterUpdate.current_version).toBe(2);
+    expect(afterUpdate.versions.map((v) => v.version).sort()).toEqual([1, 2]);
+    expect(afterUpdate.versions.some((v) => v.description.startsWith('Bridge:'))).toBe(false);
   });
 
   it('previews a delete without removing the gate directory', async () => {
@@ -595,6 +653,112 @@ describe('Gate versioning through the real write path', () => {
       expect(persistenceWasReached).toBe(true);
     });
 
+    /**
+     * The mirror half, and the one P4.2 / SF-3 found missing (2026-09-07).
+     *
+     * The two cases above prove a RECORD failure writes no file. They say nothing about the other
+     * direction, and for as long as the record ran ahead of the write there was nothing to say: a
+     * write failure necessarily left the version row it had already written. That row describes a
+     * state no file ever held, and `version_history` is durable — nothing prunes it, so a rollback
+     * to it restores content that never existed.
+     *
+     * Now that both halves run in one transaction, neither direction is a matter of ordering, and
+     * BOTH are asserted here so a future reorder cannot quietly trade one for the other. Faulted at
+     * the writer rather than at the filesystem for the same reason as above: it throws where the
+     * write throws, inside `mutate()`, without needing the disk to cooperate.
+     */
+    function failWrite() {
+      return jest
+        .spyOn(gateWriter as unknown as { buildGateYaml: () => unknown }, 'buildGateYaml')
+        .mockImplementation(() => {
+          throw new Error('Failed to write gate.yaml: disk full');
+        });
+    }
+
+    it('records no version when the file write throws during an update', async () => {
+      await run({
+        action: 'create',
+        id: GATE_ID,
+        name: 'Versioning Probe',
+        type: 'validation',
+        description: 'v1 description',
+        guidance: 'v1 guidance body',
+      } as GateManagerInput);
+
+      const rowsBefore = countVersionRows();
+      const yamlBefore = readFileSync(path.join(gatesDir, GATE_ID, 'gate.yaml'), 'utf8');
+
+      const spy = failWrite();
+      let writeWasReached = false;
+      try {
+        const outcome = await run({
+          action: 'update',
+          id: GATE_ID,
+          description: 'v2 description',
+          guidance: 'v2 guidance body',
+        } as GateManagerInput).catch((error: unknown) => ({
+          isError: true,
+          content: [{ text: String(error) }],
+        }));
+
+        expect(outcome.isError).toBe(true);
+        writeWasReached = spy.mock.calls.length > 0;
+      } finally {
+        spy.mockRestore();
+      }
+
+      // The claim. A failed write must leave the ledger exactly as it was — no row for the edit,
+      // and no bridge row either, since the record never ran at all.
+      expect(countVersionRows()).toBe(rowsBefore);
+      expect(readFileSync(path.join(gatesDir, GATE_ID, 'gate.yaml'), 'utf8')).toBe(yamlBefore);
+
+      // Same guard against vacuity as the record-failure cases: an update rejected before it
+      // reached the writer would also leave the ledger unchanged and would assert nothing.
+      expect(writeWasReached).toBe(true);
+    });
+
+    it('records no version when the file write throws during a rollback', async () => {
+      await run({
+        action: 'create',
+        id: GATE_ID,
+        name: 'Versioning Probe',
+        type: 'validation',
+        description: 'v1 description',
+        guidance: 'v1 guidance body',
+      } as GateManagerInput);
+      await run({
+        action: 'update',
+        id: GATE_ID,
+        description: 'v2 description',
+        guidance: 'v2 guidance body',
+      } as GateManagerInput);
+
+      const rowsBefore = countVersionRows();
+      const yamlBefore = readFileSync(path.join(gatesDir, GATE_ID, 'gate.yaml'), 'utf8');
+
+      const spy = failWrite();
+      let writeWasReached = false;
+      try {
+        const outcome = await run({
+          action: 'rollback',
+          id: GATE_ID,
+          version: 1,
+        } as GateManagerInput).catch((error: unknown) => ({
+          isError: true,
+          content: [{ text: String(error) }],
+        }));
+
+        expect(outcome.isError).toBe(true);
+        writeWasReached = spy.mock.calls.length > 0;
+      } finally {
+        spy.mockRestore();
+      }
+
+      expect(countVersionRows()).toBe(rowsBefore);
+      expect(readFileSync(path.join(gatesDir, GATE_ID, 'gate.yaml'), 'utf8')).toBe(yamlBefore);
+      expect(writeWasReached).toBe(true);
+    });
+
     it('aborts a rollback with nothing written when committing the edit throws', async () => {
       await run({
         action: 'create',
@@ -683,7 +847,9 @@ describe('Framework versioning through the real write path', () => {
     mockLogger = new MockLogger();
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'framework-versioning-test-'));
 
-    dbManager = await SqliteEngine.getInstance(tempDir, mockLogger as unknown as Logger);
+    dbManager = await SqliteEngine.getInstance(mockLogger as unknown as Logger, {
+      dbPath: path.join(tempDir, 'runtime-state', 'state.db'),
+    });
     await dbManager.initialize();
 
     versionHistoryService = new VersionHistoryService({
@@ -710,6 +876,9 @@ describe('Framework versioning through the real write path', () => {
       logger: mockLogger as unknown as Logger,
       frameworkManager: {
         getFramework: (id: string) => (id === FRAMEWORK_ID ? liveFramework : undefined),
+        // A loaderless double, so an empty view is the honest answer: nothing here refused a file.
+        // `handleReload` consults the quarantine to say WHY a reload failed.
+        getQuarantine: () => EMPTY_QUARANTINE_VIEW,
       } as unknown as FrameworkResourceContext['frameworkManager'],
       configManager,
       fileService,
@@ -810,6 +979,162 @@ describe('Framework versioning through the real write path', () => {
   });
 });
 
+/**
+ * B.26 — a framework error message names the directory the framework actually resolves from.
+ *
+ * `getServerRoot()` is where the PACKAGE lives; `getFrameworksDirectory()` is where a framework
+ * actually reads from and writes to (the workspace or personal-library root when one is
+ * configured, which is the common case this suite otherwise runs with `getServerRoot() ===
+ * getFrameworksDirectory()` and so cannot distinguish). `packageRoot` below is deliberately a
+ * directory that holds no framework, mirroring an installed package tree with a separate
+ * workspace configured — the shape that made the pre-fix message point at a directory the
+ * framework never occupied.
+ */
+describe('Framework lifecycle error messages name the resolved directory (B.26)', () => {
+  const FRAMEWORK_ID = 'error-path-probe';
+
+  let tempDir: string;
+  let packageRoot: string;
+  let workspaceFrameworksDir: string;
+  let fileService: FrameworkFileWriter;
+  let mockLogger: MockLogger;
+
+  function baseCtx(
+    frameworkManager: FrameworkResourceContext['frameworkManager']
+  ): FrameworkResourceContext {
+    return {
+      logger: mockLogger as unknown as Logger,
+      frameworkManager,
+      configManager: {
+        getServerRoot: () => packageRoot,
+        getFrameworksDirectory: () => workspaceFrameworksDir,
+        getBundledResourceDirectory: () => undefined,
+      } as unknown as ConfigManager,
+      fileService,
+      textDiffService: new ObjectDiffGenerator(),
+      // This suite is about error-path directory naming, not versioning — `handleCreate` now
+      // reads `isAutoVersionEnabled()` before it ever reaches the failure branches under test
+      // (tutorial-rework B.25), so a bare `{}` no longer stands in here.
+      versionHistoryService: {
+        isAutoVersionEnabled: () => false,
+      } as unknown as VersionHistoryService,
+    };
+  }
+
+  beforeEach(async () => {
+    mockLogger = new MockLogger();
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'framework-error-path-test-'));
+    packageRoot = path.join(tempDir, 'package-install');
+    workspaceFrameworksDir = path.join(tempDir, 'workspace', 'resources', 'frameworks');
+    await fs.mkdir(workspaceFrameworksDir, { recursive: true });
+
+    fileService = new FrameworkFileWriter({
+      logger: mockLogger as unknown as Logger,
+      configManager: {
+        getServerRoot: () => packageRoot,
+        getFrameworksDirectory: () => workspaceFrameworksDir,
+        getBundledResourceDirectory: () => undefined,
+      } as unknown as ConfigManager,
+    });
+
+    // Seed the framework directly at the workspace root, bypassing handleCreate.
+    await fileService.writeFrameworkFiles({
+      id: FRAMEWORK_ID,
+      name: 'Probe',
+      type: 'PROBE',
+      system_prompt_guidance: 'guidance',
+      enabled: true,
+    });
+  });
+
+  afterEach(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('a failed reload names the workspace directory the framework loads from, not the package root', async () => {
+    const ctx = baseCtx({
+      getFrameworkRegistry: () => ({
+        getRuntimeLoader: () => ({ clearCache: () => {} }),
+      }),
+      // Force `reregisterFramework` to fail, driving `handleReload`'s failure branch.
+      registerFramework: async () => false,
+      // `handleReload` asks the quarantine whether the reload failed because the file was READ
+      // and refused, so it can name the cause instead of guessing. Nothing here refused a file,
+      // and this double owns no loader, so the empty view is the honest answer — the test is
+      // about which directory the failure names, which is the vague fallback branch.
+      getQuarantine: () => EMPTY_QUARANTINE_VIEW,
+    } as unknown as FrameworkResourceContext['frameworkManager']);
+
+    const lifecycle = new FrameworkLifecycleProcessor(
+      ctx,
+      {} as unknown as FrameworkDraftValidator
+    );
+
+    const response = await lifecycle.handleReload({
+      action: 'reload',
+      id: FRAMEWORK_ID,
+    } as FrameworkManagerInput);
+
+    expect(response.isError).toBe(true);
+    const text = (response.content[0] as { text: string }).text;
+    expect(text).toContain(path.join(workspaceFrameworksDir, FRAMEWORK_ID, 'framework.yaml'));
+    expect(text).not.toContain(packageRoot);
+  });
+
+  it('a failed create rollback names the write target it could not clean up, not the package root', async () => {
+    const registryDouble = {
+      hasGuide: () => false,
+      getRuntimeLoader: () => ({ clearCache: () => {} }),
+      loadAndRegisterById: async () => true, // registry step succeeds
+      unregisterGuide: () => true,
+    };
+    const ctx = baseCtx({
+      getFramework: () => undefined,
+      getFrameworkRegistry: () => registryDouble,
+      // Force the framework-manager step to fail, entering the rollback branch.
+      registerFramework: async () => false,
+      // `handleCreate` asks the quarantine whether this id is claimed by a file another root
+      // refused (P4.24), on the branch where no existence source knows it — which is this test's
+      // branch. Same reason as the reload case above: this double owns no loader, so the empty
+      // view is the honest answer, and the test is about which directory the rollback names.
+      getQuarantine: () => EMPTY_QUARANTINE_VIEW,
+    } as unknown as FrameworkResourceContext['frameworkManager']);
+
+    // Force the rollback's file removal to fail without disturbing the real write path.
+    const deleteSpy = jest.spyOn(fileService, 'deleteFramework').mockResolvedValue(false);
+
+    const lifecycle = new FrameworkLifecycleProcessor(ctx, new FrameworkDraftValidator());
+
+    const response = await lifecycle.handleCreate({
+      action: 'create',
+      id: 'second-probe',
+      name: 'Second Probe',
+      system_prompt_guidance: 'guidance',
+      phases: [
+        { id: 'p1', name: 'Phase 1', description: 'First' },
+        { id: 'p2', name: 'Phase 2', description: 'Second' },
+      ],
+      framework_gates: [
+        {
+          id: 'g1',
+          name: 'Gate 1',
+          description: 'Test gate',
+          frameworkArea: 'Phase 1',
+          priority: 'high',
+          validationCriteria: ['Check'],
+        },
+      ],
+    } as FrameworkManagerInput);
+
+    expect(response.isError).toBe(true);
+    const text = (response.content[0] as { text: string }).text;
+    expect(text).toContain(path.join(workspaceFrameworksDir, 'second-probe'));
+    expect(text).not.toContain(packageRoot);
+
+    deleteSpy.mockRestore();
+  });
+});
+
 describe('Prompt rollback refusal writes no version rows', () => {
   const PROMPT_ID = 'refusal_probe';
   const CATEGORY = 'general';
@@ -836,7 +1161,9 @@ describe('Prompt rollback refusal writes no version rows', () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'prompt-refusal-test-'));
     promptsDir = path.join(tempDir, 'prompts');
 
-    dbManager = await SqliteEngine.getInstance(tempDir, mockLogger as unknown as Logger);
+    dbManager = await SqliteEngine.getInstance(mockLogger as unknown as Logger, {
+      dbPath: path.join(tempDir, 'runtime-state', 'state.db'),
+    });
     await dbManager.initialize();
 
     versionHistoryService = new VersionHistoryService({
@@ -973,6 +1300,17 @@ describe('gate registry coherence — production-shaped refresh (F17)', () => {
 
     constructor(private readonly dir: string) {}
 
+    /**
+     * The loader's quarantine view, as the real manager exposes it (P4.15).
+     *
+     * Empty here on purpose: this harness never writes a schema-invalid file, so nothing is
+     * refused. `handleReload` reads it to say WHY a reload failed, and an empty view is what sends
+     * it down the "nothing on disk" branch these cases assert.
+     */
+    getQuarantine(): typeof EMPTY_QUARANTINE_VIEW {
+      return EMPTY_QUARANTINE_VIEW;
+    }
+
     has(id: string): boolean {
       return this.cache.has(id);
     }
@@ -1004,7 +1342,9 @@ describe('gate registry coherence — production-shaped refresh (F17)', () => {
     gatesDir = path.join(tempDir, 'gates');
     await fs.mkdir(gatesDir, { recursive: true });
 
-    dbManager = await SqliteEngine.getInstance(tempDir, mockLogger as unknown as Logger);
+    dbManager = await SqliteEngine.getInstance(mockLogger as unknown as Logger, {
+      dbPath: path.join(tempDir, 'runtime-state', 'state.db'),
+    });
     await dbManager.initialize();
 
     registry = new DriftableGateRegistry(gatesDir);
@@ -1231,17 +1571,23 @@ describe('framework create — pre-write and post-write validation must agree (G
           registeredFrameworks.add(id);
           return true;
         },
+        getQuarantine: () => EMPTY_QUARANTINE_VIEW,
       } as unknown as FrameworkResourceContext['frameworkManager'],
       configManager,
       fileService,
       textDiffService: new ObjectDiffGenerator(),
-      // `handleCreate` never reaches versioning. Throwing rather than stubbing means a future
-      // edit that starts using it fails loudly instead of silently exercising a double.
+      // This suite is about validator/writer agreement, not versioning (create versioning is
+      // covered in the "framework registry coherence (G2)" block below), so auto-versioning is
+      // answered false and left there. Throwing for anything else means a future edit that starts
+      // using more of this surface fails loudly instead of silently exercising a stub.
       versionHistoryService: new Proxy(
         {},
         {
-          get() {
-            throw new Error('handleCreate must not reach versionHistoryService');
+          get(_target, property) {
+            if (property === 'isAutoVersionEnabled') return () => false;
+            throw new Error(
+              `this harness does not provide versionHistoryService.${String(property)}`
+            );
           },
         }
       ) as unknown as FrameworkResourceContext['versionHistoryService'],
@@ -1393,12 +1739,25 @@ describe('framework registry coherence — production-shaped refresh (G2)', () =
   let tempDir: string;
   let frameworksDir: string;
   let mockLogger: MockLogger;
+  let dbManager: SqliteEngine;
+  let versionHistoryService: VersionHistoryService;
   let fileService: FrameworkFileWriter;
   let lifecycle: FrameworkLifecycleProcessor;
   let registry: DriftableFrameworkRegistry;
   let promptRefreshes: number;
 
   class DriftableFrameworkRegistry {
+    /**
+     * The loader's quarantine view, as the real manager exposes it (P4.15).
+     *
+     * Empty here on purpose: this harness never writes a schema-invalid file, so nothing is
+     * refused. `handleReload` reads it to say WHY a reload failed, and an empty view is what sends
+     * it down the "nothing on disk" branch these cases assert.
+     */
+    getQuarantine(): typeof EMPTY_QUARANTINE_VIEW {
+      return EMPTY_QUARANTINE_VIEW;
+    }
+
     /** `RuntimeFrameworkLoader`'s parsed-definition cache. Cleared ONLY by `clearCache`. */
     private readonly loaderCache = new Map<string, Record<string, unknown>>();
     private readonly guides = new Map<string, Record<string, unknown>>();
@@ -1407,6 +1766,17 @@ describe('framework registry coherence — production-shaped refresh (G2)', () =
     readonly clearCacheCalls: string[] = [];
 
     constructor(private readonly dir: string) {}
+
+    /**
+     * The deletion guard asks the manager whether an id ships with the server (P4.3).
+     *
+     * Delegates to the real predicate rather than answering a constant: the guard's whole job is
+     * to separate shipped ids from operator-created ones, and a stub that always said `false`
+     * would let a regression that deletes `focus` from the bundled tree pass this suite.
+     */
+    isShippedFramework(id: string): boolean {
+      return isShippedFrameworkId(id);
+    }
 
     // ---- RuntimeFrameworkLoader surface -------------------------------------------------
     getRuntimeLoader(): { clearCache: (id?: string) => void } {
@@ -1470,6 +1840,11 @@ describe('framework registry coherence — production-shaped refresh (G2)', () =
       return hadDefinition || hadGuide;
     }
 
+    /** Mirrors `FrameworkManager.removeFramework`; this double holds no selection to move. */
+    removeFramework(id: string): Promise<boolean> {
+      return Promise.resolve(this.unregister(id));
+    }
+
     /** Test-only drift: forget the framework while leaving its files on disk. */
     forget(id: string): void {
       this.unregister(id);
@@ -1483,10 +1858,22 @@ describe('framework registry coherence — production-shaped refresh (G2)', () =
     frameworksDir = path.join(tempDir, 'resources', 'frameworks');
     await fs.mkdir(frameworksDir, { recursive: true });
 
+    dbManager = await SqliteEngine.getInstance(mockLogger as unknown as Logger, {
+      dbPath: path.join(tempDir, 'runtime-state', 'state.db'),
+    });
+    await dbManager.initialize();
+    versionHistoryService = new VersionHistoryService({
+      logger: mockLogger as unknown as Logger,
+      configManager: new TestVersioningConfigProvider(),
+      dbManager,
+    });
+
     const configManager = {
       getServerRoot: () => tempDir,
       getFrameworksDirectory: () => path.join(tempDir, 'resources', 'frameworks'),
       getBundledResourceDirectory: () => undefined,
+      // Delete refuses the configured default; this suite deletes a framework that is not it.
+      getFrameworksConfig: () => ({ defaultFramework: 'cageerf' }),
     } as unknown as ConfigManager;
     fileService = new FrameworkFileWriter({
       logger: mockLogger as unknown as Logger,
@@ -1500,19 +1887,9 @@ describe('framework registry coherence — production-shaped refresh (G2)', () =
       configManager,
       fileService,
       textDiffService: new ObjectDiffGenerator(),
-      // Answers exactly one question and throws for everything else, so a future edit that starts
-      // using versioning fails loudly rather than silently exercising a stub.
-      versionHistoryService: new Proxy(
-        {},
-        {
-          get(_target, property) {
-            if (property === 'isAutoVersionEnabled') return () => false;
-            throw new Error(
-              `this harness does not provide versionHistoryService.${String(property)}`
-            );
-          },
-        }
-      ) as unknown as FrameworkResourceContext['versionHistoryService'],
+      // Real: `handleCreate` now legitimately records a version, the same way `handleUpdate`
+      // already did in this harness before this change.
+      versionHistoryService,
       // The point of this harness. Production's refresh is a `logger.debug`; counting calls proves
       // it still runs without being what registers.
       onRefresh: async () => {
@@ -1524,7 +1901,12 @@ describe('framework registry coherence — production-shaped refresh (G2)', () =
   });
 
   afterEach(async () => {
-    await fs.rm(tempDir, { recursive: true, force: true });
+    try {
+      await dbManager.shutdown();
+      await fs.rm(tempDir, { recursive: true, force: true });
+    } catch {
+      // Ignore cleanup errors
+    }
   });
 
   async function create(name = 'Original Name') {
@@ -1653,7 +2035,14 @@ describe('framework registry coherence — production-shaped refresh (G2)', () =
     expect(text).toContain(path.join('no-such-framework', 'framework.yaml'));
   });
 
-  it('does not promise a version_history purge its live path never performs (G4)', async () => {
+  /**
+   * G4 used to assert the OPPOSITE: the preview said the rows "are NOT removed", and the claim was
+   * kept honest by matching a live path that never purged. P4.79 made the live path purge, so the
+   * old assertion now pins a lie — the promise and the behaviour still have to agree, and the way
+   * they agree has flipped. The preview half stays exactly as strict: a preview writes nothing and
+   * purges nothing.
+   */
+  it('promises a version_history purge, and its preview performs neither half (G4)', async () => {
     await create();
 
     const response = await lifecycle.handleDelete({
@@ -1663,9 +2052,36 @@ describe('framework registry coherence — production-shaped refresh (G2)', () =
     } as FrameworkManagerInput);
 
     const text = response.content[0]!.text!;
-    expect(text).toContain('are NOT removed');
-    expect(text).not.toContain('Would purge');
-    // The dry run must still be a dry run.
+    expect(text).toContain('Would also purge');
+    expect(text).not.toContain('are NOT removed');
+    // The preview must still be a preview: the file is there AND the rows are.
     expect(existsSync(path.join(frameworksDir, ID, 'framework.yaml'))).toBe(true);
+    expect((await versionHistoryService.loadHistory('framework', ID))?.versions.length).toBe(1);
+  });
+
+  /**
+   * The create contract for frameworks: version 1, a create description, and the first
+   * update advances to version 2 with no bridge row.
+   */
+  it('records the created state as version 1, and the first update saves version 2 with no bridge', async () => {
+    expect((await create()).isError).toBe(false);
+
+    const afterCreate = (await versionHistoryService.loadHistory('framework', ID))!;
+    expect(afterCreate.current_version).toBe(1);
+    expect(afterCreate.versions).toHaveLength(1);
+    expect(afterCreate.versions[0]!.description).not.toContain('Bridge:');
+    expect(afterCreate.versions[0]!.snapshot['name']).toBe('Original Name');
+
+    const response = await lifecycle.handleUpdate({
+      action: 'update',
+      id: ID,
+      name: 'Renamed',
+    } as FrameworkManagerInput);
+    expect(response.isError).toBe(false);
+
+    const afterUpdate = (await versionHistoryService.loadHistory('framework', ID))!;
+    expect(afterUpdate.current_version).toBe(2);
+    expect(afterUpdate.versions.map((v) => v.version).sort()).toEqual([1, 2]);
+    expect(afterUpdate.versions.some((v) => v.description.startsWith('Bridge:'))).toBe(false);
   });
 });

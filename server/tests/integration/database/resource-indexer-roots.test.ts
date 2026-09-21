@@ -4,7 +4,7 @@
  *
  * The index is what every Python hook reads. When it describes a smaller catalog than the loaders
  * serve, a prompt is executable and simultaneously unknown to the prompt router — which is exactly
- * what happened (measured 2026-08-29): 119 prompts served, 78 indexed, and `>>strategicImplement`
+ * what happened (measured 2026-08-29): 119 prompts served, 78 indexed, and `>>strategic_implement`
  * answered "Unknown prompt".
  *
  * Three independent causes, one per describe block below. Each assertion here fails against the
@@ -23,6 +23,7 @@ import {
 } from '../../../src/infra/database/index.js';
 
 import type { ShadowedResource } from '../../../src/infra/database/resource-indexer.js';
+import { testScratchPath } from '../../helpers/scratch-path.js';
 
 const mockLogger = {
   info: jest.fn() as jest.Mock,
@@ -31,7 +32,7 @@ const mockLogger = {
   debug: jest.fn() as jest.Mock,
 };
 
-const TEST_DIR = path.join(process.cwd(), 'tests/tmp/indexer-roots-test');
+const TEST_DIR = testScratchPath('indexer-roots-test');
 const BUNDLED = path.join(TEST_DIR, 'bundled', 'prompts');
 const WORKSPACE = path.join(TEST_DIR, 'workspace', 'prompts');
 
@@ -56,7 +57,9 @@ describe('ResourceIndexer roots, depth, and identity', () => {
   beforeAll(async () => {
     await fs.rm(TEST_DIR, { recursive: true, force: true });
     await fs.mkdir(TEST_DIR, { recursive: true });
-    dbManager = await SqliteEngine.getInstance(TEST_DIR, mockLogger as any);
+    dbManager = await SqliteEngine.getInstance(mockLogger as any, {
+      dbPath: path.join(TEST_DIR, 'runtime-state', 'state.db'),
+    });
     await dbManager.initialize();
   });
 

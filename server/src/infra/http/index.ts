@@ -275,6 +275,15 @@ export class ServerLifecycle {
 
   /**
    * Restart the server
+   *
+   * Restored 2026-09-20 (P4.52 reimplementation probe): `Application.restartServer`
+   * (runtime/application.ts) is a live, wired restart path (reached from `system_control`'s
+   * `maintenance` action via `module-initializer.ts`'s `restartServer` callback) that answers the
+   * same "restart the server" job with a different strategy — full shutdown + `process.exit(100)`
+   * for an external process manager to relaunch, versus this method's in-process HTTP
+   * close-and-relisten. Two live strategies for one job is evidence of a defect (an abandoned
+   * approach, or a real gap the process-manager strategy doesn't cover for STDIO/dual-transport),
+   * not proof this one is surplus. Left un-wired pending an owner decision on which is canonical.
    */
   async restart(reason: string = 'Manual restart'): Promise<void> {
     this.logger.info(`Restarting server: ${reason}`);
@@ -367,20 +376,6 @@ export class ServerLifecycle {
     }
 
     return status;
-  }
-
-  /**
-   * Get the HTTP server instance
-   */
-  getHttpServer(): Server | undefined {
-    return this.httpServer;
-  }
-
-  /**
-   * Get the port number
-   */
-  getPort(): number {
-    return this.port;
   }
 }
 

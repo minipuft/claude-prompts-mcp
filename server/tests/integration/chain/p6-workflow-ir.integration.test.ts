@@ -235,7 +235,9 @@ describe('P6 Tier 5: a Workflow IR run is an ordinary chain run — or it writes
   beforeAll(async () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'p6-workflow-ir-'));
     logger = createLogger();
-    engine = await SqliteEngine.getInstance(tmpDir, logger);
+    engine = await SqliteEngine.getInstance(logger, {
+      dbPath: path.join(tmpDir, 'runtime-state', 'state.db'),
+    });
     await engine.initialize();
   });
 

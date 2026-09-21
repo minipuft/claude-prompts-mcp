@@ -50,7 +50,7 @@ export interface FrameworkHotReloadStats {
 export interface FrameworkHotReloadRegistration {
   /** Directories that should be watched for framework changes */
   directories: string[];
-  /** Bound handler for use with HotReloadObserver.setFrameworkReloadCallback */
+  /** Bound handler, wired as an auxiliary reload by `buildFrameworkAuxiliaryReloadConfig` (runtime) */
   handler: (event: HotReloadEvent) => Promise<void>;
   /** Coordinator instance handling cache clear + re-register */
   coordinator: FrameworkHotReloadCoordinator;
@@ -62,15 +62,9 @@ export interface FrameworkHotReloadRegistration {
  * Coordinates between the file watching system and framework registry to
  * enable seamless hot reload of framework definitions.
  *
- * @example
- * ```typescript
- * const coordinator = new FrameworkHotReloadCoordinator(logger, registry, loader);
- *
- * // Register with hot reload manager
- * hotReloadObserver.setFrameworkReloadCallback(
- *   (event) => coordinator.handleFrameworkChange(event)
- * );
- * ```
+ * Wiring goes through the auxiliary-reload mechanism, the same as gates and styles:
+ * `buildFrameworkAuxiliaryReloadConfig` (runtime) turns a registration into an
+ * `AuxiliaryReloadConfig` that `HotReloadObserver.setAuxiliaryReloads` accepts.
  */
 /**
  * Internal config type with required defaults but optional callbacks
@@ -142,6 +136,30 @@ export class FrameworkHotReloadCoordinator {
 
     // Handle add/modify events
     return this.handleFrameworkReload(frameworkId);
+  }
+
+  /**
+   * Unregister every runtime framework whose definition is no longer in any root.
+   *
+   * The deletion half of a reconciliation, which is the half per-file events cannot deliver: a
+   * framework created and removed before its folder was watched was registered by its create and
+   * never announced as gone. Present definitions need no pass here — a newly watched folder
+   * reports every file in it. Only `yaml-runtime` entries are considered, so a guide registered
+   * in code is never mistaken for a missing file.
+   *
+   * @returns the ids that were unregistered
+   */
+  async reconcile(): Promise<string[]> {
+    const removed: string[] = [];
+    for (const entry of this.registry.getGuideEntries(false)) {
+      const frameworkId = entry.guide.frameworkId.toLowerCase();
+      if (entry.source !== 'yaml-runtime' || this.loader.frameworkExists(frameworkId)) {
+        continue;
+      }
+      await this.handleFrameworkDeletion(frameworkId);
+      removed.push(frameworkId);
+    }
+    return removed;
   }
 
   /**
@@ -226,31 +244,6 @@ export class FrameworkHotReloadCoordinator {
       throw error;
     }
   }
-
-  /**
-   * Get hot reload statistics
-   */
-  getStats(): FrameworkHotReloadStats {
-    return { ...this.stats };
-  }
-
-  /**
-   * Reset statistics
-   */
-  resetStats(): void {
-    this.stats = {
-      reloadsAttempted: 0,
-      reloadsSucceeded: 0,
-      reloadsFailed: 0,
-    };
-  }
-
-  /**
-   * Get the runtime loader being used
-   */
-  getLoader(): RuntimeFrameworkLoader {
-    return this.loader;
-  }
 }
 
 /**
@@ -267,7 +260,12 @@ export function createFrameworkHotReloadRegistration(
   const coordinator = new FrameworkHotReloadCoordinator(logger, registry, runtimeLoader, config);
 
   return {
-    directories: [runtimeLoader.getFrameworksDir()],
+    // Primary directory plus every additional overlay directory the loader was configured with
+    // (`getWatchDirectories()`) — mirrors `GateDefinitionLoader` and `StyleDefinitionLoader`'s
+    // registrations. The primary directory alone (what `getFrameworksDir()` used to return,
+    // before it was deleted as dead code — R36, unreached-methods baseline, 2026-09-17) would
+    // miss a workspace overlay directory entirely.
+    directories: runtimeLoader.getWatchDirectories(),
     handler: (event: HotReloadEvent) => coordinator.handleFrameworkChange(event),
     coordinator,
   };

@@ -218,7 +218,21 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
     'A conformance scenario asserting text present only in the detailed or history-inclusive ' +
       'report, distinguishing it from the current default-level assertions.'
   ),
-
+  ...exceptionGroup(
+    'system_control',
+    ['id'],
+    'skills_sync `id` filters the resources a run loads, so it is read only after option ' +
+      'validation passes and server/skills-sync.yaml has loaded — a gitignored file, absent in CI ' +
+      "and holding the developer's own registrations locally. The conformance servers inherit the " +
+      'real HOME, so a scenario that got that far would read real client skill folders, and write ' +
+      'them if `preview` ever stopped arriving. The other skills_sync parameters are exercised in ' +
+      'tool-surface.yaml only via scenarios that deliberately pair each one with an incompatible ' +
+      'command, so THOSE specific calls are refused before reaching real HOME — option validation ' +
+      'does not refuse skills_sync calls in general: an ordinary, well-formed one (an export, say) ' +
+      'passes validation and writes for real. One such export was measured writing 224 files.',
+    'A conformance server with a temp HOME and a fixture skills-sync.yaml, running `diff` or a ' +
+      '`preview: true` export filtered by `id`.'
+  ),
   ...exceptionGroup(
     'prompt_engine',
     ['handoff', 'claim_token'],
@@ -231,18 +245,47 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
   // ── resource_manager ─────────────────────────────────────────────────────
   ...exceptionGroup(
     'resource_manager',
+    ['full_restart'],
+    '`full_restart: true` restarts the server a second after it answers, which would take down ' +
+      'the shared or isolated conformance server for every later scenario. The harness cannot ' +
+      'wait out a restart and reconnect.',
+    'A conformance harness that survives a restart: `reload` with `full_restart: true` answers ' +
+      '"Full Server Restart", and the server answers again after reconnecting.'
+  ),
+  ...exceptionGroup(
+    'resource_manager',
+    ['include_legacy'],
+    'NOT a coverage gap — `include_legacy` reaches the prompt guide, and has no effect there ' +
+      'today. It widens the ranked actions to ones not marked working and hides the Heads-Up ' +
+      'section that lists them, and all 14 prompt actions in metadata/definitions/prompt-resource.ts ' +
+      'are marked working. `true` and `false` return the same text, so a scenario would pass and ' +
+      'prove nothing, the same reasoning as `format` below.',
+    'A prompt resource action whose status is not `working` — then `include_legacy: true` drops ' +
+      'the Heads-Up section and a scenario can assert it — or removing the parameter at the next ' +
+      'major.'
+  ),
+  ...exceptionGroup(
+    'resource_manager',
     [
       // `system_message` and `tools` were removed from this list on 2026-09-02: the P2.1/P2.3
       // scenarios in workspace-and-mutations.yaml now exercise both, and this check's own
-      // satisfied-exception arm is what caught them still being listed.
-      'arguments',
+      // satisfied-exception arm is what caught them still being listed. `arguments` went the same
+      // way on 2026-09-20: the P4.82 budget/artifacts scenario creates a prompt with a declared
+      // argument, because `artifacts.fromArgument` has to name one.
       'argument_updates',
       'patch',
-      'chain_steps',
       'gate_configuration',
       'injection',
-      'register_with_mcp',
-      'mcp_prompt_mode',
+      // `chain_steps` was removed from this list on 2026-09-16: the row B.60 chain-step-edit
+      // scenarios in workspace-and-mutations.yaml `create` with `chain_steps` set, and this
+      // check's own satisfied-exception arm is what caught it still being listed.
+      // `register_with_mcp` and `mcp_prompt_mode` were removed from this list at P4.7
+      // (2026-09-11). They were never prompt-only: `loader.ts` has read both off `category.yaml`
+      // since long before anything could write one, and P4.7 made `resource_type: category` the
+      // surface that writes them. `category-create-then-inspect-reads-back-declared-fields` in
+      // workspace-and-mutations.yaml now sets both to non-default values and asserts the
+      // round trip, so these two entries would read SATISFIED — which this gate's own
+      // satisfied-exception audit is what catches. They are removed rather than reworded.
       'subagent_model',
       'agent_type',
       'execution_hint',
@@ -264,15 +307,31 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
   ),
   ...exceptionGroup(
     'resource_manager',
-    ['enabled_only', 'filter', 'format', 'search_query'],
+    ['enabled_only', 'filter', 'search_query'],
     'resource_manager list-action refinement field; every `list` scenario in the corpus uses ' +
       'default arguments (`{resource_type, action: list}`) only.',
-    'A conformance scenario asserting the filtered/formatted list output differs from the ' +
-      'unfiltered default.'
+    'A conformance scenario asserting the filtered list output differs from the unfiltered ' +
+      'default.'
   ),
+  // `format` had an exception here until P4.12 (2026-09-11). It was not a coverage gap but a
+  // phantom declaration — declared, forwarded by the router, read by nothing — and its `closedBy`
+  // named removal rather than a scenario. The parameter is gone from the schema, the contract and
+  // the router, so the entry is gone with it rather than left behind as SUBJECT_MISSING.
+  // `severity`/`enforcement_mode` (gate) and the 11 framework advanced fields both closed P4.11
+  // 2026-09-09: `GateDiscoveryProcessor.handleInspect` / `FrameworkDiscoveryProcessor.handleInspect`
+  // now read both back (gate-discovery-processor.ts via `GateGuide.getDefinition()`;
+  // framework-advanced-field-summary.ts via the same loadExistingFramework/toFrameworkCreationData
+  // result `inspect` already computed for its quality score), and
+  // workspace-and-mutations.yaml carries a create-then-read-back scenario for each — asserting the
+  // NON-DEFAULT value survived the round trip, not just that the call returned ok.
   ...exceptionGroup(
     'resource_manager',
-    ['gate_type', 'guidance', 'pass_criteria', 'activation', 'retry_config'],
+    // `type` (the parameter P4.10 renamed out of `gate_type`) and `guidance` are satisfied by
+    // the P4.11 create-then-read-back gate scenarios above, which both create a gate and so have
+    // to supply them — caught by this file's own satisfied-exception audit, not a separate sweep.
+    // The renamed `gate_type` gets its own create-then-inspect row (P4.10), asserting the
+    // non-default `framework` classification survives to gate.yaml and back.
+    ['pass_criteria', 'activation', 'retry_config'],
     'gate resource_type create/update payload field; the corpus exercises resource_type:gate ' +
       'only via read-only `inspect` on a bundled gate (`resource-manager-gate-inspect`), never ' +
       'create/update.',
@@ -280,15 +339,9 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
   ),
   ...exceptionGroup(
     'resource_manager',
-    [
-      'framework',
-      'system_prompt_guidance',
-      'phases',
-      'gates',
-      'tool_descriptions',
-      'enabled',
-      'persist',
-    ],
+    // `system_prompt_guidance` and `phases` were satisfied 2026-09-09 the same way, by the P4.11
+    // framework create-then-read-back scenario (framework create requires both).
+    ['framework', 'gates', 'tool_descriptions', 'enabled', 'persist'],
     'framework resource_type create/update payload field; the corpus exercises ' +
       'resource_type:framework only via read-only `inspect` (`resource-manager-framework-inspect`). ' +
       'Framework `switch` itself is exercised through system_control, a different tool contract.',
@@ -303,28 +356,33 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
     'A conformance scenario exercising `action:compare` or `action:history`, or an update with ' +
       'skip_version:true asserting no new version was saved.'
   ),
-
-  // ── skills_sync ──────────────────────────────────────────────────────────
+  // Five `resource_manager` parameters became visible to this gate on 2026-09-15, when B.34
+  // declared the ones the schema had always published and the contract had never listed. They
+  // were not newly uncovered — they were never reachable by this enumeration, because it walks
+  // the contract and the contract did not name them. Four of the five (the chain_step_* group)
+  // were retired 2026-09-16 by `prompt-chain-step-update-edits-only-that-step` and
+  // `prompt-chain-step-reorder-permutes-existing-steps` in workspace-and-mutations.yaml; `subject`
+  // remains below.
   ...exceptionGroup(
-    'skills_sync',
-    [
-      'action',
-      'client',
-      'scope',
-      'resource_type',
-      'id',
-      'prune',
-      'output',
-      'file',
-      'category',
-      'preview',
-      'preview_detail',
-      'force',
-    ],
-    'skills_sync has no conformance corpus file at all — the tool ships zero scenarios, so every ' +
-      'one of its parameters is unexercised.',
-    'A tests/e2e/conformance/skills-sync.yaml file with at least one scenario per parameter, ' +
-      "mirroring the other three tools' corpus files."
+    'resource_manager',
+    ['subject'],
+    'Gate reminder tag, and its one declared runtime effect is `GateGuidanceRenderer` ' +
+      'suppressing a reminder-tier gate (no evaluated `pass_criteria` — gate-tier.ts) whose ' +
+      '`subject` appears in `gates.harnessCovers` (core-config.ts). `inspect` has no read-back ' +
+      'path for `subject` either (gate-discovery-processor.ts prints severity, enforcement mode ' +
+      'and classification, not subject), so a create-then-inspect row would assert nothing the ' +
+      'create returning ok does not already assert. Proving the suppression effect needs ' +
+      '`gates.harnessCovers` to differ between two executions of the reminder, and ' +
+      '`system_control config` refuses arbitrary writes over MCP by design (config-action-' +
+      'handler.ts — writes are `cpm`-only, rulings R27/R35), so no conformance scenario can ' +
+      'toggle it mid-run.',
+    "A `gates.harnessCovers` entry baked into `buildIsolatedWorkspace()`'s config.json — same " +
+      'precedent as the `resources.registerWithMcp` patch already there — naming one fixed ' +
+      'subject, paired with two isolated-workspace scenarios: one tagging a reminder-tier gate ' +
+      'with that subject, attaching it to a prompt, and executing to show the guidance text ' +
+      'ABSENT; the other tagging a DIFFERENT, uncovered subject and executing to show it ' +
+      'PRESENT. Needs a runner change (the config bake), not only a new scenario — not ' +
+      'attempted here.'
   ),
 ];
 

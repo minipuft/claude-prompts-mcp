@@ -17,24 +17,38 @@ Default settings work for most cases. Customize when you're hitting token budget
 
 **Chain execution**: Frequency controls how often each type re-injects across chain steps.
 
-## Configuration (config.json)
+## Configuration (config.jsonc)
 
-All injection settings live under the `frameworks` section:
+All injection settings live under `frameworks.injection`, one nested object per injection type.
+Your workspace's config file is `config.jsonc` by default (`config.json` is still read if that is
+what you have):
 
 ```json
 {
   "frameworks": {
     "enabled": true,
-    "systemPromptFrequency": 3,
-    "systemPromptTarget": "steps",
-    "gateGuidanceFrequency": 0,
-    "gateGuidanceTarget": "both",
-    "styleGuidance": true,
-    "styleGuidanceFrequency": 0,
-    "styleGuidanceTarget": "steps"
+    "injection": {
+      "systemPrompt": {
+        "frequency": 3,
+        "target": "steps"
+      },
+      "gateGuidance": {
+        "frequency": 0,
+        "target": "both"
+      },
+      "styleGuidance": {
+        "enabled": true,
+        "frequency": 0,
+        "target": "steps"
+      }
+    }
   }
 }
 ```
+
+Every key shown here is a default — the shipped `config.json` carries only `$schema` and `version`,
+not a `frameworks` section at all. Omit a key in your own file to keep its default; set only the
+ones you want to change.
 
 ### Frequency
 
@@ -61,15 +75,15 @@ Controls which execution contexts receive injection:
 
 ### Enable/Disable
 
-| Setting                    | Controls                                      |
-| -------------------------- | --------------------------------------------- |
-| `frameworks.enabled`       | System-prompt injection (framework on/off)    |
-| `gates.enabled`            | Gate-guidance injection (follows gate system) |
-| `frameworks.styleGuidance` | Style-guidance injection                      |
+| Setting                                      | Controls                                      |
+| -------------------------------------------- | --------------------------------------------- |
+| `frameworks.enabled`                         | System-prompt injection (framework on/off)    |
+| `gates.enabled`                              | Gate-guidance injection (follows gate system) |
+| `frameworks.injection.styleGuidance.enabled` | Style-guidance injection                      |
 
 ## Command Modifiers (Per-Request Override)
 
-Modifiers override config.json settings for a single execution:
+Modifiers override config.jsonc settings for a single execution:
 
 | Modifier     | Effect                                                             | Use Case                           |
 | ------------ | ------------------------------------------------------------------ | ---------------------------------- |
@@ -97,11 +111,11 @@ When deciding whether to inject, the system checks these levels in order. **Firs
 4. Prompt config (the prompt's own injection block)
 5. Chain config (per-chain rules)
 6. Category config (per-category rules)
-7. Global config (config.json)
+7. Global config (config.jsonc)
 8. System defaults (hardcoded)          ← Lowest priority
 ```
 
-Most users only interact with levels 1 (modifiers) and 7 (config.json). Levels 2-6 support advanced programmatic use.
+Most users only interact with levels 1 (modifiers) and 7 (config.jsonc). Levels 2-6 support advanced programmatic use.
 
 Prompt config sits above chain and category because a prompt's declaration about itself is more
 specific than the chain or category it happens to run inside. It sits below step config because a
@@ -143,7 +157,7 @@ selection phase requires the framework to be present.
 <details>
 <summary><strong>Runtime Overrides (system_control)</strong></summary>
 
-For temporary session-level adjustments without modifying config.json:
+For temporary session-level adjustments without modifying config.jsonc:
 
 ```
 system_control(action:"injection", operation:"override", type:"system-prompt", enabled:false)
@@ -163,7 +177,9 @@ Overrides support scope (`session`, `chain`, `step`) and optional TTL expiration
 {
   "frameworks": {
     "enabled": false,
-    "styleGuidance": false
+    "injection": {
+      "styleGuidance": { "enabled": false }
+    }
   }
 }
 ```
@@ -173,9 +189,11 @@ Overrides support scope (`session`, `chain`, `step`) and optional TTL expiration
 ```json
 {
   "frameworks": {
-    "systemPromptFrequency": 1,
-    "gateGuidanceFrequency": 1,
-    "styleGuidanceFrequency": 1
+    "injection": {
+      "systemPrompt": { "frequency": 1 },
+      "gateGuidance": { "frequency": 1 },
+      "styleGuidance": { "frequency": 1 }
+    }
   }
 }
 ```
@@ -185,9 +203,11 @@ Overrides support scope (`session`, `chain`, `step`) and optional TTL expiration
 ```json
 {
   "frameworks": {
-    "systemPromptFrequency": 3,
-    "gateGuidanceFrequency": 0,
-    "styleGuidanceFrequency": 0
+    "injection": {
+      "systemPrompt": { "frequency": 3 },
+      "gateGuidance": { "frequency": 0 },
+      "styleGuidance": { "frequency": 0 }
+    }
   }
 }
 ```

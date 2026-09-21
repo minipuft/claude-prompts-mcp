@@ -108,6 +108,32 @@ const RULES = {
       delete: ['onRefresh'],
     },
   },
+  'src/mcp/tools/category-manager/services/category-lifecycle-processor.ts': {
+    resource: 'category',
+    why:
+      'Categories side with PROMPTS, not with gates and frameworks, and the reason is mechanical: ' +
+      'there is no per-category registry entry to reload. The whole `Category[]` is rebuilt by ' +
+      'one walk of the prompt roots, which is exactly what `onRefresh` — the application full ' +
+      'server refresh — performs before republishing it through `updateData`. A per-id reload ' +
+      'here would have nothing to call. Declared rather than left to inference, per this file`s ' +
+      'own rule that the prompt/gate asymmetry must be stated.',
+    actions: {
+      create: ['onRefresh'],
+      update: ['onRefresh'],
+      delete: ['onRefresh'],
+      reload: ['onRefresh'],
+    },
+  },
+  'src/mcp/tools/category-manager/services/category-versioning-processor.ts': {
+    resource: 'category',
+    why:
+      '`rollback` rewrites `category.yaml` through the same file service as `update`, so it owes ' +
+      'the same registry consequence — and for categories that consequence is the full refresh, ' +
+      'for the reason the lifecycle entry above states.',
+    actions: {
+      rollback: ['onRefresh'],
+    },
+  },
   'src/mcp/tools/gate-manager/services/gate-lifecycle-processor.ts': {
     resource: 'gate',
     why:
@@ -158,11 +184,15 @@ const RULES = {
       'nothing registers unless a handler says so. `create` registers inside ' +
       '`createFrameworkAtomic`, reached by the one-hop helper resolution; `update` and `reload` ' +
       'go through `reregister`, which clears the runtime loader cache FIRST — without that, a ' +
-      're-register re-serves the pre-edit content the loader already holds.',
+      're-register re-serves the pre-edit content the loader already holds. `delete` goes through ' +
+      '`removeFramework`, which unregisters AND awaits moving a selection that named the ' +
+      'framework to the configured default. A bare `unregister` is not accepted: it leaves that ' +
+      'selection naming a framework that no longer exists, and every later request that resolves ' +
+      'the active framework fails.',
     actions: {
       create: ['registerFramework('],
       update: ['this.reregister(', 'reregisterFramework('],
-      delete: ['frameworkManager.unregister(', 'unregister('],
+      delete: ['frameworkManager.removeFramework('],
       reload: ['this.reregister(', 'reregisterFramework('],
     },
   },
@@ -568,7 +598,9 @@ function selfTest() {
   }
 
   // 1. Removing a real registration call reds it — once per resource that requires an explicit
-  //    one, so neither the gate nor the framework rule can quietly stop firing.
+  //    one, so neither the gate nor the framework rule can quietly stop firing. Framework delete
+  //    gets its own case because its step, `removeFramework`, is not the one `update` uses; the
+  //    `update` mutation alone would leave the delete rule unexercised.
   for (const [file, marker] of [
     [
       'src/mcp/tools/gate-manager/services/gate-lifecycle-processor.ts',
@@ -577,6 +609,10 @@ function selfTest() {
     [
       'src/mcp/tools/framework-manager/services/framework-lifecycle-processor.ts',
       'await this.reregister(id)',
+    ],
+    [
+      'src/mcp/tools/framework-manager/services/framework-lifecycle-processor.ts',
+      'await this.ctx.frameworkManager.removeFramework(id)',
     ],
   ]) {
     const original = clean.get(file);

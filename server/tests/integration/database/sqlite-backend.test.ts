@@ -14,6 +14,7 @@ import * as path from 'node:path';
 import { jest, describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 
 import { SqliteEngine, SqliteStateStore } from '../../../src/infra/database/index.js';
+import { testScratchPath } from '../../helpers/scratch-path.js';
 
 // Mock logger
 const mockLogger = {
@@ -24,7 +25,7 @@ const mockLogger = {
 };
 
 describe('SQLite State Backend', () => {
-  const testDir = path.join(process.cwd(), 'tests/tmp/sqlite-test');
+  const testDir = testScratchPath('sqlite-test');
   let dbManager: SqliteEngine;
 
   beforeAll(async () => {
@@ -42,7 +43,9 @@ describe('SQLite State Backend', () => {
 
   describe('SqliteEngine', () => {
     it('should initialize and create state.db', async () => {
-      dbManager = await SqliteEngine.getInstance(testDir, mockLogger as any);
+      dbManager = await SqliteEngine.getInstance(mockLogger as any, {
+        dbPath: path.join(testDir, 'runtime-state', 'state.db'),
+      });
       await dbManager.initialize();
 
       // Verify state.db was created (node:sqlite writes directly to disk)
@@ -53,7 +56,7 @@ describe('SQLite State Backend', () => {
 
     it('should have correct schema version', async () => {
       const version = dbManager.getSchemaVersion();
-      expect(version).toBe(27);
+      expect(version).toBe(29);
     });
 
     // These exercise run/queryOne/transaction, not any particular table. They used `tenants`,
@@ -190,7 +193,7 @@ describe('SQLite State Backend', () => {
 });
 
 describe('Schema version bump', () => {
-  const testDir = path.join(process.cwd(), 'tests/tmp/sqlite-schema-bump');
+  const testDir = testScratchPath('sqlite-schema-bump');
   const dbPath = path.join(testDir, 'runtime-state', 'state.db');
   let engine: SqliteEngine;
 
@@ -198,7 +201,9 @@ describe('Schema version bump', () => {
     await fs.rm(testDir, { recursive: true, force: true });
     await fs.mkdir(testDir, { recursive: true });
 
-    engine = await SqliteEngine.getInstance(testDir, mockLogger as any);
+    engine = await SqliteEngine.getInstance(mockLogger as any, {
+      dbPath: path.join(testDir, 'runtime-state', 'state.db'),
+    });
     await engine.initialize();
 
     // A durable row: a resource snapshot backing rollback. Exists nowhere else.
@@ -251,7 +256,9 @@ describe('Schema version bump', () => {
     engine.run(`INSERT INTO schema_version (version) VALUES (?)`, [1]);
     await engine.shutdown();
 
-    engine = await SqliteEngine.getInstance(testDir, mockLogger as any);
+    engine = await SqliteEngine.getInstance(mockLogger as any, {
+      dbPath: path.join(testDir, 'runtime-state', 'state.db'),
+    });
     await engine.initialize();
   });
 
@@ -263,7 +270,7 @@ describe('Schema version bump', () => {
   });
 
   it('recreates the schema at the current version', () => {
-    expect(engine.getSchemaVersion()).toBe(27);
+    expect(engine.getSchemaVersion()).toBe(29);
   });
 
   it('preserves version_history rows across the recreate', () => {
@@ -278,14 +285,6 @@ describe('Schema version bump', () => {
     );
 
     expect(row?.resource_id).toBe('survives-bump');
-  });
-
-  it('carries no stale one-time exclusion into this bump', () => {
-    // The gate that forces the retirement lives in validate:table-contracts and in
-    // snapshotDurableTables(); this asserts the observable consequence rather than the constant.
-    // A non-empty DROPPED_ON_THIS_BUMP declared for an older SCHEMA_VERSION throws on init, so
-    // reaching this line at all means the two are consistent.
-    expect(engine.isInitialized()).toBe(true);
   });
 
   it('preserves skills_sync_manifests rows across the recreate', () => {

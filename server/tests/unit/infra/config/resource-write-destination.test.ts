@@ -29,12 +29,18 @@ function resolverAt(root: string): ResourcePathSource {
     getPromptsPath: () => path.join(root, 'prompts'),
     getGatesPath: () => path.join(root, 'gates'),
     getFrameworksPath: () => path.join(root, 'frameworks'),
+    getScriptsPath: () => path.join(root, 'scripts'),
+    getStylesPath: () => path.join(root, 'styles'),
     // A bundled root distinct from the writable one, so a test that confuses the two fails.
     getBundledResourceDir: (resourceType: string) => path.join(root, 'bundled', resourceType),
     // Distinct again, for the same reason: a reload that silently used the writable root
     // instead of the overlay set is the defect P6.1 fixed, and a stub returning the same
     // path either way could not tell them apart.
     getOverlayResourceDirs: (resourceType: string) => [path.join(root, 'overlay', resourceType)],
+    // Outside `root` entirely: runtime state lives under the runtime root, not beside resources.
+    getRuntimeStatePath: () => path.join(root, '..', 'runtime-root', 'runtime-state'),
+    // A file name the loader could not produce by joining, so a hand-join is caught.
+    getStateDatabasePath: () => path.join(root, '..', 'runtime-root', 'db', 'resolver-state.db'),
   };
 }
 
@@ -137,6 +143,91 @@ describe('prompt write destination', () => {
 
     try {
       expect(manager.getFrameworksDirectory()).toBe(path.join(dir, 'resources', 'frameworks'));
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('resolves the scripts directory through the path source too', async () => {
+    const { manager, dir, cleanup } = await loaderWith(resolverAt('/somewhere/else/resources'));
+
+    try {
+      // Same defect as gates and frameworks, on the read side this time: `WorkspaceScriptLoader`
+      // built its search directory from `getServerRoot()` directly (`prompt-executor.ts`), so a
+      // workspace script was never found regardless of what `MCP_WORKSPACE` named.
+      expect(manager.getScriptsDirectory()).toBe('/somewhere/else/resources/scripts');
+      expect(manager.getScriptsDirectory().startsWith(dir)).toBe(false);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('falls back to the config-relative scripts directory without a path source', async () => {
+    const { manager, dir, cleanup } = await loaderWith();
+
+    try {
+      expect(manager.getScriptsDirectory()).toBe(path.join(dir, 'resources', 'scripts'));
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('resolves the styles directory through the path source too', async () => {
+    const { manager, dir, cleanup } = await loaderWith(resolverAt('/somewhere/else/resources'));
+
+    try {
+      expect(manager.getStylesDirectory()).toBe('/somewhere/else/resources/styles');
+      expect(manager.getStylesDirectory().startsWith(dir)).toBe(false);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('falls back to the config-relative styles directory without a path source', async () => {
+    const { manager, dir, cleanup } = await loaderWith();
+
+    try {
+      expect(manager.getStylesDirectory()).toBe(path.join(dir, 'resources', 'styles'));
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('resolves the runtime state directory through the path source', async () => {
+    const { manager, dir, cleanup } = await loaderWith(resolverAt('/somewhere/else/resources'));
+
+    try {
+      // The sixth instance, and the one B.62 fixed: `verify-state.db` was placed under the
+      // config file's directory — the package — and ignored MCP_RUNTIME_ROOT.
+      expect(manager.getRuntimeStateDirectory()).toBe(
+        path.join('/somewhere/else/runtime-root', 'runtime-state')
+      );
+      expect(manager.getRuntimeStateDirectory().startsWith(dir)).toBe(false);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('refuses to guess a runtime state directory without a path source', async () => {
+    const { manager, cleanup } = await loaderWith();
+
+    try {
+      // Unlike the five resource directories there is no config-relative fallback: the config
+      // file's directory is the package for every default install.
+      expect(() => manager.getRuntimeStateDirectory()).toThrow(/no path source/);
+      expect(() => manager.getStateDatabasePath()).toThrow(/no path source/);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('reads the state database path from the path source instead of joining it', async () => {
+    const { manager, cleanup } = await loaderWith(resolverAt('/somewhere/else/resources'));
+
+    try {
+      expect(manager.getStateDatabasePath()).toBe(
+        path.join('/somewhere/else/runtime-root', 'db', 'resolver-state.db')
+      );
     } finally {
       await cleanup();
     }

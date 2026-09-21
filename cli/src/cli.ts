@@ -77,6 +77,8 @@ function parseCliArgs(args: string[] = process.argv.slice(2)): ParsedArgs {
       force: { type: 'boolean', short: 'f' },
       // history flags
       limit: { type: 'string' },
+      // rollback flags
+      preview: { type: 'boolean' },
       // link-gate flags
       remove: { type: 'boolean' },
       'no-validate': { type: 'boolean' },
@@ -113,6 +115,7 @@ function parseCliArgs(args: string[] = process.argv.slice(2)): ParsedArgs {
       category: values.category as string | undefined,
       force: values.force as boolean | undefined,
       limit: values.limit as string | undefined,
+      preview: values.preview as boolean | undefined,
       remove: values.remove as boolean | undefined,
       noValidate: values['no-validate'] as boolean | undefined,
       value: values.value as string | undefined,
@@ -130,8 +133,8 @@ Options:
       --gates             Validate gates only
       --frameworks     Validate frameworks only
       --styles            Validate styles only
-      --config            Also validate config.json
-      --all               Validate all types + config.json
+      --config            Also validate config.jsonc
+      --all               Validate all types + config.jsonc
   -w, --workspace <path>  Workspace directory (default: MCP_WORKSPACE or cwd)
       --json              JSON output (exit 0 = valid, 1 = errors)
 
@@ -174,7 +177,8 @@ Examples:
 
 Usage: cpm init [path] [options]
 
-Creates a resources/prompts/ directory with starter prompts.
+Creates a resources/prompts/ directory with starter prompts, and a config.jsonc
+with every setting commented out.
 If path is omitted, initializes in the current directory.
 
 Options:
@@ -266,14 +270,20 @@ Types: prompt, gate, framework, style (singular or plural)
 
 Saves current state as a new version, then restores the target version.
 
+A version recorded since schema v29 restores its files byte for byte; one recorded
+before that merges its recorded fields over the entry file. A rollback never deletes
+a file, and names every file it leaves in place.
+
 Options:
+      --preview           Print what the rollback would do; write and record nothing
       --no-validate       Skip post-rename schema validation
   -w, --workspace <path>  Workspace directory (default: MCP_WORKSPACE or cwd)
       --json              JSON output
 
 Examples:
   cpm rollback prompt quick_review 2 -w server
-  cpm rollback gate code-quality 1 --json`,
+  cpm rollback gate code-quality 1 --json
+  cpm rollback gate code-quality 1 --preview`,
 
   rename: `cpm rename - Rename a resource
 
@@ -402,12 +412,14 @@ Examples:
 Usage: cpm config <subcommand> [options]
 
 Subcommands:
-  list                    Display full config.json
+  list                    Display full config.jsonc
   get <key>               Get a specific config value
   set <key> <value>       Set a config value (with backup + validation)
-  validate                Validate config.json
+  validate                Validate config.jsonc
   reset                   Reset config to defaults (requires --force)
   keys                    List all valid config keys with types
+  history                 List recorded config versions
+  rollback <version>      Restore a recorded config version, byte for byte
 
 Options:
   -w, --workspace <path>  Workspace directory (default: MCP_WORKSPACE or cwd)
@@ -422,7 +434,10 @@ Examples:
   cpm config set server.port 8080 --json
   cpm config validate -w server
   cpm config reset --force
-  cpm config keys`,
+  cpm config keys
+  cpm config history --limit 20
+  cpm config rollback 3 --preview
+  cpm config rollback 3`,
 };
 
 function printHelp(command?: CommandName): void {
@@ -450,7 +465,7 @@ Commands:
   toggle     Toggle enabled state (frameworks, styles)
   link-gate  Link or unlink a gate to a prompt
   guide      Command discovery and help
-  config     Manage workspace configuration (config.json)
+  config     Manage workspace configuration (config.jsonc)
   enable     Enable a subsystem (shorthand for config set)
   disable    Disable a subsystem (shorthand for config set)
 
@@ -582,6 +597,7 @@ export async function run(args?: string[]): Promise<void> {
         type: parsed.positionals[0],
         id: parsed.positionals[1],
         version: parsed.positionals[2],
+        preview: parsed.flags['preview'] as boolean | undefined,
       });
       break;
     case 'rename':
@@ -637,6 +653,8 @@ export async function run(args?: string[]): Promise<void> {
         positionals: parsed.positionals.slice(1),
         force: Boolean(parsed.flags['force']),
         value: parsed.flags['value'] as string | undefined,
+        limit: parsed.flags['limit'] as string | undefined,
+        preview: parsed.flags['preview'] as boolean | undefined,
       });
       break;
     case 'enable':

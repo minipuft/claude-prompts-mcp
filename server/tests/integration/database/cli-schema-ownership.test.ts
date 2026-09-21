@@ -29,6 +29,7 @@ import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals
 
 import { loadHistory, saveVersion } from '../../../src/cli-shared/version-history.js';
 import { SqliteEngine } from '../../../src/infra/database/index.js';
+import { testScratchPath } from '../../helpers/scratch-path.js';
 
 const mockLogger = {
   info: jest.fn() as jest.Mock,
@@ -37,7 +38,7 @@ const mockLogger = {
   debug: jest.fn() as jest.Mock,
 };
 
-const testDir = path.join(process.cwd(), 'tests/tmp/cli-schema-ownership');
+const testDir = testScratchPath('cli-schema-ownership');
 const promptDir = path.join(testDir, 'resources', 'prompts', 'general', 'demo');
 
 describe('CLI never owns state.db schema', () => {
@@ -68,7 +69,7 @@ describe('CLI never owns state.db schema', () => {
   it('guard 1: does not even create state.db when the server has never run', async () => {
     // Both a write and a read, because only the write path called ensure_schema.
     expect(saveVersion(promptDir, 'prompt', 'demo', { id: 'demo' }).success).toBe(false);
-    expect(loadHistory(promptDir)).toBeNull();
+    expect(loadHistory(promptDir, { resourceType: 'prompt', resourceId: 'demo' })).toBeNull();
 
     await expect(fs.stat(dbPath())).rejects.toThrow();
   });
@@ -83,7 +84,9 @@ describe('CLI never owns state.db schema', () => {
 
     // The regression: with a CLI-authored version_history present, this threw
     // `no such column: workspace_id` from applySchema and the server could not start.
-    const engine = await SqliteEngine.getInstance(testDir, mockLogger as any);
+    const engine = await SqliteEngine.getInstance(mockLogger as any, {
+      dbPath: path.join(testDir, 'runtime-state', 'state.db'),
+    });
     await expect(engine.initialize()).resolves.toBeUndefined();
 
     const columns = engine
@@ -94,12 +97,17 @@ describe('CLI never owns state.db schema', () => {
   });
 
   it('round-trips history once the engine has created the schema', async () => {
-    const engine = await SqliteEngine.getInstance(testDir, mockLogger as any);
+    const engine = await SqliteEngine.getInstance(mockLogger as any, {
+      dbPath: path.join(testDir, 'runtime-state', 'state.db'),
+    });
     await engine.initialize();
     await engine.shutdown();
 
     const saved = saveVersion(promptDir, 'prompt', 'demo', { id: 'demo' }, { description: 'v1' });
     expect(saved.success).toBe(true);
-    expect(loadHistory(promptDir)?.versions[0]?.description).toBe('v1');
+    expect(
+      loadHistory(promptDir, { resourceType: 'prompt', resourceId: 'demo' })?.versions[0]
+        ?.description
+    ).toBe('v1');
   });
 });

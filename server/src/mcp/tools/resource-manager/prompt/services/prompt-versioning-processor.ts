@@ -8,7 +8,15 @@ import { canonicalPromptSnapshot, validateRequiredFields } from '../utils/valida
 
 import type { PromptResourceInput } from '../../core/types.js';
 
-import { describeRollbackPreview, type SnapshotContract } from '#modules/versioning/index.js';
+import {
+  applyByteRestore,
+  describeRestorePlan,
+  describeRollbackPreview,
+  describeRollbackRecord,
+  restoreWritesNothing,
+  type RestorePlan,
+  type SnapshotContract,
+} from '#modules/versioning/index.js';
 import { ToolResponse } from '#shared/types/index.js';
 
 /**
@@ -44,6 +52,14 @@ export const RESTORED_OPTIONAL_SNAPSHOT_FIELDS = [
   'subagentModel',
   'agentType',
   'injection',
+  // P4.83. Both are now projected (`SNAPSHOT_PRESERVED_FIELDS`), both are authored values the
+  // converter copies verbatim, and both are `PRESERVED_PROMPT_YAML_KEYS` members — so a supplied
+  // value wins in `resolvePreservedPromptYamlFields` and the restored declaration reaches the
+  // YAML through the source-preserving writer, comments intact. Without these two entries the
+  // snapshot would RECORD them and the rollback would still leave today's value on disk, which
+  // is a partial restore announced as a full one.
+  'budget',
+  'artifacts',
 ] as const;
 
 /**
@@ -127,19 +143,24 @@ export const promptSnapshotContract: SnapshotContract<object, Record<string, unk
 };
 
 /**
- * F7 — say so when a rollback leaves script tools untouched.
+ * F7 — say so when a PROJECTION-ONLY rollback leaves script tools untouched.
  *
- * `tools/{id}/` holds `tool.yaml`, `schema.json` and a script file, none of which a version
- * snapshot records: `canonicalPromptSnapshot` excludes `tools` deliberately (the writer holds
- * definition OBJECTS while `PromptYamlSchema` declares an id list), and `ConvertedPrompt` carries
- * only the loaded definitions, not their bytes. So a rollback restores the template and leaves the
- * scripts at whatever they currently are.
+ * NARROWED AT ROW O.7, AND THE NARROWING IS THE POINT. The sentence below used to be true of every
+ * rollback; it is now true of exactly one path. A version row recorded since schema v29 carries the
+ * resource's FILES — `resourceFileSet` claims `tools/{id}/tool.yaml`, its script and its schema —
+ * so restoring that row restores the tools byte for byte, and this warning would be a false
+ * statement about a rollback that did restore them. It is therefore emitted only where it remains
+ * exactly true: a bridge row, a row written before v29, or a row degraded to projection-only,
+ * restored through `SnapshotContract.restore` and the merging writer.
  *
- * Versioning them was considered and rejected on measurement (OQ-E1, 2026-08-17): 7 of 121 prompt
- * directories declare tools, and no gate or framework directory has a single file its writer does
- * not already own. What is NOT acceptable is the silence — a partial restore reported as a full
- * one is the defect class this whole change removes, and it does not stop being one because the
- * missing part is a file rather than a field.
+ * Why the projection genuinely cannot carry them: `canonicalPromptSnapshot` excludes `tools`
+ * deliberately (the writer holds definition OBJECTS while `PromptYamlSchema` declares an id list),
+ * and `ConvertedPrompt` carries only the loaded definitions, not their bytes.
+ *
+ * Versioning them in the SNAPSHOT was considered and rejected on measurement (OQ-E1, 2026-08-17).
+ * The object store answered the same question a different way — by recording bytes rather than
+ * teaching a projection to carry them — which is why that rejection stands and this warning still
+ * shrank.
  */
 function describeUnversionedScriptTools(livePrompt: { scriptTools?: unknown[] }): string {
   const count = livePrompt.scriptTools?.length ?? 0;
@@ -252,33 +273,55 @@ export class PromptVersioningProcessor {
 
     const snapshot = resolved.entry.snapshot;
     const restore = buildRestoreFromSnapshot(id, snapshot);
-    if (!restore.ok) {
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text:
-              `❌ Rollback failed: version ${version} of '${id}' is not a complete snapshot — ` +
-              `missing ${restore.missingFields.join(', ')}.\n\n` +
-              `The prompt was left unchanged and no version was recorded. Substituting the live ` +
-              `value for a missing field is what produced rollbacks landing on a state matching ` +
-              `neither version.`,
-          },
-        ],
-        isError: true,
-      };
+    const currentState = canonicalPromptSnapshot(id, currentPrompt);
+
+    // Does version N carry the FILES, or only their projection? See the same block in
+    // `gate-versioning-processor.ts`; a `refused` is never downgraded to a fallback.
+    //
+    // This is what closes P4.83 for a prompt. A chain's `edges` and a prompt's `tools/` are not
+    // restored because the snapshot learned to carry them — they are restored because the FILES
+    // come back, and the enumerator claimed them at record time.
+    const byteRestore = await this.context.versionHistoryService.planByteRestore(
+      'prompt',
+      id,
+      version
+    );
+    if (byteRestore.status === 'refused') {
+      return this.errorResponse(`❌ Rollback failed: ${byteRestore.reason}`);
     }
 
-    const currentState = canonicalPromptSnapshot(id, currentPrompt);
+    if (byteRestore.status === 'ready') {
+      if (isPreviewRequest(args)) {
+        return this.previewResponse(id, version, byteRestore.plan);
+      }
+      return this.restorePromptBytes(id, version, byteRestore.plan, byteRestore.bytes, {
+        currentState,
+        snapshot,
+      });
+    }
+
+    // The byte path does not need a restorable PROJECTION, so its check runs after the branch.
+    // A version whose snapshot is missing a required field may still carry the resource's files,
+    // and refusing that rollback would refuse a restore the record can perform — the projection's
+    // completeness is a property of the fallback, not of the version.
+    if (!restore.ok) {
+      return this.errorResponse(
+        `❌ Rollback failed: version ${version} of '${id}' is not a complete snapshot — ` +
+          `missing ${restore.missingFields.join(', ')}.\n\n` +
+          `The prompt was left unchanged and no version was recorded. Substituting the live ` +
+          `value for a missing field is what produced rollbacks landing on a state matching ` +
+          `neither version.`
+      );
+    }
 
     // A preview returns here — after validation, so it refuses an unrestorable version the same
     // way the real call does, and BEFORE the version row is recorded, so neither the file nor the
-    // table moves.
+    // table moves. The diff is projected from the same write the rollback below performs — same
+    // payload, same scope — so it names the files that write lands in rather than the snapshot's
+    // fields rendered as one YAML document.
     if (isPreviewRequest(args)) {
-      const diff = this.textDiffService.generateObjectDiff(
-        currentState,
-        snapshot,
-        `${id}/prompt.yaml`
+      const diff = this.textDiffService.generateFileChangeDiff(
+        await this.fileOperations.projectPromptWrite(restore.promptData, ALL_PROMPT_DATA_KEYS)
       );
       return {
         content: [
@@ -302,36 +345,18 @@ export class PromptVersioningProcessor {
       };
     }
 
-    // PHASE 2 — record. Throws on persistence failure, which aborts with nothing on disk. This
-    // ordering is the safety property: recording after the write would leave a written file with
-    // no version row. Projected through the same shape `updatePrompt` records, because the raw
-    // ConvertedPrompt carries loader-resolved runtime keys and passing it here would make the
-    // bridge check always see the live state as unrecorded (see canonicalPromptSnapshot).
-    let saveResult;
-    try {
-      saveResult = await this.context.versionHistoryService.commitEdit(
-        'prompt',
-        id,
-        currentState,
-        snapshot,
-        { description: `Rollback to v${version}`, diff_summary: '' }
-      );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text:
-              `❌ Rollback failed: could not record the version snapshot — ${message}\n\n` +
-              `The prompt was left unchanged.`,
-          },
-        ],
-        isError: true,
-      };
-    }
+    // PHASE 2 + 3 — write and record as ONE transaction (P4.2 / SF-3). The safety property used to
+    // ride on their ORDER, which could only choose a failure mode: recording first left a row for
+    // a write that could still fail, recording second left a written file with no version row. The
+    // record now runs inside the write's transaction after verification, so a failed write records
+    // nothing and a failed record restores the files. Projected through the same shape
+    // `updatePrompt` records, because the raw ConvertedPrompt carries loader-resolved runtime keys
+    // and passing it here would make the bridge check always see the live state as unrecorded (see
+    // canonicalPromptSnapshot).
+    let restoreOutcome: { version?: number; recorded: boolean } | undefined;
+    let recordFailure: string | undefined;
 
-    // PHASE 3 — write. Same write model as `update`: one writer (`createOrUpdateYamlPrompt`) means
+    // Same write model as `update`: one writer (`createOrUpdateYamlPrompt`) means
     // rollback inherits the on-disk field preservation Tier 1.4 established, so the
     // prompt-level fields the writer builds no value for survive a rollback exactly as they
     // survive an update. `ALL_PROMPT_DATA_KEYS`: rollback owns the WHOLE restored state (Fix B,
@@ -340,7 +365,54 @@ export class PromptVersioningProcessor {
     // to a version recorded under a DIFFERENT category perform a category move (Part 2): the
     // writer resolves that purely from `restore.promptData.category` vs the on-disk directory,
     // with no rollback-specific code needed here.
-    await this.fileOperations.updatePromptImplementation(restore.promptData, ALL_PROMPT_DATA_KEYS);
+    try {
+      await this.fileOperations.updatePromptImplementation(
+        restore.promptData,
+        ALL_PROMPT_DATA_KEYS,
+        undefined,
+        undefined,
+        {
+          commit: async (): Promise<void> => {
+            try {
+              const saveResult = await this.context.versionHistoryService.commitEdit(
+                'prompt',
+                id,
+                currentState,
+                snapshot,
+                { description: `Rollback to v${version}`, diff_summary: '' }
+              );
+              restoreOutcome = saveResult;
+            } catch (error) {
+              recordFailure = error instanceof Error ? error.message : String(error);
+              throw error;
+            }
+          },
+        }
+      );
+    } catch (error) {
+      const message = recordFailure ?? (error instanceof Error ? error.message : String(error));
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text:
+              (recordFailure !== undefined
+                ? `❌ Rollback failed: could not record the version snapshot — ${message}\n\n`
+                : `❌ Rollback failed: the write did not complete — ${message}\n\n`) +
+              `The prompt was left unchanged.`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    if (restoreOutcome === undefined) {
+      // Unreachable: `commit` either assigns or throws, and a throw is caught above.
+      throw new Error(
+        `Rollback of prompt '${id}' reported a successful write without recording a version`
+      );
+    }
+
     await this.context.dependencies.onRefresh();
 
     return {
@@ -349,7 +421,7 @@ export class PromptVersioningProcessor {
           type: 'text' as const,
           text:
             `✅ Prompt '${id}' rolled back to version ${version}\n\n` +
-            `📜 Restored state recorded as version ${saveResult.version}\n` +
+            `${describeRollbackRecord(restoreOutcome)}\n` +
             describeUnversionedScriptTools(currentPrompt) +
             `🔄 Prompts reloaded`,
         },
@@ -358,9 +430,108 @@ export class PromptVersioningProcessor {
         action: 'rollback',
         id,
         restored_version: version,
-        current_version: saveResult.version,
+        current_version: restoreOutcome.version,
         mutated: true,
         refreshed: true,
+      },
+      isError: false,
+    };
+  }
+
+  /** One error reply shape, so a new refusal cannot arrive in a different one. */
+  private errorResponse(text: string): ToolResponse {
+    return { content: [{ type: 'text' as const, text }], isError: true };
+  }
+
+  /** The byte-exact preview: the SAME plan value {@link restorePromptBytes} applies. */
+  private previewResponse(id: string, version: number, plan: RestorePlan): ToolResponse {
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: describeRollbackPreview('prompt', id, version, undefined, undefined, plan),
+        },
+      ],
+      structuredContent: {
+        action: 'preview',
+        preview_action: 'rollback',
+        id,
+        target_version: version,
+        valid: true,
+        mutated: false,
+        has_changes: !restoreWritesNothing(plan),
+        files_written: plan.write.map((file) => file.path),
+        files_unchanged: plan.unchanged,
+        files_left_in_place: plan.leftInPlace,
+      },
+      isError: false,
+    };
+  }
+
+  /**
+   * Put version N's recorded bytes back, then record the state that produced.
+   *
+   * No `describeUnversionedScriptTools` warning here, and that absence IS the fix for P4.83: the
+   * warning says `tools/` was left unchanged, which stops being true the moment the version row
+   * carries the tool files themselves. It stays on the projection path, where it is still exactly
+   * true.
+   */
+  private async restorePromptBytes(
+    id: string,
+    version: number,
+    plan: RestorePlan,
+    bytes: ReadonlyMap<string, Uint8Array>,
+    states: { currentState: Record<string, unknown>; snapshot: Record<string, unknown> }
+  ): Promise<ToolResponse> {
+    let restoreOutcome: { version?: number; recorded: boolean } | undefined;
+
+    const outcome = await applyByteRestore({
+      plan,
+      bytes,
+      commit: async (): Promise<void> => {
+        restoreOutcome = await this.context.versionHistoryService.commitEdit(
+          'prompt',
+          id,
+          states.currentState,
+          states.snapshot,
+          { description: `Rollback to v${version}`, diff_summary: '' }
+        );
+      },
+    });
+
+    if (!outcome.applied) {
+      return this.errorResponse(
+        `❌ Rollback failed: ${outcome.error}\n\nThe prompt was left unchanged.`
+      );
+    }
+    if (restoreOutcome === undefined) {
+      throw new Error(
+        `Rollback of prompt '${id}' reported a successful restore without recording a version`
+      );
+    }
+
+    await this.context.dependencies.onRefresh();
+
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text:
+            `✅ Prompt '${id}' rolled back to version ${version}, byte for byte\n\n` +
+            `${describeRestorePlan(plan)}\n\n` +
+            `${describeRollbackRecord(restoreOutcome)}\n` +
+            `🔄 Prompts reloaded`,
+        },
+      ],
+      structuredContent: {
+        action: 'rollback',
+        id,
+        restored_version: version,
+        current_version: restoreOutcome.version,
+        mutated: true,
+        refreshed: true,
+        files_written: plan.write.map((file) => file.path),
+        files_left_in_place: plan.leftInPlace,
       },
       isError: false,
     };

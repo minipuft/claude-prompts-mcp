@@ -4,7 +4,11 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { createFrameworkStateStore } from '../../../src/engine/frameworks/framework-state-store.js';
+import {
+  createFrameworkStateStore,
+  type PersistedFrameworkState,
+} from '../../../src/engine/frameworks/framework-state-store.js';
+import { SqliteEngine, SqliteStateStore } from '../../../src/infra/database/index.js';
 
 import type { Logger } from '../../../src/infra/logging/index.js';
 
@@ -18,10 +22,12 @@ const createLogger = (): Logger =>
 
 describe('FrameworkStateStore (persistence)', () => {
   let tmpRoot: string;
+  let stateDbPath: string;
 
   beforeAll(() => {
     tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'fw-state-'));
     fs.mkdirSync(path.join(tmpRoot, 'runtime-state'), { recursive: true });
+    stateDbPath = path.join(tmpRoot, 'runtime-state', 'state.db');
   });
 
   afterAll(() => {
@@ -32,7 +38,7 @@ describe('FrameworkStateStore (persistence)', () => {
 
   test('writes and restores framework state across instances via SQLite', async () => {
     const logger = createLogger();
-    const mgrA = await createFrameworkStateStore(logger, tmpRoot);
+    const mgrA = await createFrameworkStateStore(logger, stateDbPath);
 
     await mgrA.enableFrameworkSystem('unit-enable');
     await mgrA.switchFramework({ targetFramework: 'react', reason: 'unit-switch' });
@@ -44,7 +50,7 @@ describe('FrameworkStateStore (persistence)', () => {
     await mgrA.shutdown();
 
     // New instance should restore the same state from SQLite
-    const mgrB = await createFrameworkStateStore(logger, tmpRoot);
+    const mgrB = await createFrameworkStateStore(logger, stateDbPath);
     const stateB = mgrB.getCurrentState();
     expect(stateB.frameworkSystemEnabled).toBe(true);
     expect(stateB.activeFramework.toLowerCase()).toBe('react');
@@ -56,7 +62,9 @@ describe('FrameworkStateStore (persistence)', () => {
   // with no reset, so a second temp root would silently reuse this suite's first database.
   test('a scope with no persisted row resolves to the configured default framework', async () => {
     const logger = createLogger();
-    const mgr = await createFrameworkStateStore(logger, tmpRoot, { defaultFramework: 'radiant' });
+    const mgr = await createFrameworkStateStore(logger, stateDbPath, {
+      defaultFramework: () => 'radiant',
+    });
 
     // Without the config wiring this reported the built-in CAGEERF fallback.
     const unseen = { workspaceId: 'workspace-with-no-persisted-framework' };
@@ -67,7 +75,7 @@ describe('FrameworkStateStore (persistence)', () => {
 
   test('two project scopes switch independently', async () => {
     const logger = createLogger();
-    const mgr = await createFrameworkStateStore(logger, tmpRoot, {
+    const mgr = await createFrameworkStateStore(logger, stateDbPath, {
       defaultScope: { workspaceId: 'project-alpha' },
     });
 
@@ -82,12 +90,51 @@ describe('FrameworkStateStore (persistence)', () => {
     await mgr.shutdown();
   });
 
+  test('two project scopes toggle the framework system independently', async () => {
+    const logger = createLogger();
+    const mgr = await createFrameworkStateStore(logger, stateDbPath, {
+      defaultScope: { workspaceId: 'toggle-alpha' },
+    });
+    const beta = { workspaceId: 'toggle-beta' };
+
+    // This suite's first test left a pre-scoping `default` row that a fresh launch scope
+    // adopts, so put alpha on a row of its own before measuring. Both toggles, so the
+    // second is a real state change whichever value adoption supplied.
+    await mgr.setFrameworkSystemEnabled(true, 'baseline');
+    await mgr.setFrameworkSystemEnabled(false, 'baseline');
+
+    // Both start disabled, so the toggle below is a real state change rather than a no-op
+    // early return — without this the assertions could pass over an inert call.
+    expect(mgr.getCurrentState().frameworkSystemEnabled).toBe(false);
+    expect(mgr.getCurrentState(beta).frameworkSystemEnabled).toBe(false);
+
+    await mgr.enableFrameworkSystem('beta asked for it', beta);
+
+    // Unscoped, this toggle wrote alpha's row: beta stayed disabled while the caller was
+    // told the system was enabled, and an unrelated project flipped.
+    expect(mgr.getCurrentState(beta).frameworkSystemEnabled).toBe(true);
+    expect(mgr.isFrameworkSystemEnabled(beta)).toBe(true);
+    expect(mgr.getCurrentState().frameworkSystemEnabled).toBe(false);
+    expect(mgr.isFrameworkSystemEnabled()).toBe(false);
+
+    await mgr.shutdown();
+
+    // The write must be readable back under the scope it was written for: a restart used to
+    // load only the launch scope and answer every other one with defaults.
+    const restarted = await createFrameworkStateStore(logger, stateDbPath, {
+      defaultScope: { workspaceId: 'toggle-alpha' },
+    });
+    expect(restarted.getCurrentState(beta).frameworkSystemEnabled).toBe(true);
+    expect(restarted.getCurrentState().frameworkSystemEnabled).toBe(false);
+    await restarted.shutdown();
+  });
+
   test('a new project scope adopts the pre-scoping global row instead of resetting', async () => {
     const logger = createLogger();
     // The suite's first test wrote 'react' under the unscoped 'default' row, standing in
     // for state written before scope ids existed.
-    const migrated = await createFrameworkStateStore(logger, tmpRoot, {
-      defaultFramework: 'radiant',
+    const migrated = await createFrameworkStateStore(logger, stateDbPath, {
+      defaultFramework: () => 'radiant',
       defaultScope: { workspaceId: 'project-upgrading' },
     });
 
@@ -100,9 +147,209 @@ describe('FrameworkStateStore (persistence)', () => {
   test('the configured default does not override a scope that already persisted a switch', async () => {
     const logger = createLogger();
     // tmpRoot still holds the 'react' row written by the restoration test above.
-    const mgr = await createFrameworkStateStore(logger, tmpRoot, { defaultFramework: 'radiant' });
+    const mgr = await createFrameworkStateStore(logger, stateDbPath, {
+      defaultFramework: () => 'radiant',
+    });
 
     expect(mgr.getCurrentState().activeFramework.toLowerCase()).toBe('react');
+
+    await mgr.shutdown();
+  });
+
+  test('a persisted framework that is no longer registered falls back to the configured default', async () => {
+    const logger = createLogger();
+    const scope = { workspaceId: 'project-with-a-removed-framework' };
+    // `switchFramework` on the store persists what it is told; validation belongs to the manager.
+    const before = await createFrameworkStateStore(logger, stateDbPath, { defaultScope: scope });
+    await before.switchFramework({ targetFramework: 'framework-that-was-removed' });
+    await before.shutdown();
+
+    const after = await createFrameworkStateStore(logger, stateDbPath, {
+      defaultFramework: () => 'radiant',
+      defaultScope: scope,
+    });
+    // Not the first framework available, which is what the recovery used to pick.
+    expect(after.getCurrentState().activeFramework.toLowerCase()).toBe('radiant');
+    expect(after.getActiveFramework().id.toLowerCase()).toBe('radiant');
+    await after.shutdown();
+  });
+
+  test('startup refuses when the persisted framework and the configured default are both unregistered', async () => {
+    const logger = createLogger();
+    const scope = { workspaceId: 'project-with-no-registered-framework' };
+    const before = await createFrameworkStateStore(logger, stateDbPath, { defaultScope: scope });
+    await before.switchFramework({ targetFramework: 'framework-that-was-removed' });
+    await before.shutdown();
+
+    // Refusing is the rule: selecting whichever framework is listed first would override the
+    // operator's declared default without saying so.
+    await expect(
+      createFrameworkStateStore(logger, stateDbPath, {
+        defaultFramework: () => 'framework-nobody-registered',
+        defaultScope: scope,
+      })
+    ).rejects.toThrow(/frameworks\.defaultFramework/);
+  });
+
+  test('removing the selected framework selects the configured default and persists it', async () => {
+    const logger = createLogger();
+    const scope = { workspaceId: 'project-removing-its-framework' };
+    const options = { defaultFramework: () => 'radiant', defaultScope: scope };
+    const store = await createFrameworkStateStore(logger, stateDbPath, options);
+    await store.switchFramework({ targetFramework: 'react' });
+
+    const removed = await store.getFrameworkManager()!.removeFramework('react');
+
+    expect(removed).toBe(true);
+    expect(store.getCurrentState().activeFramework.toLowerCase()).toBe('radiant');
+    expect(store.getActiveFramework().id.toLowerCase()).toBe('radiant');
+    await store.shutdown();
+
+    const restarted = await createFrameworkStateStore(logger, stateDbPath, options);
+    expect(restarted.getCurrentState().activeFramework.toLowerCase()).toBe('radiant');
+    await restarted.shutdown();
+  });
+
+  test('the fallback selects the configured default as it is when the framework is removed', async () => {
+    const logger = createLogger();
+    let configuredDefault = 'radiant';
+    const store = await createFrameworkStateStore(logger, stateDbPath, {
+      defaultFramework: () => configuredDefault,
+      defaultScope: { workspaceId: 'project-whose-default-changes' },
+    });
+    await store.switchFramework({ targetFramework: 'react' });
+
+    // The operator edits `frameworks.defaultFramework` after the store was built.
+    configuredDefault = 'focus';
+    await store.getFrameworkManager()!.removeFramework('react');
+
+    expect(store.getCurrentState().activeFramework.toLowerCase()).toBe('focus');
+    expect(store.getActiveFramework().id.toLowerCase()).toBe('focus');
+    await store.shutdown();
+  });
+
+  test('a selection moved off a removed framework that fails to persist rejects', async () => {
+    const logger = createLogger();
+    let failSaves = false;
+    const stateStore = {
+      exists: async () => false,
+      load: async () => undefined,
+      save: async () => {
+        if (failSaves) throw new Error('state database is read-only');
+      },
+    } as unknown as SqliteStateStore<PersistedFrameworkState>;
+    const store = await createFrameworkStateStore(logger, stateDbPath, {
+      defaultFramework: () => 'radiant',
+      defaultScope: { workspaceId: 'project-with-a-read-only-database' },
+      stateStore,
+    });
+    await store.switchFramework({ targetFramework: 'react' });
+
+    failSaves = true;
+    await expect(store.getFrameworkManager()!.removeFramework('react')).rejects.toThrow(
+      'state database is read-only'
+    );
+  });
+
+  test('a framework system toggle that fails to persist rejects', async () => {
+    const logger = createLogger();
+    let failSaves = false;
+    const stateStore = {
+      exists: async () => false,
+      load: async () => undefined,
+      save: async () => {
+        if (failSaves) throw new Error('state database is read-only');
+      },
+    } as unknown as SqliteStateStore<PersistedFrameworkState>;
+    const store = await createFrameworkStateStore(logger, stateDbPath, {
+      defaultFramework: () => 'radiant',
+      defaultScope: { workspaceId: 'project-toggling-against-a-read-only-database' },
+      stateStore,
+    });
+
+    // The toggle below is a real state change, not a no-op early return.
+    expect(store.getCurrentState().frameworkSystemEnabled).toBe(false);
+
+    failSaves = true;
+
+    // Positive control: a mutation that already awaits its save rejects through this
+    // same double. Without it, a resolved toggle below would be evidence about an
+    // inert double rather than about the toggle.
+    await expect(store.switchFramework({ targetFramework: 'react' })).rejects.toThrow(
+      'state database is read-only'
+    );
+
+    // The toggle the configuration listener drives. Its save failure was caught and
+    // logged inside the store, so the caller was told the toggle succeeded while the
+    // database still held the old value.
+    await expect(store.setFrameworkSystemEnabled(true, 'unit-toggle')).rejects.toThrow(
+      'state database is read-only'
+    );
+  });
+
+  test('a scope that has never persisted framework state logs at debug, not warn', async () => {
+    const logger = createLogger();
+    // A scope name never touched by an earlier test in this file — the load path must see
+    // `exists() === false`, not a row left over from another test.
+    const mgr = await createFrameworkStateStore(logger, stateDbPath, {
+      defaultScope: { workspaceId: 'workspace-truly-empty' },
+    });
+
+    const warnedInvalid = (logger.warn as jest.Mock).mock.calls.some(([message]) =>
+      String(message).includes('Invalid framework state')
+    );
+    expect(warnedInvalid).toBe(false);
+
+    const debugedNoState = (logger.debug as jest.Mock).mock.calls.some(([message]) =>
+      String(message).includes('No saved framework state found')
+    );
+    expect(debugedNoState).toBe(true);
+
+    await mgr.shutdown();
+  });
+
+  test('a persisted row that fails validation still logs the invalid-state warning', async () => {
+    const logger = createLogger();
+    const corruptScope = { workspaceId: 'workspace-corrupt-framework-row' };
+
+    // Seed a row directly through the same SQLite table/key the store reads, missing the
+    // `switchReason` field `isValidPersistedState` requires — a corrupt row, not an absent one.
+    const dbManager = await SqliteEngine.getInstance(logger, { dbPath: stateDbPath });
+    await dbManager.initialize();
+    const rawStore = new SqliteStateStore<PersistedFrameworkState>(
+      dbManager,
+      {
+        tableName: 'kv_state',
+        key: 'framework',
+        defaultState: () => ({
+          version: '1.0.0',
+          frameworkSystemEnabled: false,
+          activeFramework: 'CAGEERF',
+          lastSwitchedAt: new Date().toISOString(),
+          switchReason: 'Initial framework selection',
+        }),
+      },
+      logger
+    );
+    await rawStore.save(
+      {
+        version: '1.0.0',
+        frameworkSystemEnabled: false,
+        activeFramework: 'react',
+        lastSwitchedAt: new Date().toISOString(),
+        // switchReason intentionally omitted
+      } as unknown as PersistedFrameworkState,
+      corruptScope
+    );
+
+    const mgr = await createFrameworkStateStore(logger, stateDbPath, {
+      defaultScope: corruptScope,
+    });
+
+    const warnedInvalid = (logger.warn as jest.Mock).mock.calls.some(([message]) =>
+      String(message).includes('Invalid framework state')
+    );
+    expect(warnedInvalid).toBe(true);
 
     await mgr.shutdown();
   });

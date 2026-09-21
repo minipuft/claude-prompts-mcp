@@ -3,6 +3,7 @@ import {
   isUnknownInterruptPending,
   resolveEnforcementMode,
 } from '../../execution/pipeline/decisions/index.js';
+import { buildPipelineHookContext } from '../../execution/pipeline/hook-context.js';
 import { parseGateVerdict } from '../core/gate-verdict-contract.js';
 
 import type { Logger } from '#infra/logging/index.js';
@@ -350,6 +351,36 @@ export class GateVerdictProcessor {
       return { passClearedThisCall: false, earlyExit: false, userResponse };
     }
 
+    // Read the per-gate block BEFORE anything branches on the overall verdict: this is the only
+    // call that holds both the submission and the gate list it was advertised against, and the
+    // clear path deletes the pending review a few lines below. Entries land on request state,
+    // where the assembler names the failing gates and the capture service persists them.
+    this.recordPerGateVerdicts(
+      context,
+      verdictPayload.raw,
+      capturedGateIds,
+      session.pendingGateReview.attemptCount
+    );
+
+    // Checked BEFORE the outcome is recorded, not after: recording spends a retry attempt, and a
+    // verdict the engine will not accept must not cost the submitter one.
+    const refusal = this.refuseVerdictAgainstRecordedFailure(
+      session.pendingGateReview,
+      verdictPayload.verdict
+    );
+    if (refusal !== null) {
+      context.setResponse({
+        content: [{ type: 'text', text: `❌ ${refusal}` }],
+        isError: true,
+      });
+      context.diagnostics.warn(
+        'GateVerdictProcessor',
+        'Gate PASS refused — a recorded check failed',
+        { sessionId, gateIds: capturedGateIds }
+      );
+      return { passClearedThisCall: false, earlyExit: true, userResponse };
+    }
+
     const outcome = await this.chainSessionStore.recordGateReviewOutcome(sessionId, {
       verdict: verdictPayload.verdict,
       rationale: verdictPayload.rationale,
@@ -383,7 +414,11 @@ export class GateVerdictProcessor {
 
       await this.emitGateEvents(context, 'passed', capturedGateIds, verdictPayload.rationale);
     } else {
-      this.handleFailedVerdict(
+      // Awaited, as the `cleared` branch above is. Fired and forgotten, the advisory and
+      // informational handlers cleared the pending review and advanced the step AFTER the
+      // snapshot two lines below had already been taken, so the response reported the step
+      // the run had not moved off — and any failure in either was dropped entirely.
+      await this.handleFailedVerdict(
         context,
         session,
         sessionId,
@@ -404,16 +439,54 @@ export class GateVerdictProcessor {
   }
 
   /**
+   * Refuse, by name, a PASS that walks past a check the engine recorded as failing (ruling B4).
+   *
+   * `GateReviewStage` runs each gate's `shell_verify` / `script_tool` criteria and writes the
+   * outcome to `PendingGateReview.checkResults`. Until this existed, nothing downstream read it:
+   * the stage printed the failing command into the review, the model answered PASS anyway, and
+   * the processor cleared on the verdict alone — a recorded exit code losing to an opinion.
+   *
+   * Scope, deliberately narrow:
+   *
+   * - **PASS only.** A FAIL is the submitter agreeing with the check; it takes the normal
+   *   failure path with its retry budget intact.
+   * - **`gate_action: skip` / `abort` are untouched.** They are the operator's override, by
+   *   design and behind retry exhaustion — a human choosing to ship past a failing check is a
+   *   decision, where a model PASS over the same check is an unnoticed contradiction. They do
+   *   not pass through here at all (`handleGateAction`).
+   * - **No recorded results, no refusal.** A review of reminder-tier gates records nothing, so
+   *   this returns `null` and the verdict is the model's as before.
+   *
+   * @returns the sentence the submitter reads, or `null` when the verdict may proceed.
+   */
+  private refuseVerdictAgainstRecordedFailure(
+    pendingReview: ChainSession['pendingGateReview'],
+    verdict: 'PASS' | 'FAIL'
+  ): string | null {
+    if (verdict !== 'PASS') return null;
+
+    const failed = (pendingReview?.checkResults ?? []).filter((result) => !result.passed);
+    if (failed.length === 0) return null;
+
+    const gateIds = [...new Set(failed.map((result) => result.gateId))].join(', ');
+    const summaries = failed.map((result) => result.summary).join('; ');
+    return (
+      `Gate verdict refused: ${gateIds} recorded a failing check (${summaries}). ` +
+      'Fix the cause and resubmit; the check re-runs on the next review.'
+    );
+  }
+
+  /**
    * Handle a FAIL verdict based on enforcement mode.
    */
-  private handleFailedVerdict(
+  private async handleFailedVerdict(
     context: ExecutionContext,
     session: ChainSession,
     sessionId: string,
     sessionContext: SessionContext,
     capturedGateIds: string[],
     verdictPayload: ParsedGateVerdict
-  ): void {
+  ): Promise<void> {
     const pending = this.chainSessionStore.getPendingGateReview(sessionId);
     if (pending !== undefined) {
       sessionContext.pendingReview = pending;
@@ -431,7 +504,7 @@ export class GateVerdictProcessor {
         break;
 
       case 'advisory':
-        this.handleAdvisoryFail(
+        await this.handleAdvisoryFail(
           context,
           session,
           sessionId,
@@ -442,7 +515,7 @@ export class GateVerdictProcessor {
         break;
 
       case 'informational':
-        this.handleInformationalFail(
+        await this.handleInformationalFail(
           context,
           session,
           sessionId,
@@ -558,6 +631,41 @@ export class GateVerdictProcessor {
   }
 
   /**
+   * Put the submission's per-gate verdicts on request state, keyed by gate id.
+   *
+   * The authority owns the parse because it owns the `index → gateId` join; this method owns
+   * only WHEN it happens and WHERE the result lands, which is the processor's domain
+   * (verdict processing) under the ownership matrix.
+   *
+   * Nothing is written when the submission carried no per-gate block — an overall-only verdict
+   * is valid and leaving the field undefined is what tells the assembler and the capture
+   * service there is nothing extra to say. The field is never set to `[]`, so "the reviewer
+   * said nothing per-gate" and "the reviewer failed gate X" stay distinguishable.
+   */
+  private recordPerGateVerdicts(
+    context: ExecutionContext,
+    raw: string,
+    gateIds: readonly string[],
+    attempt: number
+  ): void {
+    const authority = context.gateEnforcement;
+    if (authority === undefined || gateIds.length === 0) {
+      return;
+    }
+
+    const entries = authority.parseGateVerdicts(raw, gateIds, attempt);
+    if (entries.length === 0) {
+      return;
+    }
+
+    context.state.gates.perGateVerdicts = entries;
+    context.diagnostics.info('GateVerdictProcessor', 'Per-gate verdicts recorded', {
+      failed: entries.filter((entry) => entry.verdict === 'FAIL').map((entry) => entry.gateId),
+      total: entries.length,
+    });
+  }
+
+  /**
    * Parse a gate verdict using the authority (preferred) or contract fallback.
    */
   private parseVerdict(
@@ -589,21 +697,7 @@ export class GateVerdictProcessor {
    * Create hook execution context from the current execution state.
    */
   private createHookContext(context: ExecutionContext): PipelineHookContext {
-    const executionId =
-      context.sessionContext?.sessionId ??
-      context.state.session.executionScopeId ??
-      `exec-${Date.now().toString(36)}`;
-
-    const frameworkDecision = context.frameworkAuthority.getCachedDecision();
-
-    return {
-      executionId,
-      executionType: context.sessionContext?.isChainExecution ? 'chain' : 'single',
-      chainId: context.sessionContext?.sessionId,
-      currentStep: context.sessionContext?.currentStep,
-      frameworkEnabled: frameworkDecision?.shouldApply ?? false,
-      frameworkId: frameworkDecision?.frameworkId,
-    };
+    return buildPipelineHookContext(context);
   }
 
   /**

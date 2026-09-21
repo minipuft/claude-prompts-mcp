@@ -1,17 +1,28 @@
 /**
- * Resource Manager Integration Test
+ * Resource Manager Router Integration Test
  *
- * Tests the complete resource_manager workflow with real modules:
- * - ResourceManagerRouter (real routing logic)
- * - PromptResourceHandler (real action handling)
- * - GateToolHandler (real action handling)
- * - FrameworkToolHandler (real action handling)
+ * ONE real module, and the header used to name four. `ResourceManagerRouter` is the subject:
+ * dispatch by `resource_type`, the pre-dispatch guards, parameter names as they cross the
+ * boundary, context passthrough, and error formatting. Everything it routes TO is a stand-in
+ * built in this file and cast through `as unknown as` — the four handler types are imported in
+ * type position only, so not one line of their production code is loaded when this file runs.
  *
- * Mocks:
- * - Filesystem operations (controlled fixtures)
- * - Registry operations (in-memory maps)
+ * Stand-ins (`createMock*` below), each an in-memory Map behind a `handleAction`:
+ * - the prompt handler, the gate handler, the framework handler, the category handler
  *
- * Classification: Integration (multiple real modules, mock I/O only)
+ * MUTATION-PROVEN, 2026-09-15. Throwing at the top of the prompt handler's `handleAction` left
+ * every case here green while `guide-action.test.ts` reddened; throwing at the top of the gate
+ * and framework handlers' `handleAction` left them green while `gate-manager/manager.test.ts`
+ * and `framework-creation.test.ts` reddened, 26 cases between them. Those files own the handler
+ * claims.
+ *
+ * Four lifecycle cases whose assertions read the stand-ins' own Maps through `_`-prefixed
+ * accessors were retired whole at P4.36, and the accessors with them: reading back what this file
+ * just stored can only report what the router handed a mock, which every routing case above
+ * already asserts directly. What survives asserts on the ROUTER — which handler it reached, under
+ * which parameter names, with which context.
+ *
+ * Classification: Integration (one real module, stand-in collaborators, no I/O)
  */
 
 import { describe, expect, test, jest, beforeEach } from '@jest/globals';
@@ -29,6 +40,7 @@ import type { ToolResponse } from '../../../src/shared/types/index.js';
 import type { PromptResourceHandler } from '../../../src/mcp/tools/resource-manager/prompt/index.js';
 import type { GateToolHandler } from '../../../src/mcp/tools/gate-manager/index.js';
 import type { FrameworkToolHandler } from '../../../src/mcp/tools/framework-manager/index.js';
+import type { CategoryToolHandler } from '../../../src/mcp/tools/category-manager/index.js';
 
 // Mock factories
 const createLogger = (): Logger => ({
@@ -125,8 +137,7 @@ const createMockPromptResourceHandler = (): Pick<PromptResourceHandler, 'handleA
           } as ToolResponse;
       }
     }),
-    _prompts: prompts, // Expose for test assertions
-  } as unknown as PromptResourceHandler & { _prompts: typeof prompts };
+  } as unknown as PromptResourceHandler;
 };
 
 // Create mock gate manager that tracks actions
@@ -205,8 +216,7 @@ const createMockGateManager = () => {
           } as ToolResponse;
       }
     }),
-    _gates: gates, // Expose for test assertions
-  } as unknown as GateToolHandler & { _gates: typeof gates };
+  } as unknown as GateToolHandler;
 };
 
 // Create mock framework manager that tracks actions
@@ -308,12 +318,60 @@ const createMockFrameworkManager = () => {
           } as ToolResponse;
       }
     }),
-    _frameworks: frameworks,
-    _getActive: () => activeFramework,
-  } as unknown as FrameworkToolHandler & {
-    _frameworks: typeof frameworks;
-    _getActive: () => string | null;
-  } as Pick<PromptResourceHandler, 'handleAction'>;
+  } as unknown as FrameworkToolHandler as Pick<PromptResourceHandler, 'handleAction'>;
+};
+
+/**
+ * A category double, added with `resource_type: 'category'` at P4.7.
+ *
+ * Deliberately thinner than the three above: this file's workflows exercise prompt, gate and
+ * framework lifecycles, and a fourth full state machine here would be a second implementation of
+ * `CategoryLifecycleProcessor` that the real unit and conformance suites already cover. What it
+ * DOES have to be is reachable — a router branch nothing ever calls is the shape of defect this
+ * file exists to catch — so it records the payloads it receives.
+ */
+const createMockCategoryManager = () => {
+  const declared = new Map<string, Record<string, unknown>>();
+
+  return {
+    handleAction: jest.fn(async (args: Record<string, unknown>) => {
+      const action = args['action'] as string;
+      const id = args['id'] as string | undefined;
+
+      if (action === 'create' && id !== undefined) {
+        declared.set(id, args);
+        return {
+          content: [{ type: 'text', text: `Category '${id}' created successfully` }],
+          isError: false,
+        } as ToolResponse;
+      }
+
+      if (action === 'inspect' && id !== undefined && declared.has(id)) {
+        const doc = declared.get(id) ?? {};
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Category: ${id}\n  - Name: ${String(doc['name'])}\n  - MCP Prompt Mode: ${String(
+                doc['mcpPromptMode']
+              )}`,
+            },
+          ],
+          isError: false,
+        } as ToolResponse;
+      }
+
+      return {
+        content: [{ type: 'text', text: `Unhandled category action: ${action}` }],
+        isError: true,
+      } as ToolResponse;
+    }),
+    _declared: declared,
+  };
+  // Deliberately NOT cast down to `Pick<PromptResourceHandler, 'handleAction'>` the way the three
+  // factories above are. That cast erases the `jest.Mock` type, which is why every
+  // `.mock.calls` / `.mockRejectedValueOnce` on those doubles is a baselined `tsc` error in this
+  // file. The cast the router needs happens once, at the `createResourceManagerRouter` call.
 };
 
 describe('Resource Manager Workflow Integration', () => {
@@ -322,6 +380,7 @@ describe('Resource Manager Workflow Integration', () => {
   let promptResourceHandler: ReturnType<typeof createMockPromptResourceHandler>;
   let gateManager: ReturnType<typeof createMockGateManager>;
   let frameworkManager: ReturnType<typeof createMockFrameworkManager>;
+  let categoryManager: ReturnType<typeof createMockCategoryManager>;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -329,133 +388,57 @@ describe('Resource Manager Workflow Integration', () => {
     promptResourceHandler = createMockPromptResourceHandler();
     gateManager = createMockGateManager();
     frameworkManager = createMockFrameworkManager();
+    categoryManager = createMockCategoryManager();
 
     router = createResourceManagerRouter({
       logger,
       promptResourceHandler: promptResourceHandler as unknown as PromptResourceHandler,
       gateManager: gateManager as unknown as GateToolHandler,
       frameworkManager: frameworkManager as unknown as FrameworkToolHandler,
+      categoryManager: categoryManager as unknown as CategoryToolHandler,
     });
   });
 
-  describe('Cross-Resource CRUD Workflow', () => {
-    test('complete prompt lifecycle: create → inspect → delete', async () => {
-      // Create
+  describe('Category Routing (P4.7)', () => {
+    test('routes resource_type category to the category handler, translating the two inherited parameters', async () => {
       const createResult = await router.handleAction(
         {
-          resource_type: 'prompt',
+          resource_type: 'category',
           action: 'create',
-          id: 'test-prompt',
-          name: 'Test Prompt',
-          category: 'testing',
-          user_message_template: 'Hello {{name}}',
-        },
+          id: 'analysis',
+          name: 'Analysis',
+          description: 'Analytical prompts',
+          register_with_mcp: false,
+          mcp_prompt_mode: 'launch',
+        } as ResourceManagerInput,
         {}
       );
+
       expect(createResult.isError).toBe(false);
-      expect((createResult.content[0] as { text: string }).text).toContain('Created prompt');
 
-      // Verify prompt exists
-      expect(promptResourceHandler._prompts.has('test-prompt')).toBe(true);
-
-      // Inspect
-      const inspectResult = await router.handleAction(
-        {
-          resource_type: 'prompt',
-          action: 'inspect',
-          id: 'test-prompt',
-        },
-        {}
-      );
-      expect(inspectResult.isError).toBe(false);
-      expect((inspectResult.content[0] as { text: string }).text).toContain('Test Prompt');
-
-      // Delete
-      const deleteResult = await router.handleAction(
-        {
-          resource_type: 'prompt',
-          action: 'delete',
-          id: 'test-prompt',
-          confirm: true,
-        },
-        {}
-      );
-      expect(deleteResult.isError).toBe(false);
-      expect(promptResourceHandler._prompts.has('test-prompt')).toBe(false);
+      // The router's ONE mapping for this resource type: the snake_case tool parameters become
+      // the `category.yaml` keys they write. A pass-through that forwarded `register_with_mcp`
+      // unchanged would leave the writer building a document with neither key, and the create
+      // would still report success — which is why this asserts the translated names rather than
+      // the response text.
+      const forwarded = categoryManager.handleAction.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(forwarded['registerWithMcp']).toBe(false);
+      expect(forwarded['mcpPromptMode']).toBe('launch');
+      expect(forwarded).not.toHaveProperty('register_with_mcp');
+      expect(forwarded).not.toHaveProperty('mcp_prompt_mode');
     });
 
-    test('complete gate lifecycle: create → inspect → delete', async () => {
-      // Create
-      const createResult = await router.handleAction(
-        {
-          resource_type: 'gate',
-          action: 'create',
-          id: 'test-gate',
-          name: 'Test Gate',
-          gate_type: 'validation',
-          guidance: 'Test validation guidance',
-        },
+    test('refuses a category delete without confirmation, at the shared pre-dispatch guard', async () => {
+      const result = await router.handleAction(
+        { resource_type: 'category', action: 'delete', id: 'analysis' } as ResourceManagerInput,
         {}
       );
-      expect(createResult.isError).toBe(false);
-      expect((createResult.content[0] as { text: string }).text).toContain('Created gate');
 
-      // Verify gate_type was transformed to type
-      expect(gateManager.handleAction).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'validation' }),
-        expect.any(Object)
-      );
-
-      // Inspect
-      const inspectResult = await router.handleAction(
-        {
-          resource_type: 'gate',
-          action: 'inspect',
-          id: 'test-gate',
-        },
-        {}
-      );
-      expect(inspectResult.isError).toBe(false);
-      expect((inspectResult.content[0] as { text: string }).text).toContain('validation');
-
-      // Delete
-      const deleteResult = await router.handleAction(
-        {
-          resource_type: 'gate',
-          action: 'delete',
-          id: 'test-gate',
-          confirm: true,
-        },
-        {}
-      );
-      expect(deleteResult.isError).toBe(false);
-    });
-
-    test('framework switch workflow', async () => {
-      // List available frameworks
-      const listResult = await router.handleAction(
-        {
-          resource_type: 'framework',
-          action: 'list',
-        },
-        {}
-      );
-      expect(listResult.isError).toBe(false);
-      expect((listResult.content[0] as { text: string }).text).toContain('cageerf');
-      expect((listResult.content[0] as { text: string }).text).toContain('react');
-
-      // Switch to ReACT
-      const switchResult = await router.handleAction(
-        {
-          resource_type: 'framework',
-          action: 'switch',
-          id: 'react',
-        },
-        {}
-      );
-      expect(switchResult.isError).toBe(false);
-      expect((switchResult.content[0] as { text: string }).text).toContain('Switched to');
-      expect(frameworkManager._getActive()).toBe('react');
+      expect(result.isError).toBe(true);
+      expect(result.content[0]?.text).toContain('requires confirmation');
+      // Nothing reached the handler — the guard is pre-dispatch, which is what makes it cover a
+      // resource type added later without anyone remembering to guard it.
+      expect(categoryManager.handleAction).not.toHaveBeenCalled();
     });
   });
 
@@ -530,24 +513,26 @@ describe('Resource Manager Workflow Integration', () => {
   });
 
   describe('Parameter Transformation Integration', () => {
-    test('gate_type transforms to type for gate manager', async () => {
+    test('type and gate_type pass through to the gate manager unrenamed', async () => {
       await router.handleAction(
         {
           resource_type: 'gate',
           action: 'create',
           id: 'transform-test',
-          gate_type: 'guidance',
+          type: 'guidance',
+          gate_type: 'category',
           guidance: 'Test guidance',
         },
         {}
       );
 
-      // Verify the transformation happened
+      // P4.10: each parameter carries the name of the gate.yaml key it writes.
       expect(gateManager.handleAction).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'create',
           id: 'transform-test',
-          type: 'guidance', // Transformed from gate_type
+          type: 'guidance',
+          gate_type: 'category',
           guidance: 'Test guidance',
         }),
         expect.any(Object)
@@ -662,59 +647,6 @@ describe('Resource Manager Workflow Integration', () => {
 
       expect(result.isError).toBe(true);
       expect((result.content[0] as { text: string }).text).toContain('String error thrown');
-    });
-  });
-
-  describe('Multi-Resource Operations', () => {
-    test('can manage resources of different types in sequence', async () => {
-      // Create a prompt
-      await router.handleAction(
-        {
-          resource_type: 'prompt',
-          action: 'create',
-          id: 'analysis-prompt',
-          name: 'Analysis Prompt',
-        },
-        {}
-      );
-
-      // Create a gate
-      await router.handleAction(
-        {
-          resource_type: 'gate',
-          action: 'create',
-          id: 'quality-gate',
-          gate_type: 'validation',
-        },
-        {}
-      );
-
-      // Switch framework
-      await router.handleAction(
-        {
-          resource_type: 'framework',
-          action: 'switch',
-          id: 'react',
-        },
-        {}
-      );
-
-      // Verify all resources exist
-      expect(promptResourceHandler._prompts.has('analysis-prompt')).toBe(true);
-      expect(gateManager._gates.has('quality-gate')).toBe(true);
-      expect(frameworkManager._getActive()).toBe('react');
-
-      // List all resource types
-      const promptList = await router.handleAction({ resource_type: 'prompt', action: 'list' }, {});
-      const gateList = await router.handleAction({ resource_type: 'gate', action: 'list' }, {});
-      const methodList = await router.handleAction(
-        { resource_type: 'framework', action: 'list' },
-        {}
-      );
-
-      expect(promptList.isError).toBe(false);
-      expect(gateList.isError).toBe(false);
-      expect(methodList.isError).toBe(false);
     });
   });
 });

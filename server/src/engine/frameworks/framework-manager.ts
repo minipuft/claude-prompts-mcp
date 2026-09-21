@@ -12,11 +12,11 @@
  */
 
 import { FrameworkRegistry, createFrameworkRegistry } from './definitions/index.js';
+import { isShippedFrameworkId } from './definitions/shipped-frameworks.js';
 import { substituteTemplateVariables } from './prompt-guidance/template-variables.js';
 import {
   FrameworkDefinition,
   FrameworkExecutionContext,
-  FrameworkSelection,
   FrameworkSelectionCriteria,
   FrameworkGuide,
 } from './types/index.js';
@@ -28,6 +28,7 @@ import { Logger } from '#infra/logging/index.js';
 import { BaseResourceHandler } from '#shared/core/resource-manager/index.js';
 import { DEFAULT_FRAMEWORK_ID } from '#shared/utils/constants.js';
 import { frameworkLabel } from '#shared/utils/framework-label.js';
+import { lazyQuarantineView, type QuarantineView } from '#shared/utils/resource-quarantine.js';
 
 /**
  * Framework switch request (matches FrameworkStateStore interface)
@@ -44,14 +45,19 @@ interface FrameworkStateAccessor {
   isFrameworkSystemEnabled(): boolean;
   getActiveFramework(): { id: string; type: string } | null | undefined;
   switchFramework(request: FrameworkSwitchRequest, scope?: StateStoreOptions): Promise<boolean>;
+  selectDefaultForRemovedFrameworks(): Promise<void>;
 }
 
 /**
  * Configuration for FrameworkManager
  */
 export interface FrameworkManagerConfig {
-  /** Default framework to use when none specified */
-  defaultFramework?: string;
+  /**
+   * Reads the default framework each time one is needed, so a change to
+   * `frameworks.defaultFramework` while the server runs reaches the fallback without a restart.
+   * Absent means {@link DEFAULT_FRAMEWORK_ID}.
+   */
+  defaultFramework?: () => string;
   /** Enable debug logging */
   debug?: boolean;
 }
@@ -105,14 +111,12 @@ export class FrameworkManager extends BaseResourceHandler<
 > {
   private frameworks: Map<string, FrameworkDefinition> = new Map();
   private frameworkRegistry: FrameworkRegistry | null = null;
-  private defaultFramework: string = DEFAULT_FRAMEWORK_ID;
+  private readonly readDefaultFramework: () => string;
   private frameworkStateStore?: FrameworkStateAccessor;
 
   constructor(logger: Logger, config: FrameworkManagerConfig = {}) {
     super(logger, config);
-    if (config.defaultFramework) {
-      this.defaultFramework = config.defaultFramework;
-    }
+    this.readDefaultFramework = config.defaultFramework ?? (() => DEFAULT_FRAMEWORK_ID);
   }
 
   // ============================================================================
@@ -137,7 +141,7 @@ export class FrameworkManager extends BaseResourceHandler<
 
   protected applyDefaultConfig(config: FrameworkManagerConfig): FrameworkManagerConfig {
     return {
-      defaultFramework: config.defaultFramework ?? DEFAULT_FRAMEWORK_ID,
+      defaultFramework: config.defaultFramework ?? (() => DEFAULT_FRAMEWORK_ID),
       debug: config.debug ?? false,
     };
   }
@@ -330,6 +334,27 @@ export class FrameworkManager extends BaseResourceHandler<
   }
 
   /**
+   * Remove a framework from this process, and move any selection that named it.
+   *
+   * Every path that takes a framework away calls this: `resource_manager` delete, and hot reload
+   * of a deleted framework folder. `unregister` alone is synchronous and cannot wait for the state
+   * store, and a selection left naming a removed framework cannot be resolved — every later
+   * `getActiveFramework()` throws, which over Streamable HTTP fails each request's tool
+   * registration. A manager with no state store holds no selection to move.
+   *
+   * @returns whether the framework was registered.
+   * @throws when a moved selection fails to persist, or the configured default framework is not
+   *   registered either.
+   */
+  async removeFramework(frameworkId: string): Promise<boolean> {
+    const removed = this.unregister(frameworkId);
+    if (this.frameworkStateStore !== undefined) {
+      await this.frameworkStateStore.selectDefaultForRemovedFrameworks();
+    }
+    return removed;
+  }
+
+  /**
    * Select appropriate framework based on criteria
    */
   selectFramework(criteria: FrameworkSelectionCriteria = {}): FrameworkDefinition {
@@ -361,9 +386,10 @@ export class FrameworkManager extends BaseResourceHandler<
     }
 
     // Fallback to default framework
-    const defaultFw = this.getFramework(this.defaultFramework);
+    const defaultFrameworkId = this.readDefaultFramework();
+    const defaultFw = this.getFramework(defaultFrameworkId);
     if (!defaultFw) {
-      throw new Error(`Default framework ${this.defaultFramework} not found`);
+      throw new Error(`Default framework ${defaultFrameworkId} not found`);
     }
 
     this.logger.debug(`Framework selected: ${defaultFw.name} (default fallback)`);
@@ -407,17 +433,6 @@ export class FrameworkManager extends BaseResourceHandler<
   }
 
   /**
-   * Check if a framework exists and is enabled
-   *
-   * @param id - Framework identifier (case-insensitive)
-   * @returns true if framework exists and is enabled
-   */
-  isFrameworkEnabled(id: string): boolean {
-    const framework = this.getFramework(id);
-    return framework?.enabled ?? false;
-  }
-
-  /**
    * Get list of framework IDs
    *
    * @param enabledOnly - Only return enabled frameworks (default: false)
@@ -425,6 +440,23 @@ export class FrameworkManager extends BaseResourceHandler<
    */
   getFrameworkIds(enabledOnly: boolean = false): string[] {
     return this.listFrameworks(enabledOnly).map((f) => f.id);
+  }
+
+  /**
+   * Whether this framework ships inside the package, and therefore may not be deleted.
+   *
+   * The question every caller actually has is "may I remove this", and the honest discriminator is
+   * provenance, not location: in a default install the bundled resources directory and the
+   * configured frameworks directory are the SAME path, so "is it on disk under the resources root"
+   * would also answer yes for a framework the operator created. `SHIPPED_FRAMEWORK_IDS` is the one
+   * declared answer, and `validate:shipped-frameworks` keeps it matched to the tree.
+   *
+   * Exposed here because this manager owns framework validity (project CLAUDE.md, Domain Ownership
+   * Matrix): before 2026-09-07 the deletion guard carried its own stale copy of the list, which is
+   * exactly the hardcoding that matrix forbids.
+   */
+  isShippedFramework(id: string): boolean {
+    return isShippedFrameworkId(id);
   }
 
   /**
@@ -482,11 +514,13 @@ export class FrameworkManager extends BaseResourceHandler<
   }
 
   /**
-   * List available framework guides
+   * Live view of the framework files the loader refused.
+   *
+   * Resolved on every call rather than bound once — the registry, and with it the loader that owns
+   * the collection, is built inside `initialize()`. See the gate manager's twin.
    */
-  listFrameworkGuides(): FrameworkGuide[] {
-    this.ensureInitialized();
-    return this.frameworkRegistry!.getAllGuides(true);
+  getQuarantine(): QuarantineView {
+    return lazyQuarantineView(() => this.frameworkRegistry?.getRuntimeLoader().getQuarantine());
   }
 
   /**
@@ -498,18 +532,6 @@ export class FrameworkManager extends BaseResourceHandler<
       throw new Error('Framework registry not initialized');
     }
     return this.frameworkRegistry;
-  }
-
-  /**
-   * Set default framework
-   */
-  setDefaultFramework(framework: FrameworkSelection): void {
-    if (this.hasResource(framework)) {
-      this.defaultFramework = framework;
-      this.logger.info(`Default framework set to: ${framework}`);
-    } else {
-      throw new Error(`Framework ${framework} not found`);
-    }
   }
 
   /**
@@ -606,6 +628,11 @@ export class FrameworkManager extends BaseResourceHandler<
         applicableTypes: this.getApplicableTypes(guide),
         priority: this.getFrameworkPriority(guide),
         enabled: true,
+        // Carried, not re-derived (P4.18, ruling R7): the loader stamped the root it read the
+        // definition from, and this projection is the only thing standing between that stamp and
+        // the served catalog. Anything else asking "which root serves this id" would have to
+        // resolve the roots a second time and could disagree with the loader.
+        sourceRoot: guide.sourceRoot,
       };
     } catch (error) {
       this.logger.error(`Failed to generate definition for ${guide.frameworkId}:`, error);

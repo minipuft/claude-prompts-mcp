@@ -1,0 +1,20 @@
+id: action_plan
+name: Action Plan
+category: analysis
+description: >-
+  Transform research into concrete, actionable recommendations.
+  Step 4 of the research chain.
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: topic
+    type: string
+    description: The topic researched
+    required: true
+  - name: synthesis
+    type: string
+    description: Key insights from the synthesis
+    required: false
+  - name: purpose
+    type: string
+    description: Original research purpose
+    required: false

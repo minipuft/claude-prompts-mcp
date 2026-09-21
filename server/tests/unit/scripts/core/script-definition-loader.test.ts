@@ -6,7 +6,6 @@
  * - Tool discovery
  * - Tool existence checks
  * - Cache management
- * - Stats tracking
  */
 
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
@@ -66,13 +65,6 @@ describe('ScriptToolDefinitionLoader', () => {
       const result = loader.loadTool('/nonexistent/prompt', 'nonexistent_tool', 'test_prompt');
       expect(result).toBeUndefined();
     });
-
-    it('should track cache miss for non-existent tool', () => {
-      loader.loadTool('/nonexistent', 'tool', 'prompt');
-      const stats = loader.getStats();
-
-      expect(stats.cacheMisses).toBeGreaterThan(0);
-    });
   });
 
   describe('loadToolsForPrompt', () => {
@@ -83,13 +75,6 @@ describe('ScriptToolDefinitionLoader', () => {
 
     it('should handle empty tool list', () => {
       const result = loader.loadToolsForPrompt('/tmp', [], 'test_prompt');
-      expect(result).toEqual([]);
-    });
-  });
-
-  describe('loadAllToolsForPrompt', () => {
-    it('should return empty array for directory without tools', () => {
-      const result = loader.loadAllToolsForPrompt('/tmp', 'test_prompt');
       expect(result).toEqual([]);
     });
   });
@@ -154,72 +139,89 @@ describe('ScriptToolDefinitionLoader', () => {
       expect(report.failures).toEqual([]);
       expect(report.tools).toHaveLength(1);
     });
-
-    it("keeps loadAllToolsForPrompt returning exactly the report's tools", () => {
-      writeTool(
-        'usable-widget',
-        'id: usable-widget\nname: Usable Widget\nscript: script.py\nruntime: python\n'
-      );
-      writeTool('lacks-script', 'id: lacks-script\nname: Lacks Script\nruntime: python\n');
-
-      const plain = loader.loadAllToolsForPrompt(promptDir, 'owner_prompt');
-      const detailed = loader.loadAllToolsForPromptDetailed(promptDir, 'owner_prompt');
-
-      expect(plain.map((t) => t.id)).toEqual(detailed.tools.map((t) => t.id));
-    });
   });
 
+  // Cache state has no public accessor since `getStats()` was removed (nothing in src/ read
+  // it — P4.52). These tests observe caching through behavior instead: a cached tool keeps
+  // resolving after its file is deleted from disk; clearing the cache forces a re-read that
+  // then sees the file is gone.
   describe('cache management', () => {
-    it('should clear all cache entries', () => {
-      // Trigger some cache operations
-      loader.loadTool('/path1', 'tool1', 'prompt1');
-      loader.loadTool('/path2', 'tool2', 'prompt2');
+    let promptDir: string;
+
+    function writeTool(id: string): void {
+      const dir = join(promptDir, 'tools', id);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(
+        join(dir, 'tool.yaml'),
+        `id: ${id}\nname: ${id}\nscript: script.py\nruntime: python\n`
+      );
+      writeFileSync(join(dir, 'script.py'), 'print("ok")');
+    }
+
+    beforeEach(() => {
+      promptDir = mkdtempSync(join(tmpdir(), 'tool-cache-'));
+      loader = createScriptToolDefinitionLoader({ debug: false, enableCache: true });
+    });
+
+    afterEach(() => {
+      rmSync(promptDir, { recursive: true, force: true });
+    });
+
+    it('clearCache() forces a re-read that observes a since-deleted tool file', () => {
+      writeTool('cached-widget');
+      expect(loader.loadTool(promptDir, 'cached-widget', 'owner_prompt')).toBeDefined();
+
+      rmSync(join(promptDir, 'tools', 'cached-widget'), { recursive: true, force: true });
+
+      // Still cached: the deleted file is not observed yet.
+      expect(loader.loadTool(promptDir, 'cached-widget', 'owner_prompt')).toBeDefined();
 
       loader.clearCache();
-      const stats = loader.getStats();
 
-      expect(stats.cacheSize).toBe(0);
+      expect(loader.loadTool(promptDir, 'cached-widget', 'owner_prompt')).toBeUndefined();
     });
 
-    it('should clear cache for specific prompt directory', () => {
-      const promptDir = '/path/to/prompt';
+    it('clearCache(promptDir) scopes the re-read to that prompt only', () => {
+      writeTool('scoped-widget');
+      const otherDir = mkdtempSync(join(tmpdir(), 'tool-cache-other-'));
+      try {
+        mkdirSync(join(otherDir, 'tools', 'scoped-widget'), { recursive: true });
+        writeFileSync(
+          join(otherDir, 'tools', 'scoped-widget', 'tool.yaml'),
+          'id: scoped-widget\nname: scoped-widget\nscript: script.py\nruntime: python\n'
+        );
+        writeFileSync(join(otherDir, 'tools', 'scoped-widget', 'script.py'), 'print("ok")');
 
-      // This would populate cache if the tool existed
-      loader.loadTool(promptDir, 'tool1', 'prompt1');
+        expect(loader.loadTool(promptDir, 'scoped-widget', 'owner_prompt')).toBeDefined();
+        expect(loader.loadTool(otherDir, 'scoped-widget', 'other_prompt')).toBeDefined();
 
-      loader.clearCache(promptDir);
+        rmSync(join(promptDir, 'tools', 'scoped-widget'), { recursive: true, force: true });
+        rmSync(join(otherDir, 'tools', 'scoped-widget'), { recursive: true, force: true });
 
-      // Cache should be cleared for that directory
-      const stats = loader.getStats();
-      expect(stats.cacheSize).toBe(0);
+        loader.clearCache(promptDir);
+
+        expect(loader.loadTool(promptDir, 'scoped-widget', 'owner_prompt')).toBeUndefined();
+        // Untouched prompt directory keeps serving its cached entry.
+        expect(loader.loadTool(otherDir, 'scoped-widget', 'other_prompt')).toBeDefined();
+      } finally {
+        rmSync(otherDir, { recursive: true, force: true });
+      }
     });
 
-    it('should clear cache for specific tool', () => {
-      const promptDir = '/path/to/prompt';
-      const toolId = 'test_tool';
+    it('clearToolCache() forces a re-read of that one tool only', () => {
+      writeTool('tool-a');
+      writeTool('tool-b');
+      expect(loader.loadTool(promptDir, 'tool-a', 'owner_prompt')).toBeDefined();
+      expect(loader.loadTool(promptDir, 'tool-b', 'owner_prompt')).toBeDefined();
 
-      loader.clearToolCache(promptDir, toolId);
+      rmSync(join(promptDir, 'tools', 'tool-a'), { recursive: true, force: true });
+      rmSync(join(promptDir, 'tools', 'tool-b'), { recursive: true, force: true });
 
-      // Should not throw
-      expect(true).toBe(true);
-    });
-  });
+      loader.clearToolCache(promptDir, 'tool-a');
 
-  describe('stats tracking', () => {
-    it('should track cache hits and misses', () => {
-      const initialStats = loader.getStats();
-      expect(initialStats.cacheHits).toBe(0);
-      expect(initialStats.cacheMisses).toBe(0);
-      expect(initialStats.loadErrors).toBe(0);
-      expect(initialStats.cacheSize).toBe(0);
-    });
-
-    it('should increment cache misses on load attempts', () => {
-      loader.loadTool('/nonexistent', 'tool', 'prompt');
-      loader.loadTool('/nonexistent2', 'tool2', 'prompt2');
-
-      const stats = loader.getStats();
-      expect(stats.cacheMisses).toBe(2);
+      expect(loader.loadTool(promptDir, 'tool-a', 'owner_prompt')).toBeUndefined();
+      // tool-b's cache entry was untouched.
+      expect(loader.loadTool(promptDir, 'tool-b', 'owner_prompt')).toBeDefined();
     });
   });
 

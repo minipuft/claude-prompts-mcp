@@ -143,37 +143,16 @@ argumentSuggestions:
 # Tool description overlays when this framework is active
 toolDescriptions:
   prompt_engine:
-    description: |
-      🚀 PROMPT ENGINE [CAGEERF]: Execute prompts with C.A.G.E.E.R.F framework and ground-truth validation.
-
-      WHAT IT RETURNS: Prepared prompt + CAGEERF phase instructions (Context→Analysis→Goals→Execution→Evaluation→Refinement).
-      WHAT YOU DO: Execute each phase yourself using the returned structure.
-
-      SYNTAX:
-      - >>prompt_id key:"value"              # Run prompt with arguments
-      - >>step1 --> >>step2                  # Chain multiple steps
-      - @CAGEERF >>prompt                    # Apply CAGEERF framework
-      - :: verify:"npm test" :full           # Shell validation (5 attempts, 5min)
-      - :: verify:"cmd" loop:true            # Autonomous until pass
-
-      PRESETS: :fast (1 try), :full (5 tries), :extended (10 tries)
-      MODIFIERS: %clean (no injection), %lean (gates only), %judge (preview)
+    description: >-
+      Prepared prompts carry CAGEERF phase instructions (Context → Analysis → Goals → Execution →
+      Evaluation → Refinement). Execute each phase yourself using the returned structure.
     parameters:
-      command: 'Prompt ID to expand. Resulting prompt will include CAGEERF phase guidance for you to apply.'
+      command: The resulting prompt includes CAGEERF phase guidance for you to apply.
   resource_manager:
-    description: |
-      🗂️ RESOURCE MANAGER [CAGEERF]: Unified CRUD for prompts, gates, and frameworks.
-
-      USAGE: resource_manager(resource_type:"prompt|gate|framework", action:"...", ...)
-      RESOURCE TYPES: prompt (templates), gate (quality criteria), framework (CAGEERF, ReACT, 5W1H, SCAMPER)
-      ACTIONS: create | update | delete | list | inspect | reload | switch (framework only)
-
-      Use action:"guide" with resource_type:"prompt" for phase-appropriate recommendations.
-    parameters:
-      resource_type: "Type of resource: 'prompt', 'gate', or 'framework'"
-      action: "Use 'guide' with your current CAGEERF phase for phase-appropriate action recommendations."
+    description: >-
+      Use action:"guide" with resource_type:"prompt" and your current CAGEERF phase as the goal for
+      phase-appropriate recommendations.
   system_control:
-    description: |
-      ⚙️ SYSTEM CONTROL [CAGEERF]: System administration. Status shows current CAGEERF phase context.
+    description: Status shows the current CAGEERF phase context.
     parameters:
       action: "Use 'guide' with topic:'framework' for phase-specific operation guidance."

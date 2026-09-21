@@ -7,16 +7,14 @@
  * focused on runtime concerns while delegating execution to the execution engine.
  */
 
-import * as path from 'node:path';
-
 import { McpServer } from '@modelcontextprotocol/server';
 
 // Import all module managers
+import { CoalescingReloadRunner } from './coalescing-reload-runner.js';
 import { createRuntimeFoundation } from './context.js';
-import { loadPromptData } from './data-loader.js';
-import { buildFrameworkAuxiliaryReloadConfig } from './framework-hot-reload.js';
-import { buildGateAuxiliaryReloadConfig } from './gate-hot-reload.js';
+import { loadPromptData, loadSkillsSyncExports } from './data-loader.js';
 import { buildHealthReport } from './health.js';
+import { buildPromptHotReloadOptions } from './hot-reload-auxiliaries.js';
 import {
   publishPromptsChanged,
   publishResourcesChanged,
@@ -24,10 +22,8 @@ import {
 } from './list-change-notifier.js';
 import { initializeModules } from './module-initializer.js';
 import { resolveRuntimeLaunchOptions, RuntimeLaunchOptions } from './options.js';
-import { buildResourceChangeTrackerAuxiliaryReloadConfig } from './resource-change-tracking.js';
+import { syncResourceIndex } from './resource-index-resync.js';
 import { registerMcpResources as registerMcpResourcesOn } from './resource-registration.js';
-import { indexerResourceRoots } from './resource-roots.js';
-import { buildScriptAuxiliaryReloadConfig } from './script-hot-reload.js';
 import { resolveServingUnitScope } from './serving-unit-scope.js';
 import { startServerWithManagers } from './startup-server.js';
 import { TelemetryLifecycle } from './telemetry-lifecycle.js';
@@ -38,13 +34,14 @@ import type { ApiRouter } from '#mcp/http/api.js';
 import type { McpToolRouter } from '#mcp/tools/index.js';
 import type { HotReloadEvent } from '#modules/hot-reload/hot-reload-observer.js';
 import type { Category, PromptData } from '#modules/prompts/types.js';
+import type { QuarantineView } from '#shared/utils/resource-quarantine.js';
 import type { ListChangeTargets } from './list-change-notifier.js';
 import type { PathResolver } from './paths.js';
 import type { McpServerFactory } from '@modelcontextprotocol/server';
 
 import { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';
 import { GateManager } from '#engine/gates/gate-manager.js';
-import { ConfigLoader } from '#infra/config/index.js';
+import { ConfigLoader, TransportConfigError } from '#infra/config/index.js';
 import { HookRegistry } from '#infra/hooks/index.js';
 import { Logger } from '#infra/logging/index.js';
 import { McpNotificationEmitter } from '#infra/observability/notifications/index.js';
@@ -53,6 +50,7 @@ import { reloadPromptData } from '#modules/prompts/prompt-refresh-service.js';
 import { ConversationStore, createConversationStore } from '#modules/text-refs/conversation.js';
 import { TextReferenceStore } from '#modules/text-refs/index.js';
 import { ResolvedFrameworkConfig, TransportMode } from '#shared/types/index.js';
+import { PathSettingError } from '#shared/utils/path-setting.js';
 import { ServiceOrchestrator } from '#shared/utils/service-orchestrator.js';
 
 /**
@@ -68,6 +66,15 @@ export class Application {
   private mcpToolsManager!: McpToolRouter;
   private frameworkStateStore!: FrameworkStateStore;
   private gateManager?: GateManager;
+  /**
+   * The merged refusal record the resource index reads, owned by the composition root.
+   *
+   * Assigned from `initializeModules` and never built here: this class holds the prompt and gate
+   * managers and no framework or style loader, so anything it assembled would be a partial view
+   * wearing a complete name — which is exactly what the reload path used to pass (P4.25). Live by
+   * reference, so a repair between two syncs is reflected without re-registering anything.
+   */
+  private indexQuarantine?: QuarantineView;
   private hookRegistry!: HookRegistry;
   private notificationEmitter!: McpNotificationEmitter;
   private telemetryLifecycle?: TelemetryLifecycle;
@@ -85,7 +92,7 @@ export class Application {
   private _convertedPrompts: ConvertedPrompt[] = [];
   private promptsDirectory?: string;
   private hotReloadInitialized = false;
-  private promptReloadInProgress: Promise<void> | undefined;
+  private promptReloads = new CoalescingReloadRunner((event) => this.reloadPromptsFromDisk(event));
   private promptHotReloadHandler = (event: HotReloadEvent) => this.handlePromptHotReload(event);
 
   private memoryOptimizationInterval: NodeJS.Timeout | undefined;
@@ -115,8 +122,13 @@ export class Application {
     this.runtimeOptions = runtimeOptions ?? resolveRuntimeLaunchOptions();
     this.serviceOrchestrator = new ServiceOrchestrator();
 
-    // Initialize debug output control - suppress in test environments
-    this.debugOutput = !this.runtimeOptions.testEnvironment;
+    // Startup trace prints only under --verbose/--debug-startup. This previously
+    // gated on `!testEnvironment` (CI/jest/test-arg detection) instead, which is
+    // orthogonal to verbosity: a normal operator launch is not a test environment,
+    // so `debugOutput` was `true` and every "DEBUG: " line printed to stderr
+    // regardless of `--quiet`'s STDIO default. `verbose` already folds in both
+    // flags (`resolveRuntimeLaunchOptions`), so no new flag is needed.
+    this.debugOutput = this.runtimeOptions.verbose;
   }
 
   /**
@@ -148,10 +160,14 @@ export class Application {
       this.debugLog('Starting - Server Setup and Startup...');
       await this.startServer();
       this.debugLog('completed successfully');
-      console.error('DEBUG: All startup phases completed, server should be running...');
+      this.debugLog('All startup phases completed, server should be running...');
 
       this.logger.info('Application startup completed successfully');
     } catch (error) {
+      // The entry point prints a path-setting or transport-config refusal once; logging it here
+      // too repeats it with a stack.
+      if (error instanceof PathSettingError) throw error;
+      if (error instanceof TransportConfigError) throw error;
       if (this.logger) {
         this.logger.error('Error during application startup:', error);
       } else {
@@ -159,22 +175,6 @@ export class Application {
       }
       throw error;
     }
-  }
-
-  /**
-   * Public test methods for GitHub Actions compatibility
-   */
-  async loadConfiguration(): Promise<void> {
-    await this.initializeFoundation();
-  }
-
-  async loadPromptsData(): Promise<void> {
-    await this.loadAndProcessData();
-  }
-
-  // Make initializeModules public for testing
-  async initializeModules(): Promise<void> {
-    return this.initializeModulesPrivate();
   }
 
   // Expose data for testing
@@ -213,6 +213,14 @@ export class Application {
     this.transportType = foundation.transport;
     this.pathResolver = foundation.pathResolver;
 
+    // `ConfigLoader#getTransportMode()` no longer scans `process.argv` (row 4.12) — it returns
+    // whatever this setter last gave it. Called exactly once, here, with the SAME value
+    // `TransportRouter.determineTransport` produced for `this.transportType` (the transport the
+    // server is actually serving), so a caller holding only the configManager — the
+    // identity-resolution closure in `pipeline-builder.ts` — reads an answer that cannot disagree
+    // with what got wired up.
+    this.configManager.setTransportMode(foundation.transport);
+
     const transport = foundation.transport;
 
     // Check verbosity flags for conditional logging
@@ -220,7 +228,7 @@ export class Application {
     const isQuiet = this.runtimeOptions.quiet;
 
     // Monitor framework feature toggles and log state changes
-    this.setupFrameworkConfigListener();
+    await this.setupFrameworkConfigListener();
 
     // Only show startup messages if not in quiet mode
     if (!isQuiet) {
@@ -244,12 +252,11 @@ export class Application {
     // Initialize hook registry and notification emitter
     this.hookRegistry = new HookRegistry(this.logger);
     this.notificationEmitter = new McpNotificationEmitter(this.logger);
-    // McpServer has notification() at runtime - cast to the expected interface
-    // The emitter has canSend() guard that checks typeof notification === 'function'
-    this.notificationEmitter.setServer(
-      this
-        .mcpServer as unknown as import('#infra/observability/notifications/index.js').McpNotificationServer
-    );
+    // `.server`, not the McpServer: SDK v2 moved `notification()` onto the inner `Server`,
+    // and the emitter's `canSend()` reads `typeof server.notification === 'function'` — so
+    // binding the wrapper made every notification a debug-level skip on both transports
+    // (measured 2026-09-20, `Cannot send notification` x5, `Notification sent` x0).
+    this.notificationEmitter.setServer(this.mcpServer.server);
     this.debugLog('HookRegistry and McpNotificationEmitter initialized');
 
     // Initialize telemetry lifecycle (creates runtime + hook observer, does not start SDK yet)
@@ -344,9 +351,10 @@ export class Application {
     this.frameworkStateStore = result.frameworkStateStore;
     this.gateManager = result.gateManager;
     this.mcpToolsManager = result.mcpToolsManager;
+    this.indexQuarantine = result.indexQuarantine;
 
     const currentFrameworkConfig = this.configManager.getFrameworksConfig();
-    this.syncFrameworkSystemStateFromConfig(
+    await this.syncFrameworkSystemStateFromConfig(
       currentFrameworkConfig,
       'Framework configuration synchronized during initialization'
     );
@@ -412,20 +420,31 @@ export class Application {
       // workspace-scoped. `ctx` is the only scope signal available here: the
       // schema is built now, before any call has been dispatched, so the
       // per-call `extra` the rest of the server reads does not exist yet.
-      await this.mcpToolsManager.registerAllTools(
-        server,
-        resolveServingUnitScope(
-          ctx,
-          this.configManager.getConfig().identity?.launchDefaults?.workspaceId
-        )
-      );
-      this.registerMcpResources(server);
-      // Prompts bind per unit for the same reason tools do. They were the one
-      // primitive left on the construction-time shell, so `prompts/list` came
-      // back empty on a live connection while startup logged them as
-      // registered.
-      if (this._convertedPrompts.length > 0) {
-        await this.promptManager.registerAllPrompts(this._convertedPrompts, server);
+      const launchDefaults = this.configManager.getConfig().identity.launchDefaults;
+      const scope = resolveServingUnitScope(ctx, launchDefaults.workspaceId);
+      // `stage` is what the failure names, so a request that cannot be served
+      // says which step failed instead of carrying a bare message from
+      // somewhere inside it. The error is rethrown, never swallowed: the SDK
+      // answers this request with an error and calls this factory again for the
+      // next one, which succeeds if the cause was transient. Returning a server
+      // whose binding did not finish would advertise a tool surface missing the
+      // tools that failed to bind, and every client reads that as success.
+      let stage = 'tools';
+      try {
+        await this.mcpToolsManager.registerAllTools(server, scope);
+        stage = 'resources';
+        this.registerMcpResources(server);
+        // Prompts bind per unit for the same reason tools do. They were the one
+        // primitive left on the construction-time shell, so `prompts/list` came
+        // back empty on a live connection while startup logged them as
+        // registered.
+        stage = 'prompts';
+        if (this._convertedPrompts.length > 0) {
+          await this.promptManager.registerAllPrompts(this._convertedPrompts, server);
+        }
+      } catch (error) {
+        const why = `Failed to bind ${stage} for this request's MCP server: ${String(error)}`;
+        throw new Error(why, { cause: error });
       }
       return server;
     };
@@ -448,9 +467,7 @@ export class Application {
       const server = (await build(ctx)) as McpServer;
       this.mcpServer = server;
       this.mcpToolsManager.setPinnedServer(server);
-      this.notificationEmitter.setServer(
-        server as unknown as import('#infra/observability/notifications/index.js').McpNotificationServer
-      );
+      this.notificationEmitter.setServer(server.server);
       return server;
     };
   }
@@ -518,234 +535,36 @@ export class Application {
   }
 
   /**
-   * Switch to a different framework by ID (built-in or custom)
-   * Core functionality: Allow switching between registered frameworks to guide the system
-   */
-  async switchFramework(frameworkId: string): Promise<{ success: boolean; message: string }> {
-    //  Framework switching simplified - basic support only
-
-    try {
-      this.logger.info(`Framework switching to ${frameworkId} ( basic support)`);
-      const result = {
-        success: true,
-        message: `Switched to ${frameworkId}`,
-        newFramework: frameworkId,
-        previousFramework: 'basic',
-      };
-
-      if (result.success) {
-        this.logger.info(`🔄 Framework switched to: ${result.newFramework}`);
-        return {
-          success: true,
-          message: `Successfully switched from ${result.previousFramework} to ${result.newFramework}`,
-        };
-      } else {
-        this.logger.warn(`❌ Framework switch failed: ${result.message}`);
-        return {
-          success: false,
-          message: result.message || 'Unknown error during framework switch',
-        };
-      }
-    } catch (error) {
-      this.logger.error('Framework switch error:', error);
-      return {
-        success: false,
-        message: `Error switching framework: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      };
-    }
-  }
-
-  /**
-   * Get current framework information
-   */
-  getCurrentFrameworkInfo(): {
-    id: string;
-    name: string;
-    availableFrameworks: string[];
-    isHealthy: boolean;
-  } {
-    //  Framework status simplified - basic support only
-    const status = {
-      currentFramework: 'basic',
-      currentFrameworkName: 'Basic Framework',
-      isHealthy: true,
-    };
-    const available = ['basic'];
-
-    return {
-      id: status.currentFramework,
-      name: status.currentFrameworkName,
-      availableFrameworks: available,
-      isHealthy: status.isHealthy,
-    };
-  }
-
-  /**
    * Graceful shutdown
    */
   async shutdown(): Promise<void> {
     try {
-      if (this.logger) {
-        this.logger.info('Initiating application shutdown...');
-      }
+      this.logger?.info('Initiating application shutdown...');
 
-      // Flush telemetry spans before tearing down services
-      if (this.telemetryLifecycle) {
-        try {
-          await this.telemetryLifecycle.shutdown();
-        } catch (error) {
-          this.logger?.warn('Error shutting down telemetry:', error);
-        }
-      }
+      // The order below IS the contract, and no type checker sees it:
+      // `tests/unit/runtime/application-shutdown-order.test.ts` records the sequence so a
+      // step cannot move silently. Telemetry flushes while the services it instruments are
+      // still up, the transport stops before the stores it routes into, background services
+      // stop before the surfaces that schedule work on them, and the database closes last.
+      await this.shutdownTelemetry();
+      this.shutdownServerLifecycle();
+      await this.shutdownIfSupported(this.transportRouter, 'transport manager');
+      await this.shutdownIfSupported(this.frameworkStateStore, 'framework state manager');
+      await this.shutdownIfSupported(this.promptManager, 'prompt assets');
 
-      //  Stop server and transport layers
-      if (this.serverLifecycle) {
-        if (this.logger) {
-          this.logger.debug('Shutting down server manager...');
-        }
-        this.serverLifecycle.shutdown();
-      }
-
-      // Stop transport layer (if it has shutdown method)
-      if (
-        this.transportRouter &&
-        'shutdown' in this.transportRouter &&
-        typeof (this.transportRouter as any).shutdown === 'function'
-      ) {
-        if (this.logger) {
-          this.logger.debug('Shutting down transport manager...');
-        }
-        try {
-          await (this.transportRouter as any).shutdown();
-        } catch (error) {
-          this.logger?.warn('Error shutting down transport manager:', error);
-        }
-      }
-
-      // Stop monitoring and resource-intensive components (if they have shutdown method)
-      if (
-        this.frameworkStateStore &&
-        'shutdown' in this.frameworkStateStore &&
-        typeof (this.frameworkStateStore as any).shutdown === 'function'
-      ) {
-        if (this.logger) {
-          this.logger.debug('Shutting down framework state manager...');
-        }
-        try {
-          await (this.frameworkStateStore as any).shutdown();
-        } catch (error) {
-          this.logger?.warn('Error shutting down framework state manager:', error);
-        }
-      }
-
-      // Stop file watchers and hot-reload systems (if they have shutdown method)
-      if (
-        this.promptManager &&
-        'shutdown' in this.promptManager &&
-        typeof (this.promptManager as any).shutdown === 'function'
-      ) {
-        if (this.logger) {
-          this.logger.debug('Shutting down prompt assets...');
-        }
-        try {
-          await (this.promptManager as any).shutdown();
-        } catch (error) {
-          this.logger?.warn('Error shutting down prompt assets:', error);
-        }
-      }
-
-      // Stop registered background services (watchers, timers, etc.)
+      // Registered background services (watchers, timers, etc.)
       await this.serviceOrchestrator.stopAll();
 
-      // Stop API and MCP tools (if they have shutdown method)
-      if (
-        this.apiRouter &&
-        'shutdown' in this.apiRouter &&
-        typeof (this.apiRouter as any).shutdown === 'function'
-      ) {
-        if (this.logger) {
-          this.logger.debug('Shutting down API manager...');
-        }
-        try {
-          await (this.apiRouter as any).shutdown();
-        } catch (error) {
-          this.logger?.warn('Error shutting down API manager:', error);
-        }
-      }
+      await this.shutdownIfSupported(this.apiRouter, 'API manager');
+      await this.shutdownIfSupported(this.mcpToolsManager, 'MCP tools manager');
+      await this.shutdownIfSupported(this.conversationStore, 'conversation manager');
+      await this.shutdownIfSupported(this.textReferenceStore, 'text reference manager');
 
-      if (
-        this.mcpToolsManager &&
-        'shutdown' in this.mcpToolsManager &&
-        typeof (this.mcpToolsManager as any).shutdown === 'function'
-      ) {
-        if (this.logger) {
-          this.logger.debug('Shutting down MCP tools manager...');
-        }
-        try {
-          await (this.mcpToolsManager as any).shutdown();
-        } catch (error) {
-          this.logger?.warn('Error shutting down MCP tools manager:', error);
-        }
-      }
-
-      // Stop conversation and text reference managers (if they have shutdown method)
-      if (
-        this.conversationStore &&
-        'shutdown' in this.conversationStore &&
-        typeof (this.conversationStore as any).shutdown === 'function'
-      ) {
-        if (this.logger) {
-          this.logger.debug('Shutting down conversation manager...');
-        }
-        try {
-          await (this.conversationStore as any).shutdown();
-        } catch (error) {
-          this.logger?.warn('Error shutting down conversation manager:', error);
-        }
-      }
-
-      if (
-        this.textReferenceStore &&
-        'shutdown' in this.textReferenceStore &&
-        typeof (this.textReferenceStore as any).shutdown === 'function'
-      ) {
-        if (this.logger) {
-          this.logger.debug('Shutting down text reference manager...');
-        }
-        try {
-          await (this.textReferenceStore as any).shutdown();
-        } catch (error) {
-          this.logger?.warn('Error shutting down text reference manager:', error);
-        }
-      }
-
-      // Clean up internal timers
-      if (this.configManager) {
-        if (this.frameworksConfigListener) {
-          this.configManager.removeListener(
-            'frameworksConfigChanged',
-            this.frameworksConfigListener
-          );
-          this.frameworksConfigListener = undefined;
-        }
-        this.configManager.stopWatching();
-      }
-
+      this.stopConfigWatching();
       this.cleanup();
+      await this.closeDatabase();
 
-      // Close the database LAST. Every subsystem above may still write on its way down
-      // (state stores flush, the chain manager clears its PID-owned rows), so closing
-      // earlier would turn an orderly shutdown into a series of writes against a closed
-      // handle. This is also the only place the WAL gets checkpointed: nothing called
-      // `SqliteEngine.shutdown()` before, so the log grew unbounded across restarts.
-      const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
-      await SqliteEngine.shutdownInstance();
-
-      if (this.logger) {
-        this.logger.info('Application shutdown completed successfully');
-      }
+      this.logger?.info('Application shutdown completed successfully');
     } catch (error) {
       if (this.logger) {
         this.logger.error('Error during shutdown:', error);
@@ -754,6 +573,118 @@ export class Application {
       }
       throw error;
     }
+  }
+
+  /**
+   * Flush telemetry spans before the services they describe are torn down.
+   *
+   * Guarded like the subsystems below: an exporter that cannot reach its collector must not
+   * be the reason a server fails to stop.
+   */
+  private async shutdownTelemetry(): Promise<void> {
+    if (!this.telemetryLifecycle) {
+      return;
+    }
+
+    try {
+      await this.telemetryLifecycle.shutdown();
+    } catch (error) {
+      this.reportTeardownFailure('telemetry', error);
+    }
+  }
+
+  /**
+   * Stop the server/listener layer.
+   *
+   * Deliberately NOT routed through `shutdownIfSupported`: this call is synchronous and
+   * unguarded, so a failure here reaches the single outer boundary in `shutdown()` instead
+   * of being warned and swallowed.
+   */
+  private shutdownServerLifecycle(): void {
+    if (!this.serverLifecycle) {
+      return;
+    }
+
+    this.logger?.debug('Shutting down server manager...');
+    this.serverLifecycle.shutdown();
+  }
+
+  /**
+   * Report a subsystem teardown failure.
+   *
+   * `this.logger` is guaranteed set on every reachable path to `shutdown()`: `startApplication`
+   * only returns an `Application` (so only lets `src/index.ts` obtain one to call `.shutdown()`
+   * on) after `startup()` -- and therefore `initializeFoundation()`'s `this.logger =
+   * foundation.logger` assignment -- has already resolved; every direct constructor caller in
+   * this repo (`tests/unit/runtime/*.test.ts`) passes a logger in; and `createApplication` has
+   * no caller anywhere in `src/` or `cli/` besides `startApplication` itself. Measured
+   * 2026-09-16 for P4.44 (`plans/technical-debt/resource-surface-consolidation-2026-08-27.md`,
+   * ruling R28 amendment) -- a direct stderr write was tried first and reverted once this held:
+   * `logger.warn` already reaches stderr under STDIO outside CI (`infra/logging/index.ts`,
+   * fixed by #307/e50095ac), so a second, unconditional channel only duplicated every teardown
+   * failure on a default deployment for a `this.logger === undefined` case that cannot occur.
+   * The `this.logger?.` optional chain stays for the type (`private logger!: Logger` still
+   * predates a runtime guarantee), but if a future caller ever reaches this with no logger, the
+   * failure silently drops -- the same way `startup()`'s own `catch` treats a pre-foundation
+   * failure at present. Falsifies if a new caller obtains an `Application` before `startup()`
+   * resolves, or `createApplication` gains an external caller.
+   */
+  private reportTeardownFailure(label: string, error: unknown): void {
+    this.logger?.warn(`Error shutting down ${label}:`, error);
+  }
+
+  /**
+   * Stop one subsystem that MAY expose `shutdown()`.
+   *
+   * The duck-typing describes this class's own wiring rather than the collaborators: which
+   * of these fields is assigned depends on the transport and on how far startup got, and
+   * several of the declared types carry no shutdown method at all. A failure is warned and
+   * swallowed on purpose -- one subsystem that cannot stop must not strand the ones after
+   * it, and the database close at the end of `shutdown()` is what must always be reached.
+   */
+  private async shutdownIfSupported(component: unknown, label: string): Promise<void> {
+    if (component === null || (typeof component !== 'object' && typeof component !== 'function')) {
+      return;
+    }
+
+    const candidate = component as { shutdown?: () => unknown };
+    if (typeof candidate.shutdown !== 'function') {
+      return;
+    }
+
+    this.logger?.debug(`Shutting down ${label}...`);
+    try {
+      await candidate.shutdown();
+    } catch (error) {
+      this.reportTeardownFailure(label, error);
+    }
+  }
+
+  /**
+   * Detach the framework config listener, then stop the config file watcher.
+   */
+  private stopConfigWatching(): void {
+    if (!this.configManager) {
+      return;
+    }
+
+    if (this.frameworksConfigListener) {
+      this.configManager.removeListener('frameworksConfigChanged', this.frameworksConfigListener);
+      this.frameworksConfigListener = undefined;
+    }
+    this.configManager.stopWatching();
+  }
+
+  /**
+   * Close the database LAST. Every subsystem above may still write on its way down
+   * (state stores flush, the chain manager clears its PID-owned rows), so closing
+   * earlier would turn an orderly shutdown into a series of writes against a closed
+   * handle. This is also the only place the WAL gets checkpointed: nothing called
+   * `SqliteEngine.shutdown()` before, so the log grew unbounded across restarts.
+   */
+  private async closeDatabase(): Promise<void> {
+    const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
+    await SqliteEngine.shutdownInstance();
   }
 
   /**
@@ -806,25 +737,11 @@ export class Application {
       // meant that boundary never fired while the refresh went on to report
       // "completed successfully" over a stale index.
       if (this.serverRoot) {
-        const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
-        const { createResourceIndexer, reportResourceSyncFailures, reportShadowedResources } =
-          await import('#infra/database/resource-indexer.js');
-        const { ScriptToolDefinitionLoader } =
-          await import('#modules/automation/core/script-definition-loader.js');
-        const dbManager = await SqliteEngine.getInstance(this.serverRoot, this.logger);
-        await dbManager.initialize();
-        const resourcesDir =
-          this.pathResolver?.getResourcesPath() ?? path.join(this.serverRoot, 'resources');
-        const scriptLoader = new ScriptToolDefinitionLoader({ validateOnLoad: true });
-        const indexer = createResourceIndexer(dbManager, this.logger, {
-          resourcesDir,
-          resourceRoots: indexerResourceRoots(this.pathResolver),
-          toolLoader: (dir, id) => scriptLoader.loadAllToolsForPromptDetailed(dir, id),
+        await syncResourceIndex({
+          pathResolver: this.pathResolver,
+          logger: this.logger,
+          indexQuarantine: this.indexQuarantine,
         });
-        const syncResult = await indexer.syncAll();
-        reportResourceSyncFailures(syncResult, this.logger);
-        reportShadowedResources(syncResult, this.logger);
-        this.logger.info('✅ Resource index re-synced after hot-reload.');
       }
 
       // Step 4: Notify MCP clients that the prompt list has changed (proper hot-reload)
@@ -857,39 +774,15 @@ export class Application {
         this.serviceOrchestrator.register({
           name: serviceName,
           start: async () => {
-            // Build auxiliary reload configs for framework, gates, and script tools
-            const frameworkAux = buildFrameworkAuxiliaryReloadConfig(
-              this.logger,
-              this.mcpToolsManager
-            );
-            const gateAux = buildGateAuxiliaryReloadConfig(this.logger, this.gateManager);
-
-            // Build script tool auxiliary reload config
-            const scriptLoader = this.promptManager.getModules().converter.getScriptToolLoader();
-            const promptsDir = this.promptsDirectory ?? undefined;
-            const scriptAux = promptsDir
-              ? buildScriptAuxiliaryReloadConfig(this.logger, scriptLoader, promptsDir)
-              : undefined;
-
-            // Build resource change tracking auxiliary reload config
-            const resourceChangeTrackerAux = buildResourceChangeTrackerAuxiliaryReloadConfig(
-              this.logger,
-              this.configManager
-            );
-
-            // Collect all auxiliary reloads
-            const auxiliaryReloads = [
-              frameworkAux,
-              gateAux,
-              scriptAux,
-              resourceChangeTrackerAux,
-            ].filter((aux): aux is NonNullable<typeof aux> => aux !== undefined);
-
-            const hotReloadOptions: Parameters<typeof this.promptManager.startHotReload>[2] = {};
-
-            if (auxiliaryReloads.length > 0) {
-              hotReloadOptions.auxiliaryReloads = auxiliaryReloads;
-            }
+            const hotReloadOptions = await buildPromptHotReloadOptions({
+              logger: this.logger,
+              mcpToolsManager: this.mcpToolsManager,
+              gateManager: this.gateManager,
+              scriptLoader: this.promptManager.getModules().converter.getScriptToolLoader(),
+              promptsDir: this.promptsDirectory ?? undefined,
+              configManager: this.configManager,
+              pathResolver: this.pathResolver,
+            });
 
             await this.promptManager.startHotReload(
               this.promptsDirectory!,
@@ -918,60 +811,68 @@ export class Application {
       return;
     }
 
-    if (this.promptReloadInProgress) {
-      this.logger.warn(`Hot reload already running; skipping event: ${event.reason}`);
-      return;
+    // Never dropped: an event landing while a reload runs is folded into one reload after it.
+    // A failure propagates to the observer callback's catch in `PromptAssetManager`.
+    await this.promptReloads.submit(event);
+  }
+
+  private async reloadPromptsFromDisk(event: HotReloadEvent): Promise<void> {
+    this.logger.info(
+      `🔥 Hot reload event received (${event.type}): ${
+        event.reason
+      } [${event.affectedFiles.join(', ')}]`
+    );
+
+    const result = await reloadPromptData({
+      configManager: this.configManager,
+      promptManager: this.promptManager,
+      mcpToolsManager: this.mcpToolsManager,
+    });
+
+    // Resolve the exported-prompt set from the reloaded content BEFORE publishing
+    // anything a per-request shell reads. `createMcpServerFactory` builds a fresh
+    // `McpServer` per HTTP request and registers straight from `_convertedPrompts` plus
+    // whatever export set is current at that moment; an `await` sitting between those two
+    // writes let a request land in between and filter fresh content against the export
+    // set the PREVIOUS reload left behind. `loadPromptData` (startup, and the manual
+    // `fullServerRefresh` path) never had this gap, because it resolves the export set
+    // before returning and the caller only publishes afterward — this path publishes and
+    // resolves in the opposite order, which is the defect. Every write below runs
+    // synchronously once the export set is known, closing the window.
+    const exportedPromptIds = await loadSkillsSyncExports(
+      this.pathResolver,
+      this.logger,
+      result.convertedPrompts.map((prompt) => `${prompt.category}/${prompt.id}`)
+    );
+
+    this._promptsData = result.promptsData;
+    this._convertedPrompts = result.convertedPrompts;
+    this._categories = result.categories;
+    this.promptsDirectory = result.promptsDirectory;
+
+    if (this.apiRouter) {
+      this.apiRouter.updateData(this._promptsData, this._categories, this._convertedPrompts);
     }
 
-    const reloadPromise = (async () => {
-      try {
-        this.logger.info(
-          `🔥 Hot reload event received (${event.type}): ${
-            event.reason
-          } [${event.affectedFiles.join(', ')}]`
-        );
+    this.promptManager.setExportedPromptIds(exportedPromptIds);
 
-        const result = await reloadPromptData({
-          configManager: this.configManager,
-          promptManager: this.promptManager,
-          mcpToolsManager: this.mcpToolsManager,
-        });
+    // Content refresh alone updates every already-bound handler, on every
+    // shell, because handlers resolve through the live map at call time.
+    // Re-binding still matters for ids that did not exist when the serving
+    // shell was built; the dedup guard makes it a no-op for the rest.
+    const count = await this.promptManager.registerAllPrompts(
+      this._convertedPrompts,
+      this.mcpServer
+    );
+    this.logger.info(`🔁 Refreshed prompts after hot reload (${count} newly bound).`);
+    publishPromptsChanged(this.listChangeTargets());
 
-        this._promptsData = result.promptsData;
-        this._convertedPrompts = result.convertedPrompts;
-        this._categories = result.categories;
-        this.promptsDirectory = result.promptsDirectory;
+    // Prompt resources project `_convertedPrompts`, so a reload changes the
+    // resource list too. Prompts were already announced above; resources
+    // were the half that had no producer.
+    this.notifyResourcesChanged();
 
-        if (this.apiRouter) {
-          this.apiRouter.updateData(this._promptsData, this._categories, this._convertedPrompts);
-        }
-
-        // Content refresh alone updates every already-bound handler, on every
-        // shell, because handlers resolve through the live map at call time.
-        // Re-binding still matters for ids that did not exist when the serving
-        // shell was built; the dedup guard makes it a no-op for the rest.
-        const count = await this.promptManager.registerAllPrompts(
-          this._convertedPrompts,
-          this.mcpServer
-        );
-        this.logger.info(`🔁 Refreshed prompts after hot reload (${count} newly bound).`);
-        publishPromptsChanged(this.listChangeTargets());
-
-        // Prompt resources project `_convertedPrompts`, so a reload changes the
-        // resource list too. Prompts were already announced above; resources
-        // were the half that had no producer.
-        this.notifyResourcesChanged();
-
-        this.logger.info('✅ Prompt data refreshed from filesystem changes.');
-      } catch (error) {
-        this.logger.error('❌ Prompt hot reload failed:', error);
-      } finally {
-        this.promptReloadInProgress = undefined;
-      }
-    })();
-
-    this.promptReloadInProgress = reloadPromise;
-    await reloadPromise;
+    this.logger.info('✅ Prompt data refreshed from filesystem changes.');
   }
 
   /**
@@ -1169,7 +1070,7 @@ export class Application {
     }
   }
 
-  private setupFrameworkConfigListener(): void {
+  private async setupFrameworkConfigListener(): Promise<void> {
     if (!this.configManager || this.frameworksConfigListener) {
       return;
     }
@@ -1178,17 +1079,23 @@ export class Application {
       newConfig: ResolvedFrameworkConfig,
       previousConfig: ResolvedFrameworkConfig
     ) => {
-      this.handleFrameworkConfigChange(newConfig, previousConfig);
+      // The config watcher fires with no caller to return to, so this is the
+      // boundary that owns the failure and reports it. Leaving the promise
+      // unhandled instead would reach the process-level rejection handler,
+      // which shuts the server down over a state write that can be retried.
+      void this.handleFrameworkConfigChange(newConfig, previousConfig).catch((error: unknown) =>
+        this.logger.error(`Failed to apply a framework configuration change: ${String(error)}`)
+      );
     };
 
     this.configManager.on('frameworksConfigChanged', this.frameworksConfigListener);
-    this.handleFrameworkConfigChange(this.configManager.getFrameworksConfig());
+    await this.handleFrameworkConfigChange(this.configManager.getFrameworksConfig());
   }
 
-  private handleFrameworkConfigChange(
+  private async handleFrameworkConfigChange(
     newConfig: ResolvedFrameworkConfig,
     previousConfig?: ResolvedFrameworkConfig
-  ): void {
+  ): Promise<void> {
     if (!this.logger) {
       return;
     }
@@ -1198,7 +1105,7 @@ export class Application {
       this.logger.warn(`⚠️ Framework features disabled via config: ${disabled.join(', ')}`);
     }
 
-    this.syncFrameworkSystemStateFromConfig(newConfig);
+    await this.syncFrameworkSystemStateFromConfig(newConfig);
 
     if (previousConfig) {
       const previouslyDisabled = this.describeDisabledFrameworkFeatures(previousConfig);
@@ -1208,10 +1115,10 @@ export class Application {
     }
   }
 
-  private syncFrameworkSystemStateFromConfig(
+  private async syncFrameworkSystemStateFromConfig(
     config: ResolvedFrameworkConfig,
     reason?: string
-  ): void {
+  ): Promise<void> {
     const gatesConfig = this.configManager.getGatesConfig();
     const systemPromptEnabled = config.injection?.systemPrompt?.enabled ?? true;
     const shouldEnable =
@@ -1226,7 +1133,10 @@ export class Application {
       (shouldEnable
         ? 'Framework system enabled via configuration toggles'
         : 'Framework system disabled via configuration toggles');
-    this.frameworkStateStore.setFrameworkSystemEnabled(shouldEnable, resolvedReason);
+    // Awaited: this writes the toggle to SQLite. Unawaited, a failed save was
+    // never reported to anyone and the store's memory disagreed with the
+    // database for the rest of the run.
+    await this.frameworkStateStore.setFrameworkSystemEnabled(shouldEnable, resolvedReason);
   }
 
   private describeDisabledFrameworkFeatures(config: ResolvedFrameworkConfig): string[] {

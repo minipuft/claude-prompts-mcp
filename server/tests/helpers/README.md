@@ -18,7 +18,9 @@ Shared test utilities live here: builders, fakes, fixtures, and small harness he
 ## Conventions
 
 - Keep helpers deterministic and side-effect-free.
-- No network calls. No filesystem writes outside `server/temp/` (if absolutely needed).
+- No network calls. A test that needs a real directory takes one from `testScratchPath()`
+  (`scratch-path.ts`), which is outside the working tree; `tree-state-guard.cjs` fails any run
+  that leaves something behind in the tree.
 - Prefer explicit options objects over positional arguments.
 - If a helper grows “framework-like”, promote it into a real `src/**` utility and test it normally.
 

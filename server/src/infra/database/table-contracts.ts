@@ -229,20 +229,57 @@ export const TABLE_CONTRACTS: readonly TableContract[] = [
     owner: 'src/modules/versioning/version-history-service.ts',
     posture: 'durable',
     scope: 'workspace',
+    // The DEFAULT bound, which `versioning.maxVersions` replaces — so this number states the
+    // shape of the cap (per resource, not per table) and what an unconfigured workspace keeps,
+    // never a value a sweep may enforce behind the operator's back. Both writers trim through
+    // `pruneVersionHistory`; `retention.ts` deliberately enforces no `maxRowsPerResource`.
     retention: { maxRowsPerResource: 50 },
-    readers: ['src/cli-shared/version-history.ts'],
+    readers: ['src/cli-shared/version-history.ts', 'src/cli-shared/version-history-scope.ts'],
     acceptedForeignWriters: [
       {
-        subject: 'src/cli-shared/version-history.ts',
+        // The CLI writer is one module by ownership and four files by size: `version-history.ts`
+        // crossed the 1000-line gate and was split along its responsibilities. This gate keys on
+        // PATH, so the split moved every write site out from under an exception that still
+        // applies to all of them — the second writer did not change, its file name did.
+        //
+        // `version-history.ts` carried its own entry beside this one until the subtree DELETE
+        // moved here too (2026-09-21, so the delete and the sweep of the objects it orphans could
+        // be one transaction in the module that owns both statements). That module now issues no
+        // SQL against this table at all, and the gate's satisfied-exception check said so by
+        // name — which is exactly what an exception list is for. It is listed under `readers`.
+        subject: 'src/cli-shared/version-history-rows.ts',
         reason:
-          'The CLI still writes this table directly — the `cpm` binary has no server process to ' +
-          'route through. What Tier 6.1 removed is the DIVERGENCE, not the second writer: it now ' +
-          'uses node:sqlite against the engine-created schema, binds the same scope columns, and ' +
-          'creates no DDL of its own (it reports a missing table instead). Retiring this needs ' +
-          'the CLI to reach the server, not another rewrite of this module.',
+          'The CLI writes this table directly — the `cpm` binary has no server process to route ' +
+          'through — and this file holds every statement it issues: the INSERT, the trim DELETE, ' +
+          'the subtree DELETE and the rename UPDATE. What Tier 6.1 removed is the DIVERGENCE, ' +
+          'not the second writer: it uses node:sqlite against the engine-created schema, binds ' +
+          'the same scope columns, and creates no DDL of its own (it reports a missing table ' +
+          'instead). It resolves no scope of its own — every function takes the tenant id as a ' +
+          'parameter — so it cannot drift from the owner on the axis this contract protects. ' +
+          'Retiring this needs the CLI to reach the server, not another rewrite of this module.',
         closedBy: 'A CLI-to-server transport, or an accepted permanent second writer',
       },
+      {
+        subject: 'src/cli-shared/object-store.ts',
+        reason:
+          "Two columns, one statement: after storing a version row's files it sets that row's " +
+          'tree_hash and tree_origin. It is a foreign writer by PATH and not by ownership — the ' +
+          "statement runs inside the owner's own BEGIN IMMEDIATE, on a row the owner inserted " +
+          'microseconds earlier, and it touches no other column. Routing it back through the ' +
+          'owner would put the UPDATE in a module the CLI writer cannot import, which is the one ' +
+          'thing this store exists to avoid: both writers must produce the same tree_hash, so ' +
+          'there is one implementation and it lives where both can reach it.',
+        closedBy:
+          'A CLI-to-server transport — the same event that retires the two entries above, since ' +
+          'a single writer would put this statement back inside the owner.',
+      },
     ],
+    // Its key is `(tenant_id, resource_type, resource_id, version)`, UNIQUE since schema v28
+    // (`idx_version_history_key`). A version number identifies a row within one history and every
+    // reader selects by it, so a duplicate made `rollback` restore whichever row SQLite reached
+    // first. Both writers must therefore place a row at a version no row in that history holds —
+    // which is what the CLI's rename renumbers for.
+    //
     // F6's divergent-DDL half is closed. The old `ensure_schema()` here created version_history
     // without organization_id/workspace_id and wrote no schema_version row, which left the engine
     // taking its "fresh database" path against an existing table — CREATE TABLE IF NOT EXISTS
@@ -252,6 +289,45 @@ export const TABLE_CONTRACTS: readonly TableContract[] = [
     // Phantom exceptions removed by Tier 4: saveVersion now binds organization_id and workspace_id
     // from the service's injected scope. They were still listed after the writers landed, and the
     // gate said nothing — an exception suppresses its finding whether or not it is still true.
+  },
+  // v29: the content-addressed object store. Declared here, between version_history and the rest,
+  // because DURABLE_TABLE_NAMES preserves this order and restoreDurableTables replays it — a child
+  // row must be re-inserted after the parent it references.
+  {
+    table: 'objects',
+    owner: 'src/cli-shared/object-store.ts',
+    // The classification this whole slice turns on. DURABLE_TABLE_NAMES derives from `posture`,
+    // so `ephemeral` here would mean the next SCHEMA_VERSION bump silently dropped every object
+    // while version_history.tree_hash stayed non-NULL — a row pointing at a tree that is not
+    // there. The bytes exist nowhere else once the file on disk has moved on.
+    posture: 'durable',
+    // Per-workspace by owner ruling: the key is (tenant_id, hash), and tenant_id is the value the
+    // owning version_history row carries. Cross-workspace dedup is given up on purpose — one
+    // state.db serves every project on the machine.
+    scope: 'workspace',
+    retention: 'unbounded-justified',
+    retentionRationale:
+      'The referenced closure of version_history, which is itself capped at ' +
+      'maxRowsPerResource: 50, times the files per resource, times a per-blob byte limit the ' +
+      'write path enforces. Bounded by (capped rows × files × file size), not by time — and ' +
+      'reclaimed by the sweep when the rows that referenced an object are pruned or deleted.',
+    readers: ['src/infra/database/sqlite-engine.ts'],
+  },
+  {
+    table: 'version_entries',
+    owner: 'src/cli-shared/object-store.ts',
+    // Same reasoning as `objects`, and the two must agree: an ephemeral manifest over a durable
+    // blob store would lose every reference and leave the sweep looking at unreachable bytes.
+    posture: 'durable',
+    // Its own tenant_id is not a second scope channel — it is one half of the composite foreign
+    // key into objects, and the only value it may hold is its parent version_history row's.
+    scope: 'workspace',
+    retention: 'unbounded-justified',
+    retentionRationale:
+      'One row per (version row, file). Bounded by the same capped closure as objects: ' +
+      'version_history is capped at maxRowsPerResource: 50 and these rows are deleted with the ' +
+      'version row they describe.',
+    readers: ['src/infra/database/sqlite-engine.ts'],
   },
   {
     table: 'resource_changes',

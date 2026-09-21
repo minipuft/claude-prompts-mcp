@@ -13,6 +13,7 @@ import {
   getDefaultRuntimeLoader,
   type RuntimeFrameworkLoaderConfig,
 } from './runtime-framework-loader.js';
+import { SHIPPED_FRAMEWORK_IDS } from './shipped-frameworks.js';
 import { FrameworkGuide } from '../types/index.js';
 
 import { Logger } from '#infra/logging/index.js';
@@ -222,6 +223,10 @@ export class FrameworkRegistry {
 
   /**
    * Get guide entries with metadata
+   *
+   * Unlike `getAllGuides`, an entry carries its `source`, which is what lets the reconciliation
+   * pass in `FrameworkHotReloadCoordinator.reconcile()` tell a `yaml-runtime` guide backed by a
+   * file from one registered in code.
    */
   getGuideEntries(enabledOnly: boolean = true): FrameworkGuideEntry[] {
     this.ensureInitialized();
@@ -245,23 +250,6 @@ export class FrameworkRegistry {
   }
 
   /**
-   * Enable or disable a framework guide
-   */
-  setGuideEnabled(guideId: string, enabled: boolean): boolean {
-    this.ensureInitialized();
-
-    const entry = this.guides.get(guideId.toLowerCase());
-    if (entry) {
-      entry.enabled = enabled;
-      this.logger.info(`Framework guide '${guideId}' ${enabled ? 'enabled' : 'disabled'}`);
-      return true;
-    }
-
-    this.logger.warn(`Cannot ${enabled ? 'enable' : 'disable'} guide '${guideId}': not found`);
-    return false;
-  }
-
-  /**
    * Unregister a framework guide from the registry
    *
    * @param guideId - The guide ID to unregister
@@ -279,38 +267,6 @@ export class FrameworkRegistry {
     this.guides.delete(normalizedId);
     this.logger.info(`Framework guide '${guideId}' unregistered from registry`);
     return true;
-  }
-
-  /**
-   * Get registry statistics
-   */
-  getRegistryStats() {
-    this.ensureInitialized();
-
-    const entries = Array.from(this.guides.values());
-    const enabledCount = entries.filter((e) => e.enabled).length;
-    const builtInCount = entries.filter((e) => e.isBuiltIn).length;
-
-    // Count by source
-    const sourceDistribution: Record<FrameworkSource, number> = {
-      'yaml-runtime': 0,
-      custom: 0,
-    };
-    for (const entry of entries) {
-      sourceDistribution[entry.source]++;
-    }
-
-    return {
-      totalGuides: entries.length,
-      enabledGuides: enabledCount,
-      builtInGuides: builtInCount,
-      customGuides: entries.length - builtInCount,
-      sourceDistribution,
-      averageLoadTime:
-        entries.reduce((sum, e) => sum + e.metadata.loadTime, 0) / entries.length || 0,
-      initialized: this.initialized,
-      runtimeLoaderStats: this.runtimeLoader?.getStats() ?? null,
-    };
   }
 
   /**
@@ -372,8 +328,11 @@ export class FrameworkRegistry {
   private async loadBuiltInGuides(): Promise<void> {
     this.logger.debug('Loading built-in framework guides from YAML...');
 
-    // Required built-in framework IDs
-    const builtInIds = ['cageerf', 'react', '5w1h', 'scamper'];
+    // Required built-in framework IDs. Every framework the package ships is required and is
+    // registered as built-in — this list held four of the eight on disk until 2026-09-07, so the
+    // other four registered through the discovery pass below and every `isBuiltIn` reader called
+    // them operator-created. `validate:shipped-frameworks` fails when the set drifts again.
+    const builtInIds: string[] = [...SHIPPED_FRAMEWORK_IDS];
 
     // Fail-fast: RuntimeFrameworkLoader is required
     if (!this.runtimeLoader) {

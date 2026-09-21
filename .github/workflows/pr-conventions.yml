@@ -35,6 +35,15 @@ name: PR Conventions
 # main carries a PR-shaped body): the settings are invisible to any file-based gate AND to the
 # workflow token, and the two-register body design depends on them — the collapsed appendix
 # reaches main's history only because the squash body does.
+#
+# That assertion is a WARNING, never a failure, and the reason is structural rather than a
+# tolerance for drift. Its subject is the newest squash commit on main — state no pull request
+# controls, and state that ONLY a merge can change. A required check whose subject is mutable
+# only by the action it gates is a deadlock by construction: the offending merge has already
+# landed, so failing cannot prevent it, and the sole thing that clears the check is the next
+# merge, which the failure blocks. Measured 2026-09-08: merging #265 with an overriding
+# `--body` left #269 MERGEABLE/BLOCKED, and clearing it took an admin bypass. Blocking here
+# buys nothing and costs the repair path.
 
 on:
   pull_request:
@@ -106,22 +115,52 @@ jobs:
               repo: context.repo.repo,
               per_page: 20,
             });
-            const squash = commits.find((c) => /\(#\d+\)$/.test(c.commit.message.split('\n')[0]));
-            if (!squash) {
+            const squashes = commits.filter((c) =>
+              /\(#\d+\)$/.test(c.commit.message.split('\n')[0])
+            );
+            if (squashes.length === 0) {
               core.info('No squash-shaped commit in the last 20 on the default branch.');
               return;
             }
-            const body = squash.commit.message.split('\n').slice(1).join('\n');
-            if (/^## /m.test(body)) {
-              core.info(`Squash ${squash.sha.slice(0, 8)} carries a PR-shaped body — contract holds.`);
+            const carriesBody = (c) =>
+              /^## /m.test(c.commit.message.split('\n').slice(1).join('\n'));
+            const newest = squashes[0];
+            const sha = newest.sha.slice(0, 8);
+            if (carriesBody(newest)) {
+              core.info(`Squash ${sha} carries a PR-shaped body — contract holds.`);
               return;
             }
-            core.setFailed(
-              `Squash commit ${squash.sha.slice(0, 8)} does not carry the PR body — the ` +
-                'squash_merge_commit_message setting has drifted from PR_BODY. Reapply:\n' +
-                '  gh api -X PATCH repos/' + context.repo.owner + '/' + context.repo.repo + ' \\\n' +
-                '    -f squash_merge_commit_title=PR_TITLE -f squash_merge_commit_message=PR_BODY \\\n' +
-                '    -F delete_branch_on_merge=true'
+
+            // Two causes produce an identical bodyless commit, and they need opposite fixes. They
+            // ARE separable from evidence, because they differ in BLAST RADIUS: a drifted setting
+            // strips every squash after it, while `gh pr merge --subject/--body` overrides the
+            // setting for one merge and leaves its neighbours intact. The first version of this
+            // message named only the setting, and sent a reader to re-apply one that was already
+            // correct (measured 2026-09-08, cost real debugging time).
+            const priorWithBody = squashes.slice(1).find(carriesBody);
+            const reapply =
+              '  gh api -X PATCH repos/' + context.repo.owner + '/' + context.repo.repo + ' \\\n' +
+              '    -f squash_merge_commit_title=PR_TITLE -f squash_merge_commit_message=PR_BODY \\\n' +
+              '    -F delete_branch_on_merge=true';
+            const diagnosis = priorWithBody
+              ? `An older squash (${priorWithBody.sha.slice(0, 8)}) DOES carry one, so the ` +
+                'repository setting is probably fine and this was a single overriding merge — ' +
+                'someone passed `--subject`/`--body` to `gh pr merge`, which overrides ' +
+                'squash_merge_commit_message for that merge only. Nothing to repair: merge the ' +
+                'next PR with `gh pr merge <n> --squash` and nothing else, and this clears.\n\n' +
+                'Verify before changing settings:\n' +
+                `  gh api repos/${context.repo.owner}/${context.repo.repo} -q .squash_merge_commit_message`
+              : 'No recent squash carries one either, which is the signature of a drifted ' +
+                'repository setting rather than a one-off merge. Verify, then reapply:\n' +
+                `  gh api repos/${context.repo.owner}/${context.repo.repo} -q .squash_merge_commit_message\n` +
+                reapply;
+
+            core.warning(
+              `Squash commit ${sha} does not carry a PR-shaped body.\n\n${diagnosis}\n\n` +
+                'Reported as a warning, not a failure, on purpose: this check reads main\'s newest ' +
+                'squash, which no pull request controls and only a merge can change. Failing would ' +
+                'block the very merge that clears it while doing nothing about the merge that ' +
+                'caused it — see this workflow\'s header.'
             );
 
       - name: Checkout

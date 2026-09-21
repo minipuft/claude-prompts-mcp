@@ -7,7 +7,7 @@
  *
  * Usage:
  * ```typescript
- * const engine = await SqliteEngine.getInstance(serverRoot, logger);
+ * const engine = await SqliteEngine.getInstance(logger, { dbPath: pathResolver.getStateDatabasePath() });
  * await engine.initialize();
  * const store = new SqliteStateStore<MyState>(engine, {
  *   tableName: 'my_state',

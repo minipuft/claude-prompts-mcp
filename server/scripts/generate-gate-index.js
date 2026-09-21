@@ -32,13 +32,38 @@ function discoverGates() {
       if (!existsSync(yamlPath)) return null;
       try {
         const data = yaml.load(readFileSync(yamlPath, 'utf-8'));
-        return { dir: e.name, ...data };
+        return { dir: e.name, ...data, _guidanceText: loadGuidanceText(e.name, data) };
       } catch (err) {
         console.warn(`  ⚠ Failed to parse ${e.name}/gate.yaml: ${err.message}`);
         return null;
       }
     })
     .filter(Boolean);
+}
+
+// Mirrors GateDefinitionLoader's guidance inlining (server/src/engine/gates/core/
+// gate-definition-loader.ts): a `guidanceFile` reference wins over inline `guidance`.
+function loadGuidanceText(dirName, data) {
+  if (data.guidanceFile) {
+    const guidancePath = join(GATES_DIR, dirName, data.guidanceFile);
+    if (existsSync(guidancePath)) {
+      return readFileSync(guidancePath, 'utf-8');
+    }
+    return '';
+  }
+  return data.guidance ?? '';
+}
+
+// ============================================
+// TIER (mirrors server/src/engine/gates/core/gate-tier.ts — kept in step by the
+// registry cross-check in server/tests/unit/gates/core/gate-tier.test.ts)
+// ============================================
+const EVALUATED_PASS_CRITERIA_TYPES = new Set(['shell_verify', 'script_tool']);
+
+function deriveGateTier(gate) {
+  const criteria = gate.pass_criteria ?? [];
+  const hasEvaluator = criteria.some((c) => EVALUATED_PASS_CRITERIA_TYPES.has(c?.type));
+  return hasEvaluator ? 'check' : 'reminder';
 }
 
 // ============================================
@@ -73,16 +98,43 @@ function severityBadge(gate) {
 }
 
 function activationSummary(gate) {
+  // Ruling B13: when a gate names `activation.artifacts`, artifacts alone decide — the
+  // runtime (`isGateActiveForContext`) never consults `prompt_categories` once this is set, so
+  // printing them beside it would claim a say they no longer have.
+  const artifacts = gate.activation?.artifacts ?? [];
+  const explicit = gate.activation?.explicit_request;
+  if (artifacts.length > 0) {
+    // `explicit_request` still applies on this branch: artifacts decide WHICH surfaces the gate
+    // is eligible for, `explicit_request: true` decides that it never auto-attaches to any of
+    // them. Dropping the suffix here printed `pr-security` and `pr-performance` as if they
+    // attached to every source change.
+    const summary = `artifacts: ${artifacts.join(', ')}`;
+    return explicit === true ? `${summary} · explicit only` : summary;
+  }
+
   const parts = [];
   const cats = gate.activation?.prompt_categories ?? [];
-  const explicit = gate.activation?.explicit_request;
   const frameworks = gate.activation?.framework_context ?? [];
 
   if (cats.length > 0) parts.push(cats.join(', '));
   if (frameworks.length > 0) parts.push(`frameworks: ${frameworks.join(', ')}`);
   if (explicit) parts.push('explicit only');
-  if (parts.length === 0) return 'always';
+  if (parts.length === 0) {
+    // Mirrors isGateActiveForContext (server/src/engine/gates/utils/gate-activation.ts):
+    // a MISSING activation block never auto-activates (opt-in only, since claude-prompts-mcp
+    // #286); an activation block with no restricting rule still auto-attaches (always).
+    return gate.activation === undefined ? 'opt-in' : 'always';
+  }
   return parts.join(' · ');
+}
+
+function subjectOf(gate) {
+  return typeof gate.subject === 'string' && gate.subject.length > 0 ? gate.subject : '—';
+}
+
+function tokenEstimate(gate) {
+  const text = gate._guidanceText ?? '';
+  return text.length === 0 ? 0 : Math.ceil(text.length / 4);
 }
 
 // ============================================
@@ -114,9 +166,13 @@ function renderIndex(gates) {
     '',
     `${gates.length} gates across ${Object.keys(grouped).length} groups.`,
     '',
-    'For the full enforcement-mode taxonomy (`inline_guidance` / `llm_self_check` / `framework_compliance` / `shell_verify` / `script_tool`) and how each `pass_criteria.type` actually behaves at runtime, see [docs/guides/gates.md](../../../docs/guides/gates.md#enforcement-modes).',
+    'For the full enforcement-mode taxonomy (`inline_guidance` / `framework_compliance` / `shell_verify` / `script_tool`) and how each `pass_criteria.type` actually behaves at runtime, see [docs/guides/gates.md](../../../docs/guides/gates.md#enforcement-modes).',
     '',
     '> **Note:** Gate types `content_check` and `pattern_check` were renamed to `inline_guidance` — neither had a runtime enforcement path; both rendered guidance text only. Gates using the old names should migrate.',
+    '',
+    '**Tier** is `check` when a gate carries a real runtime evaluator (`shell_verify` or `script_tool` in its `pass_criteria`); every other gate, pattern/length fields included, is `reminder` — guidance text with no runtime pass/fail path (see the taxonomy link above).',
+    '',
+    '**Activation** reads `opt-in` when a gate has no `activation` block at all: since claude-prompts-mcp #286, `isGateActiveForContext` never auto-attaches an undefined activation — the gate still applies when named explicitly (`gateConfiguration.include`, `inlineGateIds`). `always` marks a gate whose `activation` block carries no restricting rule and so auto-attaches to every context.',
     '',
   ];
 
@@ -134,13 +190,13 @@ function renderIndex(gates) {
     });
 
     lines.push(`## ${group}`, '');
-    lines.push('| Gate | Severity | Activation | Description |');
-    lines.push('|------|----------|------------|-------------|');
+    lines.push('| Gate | Tier | Severity | Activation | Subject | ~tokens | Description |');
+    lines.push('|------|------|----------|------------|---------|---------|-------------|');
 
     for (const gate of items) {
       const desc = (gate.description ?? '').replace(/\n/g, ' ').trim();
       lines.push(
-        `| \`${gate.id}\` | ${severityBadge(gate)} | ${activationSummary(gate)} | ${desc} |`
+        `| \`${gate.id}\` | ${deriveGateTier(gate)} | ${severityBadge(gate)} | ${activationSummary(gate)} | ${subjectOf(gate)} | ${tokenEstimate(gate)} | ${desc} |`
       );
     }
     lines.push('');

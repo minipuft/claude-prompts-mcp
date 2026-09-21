@@ -256,7 +256,7 @@ my-workspace/
 │               ├── tool.yaml    # Config (trigger, runtime, timeout)
 │               ├── schema.json  # Input validation schema
 │               └── script.py    # Validation logic
-├── config.json               # Server settings (optional)
+├── config.jsonc              # Server settings (optional; config.json also still read)
 ├── frameworks/               # Custom thinking frameworks (optional)
 └── gates/                    # Custom quality gates (optional)
 ```
@@ -367,12 +367,12 @@ Supported presets:
 
 ### Environment Variables
 
-| Variable             | Purpose                                                      | Example                          |
-| -------------------- | ------------------------------------------------------------ | -------------------------------- |
-| `MCP_WORKSPACE`      | Base directory containing prompts/, config.json              | `/home/user/my-prompts`          |
-| `MCP_RESOURCES_PATH` | Resources base override (frameworks, gates, styles, scripts) | `/path/to/resources`             |
-| `MCP_CONFIG_PATH`    | Custom server config.json                                    | `/path/to/config.json`           |
-| `LOG_LEVEL`          | Logging verbosity                                            | `debug`, `info`, `warn`, `error` |
+| Variable             | Purpose                                                                                                                                                                           | Example                          |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| `MCP_WORKSPACE`      | Base directory for `resources/` and your config file; must exist, or startup is refused. Resources you create are saved under its `resources/<type>/`, created on the first write | `/home/user/my-prompts`          |
+| `MCP_RESOURCES_PATH` | Resources base override (frameworks, gates, styles, scripts); must exist, or startup is refused                                                                                   | `/path/to/resources`             |
+| `MCP_CONFIG_PATH`    | Custom config file path (`.jsonc` or `.json`); must be readable, or startup is refused                                                                                            | `/path/to/config.jsonc`          |
+| `LOG_LEVEL`          | Logging verbosity                                                                                                                                                                 | `debug`, `info`, `warn`, `error` |
 
 Per-resource-type path overrides (`MCP_PROMPTS_PATH`, `MCP_GATES_PATH`, `MCP_STYLES_PATH`,
 `MCP_SCRIPTS_PATH`, and the former `MCP_METHODOLOGIES_PATH`) were documented here but are not read
@@ -380,6 +380,13 @@ anywhere in the server. Point `MCP_RESOURCES_PATH` at a resources directory inst
 resources overlay the bundled ones.
 
 **Resolution priority:** CLI flags > Environment variables > Workspace subdirectory > Package defaults
+
+A path you set is not skipped when it is unusable: a workspace or resources directory that does not
+exist, a config file that is not readable JSON (or JSONC, for a `.jsonc` path), or a workspace
+config that is not a JSON object stops the server at startup with a message naming the setting and
+the resolved path. Falling through to the next tier instead served the bundled catalog, or built-in
+defaults, as if they were yours. A workspace with no config file still uses the packaged one, and a
+workspace holding both `config.jsonc` and `config.json` refuses to start rather than picking one.
 
 ---
 
@@ -392,10 +399,10 @@ All flags accept both `--flag=value` and `--flag value` formats.
 npx claude-prompts --workspace /path/to/workspace
 
 # Override where resources are loaded from
-npx claude-prompts --workspace /path/to/workspace --config /path/to/config.json
+npx claude-prompts --workspace /path/to/workspace --config /path/to/config.jsonc
 
 # Select transport
-npx claude-prompts --transport sse
+npx claude-prompts --transport streamable-http
 
 # Client-aware handoff routing at launch
 npx claude-prompts --client codex
@@ -409,22 +416,22 @@ npx claude-prompts --log-level debug
 npx claude-prompts --startup-test --verbose
 ```
 
-| Flag                      | Purpose                                                                          |
-| ------------------------- | -------------------------------------------------------------------------------- |
-| `-h`, `--help`            | Show help and exit                                                               |
-| `--init /path`            | Initialize a new workspace with starters                                         |
-| `--workspace /path`       | Base directory for all user assets                                               |
-| `--config /path`          | Custom server config.json                                                        |
-| `--workspace-id VALUE`    | Launch default workspace scope                                                   |
-| `--organization-id VALUE` | Launch default organization scope                                                |
-| `--identity-mode VALUE`   | Identity policy: `permissive` or `locked`                                        |
-| `--client VALUE`          | Client preset: `claude-code`, `codex`, `gemini`, `opencode`, `cursor`, `unknown` |
-| `--transport MODE`        | Transport: `stdio`, `sse`, `streamable-http`                                     |
-| `--log-level LEVEL`       | Log level: `debug`, `info`, `warn`, `error`                                      |
-| `--verbose`               | Detailed logging                                                                 |
-| `--quiet`                 | Suppress non-error output                                                        |
-| `--debug-startup`         | Verbose startup diagnostics                                                      |
-| `--startup-test`          | Validate and exit (good for testing setup)                                       |
+| Flag                      | Purpose                                                                                |
+| ------------------------- | -------------------------------------------------------------------------------------- |
+| `-h`, `--help`            | Show help and exit                                                                     |
+| `--init /path`            | Initialize a new workspace with starters                                               |
+| `--workspace /path`       | Base directory for all user assets                                                     |
+| `--config /path`          | Custom config file path (`.jsonc` or `.json`); must be readable, or startup is refused |
+| `--workspace-id VALUE`    | Launch default workspace scope                                                         |
+| `--organization-id VALUE` | Launch default organization scope                                                      |
+| `--identity-mode VALUE`   | Identity policy: `permissive` or `locked`                                              |
+| `--client VALUE`          | Client preset: `claude-code`, `codex`, `gemini`, `opencode`, `cursor`, `unknown`       |
+| `--transport MODE`        | Transport: `stdio` (default), `streamable-http`, or `both`                             |
+| `--log-level LEVEL`       | Log level: `debug`, `info`, `warn`, `error`                                            |
+| `--verbose`               | Detailed logging                                                                       |
+| `--quiet`                 | Suppress non-error output                                                              |
+| `--debug-startup`         | Verbose startup diagnostics                                                            |
+| `--startup-test`          | Validate and exit (good for testing setup)                                             |
 
 ---
 
@@ -432,7 +439,7 @@ npx claude-prompts --startup-test --verbose
 
 **"No prompts found"**
 
-- Check `MCP_WORKSPACE` points to a directory containing `prompts/`
+- Check `MCP_WORKSPACE` points to your workspace. Prompts you create are saved under its `resources/prompts/`, created on the first write, and a workspace that does not exist at all refuses startup, with the resolved path on stderr
 - Run `npx claude-prompts --startup-test --verbose` to see resolved paths
 
 **"Framework not found"**

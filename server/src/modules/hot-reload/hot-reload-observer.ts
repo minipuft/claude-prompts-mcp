@@ -10,6 +10,7 @@ import {
   FileChangeEvent,
   FileObserver,
   FileObserverConfig,
+  LATE_DIRECTORY_ARMED,
   createFileObserver,
 } from './file-observer.js';
 
@@ -26,7 +27,7 @@ export type { HotReloadEventType, FileChangeOperation, HotReloadEvent };
 /**
  * Framework-aware hot reload capabilities
  */
-export interface FrameworkHotReloadCapabilities {
+interface FrameworkHotReloadCapabilities {
   enabled: boolean;
   frameworkAnalysis: boolean;
   performanceMonitoring: boolean;
@@ -65,6 +66,22 @@ export interface AuxiliaryReloadConfig {
   directories: string[];
   handler: (event: HotReloadEvent) => Promise<void>;
   match?: (event: FileChangeEvent) => boolean;
+  /**
+   * Bring what this registration holds in line with the disk, after `root` — one of its
+   * directories, or a directory containing or inside one — was created while the server ran.
+   *
+   * Required, not optional: per-file events cannot carry this. Between a directory appearing and
+   * its watcher finishing the first scan, an entry can be written and removed with no event
+   * either way, while the server already holds it — a `resource_manager` create registers its
+   * entry directly. Only the owner knows what it holds, so every registration states how it
+   * reconciles, and one that holds nothing says so in its own implementation.
+   */
+  reconcile: (root: string) => Promise<void>;
+}
+
+/** True when one path is the other, or contains it. */
+function pathsOverlap(a: string, b: string): boolean {
+  return a === b || a.startsWith(`${b}${path.sep}`) || b.startsWith(`${a}${path.sep}`);
 }
 
 /**
@@ -110,7 +127,6 @@ export class HotReloadObserver {
   private config: HotReloadConfig;
   private fileObserver: FileObserver;
   private onReloadCallback: ((event: HotReloadEvent) => Promise<void>) | undefined;
-  private onFrameworkReloadCallback: ((event: HotReloadEvent) => Promise<void>) | undefined;
   private auxiliaryReloads: AuxiliaryReloadConfig[] = [];
   private stats: HotReloadStats;
   private isStarted: boolean = false;
@@ -217,16 +233,10 @@ export class HotReloadObserver {
   }
 
   /**
-   * Set the callback for framework reload events
-   * This callback is invoked when framework YAML files change
-   */
-  setFrameworkReloadCallback(callback: (event: HotReloadEvent) => Promise<void>): void {
-    this.onFrameworkReloadCallback = callback;
-    this.logger.debug('HotReloadObserver: Framework reload callback registered');
-  }
-
-  /**
-   * Register auxiliary reload handlers (e.g., framework, gate) with their watch directories.
+   * Register auxiliary reload handlers (framework, gate, style, script tools, change tracking)
+   * with their watch directories. This is the ONE path a framework file takes: there is no
+   * dedicated framework callback, because a second route would handle every framework event
+   * twice — and while it sat unwired, it turned each framework edit into an extra prompt reload.
    * Directories must also be passed to watchDirectories by the caller.
    */
   setAuxiliaryReloads(reloads: AuxiliaryReloadConfig[]): void {
@@ -268,24 +278,6 @@ export class HotReloadObserver {
   }
 
   /**
-   * Manually trigger a reload
-   */
-  async triggerReload(
-    reason: string = 'Manual trigger',
-    requiresFullReload: boolean = true
-  ): Promise<void> {
-    const event: HotReloadEvent = {
-      type: 'reload_required',
-      reason,
-      affectedFiles: [],
-      timestamp: Date.now(),
-      requiresFullReload,
-    };
-
-    await this.processReloadEvent(event);
-  }
-
-  /**
    * Setup file observer event handlers
    */
   private setupFileObserverEventHandlers(): void {
@@ -293,8 +285,8 @@ export class HotReloadObserver {
       this.handleFileChange(event);
     });
 
-    this.fileObserver.on('frameworkFileChange', (event: FileChangeEvent) => {
-      this.handleFrameworkFileChange(event);
+    this.fileObserver.on(LATE_DIRECTORY_ARMED, (directoryPath: string) => {
+      void this.reconcileLateDirectory(directoryPath);
     });
 
     this.fileObserver.on('watcherError', (error: { directoryPath: string; error: Error }) => {
@@ -327,53 +319,38 @@ export class HotReloadObserver {
   }
 
   /**
-   * Handle framework file change events
-   * These are processed separately from regular file changes to enable
-   * targeted framework reload without affecting prompt system
+   * Reconcile everything a directory created after startup could have changed unobserved.
+   *
+   * Every auxiliary registration whose directories overlap it compares what it holds against the
+   * disk, and the prompt catalog reloads in full — prompt reload always rebuilds from every root,
+   * so that IS its reconciliation. Each owner runs even if another throws: one failed
+   * reconciliation must not leave a sibling type stale.
    */
-  private async handleFrameworkFileChange(event: FileChangeEvent): Promise<void> {
-    this.stats.filesChanged++;
-    const frameworkId = event.frameworkId ?? this.extractFrameworkId(event.filePath);
+  private async reconcileLateDirectory(directoryPath: string): Promise<void> {
+    const root = path.normalize(directoryPath);
+    this.logger.info(`🔁 HotReloadObserver: reconciling ${root} (created after startup)`);
 
-    this.logger.info(
-      `🔧 Framework file change detected: ${event.type} - ${event.filename}` +
-        (frameworkId ? ` (framework: ${frameworkId})` : '')
-    );
-
-    // Map FileChangeType to FileChangeOperation (filter out 'renamed' as it becomes 'added' or 'removed')
-    const changeType = this.mapToChangeOperation(event.type);
-
-    const hotReloadEvent: HotReloadEvent = {
-      type: 'framework_changed',
-      reason: `Framework file ${event.type}: ${event.filename}`,
-      affectedFiles: [event.filePath],
-      timestamp: event.timestamp,
-      requiresFullReload: false, // Framework changes typically don't need full reload
-      changeType,
-      ...(frameworkId ? { frameworkId } : {}),
-    };
-
-    // Use dedicated framework callback if available, otherwise fall through to general reload
-    if (this.onFrameworkReloadCallback) {
-      try {
-        await this.onFrameworkReloadCallback(hotReloadEvent);
-        this.logger.info(`✅ Framework ${frameworkId ?? 'unknown'} reloaded successfully`);
-      } catch (error) {
-        this.logger.error(`❌ Failed to reload framework ${frameworkId ?? 'unknown'}:`, error);
+    for (const reload of this.auxiliaryReloads) {
+      if (!reload.directories.some((dir) => pathsOverlap(dir, root))) {
+        continue;
       }
-    } else {
-      // Fallback to regular reload processing
-      await this.processReloadEvent(hotReloadEvent);
+      try {
+        await reload.reconcile(root);
+      } catch (error) {
+        this.logger.error(
+          `[HotReloadObserver] Reconcile failed for ${reload.id} at ${root}`,
+          error
+        );
+      }
     }
-  }
 
-  /**
-   * Extract framework ID from file path
-   */
-  private extractFrameworkId(filePath: string): string | undefined {
-    const normalizedPath = filePath.replace(/\\/g, '/');
-    const match = normalizedPath.match(/\/frameworks\/([^/]+)\//);
-    return match?.[1]?.toLowerCase();
+    await this.processReloadEvent({
+      type: 'reload_required',
+      reason: `reconciling ${root}, created after startup`,
+      affectedFiles: [root],
+      timestamp: Date.now(),
+      requiresFullReload: true,
+    });
   }
 
   /**
@@ -410,6 +387,15 @@ export class HotReloadObserver {
         continue;
       }
 
+      // The framework id the observer already resolved travels with the event.
+      //
+      // `FileObserver` extracts it from the path when it classifies a framework file, and the
+      // framework reload handler refuses an event without one ("missing frameworkId, skipping").
+      // Auxiliary events are the ONLY path framework files take (see `setAuxiliaryReloads`),
+      // so dropping the id here meant every framework edit and every framework
+      // deletion was observed by the watcher, logged as a file event, and then discarded: an
+      // edited `framework.yaml` kept serving its previous guidance, and a deleted framework
+      // stayed selected, until a restart.
       const hotReloadEvent: HotReloadEvent = {
         type: 'reload_required',
         reason: `${reload.id} file ${event.type}: ${event.filename}`,
@@ -417,6 +403,7 @@ export class HotReloadObserver {
         timestamp: event.timestamp,
         requiresFullReload: false,
         changeType: this.mapToChangeOperation(event.type),
+        ...(event.frameworkId !== undefined ? { frameworkId: event.frameworkId } : {}),
       };
 
       try {
@@ -551,72 +538,6 @@ export class HotReloadObserver {
   }
 
   /**
-   * Get current statistics
-   */
-  getStats(): HotReloadStats {
-    return {
-      ...this.stats,
-      fileObserverStats: this.fileObserver.getStats(),
-    };
-  }
-
-  /**
-   * Get current configuration
-   */
-  getConfig(): HotReloadConfig {
-    return { ...this.config };
-  }
-
-  /**
-   * Update configuration
-   */
-  updateConfig(newConfig: Partial<HotReloadConfig>): void {
-    const oldAutoReload = this.config.autoReload;
-    this.config = { ...this.config, ...newConfig };
-
-    // Update file observer config if needed
-    if (
-      newConfig.debounceMs !== undefined ||
-      newConfig.watchPromptFiles !== undefined ||
-      newConfig.watchConfigFiles !== undefined
-    ) {
-      const debounceMs: number =
-        this.config.debounceMs ?? DEFAULT_HOT_RELOAD_CONFIG.debounceMs ?? 500;
-      const watchPromptFiles: boolean =
-        this.config.watchPromptFiles ?? DEFAULT_HOT_RELOAD_CONFIG.watchPromptFiles ?? true;
-      const watchConfigFiles: boolean =
-        this.config.watchConfigFiles ?? DEFAULT_HOT_RELOAD_CONFIG.watchConfigFiles ?? true;
-
-      this.fileObserver.updateConfig({
-        debounceMs,
-        watchPromptFiles,
-        watchConfigFiles,
-      });
-    }
-
-    if (oldAutoReload !== this.config.autoReload) {
-      this.stats.autoReloadsEnabled = this.config.autoReload;
-      this.logger.info(`Auto reload ${this.config.autoReload ? 'enabled' : 'disabled'}`);
-    }
-
-    this.logger.info('HotReloadObserver configuration updated');
-  }
-
-  /**
-   * Check if hot reload manager is running
-   */
-  isRunning(): boolean {
-    return this.isStarted;
-  }
-
-  /**
-   * Get watched directories
-   */
-  getWatchedDirectories(): string[] {
-    return Array.from(this.watchedDirectories);
-  }
-
-  /**
    * Framework pre-reload processing
    *  Basic framework cache invalidation and analysis
    */
@@ -657,82 +578,6 @@ export class HotReloadObserver {
       const processingTime = performance.now() - startTime;
       this.logger.debug(`Framework post-reload monitoring: ${processingTime.toFixed(2)}ms`);
     }
-  }
-
-  /**
-   * Enable framework capabilities
-   */
-  enableFrameworkCapabilities(options: Partial<FrameworkHotReloadCapabilities> = {}): void {
-    this.config.frameworkCapabilities = {
-      enabled: true,
-      frameworkAnalysis: true,
-      performanceMonitoring: true,
-      preWarmAnalysis: true,
-      invalidateFrameworkCaches: true,
-      ...options,
-    };
-
-    // Enable framework integration on file observer if available
-    if ('enableFrameworkIntegration' in this.fileObserver) {
-      (this.fileObserver as any).enableFrameworkIntegration({
-        enabled: true,
-        analyzeChanges: this.config.frameworkCapabilities.frameworkAnalysis,
-        cacheInvalidation: this.config.frameworkCapabilities.invalidateFrameworkCaches,
-        performanceTracking: this.config.frameworkCapabilities.performanceMonitoring,
-      });
-    }
-
-    this.logger.info('Framework capabilities enabled for HotReloadObserver');
-  }
-
-  /**
-   * Disable framework capabilities
-   */
-  disableFrameworkCapabilities(): void {
-    this.config.frameworkCapabilities = {
-      enabled: false,
-      frameworkAnalysis: false,
-      performanceMonitoring: false,
-      preWarmAnalysis: false,
-      invalidateFrameworkCaches: false,
-    };
-
-    // Disable framework integration on file observer if available
-    if ('disableFrameworkIntegration' in this.fileObserver) {
-      (this.fileObserver as any).disableFrameworkIntegration();
-    }
-
-    this.logger.info('Framework capabilities disabled for HotReloadObserver');
-  }
-
-  /**
-   * Check if framework capabilities are enabled
-   */
-  isFrameworkCapabilitiesEnabled(): boolean {
-    return this.config.frameworkCapabilities?.enabled ?? false;
-  }
-
-  /**
-   * Get debug information
-   */
-  getDebugInfo(): {
-    isRunning: boolean;
-    config: HotReloadConfig;
-    stats: HotReloadStats;
-    watchedDirectories: string[];
-    pendingChanges: number;
-    fileObserverDebug: ReturnType<FileObserver['getDebugInfo']>;
-    frameworkCapabilities: FrameworkHotReloadCapabilities | undefined;
-  } {
-    return {
-      isRunning: this.isRunning(),
-      config: this.getConfig(),
-      stats: this.getStats(),
-      watchedDirectories: this.getWatchedDirectories(),
-      pendingChanges: this.pendingChanges.length,
-      fileObserverDebug: this.fileObserver.getDebugInfo(),
-      frameworkCapabilities: this.config.frameworkCapabilities,
-    };
   }
 }
 

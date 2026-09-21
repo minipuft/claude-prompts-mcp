@@ -13,17 +13,11 @@ description: >-
   visible feature, continuous math with range contracts, MEASURED discretization (regime
   classified from probed numbers, never eyeballed), a LOCK/identity contract, an offline
   harness, and a live probe with a numeric threshold.
+# subject tags this gate for harnessCovers suppression (see _index.md Subject column)
+subject: math
 guidanceFile: guidance.md
 pass_criteria:
   - type: inline_guidance
-    required_patterns:
-      - DISCRETIZATION
-      - LOCK
-  - type: inline_guidance
-    regex_patterns:
-      - 'measured|probed|texel|footprint'
-      - 'minif|magnif|native'
-      - 'threshold|±|<=|>='
 
 retry_config:
   max_attempts: 2

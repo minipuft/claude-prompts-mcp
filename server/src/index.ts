@@ -5,10 +5,7 @@
  * Minimal entry point with comprehensive error handling, health checks, and validation
  */
 
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
-
-import { ConfigLoader } from './infra/config/index.js';
+import { ConfigLoader, TransportConfigError } from './infra/config/index.js';
 import { startApplication } from './runtime/application.js';
 import { parseServerCliArgs, type ServerCliArgs } from './runtime/cli.js';
 import { RuntimeLaunchOptions, resolveRuntimeLaunchOptions } from './runtime/options.js';
@@ -16,6 +13,11 @@ import { RuntimeLaunchOptions, resolveRuntimeLaunchOptions } from './runtime/opt
 import type { Logger } from './infra/logging/index.js';
 import type { Application } from './runtime/application.js';
 import type { HealthReport } from './runtime/health.js';
+
+import { initConfig } from '#cli-shared/config-operations.js';
+import { initWorkspace } from '#cli-shared/workspace-init.js';
+import { findWorkspaceConfigFiles } from '#shared/utils/config-file-format.js';
+import { PathSettingError } from '#shared/utils/path-setting.js';
 
 const EMPTY_HEALTH_REPORT: HealthReport = {
   healthy: false,
@@ -315,17 +317,23 @@ USAGE:
   node dist/index.js [OPTIONS]
 
 QUICK START:
-  npx claude-prompts --init=~/my-prompts    Create a new workspace with starter prompts
+  npx claude-prompts --init=~/my-prompts    Create a new workspace with starter prompts and a config file
 
   Then add MCP_WORKSPACE to your Claude Desktop config and restart.
   Claude can update your prompts via resource_manager - no manual editing needed!
 
 PATH OPTIONS:
-  --workspace=/path       Base directory for all assets (resources/, config.json, hooks/)
-  --config=/path          Direct path to config.json
+  --workspace=/path       Base directory for all assets (resources/, config.jsonc, hooks/);
+                          the server refuses to start if it is not an existing
+                          directory, or if a config.jsonc or config.json there is not a
+                          JSON object (config.json is still read if that is what exists)
+  --config=/path          Direct path to your config file (config.jsonc or config.json,
+                          by extension); the server refuses to start if it is not a
+                          readable config file
 
 RUNTIME OPTIONS:
-  --init=/path            Create a new workspace with starter prompts at the specified path
+  --init=/path            Create a new workspace with starter prompts and a config file at the
+                          specified path
   --transport=TYPE        Transport type: stdio (default), streamable-http, or both
   --log-level=LEVEL       Log level: debug, info, warn, error
   --quiet                 Minimal output mode (production-friendly)
@@ -336,11 +344,14 @@ RUNTIME OPTIONS:
   --help                  Show this help message
 
 ENVIRONMENT VARIABLES:
-  MCP_WORKSPACE            Base workspace directory (same as --workspace)
-  MCP_RESOURCES_PATH       Custom resources base directory (replaces package default)
+  MCP_WORKSPACE            Base workspace directory (same as --workspace); the server
+                           refuses to start if it is not an existing directory
+  MCP_RESOURCES_PATH       Custom resources base directory (replaces package default);
+                           the server refuses to start if it is not an existing directory
   MCP_RUNTIME_ROOT         Writable root for runtime-state/ and relative logs/
                            (defaults to the workspace)
-  MCP_CONFIG_PATH          Direct path to config.json (same as --config)
+  MCP_CONFIG_PATH          Direct path to your config file (same as --config); the server
+                           refuses to start if it is not a readable config file
   LOG_LEVEL                Override log level (debug, info, warn, error)
 
 PRIORITY ORDER:
@@ -359,7 +370,7 @@ WORKSPACE STRUCTURE:
       gates/                   - Custom validation gates
       frameworks/           - Custom reasoning frameworks
       styles/                  - Custom output styles
-    config.json                - Server configuration overrides
+    config.jsonc                - Server configuration overrides (config.json also read)
 
 EXAMPLES:
   # Use a custom workspace (overlays custom + bundled resources)
@@ -396,143 +407,37 @@ For more information: https://github.com/minipuft/claude-prompts-mcp
 }
 
 /**
- * Starter prompts for new workspaces
+ * Handle `--init=/path`: create the starter workspace, then the workspace config, and report
+ * both — split out of `validateAndHandleEarlyExit` to keep its own branching under the cognitive
+ * complexity limit.
  */
-type StarterPrompt = {
-  id: string;
-  category: string;
-  description: string;
-  userMessageTemplate: string;
-  arguments: Array<{ name: string; type: 'string'; description: string }>;
-};
-
-const STARTER_PROMPTS: StarterPrompt[] = [
-  {
-    id: 'quick_review',
-    category: 'development',
-    description: 'Fast review focusing on bugs and security issues.',
-    userMessageTemplate:
-      'Review this code for bugs, security issues, and obvious improvements. Be concise and actionable.\n\n```\n{{code}}\n```',
-    arguments: [{ name: 'code', type: 'string', description: 'Code to review.' }],
-  },
-  {
-    id: 'explain',
-    category: 'development',
-    description: 'Clear explanation of how code works.',
-    userMessageTemplate:
-      'Explain how this code works. Start with a one-sentence summary, then break down the key parts.\n\n```\n{{code}}\n```',
-    arguments: [{ name: 'code', type: 'string', description: 'Code to explain.' }],
-  },
-  {
-    id: 'improve',
-    category: 'development',
-    description: 'Actionable suggestions to improve code quality.',
-    userMessageTemplate:
-      'Suggest improvements for this code. Focus on:\n- Readability\n- Performance\n- Best practices\n\nProvide before/after examples where helpful.\n\n```\n{{code}}\n```',
-    arguments: [{ name: 'code', type: 'string', description: 'Code to improve.' }],
-  },
-];
-
-function formatStarterPromptYaml(prompt: StarterPrompt): string {
-  const descriptionLines = prompt.description.split('\n').map((line) => `  ${line}`);
-  const argsLines = prompt.arguments.flatMap((arg) => [
-    `  - name: ${arg.name}`,
-    `    type: ${arg.type}`,
-    `    description: ${arg.description}`,
-  ]);
-
-  return [
-    `id: ${prompt.id}`,
-    `name: ${prompt.id}`,
-    `category: ${prompt.category}`,
-    `description: >-`,
-    ...descriptionLines,
-    `userMessageTemplateFile: user-message.md`,
-    `arguments:`,
-    ...argsLines,
-    '',
-  ].join('\n');
-}
-
-/**
- * Initialize a new workspace with starter prompts
- */
-function initWorkspace(targetPath: string): { success: boolean; message: string } {
-  try {
-    const workspacePath = resolve(targetPath);
-    const promptsDir = join(workspacePath, 'resources', 'prompts');
-
-    // Check if workspace already exists (check both new and legacy paths)
-    const legacyPromptsDir = join(workspacePath, 'prompts');
-    if (
-      (existsSync(promptsDir) && readdirSync(promptsDir).length > 0) ||
-      (existsSync(legacyPromptsDir) && readdirSync(legacyPromptsDir).length > 0)
-    ) {
-      return {
-        success: false,
-        message: `Workspace already exists at ${workspacePath}\nFound prompts directory (non-empty)`,
-      };
-    }
-
-    // Create directories
-    mkdirSync(promptsDir, { recursive: true });
-
-    const createdFiles: string[] = [];
-    for (const prompt of STARTER_PROMPTS) {
-      const promptDir = join(promptsDir, prompt.category, prompt.id);
-      mkdirSync(promptDir, { recursive: true });
-
-      const promptYamlPath = join(promptDir, 'prompt.yaml');
-      writeFileSync(promptYamlPath, formatStarterPromptYaml(prompt), 'utf8');
-      createdFiles.push(promptYamlPath);
-
-      const userMessagePath = join(promptDir, 'user-message.md');
-      writeFileSync(userMessagePath, `${prompt.userMessageTemplate.trimEnd()}\n`, 'utf8');
-      createdFiles.push(userMessagePath);
-    }
-
-    return {
-      success: true,
-      message: `
-✅ Workspace created at: ${workspacePath}
-
-Created files:
-  ${createdFiles.map((f) => `\n  ${f}`).join('')}
-
-Next steps:
-
-1. Add to your Claude Desktop config (~/.config/claude/claude_desktop_config.json):
-
-   {
-     "mcpServers": {
-       "claude-prompts": {
-         "command": "npx",
-         "args": ["-y", "claude-prompts@latest"],
-         "env": {
-           "MCP_WORKSPACE": "${workspacePath}"
-         }
-       }
-     }
-   }
-
-2. Restart Claude Desktop
-
-3. Test with: resource_manager(resource_type: "prompt", action: "list")
-
-4. Edit prompts directly or ask Claude:
-   "Update the quick_review prompt to also check for TypeScript errors"
-
-   Claude will use resource_manager to update your prompts automatically!
-
-📖 Full docs: https://github.com/minipuft/claude-prompts-mcp
-`,
-    };
-  } catch (error) {
-    return {
-      success: false,
-      message: `Failed to create workspace: ${error instanceof Error ? error.message : String(error)}`,
-    };
+function handleInitFlag(rawPath: string): { shouldExit: true; exitCode: number } {
+  let targetPath = rawPath;
+  if (targetPath.length === 0) {
+    console.error('Error: --init requires a path. Usage: --init=/path/to/workspace');
+    console.error('Example: npx claude-prompts --init=~/my-prompts');
+    return { shouldExit: true, exitCode: 1 };
   }
+
+  if (targetPath.startsWith('~')) {
+    targetPath = targetPath.replace('~', process.env['HOME'] ?? process.env['USERPROFILE'] ?? '');
+  }
+
+  const result = initWorkspace(targetPath);
+  // eslint-disable-next-line no-console -- --init returns shouldExit and main() exits before startApplication, so no transport exists; measured 2026-09-14: exit 0, no runtime root created
+  console.log(result.message);
+  if (!result.success) {
+    return { shouldExit: true, exitCode: 1 };
+  }
+
+  const configResult = initConfig(targetPath);
+  if (configResult.success) {
+    // eslint-disable-next-line no-console -- same justification as the workspace message above
+    console.log(configResult.message);
+  } else {
+    console.error(configResult.message);
+  }
+  return { shouldExit: true, exitCode: configResult.success ? 0 : 1 };
 }
 
 /**
@@ -545,20 +450,7 @@ function validateAndHandleEarlyExit(cli: ServerCliArgs): { shouldExit: boolean; 
   }
 
   if (cli.init !== undefined) {
-    let targetPath = cli.init;
-    if (targetPath.length === 0) {
-      console.error('Error: --init requires a path. Usage: --init=/path/to/workspace');
-      console.error('Example: npx claude-prompts --init=~/my-prompts');
-      return { shouldExit: true, exitCode: 1 };
-    }
-
-    if (targetPath.startsWith('~')) {
-      targetPath = targetPath.replace('~', process.env['HOME'] ?? process.env['USERPROFILE'] ?? '');
-    }
-
-    const result = initWorkspace(targetPath);
-    console.log(result.message);
-    return { shouldExit: true, exitCode: result.success ? 0 : 1 };
+    return handleInitFlag(cli.init);
   }
 
   if (
@@ -663,7 +555,10 @@ async function main(): Promise<void> {
         debugLog(`DEBUG: Checking workspace: ${workspace}`);
         debugLog(`DEBUG: Workspace exists: ${fs.existsSync(workspace)}`);
 
-        const configPath = path.join(workspace, 'config.json');
+        // Same precedence PathResolver uses (config.jsonc before config.json); this probe just
+        // reports what it finds rather than resolving the packaged fallback.
+        const configPath =
+          findWorkspaceConfigFiles(workspace)[0] ?? path.join(workspace, 'config.json');
         debugLog(`DEBUG: Config path: ${configPath}`);
         debugLog(`DEBUG: Config exists: ${fs.existsSync(configPath)}`);
 
@@ -753,6 +648,18 @@ async function main(): Promise<void> {
     // Log successful complete initialization
     activeLogger.info('✅ Application initialization completed - all systems operational');
   } catch (error) {
+    // A refused path setting or transport config is an operator error with a complete
+    // explanation, thrown before anything starts: print it once, without a stack, and leave
+    // nothing to roll back.
+    if (error instanceof PathSettingError) {
+      console.error(error.message);
+      process.exit(1);
+    }
+    if (error instanceof TransportConfigError) {
+      console.error(error.message);
+      process.exit(1);
+    }
+
     // Comprehensive error handling with rollback
     console.error('❌ Failed to start MCP Claude Prompts Server:', error);
 

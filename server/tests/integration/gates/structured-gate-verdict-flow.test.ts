@@ -40,7 +40,9 @@ function normalizeAtBoundary(gateVerdict: unknown): string | undefined {
 function authority(): GateEnforcementAuthority {
   return new GateEnforcementAuthority(
     {} as ConstructorParameters<typeof GateEnforcementAuthority>[0],
-    {} as ConstructorParameters<typeof GateEnforcementAuthority>[1]
+    { warn: () => undefined } as unknown as ConstructorParameters<
+      typeof GateEnforcementAuthority
+    >[1]
   );
 }
 
@@ -65,7 +67,23 @@ describe('structured gate verdict, schema through parser', () => {
 
     expect(verdict?.verdict).toBe('FAIL');
     expect(verdict?.rationale).toBe('two gates unmet');
-    expect(authority().parseGateVerdicts(normalized ?? '')).toEqual(submission.per_gate);
+    // The parse boundary resolves each `[n]` to the gate at that position in the list the
+    // review advertised, so the per-gate detail arrives keyed by id — what every downstream
+    // reader (`context.state.gates.perGateVerdicts`, `execution_records`) consumes.
+    const advertised = ['api-documentation', 'test-coverage', 'code-quality'];
+    expect(
+      authority()
+        .parseGateVerdicts(normalized ?? '', advertised)
+        .map(({ gateId, verdict, rationale }) => ({ gateId, verdict, rationale }))
+    ).toEqual([
+      {
+        gateId: 'api-documentation',
+        verdict: 'PASS',
+        rationale: submission.per_gate[0]!.rationale,
+      },
+      { gateId: 'test-coverage', verdict: 'FAIL', rationale: submission.per_gate[1]!.rationale },
+      { gateId: 'code-quality', verdict: 'FAIL', rationale: submission.per_gate[2]!.rationale },
+    ]);
   });
 
   test('the legacy string form still reaches the parser unchanged', () => {

@@ -36,3 +36,7 @@ arguments:
       Target audience: beginner | intermediate | expert | mixed. Affects depth
       and assumed knowledge.
     type: string
+artifacts:
+  produces:
+    - docs
+    - readme

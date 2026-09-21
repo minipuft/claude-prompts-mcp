@@ -75,10 +75,28 @@ function createProcessor(
     onRefresh: jest.fn(async () => {}),
     onRestart: jest.fn(async () => {}),
   };
-  const updatePromptImplementation = jest.fn(async (promptData: Record<string, unknown>) => {
-    currentPrompt = promptData;
-    return { message: 'written' };
-  });
+  // Models the real writer's transaction: the caller's `commit` step runs after the write and a
+  // throw rolls the files back (P4.2). A double ignoring `options` measures a writer that no
+  // longer exists.
+  const updatePromptImplementation = jest.fn(
+    async (
+      promptData: Record<string, unknown>,
+      _suppliedKeys?: unknown,
+      _sourceRoot?: unknown,
+      _writeIntent?: unknown,
+      options?: { commit?: () => Promise<void> }
+    ) => {
+      const previous = currentPrompt;
+      currentPrompt = promptData;
+      try {
+        await options?.commit?.();
+      } catch (error) {
+        currentPrompt = previous;
+        throw new Error(`Prompt write failed and was rolled back: ${String(error)}`);
+      }
+      return { message: 'written' };
+    }
+  );
   const recordEditResult = jest.fn(
     async (
       _type: string,
@@ -93,7 +111,20 @@ function createProcessor(
     dependencies,
     promptAnalyzer: new PromptAnalyzer(dependencies),
     gateAnalyzer: new GateAnalyzer(dependencies as never),
-    fileOperations: { updatePromptImplementation },
+    // The diff is read off the writer's projection. This double projects the one file these edits
+    // land in, from the state the write double last left, so a version row's diff summary counts
+    // the change the update makes.
+    fileOperations: {
+      updatePromptImplementation,
+      projectPromptWrite: jest.fn(async (promptData: Record<string, unknown>) => [
+        {
+          path: 'general/review_code/user-message.md',
+          previousPath: 'general/review_code/user-message.md',
+          before: String(currentPrompt['userMessageTemplate'] ?? ''),
+          after: String(promptData['userMessageTemplate'] ?? ''),
+        },
+      ]),
+    },
     getData: () => ({ convertedPrompts: [currentPrompt] }),
     versionHistoryService: {
       isAutoVersionEnabled: () => true,
@@ -320,7 +351,7 @@ describe('produced-state validation (row 3.5)', () => {
   /**
    * The differential rule. Three shipped prompts carry Handlebars-style `{{#if}}` bodies that no
    * Nunjucks parse accepts (measured 2026-08-12: `creative/lora_profile`,
-   * `general/diagnosisCard`, plus `{{{x}}}` in the same family). A flat syntax gate would refuse
+   * `general/diagnosis_card`, plus `{{{x}}}` in the same family). A flat syntax gate would refuse
    * every future edit to them — including an edit that repairs them.
    */
   test('allows an edit to a prompt whose template was already unparseable', async () => {

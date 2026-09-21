@@ -66,6 +66,8 @@ interface Harness {
   recordEditResult: jest.Mock;
   /** `rollback` double on `versionHistoryService` — unset by default; tests configure it. */
   rollback: RollbackMock;
+  /** Makes the byte path answer `refused` for the next `handleRollback` on this harness. */
+  refuseByteRestore: (reason: string) => void;
   /**
    * Every file the writer produced for this prompt, keyed by name. The writer externalises the two
    * text bodies to `user-message.md` / `system-message.md`, so reading `prompt.yaml` alone would
@@ -132,6 +134,18 @@ function createHarness(workspaceDir: string): Harness {
     success: false,
     error: 'rollback not configured for this test',
   }));
+  /**
+   * What the byte path answers, overridable per test.
+   *
+   * The PROJECTION path is what this harness's doubles describe — it configures a snapshot and
+   * never a file tree — so `projection-only` is the honest default, and exactly what a pre-v29 row
+   * answers. One case below flips it to `refused`, because a mutant that deleted that branch from
+   * a processor came back green when no test drove it.
+   */
+  let byteRestoreAnswer: { status: string; reason: string } = {
+    status: 'projection-only',
+    reason: 'this harness records no file trees',
+  };
 
   const context = {
     dependencies,
@@ -143,6 +157,9 @@ function createHarness(workspaceDir: string): Harness {
       isAutoVersionEnabled: () => true,
       loadHistory: jest.fn(async () => ({ current_version: 3 })),
       recordEditResult,
+      // The create-path writer: no prior state to bridge, so `createPrompt` calls this
+      // directly rather than through `recordEditResult`.
+      saveVersion: jest.fn(async () => ({ success: true, version: 1 })),
       rollback,
       // Bridge the test-configured `rollback` double into the two-phase contract the processor
       // now calls (resolveRollbackTarget → commitEdit → write). Tests keep configuring
@@ -154,6 +171,12 @@ function createHarness(workspaceDir: string): Harness {
           ? { ok: true as const, entry: { snapshot: result.snapshot } }
           : { ok: false as const, error: result.error ?? 'Version not found' };
       },
+      /**
+       * The PROJECTION path, which is what this harness's doubles describe: it configures a
+       * snapshot, never a file tree. Answering "no tree" is exactly what a pre-v29 row answers,
+       * and it is the honest double — a missing method is a TypeError at the call site.
+       */
+      planByteRestore: async () => byteRestoreAnswer,
       commitEdit: async () => {
         const result = await rollback();
         return { version: result.saved_version ?? 0, bridged: false };
@@ -180,6 +203,9 @@ function createHarness(workspaceDir: string): Harness {
     context,
     promptsDir,
     logger,
+    refuseByteRestore: (reason: string) => {
+      byteRestoreAnswer = { status: 'refused', reason };
+    },
   };
 }
 
@@ -512,6 +538,50 @@ describe('tools/category preservation and create pre-verify (Fix A + Fix C)', ()
   });
 
   /**
+   * A byte-path refusal must not fall through to the projection path.
+   *
+   * The prompt half of the enumeration `preview-matches-write.integration.test.ts` carries for the
+   * other three processors. A mutant deleting the refusal branch from one processor came back
+   * green before these cases existed: the projection path produces a perfectly plausible rollback
+   * from a state the row explicitly says it can no longer vouch for.
+   */
+  test('rollback refuses when the byte path refuses, and writes nothing', async () => {
+    const dir = workspace();
+    const harness = createHarness(dir);
+    await seed(harness);
+    const before = harness.readFiles();
+
+    harness.rollback.mockResolvedValue({
+      success: true,
+      saved_version: 2,
+      snapshot: {
+        name: 'Patch Target',
+        category: CATEGORY,
+        description: 'A prompt used to exercise anchored patching',
+        userMessageTemplate: TEMPLATE,
+        systemMessage: 'Be precise.',
+      },
+    });
+    harness.refuseByteRestore(
+      "the recorded bytes of 'user-message.md' are missing from the object store"
+    );
+
+    const response = await new PromptVersioningProcessor(harness.context).handleRollback({
+      id: PROMPT_ID,
+      version: 1,
+      confirm: true,
+    } as never);
+
+    expect(response.isError).toBe(true);
+    expect((response.content[0] as { text: string }).text).toContain(
+      'missing from the object store'
+    );
+    // Nothing moved — a refusal that named the right thing while writing half the files would
+    // pass an assertion about its message alone.
+    expect(harness.readFiles()).toEqual(before);
+  });
+
+  /**
    * Test 4 — `createPrompt` refuses a template that will not compile BEFORE any write, unlike the
    * pre-Fix-C behaviour where the only check ran AFTER the files landed on disk. Refusal must
    * leave no trace: no prompt directory at all (not a write-then-rollback).
@@ -592,7 +662,7 @@ describe('write-scope byte-identity and category move (Fix B + Part 2)', () => {
    * re-serialization. `system-message.md` is asserted untouched the same way.
    *
    * FALSIFICATION: neuter the scope table (make `writesYaml` always `true` in
-   * `createOrUpdateYamlPrompt`) and `rawAfter` no longer equals `rawBefore` — the comment and key
+   * `planPromptFiles`) and `rawAfter` no longer equals `rawBefore` — the comment and key
    * order are lost to `serializeYaml`, which has no comment model.
    */
   test('a patch-only edit leaves prompt.yaml byte-identical, system-message.md untouched', async () => {

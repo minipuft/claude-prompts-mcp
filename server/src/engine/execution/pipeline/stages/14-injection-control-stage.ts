@@ -316,18 +316,4 @@ export class InjectionControlStage extends BasePipelineStage {
 
     return Object.keys(record).length > 0 ? record : undefined;
   }
-
-  /**
-   * Reset the service (for testing or when config changes).
-   */
-  resetService(): void {
-    this.injectionService = null;
-  }
-
-  /**
-   * Get the current service instance (for testing).
-   */
-  getService(): InjectionDecisionService | null {
-    return this.injectionService;
-  }
 }

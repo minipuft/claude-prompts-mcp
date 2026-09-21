@@ -19,6 +19,16 @@ scenarios:
     requests: [{ tool: system_control, args: { action: status } }]
     expect: { ok: true }
 
+  - id: sc-status-without-metrics
+    claim_source: >-
+      system_control contract — `include_metrics` "Include detailed metrics output". The status
+      overview prints its Performance Metrics block unless `include_metrics: false` arrives.
+    requests:
+      - tool: system_control
+        args: { action: status, include_metrics: false }
+    expect:
+      { text_contains: '**System Status Overview**', text_not_contains: '**Performance Metrics**' }
+
   - id: sc-framework-list
     claim_source: 'system_control action: framework (list) — FrameworkManager is the authority'
     requests: [{ tool: system_control, args: { action: framework, operation: list } }]
@@ -47,9 +57,13 @@ scenarios:
     expect: { ok: true }
 
   - id: sc-config
-    claim_source: 'system_control action: config'
-    requests: [{ tool: system_control, args: { action: config } }]
-    expect: { ok: true }
+    claim_source: >-
+      system_control contract — config `list` "the whole loaded configuration". Asserted on
+      content, not bare `ok`: a malformed config call used to fall through to this same dump
+      (the `if (!configRequest) return list` defect d69cba37 removed), so `ok: true` alone would
+      not distinguish a real `list` request from that defect reappearing.
+    requests: [{ tool: system_control, args: { action: config, operation: list } }]
+    expect: { text_contains: '**Current Configuration**' }
 
   - id: sc-guide
     claim_source: 'system_control action: guide'
@@ -66,6 +80,88 @@ scenarios:
         args: { action: guide, topic: framework }
     expect: { text_contains: 'Focus: `framework`' }
 
+  - id: sc-guide-without-planned
+    claim_source: >-
+      system_control contract — `include_planned` "set false to leave out operations marked
+      planned". The guide adds its include-planned hint only when `include_planned: false` arrives.
+    requests:
+      - tool: system_control
+        args: { action: guide, include_planned: false }
+    expect: { text_contains: 'Include planned operations with `include_planned:true`.' }
+
+  - id: sc-config-keys
+    claim_source: >-
+      system_control contract — config `keys` "declared schema keys", the read that stood in for
+      per-key `get` once d69cba37 made config read-only over MCP.
+    requests:
+      - tool: system_control
+        args: { action: config, operation: keys }
+    expect: { text_contains: '**Declared Configuration Keys**' }
+
+  - id: sc-config-get
+    claim_source: >-
+      system_control contract — config `get` (row 6.3, owner ruling R59): `config: { operation:
+      "get", key }` returns that key's effective value and source.
+    requests:
+      - tool: system_control
+        args:
+          action: config
+          operation: get
+          config: { operation: get, key: server.name }
+    expect: { text_contains: 'claude-prompts' }
+
+  - id: sc-config-get-unknown-key
+    claim_source: >-
+      system_control contract — config `get` refuses a key the schema does not declare, naming
+      `keys` rather than answering it.
+    requests:
+      - tool: system_control
+        args:
+          action: config
+          operation: get
+          config: { operation: get, key: server.nope }
+    expect: { error_contains: 'keys' }
+
+  - id: sc-config-write-refused
+    claim_source: >-
+      system_control contract — configuration is read-only over MCP (owner rulings R27/R35): a
+      write operation (`set`) never reaches the config manager, and refusing it is the security
+      boundary this row exists to keep closed.
+    requests:
+      - tool: system_control
+        args: { action: config, operation: set }
+    expect: { error_contains: 'config operation `set` is not served over MCP.' }
+
+  - id: sc-config-validate-key-valid
+    claim_source: >-
+      system_control contract — config `validate` per-key candidate check:
+      `config: { operation: "validate", key, value }` reports whether `value` would be valid for
+      `key`, without writing it. config-action-handler.ts `handleConfigValidate` prints
+      `Configuration valid for **<key>**` when `validateConfigInput` accepts the candidate.
+    requests:
+      - tool: system_control
+        args:
+          action: config
+          operation: validate
+          config: { operation: validate, key: logging.level, value: info }
+    expect: { text_contains: 'Configuration valid for **logging.level**' }
+
+  - id: sc-config-validate-key-invalid
+    claim_source: >-
+      system_control contract — the same per-key candidate check reports the reason a candidate
+      is invalid, rather than merely refusing. `validateConfigInput` rejects any `logging.level`
+      outside debug/info/warn/error, and `handleConfigValidate` prints that reason inline —
+      distinguishing "reached the validator and failed" from the `get`/`set` refusals above, which
+      never reach it at all.
+    requests:
+      - tool: system_control
+        args:
+          action: config
+          operation: validate
+          config: { operation: validate, key: logging.level, value: verbose }
+    expect:
+      text_contains: 'Invalid configuration for **logging.level**: logging.level must be one of: error, warn, info, debug'
+
   - id: sc-injection
     claim_source: 'system_control action: injection — docs/guides/injection-control.md'
     requests: [{ tool: system_control, args: { action: injection } }]
@@ -81,6 +177,22 @@ scenarios:
     requests: [{ tool: system_control, args: { action: changes } }]
     expect: { ok: true }
 
+  - id: sc-changes-filters
+    claim_source: >-
+      system_control contract — changes list `source`, `resource_type` and `since`. An empty page
+      names every filter it applied, so each value is shown reaching the action.
+    requests:
+      - tool: system_control
+        args:
+          {
+            action: changes,
+            operation: list,
+            source: mcp-tool,
+            resource_type: gate,
+            since: '2999-01-01T00:00:00Z',
+          }
+    expect: { text_contains: 'from source `mcp-tool` for type `gate` since `2999-01-01T00:00:00Z`' }
+
   - id: sc-execution-history
     claim_source: 'system_control action: execution_history — SEP-1686 ledger, v_execution_history'
     requests: [{ tool: system_control, args: { action: execution_history } }]
@@ -89,8 +201,91 @@ scenarios:
   - id: sc-unknown-action-rejects
     claim_source: 'system_control advertises a closed action set — an unknown action must not pass'
     requests: [{ tool: system_control, args: { action: definitely_not_an_action } }]
-    # Names the rejected action AND that a closed set exists — a generic failure cannot produce it.
-    expect: { error_contains: 'Unknown action: definitely_not_an_action. Valid actions:' }
+    # The refusal moved from the router to the schema when `action` became `z.enum(...)` — the
+    # router's `Unknown action: <value>. Valid actions: …` is now unreachable over MCP, because
+    # zod rejects before the callback runs. The new message drops the echoed value and gains the
+    # whole option list, so the assertion names the list instead: it is still specific to THIS
+    # tool's closed set (`action:` plus the twelve ids), which a generic failure cannot produce.
+    expect:
+      {
+        error_contains: 'action: Invalid option: expected one of "status"|"framework"|"gates"|"analytics"|"config"|"maintenance"|"guide"|"injection"|"session"|"changes"|"execution_history"|"skills_sync"',
+      }
+
+  # ── system_control skills_sync: each option reaches its validation ──────────
+  #
+  # Every row is refused by option validation, which runs before skills-sync.yaml is read and
+  # before anything is written. Each uses `diff` or `clone` so that if its field ever stopped
+  # arriving, the call would fall through to a read-only diff or another refusal — never an export
+  # against this server's real HOME.
+  - id: sc-skills-sync-client
+    claim_source: 'system_control contract — skills_sync `client` "Target client id"'
+    requests:
+      - tool: system_control
+        args: { action: skills_sync, operation: diff, client: no-such-client }
+    expect: { error_contains: 'Unknown client: no-such-client' }
+
+  - id: sc-skills-sync-scope
+    claim_source: >-
+      system_control contract — `scope` is shared: skills_sync takes user or project and refuses
+      the injection values.
+    requests:
+      - tool: system_control
+        args: { action: skills_sync, operation: diff, scope: session }
+    expect: { error_contains: 'Invalid scope: session. Expected one of: user, project.' }
+
+  - id: sc-skills-sync-preview-detail
+    claim_source: 'system_control contract — `preview_detail` "Requires `preview: true`"'
+    requests:
+      - tool: system_control
+        args: { action: skills_sync, operation: diff, preview_detail: summary }
+    expect: { error_contains: '--preview-detail requires --preview' }
+
+  - id: sc-skills-sync-preview
+    claim_source: >-
+      system_control contract — skills_sync `preview`. With `preview: true` present, the diff depth
+      is refused for its command rather than for a missing preview.
+    requests:
+      - tool: system_control
+        args: { action: skills_sync, operation: diff, preview: true, preview_detail: diff }
+    expect: { error_contains: '--preview-detail diff is only valid for the pull command.' }
+
+  - id: sc-skills-sync-output
+    claim_source: 'system_control contract — skills_sync `output` "For skills_sync diff"'
+    requests:
+      - tool: system_control
+        args: { action: skills_sync, operation: clone, output: conformance-patches }
+    expect: { error_contains: '--output is only valid for the diff command.' }
+
+  - id: sc-skills-sync-file
+    claim_source: 'system_control contract — skills_sync `file` "For skills_sync clone"'
+    requests:
+      - tool: system_control
+        args: { action: skills_sync, operation: diff, file: conformance/SKILL.md }
+    expect:
+      { error_contains: '--file, --category, and --force are only valid for the clone command.' }
+
+  - id: sc-skills-sync-category
+    claim_source: 'system_control contract — skills_sync `category` "For skills_sync clone"'
+    requests:
+      - tool: system_control
+        args: { action: skills_sync, operation: diff, category: conformance }
+    expect:
+      { error_contains: '--file, --category, and --force are only valid for the clone command.' }
+
+  - id: sc-skills-sync-force
+    claim_source: 'system_control contract — skills_sync `force` "For skills_sync clone"'
+    requests:
+      - tool: system_control
+        args: { action: skills_sync, operation: diff, force: true }
+    expect:
+      { error_contains: '--file, --category, and --force are only valid for the clone command.' }
+
+  - id: sc-skills-sync-prune
+    claim_source: 'system_control contract — skills_sync `prune` "For skills_sync sync"'
+    requests:
+      - tool: system_control
+        args: { action: skills_sync, operation: diff, prune: false }
+    expect: { error_contains: '--prune/--no-prune are only valid for the sync command.' }
 
   # ── resource_manager: list answers for every advertised resource_type ───────
   - id: rm-list-prompt
@@ -174,3 +369,48 @@ scenarios:
       - tool: resource_manager
         args: { resource_type: prompt, action: list, source_workspace: elsewhere }
     expect: { error_contains: "'source_workspace' is a read-only parameter" }
+
+  - id: rm-prompt-guide-goal
+    claim_source: >-
+      resource_manager contract — prompt guide `goal` "the guide ranks its suggested actions
+      against it". The guide echoes the goal it received in place of its default goal line.
+    requests:
+      - tool: resource_manager
+        args: { resource_type: prompt, action: guide, goal: conformance gate review }
+    expect: { text_contains: '🎯 **Goal**: conformance gate review' }
+
+  # ── P4.93 / R50: an undeclared key is refused by name, over the real transport ──────────────
+  #
+  # `{action:"status", previw:true}` answered with a normal status overview and `isError:false`
+  # on f711401b, because zod stripped the key before the callback ran. The nearest existing rows
+  # (`sc-unknown-action`, the config `get` unknown-key row) exercise different mechanisms: an
+  # unknown VALUE and an unknown CONFIG key, neither of which is an undeclared argument.
+  - id: sc-refuses-a-key-its-contract-does-not-declare
+    claim_source: >-
+      docs/reference/mcp-tools.md § Undeclared parameters — "a key the tool does not declare is
+      refused by name, on all three tools". Implemented by describeUndeclaredParameterRefusal
+      (mcp/tools/shared/undeclared-parameters.ts).
+    requests:
+      - tool: system_control
+        args: { action: status, previw: true }
+    expect:
+      error_contains: "'previw' is not a parameter of system_control"
+
+  - id: sc-refuses-a-mistyped-safety-flag-rather-than-running-unguarded
+    claim_source: >-
+      docs/guides/troubleshooting.md § "is not a parameter of" — a safety flag under a slightly
+      wrong name used to be dropped while the guarded action ran; the shape that wrote 33 files.
+    requests:
+      - tool: system_control
+        args: { action: skills_sync, operation: export, client: claude-code, dry_run: true }
+    expect:
+      error_contains: "'dry_run' is not a parameter of system_control"
+
+  - id: sc-still-accepts-every-declared-parameter-it-is-sent
+    claim_source: >-
+      The positive control for the two rows above: a refusal that fired on everything would
+      satisfy both. The same action with only declared parameters answers.
+    requests:
+      - tool: system_control
+        args: { action: status, include_metrics: false }
+    expect: { text_contains: '**System Status Overview**' }

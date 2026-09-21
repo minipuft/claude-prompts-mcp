@@ -4,12 +4,13 @@
  * Reuses existing PromptAssetManager behavior without duplicating transport/config logic.
  */
 
-import { access, readFile, stat } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import * as path from 'node:path';
 
 import * as yaml from 'js-yaml';
 
 import { formatResourceInventory } from './resource-inventory.js';
+import { resolveSkillsSyncPaths } from './skills-sync-paths.js';
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { ConfigLoader } from '#infra/config/index.js';
@@ -18,8 +19,11 @@ import type { PromptAssetManager } from '#modules/prompts/index.js';
 import type { Category, PromptData } from '#modules/prompts/types.js';
 import type { RuntimeLaunchOptions } from './options.js';
 import type { PathResolver } from './paths.js';
+import type { Stats } from 'node:fs';
 
+import { summarizeQuarantine } from '#mcp/tools/shared/quarantine-report.js';
 import { loadPromptsAcrossRoots, mergePromptResults } from '#modules/prompts/prompt-root-loader.js';
+import { getSkillsSyncConfigPath } from '#modules/skills-sync/service.js';
 
 export interface PromptDataLoadParams {
   logger: Logger;
@@ -83,24 +87,16 @@ export async function loadPromptData(params: PromptDataLoadParams): Promise<Prom
     }
   }
 
-  // Verify path exists (can be directory or file for backward compatibility)
-  await access(promptsPath).catch((error) => {
-    logger.error(`✗ Prompts path NOT FOUND: ${promptsPath}`);
-    if (isVerbose) {
-      logger.error(`File access error:`, error);
-      logger.error(`Is path absolute? ${path.isAbsolute(promptsPath)}`);
-      logger.error(`Normalized path: ${path.normalize(promptsPath)}`);
-    }
-    throw new Error(`Prompts path not found: ${promptsPath}`);
-  });
-
-  // Determine if path is directory or file
-  const pathStats = await stat(promptsPath);
-  const isDirectory = pathStats.isDirectory();
+  // Absence is not refused here. A custom workspace's prompts directory is created by its first
+  // write, and until then `loadPromptsAcrossRoots` serves the bundled tree; it still throws when
+  // no bundled tree backs a missing primary. Any other failure to read the path stops startup.
+  const pathStats = await statUnlessAbsent(promptsPath);
+  // A directory, or a file for backward compatibility.
+  const isDirectory = pathStats?.isDirectory() ?? true;
 
   if (isVerbose) {
     const pathType = isDirectory ? 'directory' : 'file';
-    logger.info(`✓ Prompts ${pathType} exists: ${promptsPath}`);
+    logger.info(`✓ Prompts ${pathType}: ${promptsPath}`);
   }
 
   // Drop cached file contents before reading, so a reload observes the disk rather than the last
@@ -114,8 +110,8 @@ export async function loadPromptData(params: PromptDataLoadParams): Promise<Prom
   promptManager.clearLoaderCache();
 
   // The bundled tree loads FIRST, so a workspace prompts directory overlays it instead of
-  // replacing it. `resolveResourceSubdir` returns the first existing candidate and stops, so a
-  // workspace holding one prompt used to serve exactly one prompt — the 39 bundled ones silently
+  // replacing it. `resolveResourceSubdir` names a single directory per type, so before this a
+  // workspace holding one prompt served exactly one prompt — the 39 bundled ones silently
   // gone, and the startup line indistinguishable from a healthy one. Measured 2026-08-28; see
   // `PathResolver.getBundledResourceDir` for the same defect's fatal form on frameworks.
   //
@@ -174,6 +170,36 @@ export async function loadPromptData(params: PromptDataLoadParams): Promise<Prom
     logger.info(line);
   }
 
+  // Name the files, not just the count. `invalid: 3` on the line above is reconcilable arithmetic
+  // but not an actionable finding — an operator still has to guess which three, and the loader's
+  // own ERROR lines are hundreds of lines up in a startup log. Deliberately not gated on
+  // `!isQuiet`, for the reason the inventory block above records: STDIO auto-enables quiet, and
+  // STDIO is how every MCP client launches this server.
+  //
+  // The shadow half names the ROOT, not the fact of one. `convertedPrompts` carries `sourceRoot`,
+  // stamped by the loader on the pass that produced it (`PromptAssetManager`, P1.1), and it was in
+  // scope here while this line re-derived shadowing from a bare `Set` of served ids and could only
+  // say "another root". An operator reading that still has to work out which of bundled, primary
+  // and overlay answered — the one fact that decides whether repairing the file changes what
+  // serves. `summarizeQuarantine` is the pairing the `resource_manager` surfaces already use, so
+  // the startup log and `list` now agree by construction rather than by care.
+  const quarantined = promptManager.getQuarantine().list();
+  for (const finding of summarizeQuarantine(quarantined, convertedPrompts)) {
+    const shadowed = finding.shadowed
+      ? ` (served from ${finding.servedFrom ?? 'another root'} — your edit is not live)`
+      : '';
+    logger.warn(
+      `🚧 quarantined prompt '${finding.record.id}': ${finding.record.path} — ` +
+        `${finding.record.error}${shadowed}`
+    );
+  }
+  if (quarantined.length > 0) {
+    logger.warn(
+      `🚧 ${quarantined.length} prompt file(s) quarantined — repair with ` +
+        `resource_manager(action:"update"); they are on disk and not in the catalog`
+    );
+  }
+
   if (!isQuiet) {
     logger.info('=== PROMPT LOADING RESULTS ===');
     logger.info(`✓ Converted ${convertedPrompts.length} prompts to MCP format`);
@@ -184,10 +210,15 @@ export async function loadPromptData(params: PromptDataLoadParams): Promise<Prom
   params.apiRouter?.updateData(promptsData, categories, convertedPrompts);
 
   // Auto-deregister prompts exported as client skills via skills-sync.yaml.
-  // Set unconditionally: a hot reload that REMOVES the last registration must
-  // clear the previous set, or the prompt stays deregistered until restart.
+  // Set unconditionally: a call that REMOVES the last registration must clear
+  // the previous set, or the prompt stays deregistered until restart.
+  //
+  // This function runs at startup and on the manual `fullServerRefresh` path. The
+  // filesystem-watch hot-reload path (`Application.handlePromptHotReload`) does not call
+  // it — that path reloads prompt content through `reloadPromptData` instead — so it
+  // recomputes the exported set the same way, separately, right after that call.
   const exportedPromptIds = await loadSkillsSyncExports(
-    serverRoot,
+    pathResolver,
     logger,
     convertedPrompts.map((prompt) => `${prompt.category}/${prompt.id}`)
   );
@@ -208,6 +239,16 @@ export async function loadPromptData(params: PromptDataLoadParams): Promise<Prom
     convertedPrompts,
     promptsDirectory: promptsPath,
   };
+}
+
+/** A path's stats, or `undefined` when nothing exists there yet. Any other failure throws. */
+async function statUnlessAbsent(target: string): Promise<Stats | undefined> {
+  try {
+    return await stat(target);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
 }
 
 /** One load pass: the prompts, their categories, and the MCP-converted forms. */
@@ -282,13 +323,16 @@ function collectRegisteredKeys(
  * Returns an empty set when the file is missing or declares neither key.
  */
 export async function loadSkillsSyncExports(
-  serverRoot: string | undefined,
+  pathResolver: PathResolver | undefined,
   logger: Logger,
   allPromptKeys: string[]
 ): Promise<Set<string>> {
-  if (serverRoot === undefined) return new Set();
+  if (pathResolver === undefined) return new Set();
 
-  const configPath = path.join(serverRoot, 'skills-sync.yaml');
+  // The file skills sync itself reads and registers into: the workspace's when it holds one, else
+  // the package's. Reading only the package copy left a prompt registered in the workspace listed
+  // here as well as served as a skill.
+  const configPath = getSkillsSyncConfigPath(resolveSkillsSyncPaths(pathResolver));
   try {
     const content = await readFile(configPath, 'utf-8');
     const config = yaml.load(content) as SkillsSyncDeregistrationConfig | null;

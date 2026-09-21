@@ -1,6 +1,13 @@
 // @lifecycle canonical - Prompt discovery and analysis operations.
 
 import { promptResourceMetadata } from '../../../../metadata/definitions/prompt-resource.js';
+import {
+  formatQuarantineSection,
+  formatQuarantinedInspect,
+  formatShadowedNote,
+  summarizeQuarantine,
+  type QuarantineFinding,
+} from '../../../shared/quarantine-report.js';
 import { GateAnalyzer } from '../analysis/gate-analyzer.js';
 import { PromptAnalyzer } from '../analysis/prompt-analyzer.js';
 import { PromptResourceContext } from '../core/context.js';
@@ -40,6 +47,19 @@ export class PromptDiscoveryProcessor {
     this.gateAnalyzer = context.gateAnalyzer;
     this.filterParser = context.filterParser;
     this.promptMatcher = context.promptMatcher;
+  }
+
+  /**
+   * Every refused file on disk, paired with whatever is serving its id instead.
+   *
+   * Reads the loader's LIVE quarantine view, so a reload is reflected without this processor being
+   * told. Empty when the view is unbound (the unit suites) — which degrades to the previous
+   * output rather than to a wrong claim.
+   */
+  private quarantineFindings(): QuarantineFinding[] {
+    const records = this.context.dependencies.quarantine?.list() ?? [];
+    if (records.length === 0) return [];
+    return summarizeQuarantine(records, this.getConvertedPrompts());
   }
 
   async listPrompts(args: any): Promise<ToolResponse> {
@@ -90,11 +110,16 @@ export class PromptDiscoveryProcessor {
     });
 
     if (matchingPrompts.length === 0) {
+      // The quarantine section belongs on THIS branch above all others: a root whose prompts all
+      // failed to load produces exactly this response, and "no prompts found" for a directory
+      // full of prompt.yaml files is the least actionable thing the tool can say.
       return {
         content: [
           {
             type: 'text' as const,
-            text: `📭 No prompts found matching filter: "${args.search_query || 'all'}"\n\n💡 Try broader search terms or use filters like 'type:template', 'category:analysis'`,
+            text:
+              `📭 No prompts found matching filter: "${args.search_query || 'all'}"\n\n💡 Try broader search terms or use filters like 'type:template', 'category:analysis'` +
+              formatQuarantineSection(this.quarantineFindings(), 'prompt'),
           },
         ],
         isError: false,
@@ -226,6 +251,8 @@ export class PromptDiscoveryProcessor {
       }
     }
 
+    result += formatQuarantineSection(this.quarantineFindings(), 'prompt');
+
     return {
       content: [{ type: 'text' as const, text: result }],
       isError: false,
@@ -270,6 +297,18 @@ export class PromptDiscoveryProcessor {
     validateRequiredFields(args, ['id']);
     const prompt = this.getConvertedPrompts().find((p) => p.id === args.id);
     if (!prompt) {
+      // `Prompt not found` was true of the catalog and false of the disk. Measured 2026-09-11:
+      // a server that had just logged `Invalid YAML in <path>` answered exactly that for the
+      // file it had named, leaving the operator with a defect nothing could reach.
+      const quarantined = this.context.dependencies.quarantine?.byId(String(args.id)) ?? [];
+      if (quarantined.length > 0) {
+        return {
+          content: [
+            { type: 'text' as const, text: formatQuarantinedInspect(quarantined, 'prompt') },
+          ],
+          isError: true,
+        };
+      }
       return {
         content: [{ type: 'text' as const, text: `Prompt not found: ${args.id}` }],
         isError: true,
@@ -378,6 +417,14 @@ export class PromptDiscoveryProcessor {
         response += `🛡️ **Gates**: ${JSON.stringify(gateConfig)}\n`;
       }
     }
+
+    // Announce the fallback. The served definition is correct and the operator asked about it —
+    // but if a nearer file for the same id failed to load, their edit to that file is inert, and
+    // nothing else in this response would tell them. Empty for every healthy prompt.
+    response += formatShadowedNote(
+      this.context.dependencies.quarantine?.byId(prompt.id) ?? [],
+      (prompt as { sourceRoot?: string }).sourceRoot
+    );
 
     return {
       content: [{ type: 'text' as const, text: response }],

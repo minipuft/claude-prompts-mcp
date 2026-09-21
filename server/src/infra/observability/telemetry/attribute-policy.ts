@@ -107,13 +107,6 @@ export class AttributePolicyEnforcer {
     return result;
   }
 
-  /**
-   * Check if a single attribute key would be allowed by the current policy.
-   */
-  isAllowed(key: string): boolean {
-    return this.evaluateAttribute(key, 'probe') !== undefined;
-  }
-
   // ===== Private Pure Methods =====
 
   /**

@@ -5,6 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, jest } from '@je
 
 import { SqliteEngine } from '../../../src/infra/database/index.js';
 import { createResourceChangeTracker } from '../../../src/infra/observability/tracking/index.js';
+import { testScratchPath } from '../../helpers/scratch-path.js';
 
 /**
  * Baseline comparison against the tracker's real surface.
@@ -31,7 +32,7 @@ const logger = {
   debug: jest.fn() as jest.Mock,
 };
 
-const TEST_DIR = path.join(process.cwd(), 'tests/tmp/resource-change-tracker-baseline');
+const TEST_DIR = testScratchPath('resource-change-tracker-baseline');
 const RESOURCE_DIR = path.join(TEST_DIR, 'resources');
 
 /** Write a resource file and return the descriptor `compareBaseline` expects. */
@@ -56,7 +57,9 @@ describe('ResourceChangeTracker baseline comparison', () => {
     await fs.rm(TEST_DIR, { recursive: true, force: true });
     await fs.mkdir(RESOURCE_DIR, { recursive: true });
 
-    dbManager = await SqliteEngine.getInstance(TEST_DIR, logger as any);
+    dbManager = await SqliteEngine.getInstance(logger as any, {
+      dbPath: path.join(TEST_DIR, 'runtime-state', 'state.db'),
+    });
     await dbManager.initialize();
   });
 
@@ -83,7 +86,7 @@ describe('ResourceChangeTracker baseline comparison', () => {
   it('counts every tracked resource as added on first run, and nothing on an unchanged rerun', async () => {
     const tracker = createResourceChangeTracker(logger as any, {
       maxEntries: 1000,
-      serverRoot: TEST_DIR,
+      dbPath: path.join(TEST_DIR, 'runtime-state', 'state.db'),
     });
     await tracker.initialize();
 
@@ -110,7 +113,7 @@ describe('ResourceChangeTracker baseline comparison', () => {
   it('detects a modification when a tracked file changes between runs', async () => {
     const tracker = createResourceChangeTracker(logger as any, {
       maxEntries: 1000,
-      serverRoot: TEST_DIR,
+      dbPath: path.join(TEST_DIR, 'runtime-state', 'state.db'),
     });
     await tracker.initialize();
 
@@ -128,7 +131,7 @@ describe('ResourceChangeTracker baseline comparison', () => {
   it('preserves a full resource ID containing a slash when detecting removals', async () => {
     const tracker = createResourceChangeTracker(logger as any, {
       maxEntries: 1000,
-      serverRoot: TEST_DIR,
+      dbPath: path.join(TEST_DIR, 'runtime-state', 'state.db'),
     });
     await tracker.initialize();
 
@@ -177,7 +180,7 @@ describe('ResourceChangeTracker baseline comparison', () => {
     it('stamps the configured defaultScope onto rows it writes', async () => {
       const tracker = createResourceChangeTracker(logger as any, {
         maxEntries: 1000,
-        serverRoot: TEST_DIR,
+        dbPath: path.join(TEST_DIR, 'runtime-state', 'state.db'),
         defaultScope: { workspaceId: 'ws-alpha', organizationId: 'org-alpha' },
       });
       await tracker.initialize();
@@ -198,7 +201,7 @@ describe('ResourceChangeTracker baseline comparison', () => {
     it('falls back to the default tenant and NULL scope when no defaultScope is configured', async () => {
       const tracker = createResourceChangeTracker(logger as any, {
         maxEntries: 1000,
-        serverRoot: TEST_DIR,
+        dbPath: path.join(TEST_DIR, 'runtime-state', 'state.db'),
       });
       await tracker.initialize();
 
@@ -219,7 +222,7 @@ describe('ResourceChangeTracker baseline comparison', () => {
     it('stamps scope on removals, which take a different branch to the same insert', async () => {
       const tracker = createResourceChangeTracker(logger as any, {
         maxEntries: 1000,
-        serverRoot: TEST_DIR,
+        dbPath: path.join(TEST_DIR, 'runtime-state', 'state.db'),
         defaultScope: { workspaceId: 'ws-beta' },
       });
       await tracker.initialize();

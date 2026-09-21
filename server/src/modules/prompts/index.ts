@@ -10,11 +10,13 @@ export * from './registry.js';
 export * from './prompt-schema.js';
 export * from './category-manager.js';
 
-import * as path from 'node:path';
-
 import { PromptConverter } from './converter.js';
 import { PromptLoader } from './loader.js';
-import { discoverPromptDirectories, buildWatchTargets } from './prompt-watch-setup.js';
+import {
+  discoverPromptDirectories,
+  buildWatchTargets,
+  type WatchTarget,
+} from './prompt-watch-setup.js';
 import { PromptRegistry, type PromptRegistryServer } from './registry.js';
 import {
   HotReloadObserver,
@@ -26,6 +28,7 @@ import { ConversationStore } from '../text-refs/conversation.js';
 import { TextReferenceStore } from '../text-refs/index.js';
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
+import type { QuarantineView } from '#shared/utils/resource-quarantine.js';
 import type { Category, CategoryPromptsResult, PromptData } from './types.js';
 import type { McpServer } from '@modelcontextprotocol/server';
 
@@ -187,6 +190,18 @@ export class PromptAssetManager {
   }
 
   /**
+   * Live view of the prompt files the loader refused, across every root.
+   *
+   * Handed to the tool layer once at wiring time. It is the same object the loader writes to, so
+   * a reload is visible through it with no re-plumbing — and a consumer holding it can see a
+   * broken file's id, category, root, path and error, and nothing else. There is deliberately no
+   * accessor for the content that failed to load.
+   */
+  getQuarantine(): QuarantineView {
+    return this.loader.getQuarantine();
+  }
+
+  /**
    * Clear the loader's file cache.
    * Call this before reloading prompts to ensure fresh content is read from disk.
    */
@@ -195,71 +210,19 @@ export class PromptAssetManager {
   }
 
   /**
-   * Complete prompt system initialization
-   */
-  async initializePromptSystem(
-    configPath: string,
-    basePath?: string
-  ): Promise<{
-    promptsData: PromptData[];
-    categories: Category[];
-    convertedPrompts: ConvertedPrompt[];
-    loadedCount: number;
-  }> {
-    try {
-      // Load and convert prompts
-      const result = await this.loadAndConvertPrompts(configPath, basePath);
-
-      // Publish content only. Binding happens per serving unit, so registering
-      // here would target the construction-time shell that no client connects
-      // to — which is what made a loaded-but-unreachable prompt surface report
-      // itself as registered.
-      if (this.registry) {
-        this.setLivePrompts(result.convertedPrompts);
-      } else {
-        this.logger.warn('MCP server not available - skipping prompt registration');
-      }
-
-      return { ...result, loadedCount: result.convertedPrompts.length };
-    } catch (error) {
-      this.logger.error('Error initializing prompt system:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Reload prompts (useful for hot-reloading)
-   */
-  async reloadPrompts(
-    configPath: string,
-    basePath?: string
-  ): Promise<{
-    promptsData: PromptData[];
-    categories: Category[];
-    convertedPrompts: ConvertedPrompt[];
-    loadedCount: number;
-  }> {
-    this.logger.info('Reloading prompt system...');
-
-    // Note: MCP protocol doesn't support unregistering prompts
-    // Hot-reload will be handled via list_changed notifications
-
-    // Reinitialize the system
-    return this.initializePromptSystem(configPath, basePath);
-  }
-
-  /**
    * Start automatic file watching for hot reload
    */
   async startHotReload(
-    promptsConfigPath: string,
+    promptsDir: string,
     onReloadCallback?: (event: PromptHotReloadEvent) => Promise<void>,
     options?: {
-      frameworkHotReload?: {
-        handler: (event: PromptHotReloadEvent) => Promise<void>;
-        directories?: string[];
-      };
       auxiliaryReloads?: AuxiliaryReloadConfig[];
+      /**
+       * Every root the prompt loader reads besides the primary one — the bundled tree and any
+       * workspace overlay. The caller resolves them, because the same set has to be the one the
+       * loader composes the catalog from.
+       */
+      promptRoots?: string[];
     }
   ): Promise<void> {
     if (!this.hotReloadObserver) {
@@ -279,11 +242,6 @@ export class PromptAssetManager {
       });
     }
 
-    // Register framework-specific reload callback (keeps manager generic)
-    if (options?.frameworkHotReload?.handler) {
-      this.hotReloadObserver.setFrameworkReloadCallback(options.frameworkHotReload.handler);
-    }
-
     if (options?.auxiliaryReloads) {
       this.hotReloadObserver.setAuxiliaryReloads(options.auxiliaryReloads);
     }
@@ -291,12 +249,27 @@ export class PromptAssetManager {
     // Start monitoring
     await this.hotReloadObserver.start();
 
-    const promptsDir = path.dirname(promptsConfigPath);
-    const categoryDirs = await discoverPromptDirectories(promptsDir, this.loader, this.logger);
+    // `promptsDir` IS the prompts root. This parameter used to be a prompts CONFIG FILE path and
+    // was reduced with `path.dirname`; once callers passed the directory itself, that put the
+    // watcher on the root's PARENT — `<workspace>/resources`, or the whole workspace for a legacy
+    // `<workspace>/prompts` — polling every resource type and any runtime state beside them, and
+    // discovering the sibling type folders as "categories" while the real ones went untagged.
+    //
+    // Discover categories under EVERY root the loader reads, not just the primary one.
+    //
+    // The catalog is composed from the bundled tree, the primary root and every workspace
+    // overlay, so an edit in any of them changes what is served. Watching only the primary made
+    // an edit to a bundled-only or overlay-only prompt invisible to the watcher: the reload it
+    // should have triggered never ran, and the previous body was served until a restart.
+    const promptRoots = [promptsDir, ...(options?.promptRoots ?? [])];
+    const categoryDirs: WatchTarget[] = [];
+    for (const root of promptRoots) {
+      categoryDirs.push(...(await discoverPromptDirectories(root, this.loader, this.logger)));
+    }
 
     const watchTargets = buildWatchTargets(promptsDir, categoryDirs, {
-      frameworkDirectories: options?.frameworkHotReload?.directories,
       auxiliaryDirectories: options?.auxiliaryReloads?.map((r) => r.directories),
+      ...(options?.promptRoots !== undefined ? { promptRoots: options.promptRoots } : {}),
     });
 
     await this.hotReloadObserver.watchDirectories(watchTargets);
@@ -319,9 +292,10 @@ export class PromptAssetManager {
       return;
     }
 
+    const categoryManager = this.loader.getCategoryManager();
     this.logger.info('📋 Category breakdown:');
     categories.forEach((category) => {
-      const categoryPrompts = promptsData.filter((p) => p.category === category.id);
+      const categoryPrompts = categoryManager.getPromptsByCategory(promptsData, category.id);
       this.logger.info(`   ${category.name} (${category.id}): ${categoryPrompts.length} prompts`);
     });
 
@@ -351,30 +325,6 @@ export class PromptAssetManager {
       categoryManager: this.loader.getCategoryManager(),
       hotReloadObserver: this.hotReloadObserver,
     };
-  }
-
-  getTextReferenceStore(): TextReferenceStore {
-    return this.textReferenceStore;
-  }
-
-  /**
-   * Get system statistics
-   */
-  getStats(prompts?: ConvertedPrompt[]) {
-    const stats: any = {
-      textReferences: this.textReferenceStore.getStats(),
-    };
-
-    if (prompts && this.registry) {
-      stats.registration = this.registry.getRegistrationStats(prompts);
-      stats.conversation = this.conversationStore.getConversationStats();
-    }
-
-    if (prompts && this.converter) {
-      stats.conversion = this.converter.getConversionStats(prompts.length, prompts);
-    }
-
-    return stats;
   }
 
   /**

@@ -113,7 +113,7 @@ When `loop:true` is enabled, the Stop hook prevents Claude from stopping until v
 
 ### How Stop Hook Works
 
-1. When verification starts with `loop:true`, state is written to `runtime-state/verify-state.db`
+1. When verification starts with `loop:true`, state is written to `verify-state.db` beside `state.db` in the server's runtime state directory — `$MCP_RUNTIME_ROOT/runtime-state/`, or `${CLAUDE_PLUGIN_DATA}/runtime-state/` under the Claude Code plugin — which is where the Stop hook reads it
 2. Claude makes changes and attempts to finish responding (end of turn)
 3. The Stop hook intercepts the stop and runs the verification command
 4. If PASS → Claude stops normally, user sees success
@@ -175,7 +175,7 @@ This ensures spawned instances don't repeat previous mistakes.
 
 ### Configuration
 
-Configure isolation in `server/config.json`:
+Configure isolation in your config file (`config.jsonc`, or `config.json`):
 
 ```json
 {
@@ -420,7 +420,7 @@ prompt_engine(chain_id: "chain-fix-bug", user_response: "applied fix")
 ### Stop hook not working
 
 - Ensure `loop:true` is set
-- Check that `runtime-state/verify-state.db` is being created
+- Check that `verify-state.db` is being created beside `state.db` in the runtime state directory (see step 1 above), not in the package directory
 - Verify Stop hook is configured in Claude Code settings
 
 ## See Also

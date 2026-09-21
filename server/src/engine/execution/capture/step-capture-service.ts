@@ -1,10 +1,16 @@
 // @lifecycle canonical - Captures step results (placeholder or real) in chain sessions.
 
 import { resolveDelegationSkipped } from '../delegation/acknowledgment.js';
+import { buildPipelineHookContext } from '../pipeline/hook-context.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { ExecutionRecordStore } from '#modules/chains/execution-record-store.js';
-import type { ChainSession, ChainSessionService } from '#shared/types/index.js';
+import type {
+  ChainSession,
+  ChainSessionService,
+  HookRegistryPort,
+  McpNotificationEmitterPort,
+} from '#shared/types/index.js';
 import type { ExecutionContext, SessionContext } from '../context/index.js';
 
 import { currentOrdinal, nodeIdAt, totalOf } from '#shared/utils/node-order.js';
@@ -49,7 +55,13 @@ export class StepCaptureService {
      * Ledger writer for the capture-time `completed` step row (S8). Optional, matching the
      * pipeline stages that hold the same store: absent, capture still happens, just unledgered.
      */
-    private readonly executionRecordStore: ExecutionRecordStore | null = null
+    private readonly executionRecordStore: ExecutionRecordStore | null = null,
+    /**
+     * Hook fan-out and client push for the step-completed fact. Optional for the same reason
+     * the record store is: a pipeline built without them still captures, just unannounced.
+     */
+    private readonly hookRegistry?: HookRegistryPort,
+    private readonly notificationEmitter?: McpNotificationEmitterPort
   ) {}
 
   /**
@@ -194,7 +206,54 @@ export class StepCaptureService {
 
     this.ledgerCapturedStep(context, sessionId, chainId, target, responseContent);
 
+    await this.announceStepComplete(context, chainId, target, responseContent);
+
     this.logger.debug(`Step ${target.ordinal} (${target.nodeId}) completed with real response`);
+  }
+
+  /**
+   * Announce the step-completed fact to hook consumers and to the connected client.
+   *
+   * Placed here and nowhere else because this is the one path that records a REAL step
+   * completion, and `captureStep` returns early for a step already completed non-placeholder —
+   * so a gate retry re-entering capture cannot announce a second time. The placeholder write
+   * deliberately does not announce: it is a STDIO transport artifact standing in for output
+   * that has not arrived, and a client told "step 2 complete" for it would advance past a step
+   * whose result does not exist yet.
+   *
+   * Isolated the way the gate emissions are (`GateVerdictProcessor.emitGateEvents`): one catch
+   * around both channels, because announcing is never a reason to fail a capture that already
+   * persisted. `HookRegistry` isolates each consumer callback itself, so nothing here nests a
+   * second layer around that.
+   */
+  private async announceStepComplete(
+    context: ExecutionContext,
+    chainId: string,
+    target: StepTarget,
+    responseContent: string
+  ): Promise<void> {
+    if (this.hookRegistry === undefined && this.notificationEmitter === undefined) return;
+
+    try {
+      const hookContext = buildPipelineHookContext(context);
+      await this.hookRegistry?.emitStepComplete(
+        chainId,
+        target.ordinal,
+        responseContent,
+        hookContext
+      );
+      this.notificationEmitter?.emitChainStepComplete({
+        chainId,
+        stepIndex: target.ordinal,
+        status: 'passed',
+      });
+    } catch (error) {
+      this.logger.warn(
+        `[StepCaptureService] Failed to announce step ${target.ordinal} completion: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
   }
 
   /**
@@ -205,6 +264,20 @@ export class StepCaptureService {
    * from), NULL everywhere else — partial population BY ROW TYPE. Exactly one row per captured
    * step: gate retries re-enter `captureStep` and take its completed-non-placeholder early
    * return before reaching this.
+   *
+   * It is also the ONLY append that fires on a call carrying a `gate_verdict`, which is why
+   * `gateVerdicts` binds here (P4.76). Measured against a hermetic server on 2026-09-20, not
+   * reasoned about: of the five `executionRecordStore.append()` sites, this is the one that
+   * runs when the client answers the step and submits the verdict in one call — the shape the
+   * server's own footer advertises (`user_response="..." gate_verdict="..."`). Stage 16 runs
+   * `processPendingReviewVerdict` before `captureStep`, so the verdicts are on request state by
+   * the time this reads them.
+   *
+   * ☐ The SPLIT shape is not covered (as of 2026-09-20 · flips when a verdict-only call is
+   * observed to append a row): when the response is sent on one call and the verdict on a
+   * later one, this row is already written and `captureStep` early-returns, so NO append fires
+   * on the verdict call at all and those verdicts reach no record. Closing that needs a new
+   * verdict-time row, which is a record-shape decision rather than a binding.
    */
   private ledgerCapturedStep(
     context: ExecutionContext,
@@ -232,6 +305,11 @@ export class StepCaptureService {
       capturedResponse: responseContent,
     });
 
+    // Omitted rather than bound to `[]` when the call carried no per-gate detail: the column
+    // already defaults to `'[]'`, and writing it explicitly would make "ungated step" and
+    // "reviewer said nothing per-gate" the same row.
+    const gateVerdicts = context.state.gates.perGateVerdicts;
+
     const capturedAt = Date.now();
     this.executionRecordStore.append({
       sessionId,
@@ -244,6 +322,7 @@ export class StepCaptureService {
       startedAt: capturedAt,
       completedAt: capturedAt,
       ...(delegationSkipped !== undefined ? { delegationSkipped } : {}),
+      ...(gateVerdicts !== undefined ? { gateVerdicts } : {}),
       scope: context.getScopeOptions(),
     });
   }

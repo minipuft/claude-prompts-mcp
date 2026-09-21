@@ -72,6 +72,7 @@ describe('AttributePolicyEnforcer', () => {
       expect(result['cpm.gates.applied_count']).toBe(3);
       expect(result['cpm.chain.current_step']).toBe(2);
       expect(result['cpm.chain.total_steps']).toBe(5);
+      expect(result['cpm.scope.continuity_source']).toBe('workspace');
     });
 
     test('drops safe attributes when businessContext is false', () => {
@@ -187,26 +188,6 @@ describe('AttributePolicyEnforcer', () => {
     });
   });
 
-  describe('isAllowed', () => {
-    const enforcer = new AttributePolicyEnforcer(defaultPolicy);
-
-    test('returns true for allowed safe attribute', () => {
-      expect(enforcer.isAllowed('cpm.prompt.id')).toBe(true);
-    });
-
-    test('returns false for excluded attribute', () => {
-      expect(enforcer.isAllowed('cpm.prompt.body')).toBe(false);
-    });
-
-    test('returns true for non-cpm attribute', () => {
-      expect(enforcer.isAllowed('http.method')).toBe(true);
-    });
-
-    test('returns false for unknown cpm attribute', () => {
-      expect(enforcer.isAllowed('cpm.unknown')).toBe(false);
-    });
-  });
-
   describe('wide-event enrichment attributes', () => {
     const enforcer = new AttributePolicyEnforcer(defaultPolicy);
 
@@ -251,6 +232,7 @@ describe('AttributePolicyEnforcer', () => {
         'cpm.chain.step_index': 3,
         'cpm.chain.id': 'chain-abc',
         'cpm.scope.source': 'workspace',
+        'cpm.scope.continuity_source': 'header',
         'cpm.error.type': 'ValidationError',
       });
 
@@ -258,6 +240,7 @@ describe('AttributePolicyEnforcer', () => {
       expect(result['cpm.chain.step_index']).toBe(3);
       expect(result['cpm.chain.id']).toBe('chain-abc');
       expect(result['cpm.scope.source']).toBe('workspace');
+      expect(result['cpm.scope.continuity_source']).toBe('header');
       expect(result['cpm.error.type']).toBe('ValidationError');
     });
   });

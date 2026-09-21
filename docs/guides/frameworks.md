@@ -43,7 +43,7 @@ system_control(action: "framework", operation: "switch", framework: "cageerf")
 A switch persists to the calling project's scope, so different repositories can sit on different
 frameworks at the same time — CAGEERF for a server codebase, RADIANT for a Spicetify theme.
 
-Declare the starting point in that project's `config.json`:
+Declare the starting point in that project's `config.jsonc` (`config.json` is also still read):
 
 ```json
 {
@@ -56,6 +56,25 @@ Declare the starting point in that project's `config.json`:
 This is the **floor**, not a lock. It applies to any scope with no persisted state; a runtime
 `system_control` switch overrides it for that project and survives restarts. A project that
 declares nothing falls back to `CAGEERF`.
+
+Any framework the server has can be switched to, including one in your workspace or one created
+with `resource_manager` while the server runs, and that selection survives a restart as well.
+
+The configured default is also where the selection goes when the active framework disappears:
+
+- deleting the active framework with `resource_manager` selects `defaultFramework` and saves that
+  selection;
+- at startup, a saved selection whose framework no longer exists is replaced by `defaultFramework`.
+
+Because the selection has nowhere else to go, the framework named by `defaultFramework` cannot be
+deleted: `resource_manager` refuses the delete, and its preview, and removes nothing until the
+setting names another framework. If neither the saved selection nor `defaultFramework` names a
+registered framework when the server starts, the server refuses to start, and the error names
+`frameworks.defaultFramework`; it does not pick another framework in its place.
+
+The server reads `defaultFramework` each time it needs it, and reloads its config file when it
+changes, so an edit to the setting applies to this fallback and to the delete refusal without a
+restart.
 
 Isolation depends on each project resolving a distinct scope id. Confirm it in the startup log:
 
@@ -73,6 +92,11 @@ Use the `@` operator to apply a specific framework to a single prompt without ch
 ```
 prompt_engine(command: "@REACT >>my_prompt")
 ```
+
+`@` recognizes the frameworks that exist when the command runs. A framework created with
+`resource_manager` applies through `@<id>` straight away, without a restart, and once it is deleted
+`@<id>` is left as literal text. A word that names no framework is also left as literal text, which
+is what keeps `@docs/` or `@mention` in a command from being read as an operator.
 
 ### Disable for a Single Request
 
@@ -98,12 +122,12 @@ prompt_engine(command: "%clean >>my_prompt")
 
 When a framework is active, the server adds guidance at multiple levels:
 
-| Layer                         | What                                          | Where                       |
-| ----------------------------- | --------------------------------------------- | --------------------------- |
-| **System prompt guidance**    | Phase descriptions and reasoning instructions | Prepended to system prompt  |
-| **Framework gates**           | Per-phase quality validation criteria         | Added to gate review        |
-| **Tool description overlays** | Framework-branded tool descriptions           | Visible in MCP tool listing |
-| **Phase guards**              | Structural assertions on output sections      | Post-execution verification |
+| Layer                         | What                                                   | Where                       |
+| ----------------------------- | ------------------------------------------------------ | --------------------------- |
+| **System prompt guidance**    | Phase descriptions and reasoning instructions          | Prepended to system prompt  |
+| **Framework gates**           | Per-phase quality validation criteria                  | Added to gate review        |
+| **Tool description guidance** | Framework guidance appended to each tool's description | Visible in MCP tool listing |
+| **Phase guards**              | Structural assertions on output sections               | Post-execution verification |
 
 <details>
 <summary><strong>Example: CAGEERF system prompt injection</strong></summary>
@@ -122,6 +146,8 @@ Apply the C.A.G.E.E.R.F framework systematically:
 ```
 
 </details>
+
+A framework's `toolDescriptions` entry is guidance, not a replacement. The server serves each tool's own description first — its actions, resource types and syntax — and appends the active framework's text after it under an `ACTIVE FRAMEWORK [TYPE]:` heading. Write only what the framework adds; a copied action list or syntax block goes stale when the tool changes, and `npm run validate:framework-tool-descriptions` rejects one in a bundled framework.
 
 ---
 

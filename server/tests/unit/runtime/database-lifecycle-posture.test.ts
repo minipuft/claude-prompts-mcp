@@ -20,17 +20,18 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { describe, expect, it, jest, afterEach } from '@jest/globals';
+import { describe, expect, it, jest, afterEach, beforeEach } from '@jest/globals';
 
 import { SqliteEngine } from '../../../src/infra/database/index.js';
 import { createSimpleLogger } from '../../../src/infra/logging/index.js';
 import { Application } from '../../../src/runtime/application.js';
 import { initializeModules } from '../../../src/runtime/module-initializer.js';
 import type { RuntimeLaunchOptions } from '../../../src/runtime/options.js';
+import { testScratchPath } from '../../helpers/scratch-path.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const SERVER_ROOT = path.resolve(path.dirname(__filename), '..', '..', '..');
-const TMP_ROOT = path.join(process.cwd(), 'tests/tmp/db-lifecycle-posture');
+const TMP_ROOT = testScratchPath('db-lifecycle-posture');
 
 const mockLogger = {
   info: jest.fn() as jest.Mock,
@@ -52,8 +53,19 @@ function buildApp(): Application {
   return new Application(createSimpleLogger('stdio'), runtimeOptions as RuntimeLaunchOptions);
 }
 
+// Every app here names the package as `serverRoot` and no workspace, so its runtime root would
+// fall back to the package directory and startup would leave an empty `server/logs/` behind
+// (found by the tree-state guard, 2026-09-16). `MCP_RUNTIME_ROOT` moves only the writable root.
+let previousRuntimeRoot: string | undefined;
+beforeEach(() => {
+  previousRuntimeRoot = process.env['MCP_RUNTIME_ROOT'];
+  process.env['MCP_RUNTIME_ROOT'] = path.join(TMP_ROOT, 'runtime-root');
+});
+
 afterEach(async () => {
   await SqliteEngine.shutdownInstance();
+  if (previousRuntimeRoot === undefined) delete process.env['MCP_RUNTIME_ROOT'];
+  else process.env['MCP_RUNTIME_ROOT'] = previousRuntimeRoot;
   await fs.rm(TMP_ROOT, { recursive: true, force: true });
 });
 
@@ -61,12 +73,14 @@ describe('Application shutdown closes the database (5.2)', () => {
   it('closes an open engine', async () => {
     const dbDir = path.join(TMP_ROOT, 'closes');
     await fs.mkdir(dbDir, { recursive: true });
-    const engine = await SqliteEngine.getInstance(dbDir, mockLogger as any);
+    const engine = await SqliteEngine.getInstance(mockLogger as any, {
+      dbPath: path.join(dbDir, 'runtime-state', 'state.db'),
+    });
     await engine.initialize();
     expect(engine.isInitialized()).toBe(true);
 
     const app = buildApp();
-    await app.loadConfiguration();
+    await (app as unknown as { initializeFoundation: () => Promise<void> }).initializeFoundation();
     await app.shutdown();
 
     expect(engine.isInitialized()).toBe(false);
@@ -75,13 +89,15 @@ describe('Application shutdown closes the database (5.2)', () => {
   it('closes the database AFTER the subsystems that may still write', async () => {
     const dbDir = path.join(TMP_ROOT, 'ordering');
     await fs.mkdir(dbDir, { recursive: true });
-    const engine = await SqliteEngine.getInstance(dbDir, mockLogger as any);
+    const engine = await SqliteEngine.getInstance(mockLogger as any, {
+      dbPath: path.join(dbDir, 'runtime-state', 'state.db'),
+    });
     await engine.initialize();
 
     const order: string[] = [];
 
     const app = buildApp();
-    await app.loadConfiguration();
+    await (app as unknown as { initializeFoundation: () => Promise<void> }).initializeFoundation();
 
     // `configManager.stopWatching()` is the last teardown step before the database
     // close. If the close ever moves above the subsystem block, this ordering inverts.
@@ -126,7 +142,9 @@ describe('Database init failure fails startup (5.3)', () => {
       runtimeOptions: { verbose: false },
       configManager: { getConfig: () => ({}) },
       serverRoot: brokenRoot,
-      pathResolver: { getRuntimeStatePath: () => path.join(brokenRoot, 'runtime-state') },
+      pathResolver: {
+        getStateDatabasePath: () => path.join(brokenRoot, 'runtime-state', 'state.db'),
+      },
     };
 
     // Everything after the tracker — framework store, gate manager, MCP registration —
