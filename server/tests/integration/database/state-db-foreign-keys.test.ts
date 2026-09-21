@@ -17,7 +17,13 @@
  *     ever says OFF;
  *   * the BEHAVIOUR, on both writers: a referenced object cannot be deleted, and deleting a
  *     version row takes its entries with it. Red if the pragma is turned off, and red if the DDL
- *     loses either `ON DELETE` clause.
+ *     loses either FOREIGN KEY clause.
+ *
+ * One more boundary, measured rather than assumed: deleting the words `ON DELETE RESTRICT` leaves
+ * every case here green, because SQLite's default action is `NO ACTION`, which refuses an
+ * immediate constraint just as RESTRICT does — the two differ only in WHEN the check fires within
+ * a statement. So the refusal below pins that a foreign key exists and is enforced, not the choice
+ * of RESTRICT over the default. Removing the whole `FOREIGN KEY` clause is what goes red.
  *
  * The CLI is a separate connection in a separate module (`cli-shared/version-history.ts`, which
  * cannot import `runtime/` and bundles for a lower Node floor), so it is exercised through a real
