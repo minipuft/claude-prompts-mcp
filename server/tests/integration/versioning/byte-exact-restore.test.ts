@@ -334,12 +334,19 @@ describe('applyByteRestore', () => {
   });
 
   it('restores every written file byte-identical when the record throws', async () => {
+    // TWO files, not one, and that is the point: with a single-file plan this case passes against
+    // a transaction that snapshots only the entry file — exactly the shape a mutation of the CLI's
+    // target choice exposed, which stayed green against the one-file version.
     const version = await recordVersion('gate', 'alpha', {
-      'gate.yaml': '# recorded\nid: alpha\n',
+      'gate.yaml': '# recorded\nid: alpha\nguidanceFile: guidance.md\n',
+      'guidance.md': '# recorded guidance\n',
     });
     const yamlPath = path.join(rootFor('gate'), 'alpha', 'gate.yaml');
-    const before = 'id: alpha\n# edited by hand\n';
+    const guidancePath = path.join(rootFor('gate'), 'alpha', 'guidance.md');
+    const before = 'id: alpha\nguidanceFile: guidance.md\n# edited by hand\n';
+    const guidanceBefore = '# edited guidance by hand\n';
     await writeFile(yamlPath, before, 'utf8');
+    await writeFile(guidancePath, guidanceBefore, 'utf8');
 
     const available = await service().planByteRestore('gate', 'alpha', version);
     if (available.status !== 'ready') throw new Error(`expected ready, got ${available.status}`);
@@ -355,7 +362,10 @@ describe('applyByteRestore', () => {
     expect(outcome.applied).toBe(false);
     if (outcome.applied) throw new Error('unreachable');
     expect(outcome.rolledBack).toBe(true);
-    // Byte-identical, not merely "restored": the transaction's whole purpose.
+    // Byte-identical, not merely "restored": the transaction's whole purpose. Both files, because
+    // the companion is the one a too-narrow target list leaves holding restored bytes under a
+    // reply saying the rollback failed.
     expect(await readFile(yamlPath, 'utf8')).toBe(before);
+    expect(await readFile(guidancePath, 'utf8')).toBe(guidanceBefore);
   });
 });
