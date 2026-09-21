@@ -18,6 +18,8 @@
 
 import { McpServer } from '@modelcontextprotocol/server';
 
+import { withRequestNotifications } from '#shared/utils/request-notification-scope.js';
+
 import { CategoryToolHandler, createCategoryToolHandler } from './category-manager/index.js';
 import { FrameworkToolHandler, createFrameworkToolHandler } from './framework-manager/index.js';
 import { GateToolHandler, createGateToolHandler } from './gate-manager/index.js';
@@ -39,6 +41,7 @@ import {
   type ResourceManagerInput as ResourceManagerSchemaInput,
 } from './schemas/index.js';
 import { deriveStructuredMessage } from './shared/structured-message.js';
+
 import {
   ConsolidatedSystemControl,
   createConsolidatedSystemControl,
@@ -850,7 +853,7 @@ export class McpToolRouter {
             openWorldHint: false,
           },
         },
-        async (args: PromptEngineInput, extra: unknown) => {
+        withRequestNotifications(async (args: PromptEngineInput, extra: unknown) => {
           try {
             // Normalize and validate string inputs (trim whitespace, filter empty values)
             const trimmedCommand = args.command?.trim();
@@ -1011,7 +1014,7 @@ export class McpToolRouter {
               isError: true,
             };
           }
-        }
+        })
       );
       this.logger.debug('✅ prompt_engine tool registered successfully');
     } catch (error) {
@@ -1073,7 +1076,7 @@ export class McpToolRouter {
             openWorldHint: false,
           },
         },
-        async (args: SystemControlInput, extra: unknown) => {
+        withRequestNotifications(async (args: SystemControlInput, extra: unknown) => {
           try {
             const toolResponse = await this.systemControl.handleAction(
               args,
@@ -1099,7 +1102,7 @@ export class McpToolRouter {
               isError: true,
             };
           }
-        }
+        })
       );
       this.logger.debug('✅ system_control tool registered successfully');
     } catch (error) {
@@ -1141,7 +1144,7 @@ export class McpToolRouter {
             openWorldHint: false,
           },
         },
-        async (args: ResourceManagerSchemaInput, extra: unknown) => {
+        withRequestNotifications(async (args: ResourceManagerSchemaInput, extra: unknown) => {
           try {
             const router = this.resourceManagerRouter;
             if (router == null) {
@@ -1176,7 +1179,7 @@ export class McpToolRouter {
               isError: true,
             };
           }
-        }
+        })
       );
       this.logger.debug('✅ resource_manager tool registered successfully');
     } catch (error) {
