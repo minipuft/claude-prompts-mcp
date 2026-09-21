@@ -27,7 +27,7 @@
  */
 
 import { describe, expect, jest, test, beforeEach, afterEach } from '@jest/globals';
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -217,6 +217,107 @@ describe('chain `edges` through the real prompt write path', () => {
 
     expect(response.isError).toBe(false);
     expect(harness.readYaml()['edges']).toEqual([{ from: 'step-b', to: 'step-c' }]);
+  });
+
+  /**
+   * `edges` reaches the file through the source-preserving writer like every other resident key,
+   * so setting or clearing it must disturb the file's own formatting no more than the key itself.
+   *
+   * The seeded `prompt.yaml` is machine-written and carries nothing a serializer could normalize
+   * away, so both cases below OVERWRITE it with a hand-authored equivalent first: a leading
+   * comment, a comment above the edge list, a needlessly quoted value, and a folded description
+   * wrapped wider than the serializer's own width. Without that substitution the assertion would
+   * hold for a writer that reformatted everything.
+   */
+  const AUTHORED_CHAIN = [
+    '# Authored by hand — the step order below is meaningful to a reader.',
+    `id: ${PROMPT_ID}`,
+    'name: Edge Chain',
+    `category: "${CATEGORY}"`,
+    '',
+    'description: >-',
+    '  A chain that declares dependency edges, described in a folded scalar wrapped well past the',
+    '  width this serializer would choose for itself.',
+    '',
+    'userMessageTemplateFile: user-message.md',
+    '',
+    'chainSteps:',
+    '  - promptId: step-a',
+    '    stepName: Step A',
+    '  - promptId: step-b',
+    '    stepName: Step B',
+    '  - promptId: step-c',
+    '    stepName: Step C',
+    '',
+    '# Edges are ordering constraints; the loader drops them, so this file is their only home.',
+    'edges:',
+    '  - from: step-a',
+    '    to: step-c',
+    '',
+  ].join('\n');
+
+  /** 1-based line numbers at which two texts differ. */
+  const changedLines = (before: string, after: string): number[] => {
+    const a = before.split('\n');
+    const b = after.split('\n');
+    const out: number[] = [];
+    for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
+      if (a[i] !== b[i]) out.push(i + 1);
+    }
+    return out;
+  };
+  const commentCount = (text: string): number => (text.match(/^\s*#/gm) ?? []).length;
+
+  test('setting edges on a hand-authored chain keeps its comments and untouched lines', async () => {
+    const harness = createHarness(workspace());
+    await seed(harness);
+
+    const yamlPath = join(harness.promptsDir, CATEGORY, PROMPT_ID, 'prompt.yaml');
+    writeFileSync(yamlPath, AUTHORED_CHAIN, 'utf8');
+    await harness.reload();
+
+    const response = await harness.processor.updatePrompt({
+      id: PROMPT_ID,
+      edges: [{ from: 'step-a', to: 'step-b' }],
+    } as never);
+    expect(response.isError).toBe(false);
+
+    const after = readFileSync(yamlPath, 'utf8');
+    expect(harness.readYaml()['edges']).toEqual([{ from: 'step-a', to: 'step-b' }]);
+
+    // Only the edge's own value line moved; every comment survived.
+    expect(changedLines(AUTHORED_CHAIN, after)).toEqual([23]);
+    expect(commentCount(after)).toBe(commentCount(AUTHORED_CHAIN));
+    expect(after).toContain('# Edges are ordering constraints');
+  });
+
+  test('unsetting edges on a hand-authored chain removes the key and keeps its comments', async () => {
+    const harness = createHarness(workspace());
+    await seed(harness);
+
+    const yamlPath = join(harness.promptsDir, CATEGORY, PROMPT_ID, 'prompt.yaml');
+    writeFileSync(yamlPath, AUTHORED_CHAIN, 'utf8');
+    await harness.reload();
+
+    const response = await harness.processor.updatePrompt({
+      id: PROMPT_ID,
+      unset: ['edges'],
+    } as never);
+    expect(response.isError).toBe(false);
+
+    const after = readFileSync(yamlPath, 'utf8');
+    expect(harness.readYaml()['edges']).toBeUndefined();
+
+    // A removed key takes its OWN comment with it and nothing else. That asymmetry is the whole
+    // contract for a deletion: the comment above `edges:` documents `edges`, so leaving it behind
+    // would strand a sentence describing a key that is gone — while every unrelated comment has
+    // to survive, which a full re-serialize would not have managed.
+    expect(after).not.toContain('# Edges are ordering constraints');
+    expect(after).toContain('# Authored by hand');
+    expect(commentCount(after)).toBe(commentCount(AUTHORED_CHAIN) - 1);
+
+    // The steps the edges referenced are untouched — only the edge list was unset.
+    expect(harness.readYaml()['chainSteps']).toHaveLength(3);
   });
 
   test('dropping a step an edge names, with the corrected edges in the same call, succeeds', async () => {
