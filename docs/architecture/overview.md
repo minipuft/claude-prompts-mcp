@@ -770,6 +770,12 @@ falling back to another transport.
   request from the server factory and nothing is retained between exchanges. Cross-call state
   uses the repo's own run handles (`chain_id`), passed as ordinary tool arguments.
 
+- **Server notifications ride the causing request's stream.** The gate, chain and framework
+  notifications are raised while a tool call is in flight, so they are written onto that POST's
+  own `text/event-stream` response body through the SDK's per-request notifier. A client that
+  reads only the message whose `id` matches its request discards them.
+  → `docs/guides/telemetry-observability.md`
+
 **STDIO** keeps one `McpServer` for the life of the connection. That lifetime difference is the
 one place the transports genuinely diverge — see `CLAUDE.md` Core Principle 3.
 

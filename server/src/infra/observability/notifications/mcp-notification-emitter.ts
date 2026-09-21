@@ -34,11 +34,6 @@
  * One emitter, one payload shape, both transports.
  */
 
-import {
-  currentRequestNotificationSink,
-  type RequestNotificationSink,
-} from '#shared/utils/request-notification-scope.js';
-
 import type {
   ChainCompleteNotification,
   ChainStepCompleteNotification,
@@ -49,6 +44,11 @@ import type {
   RetryExhaustedNotification,
 } from '#shared/types/index.js';
 import type { Logger } from '../../logging/index.js';
+
+import {
+  currentRequestNotificationSink,
+  type RequestNotificationSink,
+} from '#shared/utils/request-notification-scope.js';
 
 /**
  * Minimal MCP server interface for sending notifications.

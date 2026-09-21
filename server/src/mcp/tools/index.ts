@@ -18,8 +18,6 @@
 
 import { McpServer } from '@modelcontextprotocol/server';
 
-import { withRequestNotifications } from '#shared/utils/request-notification-scope.js';
-
 import { CategoryToolHandler, createCategoryToolHandler } from './category-manager/index.js';
 import { FrameworkToolHandler, createFrameworkToolHandler } from './framework-manager/index.js';
 import { GateToolHandler, createGateToolHandler } from './gate-manager/index.js';
@@ -41,7 +39,6 @@ import {
   type ResourceManagerInput as ResourceManagerSchemaInput,
 } from './schemas/index.js';
 import { deriveStructuredMessage } from './shared/structured-message.js';
-
 import {
   ConsolidatedSystemControl,
   createConsolidatedSystemControl,
@@ -82,6 +79,7 @@ import { PromptAssetManager } from '#modules/prompts/index.js';
 // Gate evaluator removed - now using Framework validation
 import { createContentAnalyzer } from '#modules/semantic/content-analyzer.js';
 import { TextReferenceStore } from '#modules/text-refs/index.js';
+import { withRequestNotifications } from '#shared/utils/request-notification-scope.js';
 // Schemas now hand-written in ./schemas/ (replaced generated mcp-schemas.ts)
 
 // REMOVED: ExecutionCoordinator and ChainOrchestrator - modular chain system removed
