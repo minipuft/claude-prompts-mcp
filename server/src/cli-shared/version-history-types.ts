@@ -25,39 +25,48 @@ export const DEFAULT_MAX_VERSIONS = DEFAULT_VERSIONING_CONFIG.maxVersions;
 
 export type ResourceType = 'prompt' | 'gate' | 'framework' | 'style';
 
-export interface HistoryRequest {
+/**
+ * Which rows an operation acts on, and the per-call facts a row records.
+ *
+ * Separate from {@link HistoryRequest} because the row-level helpers read exactly these four
+ * fields and nothing else, while a dispatched request additionally names an action and a database.
+ * `rollbackVersion` needs the first without the second: it holds its own connection open across
+ * the file write (see `recordCheckpointedWrite`) instead of routing one action through `dispatch`,
+ * so it has a resource to name and no action to dispatch.
+ */
+export interface HistoryRowRequest {
+  resource_type: ResourceType;
+  resource_id: string;
+  max_versions?: number;
+  created_at?: string;
+}
+
+export interface HistoryRequest extends HistoryRowRequest {
   action:
     | 'load_history'
     | 'get_version'
     | 'save_version'
     | 'record_edit_result'
     | 'compare_versions'
-    | 'rollback'
     | 'delete_history'
     | 'rename_history';
   db_path: string;
-  resource_type: ResourceType;
-  resource_id: string;
   version?: number;
   from_version?: number;
   to_version?: number;
-  max_versions?: number;
-  created_at?: string;
   snapshot?: Record<string, unknown>;
-  /** The on-disk state immediately BEFORE this edit — only read by `record_edit_result`/`rollback` for the bridge check. */
+  /** The on-disk state immediately BEFORE this edit — only read by `record_edit_result` for the bridge check. */
   prior_snapshot?: Record<string, unknown>;
   /**
-   * The resource's bytes, already read, for whichever row the disk currently describes.
+   * The resource's bytes, already read, for the row the disk currently describes.
    *
-   * Absent means projection-only, which is every action but `rollback` today. See
-   * `recordEditResultRow` for why the answer is per ROW rather than per row kind.
+   * Absent means projection-only. See `recordTree` for why the answer is per ROW rather than per
+   * row kind, and `recordCheckpointedWrite` for the ordering that lets BOTH rows of one operation
+   * carry one.
    */
-  bridge_tree?: LoadedTree | null;
   produced_tree?: LoadedTree | null;
   description?: string;
   diff_summary?: string;
-  target_version?: number;
-  current_snapshot?: Record<string, unknown>;
   new_resource_id?: string;
 }
 
@@ -70,7 +79,7 @@ export interface HistoryResponse {
   to?: VersionEntry;
   version?: number;
   /**
-   * Set by `save_version`, `record_edit_result` and `rollback` — whether a row was inserted.
+   * Set by `save_version` and `record_edit_result` — whether a row was inserted.
    *
    * False means the snapshot was identical to the newest recorded one, so `version` is the number
    * that already existed. A caller printing `version` without reading this announces a save that
@@ -79,9 +88,6 @@ export interface HistoryResponse {
   recorded?: boolean;
   /** Set by `record_edit_result` — true when a bridge row was inserted before the recorded result. */
   bridged?: boolean;
-  saved_version?: number;
-  restored_version?: number;
-  snapshot?: Record<string, unknown>;
   /**
    * Set alongside `success: false` by `load_history` when `resolveEffectiveTenantId` found the
    * guessed tenant empty AND more than one other tenant holding rows for this resource — refused

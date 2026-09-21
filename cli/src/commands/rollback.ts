@@ -3,9 +3,6 @@ import {
   resolveConfiguredMaxVersions,
   rollbackVersion,
 } from '@cli-shared/index.js';
-// Imported from the defining module, not through the barrel: a barrel re-export with no consumer
-// inside `server/src` reads to knip as an unused export, and this one already has one there.
-import { readResourceTree } from '@cli-shared/object-store.js';
 import { resourceFileSet } from '@shared/utils/resource-file-set.js';
 import { serializeYamlPreservingSource } from '@shared/utils/yaml/yaml-document-writer.js';
 import { resolveWorkspace, resolveResourceDir, findResource } from '../lib/workspace.js';
@@ -74,45 +71,6 @@ export async function rollback(options: RollbackOptions): Promise<number> {
   }
   const resourceType = singularName(type) as 'prompt' | 'gate' | 'framework';
 
-  // The resource's bytes as they are RIGHT NOW, read before any row is written — this call
-  // records the pre-rollback state as the bridge row, and the restore below is what changes the
-  // files afterwards. Same enumerator and same recorder the server uses, so a `cpm` checkpoint
-  // and a server checkpoint of identical files carry identical `tree_hash`.
-  //
-  // Never fatal: a resource whose bytes cannot be enumerated or read is recorded
-  // projection-only, exactly as `cpm` has always recorded it. A rollback must not fail because a
-  // checkpoint could not be taken.
-  let tree = null;
-  try {
-    const files = await resourceFileSet({
-      resourceType,
-      entryPath: match.file,
-      roots: { primary: resolveResourceDir(workspace, type) },
-    });
-    const loaded = await readResourceTree(files);
-    if ('tree' in loaded) tree = loaded.tree;
-  } catch {
-    tree = null;
-  }
-
-  // The workspace's own `versioning.maxVersions`, not the built-in 50: a rollback writes rows and
-  // trims the history it wrote them into, and until now `cpm` trimmed to a hardcoded bound while
-  // the server trimmed to the configured one — the same resource kept a different number of
-  // versions depending on which process last touched it.
-  const result = rollbackVersion(
-    match.file,
-    resourceType,
-    match.id,
-    targetVersion,
-    currentData,
-    { maxVersions: resolveConfiguredMaxVersions(workspace), tree },
-  );
-
-  if (!result.success) {
-    console.error(result.error ?? 'Rollback failed.');
-    return 1;
-  }
-
   // Write the restored snapshot back, MERGED over what is on disk rather than replacing it.
   //
   // A snapshot is a projection of the authored surface, not the whole file. The server's writers
@@ -132,17 +90,23 @@ export async function rollback(options: RollbackOptions): Promise<number> {
   // restorable, and merging it under the payload spelling wrote a second key beside the real one
   // — a duplicate the loader ignores, on an operation the operator reads as "this file is now
   // version N".
+  //
+  // **This runs BETWEEN the two version rows, not after both of them.** `rollbackVersion` takes it
+  // as a callback so the prior-state row is written while the disk still holds the prior bytes and
+  // the produced row is written once these bytes are on disk — before, the restored file was
+  // described by no row at all and `cpm history` listed a state it could not restore.
   const notRestored: string[] = [];
-  if (result.snapshot) {
-    const { writeFileSync } = await import('node:fs');
+  const applyRestore = async (snapshot: Record<string, unknown>): Promise<void> => {
+    const { readFileSync, writeFileSync } = await import('node:fs');
     const excluded = new Set(config.snapshotKeysNotInEntryFile ?? []);
     const renames = config.snapshotKeyToEntryKey ?? {};
     const restorable = Object.fromEntries(
-      Object.entries(result.snapshot)
+      Object.entries(snapshot)
         .filter(([key]) => !excluded.has(key))
         .map(([key, value]) => [renames[key] ?? key, value]),
     );
 
+    notRestored.length = 0;
     for (const key of Object.keys(currentData)) {
       if (!(key in restorable)) {
         notRestored.push(key);
@@ -151,7 +115,6 @@ export async function rollback(options: RollbackOptions): Promise<number> {
 
     // Source-preserving, like every other resource write: a rollback that restored the right
     // values while stripping the file's comments would be a different kind of data loss.
-    const { readFileSync } = await import('node:fs');
     writeFileSync(
       yamlPath,
       serializeYamlPreservingSource(
@@ -160,6 +123,36 @@ export async function rollback(options: RollbackOptions): Promise<number> {
       ).content,
       'utf8',
     );
+  };
+
+  // The workspace's own `versioning.maxVersions`, not the built-in 50: a rollback writes rows and
+  // trims the history it wrote them into, and until now `cpm` trimmed to a hardcoded bound while
+  // the server trimmed to the configured one — the same resource kept a different number of
+  // versions depending on which process last touched it.
+  //
+  // `targets` is the entry file alone, not its directory: a single-file prompt's directory is the
+  // CATEGORY, and snapshotting that would restore every sibling prompt on a failed record.
+  const result = await rollbackVersion(
+    match.file,
+    { resourceType, resourceId: match.id },
+    targetVersion,
+    currentData,
+    {
+      enumerate: () =>
+        resourceFileSet({
+          resourceType,
+          entryPath: match.file,
+          roots: { primary: resolveResourceDir(workspace, type) },
+        }),
+      targets: [{ path: yamlPath, kind: 'file' }],
+      apply: applyRestore,
+      maxVersions: resolveConfiguredMaxVersions(workspace),
+    },
+  );
+
+  if (!result.success) {
+    console.error(result.error ?? 'Rollback failed.');
+    return 1;
   }
 
   if (options.json) {
