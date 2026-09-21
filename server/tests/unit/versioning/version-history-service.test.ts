@@ -504,16 +504,43 @@ describe('VersionHistoryService', () => {
       let history = await service.loadHistory('prompt', 'test');
       expect(history).not.toBeNull();
 
-      const result = await service.deleteHistory('prompt', 'test');
-      expect(result).toBe(true);
+      const removed = await service.deleteHistory('prompt', 'test');
+      expect(removed).toBe(1);
 
       history = await service.loadHistory('prompt', 'test');
       expect(history).toBeNull();
     });
 
-    it('should return true when no history exists', async () => {
-      const result = await service.deleteHistory('prompt', 'nonexistent');
-      expect(result).toBe(true);
+    it('should report zero when no history exists', async () => {
+      const removed = await service.deleteHistory('prompt', 'nonexistent');
+      expect(removed).toBe(0);
+    });
+
+    it('takes a chain step with its chain, and leaves a same-prefixed sibling', async () => {
+      // The subtree predicate, and the twin that differs in one character: `chain/step` goes with
+      // `chain`, `chain_other` does not. Both surfaces read one definition of this, so the CLI's
+      // own subtree tests and this one are testing the same string.
+      await service.saveVersion('prompt', 'chain', { x: 1 });
+      await service.saveVersion('prompt', 'chain/step', { x: 2 });
+      await service.saveVersion('prompt', 'chain_other', { x: 3 });
+
+      expect(await service.deleteHistory('prompt', 'chain')).toBe(2);
+
+      expect(await service.loadHistory('prompt', 'chain')).toBeNull();
+      expect(await service.loadHistory('prompt', 'chain/step')).toBeNull();
+      expect(await service.loadHistory('prompt', 'chain_other')).not.toBeNull();
+    });
+
+    it('throws rather than reporting a purge it did not do', async () => {
+      // Persistence throws and the caller decides — the posture `saveVersion` already has on this
+      // table. Returning `false` is what let every caller log and report a clean delete.
+      const broken = new VersionHistoryService({
+        logger: dbCtx.logger,
+        configManager: mockConfigProvider,
+      });
+      await expect(broken.deleteHistory('prompt', 'test')).rejects.toThrow(
+        /Failed to purge version history/
+      );
     });
   });
 

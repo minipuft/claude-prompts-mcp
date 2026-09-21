@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-20T22:58:45.430Z",
-  "total": 29,
+  "generatedAt": "2026-09-21T00:44:54.064Z",
+  "total": 28,
   "methods": [
     "ArgumentHistoryTracker.getLatestArguments",
     "AttributePolicyEnforcer.isAllowed",
@@ -30,8 +30,7 @@
     "ServerLifecycle.restart",
     "SqliteEngine.getSchemaVersion",
     "TelemetryLifecycle.getRuntime",
-    "TelemetryLifecycle.isEnabled",
-    "VersionHistoryService.deleteHistory"
+    "TelemetryLifecycle.isEnabled"
   ],
   "reasons": {
     "GateStateStore.recordValidation": "kept per its own doc comment (gate-state-store.ts): the only caller, LightweightGateSystem.validateContent, was deleted with GateValidator when every criteria type moved to a pipeline stage, leaving getSystemHealth's totalValidations/successRate/lastValidationTime fields with no producer. Deleting the writer without the health fields would leave a reader describing a number nothing computes; revives when 20-gate-review-stage.ts wires in ground-truth results, or gets killed together with the health fields in a follow-up row (R36, P4.52, 2026-09-17).",

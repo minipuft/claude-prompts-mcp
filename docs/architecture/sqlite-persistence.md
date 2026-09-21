@@ -88,6 +88,16 @@ edit required.
 orphan detection, and `applySyncPrune` deletes directories listed in it — losing it turns a prune
 into either a no-op or a deletion of the wrong thing.
 
+**Durable is not unbounded: the rows are reclaimed by the delete of the resource they describe.**
+Its declared retention is per-resource (`maxRowsPerResource`), which bounds a LIVE resource's
+history and says nothing about a dead one's — and until the four `resource_manager` delete handlers
+called `VersionHistoryService.deleteHistory`, nothing did. Rows of a deleted resource stayed
+forever: unreachable, because every reader resolves the resource before the row, and inherited by
+the next resource created under that id. Both delete surfaces purge now, over one subtree predicate
+(`RESOURCE_SUBTREE_MATCH`, `modules/versioning/history-key.ts`) so a chain takes its steps'
+`chain/step` rows with it. The residual leak is cross-surface, not per-surface: rows written under a
+tenant id the other surface does not resolve are not reached by its delete.
+
 `ensureSchema()` snapshots durable rows → drops → `applySchema()` → restores by intersecting old
 columns with new. **Do not "optimize" this into skipping durable tables during the drop.**
 `applySchema()` uses `CREATE TABLE IF NOT EXISTS`, so a table that is never dropped is never
