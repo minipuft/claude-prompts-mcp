@@ -229,31 +229,34 @@ export const TABLE_CONTRACTS: readonly TableContract[] = [
     owner: 'src/modules/versioning/version-history-service.ts',
     posture: 'durable',
     scope: 'workspace',
+    // The DEFAULT bound, which `versioning.maxVersions` replaces — so this number states the
+    // shape of the cap (per resource, not per table) and what an unconfigured workspace keeps,
+    // never a value a sweep may enforce behind the operator's back. Both writers trim through
+    // `pruneVersionHistory`; `retention.ts` deliberately enforces no `maxRowsPerResource`.
     retention: { maxRowsPerResource: 50 },
     readers: ['src/cli-shared/version-history.ts', 'src/cli-shared/version-history-scope.ts'],
     acceptedForeignWriters: [
       {
-        subject: 'src/cli-shared/version-history.ts',
-        reason:
-          'The CLI still writes this table directly — the `cpm` binary has no server process to ' +
-          'route through. What Tier 6.1 removed is the DIVERGENCE, not the second writer: it now ' +
-          'uses node:sqlite against the engine-created schema, binds the same scope columns, and ' +
-          'creates no DDL of its own (it reports a missing table instead). Retiring this needs ' +
-          'the CLI to reach the server, not another rewrite of this module.',
-        closedBy: 'A CLI-to-server transport, or an accepted permanent second writer',
-      },
-      {
         // The CLI writer is one module by ownership and four files by size: `version-history.ts`
         // crossed the 1000-line gate and was split along its responsibilities. This gate keys on
-        // PATH, so the split moved three write sites out from under an exception that still
-        // applies to every one of them — the second writer did not change, its file name did.
-        // Both entries retire together, by the same event.
+        // PATH, so the split moved every write site out from under an exception that still
+        // applies to all of them — the second writer did not change, its file name did.
+        //
+        // `version-history.ts` carried its own entry beside this one until the subtree DELETE
+        // moved here too (2026-09-21, so the delete and the sweep of the objects it orphans could
+        // be one transaction in the module that owns both statements). That module now issues no
+        // SQL against this table at all, and the gate's satisfied-exception check said so by
+        // name — which is exactly what an exception list is for. It is listed under `readers`.
         subject: 'src/cli-shared/version-history-rows.ts',
         reason:
-          'The same accepted second writer as the entry above: this file holds the INSERT, the ' +
-          'trim DELETE and the rename UPDATE that `version-history.ts` used to hold inline. It ' +
-          'resolves no scope of its own — every function takes the tenant id as a parameter — so ' +
-          'it cannot drift from the owner on the axis this contract exists to protect.',
+          'The CLI writes this table directly — the `cpm` binary has no server process to route ' +
+          'through — and this file holds every statement it issues: the INSERT, the trim DELETE, ' +
+          'the subtree DELETE and the rename UPDATE. What Tier 6.1 removed is the DIVERGENCE, ' +
+          'not the second writer: it uses node:sqlite against the engine-created schema, binds ' +
+          'the same scope columns, and creates no DDL of its own (it reports a missing table ' +
+          'instead). It resolves no scope of its own — every function takes the tenant id as a ' +
+          'parameter — so it cannot drift from the owner on the axis this contract protects. ' +
+          'Retiring this needs the CLI to reach the server, not another rewrite of this module.',
         closedBy: 'A CLI-to-server transport, or an accepted permanent second writer',
       },
       {

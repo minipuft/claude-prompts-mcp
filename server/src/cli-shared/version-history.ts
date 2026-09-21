@@ -30,10 +30,11 @@
 import { existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 
+import { getConfigValue, readConfig } from './config-operations.js';
 import { resolveStateDbPath } from './version-history-location.js';
 import {
-  SUBTREE_MATCH,
   appendVersion,
+  deleteSubtree,
   loadRows,
   recordEditResultRow,
   renameSubtree,
@@ -50,6 +51,7 @@ import type {
   RollbackResult,
   SaveVersionOptions,
 } from '#modules/versioning/types.js';
+import type { LoadedTree } from './object-store.js';
 import type { HistoryRequest, HistoryResponse, ResourceType } from './version-history-types.js';
 
 import { STATE_DB_WRITER_PRAGMAS } from '#shared/utils/runtime-state-location.js';
@@ -157,14 +159,11 @@ function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): 
     }
 
     case 'save_version': {
-      const outcome = appendVersion(
-        db,
-        tenantId,
-        request,
-        request.snapshot ?? {},
-        request.description ?? '',
-        request.diff_summary ?? ''
-      );
+      const outcome = appendVersion(db, tenantId, request, request.snapshot ?? {}, {
+        description: request.description ?? '',
+        diffSummary: request.diff_summary ?? '',
+        tree: request.produced_tree ?? null,
+      });
       return { success: true, version: outcome.version, recorded: outcome.recorded };
     }
 
@@ -174,6 +173,8 @@ function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): 
         producedSnapshot: request.snapshot ?? {},
         description: request.description ?? '',
         diffSummary: request.diff_summary ?? '',
+        bridgeTree: request.bridge_tree ?? null,
+        producedTree: request.produced_tree ?? null,
       });
       return {
         success: true,
@@ -223,6 +224,8 @@ function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): 
         producedSnapshot: restoredSnapshot,
         description: `Rollback to v${target}`,
         diffSummary: '',
+        bridgeTree: request.bridge_tree ?? null,
+        producedTree: request.produced_tree ?? null,
       });
       return {
         success: true,
@@ -248,11 +251,7 @@ function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): 
       // a chain that has ever been edited as a whole, its own row exists and names the tenant
       // correctly; a chain versioned only step-by-step is outside what this check can see.
       const effectiveTenantId = resolveEffectiveTenantId(db, tenantId, request).tenantId;
-      db.prepare(
-        `DELETE FROM version_history
-         WHERE tenant_id = ? AND resource_type = ? AND ${SUBTREE_MATCH}`
-      ).run(effectiveTenantId, request.resource_type, request.resource_id, request.resource_id);
-      return { success: true };
+      return deleteSubtree(db, effectiveTenantId, request);
     }
 
     case 'rename_history': {
@@ -363,12 +362,63 @@ export function compareVersions(
 
 // ── Write operations ────────────────────────────────────────────────────────
 
+/**
+ * What a CLI history write needs beyond the snapshot itself.
+ *
+ * `maxVersions` rides here rather than as its own parameter because `recordEditResult` would
+ * otherwise take seven, over the `max-params` ceiling — and because the bound belongs with the
+ * other per-call facts the row records. Omitting it keeps {@link DEFAULT_MAX_VERSIONS}, which is
+ * what a workspace that configured nothing gets; a `cpm` command supplies
+ * {@link resolveConfiguredMaxVersions}.
+ */
+export interface HistoryWriteOptions extends SaveVersionOptions {
+  maxVersions?: number;
+  /**
+   * The resource's bytes as they are on disk RIGHT NOW, already read by the caller.
+   *
+   * Supplied by `cpm rollback` alone today; every other CLI write leaves it absent and records a
+   * projection-only row, which is the behaviour those paths have always had. Which ROW it lands
+   * on is decided per operation — see `rollbackVersion`.
+   */
+  tree?: LoadedTree | null;
+}
+
+/**
+ * The row cap this workspace configured, or {@link DEFAULT_MAX_VERSIONS} when it configured none.
+ *
+ * **Why a `cpm` command must call this.** `versioning.maxVersions` is read by the SERVER through
+ * `infra/config`, which `cli-shared` may not import (`validate:arch`, `cli-shared-no-runtime`), so
+ * for years every CLI write bound the hardcoded default instead: an operator who set 3 kept 3
+ * after an MCP edit and 50 after a `cpm rollback`, against one file. This reads the workspace
+ * config DOCUMENT through the same reader `cpm config` uses, so the value is the one on disk and
+ * the resolution is not a second derivation of where the config lives.
+ *
+ * Both spellings are honoured — `versioning.maxVersions` is the 5.0 file name and
+ * `versioning.max_versions` the 4.x one the server still folds in
+ * (`infra/config/config-file-translation.ts`). A value that is not a positive integer falls back
+ * rather than throwing: a malformed setting must not make a rollback fail, and the server's own
+ * loader treats it the same way.
+ */
+export function resolveConfiguredMaxVersions(workspace: string): number {
+  const read = readConfig(workspace);
+  if (!read.success || read.config === undefined) {
+    return DEFAULT_MAX_VERSIONS;
+  }
+  for (const key of ['versioning.maxVersions', 'versioning.max_versions']) {
+    const value = getConfigValue(read.config, key);
+    if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+      return value;
+    }
+  }
+  return DEFAULT_MAX_VERSIONS;
+}
+
 export function saveVersion(
   resourceDir: string,
   resourceType: ResourceType,
   resourceId: string,
   snapshot: Record<string, unknown>,
-  options?: SaveVersionOptions
+  options?: HistoryWriteOptions
 ): SaveVersionResult {
   const request = createRequest(resourceDir, 'save_version', { resourceType, resourceId });
   if (request === null) {
@@ -381,7 +431,9 @@ export function saveVersion(
     diff_summary: options?.diff_summary ?? '',
     description: options?.description,
     created_at: new Date().toISOString(),
-    max_versions: DEFAULT_MAX_VERSIONS,
+    max_versions: options?.maxVersions ?? DEFAULT_MAX_VERSIONS,
+    // One row, and the caller says whether the disk holds the state it is passing.
+    produced_tree: options?.tree ?? null,
   });
   if (!result.success) {
     return { success: false, error: result.error ?? 'Failed to save version', recorded: false };
@@ -403,7 +455,7 @@ export function recordEditResult(
   resourceId: string,
   priorLiveSnapshot: Record<string, unknown>,
   producedSnapshot: Record<string, unknown>,
-  options?: SaveVersionOptions
+  options?: HistoryWriteOptions
 ): SaveVersionResult & { bridged: boolean } {
   const request = createRequest(resourceDir, 'record_edit_result', { resourceType, resourceId });
   if (request === null) {
@@ -422,7 +474,11 @@ export function recordEditResult(
     diff_summary: options?.diff_summary ?? '',
     description: options?.description ?? '',
     created_at: new Date().toISOString(),
-    max_versions: DEFAULT_MAX_VERSIONS,
+    max_versions: options?.maxVersions ?? DEFAULT_MAX_VERSIONS,
+    // The server's assignment: a caller that RECORDS AN EDIT has already written the produced
+    // files, so the produced row is the one the disk describes and the bridge row is not.
+    produced_tree: options?.tree ?? null,
+    bridge_tree: null,
   });
   if (!result.success) {
     return {
@@ -445,7 +501,8 @@ export function rollbackVersion(
   resourceType: ResourceType,
   resourceId: string,
   targetVersion: number,
-  currentSnapshot: Record<string, unknown>
+  currentSnapshot: Record<string, unknown>,
+  options?: HistoryWriteOptions
 ): RollbackResult & { snapshot?: Record<string, unknown> } {
   const request = createRequest(resourceDir, 'rollback', { resourceType, resourceId });
   if (request === null) {
@@ -457,7 +514,19 @@ export function rollbackVersion(
     target_version: targetVersion,
     current_snapshot: currentSnapshot,
     created_at: new Date().toISOString(),
-    max_versions: DEFAULT_MAX_VERSIONS,
+    max_versions: options?.maxVersions ?? DEFAULT_MAX_VERSIONS,
+    // MEASURED, not assumed: `cpm rollback` calls this BEFORE it writes the restored file
+    // (`cli/src/commands/rollback.ts` — the merge and `writeFileSync` come after this returns).
+    // So at the moment both rows are written, the bytes on disk are the state this call was
+    // handed as `currentSnapshot` — the BRIDGE row's state. The produced row claims the RESTORED
+    // state, which is not on disk yet, so it stays projection-only: a tree there would file the
+    // pre-rollback bytes under the row claiming the restored content, and a later byte-exact
+    // rollback would restore the wrong state while reporting full fidelity.
+    //
+    // This is the inverse of the server's assignment and it is the same rule, not an exception to
+    // it: a row gets a tree exactly when the disk describes that row's state.
+    bridge_tree: options?.tree ?? null,
+    produced_tree: null,
   });
   if (!result.success) {
     return { success: false, error: result.error ?? 'Rollback failed' };

@@ -10,11 +10,13 @@
  * Split out of `version-history.ts` when that file crossed the 1000-line gate; a pure move.
  */
 
+import { recordTree, sweepUnreferencedObjects } from './object-store.js';
 import { DEFAULT_MAX_VERSIONS } from './version-history-types.js';
 
 import type { HistoryFile, VersionEntry } from '#modules/versioning/types.js';
+import type { LoadedTree, ObjectStoreDatabase } from './object-store.js';
 import type { HistoryRequest, HistoryResponse, HistoryRow } from './version-history-types.js';
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 
 import { RESOURCE_SUBTREE_MATCH } from '#modules/versioning/history-key.js';
 import { hashCanonical } from '#shared/utils/hash.js';
@@ -42,7 +44,7 @@ export interface AppendOutcome {
 }
 
 /** Imported, not written here — `deleteHistory` matches the same set over MCP. */
-export const SUBTREE_MATCH = RESOURCE_SUBTREE_MATCH;
+const SUBTREE_MATCH = RESOURCE_SUBTREE_MATCH;
 
 export function toEntry(row: HistoryRow): VersionEntry {
   return {
@@ -119,12 +121,11 @@ export function appendVersion(
   tenantId: string,
   request: HistoryRequest,
   snapshot: Record<string, unknown>,
-  description: string,
-  diffSummary: string
+  row: AppendRowFacts
 ): AppendOutcome {
   db.exec('BEGIN IMMEDIATE');
   try {
-    const outcome = appendVersionRow(db, tenantId, request, snapshot, description, diffSummary);
+    const outcome = appendVersionRow(db, tenantId, request, snapshot, row);
     db.exec('COMMIT');
     return outcome;
   } catch (error) {
@@ -133,15 +134,24 @@ export function appendVersion(
   }
 }
 
+/** What a row records beyond its snapshot: its prose, and the bytes it may claim. */
+export interface AppendRowFacts {
+  description: string;
+  diffSummary: string;
+  /** Non-null only when the bytes on disk RIGHT NOW are this row's state. */
+  tree?: LoadedTree | null;
+}
+
 /** The body of `appendVersion`, which owns the transaction around it. */
 function appendVersionRow(
   db: DatabaseSync,
   tenantId: string,
   request: HistoryRequest,
   snapshot: Record<string, unknown>,
-  description: string,
-  diffSummary: string
+  row: AppendRowFacts
 ): AppendOutcome {
+  const { description, diffSummary } = row;
+  const tree = row.tree ?? null;
   // Serialised once: the text the equality test measures is the text the INSERT binds.
   const payload = JSON.stringify(snapshot);
   const latest = latestRow(db, tenantId, request);
@@ -166,7 +176,29 @@ function appendVersionRow(
     description,
     request.created_at ?? new Date().toISOString()
   );
-  prune(db, tenantId, request, request.max_versions ?? DEFAULT_MAX_VERSIONS);
+  const store = asObjectStoreDatabase(db);
+  // The SAME recorder the server calls, over bytes the caller read before this transaction
+  // opened. One implementation is the whole point: a `cpm` write and a server write of identical
+  // files must produce identical `tree_hash`, and two copies of the enumeration-plus-hashing
+  // could only agree by inspection.
+  if (tree !== null) {
+    const row = db
+      .prepare(
+        `SELECT id FROM version_history
+         WHERE tenant_id = ? AND resource_type = ? AND resource_id = ? AND version = ?`
+      )
+      .get(tenantId, request.resource_type, request.resource_id, version) as
+      { id: number } | undefined;
+    if (row !== undefined) {
+      recordTree(store, { tenantId, versionRowId: Number(row.id), tree });
+    }
+  }
+  pruneVersionHistory(store, {
+    tenantId,
+    resourceType: request.resource_type,
+    resourceId: request.resource_id,
+    maxVersions: request.max_versions ?? DEFAULT_MAX_VERSIONS,
+  });
   return { version, recorded: true };
 }
 
@@ -189,47 +221,143 @@ export function recordEditResultRow(
     producedSnapshot: Record<string, unknown>;
     description: string;
     diffSummary: string;
+    /**
+     * Which of the two rows, if either, the bytes on disk describe RIGHT NOW.
+     *
+     * Per row rather than one flag, because the answer is not a property of the row's KIND — it
+     * is a property of when this call runs relative to the file write, and the two callers differ.
+     * A server edit records after writing, so the produced row qualifies and the bridge row does
+     * not. `cpm rollback` records BEFORE restoring, so the disk still holds the pre-rollback
+     * state: the bridge row qualifies and the produced row does not. Reading R66 as "bridge rows
+     * never get a tree" would, on that path, file the pre-rollback bytes under the row claiming
+     * the restored state — full fidelity reported over the wrong content.
+     */
+    bridgeTree?: LoadedTree | null;
+    producedTree?: LoadedTree | null;
   }
 ): AppendOutcome & { bridged: boolean } {
   const { priorLiveSnapshot, producedSnapshot, description, diffSummary } = edit;
   // ONE equality rule, applied twice — the bridge is simply an append that may find nothing to
   // do. It previously carried its own order-sensitive comparison while the record below carried
   // none, so "is this already the newest state?" had two answers on one path.
-  const bridge = appendVersion(
-    db,
-    tenantId,
-    request,
-    priorLiveSnapshot,
-    'Bridge: prior live state (era transition or out-of-band edit)',
-    ''
-  );
-  const outcome = appendVersion(db, tenantId, request, producedSnapshot, description, diffSummary);
+  const bridge = appendVersion(db, tenantId, request, priorLiveSnapshot, {
+    description: 'Bridge: prior live state (era transition or out-of-band edit)',
+    diffSummary: '',
+    tree: edit.bridgeTree ?? null,
+  });
+  const outcome = appendVersion(db, tenantId, request, producedSnapshot, {
+    description,
+    diffSummary,
+    tree: edit.producedTree ?? null,
+  });
   return { ...outcome, bridged: bridge.recorded };
 }
 
-function prune(
+/**
+ * Delete `request.resource_id` and every id below it, and sweep the objects that orphans.
+ *
+ * One transaction, IMMEDIATE, because the two statements depend on each other: the rows go, their
+ * manifest rows go with them by cascade, and the objects nothing references any more go in the
+ * same unit. Split across two, a crash between them leaves this tenant's bytes behind with
+ * nothing that ever looks at them again — there is no maintenance pass to find them later.
+ *
+ * Lives here rather than inline in the dispatcher for the same reason `renameSubtree` does: this
+ * module is the SQL vocabulary of `version_history`, and the dispatcher routes.
+ */
+export function deleteSubtree(
   db: DatabaseSync,
   tenantId: string,
-  request: HistoryRequest,
-  maxVersions: number
-): void {
-  db.prepare(
+  request: HistoryRequest
+): HistoryResponse {
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    db.prepare(
+      `DELETE FROM version_history
+       WHERE tenant_id = ? AND resource_type = ? AND ${SUBTREE_MATCH}`
+    ).run(tenantId, request.resource_type, request.resource_id, request.resource_id);
+    sweepUnreferencedObjects(asObjectStoreDatabase(db), tenantId);
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+  return { success: true };
+}
+
+/** What one prune acts on: one resource's rows under one tenant, and the bound they must fit. */
+export interface PruneVersionHistoryInput {
+  tenantId: string;
+  resourceType: string;
+  resourceId: string;
+  /** The operator's `versioning.maxVersions`, already resolved. Never a default decided here. */
+  maxVersions: number;
+}
+
+/**
+ * Trim one resource's history to `maxVersions`, NEWEST kept — the one implementation, for both
+ * writers of `version_history`.
+ *
+ * There were two, with different SQL and different bounds. The server counted before deleting and
+ * used the configured `versioning.maxVersions`; the CLI deleted unconditionally and used a
+ * hardcoded 50, because the configured value never reached its request. A workspace set to keep 3
+ * therefore kept 3 after a `resource_manager` edit and 50 after a `cpm rollback`, on the same
+ * resource in the same file — the operator's setting meant different things depending on which
+ * process last wrote. Retention is a property of the TABLE, not of the surface that reached it, so
+ * it is stated once here and both writers call it with a bound they resolved, never invented.
+ *
+ * Takes the two-method database shape `object-store.ts` declares rather than `DatabaseSync` or
+ * `DatabasePort`: those are the CLI's and the server's own connection types, and a function both
+ * must call can be written against neither. `asObjectStoreDatabase` adapts the CLI's.
+ *
+ * @returns how many rows the trim removed, so each caller can log its own count.
+ */
+export function pruneVersionHistory(
+  db: ObjectStoreDatabase,
+  input: PruneVersionHistoryInput
+): number {
+  const { tenantId, resourceType, resourceId, maxVersions } = input;
+  const key = [tenantId, resourceType, resourceId];
+
+  const counted = db.queryOne<{ cnt: number }>(
+    `SELECT COUNT(*) AS cnt FROM version_history
+     WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?`,
+    key
+  );
+  const total = Number(counted?.cnt ?? 0);
+  if (total <= maxVersions) {
+    return 0;
+  }
+
+  db.run(
     `DELETE FROM version_history
      WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?
        AND id NOT IN (
          SELECT id FROM version_history
          WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?
          ORDER BY version DESC LIMIT ?
-       )`
-  ).run(
-    tenantId,
-    request.resource_type,
-    request.resource_id,
-    tenantId,
-    request.resource_type,
-    request.resource_id,
-    maxVersions
+       )`,
+    [...key, ...key, maxVersions]
   );
+  // Their manifest rows went with them by cascade; their OBJECTS did not, and nothing else ever
+  // looks at an object again. Same transaction as the delete that orphaned them.
+  sweepUnreferencedObjects(db, tenantId);
+  return total - maxVersions;
+}
+
+/**
+ * The CLI's raw `DatabaseSync` as the two-method shape the shared history writes take.
+ *
+ * `node:sqlite` exposes `prepare`/`exec`, not `run(sql, params)`, so the adapter is unavoidable —
+ * it is four lines here instead of a second copy of every shared statement over there.
+ */
+function asObjectStoreDatabase(db: DatabaseSync): ObjectStoreDatabase {
+  return {
+    run: (sql, params = []) => {
+      db.prepare(sql).run(...(params as SQLInputValue[]));
+    },
+    queryOne: <T = Record<string, unknown>>(sql: string, params: unknown[] = []) =>
+      (db.prepare(sql).get(...(params as SQLInputValue[])) as T | undefined) ?? null,
+  };
 }
 
 export function loadRows(db: DatabaseSync, tenantId: string, request: HistoryRequest): HistoryFile {

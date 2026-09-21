@@ -128,6 +128,7 @@ export {
   deleteVersionRows,
   renameHistoryResource,
   formatHistoryTable,
+  resolveConfiguredMaxVersions,
 } from './version-history.js';
 
 // ── Resource scaffolding (node:fs only) ──────────────────────────────────────

@@ -2,6 +2,7 @@
 
 import { RESOURCE_SUBTREE_MATCH } from './history-key.js';
 
+import type { LoadedTree } from '#cli-shared/object-store.js';
 import type { VersioningConfig, Logger } from '#shared/types/index.js';
 import type { DatabasePort, StateStoreOptions } from '#shared/types/persistence.js';
 import type {
@@ -17,7 +18,12 @@ import type {
   ResourceType,
 } from './types.js';
 
-import { recordTree } from '#cli-shared/object-store.js';
+import {
+  readResourceTree,
+  recordTree,
+  sweepUnreferencedObjects,
+} from '#cli-shared/object-store.js';
+import { pruneVersionHistory } from '#cli-shared/version-history-rows.js';
 import { hashCanonical } from '#shared/utils/hash.js';
 import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
 import { resourceFileSet } from '#shared/utils/resource-file-set.js';
@@ -254,6 +260,15 @@ export class VersionHistoryService {
       // what the INSERT binds, so the two cannot describe different states.
       const payload = JSON.stringify(snapshot);
 
+      // The resource's bytes are read here, ABOVE the write lock. Nothing about them needs it:
+      // objects are content-addressed, so a file that changes between this read and the commit
+      // produces a different tree rather than a wrong one, and holding the lock across disk I/O
+      // blocks the other writer of this one file for as long as the disk takes.
+      const prepared = recordFiles
+        ? await this.prepareFileTree(resourceType, resourceId)
+        : undefined;
+      let treeReason = prepared !== undefined && 'reason' in prepared ? prepared.reason : undefined;
+
       const outcome = await db.transaction(async () => {
         // The newest row's number AND its snapshot, read together. The equality decision lives
         // INSIDE this transaction deliberately: decided before `BEGIN IMMEDIATE`, two processes
@@ -281,21 +296,31 @@ export class VersionHistoryService {
           payload,
           options,
         });
-        // Files LAST, inside the same lock the row was written under. That placement is invariant
-        // WRITE-1: an object insert and the manifest row that justifies it commit together or not
-        // at all, so a crash between them leaves neither — there is no window in which a stored
-        // object lacks a reference or a row points at a tree that is not there.
-        await this.recordFileTree({
-          db,
-          tenantId,
-          resourceType,
-          resourceId,
-          version,
-          recordFiles,
-        });
+        // The STATEMENTS that store the files run last, inside the same lock the row was written
+        // under. That placement is invariant WRITE-1: an object insert and the manifest row that
+        // justifies it commit together or not at all, so a crash between them leaves neither. The
+        // file READS are not in here — they happened above, before the lock was taken.
+        if (prepared !== undefined && 'tree' in prepared) {
+          treeReason = this.attachFileTree({
+            db,
+            tenantId,
+            resourceType,
+            resourceId,
+            version,
+            tree: prepared.tree,
+          });
+        }
         return { version, recorded: true };
       }, 'immediate');
 
+      // Warned once, and only for a row that exists: an unchanged write records nothing, so a
+      // degradation reported there would describe a version nobody wrote.
+      if (outcome.recorded && treeReason !== undefined) {
+        this.logger.warn(
+          `Recorded ${resourceType}/${resourceId} version ${outcome.version} without a file ` +
+            `tree: ${treeReason}. Rollback to this version restores from its projection.`
+        );
+      }
       this.logger.debug(
         outcome.recorded
           ? `Saved version ${outcome.version} for ${resourceType}/${resourceId}`
@@ -345,23 +370,19 @@ export class VersionHistoryService {
       ]
     );
 
-    // Prune old versions if exceeding max
-    const count = db.queryOne<{ cnt: number }>(
-      `SELECT COUNT(*) as cnt FROM version_history
-         WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?`,
-      [tenantId, resourceType, resourceId]
-    );
-
-    if (count && count.cnt > config.maxVersions) {
-      db.run(
-        `DELETE FROM version_history WHERE id NOT IN (
-            SELECT id FROM version_history
-            WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?
-            ORDER BY version DESC LIMIT ?
-          ) AND tenant_id = ? AND resource_type = ? AND resource_id = ?`,
-        [tenantId, resourceType, resourceId, config.maxVersions, tenantId, resourceType, resourceId]
+    // Trim through the ONE implementation both writers share (`cli-shared/version-history-rows`).
+    // It used to be restated here, with SQL and a bound that differed from the CLI's — which is
+    // how a workspace configured to keep three versions kept fifty after a `cpm` write.
+    const pruned = pruneVersionHistory(db, {
+      tenantId,
+      resourceType,
+      resourceId,
+      maxVersions: config.maxVersions,
+    });
+    if (pruned > 0) {
+      this.logger.debug(
+        `Pruned ${pruned} history row(s) for ${resourceId} to ${config.maxVersions} versions`
       );
-      this.logger.debug(`Pruned history for ${resourceId} to ${config.maxVersions} versions`);
     }
   }
 
@@ -378,24 +399,13 @@ export class VersionHistoryService {
    * "this INSERT failed" is a property of the database, and only the second one means the row
    * itself is untrustworthy.
    */
-  private async recordFileTree(input: {
-    db: DatabasePort;
-    tenantId: string;
-    resourceType: ResourceType;
-    resourceId: string;
-    version: number;
-    recordFiles: boolean;
-  }): Promise<void> {
-    const { db, tenantId, resourceType, resourceId, version, recordFiles } = input;
-    if (!recordFiles) return;
-
+  private async prepareFileTree(
+    resourceType: ResourceType,
+    resourceId: string
+  ): Promise<{ tree: LoadedTree } | { reason: string }> {
     const location = await this.locateResourceFiles(resourceType, resourceId);
     if (!location.located) {
-      this.logger.warn(
-        `Recorded ${resourceType}/${resourceId} version ${version} without a file tree: ` +
-          `${location.reason}. Rollback to this version restores from its projection.`
-      );
-      return;
+      return { reason: location.reason };
     }
 
     let files: ResourceFileSet;
@@ -406,13 +416,28 @@ export class VersionHistoryService {
         roots: location.roots,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.warn(
-        `Recorded ${resourceType}/${resourceId} version ${version} without a file tree: ` +
-          `${message}. Rollback to this version restores from its projection.`
-      );
-      return;
+      return { reason: error instanceof Error ? error.message : String(error) };
     }
+    return readResourceTree(files);
+  }
+
+  /**
+   * Point the row just inserted at bytes already read, or say why it stays projection-only.
+   *
+   * Runs INSIDE the caller's transaction and is synchronous: every I/O this used to do now
+   * happens in `prepareFileTree`, above the lock. Returns a reason instead of warning, because
+   * the caller warns once and only when a row was actually written — a degradation reported for
+   * a write that skip-if-equal declined would describe a row that does not exist.
+   */
+  private attachFileTree(input: {
+    db: DatabasePort;
+    tenantId: string;
+    resourceType: ResourceType;
+    resourceId: string;
+    version: number;
+    tree: LoadedTree;
+  }): string | undefined {
+    const { db, tenantId, resourceType, resourceId, version, tree } = input;
 
     // The row id is read back rather than taken from a driver's last-insert value: `DatabasePort`
     // exposes none, and (tenant, type, id, version) is UNIQUE since schema v28, so this SELECT
@@ -423,20 +448,11 @@ export class VersionHistoryService {
       [tenantId, resourceType, resourceId, version]
     );
     if (row === null) {
-      this.logger.warn(
-        `Recorded ${resourceType}/${resourceId} version ${version} without a file tree: the row ` +
-          `could not be read back inside its own transaction.`
-      );
-      return;
+      return 'the row could not be read back inside its own transaction';
     }
 
-    const outcome = await recordTree(db, { tenantId, versionRowId: row.id, files });
-    if (!outcome.recorded) {
-      this.logger.warn(
-        `Recorded ${resourceType}/${resourceId} version ${version} without a file tree: ` +
-          `${outcome.reason}. Rollback to this version restores from its projection.`
-      );
-    }
+    const outcome = recordTree(db, { tenantId, versionRowId: row.id, tree });
+    return outcome.recorded ? undefined : outcome.reason;
   }
 
   /**
@@ -712,18 +728,26 @@ export class VersionHistoryService {
       const tenantId = this.resolveTenantId();
       const params = [tenantId, resourceType, resourceId, resourceId];
 
-      const before = db.queryOne<{ cnt: number }>(
-        `SELECT COUNT(*) as cnt FROM version_history
-         WHERE tenant_id = ? AND resource_type = ? AND ${RESOURCE_SUBTREE_MATCH}`,
-        params
-      );
-      db.run(
-        `DELETE FROM version_history
-         WHERE tenant_id = ? AND resource_type = ? AND ${RESOURCE_SUBTREE_MATCH}`,
-        params
-      );
+      // One transaction, IMMEDIATE: the count this reports, the delete it reports on, and the
+      // sweep of the objects that delete orphaned are one unit. The count is inside too — read
+      // above the lock it can be a number another writer has already changed.
+      const removed = await db.transaction(async () => {
+        const before = db.queryOne<{ cnt: number }>(
+          `SELECT COUNT(*) as cnt FROM version_history
+           WHERE tenant_id = ? AND resource_type = ? AND ${RESOURCE_SUBTREE_MATCH}`,
+          params
+        );
+        db.run(
+          `DELETE FROM version_history
+           WHERE tenant_id = ? AND resource_type = ? AND ${RESOURCE_SUBTREE_MATCH}`,
+          params
+        );
+        // The manifest rows went by cascade; the objects behind them are reachable from nothing
+        // else, and nothing ever enumerates the table to find them later.
+        sweepUnreferencedObjects(db, tenantId);
+        return before?.cnt ?? 0;
+      }, 'immediate');
 
-      const removed = before?.cnt ?? 0;
       this.logger.debug(`Deleted ${removed} history row(s) for ${resourceType}/${resourceId}`);
       return removed;
     } catch (error) {

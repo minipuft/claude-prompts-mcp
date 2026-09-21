@@ -94,6 +94,17 @@ classification, not the DDL, is the risky part of that bump.
 orphan detection, and `applySyncPrune` deletes directories listed in it — losing it turns a prune
 into either a no-op or a deletion of the wrong thing.
 
+**One prune, one bound, both writers.** `maxRowsPerResource: 50` in the contract is the bound an
+unconfigured workspace gets; `versioning.maxVersions` replaces it. Both writers trim through
+`pruneVersionHistory` (`cli-shared/version-history-rows.ts`), which keeps the NEWEST N and takes
+the bound as an argument — it resolves no default of its own. The server passes its resolved
+`VersioningConfig`; `cpm` passes `resolveConfiguredMaxVersions(workspace)`, which reads the
+workspace config document through the same reader `cpm config` uses, honouring both the 5.0
+`versioning.maxVersions` and the 4.x `versioning.max_versions` spelling. Until 2026-09-21 the CLI
+bound a hardcoded 50 into every request, so a workspace set to keep three kept three after an MCP
+edit and fifty after a `cpm rollback` — against one file. `retention.ts` enforces no
+`maxRowsPerResource` for exactly this reason: a generic sweep would know only the declaration.
+
 **Durable is not unbounded: the rows are reclaimed by the delete of the resource they describe.**
 Its declared retention is per-resource (`maxRowsPerResource`), which bounds a LIVE resource's
 history and says nothing about a dead one's — and until the four `resource_manager` delete handlers
@@ -138,6 +149,13 @@ It opens no transaction of its own: every statement runs inside the caller's exi
 and `tree_origin`. That is invariant WRITE-1: an object insert is always in the same transaction as
 the reference that justifies it, so a crash between them leaves neither.
 
+**The file READS are outside that lock, and `recordTree` is synchronous.** `readResourceTree` reads
+and hashes the bytes before the caller takes the lock; `recordTree` then runs SQL only. Nothing
+read needs the lock — objects are content-addressed, so a file that changes between the read and
+the commit produces a different tree rather than a wrong one — and holding a write lock on a file
+two processes share across disk I/O blocks the other one for as long as the disk takes. It is also
+what lets `cpm` share the recorder at all: that path is a fully synchronous `DatabaseSync`.
+
 The files it stores are the ones `resourceFileSet` enumerates, and it never enumerates for itself —
 one answer, shared by the recorder and any later restorer. Finding the resource from a type and an
 id is a third party's job again: `runtime/resource-roots.ts` builds a `ResourceFileLocatorPort` from
@@ -151,11 +169,27 @@ the thing nothing regenerates; refusing to write it because its bytes were too l
 degraded rollback for a lost version. A SQLite failure is the other case and propagates, rolling the
 caller's transaction back.
 
-**Bridge rows never carry a tree, structurally.** `recordEditResult` appends the prior live state
-and then the produced state, and BOTH appends run at commit time — after the produced files are on
-disk. An enumerator run inside either one therefore reads the produced bytes, so a tree on the
-bridge row would describe the produced state under a row whose snapshot is the prior one. The
-distinction is a parameter, not a match against the bridge row's description text.
+**A row gets a tree exactly when the bytes on disk at record time ARE that row's state**, and only
+its caller knows that — so the answer is a per-row parameter, never a match against the bridge
+row's description text, which is presentation deciding durability.
+
+On the SERVER, `recordEditResult` appends the prior live state and then the produced state, and
+BOTH appends run at commit time, after the produced files are on disk. So the produced row
+qualifies and the bridge row does not: a tree on the bridge row would describe the produced bytes
+under a row whose snapshot is the prior state.
+
+**`cpm rollback` is the same rule with the opposite answer, and it is not an exception.**
+`rollbackVersion` runs BEFORE `cli/src/commands/rollback.ts` writes the restored file, so the disk
+still holds the PRE-rollback state — the bridge row's state. The bridge row therefore carries the
+tree and the produced row stays projection-only. Reading the server's assignment as a rule about
+row KINDS would, on that path, file the pre-rollback bytes under the row claiming the restored
+content, and a later byte-exact rollback would restore the wrong state at full confidence. Pinned
+by `tests/integration/versioning/cli-tree-parity.test.ts`, which also asserts that a `cpm` write
+and a server write of identical files produce an identical `tree_hash` — one enumerator, one
+hasher, one recorder, reached from both sides.
+
+`cpm`'s edit commands (`link-gate`, `rename`, `move`) record no version at all, and so record no
+tree; `rollback` is the CLI's only version-writing path today.
 
 **Losing every object degrades rollback to the projection path; it never loses history.**
 `version_history.snapshot` keeps holding the projection every reader already reads, and it is not
@@ -207,8 +241,33 @@ adds is covered by a red run rather than by someone remembering. It also reads t
 edges out of the engine's own DDL and checks the declared restore order against them.
 
 **Do not read enforcement as "the cascade prunes entries for us."** It is still a per-connection
-setting, so any opener that turns it off writes into the same file. A prune deletes its entries
-explicitly, and the startup referential check is what finds what such an opener left behind.
+setting, so any opener that turns it off writes into the same file. The startup referential check
+is what finds what such an opener left behind.
+
+**Every path that removes rows of `version_history` or `version_entries` also sweeps that tenant's
+orphaned objects, in the SAME transaction.** An object is reachable only through
+`version_history → version_entries → objects`; nothing enumerates the table and there is no
+maintenance pass, so bytes whose last manifest row is gone are unreachable and unreclaimable. The
+sweep is `sweepUnreferencedObjects` (`cli-shared/object-store.ts`): `NOT EXISTS` against
+`version_entries`, scoped to one `tenant_id`, re-derived every time rather than tracked in a
+refcount column a crash could drift. Four callers, and the predicate has to name BOTH tables to
+find them all — one of the four deletes no `version_history` row at all:
+
+| Path                                                  | Where                                                          |
+| ----------------------------------------------------- | -------------------------------------------------------------- |
+| prune, on every append (both writers)                 | `pruneVersionHistory`, `cli-shared/version-history-rows.ts`    |
+| `deleteHistory`, from the four `handleDelete` bodies  | `modules/versioning/version-history-service.ts`                |
+| `cpm`'s `deleteVersionRows`                           | the `delete_history` dispatch, `cli-shared/version-history.ts` |
+| the startup referential repair (deletes ENTRIES only) | `SqliteEngine.repairVersionTrees`                              |
+
+The `NOT EXISTS` clause is the guard; the foreign key is the backstop. Both matter and they are not
+interchangeable — a sweep relying on the constraint would RAISE on a referenced object and abort
+the caller's whole transaction, taking its `version_history` deletes with it.
+
+**A rename is GC-neutral and needs no sweep.** `renameSubtree` re-keys `resource_id`/`version`
+only; entries key on `version_row_id` and objects on content, so neither moves. Pinned by
+`tests/integration/versioning/object-gc.test.ts`, which compares both tables as one value across a
+rename — "rename touches history" otherwise invites a speculative fix.
 
 **No backfill of pre-v29 rows, deliberately.** Materialising a tree from a projection would
 fabricate file bytes that never existed on disk, which is worse than a NULL. Old rows keep
