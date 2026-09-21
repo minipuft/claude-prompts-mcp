@@ -33,18 +33,36 @@ function roundTrip(submission: GateVerdictSubmission): {
 } {
   const rendered = renderGateVerdict(submission);
   const parsed = parseGateVerdict(rendered, 'gate_verdict');
-  // `parseGateVerdicts` reads only its string argument, but the constructor
-  // requires collaborators it does not touch here. Stubs keep this a unit test
+  // `parseGateVerdicts` reads its string argument and the advertised gate list, but the
+  // constructor requires collaborators it does not touch here. Stubs keep this a unit test
   // of the parser rather than dragging in a session store.
   const authority = new GateEnforcementAuthority(
     {} as ConstructorParameters<typeof GateEnforcementAuthority>[0],
-    {} as ConstructorParameters<typeof GateEnforcementAuthority>[1]
+    { warn: () => undefined } as unknown as ConstructorParameters<
+      typeof GateEnforcementAuthority
+    >[1]
+  );
+
+  // The parser resolves `[n]` against the list the review advertised, so the round trip needs
+  // one. Synthetic ids positioned 1..N let the assertion stay in the submission's own
+  // vocabulary (`index`) while exercising the real id resolution.
+  const highestIndex = (submission.per_gate ?? []).reduce(
+    (max, entry) => Math.max(max, entry.index),
+    0
+  );
+  const gateIds = Array.from(
+    { length: highestIndex },
+    (_unused, position) => `gate-${position + 1}`
   );
 
   return {
     overall: parsed?.verdict ?? null,
     rationale: parsed?.rationale ?? null,
-    perGate: authority.parseGateVerdicts(rendered),
+    perGate: authority.parseGateVerdicts(rendered, gateIds).map((entry) => ({
+      index: gateIds.indexOf(entry.gateId) + 1,
+      passed: entry.verdict === 'PASS',
+      rationale: entry.rationale ?? '',
+    })),
     reminders: parseGateVerdictReminders(rendered),
   };
 }

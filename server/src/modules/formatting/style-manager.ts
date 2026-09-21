@@ -11,15 +11,9 @@
  * @see GateManager for the pattern this follows
  */
 
-import {
-  StyleDefinitionLoader,
-  type StyleLoaderStats,
-  type LoadedStyleDefinition,
-} from './core/index.js';
+import { StyleDefinitionLoader, type LoadedStyleDefinition } from './core/index.js';
 
 import type { StyleManagerPort, Logger } from '#shared/types/index.js';
-
-import { isGateActiveForContext } from '#engine/gates/utils/gate-activation.js';
 
 /**
  * Configuration for StyleManager
@@ -27,18 +21,6 @@ import { isGateActiveForContext } from '#engine/gates/utils/gate-activation.js';
 export interface StyleManagerConfig {
   /** Enable debug logging */
   debug?: boolean;
-}
-
-/**
- * Style activation context for determining auto-application
- */
-export interface StyleActivationContext {
-  /** Prompt category being executed */
-  promptCategory?: string;
-  /** Current framework (e.g., 'CAGEERF', 'REACT') */
-  framework?: string;
-  /** Whether style was explicitly requested */
-  explicitRequest?: boolean;
 }
 
 /**
@@ -93,8 +75,8 @@ export class StyleManager implements StyleManagerPort {
   /**
    * Report what the injected loader can serve, and mark the manager usable.
    *
-   * No longer builds anything — the loader arrives in the constructor. What remains is the startup
-   * line and the lifecycle flag the `getStatus()` surface reports.
+   * No longer builds anything — the loader arrives in the constructor. What remains is the
+   * startup line and setting the lifecycle flag `ensureInitialized()` checks.
    */
   async initialize(): Promise<void> {
     if (this.initialized) {
@@ -142,17 +124,6 @@ export class StyleManager implements StyleManagerPort {
   }
 
   /**
-   * Check if a style exists
-   *
-   * @param styleId - The style ID to check
-   * @returns true if the style exists
-   */
-  hasStyle(styleId: string): boolean {
-    this.ensureInitialized();
-    return this.loader.styleExists(styleId);
-  }
-
-  /**
    * List all registered style IDs
    *
    * @returns Array of style IDs
@@ -163,97 +134,11 @@ export class StyleManager implements StyleManagerPort {
   }
 
   /**
-   * Get all style definitions
-   *
-   * @returns Map of ID to definition
-   */
-  getAllStyles(): Map<string, LoadedStyleDefinition> {
-    this.ensureInitialized();
-    return this.loader.loadAllStyles();
-  }
-
-  /**
-   * Check if a style is compatible with a framework
-   *
-   * @param styleId - The style ID
-   * @param frameworkId - The framework ID to check compatibility with
-   * @returns true if compatible (or no restrictions defined)
-   */
-  isStyleCompatible(styleId: string, frameworkId?: string): boolean {
-    const style = this.getStyle(styleId);
-    if (!style?.compatibleFrameworks) return true; // No restriction
-    if (!frameworkId) return true;
-    return style.compatibleFrameworks.some((f) => f.toUpperCase() === frameworkId.toUpperCase());
-  }
-
-  /**
-   * Check if a style should be auto-applied for a given context
-   *
-   * Uses the canonical gate activation utility for rule checking.
-   * Note: Styles differ from gates in that no activation rules = NOT auto-applied.
-   *
-   * @param styleId - The style ID
-   * @param context - Activation context
-   * @returns true if the style should be auto-applied
-   */
-  isStyleActive(styleId: string, context: StyleActivationContext): boolean {
-    const style = this.getStyle(styleId);
-    if (!style) return false;
-    if (!style.enabled) return false;
-    if (!style.activation) return false; // Styles require explicit activation rules
-
-    // Use canonical gate activation utility for rule checking
-    return isGateActiveForContext(style.activation, {
-      promptCategory: context.promptCategory,
-      framework: context.framework,
-      explicitRequest: context.explicitRequest,
-    });
-  }
-
-  /**
-   * Clear cached style definitions
-   *
-   * @param styleId - Optional specific style ID to clear
-   */
-  clearCache(styleId?: string): void {
-    this.ensureInitialized();
-    this.loader.clearCache(styleId);
-    if (styleId) {
-      this.logger.debug(`Cleared cache for style: ${styleId}`);
-    } else {
-      this.logger.debug('Cleared all style caches');
-    }
-  }
-
-  /**
-   * Get loader statistics
-   */
-  getLoaderStats(): StyleLoaderStats {
-    this.ensureInitialized();
-    return this.loader.getStats();
-  }
-
-  /**
    * Get the underlying loader (for testing/advanced use)
    */
   getLoader(): StyleDefinitionLoader {
     this.ensureInitialized();
     return this.loader;
-  }
-
-  /**
-   * Get combined style system status
-   */
-  getStatus(): {
-    initialized: boolean;
-    availableStyles: string[];
-    loaderStats: StyleLoaderStats | null;
-  } {
-    return {
-      initialized: this.initialized,
-      availableStyles: this.initialized ? this.loader.discoverStyles() : [],
-      loaderStats: this.initialized ? this.loader.getStats() : null,
-    };
   }
 
   // ============================================================================

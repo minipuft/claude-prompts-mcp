@@ -61,24 +61,6 @@ export interface StyleDefinitionLoaderConfig {
   debug?: boolean;
 }
 
-/**
- * Statistics from the loader
- */
-export interface StyleLoaderStats {
-  /** Number of cached definitions */
-  cacheSize: number;
-  /** Cache hit count */
-  cacheHits: number;
-  /** Cache miss count */
-  cacheMisses: number;
-  /** Number of load errors encountered */
-  loadErrors: number;
-  /** Styles directory being used */
-  stylesDir: string;
-  /** Additional overlay directories */
-  additionalStylesDirs: string[];
-}
-
 // Re-export validation types
 export type { StyleSchemaValidationResult } from './style-schema.js';
 
@@ -216,16 +198,6 @@ export class StyleDefinitionLoader {
   }
 
   /**
-   * Check if a style exists
-   *
-   * @param id - Style ID to check
-   * @returns True if the style has a valid entry point
-   */
-  styleExists(id: string): boolean {
-    return this.entryRootsFor(id.toLowerCase()).length > 0;
-  }
-
-  /**
    * Clear the cache (all or specific ID)
    *
    * @param id - Optional specific ID to clear; if omitted, clears all
@@ -239,20 +211,6 @@ export class StyleDefinitionLoader {
   }
 
   /**
-   * Get loader statistics
-   */
-  getStats(): StyleLoaderStats {
-    return {
-      cacheSize: this.cache.size,
-      cacheHits: this.stats.cacheHits,
-      cacheMisses: this.stats.cacheMisses,
-      loadErrors: this.stats.loadErrors,
-      stylesDir: this.stylesDir,
-      additionalStylesDirs: this.additionalStylesDirs,
-    };
-  }
-
-  /**
    * Live view of the style files that failed to load, across every root consulted so far.
    *
    * Populated by demand, not by discovery: `discoverStyles()` only lists directories holding a
@@ -262,13 +220,6 @@ export class StyleDefinitionLoader {
    */
   getQuarantine(): QuarantineView {
     return this.quarantine;
-  }
-
-  /**
-   * Get the styles directory being used
-   */
-  getStylesDir(): string {
-    return this.stylesDir;
   }
 
   /**

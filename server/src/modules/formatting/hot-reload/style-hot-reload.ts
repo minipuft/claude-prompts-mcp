@@ -221,31 +221,6 @@ export class StyleHotReloadCoordinator {
       throw error;
     }
   }
-
-  /**
-   * Get hot reload statistics
-   */
-  getStats(): StyleHotReloadStats {
-    return { ...this.stats };
-  }
-
-  /**
-   * Reset statistics
-   */
-  resetStats(): void {
-    this.stats = {
-      reloadsAttempted: 0,
-      reloadsSucceeded: 0,
-      reloadsFailed: 0,
-    };
-  }
-
-  /**
-   * Get the definition loader being used
-   */
-  getLoader(): StyleDefinitionLoader {
-    return this.loader;
-  }
 }
 
 /**

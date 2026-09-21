@@ -3,7 +3,6 @@ import { describe, expect, test } from '@jest/globals';
 import {
   buildReviewInstructions,
   composeReviewPrompt,
-  parseLLMReview,
 } from '../../../../src/engine/gates/core/review-utils.js';
 
 import type { GateReviewPrompt } from '../../../../src/engine/execution/types.js';
@@ -81,21 +80,6 @@ describe('review-utils', () => {
     expect(result.combinedPrompt).toContain('Instructions:');
     expect(result.combinedPrompt).toContain('Retry Hints:');
     expect(result.combinedPrompt).toContain('Previous Assistant Response:');
-  });
-
-  test('parseLLMReview detects PASS verdicts with justification', () => {
-    const parsed = parseLLMReview('GATE_REVIEW: PASS - all gates satisfied');
-
-    expect(parsed.decision).toBe('pass');
-    expect(parsed.reasoning).toContain('all gates satisfied');
-    expect(parsed.matchType).toBe('explicit');
-  });
-
-  test('parseLLMReview detects FAIL verdicts and captures reasoning', () => {
-    const parsed = parseLLMReview('GATE_REVIEW: FAIL\nMissing citations for claim 42.');
-
-    expect(parsed.decision).toBe('fail');
-    expect(parsed.reasoning).toContain('Missing citations for claim 42.');
   });
 
   test('composeReviewPrompt renders delivery framing for originalArgs', () => {

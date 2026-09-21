@@ -5,7 +5,7 @@
  * - saveVersion: Auto-versioning, FIFO pruning, disabled mode
  * - loadHistory: Loading existing/non-existing history
  * - getVersion: Retrieving specific version snapshots
- * - rollback: Pre-rollback save, restoring versions
+ * - recordEditResult: bridge + record semantics shared by every rollback/edit caller
  * - compareVersions: Comparing two version snapshots
  * - deleteHistory: Cleanup on resource deletion
  * - formatHistoryForDisplay: Display formatting
@@ -234,28 +234,6 @@ describe('VersionHistoryService', () => {
       expect(await service.loadHistory('prompt', 'doomed')).toBeNull();
     });
 
-    it('still reports a rollback whose pre-rollback snapshot cannot persist as a failure', async () => {
-      // The one caller that already had a catch boundary: `rollback` converts the throw into the
-      // same `{success:false}` it returned before, so its contract is unchanged.
-      const { db, fail } = failingWrites(dbCtx.dbManager);
-      const failingService = new VersionHistoryService({
-        logger: dbCtx.logger,
-        configManager: mockConfigProvider,
-        dbManager: db,
-      });
-
-      await failingService.saveVersion('prompt', 'rollback-target', { state: 'v1' });
-      fail();
-
-      const result = await failingService.rollback('prompt', 'rollback-target', 1, {
-        state: 'live',
-      });
-
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('Failed to persist version snapshot');
-      expect(result.snapshot).toBeUndefined();
-    });
-
     it('does not throw when versioning is disabled — that path never reaches the database', async () => {
       const { db, fail } = failingWrites(dbCtx.dbManager);
       const failingService = new VersionHistoryService({
@@ -399,56 +377,15 @@ describe('VersionHistoryService', () => {
   });
 
   // ==========================================================================
-  // rollback Tests
+  // recordEditResult Tests — the bridge + record semantics both the rollback
+  // and update write paths share (resolveRollbackTarget + commitEdit)
   // ==========================================================================
 
-  describe('rollback', () => {
+  describe('recordEditResult', () => {
     beforeEach(async () => {
       await service.saveVersion('gate', 'test-gate', { criteria: 'original' });
       await service.saveVersion('gate', 'test-gate', { criteria: 'modified' });
       await service.saveVersion('gate', 'test-gate', { criteria: 'latest' });
-    });
-
-    // Deliberately re-encoded for go-forward semantics (P7 row 2.4, OQ-P7-3): the live state
-    // differs from v3's snapshot, so it is bridged as v4, and the RESTORED state is recorded as
-    // v5 — the newest version now holds what the rollback produced, not what preceded it.
-    it('should rollback to previous version successfully', async () => {
-      const currentSnapshot = { criteria: 'current-state' };
-
-      const result = await service.rollback('gate', 'test-gate', 1, currentSnapshot);
-
-      expect(result.success).toBe(true);
-      expect(result.restored_version).toBe(1);
-      expect(result.saved_version).toBe(5); // v4 = bridged live state, v5 = restored state
-      expect(result.snapshot).toEqual({ criteria: 'original' });
-
-      const history = await service.loadHistory('gate', 'test-gate');
-      expect(history!.current_version).toBe(5);
-      const bridged = await service.getVersion('gate', 'test-gate', 4);
-      expect(bridged!.snapshot).toEqual({ criteria: 'current-state' });
-      expect(bridged!.description).toContain('Bridge');
-      const restored = await service.getVersion('gate', 'test-gate', 5);
-      expect(restored!.snapshot).toEqual({ criteria: 'original' });
-      expect(restored!.description).toBe('Rollback to v1');
-    });
-
-    // P7 row 2.4 — go-forward numbering semantics
-    it('records exactly one row per rollback when the live state is already recorded', async () => {
-      // Live state equals v3's snapshot → no bridge; restored state becomes v4.
-      const result = await service.rollback('gate', 'test-gate', 1, { criteria: 'latest' });
-
-      expect(result.saved_version).toBe(4);
-      expect(await service.getLatestVersion('gate', 'test-gate')).toBe(4);
-      const restored = await service.getVersion('gate', 'test-gate', 4);
-      expect(restored!.snapshot).toEqual({ criteria: 'original' });
-    });
-
-    it('consumes no version number when the target does not exist', async () => {
-      const before = await service.getLatestVersion('gate', 'test-gate');
-      const result = await service.rollback('gate', 'test-gate', 99, { criteria: 'anything' });
-
-      expect(result.success).toBe(false);
-      expect(await service.getLatestVersion('gate', 'test-gate')).toBe(before);
     });
 
     it('recordEditResult: newest version equals the produced state, single row at steady state', async () => {
@@ -499,20 +436,23 @@ describe('VersionHistoryService', () => {
       expect(result.version).toBe(2);
     });
 
-    it('should fail when target version does not exist', async () => {
-      const result = await service.rollback('gate', 'test-gate', 99, { x: 1 });
+    // resolveRollbackTarget is phase one of the live rollback path every processor calls
+    // (handleRollback -> resolveRollbackTarget -> commitEdit); these two guard the refusal
+    // cases at that boundary now that the `rollback()` convenience wrapper is gone.
+    it('resolveRollbackTarget fails when the target version does not exist', async () => {
+      const result = await service.resolveRollbackTarget('gate', 'test-gate', 99);
 
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('Version 99 not found');
+      expect(result.ok).toBe(false);
+      expect(!result.ok && result.error).toContain('Version 99 not found');
     });
 
-    it('should fail when versioning is disabled', async () => {
+    it('resolveRollbackTarget fails when versioning is disabled', async () => {
       mockConfigProvider.setConfig({ enabled: false });
 
-      const result = await service.rollback('gate', 'test-gate', 1, { x: 1 });
+      const result = await service.resolveRollbackTarget('gate', 'test-gate', 1);
 
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('disabled');
+      expect(result.ok).toBe(false);
+      expect(!result.ok && result.error).toContain('disabled');
     });
   });
 
@@ -564,16 +504,43 @@ describe('VersionHistoryService', () => {
       let history = await service.loadHistory('prompt', 'test');
       expect(history).not.toBeNull();
 
-      const result = await service.deleteHistory('prompt', 'test');
-      expect(result).toBe(true);
+      const removed = await service.deleteHistory('prompt', 'test');
+      expect(removed).toBe(1);
 
       history = await service.loadHistory('prompt', 'test');
       expect(history).toBeNull();
     });
 
-    it('should return true when no history exists', async () => {
-      const result = await service.deleteHistory('prompt', 'nonexistent');
-      expect(result).toBe(true);
+    it('should report zero when no history exists', async () => {
+      const removed = await service.deleteHistory('prompt', 'nonexistent');
+      expect(removed).toBe(0);
+    });
+
+    it('takes a chain step with its chain, and leaves a same-prefixed sibling', async () => {
+      // The subtree predicate, and the twin that differs in one character: `chain/step` goes with
+      // `chain`, `chain_other` does not. Both surfaces read one definition of this, so the CLI's
+      // own subtree tests and this one are testing the same string.
+      await service.saveVersion('prompt', 'chain', { x: 1 });
+      await service.saveVersion('prompt', 'chain/step', { x: 2 });
+      await service.saveVersion('prompt', 'chain_other', { x: 3 });
+
+      expect(await service.deleteHistory('prompt', 'chain')).toBe(2);
+
+      expect(await service.loadHistory('prompt', 'chain')).toBeNull();
+      expect(await service.loadHistory('prompt', 'chain/step')).toBeNull();
+      expect(await service.loadHistory('prompt', 'chain_other')).not.toBeNull();
+    });
+
+    it('throws rather than reporting a purge it did not do', async () => {
+      // Persistence throws and the caller decides — the posture `saveVersion` already has on this
+      // table. Returning `false` is what let every caller log and report a clean delete.
+      const broken = new VersionHistoryService({
+        logger: dbCtx.logger,
+        configManager: mockConfigProvider,
+      });
+      await expect(broken.deleteHistory('prompt', 'test')).rejects.toThrow(
+        /Failed to purge version history/
+      );
     });
   });
 

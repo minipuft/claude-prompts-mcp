@@ -230,7 +230,7 @@ export const TABLE_CONTRACTS: readonly TableContract[] = [
     posture: 'durable',
     scope: 'workspace',
     retention: { maxRowsPerResource: 50 },
-    readers: ['src/cli-shared/version-history.ts'],
+    readers: ['src/cli-shared/version-history.ts', 'src/cli-shared/version-history-scope.ts'],
     acceptedForeignWriters: [
       {
         subject: 'src/cli-shared/version-history.ts',
@@ -242,7 +242,27 @@ export const TABLE_CONTRACTS: readonly TableContract[] = [
           'the CLI to reach the server, not another rewrite of this module.',
         closedBy: 'A CLI-to-server transport, or an accepted permanent second writer',
       },
+      {
+        // The CLI writer is one module by ownership and four files by size: `version-history.ts`
+        // crossed the 1000-line gate and was split along its responsibilities. This gate keys on
+        // PATH, so the split moved three write sites out from under an exception that still
+        // applies to every one of them — the second writer did not change, its file name did.
+        // Both entries retire together, by the same event.
+        subject: 'src/cli-shared/version-history-rows.ts',
+        reason:
+          'The same accepted second writer as the entry above: this file holds the INSERT, the ' +
+          'trim DELETE and the rename UPDATE that `version-history.ts` used to hold inline. It ' +
+          'resolves no scope of its own — every function takes the tenant id as a parameter — so ' +
+          'it cannot drift from the owner on the axis this contract exists to protect.',
+        closedBy: 'A CLI-to-server transport, or an accepted permanent second writer',
+      },
     ],
+    // Its key is `(tenant_id, resource_type, resource_id, version)`, UNIQUE since schema v28
+    // (`idx_version_history_key`). A version number identifies a row within one history and every
+    // reader selects by it, so a duplicate made `rollback` restore whichever row SQLite reached
+    // first. Both writers must therefore place a row at a version no row in that history holds —
+    // which is what the CLI's rename renumbers for.
+    //
     // F6's divergent-DDL half is closed. The old `ensure_schema()` here created version_history
     // without organization_id/workspace_id and wrote no schema_version row, which left the engine
     // taking its "fresh database" path against an existing table — CREATE TABLE IF NOT EXISTS

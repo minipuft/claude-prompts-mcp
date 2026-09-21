@@ -79,20 +79,6 @@ export class TelemetryLifecycle {
   }
 
   /**
-   * Whether the telemetry runtime is active and collecting.
-   */
-  isEnabled(): boolean {
-    return this.runtime.isEnabled();
-  }
-
-  /**
-   * Get the underlying runtime for consumers that need tracer access (Phase 1.4).
-   */
-  getRuntime(): TelemetryRuntimeImpl {
-    return this.runtime;
-  }
-
-  /**
    * Get status snapshot for observability resources (Phase 1.6).
    */
   getStatus(): TelemetryStatus {

@@ -27,7 +27,7 @@ export type { HotReloadEventType, FileChangeOperation, HotReloadEvent };
 /**
  * Framework-aware hot reload capabilities
  */
-export interface FrameworkHotReloadCapabilities {
+interface FrameworkHotReloadCapabilities {
   enabled: boolean;
   frameworkAnalysis: boolean;
   performanceMonitoring: boolean;
@@ -275,24 +275,6 @@ export class HotReloadObserver {
         this.logger.error(`Failed to watch directory ${dirPath}:`, error);
       }
     }
-  }
-
-  /**
-   * Manually trigger a reload
-   */
-  async triggerReload(
-    reason: string = 'Manual trigger',
-    requiresFullReload: boolean = true
-  ): Promise<void> {
-    const event: HotReloadEvent = {
-      type: 'reload_required',
-      reason,
-      affectedFiles: [],
-      timestamp: Date.now(),
-      requiresFullReload,
-    };
-
-    await this.processReloadEvent(event);
   }
 
   /**
@@ -556,72 +538,6 @@ export class HotReloadObserver {
   }
 
   /**
-   * Get current statistics
-   */
-  getStats(): HotReloadStats {
-    return {
-      ...this.stats,
-      fileObserverStats: this.fileObserver.getStats(),
-    };
-  }
-
-  /**
-   * Get current configuration
-   */
-  getConfig(): HotReloadConfig {
-    return { ...this.config };
-  }
-
-  /**
-   * Update configuration
-   */
-  updateConfig(newConfig: Partial<HotReloadConfig>): void {
-    const oldAutoReload = this.config.autoReload;
-    this.config = { ...this.config, ...newConfig };
-
-    // Update file observer config if needed
-    if (
-      newConfig.debounceMs !== undefined ||
-      newConfig.watchPromptFiles !== undefined ||
-      newConfig.watchConfigFiles !== undefined
-    ) {
-      const debounceMs: number =
-        this.config.debounceMs ?? DEFAULT_HOT_RELOAD_CONFIG.debounceMs ?? 500;
-      const watchPromptFiles: boolean =
-        this.config.watchPromptFiles ?? DEFAULT_HOT_RELOAD_CONFIG.watchPromptFiles ?? true;
-      const watchConfigFiles: boolean =
-        this.config.watchConfigFiles ?? DEFAULT_HOT_RELOAD_CONFIG.watchConfigFiles ?? true;
-
-      this.fileObserver.updateConfig({
-        debounceMs,
-        watchPromptFiles,
-        watchConfigFiles,
-      });
-    }
-
-    if (oldAutoReload !== this.config.autoReload) {
-      this.stats.autoReloadsEnabled = this.config.autoReload;
-      this.logger.info(`Auto reload ${this.config.autoReload ? 'enabled' : 'disabled'}`);
-    }
-
-    this.logger.info('HotReloadObserver configuration updated');
-  }
-
-  /**
-   * Check if hot reload manager is running
-   */
-  isRunning(): boolean {
-    return this.isStarted;
-  }
-
-  /**
-   * Get watched directories
-   */
-  getWatchedDirectories(): string[] {
-    return Array.from(this.watchedDirectories);
-  }
-
-  /**
    * Framework pre-reload processing
    *  Basic framework cache invalidation and analysis
    */
@@ -662,82 +578,6 @@ export class HotReloadObserver {
       const processingTime = performance.now() - startTime;
       this.logger.debug(`Framework post-reload monitoring: ${processingTime.toFixed(2)}ms`);
     }
-  }
-
-  /**
-   * Enable framework capabilities
-   */
-  enableFrameworkCapabilities(options: Partial<FrameworkHotReloadCapabilities> = {}): void {
-    this.config.frameworkCapabilities = {
-      enabled: true,
-      frameworkAnalysis: true,
-      performanceMonitoring: true,
-      preWarmAnalysis: true,
-      invalidateFrameworkCaches: true,
-      ...options,
-    };
-
-    // Enable framework integration on file observer if available
-    if ('enableFrameworkIntegration' in this.fileObserver) {
-      (this.fileObserver as any).enableFrameworkIntegration({
-        enabled: true,
-        analyzeChanges: this.config.frameworkCapabilities.frameworkAnalysis,
-        cacheInvalidation: this.config.frameworkCapabilities.invalidateFrameworkCaches,
-        performanceTracking: this.config.frameworkCapabilities.performanceMonitoring,
-      });
-    }
-
-    this.logger.info('Framework capabilities enabled for HotReloadObserver');
-  }
-
-  /**
-   * Disable framework capabilities
-   */
-  disableFrameworkCapabilities(): void {
-    this.config.frameworkCapabilities = {
-      enabled: false,
-      frameworkAnalysis: false,
-      performanceMonitoring: false,
-      preWarmAnalysis: false,
-      invalidateFrameworkCaches: false,
-    };
-
-    // Disable framework integration on file observer if available
-    if ('disableFrameworkIntegration' in this.fileObserver) {
-      (this.fileObserver as any).disableFrameworkIntegration();
-    }
-
-    this.logger.info('Framework capabilities disabled for HotReloadObserver');
-  }
-
-  /**
-   * Check if framework capabilities are enabled
-   */
-  isFrameworkCapabilitiesEnabled(): boolean {
-    return this.config.frameworkCapabilities?.enabled ?? false;
-  }
-
-  /**
-   * Get debug information
-   */
-  getDebugInfo(): {
-    isRunning: boolean;
-    config: HotReloadConfig;
-    stats: HotReloadStats;
-    watchedDirectories: string[];
-    pendingChanges: number;
-    fileObserverDebug: ReturnType<FileObserver['getDebugInfo']>;
-    frameworkCapabilities: FrameworkHotReloadCapabilities | undefined;
-  } {
-    return {
-      isRunning: this.isRunning(),
-      config: this.getConfig(),
-      stats: this.getStats(),
-      watchedDirectories: this.getWatchedDirectories(),
-      pendingChanges: this.pendingChanges.length,
-      fileObserverDebug: this.fileObserver.getDebugInfo(),
-      frameworkCapabilities: this.config.frameworkCapabilities,
-    };
   }
 }
 

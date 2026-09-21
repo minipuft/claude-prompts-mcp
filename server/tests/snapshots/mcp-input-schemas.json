@@ -1024,6 +1024,63 @@
         },
         "type": "array"
       },
+      "artifacts": {
+        "additionalProperties": false,
+        "properties": {
+          "fromArgument": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "produces": {
+            "items": {
+              "enum": [
+                "source",
+                "test",
+                "docs",
+                "readme",
+                "plan",
+                "changelog",
+                "config",
+                "prompt",
+                "gate",
+                "pr-body"
+              ],
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "budget": {
+        "additionalProperties": false,
+        "properties": {
+          "declaredCostCeiling": {
+            "exclusiveMinimum": 0,
+            "type": "number"
+          },
+          "maxFanOut": {
+            "exclusiveMinimum": 0,
+            "maximum": 8,
+            "type": "integer"
+          },
+          "maxInsertions": {
+            "maximum": 3,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxNodes": {
+            "exclusiveMinimum": 0,
+            "maximum": 32,
+            "type": "integer"
+          },
+          "pauseOnBlocking": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
       "category": {
         "type": "string"
       },
@@ -1305,6 +1362,29 @@
           "full"
         ],
         "type": "string"
+      },
+      "edges": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "from": {
+              "minLength": 1,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "type": "string"
+            },
+            "to": {
+              "minLength": 1,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "from",
+            "to"
+          ],
+          "type": "object"
+        },
+        "type": "array"
       },
       "enabled": {
         "type": "boolean"

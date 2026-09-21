@@ -40,11 +40,34 @@ import {
   VIEW_CONTRACTS,
 } from './table-contracts.js';
 
-import type { DatabasePort } from '#shared/types/persistence.js';
+import type { DatabasePort, TransactionMode } from '#shared/types/persistence.js';
 import type { Logger } from '../logging/index.js';
+
+import { STATE_DB_BUSY_TIMEOUT_MS } from '#shared/utils/runtime-state-location.js';
 
 /**
  * Bump this when changing the embedded schema. Triggers drop-and-recreate.
+ *
+ * v28: adds `idx_version_history_key`, a UNIQUE index on
+ * `(tenant_id, resource_type, resource_id, version)` — the key `version_history` always meant and
+ * never enforced.
+ *
+ * A version number identifies a row within a resource's history; every reader selects by it. Two
+ * rows could share one, and the producer that made that happen was the CLI's `rename_history`: it
+ * re-keyed a resource's rows with a bare `UPDATE ... SET resource_id`, so renaming onto an id that
+ * still carried history — a deleted resource's rows survive it by design, which every delete path
+ * says out loud — merged two sequences and left two rows claiming to be v1. `getVersion`,
+ * `compareVersions` and `rollback` then restored whichever SQLite returned first. The producer was
+ * fixed with the index: the rename now renumbers the incoming rows to continue after the target's
+ * newest version, in one transaction.
+ *
+ * `version_history` is `durable`, so this bump takes the snapshot/restore round-trip — and a
+ * database that ALREADY holds duplicates would fail that restore on the new index. It does not:
+ * `renumberDuplicateVersionHistory` runs between the snapshot and the restore and renumbers
+ * colliding rows deterministically by `created_at` then `id`, keeping every row and every
+ * chronology. That is this bump's migration, and it is the whole of it — no dual write, no flag,
+ * no engine-resident code that re-runs forever, since a v28 database cannot produce a duplicate.
+ * `DROPPED_ON_THIS_BUMP` stays empty and `DROPPED_AT_VERSION` does not move: nothing is discarded.
  *
  * v27: adds `delegated` and `args_json` to `chain_run_nodes` (row A.5, remainder node fields).
  *
@@ -233,7 +256,7 @@ import type { Logger } from '../logging/index.js';
  * `respondedAt`, which changes the `substate_json` shape in `execution_records`. Rows written by
  * v15 would decode to a lifecycle value outside `StepLifecycle`, so they must not survive.
  */
-const SCHEMA_VERSION = 27;
+const SCHEMA_VERSION = 28;
 
 /**
  * Tables whose rows exist nowhere else and therefore survive a SCHEMA_VERSION bump.
@@ -281,6 +304,71 @@ const DROPPED_AT_VERSION: number = 19;
 
 /** Rows carried across a schema recreate, keyed by table name. */
 type DurableSnapshot = Map<string, Array<Record<string, unknown>>>;
+
+/**
+ * The history key a row belongs to, as one string.
+ *
+ * `JSON.stringify` rather than a joined separator: a resource id may contain any character,
+ * so any literal separator can be forged into another history's key — and a NUL one makes this
+ * source file binary to `rg`, which silently blinds every text gate that scans it.
+ */
+function versionHistoryGroupKey(row: Record<string, unknown>): string {
+  return JSON.stringify(
+    [row['tenant_id'], row['resource_type'], row['resource_id']].map((part) => String(part ?? ''))
+  );
+}
+
+/**
+ * Renumber `version_history` rows so no two in one history share a version. PURE.
+ *
+ * The v28 migration (see the SCHEMA_VERSION docblock). Rows written before v28 could collide,
+ * because the CLI's rename merged two histories under one id, so the restore into the newly
+ * unique-indexed table would otherwise throw — and the restore's own failure mode is to abort
+ * startup, which for a durable table nothing regenerates is worse than the duplicate.
+ *
+ * Deterministic and order-preserving: within a history, rows are walked oldest-first by
+ * `created_at` then `id` (the write order, which is the only chronology these rows carry), and
+ * each keeps its own version unless that would repeat or go backwards, in which case it takes the
+ * next free number. A history that was already unique and ascending is left byte-identical, so the
+ * migration is a no-op for every database that never renamed onto occupied history.
+ *
+ * Mutates `version` on the given rows and returns how many it changed.
+ */
+function renumberDuplicateVersionHistory(rows: Array<Record<string, unknown>>): number {
+  const groups = new Map<string, Array<Record<string, unknown>>>();
+  for (const row of rows) {
+    const key = versionHistoryGroupKey(row);
+    const group = groups.get(key);
+    if (group === undefined) {
+      groups.set(key, [row]);
+    } else {
+      group.push(row);
+    }
+  }
+
+  let renumbered = 0;
+  for (const group of groups.values()) {
+    group.sort((left, right) => {
+      const byDate = String(left['created_at'] ?? '').localeCompare(
+        String(right['created_at'] ?? '')
+      );
+      return byDate !== 0 ? byDate : Number(left['id'] ?? 0) - Number(right['id'] ?? 0);
+    });
+
+    let previous = 0;
+    for (const row of group) {
+      const declared = Number(row['version'] ?? 0);
+      const assigned = declared > previous ? declared : previous + 1;
+      if (assigned !== declared) {
+        row['version'] = assigned;
+        renumbered += 1;
+      }
+      previous = assigned;
+    }
+  }
+
+  return renumbered;
+}
 
 /**
  * Database configuration options
@@ -377,6 +465,16 @@ export class SqliteEngine implements DatabasePort {
       // Enable WAL mode for concurrent reader access (Python hooks, skills-sync CLI)
       this.db.exec('PRAGMA journal_mode=WAL');
 
+      // Wait for a lock another connection holds, rather than failing at once.
+      //
+      // WAL lets readers and one writer coexist; it does not make two writers coexist, and this
+      // file has three openers (this server, `cpm`, the Python hooks). Unset, this connection took
+      // SQLite's default of 0 and lost every race outright — a `version_history` save meeting the
+      // CLI mid-write threw instead of waiting the few milliseconds the CLI needed. The value is
+      // `STATE_DB_BUSY_TIMEOUT_MS`, the same constant the CLI's own connection reads, so the two
+      // cannot drift into disagreeing about how patient this file is.
+      this.db.exec(`PRAGMA busy_timeout = ${STATE_DB_BUSY_TIMEOUT_MS}`);
+
       // Ensure schema is current (creates or recreates if version mismatch)
       this.ensureSchema();
       this.assertSchemaMatchesContracts();
@@ -451,10 +549,15 @@ export class SqliteEngine implements DatabasePort {
   }
 
   /**
-   * Begin a transaction
+   * Begin a transaction.
+   *
+   * Defaults to SQLite's DEFERRED, which takes no lock until the first write — so two connections
+   * can both read, and the second to write is refused. A body that reads a value and writes it back
+   * (`MAX(version)` + INSERT) must pass `'immediate'`, which takes the write lock at BEGIN and makes
+   * the pair one unit.
    */
-  beginTransaction(): void {
-    this.run('BEGIN TRANSACTION');
+  beginTransaction(mode: TransactionMode = 'deferred'): void {
+    this.run(mode === 'immediate' ? 'BEGIN IMMEDIATE' : 'BEGIN TRANSACTION');
   }
 
   /**
@@ -474,8 +577,8 @@ export class SqliteEngine implements DatabasePort {
   /**
    * Execute multiple statements in a transaction
    */
-  async transaction<T>(fn: () => T | Promise<T>): Promise<T> {
-    this.beginTransaction();
+  async transaction<T>(fn: () => T | Promise<T>, mode: TransactionMode = 'deferred'): Promise<T> {
+    this.beginTransaction(mode);
     try {
       const result = await fn();
       this.commit();
@@ -518,6 +621,7 @@ export class SqliteEngine implements DatabasePort {
       `Schema version mismatch (have ${currentVersion}, need ${SCHEMA_VERSION}), recreating...`
     );
     const preserved = this.snapshotDurableTables();
+    this.normalizeVersionHistorySnapshot(preserved);
     this.dropAllTables();
     this.applySchema();
     this.restoreDurableTables(preserved);
@@ -565,6 +669,27 @@ export class SqliteEngine implements DatabasePort {
     }
 
     return snapshot;
+  }
+
+  /**
+   * Make the snapshotted `version_history` rows satisfy v28's unique key before they are restored.
+   *
+   * The boundary for the pure renumbering above: it decides, this logs. One line, with the count,
+   * because an operator whose rollback history was silently re-numbered deserves to see it in the
+   * startup log — and silence is the honest output when nothing collided.
+   */
+  private normalizeVersionHistorySnapshot(snapshot: DurableSnapshot): void {
+    const rows = snapshot.get('version_history');
+    if (rows === undefined) {
+      return;
+    }
+    const renumbered = renumberDuplicateVersionHistory(rows);
+    if (renumbered > 0) {
+      this.logger.info(
+        `version_history: renumbered ${renumbered} row(s) that shared a version with another row ` +
+          'in the same history (schema v28 unique key); no rows were discarded.'
+      );
+    }
   }
 
   /**
@@ -886,6 +1011,12 @@ export class SqliteEngine implements DatabasePort {
       CREATE INDEX IF NOT EXISTS idx_resource_changes_tenant ON resource_changes(tenant_id, timestamp);
       CREATE INDEX IF NOT EXISTS idx_ssm_client_scope ON skills_sync_manifests(client, scope);
       CREATE INDEX IF NOT EXISTS idx_version_history_resource ON version_history(tenant_id, resource_type, resource_id);
+      -- A version number is an IDENTITY within a resource's history, not an attribute of a row:
+      -- every reader selects by it (getVersion, compareVersions, rollback), so two rows sharing
+      -- one makes those reads return whichever SQLite reached first. This index is also the gate
+      -- that closes the class — it refuses a duplicate from ANY writer, including one nobody
+      -- enumerated, which a name-keyed source scan could not do.
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_version_history_key ON version_history(tenant_id, resource_type, resource_id, version);
       CREATE INDEX IF NOT EXISTS idx_version_history_workspace ON version_history(workspace_id);
       CREATE INDEX IF NOT EXISTS idx_version_history_organization ON version_history(organization_id);
       CREATE INDEX IF NOT EXISTS idx_resource_changes_workspace ON resource_changes(workspace_id);
@@ -1107,13 +1238,6 @@ export class SqliteEngine implements DatabasePort {
       const msg = error instanceof Error ? error.message : String(error);
       this.logger.warn(`WAL checkpoint skipped during shutdown: ${msg}`);
     }
-  }
-
-  /**
-   * Get database file path (for testing/debugging)
-   */
-  getDbPath(): string {
-    return this.dbPath;
   }
 
   /**

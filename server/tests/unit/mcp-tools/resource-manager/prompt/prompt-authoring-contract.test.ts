@@ -6,6 +6,16 @@ import { GateAnalyzer } from '../../../../../src/mcp/tools/resource-manager/prom
 import { ObjectDiffGenerator } from '../../../../../src/mcp/tools/resource-manager/prompt/analysis/object-diff-generator.js';
 import { PromptAnalyzer } from '../../../../../src/mcp/tools/resource-manager/prompt/analysis/prompt-analyzer.js';
 import { PromptLifecycleProcessor } from '../../../../../src/mcp/tools/resource-manager/prompt/services/prompt-lifecycle-processor.js';
+import {
+  UNSETTABLE_FIELDS,
+  UPDATE_FIELDS,
+} from '../../../../../src/mcp/tools/resource-manager/prompt/utils/validation.js';
+import { resourceManagerInputSchema } from '../../../../../src/mcp/tools/schemas/resource-manager.schema.js';
+import { workflowBudgetSchema } from '../../../../../src/mcp/tools/schemas/workflow-ir.schema.js';
+import {
+  PromptArtifactsSchema,
+  PromptYamlSchema,
+} from '../../../../../src/modules/prompts/prompt-schema.js';
 
 import type { PromptResourceContext } from '../../../../../src/mcp/tools/resource-manager/prompt/core/context.js';
 import type { ConfigManager, Logger } from '../../../../../src/shared/types/index.js';
@@ -315,5 +325,93 @@ describe('prompt update optimistic concurrency', () => {
     expect(response.isError).toBe(true);
     expect(harness.updatePromptImplementation).not.toHaveBeenCalled();
     expect(harness.recordEditResult).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The class P4.65 belongs to: a `prompt.yaml` key the loader accepts that no tool parameter writes.
+ *
+ * `edges` was one of these. It was schema-valid, load-bearing (`collectChainEdgeErrors` refuses a
+ * chain whose edges no longer match its steps), and unreachable from `resource_manager` — so the
+ * only remedy for a refusal was a hand edit of `prompt.yaml`, which this project forbids. Fixing
+ * `edges` alone would close one instance; this closes the CLASS, by failing when a new key joins
+ * `PromptYamlSchema` without being classified.
+ *
+ * Deliberately a classification, not a "must be settable" rule: two keys legitimately are not, and
+ * each carries the observation that would flip it.
+ */
+describe('every prompt.yaml key the loader accepts is classified', () => {
+  /**
+   * Keys the WRITER owns: it produces the message files, so it decides their pointers. A caller
+   * sets the BODY (`system_message`, `user_message_template`) and the writer decides where it goes.
+   */
+  const WRITER_OWNED = new Set(['systemMessageFile', 'userMessageTemplateFile']);
+
+  const SETTABLE = new Set<string>([
+    // The resource identity — the `id` parameter, not a field overlay.
+    'id',
+    // Reaches `promptData` directly from `args.tools` rather than through `UPDATE_FIELDS`.
+    'tools',
+    ...Object.values(UPDATE_FIELDS),
+  ]);
+
+  /**
+   * There is deliberately NO third category.
+   *
+   * This gate shipped (P4.65) with two stamped exceptions, `budget` and `artifacts`, each carrying
+   * an as-of date and a falsifier. P4.82 read both against their own documentation — a chain's
+   * budget and a prompt's artifact declaration are things an AUTHOR states, and the docs say so in
+   * those words — so both became settable and the exception list emptied. Re-introducing one means
+   * arguing that a key `PromptYamlSchema` accepts is not authored by the person authoring the
+   * prompt, which is a claim worth making explicitly rather than by adding a row.
+   */
+  test('no key is left unclassified, and nothing is exempt', () => {
+    const unclassified = Object.keys(PromptYamlSchema.shape).filter(
+      (key) => !SETTABLE.has(key) && !WRITER_OWNED.has(key)
+    );
+
+    expect(unclassified).toEqual([]);
+  });
+
+  test('every classification still names a key the loader accepts', () => {
+    // The other direction: a stale entry documents a key that is gone.
+    const accepted = new Set(Object.keys(PromptYamlSchema.shape));
+    const stale = [...WRITER_OWNED, ...SETTABLE].filter((key) => !accepted.has(key));
+
+    expect(stale).toEqual([]);
+  });
+
+  test('every settable prompt.yaml key is also clearable, or is one a prompt cannot load without', () => {
+    // `unset` refuses the four structural fields BY NAME rather than writing a prompt that fails
+    // its next load; everything else optional in the loader's schema must be clearable, or
+    // "supply to set, omit to preserve" leaves it write-once.
+    const STRUCTURAL = new Set(['id', 'name', 'category', 'description', 'userMessageTemplate']);
+    const settableParameters = Object.entries(UPDATE_FIELDS).filter(
+      ([, dataKey]) => !STRUCTURAL.has(dataKey)
+    );
+    const unclearable = settableParameters
+      .filter(([parameter]) => UNSETTABLE_FIELDS[parameter] === undefined)
+      .map(([parameter]) => parameter);
+
+    expect(unclearable).toEqual([]);
+  });
+
+  test("budget and artifacts are validated by the loader's own schemas, not copies", () => {
+    // IDENTITY, not equivalence. The tool's bound on a structural cap has to BE the loader's
+    // bound: a restatement here would be a second place for `DEFAULT_WORKFLOW_CAPS` to drift from,
+    // and it would still refuse an over-cap value — just later, after a write and a rollback,
+    // which no conformance assertion on the refusal TEXT can tell apart from the boundary case.
+    const shape = resourceManagerInputSchema.shape as Record<string, { unwrap?: () => unknown }>;
+    expect(shape['budget']?.unwrap?.()).toBe(workflowBudgetSchema);
+    expect(shape['artifacts']?.unwrap?.()).toBe(PromptArtifactsSchema);
+  });
+
+  test('the three keys this class was found through are settable and clearable', () => {
+    // Named rather than left implicit in the sweeps above, which would stay green if any of them
+    // were dropped from both maps at once.
+    for (const key of ['edges', 'budget', 'artifacts']) {
+      expect(UPDATE_FIELDS[key]).toBe(key);
+      expect(UNSETTABLE_FIELDS[key]).toBe(key);
+    }
   });
 });

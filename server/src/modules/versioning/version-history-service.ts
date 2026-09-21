@@ -2,16 +2,19 @@
 
 import { isDeepStrictEqual } from 'node:util';
 
+import { RESOURCE_SUBTREE_MATCH } from './history-key.js';
+
 import type { VersioningConfig, Logger } from '#shared/types/index.js';
 import type { DatabasePort, StateStoreOptions } from '#shared/types/persistence.js';
 import type {
   VersionEntry,
   HistoryFile,
   SaveVersionResult,
-  RollbackResult,
   SaveVersionOptions,
   ResourceType,
 } from './types.js';
+
+import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
 
 interface VersionRow {
   id: number;
@@ -28,8 +31,6 @@ interface VersionRow {
  * Interface for config provider - allows ConfigManager or test doubles.
  * Requires both versioning config and serverRoot for SQLite access.
  */
-import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
-
 export interface VersioningConfigProvider {
   getVersioningConfig(): VersioningConfig;
   getServerRoot(): string;
@@ -154,59 +155,44 @@ export class VersionHistoryService {
       const db = this.getDb();
       const tenantId = this.resolveTenantId();
 
-      // Get current max version
-      const row = db.queryOne<{ max_version: number | null }>(
-        `SELECT MAX(version) as max_version FROM version_history
+      // `MAX(version)` and the INSERT that consumes it are ONE unit, under the write lock.
+      //
+      // The number this reads is the number it writes back, so anything committing between the two
+      // makes the INSERT land on a stale maximum. Two rows then share a version — and since schema
+      // v28 that is a UNIQUE violation rather than a silent duplicate, which turns a rare wrong
+      // rollback into a failed save, but only a transaction removes the window. `version_history`
+      // has two accepted writers (this service and `cli-shared/version-history.ts`) against one
+      // file, so the racing connection is a real configuration, not a hypothetical. IMMEDIATE, not
+      // deferred: a deferred transaction takes no lock until the write, by which point both readers
+      // already hold the same stale maximum.
+      //
+      // The prune is inside deliberately — it already ran adjacent to the insert, reads the count
+      // this insert produced, and deletes by it.
+      //
+      // No retry loop, because one is not needed: a contending writer WAITS on the lock. Both
+      // connections to this file set `busy_timeout` from `STATE_DB_BUSY_TIMEOUT_MS`, so the loser
+      // of a race blocks for the few milliseconds the winner's transaction takes and then proceeds.
+      // A retry here would be a second, worse implementation of that wait, in the wrong layer.
+      const newVersion = await db.transaction(async () => {
+        // Get current max version
+        const row = db.queryOne<{ max_version: number | null }>(
+          `SELECT MAX(version) as max_version FROM version_history
          WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?`,
-        [tenantId, resourceType, resourceId]
-      );
-      const currentVersion = row?.max_version ?? 0;
-      const newVersion = currentVersion + 1;
-
-      // Insert new version
-      db.run(
-        `INSERT INTO version_history (tenant_id, organization_id, workspace_id, resource_type, resource_id, version, snapshot, diff_summary, description, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
+          [tenantId, resourceType, resourceId]
+        );
+        const currentVersion = row?.max_version ?? 0;
+        const version = currentVersion + 1;
+        this.insertAndPrune({
+          db,
           tenantId,
-          this.scope?.organizationId ?? null,
-          this.scope?.workspaceId ?? null,
           resourceType,
           resourceId,
-          newVersion,
-          JSON.stringify(snapshot),
-          options?.diff_summary ?? '',
-          options?.description ?? `Version ${newVersion}`,
-          new Date().toISOString(),
-        ]
-      );
-
-      // Prune old versions if exceeding max
-      const count = db.queryOne<{ cnt: number }>(
-        `SELECT COUNT(*) as cnt FROM version_history
-         WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?`,
-        [tenantId, resourceType, resourceId]
-      );
-
-      if (count && count.cnt > config.maxVersions) {
-        db.run(
-          `DELETE FROM version_history WHERE id NOT IN (
-            SELECT id FROM version_history
-            WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?
-            ORDER BY version DESC LIMIT ?
-          ) AND tenant_id = ? AND resource_type = ? AND resource_id = ?`,
-          [
-            tenantId,
-            resourceType,
-            resourceId,
-            config.maxVersions,
-            tenantId,
-            resourceType,
-            resourceId,
-          ]
-        );
-        this.logger.debug(`Pruned history for ${resourceId} to ${config.maxVersions} versions`);
-      }
+          version,
+          snapshot,
+          options,
+        });
+        return version;
+      }, 'immediate');
 
       this.logger.debug(`Saved version ${newVersion} for ${resourceType}/${resourceId}`);
       return { success: true, version: newVersion };
@@ -217,6 +203,58 @@ export class VersionHistoryService {
         `Failed to persist version snapshot for ${resourceType}/${resourceId}: ${message}`,
         { cause: error }
       );
+    }
+  }
+
+  /** The write half of `saveVersion`, run inside its transaction: the row, then the trim. */
+  private insertAndPrune(input: {
+    db: DatabasePort;
+    tenantId: string;
+    resourceType: ResourceType;
+    resourceId: string;
+    version: number;
+    snapshot: Record<string, unknown>;
+    options?: SaveVersionOptions;
+  }): void {
+    const { db, tenantId, resourceType, resourceId, snapshot, options } = input;
+    const newVersion = input.version;
+    const config = this.getConfig();
+
+    // Insert new version
+    db.run(
+      `INSERT INTO version_history (tenant_id, organization_id, workspace_id, resource_type, resource_id, version, snapshot, diff_summary, description, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        tenantId,
+        this.scope?.organizationId ?? null,
+        this.scope?.workspaceId ?? null,
+        resourceType,
+        resourceId,
+        newVersion,
+        JSON.stringify(snapshot),
+        options?.diff_summary ?? '',
+        options?.description ?? `Version ${newVersion}`,
+        new Date().toISOString(),
+      ]
+    );
+
+    // Prune old versions if exceeding max
+    const count = db.queryOne<{ cnt: number }>(
+      `SELECT COUNT(*) as cnt FROM version_history
+         WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?`,
+      [tenantId, resourceType, resourceId]
+    );
+
+    if (count && count.cnt > config.maxVersions) {
+      db.run(
+        `DELETE FROM version_history WHERE id NOT IN (
+            SELECT id FROM version_history
+            WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?
+            ORDER BY version DESC LIMIT ?
+          ) AND tenant_id = ? AND resource_type = ? AND resource_id = ?`,
+        [tenantId, resourceType, resourceId, config.maxVersions, tenantId, resourceType, resourceId]
+      );
+      this.logger.debug(`Pruned history for ${resourceId} to ${config.maxVersions} versions`);
     }
   }
 
@@ -441,66 +479,6 @@ export class VersionHistoryService {
   }
 
   /**
-   * Rollback to a previous version.
-   *
-   * Go-forward semantics (OQ-P7-3): the target is validated BEFORE anything is written, so a
-   * refused rollback consumes no version number (DEV-T2-6's defect). The restored state is then
-   * recorded as the newest version — a rollback is an edit, and version N holds what edit N
-   * produced. The live pre-rollback state needs no dedicated "Pre-rollback snapshot" row: under
-   * these semantics it is already the previous version, and when it is not (old-era rows,
-   * out-of-band edits) the bridge records it.
-   *
-   * RESTORABILITY is not checked here — only existence. A caller that can reject the snapshot
-   * (because its snapshot contract finds a required field missing) must use
-   * `resolveRollbackTarget` + `commitEdit` instead, so the rejection happens before any write.
-   * This convenience wrapper remains for callers with no such rejection to make.
-   */
-  async rollback(
-    resourceType: ResourceType,
-    resourceId: string,
-    targetVersion: number,
-    currentSnapshot: Record<string, unknown>
-  ): Promise<RollbackResult & { snapshot?: Record<string, unknown> }> {
-    const resolved = await this.resolveRollbackTarget(resourceType, resourceId, targetVersion);
-    if (!resolved.ok) {
-      return { success: false, error: resolved.error };
-    }
-    const targetEntry = resolved.entry;
-
-    try {
-      // Record the RESTORED state as the newest version, bridging the live state first if it is
-      // not already recorded. A persistence failure throws and is caught below — a rollback that
-      // reports failure and restores nothing, with the target validated above so the refusal
-      // path writes no rows at all.
-      const saveResult = await this.commitEdit(
-        resourceType,
-        resourceId,
-        currentSnapshot,
-        targetEntry.snapshot,
-        {
-          description: `Rollback to v${targetVersion}`,
-          diff_summary: '',
-        }
-      );
-
-      this.logger.info(
-        `Rollback ${resourceType}/${resourceId}: recorded v${saveResult.version} (restored from v${targetVersion}${saveResult.bridged ? ', live state bridged' : ''})`
-      );
-
-      return {
-        success: true,
-        saved_version: saveResult.version,
-        restored_version: targetVersion,
-        snapshot: targetEntry.snapshot,
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Rollback failed for ${resourceId}: ${message}`);
-      return { success: false, error: message };
-    }
-  }
-
-  /**
    * Compare two versions and return their snapshots for diffing.
    */
   async compareVersions(
@@ -534,25 +512,59 @@ export class VersionHistoryService {
   }
 
   /**
-   * Delete version history for a resource.
-   * Called when a resource is deleted.
+   * Purge the version history of a resource, and of every id beneath it.
+   *
+   * Called when a resource is deleted — by all four `resource_manager` delete handlers, and by
+   * nothing else. It was called by nobody at all until this was wired: the rows of a deleted
+   * resource survived it permanently, unreachable by any action (rollback resolves the resource
+   * first) and never reclaimed, and re-creating the same id later inherited a stranger's history.
+   * `cpm delete` purged them the whole time, so the two surfaces disagreed about what delete means.
+   *
+   * SUBTREE, not one id: a chain's steps keep their history under `chain/step`, and deleting the
+   * chain deletes them too, so their rows go with it rather than staying behind under ids nothing
+   * serves. The predicate is imported rather than written here — `cli-shared` uses the same one,
+   * and two copies of it would be the same cross-surface disagreement one layer down.
+   *
+   * **Throws on failure**, like `saveVersion` on this table and for the same reason: returning
+   * `false` let every caller log and proceed, reporting a delete that only half happened. The
+   * caller decides what to tell the operator; it must not be told the purge succeeded.
+   *
+   * Returns how many rows were removed, which is what lets a reply state what it did.
    */
-  async deleteHistory(resourceType: ResourceType, resourceId: string): Promise<boolean> {
+  async deleteHistory(resourceType: ResourceType, resourceId: string): Promise<number> {
+    // Disabled versioning wrote no rows, so there are none to purge — the same early return
+    // `saveVersion` makes, for the same reason. Without it a delete on a server with versioning
+    // off would fail on a database this service never opened.
+    if (!this.getConfig().enabled) {
+      return 0;
+    }
+
     try {
       const db = this.getDb();
       const tenantId = this.resolveTenantId();
+      const params = [tenantId, resourceType, resourceId, resourceId];
 
+      const before = db.queryOne<{ cnt: number }>(
+        `SELECT COUNT(*) as cnt FROM version_history
+         WHERE tenant_id = ? AND resource_type = ? AND ${RESOURCE_SUBTREE_MATCH}`,
+        params
+      );
       db.run(
         `DELETE FROM version_history
-         WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?`,
-        [tenantId, resourceType, resourceId]
+         WHERE tenant_id = ? AND resource_type = ? AND ${RESOURCE_SUBTREE_MATCH}`,
+        params
       );
 
-      this.logger.debug(`Deleted history for ${resourceType}/${resourceId}`);
-      return true;
+      const removed = before?.cnt ?? 0;
+      this.logger.debug(`Deleted ${removed} history row(s) for ${resourceType}/${resourceId}`);
+      return removed;
     } catch (error) {
-      this.logger.error(`Failed to delete history for ${resourceType}/${resourceId}: ${error}`);
-      return false;
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to delete history for ${resourceType}/${resourceId}: ${message}`);
+      throw new Error(
+        `Failed to purge version history for ${resourceType}/${resourceId}: ${message}`,
+        { cause: error }
+      );
     }
   }
 

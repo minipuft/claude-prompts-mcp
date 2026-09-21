@@ -21,7 +21,6 @@ import { CategoryManager, createCategoryManager } from './category-manager.js';
 import { parseMarkdownPromptContent } from './markdown-prompt-parser.js';
 import {
   type LoadedPromptFile,
-  discoverYamlPrompts,
   hasYamlPrompts,
   loadYamlPrompt as loadYamlPromptFn,
   loadAllYamlPrompts as loadAllYamlPromptsFn,
@@ -45,17 +44,6 @@ export interface PromptLoaderConfig {
   enableCache?: boolean;
   /** Log debug information */
   debug?: boolean;
-}
-
-export interface PromptLoaderStats {
-  /** Number of cached prompt files */
-  cacheSize: number;
-  /** Cache hit count */
-  cacheHits: number;
-  /** Cache miss count */
-  cacheMisses: number;
-  /** Number of load errors encountered */
-  loadErrors: number;
 }
 
 export class PromptLoader {
@@ -111,18 +99,6 @@ export class PromptLoader {
         this.logger.info(`[PromptLoader] Cleared entire cache (${previousSize} entries)`);
       }
     }
-  }
-
-  /**
-   * Get loader statistics
-   */
-  getStats(): PromptLoaderStats {
-    return {
-      cacheSize: this.promptFileCache.size,
-      cacheHits: this.stats.cacheHits,
-      cacheMisses: this.stats.cacheMisses,
-      loadErrors: this.stats.loadErrors,
-    };
   }
 
   /** Live view of the prompt files that failed to load, across every root walked so far. */
@@ -326,23 +302,6 @@ export class PromptLoader {
     }
   }
 
-  /**
-   * Check if caching is enabled
-   */
-  isCacheEnabled(): boolean {
-    return this.enableCache;
-  }
-
-  /**
-   * Enable or disable caching at runtime
-   */
-  setCacheEnabled(enabled: boolean): void {
-    this.enableCache = enabled;
-    if (!enabled) {
-      this.clearCache();
-    }
-  }
-
   /** Build the shared context for YAML loading functions. */
   private get yamlCtx() {
     return {
@@ -353,14 +312,6 @@ export class PromptLoader {
       debug: this.debug,
       quarantine: this.activeQuarantineSink,
     };
-  }
-
-  /**
-   * Discover YAML-based prompts in a category directory.
-   * @see discoverYamlPrompts in yaml-prompt-loader.ts for full documentation.
-   */
-  discoverYamlPrompts(categoryDir: string, prefix: string = ''): string[] {
-    return discoverYamlPrompts(categoryDir, prefix);
   }
 
   /**

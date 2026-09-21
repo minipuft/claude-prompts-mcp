@@ -481,10 +481,14 @@ def build_resource_manager_params(data: dict[str, Any]) -> dict[str, Any]:
         "phases": data["phases"],
     }
 
-    # Optional fields - only include if present
+    # Optional fields - only include if present.
+    #
+    # `type` and `version` are this tool's INPUT fields and are deliberately not forwarded.
+    # resource_manager derives a framework's `type` from its id and stamps `version` itself, and
+    # it declares neither for a framework: `type` belongs to resource_type:"gate" (refused by
+    # name since #337) and `version` is the versioning parameter for `rollback`, declared as a
+    # NUMBER — so forwarding the semver string fails schema validation outright.
     optional_fields = [
-        "type",
-        "version",
         "enabled",
         "description",
         "gates",
@@ -573,6 +577,13 @@ def validate_framework(data: dict[str, Any]) -> dict[str, Any]:
         }
 
     # If 100% score, run structural validations
+    for ignored, reason in (
+        ("type", "resource_manager derives a framework's type from its id"),
+        ("version", "resource_manager stamps the version itself"),
+    ):
+        if data.get(ignored) is not None:
+            warnings.append(f"'{ignored}' is not forwarded: {reason}.")
+
     phase_errors, phase_warnings = validate_phase_consistency(data)
     errors.extend(phase_errors)
     warnings.extend(phase_warnings)

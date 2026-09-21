@@ -282,35 +282,4 @@ export class ComparisonEngine {
 
     return summary;
   }
-
-  /**
-   * Track analysis evolution over time
-   */
-  trackEvolution(promptId: string, classification: PromptClassification): void {
-    // Log significant analysis data for evolution tracking
-    this.logger.debug(`Analysis evolution for ${promptId}:`, {
-      executionType: classification.executionType,
-      requiresFramework: classification.requiresFramework,
-      confidence: classification.confidence,
-      gates: classification.suggestedGates.length,
-      analysisMode: classification.analysisMode,
-      timestamp: new Date().toISOString(),
-    });
-  }
-
-  /**
-   * Assess overall improvement direction
-   */
-  assessImprovement(changes: ComparisonChange[]): 'improved' | 'degraded' | 'neutral' {
-    const positiveChanges = changes.filter((c) => c.impact === 'positive').length;
-    const negativeChanges = changes.filter((c) => c.impact === 'negative').length;
-
-    if (positiveChanges > negativeChanges) {
-      return 'improved';
-    } else if (negativeChanges > positiveChanges) {
-      return 'degraded';
-    }
-
-    return 'neutral';
-  }
 }

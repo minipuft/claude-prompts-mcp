@@ -99,6 +99,18 @@ export interface GateVerdictSummary {
   rationale?: string;
   timestamp: number;
   attempt?: number;
+  /**
+   * Which kind of gate produced this verdict, so a self-declared attestation is never counted
+   * as a graded result.
+   *
+   * A `check` gate is evaluated — the engine runs its `shell_verify` / `script_tool` criteria
+   * and a PASS over a recorded failure is refused. A `reminder` has no evaluator at all: the
+   * reviewer attests to it, which is a fact worth recording and a different fact from a check
+   * passing. Without this field a pass rate over both is two systems averaged together.
+   *
+   * Absent means `check`, which is what every entry parsed from a `GATE_VERDICTS:` block is.
+   */
+  tier?: 'check' | 'reminder';
 }
 
 /**

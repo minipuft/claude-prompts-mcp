@@ -494,58 +494,6 @@ export class ResourceChangeTracker implements ResourceChangeLogPort {
     }
     return removed;
   }
-
-  /**
-   * Get the current hash for a resource
-   */
-  getResourceHash(resourceType: TrackedResourceType, resourceId: string): string | undefined {
-    const cacheKey = this.getCacheKey(resourceType, resourceId);
-    return this.hashCache.get(cacheKey);
-  }
-
-  /**
-   * Get all cached hashes
-   */
-  getAllHashes(): Map<string, string> {
-    return new Map(this.hashCache);
-  }
-
-  /**
-   * Get tracker statistics
-   */
-  async getStats(): Promise<{
-    cachedHashes: number;
-    totalChanges: number;
-  }> {
-    let totalChanges = 0;
-    try {
-      const result = this.dbManager?.queryOne<{ cnt: number }>(
-        'SELECT COUNT(*) as cnt FROM resource_changes'
-      );
-      totalChanges = result?.cnt ?? 0;
-    } catch {
-      // Table may not exist yet
-    }
-
-    return {
-      cachedHashes: this.hashCache.size,
-      totalChanges,
-    };
-  }
-
-  /**
-   * Clear all tracking data (for testing or reset)
-   */
-  async clear(): Promise<void> {
-    this.hashCache.clear();
-
-    if (this.dbManager) {
-      this.dbManager.run('DELETE FROM resource_changes');
-      await this.hashStore!.save({});
-    }
-
-    this.logger.info('ResourceChangeTracker: All tracking data cleared');
-  }
 }
 
 /**

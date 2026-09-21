@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-20T17:34:28.480Z",
+  "generatedAt": "2026-09-21T00:24:42.019Z",
   "eslintTarget": "src,scripts,eslint-rules",
   "totals": {
-    "errors": 2798,
-    "warnings": 775
+    "errors": 2747,
+    "warnings": 766
   },
   "byRule": {
     "@typescript-eslint/strict-boolean-expressions": {
-      "errors": 1882,
+      "errors": 1848,
       "warnings": 0
     },
     "sonarjs/cognitive-complexity": {
@@ -17,10 +17,10 @@
     },
     "@typescript-eslint/no-non-null-assertion": {
       "errors": 0,
-      "warnings": 79
+      "warnings": 78
     },
     "@typescript-eslint/no-unnecessary-condition": {
-      "errors": 393,
+      "errors": 387,
       "warnings": 0
     },
     "max-params": {
@@ -28,7 +28,7 @@
       "warnings": 7
     },
     "@typescript-eslint/prefer-nullish-coalescing": {
-      "errors": 156,
+      "errors": 153,
       "warnings": 0
     },
     "import-x/order": {
@@ -36,7 +36,7 @@
       "warnings": 0
     },
     "@typescript-eslint/explicit-module-boundary-types": {
-      "errors": 51,
+      "errors": 49,
       "warnings": 0
     },
     "@typescript-eslint/no-unsafe-assignment": {
@@ -45,18 +45,18 @@
     },
     "@typescript-eslint/no-unsafe-call": {
       "errors": 0,
-      "warnings": 29
+      "warnings": 27
     },
     "@typescript-eslint/no-unsafe-member-access": {
       "errors": 0,
-      "warnings": 362
+      "warnings": 357
     },
     "@typescript-eslint/explicit-function-return-type": {
-      "errors": 24,
+      "errors": 22,
       "warnings": 0
     },
     "@typescript-eslint/no-explicit-any": {
-      "errors": 254,
+      "errors": 251,
       "warnings": 0
     },
     "max-depth": {
@@ -72,7 +72,7 @@
       "warnings": 0
     },
     "no-useless-escape": {
-      "errors": 2,
+      "errors": 1,
       "warnings": 0
     },
     "__unknown__": {
@@ -81,7 +81,7 @@
     },
     "@typescript-eslint/no-unsafe-return": {
       "errors": 0,
-      "warnings": 12
+      "warnings": 11
     },
     "@typescript-eslint/no-floating-promises": {
       "errors": 7,

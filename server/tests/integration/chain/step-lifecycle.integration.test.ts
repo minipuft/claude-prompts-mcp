@@ -229,7 +229,10 @@ const buildPipeline = (options: {
     SessionManagement: new SessionManagementStage(sessionStore, logger),
     StepResponseCapture: new StepResponseCaptureStage(
       new GateVerdictProcessor(sessionStore, logger),
-      new StepCaptureService(sessionStore, logger),
+      // The record store reaches the capture service too: `ledgerCapturedStep` is the only
+      // append that fires on a call carrying a `gate_verdict`, so without it the whole
+      // capture-time ledger — the `completed` rows and `gate_verdicts_json` — is invisible here.
+      new StepCaptureService(sessionStore, logger, recordStore),
       sessionStore,
       new UnknownObservationProcessor(sessionStore, logger),
       logger
@@ -469,6 +472,63 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
 
     // The store agrees: the run is not finished, and the text no longer says otherwise.
     expect(onlySession().runStatus).toBe('working');
+  });
+
+  /**
+   * P4.76: `execution_records.gate_verdicts_json` had a column, a typed row shape, a read path
+   * and a JSON parse — and no writer anywhere, so every row read `'[]'`.
+   *
+   * The binding site was MEASURED rather than reasoned about (drive against a hermetic server,
+   * 2026-09-20): of the five `append()` sites, only `StepCaptureService.ledgerCapturedStep`
+   * fires on a call carrying a `gate_verdict`, and only in the shape the server's own footer
+   * advertises — `user_response` and `gate_verdict` in one call, which is what
+   * `driveToFinalStep` does.
+   */
+  const completedVerdicts = (sessionId: string): string[] =>
+    (
+      db
+        .prepare(
+          `SELECT gate_verdicts_json FROM execution_records
+           WHERE session_id = ? AND status = 'completed' ORDER BY execution_id ASC`
+        )
+        .all(sessionId) as Array<{ gate_verdicts_json: string }>
+    ).map((row) => row.gate_verdicts_json);
+
+  test("a reviewed step's row carries the per-gate verdicts, keyed by gate id", async () => {
+    const failVerdict = renderGateVerdict({
+      overall: 'FAIL',
+      rationale: 'the gate is not met',
+      per_gate: [{ index: 1, passed: false, rationale: 'no evidence of review' }],
+    });
+
+    await pipeline.execute({ command: `>>draft --> >>review` });
+    const chainId = onlySession().chainId;
+    await pipeline.execute({
+      chain_id: chainId,
+      user_response: 'step 1 output',
+      gate_verdict: failVerdict,
+    } as any);
+
+    const rows = completedVerdicts(onlySession().sessionId);
+    expect(rows).toHaveLength(1);
+    const parsed = JSON.parse(rows[0] ?? '[]') as Array<Record<string, unknown>>;
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0]).toMatchObject({
+      gateId: GATE_ID,
+      verdict: 'FAIL',
+      rationale: 'no evidence of review',
+    });
+    expect(typeof parsed[0]?.['timestamp']).toBe('number');
+  });
+
+  test("positive control: a step answered with no verdict leaves its row's column at '[]'", async () => {
+    // The absence asserted here is evidence only because the drive above — same chain, same
+    // step, same row — does write entries. The single difference is the `gate_verdict` argument.
+    await pipeline.execute({ command: `>>draft --> >>review` });
+    const chainId = onlySession().chainId;
+    await pipeline.execute({ chain_id: chainId, user_response: 'step 1 output' } as any);
+
+    expect(completedVerdicts(onlySession().sessionId)).toEqual(['[]']);
   });
 
   test('step 1 is ledgered on the chain-start call', async () => {

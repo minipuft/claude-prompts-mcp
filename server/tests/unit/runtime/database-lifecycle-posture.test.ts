@@ -80,7 +80,7 @@ describe('Application shutdown closes the database (5.2)', () => {
     expect(engine.isInitialized()).toBe(true);
 
     const app = buildApp();
-    await app.loadConfiguration();
+    await (app as unknown as { initializeFoundation: () => Promise<void> }).initializeFoundation();
     await app.shutdown();
 
     expect(engine.isInitialized()).toBe(false);
@@ -97,7 +97,7 @@ describe('Application shutdown closes the database (5.2)', () => {
     const order: string[] = [];
 
     const app = buildApp();
-    await app.loadConfiguration();
+    await (app as unknown as { initializeFoundation: () => Promise<void> }).initializeFoundation();
 
     // `configManager.stopWatching()` is the last teardown step before the database
     // close. If the close ever moves above the subsystem block, this ordering inverts.

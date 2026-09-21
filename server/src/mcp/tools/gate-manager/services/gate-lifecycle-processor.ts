@@ -13,6 +13,7 @@ import type { QuarantinedResource } from '#shared/utils/resource-quarantine.js';
 import type { GateResourceContext } from '../core/context.js';
 import type { GateManagerInput, GateCreationData } from '../core/types.js';
 
+import { purgeHistoryOnDelete } from '#modules/versioning/delete-purge.js';
 import { projectWriteModel } from '#modules/versioning/index.js';
 import { logMcpToolChange } from '#shared/core/resource-change-log.js';
 import { resolveContainedPath } from '#shared/utils/path-containment.js';
@@ -589,8 +590,7 @@ export class GateLifecycleProcessor {
         `🔍 **Preview** — deletion of gate '${id}'\n\n` +
           `Nothing was removed.\n\n` +
           `📁 Would remove the directory: ${gateDir}\n` +
-          `📜 Its \`version_history\` rows are NOT removed — they survive and become unreachable, ` +
-          `since rollback resolves the gate first\n` +
+          `📜 Would also purge its \`version_history\` rows — a preview purges nothing\n` +
           `⚠️ Deletion cannot be undone — rollback cannot restore a deleted gate.\n\n` +
           `💡 Re-send as \`action:"delete"\` with \`confirm: true\` to apply it.`
       );
@@ -603,6 +603,17 @@ export class GateLifecycleProcessor {
         `Failed to delete gate directory: ${error instanceof Error ? error.message : String(error)}`
       );
     }
+
+    // AFTER the removal, and only if it succeeded. The other order destroys the rollback history of
+    // a resource that is still on disk when the `fs.rm` fails, which is unrecoverable; this order's
+    // failure mode is rows left behind, which is exactly the state before this was wired.
+    const purge = await purgeHistoryOnDelete(
+      this.ctx.versionHistoryService,
+      'gate',
+      id,
+      `directory removed: ${gateDir}`
+    );
+    if (purge.failure !== undefined) return this.error(purge.failure);
 
     const unregistered = this.ctx.gateManager.unregister(id);
     if (!unregistered) {
@@ -619,6 +630,7 @@ export class GateLifecycleProcessor {
     return this.success(
       `✅ Gate '${id}' deleted successfully\n\n` +
         `📁 Directory removed: ${gateDir}\n\n` +
+        `📜 Version history purged: ${purge.removed} row(s)\n\n` +
         (unregistered
           ? `🔄 Gate unregistered from registry`
           : `ℹ️ It was not in the gate registry, so only the files were removed`)

@@ -50,6 +50,9 @@ export type resource_managerParamName =
   | 'chain_step_index'
   | 'chain_step_data'
   | 'chain_step_order'
+  | 'edges'
+  | 'budget'
+  | 'artifacts'
   | 'tools'
   | 'gate_configuration'
   | 'composer'
@@ -276,7 +279,7 @@ export const resource_managerParameters: ToolParameter[] = [
     name: 'unset',
     type: 'array<string>',
     description:
-      '[Prompt] Update-only: CLEAR these fields, naming them as the tool parameters you would use to set them. Supplying a value SETS it and omitting it PRESERVES it, so before this there was no way to say REMOVE — `system_message: ""` set an empty body rather than dropping the key, and for the fields the writer carries forward off disk (`tools`, `injection`, `register_with_mcp`, `mcp_prompt_mode`, `subagent_model`, `agent_type`, `composer`) omission was already the preserve signal. Unsettable: agent_type, arguments, chain_steps, composer, gate_configuration, injection, mcp_prompt_mode, register_with_mcp, subagent_model, system_message, tools. `name`, `category`, `description` and `user_message_template` are refused by name: they stay settable, but a prompt missing one does not load. Unsetting `system_message` also deletes `system-message.md`; unsetting `tools` unbinds without deleting `tools/{id}/`. A field both supplied and unset in one call is refused rather than resolved in an unseen order.',
+      '[Prompt] Update-only: CLEAR these fields, naming them as the tool parameters you would use to set them. Supplying a value SETS it and omitting it PRESERVES it, so before this there was no way to say REMOVE — `system_message: ""` set an empty body rather than dropping the key, and for the fields the writer carries forward off disk (`tools`, `injection`, `register_with_mcp`, `mcp_prompt_mode`, `subagent_model`, `agent_type`, `composer`) omission was already the preserve signal. Unsettable: agent_type, arguments, artifacts, budget, chain_steps, composer, edges, gate_configuration, injection, mcp_prompt_mode, register_with_mcp, subagent_model, system_message, tools. `name`, `category`, `description` and `user_message_template` are refused by name: they stay settable, but a prompt missing one does not load. Unsetting `system_message` also deletes `system-message.md`; unsetting `tools` unbinds without deleting `tools/{id}/`. A field both supplied and unset in one call is refused rather than resolved in an unseen order.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
@@ -322,6 +325,33 @@ export const resource_managerParameters: ToolParameter[] = [
     type: 'array<number>',
     description:
       '[Prompt] New index order for `chain_step_operation: "reorder"`. Must be a permutation of [0..n-1] for the current step count; anything else is refused rather than partially applied.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'edges',
+    type: 'array<object<{from:string,to:string}>>',
+    description:
+      '[Prompt] Dependency edges between this chain\'s steps, each `{from, to}` naming a step id — an explicit step `id`, or the kebab-case slug minted from `stepName`. Ordering constraints, not control flow: the loader linearizes them into `chainSteps` order at load time. An edge naming a step the chain does not declare, or a cycle, is refused and the write is rolled back — so a `chain_steps` rewrite that drops a step an edge still names must send the corrected `edges` in the SAME call, which is validated as one state. Send `unset: ["edges"]` to drop every edge and keep the authored step order.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'budget',
+    type: 'object<{maxNodes?:number,maxFanOut?:number,maxInsertions?:number,declaredCostCeiling?:number,pauseOnBlocking?:boolean}>',
+    description:
+      '[Prompt] Run-level budget for a chain, the same shape and the same caps a submitted Workflow IR declares. A declared structural cap may only NARROW the server default, so a value above it is refused here rather than silently clamped, and an unrecognized key is refused rather than dropped. `pauseOnBlocking: true` HOLDS the run on a blocking unknown until a `gate_action` verb clears it. Send `unset: ["budget"]` to drop the declaration and run on the server defaults.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'artifacts',
+    type: 'object<{produces?:string[],fromArgument?:string}>',
+    description:
+      '[Prompt] What this prompt\'s run touches, in the fixed artifact-kind vocabulary (source, test, docs, readme, plan, changelog, config, prompt, gate, pr-body). `produces` names kinds it always yields; `fromArgument` names one declared argument whose value carries the paths this run touches, and must match an argument the prompt declares — the two union. This is the only channel a run has for declaring artifacts, and artifact-scoped gates attach from it. Send `unset: ["artifacts"]` to declare nothing.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,

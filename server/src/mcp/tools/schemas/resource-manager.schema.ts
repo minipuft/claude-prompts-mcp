@@ -3,17 +3,26 @@
  * Resource Manager Input Schema
  *
  * Hand-written replacement for the generated resourceManagerSchema in mcp-schemas.ts.
- * Uses .passthrough() to allow framework fields to flow through for advanced scenarios.
+ *
+ * `.passthrough()` at the bottom of this object is DELIBERATE and load-bearing, and no longer for
+ * the reason it was added. It arrived so eleven framework advanced fields could reach the writer
+ * while the published schema named none of them; that ended at P4.1/P4.5, when all eleven were
+ * declared. It stays because `describeParameterRefusal` (R46) has to SEE an undeclared key in
+ * order to refuse it by name, before dispatch, saying which tool it is not a parameter of. A
+ * `.strict()` object here would reject the same key one layer earlier with a zod message that
+ * names neither — and would put a second refusal path above the one that owns this class.
  */
 
 import { z } from 'zod/v4';
 
+import { workflowBudgetSchema, workflowEdgeSchema } from './workflow-ir.schema.js';
 import { PATCH_TARGET_FIELDS } from '../resource-manager/prompt/operations/template-patch.js';
 import { PREVIEWABLE_ACTIONS } from '../shared/preview-action.js';
 
 import {
   ArgumentValidationSchema,
   ChainStepSchema,
+  PromptArtifactsSchema,
   PromptComposerMetadataSchema,
   PromptInjectionConfigSchema,
 } from '#modules/prompts/prompt-schema.js';
@@ -337,6 +346,43 @@ export const resourceManagerInputSchema = z
     chain_step_data: ChainStepSchema.passthrough().optional(),
     /** [Prompt] New index order for reorder operation (permutation of [0..n-1]). */
     chain_step_order: z.array(z.number().int().nonnegative()).optional(),
+    /**
+     * [Prompt] Dependency edges between this chain's steps, addressed by minted node id.
+     *
+     * Same shape and same meaning `PromptYamlSchema.edges` carries (prompt-schema.ts) — ordering
+     * constraints the loader linearizes into `chainSteps` order, never control flow — because the
+     * value goes verbatim into `prompt.yaml`. Reusing `workflowEdgeSchema` rather than restating
+     * `{from, to}` is what keeps a value accepted here from being rejected at load.
+     *
+     * The parameter exists because the validation already did (P4.65): a `chain_steps` rewrite
+     * dropping a step an edge still names is refused and rolled back, and until this parameter
+     * there was no way to correct the edge through the tool at all — the only remedy was a hand
+     * edit of the YAML, which this project forbids. An update carrying both is validated as ONE
+     * state by the post-write verification, which reads the file the write produced.
+     */
+    edges: z.array(workflowEdgeSchema).optional(),
+    /**
+     * [Prompt] Run-level budget for a chain (P4.82).
+     *
+     * `workflowBudgetSchema` itself, not a restatement of it — so the `.max()` bound that makes a
+     * declared cap NARROW-ONLY is the same bound the loader applies, enforced by the same
+     * validator. A copy here would be a second place for the cap to drift from
+     * `DEFAULT_WORKFLOW_CAPS`, which is the drift the Workflow IR path already pins a test against.
+     * It is `.strict()`, so a misspelled budget key is refused at the boundary rather than dropped
+     * into a declaration that then silently does nothing.
+     */
+    budget: workflowBudgetSchema.optional(),
+    /**
+     * [Prompt] What this prompt's run touches, in the fixed `ArtifactKind` vocabulary (P4.82).
+     *
+     * `PromptArtifactsSchema` itself, for the same reason `budget` above is `workflowBudgetSchema`:
+     * the value goes verbatim into `prompt.yaml`. Its `.strict()` is load-bearing — a misspelled
+     * key here fails in the worst way, by leaving the artifact-scoped gate the author was aiming at
+     * simply unattached with nothing said. The cross-field rule (`fromArgument` must name a
+     * declared argument) is not expressible at this boundary, because an update need not carry
+     * `arguments`; the post-write verification reads the produced FILE and refuses there.
+     */
+    artifacts: PromptArtifactsSchema.optional(),
     /** [Prompt] Script tools to create with the prompt. */
     tools: z.array(z.unknown()).optional(),
     /**
