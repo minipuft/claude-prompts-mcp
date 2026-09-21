@@ -390,15 +390,15 @@ Framework creation requires 100% score. All 5 tiers must be complete.
 
 ### Tier 1: Foundation (30%)
 
-| Field                    | Type    | Requirement                                     |
-| ------------------------ | ------- | ----------------------------------------------- |
-| `id`                     | string  | Lowercase-hyphenated identifier                 |
-| `name`                   | string  | Human-readable name                             |
-| `type`                   | string  | Framework type identifier (e.g., "MYFRAMEWORK") |
-| `version`                | string  | Semantic version (e.g., "1.0.0")                |
-| `enabled`                | boolean | Set to `true`                                   |
-| `system_prompt_guidance` | string  | ≥100 chars with `**PhaseName**:` format         |
-| `phases`                 | array   | ≥2 phases, each with `{id, name, description}`  |
+| Field                    | Type    | Requirement                                        |
+| ------------------------ | ------- | -------------------------------------------------- |
+| `id`                     | string  | Lowercase-hyphenated identifier                    |
+| `name`                   | string  | Human-readable name                                |
+| `type`                   | string  | Scored, not forwarded — derived from `id` on write |
+| `version`                | string  | Scored, not forwarded — stamped on write           |
+| `enabled`                | boolean | Set to `true`                                      |
+| `system_prompt_guidance` | string  | ≥100 chars with `**PhaseName**:` format            |
+| `phases`                 | array   | ≥2 phases, each with `{id, name, description}`     |
 
 ### Tier 2: Quality Validation (20%)
 
