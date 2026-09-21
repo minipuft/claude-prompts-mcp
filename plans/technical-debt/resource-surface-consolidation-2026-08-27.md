@@ -2,7 +2,7 @@
 title: "resource_manager surface consolidation — where resources live and what is authorable"
 date: 2026-08-27
 status: active
-publish: push+merge (2026-09-20 · owner rulings · the tail PR #342; then the hardening slice and the checkpoint slices that follow it, each on a green full suite)
+publish: push+merge (2026-09-20 · owner rulings · the tail PR #342, the hardening slice #344 and the checkpoint slices #345–#347, all merged; the next slice needs its own ruling)
 tags: []
 ---
 
@@ -22,16 +22,18 @@ lifecycle it can actually reach.
 
 ## Now
 
-_Rewritten 2026-09-21._ The restore slice merged as #346 (`404d57bd`). Config checkpointing is on
-`feat/config-checkpoints` and goes out as one PR under `publish:`; it closes P4.92.
+_Rewritten 2026-09-21._ No slice is running. The owner's three rulings of 2026-09-20 are all on
+`main`: HTTP notifications and the undeclared-key refusal on every tool (#344 `b87ddbb6`), and the
+checkpoint system across #344, #345 `03dd1582` (the per-workspace object store), #346 `404d57bd`
+(byte-exact restore that never deletes a file) and #347 `73498a88` (config checkpointing).
 
-- **In this PR (BREAKING for `cpm`):** every config file write records a version; `cpm config
-history` and `cpm config rollback [--preview]`; the timestamped backups and `backupPath` are gone.
 - **Owner calls open:** `cpm`'s prompt edits against about 59 KB of dev bundle (P4.104, affordable
   under the 1,000,000 budget); the path in a nested `gate_verdict` refusal (P4.103); the wording of
-  a `cpm`-written create row (P4.107); one tenant for a workspace's config history (P4.109, B.89).
-- **Open, not started:** P4.86, P4.87, P4.89–P4.91, P4.99–P4.102, P4.105–P4.109. **Owner's,
-  outside the repo:** the `~/.claude` rename (P5.12 second half), P5.16, then P5.13.
+  a `cpm`-written create row (P4.107); one tenant for a workspace's config history (P4.109, the
+  tutorial plan's B.89).
+- **Open, not started:** P4.86, P4.87, P4.89–P4.91, P4.99–P4.102, P4.105, P4.106, P4.108.
+  **Owner's, outside the repo:** the `~/.claude` rename (P5.12 second half), P5.16, then P5.13.
+- **Constraint in force:** `publish:` covered the slices above. The next slice needs its own ruling.
 
 ## What already landed (do not redo)
 
