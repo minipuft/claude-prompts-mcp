@@ -8,7 +8,11 @@ import { canonicalPromptSnapshot, validateRequiredFields } from '../utils/valida
 
 import type { PromptResourceInput } from '../../core/types.js';
 
-import { describeRollbackPreview, type SnapshotContract } from '#modules/versioning/index.js';
+import {
+  describeRollbackPreview,
+  describeRollbackRecord,
+  type SnapshotContract,
+} from '#modules/versioning/index.js';
 import { ToolResponse } from '#shared/types/index.js';
 
 /**
@@ -310,7 +314,7 @@ export class PromptVersioningProcessor {
     // `updatePrompt` records, because the raw ConvertedPrompt carries loader-resolved runtime keys
     // and passing it here would make the bridge check always see the live state as unrecorded (see
     // canonicalPromptSnapshot).
-    let restoredVersion: number | undefined;
+    let restoreOutcome: { version?: number; recorded: boolean } | undefined;
     let recordFailure: string | undefined;
 
     // Same write model as `update`: one writer (`createOrUpdateYamlPrompt`) means
@@ -338,7 +342,7 @@ export class PromptVersioningProcessor {
                 snapshot,
                 { description: `Rollback to v${version}`, diff_summary: '' }
               );
-              restoredVersion = saveResult.version;
+              restoreOutcome = saveResult;
             } catch (error) {
               recordFailure = error instanceof Error ? error.message : String(error);
               throw error;
@@ -363,7 +367,7 @@ export class PromptVersioningProcessor {
       };
     }
 
-    if (restoredVersion === undefined) {
+    if (restoreOutcome === undefined) {
       // Unreachable: `commit` either assigns or throws, and a throw is caught above.
       throw new Error(
         `Rollback of prompt '${id}' reported a successful write without recording a version`
@@ -378,7 +382,7 @@ export class PromptVersioningProcessor {
           type: 'text' as const,
           text:
             `✅ Prompt '${id}' rolled back to version ${version}\n\n` +
-            `📜 Restored state recorded as version ${restoredVersion}\n` +
+            `${describeRollbackRecord(restoreOutcome)}\n` +
             describeUnversionedScriptTools(currentPrompt) +
             `🔄 Prompts reloaded`,
         },
@@ -387,7 +391,7 @@ export class PromptVersioningProcessor {
         action: 'rollback',
         id,
         restored_version: version,
-        current_version: restoredVersion,
+        current_version: restoreOutcome.version,
         mutated: true,
         refreshed: true,
       },

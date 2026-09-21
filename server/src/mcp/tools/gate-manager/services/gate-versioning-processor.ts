@@ -7,7 +7,11 @@ import type { ToolResponse } from '#shared/types/index.js';
 import type { GateResourceContext } from '../core/context.js';
 import type { GateManagerInput } from '../core/types.js';
 
-import { describeIncompleteSnapshot, describeRollbackPreview } from '#modules/versioning/index.js';
+import {
+  describeIncompleteSnapshot,
+  describeRollbackPreview,
+  describeRollbackRecord,
+} from '#modules/versioning/index.js';
 
 export class GateVersioningProcessor {
   constructor(private readonly ctx: GateResourceContext) {}
@@ -92,7 +96,7 @@ export class GateVersioningProcessor {
     //
     // Fields outside the projection are carried forward from disk by
     // `resolvePreservedGateYamlFields` inside the writer, which is where that live read belongs.
-    let restoredVersion: number | undefined;
+    let restoreOutcome: { version?: number; recorded: boolean } | undefined;
     let recordFailure: string | undefined;
 
     // Rollback restores the WHOLE snapshot — no `suppliedKeys` narrowing (the `undefined` below
@@ -111,7 +115,7 @@ export class GateVersioningProcessor {
               snapshot,
               { description: `Rollback to v${version}`, diff_summary: '' }
             );
-            restoredVersion = saveResult.version;
+            restoreOutcome = saveResult;
           } catch (error) {
             recordFailure = error instanceof Error ? error.message : String(error);
             throw error;
@@ -129,7 +133,7 @@ export class GateVersioningProcessor {
         : this.error(`Rollback write failed: ${writeResult.error}`);
     }
 
-    if (restoredVersion === undefined) {
+    if (restoreOutcome === undefined) {
       // Unreachable: `commit` either assigns or throws, and a throw fails the write above.
       throw new Error(
         `Rollback of gate '${id}' reported a successful write without recording a version`
@@ -140,7 +144,7 @@ export class GateVersioningProcessor {
 
     return this.success(
       `✅ Gate '${id}' rolled back to version ${version}\n\n` +
-        `📜 Restored state recorded as version ${restoredVersion}\n` +
+        `${describeRollbackRecord(restoreOutcome)}\n` +
         (reloaded
           ? `🔄 Gate reloaded with restored content`
           : `⚠️ Files restored, but the gate could not be reloaded into this process — it still ` +

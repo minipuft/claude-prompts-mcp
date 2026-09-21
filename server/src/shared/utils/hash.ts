@@ -86,86 +86,69 @@ const HASH_PREFIX = 'sha256:';
  * `-0` is emitted as `0`. That is not a guess: `JSON.stringify(-0)` is `"0"` and the value reads
  * back as `+0`, so `0` IS its round-tripped identity.
  */
-function encodeCanonical(value: unknown, path: string): string {
-  if (value === null) return 'null';
-
-  switch (typeof value) {
-    case 'string':
-      return JSON.stringify(value);
-    case 'boolean':
-      return value ? 'true' : 'false';
-    case 'number':
-      if (!Number.isFinite(value)) {
-        throw new TypeError(
-          `canonicalJson: ${String(value)} at ${path} has no JSON representation ` +
-            `(it would serialise as null and collide with a real null)`
-        );
-      }
-      // Object.is(-0, 0) is false, but their JSON forms are both "0".
-      return JSON.stringify(value === 0 ? 0 : value);
-    case 'object':
-      return encodeCanonicalObject(value, path);
-    default:
-      throw new TypeError(
-        `canonicalJson: ${typeof value} at ${path} has no JSON representation; ` +
-          `convert it before hashing`
-      );
-  }
+function refuse(path: string, what: string): TypeError {
+  return new TypeError(
+    `canonicalJson: ${what} at ${path} has no JSON round-trip; convert it first`
+  );
 }
 
-function encodeCanonicalObject(value: object, path: string): string {
-  if (Array.isArray(value)) {
-    // Array ORDER IS content — two orderings of the same members are two different states.
-    return `[${value
-      .map((member, index) => {
-        if (member === undefined) {
-          throw new TypeError(
-            `canonicalJson: undefined at ${path}[${index}] has no JSON representation ` +
-              `(it would serialise as null)`
-          );
-        }
-        return encodeCanonical(member, `${path}[${index}]`);
-      })
-      .join(',')}]`;
+/** Array ORDER IS content — two orderings of the same members are two different states. */
+function canonicalArray(value: readonly unknown[], path: string): unknown[] {
+  const members: unknown[] = [];
+  for (const [index, member] of value.entries()) {
+    if (member === undefined) throw refuse(`${path}[${index}]`, 'undefined');
+    members.push(toCanonical(member, `${path}[${index}]`));
   }
+  return members;
+}
 
-  const prototype = Object.getPrototypeOf(value) as object | null;
-  if (prototype !== Object.prototype && prototype !== null) {
-    const named = (value as { constructor?: { name?: string } }).constructor?.name;
-    throw new TypeError(
-      `canonicalJson: ${named ?? 'non-plain object'} at ${path} is not a plain ` +
-        `object; convert it to JSON-representable data before hashing`
-    );
-  }
-  if ('toJSON' in value) {
-    throw new TypeError(
-      `canonicalJson: the object at ${path} defines toJSON, so its hashed form would differ ` +
-        `from the value that reads back; convert it before hashing`
-    );
-  }
+function canonicalObject(value: object, path: string): Record<string, unknown> {
+  const prototype: unknown = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null)
+    throw refuse(path, 'a non-plain object');
+  if ('toJSON' in value) throw refuse(path, 'an object with toJSON');
 
   const record = value as Record<string, unknown>;
-  // ASCII-ascending by code unit — the default `Array.prototype.sort` comparator, deliberately
-  // NOT `localeCompare`, which is locale-dependent and would make the hash machine-dependent.
-  const keys = Object.keys(record)
-    .filter((key) => record[key] !== undefined)
-    .sort();
-  return `{${keys
-    .map((key) => `${JSON.stringify(key)}:${encodeCanonical(record[key], `${path}.${key}`)}`)
-    .join(',')}}`;
+  const canonical: Record<string, unknown> = {};
+  // Sorted by the default comparator — ASCII-ascending by code unit, deliberately NOT
+  // `localeCompare`, which is locale-dependent and would make the hash machine-dependent.
+  // `JSON.stringify` emits in insertion order, so sorting here IS the canonical key order.
+  for (const key of Object.keys(record).sort()) {
+    if (record[key] !== undefined) canonical[key] = toCanonical(record[key], `${path}.${key}`);
+  }
+  return canonical;
+}
+
+function canonicalNumber(value: number, path: string): number {
+  if (!Number.isFinite(value)) throw refuse(path, String(value));
+  // Object.is(-0, 0) is false, but their JSON forms are both "0".
+  return value === 0 ? 0 : value;
+}
+
+function toCanonical(value: unknown, path: string): unknown {
+  if (value === null) return null;
+  switch (typeof value) {
+    case 'string':
+    case 'boolean':
+      return value;
+    case 'number':
+      return canonicalNumber(value, path);
+    case 'object':
+      return Array.isArray(value) ? canonicalArray(value, path) : canonicalObject(value, path);
+    default:
+      throw refuse(path, typeof value);
+  }
 }
 
 /**
  * Serialise a value to a form where byte-equality means "the same state".
  *
  * Object keys sorted ASCII-ascending, array order preserved, no whitespace. Throws `TypeError`
- * naming the path for anything that cannot round-trip through JSON (see `encodeCanonical`).
+ * naming the path for anything that cannot round-trip through JSON (see above).
  */
 export function canonicalJson(value: unknown): string {
-  if (value === undefined) {
-    throw new TypeError('canonicalJson: undefined has no JSON representation');
-  }
-  return encodeCanonical(value, '$');
+  if (value === undefined) throw refuse('$', 'undefined');
+  return JSON.stringify(toCanonical(value, '$'));
 }
 
 /** `sha256:` + the digest of a value's canonical JSON form. */

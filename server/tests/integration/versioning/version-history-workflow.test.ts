@@ -105,7 +105,15 @@ class SimulatedResourceManager {
     data: Record<string, unknown>,
     options?: { skipVersion?: boolean }
   ): Promise<{ success: boolean }> {
-    // Save current state as version before update (unless skipped)
+    // Apply the update, THEN record the state it produced.
+    //
+    // Go-forward numbering (P7): version N holds what edit N produced, which is what every real
+    // processor does via `recordEditResult`. This simulator recorded the PRE-update state instead,
+    // a pre-P7 shape that never matched production and is now visibly wrong: the first such
+    // snapshot is byte-identical to the one `create` just wrote, and an unchanged write no longer
+    // spends a version. The old shape also never recorded the final state at all.
+    this.currentState = { ...this.currentState, ...data };
+
     if (
       !options?.skipVersion &&
       this.versionHistoryService.isAutoVersionEnabled() &&
@@ -115,12 +123,9 @@ class SimulatedResourceManager {
         this.resourceType,
         this.resourceId,
         this.currentState,
-        { description: 'Pre-update snapshot' }
+        { description: 'Post-update snapshot' }
       );
     }
-
-    // Apply update
-    this.currentState = { ...this.currentState, ...data };
 
     return { success: true };
   }
@@ -356,8 +361,8 @@ describe('Version History Workflow Integration', () => {
       expect(alphaRows.map((r) => r.version)).toEqual([1, 2]);
 
       // Reads are scoped too, not just writes: alpha sees its own two versions and none of beta's.
-      expect(await alpha.getLatestVersion('prompt', 'shared-id')).toBe(2);
-      expect(await beta.getLatestVersion('prompt', 'shared-id')).toBe(1);
+      expect((await alpha.loadHistory('prompt', 'shared-id'))?.current_version).toBe(2);
+      expect((await beta.loadHistory('prompt', 'shared-id'))?.current_version).toBe(1);
     });
 
     /**

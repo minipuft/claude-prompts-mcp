@@ -207,7 +207,8 @@ async function runDrive(harness: Harness): Promise<DriveObservations> {
     throw new Error(editResponse.content.map((part) => ('text' in part ? part.text : '')).join(''));
   }
   harness.syncLive({ ...harness.livePrompt, userMessageTemplate: EDITED_TEMPLATE });
-  const latestAfterEdit = await harness.history.getLatestVersion('prompt', PROMPT_ID);
+  const latestAfterEdit =
+    (await harness.history.loadHistory('prompt', PROMPT_ID))?.current_version ?? 0;
 
   // Clause (a): the wire carries only the anchor, never the untouched sections.
   const patchResponse = await harness.lifecycle.updatePrompt({
@@ -223,7 +224,8 @@ async function runDrive(harness: Harness): Promise<DriveObservations> {
   expect(patchResponse.isError).toBe(false);
   harness.syncLive({ ...harness.livePrompt, userMessageTemplate: PATCHED_TEMPLATE });
   const filesAfterPatch = harness.readFiles();
-  const latestAfterPatch = await harness.history.getLatestVersion('prompt', PROMPT_ID);
+  const latestAfterPatch =
+    (await harness.history.loadHistory('prompt', PROMPT_ID))?.current_version ?? 0;
 
   // Clause (b): syntax error — no write, no version.
   const filesBeforeRejection = harness.readFiles();
@@ -238,7 +240,8 @@ async function runDrive(harness: Harness): Promise<DriveObservations> {
     ],
   } as never);
   const filesAfterRejection = harness.readFiles();
-  const latestAfterRejection = await harness.history.getLatestVersion('prompt', PROMPT_ID);
+  const latestAfterRejection =
+    (await harness.history.loadHistory('prompt', PROMPT_ID))?.current_version ?? 0;
 
   // Exact-restore leg: roll back to the pre-patch state through the real write path.
   const rollbackResponse = await harness.versioning.handleRollback({
@@ -248,7 +251,8 @@ async function runDrive(harness: Harness): Promise<DriveObservations> {
   } as never);
   expect(rollbackResponse.isError).toBe(false);
   const filesAfterRollback = harness.readFiles();
-  const latestAfterRollback = await harness.history.getLatestVersion('prompt', PROMPT_ID);
+  const latestAfterRollback =
+    (await harness.history.loadHistory('prompt', PROMPT_ID))?.current_version ?? 0;
 
   const rowsByVersion = new Map<
     number,

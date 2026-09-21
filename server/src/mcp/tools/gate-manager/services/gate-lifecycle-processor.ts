@@ -14,7 +14,7 @@ import type { GateResourceContext } from '../core/context.js';
 import type { GateManagerInput, GateCreationData } from '../core/types.js';
 
 import { purgeHistoryOnDelete } from '#modules/versioning/delete-purge.js';
-import { projectWriteModel } from '#modules/versioning/index.js';
+import { describeVersionRecord, projectWriteModel } from '#modules/versioning/index.js';
 import { logMcpToolChange } from '#shared/core/resource-change-log.js';
 import { resolveContainedPath } from '#shared/utils/path-containment.js';
 import { preferredRepairTarget } from '#shared/utils/resource-quarantine.js';
@@ -277,7 +277,7 @@ export class GateLifecycleProcessor {
     // Runs as the writer transaction's `commit` step, not ahead of it (P4.2 / SF-3) — see the
     // matching comment in `framework-lifecycle-processor.ts` for why ordering the record against
     // the write could only pick which failure mode the caller got.
-    let versionSaved: number | undefined;
+    let versionOutcome: { version?: number; recorded: boolean } | undefined;
     const skipVersion = args.skip_version === true;
     const commitOptions =
       this.ctx.versionHistoryService.isAutoVersionEnabled() && !skipVersion
@@ -296,8 +296,10 @@ export class GateLifecycleProcessor {
                   diff_summary: `+${diffResult.stats.additions}/-${diffResult.stats.deletions}`,
                 }
               );
-              versionSaved = versionResult.version;
-              this.ctx.logger.debug(`Saved version ${versionSaved} for gate ${id}`);
+              versionOutcome = versionResult;
+              this.ctx.logger.debug(
+                `${versionResult.recorded ? 'Saved' : 'Matched'} version ${versionResult.version} for gate ${id}`
+              );
             },
           }
         : {};
@@ -321,8 +323,8 @@ export class GateLifecycleProcessor {
       `✅ Gate '${id}' updated successfully\n\n` +
       `📁 Files updated:\n${result.paths?.map((p) => `  - ${p}`).join('\n')}\n\n`;
 
-    if (versionSaved !== undefined) {
-      response += `📜 **Version ${versionSaved}** saved (use \`action:"history"\` to view)\n\n`;
+    if (versionOutcome !== undefined) {
+      response += `${describeVersionRecord(versionOutcome)}\n\n`;
     }
 
     if (diffResult.hasChanges) {
@@ -401,7 +403,7 @@ export class GateLifecycleProcessor {
       gateSnapshotContract.projectedFields
     );
 
-    let versionSaved: number | undefined;
+    let versionOutcome: { version?: number; recorded: boolean } | undefined;
     const skipVersion = args.skip_version === true;
     const commitOptions =
       this.ctx.versionHistoryService.isAutoVersionEnabled() && !skipVersion
@@ -421,8 +423,10 @@ export class GateLifecycleProcessor {
                   diff_summary: '',
                 }
               );
-              versionSaved = versionResult.version;
-              this.ctx.logger.debug(`Saved repair version ${versionSaved} for gate ${args.id}`);
+              versionOutcome = versionResult;
+              this.ctx.logger.debug(
+                `${versionResult.recorded ? 'Saved' : 'Matched'} repair version ${versionResult.version} for gate ${args.id}`
+              );
             },
           }
         : {};
@@ -457,12 +461,15 @@ export class GateLifecycleProcessor {
     // recorded" — became a lie the moment the record above was added, and a version line is the
     // one place an operator checks before trusting `rollback`.
     const versionLine =
-      versionSaved !== undefined
-        ? `📜 **Version ${versionSaved}** recorded — the repaired state, with no diff: a ` +
-          `quarantined gate has no prior loadable state to compare against (use ` +
-          `\`action:"history"\` to view).\n`
-        : `📜 No version was recorded — auto-versioning is off for this server, or ` +
-          `\`skip_version\` was set on this call.\n`;
+      versionOutcome === undefined
+        ? `📜 No version was recorded — auto-versioning is off for this server, or ` +
+          `\`skip_version\` was set on this call.\n`
+        : versionOutcome.recorded
+          ? `📜 **Version ${versionOutcome.version}** recorded — the repaired state, with no diff: a ` +
+            `quarantined gate has no prior loadable state to compare against (use ` +
+            `\`action:"history"\` to view).\n`
+          : `📜 The repaired state already matches version ${versionOutcome.version}, so no new ` +
+            `version was recorded (use \`action:"history"\` to view).\n`;
 
     return this.success(
       `🩺 Repair written for quarantined gate '${target.id}'\n\n` +

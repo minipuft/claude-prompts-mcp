@@ -1,7 +1,5 @@
 // @lifecycle canonical - Core service for managing resource version history
 
-import { isDeepStrictEqual } from 'node:util';
-
 import { RESOURCE_SUBTREE_MATCH } from './history-key.js';
 
 import type { VersioningConfig, Logger } from '#shared/types/index.js';
@@ -14,7 +12,23 @@ import type {
   ResourceType,
 } from './types.js';
 
+import { hashCanonical } from '#shared/utils/hash.js';
 import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
+
+/**
+ * The identity of a snapshot, as the table stores it.
+ *
+ * Hashed from the PERSISTED text rather than from the live object, on both sides of every
+ * comparison. That is what makes the test symmetric: a live snapshot can hold an `undefined`
+ * member or a key order a loader happened to produce, neither of which survives the column, so
+ * comparing a live object against a stored row directly answers a different question than
+ * "will this row equal the one already there". `hashCanonical` then removes key order from the
+ * answer entirely — the property CHANGELOG 4.0.0 claimed for the whole system and which, until
+ * now, held on the server path only.
+ */
+function snapshotIdentity(persistedJson: string): string {
+  return hashCanonical(JSON.parse(persistedJson));
+}
 
 interface VersionRow {
   id: number;
@@ -148,7 +162,7 @@ export class VersionHistoryService {
     const config = this.getConfig();
 
     if (!config.enabled) {
-      return { success: true, version: 0 };
+      return { success: true, version: 0, recorded: false };
     }
 
     try {
@@ -173,29 +187,46 @@ export class VersionHistoryService {
       // connections to this file set `busy_timeout` from `STATE_DB_BUSY_TIMEOUT_MS`, so the loser
       // of a race blocks for the few milliseconds the winner's transaction takes and then proceeds.
       // A retry here would be a second, worse implementation of that wait, in the wrong layer.
-      const newVersion = await db.transaction(async () => {
-        // Get current max version
-        const row = db.queryOne<{ max_version: number | null }>(
-          `SELECT MAX(version) as max_version FROM version_history
-         WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?`,
+      // Serialised ONCE, outside the lock: this text is both what the equality test measures and
+      // what the INSERT binds, so the two cannot describe different states.
+      const payload = JSON.stringify(snapshot);
+
+      const outcome = await db.transaction(async () => {
+        // The newest row's number AND its snapshot, read together. The equality decision lives
+        // INSIDE this transaction deliberately: decided before `BEGIN IMMEDIATE`, two processes
+        // could each compare against a maximum the other was about to replace and each conclude
+        // "unchanged", so a genuine change would go unrecorded by both. `version_history` has two
+        // accepted writers against one file, so that is a real configuration.
+        const row = db.queryOne<{ version: number; snapshot: string }>(
+          `SELECT version, snapshot FROM version_history
+         WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?
+         ORDER BY version DESC LIMIT 1`,
           [tenantId, resourceType, resourceId]
         );
-        const currentVersion = row?.max_version ?? 0;
-        const version = currentVersion + 1;
+
+        if (row !== null && snapshotIdentity(row.snapshot) === snapshotIdentity(payload)) {
+          return { version: row.version, recorded: false };
+        }
+
+        const version = (row?.version ?? 0) + 1;
         this.insertAndPrune({
           db,
           tenantId,
           resourceType,
           resourceId,
           version,
-          snapshot,
+          payload,
           options,
         });
-        return version;
+        return { version, recorded: true };
       }, 'immediate');
 
-      this.logger.debug(`Saved version ${newVersion} for ${resourceType}/${resourceId}`);
-      return { success: true, version: newVersion };
+      this.logger.debug(
+        outcome.recorded
+          ? `Saved version ${outcome.version} for ${resourceType}/${resourceId}`
+          : `No change to record for ${resourceType}/${resourceId}; still at version ${outcome.version}`
+      );
+      return { success: true, version: outcome.version, recorded: outcome.recorded };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.error(`Failed to save version for ${resourceId}: ${message}`);
@@ -213,10 +244,11 @@ export class VersionHistoryService {
     resourceType: ResourceType;
     resourceId: string;
     version: number;
-    snapshot: Record<string, unknown>;
+    /** The snapshot as `saveVersion` serialised it — the same text its equality test measured. */
+    payload: string;
     options?: SaveVersionOptions;
   }): void {
-    const { db, tenantId, resourceType, resourceId, snapshot, options } = input;
+    const { db, tenantId, resourceType, resourceId, payload, options } = input;
     const newVersion = input.version;
     const config = this.getConfig();
 
@@ -231,7 +263,7 @@ export class VersionHistoryService {
         resourceType,
         resourceId,
         newVersion,
-        JSON.stringify(snapshot),
+        payload,
         options?.diff_summary ?? '',
         options?.description ?? `Version ${newVersion}`,
         new Date().toISOString(),
@@ -344,26 +376,6 @@ export class VersionHistoryService {
   }
 
   /**
-   * Get the latest version number for a resource.
-   */
-  async getLatestVersion(resourceType: ResourceType, resourceId: string): Promise<number> {
-    try {
-      const db = this.getDb();
-      const tenantId = this.resolveTenantId();
-
-      const row = db.queryOne<{ max_version: number | null }>(
-        `SELECT MAX(version) as max_version FROM version_history
-         WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?`,
-        [tenantId, resourceType, resourceId]
-      );
-
-      return row?.max_version ?? 0;
-    } catch {
-      return 0;
-    }
-  }
-
-  /**
    * Record the state PRODUCED by an edit, bridging any unrecorded prior state first.
    *
    * Go-forward numbering (P7-D2 mechanism 1, OQ-P7-3): version N holds the state edit N
@@ -389,40 +401,23 @@ export class VersionHistoryService {
     options?: SaveVersionOptions
   ): Promise<SaveVersionResult & { bridged: boolean }> {
     if (!this.isEnabled()) {
-      return { success: true, version: 0, bridged: false };
+      return { success: true, version: 0, bridged: false, recorded: false };
     }
 
-    const bridged = !(await this.latestSnapshotMatches(
-      resourceType,
-      resourceId,
-      priorLiveSnapshot
-    ));
-    if (bridged) {
-      await this.saveVersion(resourceType, resourceId, priorLiveSnapshot, {
-        description: 'Bridge: prior live state (era transition or out-of-band edit)',
-        diff_summary: '',
-      });
-    }
+    // ONE equality rule, applied twice. The bridge used to have its own comparison
+    // (`isDeepStrictEqual` against the newest row, decided outside the write lock) while the
+    // record below had none at all, so the same question — "is this state already the newest
+    // one?" — was answered by two different implementations on two paths, and the second answer
+    // was always "no". Both calls now go through `saveVersion`, whose test runs inside its own
+    // transaction: the bridge row appears exactly when the prior live state is unrecorded, and
+    // `bridged` is simply whether that call wrote.
+    const bridge = await this.saveVersion(resourceType, resourceId, priorLiveSnapshot, {
+      description: 'Bridge: prior live state (era transition or out-of-band edit)',
+      diff_summary: '',
+    });
 
     const result = await this.saveVersion(resourceType, resourceId, producedSnapshot, options);
-    return { ...result, bridged };
-  }
-
-  /** True when the newest recorded snapshot structurally equals the given live state. */
-  private async latestSnapshotMatches(
-    resourceType: ResourceType,
-    resourceId: string,
-    live: Record<string, unknown>
-  ): Promise<boolean> {
-    const latest = await this.getLatestVersion(resourceType, resourceId);
-    if (latest === 0) return false;
-    const entry = await this.getVersion(resourceType, resourceId, latest);
-    if (entry === null) return false;
-    // Snapshots cross a JSON persistence boundary, which drops `undefined` object members while
-    // preserving array order. Compare against that persisted shape, but use structural equality so
-    // loader-induced object key reordering does not create a phantom bridge row.
-    const persistedLive = JSON.parse(JSON.stringify(live)) as Record<string, unknown>;
-    return isDeepStrictEqual(entry.snapshot, persistedLive);
+    return { ...result, bridged: bridge.recorded };
   }
 
   /**

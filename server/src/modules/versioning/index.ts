@@ -20,4 +20,6 @@ export {
   projectWriteModel,
   describeRollbackPreview,
   describeIncompleteSnapshot,
+  describeVersionRecord,
+  describeRollbackRecord,
 } from './snapshot-contract.js';

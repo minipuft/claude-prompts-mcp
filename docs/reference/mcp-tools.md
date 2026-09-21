@@ -1709,6 +1709,13 @@ the resource's live state before the edit (the first edit after this behavior sh
 out-of-band file change), a self-healing "Bridge" row is recorded first so no state becomes
 unreachable.
 
+**An edit that changes nothing records nothing.** Both writers — `resource_manager` and `cpm` —
+compare the incoming snapshot against the newest recorded one, inside the same transaction that
+assigns the version number, and skip the insert when they match. The reply says so rather than
+naming a version it did not write: `📜 No change to record — still at version N`. Key ORDER is not
+a difference (two records holding the same data compare equal however their keys were emitted);
+array order is, because the order of `chain_steps` or `arguments` is part of the state.
+
 ### Configuration
 
 Enable/disable in `config.jsonc` (`config.json` is also still read):
