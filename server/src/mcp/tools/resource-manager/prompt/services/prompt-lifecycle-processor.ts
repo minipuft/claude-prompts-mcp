@@ -578,9 +578,12 @@ export class PromptLifecycleProcessor {
     // introduced it. The chain's own `<chainId>/<step>` children are exempt — the write below
     // scaffolds exactly those.
     if (promptData.chainSteps && promptData.chainSteps.length > 0) {
+      // Read the id through `promptFields`, the indexed `Record` this method already uses for
+      // exactly this reason — `promptData` is `any` and a member access on it is unchecked.
+      const chainId = String(promptFields['id']);
       const chainIntegrity = validateChainStepReferences(
         promptData.chainSteps,
-        String(promptData.id),
+        chainId,
         this.getConvertedPrompts().map((p) => p.id)
       );
       if (!chainIntegrity.valid) {
@@ -588,7 +591,7 @@ export class PromptLifecycleProcessor {
           `❌ **Prompt update blocked** — a chain step names a prompt that does not exist:\n\n` +
             `${chainIntegrity.problems.map((problem) => `- ${problem}`).join('\n')}\n\n` +
             `💡 Nothing was written and no version was consumed. Create the missing prompt, or ` +
-            `nest the step under '${String(promptData.id)}/' so this call scaffolds it.`
+            `nest the step under '${chainId}/' so this call scaffolds it.`
         );
       }
     }

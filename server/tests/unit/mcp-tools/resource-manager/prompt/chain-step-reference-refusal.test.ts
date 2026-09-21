@@ -8,7 +8,9 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
 import { ContentAnalyzer } from '../../../../../src/modules/semantic/content-analyzer.js';
+import { ComparisonEngine } from '../../../../../src/mcp/tools/resource-manager/prompt/analysis/comparison-engine.js';
 import { GateAnalyzer } from '../../../../../src/mcp/tools/resource-manager/prompt/analysis/gate-analyzer.js';
+import { ObjectDiffGenerator } from '../../../../../src/mcp/tools/resource-manager/prompt/analysis/object-diff-generator.js';
 import { PromptAnalyzer } from '../../../../../src/mcp/tools/resource-manager/prompt/analysis/prompt-analyzer.js';
 import { PromptLifecycleProcessor } from '../../../../../src/mcp/tools/resource-manager/prompt/services/prompt-lifecycle-processor.js';
 
@@ -70,17 +72,20 @@ function createProcessor(seeded: Array<Record<string, unknown>> = [REGISTERED_PR
     dependencies,
     promptAnalyzer: new PromptAnalyzer(dependencies),
     gateAnalyzer: new GateAnalyzer(dependencies as never),
-    fileOperations: { updatePromptImplementation },
+    // `projectPromptWrite` reports the files an update WOULD land in; the update path calls it
+    // ahead of the write to build its diff. Stubbed empty because this file asserts the chain-step
+    // refusal, not the diff — the sibling mocks in `prompt-lifecycle-processor.test.ts` do the same.
+    fileOperations: { updatePromptImplementation, projectPromptWrite: jest.fn(async () => []) },
     getData: () => ({ convertedPrompts }),
     versionHistoryService: {
       isAutoVersionEnabled: () => false,
       loadHistory: jest.fn(async () => null),
     },
-    textDiffService: { generatePromptDiff: () => ({ hasChanges: false, formatted: '' }) },
-    comparisonEngine: {
-      compareAnalyses: () => ({}),
-      generateDisplaySummary: () => '',
-    },
+    // The real diff generator and comparison engine, as in `prompt-lifecycle-processor.test.ts`:
+    // stubbing them would assert only the stub's own return values, and a stub of a shape that
+    // moves (`generatePromptDiff` -> `generateFileChangeDiff`) fails far from its cause.
+    textDiffService: new ObjectDiffGenerator(),
+    comparisonEngine: new ComparisonEngine(dependencies.logger),
   } as unknown as PromptResourceContext;
 
   return { processor: new PromptLifecycleProcessor(context), updatePromptImplementation };
