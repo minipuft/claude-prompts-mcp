@@ -35,6 +35,10 @@ import { fileURLToPath } from 'node:url';
 
 import * as yaml from 'js-yaml';
 
+import {
+  describeUnresolvedChainStep,
+  resolveChainSteps,
+} from '../src/modules/prompts/chain-step-resolution.js';
 import { normalizeInlineGateDefinitions } from '../src/modules/prompts/yaml-prompt-loader.js';
 import { validatePromptYaml } from '../src/modules/prompts/prompt-schema.js';
 import {
@@ -58,7 +62,7 @@ const ROOT =
 
 interface Problem {
   file: string;
-  kind: 'schema' | 'gate' | 'convention' | 'orphan';
+  kind: 'schema' | 'gate' | 'convention' | 'orphan' | 'chain';
   detail: string;
 }
 
@@ -215,6 +219,57 @@ function findDroppedGates(parsed: unknown): string[] {
   };
   normalizeInlineGateDefinitions(declared, { logger });
   return reasons;
+}
+
+/**
+ * The id the REGISTRY will serve this file under.
+ *
+ * `loadYamlPrompt` derives it from the path relative to the CATEGORY root, so a top-level prompt
+ * is `id` and a nested chain step is `parent/step` — which is the form `chainSteps[].promptId`
+ * uses. Deriving it here rather than reading the file's own `id:` key is what makes this check
+ * agree with the server: a scaffolded step's `id:` is the bare step name and the loader overrides
+ * it with the path-derived one.
+ */
+function registeredIdOf(file: string, root: string): string {
+  const segments = relative(root, dirname(file)).split(/[/\\]/);
+  return segments.slice(1).join('/');
+}
+
+/**
+ * Every chain step under this root that names a prompt the root does not contain.
+ *
+ * The LOAD posture (`resolution !== 'resolved'`): nothing is being written, so the
+ * `<chainId>/<step>` shape a `resource_manager` write would scaffold is, here, simply a directory
+ * that is not on disk. R4 scopes this to ONE root — an overlay chain referencing a bundled prompt
+ * is checked at load, where both roots are visible, not in CI, where they are not.
+ */
+function findChainProblems(files: string[], root: string): Problem[] {
+  const registeredIds = new Set(files.map((file) => registeredIdOf(file, root)));
+  const problems: Problem[] = [];
+
+  for (const file of files) {
+    let parsed: unknown;
+    try {
+      parsed = yaml.load(readFileSync(file, 'utf8'));
+    } catch {
+      continue; // Already reported as a schema problem by `validateFile`.
+    }
+    const steps = (parsed as { chainSteps?: unknown })?.chainSteps;
+    if (!Array.isArray(steps) || steps.length === 0) {
+      continue;
+    }
+    for (const reference of resolveChainSteps(steps, registeredIdOf(file, root), registeredIds)) {
+      if (reference.resolution !== 'resolved') {
+        problems.push({
+          file: relative(root, file),
+          kind: 'chain',
+          detail: `chain '${registeredIdOf(file, root)}' ${describeUnresolvedChainStep(reference)}`,
+        });
+      }
+    }
+  }
+
+  return problems;
 }
 
 function validateFile(file: string): Problem[] {
@@ -374,7 +429,11 @@ function run(root: string): Problem[] {
     process.exit(2);
   }
   const promptFiles = findPromptFiles(root);
-  return [...promptFiles.flatMap(validateFile), ...findOrphanGates(root, promptFiles)];
+  return [
+    ...promptFiles.flatMap(validateFile),
+    ...findOrphanGates(root, promptFiles),
+    ...findChainProblems(promptFiles, root),
+  ];
 }
 
 // A self-test that only proved the validator ACCEPTS the bundled tree would pass against a
@@ -412,6 +471,39 @@ if (SELF_TEST) {
       '',
     ].join('\n')
   );
+  // The chain arm. `good/ok_chain` names a step that EXISTS under this root, `bad/broken_chain`
+  // names one that does not — both are chains, so a validator that simply ignored `chainSteps`
+  // would fail the second assertion, and one that reported every chain would fail the first.
+  write(
+    'good/ok_chain',
+    [
+      'id: ok_chain',
+      'name: OK Chain',
+      'category: good',
+      'description: A chain whose only step is a prompt this root contains.',
+      'userMessageTemplateFile: user-message.md',
+      'chainSteps:',
+      '  - promptId: ok_prompt',
+      '    stepName: Step One',
+      '',
+    ].join('\n')
+  );
+  write(
+    'bad/broken_chain',
+    [
+      'id: broken_chain',
+      'name: Broken Chain',
+      'category: bad',
+      'description: A chain naming a prompt that does not exist under this root.',
+      'userMessageTemplateFile: user-message.md',
+      'chainSteps:',
+      '  - promptId: ok_prompt',
+      '    stepName: Step One',
+      '  - promptId: no_such_prompt',
+      '    stepName: Step Two',
+      '',
+    ].join('\n')
+  );
   write(
     'bad/dropped_gate',
     [
@@ -430,26 +522,37 @@ if (SELF_TEST) {
     ].join('\n')
   );
 
-  const found = findPromptFiles(dir).flatMap((file) => {
-    const rel = relative(dir, file);
-    const parsed = yaml.load(readFileSync(file, 'utf8'));
-    const schema = validatePromptYaml(parsed, basename(dirname(file)));
-    const gates = findDroppedGates(parsed);
-    return [
-      ...(schema.valid ? [] : [{ file: rel, kind: 'schema' as const, detail: 'invalid' }]),
-      ...gates.map((detail) => ({ file: rel, kind: 'gate' as const, detail })),
-    ];
-  });
+  const files = findPromptFiles(dir);
+  const found = [
+    ...files.flatMap((file) => {
+      const rel = relative(dir, file);
+      const parsed = yaml.load(readFileSync(file, 'utf8'));
+      const schema = validatePromptYaml(parsed, basename(dirname(file)));
+      const gates = findDroppedGates(parsed);
+      return [
+        ...(schema.valid ? [] : [{ file: rel, kind: 'schema' as const, detail: 'invalid' }]),
+        ...gates.map((detail) => ({ file: rel, kind: 'gate' as const, detail })),
+      ];
+    }),
+    ...findChainProblems(files, dir),
+  ];
   rmSync(dir, { recursive: true, force: true });
 
   const clean = found.filter((p) => p.file.startsWith('good'));
   const schemaCaught = found.some((p) => p.file.includes('no_description') && p.kind === 'schema');
   const gateCaught = found.some((p) => p.file.includes('dropped_gate') && p.kind === 'gate');
+  const chainCaught = found.some(
+    (p) =>
+      p.file.includes('broken_chain') &&
+      p.kind === 'chain' &&
+      p.detail.includes("step 2 references unknown promptId 'no_such_prompt'")
+  );
 
   const failures: string[] = [];
   if (clean.length > 0) failures.push(`a valid prompt was reported: ${JSON.stringify(clean)}`);
   if (!schemaCaught) failures.push('an empty description was NOT reported');
   if (!gateCaught) failures.push('a gate missing `guidance` was NOT reported');
+  if (!chainCaught) failures.push('a chain step naming no prompt was NOT reported by position');
 
   // Orphan-gate fixtures — a real `resources/{prompts,gates}` layout (`findOrphanGates` derives
   // `gatesRoot` as `dirname(root)/gates`), one gate per activation/inclusion combination: a gate
@@ -667,7 +770,8 @@ if (SELF_TEST) {
     process.exit(1);
   }
   console.log(
-    'validate:prompts --self-test OK — accepts a valid prompt, catches both defect kinds, ' +
+    'validate:prompts --self-test OK — accepts a valid prompt and a resolvable chain, catches ' +
+      'an invalid schema, a dropped gate and an unresolvable chain step, ' +
       'flags an orphan gate without false-positiving on activation/include/inlineGateIds, ' +
       'walks only the prompt directories the loader serves, and tells a declared ' +
       'personal-library exemption apart from a renamed-away tracked one'
@@ -696,32 +800,35 @@ if (problems.length === 0) {
   process.exit(0);
 }
 
+const LABELS: Record<Problem['kind'], string> = {
+  schema: 'INVALID',
+  gate: 'GATE   ',
+  convention: 'CONVENT',
+  orphan: 'ORPHAN ',
+  chain: 'CHAIN  ',
+};
+
 const schemaProblems = problems.filter((p) => p.kind === 'schema');
 const gateProblems = problems.filter((p) => p.kind === 'gate');
 const conventionProblems = problems.filter((p) => p.kind === 'convention');
 const orphanProblems = problems.filter((p) => p.kind === 'orphan');
+const chainProblems = problems.filter((p) => p.kind === 'chain');
 
 console.error(
   `validate:prompts FAILED — ${schemaProblems.length} schema error(s), ` +
     `${gateProblems.length} silently dropped gate(s), ${conventionProblems.length} ` +
-    `convention violation(s) and ${orphanProblems.length} orphan gate(s) across ${files} ` +
-    `prompt(s) under ${ROOT}\n`
+    `convention violation(s), ${orphanProblems.length} orphan gate(s) and ` +
+    `${chainProblems.length} unresolvable chain step(s) across ` +
+    `${files} prompt(s) under ${ROOT}\n`
 );
 for (const problem of problems) {
-  const label =
-    problem.kind === 'schema'
-      ? 'INVALID'
-      : problem.kind === 'gate'
-        ? 'GATE   '
-        : problem.kind === 'convention'
-          ? 'CONVENT'
-          : 'ORPHAN ';
-  console.error(`  ${label}  ${problem.file}`);
+  console.error(`  ${LABELS[problem.kind]}  ${problem.file}`);
   console.error(`            ${problem.detail}`);
 }
 console.error(
-  '\nA prompt with a schema error is DROPPED at load, a dropped gate never runs, and an orphan ' +
-    'gate never attaches — all three are silent at runtime. Fix the file, or the server will keep ' +
-    'starting "successfully" without it.'
+  '\nA prompt with a schema error is DROPPED at load, a dropped gate never runs, an orphan gate ' +
+    'never attaches, and a chain step naming no prompt fails only when the run reaches it — all ' +
+    'four are silent at startup. Fix the file, or the server will keep starting "successfully" ' +
+    'without it.'
 );
 process.exit(1);

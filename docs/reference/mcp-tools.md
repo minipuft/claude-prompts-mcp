@@ -1089,7 +1089,7 @@ resource_manager(resource_type:"category", action:"delete", id:"analysis", confi
 | `preview_action`        | With `action:"preview"`: which mutation to render — `update` (prompt only), `rollback`, or `delete`. Writes nothing, consumes no version                       |
 | `expected_version`      | Prompt update concurrency token from `inspect`; stale values refuse before versioning or writing                                                               |
 | `unset`                 | Update-only: CLEAR the named fields — see [Removing a field](#removing-a-field-unset)                                                                          |
-| `chain_steps`           | Chain step definitions                                                                                                                                         |
+| `chain_steps`           | Chain step definitions — every `promptId` must name a registered prompt or the write is refused                                                                |
 | `chain_step_operation`  | `add \| remove \| reorder \| update` — omit it to replace the whole array                                                                                      |
 | `budget`                | Chain run-level budget — `maxNodes`, `maxFanOut`, `maxInsertions`, `declaredCostCeiling`, `pauseOnBlocking`. A declared cap may only narrow the server default |
 | `artifacts`             | What this run touches — `produces` (artifact kinds) and `fromArgument` (a declared argument carrying paths). Artifact-scoped gates attach from it              |
@@ -1106,6 +1106,12 @@ resource_manager(resource_type:"category", action:"delete", id:"analysis", confi
 `type` accepts `string \| number \| boolean \| object \| array`. `required:true` alone does not
 block execution — enforcement only arms when the argument also declares a `validation` block
 (`pattern`, `minLength`, `maxLength`).
+
+A chain step naming a prompt that does not exist refuses the whole call, with one addressed line
+per step (`step 2 references unknown promptId 'run_smoke_tests'`) — nothing is written, nothing is
+scaffolded, and no version is consumed. The one exemption is a step named `<promptId>/<step>`, one
+level deep, which this same call scaffolds into a sub-prompt directory. See
+[Step References Must Resolve](../concepts/chains-lifecycle.md#step-references-must-resolve).
 
 The last five are written into `prompt.yaml` verbatim and are otherwise carried forward untouched:
 supply one and it is set, omit it and the prompt keeps whatever it already declared. Two of them
