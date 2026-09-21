@@ -112,6 +112,28 @@ describe('a config rollback refuses rather than inventing a document', () => {
     expect(readFileSync(configPath, 'utf8')).toBe(before);
   });
 
+  it('refuses a state.db with no object store, naming the schema rather than throwing', async () => {
+    await setConfigValueRecorded(workspace, 'gates.enabled', 'false');
+    const before = readFileSync(configPath, 'utf8');
+
+    // What a `state.db` written by a server older than v29 looks like to this code: no object
+    // store. The guard has to answer BEFORE the SELECT that names `version_history.tree_hash`,
+    // because on a real pre-v29 schema that column does not exist and a SELECT naming it THROWS.
+    const db = openDb();
+    try {
+      db.exec('PRAGMA foreign_keys = OFF');
+      db.exec('DROP TABLE version_entries');
+      db.exec('DROP TABLE objects');
+    } finally {
+      db.close();
+    }
+
+    const result = await rollbackConfigVersion(workspace, 1);
+    expect(result.ok).toBe(false);
+    expect(result.ok === false ? result.refusal : '').toMatch(/schema predates v29/);
+    expect(readFileSync(configPath, 'utf8')).toBe(before);
+  });
+
   it('refuses to restore a .jsonc version into a workspace now holding a .json', async () => {
     await setConfigValueRecorded(workspace, 'gates.enabled', 'false');
 
