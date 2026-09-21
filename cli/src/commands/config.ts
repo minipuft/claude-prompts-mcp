@@ -295,9 +295,6 @@ async function configSet(options: ConfigOptions): Promise<number> {
   } else {
     if (result.success) {
       console.log(result.message);
-      if (result.backupPath) {
-        console.log(`Backup: ${result.backupPath}`);
-      }
       console.log(describeConfigRecord(result));
       if (result.restartRequired) {
         console.log('Note: This change requires a server restart to take effect');
@@ -360,9 +357,6 @@ async function configReset(options: ConfigOptions): Promise<number> {
   } else {
     if (result.success) {
       console.log(result.message);
-      if (result.backupPath) {
-        console.log(`Backup: ${result.backupPath}`);
-      }
       console.log(describeConfigRecord(result));
     } else {
       console.error(result.message);

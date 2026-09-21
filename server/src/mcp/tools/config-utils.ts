@@ -2,11 +2,16 @@
 /**
  * Configuration Utilities for Safe Config Management
  *
- * Provides atomic config operations with automatic backup for secure configuration
- * management in system_control tool. `restoreFromBackup` had no caller since PR #312
- * retired `system_control config restore` (2026-09-15) and was deleted here (P4.81,
- * 2026-09-20). `createConfigBackup` still runs on every write below and its output is
- * currently unreachable by any action — an open owner question, not fixed by this pass.
+ * Provides atomic, checkpointed config writes for the `system_control` tool.
+ *
+ * NO BACKUP FILES (ruling R53, O.9)
+ * This class used to carry `createConfigBackup`, which copied the config beside itself as
+ * `config.json[c].backup.<epoch-ms>`. Nothing read one: `restoreFromBackup` lost its last caller
+ * when PR #312 retired `system_control config restore` (2026-09-15) and was deleted at P4.81, and
+ * both production callers of `updateConfigValue` passed `createBackup: false` — so the only thing
+ * still reaching it was its own unit test. A config write is now a `version_history` row carrying
+ * the file's bytes (`#cli-shared/config-checkpoint.js`), which `cpm config history` lists and
+ * `cpm config rollback` puts back. A timestamped copy nothing can restore is not a backup.
  *
  * NO KEY LIST, NO VALIDATOR, NO SECOND WRITER, NO RE-EXPORT (ruling R54)
  * This file used to define its own `CONFIG_VALID_KEYS` (24 keys against cli-shared's 60) and its
@@ -36,7 +41,6 @@ import {
 } from '#cli-shared/config-input-validator.js';
 import {
   applyConfigChange,
-  backupConfig,
   readConfigFile,
   validateConfigDocument,
   writeConfigKeyAtomic,
@@ -49,26 +53,13 @@ import { type ConfigManager, type Logger } from '#shared/types/index.js';
 export interface ConfigWriteResult {
   success: boolean;
   message: string;
-  backupPath?: string;
   error?: string;
   restartRequired?: boolean;
 }
 
 /**
- * Configuration backup information.
- *
- * `originalConfig` is the DOCUMENT that was on disk before the write, not a resolved `Config` —
- * a backup of anything else would restore a file the operator never wrote.
- */
-export interface ConfigBackup {
-  backupPath: string;
-  timestamp: number;
-  originalConfig: Record<string, unknown>;
-}
-
-/**
  * Safe Configuration Writer
- * Provides atomic config operations with automatic backup
+ * Validates a candidate, edits one key's characters in place, and records the result as a version.
  */
 export class SafeConfigWriter {
   private logger: Logger;
@@ -87,11 +78,7 @@ export class SafeConfigWriter {
    * The order is the contract: validate the candidate, read the file, apply one key, validate the
    * whole resulting DOCUMENT, then write. Nothing reaches disk until both checks pass.
    */
-  async updateConfigValue(
-    key: string,
-    value: string,
-    options?: { createBackup?: boolean }
-  ): Promise<ConfigWriteResult> {
+  async updateConfigValue(key: string, value: string): Promise<ConfigWriteResult> {
     try {
       // Step 1: Validate the candidate against the generated key table
       const validation = validateConfigInput(key, value);
@@ -115,17 +102,10 @@ export class SafeConfigWriter {
         };
       }
 
-      // Step 3: Create backup
-      const shouldCreateBackup = options?.createBackup !== false;
-      const backup = shouldCreateBackup ? this.createConfigBackup(read.config) : undefined;
-      if (backup) {
-        this.logger.info(`Config backup created: ${backup.backupPath}`);
-      }
-
-      // Step 4: Build the candidate document — what the file will mean once the key is set
+      // Step 3: Build the candidate document — what the file will mean once the key is set
       const updatedConfig = applyConfigChange(read.config, key, validation.convertedValue);
 
-      // Step 5: Validate the entire updated document
+      // Step 4: Validate the entire updated document
       const documentCheck = validateConfigDocument(updatedConfig);
       if (!documentCheck.valid) {
         const errorMessage = documentCheck.errors.join('; ');
@@ -133,11 +113,10 @@ export class SafeConfigWriter {
           success: false,
           message: `Configuration validation failed: ${errorMessage}`,
           error: errorMessage,
-          ...(backup?.backupPath ? { backupPath: backup.backupPath } : {}),
         };
       }
 
-      // Step 6: Edit that one key's characters in the file the operator owns — a toggle over MCP
+      // Step 5: Edit that one key's characters in the file the operator owns — a toggle over MCP
       // must not cost them the comments and layout they wrote — and record it as a config version.
       //
       // The SAME checkpoint `cpm config set` takes, through the same function. `system_control`
@@ -159,13 +138,12 @@ export class SafeConfigWriter {
         this.logger.debug(`Config change not recorded as a version: ${record.reason}`);
       }
 
-      // Step 7: Reload ConfigManager to use new config
+      // Step 6: Reload ConfigManager to use new config
       await this.configManager.loadConfig();
 
       return {
         success: true,
         message: `Configuration updated successfully: ${key} = ${value}`,
-        ...(backup?.backupPath ? { backupPath: backup.backupPath } : {}),
         restartRequired: this.requiresRestart(key),
       };
     } catch (error) {
@@ -175,24 +153,6 @@ export class SafeConfigWriter {
         message: `Failed to update configuration: ${error}`,
         error: String(error),
       };
-    }
-  }
-
-  /**
-   * Create a timestamped backup of the current configuration file.
-   */
-  private createConfigBackup(originalConfig: Record<string, unknown>): ConfigBackup {
-    try {
-      const backupPath = backupConfig(this.configPath);
-      this.logger.debug(`Config backup created: ${backupPath}`);
-      return {
-        backupPath,
-        timestamp: Date.now(),
-        originalConfig,
-      };
-    } catch (error) {
-      this.logger.error(`Failed to create config backup:`, error);
-      throw new Error(`Backup creation failed: ${error}`, { cause: error });
     }
   }
 

@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import {
@@ -124,6 +124,17 @@ describe('a config write is recorded as a version', () => {
     const changed = await setConfigValueRecorded(workspace, 'gates.enabled', 'true');
     expect(changed.recorded).toBe(true);
     expect(rows()).toHaveLength(3);
+  });
+
+  it('writes no .backup.<ts> file beside the config', async () => {
+    await setConfigValueRecorded(workspace, 'gates.enabled', 'false');
+    await setConfigValueRecorded(workspace, 'gates.enabled', 'true');
+    await resetConfigRecorded(workspace);
+    // Ruling R53: the prior bytes are version rows. A timestamped copy nothing could restore was
+    // not a backup, and every surface that used to write one is enumerated in this file's header.
+    expect(readdirSync(workspace).filter((name) => name.includes('.backup.'))).toEqual([]);
+    // Positive control: the probe reads the directory the config actually sits in.
+    expect(readdirSync(workspace)).toContain('config.jsonc');
   });
 
   it('keeps the operator comments the edit did not touch', async () => {

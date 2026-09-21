@@ -112,17 +112,24 @@ way. The value only matters to your editor.
 ```bash
 cpm config list                    # Full config as formatted JSON
 cpm config get <key>                # One value by dot-notation key
-cpm config set <key> <value>        # Write one value (backup + edit in place)
+cpm config set <key> <value>        # Write one value, editing that key's characters in place
 cpm config validate                 # Check the file against the schema
 cpm config reset --force            # Restore defaults
 cpm config keys                     # List every valid key
+cpm config history                  # Every recorded version of this workspace's config
+cpm config rollback <version>       # Restore a recorded version's bytes (--preview to dry-run)
 ```
+
+Every write to the file is recorded as a version carrying its exact bytes, comments included —
+including a persisted `gates`/`framework` toggle made over MCP. A write that changes no character
+records nothing. There are no `.backup.<timestamp>` files: they were removed in 5.0 because nothing
+read them back (see [CLI Guide § Config versions](../guides/cli.md#config-versions)).
 
 Full flag reference and subcommand details: [CLI Guide § config](../guides/cli.md#config).
 
 **Over MCP**, `system_control(action:"config", …)` serves reads only: `list`, `keys`, `get`, and
-`validate`. There is no `set`, `reset`, or `restore` operation; a request naming one is refused by
-name. Change a setting with `cpm config set` instead. Full parameters and examples: [MCP Tools
+`validate`. There is no `set`, `reset`, `restore`, `history` or `rollback` operation; a request
+naming one is refused by name, and the version history added in 5.0 is a `cpm` surface only. Change a setting with `cpm config set` instead. Full parameters and examples: [MCP Tools
 Reference § Config Operations](mcp-tools.md#config-operations).
 
 This is narrower than "configuration can't be written over MCP." Toggling gates or a framework
