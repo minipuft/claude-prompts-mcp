@@ -577,6 +577,13 @@ export class PromptLifecycleProcessor {
     // file: the run used to fail at that step one invocation later, far from the write that
     // introduced it. The chain's own `<chainId>/<step>` children are exempt — the write below
     // scaffolds exactly those.
+    //
+    // Scoped to steps THIS call authors, which is what `suppliedKeys` means everywhere else in
+    // this method. A caller that sends `edges` or `unset` and no chain-step parameter is not
+    // writing a step, and blocking it would make a chain already broken on disk uneditable —
+    // including by the edit that repairs it. That is the split `diagnosePromptWrite` already
+    // draws below between `blocking` (introduced by this edit) and `preExisting` (logged, not
+    // blocked), applied to the same question one paragraph earlier.
     if (promptData.chainSteps && promptData.chainSteps.length > 0) {
       // Read the id through `promptFields`, the indexed `Record` this method already uses for
       // exactly this reason — `promptData` is `any` and a member access on it is unchecked.
@@ -587,11 +594,17 @@ export class PromptLifecycleProcessor {
         this.getConvertedPrompts().map((p) => p.id)
       );
       if (!chainIntegrity.valid) {
-        return this.blockedUpdate(
-          `❌ **Prompt update blocked** — a chain step names a prompt that does not exist:\n\n` +
-            `${chainIntegrity.problems.map((problem) => `- ${problem}`).join('\n')}\n\n` +
-            `💡 Nothing was written and no version was consumed. Create the missing prompt, or ` +
-            `nest the step under '${chainId}/' so this call scaffolds it.`
+        if (suppliedKeys.has('chainSteps')) {
+          return this.blockedUpdate(
+            `❌ **Prompt update blocked** — a chain step names a prompt that does not exist:\n\n` +
+              `${chainIntegrity.problems.map((problem) => `- ${problem}`).join('\n')}\n\n` +
+              `💡 Nothing was written and no version was consumed. Create the missing prompt, or ` +
+              `nest the step under '${chainId}/' so this call scaffolds it.`
+          );
+        }
+        this.context.dependencies.logger.warn(
+          `Chain '${chainId}' has pre-existing unresolvable chain step(s) (not introduced by ` +
+            `this edit): ${chainIntegrity.problems.join('; ')}`
         );
       }
     }

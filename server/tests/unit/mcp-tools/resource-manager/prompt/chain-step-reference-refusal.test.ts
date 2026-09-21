@@ -217,6 +217,46 @@ describe('resource_manager update — the same refusal on an existing chain', ()
     expect(updatePromptImplementation).not.toHaveBeenCalled();
   });
 
+  // The refusal is scoped to steps the call AUTHORS. A chain already broken on disk must stay
+  // editable by every other parameter — otherwise the edit that repairs it is refused too, and
+  // an `edges` or `unset` update to such a chain can never land. The twin below differs from this
+  // one in ONE thing: whether `chain_steps` is supplied.
+  const brokenChain = {
+    ...existingChain,
+    id: 'broken_chain',
+    chainSteps: [{ promptId: 'never_registered', stepName: 'Ghost' }],
+  };
+
+  test('accepts an update that supplies no chain step, on a chain already broken on disk', async () => {
+    const { processor, updatePromptImplementation } = createProcessor([
+      REGISTERED_PROMPT,
+      brokenChain,
+    ]);
+
+    const response = (await processor.updatePrompt({
+      id: 'broken_chain',
+      description: 'Renamed, without touching a single chain step',
+    })) as never;
+
+    expect(textOf(response)).not.toContain('references unknown promptId');
+    expect(updatePromptImplementation).toHaveBeenCalledTimes(1);
+  });
+
+  test('still refuses when that same broken chain has its steps supplied', async () => {
+    const { processor, updatePromptImplementation } = createProcessor([
+      REGISTERED_PROMPT,
+      brokenChain,
+    ]);
+
+    const response = (await processor.updatePrompt({
+      id: 'broken_chain',
+      chain_steps: [{ promptId: 'never_registered', stepName: 'Ghost' }],
+    })) as never;
+
+    expect(textOf(response)).toContain("step 1 references unknown promptId 'never_registered'");
+    expect(updatePromptImplementation).not.toHaveBeenCalled();
+  });
+
   test('accepts an update whose steps all resolve', async () => {
     const { processor, updatePromptImplementation } = createProcessor([
       REGISTERED_PROMPT,
