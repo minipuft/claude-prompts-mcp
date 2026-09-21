@@ -78,7 +78,10 @@ const PERMUTED = {
 const ROWS_ONLY_RESTORE = {
   enumerate: (): Promise<never> => Promise.reject(new Error('no resource files in this fixture')),
   targets: [],
-  apply: (): void => {},
+  // Returns the snapshot it was handed: this fixture writes no files, so the state the restore
+  // produced IS the target state.
+  apply: (snapshot: Record<string, unknown>): Promise<Record<string, unknown>> =>
+    Promise.resolve(snapshot),
 };
 
 describe('an unchanged write creates no version row', () => {

@@ -74,8 +74,12 @@ function restoreGate(entryPath: string, gatesRoot: string, yamlText: string) {
     enumerate: () =>
       resourceFileSet({ resourceType: 'gate' as const, entryPath, roots: { primary: gatesRoot } }),
     targets: [{ path: entryPath, kind: 'file' as const }],
-    apply: async (_snapshot: Record<string, unknown>): Promise<void> => {
+    // Returns the target snapshot: this fixture's write IS a faithful restore of it, so the state
+    // produced and the state requested are the same object. A real command re-projects from disk
+    // instead, because its merge can leave keys and companion files the snapshot does not carry.
+    apply: async (snapshot: Record<string, unknown>): Promise<Record<string, unknown>> => {
       await writeFile(entryPath, yamlText);
+      return snapshot;
     },
   };
 }
@@ -408,12 +412,13 @@ describe('the two writers produce one checkpoint format', () => {
         {
           ...restore,
           apply: async (snapshot) => {
-            await restore.apply(snapshot);
+            const produced = await restore.apply(snapshot);
             // The write SUCCEEDED; the record is what fails. Renaming the table from a second
             // connection is the cheapest fault that reaches the produced append and nothing else.
             const saboteur = new DatabaseSync(ctx.dbPath);
             saboteur.exec('ALTER TABLE version_history RENAME TO version_history_moved');
             saboteur.close();
+            return produced;
           },
         }
       );

@@ -203,6 +203,15 @@ cpm rollback gate code-quality 1 --json
 
 Saves the current state as a new version, writes the target version back over the resource YAML, then records the state that write PRODUCED as the newest version — the same order the server records an edit in. Both rows carry the resource's bytes as they stood when the row was written, so either state can later be restored byte-exactly.
 
+For a gate or a framework, both rows carry the SAME projection `resource_manager` records — one
+declaration per resource type, shared by the two surfaces. Rolling back a gate or framework the
+server last wrote therefore adds exactly one row and no "Bridge: prior live state" row, because the
+state being replaced now compares equal to the newest recorded one. A **prompt** rollback still
+bridges: the shared prompt projection takes a loader-resolved prompt, and reaching the prompt loader
+from the CLI bundle measured +59.0 KB against 24.1 KB of headroom (2026-09-21), so `cpm` still
+records a prompt's raw `prompt.yaml` map. ☐ open as of 2026-09-21 · flips when a prompt's authored
+state is reachable from `cli-shared/` within the bundle budget.
+
 Nothing is recorded when the target version is already the current state; `--json` reports that as `"recorded": false` alongside the version number that was already newest. A rollback that cannot write the file records no restored version at all, and a rollback whose version row cannot be written leaves the file byte-identical to what it was.
 
 `rollback` is the only command that records a version. `delete` purges the resource's history, `rename` re-keys it onto the new id, and `move` leaves it alone (a category move does not change the id history is keyed on). `create`, `link-gate` and `toggle` write the resource and record nothing — the MCP server's `resource_manager` does record a version for the same edits, so use it where the history matters.
@@ -430,7 +439,7 @@ Within a workspace, it checks `resources/<type>/` first, then `<type>/` as a leg
 
 ## Architecture
 
-The CLI is an esbuild bundle (~306KB) that imports shared logic from `server/src/cli-shared/`. Most commands run self-contained; versioning commands (`history`, `compare`, `rollback`) require `python3`/`python` to query SQLite (`runtime-state/state.db`).
+The CLI is an esbuild bundle (~306KB) that imports shared logic from `server/src/cli-shared/`. Every command runs self-contained: versioning commands (`history`, `compare`, `rollback`) read and write `runtime-state/state.db` through Node's built-in `node:sqlite`, which is why the CLI has no Python requirement.
 
 ```
 cli/
