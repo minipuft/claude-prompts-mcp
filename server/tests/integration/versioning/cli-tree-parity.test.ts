@@ -465,8 +465,11 @@ describe('the two writers produce one checkpoint format', () => {
       if (depth === 0) break;
     }
     expect(call).toMatch(/\benumerate\b/);
-    expect(call).toMatch(/\btargets\b/);
     expect(call).toMatch(/\bapply\b/);
+    // The target must be the entry FILE, named as such. A single-file prompt's directory is its
+    // CATEGORY, so a directory target would restore every sibling prompt when a record fails —
+    // and `targets` alone is satisfied by any value at all.
+    expect(call).toMatch(/targets:\s*\[\s*\{\s*path:\s*yamlPath\s*,\s*kind:\s*'file'/);
 
     // And the write must be INSIDE what it hands over. A command that kept its own `writeFileSync`
     // after the call would satisfy every match above while restoring the old ordering.
