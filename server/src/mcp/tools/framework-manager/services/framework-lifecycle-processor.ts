@@ -18,8 +18,8 @@ import type { FrameworkManagerInput, FrameworkCreationData } from '../core/types
 
 import { purgeHistoryOnDelete } from '#modules/versioning/delete-purge.js';
 import {
-  CREATE_ROW_DESCRIPTION,
-  UPDATE_ROW_DESCRIPTION,
+  createRowDescription,
+  updateRowDescription,
   describeVersionRecord,
   projectWriteModel,
 } from '#modules/versioning/index.js';
@@ -137,7 +137,7 @@ export class FrameworkLifecycleProcessor {
                   frameworkData as unknown as Record<string, unknown>,
                   frameworkSnapshotContract.projectedFields
                 ),
-                { description: CREATE_ROW_DESCRIPTION, diff_summary: '' }
+                { description: createRowDescription('resource_manager'), diff_summary: '' }
               );
             },
           }
@@ -243,7 +243,7 @@ export class FrameworkLifecycleProcessor {
                 beforeState,
                 afterState,
                 {
-                  description: UPDATE_ROW_DESCRIPTION,
+                  description: updateRowDescription('resource_manager'),
                   diff_summary: `+${diffResult.stats.additions}/-${diffResult.stats.deletions}`,
                 }
               );

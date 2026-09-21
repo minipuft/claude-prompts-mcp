@@ -390,13 +390,19 @@ describe('cpm rollback restores recorded bytes (built binary)', () => {
     );
   });
 
-  it("records a prompt's snapshot through cpm's own projection, not the shared one", () => {
-    // The bundle blocker is about the SNAPSHOT and not about the bytes. `cpm` records the raw
-    // `prompt.yaml` map, which carries the FILE-pointer keys the loader reads; the shared
-    // projection would carry the inlined bodies instead. Asserting the distinguishing key is what
-    // makes this a statement about which projection ran rather than about the row existing.
-    expect(Object.keys(promptRecordedSnapshot)).toContain('userMessageTemplateFile');
-    expect(Object.keys(promptRecordedSnapshot)).not.toContain('userMessageTemplate');
+  it("records a prompt's snapshot through the SHARED projection, bodies inlined", () => {
+    // The inverse of what this test asserted until 2026-09-21, and the assertion is inverted
+    // rather than deleted because the distinguishing keys are what say WHICH projection ran.
+    // `cpm` used to record the raw `prompt.yaml` map, carrying the FILE-pointer keys; it now
+    // reaches the server's own projection, which carries the RESOLVED bodies. The snapshot and
+    // the bytes stayed separate questions throughout — the byte assertions above are unchanged.
+    expect(Object.keys(promptRecordedSnapshot)).toContain('userMessageTemplate');
+    expect(Object.keys(promptRecordedSnapshot)).not.toContain('userMessageTemplateFile');
+    // The VALUE, not just the key: a resolved template is the hand-authored body this test wrote,
+    // which a pointer-shaped snapshot could not hold.
+    expect(String(promptRecordedSnapshot['userMessageTemplate'])).toBe(
+      HAND_AUTHORED_BODY.toString('utf8')
+    );
   });
 
   it('previews without writing anything', () => {

@@ -37,13 +37,12 @@
 
 import * as path from 'node:path';
 
-import { canonicalPromptSnapshot } from '#modules/versioning/projections/prompt-snapshot.js';
-
 import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { Logger } from '#shared/types/index.js';
 
 import { PromptConverter } from '#modules/prompts/converter.js';
 import { PromptLoader } from '#modules/prompts/loader.js';
+import { canonicalPromptSnapshot } from '#modules/versioning/projections/prompt-snapshot.js';
 
 /** See the module header: `infra/logging` is across a boundary `cli-shared/` may not cross. */
 const SILENT_LOGGER: Logger = {

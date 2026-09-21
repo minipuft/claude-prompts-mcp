@@ -6,40 +6,22 @@ import type { RestorePlan } from './restore-plan.js';
 import type { ResourceType } from './types.js';
 
 /**
- * The description a version row carries for the state a CREATE produced.
+ * The description a version row carries for the state a write produced, by SURFACE.
  *
  * `version_history` has two accepted writers, and a row's `description` is the only prose an
  * operator reading `cpm history` or `resource_manager history` ever sees about what produced it.
  * `VersionHistoryService` additionally separates eras by description convention — post-fix rows
  * name the action that produced them, bridge rows say so explicitly — so the text is part of the
- * row contract rather than a label each call site is free to phrase. It was a literal at three
- * sites here and would have become a fourth in `cli-shared/`; one owner is why a `cpm`-written row
- * and a `resource_manager`-written row for the same event differ in exactly one word — the surface
- * — rather than in whatever each site happened to write.
+ * row contract rather than a label each call site is free to phrase.
+ *
+ * It was a pair of CONSTANTS until 2026-09-21, and `cpm` reused them, so every `cpm`-written row
+ * said `Created via resource_manager`. That is a plain untruth in the one sentence a history is
+ * consulted for — what changed this, and can I undo it — and the two surfaces undo differently.
+ * A function rather than a second pair of constants because the SHAPE of the sentence is what the
+ * era convention reads; two pairs would let the shapes drift while each stayed correct alone.
  *
  * Sibling of `BRIDGE_DESCRIPTION` (`cli-shared/version-history-rows.ts`), which already had to be
  * shared for exactly this reason.
- */
-export const CREATE_ROW_DESCRIPTION = createRowDescription('resource_manager');
-
-/** The same, for the state an UPDATE produced. */
-export const UPDATE_ROW_DESCRIPTION = updateRowDescription('resource_manager');
-
-/**
- * Which surface wrote a row — the one thing the two sentences above are NOT allowed to share.
- *
- * `version_history` has two accepted writers, and until 2026-09-21 every `cpm` row said
- * `resource_manager` because the constant it reused said so. That is a plain untruth in the only
- * prose an operator reading `cpm history` ever sees about what produced a row, and it is the
- * expensive kind: the question a history is consulted for is "what changed this, and can I undo
- * it", and both surfaces undo differently.
- *
- * Parameterised rather than given a second pair of constants, because the SHAPE of the sentence is
- * what `VersionHistoryService` separates eras by ("post-fix rows name the action that produced
- * them") — a second pair would let the two shapes drift while both stayed correct on their own
- * side. The server's wording is unchanged by construction: `CREATE_ROW_DESCRIPTION` and
- * `UPDATE_ROW_DESCRIPTION` above are DEFINED as these functions' `'resource_manager'` answers, so
- * a change to the sentence moves both surfaces or neither.
  */
 export type VersionRowSurface = 'resource_manager' | 'cpm';
 
@@ -47,6 +29,7 @@ export function createRowDescription(surface: VersionRowSurface): string {
   return `Created via ${surface}`;
 }
 
+/** The same, for the state an UPDATE produced. */
 export function updateRowDescription(surface: VersionRowSurface): string {
   return `Update via ${surface}`;
 }

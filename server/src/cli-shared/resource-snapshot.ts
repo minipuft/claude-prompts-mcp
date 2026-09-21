@@ -6,10 +6,10 @@ import { dirname, resolve } from 'node:path';
 // The projection files directly, not the `versioning` barrel: the barrel also exports
 // `VersionHistoryService`, which the CLI neither uses nor can typecheck, and importing it cost
 // 5.6 KB of bundle plus two pre-existing type errors surfacing in `cli`'s own `tsc`.
+import { projectPromptFromDisk } from './prompt-projection.js';
+
 import { projectFrameworkSnapshot } from '#modules/versioning/projections/framework-snapshot.js';
 import { projectGateSnapshot } from '#modules/versioning/projections/gate-snapshot.js';
-
-import { projectPromptFromDisk } from './prompt-projection.js';
 
 /** The versioned resource types `cpm` can address. */
 export type CliVersionedResourceType = 'prompt' | 'gate' | 'framework';

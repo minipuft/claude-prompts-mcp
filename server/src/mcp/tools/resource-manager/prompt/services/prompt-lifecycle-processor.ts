@@ -48,8 +48,8 @@ import type { PromptResourceInput } from '../../core/types.js';
 import { PromptReferenceValidator } from '#engine/execution/reference/index.js';
 import { purgeHistoryOnDelete } from '#modules/versioning/delete-purge.js';
 import {
-  CREATE_ROW_DESCRIPTION,
-  UPDATE_ROW_DESCRIPTION,
+  createRowDescription,
+  updateRowDescription,
   canonicalPromptSnapshot,
   describeVersionRecord,
 } from '#modules/versioning/index.js';
@@ -173,7 +173,7 @@ export class PromptLifecycleProcessor {
                   'prompt',
                   canonicalId,
                   normalizeReloadShape(canonicalPromptSnapshot(canonicalId, promptData)),
-                  { description: CREATE_ROW_DESCRIPTION, diff_summary: '' }
+                  { description: createRowDescription('resource_manager'), diff_summary: '' }
                 );
               } catch (error) {
                 versionFailure = error instanceof Error ? error.message : String(error);
@@ -706,7 +706,7 @@ export class PromptLifecycleProcessor {
                   beforeContent as unknown as Record<string, unknown>,
                   { ...promptData },
                   {
-                    description: UPDATE_ROW_DESCRIPTION,
+                    description: updateRowDescription('resource_manager'),
                     diff_summary: `+${diffResult.stats.additions}/-${diffResult.stats.deletions}`,
                   }
                 );
