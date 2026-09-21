@@ -6,11 +6,16 @@
  * Designed to be reusable across frameworks and future prompt YAML support.
  */
 
-// js-yaml 5 is ESM-only and publishes no default export, so the namespace form is
-// the only one that resolves. `import yaml from 'js-yaml'` type-checks under this
-// repo's `allowSyntheticDefaultImports` but fails at module instantiation — see the
-// note above `parseYaml` below.
-import * as yaml from 'js-yaml';
+// One YAML library, not two. `yaml` backs the source-preserving resource writer, and running
+// js-yaml beside it put both in the `cpm` bundle for no behavioural gain: measured on the 105
+// bundled resources, the two parse to identical values 105/105, with a control (an explicit
+// `%YAML 1.1` directive) confirming the probe can see a difference when one exists. Dropping
+// js-yaml removes 125,991 input bytes from that bundle.
+//
+// What DID change is serializer FORMATTING: `YAML.stringify` and js-yaml's `dump` agree
+// byte-for-byte on only 24 of those 105 files, though all 105 round-trip to the same value. That
+// affects freshly created files and the writer's structural-rewrite tier, never what a file means.
+import * as YAML from 'yaml';
 
 /**
  * Options for YAML parsing
@@ -18,8 +23,6 @@ import * as yaml from 'js-yaml';
 export interface YamlParseOptions {
   /** Filename for error messages */
   filename?: string;
-  /** Custom schema (default: js-yaml's CORE_SCHEMA) */
-  schema?: yaml.Schema;
 }
 
 /**
@@ -74,31 +77,23 @@ export interface YamlParseResult<T> {
  */
 export function parseYaml<T>(content: string, options?: YamlParseOptions): YamlParseResult<T> {
   try {
-    const loadOptions: Parameters<typeof yaml.load>[1] = { filename: options?.filename };
-    if (options?.schema) {
-      loadOptions.schema = options.schema;
-    }
-
-    const data = yaml.load(content, loadOptions) as T;
+    const data = YAML.parse(content, { prettyErrors: true }) as T;
 
     return { success: true, data };
   } catch (error) {
-    if (error instanceof yaml.YAMLException) {
+    if (error instanceof YAML.YAMLParseError) {
       const errorDetails: YamlParseError = {
         message: error.message,
         cause: error,
       };
 
-      // js-yaml 5 types mark positions as `string | null`; our contract is
-      // `| undefined`, so a null mark is normalised rather than widened.
-      if (error.mark?.line !== undefined) {
-        errorDetails.line = error.mark.line;
-      }
-      if (error.mark?.column !== undefined) {
-        errorDetails.column = error.mark.column;
-      }
-      if (error.mark?.snippet) {
-        errorDetails.snippet = error.mark.snippet;
+      // `linePos` counts from 1; this contract counts `line` from 0, and `parseYamlOrThrow`
+      // adds the 1 back when it formats. Converting here rather than at the reader keeps the
+      // single documented meaning of the field.
+      const position = error.linePos?.[0];
+      if (position !== undefined) {
+        errorDetails.line = position.line - 1;
+        errorDetails.column = position.col;
       }
       if (options?.filename) {
         errorDetails.filename = options.filename;
@@ -174,11 +169,15 @@ export function serializeYaml(
     sortKeys?: boolean;
   }
 ): string {
-  return yaml.dump(data, {
+  return YAML.stringify(data, {
     indent: options?.indent ?? 2,
     lineWidth: options?.lineWidth ?? 80,
-    noRefs: options?.noRefs ?? true,
-    sortKeys: options?.sortKeys ?? false,
+    // js-yaml's `noRefs: true` is `yaml`'s `aliasDuplicateObjects: false`. Without it, a value
+    // reachable twice is emitted once with an anchor and once as an alias, which is valid YAML
+    // that reads as a different document to a human and to any line-based diff.
+    aliasDuplicateObjects: !(options?.noRefs ?? true),
+    // `yaml` spells js-yaml's `sortKeys` as `sortMapEntries`.
+    sortMapEntries: options?.sortKeys ?? false,
   });
 }
 

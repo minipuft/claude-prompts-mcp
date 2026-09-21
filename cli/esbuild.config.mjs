@@ -85,9 +85,27 @@ const JSONC_PARSER_ESM_ENTRY = resolveEsmEntry('jsonc-parser', SERVER_ROOT);
  * jsonc-parser is bundled once — six ESM modules, each emitted a single time — so this is
  * additive, not a duplicate dependency the merge introduced. BUNDLE_BUDGET_BYTES (shipped,
  * minified) is again untouched and is the number that governs what users download.
+ *
+ * Raised again 2026-09-20 (row P4.64), and this one buys a behaviour: `cpm` resource writes
+ * now preserve the comments and layout of the parts an edit did not name, which needs the
+ * `yaml` package's CST layer. Measured on this tree:
+ *
+ *   both libraries bundled   941.2 KB  — js-yaml and yaml side by side, rejected
+ *   js-yaml dropped          839,288 B — the shipped number, rounded up to 840,000
+ *
+ * js-yaml left the `cpm` bundle entirely because exactly one module in that graph imported it
+ * (`shared/utils/yaml/yaml-parser.ts`), worth 125,991 input bytes. It remains a dependency for
+ * server-only code that the CLI never reaches. The swap was gated on parse equivalence, not
+ * assumed: all 105 bundled resources parse to identical values under both libraries, with a
+ * control (an explicit `%YAML 1.1` directive) confirming the probe can see a difference when
+ * one exists. Serializer FORMATTING does differ — byte-identical on 24 of 105 — though all 105
+ * round-trip to the same value.
+ *
+ * BUNDLE_BUDGET_BYTES (shipped, minified) is again untouched: measured 407,640 B here against
+ * 512,000, and it is still the number that governs what users download.
  */
 export const BUNDLE_BUDGET_BYTES = 512_000; // 500KB — shipped (minified)
-export const DEV_BUNDLE_BUDGET_BYTES = 690_000; // 674KB — unminified dev build
+export const DEV_BUNDLE_BUDGET_BYTES = 840_000; // 820KB — unminified dev build
 
 /** Absolute path to the server source tree the CLI shares code with. */
 const SERVER_SRC = join(SERVER_ROOT, 'src');
