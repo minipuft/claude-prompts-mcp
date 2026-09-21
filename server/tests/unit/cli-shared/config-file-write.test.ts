@@ -19,7 +19,7 @@
  */
 
 import { describe, expect, it, beforeEach, afterEach } from '@jest/globals';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -272,11 +272,10 @@ describe('config file write path', () => {
       expectRefusal(result.message);
     });
 
-    it('refuses a reset, writing no backup', () => {
+    it('refuses a reset, writing nothing', () => {
       const result = resetConfig(tempDir);
       expect(result.success).toBe(false);
       expectRefusal(result.message);
-      expect(result.backupPath).toBeUndefined();
     });
   });
 
@@ -326,7 +325,7 @@ describe('config file write path', () => {
   });
 
   describe('resetConfig', () => {
-    it('rewrites an existing config.jsonc from the template, keeping a backup of what was there', () => {
+    it('rewrites an existing config.jsonc from the template, leaving no backup file', () => {
       const jsoncPath = join(tempDir, 'config.jsonc');
       writeFileSync(jsoncPath, HAND_AUTHORED_JSONC, 'utf8');
 
@@ -334,7 +333,11 @@ describe('config file write path', () => {
 
       expect(result).toMatchObject({ success: true, configPath: jsoncPath });
       expect(readFileSync(jsoncPath, 'utf8')).toBe(CONFIG_JSONC_TEMPLATE);
-      expect(readFileSync(result.backupPath as string, 'utf8')).toBe(HAND_AUTHORED_JSONC);
+      // The prior bytes are recoverable as a version row, not as a file beside the config
+      // (ruling R53) — `cpm config rollback` is what reads them back.
+      expect(readdirSync(tempDir).filter((name) => name.includes('.backup.'))).toEqual([]);
+      // Positive control: the probe reads the directory the config actually sits in.
+      expect(readdirSync(tempDir)).toContain('config.jsonc');
       expect(existsSync(configPath)).toBe(false);
     });
 
@@ -347,15 +350,14 @@ describe('config file write path', () => {
       expect(readFileSync(configPath, 'utf8')).toBe(
         JSON.stringify(generateDefaultConfig(), null, 2) + '\n'
       );
-      expect(readFileSync(result.backupPath as string, 'utf8')).toBe(HAND_AUTHORED_JSON);
+      expect(readdirSync(tempDir).filter((name) => name.includes('.backup.'))).toEqual([]);
       expect(existsSync(join(tempDir, 'config.jsonc'))).toBe(false);
     });
 
-    it('writes the template as config.jsonc when the workspace has no config to back up', () => {
+    it('writes the template as config.jsonc when the workspace has no config', () => {
       const result = resetConfig(tempDir);
 
       expect(result).toMatchObject({ success: true, configPath: join(tempDir, 'config.jsonc') });
-      expect(result.backupPath).toBeUndefined();
       expect(readFileSync(result.configPath, 'utf8')).toBe(CONFIG_JSONC_TEMPLATE);
     });
   });

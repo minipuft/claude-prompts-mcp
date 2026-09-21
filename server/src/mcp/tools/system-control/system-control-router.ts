@@ -233,8 +233,7 @@ export class ConsolidatedSystemControl implements SystemControlContext {
     try {
       const result = await this.safeConfigWriter.updateConfigValue(
         'gates.enabled',
-        String(enabled),
-        { createBackup: false }
+        String(enabled)
       );
       if (!result.success) {
         return `⚠️ Failed to persist gates.enabled: ${result.message || result.error}`;
@@ -266,9 +265,7 @@ export class ConsolidatedSystemControl implements SystemControlContext {
 
     try {
       for (const key of keys) {
-        const result = await this.safeConfigWriter.updateConfigValue(key, String(enabled), {
-          createBackup: false,
-        });
+        const result = await this.safeConfigWriter.updateConfigValue(key, String(enabled));
         if (!result.success) {
           return `⚠️ Failed to persist ${key}: ${result.message || result.error}`;
         }

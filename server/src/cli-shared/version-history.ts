@@ -35,7 +35,7 @@
 import { existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 
-import { recordCheckpointedWrite } from './checkpointed-write.js';
+import { recordCheckpointedWrite, treeFromFileSet } from './checkpointed-write.js';
 import { getConfigValue, readConfig } from './config-operations.js';
 import { hasObjectStore } from './object-store.js';
 import { resolveStateDbPath } from './version-history-location.js';
@@ -135,8 +135,13 @@ function runSqlite(request: HistoryRequest): HistoryResponse {
  * dispatch cannot express, and it must reach the connection the same way — same pragmas, same
  * missing-table refusal — or the two writers of one file would disagree about lock patience and
  * foreign keys depending on which `cpm` command ran.
+ *
+ * Exported for `config-checkpoint.ts`, which holds the connection open across a config write for
+ * the same reason. It is not a general-purpose opener: a caller that skipped it would reach
+ * `state.db` without `STATE_DB_WRITER_PRAGMAS` and without the missing-table refusal, which is the
+ * divergence this function exists to prevent.
  */
-function openStateDb(dbPath: string): { db: DatabaseSync } | { error: string } {
+export function openStateDb(dbPath: string): { db: DatabaseSync } | { error: string } {
   if (!existsSync(dbPath)) {
     return { error: `state.db not found at ${dbPath}` };
   }
@@ -515,7 +520,7 @@ export async function recordResourceWrite(
   };
   try {
     const result = await recordCheckpointedWrite(db, resolveTenantId(dbPath), request, {
-      enumerate: record.enumerate,
+      loadTree: treeFromFileSet(record.enumerate),
       targets: record.targets,
       priorSnapshot: record.priorSnapshot,
       write: record.write,
@@ -761,7 +766,7 @@ export async function rollbackVersion(
     }
 
     const result = await recordCheckpointedWrite(db, tenantId, request, {
-      enumerate: restore.enumerate,
+      loadTree: treeFromFileSet(restore.enumerate),
       // The plan's own paths on the byte path: those are the files that change, and they are what
       // must go back byte-identical if the version record fails. The caller's `targets` (the entry
       // file alone) would leave a restored companion file behind after a rolled-back write.

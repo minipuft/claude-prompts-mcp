@@ -139,6 +139,32 @@ to say so. It cannot be derived at restore time — roots are resolved per proce
 under one root layout would be re-classified under another. `tree_origin` is NULL exactly when
 `tree_hash` is; the two are one fact and ship in one schema version for that reason.
 
+### The config file is a checkpointed resource too
+
+`version_history.resource_type` is a bare `TEXT` with no `CHECK`, and since ruling R53 it also
+carries the literal `'config'`, with `resource_id = 'config'`, scoped by `tenant_id` like every
+other row. No schema change was needed — the same widening `'category'` took at P4.7.
+
+Three things make it different from the four resource types, and all three are deliberate:
+
+- **It is not a `ResourceType`.** Only `cli-shared/version-history-types.ts`'s union gained the
+  literal. The published `resource_manager` union did not: config stays read-only over MCP, as it
+  has been since #312, and `cpm config history` / `cpm config rollback` are the whole surface. The
+  versioning domain's own union did not either, because it keys `resourceFileSet`'s entry-filename
+  table and config has no resource root, no entry filename and no loader to enumerate.
+- **Its `snapshot` is not a projection.** It holds `{filename, size, hash}` and nothing else. There
+  is no `SnapshotContract` for config, because the file's BYTES are the version — a `.jsonc`
+  document's comments are part of what an operator is restoring, and no projection carries them.
+- **A row with no tree is therefore unrestorable, and says so.** Every other type degrades to its
+  projection when `tree_hash` is NULL; config refuses by name instead, because falling back would
+  mean inventing a document. That asymmetry is the price of storing nothing but a digest, and it is
+  checked rather than documented (`cli-shared/config-restore.ts`).
+
+Which file gets recorded is the file that was written — `resolveConfigPath` on the CLI side,
+`configManager.getConfigPath()` on the server side. There is no overlay layering for config: one
+path is resolved, it is both what was read and what is written back, so a restore's destination is
+never a different tree and `tree_origin` is always `primary`.
+
 ### What writes a tree, and when
 
 `cli-shared/object-store.ts` is the sole writer of both tables. It lives there, rather than beside
