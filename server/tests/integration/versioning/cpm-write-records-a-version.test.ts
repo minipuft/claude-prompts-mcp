@@ -279,6 +279,16 @@ describe('every cpm command that writes a resource is classified against what it
     );
   });
 
+  it('has cpm toggle name the entry FILE as its rollback target, not the directory', () => {
+    // Same class as the create row above, and the same mutant stayed green: an empty `targets`
+    // restores nothing when the record fails. The value matters twice here — `toggleEnabled`
+    // rewrites `framework.yaml` alone, so a DIRECTORY target would also put back a
+    // `system-prompt.md` this write never touched.
+    const source = sourceOf.get(modules.get('toggle')!)!;
+    expect(source).toContain("targets: [{ path: match.file, kind: 'file' }]");
+    expect(source).not.toContain("kind: 'directory'");
+  });
+
   it('detects a planted writer that records nothing — the probe sees something', () => {
     // The positive control for `calls()`, which every assertion above rests on. Two sources
     // differing in ONE identifier: the writer is present in both, the recorder in only one.
