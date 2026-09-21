@@ -13,16 +13,20 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 
 import type { TestDatabaseContext } from '../../helpers/test-database.js';
 import type { VersioningConfigProvider } from '../../../src/modules/versioning/version-history-service.js';
 import type { ResourceFileLocatorPort } from '../../../src/shared/utils/resource-file-set.js';
 
+import { rollbackVersion } from '../../../src/cli-shared/version-history.js';
 import { applyByteRestore } from '../../../src/modules/versioning/byte-restore.js';
 import { VersionHistoryService } from '../../../src/modules/versioning/version-history-service.js';
 import { hashBytes } from '../../../src/shared/utils/hash.js';
+import { resourceFileSet } from '../../../src/shared/utils/resource-file-set.js';
 import { createTestDatabaseManager } from '../../helpers/test-database.js';
 
 const TENANT = 'byte-restore-tenant';
@@ -221,6 +225,85 @@ describe('planByteRestore', () => {
 
     const available = await service().planByteRestore('gate', 'alpha', version);
     expect(available.status).toBe('refused');
+  });
+});
+
+/**
+ * A `cpm` rollback against a database written by a server older than schema v29.
+ *
+ * EXPLICIT, because the coverage that caught this was an accident. `cpm` opens whatever `state.db`
+ * it finds, and a pre-v29 file has neither the object store nor `version_history`'s tree columns —
+ * so a SELECT naming `tree_hash` THROWS rather than returning nothing, and an ordinary rollback
+ * against an older database fails. It was found by the CLI suite's hand-seeded fixture, whose
+ * subject is `cpm rollback` output and not schema compatibility at all; a fixture cleanup there
+ * would have removed this net without anyone noticing what it protected. Same shape as the two
+ * compatibility defects the previous worker on this arc recorded.
+ */
+describe('rollbackVersion against a pre-v29 database', () => {
+  it('restores through the projection path instead of throwing', async () => {
+    const workspace = await mkdtemp(path.join(tmpdir(), 'pre-v29-rollback-'));
+    try {
+      const gateDir = path.join(workspace, 'resources', 'gates', 'alpha');
+      await mkdir(gateDir, { recursive: true });
+      await mkdir(path.join(workspace, 'runtime-state'), { recursive: true });
+      await writeFile(
+        path.join(gateDir, 'gate.yaml'),
+        '# hand-authored\nid: alpha\nname: Current\n',
+        'utf8'
+      );
+
+      // The v28 shape: no `objects`, no `version_entries`, and no tree columns.
+      const db = new DatabaseSync(path.join(workspace, 'runtime-state', 'state.db'));
+      try {
+        db.exec(`CREATE TABLE version_history (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          tenant_id TEXT NOT NULL DEFAULT 'default',
+          organization_id TEXT, workspace_id TEXT,
+          resource_type TEXT NOT NULL, resource_id TEXT NOT NULL, version INTEGER NOT NULL,
+          snapshot TEXT NOT NULL, diff_summary TEXT DEFAULT '', description TEXT DEFAULT '',
+          created_at TEXT NOT NULL)`);
+        db.prepare(
+          `INSERT INTO version_history
+             (tenant_id, resource_type, resource_id, version, snapshot, created_at)
+           VALUES ('default', 'gate', 'alpha', 1, ?, ?)`
+        ).run(JSON.stringify({ id: 'alpha', name: 'Recorded' }), new Date().toISOString());
+      } finally {
+        db.close();
+      }
+
+      let applied = false;
+      const result = await rollbackVersion(
+        gateDir,
+        { resourceType: 'gate', resourceId: 'alpha' },
+        1,
+        { id: 'alpha', name: 'Current' },
+        {
+          enumerate: () =>
+            resourceFileSet({
+              resourceType: 'gate',
+              entryPath: path.join(gateDir, 'gate.yaml'),
+              roots: { primary: path.join(workspace, 'resources', 'gates') },
+            }),
+          targets: [{ path: path.join(gateDir, 'gate.yaml'), kind: 'file' }],
+          apply: (snapshot) => {
+            applied = true;
+            return Promise.resolve(snapshot);
+          },
+          location: {
+            located: true,
+            entryPath: path.join(gateDir, 'gate.yaml'),
+            roots: { primary: path.join(workspace, 'resources', 'gates') },
+          },
+        }
+      );
+
+      // The projection path ran, and nothing threw on a column that is not there.
+      expect(result.success).toBe(true);
+      expect(applied).toBe(true);
+      expect(result.plan).toBeUndefined();
+    } finally {
+      await rm(workspace, { recursive: true, force: true });
+    }
   });
 });
 

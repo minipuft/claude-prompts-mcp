@@ -77,6 +77,8 @@ function parseCliArgs(args: string[] = process.argv.slice(2)): ParsedArgs {
       force: { type: 'boolean', short: 'f' },
       // history flags
       limit: { type: 'string' },
+      // rollback flags
+      preview: { type: 'boolean' },
       // link-gate flags
       remove: { type: 'boolean' },
       'no-validate': { type: 'boolean' },
@@ -113,6 +115,7 @@ function parseCliArgs(args: string[] = process.argv.slice(2)): ParsedArgs {
       category: values.category as string | undefined,
       force: values.force as boolean | undefined,
       limit: values.limit as string | undefined,
+      preview: values.preview as boolean | undefined,
       remove: values.remove as boolean | undefined,
       noValidate: values['no-validate'] as boolean | undefined,
       value: values.value as string | undefined,
@@ -267,14 +270,20 @@ Types: prompt, gate, framework, style (singular or plural)
 
 Saves current state as a new version, then restores the target version.
 
+A version recorded since schema v29 restores its files byte for byte; one recorded
+before that merges its recorded fields over the entry file. A rollback never deletes
+a file, and names every file it leaves in place.
+
 Options:
+      --preview           Print what the rollback would do; write and record nothing
       --no-validate       Skip post-rename schema validation
   -w, --workspace <path>  Workspace directory (default: MCP_WORKSPACE or cwd)
       --json              JSON output
 
 Examples:
   cpm rollback prompt quick_review 2 -w server
-  cpm rollback gate code-quality 1 --json`,
+  cpm rollback gate code-quality 1 --json
+  cpm rollback gate code-quality 1 --preview`,
 
   rename: `cpm rename - Rename a resource
 
@@ -583,6 +592,7 @@ export async function run(args?: string[]): Promise<void> {
         type: parsed.positionals[0],
         id: parsed.positionals[1],
         version: parsed.positionals[2],
+        preview: parsed.flags['preview'] as boolean | undefined,
       });
       break;
     case 'rename':

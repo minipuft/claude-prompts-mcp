@@ -65,10 +65,6 @@ export class GateVersioningProcessor {
 
     const snapshot = resolved.entry.snapshot;
     const restore = gateSnapshotContract.restore(id, snapshot);
-    if (!restore.ok) {
-      return this.error(describeIncompleteSnapshot('gate', id, version, restore.missingFields));
-    }
-
     const currentState = gateSnapshotContract.project(id, existingGate);
 
     // Does version N carry the FILES, or only their projection? A row recorded since schema v29
@@ -94,6 +90,14 @@ export class GateVersioningProcessor {
         currentState,
         snapshot,
       });
+    }
+
+    // The byte path does not need a restorable PROJECTION, so its check runs after the branch.
+    // A version whose snapshot is missing a required field may still carry the resource's files,
+    // and refusing that rollback would refuse a restore the record can perform — the projection's
+    // completeness is a property of the fallback, not of the version.
+    if (!restore.ok) {
+      return this.error(describeIncompleteSnapshot('gate', id, version, restore.missingFields));
     }
 
     // A preview returns here — after validation, so it refuses an unrestorable version the same

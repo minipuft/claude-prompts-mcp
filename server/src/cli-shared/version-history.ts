@@ -36,10 +36,12 @@ import { existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 
 import { recordCheckpointedWrite } from './checkpointed-write.js';
+import { hasObjectStore } from './object-store.js';
 import { getConfigValue, readConfig } from './config-operations.js';
 import { resolveStateDbPath } from './version-history-location.js';
 import {
   appendVersion,
+  asObjectStoreDatabase,
   deleteSubtree,
   loadRows,
   renameSubtree,
@@ -50,14 +52,20 @@ import { resolveEffectiveTenantId, resolveTenantId } from './version-history-sco
 import { DEFAULT_MAX_VERSIONS } from './version-history-types.js';
 
 import type { ResourceMutationTarget } from '#modules/resources/services/resource-mutation-transaction.js';
+import type { RestorePlan } from '#modules/versioning/restore-plan.js';
 import type {
   VersionEntry,
   HistoryFile,
   SaveVersionResult,
   RollbackResult,
   SaveVersionOptions,
+  ResourceType as VersioningResourceType,
 } from '#modules/versioning/types.js';
-import type { ResourceFileSet } from '#shared/utils/resource-file-set.js';
+import type {
+  ResourceFileSet,
+  ResourceLocationResult,
+  ResourceRootOrigin,
+} from '#shared/utils/resource-file-set.js';
 import type { LoadedTree } from './object-store.js';
 import type {
   HistoryRequest,
@@ -66,6 +74,11 @@ import type {
   ResourceType,
 } from './version-history-types.js';
 
+import {
+  resolveByteRestore,
+  restoreTargets,
+  writeRestoredFiles,
+} from '#modules/versioning/byte-restore.js';
 import { STATE_DB_WRITER_PRAGMAS } from '#shared/utils/runtime-state-location.js';
 
 /**
@@ -595,6 +608,84 @@ export interface RollbackRestore {
   apply: (snapshot: Record<string, unknown>) => Promise<Record<string, unknown>>;
   /** The workspace's own bound — {@link resolveConfiguredMaxVersions}. */
   maxVersions?: number;
+  /**
+   * Where the resource's files are, for the BYTE path.
+   *
+   * Optional, and its absence is a real answer: a caller that cannot say where the files live gets
+   * today's projection restore, which is what every `cpm rollback` did before schema v29. The
+   * value has the same shape the server's injected locator returns, so both surfaces hand
+   * `resolveByteRestore` the same thing.
+   */
+  location?: ResourceLocationResult;
+  /**
+   * The projection of what is on disk AFTER a byte restore.
+   *
+   * Byte-restoring does not produce a snapshot — it produces files — and the produced row must
+   * describe what the files hold, not what the target row claimed. Re-projecting is also what
+   * keeps a left-in-place file (ruling R57) honestly reflected: the restored resource may differ
+   * from the target version, and the row records the difference rather than the intention.
+   */
+  reproject?: () => Promise<Record<string, unknown>>;
+  /**
+   * Resolve the plan and return it WITHOUT writing a file or a row.
+   *
+   * The same value the apply runs, from the same call — not a second derivation. A preview built
+   * from its own read of the tables can agree with the action today and drift from it silently.
+   */
+  preview?: boolean;
+}
+
+/**
+ * The byte-restore availability for one `cpm` rollback target.
+ *
+ * `selectVersion` reads the ENTRY columns a history listing needs and deliberately not the row id
+ * or its tree columns, so those are read here rather than widening a projection every other caller
+ * would then carry. A row with no tree, or a caller that gave no location, is `projection-only` —
+ * the answer every `cpm rollback` gave before schema v29.
+ */
+async function resolveCliByteRestore(
+  db: DatabaseSync,
+  tenantId: string,
+  request: HistoryRowRequest,
+  input: { targetVersion: number; location?: ResourceLocationResult }
+): Promise<Awaited<ReturnType<typeof resolveByteRestore>>> {
+  if (input.location === undefined) {
+    return { status: 'projection-only', reason: 'no resource location was supplied' };
+  }
+  // Asked BEFORE the SELECT below, not after it. `cpm` opens whatever `state.db` it finds, and one
+  // written by a server older than v29 has neither the object store nor `version_history`'s tree
+  // columns — a SELECT naming `tree_hash` there THROWS, which would turn a perfectly ordinary
+  // rollback against an older database into a failure. The tables and the columns arrived in the
+  // same bump, so one lookup answers for both.
+  if (!hasObjectStore(asObjectStoreDatabase(db))) {
+    return {
+      status: 'projection-only',
+      reason: 'this state.db has no object store — its schema predates v29',
+    };
+  }
+  const row = db
+    .prepare(
+      `SELECT id, tree_hash, tree_origin FROM version_history
+       WHERE tenant_id = ? AND resource_type = ? AND resource_id = ? AND version = ?`
+    )
+    .get(tenantId, request.resource_type, request.resource_id, input.targetVersion) as
+    { id: number; tree_hash: string | null; tree_origin: string | null } | undefined;
+  if (row?.tree_hash == null) {
+    return {
+      status: 'projection-only',
+      reason: `version ${input.targetVersion} recorded no file tree`,
+    };
+  }
+  return resolveByteRestore({
+    db: asObjectStoreDatabase(db),
+    tenantId,
+    resourceType: request.resource_type as VersioningResourceType,
+    resourceId: request.resource_id,
+    version: input.targetVersion,
+    versionRowId: Number(row.id),
+    recordedOrigin: (row.tree_origin ?? 'unknown') as ResourceRootOrigin,
+    location: input.location,
+  });
 }
 
 /**
@@ -611,7 +702,13 @@ export async function rollbackVersion(
   targetVersion: number,
   currentSnapshot: Record<string, unknown>,
   restore: RollbackRestore
-): Promise<RollbackResult & { snapshot?: Record<string, unknown> }> {
+): Promise<
+  RollbackResult & {
+    snapshot?: Record<string, unknown>;
+    /** Present when the target version carries a file tree — the plan a preview prints. */
+    plan?: RestorePlan;
+  }
+> {
   const dbPath = resolveStateDbPath(resourceDir);
   if (dbPath === null || !isNonEmptyString(ref.resourceType) || !isNonEmptyString(ref.resourceId)) {
     return { success: false, error: 'Unable to resolve resource DB path' };
@@ -639,11 +736,47 @@ export async function rollbackVersion(
     }
     const restoredSnapshot = JSON.parse(targetRow.snapshot) as Record<string, unknown>;
 
+    // The SAME resolution the server performs, over the same tables, through the same function —
+    // which is what makes a `cpm rollback` and a `resource_manager rollback` of one version put
+    // back the same bytes rather than two implementations agreeing by inspection.
+    const available = await resolveCliByteRestore(db, tenantId, request, {
+      targetVersion,
+      location: restore.location,
+    });
+    if (available.status === 'refused') {
+      return { success: false, error: available.reason };
+    }
+    const plan = available.status === 'ready' ? available.plan : undefined;
+
+    // A preview returns HERE: before the prior-state row, before the file write, before the
+    // produced row. Nothing has been written at this point and the plan is already resolved.
+    if (restore.preview === true) {
+      return {
+        success: true,
+        restored_version: targetVersion,
+        recorded: false,
+        snapshot: restoredSnapshot,
+        ...(plan !== undefined ? { plan } : {}),
+      };
+    }
+
     const result = await recordCheckpointedWrite(db, tenantId, request, {
       enumerate: restore.enumerate,
-      targets: restore.targets,
+      // The plan's own paths on the byte path: those are the files that change, and they are what
+      // must go back byte-identical if the version record fails. The caller's `targets` (the entry
+      // file alone) would leave a restored companion file behind after a rolled-back write.
+      targets: available.status === 'ready' ? restoreTargets(available.plan) : restore.targets,
       priorSnapshot: currentSnapshot,
-      write: async () => await restore.apply(restoredSnapshot),
+      write: async () => {
+        if (available.status !== 'ready') {
+          return await restore.apply(restoredSnapshot);
+        }
+        await writeRestoredFiles(available.plan, available.bytes);
+        // Re-projected from disk, never the target row echoed back: a restore that left a file in
+        // place (ruling R57) produced a state that differs from the target version, and the row
+        // must record what the files hold.
+        return restore.reproject !== undefined ? await restore.reproject() : restoredSnapshot;
+      },
       description: `Rollback to v${targetVersion}`,
     });
     if (!result.success) {
@@ -657,6 +790,7 @@ export async function rollbackVersion(
       recorded: result.outcome.recorded,
       restored_version: targetVersion,
       snapshot: restoredSnapshot,
+      ...(plan !== undefined ? { plan } : {}),
     };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : String(error) };

@@ -207,6 +207,36 @@ export type ByteRestoreOutcome =
   { applied: true } | { applied: false; error: string; rolledBack: boolean };
 
 /**
+ * Write every planned file, verbatim. The ONE writer both surfaces use.
+ *
+ * Shared rather than duplicated because `cpm rollback` runs inside its own transaction
+ * (`recordCheckpointedWrite`) and the server runs inside {@link applyByteRestore}'s: two copies of
+ * "write the bytes at the planned path" could only agree by inspection, and the thing they would
+ * disagree about is which bytes land on an operator's disk.
+ */
+export async function writeRestoredFiles(
+  plan: RestorePlan,
+  bytes: ReadonlyMap<string, Uint8Array>
+): Promise<void> {
+  for (const file of plan.write) {
+    const recorded = bytes.get(file.hash);
+    if (recorded === undefined) {
+      // Unreachable from `resolveByteRestore`, which refuses an incomplete tree before it plans.
+      // A throw rather than a skip: a restore that quietly omitted one file would report a
+      // byte-exact rollback of a state the files do not hold.
+      throw new Error(`Restore aborted: no recorded bytes for ${file.path} (${file.hash})`);
+    }
+    await mkdir(path.dirname(file.absolutePath), { recursive: true });
+    await writeFile(file.absolutePath, recorded);
+  }
+}
+
+/** Every path a plan writes, as the transaction targets that restore it on a failed record. */
+export function restoreTargets(plan: RestorePlan): ResourceMutationTarget[] {
+  return plan.write.map((file) => ({ path: file.absolutePath, kind: 'file' }));
+}
+
+/**
  * Write the planned bytes, then record, as ONE transaction.
  *
  * Targets are exactly the paths the plan writes — not the resource's directory. Snapshotting the
@@ -215,26 +245,13 @@ export type ByteRestoreOutcome =
  * no business capturing files it will not touch.
  */
 export async function applyByteRestore(run: ByteRestoreRun): Promise<ByteRestoreOutcome> {
-  const targets: ResourceMutationTarget[] = run.plan.write.map((file) => ({
-    path: file.absolutePath,
-    kind: 'file',
-  }));
+  const targets = restoreTargets(run.plan);
 
   const transaction = new ResourceMutationTransaction();
   const result = await transaction.run<void, void>({
     targets,
     mutate: async () => {
-      for (const file of run.plan.write) {
-        const bytes = run.bytes.get(file.hash);
-        if (bytes === undefined) {
-          // Unreachable from `resolveByteRestore`, which refuses an incomplete tree before it
-          // plans. A throw rather than a skip: a restore that quietly omitted one file would
-          // report a byte-exact rollback of a state the files do not hold.
-          throw new Error(`Restore aborted: no recorded bytes for ${file.path} (${file.hash})`);
-        }
-        await mkdir(path.dirname(file.absolutePath), { recursive: true });
-        await writeFile(file.absolutePath, bytes);
-      }
+      await writeRestoredFiles(run.plan, run.bytes);
     },
     commit: run.commit,
   });

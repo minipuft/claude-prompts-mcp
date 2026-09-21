@@ -75,10 +75,6 @@ export class CategoryVersioningProcessor {
 
     const snapshot = resolved.entry.snapshot;
     const restore = categorySnapshotContract.restore(id, snapshot);
-    if (!restore.ok) {
-      return this.error(describeIncompleteSnapshot('category', id, version, restore.missingFields));
-    }
-
     const declared = await readCategoryYamlDocument(yamlPath, this.ctx.logger);
     if (declared === undefined) {
       return this.error(
@@ -109,6 +105,14 @@ export class CategoryVersioningProcessor {
         currentState,
         snapshot,
       });
+    }
+
+    // The byte path does not need a restorable PROJECTION, so its check runs after the branch.
+    // A version whose snapshot is missing a required field may still carry the resource's files,
+    // and refusing that rollback would refuse a restore the record can perform — the projection's
+    // completeness is a property of the fallback, not of the version.
+    if (!restore.ok) {
+      return this.error(describeIncompleteSnapshot('category', id, version, restore.missingFields));
     }
 
     // A preview returns here — after validation, so it refuses an unrestorable version the same
