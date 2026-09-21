@@ -1137,7 +1137,7 @@ export class ResponseAssembler {
       return [];
     }
 
-    if (context.state.injection?.systemPrompt?.inject === false) {
+    if (context.state.injection.systemPrompt?.inject === false) {
       return [];
     }
 

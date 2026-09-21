@@ -95,7 +95,7 @@ function createContext(overrides: {
     context.state.injection.systemPrompt = {
       inject: overrides.systemPromptInjected,
       reason: 'test',
-      source: 'prompt',
+      source: 'prompt-config',
       decidedAt: Date.now(),
     };
   }

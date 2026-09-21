@@ -166,7 +166,7 @@ const RANK = GATE_SOURCE_PRIORITY;
 export const DEFAULT_FRAMEWORK_GATE_ID = 'framework-compliance';
 
 /** The three conditions that withhold the active framework's gates. */
-export interface FrameworkVetoInput {
+interface FrameworkVetoInput {
   /** Whether a framework system prompt is actually injected for this execution. */
   readonly frameworkInjected: boolean;
   /** Operator switch `gatesConfig.enableFrameworkGates`; `undefined` means enabled. */
@@ -176,7 +176,7 @@ export interface FrameworkVetoInput {
 }
 
 /** A framework veto that applies, and the highest source rank it may remove. */
-export interface FrameworkVeto {
+interface FrameworkVeto {
   readonly name: string;
   readonly bindsUpToRank: number;
 }
@@ -184,18 +184,17 @@ export interface FrameworkVeto {
 /**
  * Which framework vetoes apply to this execution, with the rank each binds up to.
  *
- * Exported because two callers need the same three conditions for different reasons. This
- * resolver turns each into a ranked `GateVeto`. `GateEnhancementService` appends a default
- * `framework-compliance` when nothing else supplied a framework gate, and that append is
- * BELOW every declared source — so it must not happen while any veto applies, whatever that
- * veto's `bindsUpToRank`.
+ * Module-private, deliberately. It was exported while `GateEnhancementService` re-derived the
+ * same three conditions to decide whether its unranked fallback could append; that second
+ * derivation WAS the #228 defect, because three conditions are not the veto set — `exclude` is
+ * also in it. The appender now asks `GateResolutionResult.acceptsUnrankedGate`, and exporting
+ * these again would re-offer the subset that caused both failures.
  *
  * Read the ranks as scoping the vetoes against ranked sources only; they say nothing about a
- * fallback that has no rank. Until 2026-08-18 the append consulted `enableFrameworkGates`
- * alone and silently reinstated the gate the resolver had just withheld — so `framework_gates:
- * false` and an uninjected framework were both unobservable at the service boundary.
+ * fallback that has no rank, which is why `acceptsUnrankedGate` ignores `bindsUpToRank`
+ * entirely.
  */
-export function applicableFrameworkVetoes(input: FrameworkVetoInput): FrameworkVeto[] {
+function applicableFrameworkVetoes(input: FrameworkVetoInput): FrameworkVeto[] {
   const applicable: FrameworkVeto[] = [];
 
   if (!input.frameworkInjected) {
