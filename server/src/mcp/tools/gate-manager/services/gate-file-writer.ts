@@ -9,7 +9,10 @@ import type { ConfigManager, Logger } from '#shared/types/index.js';
 import type { FileContentChange } from '../../resource-manager/prompt/analysis/object-diff-generator.js';
 import type { GateCreationData } from '../core/types.js';
 
-import { GATE_YAML_DECLARED_KEYS } from '#engine/gates/core/gate-yaml-keys.js';
+import {
+  GATE_YAML_PROJECTED_KEYS,
+  PRESERVED_GATE_YAML_KEYS,
+} from '#engine/gates/core/gate-yaml-keys.js';
 import {
   ResourceMutationTransaction,
   ResourceVerificationService,
@@ -22,61 +25,6 @@ import {
   serializeYamlPreservingSource,
 } from '#shared/utils/yaml/yaml-document-writer.js';
 import { parseYaml } from '#shared/utils/yaml/yaml-parser.js';
-
-/**
- * gate.yaml keys `buildGateYaml` writes directly from `GateCreationData` — always
- * (`id`/`name`/`type`/`description`/`guidanceFile`) or conditionally when the caller/fallback
- * supplied a value (`pass_criteria`/`activation`/`retry_config`). Never candidates for the
- * generic carry-forward below — the code above already decides their fate.
- */
-const GATE_YAML_PROJECTED_KEYS = [
-  'id',
-  'name',
-  'type',
-  'description',
-  'guidanceFile',
-  'pass_criteria',
-  'activation',
-  'retry_config',
-] as const;
-
-/**
- * Schema keys deliberately NOT carried forward generically. `guidance` is the only member:
- * inline `guidance:` YAML content is always superseded by the `guidance.md` file this writer
- * produces (referenced via `guidanceFile`), so preserving a stale inline value would create two
- * disagreeing guidance sources instead of one.
- */
-const GATE_YAML_EXCLUDED_KEYS = ['guidance'] as const;
-
-/**
- * Authorable gate.yaml keys `GateFileWriter` builds no value for — carried forward from the
- * on-disk file when the caller didn't supply a value. Without this, ANY `resource_manager`
- * update on a hand-authored gate setting these silently strips them back to loader defaults.
- * Same class of bug already fixed for prompts via `PRESERVED_PROMPT_YAML_KEYS`
- * (`resource-manager/prompt/operations/file-operations.ts`).
- *
- * Derived from `GATE_YAML_DECLARED_KEYS` (`gate-yaml-keys.ts`'s engine-side walk of
- * `GateDefinitionSchema`'s declared object keys), minus the projected and excluded sets above
- * (currently `severity`, `enforcementMode`, `gate_type`, `evaluation`, `blockResponseOnFail`). A
- * future schema field lands here automatically — nothing to update by hand.
- *
- * `GateCreationData` carries `severity` and `enforcementMode` since P4.4 and `gate_type` since
- * P4.10, so the "caller supplied a value" branch of `resolvePreservedGateYamlFields` is reachable
- * for all three: supplied, they are written; omitted, they still resolve from the existing
- * on-disk file. That separation is the whole point of routing them through preservation rather
- * than projection — settability did not cost the carry-forward.
- *
- * `gate_type` was the last one to become settable, because publishing it meant renaming the tool
- * parameter that had taken its name (and wrote the YAML key `type`) — a breaking change, landed
- * at P4.10.
- */
-export const PRESERVED_GATE_YAML_KEYS = GATE_YAML_DECLARED_KEYS.filter(
-  (key) =>
-    !(GATE_YAML_PROJECTED_KEYS as readonly string[]).includes(key) &&
-    !(GATE_YAML_EXCLUDED_KEYS as readonly string[]).includes(key)
-);
-
-export { GATE_YAML_PROJECTED_KEYS, GATE_YAML_EXCLUDED_KEYS };
 
 /**
  * Every `gate.yaml` key a write of `gate.yaml` decides (P4.67) — the projected keys `buildGateYaml`
@@ -104,7 +52,8 @@ const GATE_YAML_DECIDED_KEYS: ReadonlySet<string> = new Set([
  * key, `gate.yaml` is one of the files that write is allowed to touch.
  *
  * Derived from `GATE_YAML_PROJECTED_KEYS` and `PRESERVED_GATE_YAML_KEYS` rather than listed by
- * hand, for the same reason `PRESERVED_GATE_YAML_KEYS` derives from the schema walk above: a
+ * hand, for the same reason `PRESERVED_GATE_YAML_KEYS` derives from the schema walk in
+ * `gate-yaml-keys.ts`: a
  * future gate.yaml field lands here automatically. `id` and `guidanceFile` are excluded — `id`
  * addresses the gate rather than describing an editable field, and `guidanceFile` is a constant
  * the writer derives, never something a caller supplies.
