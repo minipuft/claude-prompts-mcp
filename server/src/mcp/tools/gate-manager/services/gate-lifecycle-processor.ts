@@ -14,7 +14,12 @@ import type { GateResourceContext } from '../core/context.js';
 import type { GateManagerInput, GateCreationData } from '../core/types.js';
 
 import { purgeHistoryOnDelete } from '#modules/versioning/delete-purge.js';
-import { describeVersionRecord, projectWriteModel } from '#modules/versioning/index.js';
+import {
+  CREATE_ROW_DESCRIPTION,
+  UPDATE_ROW_DESCRIPTION,
+  describeVersionRecord,
+  projectWriteModel,
+} from '#modules/versioning/index.js';
 import { logMcpToolChange } from '#shared/core/resource-change-log.js';
 import { resolveContainedPath } from '#shared/utils/path-containment.js';
 import { preferredRepairTarget } from '#shared/utils/resource-quarantine.js';
@@ -106,7 +111,7 @@ export class GateLifecycleProcessor {
                   { ...gateData, guidance: ensureTrailingNewline(gateData.guidance) },
                   gateSnapshotContract.projectedFields
                 ),
-                { description: 'Created via resource_manager', diff_summary: '' }
+                { description: CREATE_ROW_DESCRIPTION, diff_summary: '' }
               );
             },
           }
@@ -292,7 +297,7 @@ export class GateLifecycleProcessor {
                 beforeState,
                 afterState,
                 {
-                  description: 'Update via resource_manager',
+                  description: UPDATE_ROW_DESCRIPTION,
                   diff_summary: `+${diffResult.stats.additions}/-${diffResult.stats.deletions}`,
                 }
               );

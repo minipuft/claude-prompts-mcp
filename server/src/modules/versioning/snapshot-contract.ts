@@ -3,6 +3,25 @@
 import type { ResourceType } from './types.js';
 
 /**
+ * The description a version row carries for the state a CREATE produced.
+ *
+ * `version_history` has two accepted writers, and a row's `description` is the only prose an
+ * operator reading `cpm history` or `resource_manager history` ever sees about what produced it.
+ * `VersionHistoryService` additionally separates eras by description convention — post-fix rows
+ * name the action that produced them, bridge rows say so explicitly — so the text is part of the
+ * row contract rather than a label each call site is free to phrase. It was a literal at three
+ * sites here and would have become a fourth in `cli-shared/`; one owner, quoted verbatim, is why
+ * a `cpm`-written row and a `resource_manager`-written row for the same event read identically.
+ *
+ * Sibling of `BRIDGE_DESCRIPTION` (`cli-shared/version-history-rows.ts`), which already had to be
+ * shared for exactly this reason.
+ */
+export const CREATE_ROW_DESCRIPTION = 'Created via resource_manager';
+
+/** The same, for the state an UPDATE produced. */
+export const UPDATE_ROW_DESCRIPTION = 'Update via resource_manager';
+
+/**
  * Outcome of reconstructing a write model from a recorded snapshot.
  *
  * The failure case names fields rather than returning a partial model on purpose. The defect this

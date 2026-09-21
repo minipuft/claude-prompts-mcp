@@ -39,7 +39,7 @@ const GUIDANCE = '# guidance\n\nbody text\n';
 const FRAMEWORK_YAML = `id: beta
 name: Beta
 version: 1.0.0
-type: methodology
+type: BETA
 description: A framework
 enabled: true
 `;
