@@ -192,6 +192,36 @@ describe('planByteRestore', () => {
     // failure this whole route exists to remove.
     expect(available.reason).not.toContain('recorded no file tree');
   });
+
+  it("does not read another workspace's object for the same digest", async () => {
+    // Objects are keyed `(tenant_id, hash)` (ruling R56), so two workspaces holding byte-identical
+    // files hold two rows with the SAME digest. Drop one tenant's object and its rollback must
+    // refuse — a read joined on hash alone would find the other workspace's copy and report a
+    // byte-exact restore from bytes this workspace never recorded.
+    const version = await recordVersion('gate', 'alpha', { 'gate.yaml': 'id: alpha\n' });
+    const [entry] = ctx.dbManager.query<{ object_hash: string }>(
+      `SELECT object_hash FROM version_entries`
+    );
+    const hash = entry?.object_hash ?? '';
+
+    // A second workspace's row for the identical bytes, under a different tenant.
+    ctx.dbManager.run(
+      `INSERT INTO objects (tenant_id, hash, bytes, size, created_at)
+       SELECT 'other-workspace', hash, bytes, size, created_at FROM objects WHERE hash = ?`,
+      [hash]
+    );
+    // Positive control: both rows exist, so a hash-only read would find one.
+    expect(
+      ctx.dbManager.query(`SELECT tenant_id FROM objects WHERE hash = ?`, [hash])
+    ).toHaveLength(2);
+
+    ctx.dbManager.run(`PRAGMA foreign_keys = OFF`);
+    ctx.dbManager.run(`DELETE FROM objects WHERE hash = ? AND tenant_id = ?`, [hash, TENANT]);
+    ctx.dbManager.run(`PRAGMA foreign_keys = ON`);
+
+    const available = await service().planByteRestore('gate', 'alpha', version);
+    expect(available.status).toBe('refused');
+  });
 });
 
 describe('applyByteRestore', () => {
