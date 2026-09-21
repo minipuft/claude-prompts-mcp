@@ -34,8 +34,6 @@
  * projection is the defect this slice exists to remove.
  */
 
-import { ResourceMutationTransaction } from '#modules/resources/services/resource-mutation-transaction.js';
-
 import { readResourceTree } from './object-store.js';
 import { appendVersion, BRIDGE_DESCRIPTION } from './version-history-rows.js';
 
@@ -45,6 +43,8 @@ import type { LoadedTree } from './object-store.js';
 import type { AppendOutcome } from './version-history-rows.js';
 import type { HistoryRowRequest } from './version-history-types.js';
 import type { DatabaseSync } from 'node:sqlite';
+
+import { ResourceMutationTransaction } from '#modules/resources/services/resource-mutation-transaction.js';
 
 /** What one checkpointed write needs to know beyond the rows it writes. */
 export interface CheckpointedWriteInput {
@@ -69,7 +69,7 @@ export interface CheckpointedWriteInput {
   diffSummary?: string;
 }
 
-export interface CheckpointedWriteOutcome extends AppendOutcome {
+interface CheckpointedWriteOutcome extends AppendOutcome {
   /** True when the prior live state was not already the newest recorded row. */
   bridged: boolean;
 }

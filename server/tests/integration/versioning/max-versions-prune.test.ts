@@ -205,15 +205,19 @@ describe('versioning.maxVersions is one bound for both writers', () => {
    */
   describe('every cpm command that writes history supplies the configured bound', () => {
     /**
-     * Where each CLI writer's options object sits in its parameter list, 1-based.
+     * Where each CLI writer's options object sits in its parameter list, 1-based, and the type it
+     * declares there.
      *
-     * Asserted against the source below rather than trusted: a renamed or moved parameter would
-     * otherwise make this scanner check the wrong argument and keep passing.
+     * Both halves are asserted against the source below rather than trusted: a renamed or moved
+     * parameter would otherwise make this scanner check the wrong argument and keep passing.
+     * `rollbackVersion` names a different type from the other two because it also takes the
+     * restore callback there — the bound rides in the same object either way, which is the
+     * property this scanner is about.
      */
-    const WRITERS: Record<string, number> = {
-      saveVersion: 5,
-      recordEditResult: 6,
-      rollbackVersion: 6,
+    const WRITERS: Record<string, { position: number; optionsType: string }> = {
+      saveVersion: { position: 5, optionsType: 'HistoryWriteOptions' },
+      recordEditResult: { position: 6, optionsType: 'HistoryWriteOptions' },
+      rollbackVersion: { position: 5, optionsType: 'RollbackRestore' },
     };
 
     /**
@@ -266,12 +270,12 @@ describe('versioning.maxVersions is one bound for both writers', () => {
         path.join(REPO_ROOT, 'server/src/cli-shared/version-history.ts'),
         'utf8'
       );
-      for (const [name, position] of Object.entries(WRITERS)) {
-        const start = source.indexOf(`export function ${name}(`);
+      for (const [name, writer] of Object.entries(WRITERS)) {
+        const start = source.search(new RegExp(`export (async )?function ${name}\\(`));
         expect(start).toBeGreaterThan(-1);
         const params = argumentsOf(source, source.indexOf('(', start), true);
-        expect(params).toHaveLength(position);
-        expect(params[position - 1]).toContain('HistoryWriteOptions');
+        expect(params).toHaveLength(writer.position);
+        expect(params[writer.position - 1]).toContain(writer.optionsType);
       }
     });
 
@@ -286,7 +290,7 @@ describe('versioning.maxVersions is one bound for both writers', () => {
         const source = readFileSync(path.join(commandsDir, file), 'utf8');
         for (const call of callsIn(source)) {
           checked += 1;
-          const position = WRITERS[call.name] as number;
+          const position = (WRITERS[call.name] as { position: number }).position;
           const supplied = call.args[position - 1];
           if (supplied === undefined || !supplied.includes('resolveConfiguredMaxVersions')) {
             offenders.push(`${file}: ${call.name} passes ${call.args.length} arguments`);
@@ -302,15 +306,18 @@ describe('versioning.maxVersions is one bound for both writers', () => {
 
     it('reports a planted call that omits the bound — the scanner sees something', () => {
       const planted = `
-        const a = rollbackVersion(dir, 'gate', id, 2, data);
-        const b = rollbackVersion(dir, 'gate', id, 2, data, {
+        const a = rollbackVersion(dir, ref, 2, data, { enumerate, targets, apply });
+        const b = rollbackVersion(dir, ref, 2, data, {
+          enumerate,
+          targets,
+          apply,
           maxVersions: resolveConfiguredMaxVersions(ws),
         });
       `;
       const calls = callsIn(planted);
       expect(calls).toHaveLength(2);
-      expect(calls[0]?.args).toHaveLength(5);
-      expect(calls[1]?.args[5]).toContain('resolveConfiguredMaxVersions');
+      expect(calls[0]?.args[4]).not.toContain('resolveConfiguredMaxVersions');
+      expect(calls[1]?.args[4]).toContain('resolveConfiguredMaxVersions');
     });
   });
 });

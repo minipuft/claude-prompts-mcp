@@ -29,6 +29,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { DatabaseSync } from 'node:sqlite';
+
+import { hashBytes } from '../../src/shared/utils/hash.js';
 import { parseYamlOrThrow } from '../../src/shared/utils/yaml/index.js';
 import { buildServerEnv } from './helpers/child-env.js';
 import {
@@ -228,6 +231,37 @@ describe('cpm rollback matches resource_manager rollback (Streamable HTTP)', () 
       const files = observed[type];
       expect(descriptionOf(files!.cli)).toBe('V1-DESC');
       expect(descriptionOf(files!.server)).toBe('V1-DESC');
+    });
+
+    it(`records the ${type} bytes cpm rollback left on disk`, async () => {
+      // Through the BUILT binary, against the SAME `state.db` the server writes: the newest row of
+      // the CLI-rolled-back resource must describe the files that are there now. Before this, the
+      // row was written ahead of the restore and carried `tree_hash` NULL, so the state an operator
+      // sees in `cpm history` was one no rollback could reproduce byte-exactly.
+      const id = `cli_${type}_probe`;
+      const resourceRoot = path.dirname(CASES[type]!.entryFile(workspace, id));
+
+      const db = new DatabaseSync(path.join(workspace, 'runtime-state', 'state.db'));
+      const row = db
+        .prepare(
+          `SELECT id, description, tree_hash FROM version_history
+           WHERE resource_type = ? AND resource_id = ? ORDER BY version DESC LIMIT 1`
+        )
+        .get(type, id) as { id: number; description: string; tree_hash: string | null } | undefined;
+      const entries = db
+        .prepare(`SELECT path, object_hash FROM version_entries WHERE version_row_id = ?`)
+        .all(row?.id ?? -1) as unknown as Array<{ path: string; object_hash: string }>;
+      db.close();
+
+      expect(row?.description).toMatch(/^Rollback to v1$/);
+      expect(row?.tree_hash).toMatch(/^sha256:/);
+      expect(entries.length).toBeGreaterThan(0);
+      for (const entry of entries) {
+        // Hashed from the file itself, never from anything the writer reported.
+        expect(entry.object_hash).toBe(
+          hashBytes(await readFile(path.join(resourceRoot, entry.path)))
+        );
+      }
     });
   }
 });

@@ -178,13 +178,27 @@ BOTH appends run at commit time, after the produced files are on disk. So the pr
 qualifies and the bridge row does not: a tree on the bridge row would describe the produced bytes
 under a row whose snapshot is the prior state.
 
-**`cpm rollback` is the same rule with the opposite answer, and it is not an exception.**
-`rollbackVersion` runs BEFORE `cli/src/commands/rollback.ts` writes the restored file, so the disk
-still holds the PRE-rollback state — the bridge row's state. The bridge row therefore carries the
-tree and the produced row stays projection-only. Reading the server's assignment as a rule about
-row KINDS would, on that path, file the pre-rollback bytes under the row claiming the restored
-content, and a later byte-exact rollback would restore the wrong state at full confidence. Pinned
-by `tests/integration/versioning/cli-tree-parity.test.ts`, which also asserts that a `cpm` write
+**`cpm rollback` reaches the same rule by interleaving the write between its two rows.** It used
+to record both rows and restore the files afterwards, which left the file it produced described by
+no row at all: measured 2026-09-21, `Rollback to v1` carried `tree_hash` NULL while the bytes on
+disk hashed to something nothing had recorded, so `cpm history` listed a state a later rollback
+could not reproduce. `rollbackVersion` now takes the restore as a callback
+(`RollbackRestore.apply`) and drives it between the two appends: the prior-state row is written
+while the disk still holds the prior bytes, and the produced row once the restored bytes are
+there. Both rows carry the tree of the state they describe, and neither carries the other's.
+
+That ordering also gives the two rows the server's atomicity. `recordCheckpointedWrite`
+(`cli-shared/checkpointed-write.ts`) runs the restore and the produced append as the `mutate` and
+`commit` steps of the same `ResourceMutationTransaction` every server processor uses, so a failed
+restore claims nothing and a failed record puts the files back byte-identical. The prior-state row
+is deliberately OUTSIDE that transaction: it describes a state that genuinely existed, which is
+true whether or not the write that follows succeeds — and after a rolled-back write the files are
+once again exactly what it describes.
+
+Pinned by `tests/integration/versioning/cli-tree-parity.test.ts` (both rows' manifests, the
+already-current case, a failed restore, a failed record, and the command's own wiring) and by
+`tests/e2e/cli-rollback-parity.e2e.test.ts`, which drives the BUILT `cpm` binary against the
+server's own `state.db` and hashes the files afterwards. The same file asserts that a `cpm` write
 and a server write of identical files produce an identical `tree_hash` — one enumerator, one
 hasher, one recorder, reached from both sides.
 

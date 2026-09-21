@@ -130,7 +130,6 @@ export {
   formatHistoryTable,
   resolveConfiguredMaxVersions,
 } from './version-history.js';
-export type { HistoryResourceRef, RollbackRestore } from './version-history.js';
 
 // ── Resource scaffolding (node:fs only) ──────────────────────────────────────
 

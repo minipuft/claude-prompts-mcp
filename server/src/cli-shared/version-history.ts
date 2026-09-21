@@ -35,9 +35,9 @@
 import { existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 
+import { recordCheckpointedWrite } from './checkpointed-write.js';
 import { getConfigValue, readConfig } from './config-operations.js';
 import { resolveStateDbPath } from './version-history-location.js';
-import { recordCheckpointedWrite } from './checkpointed-write.js';
 import {
   appendVersion,
   deleteSubtree,
@@ -50,6 +50,7 @@ import {
 import { resolveEffectiveTenantId, resolveTenantId } from './version-history-scope.js';
 import { DEFAULT_MAX_VERSIONS } from './version-history-types.js';
 
+import type { ResourceMutationTarget } from '#modules/resources/services/resource-mutation-transaction.js';
 import type {
   VersionEntry,
   HistoryFile,
@@ -57,7 +58,6 @@ import type {
   RollbackResult,
   SaveVersionOptions,
 } from '#modules/versioning/types.js';
-import type { ResourceMutationTarget } from '#modules/resources/services/resource-mutation-transaction.js';
 import type { ResourceFileSet } from '#shared/utils/resource-file-set.js';
 import type { LoadedTree } from './object-store.js';
 import type {

@@ -201,7 +201,9 @@ cpm rollback prompt action_plan 2 --workspace server
 cpm rollback gate code-quality 1 --json
 ```
 
-Saves the current state as a new version before restoring the target version (matching server behavior). The restored snapshot is written back to the resource YAML file.
+Saves the current state as a new version, writes the target version back over the resource YAML, then records the state that write PRODUCED as the newest version — the same order the server records an edit in. Both rows carry the resource's bytes as they stood when the row was written, so either state can later be restored byte-exactly.
+
+Nothing is recorded when the target version is already the current state; `--json` reports that as `"recorded": false` alongside the version number that was already newest. A rollback that cannot write the file records no restored version at all, and a rollback whose version row cannot be written leaves the file byte-identical to what it was.
 
 Exit codes: `0` success, `1` version not found or error.
 
