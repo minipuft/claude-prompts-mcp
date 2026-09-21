@@ -350,9 +350,7 @@ export class PipelineBuilder {
         // above reads its config the same way for the same reason. Resolving once here would
         // pin the mode to whatever was on disk when this pipeline was built.
         handoffEvidenceMode: () =>
-          resolveHandoffEvidenceMode(
-            deps.configManager.getConfig().execution?.delegation?.evidence
-          ),
+          resolveHandoffEvidenceMode(deps.configManager.getConfig().execution.delegation?.evidence),
       }
     );
 
