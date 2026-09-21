@@ -32,7 +32,7 @@
  * `resolveEffectiveTenantId` for the exact rule and why it stays conservative under ambiguity.
  *
  * **Config is the exception, and it needs neither half.** A config file's history belongs to the
- * FILE, so its tenant is `configTenantId(configPath)` — exact on both surfaces, derived from a
+ * FILE, so its tenant comes from `configTenantId` — exact on both surfaces, derived from a
  * path both processes name rather than from a cwd neither shares. A config request therefore
  * arrives with its tenant already resolved, is never corrected, and is refused outright if it
  * arrives without one (`runSqlite`).
@@ -143,7 +143,8 @@ function runSqlite(request: HistoryRequest): HistoryResponse {
   // remove. A caller cannot handle this; it is a wiring mistake, so it fails where it is made.
   if (request.resource_type === 'config' && request.tenant_id === undefined) {
     throw new Error(
-      'a config history request must carry the tenant resolved by configTenantId(configPath) ' +
+      'a config history request must carry the tenant resolved by configTenantId(<the config ' +
+        "file's path>) " +
         "(#shared/utils/config-scope.js); a config file's history belongs to the FILE, and this " +
         'process cannot derive it from its working directory'
     );
