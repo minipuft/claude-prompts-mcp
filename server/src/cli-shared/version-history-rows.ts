@@ -15,7 +15,7 @@ import { DEFAULT_MAX_VERSIONS } from './version-history-types.js';
 
 import type { HistoryFile, VersionEntry } from '#modules/versioning/types.js';
 import type { LoadedTree, ObjectStoreDatabase } from './object-store.js';
-import type { HistoryRequest, HistoryResponse, HistoryRow } from './version-history-types.js';
+import type { HistoryResponse, HistoryRow, HistoryRowRequest } from './version-history-types.js';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 
 import { RESOURCE_SUBTREE_MATCH } from '#modules/versioning/history-key.js';
@@ -36,6 +36,15 @@ const ENTRY_COLUMNS = 'version, snapshot, diff_summary, description, created_at'
 function snapshotIdentity(persistedJson: string): string {
   return hashCanonical(JSON.parse(persistedJson));
 }
+
+/**
+ * The description a prior-state row carries, on both of the CLI's paths that write one.
+ *
+ * Exported rather than repeated because `recordEditResultRow` and `recordCheckpointedWrite` write
+ * the same kind of row from two different orderings, and a bridge row an operator can recognise in
+ * `cpm history` on one path and not the other would read as two different events.
+ */
+export const BRIDGE_DESCRIPTION = 'Bridge: prior live state (era transition or out-of-band edit)';
 
 /** What one append did: the version that is now newest, and whether this call created it. */
 export interface AppendOutcome {
@@ -59,7 +68,7 @@ export function toEntry(row: HistoryRow): VersionEntry {
 export function selectVersion(
   db: DatabaseSync,
   tenantId: string,
-  request: HistoryRequest,
+  request: HistoryRowRequest,
   version: number
 ): HistoryRow | undefined {
   return db
@@ -70,7 +79,7 @@ export function selectVersion(
     .get(tenantId, request.resource_type, request.resource_id, version) as HistoryRow | undefined;
 }
 
-function latestVersion(db: DatabaseSync, tenantId: string, request: HistoryRequest): number {
+function latestVersion(db: DatabaseSync, tenantId: string, request: HistoryRowRequest): number {
   const row = db
     .prepare(
       `SELECT MAX(version) AS latest FROM version_history
@@ -85,7 +94,7 @@ function latestVersion(db: DatabaseSync, tenantId: string, request: HistoryReque
 function latestRow(
   db: DatabaseSync,
   tenantId: string,
-  request: HistoryRequest
+  request: HistoryRowRequest
 ): { version: number; snapshot: string } | undefined {
   return db
     .prepare(
@@ -119,7 +128,7 @@ function latestRow(
 export function appendVersion(
   db: DatabaseSync,
   tenantId: string,
-  request: HistoryRequest,
+  request: HistoryRowRequest,
   snapshot: Record<string, unknown>,
   row: AppendRowFacts
 ): AppendOutcome {
@@ -146,7 +155,7 @@ export interface AppendRowFacts {
 function appendVersionRow(
   db: DatabaseSync,
   tenantId: string,
-  request: HistoryRequest,
+  request: HistoryRowRequest,
   snapshot: Record<string, unknown>,
   row: AppendRowFacts
 ): AppendOutcome {
@@ -215,24 +224,21 @@ function appendVersionRow(
 export function recordEditResultRow(
   db: DatabaseSync,
   tenantId: string,
-  request: HistoryRequest,
+  request: HistoryRowRequest,
   edit: {
     priorLiveSnapshot: Record<string, unknown>;
     producedSnapshot: Record<string, unknown>;
     description: string;
     diffSummary: string;
     /**
-     * Which of the two rows, if either, the bytes on disk describe RIGHT NOW.
+     * The produced files, when the caller has already written them.
      *
-     * Per row rather than one flag, because the answer is not a property of the row's KIND — it
-     * is a property of when this call runs relative to the file write, and the two callers differ.
-     * A server edit records after writing, so the produced row qualifies and the bridge row does
-     * not. `cpm rollback` records BEFORE restoring, so the disk still holds the pre-rollback
-     * state: the bridge row qualifies and the produced row does not. Reading R66 as "bridge rows
-     * never get a tree" would, on that path, file the pre-rollback bytes under the row claiming
-     * the restored state — full fidelity reported over the wrong content.
+     * Only the PRODUCED row can carry them here, because this function records both rows at once:
+     * a caller reaching it has written its files, so the disk describes the produced state and a
+     * tree on the bridge row would file the produced bytes under the row claiming the PRIOR one
+     * (ruling R66). An operation that wants both rows to carry their own bytes has to interleave
+     * the write between them — that is `recordCheckpointedWrite`, not this.
      */
-    bridgeTree?: LoadedTree | null;
     producedTree?: LoadedTree | null;
   }
 ): AppendOutcome & { bridged: boolean } {
@@ -241,9 +247,9 @@ export function recordEditResultRow(
   // do. It previously carried its own order-sensitive comparison while the record below carried
   // none, so "is this already the newest state?" had two answers on one path.
   const bridge = appendVersion(db, tenantId, request, priorLiveSnapshot, {
-    description: 'Bridge: prior live state (era transition or out-of-band edit)',
+    description: BRIDGE_DESCRIPTION,
     diffSummary: '',
-    tree: edit.bridgeTree ?? null,
+    tree: null,
   });
   const outcome = appendVersion(db, tenantId, request, producedSnapshot, {
     description,
@@ -267,7 +273,7 @@ export function recordEditResultRow(
 export function deleteSubtree(
   db: DatabaseSync,
   tenantId: string,
-  request: HistoryRequest
+  request: HistoryRowRequest
 ): HistoryResponse {
   db.exec('BEGIN IMMEDIATE');
   try {
@@ -360,7 +366,11 @@ function asObjectStoreDatabase(db: DatabaseSync): ObjectStoreDatabase {
   };
 }
 
-export function loadRows(db: DatabaseSync, tenantId: string, request: HistoryRequest): HistoryFile {
+export function loadRows(
+  db: DatabaseSync,
+  tenantId: string,
+  request: HistoryRowRequest
+): HistoryFile {
   const rows = db
     .prepare(
       `SELECT ${ENTRY_COLUMNS} FROM version_history
@@ -402,7 +412,7 @@ interface MovingRow {
 export function renameSubtree(
   db: DatabaseSync,
   tenantId: string,
-  request: HistoryRequest,
+  request: HistoryRowRequest,
   newResourceId: string
 ): HistoryResponse {
   const oldResourceId = request.resource_id;

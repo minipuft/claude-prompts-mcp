@@ -178,18 +178,50 @@ BOTH appends run at commit time, after the produced files are on disk. So the pr
 qualifies and the bridge row does not: a tree on the bridge row would describe the produced bytes
 under a row whose snapshot is the prior state.
 
-**`cpm rollback` is the same rule with the opposite answer, and it is not an exception.**
-`rollbackVersion` runs BEFORE `cli/src/commands/rollback.ts` writes the restored file, so the disk
-still holds the PRE-rollback state — the bridge row's state. The bridge row therefore carries the
-tree and the produced row stays projection-only. Reading the server's assignment as a rule about
-row KINDS would, on that path, file the pre-rollback bytes under the row claiming the restored
-content, and a later byte-exact rollback would restore the wrong state at full confidence. Pinned
-by `tests/integration/versioning/cli-tree-parity.test.ts`, which also asserts that a `cpm` write
+**`cpm rollback` reaches the same rule by interleaving the write between its two rows.** It used
+to record both rows and restore the files afterwards, which left the file it produced described by
+no row at all: measured 2026-09-21, `Rollback to v1` carried `tree_hash` NULL while the bytes on
+disk hashed to something nothing had recorded, so `cpm history` listed a state a later rollback
+could not reproduce. `rollbackVersion` now takes the restore as a callback
+(`RollbackRestore.apply`) and drives it between the two appends: the prior-state row is written
+while the disk still holds the prior bytes, and the produced row once the restored bytes are
+there. Both rows carry the tree of the state they describe, and neither carries the other's.
+
+That ordering also gives the two rows the server's atomicity. `recordCheckpointedWrite`
+(`cli-shared/checkpointed-write.ts`) runs the restore and the produced append as the `mutate` and
+`commit` steps of the same `ResourceMutationTransaction` every server processor uses, so a failed
+restore claims nothing and a failed record puts the files back byte-identical. The prior-state row
+is deliberately OUTSIDE that transaction: it describes a state that genuinely existed, which is
+true whether or not the write that follows succeeds — and after a rolled-back write the files are
+once again exactly what it describes.
+
+Pinned by `tests/integration/versioning/cli-tree-parity.test.ts` (both rows' manifests, the
+already-current case, a failed restore, a failed record, and the command's own wiring) and by
+`tests/e2e/cli-rollback-parity.e2e.test.ts`, which drives the BUILT `cpm` binary against the
+server's own `state.db` and hashes the files afterwards. The same file asserts that a `cpm` write
 and a server write of identical files produce an identical `tree_hash` — one enumerator, one
 hasher, one recorder, reached from both sides.
 
-`cpm`'s edit commands (`link-gate`, `rename`, `move`) record no version at all, and so record no
-tree; `rollback` is the CLI's only version-writing path today.
+**`rollback` is still the CLI's only version-writing path, and the reason the others cannot join it
+is a projection, not an ordering.** `cpm create`, `cpm link-gate` and `cpm toggle` each write a
+resource and record nothing. A version row's `snapshot` is a `SnapshotContract` projection, and all
+four contracts live under `src/mcp/tools/**` — which `cli-shared/` may not reach
+(`.dependency-cruiser.cjs`, `cli-shared-no-runtime`, `reachable: true`; measured by planting the
+import, `validate:arch` went from 0 errors to 48) and which `cli/src` cannot resolve at all, having
+no `@mcp` alias. The second half is not an import: `project(id, live)` takes the server's LOADED
+model, whose gate `guidance` is the inlined body of `guidanceFile` and whose prompt template is
+resolved rather than a `userMessageTemplateFile` pointer, and `cpm` runs no loader that produces
+either. Writing a CLI-side projection instead would be a second projection of one resource, which
+is the shape this whole arc exists to remove — and `cpm` already has one, which is why every
+`cpm rollback` of a server-written resource bridges: it passes the raw YAML map as the prior-state
+snapshot.
+
+`cpm delete` purges the subtree, `cpm rename` re-keys it, and `cpm move` leaves it alone because a
+category move does not change the id a history row is keyed on. Those three are complete, not
+missing a row. The whole classification is enumerated from the command registry, with the open
+entries stamped, by `tests/integration/versioning/cpm-write-records-a-version.test.ts`: a command
+that starts writing resources without a classification fails there, and so does an entry whose
+stated blocker no longer holds.
 
 **Losing every object degrades rollback to the projection path; it never loses history.**
 `version_history.snapshot` keeps holding the projection every reader already reads, and it is not

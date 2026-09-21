@@ -14,9 +14,14 @@
  * `VersionHistoryService` — and they must agree on what a version number means or a resource
  * edited by both accumulates a history where "the newest version" means two different things
  * depending on who last wrote it. Go-forward: version N holds the state edit N PRODUCED, not
- * the state that preceded it. `recordEditResult` and the `rollback` action carry the bridge-row
- * logic (self-healing v1 for a never-before-recorded resource, or an out-of-band edit) — see
+ * the state that preceded it. `recordEditResult` and `rollbackVersion` carry the bridge-row logic
+ * (self-healing v1 for a never-before-recorded resource, or an out-of-band edit) — see
  * `recordEditResult` below for the mechanism, mirrored line-for-line from the server's.
+ *
+ * **`rollbackVersion` is the one write that is not a dispatched action, and it is async.** It has
+ * to hold the connection open ACROSS the file write so the prior-state row lands while the disk
+ * still holds the prior bytes and the produced row lands once the restored bytes are there
+ * (`checkpointed-write.ts`). Everything else here stays synchronous.
  *
  * **Scope must also match, and cannot always be derived — so it is read back instead.**
  * `resolveTenantId` derives a scope guess independently of the server's own resolution (see its
@@ -30,6 +35,7 @@
 import { existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 
+import { recordCheckpointedWrite } from './checkpointed-write.js';
 import { getConfigValue, readConfig } from './config-operations.js';
 import { resolveStateDbPath } from './version-history-location.js';
 import {
@@ -44,6 +50,7 @@ import {
 import { resolveEffectiveTenantId, resolveTenantId } from './version-history-scope.js';
 import { DEFAULT_MAX_VERSIONS } from './version-history-types.js';
 
+import type { ResourceMutationTarget } from '#modules/resources/services/resource-mutation-transaction.js';
 import type {
   VersionEntry,
   HistoryFile,
@@ -51,8 +58,14 @@ import type {
   RollbackResult,
   SaveVersionOptions,
 } from '#modules/versioning/types.js';
+import type { ResourceFileSet } from '#shared/utils/resource-file-set.js';
 import type { LoadedTree } from './object-store.js';
-import type { HistoryRequest, HistoryResponse, ResourceType } from './version-history-types.js';
+import type {
+  HistoryRequest,
+  HistoryResponse,
+  HistoryRowRequest,
+  ResourceType,
+} from './version-history-types.js';
 
 import { STATE_DB_WRITER_PRAGMAS } from '#shared/utils/runtime-state-location.js';
 
@@ -88,30 +101,56 @@ export interface HistoryResourceRef {
  * single owner of this DDL; the CLI reports a missing table instead of inventing one.
  */
 function runSqlite(request: HistoryRequest): HistoryResponse {
-  if (!existsSync(request.db_path)) {
-    return { success: false, error: `state.db not found at ${request.db_path}` };
+  const opened = openStateDb(request.db_path);
+  if ('error' in opened) {
+    return { success: false, error: opened.error };
   }
 
-  let db: DatabaseSync | undefined;
   try {
-    db = new DatabaseSync(request.db_path);
+    return dispatch(opened.db, request, resolveTenantId(request.db_path));
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  } finally {
+    opened.db.close();
+  }
+}
+
+/**
+ * Open `state.db` for writing, or say why it cannot be used.
+ *
+ * Extracted from `runSqlite` when `rollbackVersion` stopped being a dispatched action: that path
+ * holds the connection open ACROSS the file write (`recordCheckpointedWrite`), which a synchronous
+ * dispatch cannot express, and it must reach the connection the same way — same pragmas, same
+ * missing-table refusal — or the two writers of one file would disagree about lock patience and
+ * foreign keys depending on which `cpm` command ran.
+ */
+function openStateDb(dbPath: string): { db: DatabaseSync } | { error: string } {
+  if (!existsSync(dbPath)) {
+    return { error: `state.db not found at ${dbPath}` };
+  }
+  let db: DatabaseSync;
+  try {
+    db = new DatabaseSync(dbPath);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : String(error) };
+  }
+  try {
     // The same list the server's connection applies — one owner, so the two writers of this file
     // cannot disagree about its lock patience or about whether its foreign keys hold.
     for (const pragma of STATE_DB_WRITER_PRAGMAS) {
       db.exec(pragma);
     }
     if (!versionHistoryExists(db)) {
+      db.close();
       return {
-        success: false,
         error: 'version_history table is absent — start the MCP server once to create the schema',
       };
     }
-    return dispatch(db, request, resolveTenantId(request.db_path));
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : String(error) };
-  } finally {
-    db?.close();
+    db.close();
+    return { error: error instanceof Error ? error.message : String(error) };
   }
+  return { db };
 }
 
 function versionHistoryExists(db: DatabaseSync): boolean {
@@ -173,7 +212,6 @@ function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): 
         producedSnapshot: request.snapshot ?? {},
         description: request.description ?? '',
         diffSummary: request.diff_summary ?? '',
-        bridgeTree: request.bridge_tree ?? null,
         producedTree: request.produced_tree ?? null,
       });
       return {
@@ -197,45 +235,6 @@ function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): 
         return { success: false, error: `Version ${toVersion} not found` };
       }
       return { success: true, from: toEntry(fromRow), to: toEntry(toRow) };
-    }
-
-    case 'rollback': {
-      // Go-forward semantics (mirrors VersionHistoryService.rollback): the target is validated
-      // BEFORE anything is written, so a refused rollback consumes no version number. The
-      // restored state is then recorded as the newest version via `recordEditResult` — a
-      // rollback is an edit, and version N holds what edit N produced. The live pre-rollback
-      // state needs no dedicated "Pre-rollback snapshot" row: under these semantics it is
-      // already the previous version, and when it is not (old-era rows, out-of-band edits) the
-      // bridge records it.
-      //
-      // The tenant is corrected once, before the read, and the SAME value is reused for the
-      // write below — a rollback that read the target from a corrected tenant must record the
-      // restored state there too, or the operation splits across two tenants and the next read
-      // sees a one-row history instead of a continuation.
-      const effectiveTenantId = resolveEffectiveTenantId(db, tenantId, request).tenantId;
-      const target = Number(request.target_version);
-      const targetRow = selectVersion(db, effectiveTenantId, request, target);
-      if (targetRow === undefined) {
-        return { success: false, error: `Version ${target} not found` };
-      }
-      const restoredSnapshot = JSON.parse(targetRow.snapshot) as Record<string, unknown>;
-      const result = recordEditResultRow(db, effectiveTenantId, request, {
-        priorLiveSnapshot: request.current_snapshot ?? {},
-        producedSnapshot: restoredSnapshot,
-        description: `Rollback to v${target}`,
-        diffSummary: '',
-        bridgeTree: request.bridge_tree ?? null,
-        producedTree: request.produced_tree ?? null,
-      });
-      return {
-        success: true,
-        saved_version: result.version,
-        // False when the target version was already the current state: nothing to restore and
-        // nothing to record, so `saved_version` is the number that was already newest.
-        recorded: result.recorded,
-        restored_version: target,
-        snapshot: restoredSnapshot,
-      };
     }
 
     // Delete and rename act on the id AND every id below it (`id/…`). A chain directory holds its
@@ -478,7 +477,6 @@ export function recordEditResult(
     // The server's assignment: a caller that RECORDS AN EDIT has already written the produced
     // files, so the produced row is the one the disk describes and the bridge row is not.
     produced_tree: options?.tree ?? null,
-    bridge_tree: null,
   });
   if (!result.success) {
     return {
@@ -496,48 +494,97 @@ export function recordEditResult(
   };
 }
 
-export function rollbackVersion(
+/**
+ * How a rollback puts the target version back on disk, and which files that touches.
+ *
+ * `apply` exists so the RESTORE happens between the two rows rather than after both of them.
+ * `cpm rollback` used to record everything first and write afterwards, which left the merged file
+ * it produced described by no row at all: measured 2026-09-21, `Rollback to v1` carried
+ * `tree_hash` NULL while the bytes on disk hashed to something nothing had recorded, so
+ * `cpm history` listed a state it could not restore byte-exactly. Handing the write in as a
+ * callback is the same inversion every server processor already uses (`commit` of
+ * `ResourceMutationTransaction`), and it is what lets both rows carry the bytes they describe.
+ */
+export interface RollbackRestore {
+  /** The resource's files, re-enumerated on each call — see `CheckpointedWriteInput.enumerate`. */
+  enumerate: () => Promise<ResourceFileSet>;
+  /** Every path `apply` may touch; restored byte-identical if the version record fails. */
+  targets: ResourceMutationTarget[];
+  /** Write the target version's state to disk. Throwing aborts the rollback with nothing claimed. */
+  apply: (snapshot: Record<string, unknown>) => Promise<void> | void;
+  /** The workspace's own bound — {@link resolveConfiguredMaxVersions}. */
+  maxVersions?: number;
+}
+
+/**
+ * Restore `targetVersion` and record the state that restore produced.
+ *
+ * Not a dispatched action, unlike every other write here: the connection has to stay open across
+ * `restore.apply`, and `dispatch` is synchronous by construction (`DatabaseSync`). The target is
+ * still validated before anything is written, so a refused rollback consumes no version number and
+ * touches no file.
+ */
+export async function rollbackVersion(
   resourceDir: string,
-  resourceType: ResourceType,
-  resourceId: string,
+  ref: HistoryResourceRef,
   targetVersion: number,
   currentSnapshot: Record<string, unknown>,
-  options?: HistoryWriteOptions
-): RollbackResult & { snapshot?: Record<string, unknown> } {
-  const request = createRequest(resourceDir, 'rollback', { resourceType, resourceId });
-  if (request === null) {
+  restore: RollbackRestore
+): Promise<RollbackResult & { snapshot?: Record<string, unknown> }> {
+  const dbPath = resolveStateDbPath(resourceDir);
+  if (dbPath === null || !isNonEmptyString(ref.resourceType) || !isNonEmptyString(ref.resourceId)) {
     return { success: false, error: 'Unable to resolve resource DB path' };
   }
-
-  const result = runSqlite({
-    ...(request as HistoryRequest),
-    target_version: targetVersion,
-    current_snapshot: currentSnapshot,
-    created_at: new Date().toISOString(),
-    max_versions: options?.maxVersions ?? DEFAULT_MAX_VERSIONS,
-    // MEASURED, not assumed: `cpm rollback` calls this BEFORE it writes the restored file
-    // (`cli/src/commands/rollback.ts` — the merge and `writeFileSync` come after this returns).
-    // So at the moment both rows are written, the bytes on disk are the state this call was
-    // handed as `currentSnapshot` — the BRIDGE row's state. The produced row claims the RESTORED
-    // state, which is not on disk yet, so it stays projection-only: a tree there would file the
-    // pre-rollback bytes under the row claiming the restored content, and a later byte-exact
-    // rollback would restore the wrong state while reporting full fidelity.
-    //
-    // This is the inverse of the server's assignment and it is the same rule, not an exception to
-    // it: a row gets a tree exactly when the disk describes that row's state.
-    bridge_tree: options?.tree ?? null,
-    produced_tree: null,
-  });
-  if (!result.success) {
-    return { success: false, error: result.error ?? 'Rollback failed' };
+  const opened = openStateDb(dbPath);
+  if ('error' in opened) {
+    return { success: false, error: opened.error };
   }
-  return {
-    success: true,
-    saved_version: result.saved_version,
-    recorded: result.recorded ?? false,
-    restored_version: result.restored_version,
-    snapshot: result.snapshot,
+
+  const { db } = opened;
+  const request: HistoryRowRequest = {
+    resource_type: ref.resourceType,
+    resource_id: ref.resourceId,
+    created_at: new Date().toISOString(),
+    max_versions: restore.maxVersions ?? DEFAULT_MAX_VERSIONS,
   };
+  try {
+    // The tenant is corrected ONCE and the same value carries both rows — a rollback that read
+    // its target from a corrected tenant must record the restored state there too, or the
+    // operation splits across two tenants and the next read sees a one-row history.
+    const tenantId = resolveEffectiveTenantId(db, resolveTenantId(dbPath), request).tenantId;
+    const targetRow = selectVersion(db, tenantId, request, targetVersion);
+    if (targetRow === undefined) {
+      return { success: false, error: `Version ${targetVersion} not found` };
+    }
+    const restoredSnapshot = JSON.parse(targetRow.snapshot) as Record<string, unknown>;
+
+    const result = await recordCheckpointedWrite(db, tenantId, request, {
+      enumerate: restore.enumerate,
+      targets: restore.targets,
+      priorSnapshot: currentSnapshot,
+      write: async () => {
+        await restore.apply(restoredSnapshot);
+        return restoredSnapshot;
+      },
+      description: `Rollback to v${targetVersion}`,
+    });
+    if (!result.success) {
+      return { success: false, error: result.error };
+    }
+    return {
+      success: true,
+      saved_version: result.outcome.version,
+      // False when the target version was already the current state: the restore ran and produced
+      // the state that was already newest, so `saved_version` is the number that already existed.
+      recorded: result.outcome.recorded,
+      restored_version: targetVersion,
+      snapshot: restoredSnapshot,
+    };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  } finally {
+    db.close();
+  }
 }
 
 /**

@@ -74,6 +74,13 @@ const PERMUTED = {
   id: 'shared-gate',
 };
 
+/** Rows only: this fixture has a `state.db` and no resource files, so every row is projection-only. */
+const ROWS_ONLY_RESTORE = {
+  enumerate: (): Promise<never> => Promise.reject(new Error('no resource files in this fixture')),
+  targets: [],
+  apply: (): void => {},
+};
+
 describe('an unchanged write creates no version row', () => {
   let dbCtx: TestDatabaseContext;
   let service: VersionHistoryService;
@@ -207,25 +214,31 @@ describe('an unchanged write creates no version row', () => {
       expect(countRows()).toBe(1);
     });
 
-    it('rolling back to the state already current records nothing', () => {
+    it('rolling back to the state already current records nothing', async () => {
       cliSaveVersion(resourceDir, 'gate', 'shared-gate', SNAPSHOT);
       cliSaveVersion(resourceDir, 'gate', 'shared-gate', { ...SNAPSHOT, description: 'v2' });
       expect(countRows()).toBe(2);
 
-      const toCurrent = cliRollbackVersion(resourceDir, 'gate', 'shared-gate', 2, {
-        ...SNAPSHOT,
-        description: 'v2',
-      });
+      const toCurrent = await cliRollbackVersion(
+        resourceDir,
+        { resourceType: 'gate', resourceId: 'shared-gate' },
+        2,
+        { ...SNAPSHOT, description: 'v2' },
+        ROWS_ONLY_RESTORE
+      );
       expect(toCurrent.success).toBe(true);
       expect(toCurrent.recorded).toBe(false);
       expect(toCurrent.saved_version).toBe(2);
       expect(countRows()).toBe(2);
 
       // Positive control: a rollback to a DIFFERENT version records exactly one row.
-      const real = cliRollbackVersion(resourceDir, 'gate', 'shared-gate', 1, {
-        ...SNAPSHOT,
-        description: 'v2',
-      });
+      const real = await cliRollbackVersion(
+        resourceDir,
+        { resourceType: 'gate', resourceId: 'shared-gate' },
+        1,
+        { ...SNAPSHOT, description: 'v2' },
+        ROWS_ONLY_RESTORE
+      );
       expect(real.recorded).toBe(true);
       expect(real.saved_version).toBe(3);
       expect(countRows()).toBe(3);

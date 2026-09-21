@@ -14,7 +14,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-import type { HistoryRequest } from './version-history-types.js';
+import type { HistoryRowRequest } from './version-history-types.js';
 import type { DatabaseSync } from 'node:sqlite';
 
 import {
@@ -110,9 +110,7 @@ function readConfiguredWorkspaceId(dbPath: string): string | undefined {
  * an ordinary empty result.
  *
  * `dispatch` calls this for every action whose SQL can only act on rows that already exist —
- * `load_history`, `get_version`, `compare_versions`, `rollback` (which reads its target before
- * writing the restored state, under the SAME resolved tenant so the two halves of one rollback
- * never split across tenants), and `delete_history` (a wrong guess must not leave the server's
+ * `load_history`, `get_version`, `compare_versions` and `delete_history` (a wrong guess must not leave the server's
  * rows behind as an undeletable orphan — `cpm delete` has the identical shape as `cpm rollback`:
  * both are reached only from `cli/src/commands/*.ts`, never from the server, which always writes
  * through `VersionHistoryService`'s own `this.scope`, not this guess). `save_version` and
@@ -126,6 +124,11 @@ function readConfiguredWorkspaceId(dbPath: string): string | undefined {
  * file (row renumbering); correcting it is the same shape and belongs with that change, not this
  * one — tracked as an open gap, not a decision that it should stay uncorrected.
  *
+ * `rollbackVersion` calls it directly rather than through `dispatch`, for the same reason and with
+ * the same care: it resolves the tenant ONCE, reads its target under it, and hands that same value
+ * to both rows of the checkpointed write, so the two halves of one rollback never split across
+ * tenants.
+ *
  * Only `load_history` currently inspects `ambiguousCandidateCount` and refuses loudly on it
  * (`dispatch`'s other four callers read `.tenantId` alone, unchanged from before this field
  * existed) — see that case for why an ambiguous result must not collapse into the same "nothing
@@ -134,7 +137,7 @@ function readConfiguredWorkspaceId(dbPath: string): string | undefined {
 export function resolveEffectiveTenantId(
   db: DatabaseSync,
   guessedTenantId: string,
-  request: HistoryRequest
+  request: HistoryRowRequest
 ): { tenantId: string; ambiguousCandidateCount?: number } {
   const guessHasRows =
     db

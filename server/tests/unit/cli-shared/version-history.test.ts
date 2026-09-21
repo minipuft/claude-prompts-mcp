@@ -84,6 +84,20 @@ function seedPromptHistory(resourceDir: string): void {
   );
 }
 
+/**
+ * A rollback restore that enumerates nothing and writes nothing.
+ *
+ * These cases are about the ROWS a rollback writes, not the bytes: the fixtures here are a
+ * `state.db` with no resource files beside it, so enumeration legitimately fails and every row is
+ * recorded projection-only — which is what `loadTreeQuietly` is for. `cli-tree-parity.test.ts`
+ * owns the byte half, over a resource that actually exists.
+ */
+const ROWS_ONLY_RESTORE = {
+  enumerate: (): Promise<never> => Promise.reject(new Error('no resource files in this fixture')),
+  targets: [],
+  apply: (): void => {},
+};
+
 describe('version-history', () => {
   let tempDir: string;
   let promptDir: string;
@@ -215,9 +229,15 @@ describe('version-history', () => {
     // v3's recorded snapshot, so it is bridged as v4, and the RESTORED (target) content is
     // recorded as v5 — the newest version now holds what the rollback PRODUCED, not what
     // preceded it. Mirrors VersionHistoryService's rollback test exactly.
-    it('bridges an unrecorded live state, then records the restored content as newest', () => {
+    it('bridges an unrecorded live state, then records the restored content as newest', async () => {
       const currentSnapshot = { id: 'test-prompt', description: 'current' };
-      const result = rollbackVersion(promptDir, 'prompt', 'test-prompt', 1, currentSnapshot);
+      const result = await rollbackVersion(
+        promptDir,
+        PROMPT_REF,
+        1,
+        currentSnapshot,
+        ROWS_ONLY_RESTORE
+      );
 
       expect(result.success).toBe(true);
       expect(result.restored_version).toBe(1);
@@ -234,10 +254,16 @@ describe('version-history', () => {
       expect(restored!.description).toBe('Rollback to v1');
     });
 
-    it('records exactly one row when the live state is already the latest recorded snapshot', () => {
+    it('records exactly one row when the live state is already the latest recorded snapshot', async () => {
       // seedPromptHistory's v3 snapshot is exactly this — no bridge needed.
       const currentSnapshot = { id: 'test-prompt', description: 'v3 description' };
-      const result = rollbackVersion(promptDir, 'prompt', 'test-prompt', 1, currentSnapshot);
+      const result = await rollbackVersion(
+        promptDir,
+        PROMPT_REF,
+        1,
+        currentSnapshot,
+        ROWS_ONLY_RESTORE
+      );
 
       expect(result.saved_version).toBe(4);
       const restored = getVersion(promptDir, 4, PROMPT_REF);
@@ -245,9 +271,9 @@ describe('version-history', () => {
       expect(restored!.description).toBe('Rollback to v1');
     });
 
-    it('errors when target version does not exist, and consumes no version number', () => {
+    it('errors when target version does not exist, and consumes no version number', async () => {
       const before = loadHistory(promptDir, PROMPT_REF)!.current_version;
-      const result = rollbackVersion(promptDir, 'prompt', 'test-prompt', 99, {});
+      const result = await rollbackVersion(promptDir, PROMPT_REF, 99, {}, ROWS_ONLY_RESTORE);
       expect(result.success).toBe(false);
       expect(result.error).toContain('99');
       expect(loadHistory(promptDir, PROMPT_REF)!.current_version).toBe(before);
@@ -591,16 +617,19 @@ describe('version-history', () => {
       expect(history!.versions).toHaveLength(2);
     });
 
-    it('rollback records the restored version under the corrected tenant, never a new one', () => {
+    it('rollback records the restored version under the corrected tenant, never a new one', async () => {
       process.env['CLAUDE_PROJECT_DIR'] = '/srv/server-tenant';
       saveVersion(promptDir, 'prompt', 'test-prompt', { id: 'test-prompt', description: 'v1' });
       saveVersion(promptDir, 'prompt', 'test-prompt', { id: 'test-prompt', description: 'v2' });
 
       process.env['CLAUDE_PROJECT_DIR'] = '/home/user/cli-tenant';
-      const result = rollbackVersion(promptDir, 'prompt', 'test-prompt', 1, {
-        id: 'test-prompt',
-        description: 'v2',
-      });
+      const result = await rollbackVersion(
+        promptDir,
+        PROMPT_REF,
+        1,
+        { id: 'test-prompt', description: 'v2' },
+        ROWS_ONLY_RESTORE
+      );
 
       expect(result.success).toBe(true);
       expect(result.restored_version).toBe(1);
