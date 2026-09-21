@@ -264,6 +264,30 @@ describe('every cpm command that writes a resource is classified against what it
     expect(/^\s{2}gate:/m.test(projectorKeys![1]!)).toBe(true);
   });
 
+  it('has cpm create name the created directory as its rollback target', () => {
+    /**
+     * The VALUE of `targets`, not the presence of the name.
+     *
+     * `targets` is what `ResourceMutationTransaction` restores when the version record fails, and
+     * `expect(source).toMatch(/\btargets\b/)` is satisfied by ANY value — an empty array
+     * included, which restores nothing and leaves a created-but-unrecorded resource behind.
+     * Measured on this file's sibling row: the empty-array mutant stayed green under every
+     * behavioural test here, because no test drives a record failure through the command itself.
+     *
+     * A create's target must be the resource DIRECTORY, captured as absent so restoring it means
+     * removing it — and it must be `resolveResourceDir`'s answer, which
+     * `tests/unit/cli-shared/resource-scaffold.test.ts` pins to the path the create actually uses.
+     */
+    const source = sourceOf.get(modules.get('create')!)!;
+    expect(source).toContain("targets: [{ path: resourceDir, kind: 'directory' }]");
+    expect(source).toContain('resolveCreatedResourceDir(baseDir, type, id, category)');
+    // The control: the same search over a source that names `targets` with a different value does
+    // NOT match, so the assertion is measuring the value and not the identifier.
+    expect(`const x = { targets: [] };`).not.toContain(
+      "targets: [{ path: resourceDir, kind: 'directory' }]"
+    );
+  });
+
   it('detects a planted writer that records nothing — the probe sees something', () => {
     // The positive control for `calls()`, which every assertion above rests on. Two sources
     // differing in ONE identifier: the writer is present in both, the recorder in only one.
