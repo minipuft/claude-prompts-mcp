@@ -24,8 +24,8 @@ export { describeRestorePlan, restoreWritesNothing } from './restore-plan.js';
 // in front of no importer.
 export { applyByteRestore } from './byte-restore.js';
 export {
-  CREATE_ROW_DESCRIPTION,
-  UPDATE_ROW_DESCRIPTION,
+  createRowDescription,
+  updateRowDescription,
   missingRequiredFields,
   copyPresentFields,
   canonicalizeSnapshot,
@@ -58,3 +58,6 @@ export {
   CATEGORY_OPTIONAL_SNAPSHOT_FIELDS,
   projectCategorySnapshot,
 } from './projections/category-snapshot.js';
+// `SNAPSHOT_PRESERVED_FIELDS` is deliberately NOT re-exported: it is the projection's own input
+// list and no consumer outside that file names it.
+export { canonicalPromptSnapshot } from './projections/prompt-snapshot.js';

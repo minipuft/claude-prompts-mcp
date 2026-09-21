@@ -110,7 +110,8 @@ describe('cpm toggle records what it flipped (Streamable HTTP)', () => {
 
     const after = rows('framework', 'flipme');
     expect(after).toHaveLength(2);
-    expect(after[1]!.description).toBe('Update via resource_manager');
+    // Written by `cpm`, so it NAMES cpm — the server's own rows still say resource_manager.
+    expect(after[1]!.description).toBe('Update via cpm');
     expect(after[1]!.tree_hash).toMatch(/^sha256:/);
 
     // The VALUE the flip produced, not merely that a second row exists: a row recording the
@@ -140,13 +141,14 @@ describe('cpm toggle records what it flipped (Streamable HTTP)', () => {
     );
     expect(restored).toContain('# phasesFile: phases.yaml');
 
-    // The bytes are NOT identical, and the difference is bounded rather than waved away:
-    // `serializeYamlPreservingSource` drops one blank line after the key it rewrote (measured
-    // 2026-09-21, on the line after `enabled:`). Every non-blank line must still match, so a real
-    // content change fails here.
-    const significant = (text: string): string[] =>
-      text.split('\n').filter((line) => line.trim() !== '');
-    expect(significant(restored)).toEqual(significant(original));
+    // The bytes ARE identical, and that is the stronger claim — asserted as bytes rather than as
+    // "every non-blank line matches", which is what this test settled for while the rollback still
+    // went through the merging writer. Version 1 records a file tree, so the rollback takes the
+    // BYTE path and puts the recorded files back verbatim. Re-measured 2026-09-21: the earlier
+    // note here, that `serializeYamlPreservingSource` drops one blank line after the key it
+    // rewrites, does not reproduce on any reachable input — see
+    // `tests/integration/resources/yaml-source-preservation.test.ts`.
+    expect(restored).toBe(original);
   });
 
   it('writes no bridge row on a toggle, and does write one when the file moved out of band', async () => {
@@ -165,8 +167,8 @@ describe('cpm toggle records what it flipped (Streamable HTTP)', () => {
     json('toggle', 'framework', 'control_fw');
 
     expect(rows('framework', 'parity_fw').map((row) => row.description)).toEqual([
-      'Created via resource_manager',
-      'Update via resource_manager',
+      'Created via cpm',
+      'Update via cpm',
     ]);
     const control = rows('framework', 'control_fw').map((row) => row.description);
     expect(control[1]).toContain('Bridge:');

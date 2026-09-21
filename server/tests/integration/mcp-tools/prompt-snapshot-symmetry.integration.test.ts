@@ -24,7 +24,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { canonicalPromptSnapshot } from '../../../src/mcp/tools/resource-manager/prompt/utils/validation.js';
+import { canonicalPromptSnapshot } from '../../../src/modules/versioning/projections/prompt-snapshot.js';
 import { PromptConverter } from '../../../src/modules/prompts/converter.js';
 import { PromptLoader } from '../../../src/modules/prompts/loader.js';
 import { hashCanonical } from '../../../src/shared/utils/hash.js';

@@ -51,7 +51,7 @@ import { PromptAnalyzer } from '../../../src/mcp/tools/resource-manager/prompt/a
 import { FileOperations } from '../../../src/mcp/tools/resource-manager/prompt/operations/file-operations.js';
 import { PromptLifecycleProcessor } from '../../../src/mcp/tools/resource-manager/prompt/services/prompt-lifecycle-processor.js';
 import { PromptVersioningProcessor } from '../../../src/mcp/tools/resource-manager/prompt/services/prompt-versioning-processor.js';
-import { canonicalPromptSnapshot } from '../../../src/mcp/tools/resource-manager/prompt/utils/validation.js';
+import { canonicalPromptSnapshot } from '../../../src/modules/versioning/projections/prompt-snapshot.js';
 import { PREVIEWABLE_ACTIONS_BY_TYPE } from '../../../src/mcp/tools/shared/preview-action.js';
 import { PromptConverter } from '../../../src/modules/prompts/converter.js';
 import { PromptLoader } from '../../../src/modules/prompts/loader.js';

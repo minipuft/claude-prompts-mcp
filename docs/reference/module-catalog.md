@@ -11,9 +11,9 @@ remains in `server/.dependency-cruiser.cjs`.
 | Module | Source path | Kind | Lifecycle | Description | Docs | Public entry | Observed dependencies | Imported by |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `server-source` | `src` | application | canonical | Server source composition root. | — | `index.ts` | cli-shared<br>infra-config<br>infra-logging<br>runtime<br>shared-utils | — |
-| `cli-shared` | `src/cli-shared` | adapter | canonical | Shared implementation used by the standalone CLI integration surface. | — | `index.ts` | engine-frameworks<br>engine-gates<br>formatting<br>prompts<br>resources<br>shared-types<br>shared-utils<br>versioning | infra-database<br>mcp-tools<br>server-source<br>skills-sync<br>versioning |
+| `cli-shared` | `src/cli-shared` | adapter | canonical | Shared implementation used by the standalone CLI integration surface. | — | `index.ts` | engine-execution<br>engine-frameworks<br>engine-gates<br>formatting<br>prompts<br>resources<br>shared-types<br>shared-utils<br>versioning | infra-database<br>mcp-tools<br>server-source<br>skills-sync<br>versioning |
 | `execution-engine` | `src/engine` | layer | canonical | Client-guided execution, framework, and gate decision logic. | — | — | — | — |
-| `engine-execution` | `src/engine/execution` | domain | canonical | Parses commands and coordinates the staged client-guided execution pipeline. | — | — | chains<br>engine-frameworks<br>engine-gates<br>infra-database<br>infra-logging<br>shared-types<br>shared-utils<br>workflow-ir | automation<br>chains<br>engine-frameworks<br>engine-gates<br>mcp-http<br>mcp-tools<br>prompts<br>runtime<br>semantic<br>workflow-ir |
+| `engine-execution` | `src/engine/execution` | domain | canonical | Parses commands and coordinates the staged client-guided execution pipeline. | — | — | chains<br>engine-frameworks<br>engine-gates<br>infra-database<br>infra-logging<br>shared-types<br>shared-utils<br>workflow-ir | automation<br>chains<br>cli-shared<br>engine-frameworks<br>engine-gates<br>mcp-http<br>mcp-tools<br>prompts<br>runtime<br>semantic<br>workflow-ir |
 | `engine-frameworks` | `src/engine/frameworks` | domain | canonical | Loads, validates, selects, and applies reasoning frameworks. | — | — | engine-execution<br>infra-database<br>infra-logging<br>shared-core<br>shared-types<br>shared-utils | cli-shared<br>engine-execution<br>mcp-tools<br>resources<br>runtime |
 | `engine-gates` | `src/engine/gates` | domain | canonical | Selects, enhances, and evaluates quality-gate guidance. | — | — | engine-execution<br>infra-database<br>infra-logging<br>shared-core<br>shared-types<br>shared-utils | cli-shared<br>engine-execution<br>mcp-tools<br>prompts<br>resources<br>runtime<br>skills-sync<br>versioning |
 | `engine-interfaces` | `src/engine/interfaces` | protocol | canonical | Contracts exposed by the execution engine to collaborating layers. | — | — | — | — |
@@ -120,6 +120,7 @@ flowchart LR
   module_chains --> module_shared_types
   module_chains --> module_shared_utils
   module_chains --> module_text_references
+  module_cli_shared -. type .-> module_engine_execution
   module_cli_shared --> module_engine_frameworks
   module_cli_shared --> module_engine_gates
   module_cli_shared --> module_formatting

@@ -14,7 +14,7 @@ import type { CategoryCreationData, CategoryManagerInput } from '../core/types.j
 import { discoverYamlPromptsInCategory } from '#modules/prompts/category-maintenance.js';
 import { purgeHistoryOnDelete } from '#modules/versioning/delete-purge.js';
 import {
-  UPDATE_ROW_DESCRIPTION,
+  updateRowDescription,
   describeVersionRecord,
   projectWriteModel,
 } from '#modules/versioning/index.js';
@@ -157,7 +157,7 @@ export class CategoryLifecycleProcessor {
                 beforeState,
                 afterState,
                 {
-                  description: UPDATE_ROW_DESCRIPTION,
+                  description: updateRowDescription('resource_manager'),
                   diff_summary: `+${diffResult.stats.additions}/-${diffResult.stats.deletions}`,
                 }
               );

@@ -16,6 +16,10 @@
  *
  * **Both polarities are checked.** A command in `CANNOT_RECORD_YET` that HAS started recording
  * fails here too — an exception whose condition no longer holds is a finding, not a pass.
+ *
+ * **The open half is EMPTY as of 2026-09-21**, and the two empty tables carry their own controls
+ * so that emptiness is a measured state rather than an unmaintained one: an empty table makes its
+ * loop vacuous, so each one asserts something that WOULD have failed while it had entries.
  */
 
 import { describe, expect, it } from '@jest/globals';
@@ -48,33 +52,27 @@ const RESOURCE_WRITERS = [
 const VERSION_RECORDERS = ['rollbackVersion', 'recordResourceWrite', 'saveVersion'];
 
 /** The closed half: writes a resource AND records what the write produced. */
-const RECORDS_A_VERSION = ['rollback', 'create', 'toggle'];
+const RECORDS_A_VERSION = ['rollback', 'create', 'toggle', 'link-gate'];
 
 /**
  * Records for some resource types and, by measurement, cannot yet for others.
  *
  * A third table rather than a second entry in `CANNOT_RECORD_YET`, because a command cannot be in
- * two halves at once and collapsing the distinction loses the fact an operator needs: `cpm create
- * gate` writes a row and `cpm create prompt` does not. Each entry names the types still blocked
- * and is stamped like any other open marker.
+ * two halves at once and collapsing the distinction loses the fact an operator needs: when
+ * `cpm create gate` wrote a row and `cpm create prompt` did not, the reply for one said
+ * `recorded: true` and the other said `recorded: false`.
  *
- * The check below is not "the entry exists": it reads `cli-shared/resource-snapshot.ts` and
- * requires the blocked type to still be absent from the projector table there, so lifting the
- * blocker without moving this entry fails here.
+ * **EMPTY since 2026-09-21, and kept rather than deleted.** `create` was its only entry, blocked
+ * on `prompt`; the prompt projection is now reachable from `cli-shared/`, so every versioned type
+ * a `cpm` command writes records. The table stays because the SHAPE recurs — the next resource
+ * type added arrives unprojected — and because the check below is what makes an entry here
+ * falsifiable. Emptiness is asserted, not assumed: an entry appearing without a blocker that
+ * still holds fails the same check.
  */
 const RECORDS_SOME_TYPES: Record<
   string,
   { blockedTypes: string[]; asOf: string; flipsWhen: string }
-> = {
-  create: {
-    blockedTypes: ['prompt'],
-    asOf: '2026-09-21',
-    flipsWhen:
-      'the prompt projection becomes reachable from `cli-shared` under the dev bundle budget — ' +
-      'measured 2026-09-21 as a reachable import at +59.0 KB, which is 35.5 KB over the ' +
-      '900,000-byte `DEV_BUNDLE_BUDGET_BYTES` and fails `npm run build` outright.',
-  },
-};
+> = {};
 
 /** Writes a resource, and a version row would be wrong rather than missing. */
 const HISTORY_HANDLED_WITHOUT_A_VERSION: Record<string, string> = {
@@ -93,37 +91,21 @@ const HISTORY_HANDLED_WITHOUT_A_VERSION: Record<string, string> = {
 };
 
 /**
- * Writes a resource, records nothing, and CANNOT until the prompt projection is reachable.
+ * Writes a resource, records nothing, and cannot yet — the open half.
  *
- * The blocker moved, and this is what it is now. Until 2026-09-21 the reason was an IMPORT rule:
- * all four `SnapshotContract` implementations lived under `src/mcp/tools/**`, which `cli-shared/`
- * may not reach. That is fixed — gate, framework and category now project from
- * `modules/versioning/projections/`, which both surfaces import, and `cli-shared/
- * resource-snapshot.ts` is the CLI's entry to them.
+ * **EMPTY since 2026-09-21.** Its last entry was `link-gate`, which edits a prompt's
+ * `gateConfiguration` and was blocked by the same thing `cpm create prompt` was: a prompt's
+ * authored state is what the LOADER resolves (`userMessageTemplate` is the inlined body where
+ * `prompt.yaml` holds only `userMessageTemplateFile`), and `cli-shared/` could not reach the
+ * loader. It can now — `canonicalPromptSnapshot` moved to `modules/versioning/projections/` and
+ * `cli-shared/prompt-projection.ts` builds its input through `PromptLoader` + `PromptConverter`,
+ * at a measured +66.2 KB on the 1,000,000-byte `DEV_BUNDLE_BUDGET_BYTES`.
  *
- * What remains is a BUDGET, measured rather than argued. A prompt snapshot is projected from a
- * loader-RESOLVED `ConvertedPrompt` — `userMessageTemplate` is the inlined body where `prompt.yaml`
- * holds only `userMessageTemplateFile` — so building one from the CLI needs `loadYamlPrompt` AND
- * `PromptConverter`. Measured as a reachable import on 2026-09-21: the `cpm` bundle went
- * 855.4 KB → 914.4 KB, **+59.0 KB**, which is 35.5 KB over the 900,000-byte
- * `DEV_BUNDLE_BUDGET_BYTES`, and `npm run build` fails outright. The budget was not raised.
- *
- * Writing a second, YAML-shaped prompt projection instead is the defect this slice exists to
- * remove: the bridge decision is `hashCanonical` equality, so a differently-shaped snapshot can
- * never compare equal and EVERY server edit of a `cpm`-written prompt would bridge.
+ * Kept empty rather than deleted for the reason the table above is: the check below reads BOTH
+ * polarities, so an entry added here must still be unable to record, and a command that starts
+ * recording must leave. An empty table with a live check is a gate; a deleted table is nothing.
  */
-const CANNOT_RECORD_YET: Record<string, { asOf: string; flipsWhen: string }> = {
-  // `link-gate` edits a PROMPT's `gateConfiguration`, so it is blocked by the prompt projection
-  // and by nothing else: gates and frameworks already record through `cpm create` and
-  // `cpm toggle`.
-  'link-gate': {
-    asOf: '2026-09-21',
-    flipsWhen:
-      'the prompt projection becomes reachable from `cli-shared` under the dev bundle budget — ' +
-      'measured 2026-09-21 as a reachable import at +59.0 KB, which is 35.5 KB over the ' +
-      '900,000-byte `DEV_BUNDLE_BUDGET_BYTES` and fails `npm run build` outright.',
-  },
-};
+const CANNOT_RECORD_YET: Record<string, { asOf: string; flipsWhen: string }> = {};
 
 /** The registry, the dispatch and the import list — read, never restated. */
 function commandModules(): Map<string, string> {
@@ -212,6 +194,13 @@ describe('every cpm command that writes a resource is classified against what it
 
   it('has every CANNOT_RECORD_YET entry still unable to — a satisfied exception is a finding', () => {
     const satisfied: string[] = [];
+    // The table is empty today, so the loop below runs zero times. The control for that: the
+    // three commands that USED to be here must now be shown to record, or "empty" is
+    // indistinguishable from "the classification stopped being maintained".
+    for (const name of ['create', 'toggle', 'link-gate']) {
+      const source = sourceOf.get(modules.get(name)!)!;
+      expect(calls(source, VERSION_RECORDERS).length).toBeGreaterThan(0);
+    }
     for (const [name, marker] of Object.entries(CANNOT_RECORD_YET)) {
       // Both halves stamped: a `☐` with no as-of date and no falsifier is not actionable.
       expect(marker.asOf).toMatch(/^\d{4}-\d{2}-\d{2}$/);
@@ -245,9 +234,16 @@ describe('every cpm command that writes a resource is classified against what it
         expect(new RegExp(`^\\s{2}${blocked}:`, 'm').test(projectorKeys![1]!)).toBe(false);
       }
     }
-    // The control: a type that IS projected is found by the same match, so a regex that stopped
-    // matching anything could not report every blocked type as still blocked.
+    // The control, and it is load-bearing now that the table is empty: the loop above runs zero
+    // times, so nothing in it can fail. These three assert the PROJECTOR TABLE the loop reads is
+    // the real one and holds every type — which is exactly why the table above is empty. A regex
+    // that stopped matching would fail here rather than passing an empty loop.
     expect(/^\s{2}gate:/m.test(projectorKeys![1]!)).toBe(true);
+    expect(/^\s{2}framework:/m.test(projectorKeys![1]!)).toBe(true);
+    expect(/^\s{2}prompt:/m.test(projectorKeys![1]!)).toBe(true);
+    // The negative control for the same regex: a type the table does not carry is NOT matched, so
+    // a pattern that matched everything could not report a blocked type as blocked.
+    expect(/^\s{2}style:/m.test(projectorKeys![1]!)).toBe(false);
   });
 
   it('has cpm create name the created directory as its rollback target', () => {
@@ -280,6 +276,16 @@ describe('every cpm command that writes a resource is classified against what it
     // rewrites `framework.yaml` alone, so a DIRECTORY target would also put back a
     // `system-prompt.md` this write never touched.
     const source = sourceOf.get(modules.get('toggle')!)!;
+    expect(source).toContain("targets: [{ path: match.file, kind: 'file' }]");
+    expect(source).not.toContain("kind: 'directory'");
+  });
+
+  it('has cpm link-gate name the prompt ENTRY FILE as its rollback target, not the directory', () => {
+    // Same class as the create and toggle rows above, and the same mutant stayed green on both:
+    // an empty `targets` restores nothing when the record fails. The value matters twice here —
+    // a single-file prompt's DIRECTORY is its category, so a directory target would snapshot and
+    // restore every sibling prompt in it.
+    const source = sourceOf.get(modules.get('link-gate')!)!;
     expect(source).toContain("targets: [{ path: match.file, kind: 'file' }]");
     expect(source).not.toContain("kind: 'directory'");
   });
