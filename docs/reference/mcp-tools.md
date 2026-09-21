@@ -892,21 +892,81 @@ Only the last row destroys a file you sent no replacement for, which is why it i
 
 ### Undeclared parameters
 
-`resource_manager` refuses a key its contract does not declare, naming the key:
+**All three tools refuse an argument key their contract does not declare, naming the key.** This is
+a security property, not a tidiness one — see [Why this is a security
+property](#why-this-is-a-security-property) below.
 
 ```
 'chain_step' is not a parameter of resource_manager.
+'force_restrt' is not a parameter of prompt_engine.  Did you mean 'force_restart'?
+'previw' and 'confirmed' are not parameters of system_control.
 ```
 
-This is the other half of the per-type refusal above. A parameter that IS declared but belongs to
-another `resource_type` is refused naming the types that read it; a key declared nowhere is refused
-naming only itself — the contract is one `action:"guide"` away, and reprinting seventy names to
-correct one typo buries the correction. Both refusals happen before dispatch, so nothing is written
-and no version is spent.
+One refusal serves all three (`server/src/mcp/tools/shared/undeclared-parameters.ts`). It reads the
+declared key set from the tool's **contract** (`server/tooling/contracts/*.json`) — the same set
+`tools/list` publishes and a client validates against — names **every** undeclared key in one
+message, and suggests the nearest declared name when the spelling is close (`enforcementMode` →
+`enforcement_mode`). The refusal happens before dispatch, so nothing is written and no version is
+spent.
 
-Until this refusal, an undeclared key was accepted, read by nobody, and the call answered success —
-the same silent no-op that made a `resource_type:"framework"` call with `unset` report a change it
-never made. A misspelled parameter now fails loudly instead of doing nothing quietly.
+`resource_manager` has a second, narrower refusal beside it: a parameter that IS declared but
+belongs to another `resource_type` is refused naming the types that read it (see the per-type
+refusal above). That one names only the first offender, because the owner list is the same
+correction for all of them.
+
+#### A declared parameter the current state does not advertise
+
+`prompt_engine` publishes a **union**: `gates`, `gate_verdict` and `gate_action` appear in
+`tools/list` only while the gate system is enabled. A client holding a stale `tools/list` that
+still sends one gets its own message, not "not a parameter" — the contract does name it:
+
+```
+'gate_verdict' is a parameter of prompt_engine, but not one this server is advertising right now:
+the gate system is disabled, so nothing reads a gate parameter. Enable it with
+`system_control action:"gates", operation:"enable"`, or drop it from this call.
+```
+
+#### Why this is a security property
+
+Until this refusal, an undeclared key was accepted, read by nobody, and the call answered
+**success**. Measured over both transports before the fix: `prompt_engine {command, force_restrt}`
+returned a normal prompt list, and `system_control {action:"status", previw:true}` returned a normal
+status overview — both `isError: false`.
+
+The cost is not a dropped convenience flag. A caller — or a model following a prompt-injected
+instruction — that sends a **safety** flag under a slightly wrong name got a success reply while the
+server did the unguarded thing: a `preview` / `confirm` / `persist` typo ran the guarded action
+unguarded.
+This repository has already paid that once, through exactly this mechanism: a `skills_sync` preview
+wrote 33 real files because the registered schema dropped the undeclared flag. Refusing by name
+turns the whole class into a loud error at the boundary.
+
+#### Scope
+
+- **Top-level `arguments` keys only.** `_meta` is a client-protocol field carried on `params`,
+  beside `arguments`, never inside it, so it is out of reach and needs no exemption.
+- **Nested object keys are covered too, by a different mechanism.** Every object schema reachable
+  from a tool's parameters refuses an unknown key, naming the path it sits at
+  (`arguments.0: Unrecognized key: "requred"`). That is zod's own refusal rather than the
+  suggestion-carrying one above: a nested key is rejected during validation, so the call never
+  reaches the handler that would name a correction. `tests/unit/mcp-tools/nested-object-strictness.test.ts`
+  walks the whole reachable graph and fails on any object that is neither closed nor listed below,
+  so a new nested object cannot join the class unclassified.
+- **Deliberately open, with reasons** — the only objects where an unknown key still survives:
+  - the three tools' top-level parameters, so the refusal above can name the key and suggest a fix;
+  - `chain_steps[]` and `chain_step_data`, because a chain step is an opaque object by decision
+    (contrast the sibling `arguments`, which is a typed contract).
+- **`gate_verdict` is refused but its path is not printed.** It is a union of the structured object
+  and the legacy string, and a union failure is reported as one issue whose sub-issues are nested,
+  so a client sees `gate_verdict: Invalid input`. The safety property holds regardless — a
+  misspelled `passed` is rejected outright, where it used to be dropped and leave the field absent,
+  which reads as FAIL. The legacy string form is unchanged.
+- **Published schemas stay open at the top level.** `additionalProperties` is not set to `false` on
+  a tool's own parameters, deliberately: the key has to ARRIVE for the server to name it and suggest
+  a correction. Nested objects DO publish `additionalProperties: false`, which is what lets a client
+  catch a nested typo before it sends.
+- **Script tools are covered too** — see
+  [script-tools.md § Security Model](../guides/script-tools.md#security-model).
 
 ### Chain edges
 
@@ -1055,10 +1115,22 @@ value that outranks all of them permanently — the prompt stops following any l
 category or global default, and only another explicit call moves it again. Set them when this
 prompt must differ from its category; leave them out when it should follow along.
 
-Rollback restores `injection`, `subagent_model` and `agent_type` from the target version's
-snapshot. `register_with_mcp` and `mcp_prompt_mode` keep their current on-disk value across a
-rollback — a recorded value for those two cannot be distinguished from an inherited default in
-older history rows, so restoring one could silently freeze a prompt that never declared it.
+Rollback restores `injection`, `subagent_model`, `agent_type`, `budget` and `artifacts` from the
+target version's snapshot. `register_with_mcp` and `mcp_prompt_mode` keep their current on-disk
+value across a rollback — a recorded value for those two cannot be distinguished from an inherited
+default in older history rows, so restoring one could silently freeze a prompt that never declared
+it.
+
+**A chain's `edges` and its `tools` id list are recorded by no version, and a rollback leaves both
+at their current on-disk value.** Neither survives loading — the loader linearises `edges` into
+step order and drops them, and `tools` survives only as loaded definitions, not as the authored
+ids — so the only source for either is the file itself, which four of the seven places that build
+a prompt snapshot cannot read. Recording them at some of those places and not the others would
+make every prompt edit write a duplicate history row and every prompt write report a false
+post-write verification failure, so they are left out rather than half-recorded. ☐ open as of
+2026-09-20 · closes when a loaded prompt carries the path to its own entry file. Until then, a
+rollback of a chain whose edges have changed restores everything else and leaves the edges alone —
+re-send them with `edges:` on an `update`.
 
 **Gate Parameters:**
 
@@ -1708,6 +1780,13 @@ equals what `inspect` shows (go-forward numbering). If the latest stored snapsho
 the resource's live state before the edit (the first edit after this behavior shipped, or an
 out-of-band file change), a self-healing "Bridge" row is recorded first so no state becomes
 unreachable.
+
+**An edit that changes nothing records nothing.** Both writers — `resource_manager` and `cpm` —
+compare the incoming snapshot against the newest recorded one, inside the same transaction that
+assigns the version number, and skip the insert when they match. The reply says so rather than
+naming a version it did not write: `📜 No change to record — still at version N`. Key ORDER is not
+a difference (two records holding the same data compare equal however their keys were emitted);
+array order is, because the order of `chain_steps` or `arguments` is part of the state.
 
 ### Configuration
 

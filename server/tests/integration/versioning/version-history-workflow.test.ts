@@ -105,7 +105,15 @@ class SimulatedResourceManager {
     data: Record<string, unknown>,
     options?: { skipVersion?: boolean }
   ): Promise<{ success: boolean }> {
-    // Save current state as version before update (unless skipped)
+    // Apply the update, THEN record the state it produced.
+    //
+    // Go-forward numbering (P7): version N holds what edit N produced, which is what every real
+    // processor does via `recordEditResult`. This simulator recorded the PRE-update state instead,
+    // a pre-P7 shape that never matched production and is now visibly wrong: the first such
+    // snapshot is byte-identical to the one `create` just wrote, and an unchanged write no longer
+    // spends a version. The old shape also never recorded the final state at all.
+    this.currentState = { ...this.currentState, ...data };
+
     if (
       !options?.skipVersion &&
       this.versionHistoryService.isAutoVersionEnabled() &&
@@ -115,12 +123,9 @@ class SimulatedResourceManager {
         this.resourceType,
         this.resourceId,
         this.currentState,
-        { description: 'Pre-update snapshot' }
+        { description: 'Post-update snapshot' }
       );
     }
-
-    // Apply update
-    this.currentState = { ...this.currentState, ...data };
 
     return { success: true };
   }
@@ -356,8 +361,8 @@ describe('Version History Workflow Integration', () => {
       expect(alphaRows.map((r) => r.version)).toEqual([1, 2]);
 
       // Reads are scoped too, not just writes: alpha sees its own two versions and none of beta's.
-      expect(await alpha.getLatestVersion('prompt', 'shared-id')).toBe(2);
-      expect(await beta.getLatestVersion('prompt', 'shared-id')).toBe(1);
+      expect((await alpha.loadHistory('prompt', 'shared-id'))?.current_version).toBe(2);
+      expect((await beta.loadHistory('prompt', 'shared-id'))?.current_version).toBe(1);
     });
 
     /**
@@ -664,6 +669,53 @@ describe('Version History Workflow Integration', () => {
       expect(written).not.toHaveProperty('systemMessageFile');
 
       expect(onRefreshCalls).toBe(1);
+    });
+
+    /**
+     * P4.83 — `budget` and `artifacts` are recorded and restored, through the writer that keeps
+     * the file's comments.
+     *
+     * Before this row the snapshot omitted both, so the writer's on-disk preservation carried the
+     * CURRENT value forward on every rollback: a chain rolled back to a version with a different
+     * budget silently kept today's, under a message saying version 1 had been restored. The
+     * authored comment is asserted alongside, because a restore that put the declaration back
+     * while stripping the file's comments trades one loss for another.
+     */
+    it('restores the recorded budget and artifacts, keeping the file comments', async () => {
+      await seedDivergedPrompt({
+        budget: { maxInsertions: 3 },
+        artifacts: { produces: ['plan'] },
+      });
+
+      // The CURRENT on-disk declaration differs from the recorded one, and carries a comment the
+      // writer never produced — so a passing assertion cannot be the writer agreeing with itself.
+      const yamlPath = path.join(promptsDir, CATEGORY, PROMPT_ID, 'prompt.yaml');
+      await fs.writeFile(
+        yamlPath,
+        `${await fs.readFile(yamlPath, 'utf8')}\n# authored by hand, must survive a rollback\n` +
+          `budget:\n  maxInsertions: 1\nartifacts:\n  produces:\n    - docs\n`,
+        'utf8'
+      );
+      convertedPrompts[0]!['budget'] = { maxInsertions: 1 };
+      convertedPrompts[0]!['artifacts'] = { produces: ['docs'] };
+
+      // Positive control: the probe reads a file that really does hold the live values first.
+      expect(readPromptYaml()['budget']).toEqual({ maxInsertions: 1 });
+
+      const response = await processor.handleRollback({
+        action: 'rollback',
+        id: PROMPT_ID,
+        version: 1,
+        confirm: true,
+      });
+      expect(response.isError).toBe(false);
+
+      const written = readPromptYaml();
+      expect(written['budget']).toEqual({ maxInsertions: 3 });
+      expect(written['artifacts']).toEqual({ produces: ['plan'] });
+      expect(await fs.readFile(yamlPath, 'utf8')).toContain(
+        '# authored by hand, must survive a rollback'
+      );
     });
 
     it('restores an authored field the live prompt overwrote', async () => {

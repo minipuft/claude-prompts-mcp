@@ -39,7 +39,7 @@ import {
  * Mirrors `PromptArgumentSchema` (prompt-schema.ts) field for field, deliberately — see the
  * `arguments` parameter comment below for why every field stays optional rather than defaulted.
  */
-const promptArgumentSchema = z.object({
+const promptArgumentSchema = z.strictObject({
   name: z.string(),
   type: z.enum(['string', 'number', 'boolean', 'object', 'array']).optional(),
   description: z.string().optional(),
@@ -70,7 +70,7 @@ const promptArgumentSchema = z.object({
 // `generic-framework-guide.ts`), the shape mirrors that engine reader instead.
 
 /** Mirrors `FrameworkGateSchema` (framework-schema.ts:18). Only `id` and `name` are required. */
-const frameworkGateSchema = z.object({
+const frameworkGateSchema = z.strictObject({
   id: z.string().min(1),
   name: z.string().min(1),
   description: z.string().optional(),
@@ -82,7 +82,7 @@ const frameworkGateSchema = z.object({
 });
 
 /** Mirrors `TemplateSuggestionSchema` (framework-schema.ts:34). */
-const templateSuggestionSchema = z.object({
+const templateSuggestionSchema = z.strictObject({
   section: z.enum(['system', 'user']),
   type: z.enum(['addition', 'structure', 'modification']),
   description: z.string().optional(),
@@ -92,7 +92,7 @@ const templateSuggestionSchema = z.object({
 });
 
 /** Mirrors `PhaseGuardSchema` (framework-schema.ts:48) — deterministic per-section checks. */
-const phaseGuardSchema = z.object({
+const phaseGuardSchema = z.strictObject({
   required: z.boolean().optional(),
   min_length: z.number().int().positive().optional(),
   max_length: z.number().int().positive().optional(),
@@ -103,7 +103,7 @@ const phaseGuardSchema = z.object({
 });
 
 /** Mirrors `ProcessingStepSchema` (framework-schema.ts:63), a `phases.yaml` member. */
-const processingStepSchema = z.object({
+const processingStepSchema = z.strictObject({
   id: z.string().min(1),
   name: z.string().min(1),
   description: z.string().min(1),
@@ -115,7 +115,7 @@ const processingStepSchema = z.object({
 });
 
 /** Mirrors `ExecutionStepSchema` (framework-schema.ts:79), a `phases.yaml` member. */
-const executionStepSchema = z.object({
+const executionStepSchema = z.strictObject({
   id: z.string().min(1),
   name: z.string().min(1),
   action: z.string().min(1),
@@ -133,7 +133,7 @@ const executionStepSchema = z.object({
  * populate `required_patterns`. Author a reminder sentence into `guidance` instead, or use
  * `shell_verify`/`script_tool` for a real check.
  */
-export const gatePassCriteriaSchema = z.object({
+export const gatePassCriteriaSchema = z.strictObject({
   type: z
     .enum(['inline_guidance', 'framework_compliance', 'shell_verify', 'script_tool'])
     .optional(),
@@ -145,7 +145,7 @@ export const gatePassCriteriaSchema = z.object({
   quality_indicators: z
     .record(
       z.string(),
-      z.object({
+      z.strictObject({
         keywords: z.array(z.string()).optional(),
         patterns: z.array(z.string()).optional(),
       })
@@ -283,7 +283,7 @@ export const resourceManagerInputSchema = z
      */
     patch: z
       .array(
-        z.object({
+        z.strictObject({
           field: z.enum(PATCH_TARGET_FIELDS),
           old_string: z.string().min(1),
           new_string: z.string(),
@@ -546,7 +546,7 @@ export const resourceManagerInputSchema = z
      * (as `frameworkElements`). Read by `generic-framework-guide.ts` to build creation guidance.
      */
     framework_elements: z
-      .object({
+      .strictObject({
         requiredSections: z.array(z.string()),
         optionalSections: z.array(z.string()).optional(),
         sectionDescriptions: z.record(z.string(), z.string()),
@@ -558,7 +558,7 @@ export const resourceManagerInputSchema = z
      */
     argument_suggestions: z
       .array(
-        z.object({
+        z.strictObject({
           name: z.string().min(1),
           type: z.enum(['string', 'array', 'object', 'boolean', 'number']),
           description: z.string(),
@@ -577,7 +577,7 @@ export const resourceManagerInputSchema = z
     execution_type_enhancements: z.record(z.string(), z.unknown()).optional(),
     /** [Framework] System/user prompt additions and contextual hints → `phases.yaml`. */
     template_enhancements: z
-      .object({
+      .strictObject({
         systemPromptAdditions: z.array(z.string()).optional(),
         userPromptModifications: z.array(z.string()).optional(),
         contextualHints: z.array(z.string()).optional(),
@@ -585,7 +585,7 @@ export const resourceManagerInputSchema = z
       .optional(),
     /** [Framework] Pre/post/validation hooks around execution → `phases.yaml`. */
     execution_flow: z
-      .object({
+      .strictObject({
         preProcessingSteps: z.array(z.string()).optional(),
         postProcessingSteps: z.array(z.string()).optional(),
         validationSteps: z.array(z.string()).optional(),

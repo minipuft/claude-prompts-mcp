@@ -239,7 +239,7 @@ export class ResponseAssembler {
    */
   formatBlockedResponse(context: ExecutionContext): string {
     const blockedGateIds = context.state.gates.blockedGateIds ?? [];
-    const gateInstructions = context.gateInstructions ?? '';
+    const gateInstructions = this.resolveBlockedReviewInstructions(context);
 
     const sections: string[] = [
       '## ⛔ Response Blocked',
@@ -261,10 +261,17 @@ export class ResponseAssembler {
       sections.push('');
     }
 
+    sections.push('---');
+    sections.push('');
     if (gateInstructions !== '') {
-      sections.push('---');
-      sections.push('');
       sections.push(gateInstructions);
+    } else {
+      // Never silently. A block with no criteria is a retry loop with nothing to act on, and the
+      // omission used to be invisible: the `if` above simply skipped the section. Say which piece
+      // is missing so the absence is a report rather than a shorter response.
+      sections.push(
+        '**Gate review instructions are unavailable for this call** — the gate criteria could not be rendered. Inspect the gate definitions named above.'
+      );
     }
 
     sections.push('');
@@ -807,6 +814,36 @@ export class ResponseAssembler {
       failed.set(entry.gateId, rationale.length > 0 ? rationale : 'no rationale given');
     }
     return failed;
+  }
+
+  /**
+   * The gate review instructions a blocked response carries — the one thing a blocked caller can
+   * act on, from whichever of the two places this call actually put it.
+   *
+   * `context.gateInstructions` is written by gate enhancement on the SINGLE-PROMPT path only
+   * (`GateEnhancementService`, the enhanced-template tail). On a chain step the per-step gate text
+   * goes to `step.metadata['gateInstructions']` instead, and the rendered review — criteria,
+   * attempt counter, resubmit schema — is what `GateReviewStage` put in `context.executionResults`.
+   * Reading only the first field meant every blocked CHAIN step returned a stub naming the gates
+   * and nothing else, while `blockResponseOnFail`'s contract is that the review instructions ARE
+   * returned. Measured 2026-09-20: 291 characters, no criteria, no attempt counter.
+   *
+   * The execution result is admitted by its own predicate — `metadata.gateReview` present — not by
+   * merely existing. That metadata is stamped only by the review render, so the content is
+   * instruction text; on any other path `executionResults` holds the model output this block
+   * exists to suppress, and returning it would defeat the block. Verified on the render: it
+   * carries no `user_response` text.
+   */
+  private resolveBlockedReviewInstructions(context: ExecutionContext): string {
+    const enhanced = context.gateInstructions ?? '';
+    if (enhanced.trim() !== '') {
+      return enhanced;
+    }
+
+    const results = context.executionResults;
+    const isGateReviewRender = results?.metadata?.['gateReview'] !== undefined;
+
+    return isGateReviewRender && typeof results?.content === 'string' ? results.content : '';
   }
 
   /**

@@ -508,14 +508,58 @@ Scripts run like npm/pip packages: you trust the author. Version-control and cod
 
 ### Protections
 
-| Protection             | What It Does                                  |
-| ---------------------- | --------------------------------------------- |
-| Process isolation      | Separate subprocess per script                |
-| Timeout                | Default 30s, max 5min — kills runaway scripts |
-| Working directory      | Locked to tool folder                         |
-| Env filtering          | Only safe vars inherited (no leaked API keys) |
-| Input validation       | JSON Schema checked before execution          |
-| Auto-execute whitelist | Only approved MCP tools can trigger           |
+| Protection             | What It Does                                              |
+| ---------------------- | --------------------------------------------------------- |
+| Process isolation      | Separate subprocess per script                            |
+| Timeout                | Default 30s, max 5min — kills runaway scripts             |
+| Working directory      | Locked to tool folder                                     |
+| Env filtering          | Only safe vars inherited (no leaked API keys)             |
+| Input validation       | JSON Schema checked before execution                      |
+| Auto-execute whitelist | Only approved MCP tools can trigger                       |
+| Auto-execute params    | Refused by name if the tool does not declare them         |
+| Auto-execute schema    | Validated against the same schema an MCP client's call is |
+| Auto-execute result    | A refusal fails the run; it is never reported as success  |
+
+### Auto-execute parameters are checked, not forwarded
+
+A script's stdout is the one place in this server where non-operator-authored text decides a
+resource mutation's parameters. An `auto_execute.params` object carrying a key `resource_manager`
+does not declare is refused before the call, and the refusal becomes `prompt_engine`'s error,
+naming both the script and the key:
+
+```
+Script tool 'my_tool' emitted an auto_execute call that is refused.
+'enforcementMode' is not a parameter of resource_manager.  Did you mean 'enforcement_mode'?
+```
+
+Before this, such a key was dropped and the mutation ran with a success reply — so a script that
+believed it was emitting `preview_action` but spelled it `previewAction` performed the real write.
+The same rule the MCP boundary applies
+([mcp-tools.md § Undeclared parameters](../reference/mcp-tools.md#undeclared-parameters)) now
+applies here, which is why the bundled tools remap `enforcementMode` → `enforcement_mode` rather
+than emitting the camelCase spelling.
+
+### A refused auto-execute fails the run
+
+Every OTHER way `resource_manager` can say no — a parameter the resource type does not own, an
+unconfirmed destructive action, a target that does not exist, a value of the wrong type — comes
+back as an error reply rather than being caught before the call. Those replies used to be stored
+in the run's script results and logged, and nothing read them, so the prompt rendered normally and
+`prompt_engine` answered success over a mutation that never happened.
+
+The run now fails, naming the script tool and carrying `resource_manager`'s own message verbatim:
+
+```
+Script tool 'my_tool' emitted an auto_execute call that resource_manager refused.
+❌ 'unset' is not a parameter of resource_type:"gate" — it is read only by resource_type:"prompt".
+```
+
+A script's emitted parameters are also validated against the **same** `resource_manager` schema an
+MCP client's call is validated against. The in-process path previously ran none, so a script could
+send `limit: "not-a-number"` — a shape no client could — and reach the router untyped.
+
+An accepted `auto_execute` is unaffected: it runs, `{{tool_<id>_result}}` holds its reply, and the
+prompt renders as before.
 
 ### Environment Variables
 

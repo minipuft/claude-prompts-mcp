@@ -147,13 +147,28 @@ describe('resource_manager argument contract', () => {
     ).toThrow();
   });
 
-  it('still strips an unrecognised argument key', () => {
-    // OQ-P7-2: explicit fields, not `.passthrough()`. The sibling `chain_steps` IS passthrough
-    // because a step is an opaque object; an argument is a typed contract and passthrough would
-    // admit arbitrary keys into persisted YAML.
-    const [arg] = parseArguments([{ name: 'feature', requred: true }]);
+  it('REFUSES an unrecognised argument key, naming its path', () => {
+    // OQ-P7-2 gave this schema explicit fields rather than `.passthrough()`, so an arbitrary key
+    // could not reach persisted YAML. It was STRIPPED, which served that intent and nothing else:
+    // the author who typed `requred` was told their argument was written, and it was — without
+    // the field they meant. P4.97 refuses instead, which serves the same intent AND says so.
+    expect(() => parseArguments([{ name: 'feature', requred: true }])).toThrow(
+      /Unrecognized key: \\"requred\\"/
+    );
 
-    expect(arg).not.toHaveProperty('requred');
+    try {
+      parseArguments([{ name: 'feature', requred: true }]);
+    } catch (error) {
+      // Names WHICH element, not merely that something was wrong.
+      const issues = (error as { issues?: { path: (string | number)[] }[] }).issues ?? [];
+      expect(issues[0]?.path).toEqual(['arguments', 0]);
+    }
+  });
+
+  it('CONTROL: the correctly spelled key still parses', () => {
+    const [arg] = parseArguments([{ name: 'feature', required: true }]);
+
+    expect(arg).toHaveProperty('required', true);
   });
 });
 

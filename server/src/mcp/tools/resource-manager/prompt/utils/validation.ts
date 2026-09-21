@@ -162,7 +162,7 @@ function describeUnsettableRefusal(name: string): string {
 }
 
 /**
- * The three preserved fields the canonical snapshot projects, and the two it cannot.
+ * The preserved fields the canonical snapshot projects, and the ones it cannot.
  *
  * A field belongs here only when the projection SOURCE holds its authored value. `ConvertedPrompt`
  * copies `subagentModel` and `agentType` verbatim from the prompt's own YAML (converter.ts:165-169,
@@ -177,11 +177,30 @@ function describeUnsettableRefusal(name: string): string {
  * default it was inheriting, on every edit, without anyone asking. That is DEV-T1-3's hazard made
  * unconditional. They reach the YAML only when a caller sets them explicitly.
  */
+/*
+ * `budget` and `artifacts` joined at P4.83, and they pass the same test the four above do: the
+ * converter copies each verbatim from the prompt's own YAML behind a `!== undefined` guard
+ * (converter.ts:177-178, :192-193), so present-on-the-source means authored, and absent stays
+ * absent. Until then the snapshot omitted them, which made a rollback unable to restore either —
+ * the writer's on-disk preservation carried the CURRENT value forward instead, so rolling a chain
+ * back to a version with a different `budget` silently kept today's.
+ *
+ * `edges` and the authored `tools` id list are the half of P4.83 this list CANNOT close, and the
+ * reason is a property of the source rather than a judgement: `ConvertedPrompt` carries neither
+ * (the loader linearises edges into `chainSteps` order and drops them; `tools` survives only as
+ * loaded `scriptTools` definitions, not as the authored ids). Their only readable source is the
+ * on-disk YAML, which four of this function's seven call sites cannot reach — see the note on
+ * `canonicalPromptSnapshot` below. Recorded as open, with the condition that closes it, rather
+ * than half-projected: a field present on the record side and absent on the compare side bridges
+ * every edit into a durable table, silently.
+ */
 export const SNAPSHOT_PRESERVED_FIELDS = [
   'composer',
   'injection',
   'subagentModel',
   'agentType',
+  'budget',
+  'artifacts',
 ] as const;
 
 /**
@@ -197,6 +216,21 @@ export const SNAPSHOT_PRESERVED_FIELDS = [
  * plus `tools` (which only ever arrives via `args.tools` — the live prompt carries loaded
  * `scriptTools`, not the raw id list, so the prior value is not reconstructable here and the key
  * is deliberately absent).
+ *
+ * **This function takes ONE source, and that bounds what P4.83 could close.** `edges` and the
+ * authored `tools` id list live only in the on-disk YAML, and of the seven call sites here, four
+ * cannot reach it: `prompt-discovery-processor` and `prompt-mutation-receipt-service` hold no
+ * `FileOperations` at all, and `ConvertedPrompt` records no path to its own entry file (only
+ * `sourceRoot`, the root), so even the two sites that do hold one would have to re-derive the
+ * loader's single-file-vs-directory layout rule. Adding the YAML as a second source WITHOUT
+ * reaching every site forks the projection, and a forked projection is not a cosmetic gap: the
+ * receipt compares `canonicalPromptSnapshot(writeModel)` against
+ * `canonicalPromptSnapshot(reloadedPrompt)`, so a YAML-fed write model versus a loader-fed reload
+ * would report `❌ Post-write verification failed (mismatched: edges, tools)` on every prompt
+ * write, and `recordEditResult` would bridge every edit into a durable table. ☐ open as of
+ * 2026-09-20 · closes when `ConvertedPrompt` carries its own entry path (one field, stamped by
+ * the converter where `promptDir` already is) so every call site can read the YAML from the
+ * source it already holds — at which point `edges` and `tools` join the list above.
  *
  * The `SNAPSHOT_PRESERVED_FIELDS` tail (OQ-P7-8) is preserve-if-present, never defaulted: absent
  * on the source stays absent from the projection. Without it a recorded snapshot omits a field the

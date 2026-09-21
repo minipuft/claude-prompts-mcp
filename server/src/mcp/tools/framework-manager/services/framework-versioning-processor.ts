@@ -8,7 +8,11 @@ import type { ToolResponse } from '#shared/types/index.js';
 import type { FrameworkResourceContext } from '../core/context.js';
 import type { FrameworkManagerInput } from '../core/types.js';
 
-import { describeIncompleteSnapshot, describeRollbackPreview } from '#modules/versioning/index.js';
+import {
+  describeIncompleteSnapshot,
+  describeRollbackPreview,
+  describeRollbackRecord,
+} from '#modules/versioning/index.js';
 
 export class FrameworkVersioningProcessor {
   constructor(private readonly ctx: FrameworkResourceContext) {}
@@ -108,7 +112,7 @@ export class FrameworkVersioningProcessor {
     //
     // Fields outside the projection are carried forward by the writer's deep merge over the
     // existing YAML, which is why they are not in the projection to begin with.
-    let restoredVersion: number | undefined;
+    let restoreOutcome: { version?: number; recorded: boolean } | undefined;
     let recordFailure: string | undefined;
 
     const writeResult = await this.ctx.fileService.writeFrameworkFiles(
@@ -124,7 +128,7 @@ export class FrameworkVersioningProcessor {
               snapshot,
               { description: `Rollback to v${version}`, diff_summary: '' }
             );
-            restoredVersion = saveResult.version;
+            restoreOutcome = saveResult;
           } catch (error) {
             recordFailure = error instanceof Error ? error.message : String(error);
             throw error;
@@ -142,7 +146,7 @@ export class FrameworkVersioningProcessor {
         : this.error(`Rollback write failed: ${writeResult.error}`);
     }
 
-    if (restoredVersion === undefined) {
+    if (restoreOutcome === undefined) {
       // Unreachable: `commit` either assigns or throws, and a throw fails the write above. Loud
       // rather than defaulted, because a rollback that silently reported no version would be the
       // unrecorded-write defect this row exists to close, wearing a nicer number.
@@ -162,7 +166,7 @@ export class FrameworkVersioningProcessor {
 
     let response =
       `✅ Framework '${id}' rolled back to version ${version}\n\n` +
-      `📜 Restored state recorded as version ${restoredVersion}\n`;
+      `${describeRollbackRecord(restoreOutcome)}\n`;
 
     // A merge writer cannot remove a key, so a field the snapshot never recorded keeps its
     // current value. Saying so is the difference between a partial restore and a partial restore

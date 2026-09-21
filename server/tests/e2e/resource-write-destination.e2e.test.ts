@@ -216,7 +216,9 @@ describe('resource writes resolve through PathResolver (D8 Arc 1)', () => {
       type: 'validation',
       description: 'Asserts gate writes honor MCP_RESOURCES_PATH.',
       guidance: 'probe guidance',
-      pass_criteria: [{ type: 'inline_guidance', description: 'probe criterion' }],
+      // `description` is not a declared pass-criterion field. It used to be stripped here, so
+      // this fixture believed it wrote a criterion description and did not (P4.97).
+      pass_criteria: [{ type: 'inline_guidance', severity: 'warn' }],
     });
 
     expect(result.isError).toBe(false);

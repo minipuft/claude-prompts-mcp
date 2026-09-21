@@ -19,14 +19,14 @@
 import { z } from 'zod/v4';
 
 /** Quick inline gate: {name, description} */
-export const customCheckSchema = z.object({
+export const customCheckSchema = z.strictObject({
   name: z.string().min(1, 'Custom check name cannot be empty'),
   description: z.string().min(1, 'Custom check description cannot be empty'),
 });
 
 /** Full gate definition with optional fields */
 export const temporaryGateObjectSchema = z
-  .object({
+  .strictObject({
     id: z.string().min(1, 'Gate ID cannot be empty').optional(),
     template: z.string().min(1, 'Template reference cannot be empty').optional(),
     name: z.string().optional(),

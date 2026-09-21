@@ -70,8 +70,17 @@ export class ResourceManagerRouter {
   ): Promise<ToolResponse> {
     const { resource_type, action } = args;
 
-    // Note: resource_type and action are validated by Zod schema before reaching here.
-    // The types guarantee they are present and valid.
+    // `resource_type` and `action` have been parsed against `resourceManagerInputSchema` before
+    // reaching here, so the types hold. That is true of BOTH callers, but for different reasons,
+    // and the distinction cost a defect: the registered path gets it from the MCP SDK, which
+    // parses `params.arguments` against the schema and hands this handler the parsed value; the
+    // in-process path (a script tool's `auto_execute`, stage 09) used to arrive through an
+    // `as any` with nothing parsed at all. `getResourceManagerHandler` now runs the same schema
+    // — the one SSOT, not a second validator — so this note describes both again.
+    //
+    // What the schema does NOT decide, and this router does below: whether the action is legal
+    // for the resource type, whether a parameter belongs to it, and whether a destructive action
+    // was confirmed.
 
     // Validate action is valid for this specific resource_type
     const validationResult = this.validateActionForResourceType(resource_type, action);

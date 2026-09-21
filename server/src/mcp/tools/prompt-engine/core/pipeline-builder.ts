@@ -13,6 +13,8 @@
  *                 └── PipelineStage[] (22 stages)
  */
 
+import { describeUndeclaredParameterRefusal } from '../../shared/undeclared-parameters.js';
+
 import type { GateService } from '#engine/gates/services/gate-service-interface.js';
 import type { PipelineDependencies } from './pipeline-dependencies.js';
 
@@ -199,7 +201,9 @@ export class PipelineBuilder {
     // Script auto-execute stage
     const scriptAutoExecuteStage = new ScriptAutoExecuteStage(
       this.resolveResourceManagerHandler(),
-      deps.logger
+      deps.logger,
+      // The same refusal the tool boundary runs, injected because layer 2 may not import layer 4.
+      (params) => describeUndeclaredParameterRefusal('resource_manager', params)
     );
 
     // ── Stages 10-15: Judge, Gates, Framework, Session, Injection ──

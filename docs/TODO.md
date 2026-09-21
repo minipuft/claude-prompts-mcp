@@ -38,7 +38,9 @@ What's next for Claude Prompts MCP.
 
 **Solution**: Run a prompt N times with variations. Score against gates automatically. Surface the winner.
 
-**Expect**:
+**Expect** — a SKETCH of a surface that does not exist. `optimize` is not a declared
+`prompt_engine` parameter, and the server refuses an undeclared argument key by name, so this is
+not a call anyone can make today:
 
 ```
 prompt_engine(command:">>code_review", optimize:{runs:10, gate:"quality-score"})
@@ -55,7 +57,8 @@ prompt_engine(command:">>code_review", optimize:{runs:10, gate:"quality-score"})
 
 **Solution**: Optional remote sync. Push/pull to shared workspace. Usage stats across team.
 
-**Expect**:
+**Expect** — a SKETCH, on the same terms as above. Neither `action:"push"` nor `workspace` is
+declared, and both would be refused by name:
 
 ```
 resource_manager(resource_type:"prompt", action:"push", workspace:"team-acme")

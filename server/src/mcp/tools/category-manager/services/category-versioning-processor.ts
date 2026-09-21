@@ -9,7 +9,11 @@ import type { ToolResponse } from '#shared/types/index.js';
 import type { CategoryResourceContext } from '../core/context.js';
 import type { CategoryManagerInput } from '../core/types.js';
 
-import { describeIncompleteSnapshot, describeRollbackPreview } from '#modules/versioning/index.js';
+import {
+  describeIncompleteSnapshot,
+  describeRollbackPreview,
+  describeRollbackRecord,
+} from '#modules/versioning/index.js';
 
 export class CategoryVersioningProcessor {
   constructor(private readonly ctx: CategoryResourceContext) {}
@@ -102,7 +106,7 @@ export class CategoryVersioningProcessor {
     // PHASE 2 + 3 — write and record as ONE transaction (P4.2 / SF-3). The record runs inside the
     // write's transaction after verification, so a failed write records nothing and a failed
     // record restores the file.
-    let restoredVersion: number | undefined;
+    let restoreOutcome: { version?: number; recorded: boolean } | undefined;
     let recordFailure: string | undefined;
 
     const writeResult = await this.ctx.categoryFileService.writeCategoryFiles(restore.writeModel, {
@@ -115,7 +119,7 @@ export class CategoryVersioningProcessor {
             snapshot,
             { description: `Rollback to v${version}`, diff_summary: '' }
           );
-          restoredVersion = saveResult.version;
+          restoreOutcome = saveResult;
         } catch (error) {
           recordFailure = error instanceof Error ? error.message : String(error);
           throw error;
@@ -132,7 +136,7 @@ export class CategoryVersioningProcessor {
         : this.error(`Rollback write failed: ${writeResult.error}`);
     }
 
-    if (restoredVersion === undefined) {
+    if (restoreOutcome === undefined) {
       // Unreachable: `commit` either assigns or throws, and a throw fails the write above.
       throw new Error(
         `Rollback of category '${id}' reported a successful write without recording a version`
@@ -143,7 +147,7 @@ export class CategoryVersioningProcessor {
 
     return this.success(
       `✅ Category '${id}' rolled back to version ${version}\n\n` +
-        `📜 Restored state recorded as version ${restoredVersion}\n` +
+        `${describeRollbackRecord(restoreOutcome)}\n` +
         `🔄 Prompt data reloaded with the restored declaration`
     );
   }

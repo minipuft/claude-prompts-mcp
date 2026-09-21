@@ -48,6 +48,7 @@ import type { PromptResourceInput } from '../../core/types.js';
 
 import { PromptReferenceValidator } from '#engine/execution/reference/index.js';
 import { purgeHistoryOnDelete } from '#modules/versioning/delete-purge.js';
+import { describeVersionRecord } from '#modules/versioning/index.js';
 import { ToolResponse } from '#shared/types/index.js';
 import { PromptError } from '#shared/utils/index.js';
 import { preferredRepairTarget } from '#shared/utils/resource-quarantine.js';
@@ -682,7 +683,7 @@ export class PromptLifecycleProcessor {
     // written and verified, and if it throws the transaction restores them. `versionFailure` is
     // what lets this method still tell an operator WHICH half failed, since both now surface as
     // one rejected write.
-    let versionSaved: number | undefined;
+    let versionOutcome: { version?: number; recorded: boolean } | undefined;
     let versionFailure: string | undefined;
     const skipVersion = args.skip_version === true;
     const commitOptions =
@@ -705,9 +706,9 @@ export class PromptLifecycleProcessor {
                     diff_summary: `+${diffResult.stats.additions}/-${diffResult.stats.deletions}`,
                   }
                 );
-                versionSaved = versionResult.version;
+                versionOutcome = versionResult;
                 this.context.dependencies.logger.debug(
-                  `Saved version ${versionSaved} for prompt ${promptData.id}`
+                  `${versionResult.recorded ? 'Saved' : 'Matched'} version ${versionResult.version} for prompt ${promptData.id}`
                 );
               } catch (error) {
                 versionFailure = error instanceof Error ? error.message : String(error);
@@ -758,8 +759,8 @@ export class PromptLifecycleProcessor {
       response += `🩹 **Patched**: ${patchedFields.map((field) => `\`${field}\``).join(', ')} (${patchOperations.length} operation(s))\n\n`;
     }
 
-    if (versionSaved !== undefined) {
-      response += `📜 **Version ${versionSaved}** saved (use \`action:"history"\` to view)\n\n`;
+    if (versionOutcome !== undefined) {
+      response += `${describeVersionRecord(versionOutcome)}\n\n`;
     }
 
     if (diffResult.hasChanges) {

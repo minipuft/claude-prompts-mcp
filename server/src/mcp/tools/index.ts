@@ -40,6 +40,12 @@ import {
 } from './schemas/index.js';
 import { deriveStructuredMessage } from './shared/structured-message.js';
 import {
+  GATE_PARAMETERS_UNAVAILABLE,
+  describeUndeclaredParameterRefusal,
+  type ContractToolName,
+  type UnavailableParameters,
+} from './shared/undeclared-parameters.js';
+import {
   ConsolidatedSystemControl,
   createConsolidatedSystemControl,
 } from './system-control/index.js';
@@ -79,6 +85,7 @@ import { PromptAssetManager } from '#modules/prompts/index.js';
 // Gate evaluator removed - now using Framework validation
 import { createContentAnalyzer } from '#modules/semantic/content-analyzer.js';
 import { TextReferenceStore } from '#modules/text-refs/index.js';
+import { withRequestNotifications } from '#shared/utils/request-notification-scope.js';
 // Schemas now hand-written in ./schemas/ (replaced generated mcp-schemas.ts)
 
 // REMOVED: ExecutionCoordinator and ChainOrchestrator - modular chain system removed
@@ -479,6 +486,28 @@ export class McpToolRouter {
   }
 
   /**
+   * The tool's error response for an argument key its contract does not declare, or `null`.
+   *
+   * Stands here, at the registered callback, rather than inside each tool's router, because this
+   * is the only point on the `prompt_engine` path where an undeclared key still EXISTS: the
+   * handler below rebuilds its arguments through an explicit allowlist, so a key not named there
+   * is gone before any router sees it. `system_control` keeps its refusal beside it so one rule
+   * lives in one place. `resource_manager` is the exception and stays in its own router, because
+   * its second half — a declared key owned by another `resource_type` — is router knowledge
+   * (`resource-manager/core/parameter-ownership.ts`).
+   */
+  private refuseUndeclaredParameters(
+    tool: ContractToolName,
+    args: object,
+    unavailable?: UnavailableParameters
+  ): { content: { type: 'text'; text: string }[]; isError: true } | null {
+    const refusal = describeUndeclaredParameterRefusal(tool, args, unavailable);
+    if (refusal === null) return null;
+    this.logger.warn(`${tool} refused undeclared parameter(s): ${refusal.split('\n')[0] ?? ''}`);
+    return { content: [{ type: 'text', text: `❌ ${refusal}` }], isError: true };
+  }
+
+  /**
    * Build the `prompt_engine` input schema from current runtime state.
    *
    * Shared by registration and by the STDIO reshape, so both read the same
@@ -757,7 +786,21 @@ export class McpToolRouter {
 
   /**
    * Get resource manager handler for auto-execute functionality.
-   * Returns a function that can execute resource_manager actions internally.
+   *
+   * Returns a function that runs a `resource_manager` action internally, for a caller that never
+   * crosses the MCP boundary — today, a script tool's `auto_execute` block (stage 09).
+   *
+   * It validates through `resourceManagerInputSchema` FIRST, because that is the one thing the
+   * registered path gets for free and this one did not: the SDK parses `arguments` against the
+   * registered schema and hands the handler the result, so a registered call reaching the router
+   * has had its types, enums and shapes checked. This path used to pass the script's object
+   * through `as any`. Measured 2026-09-20: `{resource_type:"prompt", action:"list", limit:
+   * "not-a-number"}` from a script reached the router untyped, where the same call over MCP is
+   * rejected. One `safeParse` is the whole reuse — the schema is the SSOT for both paths, so
+   * there is no second validator to keep in step.
+   *
+   * A failure is returned as an error `ToolResponse` rather than thrown, so it travels the same
+   * channel every other router refusal does and stage 09 fails the step on it.
    */
   getResourceManagerHandler():
     | ((
@@ -769,7 +812,28 @@ export class McpToolRouter {
     if (router == null) {
       return null;
     }
-    return (args, context) => router.handleAction(args as any, context);
+    return async (args, context) => {
+      const parsed = resourceManagerInputSchema.safeParse(args);
+      if (!parsed.success) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text:
+                `resource_manager rejected these parameters: ` +
+                parsed.error.issues
+                  .map((issue) => {
+                    const where = issue.path.join('.');
+                    return `${where.length > 0 ? where : '(root)'}: ${issue.message}`;
+                  })
+                  .join('; '),
+            },
+          ],
+          isError: true,
+        };
+      }
+      return router.handleAction(parsed.data as ResourceManagerInput, context);
+    };
   }
 
   // REMOVED: wireExecutionCoordinator - ExecutionCoordinator removed
@@ -850,8 +914,21 @@ export class McpToolRouter {
             openWorldHint: false,
           },
         },
-        async (args: PromptEngineInput, extra: unknown) => {
+        withRequestNotifications(async (args: PromptEngineInput, extra: unknown) => {
           try {
+            // Ahead of the allowlist below, which is where an undeclared key would otherwise
+            // vanish. The gate trio is DECLARED but withdrawn from the advertised surface while
+            // gates are off, so it gets the "not advertised right now" message, never "not a
+            // parameter" — the contract names it (CLAUDE.md §Public API Contract).
+            const undeclared = this.refuseUndeclaredParameters(
+              'prompt_engine',
+              args,
+              this.readToolSurfaceState().gateSystemEnabled === false
+                ? GATE_PARAMETERS_UNAVAILABLE
+                : undefined
+            );
+            if (undeclared !== null) return undeclared;
+
             // Normalize and validate string inputs (trim whitespace, filter empty values)
             const trimmedCommand = args.command?.trim();
             const trimmedChainId = args.chain_id?.trim();
@@ -1011,7 +1088,7 @@ export class McpToolRouter {
               isError: true,
             };
           }
-        }
+        })
       );
       this.logger.debug('✅ prompt_engine tool registered successfully');
     } catch (error) {
@@ -1073,8 +1150,11 @@ export class McpToolRouter {
             openWorldHint: false,
           },
         },
-        async (args: SystemControlInput, extra: unknown) => {
+        withRequestNotifications(async (args: SystemControlInput, extra: unknown) => {
           try {
+            const undeclared = this.refuseUndeclaredParameters('system_control', args);
+            if (undeclared !== null) return undeclared;
+
             const toolResponse = await this.systemControl.handleAction(
               args,
               this.enrichExtraWithClientInfo(extra)
@@ -1099,7 +1179,7 @@ export class McpToolRouter {
               isError: true,
             };
           }
-        }
+        })
       );
       this.logger.debug('✅ system_control tool registered successfully');
     } catch (error) {
@@ -1141,7 +1221,7 @@ export class McpToolRouter {
             openWorldHint: false,
           },
         },
-        async (args: ResourceManagerSchemaInput, extra: unknown) => {
+        withRequestNotifications(async (args: ResourceManagerSchemaInput, extra: unknown) => {
           try {
             const router = this.resourceManagerRouter;
             if (router == null) {
@@ -1176,7 +1256,7 @@ export class McpToolRouter {
               isError: true,
             };
           }
-        }
+        })
       );
       this.logger.debug('✅ resource_manager tool registered successfully');
     } catch (error) {

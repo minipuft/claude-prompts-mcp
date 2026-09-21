@@ -119,9 +119,31 @@ claiming to be v1. The producer moved with the index — a rename now renumbers 
 continue after the target's newest version, in one transaction, and a target with no history is
 re-keyed with its numbers untouched.
 
-Both writers take the key the same way, and each does it atomically: `MAX(version)` and the INSERT
-that consumes it run inside one `BEGIN IMMEDIATE`, because the number read is the number written
-back and a second connection committing between the two makes the INSERT land on a stale maximum.
+Both writers take the key the same way, and each does it atomically: the newest row and the INSERT
+that consumes its number run inside one `BEGIN IMMEDIATE`, because the number read is the number
+written back and a second connection committing between the two makes the INSERT land on a stale
+maximum.
+
+That one read now answers two questions, which is why it selects the row rather than `MAX(version)`:
+what number comes next, and whether this snapshot is the one already stored. When
+`hashCanonical(snapshot)` — `shared/utils/hash.ts`, the single identity rule both writers import —
+matches the newest row's, no row is inserted and the existing version is returned. The equality
+decision sits INSIDE the lock for the same reason the numbering does: decided above the `BEGIN`,
+two processes could each compare against a newest row the other was about to replace and each
+conclude "unchanged", leaving a real change recorded by neither.
+
+**A stored hash must hash what each writer stores, not one uniform projection.** Three of the four
+`SnapshotContract`s canonicalise through `canonicalizeSnapshot`; the prompt contract deliberately
+does not, because `id` and every `SNAPSHOT_PRESERVED_FIELDS` member sit outside its
+`projectedFields` and would be dropped — re-bridging every prompt row already on disk. Anything
+that later persists a `snapshot_hash` column has to take each writer's own stored text as its
+input, or prompts and the other three resource types will disagree about what a snapshot IS.
+
+Until then the two writers disagreed about what "unchanged" meant. The server used
+`isDeepStrictEqual` and let the answer gate only the BRIDGE row, inserting the produced state
+regardless; the CLI compared `JSON.stringify` output, which is key-order sensitive, so a snapshot
+the server had written read as different data to `cpm`. One rule, imported by both, is what makes
+their rows interchangeable.
 `DatabasePort.transaction(fn, 'immediate')` is the shared helper; the default stays `deferred`,
 which takes no lock until the first write and is correct only for a body that reads OR writes. No
 retry loop — a contender waits on the lock, and how long it waits is `busy_timeout`.
