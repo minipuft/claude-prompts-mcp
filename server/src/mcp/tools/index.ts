@@ -40,6 +40,12 @@ import {
 } from './schemas/index.js';
 import { deriveStructuredMessage } from './shared/structured-message.js';
 import {
+  GATE_PARAMETERS_UNAVAILABLE,
+  describeUndeclaredParameterRefusal,
+  type ContractToolName,
+  type UnavailableParameters,
+} from './shared/undeclared-parameters.js';
+import {
   ConsolidatedSystemControl,
   createConsolidatedSystemControl,
 } from './system-control/index.js';
@@ -479,6 +485,28 @@ export class McpToolRouter {
   }
 
   /**
+   * The tool's error response for an argument key its contract does not declare, or `null`.
+   *
+   * Stands here, at the registered callback, rather than inside each tool's router, because this
+   * is the only point on the `prompt_engine` path where an undeclared key still EXISTS: the
+   * handler below rebuilds its arguments through an explicit allowlist, so a key not named there
+   * is gone before any router sees it. `system_control` keeps its refusal beside it so one rule
+   * lives in one place. `resource_manager` is the exception and stays in its own router, because
+   * its second half — a declared key owned by another `resource_type` — is router knowledge
+   * (`resource-manager/core/parameter-ownership.ts`).
+   */
+  private refuseUndeclaredParameters(
+    tool: ContractToolName,
+    args: object,
+    unavailable?: UnavailableParameters
+  ): { content: { type: 'text'; text: string }[]; isError: true } | null {
+    const refusal = describeUndeclaredParameterRefusal(tool, args, unavailable);
+    if (refusal === null) return null;
+    this.logger.warn(`${tool} refused undeclared parameter(s): ${refusal.split('\n')[0] ?? ''}`);
+    return { content: [{ type: 'text', text: `❌ ${refusal}` }], isError: true };
+  }
+
+  /**
    * Build the `prompt_engine` input schema from current runtime state.
    *
    * Shared by registration and by the STDIO reshape, so both read the same
@@ -852,6 +880,19 @@ export class McpToolRouter {
         },
         async (args: PromptEngineInput, extra: unknown) => {
           try {
+            // Ahead of the allowlist below, which is where an undeclared key would otherwise
+            // vanish. The gate trio is DECLARED but withdrawn from the advertised surface while
+            // gates are off, so it gets the "not advertised right now" message, never "not a
+            // parameter" — the contract names it (CLAUDE.md §Public API Contract).
+            const undeclared = this.refuseUndeclaredParameters(
+              'prompt_engine',
+              args,
+              this.readToolSurfaceState().gateSystemEnabled === false
+                ? GATE_PARAMETERS_UNAVAILABLE
+                : undefined
+            );
+            if (undeclared !== null) return undeclared;
+
             // Normalize and validate string inputs (trim whitespace, filter empty values)
             const trimmedCommand = args.command?.trim();
             const trimmedChainId = args.chain_id?.trim();
@@ -1075,6 +1116,9 @@ export class McpToolRouter {
         },
         async (args: SystemControlInput, extra: unknown) => {
           try {
+            const undeclared = this.refuseUndeclaredParameters('system_control', args);
+            if (undeclared !== null) return undeclared;
+
             const toolResponse = await this.systemControl.handleAction(
               args,
               this.enrichExtraWithClientInfo(extra)

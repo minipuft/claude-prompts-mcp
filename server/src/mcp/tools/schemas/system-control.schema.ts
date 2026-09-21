@@ -3,10 +3,17 @@
  * System Control Input Schema
  *
  * The SSOT for system_control parameter validation. It must declare every field an action
- * handler reads: zod strips undeclared keys before the registered callback runs, so an
- * undeclared field never reaches its handler, and the handler runs on its default instead.
- * `tests/unit/mcp-tools/tool-input-fields.test.ts` fails when a handler reads a field this
- * object does not declare.
+ * handler reads: an undeclared field never reaches its handler, and the handler runs on its
+ * default instead. `tests/unit/mcp-tools/tool-input-fields.test.ts` fails when a handler reads a
+ * field this object does not declare.
+ *
+ * The registered schema is `.passthrough()` — {@link buildSystemControlSchema} — while the
+ * declared shape and the inferred type stay {@link buildSystemControlShape}. Zod's default was to
+ * STRIP an unknown key, which is how `action:"status", previw:true` answered success and how a
+ * mistyped safety flag ran the unguarded path. Passing it through is what lets the registered
+ * callback refuse it BY NAME (`shared/undeclared-parameters.ts`, R50); the type deliberately does
+ * not widen, because an index signature would make a typo in a handler's own property access
+ * typecheck.
  *
  * Descriptions come from `tooling/contracts/system-control.json`. Each field is described by its
  * generated contract parameter name, so a field the contract does not list is a type error here.
@@ -36,10 +43,10 @@ const CONTRACT_DESCRIPTIONS = Object.fromEntries(
 // ---------------------------------------------------------------------------
 
 /**
- * Build the system_control input schema with framework-aware descriptions.
+ * The DECLARED shape — exactly the contract's parameters, and the source of the inferred type.
  */
-// eslint-disable-next-line @typescript-eslint/explicit-function-return-type, @typescript-eslint/explicit-module-boundary-types
-export function buildSystemControlSchema(resolve: DescriptionResolver = identity) {
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
+function buildSystemControlShape(resolve: DescriptionResolver = identity) {
   const describe = (name: system_controlParamName): string =>
     resolve(name, CONTRACT_DESCRIPTIONS[name]);
 
@@ -113,5 +120,16 @@ export function buildSystemControlSchema(resolve: DescriptionResolver = identity
   });
 }
 
-/** Inferred input type */
-export type SystemControlInput = z.infer<ReturnType<typeof buildSystemControlSchema>>;
+/**
+ * Build the REGISTERED system_control input schema with framework-aware descriptions.
+ *
+ * `.passthrough()` so an undeclared key survives validation and the registered callback can name
+ * it. See this file's header for why the strip default was a defect rather than a convenience.
+ */
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type, @typescript-eslint/explicit-module-boundary-types
+export function buildSystemControlSchema(resolve: DescriptionResolver = identity) {
+  return buildSystemControlShape(resolve).passthrough();
+}
+
+/** Inferred input type — the DECLARED shape, deliberately without passthrough's index signature. */
+export type SystemControlInput = z.infer<ReturnType<typeof buildSystemControlShape>>;

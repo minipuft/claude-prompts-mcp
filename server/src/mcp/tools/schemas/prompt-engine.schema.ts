@@ -479,11 +479,16 @@ function buildWidestSchema(
  * Calling it twice with equal state yields an equal schema; nothing is cached
  * or carried between calls.
  *
- * Narrowing withdraws a parameter from what is *advertised*. It does not add a
- * rejection: Zod strips unknown keys by default and that default is kept, so a
- * client holding a stale `tools/list` has its leftover value dropped rather
- * than erroring. That matches the runtime, which already ignores gate ids from
- * every source while the gate system is off.
+ * Narrowing withdraws a parameter from what is *advertised*. The shape is
+ * `.passthrough()` so an unknown key ARRIVES rather than being stripped: the
+ * handler refuses it by name (`shared/undeclared-parameters.ts`, R50), and a
+ * client holding a stale `tools/list` that still sends `gate_verdict` is told
+ * the gate system is off instead of having the value silently dropped. Both
+ * used to answer success. A `.strict()` object here would reject one layer
+ * earlier with a zod message naming neither the tool nor the correction, and
+ * would put a second refusal path above the one that owns this class — the
+ * same reasoning `resource_manager.schema.ts` records for its own
+ * `.passthrough()`.
  *
  * @param verdictValidator - `(v: string) => boolean` for gate_verdict format validation
  * @param verdictMessage - validation error message for gate_verdict
@@ -500,10 +505,12 @@ export function buildPromptEngineSchema(
   // Absent state means "widest", matching `isGateSystemEnabled()`, which
   // defaults to enabled when no gate state store is wired.
   if (surface.state?.gateSystemEnabled === false) {
-    return withSourceExclusivity(z.object(buildCoreFields(resolve)));
+    return withSourceExclusivity(z.object(buildCoreFields(resolve)).passthrough());
   }
 
-  return withSourceExclusivity(buildWidestSchema(resolve, verdictValidator, verdictMessage));
+  return withSourceExclusivity(
+    buildWidestSchema(resolve, verdictValidator, verdictMessage).passthrough()
+  );
 }
 
 /** The four command sources, in the order the rejection message names them. */

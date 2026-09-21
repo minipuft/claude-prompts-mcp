@@ -64,6 +64,16 @@ export type AutoExecuteHandler = (
 ) => Promise<ToolResponse>;
 
 /**
+ * Why a script's emitted params name something `resource_manager` will not read, or `null`.
+ *
+ * INJECTED rather than imported: the refusal is owned at layer 4 (`mcp/tools/shared/
+ * undeclared-parameters.ts`) and this stage is layer 2, which `validate:arch` forbids from
+ * value-importing `mcp/`. The composition root that already hands this stage its
+ * {@link AutoExecuteHandler} hands it the matching refusal, so the two cannot drift.
+ */
+export type AutoExecuteParamRefusal = (params: Record<string, unknown>) => string | null;
+
+/**
  * Pipeline Stage 09: Script Auto-Execute
  *
  * Detects auto_execute metadata in script outputs and calls
@@ -77,7 +87,8 @@ export class ScriptAutoExecuteStage extends BasePipelineStage {
 
   constructor(
     private readonly resourceManagerHandler: AutoExecuteHandler | null,
-    logger: Logger
+    logger: Logger,
+    private readonly describeParamRefusal: AutoExecuteParamRefusal | null = null
   ) {
     super(logger);
   }
@@ -123,6 +134,8 @@ export class ScriptAutoExecuteStage extends BasePipelineStage {
         continue;
       }
 
+      this.assertParamsAreDeclared(toolId, autoExecute.params);
+
       // Get script state once (already initialized with autoExecuteResults by helper)
       const scripts = context.ensureScriptState();
 
@@ -147,6 +160,25 @@ export class ScriptAutoExecuteStage extends BasePipelineStage {
 
     this.logExit({ autoExecuted: autoExecuteCount });
   }
+
+  /**
+   * Throw unless every emitted key is one `resource_manager` declares.
+   *
+   * A script's stdout is authored content, and these params go straight to a resource MUTATION.
+   * The router runs the same refusal, but this stage SWALLOWS what the router returns — an
+   * `isError` response only reaches `context.diagnostics.info` and nothing downstream reads it,
+   * so `prompt_engine` answered success over a refused write. A THROW instead of a skip: the
+   * pipeline's single error boundary turns it into the tool's error, and the message names the
+   * script so an operator knows which file to open.
+   */
+  private assertParamsAreDeclared(toolId: string, params: Record<string, unknown>): void {
+    const refusal = this.describeParamRefusal?.(params) ?? null;
+    if (refusal === null) return;
+
+    throw new Error(
+      `Script tool '${toolId}' emitted an auto_execute call that is refused. ${refusal}`
+    );
+  }
 }
 
 /**
@@ -154,7 +186,8 @@ export class ScriptAutoExecuteStage extends BasePipelineStage {
  */
 export function createScriptAutoExecuteStage(
   resourceManagerHandler: AutoExecuteHandler | null,
-  logger: Logger
+  logger: Logger,
+  describeParamRefusal: AutoExecuteParamRefusal | null = null
 ): ScriptAutoExecuteStage {
-  return new ScriptAutoExecuteStage(resourceManagerHandler, logger);
+  return new ScriptAutoExecuteStage(resourceManagerHandler, logger, describeParamRefusal);
 }
