@@ -17,6 +17,14 @@
  * the state that preceded it. `recordEditResult` and the `rollback` action carry the bridge-row
  * logic (self-healing v1 for a never-before-recorded resource, or an out-of-band edit) — see
  * `recordEditResult` below for the mechanism, mirrored line-for-line from the server's.
+ *
+ * **Scope must also match, and cannot always be derived — so it is read back instead.**
+ * `resolveTenantId` derives a scope guess independently of the server's own resolution (see its
+ * doc comment for the precedence and why it can diverge). Rather than leave that guess as the
+ * only answer, `resolveEffectiveTenantId` corrects it against the db's own `tenant_id` column
+ * when the guess finds no rows and exactly one other tenant does — the server's resolution is
+ * the source of truth, and an existing row already records what it was. See
+ * `resolveEffectiveTenantId` for the exact rule and why it stays conservative under ambiguity.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -104,6 +112,15 @@ interface HistoryResponse {
   saved_version?: number;
   restored_version?: number;
   snapshot?: Record<string, unknown>;
+  /**
+   * Set alongside `success: false` by `load_history` when `resolveEffectiveTenantId` found the
+   * guessed tenant empty AND more than one other tenant holding rows for this resource — refused
+   * rather than guessed between two real candidates. Distinguishes this from every other
+   * `success: false` (missing `state.db`, missing table): those map to `loadHistory` returning
+   * `null`, same as a genuinely empty history; this one must not, or a caller cannot tell
+   * "nothing recorded" from "recorded somewhere this guess could not find".
+   */
+  ambiguous?: true;
 }
 
 /** First of `values` that is set and not all-whitespace, else `undefined`. */
@@ -170,18 +187,29 @@ function resolveStateDbPath(resourceDir: string): string | null {
 }
 
 /**
- * Resolve the tenant this process writes `version_history` under.
+ * Guess the tenant this process would write `version_history` under, absent other evidence.
  *
- * Must agree with `VersionHistoryService.resolveTenantId()` on the server, which is
- * `resolveContinuityScopeId(scope)` over the launch workspace. Same precedence applied
- * here: an explicit `identity.launchDefaults.workspaceId` in the workspace config outranks the
- * environment-derived id, which falls back to `'default'`.
+ * Mirrors the SHAPE of `VersionHistoryService.resolveTenantId()` on the server —
+ * `resolveContinuityScopeId(scope)` — but cannot mirror its INPUT: the server's `scope` there
+ * comes from `identity.launchDefaults`, resolved at ITS launch from `--workspace-id`, its
+ * config file, or its own `CLAUDE_PROJECT_DIR`/cwd (`applyRuntimeIdentityOverrides`,
+ * `runtime/context.ts`) — none of which this process can observe. What it CAN observe: the
+ * same `identity.launchDefaults.workspaceId` if the workspace's config file sets it explicitly
+ * (`readConfiguredWorkspaceId`, matching rung 2 of the server's precedence), and its own
+ * `CLAUDE_PROJECT_DIR`/cwd, which matches the server's only when both processes share an
+ * environment (e.g. launched from the same shell/session) or happen to share a cwd.
  *
- * **Known limitation, stated rather than hidden**: a server launched with an explicit
- * `--workspace-id` flag records that id, and nothing on disk tells the CLI what flag the
- * server was started with. In that configuration the two still diverge. Closing it needs
- * the server to persist its resolved scope where the CLI can read it — out of scope here,
- * and narrower than the `'default'`-vs-workspace split this replaces.
+ * **This is a guess, not the answer, and `runSqlite` does not trust it blindly.** A `--workspace-id`
+ * flag, or a server that derived its scope from a launch cwd this process never shares (the
+ * common shape for a background daemon: one fixed install path serving many per-project
+ * workspaces), both produce a guess that disagrees with the server's actual resolution. Rather
+ * than let a wrong guess silently report "no history" or diverge a rollback onto a new tenant,
+ * `resolveEffectiveTenantId` (below `runSqlite`) corrects it against `tenant_id` values already
+ * recorded in this db — the server's resolution is the source of truth, and an existing row
+ * already names it. What remains unclosed: a resource with NO history yet, first written by the
+ * CLI itself under a guess the server would not have made — there is no prior row to correct
+ * against, and closing that needs the server to persist its resolved scope somewhere this
+ * process can read before any write happens, which is out of scope here.
  */
 function resolveTenantId(dbPath: string): string {
   const configured = readConfiguredWorkspaceId(dbPath);
@@ -255,6 +283,82 @@ function runSqlite(request: HistoryRequest): HistoryResponse {
   } finally {
     db?.close();
   }
+}
+
+/**
+ * Correct `resolveTenantId`'s guess against what this db actually holds for this resource.
+ *
+ * `resolveTenantId` derives a scope independently of the server — it cannot see the server's own
+ * launch cwd, only `CLAUDE_PROJECT_DIR` (if the CLI process happens to share it) and a configured
+ * `identity.launchDefaults.workspaceId`. Neither rung fires for a server that derived its scope
+ * from its own launch cwd with nothing configured — a background-daemon deployment where
+ * `MCP_WORKSPACE` names a per-project directory but the server binary itself always launches from
+ * one fixed install path. In that shape the CLI's guess and the server's resolution are two
+ * independent answers to the same question and agree only by accident (measured: `cpm rollback -w
+ * <workspace>` from an unrelated cwd reports `Version 1 not found` against history that exists).
+ *
+ * The correction is not a second guess: `tenant_id` on an existing `version_history` row is not
+ * derived, it is what the writer — the server — actually used, so reading it is consulting the
+ * SSOT directly instead of re-predicting it. Applied only when unambiguous (the guessed tenant has
+ * no rows for this exact resource, and exactly one OTHER tenant does): a shared `state.db` can
+ * legitimately hold the same `resource_type`/`resource_id` under two unrelated projects. Two real
+ * candidates is reported as `ambiguousCandidateCount`, not silently resolved — picking one would
+ * serve the wrong project's history, and returning the guess unlabeled would read exactly like a
+ * genuinely empty history, which is the same "nothing found" symptom this fix exists to remove.
+ * Zero candidates (nobody, anywhere, has ever recorded this resource) is not ambiguous — there is
+ * nothing to be ambiguous BETWEEN — so it returns the guess unlabeled too, and the caller reports
+ * an ordinary empty result.
+ *
+ * `dispatch` calls this for every action whose SQL can only act on rows that already exist —
+ * `load_history`, `get_version`, `compare_versions`, `rollback` (which reads its target before
+ * writing the restored state, under the SAME resolved tenant so the two halves of one rollback
+ * never split across tenants), and `delete_history` (a wrong guess must not leave the server's
+ * rows behind as an undeletable orphan — `cpm delete` has the identical shape as `cpm rollback`:
+ * both are reached only from `cli/src/commands/*.ts`, never from the server, which always writes
+ * through `VersionHistoryService`'s own `this.scope`, not this guess). `save_version` and
+ * `record_edit_result` deliberately do NOT go through this: they can legitimately be the
+ * first-ever write for a genuinely different, correctly-resolved tenant that happens to share a
+ * `resource_type`/`resource_id` with another tenant's resource — "correcting" that write would
+ * silently merge two unrelated projects' histories. Measured while writing this fix's own test:
+ * an unmodified `saveVersion` under a second real tenant was redirected into the first tenant's
+ * existing history instead of starting its own. `rename_history` is left on the uncorrected guess
+ * too, but for a different reason: its write path is being edited concurrently elsewhere in this
+ * file (row renumbering); correcting it is the same shape and belongs with that change, not this
+ * one — tracked as an open gap, not a decision that it should stay uncorrected.
+ *
+ * Only `load_history` currently inspects `ambiguousCandidateCount` and refuses loudly on it
+ * (`dispatch`'s other four callers read `.tenantId` alone, unchanged from before this field
+ * existed) — see that case for why an ambiguous result must not collapse into the same "nothing
+ * found" shape a genuinely empty history produces.
+ */
+function resolveEffectiveTenantId(
+  db: DatabaseSync,
+  guessedTenantId: string,
+  request: HistoryRequest
+): { tenantId: string; ambiguousCandidateCount?: number } {
+  const guessHasRows =
+    db
+      .prepare(
+        `SELECT 1 FROM version_history WHERE tenant_id = ? AND resource_type = ? AND resource_id = ? LIMIT 1`
+      )
+      .get(guessedTenantId, request.resource_type, request.resource_id) !== undefined;
+  if (guessHasRows) {
+    return { tenantId: guessedTenantId };
+  }
+
+  const candidates = db
+    .prepare(
+      `SELECT DISTINCT tenant_id FROM version_history WHERE resource_type = ? AND resource_id = ?`
+    )
+    .all(request.resource_type, request.resource_id) as { tenant_id: string }[];
+  const onlyCandidate = candidates.length === 1 ? candidates[0] : undefined;
+  if (onlyCandidate !== undefined) {
+    return { tenantId: onlyCandidate.tenant_id };
+  }
+  if (candidates.length >= 2) {
+    return { tenantId: guessedTenantId, ambiguousCandidateCount: candidates.length };
+  }
+  return { tenantId: guessedTenantId };
 }
 
 function versionHistoryExists(db: DatabaseSync): boolean {
@@ -440,16 +544,40 @@ function loadRows(db: DatabaseSync, tenantId: string, request: HistoryRequest): 
   };
 }
 
-/** Route one request to its SQL. Mirrors the action set the Python helper dispatched. */
+/**
+ * Route one request to its SQL. Mirrors the action set the Python helper dispatched.
+ *
+ * `tenantId` is `resolveTenantId`'s derivation, unverified against this db. The five actions
+ * that only ever act on EXISTING rows resolve their own `effectiveTenantId` via
+ * `resolveEffectiveTenantId` before using it; `save_version`/`record_edit_result` use `tenantId`
+ * as given (a legitimate new write must not be redirected), and `rename_history` does too for a
+ * narrower reason — see `resolveEffectiveTenantId`'s doc comment for both.
+ */
 function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): HistoryResponse {
   switch (request.action) {
     case 'load_history': {
-      const history = loadRows(db, tenantId, request);
+      const resolved = resolveEffectiveTenantId(db, tenantId, request);
+      // An ambiguous resolution must not collapse into the same shape a genuinely empty history
+      // produces below (`success: true, history: null`) — that is the exact symptom this fix
+      // exists to remove, just moved one level down. Refuse by name instead, through the
+      // `success: false` channel every other real failure in this dispatch already uses.
+      if (resolved.ambiguousCandidateCount !== undefined) {
+        return {
+          success: false,
+          error:
+            `${request.resource_type} '${request.resource_id}' has version history under ` +
+            `${resolved.ambiguousCandidateCount} other scopes on this state.db; this process ` +
+            `cannot tell which one you mean. Re-run from the workspace whose history you want.`,
+          ambiguous: true,
+        };
+      }
+      const history = loadRows(db, resolved.tenantId, request);
       return { success: true, history: history.versions.length > 0 ? history : null };
     }
 
     case 'get_version': {
-      const row = selectVersion(db, tenantId, request, Number(request.version));
+      const effectiveTenantId = resolveEffectiveTenantId(db, tenantId, request).tenantId;
+      const row = selectVersion(db, effectiveTenantId, request, Number(request.version));
       return { success: true, entry: row !== undefined ? toEntry(row) : null };
     }
 
@@ -476,13 +604,14 @@ function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): 
     }
 
     case 'compare_versions': {
+      const effectiveTenantId = resolveEffectiveTenantId(db, tenantId, request).tenantId;
       const fromVersion = Number(request.from_version);
       const toVersion = Number(request.to_version);
-      const fromRow = selectVersion(db, tenantId, request, fromVersion);
+      const fromRow = selectVersion(db, effectiveTenantId, request, fromVersion);
       if (fromRow === undefined) {
         return { success: false, error: `Version ${fromVersion} not found` };
       }
-      const toRow = selectVersion(db, tenantId, request, toVersion);
+      const toRow = selectVersion(db, effectiveTenantId, request, toVersion);
       if (toRow === undefined) {
         return { success: false, error: `Version ${toVersion} not found` };
       }
@@ -497,13 +626,19 @@ function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): 
       // state needs no dedicated "Pre-rollback snapshot" row: under these semantics it is
       // already the previous version, and when it is not (old-era rows, out-of-band edits) the
       // bridge records it.
+      //
+      // The tenant is corrected once, before the read, and the SAME value is reused for the
+      // write below — a rollback that read the target from a corrected tenant must record the
+      // restored state there too, or the operation splits across two tenants and the next read
+      // sees a one-row history instead of a continuation.
+      const effectiveTenantId = resolveEffectiveTenantId(db, tenantId, request).tenantId;
       const target = Number(request.target_version);
-      const targetRow = selectVersion(db, tenantId, request, target);
+      const targetRow = selectVersion(db, effectiveTenantId, request, target);
       if (targetRow === undefined) {
         return { success: false, error: `Version ${target} not found` };
       }
       const restoredSnapshot = JSON.parse(targetRow.snapshot) as Record<string, unknown>;
-      const result = recordEditResultRow(db, tenantId, request, {
+      const result = recordEditResultRow(db, effectiveTenantId, request, {
         priorLiveSnapshot: request.current_snapshot ?? {},
         producedSnapshot: restoredSnapshot,
         description: `Rollback to v${target}`,
@@ -522,10 +657,18 @@ function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): 
     // renames them too, so their rows go with it rather than staying behind under ids nothing
     // serves. The prefix carries the `/`, so `chain_other` is not below `chain`.
     case 'delete_history': {
+      // Corrected the same way rollback is: `cpm delete` is reached only from
+      // `cli/src/commands/delete.ts` (via `deleteResourceDir`), never from the server, so a wrong
+      // guess here would leave the server's rows behind as an orphan nothing can reach — the
+      // resource directory is gone, but its history under the real tenant is not. The correction
+      // itself keys on the resource's OWN exact id, not the subtree the DELETE below removes: for
+      // a chain that has ever been edited as a whole, its own row exists and names the tenant
+      // correctly; a chain versioned only step-by-step is outside what this check can see.
+      const effectiveTenantId = resolveEffectiveTenantId(db, tenantId, request).tenantId;
       db.prepare(
         `DELETE FROM version_history
          WHERE tenant_id = ? AND resource_type = ? AND ${SUBTREE_MATCH}`
-      ).run(tenantId, request.resource_type, request.resource_id, request.resource_id);
+      ).run(effectiveTenantId, request.resource_type, request.resource_id, request.resource_id);
       return { success: true };
     }
 
@@ -577,6 +720,18 @@ function createRequest(
 
 // ── Read operations ─────────────────────────────────────────────────────────
 
+/**
+ * Load a resource's version history.
+ *
+ * Throws only for the `ambiguous` case (`HistoryResponse.ambiguous`, set by `dispatch`'s
+ * `load_history` case) — a resource with recorded history under more than one tenant, where this
+ * process's scope guess matches none of them. `null` stays reserved for every OTHER outcome,
+ * including a genuinely empty history and a missing `state.db`/`version_history` table (both
+ * pre-existing `success: false` cases with no distinguishing field): a caller must be able to
+ * tell "there is nothing to find" from "this process could not tell which of several tenants you
+ * meant", and collapsing the second into the first reproduces the exact "no history" symptom this
+ * correction exists to remove — just one layer further out.
+ */
 export function loadHistory(resourceDir: string, ref: HistoryResourceRef): HistoryFile | null {
   const request = createRequest(resourceDir, 'load_history', ref);
   if (request === null) {
@@ -584,6 +739,9 @@ export function loadHistory(resourceDir: string, ref: HistoryResourceRef): Histo
   }
   const result = runSqlite(request as HistoryRequest);
   if (!result.success) {
+    if (result.ambiguous === true) {
+      throw new Error(result.error ?? 'Ambiguous version history scope.');
+    }
     return null;
   }
   return result.history ?? null;
