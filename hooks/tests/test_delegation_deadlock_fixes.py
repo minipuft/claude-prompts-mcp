@@ -67,9 +67,9 @@ def run_post_prompt_engine(monkeypatch, capsys, *, session_id, content, tool_inp
     return excinfo.value.code, (json.loads(out) if out.strip() else {})
 
 
-def run_delegation_enforce(monkeypatch, capsys, *, session_id, tool_name):
+def run_delegation_enforce(monkeypatch, capsys, *, session_id, tool_name, tool_input=None):
     """Simulate a delegation-enforce.py PreToolUse invocation."""
-    payload = {"session_id": session_id, "tool_name": tool_name}
+    payload = {"session_id": session_id, "tool_name": tool_name, "tool_input": tool_input or {}}
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
     with pytest.raises(SystemExit) as excinfo:
         delegation_enforce.main()
@@ -198,11 +198,19 @@ class TestDefect3ClearCondition:
     def test_agent_tool_clears_state_and_allows(self, patch_workspace, monkeypatch, capsys):
         """This build reports its subagent tool as 'Agent'. Would fail before
         the fix (old code only cleared on tool_name == 'Task', so the block
-        could never self-clear on this client)."""
+        could never self-clear on this client). Pinned to the foreground
+        (run_in_background: false) per R2 — see test_delegation_spawn_pin.py
+        for the non-pinned deny cases this same branch now covers."""
         session_id = "defect3-agent"
         self._arm(session_id)
 
-        code, out = run_delegation_enforce(monkeypatch, capsys, session_id=session_id, tool_name="Agent")
+        code, out = run_delegation_enforce(
+            monkeypatch,
+            capsys,
+            session_id=session_id,
+            tool_name="Agent",
+            tool_input={"run_in_background": False},
+        )
         assert code == 0
         assert out.get("hookSpecificOutput", {}).get("permissionDecision") != "deny"
 

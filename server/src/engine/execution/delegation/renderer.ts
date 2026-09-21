@@ -40,7 +40,7 @@ export class DelegationRenderer {
   renderCurrentStepHandoff(payload: DelegationPayload, hints?: RenderingHints): string {
     const strategy = this.resolveStrategy(payload);
     const model = strategy.resolveModel(payload);
-    const toolCall = strategy.formatToolCall(payload.agentType, model);
+    const toolCall = strategy.formatToolCall(payload.agentType, model, payload.mode);
     const constraints = strategy.formatConstraints();
 
     const verdictHint = payload.hasGates
@@ -98,6 +98,8 @@ export interface DelegatedStepHandoffInputs {
   readonly inlineGateCount: number | undefined;
   readonly hasGates: boolean;
   readonly gateGuidanceEnabled: boolean;
+  /** The handoff contract token this step's brief carries (`handoffNodeToken(step)`). */
+  readonly nodeToken: string;
 }
 
 /**
@@ -115,6 +117,8 @@ export function renderDelegatedStepHandoff(inputs: DelegatedStepHandoffInputs): 
     ...(inputs.subagentModel != null ? { subagentModel: inputs.subagentModel } : {}),
     gateCount: inputs.inlineGateCount ?? (inputs.hasGates ? 1 : 0),
     hasGates: inputs.hasGates,
+    nodeToken: inputs.nodeToken,
+    mode: 'blocking',
   };
   return new DelegationRenderer().renderCurrentStepHandoff(payload, {
     gateGuidanceEnabled: inputs.gateGuidanceEnabled,

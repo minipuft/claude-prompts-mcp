@@ -135,6 +135,7 @@ const DEFAULT_CHAIN_SESSION_CONFIG: ChainSessionConfig = {
 
 const DEFAULT_EXECUTION_CONFIG: ExecutionConfig = {
   judge: true,
+  delegation: { evidence: 'required' },
 };
 
 const DEFAULT_RESOURCES_CONFIG: ResourcesConfig = {
@@ -449,6 +450,27 @@ function normalizeVersioning(file: ConfigFile): VersioningConfig {
   };
 }
 
+/**
+ * Execution, resolved leaf by leaf against {@link DEFAULT_EXECUTION_CONFIG}.
+ *
+ * A builder rather than an inline object literal, and that is the whole point of it: the literal
+ * this replaced named `judge` and nothing else, so every other `execution.*` leaf an operator set
+ * was read off disk, dropped here, and never reached a runtime reader — silently, because the
+ * mapping is where a file key becomes a runtime value and a key omitted from the mapping looks
+ * exactly like a key the file did not set. `execution.delegation.evidence` was the first such
+ * leaf; a section builder means the next one fails to compile instead of failing to apply.
+ */
+function normalizeExecution(file: ConfigFile): ExecutionConfig {
+  const execution = file.execution;
+  const def = DEFAULT_EXECUTION_CONFIG;
+  return {
+    judge: execution?.judge ?? def.judge,
+    delegation: {
+      evidence: execution?.delegation?.evidence ?? def.delegation?.evidence,
+    },
+  };
+}
+
 /** Telemetry, merged over the safe defaults — the same fold the loader has always applied. */
 function normalizeTelemetry(file: ConfigFile): TelemetryConfig {
   const telemetry = file.telemetry;
@@ -499,7 +521,7 @@ function normalizeConfigFile(file: ConfigFile): Config {
     },
     gates: normalizeGates(file),
     phaseGuards: normalizePhaseGuards(file),
-    execution: { judge: file.execution?.judge ?? DEFAULT_EXECUTION_CONFIG.judge },
+    execution: normalizeExecution(file),
     frameworks: normalizeFrameworks(file),
     chainSessions: normalizeChainSessions(file),
     logging: normalizeLogging(file),

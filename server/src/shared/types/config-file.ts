@@ -392,6 +392,17 @@ interface ConfigFilePhaseGuards {
   maxRetries?: number;
 }
 
+/** Delegated-step (`==>`) handoff settings. */
+interface ConfigFileDelegation {
+  /**
+   * What to do when a delegated step's resume does not carry the brief's HANDOFF RESULT trailer:
+   * 'required' refuses the resume, 'advisory' accepts it and records the reason.
+   *
+   * @default "required"
+   */
+  evidence?: 'required' | 'advisory';
+}
+
 /** Prompt execution behavior. */
 interface ConfigFileExecution {
   /**
@@ -400,6 +411,8 @@ interface ConfigFileExecution {
    * @default true
    */
   judge?: boolean;
+  /** Delegated-step (`==>`) handoff settings. */
+  delegation?: ConfigFileDelegation;
 }
 
 /**

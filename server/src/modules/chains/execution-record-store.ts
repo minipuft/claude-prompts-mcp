@@ -30,6 +30,7 @@ import type {
   EvidencePayload,
   GateVerdictSummary,
 } from '#shared/types/chain-execution.js';
+import type { HandoffEvidenceReason } from '#shared/types/handoff-evidence.js';
 import type { Logger } from '#shared/types/index.js';
 import type { DatabasePort, StateStoreOptions } from '#shared/types/persistence.js';
 
@@ -62,7 +63,7 @@ interface ExecutionRecordRow {
   nodes_skipped: number | null;
   interrupts_raised: number | null;
   remainders_accepted: number | null;
-  delegation_skipped: number | null;
+  handoff_evidence: string | null;
 }
 
 export interface ExecutionRecordAppendInput {
@@ -111,12 +112,13 @@ export interface ExecutionRecordAppendInput {
   interruptsRaised?: number;
   remaindersAccepted?: number;
   /**
-   * S8 delegation-acknowledgment audit. Bound ONLY by the capture-time step writer
-   * (StepCaptureService), and only when the captured step was delegated AND gated — the one
-   * row type where the fact exists. Stored as 1 (skipped) / 0 (acknowledged) / NULL (not
-   * evaluable): partial population BY ROW TYPE, the same reading as the v21/v23 columns above.
+   * Delegation handoff evidence (v28). Bound by the capture-time step writer
+   * (StepCaptureService) for EVERY delegated step, in both evidence modes — the reason the
+   * resume was or was not acceptable, as `resolveHandoffEvidenceReason` returned it. Omitted
+   * (NULL) exactly when the step was not delegated: partial population BY ROW TYPE, the same
+   * reading as the v21/v23 columns above.
    */
-  delegationSkipped?: boolean;
+  handoffEvidence?: HandoffEvidenceReason;
   scope?: StateStoreOptions;
 }
 
@@ -156,7 +158,7 @@ export class ExecutionRecordStore {
           error_message, started_at, completed_at,
           steps_planned, gates_fired, gate_retries, unknowns_opened, unknowns_closed,
           nodes_inserted, nodes_skipped, interrupts_raised, remainders_accepted,
-          delegation_skipped
+          handoff_evidence
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         params
       );
@@ -254,8 +256,8 @@ export class ExecutionRecordStore {
       nodesSkipped: row.nodes_skipped ?? undefined,
       interruptsRaised: row.interrupts_raised ?? undefined,
       remaindersAccepted: row.remainders_accepted ?? undefined,
-      ...(row.delegation_skipped !== null
-        ? { delegationSkipped: row.delegation_skipped === 1 }
+      ...(row.handoff_evidence !== null
+        ? { handoffEvidence: row.handoff_evidence as HandoffEvidenceReason }
         : {}),
     };
   }
@@ -295,7 +297,7 @@ function buildAppendParams(
     input.nodesSkipped ?? null,
     input.interruptsRaised ?? null,
     input.remaindersAccepted ?? null,
-    input.delegationSkipped === undefined ? null : input.delegationSkipped ? 1 : 0,
+    input.handoffEvidence ?? null,
   ];
 }
 

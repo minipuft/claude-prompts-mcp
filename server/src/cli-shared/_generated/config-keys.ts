@@ -26,6 +26,7 @@ export const CONFIG_VALID_KEYS = [
   'chainSessions.cleanupIntervalMinutes',
   'chainSessions.reviewTimeoutMinutes',
   'chainSessions.timeoutMinutes',
+  'execution.delegation.evidence',
   'execution.judge',
   'frameworks.defaultFramework',
   'frameworks.dynamicToolDescriptions',
@@ -112,6 +113,10 @@ export const CONFIG_KEY_TABLE: Readonly<Record<ConfigKey, ConfigLeafRule>> = {
     type: 'integer',
     minimum: 1,
     maximum: 10080,
+  },
+  'execution.delegation.evidence': {
+    type: 'string',
+    enum: ['required', 'advisory'],
   },
   'execution.judge': {
     type: 'boolean',

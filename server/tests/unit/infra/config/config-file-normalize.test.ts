@@ -158,6 +158,49 @@ describe('config file -> runtime config mapping', () => {
     });
   });
 
+  // Until `normalizeExecution` existed, the mapping named `execution.judge` in an inline object
+  // literal and dropped every other `execution.*` leaf the file set. That is invisible from
+  // inside the section — a dropped leaf and a leaf the file never set resolve identically — so
+  // these read the ONE non-default value back out of the resolved config.
+  describe('execution.delegation.evidence reaches the runtime config', () => {
+    it("resolves a file's `advisory` to `advisory`", async () => {
+      const { config, manager, cleanup } = await resolve({
+        version: 5,
+        execution: { delegation: { evidence: 'advisory' } },
+      });
+
+      expect(config.execution.delegation?.evidence).toBe('advisory');
+      // The getter is what `pipeline-builder` reads on every request, so the value has to be
+      // there and not only on the object the mapping returned.
+      expect(manager.getConfig().execution.delegation?.evidence).toBe('advisory');
+
+      await cleanup();
+    });
+
+    // POSITIVE CONTROL for the case above: `required` is the default, so a mapping that dropped
+    // the leaf entirely would still satisfy a test that only asserted `required`. These two
+    // differ in exactly one identifier and must disagree.
+    it('resolves a file that says nothing to `required`', async () => {
+      const { config, cleanup } = await resolve({ version: 5 });
+
+      expect(config.execution.delegation?.evidence).toBe('required');
+
+      await cleanup();
+    });
+
+    it('leaves `judge` alone while carrying the delegation leaf', async () => {
+      const { config, cleanup } = await resolve({
+        version: 5,
+        execution: { judge: false, delegation: { evidence: 'advisory' } },
+      });
+
+      expect(config.execution.judge).toBe(false);
+      expect(config.execution.delegation?.evidence).toBe('advisory');
+
+      await cleanup();
+    });
+  });
+
   describe('a file that declares nothing', () => {
     // Every default value this loader applies, in one place. Written out rather than compared
     // against the module's own constants: a test that reads the same constant the code reads
@@ -170,7 +213,7 @@ describe('config file -> runtime config mapping', () => {
       prompts: { directory: 'resources/prompts', registerWithMcp: true },
       // No `analysis`: the section is not a config key any more, so the loader defaults nothing
       // for it and `Config.analysis` stays unset.
-      execution: { judge: true },
+      execution: { judge: true, delegation: { evidence: 'required' } },
       gates: {
         enabled: true,
         frameworkGates: true,

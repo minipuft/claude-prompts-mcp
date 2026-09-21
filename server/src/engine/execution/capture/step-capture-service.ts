@@ -1,6 +1,6 @@
 // @lifecycle canonical - Captures step results (placeholder or real) in chain sessions.
 
-import { resolveDelegationSkipped } from '../delegation/acknowledgment.js';
+import { handoffNodeToken, resolveHandoffEvidenceReason } from '../delegation/handoff-contract.js';
 import { buildPipelineHookContext } from '../pipeline/hook-context.js';
 
 import type { Logger } from '#infra/logging/index.js';
@@ -257,13 +257,16 @@ export class StepCaptureService {
   }
 
   /**
-   * Append the capture-time `completed` row for the step whose real output was just captured
-   * (S8). This is the moment the delegation-acknowledgment fact exists and the only writer
-   * that binds `delegation_skipped`: 1/0 when the captured step was delegated AND carried gate
-   * text (the same `metadata['gateInstructions']` field the brief derived its Result Contract
-   * from), NULL everywhere else — partial population BY ROW TYPE. Exactly one row per captured
-   * step: gate retries re-enter `captureStep` and take its completed-non-placeholder early
-   * return before reaching this.
+   * Append the capture-time `completed` row for the step whose real output was just captured.
+   * This is the moment the handoff-evidence fact exists and the only writer that binds
+   * `handoff_evidence`: the reason a delegated step's resume was or was not acceptable, bound
+   * for EVERY delegated step and in both evidence modes, NULL only when the step was not
+   * delegated — partial population BY ROW TYPE. The reason is recorded here regardless of mode
+   * BECAUSE the mode decides refusal, not observation: under `required` an unacceptable resume
+   * never reaches this method (stage 16 refuses first), so the rows this writes under `required`
+   * are `ok`, and the other three are what `advisory` is for. Exactly one row per captured step:
+   * gate retries re-enter `captureStep` and take its completed-non-placeholder early return
+   * before reaching this.
    *
    * It is also the ONLY append that fires on a call carrying a `gate_verdict`, which is why
    * `gateVerdicts` binds here (P4.76). Measured against a hermetic server on 2026-09-20, not
@@ -295,14 +298,13 @@ export class StepCaptureService {
       steps?.find((candidate) => candidate.nodeId === target.nodeId) ??
       steps?.find((candidate) => candidate.stepNumber === target.ordinal);
 
-    const stepGateText =
-      typeof step?.metadata?.['gateInstructions'] === 'string'
-        ? step.metadata['gateInstructions']
-        : undefined;
-    const delegationSkipped = resolveDelegationSkipped({
+    // The token is derived from the step the same way the brief derived it — one exported
+    // derivation, so "what the brief printed" and "what the record measures the reply against"
+    // cannot drift. A step the two-key lookup above could not resolve still has an ordinal.
+    const handoffEvidence = resolveHandoffEvidenceReason({
       delegated: step?.delegated,
-      stepGateText,
-      capturedResponse: responseContent,
+      expectedToken: handoffNodeToken(step ?? { stepNumber: target.ordinal }),
+      reply: responseContent,
     });
 
     // Omitted rather than bound to `[]` when the call carried no per-gate detail: the column
@@ -321,7 +323,7 @@ export class StepCaptureService {
       substate: { respondedAt: capturedAt },
       startedAt: capturedAt,
       completedAt: capturedAt,
-      ...(delegationSkipped !== undefined ? { delegationSkipped } : {}),
+      ...(handoffEvidence !== undefined ? { handoffEvidence } : {}),
       ...(gateVerdicts !== undefined ? { gateVerdicts } : {}),
       scope: context.getScopeOptions(),
     });

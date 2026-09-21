@@ -394,6 +394,22 @@
           "type": "boolean",
           "description": "Enable %judge modifier for framework comparison.",
           "default": true
+        },
+        "delegation": {
+          "type": "object",
+          "properties": {
+            "evidence": {
+              "type": "string",
+              "enum": [
+                "required",
+                "advisory"
+              ],
+              "description": "What to do when a delegated step's resume does not carry the brief's HANDOFF RESULT trailer: 'required' refuses the resume, 'advisory' accepts it and records the reason.",
+              "default": "required"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Delegated-step (`==>`) handoff settings."
         }
       },
       "additionalProperties": false,
