@@ -141,24 +141,45 @@ on which one workspace could observe that another holds a given byte sequence. `
 the value the owning `version_history` row carries — resolved once and passed down, never
 re-derived in the store.
 
-**The foreign keys are declared and — contrary to what a grep suggests — enforced.**
-`rg "foreign_keys"` over `server/src` and `cli/src` returns nothing, and the obvious reading of
-that absence is wrong: `node:sqlite`'s `DatabaseSync` enables foreign key constraints by default,
-and both openers that WRITE `state.db` (the engine, and `cli-shared/version-history.ts`) are
-`DatabaseSync`. Measured 2026-09-20 — `PRAGMA foreign_keys` reads `1` on a fresh connection. The
-Python hooks open read-only through `sqlite3`, where the default really is off; a reader cannot
-violate a constraint.
+**The foreign keys are declared, enforced, and now asserted — and the three are different
+things.** `rg "foreign_keys"` over `server/src` and `cli/src` used to return nothing, and the
+obvious reading of that absence was wrong: `node:sqlite`'s `DatabaseSync` enables foreign key
+constraints **by default**, and both openers that WRITE `state.db` are `DatabaseSync`. Measured
+2026-09-20 — `PRAGMA foreign_keys` reads `1` on a fresh connection.
+
+Enforcement was therefore inherited from the driver rather than owned by this repository, which is
+not a state a v29 invariant may rest on. `STATE_DB_WRITER_PRAGMAS`
+(`shared/utils/runtime-state-location.ts`) now carries `PRAGMA foreign_keys = ON` beside the shared
+`busy_timeout`, and both writers apply the whole list. **Be honest about what that line proves:
+removing it changes no behaviour on this driver, and no test goes red when it is deleted.** It is
+an assertion, not a fix — what it buys is that a driver default change, a different Node, or a new
+opener written from that list cannot silently withdraw the guarantee.
+
+Every opener of `state.db`, and its foreign key posture:
+
+| Opener                                  | Driver               | Posture                                  |
+| --------------------------------------- | -------------------- | ---------------------------------------- |
+| `infra/database/sqlite-engine.ts`       | `node:sqlite`        | ON — applies `STATE_DB_WRITER_PRAGMAS`   |
+| `cli-shared/version-history.ts` (`cpm`) | `node:sqlite`        | ON — applies the same list               |
+| `hooks/lib/db_reader.py`                | `sqlite3`, `mode=ro` | off (driver default); read-only, so moot |
+
+`hooks/lib/hook_state_store.py` and `hooks/lib/verify_active_store.py` open `hooks-state.db` and
+`verify-state.db`, which are different files with different schemas.
 
 Two consequences that only show up at a schema bump: `restoreDurableTables` replays
 `DURABLE_TABLE_NAMES` in declaration order, so `objects` and `version_entries` must stay declared
 **after** `version_history` in `table-contracts.ts` or the restore is refused; and `dropAllTables`
 drops in `sqlite_master` order, which reaches `version_history` first and cascades the manifest
-empty before either new table is dropped.
+empty before either new table is dropped. Both are pinned by
+`tests/integration/database/durable-round-trip.test.ts`, which is generated from `TABLE_CONTRACTS`:
+it seeds one row in every `durable` table, runs the recreate, requires every row back
+byte-identical, and **fails when a durable table has no seed** — so the next durable table anyone
+adds is covered by a red run rather than by someone remembering. It also reads the foreign key
+edges out of the engine's own DDL and checks the declared restore order against them.
 
-**Do not read this as "the cascade prunes entries for us."** It is a per-connection driver default
-this repository does not assert, so any opener that turns it off writes into the same file. A prune
-deletes its entries explicitly, and the startup referential check is what finds what an opener
-without constraints left behind.
+**Do not read enforcement as "the cascade prunes entries for us."** It is still a per-connection
+setting, so any opener that turns it off writes into the same file. A prune deletes its entries
+explicitly, and the startup referential check is what finds what such an opener left behind.
 
 **No backfill of pre-v29 rows, deliberately.** Materialising a tree from a projection would
 fabricate file bytes that never existed on disk, which is worse than a NULL. Old rows keep

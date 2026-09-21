@@ -52,7 +52,7 @@ import type {
 } from '#modules/versioning/types.js';
 import type { HistoryRequest, HistoryResponse, ResourceType } from './version-history-types.js';
 
-import { STATE_DB_BUSY_TIMEOUT_MS } from '#shared/utils/runtime-state-location.js';
+import { STATE_DB_WRITER_PRAGMAS } from '#shared/utils/runtime-state-location.js';
 
 /**
  * Which resource a history call is about: its type and the id it is served under — for a nested
@@ -93,7 +93,11 @@ function runSqlite(request: HistoryRequest): HistoryResponse {
   let db: DatabaseSync | undefined;
   try {
     db = new DatabaseSync(request.db_path);
-    db.exec(`PRAGMA busy_timeout = ${STATE_DB_BUSY_TIMEOUT_MS}`);
+    // The same list the server's connection applies — one owner, so the two writers of this file
+    // cannot disagree about its lock patience or about whether its foreign keys hold.
+    for (const pragma of STATE_DB_WRITER_PRAGMAS) {
+      db.exec(pragma);
+    }
     if (!versionHistoryExists(db)) {
       return {
         success: false,
