@@ -48,6 +48,7 @@ export class FrameworkToolHandler {
       versionHistoryService: new VersionHistoryService({
         logger: deps.logger,
         configManager: deps.configManager,
+        resourceFileLocator: deps.resourceFileLocator,
       }),
       onRefresh: deps.onRefresh,
       onToolsUpdate: deps.onToolsUpdate,

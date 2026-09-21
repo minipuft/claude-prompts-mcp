@@ -26,8 +26,8 @@ every boot.
 | `resource_index`        | `resource-indexer.ts`                               | derived     | none            |
 | `skills_sync_manifests` | `modules/skills-sync/service.ts`                    | **durable** | client-scope    |
 | `version_history`       | `modules/versioning/version-history-service.ts`     | **durable** | workspace       |
-| `objects`               | `modules/versioning/version-history-service.ts`     | **durable** | workspace       |
-| `version_entries`       | `modules/versioning/version-history-service.ts`     | **durable** | workspace       |
+| `objects`               | `cli-shared/object-store.ts`                        | **durable** | workspace       |
+| `version_entries`       | `cli-shared/object-store.ts`                        | **durable** | workspace       |
 | `resource_changes`      | `observability/tracking/resource-change-tracker.ts` | derived     | workspace       |
 | `chain_runs`            | `modules/chains/run-registry.ts`                    | ephemeral   | run-owner-pid   |
 | `chain_run_nodes`       | `modules/chains/run-registry.ts`                    | ephemeral   | run-owner-pid\* |
@@ -127,6 +127,35 @@ override, which is a different act from restoring a workspace file over itself, 
 to say so. It cannot be derived at restore time — roots are resolved per process, so a row written
 under one root layout would be re-classified under another. `tree_origin` is NULL exactly when
 `tree_hash` is; the two are one fact and ship in one schema version for that reason.
+
+### What writes a tree, and when
+
+`cli-shared/object-store.ts` is the sole writer of both tables. It lives there, rather than beside
+the server's versioning service, because both writers of `version_history` must produce the SAME
+`tree_hash` for the same files and `cli-shared/` is the only layer the server and `cpm` can share.
+It opens no transaction of its own: every statement runs inside the caller's existing
+`BEGIN IMMEDIATE`, in foreign-key order — objects, then the manifest, then the row's `tree_hash`
+and `tree_origin`. That is invariant WRITE-1: an object insert is always in the same transaction as
+the reference that justifies it, so a crash between them leaves neither.
+
+The files it stores are the ones `resourceFileSet` enumerates, and it never enumerates for itself —
+one answer, shared by the recorder and any later restorer. Finding the resource from a type and an
+id is a third party's job again: `runtime/resource-roots.ts` builds a `ResourceFileLocatorPort` from
+`resolveResourceRoots` and the composition root threads it into each tool's `VersionHistoryService`,
+so root precedence keeps its one owner.
+
+**A row that records no tree is a degradation, not a failure.** An over-limit file (1 MiB per file,
+8 MiB per resource), an unreadable one, a resource no root holds, or a service with no locator
+leaves `tree_hash` NULL and emits one `warn` naming the resource and the reason. The version row is
+the thing nothing regenerates; refusing to write it because its bytes were too large would trade a
+degraded rollback for a lost version. A SQLite failure is the other case and propagates, rolling the
+caller's transaction back.
+
+**Bridge rows never carry a tree, structurally.** `recordEditResult` appends the prior live state
+and then the produced state, and BOTH appends run at commit time — after the produced files are on
+disk. An enumerator run inside either one therefore reads the produced bytes, so a tree on the
+bridge row would describe the produced state under a row whose snapshot is the prior one. The
+distinction is a parameter, not a match against the bridge row's description text.
 
 **Losing every object degrades rollback to the projection path; it never loses history.**
 `version_history.snapshot` keeps holding the projection every reader already reads, and it is not

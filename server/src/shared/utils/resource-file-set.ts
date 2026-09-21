@@ -56,10 +56,12 @@ import * as path from 'node:path';
 
 import { isPathInside } from './path-containment.js';
 import {
+  isExcludedCategoryDirectoryName,
   isIgnoredPromptEntryName,
   isReservedPromptDirectoryName,
   isSingleFilePromptName,
 } from './prompt-layout.js';
+import { resourceEntryRoots } from './resource-root-lookup.js';
 import { parseYaml } from './yaml/yaml-parser.js';
 
 import type { ResourceType } from '#modules/versioning/types.js';
@@ -431,3 +433,112 @@ export async function resourceFileSet(options: ResourceFileSetOptions): Promise<
     files: builder.list(),
   };
 }
+
+/**
+ * The entry filename a resource of this type is addressed by.
+ *
+ * Exported so a caller that must FIND the entry file before enumerating the set reads the same
+ * table `resourceFileSet` validates against. Two statements of "a gate is addressed by gate.yaml"
+ * is how a locator comes to hand this function a path it then refuses.
+ */
+export function resourceEntryFileName(resourceType: ResourceType): string {
+  return ENTRY_FILENAME[resourceType];
+}
+
+/** What {@link locateResourceEntry} is asked. */
+export interface ResourceEntryLookup {
+  resourceType: ResourceType;
+  /** The id the resource is SERVED under — a nested chain step's id carries its own `/`. */
+  resourceId: string;
+  /** Contributing roots, highest precedence first (`ResourceRoots.lookupDirs`). */
+  lookupDirs: readonly string[];
+}
+
+/**
+ * The absolute entry-file path for an id, or `undefined` when no contributing root holds it.
+ *
+ * ROOT PRECEDENCE IS NOT DECIDED HERE. `lookupDirs` arrives already ordered by
+ * `resourceRootPrecedence`, and the walk below is `resourceEntryRoots` — the same first-hit-wins
+ * lookup the loaders perform. This function adds exactly one thing to it: the single-file prompt
+ * layout, which `resourceEntryRoot` cannot express because it probes for a DIRECTORY holding an
+ * entry file and a `{category}/{id}.yaml` prompt has no directory of its own.
+ *
+ * `undefined` is a real answer, not an error: an id whose files were deleted, or a type served
+ * from a root this process never resolved. The caller degrades — it does not fail the write that
+ * asked.
+ */
+export async function locateResourceEntry(
+  lookup: ResourceEntryLookup
+): Promise<string | undefined> {
+  const { resourceType, resourceId, lookupDirs } = lookup;
+  const entryFileName = ENTRY_FILENAME[resourceType];
+
+  const [base] = resourceEntryRoots([...lookupDirs], resourceId, entryFileName);
+  if (base !== undefined) return path.join(base, resourceId, entryFileName);
+
+  if (resourceType !== 'prompt') return undefined;
+  return singleFilePromptEntry(lookupDirs, resourceId);
+}
+
+/**
+ * The `{root}/{category}/{id}.yaml` path for a prompt with no directory of its own.
+ *
+ * The category directory is the one level this walk descends — matching `promptIdFromSingleFile`,
+ * which derives the id by dropping exactly that first segment — and what counts as a category
+ * directory is `prompt-layout.ts`'s answer, not a second one stated here.
+ */
+async function singleFilePromptEntry(
+  lookupDirs: readonly string[],
+  resourceId: string
+): Promise<string | undefined> {
+  const fileName = `${resourceId}.yaml`;
+  if (!isSingleFilePromptName(path.basename(fileName))) return undefined;
+
+  for (const root of lookupDirs) {
+    for (const group of await categoryDirectories(root)) {
+      const candidate = path.join(root, group, fileName);
+      if (await isRegularFile(candidate)) return candidate;
+    }
+  }
+  return undefined;
+}
+
+/** Directory names under a prompts root that the loader treats as categories. */
+async function categoryDirectories(root: string): Promise<string[]> {
+  let entries: Dirent[];
+  try {
+    entries = await readdir(root, { withFileTypes: true });
+  } catch {
+    return []; // An absent or unreadable root contributes nothing, exactly as in the walk above.
+  }
+  return entries
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .filter(
+      (name) => !isExcludedCategoryDirectoryName(name) && !isReservedPromptDirectoryName(name)
+    );
+}
+
+/**
+ * Where a resource's files are — the one question `resourceFileSet` cannot answer for itself.
+ *
+ * `resourceFileSet` takes an entry PATH and the type's roots; a version record holds only a type
+ * and an id. Resolving the gap needs `PathResolver` and `resolveResourceRoots`, both of which live
+ * in `runtime/`, which no layer below may import (`.dependency-cruiser.cjs`,
+ * `no-imports-into-runtime`). So the contract is declared here beside the consumer and the
+ * implementation is built at the composition root, which is the remedy that rule names.
+ */
+export interface ResourceFileLocatorPort {
+  locate(resourceType: ResourceType, resourceId: string): Promise<ResourceLocationResult>;
+}
+
+/**
+ * Located, or refused with a reason the caller can log.
+ *
+ * Tagged rather than "`undefined` means no", because every refusal here degrades a checkpoint to
+ * projection-only and an operator reading that warning needs to know WHICH of the reasons it was:
+ * no locator wired, no root for the type, or an id no root holds.
+ */
+export type ResourceLocationResult =
+  | { located: true; entryPath: string; roots: ResourceRootClassification }
+  | { located: false; reason: string };

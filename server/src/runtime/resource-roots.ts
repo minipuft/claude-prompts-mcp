@@ -21,8 +21,14 @@
 import { existsSync } from 'node:fs';
 
 import type { ResourceRootMap } from '#infra/database/resource-indexer.js';
+import type { ResourceType } from '#modules/versioning/types.js';
+import type {
+  ResourceFileLocatorPort,
+  ResourceLocationResult,
+} from '#shared/utils/resource-file-set.js';
 import type { PathResolver } from './paths.js';
 
+import { locateResourceEntry, resourceEntryFileName } from '#shared/utils/resource-file-set.js';
 import { resourceRootPrecedence } from '#shared/utils/resource-root-lookup.js';
 
 /** Every directory that contributes definitions of one resource type, in precedence order. */
@@ -139,4 +145,77 @@ export function indexerResourceRoots(pathResolver: PathResolver | undefined): Re
     map[key] = orderedResourceRoots(resolveResourceRoots(pathResolver, dir, primaries[key]));
   }
   return map;
+}
+
+/**
+ * The directory each VERSIONED resource type is read from, and therefore checkpointed from.
+ *
+ * Distinct from {@link INDEXED_TYPE_DIRS} above and deliberately not merged with it: the indexer
+ * walks `styles` and never sees a `category`, while version history is kept for `category` and
+ * never for a style. The two sets overlap in three entries and answer different questions, and one
+ * table serving both would have to carry a "which consumer" flag per row.
+ *
+ * `category` maps to `prompts` because a category IS a `category.yaml` inside the prompts tree —
+ * it has no root of its own (`CategoryFileWriter.categoryDir`).
+ */
+const VERSIONED_TYPE_DIRS: Readonly<Record<ResourceType, 'prompts' | 'gates' | 'frameworks'>> = {
+  prompt: 'prompts',
+  category: 'prompts',
+  gate: 'gates',
+  framework: 'frameworks',
+};
+
+/**
+ * Build the locator the versioning service uses to find a resource's files from its id alone.
+ *
+ * WHY HERE. `VersionHistoryService` holds a type and an id; a checkpoint needs the entry FILE and
+ * the type's roots. Only `PathResolver` + {@link resolveResourceRoots} can close that gap, and both
+ * live in `runtime/`, which `mcp/`, `modules/` and `cli-shared/` may not import
+ * (`.dependency-cruiser.cjs`, `no-imports-into-runtime`). The remedy that rule names is the one
+ * used here: the port is declared in `shared/utils/resource-file-set.ts` beside the enumerator that
+ * consumes its answer, and the composition root hands the two together.
+ *
+ * Roots are re-resolved on every call rather than captured once, matching
+ * `getOverlayResourceDirs`'s contract: a workspace overlay created while the server ran must be
+ * checkpointable without a restart.
+ */
+export function createResourceFileLocator(
+  pathResolver: PathResolver | undefined
+): ResourceFileLocatorPort {
+  return {
+    async locate(resourceType, resourceId): Promise<ResourceLocationResult> {
+      if (pathResolver === undefined) {
+        return { located: false, reason: 'no path resolver was wired at the composition root' };
+      }
+      const typeDir = VERSIONED_TYPE_DIRS[resourceType];
+      const primary =
+        typeDir === 'prompts'
+          ? pathResolver.getPromptsPath()
+          : typeDir === 'gates'
+            ? pathResolver.getGatesPath()
+            : pathResolver.getFrameworksPath();
+
+      const roots = resolveResourceRoots(pathResolver, typeDir, primary);
+      const entryPath = await locateResourceEntry({
+        resourceType,
+        resourceId,
+        lookupDirs: roots.lookupDirs,
+      });
+      if (entryPath === undefined) {
+        const searched =
+          roots.lookupDirs.length > 0 ? roots.lookupDirs.join(', ') : 'none resolved';
+        return {
+          located: false,
+          reason:
+            `no ${resourceEntryFileName(resourceType)} for ${resourceType} '${resourceId}' under ` +
+            `any contributing root (${searched})`,
+        };
+      }
+      return {
+        located: true,
+        entryPath,
+        roots: { primary: roots.primary, overlays: roots.overlays, bundled: roots.bundled },
+      };
+    },
+  };
 }

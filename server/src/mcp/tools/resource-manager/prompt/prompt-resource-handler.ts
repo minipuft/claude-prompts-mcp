@@ -18,6 +18,7 @@ import { resolveDispatchAction } from '../../shared/preview-action.js';
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { PromptData, Category } from '#modules/prompts/types.js';
+import type { ResourceFileLocatorPort } from '#shared/utils/resource-file-set.js';
 import type { QuarantineView } from '#shared/utils/resource-quarantine.js';
 import type { PromptResourceActionId } from '../../../metadata/definitions/prompt-resource.js';
 import type { ActionDescriptor } from '../../../metadata/definitions/types.js';
@@ -71,6 +72,7 @@ export class PromptResourceHandler implements PromptResourceHandlerPort {
     this.versionHistoryService = new VersionHistoryService({
       logger: this.logger,
       configManager: dependencies.configManager,
+      resourceFileLocator: dependencies.resourceFileLocator,
     });
 
     const context: PromptResourceContext = {
@@ -343,7 +345,8 @@ export function createPromptResourceHandler(
   frameworkStateStore: FrameworkStateStore | undefined,
   frameworkManager: FrameworkManager | undefined,
   onRefresh: () => Promise<void>,
-  onRestart: (reason: string) => Promise<void>
+  onRestart: (reason: string) => Promise<void>,
+  resourceFileLocator?: ResourceFileLocatorPort
 ): PromptResourceHandler {
   const dependencies: PromptResourceDependencies = {
     logger,
@@ -353,6 +356,7 @@ export function createPromptResourceHandler(
     onRestart,
     ...(frameworkStateStore ? { frameworkStateStore } : {}),
     ...(frameworkManager ? { frameworkManager } : {}),
+    ...(resourceFileLocator !== undefined ? { resourceFileLocator } : {}),
   };
 
   return new PromptResourceHandler(dependencies);
