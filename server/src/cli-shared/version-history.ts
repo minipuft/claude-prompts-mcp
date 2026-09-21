@@ -510,8 +510,17 @@ export interface RollbackRestore {
   enumerate: () => Promise<ResourceFileSet>;
   /** Every path `apply` may touch; restored byte-identical if the version record fails. */
   targets: ResourceMutationTarget[];
-  /** Write the target version's state to disk. Throwing aborts the rollback with nothing claimed. */
-  apply: (snapshot: Record<string, unknown>) => Promise<void> | void;
+  /**
+   * Write the target version's state to disk and return the state that write PRODUCED.
+   *
+   * Returning it rather than reusing the target row's snapshot is what makes the produced row
+   * true: a CLI restore merges the snapshot over the entry file and touches nothing else, so a
+   * gate's `guidance.md` and any key the snapshot does not carry stay as they were. Recording the
+   * target snapshot verbatim would claim a state the files do not hold.
+   *
+   * Throwing aborts the rollback with nothing claimed.
+   */
+  apply: (snapshot: Record<string, unknown>) => Promise<Record<string, unknown>>;
   /** The workspace's own bound — {@link resolveConfiguredMaxVersions}. */
   maxVersions?: number;
 }
@@ -562,10 +571,7 @@ export async function rollbackVersion(
       enumerate: restore.enumerate,
       targets: restore.targets,
       priorSnapshot: currentSnapshot,
-      write: async () => {
-        await restore.apply(restoredSnapshot);
-        return restoredSnapshot;
-      },
+      write: async () => await restore.apply(restoredSnapshot),
       description: `Rollback to v${targetVersion}`,
     });
     if (!result.success) {

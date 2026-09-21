@@ -202,19 +202,31 @@ server's own `state.db` and hashes the files afterwards. The same file asserts t
 and a server write of identical files produce an identical `tree_hash` — one enumerator, one
 hasher, one recorder, reached from both sides.
 
-**`rollback` is still the CLI's only version-writing path, and the reason the others cannot join it
-is a projection, not an ordering.** `cpm create`, `cpm link-gate` and `cpm toggle` each write a
-resource and record nothing. A version row's `snapshot` is a `SnapshotContract` projection, and all
-four contracts live under `src/mcp/tools/**` — which `cli-shared/` may not reach
-(`.dependency-cruiser.cjs`, `cli-shared-no-runtime`, `reachable: true`; measured by planting the
-import, `validate:arch` went from 0 errors to 48) and which `cli/src` cannot resolve at all, having
-no `@mcp` alias. The second half is not an import: `project(id, live)` takes the server's LOADED
-model, whose gate `guidance` is the inlined body of `guidanceFile` and whose prompt template is
-resolved rather than a `userMessageTemplateFile` pointer, and `cpm` runs no loader that produces
-either. Writing a CLI-side projection instead would be a second projection of one resource, which
-is the shape this whole arc exists to remove — and `cpm` already has one, which is why every
-`cpm rollback` of a server-written resource bridges: it passes the raw YAML map as the prior-state
-snapshot.
+**One projection per resource type, read by both surfaces.** A version row's `snapshot` is a
+`SnapshotContract` projection. For gates, frameworks and categories, what that projection RECORDS
+lives in `src/modules/versioning/projections/`, which both `mcp/tools/**` and `cli-shared/` import;
+the tool-layer contracts keep only `restore`, which rebuilds a write model whose type is a tool-layer
+one. `cpm rollback` of a gate or a framework therefore records the state it replaced in the same
+shape `resource_manager` would, and no longer writes a "Bridge: prior live state" row for a
+server-written resource. Until 2026-09-21 it passed the raw YAML map instead — measured on one gate,
+`{id,name,description,type,severity,guidanceFile}` against the server's
+`{id,name,type,description,guidance}` with the markdown body inline — so the two could never compare
+equal and every such rollback bridged.
+
+**The prompt projection is the one that stayed behind, and the blocker is a budget, not a layer.**
+`canonicalPromptSnapshot` takes a loader-RESOLVED prompt (`userMessageTemplate` inlined, where
+`prompt.yaml` holds only `userMessageTemplateFile`), so building its input needs `loadYamlPrompt`
+AND `PromptConverter`. Measured 2026-09-21 as a reachable import from `cli-shared/`: the dev `cpm`
+bundle went 855.4 KB → 914.4 KB, **+59.0 KB**, which is 35.5 KB past the 900,000-byte
+`DEV_BUNDLE_BUDGET_BYTES` — `npm run build` fails. So `cpm rollback` of a prompt still records the
+raw `prompt.yaml` map and still bridges, and `cpm link-gate`/`unlink-gate` (which edit a prompt) and
+`cpm create` of a prompt still record nothing. ☐ open as of 2026-09-21 · flips when a prompt's
+authored state is reachable from `cli-shared/` within the bundle budget. Writing a second,
+YAML-shaped prompt projection instead is the shape this arc exists to remove.
+
+`cpm create` and `cpm toggle` still record nothing; the shared projection is what unblocks them for
+gates and frameworks, and `tests/integration/versioning/cpm-write-records-a-version.test.ts` is the
+gate that fails the moment one of them starts recording while still classified as unable to.
 
 `cpm delete` purges the subtree, `cpm rename` re-keys it, and `cpm move` leaves it alone because a
 category move does not change the id a history row is keyed on. Those three are complete, not
