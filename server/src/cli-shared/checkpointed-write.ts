@@ -49,16 +49,23 @@ import { ResourceMutationTransaction } from '#modules/resources/services/resourc
 /** What one checkpointed write needs to know beyond the rows it writes. */
 export interface CheckpointedWriteInput {
   /**
-   * The resource's files, re-enumerated on each call.
+   * The bytes that ARE the thing being written, re-read on each call, or `null` when they cannot
+   * be recorded.
    *
    * Called once before the write and once after it, rather than once and reused: a write may add a
    * file (a gate gaining a `guidance.md`) or drop one, and a set captured beforehand would record
    * the produced row against the pre-write membership.
    *
-   * Never fatal. A resource whose bytes cannot be enumerated or read is recorded projection-only,
+   * Never fatal. Something whose bytes cannot be enumerated or read is recorded projection-only,
    * which is what every `cpm` write recorded before this module existed.
+   *
+   * Takes the loaded tree rather than a `ResourceFileSet` because not everything checkpointed here
+   * IS a resource: the workspace config file has no resource root and no entry-filename rule, so
+   * it cannot be enumerated by `resourceFileSet` and builds its one-file tree directly
+   * (`config-checkpoint.ts`). {@link treeFromFileSet} is the adapter every resource caller uses, so
+   * the enumerate-then-read pairing still exists in exactly one place.
    */
-  enumerate: () => Promise<ResourceFileSet>;
+  loadTree: () => Promise<LoadedTree | null>;
   /** Every path the write may touch — what gets restored if the record fails. */
   targets: ResourceMutationTarget[];
   /**
@@ -88,17 +95,30 @@ export type CheckpointedWriteResult =
   | { success: false; error: string; rolledBack: boolean };
 
 /**
- * Read the resource's bytes, or `null` when they cannot be recorded.
+ * The `loadTree` a RESOURCE supplies: enumerate its files, then read them.
  *
  * Soft by contract, matching `object-store.ts`: an over-limit or unreadable resource degrades the
  * row to projection-only. A write must never fail because a checkpoint could not be taken.
  */
-async function loadTreeQuietly(
+export function treeFromFileSet(
   enumerate: () => Promise<ResourceFileSet>
+): () => Promise<LoadedTree | null> {
+  return async () => {
+    try {
+      const loaded = await readResourceTree(await enumerate());
+      return 'tree' in loaded ? loaded.tree : null;
+    } catch {
+      return null;
+    }
+  };
+}
+
+/** Never let a checkpoint failure fail the write it describes — see {@link treeFromFileSet}. */
+async function loadTreeQuietly(
+  loadTree: () => Promise<LoadedTree | null>
 ): Promise<LoadedTree | null> {
   try {
-    const loaded = await readResourceTree(await enumerate());
-    return 'tree' in loaded ? loaded.tree : null;
+    return await loadTree();
   } catch {
     return null;
   }
@@ -126,7 +146,7 @@ export async function recordCheckpointedWrite(
       : appendVersion(db, tenantId, request, input.priorSnapshot, {
           description: BRIDGE_DESCRIPTION,
           diffSummary: '',
-          tree: await loadTreeQuietly(input.enumerate),
+          tree: await loadTreeQuietly(input.loadTree),
         });
 
   let produced: Record<string, unknown> = {};
@@ -143,7 +163,7 @@ export async function recordCheckpointedWrite(
       appendVersion(db, tenantId, request, produced, {
         description: input.description,
         diffSummary: input.diffSummary ?? '',
-        tree: await loadTreeQuietly(input.enumerate),
+        tree: await loadTreeQuietly(input.loadTree),
       }),
   });
 

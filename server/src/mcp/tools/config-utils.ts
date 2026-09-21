@@ -28,6 +28,7 @@
  * strip every comment out of an operator's `config.jsonc` the first time anyone toggled a gate.
  */
 
+import { recordConfigWrite } from '#cli-shared/config-checkpoint.js';
 import {
   CONFIG_RESTART_REQUIRED_KEYS,
   validateConfigInput,
@@ -137,8 +138,26 @@ export class SafeConfigWriter {
       }
 
       // Step 6: Edit that one key's characters in the file the operator owns — a toggle over MCP
-      // must not cost them the comments and layout they wrote
-      writeConfigKeyAtomic(this.configPath, key, validation.convertedValue);
+      // must not cost them the comments and layout they wrote — and record it as a config version.
+      //
+      // The SAME checkpoint `cpm config set` takes, through the same function. `system_control`
+      // gate and framework toggles write this file (`persistGateConfig`, `persistFrameworkConfig`)
+      // and recorded nothing before O.9, so an operator who toggled gates over MCP and then ran
+      // `cpm config history` saw a history missing the change they were looking at. A failure to
+      // record puts the file back byte-identical and is reported, never swallowed.
+      const record = await recordConfigWrite(this.configPath, `Set ${key}`, () => {
+        writeConfigKeyAtomic(this.configPath, key, validation.convertedValue);
+      });
+      if (!record.written) {
+        return {
+          success: false,
+          message: `Failed to update configuration: ${record.error}`,
+          error: record.error,
+        };
+      }
+      if (!record.recorded) {
+        this.logger.debug(`Config change not recorded as a version: ${record.reason}`);
+      }
 
       // Step 7: Reload ConfigManager to use new config
       await this.configManager.loadConfig();

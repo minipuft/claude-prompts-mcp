@@ -23,7 +23,24 @@ import { DEFAULT_VERSIONING_CONFIG } from '#shared/types/core-config.js';
  */
 export const DEFAULT_MAX_VERSIONS = DEFAULT_VERSIONING_CONFIG.maxVersions;
 
-export type ResourceType = 'prompt' | 'gate' | 'framework' | 'style';
+/**
+ * What a `version_history` row of this surface can be ABOUT.
+ *
+ * One of five same-named unions in this repo with four different memberships, so be precise about
+ * which one this is: it types `HistoryRowRequest.resource_type`, which is the value bound into
+ * every statement in `version-history-rows.ts`. It is not the published `resource_type` of
+ * `resource_manager` (`mcp/tools/resource-manager/core/types.ts`), and it is not the versioning
+ * domain's own (`modules/versioning/types.ts`, which carries `category` and no `style`).
+ *
+ * `'config'` joined at O.9 (owner ruling R53), and it is deliberately the ONLY union that gained
+ * it. `version_history.resource_type` is a bare `TEXT NOT NULL` with no CHECK, so there is no
+ * schema bump — same as `'category'` at P4.7. Widening the published union instead would advertise
+ * a config write surface over MCP, and config has been read-only there since #312; widening the
+ * versioning domain's union would force a fake entry filename into `resourceFileSet`'s
+ * `ENTRY_FILENAME` table and publish an enumeration that cannot exist. Config is checkpointed by
+ * `cli-shared/config-checkpoint.ts`, which states the whole argument.
+ */
+export type ResourceType = 'prompt' | 'gate' | 'framework' | 'style' | 'config';
 
 /**
  * Which rows an operation acts on, and the per-call facts a row records.

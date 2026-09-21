@@ -1,13 +1,17 @@
 import {
   readConfig,
   getConfigValue,
-  setConfigValue,
   validateConfig,
   resolveConfigPath,
   getConfigKeyInfo,
-  resetConfig,
   CONFIG_VALID_KEYS,
 } from '@cli-shared/index.js';
+// Directly, not through the barrel: the barrel is what every other command imports, and the
+// checkpointed writers are the config command's own surface.
+import {
+  resetConfigRecorded,
+  setConfigValueRecorded,
+} from '@cli-shared/config-checkpoint.js';
 import { basename } from 'node:path';
 
 import { output } from '../lib/output.js';
@@ -57,6 +61,20 @@ export async function config(options: ConfigOptions): Promise<number> {
     case 'keys':
       return configKeys(options);
   }
+}
+
+/**
+ * What the checkpoint did, in one line, for a command that just wrote the config.
+ *
+ * Printed on BOTH outcomes rather than only on success. A config write that recorded nothing —
+ * because the workspace has no `state.db`, or because not one character changed — must say so:
+ * silence there is what the timestamped `.backup.<ms>` files used to hide behind, and the operator
+ * is about to believe `cpm config rollback` can undo this.
+ */
+function describeConfigRecord(result: { recorded: boolean; version?: number; recordNote?: string }): string {
+  return result.recorded
+    ? `Recorded as config version ${result.version}. Run 'cpm config history' to see what to roll back to.`
+    : `Not recorded: ${result.recordNote ?? 'no reason given'}.`;
 }
 
 function configList(options: ConfigOptions): number {
@@ -125,7 +143,7 @@ function configGet(options: ConfigOptions): number {
   return 0;
 }
 
-function configSet(options: ConfigOptions): number {
+async function configSet(options: ConfigOptions): Promise<number> {
   const key = options.positionals[0];
   const value = options.value ?? options.positionals[1];
 
@@ -144,7 +162,7 @@ function configSet(options: ConfigOptions): number {
   }
 
   const workspace = resolveWorkspace(options.workspace);
-  const result = setConfigValue(workspace, key, value);
+  const result = await setConfigValueRecorded(workspace, key, value);
 
   if (options.json) {
     output(result, { json: true });
@@ -154,6 +172,7 @@ function configSet(options: ConfigOptions): number {
       if (result.backupPath) {
         console.log(`Backup: ${result.backupPath}`);
       }
+      console.log(describeConfigRecord(result));
       if (result.restartRequired) {
         console.log('Note: This change requires a server restart to take effect');
       }
@@ -198,7 +217,7 @@ function configValidate(options: ConfigOptions): number {
   return result.valid ? 0 : 1;
 }
 
-function configReset(options: ConfigOptions): number {
+async function configReset(options: ConfigOptions): Promise<number> {
   const workspace = resolveWorkspace(options.workspace);
   const configPath = resolveConfigPath(workspace);
 
@@ -208,7 +227,7 @@ function configReset(options: ConfigOptions): number {
     return 1;
   }
 
-  const result = resetConfig(workspace);
+  const result = await resetConfigRecorded(workspace);
 
   if (options.json) {
     output(result, { json: true });
@@ -218,6 +237,7 @@ function configReset(options: ConfigOptions): number {
       if (result.backupPath) {
         console.log(`Backup: ${result.backupPath}`);
       }
+      console.log(describeConfigRecord(result));
     } else {
       console.error(result.message);
     }
