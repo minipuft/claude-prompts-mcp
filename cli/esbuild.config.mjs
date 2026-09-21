@@ -14,17 +14,17 @@
  *   npm --prefix server run build # bundled    -> server/dist/cpm.js
  */
 
-import { existsSync, readFileSync, statSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-import { zodLocalesTrimPlugin } from './esbuild-plugins/zod-locales-trim.mjs';
+import { zodLocalesTrimPlugin } from "./esbuild-plugins/zod-locales-trim.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const SERVER_ROOT = join(__dirname, '..', 'server');
+const SERVER_ROOT = join(__dirname, "..", "server");
 const releasePkg = JSON.parse(
-  readFileSync(join(SERVER_ROOT, 'package.json'), 'utf8')
+  readFileSync(join(SERVER_ROOT, "package.json"), "utf8"),
 );
 
 /**
@@ -44,9 +44,9 @@ const releasePkg = JSON.parse(
  * uses its directory to walk `node_modules` upward.
  */
 function resolveEsmEntry(packageName, fromDir) {
-  const req = createRequire(join(fromDir, 'package.json'));
+  const req = createRequire(join(fromDir, "package.json"));
   const pkgJsonPath = req.resolve(`${packageName}/package.json`);
-  const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf8'));
+  const pkg = JSON.parse(readFileSync(pkgJsonPath, "utf8"));
   if (!pkg.module) {
     throw new Error(
       `${packageName} has no "module" field at ${pkgJsonPath} -- cannot alias to its ESM build`,
@@ -55,7 +55,7 @@ function resolveEsmEntry(packageName, fromDir) {
   return join(dirname(pkgJsonPath), pkg.module);
 }
 
-const JSONC_PARSER_ESM_ENTRY = resolveEsmEntry('jsonc-parser', SERVER_ROOT);
+const JSONC_PARSER_ESM_ENTRY = resolveEsmEntry("jsonc-parser", SERVER_ROOT);
 
 /**
  * Size budgets for the `cpm` bundle. Two numbers because two artifacts exist.
@@ -91,7 +91,7 @@ const JSONC_PARSER_ESM_ENTRY = resolveEsmEntry('jsonc-parser', SERVER_ROOT);
  * `yaml` package's CST layer. Measured on this tree:
  *
  *   both libraries bundled   941.2 KB  — js-yaml and yaml side by side, rejected
- *   js-yaml dropped          839,288 B — the shipped number, rounded up to 840,000
+ *   js-yaml dropped          839,424 B — the measured size this ceiling is set from
  *
  * js-yaml left the `cpm` bundle entirely because exactly one module in that graph imported it
  * (`shared/utils/yaml/yaml-parser.ts`), worth 125,991 input bytes. It remains a dependency for
@@ -101,14 +101,19 @@ const JSONC_PARSER_ESM_ENTRY = resolveEsmEntry('jsonc-parser', SERVER_ROOT);
  * one exists. Serializer FORMATTING does differ — byte-identical on 24 of 105 — though all 105
  * round-trip to the same value.
  *
+ * Set to 850,000 rather than the next 10,000 above the measurement: 839,424 leaves 576 bytes,
+ * and this constant has twice been raised from a number that looked like enough headroom at the
+ * time (see the two paragraphs above). 10,576 B is a working margin; 576 B is the next trivial
+ * CLI change failing the build.
+ *
  * BUNDLE_BUDGET_BYTES (shipped, minified) is again untouched: measured 407,640 B here against
  * 512,000, and it is still the number that governs what users download.
  */
 export const BUNDLE_BUDGET_BYTES = 512_000; // 500KB — shipped (minified)
-export const DEV_BUNDLE_BUDGET_BYTES = 840_000; // 820KB — unminified dev build
+export const DEV_BUNDLE_BUDGET_BYTES = 850_000; // 830KB — unminified dev build
 
 /** Absolute path to the server source tree the CLI shares code with. */
-const SERVER_SRC = join(SERVER_ROOT, 'src');
+const SERVER_SRC = join(SERVER_ROOT, "src");
 
 /**
  * Build options for the cpm bundle.
@@ -118,18 +123,18 @@ const SERVER_SRC = join(SERVER_ROOT, 'src');
  */
 export function createCliBuildOptions(overrides = {}) {
   const {
-    outfile = join(__dirname, 'dist', 'cpm.js'),
-    minify = process.env.NODE_ENV === 'production',
+    outfile = join(__dirname, "dist", "cpm.js"),
+    minify = process.env.NODE_ENV === "production",
     version = releasePkg.version,
   } = overrides;
 
   return {
     absWorkingDir: __dirname,
-    entryPoints: [join(__dirname, 'src', 'index.ts')],
+    entryPoints: [join(__dirname, "src", "index.ts")],
     bundle: true,
-    platform: 'node',
-    target: 'node18',
-    format: 'esm',
+    platform: "node",
+    target: "node18",
+    format: "esm",
     outfile,
     sourcemap: true,
     minify,
@@ -137,17 +142,56 @@ export function createCliBuildOptions(overrides = {}) {
 
     // Node.js built-ins are always available at runtime
     external: [
-      'node:assert', 'node:buffer', 'node:child_process', 'node:cluster',
-      'node:crypto', 'node:dgram', 'node:dns', 'node:events', 'node:fs',
-      'node:fs/promises', 'node:http', 'node:https', 'node:net', 'node:os',
-      'node:path', 'node:readline', 'node:stream', 'node:string_decoder',
-      'node:tls', 'node:url', 'node:util', 'node:vm', 'node:worker_threads',
-      'node:zlib', 'node:perf_hooks',
+      "node:assert",
+      "node:buffer",
+      "node:child_process",
+      "node:cluster",
+      "node:crypto",
+      "node:dgram",
+      "node:dns",
+      "node:events",
+      "node:fs",
+      "node:fs/promises",
+      "node:http",
+      "node:https",
+      "node:net",
+      "node:os",
+      "node:path",
+      "node:readline",
+      "node:stream",
+      "node:string_decoder",
+      "node:tls",
+      "node:url",
+      "node:util",
+      "node:vm",
+      "node:worker_threads",
+      "node:zlib",
+      "node:perf_hooks",
       // Unprefixed equivalents
-      'assert', 'buffer', 'child_process', 'cluster', 'crypto', 'dgram',
-      'dns', 'events', 'fs', 'http', 'https', 'net', 'os', 'path',
-      'readline', 'stream', 'string_decoder', 'tls', 'url', 'util', 'vm',
-      'worker_threads', 'zlib', 'perf_hooks',
+      "assert",
+      "buffer",
+      "child_process",
+      "cluster",
+      "crypto",
+      "dgram",
+      "dns",
+      "events",
+      "fs",
+      "http",
+      "https",
+      "net",
+      "os",
+      "path",
+      "readline",
+      "stream",
+      "string_decoder",
+      "tls",
+      "url",
+      "util",
+      "vm",
+      "worker_threads",
+      "zlib",
+      "perf_hooks",
     ],
 
     // CJS require shim for ESM bundle (shebang comes from src/index.ts)
@@ -157,23 +201,23 @@ const require = __createRequire(import.meta.url);`,
     },
 
     define: {
-      'process.env.CPM_VERSION': JSON.stringify(version),
+      "process.env.CPM_VERSION": JSON.stringify(version),
     },
 
     // Resolve @cli-shared to server source; esbuild bundles transitive deps
     alias: {
-      '@cli-shared': join(SERVER_SRC, 'cli-shared'),
+      "@cli-shared": join(SERVER_SRC, "cli-shared"),
       // Server path aliases needed for transitive imports within cli-shared re-exports
-      '@shared': join(SERVER_SRC, 'shared'),
-      '@engine': join(SERVER_SRC, 'engine'),
-      '@modules': join(SERVER_SRC, 'modules'),
+      "@shared": join(SERVER_SRC, "shared"),
+      "@engine": join(SERVER_SRC, "engine"),
+      "@modules": join(SERVER_SRC, "modules"),
       // Third-party ESM-entry override, not a path alias for our own code: see
       // resolveEsmEntry() above / F-T5-17.
-      'jsonc-parser': JSONC_PARSER_ESM_ENTRY,
+      "jsonc-parser": JSONC_PARSER_ESM_ENTRY,
     },
 
     treeShaking: true,
-    logLevel: 'info',
+    logLevel: "info",
     metafile: true,
 
     // zod 4 re-exports all 53 locales as a namespace, which tree shaking cannot
@@ -196,7 +240,7 @@ export function checkCliBundleSize(outfile, minified = false) {
   const bytes = statSync(outfile).size;
   const sizeKB = (bytes / 1024).toFixed(1);
   const budget = minified ? BUNDLE_BUDGET_BYTES : DEV_BUNDLE_BUDGET_BYTES;
-  const label = minified ? 'minified' : 'unminified';
+  const label = minified ? "minified" : "unminified";
 
   console.log(`  cpm bundle: ${sizeKB} KB (${label}) -> ${outfile}`);
 
@@ -220,7 +264,7 @@ export function checkCliBundleSize(outfile, minified = false) {
  * @param {string} outfile - path to the built bundle
  */
 export function assertNoUntraceableRequires(outfile) {
-  const source = readFileSync(outfile, 'utf8');
+  const source = readFileSync(outfile, "utf8");
   const outDir = dirname(resolve(outfile));
   // `require`, or an esbuild-renamed `require2`/`require3`/... when the bundled
   // source itself declares a local `require` binding esbuild had to disambiguate.
@@ -234,7 +278,7 @@ export function assertNoUntraceableRequires(outfile) {
     seen.add(specifier);
 
     const candidate = join(outDir, specifier);
-    const resolved = ['', '.js', '.cjs', '.mjs', '.json'].some((ext) =>
+    const resolved = ["", ".js", ".cjs", ".mjs", ".json"].some((ext) =>
       existsSync(candidate + ext),
     );
     if (!resolved) missing.push(specifier);
@@ -243,7 +287,7 @@ export function assertNoUntraceableRequires(outfile) {
   if (missing.length > 0) {
     throw new Error(
       `${outfile} still contains a relative require() of a file that was not emitted ` +
-        `next to it: ${missing.join(', ')}. This usually means a dependency resolved ` +
+        `next to it: ${missing.join(", ")}. This usually means a dependency resolved ` +
         `to a UMD/CJS build whose require() calls esbuild could not trace statically ` +
         `(reached through a variable, not a literal specifier) -- point the build at ` +
         `that dependency's ESM entry with an 'alias' entry (see resolveEsmEntry above) ` +
@@ -259,7 +303,7 @@ export async function buildCli(overrides = {}) {
   // CI's Build job installs only server/node_modules, so a top-level import made
   // `npm --prefix server run build` fail with ERR_MODULE_NOT_FOUND. Options are pure
   // data and cross the package boundary safely; the bundler does not.
-  const esbuild = await import('esbuild');
+  const esbuild = await import("esbuild");
   const options = createCliBuildOptions(overrides);
   await esbuild.build(options);
   checkCliBundleSize(options.outfile, Boolean(options.minify));
@@ -268,12 +312,15 @@ export async function buildCli(overrides = {}) {
 }
 
 // Standalone invocation: `node esbuild.config.mjs` / `npm -w cli run build`
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  console.log('Building CLI...');
+if (
+  process.argv[1] &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  console.log("Building CLI...");
   buildCli().then(
-    () => console.log('\nBuild complete: cli/dist/cpm.js'),
+    () => console.log("\nBuild complete: cli/dist/cpm.js"),
     (error) => {
-      console.error('Build failed:', error);
+      console.error("Build failed:", error);
       process.exit(1);
     },
   );

@@ -274,10 +274,16 @@ export function serializeYamlPreservingSource(
     // An unparseable file has no layout worth preserving and no safe path to edit in place.
     // Rendering from scratch is the honest outcome, and the same one the writers produced before
     // this module existed.
+    //
+    // This catch covers a genuine throw out of the parser or composer only. It is NOT the guard
+    // against a malformed file: composition COLLECTS syntax problems onto the document instead of
+    // throwing them, so the `doc.errors` test below is the load-bearing half and this branch may
+    // never run for an input a reader would call broken.
     return { content: serializeYaml(next, { sortKeys: false }), fidelity: 'created' };
   }
 
-  // A multi-document stream has no single value this write could be editing.
+  // A multi-document stream has no single value this write could be editing, and `doc.errors` is
+  // where a malformed file actually surfaces — see the note in the catch above.
   const documentCount = tokens.filter((token) => token.type === 'document').length;
   if (doc === undefined || documentCount !== 1 || doc.errors.length > 0) {
     return { content: serializeYaml(next, { sortKeys: false }), fidelity: 'created' };

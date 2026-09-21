@@ -18,6 +18,66 @@
 import * as YAML from 'yaml';
 
 /**
+ * The tags a resource file may carry, which is exactly what js-yaml 5.3.0's default schema
+ * resolved and no more.
+ *
+ * This list is a SECURITY boundary, not a style rule. A prompt pack is untrusted input — the
+ * handbook prices installing one as letting its author write into your model's context — and the
+ * `yaml` package resolves several tags js-yaml refused: `!!binary` (measured: produces a Buffer),
+ * `!!set` and `!!omap` (silently, no warning at all), and any unknown tag including
+ * `!!python/object/apply:os.system`, which it reduces to that tag's argument rather than refusing
+ * the document. Nothing here executes them, but a loader that accepts a construct the rest of the
+ * system has never seen is a gap, and swapping the parser must not widen what the server eats.
+ *
+ * Schema options do not close this: measured on `yaml` 2.9.1, `schema: 'core'` and
+ * `customTags: []` leave `!!binary`, `!!set` and `!!omap` resolving with zero errors and zero
+ * warnings. The check has to read the composed nodes.
+ */
+const PERMITTED_TAGS: ReadonlySet<string> = new Set([
+  'tag:yaml.org,2002:str',
+  'tag:yaml.org,2002:int',
+  'tag:yaml.org,2002:float',
+  'tag:yaml.org,2002:bool',
+  'tag:yaml.org,2002:null',
+  'tag:yaml.org,2002:seq',
+  'tag:yaml.org,2002:map',
+]);
+
+/**
+ * The first reason this document would have been refused under the previous parser, if any.
+ *
+ * Returns a sentence, not a boolean, because the caller puts it in front of an operator who has
+ * to find the construct in their file.
+ */
+function findStrictnessViolation(doc: YAML.Document.Parsed): string | undefined {
+  let violation: string | undefined;
+
+  YAML.visit(doc, {
+    Node(_key, node) {
+      if (violation !== undefined) return YAML.visit.BREAK;
+      const tag = (node as { tag?: string }).tag;
+      if (typeof tag === 'string' && !PERMITTED_TAGS.has(tag)) {
+        violation = `unsupported YAML tag ${tag}`;
+        return YAML.visit.BREAK;
+      }
+      return undefined;
+    },
+    Pair(_key, pair) {
+      if (violation !== undefined) return YAML.visit.BREAK;
+      // js-yaml refused these outright ("object-based map does not support complex keys");
+      // `yaml` stringifies the collection into a key like "[ 1, 2 ]", inventing a name.
+      if (YAML.isCollection(pair.key)) {
+        violation = 'a mapping key that is not a scalar';
+        return YAML.visit.BREAK;
+      }
+      return undefined;
+    },
+  });
+
+  return violation;
+}
+
+/**
  * Options for YAML parsing
  */
 export interface YamlParseOptions {
@@ -77,7 +137,28 @@ export interface YamlParseResult<T> {
  */
 export function parseYaml<T>(content: string, options?: YamlParseOptions): YamlParseResult<T> {
   try {
-    const data = YAML.parse(content, { prettyErrors: true }) as T;
+    const doc = YAML.parseDocument(content, { prettyErrors: true });
+
+    // `parseDocument` COLLECTS problems instead of throwing them, so every one of these has to be
+    // read explicitly. Reading them HERE is what makes the check universal: this function is the
+    // only parse in the codebase — `loadYamlFile`, `loadYamlFileSync` and `loadYamlFileWithResult`
+    // all route through it — so a per-caller check would be a rule each new caller could forget.
+    const firstProblem = doc.errors[0] ?? doc.warnings[0];
+    if (firstProblem !== undefined) {
+      throw firstProblem;
+    }
+
+    const violation = findStrictnessViolation(doc);
+    if (violation !== undefined) {
+      // `IMPOSSIBLE` is the library's catch-all code; the message carries the real reason, and
+      // reusing the library's error type keeps one failure shape for every caller.
+      throw new YAML.YAMLParseError([0, 0], 'IMPOSSIBLE', violation);
+    }
+
+    // `maxAliasCount` is applied when the node tree is realised, not when it is composed, so it
+    // belongs here rather than on `parseDocument`. Its default of 100 is what refuses a
+    // billion-laughs document; js-yaml had no such limit and expanded one happily.
+    const data = doc.toJS({ maxAliasCount: 100 }) as T;
 
     return { success: true, data };
   } catch (error) {
