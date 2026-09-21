@@ -5,12 +5,15 @@ import { CATEGORY_YAML_FILENAME, readCategoryYamlDocument } from './category-fil
 import { categorySnapshotContract } from './category-snapshot-contract.js';
 import { isPreviewRequest } from '../../shared/preview-action.js';
 
+import type { RestorePlan } from '#modules/versioning/index.js';
 import type { ToolResponse } from '#shared/types/index.js';
 import type { CategoryResourceContext } from '../core/context.js';
 import type { CategoryManagerInput } from '../core/types.js';
 
 import {
+  applyByteRestore,
   describeIncompleteSnapshot,
+  describeRestorePlan,
   describeRollbackPreview,
   describeRollbackRecord,
 } from '#modules/versioning/index.js';
@@ -85,6 +88,29 @@ export class CategoryVersioningProcessor {
     }
     const currentState = categorySnapshotContract.project(id, declared);
 
+    // Does version N carry the FILES, or only their projection? See the same block in
+    // `gate-versioning-processor.ts`; a `refused` is never downgraded to a fallback.
+    const byteRestore = await this.ctx.versionHistoryService.planByteRestore(
+      'category',
+      id,
+      version
+    );
+    if (byteRestore.status === 'refused') {
+      return this.error(`Rollback failed: ${byteRestore.reason}`);
+    }
+
+    if (byteRestore.status === 'ready') {
+      if (isPreviewRequest(args)) {
+        return this.success(
+          describeRollbackPreview('category', id, version, undefined, undefined, byteRestore.plan)
+        );
+      }
+      return this.restoreCategoryBytes(id, version, byteRestore.plan, byteRestore.bytes, {
+        currentState,
+        snapshot,
+      });
+    }
+
     // A preview returns here — after validation, so it refuses an unrestorable version the same
     // way the real call does, and BEFORE the version row is recorded, so neither side-effect
     // surface moves. The diff is projected from the write the rollback below performs — same
@@ -147,6 +173,55 @@ export class CategoryVersioningProcessor {
 
     return this.success(
       `✅ Category '${id}' rolled back to version ${version}\n\n` +
+        `${describeRollbackRecord(restoreOutcome)}\n` +
+        `🔄 Prompt data reloaded with the restored declaration`
+    );
+  }
+
+  /**
+   * Put version N's recorded bytes back, then record the state that produced.
+   *
+   * A category's resource is `category.yaml` and never the prompts around it (CLAUDE.md), so the
+   * enumerator recorded exactly that one file and this restore writes exactly that one file. The
+   * directory of prompts beside it is untouched — the same bound its `delete` already honours.
+   */
+  private async restoreCategoryBytes(
+    id: string,
+    version: number,
+    plan: RestorePlan,
+    bytes: ReadonlyMap<string, Uint8Array>,
+    states: { currentState: Record<string, unknown>; snapshot: Record<string, unknown> }
+  ): Promise<ToolResponse> {
+    let restoreOutcome: { version?: number; recorded: boolean } | undefined;
+
+    const outcome = await applyByteRestore({
+      plan,
+      bytes,
+      commit: async (): Promise<void> => {
+        restoreOutcome = await this.ctx.versionHistoryService.commitEdit(
+          'category',
+          id,
+          states.currentState,
+          states.snapshot,
+          { description: `Rollback to v${version}`, diff_summary: '' }
+        );
+      },
+    });
+
+    if (!outcome.applied) {
+      return this.error(`Rollback failed: ${outcome.error}`);
+    }
+    if (restoreOutcome === undefined) {
+      throw new Error(
+        `Rollback of category '${id}' reported a successful restore without recording a version`
+      );
+    }
+
+    await this.ctx.onRefresh?.();
+
+    return this.success(
+      `✅ Category '${id}' rolled back to version ${version}, byte for byte\n\n` +
+        `${describeRestorePlan(plan)}\n\n` +
         `${describeRollbackRecord(restoreOutcome)}\n` +
         `🔄 Prompt data reloaded with the restored declaration`
     );

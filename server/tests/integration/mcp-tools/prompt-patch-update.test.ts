@@ -157,6 +157,15 @@ function createHarness(workspaceDir: string): Harness {
           ? { ok: true as const, entry: { snapshot: result.snapshot } }
           : { ok: false as const, error: result.error ?? 'Version not found' };
       },
+      /**
+       * The PROJECTION path, which is what this harness's doubles describe: it configures a
+       * snapshot, never a file tree. Answering "no tree" is exactly what a pre-v29 row answers,
+       * and it is the honest double — a missing method is a TypeError at the call site.
+       */
+      planByteRestore: async () => ({
+        status: 'projection-only' as const,
+        reason: 'this harness records no file trees',
+      }),
       commitEdit: async () => {
         const result = await rollback();
         return { version: result.saved_version ?? 0, bridged: false };

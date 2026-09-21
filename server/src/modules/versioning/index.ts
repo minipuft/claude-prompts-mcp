@@ -13,6 +13,16 @@ export type {
   ResourceType,
 } from './types.js';
 export type { SnapshotContract, RestoreResult } from './snapshot-contract.js';
+
+// The byte-exact rollback path: what a restore from a recorded file tree would do, and how to run
+// it. Exported from the module barrel because the four `resource_manager` versioning processors
+// are its callers and `mcp/` may not reach past a module's public entry.
+export type { RestorePlan } from './restore-plan.js';
+export { describeRestorePlan, restoreWritesNothing } from './restore-plan.js';
+// `ByteRestoreAvailability` is deliberately NOT re-exported here: every consumer discriminates on
+// `.status` off the service method's return type and never names it, so the re-export would stand
+// in front of no importer.
+export { applyByteRestore } from './byte-restore.js';
 export {
   CREATE_ROW_DESCRIPTION,
   UPDATE_ROW_DESCRIPTION,

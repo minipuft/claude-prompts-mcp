@@ -1,5 +1,6 @@
 // @lifecycle canonical - Core service for managing resource version history
 
+import { resolveByteRestore } from './byte-restore.js';
 import { RESOURCE_SUBTREE_MATCH } from './history-key.js';
 
 import type { LoadedTree } from '#cli-shared/object-store.js';
@@ -9,7 +10,9 @@ import type {
   ResourceFileLocatorPort,
   ResourceFileSet,
   ResourceLocationResult,
+  ResourceRootOrigin,
 } from '#shared/utils/resource-file-set.js';
+import type { ByteRestoreAvailability } from './byte-restore.js';
 import type {
   VersionEntry,
   HistoryFile,
@@ -634,6 +637,59 @@ export class VersionHistoryService {
       return { ok: false, error: `Version ${targetVersion} not found` };
     }
     return { ok: true, entry: targetEntry };
+  }
+
+  /**
+   * Whether `version` can be restored from its recorded BYTES, and what doing so would do.
+   *
+   * PURE READ, like {@link resolveRollbackTarget} beside it — no file and no row moves, which is
+   * what lets `preview_action:'rollback'` call this and print the very plan an apply would run.
+   * The two call it with the same arguments and get the same value, so a preview cannot describe
+   * a different action than the one that follows it.
+   *
+   * Three answers (see `ByteRestoreAvailability`): `ready`, `projection-only` — the row carries no
+   * tree, so the caller uses today's `SnapshotContract.restore` path unchanged — and `refused`,
+   * where the caller must write nothing. A `refused` is never downgraded to a fallback here: a row
+   * advertising a tree whose objects are gone, or a recorded path that escapes the resource root,
+   * is a database that disagrees with itself, and quietly restoring something else instead is the
+   * failure this whole route exists to remove.
+   */
+  async planByteRestore(
+    resourceType: ResourceType,
+    resourceId: string,
+    version: number
+  ): Promise<ByteRestoreAvailability> {
+    if (!this.isEnabled()) {
+      return { status: 'projection-only', reason: 'versioning is disabled' };
+    }
+    const db = this.getDb();
+    const tenantId = this.resolveTenantId();
+
+    const row = db.queryOne<{ id: number; tree_hash: string | null; tree_origin: string | null }>(
+      `SELECT id, tree_hash, tree_origin FROM version_history
+       WHERE tenant_id = ? AND resource_type = ? AND resource_id = ? AND version = ?`,
+      [tenantId, resourceType, resourceId, version]
+    );
+    if (row?.tree_hash == null) {
+      return {
+        status: 'projection-only',
+        reason: `version ${version} recorded no file tree`,
+      };
+    }
+
+    return resolveByteRestore({
+      db,
+      tenantId,
+      resourceType,
+      resourceId,
+      version,
+      versionRowId: row.id,
+      // The enumerator's own vocabulary, written by `recordTree` and read straight back. Widened
+      // to `unknown` rather than defaulted to `primary`, because a row whose origin nobody could
+      // classify must not read as one this process owns.
+      recordedOrigin: (row.tree_origin ?? 'unknown') as ResourceRootOrigin,
+      location: await this.locateResourceFiles(resourceType, resourceId),
+    });
   }
 
   /**

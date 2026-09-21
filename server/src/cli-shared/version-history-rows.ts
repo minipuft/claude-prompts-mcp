@@ -315,6 +315,8 @@ function asObjectStoreDatabase(db: DatabaseSync): ObjectStoreDatabase {
     },
     queryOne: <T = Record<string, unknown>>(sql: string, params: unknown[] = []) =>
       (db.prepare(sql).get(...(params as SQLInputValue[])) as T | undefined) ?? null,
+    query: <T = Record<string, unknown>>(sql: string, params: unknown[] = []) =>
+      db.prepare(sql).all(...(params as SQLInputValue[])) as unknown as T[],
   };
 }
 

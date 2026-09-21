@@ -254,6 +254,17 @@ async function createHarness(
       recordEditResult,
       resolveRollbackTarget,
       commitEdit: jest.fn(async () => ({ version: 3, bridged: false })),
+      /**
+       * These doubles exercise the PROJECTION path, so the byte path must answer "no tree".
+       *
+       * Stated rather than omitted: a missing method is a TypeError at the call site, and the
+       * honest double for a version row this harness never recorded files for is exactly the
+       * answer a pre-v29 row gives.
+       */
+      planByteRestore: jest.fn(async () => ({
+        status: 'projection-only',
+        reason: 'this harness records no file trees',
+      })),
     },
     textDiffService: new ObjectDiffGenerator(),
     comparisonEngine: new ComparisonEngine(logger),
@@ -552,6 +563,16 @@ function createVersionSeam(): {
       isAutoVersionEnabled: () => true,
       recordEditResult,
       resolveRollbackTarget,
+      /**
+       * These harnesses exercise the PROJECTION path — they configure a snapshot and never a file
+       * tree — so the byte path must answer "no tree". That is exactly what a pre-v29 row answers,
+       * which makes this the honest double rather than a convenience: a missing method would be a
+       * TypeError at the call site, and a `ready` here would be a tree nothing recorded.
+       */
+      planByteRestore: jest.fn(async () => ({
+        status: 'projection-only',
+        reason: 'this harness records no file trees',
+      })),
       commitEdit: jest.fn(async () => ({ version: 3, bridged: false })),
     },
   };

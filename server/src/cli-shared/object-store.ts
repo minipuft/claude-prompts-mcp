@@ -71,6 +71,8 @@ const MAX_TREE_BYTES = 8 * 1024 * 1024;
 export interface ObjectStoreDatabase {
   run(sql: string, params?: unknown[]): void;
   queryOne<T = Record<string, unknown>>(sql: string, params?: unknown[]): T | null;
+  /** Needed only by {@link loadVersionTree}: a manifest is many rows, read as one statement. */
+  query<T = Record<string, unknown>>(sql: string, params?: unknown[]): T[];
 }
 
 export interface RecordTreeInput {
@@ -220,6 +222,91 @@ export function sweepUnreferencedObjects(db: ObjectStoreDatabase, tenantId: stri
 
   db.run(`DELETE FROM objects WHERE ${UNREFERENCED}`, [tenantId]);
   return orphans;
+}
+
+/**
+ * One recorded file, read back out of the store: where it sat, and exactly what was in it.
+ *
+ * Not exported: it is the shape of `LoadedVersionTree.files`, and a consumer iterating that array
+ * already has it structurally. An exported name nothing imports reads as a surface.
+ */
+interface StoredFile {
+  path: string;
+  hash: string;
+  bytes: Uint8Array;
+}
+
+/**
+ * A recorded tree, read back — or the precise reason it cannot be.
+ *
+ * Three answers, not two, because the two failures mean opposite things to a caller. `absent` is a
+ * row that never had a tree — a bridge row, a row written before schema v29, or one degraded by an
+ * over-limit file — and the honest response is today's projection-based restore. `incomplete` is a
+ * row that CLAIMS a tree whose objects are not there, which the startup referential repair
+ * (`SqliteEngine.repairVersionTrees`) normally prevents by NULLing such rows; reaching it means the
+ * database disagrees with itself, and the response is to refuse by name and write nothing. Falling
+ * back to the projection there would silently restore a different state than the one whose
+ * byte-exactness the row advertises.
+ */
+export type LoadedVersionTree =
+  | { status: 'loaded'; files: StoredFile[] }
+  | { status: 'absent' }
+  | { status: 'incomplete'; reason: string };
+
+/**
+ * Read back every file of one version row, bytes included.
+ *
+ * Scoped by `tenantId` on BOTH tables (ruling R56): objects are keyed `(tenant_id, hash)`, so a
+ * read that joined on hash alone could reach another workspace's bytes for a colliding digest. The
+ * tenant arrives from the owning `version_history` row — never re-derived here, for the same
+ * reason `recordTree` does not re-derive it.
+ *
+ * Ordered by path so two reads of one row produce the same list, which is what lets a preview and
+ * an apply be compared as ONE value.
+ */
+export function loadVersionTree(
+  db: ObjectStoreDatabase,
+  input: { tenantId: string; versionRowId: number }
+): LoadedVersionTree {
+  if (!objectStoreExists(db)) {
+    return { status: 'absent' };
+  }
+  const { tenantId, versionRowId } = input;
+
+  const manifest = db.query<{ path: string; object_hash: string }>(
+    `SELECT path, object_hash FROM version_entries
+     WHERE version_row_id = ? AND tenant_id = ?
+     ORDER BY path`,
+    [versionRowId, tenantId]
+  );
+  if (manifest.length === 0) {
+    return { status: 'absent' };
+  }
+
+  const files: StoredFile[] = [];
+  for (const entry of manifest) {
+    const object = db.queryOne<{ bytes: Uint8Array }>(
+      `SELECT bytes FROM objects WHERE tenant_id = ? AND hash = ?`,
+      [tenantId, entry.object_hash]
+    );
+    if (object === null) {
+      return {
+        status: 'incomplete',
+        reason:
+          `the recorded bytes of '${entry.path}' (${entry.object_hash}) are missing from the ` +
+          `object store`,
+      };
+    }
+    files.push({
+      path: entry.path,
+      hash: entry.object_hash,
+      // `node:sqlite` hands a BLOB back as a `Uint8Array`; normalised anyway, because a driver
+      // that handed back a `Buffer` view over a larger pool would write the pool's tail if the
+      // view were passed to `writeFile` unexamined.
+      bytes: Uint8Array.from(object.bytes),
+    });
+  }
+  return { status: 'loaded', files };
 }
 
 /** One file's bytes, its digest and the path the manifest stores it under. */
