@@ -272,8 +272,8 @@ Enforcement was therefore inherited from the driver rather than owned by this re
 not a state a v29 invariant may rest on. `STATE_DB_WRITER_PRAGMAS`
 (`shared/utils/runtime-state-location.ts`) now carries `PRAGMA foreign_keys = ON` beside the shared
 `busy_timeout`, and both writers apply the whole list. **Be honest about what that line proves:
-removing it changes no behaviour on this driver, and no test goes red when it is deleted.** It is
-an assertion, not a fix — what it buys is that a driver default change, a different Node, or a new
+removing the `foreign_keys` line changes no behaviour on this driver, and no test goes red when it
+is deleted.** It is an assertion, not a fix — what it buys is that a driver default change, a different Node, or a new
 opener written from that list cannot silently withdraw the guarantee.
 
 Every opener of `state.db`, and its foreign key posture:
@@ -398,6 +398,16 @@ of 0 and loses every race outright — WAL lets readers and one writer coexist, 
 writers coexist, and this file has three openers. The Python hooks are the third; they open
 read-only and inherit `sqlite3.connect`'s own 5-second default, the same number by coincidence
 rather than by contract, so changing the constant means checking `hooks/lib/db_reader.py` too.
+
+**The two lines of `STATE_DB_WRITER_PRAGMAS` are not equally inert, and until 2026-09-21 nothing
+said so.** Deleting the whole loop from the CLI's `openStateDb` left 501 tests green, which read
+as "the list is decorative" — true of `foreign_keys` on this driver, false of `busy_timeout`, and
+the two were indistinguishable. `tests/integration/database/cli-state-db-busy-timeout.test.ts`
+closes that half behaviourally: a child process holds `BEGIN IMMEDIATE` for 300 ms and a real CLI
+entry point (`deleteVersionRows`, reached by `cpm delete`) must WAIT for it and succeed, with a
+zero-patience connection against the same held lock as the positive control. `openStateDb` is
+private and closes its connection before any caller could read a pragma off it, so an observable
+probe is the only honest one.
 
 v28 is the worked example of a **real migration** on a durable table. `ensureSchema()` renumbers
 colliding rows between the snapshot and the restore (`renumberDuplicateVersionHistory`,
