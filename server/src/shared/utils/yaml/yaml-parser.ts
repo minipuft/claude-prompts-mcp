@@ -143,6 +143,16 @@ export function parseYaml<T>(content: string, options?: YamlParseOptions): YamlP
     // read explicitly. Reading them HERE is what makes the check universal: this function is the
     // only parse in the codebase — `loadYamlFile`, `loadYamlFileSync` and `loadYamlFileWithResult`
     // all route through it — so a per-caller check would be a rule each new caller could forget.
+    // Warnings are refused alongside errors because for untrusted input "the parser resolved
+    // something it was not sure about" is not a thing to continue past.
+    //
+    // SUBSUMED, NOT DEAD (measured 2026-09-21 on yaml 2.9.1 · flips when a warning code appears
+    // that carries no explicit tag). The only warning this corpus can raise is
+    // TAG_RESOLVE_FAILED, which always accompanies an explicit tag, so `findStrictnessViolation`
+    // already refuses every document that reaches it — removing this clause leaves the strictness
+    // tests green. It is kept as the conservative half of the pair, and stamped so its survival
+    // under mutation is not read as a gap. KEY_OVER_1024_CHARS does not fire at 1,100 characters
+    // in this version, and js-yaml accepted long keys, so nothing here narrows on that axis.
     const firstProblem = doc.errors[0] ?? doc.warnings[0];
     if (firstProblem !== undefined) {
       throw firstProblem;
