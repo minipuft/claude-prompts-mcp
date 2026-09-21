@@ -28,7 +28,7 @@
 import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 
-import { CST, Composer, Parser, type Document } from 'yaml';
+import { CST, Composer, Parser, parseDocument, type Document } from 'yaml';
 
 import { serializeYaml } from './yaml-parser.js';
 
@@ -191,6 +191,15 @@ function applyThroughSourceTokens(
 
     const next = difference.nextValue;
     if (typeof next === 'string') {
+      // A value carrying newlines is refused here, not written. `CST.setScalarValue` drops a
+      // multi-line string into a block scalar's token without re-indenting its continuation
+      // lines, which ends the block early and produces a file that no longer parses: replacing
+      // a framework's folded `systemPromptGuidance` emitted `## Method` at column 0 and the
+      // mutation transaction rejected the result. The document layer renders block scalars
+      // correctly, so multi-line values go there.
+      if (next.includes('\n')) {
+        return undefined;
+      }
       CST.setScalarValue(srcToken, next);
       continue;
     }
@@ -208,6 +217,24 @@ function applyThroughSourceTokens(
   let out = '';
   for (const token of tokens) {
     out += CST.stringify(token);
+  }
+
+  // The source-token path edits TEXT, so a token helper that mis-renders a value produces a file
+  // that no longer PARSES rather than one that parses differently. The multi-line block-scalar
+  // case above is one such helper; this check closes the class rather than that one instance, by
+  // refusing any output this module cannot read back. Refusing returns the caller to the document
+  // layer, which renders from the node tree and cannot emit malformed YAML, so the cost of a
+  // future mis-render is a re-wrapped file and never a corrupt one.
+  //
+  // `parseDocument` COLLECTS syntax errors instead of throwing, so a bare try/catch here is a
+  // guard that never fires. It was written that way first, and the mutation re-introducing the
+  // block-scalar defect walked straight through it.
+  try {
+    if (parseDocument(out).errors.length > 0) {
+      return undefined;
+    }
+  } catch {
+    return undefined;
   }
   return out;
 }

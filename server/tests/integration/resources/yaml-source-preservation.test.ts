@@ -222,6 +222,41 @@ describe('resource writes preserve the source they did not edit', () => {
     expect(commentCount(written.content)).toBe(commentCount(source));
   });
 
+  /**
+   * The defect that reached the mutation transaction before it was caught.
+   *
+   * Replacing a folded block scalar with another multi-line value is a scalar-for-scalar change,
+   * so it reached the source-token path — which wrote the new text into the block's token without
+   * re-indenting its continuation lines. The block ended early and `## Method` landed at column 0,
+   * so the file no longer parsed at all. Output that cannot be read back is the one failure this
+   * module must never produce: a re-wrapped file is a cosmetic loss, a corrupt one is data loss.
+   */
+  test('replacing a block scalar with a multi-line value still parses', () => {
+    const source = [
+      '# authored',
+      'id: probe',
+      'systemPromptGuidance: >',
+      '  ## Method',
+      '',
+      '  Work phase by phase.',
+      'version: 1.0.0',
+      '',
+    ].join('\n');
+
+    const parsed = parseYaml<Record<string, unknown>>(source);
+    const replacement = '## Method\n\nExplain the tradeoffs in detail.\n\nName every assumption.\n';
+    const written = serializeYamlPreservingSource(
+      { ...parsed.data!, systemPromptGuidance: replacement },
+      source
+    );
+
+    const reloaded = parseYaml<Record<string, unknown>>(written.content);
+    expect(reloaded.success).toBe(true);
+    expect(reloaded.data!['systemPromptGuidance']).toBe(replacement);
+    expect(reloaded.data!['version']).toBe('1.0.0');
+    expect(commentCount(written.content)).toBe(commentCount(source));
+  });
+
   test('no prior file renders from scratch rather than failing', () => {
     const written = serializeYamlPreservingSource({ id: 'fresh', name: 'Fresh' }, undefined);
     expect(written.fidelity).toBe('created');
