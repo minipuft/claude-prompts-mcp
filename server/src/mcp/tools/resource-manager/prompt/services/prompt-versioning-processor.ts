@@ -273,23 +273,6 @@ export class PromptVersioningProcessor {
 
     const snapshot = resolved.entry.snapshot;
     const restore = buildRestoreFromSnapshot(id, snapshot);
-    if (!restore.ok) {
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text:
-              `❌ Rollback failed: version ${version} of '${id}' is not a complete snapshot — ` +
-              `missing ${restore.missingFields.join(', ')}.\n\n` +
-              `The prompt was left unchanged and no version was recorded. Substituting the live ` +
-              `value for a missing field is what produced rollbacks landing on a state matching ` +
-              `neither version.`,
-          },
-        ],
-        isError: true,
-      };
-    }
-
     const currentState = canonicalPromptSnapshot(id, currentPrompt);
 
     // Does version N carry the FILES, or only their projection? See the same block in
@@ -315,6 +298,20 @@ export class PromptVersioningProcessor {
         currentState,
         snapshot,
       });
+    }
+
+    // The byte path does not need a restorable PROJECTION, so its check runs after the branch.
+    // A version whose snapshot is missing a required field may still carry the resource's files,
+    // and refusing that rollback would refuse a restore the record can perform — the projection's
+    // completeness is a property of the fallback, not of the version.
+    if (!restore.ok) {
+      return this.errorResponse(
+        `❌ Rollback failed: version ${version} of '${id}' is not a complete snapshot — ` +
+          `missing ${restore.missingFields.join(', ')}.\n\n` +
+          `The prompt was left unchanged and no version was recorded. Substituting the live ` +
+          `value for a missing field is what produced rollbacks landing on a state matching ` +
+          `neither version.`
+      );
     }
 
     // A preview returns here — after validation, so it refuses an unrestorable version the same

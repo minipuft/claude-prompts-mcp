@@ -308,7 +308,7 @@ export function pruneVersionHistory(
  * `node:sqlite` exposes `prepare`/`exec`, not `run(sql, params)`, so the adapter is unavoidable —
  * it is four lines here instead of a second copy of every shared statement over there.
  */
-function asObjectStoreDatabase(db: DatabaseSync): ObjectStoreDatabase {
+export function asObjectStoreDatabase(db: DatabaseSync): ObjectStoreDatabase {
   return {
     run: (sql, params = []) => {
       db.prepare(sql).run(...(params as SQLInputValue[]));

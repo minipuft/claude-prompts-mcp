@@ -120,7 +120,18 @@ export type RecordTreeOutcome =
  * nothing either. On the server the engine owns this DDL and asserts it at startup, so the check
  * is one `sqlite_master` lookup that always answers yes — and a NO there still surfaces, because
  * `recordTree` returns a reason its caller warns about rather than a silent skip.
+ *
+ * Exported as {@link hasObjectStore} for ONE caller outside this module: the `cpm` rollback path,
+ * which must know the answer BEFORE it selects `version_history.tree_hash`. A schema that predates
+ * v29 has neither the tables nor those columns, and a SELECT naming a column that does not exist
+ * throws rather than returning nothing — measured 2026-09-21 against the CLI suite's hand-seeded
+ * pre-v29 fixture, which failed three rollback cases. One `sqlite_master` lookup answers for both,
+ * because the tables and the columns arrived in the same bump.
  */
+export function hasObjectStore(db: ObjectStoreDatabase): boolean {
+  return objectStoreExists(db);
+}
+
 function objectStoreExists(db: ObjectStoreDatabase): boolean {
   return (
     db.queryOne<{ name: string }>(

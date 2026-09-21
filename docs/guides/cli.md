@@ -219,9 +219,16 @@ Restore a previous resource version.
 ```bash
 cpm rollback prompt action_plan 2 --workspace server
 cpm rollback gate code-quality 1 --json
+cpm rollback gate code-quality 1 --preview
 ```
 
-Saves the current state as a new version, writes the target version back over the resource YAML, then records the state that write PRODUCED as the newest version — the same order the server records an edit in. Both rows carry the resource's bytes as they stood when the row was written, so either state can later be restored byte-exactly.
+Saves the current state as a new version, restores the target version, then records the state that restore PRODUCED as the newest version — the same order the server records an edit in. Both rows carry the resource's bytes as they stood when the row was written, so either state can later be restored byte-exactly.
+
+**A version recorded since schema v29 restores its files byte for byte**, through the same planner `resource_manager rollback` uses: the recorded bytes are written back verbatim, so comments, key order, flow style, line endings, a byte-order mark and every non-ASCII character survive. Files whose recorded bytes already match are not written at all. **A rollback never deletes a file** — one the resource has now that the target version did not record stays, is listed by path, and means the resource is then not byte-identical to that version. A version that recorded no file tree still restores the older way: the recorded fields are merged over the entry file and every other key keeps its current value, which is what `not_restored` reports.
+
+Two states refuse and write nothing rather than restoring something else: a version row whose recorded bytes are missing from the object store, and a recorded path that resolves outside the resource's own directory.
+
+`--preview` resolves exactly the plan a rollback would apply and prints it, writing no file and recording no version. `--json` adds `preview`, `files_written`, `files_unchanged` and `files_left_in_place` beside the existing fields.
 
 For a gate or a framework, both rows carry the SAME projection `resource_manager` records — one
 declaration per resource type, shared by the two surfaces. Rolling back a gate or framework the
@@ -230,7 +237,9 @@ state being replaced now compares equal to the newest recorded one. A **prompt**
 bridges: the shared prompt projection takes a loader-resolved prompt, and reaching the prompt loader
 from the CLI bundle measured +59.0 KB against 24.1 KB of headroom (2026-09-21), so `cpm` still
 records a prompt's raw `prompt.yaml` map. ☐ open as of 2026-09-21 · flips when a prompt's authored
-state is reachable from `cli-shared/` within the bundle budget.
+state is reachable from `cli-shared/` within the bundle budget. That bound is about the SNAPSHOT
+only — a prompt's FILES restore byte-exactly like every other type's, because the bytes and the
+projection are different questions and only the projection needs the loader.
 
 Nothing is recorded when the target version is already the current state; `--json` reports that as `"recorded": false` alongside the version number that was already newest. A rollback that cannot write the file records no restored version at all, and a rollback whose version row cannot be written leaves the file byte-identical to what it was.
 

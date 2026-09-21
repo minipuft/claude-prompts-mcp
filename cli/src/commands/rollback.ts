@@ -6,6 +6,7 @@ import {
 // Directly, not through the `cli-shared` barrel: the barrel is what every other command imports,
 // and adding one more never-server-consumed re-export to it is knip debt with no reader.
 import { projectResourceSnapshot } from '@cli-shared/resource-snapshot.js';
+import { describeRestorePlan } from '@modules/versioning/restore-plan.js';
 import { resourceFileSet } from '@shared/utils/resource-file-set.js';
 import { serializeYamlPreservingSource } from '@shared/utils/yaml/yaml-document-writer.js';
 import { resolveWorkspace, resolveResourceDir, findResource } from '../lib/workspace.js';
@@ -18,6 +19,8 @@ interface RollbackOptions {
   type?: string;
   id?: string;
   version?: string;
+  /** Resolve what the rollback would do and print it, writing no file and recording no version. */
+  preview?: boolean;
 }
 
 export async function rollback(options: RollbackOptions): Promise<number> {
@@ -152,6 +155,7 @@ export async function rollback(options: RollbackOptions): Promise<number> {
   //
   // `targets` is the entry file alone, not its directory: a single-file prompt's directory is the
   // CATEGORY, and snapshotting that would restore every sibling prompt on a failed record.
+  const roots = { primary: resolveResourceDir(workspace, type) };
   const result = await rollbackVersion(
     match.file,
     { resourceType, resourceId: match.id },
@@ -162,11 +166,29 @@ export async function rollback(options: RollbackOptions): Promise<number> {
         resourceFileSet({
           resourceType,
           entryPath: match.file,
-          roots: { primary: resolveResourceDir(workspace, type) },
+          roots,
         }),
       targets: [{ path: yamlPath, kind: 'file' }],
       apply: applyRestore,
       maxVersions: resolveConfiguredMaxVersions(workspace),
+      // The byte path, when version N recorded one. Same shape the server's injected locator
+      // returns, so both surfaces hand `resolveByteRestore` the same thing and get the same plan.
+      location: { located: true, entryPath: match.file, roots },
+      // A PROMPT still uses `cpm`'s own projection for its SNAPSHOT — the shared prompt projection
+      // needs the loader and the converter, +59.0 KB, which does not fit the bundle budget
+      // (as of 2026-09-21 · flips when the dev cpm budget clears that). Its FILES restore
+      // byte-exactly like any other type: the snapshot and the bytes are different questions.
+      reproject: () => {
+        // Re-read from disk, because the byte restore replaced the file wholesale. `notRestored`
+        // is cleared rather than left over: it is the merging path's report of snapshot keys the
+        // entry file kept, and a byte restore has no such keys — every recorded file was replaced.
+        const onDisk = loadYamlFileSync<Record<string, unknown>>(yamlPath) ?? currentData;
+        notRestored.length = 0;
+        return Promise.resolve(
+          projectResourceSnapshot(resourceType, match.id, yamlPath, onDisk).snapshot,
+        );
+      },
+      ...(options.preview === true ? { preview: true } : {}),
     },
   );
 
@@ -174,6 +196,10 @@ export async function rollback(options: RollbackOptions): Promise<number> {
     console.error(result.error ?? 'Rollback failed.');
     return 1;
   }
+
+  // The plan, when version N recorded its files. The SAME value a preview prints and an apply
+  // executed — one call produced it, so the two cannot describe different actions.
+  const plan = result.plan;
 
   if (options.json) {
     output(
@@ -184,21 +210,50 @@ export async function rollback(options: RollbackOptions): Promise<number> {
         // already current records nothing and reports the version that was already newest.
         recorded: result.recorded ?? false,
         restored_version: result.restored_version,
+        preview: options.preview === true,
+        // Additive, and empty on the byte path by construction: `not_restored` reports snapshot
+        // keys the merging writer left at their current value, and a byte restore replaces whole
+        // files. It stays, truthfully, for a version that recorded no file tree.
         not_restored: notRestored,
+        ...(plan !== undefined
+          ? {
+              files_written: plan.write.map((file) => file.path),
+              files_unchanged: plan.unchanged,
+              files_left_in_place: plan.leftInPlace,
+            }
+          : {}),
       },
       { json: true },
     );
-  } else {
+    return 0;
+  }
+
+  if (options.preview === true) {
     console.log(
-      result.recorded === true
-        ? `Rolled back ${singularName(type)} '${options.id}': saved v${result.saved_version}, restored v${result.restored_version}`
-        : `${singularName(type)} '${options.id}' already matches v${result.restored_version} — nothing recorded.`,
+      `Preview — rollback of ${singularName(type)} '${options.id}' to v${targetVersion}.\n` +
+        `Nothing was written: no file changed and no version was recorded.`,
     );
-    if (notRestored.length > 0) {
-      console.log(
-        `Version ${targetVersion} recorded no ${notRestored.join(', ')} — left at the current value.`,
-      );
-    }
+    console.log(
+      plan !== undefined
+        ? describeRestorePlan(plan)
+        : `Version ${targetVersion} recorded no file tree. A rollback would merge its recorded ` +
+            `fields over ${yamlPath} and leave every other key at its current value.`,
+    );
+    return 0;
+  }
+
+  console.log(
+    result.recorded === true
+      ? `Rolled back ${singularName(type)} '${options.id}': saved v${result.saved_version}, restored v${result.restored_version}`
+      : `${singularName(type)} '${options.id}' already matches v${result.restored_version} — nothing recorded.`,
+  );
+  if (plan !== undefined) {
+    console.log(describeRestorePlan(plan));
+  }
+  if (notRestored.length > 0) {
+    console.log(
+      `Version ${targetVersion} recorded no ${notRestored.join(', ')} — left at the current value.`,
+    );
   }
   return 0;
 }

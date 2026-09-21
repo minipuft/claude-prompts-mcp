@@ -13,16 +13,20 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 
 import type { TestDatabaseContext } from '../../helpers/test-database.js';
 import type { VersioningConfigProvider } from '../../../src/modules/versioning/version-history-service.js';
 import type { ResourceFileLocatorPort } from '../../../src/shared/utils/resource-file-set.js';
 
+import { rollbackVersion } from '../../../src/cli-shared/version-history.js';
 import { applyByteRestore } from '../../../src/modules/versioning/byte-restore.js';
 import { VersionHistoryService } from '../../../src/modules/versioning/version-history-service.js';
 import { hashBytes } from '../../../src/shared/utils/hash.js';
+import { resourceFileSet } from '../../../src/shared/utils/resource-file-set.js';
 import { createTestDatabaseManager } from '../../helpers/test-database.js';
 
 const TENANT = 'byte-restore-tenant';
@@ -224,6 +228,85 @@ describe('planByteRestore', () => {
   });
 });
 
+/**
+ * A `cpm` rollback against a database written by a server older than schema v29.
+ *
+ * EXPLICIT, because the coverage that caught this was an accident. `cpm` opens whatever `state.db`
+ * it finds, and a pre-v29 file has neither the object store nor `version_history`'s tree columns —
+ * so a SELECT naming `tree_hash` THROWS rather than returning nothing, and an ordinary rollback
+ * against an older database fails. It was found by the CLI suite's hand-seeded fixture, whose
+ * subject is `cpm rollback` output and not schema compatibility at all; a fixture cleanup there
+ * would have removed this net without anyone noticing what it protected. Same shape as the two
+ * compatibility defects the previous worker on this arc recorded.
+ */
+describe('rollbackVersion against a pre-v29 database', () => {
+  it('restores through the projection path instead of throwing', async () => {
+    const workspace = await mkdtemp(path.join(tmpdir(), 'pre-v29-rollback-'));
+    try {
+      const gateDir = path.join(workspace, 'resources', 'gates', 'alpha');
+      await mkdir(gateDir, { recursive: true });
+      await mkdir(path.join(workspace, 'runtime-state'), { recursive: true });
+      await writeFile(
+        path.join(gateDir, 'gate.yaml'),
+        '# hand-authored\nid: alpha\nname: Current\n',
+        'utf8'
+      );
+
+      // The v28 shape: no `objects`, no `version_entries`, and no tree columns.
+      const db = new DatabaseSync(path.join(workspace, 'runtime-state', 'state.db'));
+      try {
+        db.exec(`CREATE TABLE version_history (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          tenant_id TEXT NOT NULL DEFAULT 'default',
+          organization_id TEXT, workspace_id TEXT,
+          resource_type TEXT NOT NULL, resource_id TEXT NOT NULL, version INTEGER NOT NULL,
+          snapshot TEXT NOT NULL, diff_summary TEXT DEFAULT '', description TEXT DEFAULT '',
+          created_at TEXT NOT NULL)`);
+        db.prepare(
+          `INSERT INTO version_history
+             (tenant_id, resource_type, resource_id, version, snapshot, created_at)
+           VALUES ('default', 'gate', 'alpha', 1, ?, ?)`
+        ).run(JSON.stringify({ id: 'alpha', name: 'Recorded' }), new Date().toISOString());
+      } finally {
+        db.close();
+      }
+
+      let applied = false;
+      const result = await rollbackVersion(
+        gateDir,
+        { resourceType: 'gate', resourceId: 'alpha' },
+        1,
+        { id: 'alpha', name: 'Current' },
+        {
+          enumerate: () =>
+            resourceFileSet({
+              resourceType: 'gate',
+              entryPath: path.join(gateDir, 'gate.yaml'),
+              roots: { primary: path.join(workspace, 'resources', 'gates') },
+            }),
+          targets: [{ path: path.join(gateDir, 'gate.yaml'), kind: 'file' }],
+          apply: (snapshot) => {
+            applied = true;
+            return Promise.resolve(snapshot);
+          },
+          location: {
+            located: true,
+            entryPath: path.join(gateDir, 'gate.yaml'),
+            roots: { primary: path.join(workspace, 'resources', 'gates') },
+          },
+        }
+      );
+
+      // The projection path ran, and nothing threw on a column that is not there.
+      expect(result.success).toBe(true);
+      expect(applied).toBe(true);
+      expect(result.plan).toBeUndefined();
+    } finally {
+      await rm(workspace, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('applyByteRestore', () => {
   it('writes the recorded bytes back verbatim and records afterwards', async () => {
     const recorded = '# recorded ☕\r\nid: alpha\r\n';
@@ -251,12 +334,19 @@ describe('applyByteRestore', () => {
   });
 
   it('restores every written file byte-identical when the record throws', async () => {
+    // TWO files, not one, and that is the point: with a single-file plan this case passes against
+    // a transaction that snapshots only the entry file — exactly the shape a mutation of the CLI's
+    // target choice exposed, which stayed green against the one-file version.
     const version = await recordVersion('gate', 'alpha', {
-      'gate.yaml': '# recorded\nid: alpha\n',
+      'gate.yaml': '# recorded\nid: alpha\nguidanceFile: guidance.md\n',
+      'guidance.md': '# recorded guidance\n',
     });
     const yamlPath = path.join(rootFor('gate'), 'alpha', 'gate.yaml');
-    const before = 'id: alpha\n# edited by hand\n';
+    const guidancePath = path.join(rootFor('gate'), 'alpha', 'guidance.md');
+    const before = 'id: alpha\nguidanceFile: guidance.md\n# edited by hand\n';
+    const guidanceBefore = '# edited guidance by hand\n';
     await writeFile(yamlPath, before, 'utf8');
+    await writeFile(guidancePath, guidanceBefore, 'utf8');
 
     const available = await service().planByteRestore('gate', 'alpha', version);
     if (available.status !== 'ready') throw new Error(`expected ready, got ${available.status}`);
@@ -272,7 +362,10 @@ describe('applyByteRestore', () => {
     expect(outcome.applied).toBe(false);
     if (outcome.applied) throw new Error('unreachable');
     expect(outcome.rolledBack).toBe(true);
-    // Byte-identical, not merely "restored": the transaction's whole purpose.
+    // Byte-identical, not merely "restored": the transaction's whole purpose. Both files, because
+    // the companion is the one a too-narrow target list leaves holding restored bytes under a
+    // reply saying the rollback failed.
     expect(await readFile(yamlPath, 'utf8')).toBe(before);
+    expect(await readFile(guidancePath, 'utf8')).toBe(guidanceBefore);
   });
 });

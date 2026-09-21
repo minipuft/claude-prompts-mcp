@@ -31,6 +31,7 @@ import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
+import { hashBytes } from '../../../src/shared/utils/hash.js';
 import { CategoryFileWriter } from '../../../src/mcp/tools/category-manager/services/category-file-writer.js';
 import { CategoryLifecycleProcessor } from '../../../src/mcp/tools/category-manager/services/category-lifecycle-processor.js';
 import { categorySnapshotContract } from '../../../src/mcp/tools/category-manager/services/category-snapshot-contract.js';
@@ -921,6 +922,56 @@ describe('a byte-path refusal is never downgraded to the projection path', () =>
     expect(response.isError).toBe(true);
     expect(textOf(response)).toContain('missing from the object store');
     expect(readTree(promptsDir)).toEqual(before);
+  });
+
+  test('a tree-backed version restores even when its PROJECTION is incomplete', async () => {
+    // The property the snapshot-completeness reorder buys, and the only thing that fails if it is
+    // undone. `describeIncompleteSnapshot` is a statement about the FALLBACK — a merging writer
+    // cannot rebuild a resource from a snapshot missing a required field — and it used to run
+    // ahead of the byte branch, so a version carrying the resource's actual bytes was refused for
+    // a defect in a projection the restore never reads.
+    const gatesDir = tempRoot();
+    const harness = await createGateHarness(gatesDir);
+    const restored = Buffer.from('# recorded by hand\nid: preview-probe\nname: Recorded\n', 'utf8');
+    const target = join(gatesDir, GATE_ID, 'gate.yaml');
+
+    // A snapshot missing `name`, which `gateSnapshotContract` requires.
+    harness.resolveRollbackTarget.mockResolvedValue({
+      ok: true,
+      entry: { snapshot: { id: GATE_ID, type: 'validation' } },
+    });
+    harness.planByteRestore.mockResolvedValue({
+      status: 'ready',
+      plan: {
+        resourceType: 'gate',
+        resourceId: GATE_ID,
+        version: 1,
+        destinationRoot: join(gatesDir, GATE_ID),
+        recordedOrigin: 'primary',
+        write: [
+          {
+            path: 'gate.yaml',
+            absolutePath: target,
+            hash: hashBytes(restored),
+            reason: 'differs',
+          },
+        ],
+        unchanged: [],
+        leftInPlace: [],
+      },
+      bytes: new Map([[hashBytes(restored), new Uint8Array(restored)]]),
+    });
+
+    const response = await harness.versioning.handleRollback({
+      action: 'rollback',
+      id: GATE_ID,
+      version: 1,
+      confirm: true,
+    } as GateManagerInput);
+
+    expect(response.isError).toBe(false);
+    // Byte-identical to what this test recorded, digest computed here.
+    expect(hashBytes(readFileSync(target))).toBe(hashBytes(restored));
   });
 
   test('the projection path still runs when the answer is projection-only', () => {
