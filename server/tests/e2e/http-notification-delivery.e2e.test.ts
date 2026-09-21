@@ -12,10 +12,11 @@
  * notifications and the server log carried eight `Failed to send notification … Not connected`
  * warnings.
  *
- * The client is local rather than added to `helpers/http-mcp-client.ts` in one respect only: it
- * keeps EVERY message on the stream instead of the one matching the request id. The shared
- * client's `parseJsonOrSse` returns the first match and discards the rest, which is precisely
- * what made this class of defect unobservable from the existing helpers.
+ * The stream reader now lives in `helpers/http-mcp-client.ts` as `allStreamMessages` /
+ * `notificationsOf` (P4.95), so any e2e can assert on a notification. `parseJsonOrSse` beside it
+ * still returns the first id match and discards the rest — which is what made this class of
+ * defect unobservable from the existing helpers, and why the readers are two functions rather
+ * than one changed one.
  */
 
 import { afterAll, beforeAll, describe, expect, test } from '@jest/globals';
@@ -23,9 +24,11 @@ import { afterAll, beforeAll, describe, expect, test } from '@jest/globals';
 import path from 'path';
 
 import {
+  allStreamMessages,
   httpPost,
   killServer,
   getAvailablePort,
+  notificationsOf,
   startServerWithHttp,
   waitForHealth,
   PROJECT_ROOT,
@@ -33,34 +36,10 @@ import {
 
 import type { ChildProcess } from 'child_process';
 
-/** One JSON-RPC message off a response stream. */
-interface StreamMessage {
-  id?: number;
-  method?: string;
-  params?: Record<string, unknown>;
-  result?: { content?: Array<{ text?: string }>; isError?: boolean };
-  error?: unknown;
-}
-
-/** Everything the server wrote on one POST's stream, in arrival order. */
-function allMessages(body: string): StreamMessage[] {
-  const trimmed = body.trim();
-  try {
-    return [JSON.parse(trimmed) as StreamMessage];
-  } catch {
-    // SSE framing — the normal case for this server.
-  }
-  const out: StreamMessage[] = [];
-  for (const line of trimmed.split('\n')) {
-    const l = line.trim();
-    if (!l.startsWith('data:')) continue;
-    try {
-      out.push(JSON.parse(l.slice(5).trim()) as StreamMessage);
-    } catch {
-      // Not a payload line.
-    }
-  }
-  return out;
+/** The tool answer, as it arrives on a stream that also carries notifications. */
+interface ToolAnswer {
+  content?: Array<{ text?: string }>;
+  isError?: boolean;
 }
 
 interface ToolOutcome {
@@ -97,14 +76,12 @@ describe('Streamable HTTP notification delivery', () => {
       { Accept: 'application/json, text/event-stream' }
     );
     expect(response.status).toBe(200);
-    const messages = allMessages(response.body);
-    const answer = messages.find((m) => m.id === id);
+    const answer = allStreamMessages(response.body).find((m) => m.id === id)?.result as
+      ToolAnswer | undefined;
     return {
-      text: (answer?.result?.content ?? []).map((part) => part.text ?? '').join('\n'),
-      isError: answer?.result?.isError === true,
-      notifications: messages
-        .filter((m) => m.method !== undefined && m.id === undefined)
-        .map((m) => ({ method: m.method as string, params: m.params ?? {} })),
+      text: (answer?.content ?? []).map((part) => part.text ?? '').join('\n'),
+      isError: answer?.isError === true,
+      notifications: notificationsOf(response.body),
     };
   };
 

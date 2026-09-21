@@ -319,6 +319,69 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** One JSON-RPC message off a response stream. */
+export interface StreamMessage {
+  id?: number;
+  method?: string;
+  params?: Record<string, unknown>;
+  result?: unknown;
+  error?: unknown;
+}
+
+/** A server-initiated message: a `method` and no `id`. */
+export interface StreamNotification {
+  method: string;
+  params: Record<string, unknown>;
+}
+
+/**
+ * EVERY JSON-RPC message the server wrote on one response, in arrival order.
+ *
+ * `parseJsonOrSse` below answers a different question — "what did this request return" — and
+ * discards the rest of the stream to answer it. That is the right shape for a caller who wants a
+ * result, and the wrong one for anything else on the stream: since notifications ride the
+ * response stream of the call that caused them, a client built on the first-match reader cannot
+ * observe one at all. Twenty-three e2e suites could not see a defect that dropped every
+ * notification the server emitted (P4.88), because none of them had a reader that kept them.
+ *
+ * Additive on purpose: `parseJsonOrSse` and both clients' `request` keep their return shapes.
+ */
+export function allStreamMessages(body: string): StreamMessage[] {
+  const trimmed = body.trim();
+  try {
+    return [JSON.parse(trimmed) as StreamMessage];
+  } catch {
+    // SSE framing — the normal case for this server.
+  }
+
+  const messages: StreamMessage[] = [];
+  for (const line of trimmed.split('\n')) {
+    const lineTrimmed = line.trim();
+    if (lineTrimmed.startsWith('event:') || lineTrimmed.startsWith('id:') || lineTrimmed === '') {
+      continue;
+    }
+    const payload = lineTrimmed.startsWith('data:') ? lineTrimmed.slice(5).trim() : lineTrimmed;
+    try {
+      messages.push(JSON.parse(payload) as StreamMessage);
+    } catch {
+      // Not a JSON-RPC payload line.
+    }
+  }
+  return messages;
+}
+
+/**
+ * The server-initiated messages on one response stream.
+ *
+ * `id === undefined` is the whole test, and it is the JSON-RPC definition of a notification —
+ * not a name prefix, so a new `notifications/*` method needs no change here.
+ */
+export function notificationsOf(body: string): StreamNotification[] {
+  return allStreamMessages(body)
+    .filter((message) => message.method !== undefined && message.id === undefined)
+    .map((message) => ({ method: message.method as string, params: message.params ?? {} }));
+}
+
 /**
  * Parse response body that may be JSON or SSE format
  */
@@ -465,6 +528,45 @@ export class StreamableHttpMcpClient {
     }
 
     return parsed.result;
+  }
+
+  /**
+   * Send a request and keep the whole stream: the answer AND every notification the server
+   * pushed on the same response.
+   *
+   * Beside {@link request} rather than replacing it — existing callers keep their return shape.
+   */
+  async requestWithNotifications(
+    method: string,
+    params: Record<string, unknown> = {},
+    requestId: number = 1
+  ): Promise<{ result: unknown; notifications: StreamNotification[]; body: string }> {
+    const headers: Record<string, string> = {
+      Accept: 'application/json, text/event-stream',
+    };
+    if (this.sessionId) {
+      headers['mcp-session-id'] = this.sessionId;
+    }
+
+    const response = await httpPost(
+      `${this.baseUrl}/mcp`,
+      { jsonrpc: '2.0', id: requestId, method, params },
+      headers
+    );
+    if (response.status !== 200) {
+      throw new Error(`Request failed: HTTP ${response.status}: ${response.body}`);
+    }
+
+    const messages = allStreamMessages(response.body);
+    const answer = messages.find((message) => message.id === requestId);
+    if (answer?.error != null) {
+      throw new Error(JSON.stringify(answer.error));
+    }
+    return {
+      result: answer?.result,
+      notifications: notificationsOf(response.body),
+      body: response.body,
+    };
   }
 
   /**
@@ -698,5 +800,33 @@ export class ModernMcpClient {
     requestId = 1
   ): Promise<unknown> {
     return this.request('tools/call', { name, arguments: args }, requestId, { toolName: name });
+  }
+
+  /**
+   * `tools/call`, keeping every message on the response stream.
+   *
+   * Server notifications ride the stream of the call that caused them, so this is the only shape
+   * of call that can observe one. Additive: {@link callTool} is unchanged.
+   */
+  async callToolWithNotifications(
+    name: string,
+    args: Record<string, unknown> = {},
+    requestId = 1
+  ): Promise<{ result: unknown; notifications: StreamNotification[]; body: string }> {
+    const response = await this.send('tools/call', { name, arguments: args }, requestId, {
+      toolName: name,
+    });
+    if (response.status !== 200) {
+      throw new Error(`Request failed: HTTP ${response.status}: ${response.body}`);
+    }
+    const answer = allStreamMessages(response.body).find((message) => message.id === requestId);
+    if (answer?.error != null) {
+      throw new Error(JSON.stringify(answer.error));
+    }
+    return {
+      result: answer?.result,
+      notifications: notificationsOf(response.body),
+      body: response.body,
+    };
   }
 }
