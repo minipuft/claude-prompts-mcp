@@ -82,14 +82,20 @@ Clients also receive these as MCP notifications: `notifications/chain/step_compl
 fails the build if any registerable event loses its producer again.
 
 > [!IMPORTANT]
-> **Notifications reach clients over STDIO only.** `McpNotificationEmitter` pushes through the
-> one server instance bound at startup, which `serveStdio` pins for the connection's lifetime.
-> Streamable HTTP builds a fresh server per request and has no long-lived instance to push
-> from; its only publish channel is the handler's `subscriptions/listen` notifier, which
-> carries list-changed and resource-updated events and nothing else. An HTTP client sees the
-> span events (telemetry is unaffected) but receives no gate, chain or framework notification.
-> Giving HTTP a channel for them is open work, not a defect in this wiring. An HTTP run logs one
-> `Failed to send notification` warning per event (`Not connected`) and continues serving.
+> **A notification is delivered on the channel of the tool call that caused it**, on both
+> transports. All six events — the three gate events, the two chain events and the framework
+> event — are raised while a `prompt_engine`, `system_control` or `resource_manager` call is
+> still in flight, so the emitter sends through that call's own `mcpReq.notify`. Under
+> Streamable HTTP that is the POST's `text/event-stream` body, which is why a client must send
+> `Accept: application/json, text/event-stream` and read **every** message on the stream, not
+> only the one whose `id` matches its request.
+>
+> This is the only channel SDK v2 offers a stateless server: protocol revision 2026-07-28
+> removed sessions, `createMcpHandler` builds a fresh `McpServer` per request, and the one
+> unsolicited push that remains — `subscriptions/listen`, reached through the handler's
+> notifier — carries a closed set of list-changed and resource-updated events and nothing else.
+> An event raised outside any tool call therefore has **no HTTP channel**; it falls back to the
+> server instance `serveStdio` pinned, and there are no such events today.
 
 > [!NOTE]
 > On the final step of a gated chain, `chain/complete` is delivered **before** the last
