@@ -33,8 +33,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { getConfigValue, readConfig } from './config-operations.js';
 import { resolveStateDbPath } from './version-history-location.js';
 import {
-  SUBTREE_MATCH,
   appendVersion,
+  deleteSubtree,
   loadRows,
   recordEditResultRow,
   renameSubtree,
@@ -249,11 +249,7 @@ function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): 
       // a chain that has ever been edited as a whole, its own row exists and names the tenant
       // correctly; a chain versioned only step-by-step is outside what this check can see.
       const effectiveTenantId = resolveEffectiveTenantId(db, tenantId, request).tenantId;
-      db.prepare(
-        `DELETE FROM version_history
-         WHERE tenant_id = ? AND resource_type = ? AND ${SUBTREE_MATCH}`
-      ).run(effectiveTenantId, request.resource_type, request.resource_id, request.resource_id);
-      return { success: true };
+      return deleteSubtree(db, effectiveTenantId, request);
     }
 
     case 'rename_history': {

@@ -149,6 +149,64 @@ export async function recordTree(
   return { recorded: true, treeHash, fileCount: contents.entries.length };
 }
 
+/**
+ * Delete every object of `tenantId` that no manifest row of that tenant references.
+ *
+ * **Runs inside the caller's transaction, in the SAME one as the delete that orphaned them.** A
+ * sweep in a later transaction would be a second pass over a table whose contents another writer
+ * may have changed in between; in the same transaction, the set of orphans is exactly the set this
+ * delete created, and a rollback takes both halves with it.
+ *
+ * **Re-derived, never counted.** A refcount column would be a second derivation of a fact
+ * `version_entries` already holds, and a crash between "delete the row" and "decrement" drifts it
+ * silently, in the direction that deletes live content. `NOT EXISTS` asks the authoritative table
+ * every time, so the answer is self-healing by construction.
+ *
+ * **The `NOT EXISTS` is load-bearing twice.** It is what stops a still-referenced object being
+ * deleted, and — because foreign keys are live on both writers (`STATE_DB_WRITER_PRAGMAS`) and
+ * `version_entries.object_hash` references `objects` — it is also what stops the statement raising
+ * `FOREIGN KEY constraint failed` and aborting the caller's whole transaction, taking the
+ * `version_history` deletes with it. The constraint is the backstop, not the guard.
+ *
+ * **Scoped to one tenant** (ruling R56): objects are keyed `(tenant_id, hash)`, so two workspaces
+ * holding byte-identical files hold two rows, and neither's sweep can read or reach the other's.
+ *
+ * @returns how many objects were removed.
+ */
+export function sweepUnreferencedObjects(db: ObjectStoreDatabase, tenantId: string): number {
+  // A `state.db` written by a pre-v29 server has no store at all, and `cpm` opens whatever file it
+  // finds — the same reason this module's sibling asks whether `version_history` exists before
+  // using it. Absent tables mean provably zero objects, so skipping loses nothing; throwing would
+  // make `cpm delete` fail against a database an older server created. The check is here rather
+  // than at the CLI call sites because both surfaces reach the sweep through one prune, and on the
+  // server it costs one `sqlite_master` lookup that always answers yes.
+  const present = db.queryOne<{ name: string }>(
+    `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'objects'`
+  );
+  if (present === null) {
+    return 0;
+  }
+
+  const UNREFERENCED = `tenant_id = ?
+       AND NOT EXISTS (
+         SELECT 1 FROM version_entries
+         WHERE version_entries.tenant_id = objects.tenant_id
+           AND version_entries.object_hash = objects.hash
+       )`;
+
+  const counted = db.queryOne<{ cnt: number }>(
+    `SELECT COUNT(*) AS cnt FROM objects WHERE ${UNREFERENCED}`,
+    [tenantId]
+  );
+  const orphans = Number(counted?.cnt ?? 0);
+  if (orphans === 0) {
+    return 0;
+  }
+
+  db.run(`DELETE FROM objects WHERE ${UNREFERENCED}`, [tenantId]);
+  return orphans;
+}
+
 /** One file's bytes, its digest and the path the manifest stores it under. */
 interface LoadedFile {
   path: string;

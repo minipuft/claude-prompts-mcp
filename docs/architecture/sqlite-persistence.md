@@ -218,8 +218,33 @@ adds is covered by a red run rather than by someone remembering. It also reads t
 edges out of the engine's own DDL and checks the declared restore order against them.
 
 **Do not read enforcement as "the cascade prunes entries for us."** It is still a per-connection
-setting, so any opener that turns it off writes into the same file. A prune deletes its entries
-explicitly, and the startup referential check is what finds what such an opener left behind.
+setting, so any opener that turns it off writes into the same file. The startup referential check
+is what finds what such an opener left behind.
+
+**Every path that removes rows of `version_history` or `version_entries` also sweeps that tenant's
+orphaned objects, in the SAME transaction.** An object is reachable only through
+`version_history → version_entries → objects`; nothing enumerates the table and there is no
+maintenance pass, so bytes whose last manifest row is gone are unreachable and unreclaimable. The
+sweep is `sweepUnreferencedObjects` (`cli-shared/object-store.ts`): `NOT EXISTS` against
+`version_entries`, scoped to one `tenant_id`, re-derived every time rather than tracked in a
+refcount column a crash could drift. Four callers, and the predicate has to name BOTH tables to
+find them all — one of the four deletes no `version_history` row at all:
+
+| Path                                                  | Where                                                          |
+| ----------------------------------------------------- | -------------------------------------------------------------- |
+| prune, on every append (both writers)                 | `pruneVersionHistory`, `cli-shared/version-history-rows.ts`    |
+| `deleteHistory`, from the four `handleDelete` bodies  | `modules/versioning/version-history-service.ts`                |
+| `cpm`'s `deleteVersionRows`                           | the `delete_history` dispatch, `cli-shared/version-history.ts` |
+| the startup referential repair (deletes ENTRIES only) | `SqliteEngine.repairVersionTrees`                              |
+
+The `NOT EXISTS` clause is the guard; the foreign key is the backstop. Both matter and they are not
+interchangeable — a sweep relying on the constraint would RAISE on a referenced object and abort
+the caller's whole transaction, taking its `version_history` deletes with it.
+
+**A rename is GC-neutral and needs no sweep.** `renameSubtree` re-keys `resource_id`/`version`
+only; entries key on `version_row_id` and objects on content, so neither moves. Pinned by
+`tests/integration/versioning/object-gc.test.ts`, which compares both tables as one value across a
+rename — "rename touches history" otherwise invites a speculative fix.
 
 **No backfill of pre-v29 rows, deliberately.** Materialising a tree from a projection would
 fabricate file bytes that never existed on disk, which is worse than a NULL. Old rows keep

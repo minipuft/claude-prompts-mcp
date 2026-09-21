@@ -10,6 +10,7 @@
  * Split out of `version-history.ts` when that file crossed the 1000-line gate; a pure move.
  */
 
+import { sweepUnreferencedObjects } from './object-store.js';
 import { DEFAULT_MAX_VERSIONS } from './version-history-types.js';
 
 import type { HistoryFile, VersionEntry } from '#modules/versioning/types.js';
@@ -43,7 +44,7 @@ export interface AppendOutcome {
 }
 
 /** Imported, not written here — `deleteHistory` matches the same set over MCP. */
-export const SUBTREE_MATCH = RESOURCE_SUBTREE_MATCH;
+const SUBTREE_MATCH = RESOURCE_SUBTREE_MATCH;
 
 export function toEntry(row: HistoryRow): VersionEntry {
   return {
@@ -213,6 +214,37 @@ export function recordEditResultRow(
   return { ...outcome, bridged: bridge.recorded };
 }
 
+/**
+ * Delete `request.resource_id` and every id below it, and sweep the objects that orphans.
+ *
+ * One transaction, IMMEDIATE, because the two statements depend on each other: the rows go, their
+ * manifest rows go with them by cascade, and the objects nothing references any more go in the
+ * same unit. Split across two, a crash between them leaves this tenant's bytes behind with
+ * nothing that ever looks at them again — there is no maintenance pass to find them later.
+ *
+ * Lives here rather than inline in the dispatcher for the same reason `renameSubtree` does: this
+ * module is the SQL vocabulary of `version_history`, and the dispatcher routes.
+ */
+export function deleteSubtree(
+  db: DatabaseSync,
+  tenantId: string,
+  request: HistoryRequest
+): HistoryResponse {
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    db.prepare(
+      `DELETE FROM version_history
+       WHERE tenant_id = ? AND resource_type = ? AND ${SUBTREE_MATCH}`
+    ).run(tenantId, request.resource_type, request.resource_id, request.resource_id);
+    sweepUnreferencedObjects(asObjectStoreDatabase(db), tenantId);
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+  return { success: true };
+}
+
 /** What one prune acts on: one resource's rows under one tenant, and the bound they must fit. */
 export interface PruneVersionHistoryInput {
   tenantId: string;
@@ -267,6 +299,9 @@ export function pruneVersionHistory(
        )`,
     [...key, ...key, maxVersions]
   );
+  // Their manifest rows went with them by cascade; their OBJECTS did not, and nothing else ever
+  // looks at an object again. Same transaction as the delete that orphaned them.
+  sweepUnreferencedObjects(db, tenantId);
   return total - maxVersions;
 }
 

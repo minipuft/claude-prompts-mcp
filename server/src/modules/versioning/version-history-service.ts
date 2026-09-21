@@ -17,7 +17,7 @@ import type {
   ResourceType,
 } from './types.js';
 
-import { recordTree } from '#cli-shared/object-store.js';
+import { recordTree, sweepUnreferencedObjects } from '#cli-shared/object-store.js';
 import { pruneVersionHistory } from '#cli-shared/version-history-rows.js';
 import { hashCanonical } from '#shared/utils/hash.js';
 import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
@@ -709,18 +709,26 @@ export class VersionHistoryService {
       const tenantId = this.resolveTenantId();
       const params = [tenantId, resourceType, resourceId, resourceId];
 
-      const before = db.queryOne<{ cnt: number }>(
-        `SELECT COUNT(*) as cnt FROM version_history
-         WHERE tenant_id = ? AND resource_type = ? AND ${RESOURCE_SUBTREE_MATCH}`,
-        params
-      );
-      db.run(
-        `DELETE FROM version_history
-         WHERE tenant_id = ? AND resource_type = ? AND ${RESOURCE_SUBTREE_MATCH}`,
-        params
-      );
+      // One transaction, IMMEDIATE: the count this reports, the delete it reports on, and the
+      // sweep of the objects that delete orphaned are one unit. The count is inside too — read
+      // above the lock it can be a number another writer has already changed.
+      const removed = await db.transaction(async () => {
+        const before = db.queryOne<{ cnt: number }>(
+          `SELECT COUNT(*) as cnt FROM version_history
+           WHERE tenant_id = ? AND resource_type = ? AND ${RESOURCE_SUBTREE_MATCH}`,
+          params
+        );
+        db.run(
+          `DELETE FROM version_history
+           WHERE tenant_id = ? AND resource_type = ? AND ${RESOURCE_SUBTREE_MATCH}`,
+          params
+        );
+        // The manifest rows went by cascade; the objects behind them are reachable from nothing
+        // else, and nothing ever enumerates the table to find them later.
+        sweepUnreferencedObjects(db, tenantId);
+        return before?.cnt ?? 0;
+      }, 'immediate');
 
-      const removed = before?.cnt ?? 0;
       this.logger.debug(`Deleted ${removed} history row(s) for ${resourceType}/${resourceId}`);
       return removed;
     } catch (error) {

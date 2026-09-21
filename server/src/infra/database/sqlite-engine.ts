@@ -50,6 +50,7 @@ import {
 import type { DatabasePort, TransactionMode } from '#shared/types/persistence.js';
 import type { Logger } from '../logging/index.js';
 
+import { sweepUnreferencedObjects } from '#cli-shared/object-store.js';
 import { STATE_DB_WRITER_PRAGMAS } from '#shared/utils/runtime-state-location.js';
 
 /**
@@ -736,12 +737,26 @@ export class SqliteEngine implements DatabasePort {
     const placeholders = plan.rowIds.map(() => '?').join(', ');
     this.beginTransaction('immediate');
     try {
+      // The tenants whose manifest rows are about to go, read BEFORE the delete — afterwards
+      // there is nothing left to read them from, and an object is only reachable through a
+      // manifest row of its own tenant.
+      const affected = this.query<{ tenant_id: string }>(
+        `SELECT DISTINCT tenant_id FROM version_entries WHERE version_row_id IN (${placeholders})`,
+        [...plan.rowIds]
+      );
       this.run(`DELETE FROM version_entries WHERE version_row_id IN (${placeholders})`, [
         ...plan.rowIds,
       ]);
       this.run(`UPDATE version_history SET tree_hash = NULL WHERE id IN (${placeholders})`, [
         ...plan.rowIds,
       ]);
+      // Same class as the prune and both deletes: a path that drops manifest rows must drop the
+      // objects they were the last reference to, in the same transaction. This repair is the one
+      // member of that class that removes no `version_history` row, which is exactly why a search
+      // for `DELETE FROM version_history` would have missed it.
+      for (const { tenant_id: tenantId } of affected) {
+        sweepUnreferencedObjects(this, tenantId);
+      }
       this.commit();
     } catch (error) {
       this.rollback();

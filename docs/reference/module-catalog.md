@@ -11,7 +11,7 @@ remains in `server/.dependency-cruiser.cjs`.
 | Module | Source path | Kind | Lifecycle | Description | Docs | Public entry | Observed dependencies | Imported by |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `server-source` | `src` | application | canonical | Server source composition root. | — | `index.ts` | cli-shared<br>infra-config<br>infra-logging<br>runtime<br>shared-utils | — |
-| `cli-shared` | `src/cli-shared` | adapter | canonical | Shared implementation used by the standalone CLI integration surface. | — | `index.ts` | engine-frameworks<br>engine-gates<br>formatting<br>prompts<br>resources<br>shared-types<br>shared-utils<br>versioning | mcp-tools<br>server-source<br>skills-sync<br>versioning |
+| `cli-shared` | `src/cli-shared` | adapter | canonical | Shared implementation used by the standalone CLI integration surface. | — | `index.ts` | engine-frameworks<br>engine-gates<br>formatting<br>prompts<br>resources<br>shared-types<br>shared-utils<br>versioning | infra-database<br>mcp-tools<br>server-source<br>skills-sync<br>versioning |
 | `execution-engine` | `src/engine` | layer | canonical | Client-guided execution, framework, and gate decision logic. | — | — | — | — |
 | `engine-execution` | `src/engine/execution` | domain | canonical | Parses commands and coordinates the staged client-guided execution pipeline. | — | — | chains<br>engine-frameworks<br>engine-gates<br>infra-database<br>infra-logging<br>shared-types<br>shared-utils<br>workflow-ir | automation<br>chains<br>engine-frameworks<br>engine-gates<br>mcp-http<br>mcp-tools<br>prompts<br>runtime<br>semantic<br>workflow-ir |
 | `engine-frameworks` | `src/engine/frameworks` | domain | canonical | Loads, validates, selects, and applies reasoning frameworks. | — | — | engine-execution<br>infra-database<br>infra-logging<br>shared-core<br>shared-types<br>shared-utils | cli-shared<br>engine-execution<br>mcp-tools<br>resources<br>runtime |
@@ -19,7 +19,7 @@ remains in `server/.dependency-cruiser.cjs`.
 | `engine-interfaces` | `src/engine/interfaces` | protocol | canonical | Contracts exposed by the execution engine to collaborating layers. | — | — | — | — |
 | `infrastructure` | `src/infra` | layer | canonical | Configuration, persistence, transport support, logging, and observability infrastructure. | — | — | — | — |
 | `infra-config` | `src/infra/config` | domain | canonical | Loads and resolves server configuration. | — | `index.ts` | infra-logging<br>shared-types<br>shared-utils | infra-http<br>runtime<br>server-source |
-| `infra-database` | `src/infra/database` | domain | canonical | Owns SQLite schema, storage adapters, and resource indexing. | — | `index.ts` | infra-logging<br>shared-types<br>shared-utils | engine-execution<br>engine-frameworks<br>engine-gates<br>infra-observability<br>runtime |
+| `infra-database` | `src/infra/database` | domain | canonical | Owns SQLite schema, storage adapters, and resource indexing. | — | `index.ts` | cli-shared<br>infra-logging<br>shared-types<br>shared-utils | engine-execution<br>engine-frameworks<br>engine-gates<br>infra-observability<br>runtime |
 | `infra-hooks` | `src/infra/hooks` | adapter | canonical | Integrates server behavior with supported hook surfaces. | — | `index.ts` | shared-types | infra-observability<br>runtime |
 | `infra-http` | `src/infra/http` | protocol | canonical | Provides HTTP infrastructure used by the Streamable HTTP transport. | — | `index.ts` | infra-config<br>infra-logging<br>shared-types | runtime |
 | `infra-logging` | `src/infra/logging` | shared | canonical | Provides structured logging primitives and configuration. | — | `index.ts` | shared-types | engine-execution<br>engine-frameworks<br>engine-gates<br>infra-config<br>infra-database<br>infra-http<br>infra-observability<br>runtime<br>server-source |
@@ -155,6 +155,7 @@ flowchart LR
   module_infra_config --> module_infra_logging
   module_infra_config --> module_shared_types
   module_infra_config --> module_shared_utils
+  module_infra_database --> module_cli_shared
   module_infra_database -. type .-> module_infra_logging
   module_infra_database -. type .-> module_shared_types
   module_infra_database --> module_shared_utils
