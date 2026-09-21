@@ -396,6 +396,14 @@ describe('objects are swept by every path that removes the rows referencing them
    */
   describe('every module that removes rows of either table names the sweep', () => {
     const DELETES = /DELETE FROM (version_history|version_entries)\b/;
+    /**
+     * A CALL, not a mention.
+     *
+     * The first draft tested `source.includes('sweepUnreferencedObjects')`, and its mutation
+     * proved it worthless: deleting the call from `SqliteEngine.repairVersionTrees` left the
+     * import behind and the scan stayed green. The import has no parenthesis; every call does.
+     */
+    const SWEEPS = /sweepUnreferencedObjects\s*\(/;
 
     async function sourceFiles(dir: string): Promise<string[]> {
       const found: string[] = [];
@@ -415,7 +423,7 @@ describe('objects are swept by every path that removes the rows referencing them
         const source = await readFile(file, 'utf8');
         if (!DELETES.test(source)) continue;
         removers.push(path.relative(root, file));
-        if (!source.includes('sweepUnreferencedObjects')) silent.push(path.relative(root, file));
+        if (!SWEEPS.test(source)) silent.push(path.relative(root, file));
       }
 
       // The probe saw something: three modules remove rows today (the CLI's delete and its prune
@@ -425,9 +433,15 @@ describe('objects are swept by every path that removes the rows referencing them
     });
 
     it('flags a module that deletes without sweeping — the scanner sees the defect', () => {
-      const planted = `db.run('DELETE FROM version_history WHERE id = ?', [id]);`;
-      expect(DELETES.test(planted)).toBe(true);
-      expect(planted.includes('sweepUnreferencedObjects')).toBe(false);
+      // Two mutants this scanner must tell apart: a delete with no sweep at all, and a module
+      // that still IMPORTS the sweep after its only call was removed. The second one passed the
+      // first draft of this check, and its own mutation is what found that.
+      const noSweep = `db.run('DELETE FROM version_history WHERE id = ?', [id]);`;
+      const importOnly = `import { sweepUnreferencedObjects } from './object-store.js';\n${noSweep}`;
+      expect(DELETES.test(noSweep)).toBe(true);
+      expect(SWEEPS.test(noSweep)).toBe(false);
+      expect(DELETES.test(importOnly)).toBe(true);
+      expect(SWEEPS.test(importOnly)).toBe(false);
     });
   });
 
