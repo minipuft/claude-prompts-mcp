@@ -12,6 +12,7 @@ import path from 'path';
 
 import { translateConfigFile } from './config-file-translation.js';
 import { getParsedConfigSchema, validateConfigAgainstSchema } from './config-schema-validator.js';
+import { getServerVersion } from './server-version.js';
 import { createLogger, getDefaultLoggerConfig } from '../logging/index.js';
 
 const logger = createLogger(
@@ -161,7 +162,7 @@ const DEFAULT_TRANSPORT_MODE: TransportMode = 'stdio';
 
 const DEFAULT_SERVER_CONFIG: ServerConfig = {
   name: 'claude-prompts',
-  version: '1.0.0',
+  version: getServerVersion(),
   port: 9090,
 };
 

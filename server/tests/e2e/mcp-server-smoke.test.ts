@@ -10,13 +10,14 @@ import { spawn, ChildProcess } from 'child_process';
 import path from 'path';
 import { tmpdir } from 'os';
 import { fileURLToPath } from 'url';
-import { promises as fs } from 'fs';
+import { promises as fs, readFileSync } from 'fs';
 import {
   getAvailablePort,
   startServerWithHttp,
   waitForHealth,
   killServer,
   StreamableHttpMcpClient,
+  httpGet,
   httpPost,
   parseJsonOrSse,
   ModernMcpClient,
@@ -33,6 +34,12 @@ const __dirname = path.dirname(__filename);
 
 const PROJECT_ROOT = path.resolve(__dirname, '../../..');
 const SERVER_PATH = path.join(PROJECT_ROOT, 'server', 'dist', 'index.js');
+
+// Ground truth for the version tests below — read from disk, never a literal (#287: /health and
+// `initialize` both reported a hard-coded '1.0.0' regardless of what this file said).
+const SERVER_PACKAGE_VERSION: string = JSON.parse(
+  readFileSync(path.join(PROJECT_ROOT, 'server', 'package.json'), 'utf8')
+).version;
 
 // Keep track of spawned processes for cleanup
 let serverProcess: ChildProcess | null = null;
@@ -421,7 +428,31 @@ describe('MCP Server Smoke Tests', () => {
       expect(capabilities).toHaveProperty('serverInfo');
       expect((capabilities as { serverInfo: { name: string } }).serverInfo).toHaveProperty('name');
 
+      // #287: serverInfo.version must be the actual package version, not a hard-coded default.
+      expect((capabilities as { serverInfo: { version: string } }).serverInfo.version).toBe(
+        SERVER_PACKAGE_VERSION
+      );
+
       await client.close();
+    }, 20000);
+
+    it('/health reports the package version', async () => {
+      // #287: /health reported a hard-coded '1.0.0' regardless of server/package.json.
+      streamableHttpServerPort = await getAvailablePort();
+      const baseUrl = `http://localhost:${streamableHttpServerPort}`;
+
+      streamableHttpServerProcess = startServerWithHttp(streamableHttpServerPort, {
+        transport: 'streamable-http',
+        debug: true,
+      });
+
+      await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
+
+      const response = await httpGet(`${baseUrl}/health`);
+      expect(response.status).toBe(200);
+      const body = JSON.parse(response.body) as { status: string; version: string };
+      expect(body.status).toBe('ok');
+      expect(body.version).toBe(SERVER_PACKAGE_VERSION);
     }, 20000);
 
     it('server registers expected MCP tools via Streamable HTTP', async () => {
