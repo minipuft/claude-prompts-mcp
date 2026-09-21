@@ -60,6 +60,11 @@ interface Scenario {
   readonly activeFrameworkId?: string | undefined;
   /** The prompt author's `gateConfiguration.exclude`. */
   readonly exclude?: readonly string[];
+  /**
+   * Whether the run could identify the framework's gate ids at all. `false` passes an empty set,
+   * which is what a missing or failing `GateLoader` produces.
+   */
+  readonly frameworkGatesIdentified?: boolean;
 }
 
 /**
@@ -121,7 +126,7 @@ const resolveGateIds = async (scenario: Scenario = {}): Promise<readonly string[
     scenario.enableFrameworkGates === false
       ? ({ ...GATES_CONFIG, enableFrameworkGates: false } as GateSystemSettings)
       : GATES_CONFIG,
-    new Set([FRAMEWORK_GATE])
+    scenario.frameworkGatesIdentified === false ? new Set<string>() : new Set([FRAMEWORK_GATE])
   );
 
   // `executionPlan` is assigned through `as never` above, so it must be re-typed to be read.
@@ -170,6 +175,29 @@ describe('default framework gate honours the resolver vetoes (F2)', () => {
     const gateIds = await resolveGateIds({ enableFrameworkGates: false });
 
     expect(gateIds).not.toContain(FRAMEWORK_GATE);
+  });
+
+  /**
+   * The case a ranked veto cannot express. With no framework gate ids identified there is
+   * nothing for a veto to name, so the veto set is empty — but the fallback exists precisely to
+   * supply a framework gate when none was identified, so it must still be refused.
+   *
+   * Control below: the same unidentified state with no opt-out still appends.
+   */
+  test('`framework_gates: false` withholds it even when no framework gate ids resolve', async () => {
+    const gateIds = await resolveGateIds({
+      frameworkGates: false,
+      frameworkGatesIdentified: false,
+    });
+
+    expect(gateIds).not.toContain(FRAMEWORK_GATE);
+    expect(gateIds).toContain(PLANNED_GATE);
+  });
+
+  test('unidentified framework gate ids alone do not withhold it', async () => {
+    const gateIds = await resolveGateIds({ frameworkGatesIdentified: false });
+
+    expect(gateIds).toContain(FRAMEWORK_GATE);
   });
 
   test('`framework_gates: true` is not treated as an opt-out', async () => {
