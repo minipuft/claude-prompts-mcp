@@ -132,6 +132,13 @@ decision sits INSIDE the lock for the same reason the numbering does: decided ab
 two processes could each compare against a newest row the other was about to replace and each
 conclude "unchanged", leaving a real change recorded by neither.
 
+**A stored hash must hash what each writer stores, not one uniform projection.** Three of the four
+`SnapshotContract`s canonicalise through `canonicalizeSnapshot`; the prompt contract deliberately
+does not, because `id` and every `SNAPSHOT_PRESERVED_FIELDS` member sit outside its
+`projectedFields` and would be dropped — re-bridging every prompt row already on disk. Anything
+that later persists a `snapshot_hash` column has to take each writer's own stored text as its
+input, or prompts and the other three resource types will disagree about what a snapshot IS.
+
 Until then the two writers disagreed about what "unchanged" meant. The server used
 `isDeepStrictEqual` and let the answer gate only the BRIDGE row, inserting the produced state
 regardless; the CLI compared `JSON.stringify` output, which is key-order sensitive, so a snapshot

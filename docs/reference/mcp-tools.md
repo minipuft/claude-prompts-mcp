@@ -1055,10 +1055,22 @@ value that outranks all of them permanently — the prompt stops following any l
 category or global default, and only another explicit call moves it again. Set them when this
 prompt must differ from its category; leave them out when it should follow along.
 
-Rollback restores `injection`, `subagent_model` and `agent_type` from the target version's
-snapshot. `register_with_mcp` and `mcp_prompt_mode` keep their current on-disk value across a
-rollback — a recorded value for those two cannot be distinguished from an inherited default in
-older history rows, so restoring one could silently freeze a prompt that never declared it.
+Rollback restores `injection`, `subagent_model`, `agent_type`, `budget` and `artifacts` from the
+target version's snapshot. `register_with_mcp` and `mcp_prompt_mode` keep their current on-disk
+value across a rollback — a recorded value for those two cannot be distinguished from an inherited
+default in older history rows, so restoring one could silently freeze a prompt that never declared
+it.
+
+**A chain's `edges` and its `tools` id list are recorded by no version, and a rollback leaves both
+at their current on-disk value.** Neither survives loading — the loader linearises `edges` into
+step order and drops them, and `tools` survives only as loaded definitions, not as the authored
+ids — so the only source for either is the file itself, which four of the seven places that build
+a prompt snapshot cannot read. Recording them at some of those places and not the others would
+make every prompt edit write a duplicate history row and every prompt write report a false
+post-write verification failure, so they are left out rather than half-recorded. ☐ open as of
+2026-09-20 · closes when a loaded prompt carries the path to its own entry file. Until then, a
+rollback of a chain whose edges have changed restores everything else and leaves the edges alone —
+re-send them with `edges:` on an `update`.
 
 **Gate Parameters:**
 

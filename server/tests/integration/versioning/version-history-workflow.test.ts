@@ -671,6 +671,53 @@ describe('Version History Workflow Integration', () => {
       expect(onRefreshCalls).toBe(1);
     });
 
+    /**
+     * P4.83 — `budget` and `artifacts` are recorded and restored, through the writer that keeps
+     * the file's comments.
+     *
+     * Before this row the snapshot omitted both, so the writer's on-disk preservation carried the
+     * CURRENT value forward on every rollback: a chain rolled back to a version with a different
+     * budget silently kept today's, under a message saying version 1 had been restored. The
+     * authored comment is asserted alongside, because a restore that put the declaration back
+     * while stripping the file's comments trades one loss for another.
+     */
+    it('restores the recorded budget and artifacts, keeping the file comments', async () => {
+      await seedDivergedPrompt({
+        budget: { maxInsertions: 3 },
+        artifacts: { produces: ['plan'] },
+      });
+
+      // The CURRENT on-disk declaration differs from the recorded one, and carries a comment the
+      // writer never produced — so a passing assertion cannot be the writer agreeing with itself.
+      const yamlPath = path.join(promptsDir, CATEGORY, PROMPT_ID, 'prompt.yaml');
+      await fs.writeFile(
+        yamlPath,
+        `${await fs.readFile(yamlPath, 'utf8')}\n# authored by hand, must survive a rollback\n` +
+          `budget:\n  maxInsertions: 1\nartifacts:\n  produces:\n    - docs\n`,
+        'utf8'
+      );
+      convertedPrompts[0]!['budget'] = { maxInsertions: 1 };
+      convertedPrompts[0]!['artifacts'] = { produces: ['docs'] };
+
+      // Positive control: the probe reads a file that really does hold the live values first.
+      expect(readPromptYaml()['budget']).toEqual({ maxInsertions: 1 });
+
+      const response = await processor.handleRollback({
+        action: 'rollback',
+        id: PROMPT_ID,
+        version: 1,
+        confirm: true,
+      });
+      expect(response.isError).toBe(false);
+
+      const written = readPromptYaml();
+      expect(written['budget']).toEqual({ maxInsertions: 3 });
+      expect(written['artifacts']).toEqual({ produces: ['plan'] });
+      expect(await fs.readFile(yamlPath, 'utf8')).toContain(
+        '# authored by hand, must survive a rollback'
+      );
+    });
+
     it('restores an authored field the live prompt overwrote', async () => {
       await seedDivergedPrompt();
 

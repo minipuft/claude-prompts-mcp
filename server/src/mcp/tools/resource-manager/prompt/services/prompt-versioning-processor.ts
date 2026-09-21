@@ -48,6 +48,14 @@ export const RESTORED_OPTIONAL_SNAPSHOT_FIELDS = [
   'subagentModel',
   'agentType',
   'injection',
+  // P4.83. Both are now projected (`SNAPSHOT_PRESERVED_FIELDS`), both are authored values the
+  // converter copies verbatim, and both are `PRESERVED_PROMPT_YAML_KEYS` members — so a supplied
+  // value wins in `resolvePreservedPromptYamlFields` and the restored declaration reaches the
+  // YAML through the source-preserving writer, comments intact. Without these two entries the
+  // snapshot would RECORD them and the rollback would still leave today's value on disk, which
+  // is a partial restore announced as a full one.
+  'budget',
+  'artifacts',
 ] as const;
 
 /**
