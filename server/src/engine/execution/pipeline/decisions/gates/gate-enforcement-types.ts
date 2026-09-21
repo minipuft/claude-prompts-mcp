@@ -56,16 +56,6 @@ export interface VerdictParseInput {
 }
 
 /**
- * Per-gate verdict from a gate review response.
- * Parsed from GATE_VERDICTS blocks for granular delivery tracking.
- */
-export interface GateVerdict {
-  readonly index: number;
-  readonly passed: boolean;
-  readonly rationale: string;
-}
-
-/**
  * Factory options for creating pending reviews.
  */
 export interface CreateReviewOptions {

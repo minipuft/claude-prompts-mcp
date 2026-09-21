@@ -314,6 +314,24 @@ export default [
   },
 
   {
+    // `max-lines` off for generated contract projections ONLY.
+    //
+    // The rule is an advisory about how many responsibilities a file holds; a projection holds
+    // exactly one — the contract it was generated from — however long that contract grows. It is
+    // also unactionable here: `_generated/` is rewritten by `npm run generate:contracts` and
+    // editing it is forbidden, so the warning names a file whose length nobody can shorten except
+    // by deleting a documented parameter. Measured 2026-09-20: adding two `resource_manager`
+    // parameters took `resource_manager.generated.ts` from 996 to 1016 lines and tripped the
+    // ratchet, with no edit available that would satisfy it.
+    //
+    // Narrow on purpose — this one rule, this one directory. Every other rule still runs over
+    // generated output, and the generator's own shape (one record per parameter, ~10 lines each)
+    // is the thing to revisit if the count ever becomes a real signal.
+    files: ['src/**/_generated/**/*.ts'],
+    rules: { 'max-lines': 'off' },
+  },
+
+  {
     files: lifecycleAnnotationTargets,
     ignores: ['src/**/_generated/**'],
     plugins: {

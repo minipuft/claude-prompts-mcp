@@ -61,18 +61,42 @@ Note: `telemetry.mode` and `telemetry.exporterEndpoint` changes require server r
 
 Events are attached to the active root span via the hook system:
 
-| Event Name              | Source          | Status  | Description                          |
-| ----------------------- | --------------- | ------- | ------------------------------------ |
-| `gate.passed`           | Gate evaluation | Active  | Gate passed validation               |
-| `gate.failed`           | Gate evaluation | Active  | Gate failed validation               |
-| `gate.retry_exhausted`  | Gate system     | Active  | All retry attempts consumed          |
-| `gate.response_blocked` | Gate system     | Active  | Response blocked due to gate failure |
-| `chain.step_complete`   | Chain execution | Planned | Chain step finished                  |
-| `chain.complete`        | Chain execution | Planned | Full chain completed                 |
-| `chain.failed`          | Chain execution | Planned | Chain execution failed               |
+| Event Name              | Source          | Status | Description                             |
+| ----------------------- | --------------- | ------ | --------------------------------------- |
+| `gate.passed`           | Gate evaluation | Active | Gate passed validation                  |
+| `gate.failed`           | Gate evaluation | Active | Gate failed validation                  |
+| `gate.retry_exhausted`  | Gate system     | Active | All retry attempts consumed             |
+| `gate.response_blocked` | Gate system     | Active | Response blocked due to gate failure    |
+| `chain.step_complete`   | Step capture    | Active | A chain step's real output was captured |
+| `chain.complete`        | Chain run store | Active | A run reached `completed`               |
+| `chain.failed`          | Chain run store | Active | A run reached `failed` or `cancelled`   |
+
+Each chain event fires once, where the owning service records the fact and after its persist
+resolves: `StepCaptureService` for a captured step, and `ChainSessionStore` for the run's
+terminal status. A placeholder capture — the STDIO stand-in for output that has not arrived —
+emits nothing, so `chain.step_complete` counts real step results only.
+
+Clients also receive these as MCP notifications: `notifications/chain/step_complete`,
+`notifications/chain/complete` (whose `status` names the terminal state — `completed`,
+`failed` or `cancelled`) and `notifications/framework/changed`. `validate:hook-producers`
+fails the build if any registerable event loses its producer again.
+
+> [!IMPORTANT]
+> **Notifications reach clients over STDIO only.** `McpNotificationEmitter` pushes through the
+> one server instance bound at startup, which `serveStdio` pins for the connection's lifetime.
+> Streamable HTTP builds a fresh server per request and has no long-lived instance to push
+> from; its only publish channel is the handler's `subscriptions/listen` notifier, which
+> carries list-changed and resource-updated events and nothing else. An HTTP client sees the
+> span events (telemetry is unaffected) but receives no gate, chain or framework notification.
+> Giving HTTP a channel for them is open work, not a defect in this wiring. An HTTP run logs one
+> `Failed to send notification` warning per event (`Not connected`) and continues serving.
 
 > [!NOTE]
-> Chain events are defined in the hook registry and observer but not yet emitted by chain operator code. Gate and pipeline stage events are fully active.
+> On the final step of a gated chain, `chain/complete` is delivered **before** the last
+> `chain/step_complete`: the PASS verdict advances past the last node, which latches the run
+> terminal, before the step's response is captured. Treat `chain/complete` as "the run ended",
+> not as "no further events". The ordering itself is a defect in advance-on-PASS, filed against
+> `GateVerdictProcessor`.
 
 ### Attributes
 
@@ -115,13 +139,14 @@ These attributes follow the [wide-event pattern](https://loggingsucks.com/) — 
 
 #### Other Business Attributes
 
-| Attribute                 | Type   | Description                |
-| ------------------------- | ------ | -------------------------- |
-| `cpm.prompt.id`           | string | Resolved prompt identifier |
-| `cpm.operator.types`      | string | Applied operator types     |
-| `cpm.chain.current_step`  | number | Current chain step         |
-| `cpm.chain.total_steps`   | number | Total chain steps          |
-| `cpm.gates.applied_count` | number | Number of applied gates    |
+| Attribute                   | Type   | Description                                                                                             |
+| --------------------------- | ------ | ------------------------------------------------------------------------------------------------------- |
+| `cpm.prompt.id`             | string | Resolved prompt identifier                                                                              |
+| `cpm.operator.types`        | string | Applied operator types                                                                                  |
+| `cpm.chain.current_step`    | number | Current chain step                                                                                      |
+| `cpm.chain.total_steps`     | number | Total chain steps                                                                                       |
+| `cpm.gates.applied_count`   | number | Number of applied gates                                                                                 |
+| `cpm.gates.temporary_count` | number | Number of applied gates that are temporary (request-scoped) rather than framework- or inline-registered |
 
 ### Explicitly Excluded (default)
 

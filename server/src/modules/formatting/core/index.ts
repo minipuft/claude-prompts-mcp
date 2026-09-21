@@ -27,5 +27,4 @@ export {
   createStyleDefinitionLoader,
   getDefaultStyleDefinitionLoader,
   resetDefaultStyleDefinitionLoader,
-  type StyleLoaderStats,
 } from './style-definition-loader.js';

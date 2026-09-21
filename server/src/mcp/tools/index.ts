@@ -1127,7 +1127,8 @@ export class McpToolRouter {
         {
           title: 'Resource Manager',
           description: resourceManagerDescription,
-          // Hand-written schema — includes .passthrough() for advanced framework fields
+          // Hand-written schema. `.passthrough()` is deliberate: an undeclared key must reach
+          // the router, which refuses it by name (parameter-ownership.ts, R46).
           inputSchema: resourceManagerInputSchema,
           // `delete` and `rollback` overwrite or remove authored resources; deletion cannot be
           // undone, since rollback cannot restore a deleted resource. Clients that surface
@@ -1149,8 +1150,8 @@ export class McpToolRouter {
                 isError: true,
               };
             }
-            // Cast to ResourceManagerInput - the generated schema uses .passthrough() so advanced
-            // framework fields flow through, but router expects the more specific local type
+            // Cast to ResourceManagerInput — the schema is `.passthrough()` so an undeclared key
+            // survives to the router, which refuses it; the router's own type is the narrow one.
             const toolResponse = await router.handleAction(
               args as ResourceManagerInput,
               (this.enrichExtraWithClientInfo(extra) ?? {}) as Record<string, unknown>

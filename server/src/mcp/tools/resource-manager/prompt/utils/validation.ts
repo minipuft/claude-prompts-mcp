@@ -46,6 +46,18 @@ export const UPDATE_FIELDS: Record<string, string> = {
   mcp_prompt_mode: 'mcpPromptMode',
   subagent_model: 'subagentModel',
   agent_type: 'agentType',
+  // P4.65. `edges` joins the preserved set for the same reason `tools` sits outside this map's
+  // reach: `ConvertedPrompt` carries no `edges` (the loader has already linearized them into
+  // `chainSteps` order), so the caller building `promptData` cannot read the current value and
+  // the writer must fall back to the on-disk YAML. The entry here is what lets an explicitly
+  // supplied value win that fallback — which is the whole remedy for a `chain_steps` rewrite
+  // that invalidates an edge the chain still declares.
+  edges: 'edges',
+  // P4.82. The last two chain/prompt-level keys `PromptYamlSchema` accepted that nothing could
+  // write. Measured 2026-09-20: `update` carrying either answered "Prompt Updated", saved a
+  // version, and left the file unchanged, and `create` carrying both wrote neither.
+  budget: 'budget',
+  artifacts: 'artifacts',
 };
 
 /**
@@ -81,6 +93,17 @@ export const UNSETTABLE_FIELDS: Record<string, string> = {
   mcp_prompt_mode: 'mcpPromptMode',
   subagent_model: 'subagentModel',
   agent_type: 'agentType',
+  // P4.65. Dropping every edge is a legitimate remedy for a chain whose steps changed — it
+  // restores the authored `chainSteps` order, which is what a chain with no edges already runs
+  // in. Omission is the preserve signal for `edges` like every other key here, so without this
+  // entry there would be no way to say REMOVE: `edges: []` writes an empty list rather than
+  // dropping the key.
+  edges: 'edges',
+  // P4.82. Both are optional in `PromptYamlSchema`, so their absence is a state the loader
+  // already handles: a chain with no `budget` runs on the server defaults, and a prompt with no
+  // `artifacts` declares nothing — which is deliberately distinct from declaring some other kind.
+  budget: 'budget',
+  artifacts: 'artifacts',
 };
 
 /** A resolved `unset` list, or the refusal explaining which name stopped it. */

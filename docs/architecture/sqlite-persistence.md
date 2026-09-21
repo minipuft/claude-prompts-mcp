@@ -88,6 +88,16 @@ edit required.
 orphan detection, and `applySyncPrune` deletes directories listed in it — losing it turns a prune
 into either a no-op or a deletion of the wrong thing.
 
+**Durable is not unbounded: the rows are reclaimed by the delete of the resource they describe.**
+Its declared retention is per-resource (`maxRowsPerResource`), which bounds a LIVE resource's
+history and says nothing about a dead one's — and until the four `resource_manager` delete handlers
+called `VersionHistoryService.deleteHistory`, nothing did. Rows of a deleted resource stayed
+forever: unreachable, because every reader resolves the resource before the row, and inherited by
+the next resource created under that id. Both delete surfaces purge now, over one subtree predicate
+(`RESOURCE_SUBTREE_MATCH`, `modules/versioning/history-key.ts`) so a chain takes its steps'
+`chain/step` rows with it. The residual leak is cross-surface, not per-surface: rows written under a
+tenant id the other surface does not resolve are not reached by its delete.
+
 `ensureSchema()` snapshots durable rows → drops → `applySchema()` → restores by intersecting old
 columns with new. **Do not "optimize" this into skipping durable tables during the drop.**
 `applySchema()` uses `CREATE TABLE IF NOT EXISTS`, so a table that is never dropped is never
@@ -95,6 +105,52 @@ recreated and its DDL freezes permanently.
 
 Adding a `NOT NULL` column with no default to a durable table makes the restore throw, naming the
 table. That is intended: the change needs a real migration.
+
+## A Version Number Is an Identity, and Schema v28 Enforces It
+
+`idx_version_history_key` is UNIQUE on `(tenant_id, resource_type, resource_id, version)`. Every
+reader of `version_history` selects by version — `getVersion`, `compareVersions`, `rollback` — so
+two rows sharing one meant a rollback restored whichever row SQLite reached first.
+
+They could. A resource's history rows survive its deletion by design, so an id can carry history
+while nothing serves it, and the CLI's `rename_history` re-keyed a resource onto a new id with a
+bare `UPDATE ... SET resource_id`: renaming onto such an id merged two sequences and left two rows
+claiming to be v1. The producer moved with the index — a rename now renumbers the incoming rows to
+continue after the target's newest version, in one transaction, and a target with no history is
+re-keyed with its numbers untouched.
+
+Both writers take the key the same way, and each does it atomically: `MAX(version)` and the INSERT
+that consumes it run inside one `BEGIN IMMEDIATE`, because the number read is the number written
+back and a second connection committing between the two makes the INSERT land on a stale maximum.
+`DatabasePort.transaction(fn, 'immediate')` is the shared helper; the default stays `deferred`,
+which takes no lock until the first write and is correct only for a body that reads OR writes. No
+retry loop — a contender waits on the lock, and how long it waits is `busy_timeout`.
+
+**The predicate for which mode a transaction needs is "does it read before its first write".** Only
+then is there a lock to upgrade, and an upgrade race is the one `busy_timeout` cannot rescue, since
+waiting does not resolve it. Measured rather than assumed: the statements
+`ChainManager.persistSessionsOrThrow` issues begin `DELETE, DELETE, SELECT`, so it holds the write
+lock before it reads anything and is correct as `deferred` — `tests/integration/database/
+transaction-lock-mode.integration.test.ts` records that order and fails if a `SELECT` moves to the
+front. `skills-sync`'s manifest batch opens with a `DELETE` for the same reason. An IMMEDIATE lock
+costs readers nothing: under WAL a reader still sees the last committed snapshot, which is what lets
+the Python hooks keep reading while the server writes.
+
+**Both connections set `busy_timeout` from one constant**, `STATE_DB_BUSY_TIMEOUT_MS` in
+`shared/utils/runtime-state-location.ts`, beside the two path segments and for the same reason: the
+CLI opens its own connection and cannot import `runtime/`, so two hand-typed values would drift and
+the pair would disagree about how patient this file is. Unset, a connection takes SQLite's default
+of 0 and loses every race outright — WAL lets readers and one writer coexist, it does not make two
+writers coexist, and this file has three openers. The Python hooks are the third; they open
+read-only and inherit `sqlite3.connect`'s own 5-second default, the same number by coincidence
+rather than by contract, so changing the constant means checking `hooks/lib/db_reader.py` too.
+
+v28 is the worked example of a **real migration** on a durable table. `ensureSchema()` renumbers
+colliding rows between the snapshot and the restore (`renumberDuplicateVersionHistory`,
+deterministic by `created_at` then `id`), keeping every row and every chronology, and logs one line
+with the count. Without it the restore would hit the new index and abort startup. There is no dual
+write and no flag: a v28 database cannot produce a duplicate, so the migration is a no-op forever
+after, and it needs no `DROPPED_ON_THIS_BUMP` entry because nothing is discarded.
 
 ## `tenant_id` Means Two Things — It Used to Mean Three
 

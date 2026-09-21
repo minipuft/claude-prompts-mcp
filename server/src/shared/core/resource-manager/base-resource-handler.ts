@@ -126,29 +126,6 @@ export abstract class BaseResourceHandler<
   }
 
   /**
-   * Get resource entries with metadata
-   *
-   * @param enabledOnly - If true, only return enabled entries (default: true)
-   * @returns Array of entries with metadata
-   */
-  getEntries(enabledOnly: boolean = true): TEntry[] {
-    this.ensureInitialized();
-    return this.getResourceEntries(enabledOnly);
-  }
-
-  /**
-   * Set the enabled state of a resource
-   *
-   * @param id - Resource identifier (case-insensitive)
-   * @param enabled - Whether to enable the resource
-   * @returns true if the state was changed
-   */
-  setEnabled(id: string, enabled: boolean): boolean {
-    this.ensureInitialized();
-    return this.setResourceEnabled(this.normalizeId(id), enabled);
-  }
-
-  /**
    * Reload a resource from disk
    *
    * @param id - Resource identifier (case-insensitive)
@@ -168,20 +145,6 @@ export abstract class BaseResourceHandler<
   unregister(id: string): boolean {
     this.ensureInitialized();
     return this.unregisterResource(this.normalizeId(id));
-  }
-
-  // ============================================================================
-  // Cache Management
-  // ============================================================================
-
-  /**
-   * Clear the cache
-   *
-   * @param id - Optional specific ID to clear; if omitted, clears all
-   */
-  clearCache(id?: string): void {
-    this.ensureInitialized();
-    this.clearResourceCache(id != null ? this.normalizeId(id) : undefined);
   }
 
   // ============================================================================

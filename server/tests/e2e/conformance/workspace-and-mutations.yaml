@@ -559,6 +559,308 @@ scenarios:
     expect:
       text_contains: "1. `minimal_prompt` - Step Beta\n2. `minimal_prompt` - Step Alpha"
 
+  # ── P4.65: `edges` is authorable, and an orphaned edge is refused with a remedy ────────────
+  #
+  # These three rows are the ONLY place that drives `edges` over the real route — registered tool,
+  # router, processor, writer — rather than calling the processor directly. Measured 2026-09-20 on
+  # a server built before this parameter existed: an `update` carrying `edges` answered "Prompt
+  # Updated", saved a version, and left the file's edges untouched, because nothing downstream read
+  # the key. Removing `edges` from `UPDATE_FIELDS` reds the second row here and no boundary gate.
+  #
+  # Each edge endpoint is the kebab-case id minted from `stepName` — "Step A" → `step-a`.
+  - id: prompt-chain-edges-orphaned-by-a-step-rewrite-is-refused-with-the-remedy
+    claim_source: >-
+      resource_manager contract — `edges`: "An edge naming a step the chain does not declare, or a
+      cycle, is refused and the write is rolled back — so a `chain_steps` rewrite that drops a step
+      an edge still names must send the corrected `edges` in the SAME call."
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: create
+          id: conformance_chain_edges_refusal
+          name: Conformance Chain Edges Refusal
+          category: examples
+          description: created by the conformance corpus
+          user_message_template: CONFORMANCE_CHAIN_EDGES_REFUSAL_BODY
+          chain_steps:
+            - promptId: minimal_prompt
+              stepName: Step A
+            - promptId: minimal_prompt
+              stepName: Step B
+            - promptId: minimal_prompt
+              stepName: Step C
+          edges:
+            - from: step-a
+              to: step-c
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: update
+          id: conformance_chain_edges_refusal
+          chain_steps:
+            - promptId: minimal_prompt
+              stepName: Step A
+            - promptId: minimal_prompt
+              stepName: Step B
+    # The defect names the orphaned endpoint; the remedy names the one call that satisfies it.
+    # Before P4.65 the first half was identical and the second did not exist, because `edges` was
+    # not a parameter at all and the only remedy was a hand edit the project forbids.
+    expect:
+      error_contains: 'send `edges` in the same `resource_manager` update'
+
+  - id: prompt-chain-edges-sent-with-the-step-rewrite-are-validated-as-one-state
+    claim_source: >-
+      resource_manager contract — `edges`: "must send the corrected `edges` in the SAME call, which
+      is validated as one state."
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: create
+          id: conformance_chain_edges_together
+          name: Conformance Chain Edges Together
+          category: examples
+          description: created by the conformance corpus
+          user_message_template: CONFORMANCE_CHAIN_EDGES_TOGETHER_BODY
+          chain_steps:
+            - promptId: minimal_prompt
+              stepName: Step A
+            - promptId: minimal_prompt
+              stepName: Step B
+            - promptId: minimal_prompt
+              stepName: Step C
+          edges:
+            - from: step-a
+              to: step-c
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: update
+          id: conformance_chain_edges_together
+          chain_steps:
+            - promptId: minimal_prompt
+              stepName: Step A
+            - promptId: minimal_prompt
+              stepName: Step B
+          edges:
+            - from: step-a
+              to: step-b
+      - tool: resource_manager
+        args: { resource_type: prompt, action: reload, id: conformance_chain_edges_together }
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: inspect
+          id: conformance_chain_edges_together
+          detail: full
+    # This row is the ROUTE proof, and the row above is its positive control: the identical update
+    # WITHOUT `edges` is refused. A route that dropped `edges` anywhere between the tool call and
+    # the writer would leave the created `step-a -> step-c` edge in place, orphan it on this
+    # rewrite, and red this row.
+    expect:
+      text_contains: "1. `minimal_prompt` - Step A\n2. `minimal_prompt` - Step B"
+      text_not_contains: 'Step C'
+
+  - id: gate-refuses-edges-by-name
+    claim_source: >-
+      resource_manager contract — `edges` is declared `[Prompt]`, and a parameter a resource type
+      does not read is refused by name before dispatch (parameter-ownership.ts).
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: gate
+          action: update
+          id: conformance_gate_edges
+          edges:
+            - from: step-a
+              to: step-b
+    expect:
+      error_contains: '''edges'' is not a parameter of resource_type:"gate"'
+
+  # ── P4.82: `budget` and `artifacts`, the last two loader-accepted keys nothing could write ──
+  #
+  # Measured 2026-09-20 before the fix: `update` carrying either answered "Prompt Updated", saved
+  # a version, and left the file unchanged; `create` carrying both wrote neither. `inspect` renders
+  # neither field, so every observable below is the write itself — the diff the update prints, or
+  # the refusal.
+  - id: prompt-budget-and-artifacts-are-written-then-cleared-by-unset
+    claim_source: >-
+      resource_manager contract — `budget` and `artifacts`: "Send `unset: [\"budget\"]` to drop the
+      declaration and run on the server defaults" / "Send `unset: [\"artifacts\"]` to declare
+      nothing."
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: create
+          id: conformance_budget_artifacts
+          name: Conformance Budget Artifacts
+          category: examples
+          description: created by the conformance corpus
+          user_message_template: CONFORMANCE_BUDGET_ARTIFACTS_BODY {{files}}
+          arguments:
+            - name: files
+              description: paths this run touches
+          chain_steps:
+            - promptId: minimal_prompt
+              stepName: Step A
+          budget:
+            maxInsertions: 1
+            pauseOnBlocking: true
+          artifacts:
+            produces:
+              - plan
+            fromArgument: files
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: update
+          id: conformance_budget_artifacts
+          unset: ['budget', 'artifacts']
+    # One substring, both claims. The removed block can only appear in this diff if `create`
+    # actually WROTE both fields — the state the pre-fix server reported success for and did not
+    # reach — and it can only appear as removals if `unset` reached both keys.
+    expect:
+      text_contains: "-budget:\n-  maxInsertions: 1\n-  pauseOnBlocking: true\n-artifacts:\n-  produces:\n-    - plan\n-  fromArgument: files"
+
+  - id: prompt-budget-above-the-cap-is-refused-by-the-loaders-own-bound
+    claim_source: >-
+      resource_manager contract — `budget`: "A declared structural cap may only NARROW the server
+      default, so a value above it is refused here rather than silently clamped." The bound is
+      `workflowBudgetSchema`'s own `.max(DEFAULT_WORKFLOW_CAPS.*)`, which the tool schema uses
+      directly rather than restating.
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: update
+          id: conformance_budget_artifacts
+          budget:
+            maxInsertions: 99
+    # `Invalid arguments for tool resource_manager` is the BOUNDARY's phrasing — nothing was
+    # written and no version spent. Asserting only the cap text would also pass on a loose
+    # boundary schema that let the value through to the post-write check, which refuses it too but
+    # after a write and a rollback; measured 2026-09-20 by replacing `workflowBudgetSchema` here
+    # with `z.record()` and watching this row stay green. The number is
+    # `DEFAULT_WORKFLOW_CAPS.maxInsertions`, so a tool-side copy that drifted from the loader's cap
+    # would not produce this text either. The row above is the positive control: the same
+    # parameter at 1 is accepted and written.
+    expect:
+      error_contains: 'Invalid arguments for tool resource_manager: budget.maxInsertions: Too big: expected number to be <=3'
+
+  - id: prompt-budget-with-an-unrecognized-key-is-refused-not-dropped
+    claim_source: >-
+      resource_manager contract — `budget`: "an unrecognized key is refused rather than dropped."
+      `workflowBudgetSchema` is `.strict()`.
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: update
+          id: conformance_budget_artifacts
+          budget:
+            maxInsertion: 1
+    expect:
+      error_contains: 'Invalid arguments for tool resource_manager: budget: Unrecognized key: "maxInsertion"'
+
+  - id: prompt-artifacts-fromargument-must-name-a-declared-argument
+    claim_source: >-
+      resource_manager contract — `artifacts`: "`fromArgument` … must match an argument the prompt
+      declares." Enforced on the written FILE by the post-write verification, because an update
+      need not carry `arguments` and the boundary cannot see them.
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: update
+          id: conformance_budget_artifacts
+          artifacts:
+            fromArgument: not_an_argument
+    # Reachable only if `artifacts` arrived AND was written: the check reads the produced file.
+    # A dropped parameter would answer "Prompt Updated" — which is exactly what it did before.
+    expect:
+      error_contains: "names `not_an_argument`, which is not one of this prompt's arguments"
+
+  - id: framework-refuses-budget-by-name
+    claim_source: >-
+      resource_manager contract — `budget` is declared `[Prompt]`, and a parameter a resource type
+      does not read is refused by name before dispatch (parameter-ownership.ts).
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: framework
+          action: update
+          id: conformance_framework_budget
+          budget:
+            maxInsertions: 1
+    expect:
+      error_contains: '''budget'' is not a parameter of resource_type:"framework"'
+
+  - id: category-refuses-artifacts-by-name
+    claim_source: >-
+      resource_manager contract — `artifacts` is declared `[Prompt]`, and a parameter a resource
+      type does not read is refused by name before dispatch (parameter-ownership.ts).
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: category
+          action: update
+          id: conformance_category_artifacts
+          artifacts:
+            produces:
+              - plan
+    expect:
+      error_contains: '''artifacts'' is not a parameter of resource_type:"category"'
+
+  # ── R46: a key the contract does not declare is refused, over the real transport ───────────
+  #
+  # `resourceManagerInputSchema` is `.passthrough()`, so an undeclared key ARRIVES — it is not
+  # stripped, and before this it was read by nobody while the call answered success. Driving it
+  # through `tools/call` is the only way to see that: a unit case calling the router hands it the
+  # object directly and never crosses the registered schema at all.
+  - id: resource-manager-refuses-a-key-its-contract-does-not-declare
+    claim_source: >-
+      docs/reference/mcp-tools.md § Undeclared parameters — "a key `resource_manager` does not
+      declare is refused by name". Implemented by describeParameterRefusal (parameter-ownership.ts).
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: update
+          id: conformance_create
+          not_a_parameter: probe-value
+    expect:
+      error_contains: "'not_a_parameter' is not a parameter of resource_manager"
+
+  - id: resource-manager-refuses-a-near-miss-spelling-of-a-real-parameter
+    claim_source: >-
+      docs/reference/mcp-tools.md § Undeclared parameters — the correction names the key. A typo
+      one character from a live parameter is the shape this class actually takes.
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: update
+          id: conformance_create
+          chain_step: []
+    expect:
+      error_contains: "'chain_step' is not a parameter of resource_manager"
+
+  - id: resource-manager-still-accepts-every-declared-parameter-it-is-sent
+    claim_source: >-
+      The positive control for the two rows above: a refusal that fired on everything would
+      satisfy both. The same call minus the undeclared key writes and reports a version.
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: update
+          id: conformance_create
+          description: updated by the R46 control
+    expect:
+      text_contains: '**Prompt Updated**'
+
   - id: gate-update-preview-is-refused-by-name
     claim_source: >-
       resource_manager contract — `preview_action` is validated per resource type. A gate has no

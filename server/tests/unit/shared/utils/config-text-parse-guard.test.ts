@@ -66,10 +66,13 @@ const PINNED_MAP: Record<string, string> = {
     "applyConfigChange's JSON.parse(JSON.stringify(config)) is a deep clone of an already-parsed " +
     'in-memory config object (the candidate document a caller validates before the text-level ' +
     'write in writeConfigKeyAtomic), not a file read — see the "key order" comment a few lines up.',
-  'server/src/cli-shared/version-history.ts':
-    "toEntry's JSON.parse(row.snapshot) (plus the restore-path and diff-summary reads) decode the " +
-    "`version_history` table's `snapshot` column, a DB row, not config file text; the file's own " +
-    'workspace-config read a few lines above already goes through parseConfigText.',
+  // `server/src/cli-shared/version-history.ts` was pinned here until 2026-09-21 and no longer needs
+  // to be: this predicate fires on a file holding BOTH a config-path token AND a bare JSON.parse,
+  // and that file held both only because one module did two jobs. Splitting it along its
+  // responsibilities put the workspace-config read in `version-history-scope.ts` (which parses
+  // through parseConfigText and never calls JSON.parse) and the `snapshot`-column decode in
+  // `version-history-rows.ts` (which never sees a config path). Neither matches, so the exemption
+  // is satisfied rather than relocated — deleted here in the same commit that made it untrue.
   'server/src/infra/config/config-schema-validator.ts':
     "getOrLoadSchemaEntry's JSON.parse(schemaContent) reads config.schema.json, the generated JSON " +
     'Schema file itself — strict JSON by definition, never a `.jsonc` user config.',

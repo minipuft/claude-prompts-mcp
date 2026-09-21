@@ -890,6 +890,45 @@ rather than resolved in an order you cannot see.
 Only the last row destroys a file you sent no replacement for, which is why it is the only
 `update` that requires `confirm:true`.
 
+### Undeclared parameters
+
+`resource_manager` refuses a key its contract does not declare, naming the key:
+
+```
+'chain_step' is not a parameter of resource_manager.
+```
+
+This is the other half of the per-type refusal above. A parameter that IS declared but belongs to
+another `resource_type` is refused naming the types that read it; a key declared nowhere is refused
+naming only itself — the contract is one `action:"guide"` away, and reprinting seventy names to
+correct one typo buries the correction. Both refusals happen before dispatch, so nothing is written
+and no version is spent.
+
+Until this refusal, an undeclared key was accepted, read by nobody, and the call answered success —
+the same silent no-op that made a `resource_type:"framework"` call with `unset` report a change it
+never made. A misspelled parameter now fails loudly instead of doing nothing quietly.
+
+### Chain edges
+
+A chain may declare `edges` beside its steps — `{from, to}` dependency constraints naming step ids
+(an explicit step `id`, or the kebab slug minted from `stepName`). They are ordering constraints,
+never control flow; see [chain-schema.md](chain-schema.md#edges) for what the loader does with them.
+
+**Edges and steps are one state.** An edge naming a step the chain does not declare, or a cycle, is
+refused and the whole write is rolled back. So a `chain_steps` rewrite that drops a step an edge
+still names must send the corrected `edges` in the same call:
+
+```bash
+resource_manager(
+  resource_type:"prompt", action:"update", id:"my_chain",
+  chain_steps:[{promptId:"research", stepName:"Research"}, {promptId:"draft", stepName:"Draft"}],
+  edges:[{from:"research", to:"draft"}]
+)
+```
+
+To drop every edge and keep the authored step order instead, send `unset:["edges"]`. Omitting
+`edges` PRESERVES whatever the prompt already declares, like every other carried-forward field.
+
 ### Gates
 
 ```bash
@@ -979,27 +1018,30 @@ resource_manager(resource_type:"category", action:"delete", id:"analysis", confi
 
 **Prompt Parameters:**
 
-| Parameter               | Purpose                                                                                                                                  |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `category`              | Prompt category tag                                                                                                                      |
-| `user_message_template` | Prompt body with `{{variables}}`                                                                                                         |
-| `system_message`        | Optional system message                                                                                                                  |
-| `arguments`             | Array of `{name, type?, required?, description?, defaultValue?, validation?}`                                                            |
-| `argument_updates`      | Update-only per-field overlay onto existing arguments by `name` — see [Argument Updates](#argument-updates-partial-argument-edit)        |
-| `patch`                 | Anchored replacements for `update` — see [Patch Mode](#patch-mode-partial-update)                                                        |
-| `preview_action`        | With `action:"preview"`: which mutation to render — `update` (prompt only), `rollback`, or `delete`. Writes nothing, consumes no version |
-| `expected_version`      | Prompt update concurrency token from `inspect`; stale values refuse before versioning or writing                                         |
-| `unset`                 | Update-only: CLEAR the named fields — see [Removing a field](#removing-a-field-unset)                                                    |
-| `chain_steps`           | Chain step definitions                                                                                                                   |
-| `chain_step_operation`  | `add \| remove \| reorder \| update` — omit it to replace the whole array                                                                |
-| `tool_operation`        | Update-only: `add` unions with the current tool binding, `remove` unbinds AND deletes — see [Removing a field](#removing-a-field-unset)  |
-| `tool_ids`              | Tool ids for `tool_operation:"remove"`; refused without it                                                                               |
-| `gate_configuration`    | Gate include/exclude lists                                                                                                               |
-| `injection`             | Prompt-level injection control — `system-prompt`, `gate-guidance`, `style-guidance`                                                      |
-| `register_with_mcp`     | Register as a native MCP prompt — **freezes the prompt against its category/global default**                                             |
-| `mcp_prompt_mode`       | `expand` (plain text) or `launch` (route through `prompt_engine`) — **same freeze**                                                      |
-| `subagent_model`        | `heavy \| standard \| fast` capability hint for `==>` delegated steps                                                                    |
-| `agent_type`            | Default host agent for this prompt's `==>` delegated steps                                                                               |
+| Parameter               | Purpose                                                                                                                                                        |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `category`              | Prompt category tag                                                                                                                                            |
+| `user_message_template` | Prompt body with `{{variables}}`                                                                                                                               |
+| `system_message`        | Optional system message                                                                                                                                        |
+| `arguments`             | Array of `{name, type?, required?, description?, defaultValue?, validation?}`                                                                                  |
+| `argument_updates`      | Update-only per-field overlay onto existing arguments by `name` — see [Argument Updates](#argument-updates-partial-argument-edit)                              |
+| `patch`                 | Anchored replacements for `update` — see [Patch Mode](#patch-mode-partial-update)                                                                              |
+| `preview_action`        | With `action:"preview"`: which mutation to render — `update` (prompt only), `rollback`, or `delete`. Writes nothing, consumes no version                       |
+| `expected_version`      | Prompt update concurrency token from `inspect`; stale values refuse before versioning or writing                                                               |
+| `unset`                 | Update-only: CLEAR the named fields — see [Removing a field](#removing-a-field-unset)                                                                          |
+| `chain_steps`           | Chain step definitions                                                                                                                                         |
+| `chain_step_operation`  | `add \| remove \| reorder \| update` — omit it to replace the whole array                                                                                      |
+| `budget`                | Chain run-level budget — `maxNodes`, `maxFanOut`, `maxInsertions`, `declaredCostCeiling`, `pauseOnBlocking`. A declared cap may only narrow the server default |
+| `artifacts`             | What this run touches — `produces` (artifact kinds) and `fromArgument` (a declared argument carrying paths). Artifact-scoped gates attach from it              |
+| `edges`                 | Chain dependency edges — `{from, to}` naming step ids. Send with `chain_steps` when a rewrite invalidates one; see [Chain edges](#chain-edges)                 |
+| `tool_operation`        | Update-only: `add` unions with the current tool binding, `remove` unbinds AND deletes — see [Removing a field](#removing-a-field-unset)                        |
+| `tool_ids`              | Tool ids for `tool_operation:"remove"`; refused without it                                                                                                     |
+| `gate_configuration`    | Gate include/exclude lists                                                                                                                                     |
+| `injection`             | Prompt-level injection control — `system-prompt`, `gate-guidance`, `style-guidance`                                                                            |
+| `register_with_mcp`     | Register as a native MCP prompt — **freezes the prompt against its category/global default**                                                                   |
+| `mcp_prompt_mode`       | `expand` (plain text) or `launch` (route through `prompt_engine`) — **same freeze**                                                                            |
+| `subagent_model`        | `heavy \| standard \| fast` capability hint for `==>` delegated steps                                                                                          |
+| `agent_type`            | Default host agent for this prompt's `==>` delegated steps                                                                                                     |
 
 `type` accepts `string \| number \| boolean \| object \| array`. `required:true` alone does not
 block execution — enforcement only arms when the argument also declares a `validation` block
@@ -1248,6 +1290,34 @@ handler's rendered line above does not include them yet; read them via a direct 
 them; they exist so history is available to reason about later. The line is omitted entirely for a
 session with no terminal record yet, and for records written before these fields existed — an
 absent line means "not measured", never "zero".
+
+#### Per-gate verdict lines
+
+`gates fired` counts submissions and never says which gate held the run up. A record whose step
+was reviewed with a `per_gate` list now renders one indented line per graded gate under it:
+
+```
+- `completed` step 1 · draft · 2026-09-20T12:00:00.000Z · 41ms
+  - ✓ `api-documentation` PASS — contract annotated
+  - ✗ `test-coverage` FAIL (attempt 2) — error path untested
+  - ≡ `style-guide` PASS — attested satisfied
+```
+
+`≡` marks a **reminder-tier** gate: one with no evaluator, which the reviewer attested to via the
+verdict's `reminders` field rather than being graded against. It is recorded because the
+attestation is a fact worth auditing, and marked differently because it is not a check that
+passed.
+
+The gate id is the one the review advertised, resolved from the submitted `[n]` position at the
+parse boundary; an index naming no advertised gate is dropped rather than guessed, so it appears
+nowhere. A record whose review carried no `per_gate` list renders exactly as before — including
+every record written before this was recorded, so an existing ledger is unchanged.
+
+`system_control(action:"analytics")` reads the same rows: **Gate Validations** is the number of
+ledger records carrying at least one verdict, and a **Per-Gate Outcomes** list breaks it into
+passed/failed per gate id. Reminder attestations are counted separately, as **Reminder
+Attestations**, and never inside a gate's pass rate. Both sections are omitted when no record
+carries what they report.
 
 ### Session Operations
 
@@ -1706,8 +1776,16 @@ been restored.
 the current state and the version you would restore, writing no file and recording no version; it
 still refuses an incomplete snapshot, so the preview and the real call agree. With
 `preview_action:"delete"` it reports what would be removed — for a prompt, that includes the prompts
-that reference it. Neither needs `confirm`: `preview` is not a destructive action, so there is
-nothing to confirm.
+that reference it — and it purges nothing. Neither needs `confirm`: `preview` is not a destructive
+action, so there is nothing to confirm.
+
+**A real `delete` purges the resource's version history with it**, for all four resource types, and
+the reply says how many rows it removed. Deleting a chain takes its steps' history too, since a step
+is recorded under the composite id `chain/step`. This is what `cpm delete` always did; over
+`resource_manager` the rows used to survive — unreachable by any action, because rollback resolves
+the resource first, and inherited by whatever was created under that id next. One caveat remains:
+rows `cpm` wrote are keyed by the tenant id the CLI resolved, which is not yet always the one the
+server resolves for the same workspace, so an MCP delete purges what the MCP surface wrote.
 
 <!-- preview-vocabulary: migration-note -->
 

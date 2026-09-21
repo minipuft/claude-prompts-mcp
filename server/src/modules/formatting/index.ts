@@ -29,12 +29,7 @@
  */
 
 // Main manager
-export {
-  StyleManager,
-  createStyleManager,
-  type StyleManagerConfig,
-  type StyleActivationContext,
-} from './style-manager.js';
+export { StyleManager, createStyleManager, type StyleManagerConfig } from './style-manager.js';
 
 // Core components (re-export for convenience)
 export {
@@ -51,7 +46,6 @@ export {
   createStyleDefinitionLoader,
   getDefaultStyleDefinitionLoader,
   resetDefaultStyleDefinitionLoader,
-  type StyleLoaderStats,
 } from './core/index.js';
 
 // Hot-reload support

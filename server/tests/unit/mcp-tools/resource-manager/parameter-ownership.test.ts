@@ -2,8 +2,13 @@
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 
 import { createResourceManagerRouter } from '../../../../src/mcp/tools/resource-manager/core/router.js';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import {
   COMMON_PARAMETERS,
+  DECLARED_PARAMETERS,
   PARAMETER_OWNERS,
   describeParameterRefusal,
 } from '../../../../src/mcp/tools/resource-manager/core/parameter-ownership.js';
@@ -209,6 +214,118 @@ describe('resource_manager parameter ownership', () => {
         expect.objectContaining({ unset: ['system_message'] }),
         expect.anything()
       );
+    });
+  });
+
+  /**
+   * R46 — the undeclared half of the same class.
+   *
+   * `resourceManagerInputSchema` is `.passthrough()`, so a key the contract never named arrives
+   * intact, is read by nobody, and the call answers success. #337 closed the declared-but-unowned
+   * half; this is the other one.
+   */
+  describe('R46: a key the contract does not declare', () => {
+    for (const resource_type of RESOURCE_TYPES) {
+      test(`refuses an undeclared key on ${resource_type} and never dispatches`, async () => {
+        const result = await router.handleAction(
+          {
+            resource_type,
+            action: 'update',
+            id: 'target',
+            not_a_parameter: 'probe-value',
+          } as unknown as ResourceManagerInput,
+          {}
+        );
+
+        expect(result.isError).toBe(true);
+        expect(result.content[0]?.text).toContain(
+          "'not_a_parameter' is not a parameter of resource_manager"
+        );
+        // Names the key and nothing else: a correction, not a seventy-name dump.
+        expect(result.content[0]?.text).not.toContain('user_message_template');
+        expect(handlers[resource_type].handleAction).not.toHaveBeenCalled();
+      });
+    }
+
+    test('a near-miss spelling of a real parameter is refused, not silently dropped', () => {
+      // The shape the class actually takes in the wild. `chain_step` (no `s`) is one character
+      // from a live parameter, so a check keyed on "looks unrelated" would wave it through.
+      expect(describeParameterRefusal('prompt', { chain_step: [] })).toContain(
+        "'chain_step' is not a parameter of resource_manager"
+      );
+    });
+
+    /**
+     * THE CONTROL, enumerated from the contract rather than a hand list.
+     *
+     * A refusal that fires on everything would satisfy every case above. This sends each declared
+     * parameter to each type that owns it and asserts it still reaches the handler — so the two
+     * refusals bound each other: nothing declared is refused, nothing undeclared passes.
+     */
+    describe('every declared parameter still reaches the handler that owns it', () => {
+      const declaredWithOwners: Array<[string, readonly ResourceType[]]> = [
+        ...[...COMMON_PARAMETERS]
+          .filter((name) => name !== 'resource_type')
+          .map((name): [string, readonly ResourceType[]] => [name, RESOURCE_TYPES]),
+        ...Object.entries(PARAMETER_OWNERS),
+      ];
+
+      /**
+       * Two declared parameters carry an ACTION-scoped refusal of their own, both documented and
+       * both unrelated to this class. Paired with the action each is valid on rather than skipped:
+       * a control that quietly drops the awkward members stops being a control.
+       */
+      const VALID_CALL: Readonly<Record<string, { action: string; probe?: unknown }>> = {
+        // Honoured by `history` and `compare`; every other action refuses it by name.
+        source_workspace: { action: 'history' },
+        // Only meaningful with `action:"preview"`, and `delete` is previewable for all four types.
+        preview_action: { action: 'preview', probe: 'delete' },
+      };
+
+      for (const [parameter, owners] of declaredWithOwners) {
+        for (const owner of owners) {
+          test(`${parameter} on ${owner}`, async () => {
+            const valid = VALID_CALL[parameter];
+            const result = await router.handleAction(
+              {
+                resource_type: owner,
+                action: valid?.action ?? 'update',
+                id: 'target',
+                [parameter]: valid?.probe ?? probeFor(parameter),
+              } as unknown as ResourceManagerInput,
+              {}
+            );
+
+            expect(result.isError).toBe(false);
+            expect(handlers[owner].handleAction).toHaveBeenCalled();
+          });
+        }
+      }
+    });
+
+    test('the contract declares exactly what the refusal lets through', () => {
+      // `DECLARED_PARAMETERS` is what the scan accepts; the contract JSON is what the tool
+      // publishes. Reading the contract from disk rather than the schema is deliberate — the
+      // schema is already pinned to this table by the suite above, so comparing against it again
+      // would close a loop instead of anchoring one end of it outside the code.
+      const contract = JSON.parse(
+        readFileSync(
+          path.join(
+            path.dirname(fileURLToPath(import.meta.url)),
+            '..',
+            '..',
+            '..',
+            '..',
+            'tooling',
+            'contracts',
+            'resource-manager.json'
+          ),
+          'utf8'
+        )
+      ) as { parameters: Array<{ name: string }> };
+      const published = contract.parameters.map((entry) => entry.name).sort();
+
+      expect([...DECLARED_PARAMETERS].sort()).toEqual(published);
     });
   });
 });

@@ -210,60 +210,6 @@ export class PromptAssetManager {
   }
 
   /**
-   * Complete prompt system initialization
-   */
-  async initializePromptSystem(
-    configPath: string,
-    basePath?: string
-  ): Promise<{
-    promptsData: PromptData[];
-    categories: Category[];
-    convertedPrompts: ConvertedPrompt[];
-    loadedCount: number;
-  }> {
-    try {
-      // Load and convert prompts
-      const result = await this.loadAndConvertPrompts(configPath, basePath);
-
-      // Publish content only. Binding happens per serving unit, so registering
-      // here would target the construction-time shell that no client connects
-      // to — which is what made a loaded-but-unreachable prompt surface report
-      // itself as registered.
-      if (this.registry) {
-        this.setLivePrompts(result.convertedPrompts);
-      } else {
-        this.logger.warn('MCP server not available - skipping prompt registration');
-      }
-
-      return { ...result, loadedCount: result.convertedPrompts.length };
-    } catch (error) {
-      this.logger.error('Error initializing prompt system:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Reload prompts (useful for hot-reloading)
-   */
-  async reloadPrompts(
-    configPath: string,
-    basePath?: string
-  ): Promise<{
-    promptsData: PromptData[];
-    categories: Category[];
-    convertedPrompts: ConvertedPrompt[];
-    loadedCount: number;
-  }> {
-    this.logger.info('Reloading prompt system...');
-
-    // Note: MCP protocol doesn't support unregistering prompts
-    // Hot-reload will be handled via list_changed notifications
-
-    // Reinitialize the system
-    return this.initializePromptSystem(configPath, basePath);
-  }
-
-  /**
    * Start automatic file watching for hot reload
    */
   async startHotReload(
@@ -346,9 +292,10 @@ export class PromptAssetManager {
       return;
     }
 
+    const categoryManager = this.loader.getCategoryManager();
     this.logger.info('📋 Category breakdown:');
     categories.forEach((category) => {
-      const categoryPrompts = promptsData.filter((p) => p.category === category.id);
+      const categoryPrompts = categoryManager.getPromptsByCategory(promptsData, category.id);
       this.logger.info(`   ${category.name} (${category.id}): ${categoryPrompts.length} prompts`);
     });
 
@@ -378,30 +325,6 @@ export class PromptAssetManager {
       categoryManager: this.loader.getCategoryManager(),
       hotReloadObserver: this.hotReloadObserver,
     };
-  }
-
-  getTextReferenceStore(): TextReferenceStore {
-    return this.textReferenceStore;
-  }
-
-  /**
-   * Get system statistics
-   */
-  getStats(prompts?: ConvertedPrompt[]) {
-    const stats: any = {
-      textReferences: this.textReferenceStore.getStats(),
-    };
-
-    if (prompts && this.registry) {
-      stats.registration = this.registry.getRegistrationStats(prompts);
-      stats.conversation = this.conversationStore.getConversationStats();
-    }
-
-    if (prompts && this.converter) {
-      stats.conversion = this.converter.getConversionStats(prompts.length, prompts);
-    }
-
-    return stats;
   }
 
   /**

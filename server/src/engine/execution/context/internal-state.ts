@@ -1,6 +1,7 @@
 // @lifecycle canonical - Defines internal execution context state contracts.
 import type {
   ConfirmationRequired,
+  GateVerdictSummary,
   RequestIdentityContext,
   ScriptExecutionResult,
   ToolResponse,
@@ -196,6 +197,21 @@ export interface PipelineInternalState {
      * These are gates with blockResponseOnFail: true that received FAIL verdicts.
      */
     blockedGateIds?: string[];
+    /**
+     * The reviewer's per-gate verdicts for the submission processed on THIS call, keyed by
+     * gate id (P4.75).
+     *
+     * Writer: `GateVerdictProcessor`, from `GateEnforcementAuthority.parseGateVerdicts`.
+     * Readers: `ResponseAssembler` (names the failing gates in the retry reply and fills
+     * `GateValidationInfo.failedGates[].reason`) and `StepCaptureService` (persists them onto
+     * the `execution_records` row).
+     *
+     * Request-scoped on purpose, and that is what makes it transport-agnostic: the verdict is
+     * submitted and the reply is rendered inside one call, so neither transport needs an
+     * instance field surviving between requests — HTTP builds a fresh server per request and
+     * one would be empty there.
+     */
+    perGateVerdicts?: GateVerdictSummary[];
     /** Parsed verdict detection metadata from gate review processing */
     verdictDetection?: {
       verdict: 'PASS' | 'FAIL';

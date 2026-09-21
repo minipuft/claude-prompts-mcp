@@ -602,16 +602,6 @@ export class PathResolver {
   }
 
   /**
-   * Clear the resolution cache (useful for testing or hot-reload scenarios)
-   */
-  clearCache(): void {
-    this.cache = {};
-    if (this.debug) {
-      console.error('[PathResolver] Cache cleared');
-    }
-  }
-
-  /**
    * Get the package root directory
    */
   getPackageRoot(): string {

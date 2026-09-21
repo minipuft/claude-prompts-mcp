@@ -7,9 +7,8 @@
  * 1. Save versions
  * 2. Load history
  * 3. Get specific version
- * 4. Rollback
- * 5. Compare versions
- * 6. Delete history
+ * 4. Compare versions
+ * 5. Delete history
  */
 
 import * as fs from 'node:fs/promises';
@@ -168,44 +167,8 @@ async function main() {
     console.log(`  From: ${compareResult.from!.snapshot.template}`);
     console.log(`  To: ${compareResult.to!.snapshot.template}\n`);
 
-    // Test 7: Rollback
-    console.log('--- Test 7: Rollback to v1 ---');
-    const currentState = { id: 'test-prompt', name: 'Current', template: 'Hello current' };
-    const rollbackResult = await service.rollback(
-      TEST_DIR,
-      'prompt',
-      'test-prompt',
-      1,
-      currentState
-    );
-
-    assert(rollbackResult.success, 'Rollback should succeed');
-    assert(rollbackResult.snapshot !== undefined, 'Rollback should return snapshot');
-    assert(rollbackResult.snapshot!.template === 'Hello v1', 'Restored template should be v1');
-    assert(rollbackResult.saved_version === 4, 'Pre-rollback should be saved as v4');
-    assert(rollbackResult.restored_version === 1, 'Restored version should be 1');
-
-    console.log('✓ Rolled back to v1');
-    console.log(`  Saved current state as: v${rollbackResult.saved_version}`);
-    console.log(`  Restored: v${rollbackResult.restored_version}`);
-    console.log(`  Snapshot template: ${rollbackResult.snapshot!.template}\n`);
-
-    // Test 8: Verify history after rollback
-    console.log('--- Test 8: Verify history after rollback ---');
-    const historyAfterRollback = await service.loadHistory(TEST_DIR);
-
-    assert(historyAfterRollback !== null, 'History should still exist');
-    assert(historyAfterRollback!.current_version === 4, 'Current version should be 4');
-    assert(historyAfterRollback!.versions.length === 4, 'Should have 4 versions');
-
-    console.log(`✓ History has ${historyAfterRollback!.versions.length} versions`);
-    for (const v of historyAfterRollback!.versions) {
-      console.log(`  - v${v.version}: ${v.description}`);
-    }
-    console.log();
-
-    // Test 9: Format history for display
-    console.log('--- Test 9: Format history for display ---');
+    // Test 7: Format history for display
+    console.log('--- Test 7: Format history for display ---');
     const historyForFormat = await service.loadHistory(TEST_DIR);
     assert(historyForFormat !== null, 'History should exist for formatting');
 
@@ -218,19 +181,19 @@ async function main() {
     console.log(formatted);
     console.log();
 
-    // Test 10: Delete history
-    console.log('--- Test 10: Delete history ---');
-    const deleteResult = await service.deleteHistory(TEST_DIR);
+    // Test 8: Delete history
+    console.log('--- Test 8: Delete history ---');
+    const removedRows = await service.deleteHistory('prompt', TEST_DIR);
 
-    assert(deleteResult, 'Delete should succeed');
+    assert(removedRows > 0, 'Delete should remove at least one row');
 
     const historyAfterDelete = await service.loadHistory(TEST_DIR);
     assert(historyAfterDelete === null, 'History should be deleted');
 
     console.log('✓ Deleted history\n');
 
-    // Test 11: Config changes (hot-reload simulation)
-    console.log('--- Test 11: Config hot-reload ---');
+    // Test 9: Config changes (hot-reload simulation)
+    console.log('--- Test 9: Config hot-reload ---');
 
     // Re-create some versions
     await service.saveVersion(TEST_DIR, 'prompt', 'test', { v: 1 });

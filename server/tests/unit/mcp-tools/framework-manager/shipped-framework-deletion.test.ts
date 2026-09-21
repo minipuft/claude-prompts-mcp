@@ -70,7 +70,9 @@ describe('framework deletion refuses what the server ships', () => {
       },
       fileService: { deleteFramework: jest.fn(async () => true) },
       textDiffService: {},
-      versionHistoryService: {},
+      // `deleteHistory` is reached on the success path: a delete purges the history of what it
+      // removed. Zero rows is the honest answer for a double with no database behind it.
+      versionHistoryService: { deleteHistory: jest.fn(async () => 0) },
     } as unknown as FrameworkResourceContext;
   });
 

@@ -53,7 +53,6 @@ function assertTransportSupported(value: string, source: string): void {
  * Transport types supported by the server
  */
 export enum TransportType {
-  STDIO = 'stdio',
   STREAMABLE_HTTP = 'streamable-http',
   BOTH = 'both',
 }
@@ -226,14 +225,6 @@ export class TransportRouter {
    */
   getTransportType(): TransportMode {
     return this.transport;
-  }
-
-  /**
-   * Check if STDIO transport should be active
-   * True for 'stdio' or 'both' modes
-   */
-  isStdio(): boolean {
-    return this.transport === TransportType.STDIO || this.transport === TransportType.BOTH;
   }
 
   /**

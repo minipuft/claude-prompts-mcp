@@ -550,6 +550,9 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
   }
   if (notificationEmitter) {
     mcpToolsManager.setNotificationEmitter(notificationEmitter);
+    // The framework state store is not reachable through the tools manager, and it owns the
+    // moment the active framework actually persists — so it takes the emitter directly.
+    frameworkStateStore.setNotificationEmitter(notificationEmitter);
   }
 
   if (isVerbose) logger.info('🔄 Registering all MCP tools...');

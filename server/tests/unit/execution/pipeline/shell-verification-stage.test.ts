@@ -41,7 +41,6 @@ const createMockStateManager = (
   ({
     writeState: overrides.writeState ?? jest.fn().mockResolvedValue(undefined),
     clearState: overrides.clearState ?? jest.fn().mockResolvedValue(undefined),
-    readState: jest.fn().mockResolvedValue(null),
   }) as unknown as VerifyActiveStateStore;
 
 const createMockSessionService = (): ChainSessionService =>

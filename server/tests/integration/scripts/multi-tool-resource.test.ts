@@ -49,7 +49,8 @@ function loadDemoTools(): LoadedScriptTool[] {
   // Takes a ScriptToolLoaderConfig, not a Logger — the same mismatch DEV-T1-4
   // records for ToolDetectionService. Passing a stub logger here typechecks only
   // behind a cast, and then silently sets `debug`.
-  return new ScriptToolDefinitionLoader().loadAllToolsForPrompt(PROMPT_DIR, PROMPT_ID);
+  return new ScriptToolDefinitionLoader().loadAllToolsForPromptDetailed(PROMPT_DIR, PROMPT_ID)
+    .tools;
 }
 
 /** Records whether execution was reached, without spawning anything. */

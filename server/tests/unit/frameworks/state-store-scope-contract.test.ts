@@ -28,6 +28,8 @@ const SPANS_EVERY_SCOPE: Record<string, string> = {
     'moves every scope off a framework the manager no longer has; a single scope would leave the others naming a missing framework',
   'GateStateStore.adoptLegacyGlobalState':
     'a startup migration of the pre-isolation `default` row into the launch scope; it has no caller to take a scope from',
+  'FrameworkStateStore.setNotificationEmitter':
+    'wiring, not state: it binds the process-wide client push channel the composition root built, and writes no row under any scope',
 };
 
 function parameterNames(method: (...args: never[]) => unknown): string[] {

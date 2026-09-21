@@ -188,26 +188,6 @@ describe('AttributePolicyEnforcer', () => {
     });
   });
 
-  describe('isAllowed', () => {
-    const enforcer = new AttributePolicyEnforcer(defaultPolicy);
-
-    test('returns true for allowed safe attribute', () => {
-      expect(enforcer.isAllowed('cpm.prompt.id')).toBe(true);
-    });
-
-    test('returns false for excluded attribute', () => {
-      expect(enforcer.isAllowed('cpm.prompt.body')).toBe(false);
-    });
-
-    test('returns true for non-cpm attribute', () => {
-      expect(enforcer.isAllowed('http.method')).toBe(true);
-    });
-
-    test('returns false for unknown cpm attribute', () => {
-      expect(enforcer.isAllowed('cpm.unknown')).toBe(false);
-    });
-  });
-
   describe('wide-event enrichment attributes', () => {
     const enforcer = new AttributePolicyEnforcer(defaultPolicy);
 

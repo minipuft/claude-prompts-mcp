@@ -73,24 +73,6 @@ export class ContentAnalyzer implements ContentAnalyzerPort {
     return analysis;
   }
 
-  /**
-   * Clear analysis cache
-   */
-  clearCache(): void {
-    this.analysisCache.clear();
-    this.logger.info('Content analysis cache cleared');
-  }
-
-  /**
-   * Get analysis performance statistics
-   */
-  getPerformanceStats() {
-    return {
-      cacheSize: this.analysisCache.size,
-      cacheEnabled: CACHE_ANALYSIS,
-    };
-  }
-
   // Cache and utility methods
 
   private generatePromptHash(prompt: ConvertedPrompt): string {

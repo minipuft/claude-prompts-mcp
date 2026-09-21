@@ -17,11 +17,31 @@
  * the state that preceded it. `recordEditResult` and the `rollback` action carry the bridge-row
  * logic (self-healing v1 for a never-before-recorded resource, or an out-of-band edit) — see
  * `recordEditResult` below for the mechanism, mirrored line-for-line from the server's.
+ *
+ * **Scope must also match, and cannot always be derived — so it is read back instead.**
+ * `resolveTenantId` derives a scope guess independently of the server's own resolution (see its
+ * doc comment for the precedence and why it can diverge). Rather than leave that guess as the
+ * only answer, `resolveEffectiveTenantId` corrects it against the db's own `tenant_id` column
+ * when the guess finds no rows and exactly one other tenant does — the server's resolution is
+ * the source of truth, and an existing row already records what it was. See
+ * `resolveEffectiveTenantId` for the exact rule and why it stays conservative under ambiguity.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join, normalize } from 'node:path';
+import { existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
+
+import { resolveStateDbPath } from './version-history-location.js';
+import {
+  SUBTREE_MATCH,
+  appendVersion,
+  loadRows,
+  recordEditResultRow,
+  renameSubtree,
+  selectVersion,
+  toEntry,
+} from './version-history-rows.js';
+import { resolveEffectiveTenantId, resolveTenantId } from './version-history-scope.js';
+import { DEFAULT_MAX_VERSIONS } from './version-history-types.js';
 
 import type {
   VersionEntry,
@@ -30,23 +50,9 @@ import type {
   RollbackResult,
   SaveVersionOptions,
 } from '#modules/versioning/types.js';
+import type { HistoryRequest, HistoryResponse, ResourceType } from './version-history-types.js';
 
-import {
-  configFileFormat,
-  findWorkspaceConfigFiles,
-  parseConfigText,
-} from '#shared/utils/config-file-format.js';
-import { resolveSettingPath } from '#shared/utils/path-setting.js';
-import { deriveProjectScopeId } from '#shared/utils/project-scope.js';
-import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
-import {
-  RUNTIME_STATE_DIR_NAME,
-  STATE_DB_FILE_NAME,
-} from '#shared/utils/runtime-state-location.js';
-
-const DEFAULT_MAX_VERSIONS = 50;
-
-type ResourceType = 'prompt' | 'gate' | 'framework' | 'style';
+import { STATE_DB_BUSY_TIMEOUT_MS } from '#shared/utils/runtime-state-location.js';
 
 /**
  * Which resource a history call is about: its type and the id it is served under — for a nested
@@ -61,161 +67,6 @@ type ResourceType = 'prompt' | 'gate' | 'framework' | 'style';
 export interface HistoryResourceRef {
   resourceType: ResourceType;
   resourceId: string;
-}
-
-interface HistoryRequest {
-  action:
-    | 'load_history'
-    | 'get_version'
-    | 'save_version'
-    | 'record_edit_result'
-    | 'compare_versions'
-    | 'rollback'
-    | 'delete_history'
-    | 'rename_history';
-  db_path: string;
-  resource_type: ResourceType;
-  resource_id: string;
-  version?: number;
-  from_version?: number;
-  to_version?: number;
-  max_versions?: number;
-  created_at?: string;
-  snapshot?: Record<string, unknown>;
-  /** The on-disk state immediately BEFORE this edit — only read by `record_edit_result`/`rollback` for the bridge check. */
-  prior_snapshot?: Record<string, unknown>;
-  description?: string;
-  diff_summary?: string;
-  target_version?: number;
-  current_snapshot?: Record<string, unknown>;
-  new_resource_id?: string;
-}
-
-interface HistoryResponse {
-  success: boolean;
-  error?: string;
-  history?: HistoryFile | null;
-  entry?: VersionEntry | null;
-  from?: VersionEntry;
-  to?: VersionEntry;
-  version?: number;
-  /** Set by `record_edit_result` — true when a bridge row was inserted before the recorded result. */
-  bridged?: boolean;
-  saved_version?: number;
-  restored_version?: number;
-  snapshot?: Record<string, unknown>;
-}
-
-/** First of `values` that is set and not all-whitespace, else `undefined`. */
-function firstNonEmptyEnvValue(...values: (string | undefined)[]): string | undefined {
-  for (const value of values) {
-    if (value !== undefined && value.trim() !== '') {
-      return value;
-    }
-  }
-  return undefined;
-}
-
-/**
- * Resolve `state.db`'s location the way the server does, without importing the server.
- *
- * Restates `PathResolver.getRuntimeRoot()` / `getStateDatabasePath()` (`server/src/runtime/
- * paths.ts`) rather than importing it: `validate:arch`'s `cli-shared-no-runtime` rule forbids
- * `cli-shared/` from reaching `runtime/` even transitively, because the CLI bundles this barrel
- * on its own, for a lower Node floor than the server's — >=18.18.0 vs >=22.13.0, per this repo's
- * root CLAUDE.md §Node.js Support Boundaries. The precedence is env-only, which is what a
- * standalone CLI process can actually observe; the server's `--workspace` CLI flag and
- * package-root fallback have no CLI-side equivalent:
- *
- *   1. `MCP_RUNTIME_ROOT`, if set to a non-empty value — matches `getRuntimeRoot()`'s own first
- *      branch exactly.
- *   2. `MCP_WORKSPACE`, if set to a non-empty value — matches `getRuntimeRoot()` falling back to
- *      `getWorkspace()`, whose own first two branches (`--workspace` flag, then this variable)
- *      collapse to this one for a CLI process.
- *   3. Neither set: fall back to discovering an existing `runtime-state/` by walking up from the
- *      resource directory, as this function always did. There is no env-derived root to trust in
- *      that case, and this keeps a bare local checkout — no plugin, no env vars — working as it
- *      always has.
- *
- * Branches 1 and 2 resolve through `resolveSettingPath`, the exact function `PathResolver` itself
- * calls for both variables, so a relative value is resolved against the CLI's cwd the same way the
- * server resolves it against its own.
- */
-function resolveStateDbPath(resourceDir: string): string | null {
-  const envRoot = firstNonEmptyEnvValue(
-    process.env['MCP_RUNTIME_ROOT'],
-    process.env['MCP_WORKSPACE']
-  );
-  if (envRoot !== undefined) {
-    return join(resolveSettingPath(envRoot), RUNTIME_STATE_DIR_NAME, STATE_DB_FILE_NAME);
-  }
-
-  let current = normalize(resourceDir);
-  for (;;) {
-    const runtimeStateDir = join(current, RUNTIME_STATE_DIR_NAME);
-    if (existsSync(runtimeStateDir)) {
-      return join(runtimeStateDir, STATE_DB_FILE_NAME);
-    }
-    const serverRuntimeStateDir = join(current, 'server', RUNTIME_STATE_DIR_NAME);
-    if (existsSync(serverRuntimeStateDir)) {
-      return join(serverRuntimeStateDir, STATE_DB_FILE_NAME);
-    }
-
-    const parent = dirname(current);
-    if (parent === current) {
-      return null;
-    }
-    current = parent;
-  }
-}
-
-/**
- * Resolve the tenant this process writes `version_history` under.
- *
- * Must agree with `VersionHistoryService.resolveTenantId()` on the server, which is
- * `resolveContinuityScopeId(scope)` over the launch workspace. Same precedence applied
- * here: an explicit `identity.launchDefaults.workspaceId` in the workspace config outranks the
- * environment-derived id, which falls back to `'default'`.
- *
- * **Known limitation, stated rather than hidden**: a server launched with an explicit
- * `--workspace-id` flag records that id, and nothing on disk tells the CLI what flag the
- * server was started with. In that configuration the two still diverge. Closing it needs
- * the server to persist its resolved scope where the CLI can read it — out of scope here,
- * and narrower than the `'default'`-vs-workspace split this replaces.
- */
-function resolveTenantId(dbPath: string): string {
-  const configured = readConfiguredWorkspaceId(dbPath);
-  const derived = deriveProjectScopeId()?.value;
-  return resolveContinuityScopeId({ workspaceId: configured ?? derived });
-}
-
-/**
- * Read `identity.launchDefaults.workspaceId` from the config file beside runtime-state.
- *
- * Either config name counts, in the same precedence the server reads them, and the text parses in
- * whichever dialect its extension declares — a workspace id commented around in a `config.jsonc`
- * would otherwise read as absent and silently scope this process's history to `'default'`.
- */
-function readConfiguredWorkspaceId(dbPath: string): string | undefined {
-  const configPath = findWorkspaceConfigFiles(dirname(dirname(dbPath)))[0];
-  try {
-    if (configPath === undefined) {
-      return undefined;
-    }
-    const parsed: unknown = parseConfigText(
-      readFileSync(configPath, 'utf8'),
-      configFileFormat(configPath)
-    );
-    const workspaceId = (
-      parsed as { identity?: { launchDefaults?: { workspaceId?: unknown } } } | null
-    )?.identity?.launchDefaults?.workspaceId;
-    return typeof workspaceId === 'string' && workspaceId.trim() !== ''
-      ? workspaceId.trim()
-      : undefined;
-  } catch {
-    // A malformed config is the server's problem to report, not the CLI's to crash on.
-    return undefined;
-  }
 }
 
 /**
@@ -242,7 +93,7 @@ function runSqlite(request: HistoryRequest): HistoryResponse {
   let db: DatabaseSync | undefined;
   try {
     db = new DatabaseSync(request.db_path);
-    db.exec('PRAGMA busy_timeout = 5000');
+    db.exec(`PRAGMA busy_timeout = ${STATE_DB_BUSY_TIMEOUT_MS}`);
     if (!versionHistoryExists(db)) {
       return {
         success: false,
@@ -264,192 +115,40 @@ function versionHistoryExists(db: DatabaseSync): boolean {
   return (row?.present ?? 0) > 0;
 }
 
-/** One persisted `version_history` row, before decoding the JSON snapshot. */
-interface HistoryRow {
-  version: number;
-  snapshot: string;
-  diff_summary: string | null;
-  description: string | null;
-  created_at: string;
-}
-
-const ENTRY_COLUMNS = 'version, snapshot, diff_summary, description, created_at';
-
 /**
- * Matches a resource id and every id below it; binds the id twice. Appending `/` to the column
- * makes the id itself and its descendants one prefix test: `chain` and `chain/step` both start
- * `chain/`, and `chain_other` does not.
- */
-const SUBTREE_MATCH = `substr(resource_id || '/', 1, length(?) + 1) = ? || '/'`;
-
-function toEntry(row: HistoryRow): VersionEntry {
-  return {
-    version: Number(row.version),
-    date: row.created_at,
-    snapshot: JSON.parse(row.snapshot) as Record<string, unknown>,
-    diff_summary: row.diff_summary ?? '',
-    description: row.description ?? '',
-  };
-}
-
-function selectVersion(
-  db: DatabaseSync,
-  tenantId: string,
-  request: HistoryRequest,
-  version: number
-): HistoryRow | undefined {
-  return db
-    .prepare(
-      `SELECT ${ENTRY_COLUMNS} FROM version_history
-       WHERE tenant_id = ? AND resource_type = ? AND resource_id = ? AND version = ?`
-    )
-    .get(tenantId, request.resource_type, request.resource_id, version) as HistoryRow | undefined;
-}
-
-function latestVersion(db: DatabaseSync, tenantId: string, request: HistoryRequest): number {
-  const row = db
-    .prepare(
-      `SELECT MAX(version) AS latest FROM version_history
-       WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?`
-    )
-    .get(tenantId, request.resource_type, request.resource_id) as
-    { latest: number | null } | undefined;
-  return Number(row?.latest ?? 0);
-}
-
-/** Insert a snapshot at the next version and trim to `max_versions`. */
-function appendVersion(
-  db: DatabaseSync,
-  tenantId: string,
-  request: HistoryRequest,
-  snapshot: Record<string, unknown>,
-  description: string,
-  diffSummary: string
-): number {
-  const version = latestVersion(db, tenantId, request) + 1;
-  db.prepare(
-    `INSERT INTO version_history
-       (tenant_id, organization_id, workspace_id, resource_type, resource_id,
-        version, snapshot, diff_summary, description, created_at)
-     VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(
-    tenantId,
-    tenantId,
-    request.resource_type,
-    request.resource_id,
-    version,
-    JSON.stringify(snapshot),
-    diffSummary,
-    description,
-    request.created_at ?? new Date().toISOString()
-  );
-  prune(db, tenantId, request, request.max_versions ?? DEFAULT_MAX_VERSIONS);
-  return version;
-}
-
-/** True when the newest recorded snapshot structurally equals the given live state. */
-function latestSnapshotMatches(
-  db: DatabaseSync,
-  tenantId: string,
-  request: HistoryRequest,
-  live: Record<string, unknown>
-): boolean {
-  const latest = latestVersion(db, tenantId, request);
-  if (latest === 0) return false;
-  const row = selectVersion(db, tenantId, request, latest);
-  if (row === undefined) return false;
-  return JSON.stringify(JSON.parse(row.snapshot)) === JSON.stringify(live);
-}
-
-/**
- * Record the state PRODUCED by an edit, bridging any unrecorded prior state first.
+ * Route one request to its SQL. Mirrors the action set the Python helper dispatched.
  *
- * Mirrors `VersionHistoryService.recordEditResult` exactly (P7 go-forward numbering): version N
- * always holds the state edit N produced. Whenever the latest recorded snapshot differs from the
- * live pre-edit state (first update of a never-before-recorded resource, or an out-of-band edit),
- * that live state is bridged in first so it stays rollback-reachable; steady state records exactly
- * one row per edit. Both writers of `version_history` must agree on this, or a resource's "newest
- * version" means something different depending on which process wrote it.
+ * `tenantId` is `resolveTenantId`'s derivation, unverified against this db. The five actions
+ * that only ever act on EXISTING rows resolve their own `effectiveTenantId` via
+ * `resolveEffectiveTenantId` before using it; `save_version`/`record_edit_result` use `tenantId`
+ * as given (a legitimate new write must not be redirected), and `rename_history` does too for a
+ * narrower reason — see `resolveEffectiveTenantId`'s doc comment for both.
  */
-function recordEditResultRow(
-  db: DatabaseSync,
-  tenantId: string,
-  request: HistoryRequest,
-  edit: {
-    priorLiveSnapshot: Record<string, unknown>;
-    producedSnapshot: Record<string, unknown>;
-    description: string;
-    diffSummary: string;
-  }
-): { version: number; bridged: boolean } {
-  const { priorLiveSnapshot, producedSnapshot, description, diffSummary } = edit;
-  const bridged = !latestSnapshotMatches(db, tenantId, request, priorLiveSnapshot);
-  if (bridged) {
-    appendVersion(
-      db,
-      tenantId,
-      request,
-      priorLiveSnapshot,
-      'Bridge: prior live state (era transition or out-of-band edit)',
-      ''
-    );
-  }
-  const version = appendVersion(db, tenantId, request, producedSnapshot, description, diffSummary);
-  return { version, bridged };
-}
-
-function prune(
-  db: DatabaseSync,
-  tenantId: string,
-  request: HistoryRequest,
-  maxVersions: number
-): void {
-  db.prepare(
-    `DELETE FROM version_history
-     WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?
-       AND id NOT IN (
-         SELECT id FROM version_history
-         WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?
-         ORDER BY version DESC LIMIT ?
-       )`
-  ).run(
-    tenantId,
-    request.resource_type,
-    request.resource_id,
-    tenantId,
-    request.resource_type,
-    request.resource_id,
-    maxVersions
-  );
-}
-
-function loadRows(db: DatabaseSync, tenantId: string, request: HistoryRequest): HistoryFile {
-  const rows = db
-    .prepare(
-      `SELECT ${ENTRY_COLUMNS} FROM version_history
-       WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?
-       ORDER BY version DESC`
-    )
-    .all(tenantId, request.resource_type, request.resource_id) as unknown as HistoryRow[];
-  const versions = rows.map(toEntry);
-  return {
-    resource_type: request.resource_type as HistoryFile['resource_type'],
-    resource_id: request.resource_id,
-    current_version: versions[0]?.version ?? 0,
-    versions,
-  };
-}
-
-/** Route one request to its SQL. Mirrors the action set the Python helper dispatched. */
 function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): HistoryResponse {
   switch (request.action) {
     case 'load_history': {
-      const history = loadRows(db, tenantId, request);
+      const resolved = resolveEffectiveTenantId(db, tenantId, request);
+      // An ambiguous resolution must not collapse into the same shape a genuinely empty history
+      // produces below (`success: true, history: null`) — that is the exact symptom this fix
+      // exists to remove, just moved one level down. Refuse by name instead, through the
+      // `success: false` channel every other real failure in this dispatch already uses.
+      if (resolved.ambiguousCandidateCount !== undefined) {
+        return {
+          success: false,
+          error:
+            `${request.resource_type} '${request.resource_id}' has version history under ` +
+            `${resolved.ambiguousCandidateCount} other scopes on this state.db; this process ` +
+            `cannot tell which one you mean. Re-run from the workspace whose history you want.`,
+          ambiguous: true,
+        };
+      }
+      const history = loadRows(db, resolved.tenantId, request);
       return { success: true, history: history.versions.length > 0 ? history : null };
     }
 
     case 'get_version': {
-      const row = selectVersion(db, tenantId, request, Number(request.version));
+      const effectiveTenantId = resolveEffectiveTenantId(db, tenantId, request).tenantId;
+      const row = selectVersion(db, effectiveTenantId, request, Number(request.version));
       return { success: true, entry: row !== undefined ? toEntry(row) : null };
     }
 
@@ -476,13 +175,14 @@ function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): 
     }
 
     case 'compare_versions': {
+      const effectiveTenantId = resolveEffectiveTenantId(db, tenantId, request).tenantId;
       const fromVersion = Number(request.from_version);
       const toVersion = Number(request.to_version);
-      const fromRow = selectVersion(db, tenantId, request, fromVersion);
+      const fromRow = selectVersion(db, effectiveTenantId, request, fromVersion);
       if (fromRow === undefined) {
         return { success: false, error: `Version ${fromVersion} not found` };
       }
-      const toRow = selectVersion(db, tenantId, request, toVersion);
+      const toRow = selectVersion(db, effectiveTenantId, request, toVersion);
       if (toRow === undefined) {
         return { success: false, error: `Version ${toVersion} not found` };
       }
@@ -497,13 +197,19 @@ function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): 
       // state needs no dedicated "Pre-rollback snapshot" row: under these semantics it is
       // already the previous version, and when it is not (old-era rows, out-of-band edits) the
       // bridge records it.
+      //
+      // The tenant is corrected once, before the read, and the SAME value is reused for the
+      // write below — a rollback that read the target from a corrected tenant must record the
+      // restored state there too, or the operation splits across two tenants and the next read
+      // sees a one-row history instead of a continuation.
+      const effectiveTenantId = resolveEffectiveTenantId(db, tenantId, request).tenantId;
       const target = Number(request.target_version);
-      const targetRow = selectVersion(db, tenantId, request, target);
+      const targetRow = selectVersion(db, effectiveTenantId, request, target);
       if (targetRow === undefined) {
         return { success: false, error: `Version ${target} not found` };
       }
       const restoredSnapshot = JSON.parse(targetRow.snapshot) as Record<string, unknown>;
-      const result = recordEditResultRow(db, tenantId, request, {
+      const result = recordEditResultRow(db, effectiveTenantId, request, {
         priorLiveSnapshot: request.current_snapshot ?? {},
         producedSnapshot: restoredSnapshot,
         description: `Rollback to v${target}`,
@@ -522,10 +228,18 @@ function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): 
     // renames them too, so their rows go with it rather than staying behind under ids nothing
     // serves. The prefix carries the `/`, so `chain_other` is not below `chain`.
     case 'delete_history': {
+      // Corrected the same way rollback is: `cpm delete` is reached only from
+      // `cli/src/commands/delete.ts` (via `deleteResourceDir`), never from the server, so a wrong
+      // guess here would leave the server's rows behind as an orphan nothing can reach — the
+      // resource directory is gone, but its history under the real tenant is not. The correction
+      // itself keys on the resource's OWN exact id, not the subtree the DELETE below removes: for
+      // a chain that has ever been edited as a whole, its own row exists and names the tenant
+      // correctly; a chain versioned only step-by-step is outside what this check can see.
+      const effectiveTenantId = resolveEffectiveTenantId(db, tenantId, request).tenantId;
       db.prepare(
         `DELETE FROM version_history
          WHERE tenant_id = ? AND resource_type = ? AND ${SUBTREE_MATCH}`
-      ).run(tenantId, request.resource_type, request.resource_id, request.resource_id);
+      ).run(effectiveTenantId, request.resource_type, request.resource_id, request.resource_id);
       return { success: true };
     }
 
@@ -534,18 +248,7 @@ function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): 
       if (newResourceId === undefined || newResourceId === '') {
         return { success: false, error: 'new_resource_id is required' };
       }
-      db.prepare(
-        `UPDATE version_history SET resource_id = ? || substr(resource_id, length(?) + 1)
-         WHERE tenant_id = ? AND resource_type = ? AND ${SUBTREE_MATCH}`
-      ).run(
-        newResourceId,
-        request.resource_id,
-        tenantId,
-        request.resource_type,
-        request.resource_id,
-        request.resource_id
-      );
-      return { success: true };
+      return renameSubtree(db, tenantId, request, newResourceId);
     }
   }
 }
@@ -577,6 +280,18 @@ function createRequest(
 
 // ── Read operations ─────────────────────────────────────────────────────────
 
+/**
+ * Load a resource's version history.
+ *
+ * Throws only for the `ambiguous` case (`HistoryResponse.ambiguous`, set by `dispatch`'s
+ * `load_history` case) — a resource with recorded history under more than one tenant, where this
+ * process's scope guess matches none of them. `null` stays reserved for every OTHER outcome,
+ * including a genuinely empty history and a missing `state.db`/`version_history` table (both
+ * pre-existing `success: false` cases with no distinguishing field): a caller must be able to
+ * tell "there is nothing to find" from "this process could not tell which of several tenants you
+ * meant", and collapsing the second into the first reproduces the exact "no history" symptom this
+ * correction exists to remove — just one layer further out.
+ */
 export function loadHistory(resourceDir: string, ref: HistoryResourceRef): HistoryFile | null {
   const request = createRequest(resourceDir, 'load_history', ref);
   if (request === null) {
@@ -584,6 +299,9 @@ export function loadHistory(resourceDir: string, ref: HistoryResourceRef): Histo
   }
   const result = runSqlite(request as HistoryRequest);
   if (!result.success) {
+    if (result.ambiguous === true) {
+      throw new Error(result.error ?? 'Ambiguous version history scope.');
+    }
     return null;
   }
   return result.history ?? null;
