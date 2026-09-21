@@ -418,6 +418,8 @@ Subcommands:
   validate                Validate config.jsonc
   reset                   Reset config to defaults (requires --force)
   keys                    List all valid config keys with types
+  history                 List recorded config versions
+  rollback <version>      Restore a recorded config version, byte for byte
 
 Options:
   -w, --workspace <path>  Workspace directory (default: MCP_WORKSPACE or cwd)
@@ -432,7 +434,10 @@ Examples:
   cpm config set server.port 8080 --json
   cpm config validate -w server
   cpm config reset --force
-  cpm config keys`,
+  cpm config keys
+  cpm config history --limit 20
+  cpm config rollback 3 --preview
+  cpm config rollback 3`,
 };
 
 function printHelp(command?: CommandName): void {
@@ -648,6 +653,8 @@ export async function run(args?: string[]): Promise<void> {
         positionals: parsed.positionals.slice(1),
         force: Boolean(parsed.flags['force']),
         value: parsed.flags['value'] as string | undefined,
+        limit: parsed.flags['limit'] as string | undefined,
+        preview: parsed.flags['preview'] as boolean | undefined,
       });
       break;
     case 'enable':

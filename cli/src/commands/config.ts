@@ -12,14 +12,37 @@ import {
   resetConfigRecorded,
   setConfigValueRecorded,
 } from '@cli-shared/config-checkpoint.js';
+import {
+  loadConfigHistory,
+  rollbackConfigVersion,
+} from '@cli-shared/config-restore.js';
+import { formatHistoryTable } from '@cli-shared/index.js';
+import { describeRestorePlan } from '@modules/versioning/restore-plan.js';
 import { basename } from 'node:path';
 
 import { output } from '../lib/output.js';
 import { resolveWorkspace } from '../lib/workspace.js';
 
-type ConfigSubcommand = 'list' | 'get' | 'set' | 'validate' | 'reset' | 'keys';
+type ConfigSubcommand =
+  | 'list'
+  | 'get'
+  | 'set'
+  | 'validate'
+  | 'reset'
+  | 'keys'
+  | 'history'
+  | 'rollback';
 
-const SUBCOMMANDS: ConfigSubcommand[] = ['list', 'get', 'set', 'validate', 'reset', 'keys'];
+const SUBCOMMANDS: ConfigSubcommand[] = [
+  'list',
+  'get',
+  'set',
+  'validate',
+  'reset',
+  'keys',
+  'history',
+  'rollback',
+];
 
 interface ConfigOptions {
   workspace?: string;
@@ -28,6 +51,10 @@ interface ConfigOptions {
   positionals: string[];
   force?: boolean;
   value?: string;
+  /** `config history` — how many rows to print. */
+  limit?: string;
+  /** `config rollback` — resolve the plan and print it, writing no file and recording nothing. */
+  preview?: boolean;
 }
 
 export async function config(options: ConfigOptions): Promise<number> {
@@ -44,6 +71,8 @@ export async function config(options: ConfigOptions): Promise<number> {
     console.error('  validate   Validate config.jsonc');
     console.error('  reset      Reset config to defaults (requires --force)');
     console.error('  keys       List all valid config keys');
+    console.error('  history    List recorded config versions');
+    console.error('  rollback <version> [--preview]  Restore a recorded config version');
     return 1;
   }
 
@@ -60,7 +89,104 @@ export async function config(options: ConfigOptions): Promise<number> {
       return configReset(options);
     case 'keys':
       return configKeys(options);
+    case 'history':
+      return configHistory(options);
+    case 'rollback':
+      return configRollback(options);
   }
+}
+
+/**
+ * `cpm config history` — every recorded version of this workspace's config.
+ *
+ * An empty history is reported as one, not as an error: a workspace the server has never run in
+ * has no `state.db` to record into, and a workspace whose config nobody has changed has nothing to
+ * show. Both are ordinary, and both are exactly what an operator reaching for a rollback needs
+ * told.
+ */
+function configHistory(options: ConfigOptions): number {
+  const workspace = resolveWorkspace(options.workspace);
+  const history = loadConfigHistory(workspace);
+
+  if (history === null || history.versions.length === 0) {
+    const message =
+      'No config versions recorded for this workspace yet. ' +
+      "A version is recorded the first time 'cpm config set' or 'cpm config reset' changes the file.";
+    if (options.json) {
+      output({ versions: [], message }, { json: true });
+    } else {
+      console.log(message);
+    }
+    return 0;
+  }
+
+  if (options.json) {
+    output(history, { json: true });
+  } else {
+    const limit = options.limit === undefined ? 10 : Number.parseInt(options.limit, 10);
+    console.log(formatHistoryTable(history, Number.isNaN(limit) ? 10 : limit));
+  }
+  return 0;
+}
+
+/**
+ * `cpm config rollback <version> [--preview]` — put a recorded version's bytes back.
+ *
+ * `--preview` returns the SAME plan value the apply executes, resolved by the same call, so the two
+ * cannot describe different actions. Every refusal — an unknown version, a version that recorded
+ * no bytes, bytes this build no longer accepts as config — exits 1 with its reason on stderr and
+ * leaves the file untouched.
+ */
+async function configRollback(options: ConfigOptions): Promise<number> {
+  const raw = options.positionals[0];
+  const targetVersion = raw === undefined ? Number.NaN : Number.parseInt(raw, 10);
+  if (Number.isNaN(targetVersion) || targetVersion < 1) {
+    console.error('Usage: cpm config rollback <version> [--preview]');
+    console.error("Run 'cpm config history' to see the recorded versions.");
+    return 1;
+  }
+
+  const workspace = resolveWorkspace(options.workspace);
+  const result = await rollbackConfigVersion(workspace, targetVersion, {
+    preview: options.preview === true,
+  });
+
+  if (!result.ok) {
+    if (options.json) {
+      output({ success: false, version: targetVersion, error: result.refusal }, { json: true });
+    } else {
+      console.error(result.refusal);
+    }
+    return 1;
+  }
+
+  if (options.json) {
+    output(
+      {
+        success: true,
+        restored_version: targetVersion,
+        preview: result.preview,
+        saved_version: result.savedVersion,
+        recorded: result.recorded,
+        record_note: result.recordNote,
+        files_written: result.plan.write.map((file) => file.path),
+        files_unchanged: result.plan.unchanged,
+        files_left_in_place: result.plan.leftInPlace,
+      },
+      { json: true },
+    );
+    return 0;
+  }
+
+  console.log(
+    result.preview
+      ? `Preview — rollback of config to v${targetVersion}.\nNothing was written: no file changed and no version was recorded.`
+      : result.recorded
+        ? `Restored config from v${targetVersion}, recorded as v${result.savedVersion}.`
+        : `config already matches v${targetVersion} — ${result.recordNote ?? 'nothing recorded'}.`,
+  );
+  console.log(describeRestorePlan(result.plan));
+  return 0;
 }
 
 /**

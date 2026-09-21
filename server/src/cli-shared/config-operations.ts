@@ -327,10 +327,28 @@ export function writeConfigKeyAtomic(configPath: string, key: string, value: unk
  * @throws {Error} When the write fails or the written text does not parse
  */
 function writeConfigTextAtomic(configPath: string, text: string): void {
+  writeConfigBytesAtomic(configPath, text);
+}
+
+/**
+ * The same publish, over BYTES rather than text — the one a byte-exact rollback takes.
+ *
+ * A version restore writes the digest-addressed bytes it recorded, verbatim. Handing them through
+ * a string would be a round trip: correct for every valid UTF-8 document and silently lossy for
+ * anything else, which is precisely the class of difference a byte-exact restore exists to
+ * preserve. Everything else is identical — same temp file, same parse-back check against the
+ * destination's dialect, same rename — because a restore that skipped either would publish config
+ * text no gate had validated.
+ *
+ * @param configPath - Destination path; its extension decides the dialect checked
+ * @param bytes - Complete file contents, as bytes or as text
+ * @throws {Error} When the write fails or the written content does not parse
+ */
+export function writeConfigBytesAtomic(configPath: string, bytes: Uint8Array | string): void {
   const tempPath = `${configPath}.tmp`;
 
   try {
-    writeFileSync(tempPath, text, 'utf8');
+    writeFileSync(tempPath, bytes);
 
     // Verify the written file parses as the format the destination name declares
     parseConfigText(readFileSync(tempPath, 'utf8'), configFileFormat(configPath));
