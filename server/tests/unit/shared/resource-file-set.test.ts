@@ -106,31 +106,39 @@ describe('resourceFileSet — prompt, directory form', () => {
     expect(paths(result.files)).not.toContain('_draft.yaml');
   });
 
-  it('enumerates a chain with nested steps, including a step in the single-file form', async () => {
+  it("excludes a chain's nested steps from its set, and enumerates each step under its own entry", async () => {
+    // R61. A step is its own resource — own id, own history rows — so its files belong to its own
+    // set and to no other. The two halves are asserted together on ONE fixture: absence from the
+    // parent is only meaningful beside the positive control that the same files ARE reachable, so
+    // a reader can tell "correctly scoped" from "enumerator dropped them".
     const entry = await write(
       'prompts/planning/chain/prompt.yaml',
       'id: chain\nuserMessageTemplateFile: user-message.md\n'
     );
     await write('prompts/planning/chain/user-message.md', 'usr');
-    await write(
+    const stepEntry = await write(
       'prompts/planning/chain/step_one/prompt.yaml',
       'id: step_one\nuserMessageTemplateFile: user-message.md\n'
     );
     await write('prompts/planning/chain/step_one/user-message.md', 'step usr');
-    await write('prompts/planning/chain/step_two.yaml', 'id: step_two');
-    // A directory with no `prompt.yaml` is not a step — it is a stray, and strays are bounded out.
+    const flatStep = await write('prompts/planning/chain/step_two.yaml', 'id: step_two');
     await write('prompts/planning/chain/scratch/notes.md', 'nope');
 
-    const result = await resourceFileSet({ resourceType: 'prompt', entryPath: entry });
+    const chain = await resourceFileSet({ resourceType: 'prompt', entryPath: entry });
+    const step = await resourceFileSet({ resourceType: 'prompt', entryPath: stepEntry });
+    const flat = await resourceFileSet({ resourceType: 'prompt', entryPath: flatStep });
 
-    expect(paths(result.files)).toEqual([
-      'prompt.yaml',
-      'user-message.md',
-      'step_one/prompt.yaml',
-      'step_one/user-message.md',
-      'step_two.yaml',
-    ]);
-    expect(paths(result.files)).not.toContain('scratch/notes.md');
+    expect(paths(chain.files)).toEqual(['prompt.yaml', 'user-message.md']);
+    expect(paths(step.files)).toEqual(['prompt.yaml', 'user-message.md']);
+    expect(paths(flat.files)).toEqual(['step_two.yaml']);
+    // Stated as absolute paths too: the step's files are on disk beneath the chain's directory,
+    // and it is the SET that excludes them, not the filesystem.
+    const chainAbsolute = chain.files.map((file) => file.absolutePath);
+    for (const file of [...step.files, ...flat.files]) {
+      expect(file.absolutePath.startsWith(chain.resourceRoot)).toBe(true);
+      expect(chainAbsolute).not.toContain(file.absolutePath);
+    }
+    expect(paths(chain.files)).not.toContain('scratch/notes.md');
   });
 
   it('enumerates a prompt-local script tool, its script, and its defaulted companions', async () => {
@@ -171,7 +179,10 @@ describe('resourceFileSet — prompt, directory form', () => {
     expect(paths(result.files)).not.toContain('tools/leftover/stale.txt');
   });
 
-  it('never treats a tools/ directory as a nested prompt step', async () => {
+  it('claims nothing from a tools/ entry that is not a script tool', async () => {
+    // `tools/sneaky/` holds a `prompt.yaml` and no `tool.yaml`. It is neither a tool (the loader
+    // requires the entry point) nor a step (`tools/` is reserved, and R61 excludes steps anyway),
+    // so a rule that fell back to "descend and take what is there" would show up right here.
     const entry = await write('prompts/dev/build/prompt.yaml', 'id: build\nsystemMessage: hi\n');
     await write('prompts/dev/build/tools/sneaky/prompt.yaml', 'id: sneaky');
 

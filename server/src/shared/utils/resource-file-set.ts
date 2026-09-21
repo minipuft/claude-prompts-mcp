@@ -26,11 +26,18 @@
  *       `systemMessageFile`, `userMessageTemplateFile`, a script tool's `script`/`schemaFile`/
  *       `descriptionFile`), or
  *   (c) named by a LAYOUT rule a writer or loader enforces by literal name — a framework's
- *       `system-prompt.md`, a script tool's `schema.json`/`description.md` defaults, the
- *       `tools/<id>/` directory, and a prompt's nested step directories.
+ *       `system-prompt.md`, a script tool's `schema.json`/`description.md` defaults, and the
+ *       `tools/<id>/` directory.
  * Anything else in the directory is NOT enumerated. That bound is load-bearing: it is what keeps a
  * later restore off an operator's stray note sitting beside a gate, and it is why this function
  * reports its answer rather than "everything under the root".
+ *
+ * ONE RESOURCE, ONE SET — a directory inside another resource's directory is still its OWN
+ * resource (owner ruling R61). A nested chain step is served under its own id and has its own
+ * history rows, so it is recorded and restored under them and never as part of the chain above it;
+ * a category's resource is `category.yaml` and never the prompts around it. Two resources claiming
+ * one path is how a rollback of the outer one overwrites the inner with bytes the inner's own
+ * history never recorded.
  *
  * WHY IT LIVES IN `shared/` (Layer 0). `cpm` records and restores through it, and `cli-shared/`
  * may not reach `runtime/`, `infra/` or `mcp/` (`.dependency-cruiser.cjs`, `cli-shared-no-runtime`).
@@ -309,17 +316,22 @@ async function sortedEntries(dir: string): Promise<Dirent[]> {
 }
 
 /**
- * Add one prompt directory's files, then recurse into its nested step directories.
+ * Add one prompt directory's own files: its entry, the messages it references, its script tools.
  *
  * `tools/` is walked by NAME because that is how the script tool loader discovers tools
  * (`script-definition-loader.ts` readdirs the directory), not from `prompt.yaml`'s `tools:` list —
  * that list is a BINDING, and a tool present on disk but unbound is still loadable. Enumerating
  * from the binding would silently drop the files of an unbound tool.
  *
- * A nested step is part of the parent's set AND a resource in its own right — the loader serves it
- * under `{parent}/{step}`. That overlap is deliberate and is the one judgement in this module a
- * reader should notice: a chain's checkpoint captures its steps, so rolling the chain back rolls
- * its steps back with it.
+ * A NESTED CHAIN STEP IS NOT PART OF ITS PARENT (owner ruling R61). The loader serves a step as
+ * its own prompt under `{parent}/{step}`, so it has its own id, its own history rows, and is
+ * recorded and restored under them. Claiming a step's files here would put two resources on one
+ * path: a rollback of the chain would overwrite the step with bytes the step's own history never
+ * recorded, silently overriding it. Same rule CLAUDE.md already states for a category — its
+ * resource is `category.yaml`, never the prompts around it — and the same reason.
+ *
+ * So there is no recursion and no descent. Every directory inside a prompt except `tools/` is
+ * either another resource (enumerated by its own call) or a stray, and neither is this set.
  */
 async function addPromptDirectory(builder: FileSetBuilder, promptDir: string): Promise<void> {
   const yamlPath = path.join(promptDir, 'prompt.yaml');
@@ -330,33 +342,12 @@ async function addPromptDirectory(builder: FileSetBuilder, promptDir: string): P
 
   for (const entry of await sortedEntries(promptDir)) {
     if (isIgnoredPromptEntryName(entry.name)) continue;
-    const child = path.join(promptDir, entry.name);
-    if (entry.isDirectory()) {
-      await addPromptChildDirectory(builder, child, entry.name);
-    } else if (entry.isFile() && isSingleFilePromptName(entry.name)) {
-      // A nested step may also be written in the single-file form. `isSingleFilePromptName` is
-      // the loader's own predicate, so `category.yaml`, `tool.yaml`, `prompts.yaml` and
-      // `prompt.yaml` are excluded here without this module restating why.
-      await builder.add(child);
+    // `isReservedPromptDirectoryName` rather than an `=== 'tools'` literal: which directory names
+    // a prompt reserves is `prompt-layout.ts`'s rule, and that module's own header records what it
+    // cost to have it stated in one place and implemented in another.
+    if (entry.isDirectory() && isReservedPromptDirectoryName(entry.name)) {
+      await addScriptToolDirectory(builder, path.join(promptDir, entry.name));
     }
-  }
-}
-
-/** One directory inside a prompt: the reserved `tools/`, a nested step, or a stray. */
-async function addPromptChildDirectory(
-  builder: FileSetBuilder,
-  childDir: string,
-  entryName: string
-): Promise<void> {
-  if (isReservedPromptDirectoryName(entryName)) {
-    await addScriptToolDirectory(builder, childDir);
-    return;
-  }
-  // A nested chain step announces itself the same way the loader recognises one: its own
-  // `prompt.yaml`. A directory without one holds no prompt and is not a layout rule — it is a
-  // stray, and strays are not enumerated.
-  if (await isRegularFile(path.join(childDir, 'prompt.yaml'))) {
-    await addPromptDirectory(builder, childDir);
   }
 }
 
