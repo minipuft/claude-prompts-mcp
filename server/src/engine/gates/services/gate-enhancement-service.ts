@@ -1,5 +1,5 @@
 // @lifecycle canonical - Core gate enhancement logic for prompt enrichment.
-import { applicableFrameworkVetoes, GateSetResolver } from './gate-set-resolver.js';
+import { DEFAULT_FRAMEWORK_GATE_ID, GateSetResolver } from './gate-set-resolver.js';
 import { isFrameworkInjected } from '../../execution/pipeline/decisions/injection/index.js';
 import { resolveDeclaredArtifacts } from '../utils/artifact-kinds.js';
 
@@ -7,7 +7,7 @@ import type { Logger } from '#infra/logging/index.js';
 import type { GateSystemSettings } from '#shared/types/index.js';
 import type { GateMetricsRecorder } from './gate-metrics-recorder.js';
 import type { GateService } from './gate-service-interface.js';
-import type { FrameworkVeto, GateResolutionInput } from './gate-set-resolver.js';
+import type { GateResolutionInput, GateResolutionResult } from './gate-set-resolver.js';
 import type { RunStepView, RunStepViewProvider } from './run-step-view.js';
 import type { RegisteredGateResult } from './temporary-gate-registrar.js';
 import type { ExecutionContext, SessionContext } from '../../execution/context/index.js';
@@ -206,12 +206,6 @@ export class GateEnhancementService {
       modifiers: executionPlan.modifiers,
       promptInjection: prompt.injection,
     });
-    const frameworkVetoes = applicableFrameworkVetoes({
-      frameworkInjected,
-      frameworkGatesEnabled: gatesConfig?.enableFrameworkGates !== false,
-      promptFrameworkGates: prompt.gateConfiguration?.framework_gates,
-    });
-
     // B13: the same derivation the execution planner runs, from the same two inputs. Derived
     // rather than threaded because `resolveDeclaredArtifacts` is pure and both call sites already
     // hold the prompt and the parsed arguments — a field on the plan would add a hop that can go
@@ -221,7 +215,7 @@ export class GateEnhancementService {
       context.parsedCommand?.promptArgs
     );
 
-    await this.resolveIntoAccumulator(context, {
+    const resolution = await this.resolveIntoAccumulator(context, {
       prompt,
       category: prompt.category ?? '',
       modifiers: executionPlan.modifiers,
@@ -243,7 +237,7 @@ export class GateEnhancementService {
       gatesConfig,
       activeFrameworkId,
       frameworkGateIds,
-      frameworkVetoes
+      resolution.acceptsUnrankedGate
     );
 
     if (gatesConfig !== undefined && !gatesConfig.enableFrameworkGates) {
@@ -394,13 +388,7 @@ export class GateEnhancementService {
       modifiers: step.executionPlan?.modifiers,
       promptInjection: prompt.injection,
     });
-    const frameworkVetoes = applicableFrameworkVetoes({
-      frameworkInjected,
-      frameworkGatesEnabled: input.gatesConfig?.enableFrameworkGates !== false,
-      promptFrameworkGates: prompt.gateConfiguration?.framework_gates,
-    });
-
-    await this.resolveIntoAccumulator(
+    const resolution = await this.resolveIntoAccumulator(
       context,
       stepResolutionInput({
         step,
@@ -413,7 +401,12 @@ export class GateEnhancementService {
       })
     );
 
-    const gateIds = this.stepApplicableGateIds(step, input, activeFrameworkId, frameworkVetoes);
+    const gateIds = this.stepApplicableGateIds(
+      step,
+      input,
+      activeFrameworkId,
+      resolution.acceptsUnrankedGate
+    );
 
     // P4-F3 / OQ-P5-4. The per-step list is what REVIEW must be scoped to, and it exists only
     // here, transiently. Published before the empty-list return on purpose: "this step has no
@@ -438,7 +431,7 @@ export class GateEnhancementService {
     step: ChainStepPrompt,
     input: ChainStepEnhancementInput,
     activeFrameworkId: string | undefined,
-    frameworkVetoes: readonly FrameworkVeto[]
+    acceptsUnrankedGate: (gateId: string) => boolean
   ): string[] {
     const { context, gatesConfig, frameworkGateIds } = input;
 
@@ -449,7 +442,7 @@ export class GateEnhancementService {
       gatesConfig,
       activeFrameworkId,
       frameworkGateIds,
-      frameworkVetoes
+      acceptsUnrankedGate
     );
 
     if (gatesConfig !== undefined && !gatesConfig.enableFrameworkGates) {
@@ -661,7 +654,7 @@ export class GateEnhancementService {
   private async resolveIntoAccumulator(
     context: ExecutionContext,
     input: GateResolutionInput
-  ): Promise<void> {
+  ): Promise<GateResolutionResult> {
     const resolution = await this.buildGateSetResolver().resolve(input);
 
     const registryGateIds: string[] = [];
@@ -687,6 +680,10 @@ export class GateEnhancementService {
         unregistered: Object.fromEntries(resolution.unregistered),
       });
     }
+
+    // Returned, not discarded: `acceptsUnrankedGate` is how anything that adds a gate AFTER this
+    // point asks whether this resolution's vetoes allow it.
+    return resolution;
   }
 
   private addGatesToAccumulator(
@@ -927,33 +924,38 @@ export class GateEnhancementService {
   }
 
   /**
-   * Appends `framework-compliance` when a framework is active and nothing else supplied a
+   * Appends the default framework gate when a framework is active and nothing else supplied a
    * framework gate.
    *
-   * The append carries no source rank — it is a fallback beneath every declared source — so
-   * ANY applicable framework veto binds it. Consulting `enableFrameworkGates` alone was the
-   * F2 defect: `GateSetResolver` withheld the framework gates a line earlier and this method
-   * put one straight back, making both `framework_gates: false` and an uninjected framework
-   * unobservable to every caller of the service.
+   * This is the only place in the engine that adds a gate id AFTER `GateSetResolver` has applied
+   * its vetoes, and the append carries no source rank — it is a fallback beneath every declared
+   * source — so every veto of that resolution binds it. It therefore asks the resolution one
+   * question, `acceptsUnrankedGate`, instead of re-deriving any veto for itself.
+   *
+   * Both defects this method has had were the same shape: a re-derived subset of the veto set.
+   * It first consulted `enableFrameworkGates` alone (F2), reinstating gates withheld for an
+   * uninjected framework or `framework_gates: false`; it then consulted the three framework
+   * conditions and still never saw the author's `exclude` list, so a prompt naming this gate in
+   * `exclude` got it back anyway (issue #228). Asking the resolution removes the subset.
    */
   private ensureDefaultFrameworkGate(
     gateIds: string[],
     gatesConfig: GateSystemSettings | undefined,
     activeFrameworkId: string | undefined,
     frameworkGateIds: Set<string>,
-    frameworkVetoes: readonly FrameworkVeto[]
+    acceptsUnrankedGate: (gateId: string) => boolean
   ): string[] {
     if (!gatesConfig?.enableFrameworkGates || !activeFrameworkId) {
       return gateIds;
     }
-    if (frameworkVetoes.length > 0) {
+    if (!acceptsUnrankedGate(DEFAULT_FRAMEWORK_GATE_ID)) {
       return gateIds;
     }
     const hasFrameworkGate = gateIds.some((gate) => frameworkGateIds.has(gate));
     if (hasFrameworkGate) {
       return gateIds;
     }
-    return [...gateIds, 'framework-compliance'];
+    return [...gateIds, DEFAULT_FRAMEWORK_GATE_ID];
   }
 }
 
