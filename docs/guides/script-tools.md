@@ -508,14 +508,34 @@ Scripts run like npm/pip packages: you trust the author. Version-control and cod
 
 ### Protections
 
-| Protection             | What It Does                                  |
-| ---------------------- | --------------------------------------------- |
-| Process isolation      | Separate subprocess per script                |
-| Timeout                | Default 30s, max 5min — kills runaway scripts |
-| Working directory      | Locked to tool folder                         |
-| Env filtering          | Only safe vars inherited (no leaked API keys) |
-| Input validation       | JSON Schema checked before execution          |
-| Auto-execute whitelist | Only approved MCP tools can trigger           |
+| Protection             | What It Does                                      |
+| ---------------------- | ------------------------------------------------- |
+| Process isolation      | Separate subprocess per script                    |
+| Timeout                | Default 30s, max 5min — kills runaway scripts     |
+| Working directory      | Locked to tool folder                             |
+| Env filtering          | Only safe vars inherited (no leaked API keys)     |
+| Input validation       | JSON Schema checked before execution              |
+| Auto-execute whitelist | Only approved MCP tools can trigger               |
+| Auto-execute params    | Refused by name if the tool does not declare them |
+
+### Auto-execute parameters are checked, not forwarded
+
+A script's stdout is the one place in this server where non-operator-authored text decides a
+resource mutation's parameters. An `auto_execute.params` object carrying a key `resource_manager`
+does not declare is refused before the call, and the refusal becomes `prompt_engine`'s error,
+naming both the script and the key:
+
+```
+Script tool 'my_tool' emitted an auto_execute call that is refused.
+'enforcementMode' is not a parameter of resource_manager.  Did you mean 'enforcement_mode'?
+```
+
+Before this, such a key was dropped and the mutation ran with a success reply — so a script that
+believed it was emitting `preview_action` but spelled it `previewAction` performed the real write.
+The same rule the MCP boundary applies
+([mcp-tools.md § Undeclared parameters](../reference/mcp-tools.md#undeclared-parameters)) now
+applies here, which is why the bundled tools remap `enforcementMode` → `enforcement_mode` rather
+than emitting the camelCase spelling.
 
 ### Environment Variables
 

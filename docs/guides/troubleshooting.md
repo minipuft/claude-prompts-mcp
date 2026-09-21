@@ -120,6 +120,38 @@ and the server starts on built-in defaults.
 > [!NOTE]
 > For per-client setup instructions, see the [Client Integration Guide](./client-integration.md) or the [Quick Start](../../README.md#quick-start) in the README.
 
+### "'x' is not a parameter of prompt_engine / system_control / resource_manager"
+
+**Cause**: the call carried an argument key the tool's contract does not declare — usually a
+misspelling, a camelCase spelling of a snake_case parameter, or a parameter borrowed from another
+tool.
+
+**Fix**: use the name the message suggests, or drop the key. The full declared list is one call
+away: `resource_manager(resource_type:"prompt", action:"guide")`, `system_control(action:"guide")`,
+or the tool description for `prompt_engine`.
+
+**Why it is an error rather than being ignored**: such a key used to be dropped silently while the
+call answered **success**. A mistyped _safety_ flag — `preview`, `confirm`, `persist` — therefore
+reported a guarded action while running it unguarded. See
+[mcp-tools.md § Undeclared parameters](../reference/mcp-tools.md#undeclared-parameters).
+
+### "'gate_verdict' is a parameter of prompt_engine, but not one this server is advertising right now"
+
+**Cause**: the gate system is disabled, so `prompt_engine` withdraws `gates`, `gate_verdict` and
+`gate_action` from its advertised surface. The spelling is right; the state is wrong. A client
+holding a cached `tools/list` from before the toggle is the usual source.
+
+**Fix**: `system_control(action:"gates", operation:"enable")`, or drop the parameter. Re-listing
+tools after the toggle stops the client from sending it again.
+
+### "Script tool 'x' emitted an auto_execute call that is refused"
+
+**Cause**: a script tool's `auto_execute.params` named a key `resource_manager` does not declare.
+The script — not the caller — is what needs editing.
+
+**Fix**: open the named script's `tools/<id>/` folder and correct the emitted key. See
+[script-tools.md § Auto-execute parameters are checked](./script-tools.md#auto-execute-parameters-are-checked-not-forwarded).
+
 ---
 
 ## Prompt Issues

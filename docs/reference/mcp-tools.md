@@ -892,21 +892,70 @@ Only the last row destroys a file you sent no replacement for, which is why it i
 
 ### Undeclared parameters
 
-`resource_manager` refuses a key its contract does not declare, naming the key:
+**All three tools refuse an argument key their contract does not declare, naming the key.** This is
+a security property, not a tidiness one — see [Why this is a security
+property](#why-this-is-a-security-property) below.
 
 ```
 'chain_step' is not a parameter of resource_manager.
+'force_restrt' is not a parameter of prompt_engine.  Did you mean 'force_restart'?
+'previw' and 'confirmed' are not parameters of system_control.
 ```
 
-This is the other half of the per-type refusal above. A parameter that IS declared but belongs to
-another `resource_type` is refused naming the types that read it; a key declared nowhere is refused
-naming only itself — the contract is one `action:"guide"` away, and reprinting seventy names to
-correct one typo buries the correction. Both refusals happen before dispatch, so nothing is written
-and no version is spent.
+One refusal serves all three (`server/src/mcp/tools/shared/undeclared-parameters.ts`). It reads the
+declared key set from the tool's **contract** (`server/tooling/contracts/*.json`) — the same set
+`tools/list` publishes and a client validates against — names **every** undeclared key in one
+message, and suggests the nearest declared name when the spelling is close (`enforcementMode` →
+`enforcement_mode`). The refusal happens before dispatch, so nothing is written and no version is
+spent.
 
-Until this refusal, an undeclared key was accepted, read by nobody, and the call answered success —
-the same silent no-op that made a `resource_type:"framework"` call with `unset` report a change it
-never made. A misspelled parameter now fails loudly instead of doing nothing quietly.
+`resource_manager` has a second, narrower refusal beside it: a parameter that IS declared but
+belongs to another `resource_type` is refused naming the types that read it (see the per-type
+refusal above). That one names only the first offender, because the owner list is the same
+correction for all of them.
+
+#### A declared parameter the current state does not advertise
+
+`prompt_engine` publishes a **union**: `gates`, `gate_verdict` and `gate_action` appear in
+`tools/list` only while the gate system is enabled. A client holding a stale `tools/list` that
+still sends one gets its own message, not "not a parameter" — the contract does name it:
+
+```
+'gate_verdict' is a parameter of prompt_engine, but not one this server is advertising right now:
+the gate system is disabled, so nothing reads a gate parameter. Enable it with
+`system_control action:"gates", operation:"enable"`, or drop it from this call.
+```
+
+#### Why this is a security property
+
+Until this refusal, an undeclared key was accepted, read by nobody, and the call answered
+**success**. Measured over both transports before the fix: `prompt_engine {command, force_restrt}`
+returned a normal prompt list, and `system_control {action:"status", previw:true}` returned a normal
+status overview — both `isError: false`.
+
+The cost is not a dropped convenience flag. A caller — or a model following a prompt-injected
+instruction — that sends a **safety** flag under a slightly wrong name got a success reply while the
+server did the unguarded thing: a `preview` / `confirm` / `persist` typo ran the guarded action
+unguarded.
+This repository has already paid that once, through exactly this mechanism: a `skills_sync` preview
+wrote 33 real files because the registered schema dropped the undeclared flag. Refusing by name
+turns the whole class into a loud error at the boundary.
+
+#### Scope
+
+- **Top-level `arguments` keys only.** `_meta` is a client-protocol field carried on `params`,
+  beside `arguments`, never inside it, so it is out of reach and needs no exemption.
+- **Nested object keys are a separate axis.** A contract declares parameters, not the shape inside
+  one. Some nested schemas already refuse an unknown key on their own — `workflow` and
+  `remainder` (and every node/edge below them) are strict, as is a prompt's `budget`. Others still
+  strip: `gate_verdict`'s structured form (`per_gate[]`, `reminders`), `observations[]`, an inline
+  gate object, and `system_control`'s `config`.
+- **Published schemas stay open.** `additionalProperties` is not set to `false` in `tools/list`,
+  deliberately: the key has to ARRIVE for the server to name it and suggest a correction. A
+  strict published schema would have the client reject locally with a message naming neither the
+  tool nor the fix.
+- **Script tools are covered too** — see
+  [script-tools.md § Security Model](../guides/script-tools.md#security-model).
 
 ### Chain edges
 

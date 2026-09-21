@@ -1,6 +1,7 @@
 {
   "prompt_engine": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": {},
     "properties": {
       "cancel": {
         "description": "<present>",
@@ -2191,6 +2192,7 @@
   },
   "system_control": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": {},
     "properties": {
       "action": {
         "description": "<present>",
