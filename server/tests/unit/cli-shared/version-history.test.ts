@@ -9,7 +9,7 @@ import {
   getVersion,
   compareVersions,
   saveVersion,
-  recordEditResult,
+  recordResourceWrite,
   rollbackVersion,
   deleteVersionRows,
   renameHistoryResource,
@@ -283,20 +283,39 @@ describe('version-history', () => {
     });
   });
 
-  describe('recordEditResult', () => {
+  describe('recordResourceWrite', () => {
     // P7-F10: parity target — mirrors VersionHistoryService.recordEditResult row-for-row so the
     // two accepted writers of `version_history` never disagree on what a version number means.
-    it('first update of a never-before-recorded resource lays a bridge v1 and records v2', () => {
+    // It replaced the CLI's own `recordEditResult` on 2026-09-21: that function recorded both
+    // rows AFTER the write, which left the produced files described by no row, and it had no
+    // production caller left once every `cpm` write moved onto this ordering.
+    //
+    // The write itself is the identity here, and `targets` is empty: these cases are about the
+    // ROW arithmetic, and the file-level atomicity around it has its own test
+    // (`tests/integration/versioning/cpm-create-record-atomicity.test.ts`).
+    const recordEdit = async (
+      priorLive: Record<string, unknown>,
+      produced: Record<string, unknown>
+    ): ReturnType<typeof recordResourceWrite> =>
+      await recordResourceWrite(
+        promptDir,
+        { resourceType: 'prompt', resourceId: 'test-prompt' },
+        {
+          enumerate: () => Promise.reject(new Error('projection-only row')),
+          targets: [],
+          priorSnapshot: priorLive,
+          write: () => Promise.resolve(produced),
+          description: 'Update via resource_manager',
+        }
+      );
+
+    it('first update of a never-before-recorded resource lays a bridge v1 and records v2', async () => {
       const priorLive = { id: 'test-prompt', description: 'out-of-band' };
       const produced = { id: 'test-prompt', description: 'edited' };
 
-      const result = recordEditResult(promptDir, 'prompt', 'test-prompt', priorLive, produced, {
-        description: 'Update via resource_manager',
-      });
+      const result = await recordEdit(priorLive, produced);
 
-      expect(result.success).toBe(true);
-      expect(result.bridged).toBe(true);
-      expect(result.version).toBe(2);
+      expect(result).toMatchObject({ written: true, recorded: true, bridged: true, version: 2 });
 
       const bridge = getVersion(promptDir, 1, PROMPT_REF);
       expect(bridge!.snapshot).toEqual(priorLive);
@@ -307,31 +326,18 @@ describe('version-history', () => {
       expect(newest!.description).toBe('Update via resource_manager');
     });
 
-    it('subsequent update with an already-recorded live state records v3, no bridge', () => {
+    it('subsequent update with an already-recorded live state records v3, no bridge', async () => {
       const priorLive = { id: 'test-prompt', description: 'out-of-band' };
       const firstProduced = { id: 'test-prompt', description: 'edited' };
-      recordEditResult(promptDir, 'prompt', 'test-prompt', priorLive, firstProduced, {
-        description: 'Update via resource_manager',
-      });
+      await recordEdit(priorLive, firstProduced);
 
       // Live state now equals what the first edit produced — no bridge on the second edit.
       const secondProduced = { id: 'test-prompt', description: 'edited again' };
-      const result = recordEditResult(
-        promptDir,
-        'prompt',
-        'test-prompt',
-        firstProduced,
-        secondProduced,
-        { description: 'Update via resource_manager' }
-      );
+      const result = await recordEdit(firstProduced, secondProduced);
 
-      expect(result.bridged).toBe(false);
-      expect(result.version).toBe(3);
-      const newest = getVersion(promptDir, 3, PROMPT_REF);
-      expect(newest!.snapshot).toEqual(secondProduced);
-
-      const history = loadHistory(promptDir, PROMPT_REF);
-      expect(history!.versions).toHaveLength(3);
+      expect(result).toMatchObject({ written: true, recorded: true, bridged: false, version: 3 });
+      expect(getVersion(promptDir, 3, PROMPT_REF)!.snapshot).toEqual(secondProduced);
+      expect(loadHistory(promptDir, PROMPT_REF)!.versions).toHaveLength(3);
     });
   });
 

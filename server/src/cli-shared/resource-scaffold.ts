@@ -275,9 +275,19 @@ export function resourceExists(
 }
 
 /**
- * Create a resource directory with template YAML and companion file.
+ * Where {@link createResourceDir} will put this resource — answerable BEFORE the create runs.
+ *
+ * Exported because a caller that records a version has to name the create's rollback target, and
+ * the target of a create is the directory that does not exist yet: `ResourceMutationTransaction`
+ * captures it as absent and restores it by removing it, so a failed version record leaves nothing
+ * behind. `createResourceDir` only reports the path it used in its RESULT, which is after the
+ * files are on disk and too late to have named a target.
+ *
+ * Exported rather than re-derived at the call site for the usual reason: the prompt branch folds
+ * `category ?? 'general'` into the path, and a second copy of that default is a second thing to
+ * keep in step with the template `promptYaml` writes.
  */
-function resolveResourceDir(
+export function resolveResourceDir(
   baseDir: string,
   type: ResourceType,
   id: string,
@@ -289,6 +299,7 @@ function resolveResourceDir(
   return join(baseDir, id);
 }
 
+/** Create a resource directory with template YAML and companion file. */
 export function createResourceDir(
   baseDir: string,
   type: ResourceType,

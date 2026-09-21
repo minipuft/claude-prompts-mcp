@@ -14,6 +14,8 @@ export type {
 } from './types.js';
 export type { SnapshotContract, RestoreResult } from './snapshot-contract.js';
 export {
+  CREATE_ROW_DESCRIPTION,
+  UPDATE_ROW_DESCRIPTION,
   missingRequiredFields,
   copyPresentFields,
   canonicalizeSnapshot,

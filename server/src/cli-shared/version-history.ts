@@ -14,9 +14,9 @@
  * `VersionHistoryService` — and they must agree on what a version number means or a resource
  * edited by both accumulates a history where "the newest version" means two different things
  * depending on who last wrote it. Go-forward: version N holds the state edit N PRODUCED, not
- * the state that preceded it. `recordEditResult` and `rollbackVersion` carry the bridge-row logic
- * (self-healing v1 for a never-before-recorded resource, or an out-of-band edit) — see
- * `recordEditResult` below for the mechanism, mirrored line-for-line from the server's.
+ * the state that preceded it. `recordResourceWrite` and `rollbackVersion` carry the bridge-row
+ * logic (self-healing v1 for a never-before-recorded resource, or an out-of-band edit) — see
+ * `checkpointed-write.ts` for the mechanism, mirrored from the server's.
  *
  * **`rollbackVersion` is the one write that is not a dispatched action, and it is async.** It has
  * to hold the connection open ACROSS the file write so the prior-state row lands while the disk
@@ -42,7 +42,6 @@ import {
   appendVersion,
   deleteSubtree,
   loadRows,
-  recordEditResultRow,
   renameSubtree,
   selectVersion,
   toEntry,
@@ -165,7 +164,7 @@ function versionHistoryExists(db: DatabaseSync): boolean {
  *
  * `tenantId` is `resolveTenantId`'s derivation, unverified against this db. The five actions
  * that only ever act on EXISTING rows resolve their own `effectiveTenantId` via
- * `resolveEffectiveTenantId` before using it; `save_version`/`record_edit_result` use `tenantId`
+ * `resolveEffectiveTenantId` before using it; `save_version` uses `tenantId`
  * as given (a legitimate new write must not be redirected), and `rename_history` does too for a
  * narrower reason — see `resolveEffectiveTenantId`'s doc comment for both.
  */
@@ -204,22 +203,6 @@ function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): 
         tree: request.produced_tree ?? null,
       });
       return { success: true, version: outcome.version, recorded: outcome.recorded };
-    }
-
-    case 'record_edit_result': {
-      const result = recordEditResultRow(db, tenantId, request, {
-        priorLiveSnapshot: request.prior_snapshot ?? {},
-        producedSnapshot: request.snapshot ?? {},
-        description: request.description ?? '',
-        diffSummary: request.diff_summary ?? '',
-        producedTree: request.produced_tree ?? null,
-      });
-      return {
-        success: true,
-        version: result.version,
-        recorded: result.recorded,
-        bridged: result.bridged,
-      };
     }
 
     case 'compare_versions': {
@@ -364,9 +347,9 @@ export function compareVersions(
 /**
  * What a CLI history write needs beyond the snapshot itself.
  *
- * `maxVersions` rides here rather than as its own parameter because `recordEditResult` would
- * otherwise take seven, over the `max-params` ceiling — and because the bound belongs with the
- * other per-call facts the row records. Omitting it keeps {@link DEFAULT_MAX_VERSIONS}, which is
+ * `maxVersions` rides here rather than as its own parameter because the bound belongs with the
+ * other per-call facts the row records, and because `saveVersion` would otherwise take six
+ * positional parameters. Omitting it keeps {@link DEFAULT_MAX_VERSIONS}, which is
  * what a workspace that configured nothing gets; a `cpm` command supplies
  * {@link resolveConfiguredMaxVersions}.
  */
@@ -441,57 +424,146 @@ export function saveVersion(
 }
 
 /**
- * Record the state PRODUCED by an edit, bridging any unrecorded prior state first.
+ * What one {@link recordResourceWrite} did — in three states, not two.
  *
- * Public CLI counterpart to `VersionHistoryService.recordEditResult` — same go-forward
- * numbering (version N holds what edit N produced) and same bridge-row rule, so a resource
- * edited alternately by the server and by `cpm` accumulates one consistent version sequence
- * rather than two disagreeing ones.
+ * `written: false` is the only failure, and it covers both halves of the atomicity guarantee: the
+ * write threw, or the row could not be appended and the transaction put every target back. Either
+ * way there is no resource and no row. `written: true, recorded: false` is not a failure — it is a
+ * workspace with no version history to write into, reported by name so a caller can say so.
  */
-export function recordEditResult(
+export type ResourceWriteOutcome =
+  | { written: true; recorded: true; version: number; bridged: boolean }
+  | { written: true; recorded: false; reason: string }
+  | { written: false; rolledBack: boolean; error: string };
+
+/**
+ * What one `cpm` write records: how to reach its files, how to perform it, and what it produced.
+ *
+ * Sibling of {@link RollbackRestore}, and deliberately not the same type: a rollback's write is
+ * driven by a snapshot this module reads out of the table first, while an ordinary write already
+ * knows what it is going to do. What they share is the ORDERING, which is
+ * `recordCheckpointedWrite`'s and is stated once there.
+ */
+export interface ResourceWriteRecord {
+  /** The resource's files, re-enumerated on each call — see `CheckpointedWriteInput.enumerate`. */
+  enumerate: () => Promise<ResourceFileSet>;
+  /** Every path `write` may touch; restored byte-identical if the version record fails. */
+  targets: ResourceMutationTarget[];
+  /**
+   * The state on disk right now, projected through the resource's own contract.
+   *
+   * **Omitted for a create.** See `CheckpointedWriteInput.priorSnapshot`: a create has no prior
+   * live state, so it records one row and that row is version 1.
+   */
+  priorSnapshot?: Record<string, unknown>;
+  /** Perform the write and return the projection of the state it produced. Throwing aborts it. */
+  write: () => Promise<Record<string, unknown>>;
+  description: string;
+  diffSummary?: string;
+  /** The workspace's own bound — {@link resolveConfiguredMaxVersions}. */
+  maxVersions?: number;
+}
+
+/**
+ * Perform a `cpm` write and record the state it produced, in the server's order.
+ *
+ * The one entry point for every `cpm` command that writes a resource it did not read out of the
+ * version table. `cpm create` and `cpm toggle` reach it; `cpm rollback` reaches the same ordering
+ * through `rollbackVersion`, which additionally has to load its target first.
+ *
+ * **The tenant is the derived one, uncorrected** — the same rule `dispatch` applies to
+ * `save_version`, and for the same reason: `resolveEffectiveTenantId`
+ * redirects a write onto a tenant that already holds rows for this id, which is right for an
+ * operation acting on EXISTING history (a rollback reads its target from there) and wrong for one
+ * that may legitimately be starting a new one. A create under a fresh workspace has no rows by
+ * construction, and redirecting it would file the new resource's history under someone else's
+ * scope.
+ */
+export async function recordResourceWrite(
   resourceDir: string,
-  resourceType: ResourceType,
-  resourceId: string,
-  priorLiveSnapshot: Record<string, unknown>,
-  producedSnapshot: Record<string, unknown>,
-  options?: HistoryWriteOptions
-): SaveVersionResult & { bridged: boolean } {
-  const request = createRequest(resourceDir, 'record_edit_result', { resourceType, resourceId });
-  if (request === null) {
-    return {
-      success: false,
-      error: 'Unable to resolve resource DB path',
-      bridged: false,
-      recorded: false,
-    };
+  ref: HistoryResourceRef,
+  record: ResourceWriteRecord
+): Promise<ResourceWriteOutcome> {
+  const dbPath = resolveStateDbPath(resourceDir);
+  if (dbPath === null || !isNonEmptyString(ref.resourceType) || !isNonEmptyString(ref.resourceId)) {
+    return await writeUnrecorded(record, 'no state.db could be located for this workspace');
+  }
+  const opened = openStateDb(dbPath);
+  if ('error' in opened) {
+    return await writeUnrecorded(record, opened.error);
   }
 
-  const result = runSqlite({
-    ...(request as HistoryRequest),
-    prior_snapshot: priorLiveSnapshot,
-    snapshot: producedSnapshot,
-    diff_summary: options?.diff_summary ?? '',
-    description: options?.description ?? '',
+  const { db } = opened;
+  const request: HistoryRowRequest = {
+    resource_type: ref.resourceType,
+    resource_id: ref.resourceId,
     created_at: new Date().toISOString(),
-    max_versions: options?.maxVersions ?? DEFAULT_MAX_VERSIONS,
-    // The server's assignment: a caller that RECORDS AN EDIT has already written the produced
-    // files, so the produced row is the one the disk describes and the bridge row is not.
-    produced_tree: options?.tree ?? null,
-  });
-  if (!result.success) {
+    max_versions: record.maxVersions ?? DEFAULT_MAX_VERSIONS,
+  };
+  try {
+    const result = await recordCheckpointedWrite(db, resolveTenantId(dbPath), request, {
+      enumerate: record.enumerate,
+      targets: record.targets,
+      priorSnapshot: record.priorSnapshot,
+      write: record.write,
+      description: record.description,
+      diffSummary: record.diffSummary,
+    });
+    if (!result.success) {
+      return { written: false, rolledBack: result.rolledBack, error: result.error };
+    }
+    // `recorded: false` from the append means the produced state was ALREADY the newest recorded
+    // row — a real outcome, not an unavailable history, so it carries that reason rather than the
+    // unavailability one.
+    return result.outcome.recorded
+      ? {
+          written: true,
+          recorded: true,
+          version: result.outcome.version,
+          bridged: result.outcome.bridged,
+        }
+      : {
+          written: true,
+          recorded: false,
+          reason: `the produced state already matches version ${result.outcome.version}`,
+        };
+  } catch (error) {
     return {
-      success: false,
-      error: result.error ?? 'Failed to record edit result',
-      bridged: false,
-      recorded: false,
+      written: false,
+      rolledBack: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * Perform the write with no transaction and no row, because there is no history to write into.
+ *
+ * **This is not a degraded record; it is the absence of one, reported.** A workspace the server
+ * has never run in has no `state.db` and no `version_history` table — the CLI never creates either
+ * (`runSqlite`) — and refusing the write there would make `cpm create` unusable in exactly the
+ * workspace `cpm init` just made. The server's equivalent is `isAutoVersionEnabled()` returning
+ * false: the writer runs with no `commit` step at all.
+ *
+ * The reason is returned rather than swallowed, because a create that silently records nothing is
+ * the defect shape this whole seam exists to remove.
+ */
+async function writeUnrecorded(
+  record: ResourceWriteRecord,
+  reason: string
+): Promise<ResourceWriteOutcome> {
+  try {
+    await record.write();
+  } catch (error) {
+    return {
+      written: false,
+      rolledBack: false,
+      error: error instanceof Error ? error.message : String(error),
     };
   }
-  return {
-    success: true,
-    version: result.version ?? 0,
-    recorded: result.recorded ?? false,
-    bridged: result.bridged ?? false,
-  };
+  return { written: true, recorded: false, reason };
 }
 
 /**

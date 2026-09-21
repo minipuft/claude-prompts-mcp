@@ -123,7 +123,6 @@ export {
   getVersion,
   compareVersions,
   saveVersion,
-  recordEditResult,
   rollbackVersion,
   deleteVersionRows,
   renameHistoryResource,

@@ -24,7 +24,7 @@ import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 
 import {
-  recordEditResult as cliRecordEditResult,
+  recordResourceWrite as cliRecordResourceWrite,
   loadHistory as cliLoadHistory,
   rollbackVersion as cliRollbackVersion,
   saveVersion as cliSaveVersion,
@@ -261,10 +261,22 @@ describe('an unchanged write creates no version row', () => {
       const server = await service.saveVersion('gate', 'shared-gate', SNAPSHOT);
       expect(server).toMatchObject({ version: 1, recorded: true });
 
-      const cli = cliRecordEditResult(resourceDir, 'gate', 'shared-gate', PERMUTED, PERMUTED, {
-        description: 'cpm edit producing the same state',
-      });
-      expect(cli).toMatchObject({ version: 1, recorded: false, bridged: false });
+      // Through `recordResourceWrite`, the writer a `cpm` edit actually reaches: it performs the
+      // write and records what the write produced, so the "write" here is the identity — the
+      // permuted state, already on disk — and the claim is that neither the bridge nor the
+      // produced append adds a row for it.
+      const cli = await cliRecordResourceWrite(
+        resourceDir,
+        { resourceType: 'gate', resourceId: 'shared-gate' },
+        {
+          enumerate: () => Promise.reject(new Error('no bytes — this row is projection-only')),
+          targets: [],
+          priorSnapshot: PERMUTED,
+          write: () => Promise.resolve(PERMUTED),
+          description: 'cpm edit producing the same state',
+        }
+      );
+      expect(cli).toMatchObject({ written: true, recorded: false });
       expect(countRows()).toBe(1);
     });
 

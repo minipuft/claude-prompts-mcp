@@ -142,7 +142,27 @@ cpm create style analytical --name "Analytical" --description "Structured analyt
 | `-w, --workspace <path>` | Workspace directory                  |
 | `--json`                 | JSON output                          |
 
-Exit codes: `0` created, `1` already exists or error.
+**A created gate or framework is recorded as version 1**, with the same description
+`resource_manager create` writes and no prior-state row — there is nothing to bridge, because
+nothing existed. `--json` reports `"recorded"` and `"version"`.
+
+A created **prompt** or **style** records nothing, and says so: `--json` carries
+`"recorded": false` with a `"not_recorded_reason"`, and the text output prints the same sentence.
+The two reasons are different in kind. Styles carry no version rows on either surface — nothing
+records them, so a rollback of one could only ever report "version not found". A prompt is
+blocked: its snapshot is projected from a loader-resolved prompt, and reaching that loader from
+the CLI bundle measured **+59.0 KB** on 2026-09-21, which is 35.5 KB over the dev bundle budget
+and fails the build. Recording a differently-shaped prompt snapshot instead would make every
+subsequent `resource_manager` edit write a bridge row. Use `resource_manager` where a prompt's
+history matters.
+
+A create in a workspace the server has never run in also records nothing — there is no
+`state.db`, and the CLI never authors that schema. The resource is still created, and the reason
+is reported.
+
+Exit codes: `0` created, `1` already exists or error. A create whose version row cannot be
+written is reported as a failure and leaves no files behind: the record runs inside the write's
+transaction, so the directory it captured as absent is removed again.
 
 ### delete
 
@@ -214,7 +234,12 @@ state is reachable from `cli-shared/` within the bundle budget.
 
 Nothing is recorded when the target version is already the current state; `--json` reports that as `"recorded": false` alongside the version number that was already newest. A rollback that cannot write the file records no restored version at all, and a rollback whose version row cannot be written leaves the file byte-identical to what it was.
 
-`rollback` is the only command that records a version. `delete` purges the resource's history, `rename` re-keys it onto the new id, and `move` leaves it alone (a category move does not change the id history is keyed on). `create`, `link-gate` and `toggle` write the resource and record nothing — the MCP server's `resource_manager` does record a version for the same edits, so use it where the history matters.
+Three commands record a version: `rollback`, `create` (gates and frameworks) and `toggle`
+(frameworks). `delete` purges the resource's history, `rename` re-keys it onto the new id, and
+`move` leaves it alone (a category move does not change the id history is keyed on). `link-gate`
+edits a prompt and still records nothing, for the measured prompt-projection reason under
+[create](#create) — the MCP server's `resource_manager` does record a version for that edit, so
+use it where the history matters.
 
 Exit codes: `0` success, `1` version not found or error.
 
@@ -271,7 +296,18 @@ cpm toggle style analytical --json
 | `-w, --workspace <path>` | Workspace directory                |
 | `--json`                 | JSON output                        |
 
-Flips `enabled: true` to `false` (or vice versa). Only frameworks and styles have an `enabled` field. Exit codes: `0` toggled, `1` error.
+Flips `enabled: true` to `false` (or vice versa). Only frameworks and styles have an `enabled` field.
+
+**A toggled framework records the state the flip produced**, as an edit: the state before the
+flip is bridged in first if it was not already the newest recorded row, so it stays
+rollback-reachable. `cpm rollback` to the version before the toggle restores every value and
+comment (the bytes differ by one blank line after the rewritten key — a property of the
+source-preserving serializer, not of the rollback).
+
+A toggled **style** records nothing and says so in `--json` (`"recorded": false` with
+`"not_recorded_reason"`) and in the text: styles carry no version rows on either surface.
+
+Exit codes: `0` toggled, `1` error.
 
 ### link-gate
 

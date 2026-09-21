@@ -65,33 +65,55 @@ export function projectResourceSnapshot(
   entryPath: string,
   declared: Record<string, unknown>
 ): ResourceSnapshotProjection {
-  if (resourceType === 'gate') {
+  const project = SHARED_PROJECTORS[resourceType];
+  if (project === undefined) {
+    return { shared: false, snapshot: declared, reason: PROMPT_PROJECTION_BLOCKED };
+  }
+  return { shared: true, snapshot: project(id, entryPath, declared) };
+}
+
+/**
+ * Whether this type's snapshot comes from the SERVER's projection — the discriminant, in advance.
+ *
+ * A caller that has to DECIDE before it writes (a create cannot project a file that does not
+ * exist yet) needs the same answer `projectResourceSnapshot` will give, and the only honest way to
+ * get it early is to read the same table the projection dispatches on. A caller branching on its
+ * own list of types would be a second statement of which types are shared, drifting the moment the
+ * prompt blocker is lifted — exactly the parallel-projection shape this module exists to prevent.
+ */
+export function sharesServerSnapshotProjection(resourceType: CliVersionedResourceType): boolean {
+  return SHARED_PROJECTORS[resourceType] !== undefined;
+}
+
+/**
+ * The projection per type, and the SSOT for which types have one.
+ *
+ * A missing entry is the `shared: false` branch — membership decides both the projection and the
+ * discriminant, so the two cannot disagree.
+ */
+const SHARED_PROJECTORS: Partial<
+  Record<
+    CliVersionedResourceType,
+    (id: string, entryPath: string, declared: Record<string, unknown>) => Record<string, unknown>
+  >
+> = {
+  gate: (id, entryPath, declared) => {
     const guidanceFile =
       typeof declared['guidanceFile'] === 'string' ? declared['guidanceFile'] : 'guidance.md';
-    return {
-      shared: true,
-      snapshot: projectGateSnapshot(id, {
-        name: declared['name'],
-        type: declared['type'],
-        description: declared['description'],
-        // `''`, not `undefined`, when the file is absent: the server's `getGuidance()` returns
-        // the empty string, and `canonicalizeSnapshot` keeps `''` while dropping a nullish value —
-        // so the two would differ by a whole key on a gate that carries no guidance.md.
-        guidance: readCompanion(entryPath, guidanceFile) ?? '',
-        definition: declared,
-      }),
-    };
-  }
-
-  if (resourceType === 'framework') {
-    return {
-      shared: true,
-      snapshot: projectFrameworkSnapshot(id, {
-        framework: declared,
-        systemPrompt: readCompanion(entryPath, 'system-prompt.md'),
-      }),
-    };
-  }
-
-  return { shared: false, snapshot: declared, reason: PROMPT_PROJECTION_BLOCKED };
-}
+    return projectGateSnapshot(id, {
+      name: declared['name'],
+      type: declared['type'],
+      description: declared['description'],
+      // `''`, not `undefined`, when the file is absent: the server's `getGuidance()` returns
+      // the empty string, and `canonicalizeSnapshot` keeps `''` while dropping a nullish value —
+      // so the two would differ by a whole key on a gate that carries no guidance.md.
+      guidance: readCompanion(entryPath, guidanceFile) ?? '',
+      definition: declared,
+    });
+  },
+  framework: (id, entryPath, declared) =>
+    projectFrameworkSnapshot(id, {
+      framework: declared,
+      systemPrompt: readCompanion(entryPath, 'system-prompt.md'),
+    }),
+};
