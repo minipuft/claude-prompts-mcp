@@ -454,7 +454,7 @@ export class GateReviewStage extends BasePipelineStage {
 
       context.executionResults = {
         content: [renderResult.content, carriedRender, shellSection]
-          .filter((part) => part !== '' && part !== undefined)
+          .filter((part) => part !== '')
           .join('\n\n'),
         metadata: {
           stepNumber: renderResult.stepNumber,
