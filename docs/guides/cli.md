@@ -142,19 +142,22 @@ cpm create style analytical --name "Analytical" --description "Structured analyt
 | `-w, --workspace <path>` | Workspace directory                  |
 | `--json`                 | JSON output                          |
 
-**A created gate or framework is recorded as version 1**, with the same description
-`resource_manager create` writes and no prior-state row — there is nothing to bridge, because
-nothing existed. `--json` reports `"recorded"` and `"version"`.
+**A created prompt, gate or framework is recorded as version 1**, and no prior-state row is
+written — there is nothing to bridge, because nothing existed. `--json` reports `"recorded"` and
+`"version"`. The row's description names the surface that wrote it (`Created via cpm`), so a
+history tells you which of the two writers to undo it with.
 
-A created **prompt** or **style** records nothing, and says so: `--json` carries
-`"recorded": false` with a `"not_recorded_reason"`, and the text output prints the same sentence.
-The two reasons are different in kind. Styles carry no version rows on either surface — nothing
-records them, so a rollback of one could only ever report "version not found". A prompt is
-blocked: its snapshot is projected from a loader-resolved prompt, and reaching that loader from
-the CLI bundle measured **+59.0 KB** on 2026-09-21, which is 35.5 KB over the dev bundle budget
-and fails the build. Recording a differently-shaped prompt snapshot instead would make every
-subsequent `resource_manager` edit write a bridge row. Use `resource_manager` where a prompt's
-history matters.
+A prompt's snapshot is the state the LOADER resolves, not the literal `prompt.yaml` map: a
+template held in `user-message.md` is recorded inlined, exactly as `resource_manager` records it.
+That is what makes the two surfaces' rows compare equal, so a later server edit of a `cpm`-created
+prompt records one row and no bridge row. If the loader cannot serve the prompt, the row is still
+written in the right shape and `--json` carries a `"snapshot_degraded_reason"` saying the resolved
+bodies are missing.
+
+A created **style** records nothing and says so: `--json` carries `"recorded": false` with a
+`"not_recorded_reason"`, and the text prints the same sentence. Styles carry no version rows on
+either surface — nothing records them, so a rollback of one could only ever report
+"version not found".
 
 A create in a workspace the server has never run in also records nothing — there is no
 `state.db`, and the CLI never authors that schema. The resource is still created, and the reason
@@ -230,25 +233,17 @@ Two states refuse and write nothing rather than restoring something else: a vers
 
 `--preview` resolves exactly the plan a rollback would apply and prints it, writing no file and recording no version. `--json` adds `preview`, `files_written`, `files_unchanged` and `files_left_in_place` beside the existing fields.
 
-For a gate or a framework, both rows carry the SAME projection `resource_manager` records — one
-declaration per resource type, shared by the two surfaces. Rolling back a gate or framework the
-server last wrote therefore adds exactly one row and no "Bridge: prior live state" row, because the
-state being replaced now compares equal to the newest recorded one. A **prompt** rollback still
-bridges: the shared prompt projection takes a loader-resolved prompt, and reaching the prompt loader
-from the CLI bundle measured +59.0 KB against 24.1 KB of headroom (2026-09-21), so `cpm` still
-records a prompt's raw `prompt.yaml` map. ☐ open as of 2026-09-21 · flips when a prompt's authored
-state is reachable from `cli-shared/` within the bundle budget. That bound is about the SNAPSHOT
-only — a prompt's FILES restore byte-exactly like every other type's, because the bytes and the
-projection are different questions and only the projection needs the loader.
+Every versioned type — prompt, gate and framework — projects through the SAME declaration
+`resource_manager` records with; there is one per resource type, shared by the two surfaces.
+Rolling back a resource the server last wrote therefore adds exactly one row and no
+"Bridge: prior live state" row, because the state being replaced compares equal to the newest
+recorded one.
 
 Nothing is recorded when the target version is already the current state; `--json` reports that as `"recorded": false` alongside the version number that was already newest. A rollback that cannot write the file records no restored version at all, and a rollback whose version row cannot be written leaves the file byte-identical to what it was.
 
-Three commands record a version: `rollback`, `create` (gates and frameworks) and `toggle`
-(frameworks). `delete` purges the resource's history, `rename` re-keys it onto the new id, and
-`move` leaves it alone (a category move does not change the id history is keyed on). `link-gate`
-edits a prompt and still records nothing, for the measured prompt-projection reason under
-[create](#create) — the MCP server's `resource_manager` does record a version for that edit, so
-use it where the history matters.
+Four commands record a version: `rollback`, `create` (prompts, gates and frameworks), `toggle`
+(frameworks) and `link-gate`. `delete` purges the resource's history, `rename` re-keys it onto the
+new id, and `move` leaves it alone (a category move does not change the id history is keyed on).
 
 Exit codes: `0` success, `1` version not found or error.
 
@@ -309,9 +304,8 @@ Flips `enabled: true` to `false` (or vice versa). Only frameworks and styles hav
 
 **A toggled framework records the state the flip produced**, as an edit: the state before the
 flip is bridged in first if it was not already the newest recorded row, so it stays
-rollback-reachable. `cpm rollback` to the version before the toggle restores every value and
-comment (the bytes differ by one blank line after the rewritten key — a property of the
-source-preserving serializer, not of the rollback).
+rollback-reachable. `cpm rollback` to the version before the toggle returns the file byte for byte,
+comments and blank lines included, because that version recorded its file tree.
 
 A toggled **style** records nothing and says so in `--json` (`"recorded": false` with
 `"not_recorded_reason"`) and in the text: styles carry no version rows on either surface.
@@ -336,6 +330,12 @@ cpm link-gate my-prompt code-quality --json
 | `--json`                 | JSON output                            |
 
 Modifies the prompt's `gateConfiguration.include` array. When adding, validates that the gate exists. When removing with `--remove`, the gate may already be deleted. Exit codes: `0` linked/unlinked, `1` error.
+
+**A link or unlink records the state it produced**, as an edit: the prompt's state before the link
+is bridged in first if it was not already the newest recorded row, so it stays rollback-reachable.
+`--json` carries `"recorded"`, `"version"`, and — when the row could not be written — a
+`"not_recorded_reason"`. Linking a gate that is already linked, or unlinking one that is not, is
+refused before anything is written: no file changes and no row appears.
 
 ### config
 

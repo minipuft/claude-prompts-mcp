@@ -229,8 +229,9 @@ and a server write of identical files produce an identical `tree_hash` — one e
 hasher, one recorder, reached from both sides.
 
 **One projection per resource type, read by both surfaces.** A version row's `snapshot` is a
-`SnapshotContract` projection. For gates, frameworks and categories, what that projection RECORDS
-lives in `src/modules/versioning/projections/`, which both `mcp/tools/**` and `cli-shared/` import;
+`SnapshotContract` projection. For every type — prompt, gate, framework and category — what that
+projection RECORDS lives in `src/modules/versioning/projections/`, which both `mcp/tools/**` and
+`cli-shared/` import;
 the tool-layer contracts keep only `restore`, which rebuilds a write model whose type is a tool-layer
 one. `cpm rollback` of a gate or a framework therefore records the state it replaced in the same
 shape `resource_manager` would, and no longer writes a "Bridge: prior live state" row for a
@@ -239,32 +240,44 @@ server-written resource. Until 2026-09-21 it passed the raw YAML map instead —
 `{id,name,type,description,guidance}` with the markdown body inline — so the two could never compare
 equal and every such rollback bridged.
 
-**The prompt projection is the one that stayed behind, and the blocker is a budget, not a layer.**
+**The prompt projection joined them on 2026-09-21, and what it cost was bundle, not layering.**
 `canonicalPromptSnapshot` takes a loader-RESOLVED prompt (`userMessageTemplate` inlined, where
-`prompt.yaml` holds only `userMessageTemplateFile`), so building its input needs `loadYamlPrompt`
-AND `PromptConverter`. Measured 2026-09-21 as a reachable import from `cli-shared/`: the dev `cpm`
-bundle went 855.4 KB → 914.4 KB, **+59.0 KB**, which is 35.5 KB past the 900,000-byte
-`DEV_BUNDLE_BUDGET_BYTES` — `npm run build` fails. So `cpm rollback` of a prompt still records the
-raw `prompt.yaml` map and still bridges, and `cpm link-gate`/`unlink-gate` (which edit a prompt) and
-`cpm create` of a prompt records nothing at all. ☐ open as of 2026-09-21 · flips when a prompt's
-authored state is reachable from `cli-shared/` within the bundle budget. Writing a second,
-YAML-shaped prompt projection instead is the shape this arc exists to remove.
+`prompt.yaml` holds only `userMessageTemplateFile`), so building its input needs the prompt loader.
+`cli-shared/prompt-projection.ts` runs `PromptLoader.loadFromDirectories` +
+`PromptConverter.convertMarkdownPromptsToJson` — the pair `PromptAssetManager.loadAndConvertPrompts`
+runs, used whole rather than reached past, because the WALK is what sets a prompt's `category` from
+its folder and `category` is a projected field. Measured: the dev `cpm` bundle went 918,220 B →
+986,048 B, **+66.2 KB**, against the 1,000,000-byte `DEV_BUNDLE_BUDGET_BYTES` (13,952 B of
+headroom); the shipped minified budget is untouched. Writing a second, YAML-shaped prompt
+projection instead was the shape this arc exists to remove: a differently-shaped snapshot can never
+hash-compare equal, so every server edit of a `cpm`-written prompt would have bridged forever.
 
-**`cpm create` and `cpm toggle` record through the same ordering as of 2026-09-21.** A create
-records the produced state as version 1 with no prior-state row — nothing existed to bridge, which
-is the server's own create rule — and a toggle records as an edit, bridging the pre-flip state
-first if it was not already the newest row. Both run their append as the write's `commit`, so a
-failed record restores every target: for a create that means removing the directory the
-transaction captured as absent. `cpm create` of a gate or framework and `cpm toggle` of a
-framework therefore leave a row the server's next edit does not have to bridge — driven in
+A prompt the loader cannot serve is not recorded as if it had been projected: the row is written
+through the same projection over the raw entry file, so the key set and ORDER still match, and the
+reply carries a `snapshot_degraded_reason` naming what is missing.
+
+**`cpm create`, `cpm toggle` and `cpm link-gate` record through the same ordering as of
+2026-09-21.** A create records the produced state as version 1 with no prior-state row — nothing
+existed to bridge, which is the server's own create rule — and a toggle or a gate link records as
+an edit, bridging the pre-write state first if it was not already the newest row. All run their
+append as the write's `commit`, so a failed record restores every target: for a create that means
+removing the directory the transaction captured as absent. They therefore leave a row the server's
+next edit does not have to bridge — driven in
 `tests/e2e/cli-create-records-a-version.e2e.test.ts` and
 `tests/e2e/cli-toggle-records-a-version.e2e.test.ts`, each with an out-of-band-edit twin as the
-positive control for the missing bridge row.
+positive control for the missing bridge row, and in both directions: a `cpm`-created prompt takes
+a server edit with no bridge, and a server-written prompt rolls back from `cpm` with no bridge.
+
+**A row's description names the surface that wrote it.** `createRowDescription(surface)` /
+`updateRowDescription(surface)` (`modules/versioning/snapshot-contract.ts`) are the one owner, so a
+`cpm` row reads `Created via cpm` / `Update via cpm` and a server row is unchanged. They were a
+pair of constants that `cpm` reused, which put `resource_manager` on every row `cpm` wrote — in the
+one sentence a history is consulted for, and the two surfaces undo differently.
 
 What still records nothing says so rather than staying silent, in `--json` and in the text, with
-the reason: a created prompt (the +59.0 KB blocker above), a created or toggled style (styles
-carry no version rows on either surface), and any write in a workspace with no `state.db` (the CLI
-never authors that schema). A silent non-record is the shape this arc removes.
+the reason: a created or toggled style (styles carry no version rows on either surface), and any
+write in a workspace with no `state.db` (the CLI never authors that schema). A silent non-record is
+the shape this arc removes.
 `tests/integration/versioning/cpm-write-records-a-version.test.ts` is the gate that fails the
 moment a still-blocked command starts recording, or a recording one stops.
 
