@@ -2,7 +2,7 @@
 title: "resource_manager surface consolidation — where resources live and what is authorable"
 date: 2026-08-27
 status: active
-publish: push+merge (2026-09-20 · owner rulings · the tail PR #342, the hardening slice #344 and the checkpoint slices #345–#347, all merged; the next slice needs its own ruling)
+publish: push+merge (2026-09-20 · owner rulings · the tail PR #342, the hardening slice #344 and the checkpoint slices #345–#347, all merged · 2026-09-21 owner ruling: every remaining slice of this plan is push, PR and merge, one PR per slice, on a green full suite and a clean merge state; breaking changes and force pushes still stop for the owner)
 tags: []
 ---
 
@@ -22,18 +22,18 @@ lifecycle it can actually reach.
 
 ## Now
 
-_Rewritten 2026-09-21._ No slice is running. The owner's three rulings of 2026-09-20 are all on
-`main`: HTTP notifications and the undeclared-key refusal on every tool (#344 `b87ddbb6`), and the
-checkpoint system across #344, #345 `03dd1582` (the per-workspace object store), #346 `404d57bd`
-(byte-exact restore that never deletes a file) and #347 `73498a88` (config checkpointing).
+_Rewritten 2026-09-21._ Two slices are running, each in its own worktree off `main` `7669aa4e`.
 
-- **Owner calls open:** `cpm`'s prompt edits against about 59 KB of dev bundle (P4.104, affordable
-  under the 1,000,000 budget); the path in a nested `gate_verdict` refusal (P4.103); the wording of
-  a `cpm`-written create row (P4.107); one tenant for a workspace's config history (P4.109, the
-  tutorial plan's B.89).
-- **Open, not started:** P4.86, P4.87, P4.89–P4.91, P4.99–P4.102, P4.105, P4.106, P4.108.
+- **`fix/cpm-prompt-versions`** (P4.104, P4.107): `cpm link-gate`, `unlink-gate` and a prompt
+  `create` record a version through the server's own prompt projection; a `cpm`-written create row
+  names `cpm`; the YAML writer keeps the blank line after the key it rewrites.
+- **`fix/config-history-tenant`** (P4.109, P4.108, P4.106): a config file's history is keyed by the
+  file; a check owns the pre-29 `SELECT` class; the CLI's test-only `saveVersion` gets its fork.
+- **Held behind other work:** P4.86, P4.89, P4.100, P4.101 and P4.103 edit the gate review and step
+  capture files that PRs #271 and #272 also edit, so they start after those two land.
+- **Open, not started:** P4.87, P4.90, P4.91, P4.99, P4.102, P4.105.
   **Owner's, outside the repo:** the `~/.claude` rename (P5.12 second half), P5.16, then P5.13.
-- **Constraint in force:** `publish:` covered the slices above. The next slice needs its own ruling.
+- **No owner call is open** (R71–R74).
 
 ## What already landed (do not redo)
 
@@ -732,6 +732,14 @@ Ruled before dispatching P4.43–P4.50, on `914b068c`. R23 and R24 stand as writ
   into `modules/versioning/projections/`. The prompt projection stays in the tool layer: reaching
   it from `cli-shared` measured 35.5 KB over the dev bundle budget, and a second prompt projection
   is the defect this slice removes, so those `cpm` commands say they record nothing.
+- **R71 (publish, owner 2026-09-21).** Every remaining slice is push, PR and merge.
+- **R72 (P4.104, owner 2026-09-21).** Spend the 59 KB: `cpm` reaches the server's prompt
+  projection. No second, slimmer projection. Supersedes the second half of R70.
+- **R73 (P4.109, owner 2026-09-21).** A config file's history belongs to the config file: both
+  surfaces derive the tenant from the resolved file path, never from the caller's workspace scope.
+- **R74 (P4.103 and P4.107, owner 2026-09-21).** A nested refusal names the full path and the
+  nearest declared key. A `cpm`-written create row says "Created via cpm". The blank-line drop is
+  a defect and is fixed.
 - **R29 follow-ups (ruled on the P4.45 handoff).** A method called only from tests counts as
   unreached. A stale baseline entry fails the check.
 
