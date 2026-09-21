@@ -201,17 +201,21 @@ describe('state.db foreign keys hold on both writers', () => {
       );
 
       const readDb = new DatabaseSync(dbPath, { readOnly: true });
-      const survivors = readDb
-        .prepare(
-          `SELECT vh.resource_id AS resource_id FROM version_entries ve
-           JOIN version_history vh ON vh.id = ve.version_row_id`
-        )
-        .all() as unknown as Array<{ resource_id: string }>;
+      // Read `version_entries` RAW. An earlier version of this assertion joined to
+      // `version_history`, which made it useless: an orphaned entry has no parent row, so the join
+      // dropped exactly the rows the cascade is supposed to have removed and the test passed with
+      // foreign keys OFF. A claim about orphans cannot be made through a query that discards them.
+      const entries = readDb
+        .prepare(`SELECT version_row_id FROM version_entries`)
+        .all() as unknown as Array<{ version_row_id: number }>;
+      const kept = readDb
+        .prepare(`SELECT id FROM version_history WHERE resource_id = 'kept'`)
+        .get() as { id: number } | undefined;
       readDb.close();
 
       // Control in the same assertion: the untouched resource keeps its entry, so the cascade is
       // scoped to the deleted row rather than being a table-wide wipe.
-      expect(survivors.map((row) => row.resource_id)).toEqual(['kept']);
+      expect(entries.map((row) => Number(row.version_row_id))).toEqual([Number(kept?.id)]);
     });
   });
 });
