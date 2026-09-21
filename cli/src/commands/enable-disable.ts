@@ -1,5 +1,6 @@
 import { output } from '../lib/output.js';
-import { setConfigValue, readConfig, getConfigValue } from '@cli-shared/config-operations.js';
+import { readConfig, getConfigValue } from '@cli-shared/config-operations.js';
+import { setConfigValueRecorded } from '@cli-shared/config-checkpoint.js';
 
 interface EnableDisableOptions {
   workspace?: string;
@@ -89,7 +90,7 @@ export async function enableDisable(options: EnableDisableOptions): Promise<numb
     }
   }
 
-  const result = setConfigValue(ws, configKey, targetValue);
+  const result = await setConfigValueRecorded(ws, configKey, targetValue);
 
   if (!result.success) {
     if (json) {

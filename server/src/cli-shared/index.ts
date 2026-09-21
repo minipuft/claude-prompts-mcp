@@ -181,7 +181,6 @@ export {
   getConfigValue,
   setConfigValue,
   writeConfigAtomic,
-  backupConfig,
   generateDefaultConfig,
   initConfig,
   resetConfig,

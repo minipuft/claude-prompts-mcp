@@ -391,7 +391,23 @@ To change a setting, uncomment its line and the braces of the section it sits in
 
 `cpm config set` edits the file's text in place: only the one key's own characters change, so your comments, key order and formatting all survive. Setting a key that exists only as a commented-out example in the template inserts the live key and leaves the commented example where it was — nothing tries to remove or uncomment it. A persisted `gates`/`framework` toggle from `system_control` (`persist: true`) edits in place the same way.
 
-`cpm config reset --force` backs up the current file first (`config.jsonc.backup.<timestamp>`, or `config.json.backup.<timestamp>`), then writes fresh defaults into the **same file name** — the commented template for a `config.jsonc`, or the minimal `{$schema, version}` document for a `config.json`. It never renames a file.
+`cpm config reset --force` writes fresh defaults into the **same file name** — the commented template for a `config.jsonc`, or the minimal `{$schema, version}` document for a `config.json`. It never renames a file.
+
+### Config versions
+
+Every write to the config file — `cpm config set`, `cpm config reset`, `cpm enable`/`cpm disable`, and a persisted `gates`/`framework` toggle from `system_control` — is recorded as a version carrying the file's exact bytes, comments included.
+
+```bash
+cpm config history                  # Every recorded version, newest first
+cpm config rollback 3 --preview     # What restoring v3 would change; writes nothing
+cpm config rollback 3               # Restore v3's bytes, and record the result as a new version
+```
+
+A write that changes no character records nothing and says so, and a workspace the server has never run in has no `state.db` to record into — the write still happens, and the reason is printed (and carried in `--json` as `recorded` / `recordNote`).
+
+A rollback writes the recorded bytes verbatim, through the same temp-file-and-rename every config write uses, and it is refused — with nothing written — when it cannot: an unknown version number, a version that recorded no bytes, bytes this build no longer accepts as configuration (an old version can predate a bound change), or a recorded `config.jsonc` in a workspace that now holds a `config.json`. Config is the one resource with no projected fallback: its version snapshot holds a filename, a size and a digest, so where the bytes are missing there is nothing to rebuild the document from, and the refusal says so rather than inventing one.
+
+**Removed in 5.0** (breaking): `cpm config set` and `cpm config reset` no longer leave a `config.json[c].backup.<timestamp>` file, and `--json` no longer carries `backupPath`. Nothing ever read those files back. Use `cpm config history` and `cpm config rollback` instead. Backup files already on disk are left exactly where they are.
 
 A workspace holding both `config.jsonc` and `config.json` refuses every `config` subcommand (and server startup) rather than silently preferring one:
 

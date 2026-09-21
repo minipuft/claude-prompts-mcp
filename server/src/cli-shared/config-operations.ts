@@ -23,7 +23,6 @@
  */
 
 import {
-  copyFileSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -67,7 +66,6 @@ export interface ConfigSetResult {
   previousValue?: unknown;
   newValue?: unknown;
   message: string;
-  backupPath?: string;
   restartRequired?: boolean;
   error?: string;
 }
@@ -82,7 +80,6 @@ export interface ConfigInitResult {
 export interface ConfigResetResult {
   success: boolean;
   configPath: string;
-  backupPath?: string;
   message: string;
   error?: string;
 }
@@ -208,7 +205,7 @@ export function getConfigValue(config: Record<string, unknown>, key: string): un
   return current;
 }
 
-// ── Set value with validation + atomic write + backup ────────────────────────
+// ── Set value with validation + atomic write ─────────────────────────────────
 
 export function setConfigValue(workspace: string, key: string, value: string): ConfigSetResult {
   return setConfigValueAtPath(resolveConfigPath(workspace), key, value);
@@ -251,9 +248,6 @@ export function setConfigValueAtPath(
   // Get previous value
   const previousValue = getConfigValue(config, key);
 
-  // Create backup
-  const backupPath = backupConfig(configPath);
-
   // Write atomically, editing only this key's own characters
   try {
     writeConfigKeyAtomic(configPath, key, validation.convertedValue);
@@ -262,7 +256,6 @@ export function setConfigValueAtPath(
       success: false,
       key,
       message: `Failed to write ${basename(configPath)}: ${error}`,
-      backupPath,
       error: String(error),
     };
   }
@@ -275,7 +268,6 @@ export function setConfigValueAtPath(
     previousValue,
     newValue: validation.convertedValue,
     message: `Configuration updated: ${key} = ${JSON.stringify(validation.convertedValue)}`,
-    backupPath,
     restartRequired,
   };
 }
@@ -327,10 +319,28 @@ export function writeConfigKeyAtomic(configPath: string, key: string, value: unk
  * @throws {Error} When the write fails or the written text does not parse
  */
 function writeConfigTextAtomic(configPath: string, text: string): void {
+  writeConfigBytesAtomic(configPath, text);
+}
+
+/**
+ * The same publish, over BYTES rather than text — the one a byte-exact rollback takes.
+ *
+ * A version restore writes the digest-addressed bytes it recorded, verbatim. Handing them through
+ * a string would be a round trip: correct for every valid UTF-8 document and silently lossy for
+ * anything else, which is precisely the class of difference a byte-exact restore exists to
+ * preserve. Everything else is identical — same temp file, same parse-back check against the
+ * destination's dialect, same rename — because a restore that skipped either would publish config
+ * text no gate had validated.
+ *
+ * @param configPath - Destination path; its extension decides the dialect checked
+ * @param bytes - Complete file contents, as bytes or as text
+ * @throws {Error} When the write fails or the written content does not parse
+ */
+export function writeConfigBytesAtomic(configPath: string, bytes: Uint8Array | string): void {
   const tempPath = `${configPath}.tmp`;
 
   try {
-    writeFileSync(tempPath, text, 'utf8');
+    writeFileSync(tempPath, bytes);
 
     // Verify the written file parses as the format the destination name declares
     parseConfigText(readFileSync(tempPath, 'utf8'), configFileFormat(configPath));
@@ -359,21 +369,6 @@ function writeConfigTextAtomic(configPath: string, text: string): void {
  */
 export function writeConfigAtomic(configPath: string, config: Record<string, unknown>): void {
   writeConfigTextAtomic(configPath, JSON.stringify(config, null, 2) + '\n');
-}
-
-// ── Backup ───────────────────────────────────────────────────────────────────
-
-/**
- * Copy the config beside itself, timestamped.
- *
- * The backup name keeps the whole source name including its extension
- * (`config.jsonc.backup.1758…`), so restoring it is a copy back onto a path whose dialect still
- * matches its bytes — a `.jsonc` backup can never land as a `.json` file a strict reader rejects.
- */
-export function backupConfig(configPath: string): string {
-  const backupPath = `${configPath}.backup.${Date.now()}`;
-  copyFileSync(configPath, backupPath);
-  return backupPath;
 }
 
 // ── Default config generation ────────────────────────────────────────────────
@@ -462,7 +457,11 @@ export function initConfig(targetPath: string): ConfigInitResult {
 // ── Workspace config reset ───────────────────────────────────────────────────
 
 /**
- * Replace a workspace's config with a fresh default, backing up whatever was there.
+ * Replace a workspace's config with a fresh default.
+ *
+ * What it replaced is recoverable: the caller records the prior bytes as a version row first
+ * (`config-checkpoint.ts`), so `cpm config rollback` puts the operator's document back. The
+ * timestamped `.backup.<ms>` copy this used to leave was read by nothing.
  *
  * The existing file's NAME is kept — a reset is not a migration, and renaming someone's
  * `config.json` out from under a tool that points at it would break more than it tidies. So a
@@ -471,7 +470,7 @@ export function initConfig(targetPath: string): ConfigInitResult {
  * under the same name as before.
  *
  * @param workspace - Workspace directory
- * @returns Which file was written, where its backup went, and what to tell the user
+ * @returns Which file was written and what to tell the user
  */
 export function resetConfig(workspace: string): ConfigResetResult {
   const workspaceDir = resolve(workspace);
@@ -481,9 +480,6 @@ export function resetConfig(workspace: string): ConfigResetResult {
   if (ambiguity !== undefined) {
     return { success: false, configPath, message: ambiguity, error: ambiguity };
   }
-
-  // Nothing to back up when the workspace has no config yet
-  const backupPath = existsSync(configPath) ? backupConfig(configPath) : undefined;
 
   try {
     if (configFileFormat(configPath) === 'jsonc') {
@@ -495,7 +491,6 @@ export function resetConfig(workspace: string): ConfigResetResult {
     return {
       success: false,
       configPath,
-      ...(backupPath !== undefined ? { backupPath } : {}),
       message: `Failed to reset ${basename(configPath)}: ${error}`,
       error: String(error),
     };
@@ -504,7 +499,6 @@ export function resetConfig(workspace: string): ConfigResetResult {
   return {
     success: true,
     configPath,
-    ...(backupPath !== undefined ? { backupPath } : {}),
     message: `${basename(configPath)} reset to defaults`,
   };
 }

@@ -37,6 +37,18 @@ import type { ResourceType } from './types.js';
 
 import { isPathInside } from '#shared/utils/path-containment.js';
 
+/**
+ * What a restore plan can be ABOUT — the four resource types, plus the workspace config file.
+ *
+ * `'config'` is not a `ResourceType` and deliberately never becomes one: it has no resource root,
+ * no entry-filename rule and no loader, so `resourceFileSet` cannot enumerate it and
+ * `modules/versioning/types.ts` must not claim it can (`cli-shared/config-checkpoint.ts` states
+ * the whole argument). What config DOES share is this plan: a target tree, a current tree, and the
+ * three-way per-path answer. Widening it here rather than there keeps the widening where the
+ * capability actually exists.
+ */
+type RestoreResourceType = ResourceType | 'config';
+
 /** One file as some tree records it: where it sits, and the digest of its bytes. */
 export interface RecordedFile {
   /** POSIX, relative to the resource's own root. Exactly what `version_entries.path` holds. */
@@ -70,7 +82,7 @@ interface RestoreWrite {
  * tree, and `leftInPlace` is exactly what is on disk and not in it.
  */
 export interface RestorePlan {
-  resourceType: ResourceType;
+  resourceType: RestoreResourceType;
   resourceId: string;
   /** The version being restored TO. Carried so a reply never has to be handed it separately. */
   version: number;
@@ -88,7 +100,7 @@ export interface RestorePlan {
 export type RestorePlanResult = { ok: true; plan: RestorePlan } | { ok: false; refusal: string };
 
 export interface RestorePlanInput {
-  resourceType: ResourceType;
+  resourceType: RestoreResourceType;
   resourceId: string;
   version: number;
   /**

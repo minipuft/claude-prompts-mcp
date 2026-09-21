@@ -114,7 +114,7 @@ describe('cpm config (config.jsonc)', () => {
     expect(stdout).toContain(jsonPath);
   });
 
-  it('cpm config reset --force on config.jsonc backs up as .jsonc.backup.<ts> and keeps comments', () => {
+  it('cpm config reset --force on config.jsonc leaves no backup file and keeps the name', () => {
     tmpWs = makeWorkspace('reset-jsonc');
     writeFileSync(
       join(tmpWs, 'config.jsonc'),
@@ -123,10 +123,12 @@ describe('cpm config (config.jsonc)', () => {
 
     const { exitCode, stdout } = run(['config', 'reset', '--force', '--workspace', tmpWs]);
     expect(exitCode).toBe(0);
-    expect(stdout).toMatch(/Backup: .*config\.jsonc\.backup\.\d+/);
+    expect(stdout).not.toMatch(/Backup:/);
 
-    const backup = readdirSync(tmpWs).find((f) => /^config\.jsonc\.backup\.\d+$/.test(f));
-    expect(backup).toBeDefined();
+    // Ruling R53: the prior bytes are a version row, not a timestamped copy beside the file.
+    expect(readdirSync(tmpWs).filter((f) => f.includes('.backup.'))).toEqual([]);
+    // Positive control: the probe reads the directory the config actually sits in.
+    expect(readdirSync(tmpWs)).toContain('config.jsonc');
 
     expect(existsSync(join(tmpWs, 'config.jsonc'))).toBe(true);
     expect(existsSync(join(tmpWs, 'config.json'))).toBe(false);

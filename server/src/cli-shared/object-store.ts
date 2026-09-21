@@ -349,10 +349,35 @@ export interface LoadedTree {
 export async function readResourceTree(
   files: ResourceFileSet
 ): Promise<{ tree: LoadedTree } | { reason: string }> {
+  return await readFileTree(files.files, files.origin);
+}
+
+/** One file to read, as {@link readFileTree} addresses it. Structural subset of a file-set entry. */
+export interface TreeFileRef {
+  /** POSIX, relative to whatever root the caller records under. Becomes `version_entries.path`. */
+  relativePath: string;
+  absolutePath: string;
+}
+
+/**
+ * The body of {@link readResourceTree}, over a bare list of files rather than a `ResourceFileSet`.
+ *
+ * Exists because ONE checkpointed thing is not a resource: the workspace config file has no
+ * resource root, no entry-filename rule and no loader, so `resourceFileSet` cannot enumerate it and
+ * widening that enumerator's `ResourceType` would publish a capability that does not exist
+ * (`config-checkpoint.ts` states the full argument). What config does need is identical — the same
+ * per-file and per-tree ceilings, the same `hashBytes`, the same `LoadedTree` shape — and a second
+ * copy of those could only agree with this one by inspection. So the limits live here, once, and
+ * `readResourceTree` is the enumerator-shaped caller rather than the owner.
+ */
+export async function readFileTree(
+  files: readonly TreeFileRef[],
+  origin: string
+): Promise<{ tree: LoadedTree } | { reason: string }> {
   const entries: LoadedFile[] = [];
   let total = 0;
 
-  for (const file of files.files) {
+  for (const file of files) {
     let bytes: Buffer;
     try {
       bytes = await readFile(file.absolutePath);
@@ -380,5 +405,5 @@ export async function readResourceTree(
   if (entries.length === 0) {
     return { reason: 'the enumerator reported no files' };
   }
-  return { tree: { entries, origin: files.origin } };
+  return { tree: { entries, origin } };
 }

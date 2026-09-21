@@ -17,7 +17,7 @@
  */
 
 import { describe, expect, it, beforeEach, afterEach } from '@jest/globals';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -84,12 +84,16 @@ describe('SafeConfigWriter', () => {
     expect(reloads).toBe(1);
   });
 
-  it('backs the file up under its own extension, byte for byte', async () => {
+  it('leaves no backup file beside the config it wrote', async () => {
     const writer = writerFor('config.jsonc', COMMENTED_CONFIG);
 
     const result = await writer.updateConfigValue('gates.enabled', 'true');
-    expect(result.backupPath).toContain('config.jsonc.backup.');
-    expect(readFileSync(result.backupPath as string, 'utf8')).toBe(COMMENTED_CONFIG);
+    expect(result.success).toBe(true);
+    // The prior bytes are a `version_history` row now (ruling R53), not a timestamped copy
+    // nothing could restore. `cpm config rollback` is what reads them back.
+    expect(readdirSync(tempDir).filter((name) => name.includes('.backup.'))).toEqual([]);
+    // Positive control: the probe reads the directory the config actually sits in.
+    expect(readdirSync(tempDir)).toContain('config.jsonc');
   });
 
   it('refuses when the workspace holds both config names, naming both paths', async () => {
