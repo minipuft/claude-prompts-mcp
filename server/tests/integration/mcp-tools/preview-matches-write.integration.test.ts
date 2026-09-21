@@ -31,6 +31,7 @@ import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
+import { hashBytes } from '../../../src/shared/utils/hash.js';
 import { CategoryFileWriter } from '../../../src/mcp/tools/category-manager/services/category-file-writer.js';
 import { CategoryLifecycleProcessor } from '../../../src/mcp/tools/category-manager/services/category-lifecycle-processor.js';
 import { categorySnapshotContract } from '../../../src/mcp/tools/category-manager/services/category-snapshot-contract.js';
@@ -254,6 +255,17 @@ async function createHarness(
       recordEditResult,
       resolveRollbackTarget,
       commitEdit: jest.fn(async () => ({ version: 3, bridged: false })),
+      /**
+       * These doubles exercise the PROJECTION path, so the byte path must answer "no tree".
+       *
+       * Stated rather than omitted: a missing method is a TypeError at the call site, and the
+       * honest double for a version row this harness never recorded files for is exactly the
+       * answer a pre-v29 row gives.
+       */
+      planByteRestore: jest.fn(async () => ({
+        status: 'projection-only',
+        reason: 'this harness records no file trees',
+      })),
     },
     textDiffService: new ObjectDiffGenerator(),
     comparisonEngine: new ComparisonEngine(logger),
@@ -534,6 +546,7 @@ type VersionSeamMock = jest.Mock<(...args: unknown[]) => Promise<unknown>>;
 function createVersionSeam(): {
   recordEditResult: VersionSeamMock;
   resolveRollbackTarget: VersionSeamMock;
+  planByteRestore: VersionSeamMock;
   service: Record<string, unknown>;
 } {
   const recordEditResult: VersionSeamMock = jest.fn(async () => ({
@@ -545,13 +558,25 @@ function createVersionSeam(): {
     ok: false,
     error: 'no rollback target configured for this test',
   }));
+  const planByteRestore: VersionSeamMock = jest.fn(async () => ({
+    status: 'projection-only',
+    reason: 'this harness records no file trees',
+  }));
   return {
     recordEditResult,
     resolveRollbackTarget,
+    planByteRestore,
     service: {
       isAutoVersionEnabled: () => true,
       recordEditResult,
       resolveRollbackTarget,
+      /**
+       * These harnesses exercise the PROJECTION path — they configure a snapshot and never a file
+       * tree — so the byte path must answer "no tree". That is exactly what a pre-v29 row answers,
+       * which makes this the honest double rather than a convenience: a missing method would be a
+       * TypeError at the call site, and a `ready` here would be a tree nothing recorded.
+       */
+      planByteRestore,
       commitEdit: jest.fn(async () => ({ version: 3, bridged: false })),
     },
   };
@@ -595,6 +620,7 @@ class DiskGateRegistry {
 }
 
 interface GateHarness {
+  planByteRestore: VersionSeamMock;
   lifecycle: GateLifecycleProcessor;
   versioning: GateVersioningProcessor;
   registry: DiskGateRegistry;
@@ -638,6 +664,7 @@ async function createGateHarness(gatesDir: string): Promise<GateHarness> {
     registry,
     recordEditResult: versions.recordEditResult,
     resolveRollbackTarget: versions.resolveRollbackTarget,
+    planByteRestore: versions.planByteRestore,
   };
 }
 
@@ -665,6 +692,7 @@ async function seedFramework(frameworksDir: string): Promise<void> {
 }
 
 interface FrameworkHarness {
+  planByteRestore: VersionSeamMock;
   lifecycle: FrameworkLifecycleProcessor;
   versioning: FrameworkVersioningProcessor;
   writer: FrameworkFileWriter;
@@ -702,10 +730,12 @@ function createFrameworkHarness(frameworksDir: string, bundledDir?: string): Fra
     writer,
     recordEditResult: versions.recordEditResult,
     resolveRollbackTarget: versions.resolveRollbackTarget,
+    planByteRestore: versions.planByteRestore,
   };
 }
 
 interface CategoryHarness {
+  planByteRestore: VersionSeamMock;
   lifecycle: CategoryLifecycleProcessor;
   versioning: CategoryVersioningProcessor;
   recordEditResult: VersionSeamMock;
@@ -734,6 +764,7 @@ function createCategoryHarness(promptsDir: string): CategoryHarness {
     versioning: new CategoryVersioningProcessor(context),
     recordEditResult: versions.recordEditResult,
     resolveRollbackTarget: versions.resolveRollbackTarget,
+    planByteRestore: versions.planByteRestore,
   };
 }
 
@@ -780,6 +811,176 @@ function declaredCategory(promptsDir: string, id: string): Record<string, unknow
     readFileSync(join(promptsDir, id, 'category.yaml'), 'utf8')
   );
 }
+
+/**
+ * A refusal from the byte path must never fall through to the projection path.
+ *
+ * ENUMERATED, not sampled. The property is "every processor that asks `planByteRestore` refuses
+ * when it answers `refused`", and its failure mode is silent: the projection path produces a
+ * perfectly plausible rollback from a state the row explicitly says it can no longer vouch for. A
+ * mutant deleting the refusal branch from ONE processor came back green against this file before
+ * these cases existed, which is why all four are driven — the prompt processor from
+ * `prompt-patch-update.test.ts`, the other three here — rather than one standing in for the rest.
+ *
+ * Each case asserts the refusal AND that nothing on disk moved: a refusal that named the right
+ * thing while writing half the files would pass an assertion about its message alone.
+ */
+describe('a byte-path refusal is never downgraded to the projection path', () => {
+  const roots: string[] = [];
+  const tempRoot = (): string => {
+    const dir = mkdtempSync(join(tmpdir(), 'cpm-byte-refusal-'));
+    roots.push(dir);
+    return dir;
+  };
+
+  afterEach(() => {
+    for (const dir of roots.splice(0)) rmSync(dir, { recursive: true, force: true });
+  });
+
+  const REFUSAL = {
+    status: 'refused',
+    reason: "the recorded bytes of 'guidance.md' are missing from the object store",
+  };
+
+  test('gate rollback refuses, names the reason, and writes nothing', async () => {
+    const gatesDir = tempRoot();
+    const harness = await createGateHarness(gatesDir);
+    const recorded = gateSnapshotContract.project(
+      GATE_ID,
+      harness.registry.get(GATE_ID) as GateView
+    );
+    harness.resolveRollbackTarget.mockResolvedValue({ ok: true, entry: { snapshot: recorded } });
+    harness.planByteRestore.mockResolvedValue(REFUSAL);
+
+    const before = readTree(gatesDir);
+    const response = await harness.versioning.handleRollback({
+      action: 'rollback',
+      id: GATE_ID,
+      version: 1,
+      confirm: true,
+    } as GateManagerInput);
+
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toContain('missing from the object store');
+    expect(readTree(gatesDir)).toEqual(before);
+  });
+
+  test('framework rollback refuses, names the reason, and writes nothing', async () => {
+    const frameworksDir = tempRoot();
+    const harness = createFrameworkHarness(frameworksDir);
+    await seedFramework(frameworksDir);
+    harness.resolveRollbackTarget.mockResolvedValue({
+      ok: true,
+      entry: {
+        snapshot: {
+          id: FRAMEWORK_ID,
+          name: 'Preview Probe',
+          description: 'recorded',
+          type: 'PROBE',
+          enabled: true,
+        },
+      },
+    });
+    harness.planByteRestore.mockResolvedValue(REFUSAL);
+
+    const before = readTree(frameworksDir);
+    const response = await harness.versioning.handleRollback({
+      action: 'rollback',
+      id: FRAMEWORK_ID,
+      version: 1,
+      confirm: true,
+    } as FrameworkManagerInput);
+
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toContain('missing from the object store');
+    expect(readTree(frameworksDir)).toEqual(before);
+  });
+
+  test('category rollback refuses, names the reason, and writes nothing', async () => {
+    const promptsDir = tempRoot();
+    seedCategory(promptsDir, CATEGORY_ID);
+    const harness = createCategoryHarness(promptsDir);
+    harness.resolveRollbackTarget.mockResolvedValue({
+      ok: true,
+      entry: {
+        snapshot: categorySnapshotContract.project(
+          CATEGORY_ID,
+          declaredCategory(promptsDir, CATEGORY_ID)
+        ),
+      },
+    });
+    harness.planByteRestore.mockResolvedValue(REFUSAL);
+
+    const before = readTree(promptsDir);
+    const response = await harness.versioning.handleRollback({
+      action: 'rollback',
+      id: CATEGORY_ID,
+      version: 1,
+      confirm: true,
+    } as CategoryManagerInput);
+
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toContain('missing from the object store');
+    expect(readTree(promptsDir)).toEqual(before);
+  });
+
+  test('a tree-backed version restores even when its PROJECTION is incomplete', async () => {
+    // The property the snapshot-completeness reorder buys, and the only thing that fails if it is
+    // undone. `describeIncompleteSnapshot` is a statement about the FALLBACK — a merging writer
+    // cannot rebuild a resource from a snapshot missing a required field — and it used to run
+    // ahead of the byte branch, so a version carrying the resource's actual bytes was refused for
+    // a defect in a projection the restore never reads.
+    const gatesDir = tempRoot();
+    const harness = await createGateHarness(gatesDir);
+    const restored = Buffer.from('# recorded by hand\nid: preview-probe\nname: Recorded\n', 'utf8');
+    const target = join(gatesDir, GATE_ID, 'gate.yaml');
+
+    // A snapshot missing `name`, which `gateSnapshotContract` requires.
+    harness.resolveRollbackTarget.mockResolvedValue({
+      ok: true,
+      entry: { snapshot: { id: GATE_ID, type: 'validation' } },
+    });
+    harness.planByteRestore.mockResolvedValue({
+      status: 'ready',
+      plan: {
+        resourceType: 'gate',
+        resourceId: GATE_ID,
+        version: 1,
+        destinationRoot: join(gatesDir, GATE_ID),
+        recordedOrigin: 'primary',
+        write: [
+          {
+            path: 'gate.yaml',
+            absolutePath: target,
+            hash: hashBytes(restored),
+            reason: 'differs',
+          },
+        ],
+        unchanged: [],
+        leftInPlace: [],
+      },
+      bytes: new Map([[hashBytes(restored), new Uint8Array(restored)]]),
+    });
+
+    const response = await harness.versioning.handleRollback({
+      action: 'rollback',
+      id: GATE_ID,
+      version: 1,
+      confirm: true,
+    } as GateManagerInput);
+
+    expect(response.isError).toBe(false);
+    // Byte-identical to what this test recorded, digest computed here.
+    expect(hashBytes(readFileSync(target))).toBe(hashBytes(restored));
+  });
+
+  test('the projection path still runs when the answer is projection-only', () => {
+    // The positive control for all three: the default seam answers `projection-only`, and the
+    // rollback cases in the suite above exercise exactly that path and write files. Without this
+    // note a reader could read the three refusals as "the byte branch blocks rollback".
+    expect(createVersionSeam().planByteRestore).toBeDefined();
+  });
+});
 
 describe('a gate, framework or category diff names the files and lines its write changes', () => {
   const roots: string[] = [];
