@@ -135,40 +135,50 @@ export interface YamlParseResult<T> {
  * }
  * ```
  */
+/**
+ * Parse `content` under the strictness contract, or throw.
+ *
+ * Split out of `parseYaml` so the strictness rules read as one unit and the error-shaping below
+ * stays separate from them.
+ */
+function parseStrictly<T>(content: string): T {
+  const doc = YAML.parseDocument(content, { prettyErrors: true });
+
+  // `parseDocument` COLLECTS problems instead of throwing them, so every one of these has to be
+  // read explicitly. Reading them HERE is what makes the check universal: this function is the
+  // only parse in the codebase — `loadYamlFile`, `loadYamlFileSync` and `loadYamlFileWithResult`
+  // all route through `parseYaml` — so a per-caller check would be a rule each new caller could
+  // forget. Warnings are refused alongside errors because for untrusted input "the parser
+  // resolved something it was not sure about" is not a thing to continue past.
+  //
+  // SUBSUMED, NOT DEAD (measured 2026-09-21 on yaml 2.9.1 · flips when a warning code appears
+  // that carries no explicit tag). The only warning this corpus can raise is TAG_RESOLVE_FAILED,
+  // which always accompanies an explicit tag, so `findStrictnessViolation` already refuses every
+  // document that reaches it — removing this clause leaves the strictness tests green. It is kept
+  // as the conservative half of the pair, and stamped so its survival under mutation is not read
+  // as a gap. KEY_OVER_1024_CHARS does not fire at 1,100 characters in this version, and js-yaml
+  // accepted long keys, so nothing here narrows on that axis.
+  const firstProblem = doc.errors[0] ?? doc.warnings[0];
+  if (firstProblem !== undefined) {
+    throw firstProblem;
+  }
+
+  const violation = findStrictnessViolation(doc);
+  if (violation !== undefined) {
+    // `IMPOSSIBLE` is the library's catch-all code; the message carries the real reason, and
+    // reusing the library's error type keeps one failure shape for every caller.
+    throw new YAML.YAMLParseError([0, 0], 'IMPOSSIBLE', violation);
+  }
+
+  // `maxAliasCount` is applied when the node tree is realised, not when it is composed, so it
+  // belongs here rather than on `parseDocument`. Its default of 100 is what refuses a
+  // billion-laughs document; js-yaml had no such limit and expanded one happily.
+  return doc.toJS({ maxAliasCount: 100 }) as T;
+}
+
 export function parseYaml<T>(content: string, options?: YamlParseOptions): YamlParseResult<T> {
   try {
-    const doc = YAML.parseDocument(content, { prettyErrors: true });
-
-    // `parseDocument` COLLECTS problems instead of throwing them, so every one of these has to be
-    // read explicitly. Reading them HERE is what makes the check universal: this function is the
-    // only parse in the codebase — `loadYamlFile`, `loadYamlFileSync` and `loadYamlFileWithResult`
-    // all route through it — so a per-caller check would be a rule each new caller could forget.
-    // Warnings are refused alongside errors because for untrusted input "the parser resolved
-    // something it was not sure about" is not a thing to continue past.
-    //
-    // SUBSUMED, NOT DEAD (measured 2026-09-21 on yaml 2.9.1 · flips when a warning code appears
-    // that carries no explicit tag). The only warning this corpus can raise is
-    // TAG_RESOLVE_FAILED, which always accompanies an explicit tag, so `findStrictnessViolation`
-    // already refuses every document that reaches it — removing this clause leaves the strictness
-    // tests green. It is kept as the conservative half of the pair, and stamped so its survival
-    // under mutation is not read as a gap. KEY_OVER_1024_CHARS does not fire at 1,100 characters
-    // in this version, and js-yaml accepted long keys, so nothing here narrows on that axis.
-    const firstProblem = doc.errors[0] ?? doc.warnings[0];
-    if (firstProblem !== undefined) {
-      throw firstProblem;
-    }
-
-    const violation = findStrictnessViolation(doc);
-    if (violation !== undefined) {
-      // `IMPOSSIBLE` is the library's catch-all code; the message carries the real reason, and
-      // reusing the library's error type keeps one failure shape for every caller.
-      throw new YAML.YAMLParseError([0, 0], 'IMPOSSIBLE', violation);
-    }
-
-    // `maxAliasCount` is applied when the node tree is realised, not when it is composed, so it
-    // belongs here rather than on `parseDocument`. Its default of 100 is what refuses a
-    // billion-laughs document; js-yaml had no such limit and expanded one happily.
-    const data = doc.toJS({ maxAliasCount: 100 }) as T;
+    const data = parseStrictly<T>(content);
 
     return { success: true, data };
   } catch (error) {
