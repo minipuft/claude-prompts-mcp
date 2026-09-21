@@ -247,6 +247,7 @@ describe('VersionHistoryService', () => {
       await expect(failingService.saveVersion('prompt', 'disabled', { x: 1 })).resolves.toEqual({
         success: true,
         version: 0,
+        recorded: false,
       });
     });
   });
@@ -358,21 +359,22 @@ describe('VersionHistoryService', () => {
   });
 
   // ==========================================================================
-  // getLatestVersion Tests
+  // The newest version — read through `loadHistory`, the only reader of that
+  // question left. `getLatestVersion` was deleted in S1.3: `saveVersion` now
+  // reads the newest ROW (number and snapshot together) inside its own
+  // transaction, which left the public getter with no caller in src/.
   // ==========================================================================
 
-  describe('getLatestVersion', () => {
-    it('should return 0 when no history exists', async () => {
-      const version = await service.getLatestVersion('prompt', 'nonexistent');
-      expect(version).toBe(0);
+  describe('current_version', () => {
+    it('is absent when no history exists', async () => {
+      expect(await service.loadHistory('prompt', 'nonexistent')).toBeNull();
     });
 
-    it('should return current version number', async () => {
+    it('is the newest version number', async () => {
       await service.saveVersion('prompt', 'test', { x: 1 });
       await service.saveVersion('prompt', 'test', { x: 2 });
 
-      const version = await service.getLatestVersion('prompt', 'test');
-      expect(version).toBe(2);
+      expect((await service.loadHistory('prompt', 'test'))?.current_version).toBe(2);
     });
   });
 

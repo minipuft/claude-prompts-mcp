@@ -127,6 +127,9 @@ export async function rollback(options: RollbackOptions): Promise<number> {
       {
         id: options.id,
         saved_version: result.saved_version,
+        // Whether a row was written. `saved_version` alone cannot say: rolling back to the state
+        // already current records nothing and reports the version that was already newest.
+        recorded: result.recorded ?? false,
         restored_version: result.restored_version,
         not_restored: notRestored,
       },
@@ -134,7 +137,9 @@ export async function rollback(options: RollbackOptions): Promise<number> {
     );
   } else {
     console.log(
-      `Rolled back ${singularName(type)} '${options.id}': saved v${result.saved_version}, restored v${result.restored_version}`,
+      result.recorded === true
+        ? `Rolled back ${singularName(type)} '${options.id}': saved v${result.saved_version}, restored v${result.restored_version}`
+        : `${singularName(type)} '${options.id}' already matches v${result.restored_version} — nothing recorded.`,
     );
     if (notRestored.length > 0) {
       console.log(

@@ -17,8 +17,29 @@ import type { HistoryRequest, HistoryResponse, HistoryRow } from './version-hist
 import type { DatabaseSync } from 'node:sqlite';
 
 import { RESOURCE_SUBTREE_MATCH } from '#modules/versioning/history-key.js';
+import { hashCanonical } from '#shared/utils/hash.js';
 
 const ENTRY_COLUMNS = 'version, snapshot, diff_summary, description, created_at';
+
+/**
+ * The identity of a snapshot, as the table stores it — the same rule the server writer applies.
+ *
+ * This module used to compare `JSON.stringify(JSON.parse(row.snapshot)) === JSON.stringify(live)`,
+ * which is order-SENSITIVE: two records holding identical data whose keys were emitted in a
+ * different order compared unequal, so every `cpm` edit of a resource the server had written
+ * bridged. CHANGELOG 4.0.0 claims "version comparison now ignores JSON key order" for the system;
+ * it was true of the server writer only. `hashCanonical` is that one rule, imported rather than
+ * re-derived — two writers of one durable table cannot each own a copy of what "unchanged" means.
+ */
+function snapshotIdentity(persistedJson: string): string {
+  return hashCanonical(JSON.parse(persistedJson));
+}
+
+/** What one append did: the version that is now newest, and whether this call created it. */
+export interface AppendOutcome {
+  version: number;
+  recorded: boolean;
+}
 
 /** Imported, not written here — `deleteHistory` matches the same set over MCP. */
 export const SUBTREE_MATCH = RESOURCE_SUBTREE_MATCH;
@@ -58,6 +79,22 @@ function latestVersion(db: DatabaseSync, tenantId: string, request: HistoryReque
   return Number(row?.latest ?? 0);
 }
 
+/** The newest row's number and stored snapshot text, or `undefined` when there is no history. */
+function latestRow(
+  db: DatabaseSync,
+  tenantId: string,
+  request: HistoryRequest
+): { version: number; snapshot: string } | undefined {
+  return db
+    .prepare(
+      `SELECT version, snapshot FROM version_history
+       WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?
+       ORDER BY version DESC LIMIT 1`
+    )
+    .get(tenantId, request.resource_type, request.resource_id) as
+    { version: number; snapshot: string } | undefined;
+}
+
 /**
  * Insert a snapshot at the next version and trim to `max_versions`.
  *
@@ -71,6 +108,11 @@ function latestVersion(db: DatabaseSync, tenantId: string, request: HistoryReque
  *
  * No retry: the second writer waits on the lock rather than colliding. Both connections to this
  * file set `busy_timeout` from `STATE_DB_BUSY_TIMEOUT_MS`, so the wait is the same on either side.
+ *
+ * **An unchanged write creates no row.** The equality test is inside the lock for the same reason
+ * the numbering is: decided above the `BEGIN`, this process and the server could each compare
+ * against a newest row the other was about to replace, and each conclude "unchanged" against a
+ * stale maximum — so a real change would go unrecorded by both.
  */
 export function appendVersion(
   db: DatabaseSync,
@@ -79,12 +121,12 @@ export function appendVersion(
   snapshot: Record<string, unknown>,
   description: string,
   diffSummary: string
-): number {
+): AppendOutcome {
   db.exec('BEGIN IMMEDIATE');
   try {
-    const version = appendVersionRow(db, tenantId, request, snapshot, description, diffSummary);
+    const outcome = appendVersionRow(db, tenantId, request, snapshot, description, diffSummary);
     db.exec('COMMIT');
-    return version;
+    return outcome;
   } catch (error) {
     db.exec('ROLLBACK');
     throw error;
@@ -99,7 +141,14 @@ function appendVersionRow(
   snapshot: Record<string, unknown>,
   description: string,
   diffSummary: string
-): number {
+): AppendOutcome {
+  // Serialised once: the text the equality test measures is the text the INSERT binds.
+  const payload = JSON.stringify(snapshot);
+  const latest = latestRow(db, tenantId, request);
+  if (latest !== undefined && snapshotIdentity(latest.snapshot) === snapshotIdentity(payload)) {
+    return { version: Number(latest.version), recorded: false };
+  }
+
   const version = latestVersion(db, tenantId, request) + 1;
   db.prepare(
     `INSERT INTO version_history
@@ -112,27 +161,13 @@ function appendVersionRow(
     request.resource_type,
     request.resource_id,
     version,
-    JSON.stringify(snapshot),
+    payload,
     diffSummary,
     description,
     request.created_at ?? new Date().toISOString()
   );
   prune(db, tenantId, request, request.max_versions ?? DEFAULT_MAX_VERSIONS);
-  return version;
-}
-
-/** True when the newest recorded snapshot structurally equals the given live state. */
-function latestSnapshotMatches(
-  db: DatabaseSync,
-  tenantId: string,
-  request: HistoryRequest,
-  live: Record<string, unknown>
-): boolean {
-  const latest = latestVersion(db, tenantId, request);
-  if (latest === 0) return false;
-  const row = selectVersion(db, tenantId, request, latest);
-  if (row === undefined) return false;
-  return JSON.stringify(JSON.parse(row.snapshot)) === JSON.stringify(live);
+  return { version, recorded: true };
 }
 
 /**
@@ -155,21 +190,21 @@ export function recordEditResultRow(
     description: string;
     diffSummary: string;
   }
-): { version: number; bridged: boolean } {
+): AppendOutcome & { bridged: boolean } {
   const { priorLiveSnapshot, producedSnapshot, description, diffSummary } = edit;
-  const bridged = !latestSnapshotMatches(db, tenantId, request, priorLiveSnapshot);
-  if (bridged) {
-    appendVersion(
-      db,
-      tenantId,
-      request,
-      priorLiveSnapshot,
-      'Bridge: prior live state (era transition or out-of-band edit)',
-      ''
-    );
-  }
-  const version = appendVersion(db, tenantId, request, producedSnapshot, description, diffSummary);
-  return { version, bridged };
+  // ONE equality rule, applied twice — the bridge is simply an append that may find nothing to
+  // do. It previously carried its own order-sensitive comparison while the record below carried
+  // none, so "is this already the newest state?" had two answers on one path.
+  const bridge = appendVersion(
+    db,
+    tenantId,
+    request,
+    priorLiveSnapshot,
+    'Bridge: prior live state (era transition or out-of-band edit)',
+    ''
+  );
+  const outcome = appendVersion(db, tenantId, request, producedSnapshot, description, diffSummary);
+  return { ...outcome, bridged: bridge.recorded };
 }
 
 function prune(

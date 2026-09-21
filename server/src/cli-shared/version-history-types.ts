@@ -51,6 +51,14 @@ export interface HistoryResponse {
   from?: VersionEntry;
   to?: VersionEntry;
   version?: number;
+  /**
+   * Set by `save_version`, `record_edit_result` and `rollback` — whether a row was inserted.
+   *
+   * False means the snapshot was identical to the newest recorded one, so `version` is the number
+   * that already existed. A caller printing `version` without reading this announces a save that
+   * did not happen.
+   */
+  recorded?: boolean;
   /** Set by `record_edit_result` — true when a bridge row was inserted before the recorded result. */
   bridged?: boolean;
   saved_version?: number;

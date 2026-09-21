@@ -19,6 +19,8 @@
  * router before dispatch, ahead of any write or version snapshot.
  */
 
+import { describeUndeclaredParameterRefusal } from '../../shared/undeclared-parameters.js';
+
 import type { ResourceType } from './types.js';
 
 /**
@@ -161,10 +163,11 @@ export const DECLARED_PARAMETERS: ReadonlySet<string> = new Set<string>([
  * Returns the message rather than a boolean for the reason `describePreviewRefusal` does: the
  * caller needs the parameter's name, not "invalid".
  *
- * Only the FIRST offending parameter is named. A caller who sent two wrong parameters almost
- * always sent them for one wrong reason, and naming all of them buries the correction. The
- * undeclared half deliberately lists nothing else: dumping seventy declared names to correct one
- * typo is noise, and the contract is one `action:"guide"` away.
+ * The WRONG-TYPE half names only the first offender: a caller who sent two parameters belonging to
+ * another resource type almost always sent them for one wrong reason, and the owner list is the
+ * same correction for both. The UNDECLARED half is no longer resource_manager's own — it moved to
+ * `shared/undeclared-parameters.ts` when `prompt_engine` and `system_control` acquired the same
+ * refusal (R50), and it names every undeclared key in one message rather than the first.
  */
 export function describeParameterRefusal(resourceType: ResourceType, args: object): string | null {
   // `args` is the validated tool input, an interface without an index signature. The lookup is
@@ -185,21 +188,5 @@ export function describeParameterRefusal(resourceType: ResourceType, args: objec
     );
   }
 
-  for (const parameter of Object.keys(sent)) {
-    if (DECLARED_PARAMETERS.has(parameter)) continue;
-    // "Was it sent", the same test the loop above applies — not "is the key present". JSON has no
-    // `undefined`, so nothing over MCP reaches here this way; an in-process caller building its
-    // argument object with an unset optional field does, and refusing that would be refusing a
-    // key nobody sent. A JSON `null` is still a value, and is still refused.
-    if (sent[parameter] === undefined) continue;
-
-    return (
-      `'${parameter}' is not a parameter of resource_manager.\n\n` +
-      `It was accepted and ignored before, which reported a change that never happened. ` +
-      `Check the spelling, or drop it from this call — ` +
-      `\`resource_type:"prompt", action:"guide"\` lists what this tool accepts.`
-    );
-  }
-
-  return null;
+  return describeUndeclaredParameterRefusal('resource_manager', sent);
 }

@@ -94,25 +94,23 @@ describe('prompt_engine parameter surface', () => {
     }
   );
 
-  test('drops a gate parameter that the current state does not advertise', () => {
+  test('lets a gate parameter the current state does not advertise REACH the handler', () => {
     // Withdrawal is structural at the advertised surface, and this pins what
     // that does and does not mean at the wire.
     //
-    // Zod objects strip unknown keys rather than rejecting them, and this
-    // schema deliberately keeps that default: a stale client that still sends
-    // `gates` gets it dropped, not an error. Turning on strict mode here would
-    // make a narrowed state reject calls that a wide state accepts, which
-    // punishes exactly the clients a `tools/list` cache makes stale.
-    //
-    // Dropping matches the runtime, which already ignores gate ids from every
-    // source while the system is disabled. What changes is that the parameter
-    // is no longer advertised, so a current client never constructs the call.
+    // Until P4.93 the schema kept zod's strip default, so a stale client that
+    // still sent `gates` had it dropped and got a success reply describing a
+    // run that ignored it. The schema is now `.passthrough()`: the key SURVIVES
+    // validation so the registered callback can answer "declared, but not
+    // advertised right now — enable the gate system" by name
+    // (`shared/undeclared-parameters.ts`). `.strict()` would reject one layer
+    // earlier with a zod message naming neither the tool nor the correction.
     const narrowed = build({ gateSystemEnabled: false });
 
     const result = narrowed.safeParse({ command: '>>demo', gates: ['some-gate'] });
 
     expect(result.success).toBe(true);
-    expect(result.data).not.toHaveProperty('gates');
+    expect(result.data).toHaveProperty('gates', ['some-gate']);
   });
 
   test('accepts the gate parameters when they are advertised', () => {

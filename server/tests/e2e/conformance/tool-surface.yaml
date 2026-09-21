@@ -378,3 +378,39 @@ scenarios:
       - tool: resource_manager
         args: { resource_type: prompt, action: guide, goal: conformance gate review }
     expect: { text_contains: '🎯 **Goal**: conformance gate review' }
+
+  # ── P4.93 / R50: an undeclared key is refused by name, over the real transport ──────────────
+  #
+  # `{action:"status", previw:true}` answered with a normal status overview and `isError:false`
+  # on f711401b, because zod stripped the key before the callback ran. The nearest existing rows
+  # (`sc-unknown-action`, the config `get` unknown-key row) exercise different mechanisms: an
+  # unknown VALUE and an unknown CONFIG key, neither of which is an undeclared argument.
+  - id: sc-refuses-a-key-its-contract-does-not-declare
+    claim_source: >-
+      docs/reference/mcp-tools.md § Undeclared parameters — "a key the tool does not declare is
+      refused by name, on all three tools". Implemented by describeUndeclaredParameterRefusal
+      (mcp/tools/shared/undeclared-parameters.ts).
+    requests:
+      - tool: system_control
+        args: { action: status, previw: true }
+    expect:
+      error_contains: "'previw' is not a parameter of system_control"
+
+  - id: sc-refuses-a-mistyped-safety-flag-rather-than-running-unguarded
+    claim_source: >-
+      docs/guides/troubleshooting.md § "is not a parameter of" — a safety flag under a slightly
+      wrong name used to be dropped while the guarded action ran; the shape that wrote 33 files.
+    requests:
+      - tool: system_control
+        args: { action: skills_sync, operation: export, client: claude-code, dry_run: true }
+    expect:
+      error_contains: "'dry_run' is not a parameter of system_control"
+
+  - id: sc-still-accepts-every-declared-parameter-it-is-sent
+    claim_source: >-
+      The positive control for the two rows above: a refusal that fired on everything would
+      satisfy both. The same action with only declared parameters answers.
+    requests:
+      - tool: system_control
+        args: { action: status, include_metrics: false }
+    expect: { text_contains: '**System Status Overview**' }

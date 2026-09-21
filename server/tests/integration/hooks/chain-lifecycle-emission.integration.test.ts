@@ -276,6 +276,16 @@ const chainNotifications = (
     .filter(([call]) => call.method === method)
     .map(([call]) => call.params ?? {});
 
+/**
+ * The methods the emitter pushed, in order, as ONE value.
+ *
+ * Per-method counts constrain only the methods someone thought to count, and say nothing about
+ * their order relative to each other — which is exactly the axis P4.89 is defective on. A whole
+ * sequence compared as one value degrades loudly instead.
+ */
+const notificationSequence = (server: { notification: jest.Mock }): string[] =>
+  (server.notification.mock.calls as Array<[{ method: string }]>).map(([call]) => call.method);
+
 describe('chain lifecycle events reach their registered consumers', () => {
   let db: DatabaseSync;
   let recordStore: ExecutionRecordStore;
@@ -415,6 +425,27 @@ describe('chain lifecycle events reach their registered consumers', () => {
 
     expect(chainNotifications(mockServer, 'notifications/chain/complete')).toEqual([
       { chainId, totalSteps: 2, status: 'completed' },
+    ]);
+  });
+
+  /**
+   * P4.96 re-measurement. The row reported that an UNGATED chain reaching its terminal status
+   * never announces `chain/complete`, while a gated one does. It does not reproduce, here or
+   * against a real server: this chain carries no gate and no verdict is ever submitted, and the
+   * whole sequence below is what a client receives — `chain/complete` present, and LAST.
+   *
+   * Pinned as one value rather than as three counts, because the claim is about position: the
+   * reported symptom (a missing terminal event) and the known P4.89 ordering defect (a gated run
+   * announcing `chain/complete` BEFORE its final `step_complete`) are both invisible to any
+   * assertion that only counts.
+   */
+  test('an ungated run driven to terminal announces the whole sequence, complete last', async () => {
+    await driveWholeChain();
+
+    expect(notificationSequence(mockServer)).toEqual([
+      'notifications/chain/step_complete',
+      'notifications/chain/step_complete',
+      'notifications/chain/complete',
     ]);
   });
 

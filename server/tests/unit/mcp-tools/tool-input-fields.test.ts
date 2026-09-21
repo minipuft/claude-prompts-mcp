@@ -42,6 +42,7 @@ import {
   DECLARED_PARAMETERS,
   PARAMETER_OWNERS,
 } from '../../../src/mcp/tools/resource-manager/core/parameter-ownership.js';
+import { DECLARED_PARAMETERS_BY_TOOL } from '../../../src/mcp/tools/shared/undeclared-parameters.js';
 
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const TOOLS_DIR = path.join(SERVER_ROOT, 'src', 'mcp', 'tools');
@@ -369,11 +370,15 @@ const RESOURCE_MANAGER_OWNERSHIP_TABLE_READ = 'sent[parameter]';
  * through is one in `DECLARED_PARAMETERS`. That set is asserted below to be exactly the schema's
  * key set — which is the bound, and without it this exemption would be the hole it looks like.
  *
- * The scan reads `sent[parameter]` once more, applying the same "was it sent" test the ownership
- * loop does, which is why `RESOURCE_MANAGER_OWNERSHIP_TABLE_READ` appears TWICE in the expectation
- * below: same computed access, same bound, second site.
+ * The scan reads the input by its own key once more, applying the same "was it sent" test the
+ * ownership loop does. Since P4.93 that second read lives in the SHARED refusal
+ * (`mcp/tools/shared/undeclared-parameters.ts`, one mechanism for all three tools), so the walker
+ * reports it under that module's own variable name rather than the router's.
  */
 const RESOURCE_MANAGER_UNDECLARED_KEY_SCAN = 'Object.keys(…)';
+
+/** The shared refusal's "was it sent" read — {@link RESOURCE_MANAGER_UNDECLARED_KEY_SCAN}'s. */
+const SHARED_REFUSAL_SENT_KEY_READ = 'record[key]';
 
 // ---------------------------------------------------------------------------
 // Contract parity
@@ -659,7 +664,7 @@ describe('tool handlers read only fields their registered schema declares', () =
       expect(reads.unfollowed.map((use) => use.replace(/^[^ ]+ /, ''))).toEqual([
         RESOURCE_MANAGER_OWNERSHIP_TABLE_READ,
         RESOURCE_MANAGER_UNDECLARED_KEY_SCAN,
-        RESOURCE_MANAGER_OWNERSHIP_TABLE_READ,
+        SHARED_REFUSAL_SENT_KEY_READ,
       ]);
     });
 
@@ -669,6 +674,14 @@ describe('tool handlers read only fields their registered schema declares', () =
       // parameter, which is the same defect pointed the other way.
       expect([...DECLARED_PARAMETERS].filter((name) => !declared.has(name)).sort()).toEqual([]);
       expect([...declared].filter((name) => !DECLARED_PARAMETERS.has(name)).sort()).toEqual([]);
+    });
+
+    it('bounds it in its NEW home too: the CONTRACT set IS the schema', () => {
+      // The refusal reads the contract now (R50), not this module's own table, so the bound above
+      // guards a set the refusal no longer consults. Both directions, same reasoning.
+      const contract = DECLARED_PARAMETERS_BY_TOOL.resource_manager;
+      expect([...contract].filter((name) => !declared.has(name)).sort()).toEqual([]);
+      expect([...declared].filter((name) => !contract.has(name)).sort()).toEqual([]);
     });
 
     it('declares every field the ownership table can look up', () => {

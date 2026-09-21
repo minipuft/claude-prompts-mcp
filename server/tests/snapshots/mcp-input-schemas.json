@@ -1,6 +1,7 @@
 {
   "prompt_engine": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": {},
     "properties": {
       "cancel": {
         "description": "<present>",
@@ -39,6 +40,7 @@
       "gate_verdict": {
         "anyOf": [
           {
+            "additionalProperties": false,
             "properties": {
               "overall": {
                 "enum": [
@@ -49,6 +51,7 @@
               },
               "per_gate": {
                 "items": {
+                  "additionalProperties": false,
                   "properties": {
                     "index": {
                       "exclusiveMinimum": 0,
@@ -79,10 +82,12 @@
                 "type": "string"
               },
               "reminders": {
+                "additionalProperties": false,
                 "properties": {
                   "not_applicable": {
                     "default": [],
                     "items": {
+                      "additionalProperties": false,
                       "properties": {
                         "id": {
                           "minLength": 1,
@@ -144,6 +149,7 @@
               "type": "string"
             },
             {
+              "additionalProperties": false,
               "properties": {
                 "description": {
                   "minLength": 1,
@@ -161,6 +167,7 @@
               "type": "object"
             },
             {
+              "additionalProperties": false,
               "properties": {
                 "apply_to_steps": {
                   "items": {
@@ -274,6 +281,7 @@
         "items": {
           "oneOf": [
             {
+              "additionalProperties": false,
               "properties": {
                 "blocking": {
                   "type": "boolean"
@@ -304,6 +312,7 @@
               "type": "object"
             },
             {
+              "additionalProperties": false,
               "properties": {
                 "id": {
                   "minLength": 1,
@@ -574,6 +583,7 @@
                   "type": "string"
                 },
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "description": {
                       "minLength": 1,
@@ -591,6 +601,7 @@
                   "type": "object"
                 },
                 {
+                  "additionalProperties": false,
                   "properties": {
                     "apply_to_steps": {
                       "items": {
@@ -857,6 +868,7 @@
       },
       "argument_suggestions": {
         "items": {
+          "additionalProperties": false,
           "properties": {
             "description": {
               "type": "string"
@@ -896,6 +908,7 @@
       },
       "argument_updates": {
         "items": {
+          "additionalProperties": false,
           "properties": {
             "defaultValue": {},
             "description": {
@@ -918,6 +931,7 @@
               "type": "string"
             },
             "validation": {
+              "additionalProperties": false,
               "properties": {
                 "allowedValues": {
                   "items": {
@@ -961,6 +975,7 @@
       },
       "arguments": {
         "items": {
+          "additionalProperties": false,
           "properties": {
             "defaultValue": {},
             "description": {
@@ -983,6 +998,7 @@
               "type": "string"
             },
             "validation": {
+              "additionalProperties": false,
               "properties": {
                 "allowedValues": {
                   "items": {
@@ -1401,6 +1417,7 @@
         "type": "string"
       },
       "execution_flow": {
+        "additionalProperties": false,
         "properties": {
           "postProcessingSteps": {
             "items": {
@@ -1432,6 +1449,7 @@
       },
       "execution_steps": {
         "items": {
+          "additionalProperties": false,
           "properties": {
             "action": {
               "minLength": 1,
@@ -1490,6 +1508,7 @@
         "type": "string"
       },
       "framework_elements": {
+        "additionalProperties": false,
         "properties": {
           "optionalSections": {
             "items": {
@@ -1521,6 +1540,7 @@
       },
       "framework_gates": {
         "items": {
+          "additionalProperties": false,
           "properties": {
             "criteria": {
               "items": {
@@ -1625,6 +1645,7 @@
                 "type": "boolean"
               },
               "frequency": {
+                "additionalProperties": false,
                 "properties": {
                   "interval": {
                     "exclusiveMinimum": 0,
@@ -1663,6 +1684,7 @@
                 "type": "boolean"
               },
               "frequency": {
+                "additionalProperties": false,
                 "properties": {
                   "interval": {
                     "exclusiveMinimum": 0,
@@ -1701,6 +1723,7 @@
                 "type": "boolean"
               },
               "frequency": {
+                "additionalProperties": false,
                 "properties": {
                   "interval": {
                     "exclusiveMinimum": 0,
@@ -1753,6 +1776,7 @@
       },
       "pass_criteria": {
         "items": {
+          "additionalProperties": false,
           "properties": {
             "framework": {
               "type": "string"
@@ -1764,6 +1788,7 @@
             },
             "quality_indicators": {
               "additionalProperties": {
+                "additionalProperties": false,
                 "properties": {
                   "keywords": {
                     "items": {
@@ -1872,6 +1897,7 @@
       },
       "patch": {
         "items": {
+          "additionalProperties": false,
           "properties": {
             "field": {
               "enum": [
@@ -1918,6 +1944,7 @@
       },
       "processing_steps": {
         "items": {
+          "additionalProperties": false,
           "properties": {
             "description": {
               "minLength": 1,
@@ -1928,6 +1955,7 @@
               "type": "string"
             },
             "guards": {
+              "additionalProperties": false,
               "properties": {
                 "contains_all": {
                   "items": {
@@ -2068,6 +2096,7 @@
         "type": "string"
       },
       "template_enhancements": {
+        "additionalProperties": false,
         "properties": {
           "contextualHints": {
             "items": {
@@ -2092,6 +2121,7 @@
       },
       "template_suggestions": {
         "items": {
+          "additionalProperties": false,
           "properties": {
             "content": {
               "type": "string"
@@ -2191,6 +2221,7 @@
   },
   "system_control": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": {},
     "properties": {
       "action": {
         "description": "<present>",
@@ -2219,6 +2250,7 @@
         "type": "string"
       },
       "config": {
+        "additionalProperties": false,
         "description": "<present>",
         "properties": {
           "key": {
