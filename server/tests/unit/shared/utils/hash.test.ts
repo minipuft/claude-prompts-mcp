@@ -130,6 +130,24 @@ describe('hashFileSet', () => {
     expect(computeContentHash(['x', 'y'])).toBe(computeContentHash(['y', 'x']));
   });
 
+  it('hashes the paths, not only the contents — renaming a file changes the set', () => {
+    // Without the path in each entry, these two sets are the same two digests in the same order.
+    expect(
+      hashFileSet([
+        { path: 'a', content: 'x' },
+        { path: 'b', content: 'y' },
+      ])
+    ).not.toBe(
+      hashFileSet([
+        { path: 'c', content: 'x' },
+        { path: 'd', content: 'y' },
+      ])
+    );
+    // Positive control: the contents alone genuinely are identical, so only the paths can be
+    // producing the difference above.
+    expect(computeContentHash(['x', 'y'])).toBe(computeContentHash(['x', 'y']));
+  });
+
   it('ignores enumeration order — a file set has no order', () => {
     expect(
       hashFileSet([
