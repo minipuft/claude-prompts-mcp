@@ -101,7 +101,10 @@ export class TextReferenceStore {
    * Retrieve all step results for a chain as a map of position -> content.
    *
    * Position-keyed on purpose: this is the read shape the rendering context and its consumers
-   * already expect. Address a single result by node id via {@link getChainStepResult}.
+   * already expect. `getChainStepMetadata` addresses a single node's metadata by node id; the
+   * equivalent single-node content lookup (`getChainStepResult`) had no caller of its own and was
+   * deleted -- its only reference had been this comment's own JSDoc `{@link}`, which the
+   * unreached-methods checker's language-service pass counts as a caller.
    */
   getChainStepResults(chainId: string): Record<number, string> {
     const chainResults = this.chainStepResults[chainId] || {};
@@ -112,13 +115,6 @@ export class TextReferenceStore {
     });
 
     return results;
-  }
-
-  /**
-   * Retrieve a specific step result by node id.
-   */
-  getChainStepResult(chainId: string, nodeId: string): string | null {
-    return this.chainStepResults[chainId]?.[nodeId]?.content ?? null;
   }
 
   /**
@@ -171,38 +167,6 @@ export class TextReferenceStore {
     delete this.chainStepResults[chainId];
     delete this.namedOutputs[chainId];
     this.logger.debug(`[TextReferenceStore] Cleared all step results for chain ${chainId}`);
-  }
-
-  /**
-   * Aggregate statistics about stored chains and steps.
-   */
-  getChainStats(): {
-    totalChains: number;
-    totalSteps: number;
-    chainsWithSteps: string[];
-  } {
-    const chainIds = Object.keys(this.chainStepResults);
-    let totalSteps = 0;
-
-    chainIds.forEach((chainId) => {
-      const chainSteps = this.chainStepResults[chainId];
-      if (chainSteps) {
-        totalSteps += Object.keys(chainSteps).length;
-      }
-    });
-
-    return {
-      totalChains: chainIds.length,
-      totalSteps,
-      chainsWithSteps: chainIds,
-    };
-  }
-
-  /**
-   * Canonical stats accessor used by diagnostics.
-   */
-  getStats(): ReturnType<TextReferenceStore['getChainStats']> {
-    return this.getChainStats();
   }
 }
 

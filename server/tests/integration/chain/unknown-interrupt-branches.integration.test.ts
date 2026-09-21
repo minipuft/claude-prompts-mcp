@@ -231,7 +231,6 @@ describe('row 4.1 — the three branches of a blocking-unknown interrupt', () =>
       .mockImplementation(() => {}) as unknown as jest.SpiedFunction<() => void>;
 
     store = new ChainSessionStore(createLogger(), new StubTextReferenceStore() as never, {
-      serverRoot: '/tmp/test-unknown-interrupt-branches',
       cleanupIntervalMs: 60_000,
     });
     await store.createSession(SESSION, 'chain-branch#1', 3, {}, { nodes: NODES });

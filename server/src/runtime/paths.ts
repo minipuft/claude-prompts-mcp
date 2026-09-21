@@ -19,10 +19,29 @@
  * - The directory should contain subdirs: prompts/, gates/, frameworks/, etc.
  */
 
-import { existsSync } from 'fs';
-import { join, resolve, isAbsolute } from 'path';
+import { existsSync, readFileSync, statSync } from 'fs';
+import { basename, join, resolve, isAbsolute } from 'path';
 
 import type { ServerCliArgs } from './cli.js';
+
+import {
+  configFileFormat,
+  findWorkspaceConfigFiles,
+  parseConfigText,
+} from '#shared/utils/config-file-format.js';
+import {
+  assertUsableDirectorySetting,
+  describeRemoval,
+  formatPathSettingRefusal,
+  PathSettingError,
+  resolveSettingPath,
+  type PathFallback,
+  type PathSetting,
+} from '#shared/utils/path-setting.js';
+import {
+  RUNTIME_STATE_DIR_NAME,
+  STATE_DB_FILE_NAME,
+} from '#shared/utils/runtime-state-location.js';
 
 /**
  * CLI flag values parsed from command line arguments
@@ -59,6 +78,46 @@ export interface ResolvedPaths {
   scripts: string;
   styles: string;
   logs: string;
+}
+
+/** An operator-named config path and the flag or variable that named it. */
+type ExplicitConfigSource = PathSetting & { name: '--config' | 'MCP_CONFIG_PATH' };
+
+/** A workspace path and the flag or variable that named it. */
+type WorkspaceSource = PathSetting & { name: '--workspace' | 'MCP_WORKSPACE' };
+
+/**
+ * Why `resolved` cannot serve as a config file, or `undefined` when it can.
+ *
+ * Reads the file: "exists" is not the property that matters, "parses into a config object" is.
+ */
+function describeUnusableConfigFile(resolved: string): string | undefined {
+  try {
+    if (statSync(resolved).isDirectory()) return 'is a directory, not a file';
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT' || code === 'ENOTDIR') return 'does not exist';
+    return `cannot be read (${code ?? String(error)})`;
+  }
+
+  let content: string;
+  try {
+    content = readFileSync(resolved, 'utf8');
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    return `cannot be read (${code ?? String(error)})`;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = parseConfigText(content, configFileFormat(resolved));
+  } catch (error) {
+    return `is not valid JSON (${error instanceof Error ? error.message : String(error)})`;
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return 'is valid JSON but not a JSON object';
+  }
+  return undefined;
 }
 
 /**
@@ -144,8 +203,13 @@ export class PathResolver {
 
   /** Directory containing SQLite and other mutable runtime state. */
   getRuntimeStatePath(): string {
-    this.cache.runtimeState ??= join(this.getRuntimeRoot(), 'runtime-state');
+    this.cache.runtimeState ??= join(this.getRuntimeRoot(), RUNTIME_STATE_DIR_NAME);
     return this.cache.runtimeState;
+  }
+
+  /** The server's SQLite database — the one path every `SqliteEngine.getInstance` call names. */
+  getStateDatabasePath(): string {
+    return join(this.getRuntimeStatePath(), STATE_DB_FILE_NAME);
   }
 
   /** Resolve a configured log directory beneath the writable runtime root. */
@@ -177,19 +241,9 @@ export class PathResolver {
       resolved = this.resolvePath(process.env['MCP_RESOURCES_PATH']);
       source = 'MCP_RESOURCES_PATH env var';
     }
-    // 2. Workspace resources directory
+    // 2. Workspace resources directory, else 3. package default
     else {
-      const workspace = this.getWorkspace();
-      const workspaceResources = join(workspace, 'resources');
-
-      if (existsSync(workspaceResources)) {
-        resolved = workspaceResources;
-        source = 'workspace resources/';
-      } else {
-        // 3. Package default
-        resolved = join(this.config.packageRoot, 'resources');
-        source = 'package resources/ (default)';
-      }
+      ({ resolved, source } = this.resolveDefaultResourcesPath());
     }
 
     this.cache.resources = resolved;
@@ -197,44 +251,160 @@ export class PathResolver {
     return resolved;
   }
 
+  /** Where resources resolve when `MCP_RESOURCES_PATH` names nothing: the workspace's, else the package's. */
+  private resolveDefaultResourcesPath(): { resolved: string; source: string } {
+    const workspaceResources = join(this.getWorkspace(), 'resources');
+    if (existsSync(workspaceResources)) {
+      return { resolved: workspaceResources, source: 'workspace resources/' };
+    }
+    return {
+      resolved: join(this.config.packageRoot, 'resources'),
+      source: 'package resources/ (default)',
+    };
+  }
+
   /**
-   * Get config.json path
+   * Refuse startup on an operator path setting the server cannot use, before anything reads,
+   * watches or creates a path beneath it. Throws `PathSettingError`.
+   *
+   * Checked once here rather than inside the getters: a getter answers "where would this resolve",
+   * which tests and tooling ask of paths that need not exist, while this answers "can the server
+   * start on what it was given". Before it, none of the three failed loudly: the logs `mkdir`
+   * created a missing workspace, a missing resources path fell through to the bundled catalog one
+   * subfolder at a time, and a malformed workspace config.json booted on built-in defaults.
+   *
+   * The workspace goes first because it decides both the resources fallback and the default config.
+   * An empty value counts as unset, as it does in the getters, and a workspace with no config file
+   * still uses the packaged one.
+   */
+  assertUsablePathSettings(): void {
+    const workspace = this.readWorkspaceSource();
+    if (workspace !== undefined) {
+      assertUsableDirectorySetting(workspace, {
+        fallback: this.describeWorkspaceFallback(workspace),
+      });
+    }
+
+    const resources = process.env['MCP_RESOURCES_PATH'];
+    if (resources !== undefined && resources !== '') {
+      const { resolved, source } = this.resolveDefaultResourcesPath();
+      // With no custom workspace the "workspace" resources ARE the package's, so say so.
+      const label =
+        source === 'workspace resources/' && this.isUsingCustomWorkspace()
+          ? 'the workspace resources'
+          : 'the packaged resources';
+      assertUsableDirectorySetting(
+        { name: 'MCP_RESOURCES_PATH', value: resources },
+        { fallback: { label, resolved } }
+      );
+    }
+
+    this.getConfigPath();
+    if (workspace !== undefined && this.readExplicitConfigSource() === undefined) {
+      this.assertSingleWorkspaceConfig(workspace);
+      this.assertUsableWorkspaceConfig(workspace);
+    }
+  }
+
+  /** The workspace path, flag before variable; an empty value counts as unset. */
+  private readWorkspaceSource(): WorkspaceSource | undefined {
+    const fromFlag = this.config.cli.workspace;
+    if (fromFlag !== undefined && fromFlag !== '') return { name: '--workspace', value: fromFlag };
+    const fromEnv = process.env['MCP_WORKSPACE'];
+    if (fromEnv !== undefined && fromEnv !== '') return { name: 'MCP_WORKSPACE', value: fromEnv };
+    return undefined;
+  }
+
+  /** What removing a workspace setting falls back to: the variable behind the flag, else the package root. */
+  private describeWorkspaceFallback(workspace: WorkspaceSource): PathFallback {
+    const fromEnv = process.env['MCP_WORKSPACE'];
+    if (workspace.name === '--workspace' && fromEnv !== undefined && fromEnv !== '') {
+      return { label: 'the MCP_WORKSPACE workspace', resolved: resolveSettingPath(fromEnv) };
+    }
+    return { label: 'the package root', resolved: this.config.packageRoot };
+  }
+
+  /**
+   * A workspace naming both `config.jsonc` and `config.json` is ambiguous about which one is in
+   * effect — refuse rather than pick the `.jsonc` precedence silently. Named after
+   * {@link assertUsableDirectorySetting} so the workspace itself is refused first when it is not
+   * usable at all, before either of its config files is inspected.
+   */
+  private assertSingleWorkspaceConfig(workspace: WorkspaceSource): void {
+    const found = findWorkspaceConfigFiles(this.getWorkspace());
+    if (found.length < 2) return;
+    const [jsoncPath, jsonPath] = found as [string, string];
+    throw new PathSettingError(
+      formatPathSettingRefusal({
+        setting: workspace,
+        resolved: this.getWorkspace(),
+        problem: `holds both config.jsonc (${jsoncPath}) and config.json (${jsonPath})`,
+        expected: 'a single config file',
+        remedy: `keep config.jsonc, the current name, and remove config.json (also still read)`,
+      })
+    );
+  }
+
+  /** A config file the workspace holds must be usable; one it does not hold falls back to the packaged config. */
+  private assertUsableWorkspaceConfig(workspace: WorkspaceSource): void {
+    const { resolved, origin } = this.resolveDefaultConfigPath();
+    if (origin !== 'workspace') return;
+    const problem = describeUnusableConfigFile(resolved);
+    if (problem === undefined) return;
+    throw new PathSettingError(
+      formatPathSettingRefusal({
+        setting: workspace,
+        resolved: this.getWorkspace(),
+        problem,
+        subject: `config file ${resolved}`,
+        expected: 'a readable JSON config file',
+        remedy: `move it out of the workspace to use the packaged default at ${join(this.config.packageRoot, 'config.json')}`,
+      })
+    );
+  }
+
+  /**
+   * Get the config file path
    *
    * Priority:
    *   1. --config CLI flag
    *   2. MCP_CONFIG_PATH environment variable
-   *   3. ${workspace}/config.json (if workspace differs from package and file exists)
-   *   4. ${packageRoot}/config.json (default)
+   *   3. ${workspace}/config.jsonc, else ${workspace}/config.json (if workspace differs from
+   *      package and either file exists — `.jsonc` wins when both are present, though
+   *      `assertUsablePathSettings` refuses startup on that ambiguity before this ever runs)
+   *   4. ${packageRoot}/config.json (default — the packaged file keeps its `.json` name)
+   *
+   * An explicit path (1 or 2) that is not a readable config file throws `PathSettingError`, parsed
+   * by extension (`.jsonc` tolerant of comments and a trailing comma, everything else strict
+   * JSON) via {@link parseConfigText}. `ConfigLoader.loadConfig` answers an unreadable file with
+   * the built-in defaults, which is a sensible floor for the package's own file and the wrong
+   * answer for a path an operator named: the server booted, served the bundled catalog, and never
+   * used the settings asked for.
    */
   getConfigPath(): string {
     if (this.cache.config) return this.cache.config;
 
     let resolved: string;
     let source: string;
+    const explicit = this.readExplicitConfigSource();
 
-    // 1. CLI flag (highest priority)
-    if (this.config.cli.config) {
-      resolved = this.resolvePath(this.config.cli.config);
-      source = 'CLI flag --config';
-    }
-    // 2. Environment variable
-    else if (process.env['MCP_CONFIG_PATH']) {
-      resolved = this.resolvePath(process.env['MCP_CONFIG_PATH']);
-      source = 'MCP_CONFIG_PATH env var';
-    }
-    // 3. Workspace config.json (if different from package and exists)
-    else {
-      const workspace = this.getWorkspace();
-      const workspaceConfig = join(workspace, 'config.json');
-
-      if (workspace !== this.config.packageRoot && existsSync(workspaceConfig)) {
-        resolved = workspaceConfig;
-        source = 'workspace config.json';
-      } else {
-        // 4. Package default
-        resolved = join(this.config.packageRoot, 'config.json');
-        source = 'package config.json (default)';
+    if (explicit !== undefined) {
+      resolved = this.resolvePath(explicit.value);
+      source = explicit.name === '--config' ? 'CLI flag --config' : 'MCP_CONFIG_PATH env var';
+      const problem = describeUnusableConfigFile(resolved);
+      if (problem !== undefined) {
+        throw new PathSettingError(
+          formatPathSettingRefusal({
+            setting: explicit,
+            resolved,
+            problem,
+            expected: 'a readable JSON config file',
+            remedy: describeRemoval(explicit, this.describeDefaultConfigFallback()),
+          })
+        );
       }
+    } else {
+      ({ resolved, source } = this.resolveDefaultConfigPath());
     }
 
     this.cache.config = resolved;
@@ -242,13 +412,52 @@ export class PathResolver {
     return resolved;
   }
 
+  /** The explicit config path, flag before variable; an empty value counts as unset. */
+  private readExplicitConfigSource(): ExplicitConfigSource | undefined {
+    const fromFlag = this.config.cli.config;
+    if (fromFlag !== undefined && fromFlag !== '') return { name: '--config', value: fromFlag };
+    const fromEnv = process.env['MCP_CONFIG_PATH'];
+    if (fromEnv !== undefined && fromEnv !== '') return { name: 'MCP_CONFIG_PATH', value: fromEnv };
+    return undefined;
+  }
+
+  /** The config an explicit path's removal falls back to, with a caveat when that file is unusable too. */
+  private describeDefaultConfigFallback(): PathFallback {
+    const { resolved, origin } = this.resolveDefaultConfigPath();
+    if (origin !== 'workspace') return { label: 'the packaged default', resolved };
+    const caveat = describeUnusableConfigFile(resolved);
+    return { label: 'the workspace config', resolved, ...(caveat !== undefined && { caveat }) };
+  }
+
   /**
-   * Get prompts directory path
-   *
-   * Priority:
-   *   1. ${resources}/prompts/ (from MCP_RESOURCES_PATH or workspace)
-   *   2. ${workspace}/prompts/ (legacy, if exists)
-   *   3. ${packageRoot}/resources/prompts/ (default)
+   * Where config resolves when nothing names a path: the workspace file if present, else the
+   * package's. `origin` is what every caller branches on — `'workspace'` vs `'package'` — kept
+   * separate from `source`, the human-readable label passed to {@link logResolution}, so that
+   * label can name whichever filename was actually found without becoming the thing callers
+   * compare against.
+   */
+  private resolveDefaultConfigPath(): {
+    resolved: string;
+    origin: 'workspace' | 'package';
+    source: string;
+  } {
+    const workspace = this.getWorkspace();
+    if (workspace !== this.config.packageRoot) {
+      const [first] = findWorkspaceConfigFiles(workspace);
+      if (first !== undefined) {
+        return { resolved: first, origin: 'workspace', source: `workspace ${basename(first)}` };
+      }
+    }
+    return {
+      resolved: join(this.config.packageRoot, 'config.json'),
+      origin: 'package',
+      source: 'package config.json (default)',
+    };
+  }
+
+  /**
+   * Get prompts directory path: where prompts are read from first, and where a write to them lands.
+   * Resolution order: `resolveResourceSubdir`.
    */
   getPromptsPath(): string {
     if (this.cache.prompts) return this.cache.prompts;
@@ -259,12 +468,8 @@ export class PathResolver {
   }
 
   /**
-   * Get frameworks directory path
-   *
-   * Priority:
-   *   1. ${resources}/frameworks/ (from MCP_RESOURCES_PATH or workspace)
-   *   2. ${workspace}/frameworks/ (legacy, if exists)
-   *   3. ${packageRoot}/resources/frameworks/ (default)
+   * Get frameworks directory path: where frameworks are read from first, and where a write to them lands.
+   * Resolution order: `resolveResourceSubdir`.
    */
   getFrameworksPath(): string {
     if (this.cache.frameworks) return this.cache.frameworks;
@@ -275,12 +480,8 @@ export class PathResolver {
   }
 
   /**
-   * Get gates directory path
-   *
-   * Priority:
-   *   1. ${resources}/gates/ (from MCP_RESOURCES_PATH or workspace)
-   *   2. ${workspace}/gates/ (legacy, if exists)
-   *   3. ${packageRoot}/resources/gates/ (default)
+   * Get gates directory path: where gates are read from first, and where a write to them lands.
+   * Resolution order: `resolveResourceSubdir`.
    */
   getGatesPath(): string {
     if (this.cache.gates) return this.cache.gates;
@@ -291,12 +492,8 @@ export class PathResolver {
   }
 
   /**
-   * Get scripts directory path
-   *
-   * Priority:
-   *   1. ${resources}/scripts/ (from MCP_RESOURCES_PATH or workspace)
-   *   2. ${workspace}/scripts/ (legacy, if exists)
-   *   3. ${packageRoot}/resources/scripts/ (default)
+   * Get scripts directory path: where scripts are read from first, and where a write to them lands.
+   * Resolution order: `resolveResourceSubdir`.
    */
   getScriptsPath(): string {
     if (this.cache.scripts) return this.cache.scripts;
@@ -307,12 +504,8 @@ export class PathResolver {
   }
 
   /**
-   * Get styles directory path
-   *
-   * Priority:
-   *   1. ${resources}/styles/ (from MCP_RESOURCES_PATH or workspace)
-   *   2. ${workspace}/styles/ (legacy, if exists)
-   *   3. ${packageRoot}/resources/styles/ (default)
+   * Get styles directory path: where styles are read from first, and where a write to them lands.
+   * Resolution order: `resolveResourceSubdir`.
    */
   getStylesPath(): string {
     if (this.cache.styles) return this.cache.styles;
@@ -352,25 +545,43 @@ export class PathResolver {
    *   - `${workspace}/${resourceType}/`           (e.g., ~/.claude/gates/)
    *   - `${workspace}/resources/${resourceType}/` (e.g., ~/.claude/resources/gates/)
    *
+   * The answer describes the disk NOW, so a caller that re-resolves on every load (prompt reload,
+   * category listing) sees an overlay created since startup. A caller that fixes its roots once —
+   * a loader, the watch set — takes {@link getOverlayResourceCandidates} instead.
+   *
    * @param resourceType - Resource subdirectory name (gates, frameworks, styles, scripts)
    * @param primaryDir - Primary resource dir to exclude from results (dedup)
    * @returns Existing workspace-relative directories not matching primary
    */
   getOverlayResourceDirs(resourceType: string, primaryDir?: string): string[] {
+    return this.getOverlayResourceCandidates(resourceType, primaryDir).filter((dir) =>
+      existsSync(dir)
+    );
+  }
+
+  /**
+   * Every directory that IS an overlay once it exists, whether or not it exists yet.
+   *
+   * For roots fixed at startup. Filtering these by existence once, at startup, is how a workspace
+   * overlay created while the server ran contributed to neither the catalog nor the watch set
+   * until a restart, for all four resource types. Loaders read an absent root as empty, and the
+   * file observer watches it once it appears and reconciles it then.
+   */
+  getOverlayResourceCandidates(resourceType: string, primaryDir?: string): string[] {
     if (!this.isUsingCustomWorkspace()) return [];
 
     const workspace = this.getWorkspace();
     const candidates = [join(workspace, resourceType), join(workspace, 'resources', resourceType)];
 
-    return candidates.filter((dir) => existsSync(dir) && dir !== primaryDir);
+    return candidates.filter((dir) => dir !== primaryDir);
   }
 
   /**
    * The package's own resources directory for a type — always a contributing root.
    *
-   * `resolveResourceSubdir` returns the FIRST existing candidate and stops, so once a workspace
-   * has `resources/<type>/` the bundled tree is never read. That is not a fallback; it is a
-   * replacement, and it fails three ways depending on the type:
+   * `resolveResourceSubdir` names ONE directory per type, so a loader reading only that directory
+   * never reads the bundled tree once a workspace has `resources/<type>/`. That is not a fallback;
+   * it is a replacement, and before this root existed it failed three ways depending on the type:
    *
    *   - prompts: a workspace holding one prompt serves one prompt, and the 39 bundled ones vanish
    *     with nothing in the log to distinguish it from a healthy start
@@ -388,16 +599,6 @@ export class PathResolver {
    */
   getBundledResourceDir(resourceType: string): string {
     return join(this.config.packageRoot, 'resources', resourceType);
-  }
-
-  /**
-   * Clear the resolution cache (useful for testing or hot-reload scenarios)
-   */
-  clearCache(): void {
-    this.cache = {};
-    if (this.debug) {
-      console.error('[PathResolver] Cache cleared');
-    }
   }
 
   /**
@@ -422,31 +623,56 @@ export class PathResolver {
    * Resolve a path to absolute, handling relative paths
    */
   private resolvePath(inputPath: string): string {
-    if (isAbsolute(inputPath)) {
-      return inputPath;
-    }
-    // Resolve relative to current working directory
-    return resolve(process.cwd(), inputPath);
+    return resolveSettingPath(inputPath);
   }
 
   /**
-   * Resolve a resource subdirectory using the unified resolution chain:
-   *   1. ${resources}/${subdir}/ (from MCP_RESOURCES_PATH or workspace)
+   * Resolve a resource subdirectory: the directory a type is read from first and written to.
+   *
+   * A custom workspace with no `MCP_RESOURCES_PATH` resolves inside the workspace:
+   *   1. ${workspace}/resources/${subdir}/ (if exists)
+   *   2. ${workspace}/${subdir}/ (legacy, if exists, so an existing collection does not split)
+   *   3. ${workspace}/resources/${subdir}/ (not created yet; the first write creates it)
+   *
+   * Otherwise (an explicit `MCP_RESOURCES_PATH`, or the package root as the workspace):
+   *   1. ${resources}/${subdir}/ (if exists)
    *   2. ${workspace}/${subdir}/ (legacy, if exists)
    *   3. ${packageRoot}/resources/${subdir}/ (default)
+   *
+   * Step 3 of the workspace chain names a directory that may not exist. Falling through to the
+   * package instead sent every write from an empty workspace into the install directory, which a
+   * plugin update replaces. Readers treat the absent directory as empty, and the bundled tree
+   * still loads underneath (`getBundledResourceDir`).
    */
   private resolveResourceSubdir(subdir: string): { resolved: string; source: string } {
-    const resourcesBase = this.getResourcesPath();
-    const resourcesDir = join(resourcesBase, subdir);
+    const workspace = this.getWorkspace();
+    const legacyDir = join(workspace, subdir);
+    const explicitResources = process.env['MCP_RESOURCES_PATH'];
 
+    if (
+      (explicitResources === undefined || explicitResources === '') &&
+      this.isUsingCustomWorkspace()
+    ) {
+      const workspaceDir = join(workspace, 'resources', subdir);
+      if (existsSync(workspaceDir)) {
+        return { resolved: workspaceDir, source: `workspace resources/${subdir}/` };
+      }
+      if (existsSync(legacyDir)) {
+        return { resolved: legacyDir, source: `workspace ${subdir}/ (legacy)` };
+      }
+      return {
+        resolved: workspaceDir,
+        source: `workspace resources/${subdir}/ (created on first write)`,
+      };
+    }
+
+    const resourcesDir = join(this.getResourcesPath(), subdir);
     if (existsSync(resourcesDir)) {
       return { resolved: resourcesDir, source: `resources/${subdir}/` };
     }
 
-    const workspace = this.getWorkspace();
-    const workspaceDir = join(workspace, subdir);
-    if (existsSync(workspaceDir)) {
-      return { resolved: workspaceDir, source: `workspace ${subdir}/ (legacy)` };
+    if (existsSync(legacyDir)) {
+      return { resolved: legacyDir, source: `workspace ${subdir}/ (legacy)` };
     }
 
     return {
@@ -481,26 +707,6 @@ export function parsePathCliOptions(cliArgs: ServerCliArgs): PathResolverCliOpti
     workspace: cliArgs.workspace,
     config: cliArgs.config,
   };
-}
-
-/**
- * Validate path CLI options
- *
- * @param options - Parsed CLI options
- * @returns Array of validation error messages (empty if valid)
- */
-export function validatePathCliOptions(options: PathResolverCliOptions): string[] {
-  const errors: string[] = [];
-
-  if (options.workspace && !existsSync(options.workspace)) {
-    errors.push(`Workspace directory does not exist: ${options.workspace}`);
-  }
-
-  if (options.config && !existsSync(options.config)) {
-    errors.push(`Config file does not exist: ${options.config}`);
-  }
-
-  return errors;
 }
 
 // ============================================================================

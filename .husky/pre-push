@@ -2,22 +2,25 @@
 
 set -eu
 
-# CI is the contract. This hook uses the same fail-closed scope classifier as CI,
-# then runs a strict subset of the hosted checks selected for that scope.
+# CI is the contract. The full validation suite (lint:ratchet, format, lockfile-sync, arch,
+# versions, python hooks, unit/integration/e2e tests, build, post-build schema gates — see
+# `.github/workflows/ci.yml` `lint`, `build`, and `test` jobs) runs once at the PR boundary
+# against the pushed commit's checked-out state. This hook stays local and cheap: typecheck and
+# lint only, so a push fails fast on the two error classes that are both common and fast to
+# check, without re-running work CI already owns. A feature-branch push may otherwise be red;
+# the PR boundary is where green is required (`rules/dev-workflow.md` §Validation Commands).
 
 SERVER_DIR=server
 
 # A push that only DELETES remote refs has no content to validate. Git feeds this hook
 # `<local ref> <local sha> <remote ref> <remote sha>` per ref, and a deletion is the all-zero
-# local sha. Without this, `git push origin --delete <branch>` runs the full suite against
+# local sha. Without this, `git push origin --delete <branch>` runs the checks against
 # whatever happens to be in the working tree — so retiring a merged branch from a shared
 # worktree fails on someone else's in-flight edits, and the only way through is --no-verify,
 # which disables the gate for real pushes too.
 #
 # Reads stdin, so it must run before anything else consumes it. Falls through when stdin is
 # empty (the hook invoked by hand) rather than treating "no refs" as "nothing to check".
-#
-# Recovered from `66875801` on `feat/phase-guard-declaration-contract` 2026-08-19.
 DELETIONS_ONLY=yes
 SAW_REF=no
 while read -r _local_ref local_sha _remote_ref _remote_sha; do
@@ -31,198 +34,16 @@ if [ "$SAW_REF" = yes ] && [ "$DELETIONS_ONLY" = yes ]; then
   exit 0
 fi
 
-if UPSTREAM=$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null); then
-  PUSH_RANGE="$UPSTREAM..HEAD"
-elif git rev-parse --verify origin/main >/dev/null 2>&1; then
-  BASE=$(git merge-base origin/main HEAD)
-  PUSH_RANGE="$BASE..HEAD"
-elif git rev-parse --verify HEAD^ >/dev/null 2>&1; then
-  PUSH_RANGE="HEAD^..HEAD"
-else
-  PUSH_RANGE=""
-fi
-
-if [ -n "$PUSH_RANGE" ]; then
-  PUSHED_FILES=$(git diff --name-only --diff-filter=ACMRD "$PUSH_RANGE")
-  FORMATTABLE_FILES=$(git diff --name-only --diff-filter=ACMR "$PUSH_RANGE")
-else
-  PUSHED_FILES=$(git ls-tree -r --name-only HEAD)
-  FORMATTABLE_FILES=$PUSHED_FILES
-fi
-
-VALIDATION_SCOPE=$(printf '%s\n' "$PUSHED_FILES" | node scripts/classify-validation-scope.js --scope)
-
-echo "🔍 Running pre-push validation (scope: $VALIDATION_SCOPE)..."
+echo "🔍 Running pre-push validation (typecheck + lint)..."
 echo ""
 
-echo "Change hygiene..."
-if [ -n "$PUSH_RANGE" ]; then
-  git diff --check "$PUSH_RANGE" || { echo "❌ Changed-line whitespace check failed"; exit 1; }
-else
-  git diff-tree --check --root -r HEAD || { echo "❌ Changed-line whitespace check failed"; exit 1; }
-fi
-
-# Git exports GIT_DIR (and friends) into every hook, and they take precedence over cwd-based
-# repository discovery. Any tool below that shells out to git therefore resolves against the
-# pushing repository's gitdir rather than its own working directory. Measured 2026-08-17 in a
-# linked worktree: `git ls-files 'resources/*.yaml'` returns 89 paths from a shell and 0 under a
-# hook, which turned the bundled-YAML corpus test into a failure the moment integration tests
-# joined this route — and would have made any git-backed check here quietly assess an empty set.
-# The push range was already computed above, so nothing later needs the exported values.
-#
-# Recovered from `71965a5e` on `feat/phase-guard-declaration-contract` 2026-08-19. It is a
-# PRECONDITION of step 6b, not an independent tidy-up: `tests/integration/resources/
-# yaml-corpus.test.ts:40` calls `git ls-files`, so adding integration to this hook without this
-# unset reproduces the exact failure the comment above describes.
-unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_PREFIX GIT_QUARANTINE_PATH GIT_OBJECT_DIRECTORY
-
-ROOT_FORMATTABLE=$(printf '%s\n' "$FORMATTABLE_FILES" | grep -v '^server/' | grep -E '\.(json|md|ya?ml)$' || true)
-if [ -n "$ROOT_FORMATTABLE" ]; then
-  printf '%s\n' "$ROOT_FORMATTABLE" | xargs npx --prefix "$SERVER_DIR" prettier --check
-else
-  echo "✅ No existing repo-level JSON/Markdown/YAML files in push range"
-fi
-
-if [ "$VALIDATION_SCOPE" = "docs" ]; then
-  echo ""
-  echo "Project guidance projection..."
-  node scripts/sync-project-guidance.js --check || {
-    echo "❌ Project guidance projection is stale"
-    exit 1
-  }
-
-  # Plan hygiene runs HERE, not only in `validate:all`. A plan-only change classifies as `docs`
-  # (`scripts/classify-validation-scope.js`), and the docs route skips the suite entirely — so
-  # registering this check only in the suite left it dead on the one kind of push it exists to
-  # police. Measured 2026-08-18: an unstamped `☐` reached CI and was caught only because that
-  # push happened to carry code too, which classified `full`. Same reasoning, and the same fix,
-  # as `validate-contributing.js` on the CI docs route.
-  #
-  # It imports only `node:` builtins plus `scripts/lib/exception-hygiene.js`, which imports
-  # nothing, so it runs with no `node_modules` — which is what lets CI run it on this route too.
-  # `plans:retire:check` is deliberately NOT here: `retire-done-plans` is a binary from
-  # `@minipuft/repository-standards-validation`, so CI could not match it without `npm ci`, and a
-  # local step CI does not run breaks the subset contract.
-  echo ""
-  echo "Plan row tracking (advisory)..."
-  # ADVISORY here, BLOCKING in CI. Deliberate, and the same ruling `lint:ratchet` already
-  # carries for pre-commit: this reads the WORKING TREE, so in a shared worktree it reports
-  # another session's rows — a `✓` naming a file they have on disk but have not committed.
-  # CI cannot see an untracked file at all, so blocking locally would fail your push for
-  # someone else's in-flight work on a condition CI will never flag. Measured 2026-08-18: the
-  # tree was red on a third session's row while CI was green.
-  #
-  # You still get the signal when you can act on it, and CI stays authoritative.
-  node server/scripts/validate-plan-row-tracking.js || {
-    echo "⚠️  Plan row tracking reported findings (advisory locally — CI blocks on these)."
-    echo "    Rows in files YOU touched are yours to fix before this reaches CI."
-  }
-  echo ""
-  echo "✅ Documentation-only pre-push validation passed."
-  exit 0
-fi
-
-if [ "$VALIDATION_SCOPE" = "hooks" ]; then
-  echo ""
-  echo "Python hook validation..."
-  npm --prefix "$SERVER_DIR" run validate:python || { echo "❌ Python hook validation failed"; exit 1; }
-  echo ""
-  echo "✅ Hook-only pre-push validation passed."
-  exit 0
-fi
-
-# FIRST, because every step after it measures the tree that is installed, not the tree the
-# lockfile describes, and CI installs the latter with `npm ci`. A drifted tree is how a knip
-# ratchet baseline got regenerated with knip 6.32.1 against the lockfile's 6.32.2 (2026-08-19).
-# ~50ms, and it is a strict subset of CI: `validate:all` runs the same check.
-echo ""
-echo "1/10 Lockfile sync..."
-npm --prefix "$SERVER_DIR" run validate:lockfile-sync || { echo "❌ node_modules has drifted from package-lock.json — run \`npm ci\` in server/"; exit 1; }
-
-echo ""
-echo "2/10 Type checking..."
+echo "1/2 Type checking..."
 npm --prefix "$SERVER_DIR" run typecheck || { echo "❌ Type checking failed"; exit 1; }
 
-# The check above compiles the WORKING TREE, which is a state CI never sees — CI checks out the
-# commit. In a shared worktree those two disagree routinely: staging a file whole can take a
-# consumer line whose provider is still untracked, leaving a commit that does not compile while
-# every local gate is green. That is not hypothetical; `8875ab42` did it with three symbols across
-# two parser files (2026-08-12). This compiles HEAD in a detached worktree, which is the same
-# input CI uses, so it is a stricter subset rather than a new obligation. Skips itself when the
-# tree already equals HEAD.
-npm --prefix "$SERVER_DIR" run typecheck:committed || { echo "❌ Committed state does not typecheck"; exit 1; }
-
 echo ""
-echo "3/10 Linting..."
+echo "2/2 Linting..."
 npm --prefix "$SERVER_DIR" run lint:ratchet || { echo "❌ Lint ratchet failed (new violations introduced)"; exit 1; }
 
 echo ""
-echo "4/10 Format checking..."
-echo "✅ Changed repo-level files checked above"
-
-echo ""
-echo "5/10 Python hook validation..."
-HOOK_CHANGES=$(printf '%s\n' "$PUSHED_FILES" | grep '^hooks/' || true)
-if [ -n "$HOOK_CHANGES" ]; then
-  npm --prefix "$SERVER_DIR" run validate:python || { echo "❌ Python hook validation failed"; exit 1; }
-else
-  echo "✅ No hook changes in push range"
-fi
-
-echo ""
-echo "6/10 Running tests..."
-npm --prefix "$SERVER_DIR" run test:ci || { echo "❌ Tests failed"; exit 1; }
-
-# Integration promoted from CI-only on 2026-08-19. PRIOR ART: `85fc1a99` on
-# `feat/phase-guard-declaration-contract` did this first, and carries the stronger evidence --
-# before 2026-07-29 NO automated job ran this suite and it had rotted to 10 failing suites /
-# 31 failing tests out of 349. That branch is 67 commits behind and renumbered this hook to
-# 1/9..9/9, so its version cannot be merged; this is the same fix reapplied against main's
-# current numbering, and it is now the single encoding.
-#
-# The residual that deferred it (see step 10)
-# named its own trigger -- "a mock-drift class failure reaches CI" -- and priced the suites at
-# ~3 min. Both halves were wrong in the direction that matters: `a0b36d04` is exactly that class
-# (five assertions comparing a pre-render intermediate against post-render text, stale since the
-# raw-wrapping in `d6cd6b73`), it reached CI on `main` rather than on a branch, and the measured
-# cost is 30s, not three minutes. Nothing else local runs `tests/integration/**`: `test:ci` is
-# `test:unit`, and `validate:all` calls `test:ci`, so before this line a completely broken
-# integration tier passed every local gate.
-#
-# Subset contract holds: CI runs this suite in its Test Suite job.
-# NOT on pre-commit. `ci-release.md` budgets that hook at <10s and this is 35s, and a
-# whole-project suite blocks a commit on a failure anywhere in the tree -- in a shared worktree,
-# on work that is not yours. That is the same ruling `lint:ratchet` already carries (a5d8cb51).
-echo ""
-echo "6b/10 Integration tests..."
-npm --prefix "$SERVER_DIR" run test:integration || { echo "❌ Integration tests failed"; exit 1; }
-
-echo ""
-echo "7/10 Dependency validation..."
-npm --prefix "$SERVER_DIR" run validate:arch || { echo "❌ Dependency validation failed"; exit 1; }
-
-echo ""
-echo "8/10 Version consistency check..."
-npm --prefix "$SERVER_DIR" run validate:versions || { echo "❌ Version mismatch across manifests"; exit 1; }
-
-echo ""
-echo "9/10 Build..."
-npm --prefix "$SERVER_DIR" run build || { echo "❌ Build failed"; exit 1; }
-
-# Post-build gates CI runs that this hook did not. Measured 2026-08-18: a merge landed four CI
-# failures in a row that every step above passed — conformance-coverage (new tool parameters vs
-# origin's new gate), no-legacy-sidecars (token in a comment), and the tool-schema snapshot
-# (published surface widened without a refresh). All three are sub-second here (tool-schemas
-# spawns the dist just built). RESIDUAL NARROWED 2026-08-19: integration moved to step 6b after
-# its trigger fired (see there). E2E remains CI-only — ACCEPTED RESIDUAL (as of 2026-08-19 ·
-# flips if an e2e-only failure reaches CI twice): 31s for a suite that has not yet caught
-# anything the other steps missed, where integration had already earned its place.
-echo ""
-echo "10/10 Post-build schema + semantic gates..."
-npm --prefix "$SERVER_DIR" run validate:tool-schemas || { echo "❌ MCP tool schema snapshot drifted — refresh via scripts/capture-tool-schemas.mjs"; exit 1; }
-npm --prefix "$SERVER_DIR" run validate:conformance-coverage || { echo "❌ Conformance coverage failed"; exit 1; }
-npm --prefix "$SERVER_DIR" run validate:no-legacy-sidecars || { echo "❌ Legacy sidecar reference found"; exit 1; }
-
-echo ""
-echo "✅ Full pre-push validation passed!"
+echo "✅ Pre-push validation passed (typecheck + lint). Full suite runs in CI at the PR boundary."
 echo ""

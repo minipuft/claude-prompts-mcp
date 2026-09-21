@@ -112,6 +112,41 @@ describe('runtime identity launch options', () => {
   });
 });
 
+/**
+ * Row 4.12: `RuntimeLaunchOptions.transport` exposes the `--transport` value
+ * `resolveRuntimeLaunchOptions` already computed locally for its auto-quiet decision, so a
+ * downstream reader can use the SAME resolution instead of re-parsing. `parseServerCliArgs` (built
+ * on node:util `parseArgs`) accepts both the `--transport=value` and space `--transport value`
+ * forms; this pins that `.transport` reflects either form identically, plus the no-flag default.
+ */
+describe('RuntimeLaunchOptions.transport', () => {
+  test('space form --transport streamable-http', () => {
+    const options = resolveRuntimeLaunchOptions(
+      parseServerCliArgs(['--transport', 'streamable-http']),
+      ['node', 'index.js']
+    );
+
+    expect(options.transport).toBe('streamable-http');
+  });
+
+  // CONTROL — the `=` form resolves to the identical value.
+  test('CONTROL — = form --transport=streamable-http', () => {
+    const options = resolveRuntimeLaunchOptions(
+      parseServerCliArgs(['--transport=streamable-http']),
+      ['node', 'index.js']
+    );
+
+    expect(options.transport).toBe('streamable-http');
+  });
+
+  // CONTROL — no flag at all defaults to stdio, not streamable-http.
+  test('CONTROL — no --transport flag defaults to stdio', () => {
+    const options = resolveRuntimeLaunchOptions(parseServerCliArgs([]), ['node', 'index.js']);
+
+    expect(options.transport).toBe('stdio');
+  });
+});
+
 describe('deriveProjectScopeId', () => {
   test('prefers CLAUDE_PROJECT_DIR over the working directory', () => {
     const derived = deriveProjectScopeId(

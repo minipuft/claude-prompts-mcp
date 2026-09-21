@@ -6,15 +6,10 @@ description: >-
   Validates that the task explicitly declares its learning outcome. Every task
   must state whether it produced novel patterns, confirmed existing ones, or
   found nothing new. Silence is not acceptable.
+subject: growth
 guidanceFile: guidance.md
 pass_criteria:
   - type: inline_guidance
-    required_patterns:
-      - Growth
-  - type: inline_guidance
-    regex_patterns:
-      - 'novel|confirmed|nothing new'
-      - 'pattern|learning|captured'
 
 retry_config:
   max_attempts: 1

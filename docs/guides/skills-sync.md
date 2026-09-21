@@ -40,11 +40,11 @@ Behavior references: [Claude Code memory](https://code.claude.com/docs/en/memory
 [Codex AGENTS.md](https://developers.openai.com/codex/guides/agents-md), and
 [OpenCode rules](https://opencode.ai/docs/rules/).
 
-| Problem                            | Solution                                       | Result                                                    |
-| ---------------------------------- | ---------------------------------------------- | --------------------------------------------------------- |
-| Prompts locked inside MCP server   | `skills-sync export` compiles to native format | `/review` works as a Claude Code skill, Cursor rule, etc. |
-| Exported prompts duplicated in MCP | Auto-deregistration via exports list           | Single source, no duplication                             |
-| Drift between source and exports   | `skills-sync diff` with SHA-256 manifests      | Know when skills are stale                                |
+| Problem                            | Solution                                                        | Result                                                    |
+| ---------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------- |
+| Prompts locked inside MCP server   | `skills-sync export` compiles to native format                  | `/review` works as a Claude Code skill, Cursor rule, etc. |
+| Exported prompts duplicated in MCP | Auto-deregistration via exports list                            | Single source, no duplication                             |
+| Drift between source and exports   | `skills-sync diff`, against the manifest or the would-be export | Know when skills are stale                                |
 
 ## Quick Start
 
@@ -87,6 +87,32 @@ exports:
 #       user: ~/custom/claude-skills
 ```
 
+### Where Sources and Config Are Read From
+
+Skills Sync reads the resources the server serves. The package's bundled `server/resources/`
+always contributes. A workspace set with `MCP_WORKSPACE` (or, for a running server, `--workspace`)
+layers its `resources/` over it, and a workspace entry replaces a bundled one with the same
+identity: `{category}/{id}` for a prompt, the id for a gate, framework or style.
+`MCP_RESOURCES_PATH` names a resources directory and takes precedence over the workspace, as it
+does for the server. The `system_control skills_sync` route below resolves through the same
+running server the rest of MCP reads from, so it follows `--workspace` even when `MCP_WORKSPACE`
+is unset; the standalone CLI (`npm run skills:export` and friends) has no running server to read
+from, so it resolves from `MCP_WORKSPACE` and the other environment variables only.
+
+`skills-sync.yaml` is read from the workspace when the workspace holds one, and from the package
+otherwise. Registrations an export adds are written back to the file that was read. Neither file is
+created for you.
+
+Writes follow the same roots:
+
+- `clone` creates the resource under the workspace's `resources/` when a workspace is set, and under
+  the package's otherwise.
+- `pull` writes an edit back to the resource's own source files. It refuses a resource whose source
+  is in the bundled package tree while a workspace or `MCP_RESOURCES_PATH` is set, because a package
+  update replaces that tree. Copy the resource into your workspace and pull again.
+- `patch` writes to `runtime-state/patches` under `MCP_RUNTIME_ROOT` when it is set, and under the
+  workspace otherwise.
+
 ### Export Format
 
 Only prompts are exported as standalone skills. Format is `prompt:{category}/{id}`:
@@ -97,7 +123,7 @@ exports:
   - prompt:development/review # → resources/prompts/development/review/
 ```
 
-**Gate bundling**: Prompts that declare `gateConfiguration.include` in their `prompt.yaml` get referenced gates bundled into the skill directory as `gates/{id}/gate.yaml` + `guidance.md`, with an inline `## Quality Gates` criteria table in the SKILL.md.
+**Gate bundling**: Prompts that declare `gateConfiguration.include` in their `prompt.yaml` get referenced gates bundled into the skill directory as `gates/{id}/gate.yaml` + `guidance.md`, with an inline `## Quality Gates` section in the SKILL.md split into `### Checks` and `### Reminders` — see [Which Gates an Exported Skill Carries](#which-gates-an-exported-skill-carries) for how each tier renders.
 
 **Doc bundling**: Prompts with a `docs/` subdirectory get all `.md` files bundled into `docs/` in the exported skill directory. Use this for templates, reference material, and supporting documentation that supplements the main SKILL.md. Doc files are included in the content hash for drift detection.
 
@@ -121,11 +147,13 @@ Override any output directory via the `overrides` key in `skills-sync.yaml`.
 
 ## Auto-Deregistration
 
-A prompt exported as a skill is served by that client's native harness, so listing it again under MCP `prompts/list` offers the same prompt twice. The server reads `skills-sync.yaml` during prompt registration and skips any prompt whose `{category}/{id}` is registered for export.
+A prompt exported as a skill is served by that client's native harness, so listing it again under MCP `prompts/list` offers the same prompt twice. The server reads `skills-sync.yaml` during prompt registration and skips any prompt whose `{category}/{id}` is registered for export. It reads the same `skills-sync.yaml` Skills Sync does: the workspace's when the workspace holds one, else the package's.
 
 ```
-skills-sync.yaml registrations → data-loader reads at startup → registry skips prompts/list registration
+skills-sync.yaml registrations → prompt registration reads it → registry skips prompts/list registration
 ```
+
+The exported set is recomputed at startup and on every prompt hot reload, not read once and cached — editing `skills-sync.yaml` and then editing (or re-saving) a prompt file is enough to pick up a new export or an unregistration without a restart. Editing `skills-sync.yaml` alone does not trigger a reload; it takes effect the next time a prompt file changes or the server restarts.
 
 - Reads `registrations` (every client and every scope, unioned). The pre-`registrations` flat `exports` list is still honored on read
 - A client set to `'all'` deregisters every prompt
@@ -135,7 +163,7 @@ skills-sync.yaml registrations → data-loader reads at startup → registry ski
 
 | Path                          | What you get                                                                                         |
 | ----------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Skill (native client harness) | Prose, arguments as a hint, bundled gate guidance, gate-review hook                                  |
+| Skill (native client harness) | Prose, arguments as a hint, bundled gate guidance, gate-review hook (Claude Code, opt-in per prompt) |
 | `>>id` (MCP)                  | Full pipeline — runtime gate enforcement, chain sessions, framework injection, argument substitution |
 
 ## Adapters
@@ -173,10 +201,17 @@ Client variants control minor format differences (e.g., Cursor's `alwaysApply` f
 
 ### Gate Enforcement in Exported Skills
 
-For **Claude Code only**, a prompt with active gates exports a `Stop` hook that makes the Enforcement Protocol real rather than advisory:
+For **Claude Code only**, a prompt can export a `Stop` hook that makes the Enforcement Protocol
+real rather than advisory — but only when the prompt opts in with `enforceGateHooks: true` in its
+`prompt.yaml`. The key is exporter-only, not part of the canonical prompt schema, and only the
+`claude-code` export client can carry hooks at all; Cursor, Codex, and OpenCode never get one
+regardless of the setting. Without `enforceGateHooks: true`, an exported skill's gates still
+render — as the prose `## Quality Gates` section described below, with no hook attached.
+
+With `enforceGateHooks: true`:
 
 ```
-strategicImplement/
+strategic_implement/
   SKILL.md              # frontmatter `hooks:` block → Stop → gate-review.py
   hooks/gate-review.py  # self-contained; no plugin required
   gates/<id>/guidance.md
@@ -229,6 +264,15 @@ branches all have fallbacks.
 Run `npm run skills:export` and read the warnings: they name every placeholder that stayed literal,
 per prompt, before you ship it.
 
+**A re-export that would take something away says so, too.** Before overwriting a SKILL.md this
+tool already manages, export (and sync, the same way) compares it against what it is about to write
+and warns on anything the new version drops — a frontmatter `hooks` block (for example, a prompt
+that lost its `enforceGateHooks: true`) or a `## ` section present on disk and absent from the new
+content. Only removals are reported; an added or reworded section is ordinary sync output. The same
+managed-skill check also prunes `gates/<id>/` directories a prior run wrote for a gate that has
+since dropped out of the skill's set — left behind, they would keep advertising a gate
+`gates/index.json` no longer lists — and the run log names each one it removes.
+
 ## Which Gates an Exported Skill Carries
 
 A skill does not bundle every gate in the registry, and it does not bundle only the ones a prompt
@@ -240,13 +284,29 @@ the guidance in a skill matches what `>>id` would enforce:
 | Named in the prompt's `gates.include`                                     | Always                                            |
 | Named in `gates.exclude`                                                  | Never                                             |
 | Declares `prompt_categories` matching the prompt                          | Yes — activation is by category, not by naming it |
-| Declares no activation rules at all                                       | Yes — an unrestricted gate is active everywhere   |
+| Declares no activation rules at all                                       | Never — opt-in only, same as at runtime           |
 | Requires a framework (`gate_type: framework`, or any `framework_context`) | **Never**                                         |
 
 The last row is the one that differs from runtime. The engine reads an absent framework as
 _unconstrained_, which is right for a live execution where a framework may yet be selected, but
 wrong for a static artifact: an exported skill has no framework, so a gate that only makes sense
 under one would ship guidance the reader cannot act on.
+
+**How a carried gate renders.** Once a gate is included, export splits it the same way the runtime
+does: a **check** (a gate with a `shell_verify` or `script_tool` pass criterion) renders under
+`### Checks` as a single command or tool line — for example, a line naming `npm test` — never its
+guidance, since a check is settled by rerunning that command rather than by the reader
+self-attesting it. Every other gate is a **reminder**, and renders under `### Reminders` as the
+criteria table, same as before. An installation's `gates.harnessCovers`, read from the config file
+the server reads (`config.jsonc` or `config.json`, the workspace's when it holds one, else the
+package's), shapes the
+export exactly as it shapes the runtime: a reminder whose `subject` is listed is left
+out of the exported skill entirely — no `### Reminders` row, no `gates/{gateId}/gate.yaml` or
+`guidance.md`, and no entry in `gates/index.json` — and the SKILL.md notes how many were omitted
+and which gates (id and subject) covered them. Checks are never suppressed. See
+[gate-configuration.md](../reference/gate-configuration.md#tiers) for the full tier and
+`harnessCovers` reference — this export path reads the same config field, just once per run
+instead of once per dispatch.
 
 ## Drift Detection
 
@@ -255,6 +315,16 @@ Each export records a manifest in the `skills_sync_manifests` table of `server/r
 - Modified source YAML (content changed since last export)
 - Missing exports (resource in manifest but not on disk)
 - New resources (in exports list but not yet exported)
+
+**With no saved manifest, `diff` compares against the would-be export instead.** An export run
+without a database writes every skill file and saves no manifest row, so a manifest is missing far
+more often than it looks. Rather than report nothing — which reads exactly like a clean tree —
+`diff` renders each registered resource the way an export would, writes nothing, and compares that
+against the output directory: a resource with no skill directory is `new`, files on disk that
+differ from the render (or that the render would add) are `output` drift, and a directory carrying
+the managed marker whose resource is no longer registered is an `orphan`. Source drift is the one
+finding this mode cannot make — only the manifest holds the snapshot of what the source said at
+export time. The report prints under the same header either way, and says which comparison it ran.
 
 **Symlinked skill directories are refused, not written through.** `export` and `sync` compare each
 resource's output directory against the client's base directory after resolving links. A directory
@@ -265,22 +335,33 @@ clients should share one, register the resource for only one of them.
 
 ## Commands
 
-| Command  | NPM Script              | Purpose                                                                        |
-| -------- | ----------------------- | ------------------------------------------------------------------------------ |
-| `export` | `npm run skills:export` | Write skill packages to configured output directories                          |
-| `sync`   | —                       | Export, then prune managed skills whose resource is no longer registered       |
-| `diff`   | `npm run skills:diff`   | Compare source against exported skills; `--output <dir>` writes `.patch` files |
-| `pull`   | `npm run skills:pull`   | Merge prose edited in an exported skill back into the canonical YAML           |
-| `clone`  | —                       | Create a canonical resource from an external `SKILL.md`                        |
+| Command  | NPM Script              | Purpose                                                                                                                                       |
+| -------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `export` | `npm run skills:export` | Write skill packages to configured output directories                                                                                         |
+| `sync`   | —                       | Export, then prune managed skills whose resource is no longer registered                                                                      |
+| `diff`   | `npm run skills:diff`   | Compare exported skills against the saved manifest, or against the would-be export when none is saved; `--output <dir>` writes `.patch` files |
+| `pull`   | `npm run skills:pull`   | Merge prose edited in an exported skill back into the canonical YAML                                                                          |
+| `clone`  | —                       | Create a canonical resource from an external `SKILL.md`                                                                                       |
 
 Every command accepts `--json`, which suppresses the progress log and writes a single
 machine-readable run summary to stdout — counts plus a `failures` array naming each resource
-that did not export cleanly and why.
+that did not export cleanly and why. A `diff` run adds `drift`: one element per client and scope
+it examined, each with `client`, `scope`, and an `entries` array of `{ type, id, files }`. The
+element is present with `entries: []` when that client and scope are clean, because "examined and
+in step" and "never looked at" are different answers and only a present element says the first.
 
 The same operations are reachable over MCP as `system_control` with
 `action: "skills_sync"` and `operation: "status" | "export" | "sync" | "diff" | "pull" | "clone"`.
-Prefer that path when a database is attached: it is the route that persists manifests, and
-without a manifest `diff` and prune cannot see what was exported.
+Prefer that path when a database is attached: it is the route that persists manifests. Without one,
+prune cannot see what was exported at all, and `diff` falls back to the would-be-export comparison
+above — which still finds drift, but cannot tell you the source changed since the last export.
+
+The MCP response leads with the same counts `--json` reports, rendered as text rather than parsed
+from the progress log below them: resources loaded, files written for `export`/`sync` (`0` and
+labeled `preview` when `preview: true`, plus a per-client breakdown), directories pruned, a
+drifted-resource count for `diff`, and a failure count when any command reports one. `clone` gets
+no counts line — it parses one external file rather than the canonical resource set, so it has
+none of these to report — and its own log output already states what it created.
 
 ## See Also
 

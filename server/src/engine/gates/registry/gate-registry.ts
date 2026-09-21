@@ -20,13 +20,7 @@ import {
   type GateDefinitionLoaderConfig,
 } from '../core/gate-definition-loader.js';
 
-import type {
-  GateDefinitionYaml,
-  GateGuide,
-  GateSource,
-  GateGuideEntry,
-  GateRegistryStats,
-} from '../types/index.js';
+import type { GateGuide, GateSource, GateGuideEntry, GateRegistryStats } from '../types/index.js';
 
 import { Logger } from '#infra/logging/index.js';
 
@@ -347,7 +341,7 @@ export class GateRegistry {
     this.loader.clearCache(normalizedId);
 
     // Load fresh definition
-    const definition = this.loader.loadGate(normalizedId) as GateDefinitionYaml;
+    const definition = this.loader.loadGate(normalizedId);
     if (!definition) {
       this.logger.warn(`Failed to reload gate '${gateId}': definition not found`);
       return false;
@@ -389,7 +383,7 @@ export class GateRegistry {
 
     for (const gateId of gateIds) {
       const startTime = performance.now();
-      const definition = this.loader.loadGate(gateId) as GateDefinitionYaml | undefined;
+      const definition = this.loader.loadGate(gateId);
 
       if (!definition) {
         this.logger.warn(`Failed to load gate definition: ${gateId}`);

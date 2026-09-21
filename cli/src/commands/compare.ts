@@ -1,7 +1,7 @@
 import { compareVersions } from '@cli-shared/index.js';
 import { resolveWorkspace, findResource } from '../lib/workspace.js';
 import { output } from '../lib/output.js';
-import { TYPE_MAP, singularName } from '../lib/types.js';
+import { TYPE_MAP, historyRef, singularName } from '../lib/types.js';
 
 interface CompareOptions {
   workspace?: string;
@@ -46,7 +46,7 @@ export async function compare(options: CompareOptions): Promise<number> {
     return 1;
   }
 
-  const result = compareVersions(match.dir, fromVersion, toVersion);
+  const result = compareVersions(match.file, fromVersion, toVersion, historyRef(type, match.id));
 
   if (!result.success) {
     console.error(result.error ?? 'Comparison failed.');

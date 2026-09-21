@@ -17,7 +17,7 @@ import type {
   IGateManager,
   GateActivationContext,
   GateActivationResult,
-  GateDefinitionYaml,
+  LoadedGateDefinition,
   LightweightGateDefinition,
 } from '../types.js';
 
@@ -44,12 +44,7 @@ export class GateManagerProvider implements GateDefinitionProvider {
       return null;
     }
 
-    const definition = guide.getDefinition?.() as GateDefinitionYaml | undefined;
-    if (!definition) {
-      return null;
-    }
-
-    return this.toLightweight(definition);
+    return this.toLightweight(guide.getDefinition());
   }
 
   async loadGates(gateIds: string[]): Promise<LightweightGateDefinition[]> {
@@ -83,9 +78,7 @@ export class GateManagerProvider implements GateDefinitionProvider {
     const validationGates: LightweightGateDefinition[] = [];
 
     for (const guide of activeGuides) {
-      const definition = guide.getDefinition?.() as GateDefinitionYaml | undefined;
-      if (!definition) continue;
-      const lightweight = this.toLightweight(definition);
+      const lightweight = this.toLightweight(guide.getDefinition());
       activeGates.push(lightweight);
 
       if (lightweight.guidance) {
@@ -106,10 +99,7 @@ export class GateManagerProvider implements GateDefinitionProvider {
 
   async listAvailableGateDefinitions(): Promise<LightweightGateDefinition[]> {
     return this.gateManager.list(true).reduce<LightweightGateDefinition[]>((acc, guide) => {
-      const definition = guide.getDefinition?.() as GateDefinitionYaml | undefined;
-      if (definition) {
-        acc.push(this.toLightweight(definition));
-      }
+      acc.push(this.toLightweight(guide.getDefinition()));
       return acc;
     }, []);
   }
@@ -157,7 +147,7 @@ export class GateManagerProvider implements GateDefinitionProvider {
     return gates.filter((g) => g.gate_type === 'framework').map((g) => g.id);
   }
 
-  private toLightweight(definition: GateDefinitionYaml): LightweightGateDefinition {
+  private toLightweight(definition: LoadedGateDefinition): LightweightGateDefinition {
     const retryConfig = this.normalizeRetryConfig(definition.retry_config);
     const lightweight: LightweightGateDefinition = {
       id: definition.id,
@@ -166,9 +156,10 @@ export class GateManagerProvider implements GateDefinitionProvider {
       description: definition.description,
     };
 
-    if (definition.severity) {
-      lightweight.severity = definition.severity;
+    if (definition.subject) {
+      lightweight.subject = definition.subject;
     }
+    lightweight.severity = definition.severity;
     if (definition.enforcementMode) {
       lightweight.enforcementMode = definition.enforcementMode;
     }
@@ -184,9 +175,7 @@ export class GateManagerProvider implements GateDefinitionProvider {
     if (definition.activation) {
       lightweight.activation = definition.activation;
     }
-    if (definition.gate_type) {
-      lightweight.gate_type = definition.gate_type;
-    }
+    lightweight.gate_type = definition.gate_type;
     if (definition.guidanceFile) {
       lightweight.guidanceFile = definition.guidanceFile;
     }
@@ -195,9 +184,12 @@ export class GateManagerProvider implements GateDefinitionProvider {
   }
 
   private normalizeRetryConfig(
-    retry?: GateDefinitionYaml['retry_config']
+    retry?: LoadedGateDefinition['retry_config']
   ): LightweightGateDefinition['retry_config'] {
     if (!retry) return undefined;
+    // The `??` fallbacks stay: `GateRetryConfigSchema` is `.partial()`, which re-wraps each
+    // already-defaulted field as optional, so the OUTPUT type still admits `undefined` here
+    // even though a parsed `retry_config` carries the values at runtime.
     return {
       max_attempts: retry.max_attempts ?? 2,
       improvement_hints: retry.improvement_hints ?? true,

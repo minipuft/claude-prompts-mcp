@@ -3,17 +3,26 @@
  * Resource Manager Input Schema
  *
  * Hand-written replacement for the generated resourceManagerSchema in mcp-schemas.ts.
- * Uses .passthrough() to allow framework fields to flow through for advanced scenarios.
+ *
+ * `.passthrough()` at the bottom of this object is DELIBERATE and load-bearing, and no longer for
+ * the reason it was added. It arrived so eleven framework advanced fields could reach the writer
+ * while the published schema named none of them; that ended at P4.1/P4.5, when all eleven were
+ * declared. It stays because `describeParameterRefusal` (R46) has to SEE an undeclared key in
+ * order to refuse it by name, before dispatch, saying which tool it is not a parameter of. A
+ * `.strict()` object here would reject the same key one layer earlier with a zod message that
+ * names neither — and would put a second refusal path above the one that owns this class.
  */
 
 import { z } from 'zod/v4';
 
+import { workflowBudgetSchema, workflowEdgeSchema } from './workflow-ir.schema.js';
 import { PATCH_TARGET_FIELDS } from '../resource-manager/prompt/operations/template-patch.js';
 import { PREVIEWABLE_ACTIONS } from '../shared/preview-action.js';
 
 import {
   ArgumentValidationSchema,
   ChainStepSchema,
+  PromptArtifactsSchema,
   PromptComposerMetadataSchema,
   PromptInjectionConfigSchema,
 } from '#modules/prompts/prompt-schema.js';
@@ -30,7 +39,7 @@ import {
  * Mirrors `PromptArgumentSchema` (prompt-schema.ts) field for field, deliberately — see the
  * `arguments` parameter comment below for why every field stays optional rather than defaulted.
  */
-const promptArgumentSchema = z.object({
+const promptArgumentSchema = z.strictObject({
   name: z.string(),
   type: z.enum(['string', 'number', 'boolean', 'object', 'array']).optional(),
   description: z.string().optional(),
@@ -61,7 +70,7 @@ const promptArgumentSchema = z.object({
 // `generic-framework-guide.ts`), the shape mirrors that engine reader instead.
 
 /** Mirrors `FrameworkGateSchema` (framework-schema.ts:18). Only `id` and `name` are required. */
-const frameworkGateSchema = z.object({
+const frameworkGateSchema = z.strictObject({
   id: z.string().min(1),
   name: z.string().min(1),
   description: z.string().optional(),
@@ -73,7 +82,7 @@ const frameworkGateSchema = z.object({
 });
 
 /** Mirrors `TemplateSuggestionSchema` (framework-schema.ts:34). */
-const templateSuggestionSchema = z.object({
+const templateSuggestionSchema = z.strictObject({
   section: z.enum(['system', 'user']),
   type: z.enum(['addition', 'structure', 'modification']),
   description: z.string().optional(),
@@ -83,7 +92,7 @@ const templateSuggestionSchema = z.object({
 });
 
 /** Mirrors `PhaseGuardSchema` (framework-schema.ts:48) — deterministic per-section checks. */
-const phaseGuardSchema = z.object({
+const phaseGuardSchema = z.strictObject({
   required: z.boolean().optional(),
   min_length: z.number().int().positive().optional(),
   max_length: z.number().int().positive().optional(),
@@ -94,7 +103,7 @@ const phaseGuardSchema = z.object({
 });
 
 /** Mirrors `ProcessingStepSchema` (framework-schema.ts:63), a `phases.yaml` member. */
-const processingStepSchema = z.object({
+const processingStepSchema = z.strictObject({
   id: z.string().min(1),
   name: z.string().min(1),
   description: z.string().min(1),
@@ -106,13 +115,58 @@ const processingStepSchema = z.object({
 });
 
 /** Mirrors `ExecutionStepSchema` (framework-schema.ts:79), a `phases.yaml` member. */
-const executionStepSchema = z.object({
+const executionStepSchema = z.strictObject({
   id: z.string().min(1),
   name: z.string().min(1),
   action: z.string().min(1),
   frameworkPhase: z.string().min(1),
   dependencies: z.array(z.string()).optional(),
   expected_output: z.string().min(1),
+});
+
+/**
+ * Mirrors `GatePassCriteriaSchema` (gate-schema.ts) field for field, minus the six
+ * pattern/length fields (`min_length`, `max_length`, `required_patterns`,
+ * `forbidden_patterns`, `regex_patterns`, `keyword_count`) — they never had an evaluator
+ * (B9) and `validateGateSchema` refuses them at load, so this write surface no longer
+ * offers them either. A bare string is no longer accepted here: it only ever existed to
+ * populate `required_patterns`. Author a reminder sentence into `guidance` instead, or use
+ * `shell_verify`/`script_tool` for a real check.
+ */
+export const gatePassCriteriaSchema = z.strictObject({
+  type: z
+    .enum(['inline_guidance', 'framework_compliance', 'shell_verify', 'script_tool'])
+    .optional(),
+
+  // Framework compliance options
+  framework: z.string().optional(),
+  min_compliance_score: z.number().min(0).max(1).optional(),
+  severity: z.enum(['warn', 'fail']).optional(),
+  quality_indicators: z
+    .record(
+      z.string(),
+      z.strictObject({
+        keywords: z.array(z.string()).optional(),
+        patterns: z.array(z.string()).optional(),
+      })
+    )
+    .optional(),
+
+  // Shell verification options (ground-truth validation via exit code)
+  shell_command: z.array(z.string()).nonempty().optional(),
+  shell_timeout: z.number().int().positive().optional(),
+  shell_working_dir: z.string().optional(),
+  shell_env: z.record(z.string(), z.string()).optional(),
+  shell_max_attempts: z.number().int().positive().optional(),
+  shell_preset: z.enum(['fast', 'full', 'extended']).optional(),
+  shell_stdin_source: z.enum(['agent_response']).optional(),
+  shell_response_env_var: z.string().optional(),
+
+  // Script tool verification options (structured JSON pass/fail)
+  script_tool_id: z.string().optional(),
+  script_tool_input: z.record(z.string(), z.unknown()).optional(),
+  script_tool_timeout: z.number().int().positive().optional(),
+  script_tool_working_dir: z.string().optional(),
 });
 
 /**
@@ -125,8 +179,14 @@ const executionStepSchema = z.object({
 export const resourceManagerInputSchema = z
   .object({
     // ── Core parameters ──────────────────────────────────────────────────
-    /** Type of resource to manage. Routes to appropriate handler. */
-    resource_type: z.enum(['prompt', 'gate', 'framework']),
+    /**
+     * Type of resource to manage. Routes to appropriate handler.
+     *
+     * `category` (P4.7) is an ADDED union member, which is the breaking half of
+     * CLAUDE.md §Public API Contract — the contract is the union of every reachable shape, and
+     * adding a member widens it.
+     */
+    resource_type: z.enum(['prompt', 'gate', 'framework', 'category']),
     /** Operation to perform. */
     action: z.enum([
       'create',
@@ -160,6 +220,12 @@ export const resourceManagerInputSchema = z
     confirm: z.boolean().optional(),
     /** Audit reason for reload/delete/switch operations. */
     reason: z.string().trim().optional(),
+    /** [Prompt] reload, create, update and delete restart the server instead of hot-reloading. */
+    full_restart: z.boolean().optional(),
+    /** [Prompt guide] What the caller is trying to do; ranks the suggested actions. */
+    goal: z.string().optional(),
+    /** [Prompt guide] Include full details for actions that are not marked working. */
+    include_legacy: z.boolean().optional(),
 
     // ── Prompt parameters ────────────────────────────────────────────────
     /** [Prompt] Category tag for the prompt. */
@@ -217,7 +283,7 @@ export const resourceManagerInputSchema = z
      */
     patch: z
       .array(
-        z.object({
+        z.strictObject({
           field: z.enum(PATCH_TARGET_FIELDS),
           old_string: z.string().min(1),
           new_string: z.string(),
@@ -280,6 +346,43 @@ export const resourceManagerInputSchema = z
     chain_step_data: ChainStepSchema.passthrough().optional(),
     /** [Prompt] New index order for reorder operation (permutation of [0..n-1]). */
     chain_step_order: z.array(z.number().int().nonnegative()).optional(),
+    /**
+     * [Prompt] Dependency edges between this chain's steps, addressed by minted node id.
+     *
+     * Same shape and same meaning `PromptYamlSchema.edges` carries (prompt-schema.ts) — ordering
+     * constraints the loader linearizes into `chainSteps` order, never control flow — because the
+     * value goes verbatim into `prompt.yaml`. Reusing `workflowEdgeSchema` rather than restating
+     * `{from, to}` is what keeps a value accepted here from being rejected at load.
+     *
+     * The parameter exists because the validation already did (P4.65): a `chain_steps` rewrite
+     * dropping a step an edge still names is refused and rolled back, and until this parameter
+     * there was no way to correct the edge through the tool at all — the only remedy was a hand
+     * edit of the YAML, which this project forbids. An update carrying both is validated as ONE
+     * state by the post-write verification, which reads the file the write produced.
+     */
+    edges: z.array(workflowEdgeSchema).optional(),
+    /**
+     * [Prompt] Run-level budget for a chain (P4.82).
+     *
+     * `workflowBudgetSchema` itself, not a restatement of it — so the `.max()` bound that makes a
+     * declared cap NARROW-ONLY is the same bound the loader applies, enforced by the same
+     * validator. A copy here would be a second place for the cap to drift from
+     * `DEFAULT_WORKFLOW_CAPS`, which is the drift the Workflow IR path already pins a test against.
+     * It is `.strict()`, so a misspelled budget key is refused at the boundary rather than dropped
+     * into a declaration that then silently does nothing.
+     */
+    budget: workflowBudgetSchema.optional(),
+    /**
+     * [Prompt] What this prompt's run touches, in the fixed `ArtifactKind` vocabulary (P4.82).
+     *
+     * `PromptArtifactsSchema` itself, for the same reason `budget` above is `workflowBudgetSchema`:
+     * the value goes verbatim into `prompt.yaml`. Its `.strict()` is load-bearing — a misspelled
+     * key here fails in the worst way, by leaving the artifact-scoped gate the author was aiming at
+     * simply unattached with nothing said. The cross-field rule (`fromArgument` must name a
+     * declared argument) is not expressible at this boundary, because an update need not carry
+     * `arguments`; the post-write verification reads the produced FILE and refuses there.
+     */
+    artifacts: PromptArtifactsSchema.optional(),
     /** [Prompt] Script tools to create with the prompt. */
     tools: z.array(z.unknown()).optional(),
     /**
@@ -317,21 +420,31 @@ export const resourceManagerInputSchema = z
      */
     injection: PromptInjectionConfigSchema.optional(),
     /**
-     * [Prompt] Whether this prompt registers as a native MCP prompt.
+     * [Prompt | Category] Whether prompts register as native MCP prompts.
      *
-     * FREEZE HAZARD: this value is resolved through prompt → category → global → default `true`,
-     * and setting it writes an explicit prompt-level value that outranks all three PERMANENTLY —
-     * the prompt stops following any later change to the category or global default. Omit it
-     * unless this prompt specifically needs to differ from its category.
+     * ON `resource_type: 'prompt'` — FREEZE HAZARD: this value is resolved through
+     * prompt → category → global → default `true`, and setting it writes an explicit
+     * prompt-level value that outranks all three PERMANENTLY — the prompt stops following any
+     * later change to the category or global default. Omit it unless this prompt specifically
+     * needs to differ from its category.
+     *
+     * ON `resource_type: 'category'` (P4.7) — no freeze hazard, because this IS the category
+     * level: it writes `registerWithMcp` into `category.yaml`, which every prompt in the
+     * category inherits unless it declares its own. `loader.ts` has read that key since long
+     * before anything could write it.
      */
     register_with_mcp: z.boolean().optional(),
     /**
-     * [Prompt] Native MCP prompt behaviour: 'expand' (plain template text) or 'launch' (route
-     * through prompt_engine).
+     * [Prompt | Category] Native MCP prompt behaviour: 'expand' (plain template text) or
+     * 'launch' (route through prompt_engine).
      *
-     * FREEZE HAZARD: resolved through prompt → category → default `'expand'`; an explicit value
-     * outranks both PERMANENTLY and the prompt stops following any later change to the category
-     * default. Omit it unless this prompt specifically needs to differ from its category.
+     * ON `resource_type: 'prompt'` — FREEZE HAZARD: resolved through prompt → category →
+     * default `'expand'`; an explicit value outranks both PERMANENTLY and the prompt stops
+     * following any later change to the category default. Omit it unless this prompt
+     * specifically needs to differ from its category.
+     *
+     * ON `resource_type: 'category'` (P4.7) — writes `mcpPromptMode` into `category.yaml`, the
+     * default every prompt in the category inherits.
      */
     mcp_prompt_mode: z.enum(['expand', 'launch']).optional(),
     /** [Prompt] Client-agnostic capability hint for `==>` delegated steps. */
@@ -343,8 +456,6 @@ export const resourceManagerInputSchema = z
     execution_hint: z.enum(['single', 'chain']).optional(),
     /** [Prompt] List filter query. */
     filter: z.string().optional(),
-    /** [Prompt] Output format for list/inspect. */
-    format: z.enum(['table', 'json', 'text']).optional(),
     /** [Prompt] Detail level for list/inspect. */
     detail: z.enum(['summary', 'full']).optional(),
     /** [Prompt] Search query for filtering (list action). */
@@ -352,21 +463,35 @@ export const resourceManagerInputSchema = z
 
     // ── Gate parameters ──────────────────────────────────────────────────
     /**
-     * [Gate] Gate type: validation (pass/fail) or guidance (advisory).
+     * [Gate] Gate type: validation (pass/fail) or guidance (advisory). Writes the gate.yaml
+     * key `type`.
      *
-     * NAME COLLISION, load-bearing. This parameter maps to the gate.yaml key `type`
-     * (`router.ts` `gateArgs.type = args.gate_type`), NOT to the gate.yaml key `gate_type` —
-     * which is a different field entirely (`framework` | `category` | `custom`, the
-     * classification `gate-loader.ts` filters framework gates on). That second field is
-     * therefore still unauthorable through this tool, because its own name is already taken
-     * here by this one.
-     *
-     * Deliberately NOT resolved by aliasing it to a third name: the correct end state is
-     * `type` ↔ `type` and `gate_type` ↔ `gate_type`, which is a rename and so breaking. A
-     * placeholder name would ship a parameter we already intend to delete. Tracked as P4.10
-     * against the next major.
+     * Named `type` since P4.10. It was published as `gate_type` until then, which took the name
+     * of a DIFFERENT gate.yaml key and left that one unauthorable — every tool parameter is the
+     * snake_case spelling of the gate.yaml key it writes, and these two were the only pair where
+     * that was false.
      */
-    gate_type: z.enum(['validation', 'guidance']).optional(),
+    type: z.enum(['validation', 'guidance']).optional(),
+    /**
+     * [Gate] Gate classification, writing the gate.yaml key `gate_type`. `framework` is the
+     * load-bearing value: `gate-loader.ts` filters those gates out when framework gates are
+     * disabled, and `isGateActiveForContext` requires BOTH category and framework to match for
+     * them. Absent, the loader defaults to `custom`.
+     */
+    gate_type: z.enum(['framework', 'category', 'custom']).optional(),
+    /**
+     * [Gate] Free kebab-case tag naming what this gate reminds about (e.g. `code-quality`).
+     * An installation's `gates.harnessCovers` (config.jsonc, or config.json) suppresses
+     * reminders whose subject it lists; checks (`shell_verify`/`script_tool`) are never
+     * suppressed.
+     */
+    subject: z
+      .string()
+      .regex(
+        /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+        'subject must be kebab-case: lowercase letters, digits, and hyphens only, e.g. "code-quality"'
+      )
+      .optional(),
     /**
      * [Gate] Severity for prioritization. Omitting it leaves an existing gate's value
      * untouched; a new gate takes the loader default `medium`.
@@ -379,8 +504,8 @@ export const resourceManagerInputSchema = z
     enforcement_mode: z.enum(['blocking', 'advisory', 'informational']).optional(),
     /** [Gate] Gate guidance content. */
     guidance: z.string().optional(),
-    /** [Gate] Structured pass criteria definitions. */
-    pass_criteria: z.array(z.unknown()).optional(),
+    /** [Gate] Structured pass criteria definitions — see `gatePassCriteriaSchema` above. */
+    pass_criteria: z.array(gatePassCriteriaSchema).optional(),
     /** [Gate] Activation rules. */
     activation: z.record(z.string(), z.unknown()).optional(),
     /** [Gate] Retry configuration. */
@@ -421,7 +546,7 @@ export const resourceManagerInputSchema = z
      * (as `frameworkElements`). Read by `generic-framework-guide.ts` to build creation guidance.
      */
     framework_elements: z
-      .object({
+      .strictObject({
         requiredSections: z.array(z.string()),
         optionalSections: z.array(z.string()).optional(),
         sectionDescriptions: z.record(z.string(), z.string()),
@@ -433,7 +558,7 @@ export const resourceManagerInputSchema = z
      */
     argument_suggestions: z
       .array(
-        z.object({
+        z.strictObject({
           name: z.string().min(1),
           type: z.enum(['string', 'array', 'object', 'boolean', 'number']),
           description: z.string(),
@@ -452,7 +577,7 @@ export const resourceManagerInputSchema = z
     execution_type_enhancements: z.record(z.string(), z.unknown()).optional(),
     /** [Framework] System/user prompt additions and contextual hints → `phases.yaml`. */
     template_enhancements: z
-      .object({
+      .strictObject({
         systemPromptAdditions: z.array(z.string()).optional(),
         userPromptModifications: z.array(z.string()).optional(),
         contextualHints: z.array(z.string()).optional(),
@@ -460,7 +585,7 @@ export const resourceManagerInputSchema = z
       .optional(),
     /** [Framework] Pre/post/validation hooks around execution → `phases.yaml`. */
     execution_flow: z
-      .object({
+      .strictObject({
         preProcessingSteps: z.array(z.string()).optional(),
         postProcessingSteps: z.array(z.string()).optional(),
         validationSteps: z.array(z.string()).optional(),

@@ -65,9 +65,6 @@ export class InjectionDecisionService {
   /** Active runtime overrides. */
   private runtimeOverrides: Map<InjectionType, InjectionRuntimeOverride> = new Map();
 
-  /** Track last injection step for each type. */
-  private lastInjectionStep: Map<InjectionType, number> = new Map();
-
   constructor(config: InjectionConfig, logger: Logger) {
     this.logger = logger;
     this.resolver = new HierarchyResolver(config, logger);
@@ -107,11 +104,6 @@ export class InjectionDecisionService {
 
     // Cache it
     this.decisions.set(cacheKey, decision);
-
-    // Track injection step if we're injecting
-    if (decision.inject && input.currentStep !== undefined) {
-      this.lastInjectionStep.set(input.injectionType, input.currentStep);
-    }
 
     this.logger.debug('[InjectionDecisionService] Decision made', {
       type: input.injectionType,
@@ -160,80 +152,6 @@ export class InjectionDecisionService {
     }
 
     return state;
-  }
-
-  /**
-   * Check if a decision has been made for a type.
-   */
-  hasDecided(type: InjectionType): boolean {
-    return this.decisions.has(type);
-  }
-
-  /**
-   * Get cached decision without computing.
-   */
-  getCachedDecision(type: InjectionType): InjectionDecision | undefined {
-    return this.decisions.get(type);
-  }
-
-  /**
-   * Reset all cached decisions (for new request or testing).
-   */
-  reset(): void {
-    this.decisions.clear();
-    this.lastInjectionStep.clear();
-  }
-
-  /**
-   * Set a runtime override for an injection type.
-   */
-  setRuntimeOverride(override: InjectionRuntimeOverride): void {
-    this.runtimeOverrides.set(override.type, override);
-    // Invalidate cached decision for this type
-    this.decisions.delete(override.type);
-
-    this.logger.debug('[InjectionDecisionService] Runtime override set', {
-      type: override.type,
-      enabled: override.enabled,
-      scope: override.scope,
-    });
-  }
-
-  /**
-   * Clear a runtime override.
-   */
-  clearRuntimeOverride(type: InjectionType): void {
-    this.runtimeOverrides.delete(type);
-    // Invalidate cached decision
-    this.decisions.delete(type);
-
-    this.logger.debug('[InjectionDecisionService] Runtime override cleared', {
-      type,
-    });
-  }
-
-  /**
-   * Clear all runtime overrides.
-   */
-  clearAllRuntimeOverrides(): void {
-    this.runtimeOverrides.clear();
-    this.decisions.clear();
-
-    this.logger.debug('[InjectionDecisionService] All runtime overrides cleared');
-  }
-
-  /**
-   * Get current runtime overrides for status reporting.
-   */
-  getRuntimeOverrides(): ReadonlyMap<InjectionType, InjectionRuntimeOverride> {
-    return this.runtimeOverrides;
-  }
-
-  /**
-   * Get last injection step for a type.
-   */
-  getLastInjectionStep(type: InjectionType): number | undefined {
-    return this.lastInjectionStep.get(type);
   }
 
   /**

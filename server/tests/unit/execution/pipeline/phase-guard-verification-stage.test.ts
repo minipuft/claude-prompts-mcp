@@ -455,32 +455,6 @@ describe('PhaseGuardVerificationStage', () => {
     expect(ctx.state.gates.advisoryWarnings[0]).toContain('context');
   });
 
-  test('uses default config when provider returns undefined', async () => {
-    const guide = createMockGuide([
-      {
-        id: 'context',
-        name: 'Context',
-        section_header: '## Context',
-        guards: { required: true },
-      },
-    ]);
-    const stage = createPhaseGuardVerificationStage(
-      () => createRegistry(guide),
-      () => undefined,
-      sessionStore,
-      logger
-    );
-    const ctx = withSession(createContext(createMcpRequest('>>test', 'No context section.')));
-    ctx.frameworkContext = { selectedFramework: { id: 'cageerf', name: 'CAGEERF' } } as any;
-
-    await stage.execute(ctx);
-
-    // Default is enforce mode → creates pending review
-    expect(sessionStore.setPendingGateReview).toHaveBeenCalledTimes(1);
-    const review = (sessionStore.setPendingGateReview as jest.Mock).mock.calls[0][1] as any;
-    expect(review.maxAttempts).toBe(3); // default maxRetries=2 + 1
-  });
-
   test('skips when framework registry provider returns undefined', async () => {
     const stage = createPhaseGuardVerificationStage(
       () => undefined,

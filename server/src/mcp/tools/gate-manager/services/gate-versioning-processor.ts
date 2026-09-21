@@ -3,11 +3,18 @@
 import { gateSnapshotContract } from './gate-snapshot-contract.js';
 import { isPreviewRequest } from '../../shared/preview-action.js';
 
+import type { RestorePlan } from '#modules/versioning/index.js';
 import type { ToolResponse } from '#shared/types/index.js';
 import type { GateResourceContext } from '../core/context.js';
 import type { GateManagerInput } from '../core/types.js';
 
-import { describeIncompleteSnapshot, describeRollbackPreview } from '#modules/versioning/index.js';
+import {
+  applyByteRestore,
+  describeIncompleteSnapshot,
+  describeRestorePlan,
+  describeRollbackPreview,
+  describeRollbackRecord,
+} from '#modules/versioning/index.js';
 
 export class GateVersioningProcessor {
   constructor(private readonly ctx: GateResourceContext) {}
@@ -58,22 +65,55 @@ export class GateVersioningProcessor {
 
     const snapshot = resolved.entry.snapshot;
     const restore = gateSnapshotContract.restore(id, snapshot);
+    const currentState = gateSnapshotContract.project(id, existingGate);
+
+    // Does version N carry the FILES, or only their projection? A row recorded since schema v29
+    // carries both; a bridge row, a pre-v29 row and a row degraded by an over-limit file carry
+    // only the projection, and take the merging path below exactly as they always have.
+    //
+    // A `refused` is not a fallback. It means the database contradicts itself — a row advertising
+    // a tree whose objects are gone, or a recorded path that is not a path — and restoring
+    // something else instead of saying so is the class of failure this route exists to remove.
+    const byteRestore = await this.ctx.versionHistoryService.planByteRestore('gate', id, version);
+    if (byteRestore.status === 'refused') {
+      return this.error(`Rollback failed: ${byteRestore.reason}`);
+    }
+
+    if (byteRestore.status === 'ready') {
+      // The SAME plan value the apply runs, rendered by the same function.
+      if (isPreviewRequest(args)) {
+        return this.success(
+          describeRollbackPreview('gate', id, version, undefined, undefined, byteRestore.plan)
+        );
+      }
+      return this.restoreGateBytes(id, version, byteRestore.plan, byteRestore.bytes, {
+        currentState,
+        snapshot,
+      });
+    }
+
+    // The byte path does not need a restorable PROJECTION, so its check runs after the branch.
+    // A version whose snapshot is missing a required field may still carry the resource's files,
+    // and refusing that rollback would refuse a restore the record can perform — the projection's
+    // completeness is a property of the fallback, not of the version.
     if (!restore.ok) {
       return this.error(describeIncompleteSnapshot('gate', id, version, restore.missingFields));
     }
 
-    const currentState = gateSnapshotContract.project(id, existingGate);
-
     // A preview returns here — after validation, so it refuses an unrestorable version the same
     // way the real call does, and BEFORE the version row is recorded, so neither of the two
-    // side-effect surfaces moves.
+    // side-effect surfaces moves. The diff is projected from the write the rollback below performs
+    // — same write model — so it names `gate.yaml` and `guidance.md` as that write leaves them
+    // rather than the snapshot's fields rendered as one YAML document.
     if (isPreviewRequest(args)) {
       return this.success(
         describeRollbackPreview(
           'gate',
           id,
           version,
-          this.ctx.textDiffService.generateObjectDiff(currentState, snapshot, `${id}/gate.yaml`)
+          this.ctx.textDiffService.generateFileChangeDiff(
+            await this.ctx.gateFileService.projectGateWrite(restore.writeModel)
+          )
         )
       );
     }
@@ -88,26 +128,33 @@ export class GateVersioningProcessor {
     //
     // Fields outside the projection are carried forward from disk by
     // `resolvePreservedGateYamlFields` inside the writer, which is where that live read belongs.
-    let restoredVersion: number | undefined;
+    let restoreOutcome: { version?: number; recorded: boolean } | undefined;
     let recordFailure: string | undefined;
 
-    const writeResult = await this.ctx.gateFileService.writeGateFiles(restore.writeModel, {
-      commit: async (): Promise<void> => {
-        try {
-          const saveResult = await this.ctx.versionHistoryService.commitEdit(
-            'gate',
-            id,
-            currentState,
-            snapshot,
-            { description: `Rollback to v${version}`, diff_summary: '' }
-          );
-          restoredVersion = saveResult.version;
-        } catch (error) {
-          recordFailure = error instanceof Error ? error.message : String(error);
-          throw error;
-        }
-      },
-    });
+    // Rollback restores the WHOLE snapshot — no `suppliedKeys` narrowing (the `undefined` below
+    // takes `GateFileWriter`'s "write everything" default), same as `handleCreate`: both own the
+    // complete state being written rather than an edit to a subset of it.
+    const writeResult = await this.ctx.gateFileService.writeGateFiles(
+      restore.writeModel,
+      undefined,
+      {
+        commit: async (): Promise<void> => {
+          try {
+            const saveResult = await this.ctx.versionHistoryService.commitEdit(
+              'gate',
+              id,
+              currentState,
+              snapshot,
+              { description: `Rollback to v${version}`, diff_summary: '' }
+            );
+            restoreOutcome = saveResult;
+          } catch (error) {
+            recordFailure = error instanceof Error ? error.message : String(error);
+            throw error;
+          }
+        },
+      }
+    );
 
     if (!writeResult.success) {
       return recordFailure !== undefined
@@ -118,7 +165,7 @@ export class GateVersioningProcessor {
         : this.error(`Rollback write failed: ${writeResult.error}`);
     }
 
-    if (restoredVersion === undefined) {
+    if (restoreOutcome === undefined) {
       // Unreachable: `commit` either assigns or throws, and a throw fails the write above.
       throw new Error(
         `Rollback of gate '${id}' reported a successful write without recording a version`
@@ -129,7 +176,65 @@ export class GateVersioningProcessor {
 
     return this.success(
       `✅ Gate '${id}' rolled back to version ${version}\n\n` +
-        `📜 Restored state recorded as version ${restoredVersion}\n` +
+        `${describeRollbackRecord(restoreOutcome)}\n` +
+        (reloaded
+          ? `🔄 Gate reloaded with restored content`
+          : `⚠️ Files restored, but the gate could not be reloaded into this process — it still ` +
+            `holds its pre-rollback content. See the server log.`)
+    );
+  }
+
+  /**
+   * Put version N's recorded bytes back, then record the state that produced.
+   *
+   * The bytes are written VERBATIM — not through `GateFileWriter`, and not through the
+   * source-preserving YAML writer. Both of those rebuild a file from fields, which is the right
+   * answer when a projection is all the record holds and strictly lossy when the actual bytes are.
+   * This is what makes a gate's comments, key order, flow style, CRLF and BOM survive a rollback,
+   * and it is what brings a chain's `edges` and a prompt's `tools/` back: they come back because
+   * the FILES do, not because a projection learned to carry them.
+   */
+  private async restoreGateBytes(
+    id: string,
+    version: number,
+    plan: RestorePlan,
+    bytes: ReadonlyMap<string, Uint8Array>,
+    states: { currentState: Record<string, unknown>; snapshot: Record<string, unknown> }
+  ): Promise<ToolResponse> {
+    let restoreOutcome: { version?: number; recorded: boolean } | undefined;
+
+    const outcome = await applyByteRestore({
+      plan,
+      bytes,
+      // Inside the transaction and last, exactly as the projection path below has it: the restored
+      // files are on disk when this runs, so the row it writes carries THEIR tree, and a throw
+      // here puts every written file back byte-identical.
+      commit: async (): Promise<void> => {
+        restoreOutcome = await this.ctx.versionHistoryService.commitEdit(
+          'gate',
+          id,
+          states.currentState,
+          states.snapshot,
+          { description: `Rollback to v${version}`, diff_summary: '' }
+        );
+      },
+    });
+
+    if (!outcome.applied) {
+      return this.error(`Rollback failed: ${outcome.error}`);
+    }
+    if (restoreOutcome === undefined) {
+      // Unreachable: `commit` either assigns or throws, and a throw fails the restore above.
+      throw new Error(
+        `Rollback of gate '${id}' reported a successful restore without recording a version`
+      );
+    }
+
+    const reloaded = await this.ctx.gateManager.reload(id);
+    return this.success(
+      `✅ Gate '${id}' rolled back to version ${version}, byte for byte\n\n` +
+        `${describeRestorePlan(plan)}\n\n` +
+        `${describeRollbackRecord(restoreOutcome)}\n` +
         (reloaded
           ? `🔄 Gate reloaded with restored content`
           : `⚠️ Files restored, but the gate could not be reloaded into this process — it still ` +

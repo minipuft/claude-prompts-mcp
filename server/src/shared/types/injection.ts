@@ -541,7 +541,7 @@ export const DECISION_SOURCE_DESCRIPTIONS: Readonly<Record<InjectionDecisionSour
   'prompt-config': "The prompt's own injection block in prompt.yaml",
   'chain-config': 'Chain-level configuration',
   'category-config': 'Category-level configuration',
-  'global-config': 'Global config.json settings',
+  'global-config': 'Global config.jsonc settings (config.json also read)',
   'system-default': 'Built-in system defaults',
 } as const;
 

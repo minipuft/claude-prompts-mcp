@@ -6,6 +6,7 @@
  * based on the resource_type parameter.
  */
 
+import { describeParameterRefusal } from './parameter-ownership.js';
 import {
   CROSS_WORKSPACE_READ_ACTIONS,
   PROMPT_ONLY_ACTIONS,
@@ -25,6 +26,11 @@ import type {
   ActionValidationResult,
 } from './types.js';
 import type {
+  CategoryManagerActionId,
+  CategoryManagerInput,
+} from '../../category-manager/core/types.js';
+import type { CategoryToolHandler } from '../../category-manager/index.js';
+import type {
   FrameworkManagerActionId,
   FrameworkManagerInput,
 } from '../../framework-manager/core/types.js';
@@ -43,12 +49,14 @@ export class ResourceManagerRouter {
   private readonly promptResourceHandler: PromptResourceHandlerPort;
   private readonly gateManager: GateToolHandler;
   private readonly frameworkManager: FrameworkToolHandler;
+  private readonly categoryManager: CategoryToolHandler;
 
   constructor(deps: ResourceManagerDependencies) {
     this.logger = deps.logger;
     this.promptResourceHandler = deps.promptResourceHandler;
     this.gateManager = deps.gateManager;
     this.frameworkManager = deps.frameworkManager;
+    this.categoryManager = deps.categoryManager;
 
     this.logger.debug('ResourceManagerRouter initialized');
   }
@@ -62,8 +70,17 @@ export class ResourceManagerRouter {
   ): Promise<ToolResponse> {
     const { resource_type, action } = args;
 
-    // Note: resource_type and action are validated by Zod schema before reaching here.
-    // The types guarantee they are present and valid.
+    // `resource_type` and `action` have been parsed against `resourceManagerInputSchema` before
+    // reaching here, so the types hold. That is true of BOTH callers, but for different reasons,
+    // and the distinction cost a defect: the registered path gets it from the MCP SDK, which
+    // parses `params.arguments` against the schema and hands this handler the parsed value; the
+    // in-process path (a script tool's `auto_execute`, stage 09) used to arrive through an
+    // `as any` with nothing parsed at all. `getResourceManagerHandler` now runs the same schema
+    // — the one SSOT, not a second validator — so this note describes both again.
+    //
+    // What the schema does NOT decide, and this router does below: whether the action is legal
+    // for the resource type, whether a parameter belongs to it, and whether a destructive action
+    // was confirmed.
 
     // Validate action is valid for this specific resource_type
     const validationResult = this.validateActionForResourceType(resource_type, action);
@@ -71,14 +88,22 @@ export class ResourceManagerRouter {
       return this.createErrorResponse(validationResult.error ?? 'Invalid action');
     }
 
-    // A preview must name what it would do, and the pair must be one this resource type can
-    // actually preview. Checked ahead of the confirmation guard because a malformed preview should
-    // be told what is wrong with it, not asked to confirm a deletion it never requested. The
-    // per-type check is the load-bearing half: `dry_run` was accepted on gate and framework
-    // `update`, where nothing read it, so those two previews performed the mutation.
-    const previewRefusal = describePreviewRefusal(resource_type, args);
-    if (previewRefusal !== null) {
-      return this.createErrorResponse(previewRefusal);
+    // Two per-type refusals, both about a parameter this resource type does not read, both ahead
+    // of dispatch so no write or version snapshot precedes them.
+    //
+    // `describeParameterRefusal` owns the general case: one flat schema serves four resource
+    // types, so every parameter is accepted for every type at the boundary and only the router
+    // decides which ones a handler ever sees. Each branch below forwards a subset; before this
+    // guard the rest were dropped silently and the handler still answered success — `framework`
+    // + `unset` saved a version and changed nothing.
+    //
+    // `describePreviewRefusal` is the special case its table cannot express: `preview_action` is
+    // valid for every type, and what varies is which OPERATIONS each type can preview. It runs
+    // second because "you sent a parameter this type ignores" is the coarser correction.
+    const requestRefusal =
+      describeParameterRefusal(resource_type, args) ?? describePreviewRefusal(resource_type, args);
+    if (requestRefusal !== null) {
+      return this.createErrorResponse(requestRefusal);
     }
 
     // One confirmation guard for every destructive action, ahead of dispatch. Deliberately above
@@ -132,6 +157,8 @@ export class ResourceManagerRouter {
           return await this.routeToGateManager(args, enrichedContext);
         case 'framework':
           return await this.routeToFrameworkManager(args, enrichedContext);
+        case 'category':
+          return await this.routeToCategoryManager(args, enrichedContext);
         default:
           return this.createErrorResponse(`Unknown resource_type: ${resource_type}`);
       }
@@ -203,6 +230,9 @@ export class ResourceManagerRouter {
       chain_step_index: args.chain_step_index,
       chain_step_data: args.chain_step_data,
       chain_step_order: args.chain_step_order,
+      edges: args.edges,
+      budget: args.budget,
+      artifacts: args.artifacts,
       tools: args.tools,
       tool_operation: args.tool_operation,
       tool_ids: args.tool_ids,
@@ -216,11 +246,12 @@ export class ResourceManagerRouter {
       mcp_prompt_mode: args.mcp_prompt_mode,
       subagent_model: args.subagent_model,
       agent_type: args.agent_type,
-      is_chain: args.is_chain,
       full_restart: args.full_restart,
+      // Read by `guide`. Forwarded under the caller's names like every field above.
+      goal: args.goal,
+      include_legacy: args.include_legacy,
       execution_hint: args.execution_hint,
       filter: args.filter,
-      format: args.format,
       detail: args.detail,
       search_query: args.search_query,
       confirm: args.confirm,
@@ -247,8 +278,10 @@ export class ResourceManagerRouter {
     args: ResourceManagerInput,
     context: Record<string, unknown>
   ): Promise<ToolResponse> {
-    // Transform args to gate_manager format
-    // Note: gate_type -> type transformation
+    // Pass-through, no renaming (P4.10): `type` and `gate_type` are two different gate.yaml
+    // keys and each tool parameter now carries the name of the key it writes. Until P4.10 the
+    // parameter `gate_type` was rewritten to `type` here, which left the real `gate_type` key
+    // unauthorable because its name was taken.
     // Handler performs its own validation, so we cast the transformed object
     const gateArgs: GateManagerInput = {
       action: args.action as GateManagerActionId,
@@ -256,23 +289,27 @@ export class ResourceManagerRouter {
 
     if (args.id) gateArgs.id = args.id;
     if (args.name) gateArgs.name = args.name;
-    if (args.gate_type) gateArgs.type = args.gate_type;
+    if (args.type) gateArgs.type = args.type;
+    if (args.gate_type) gateArgs.gate_type = args.gate_type;
     if (args.severity) gateArgs.severity = args.severity;
     // snake_case tool parameter → the gate.yaml key's own camelCase spelling. The YAML key is
     // `enforcementMode`; every tool parameter is the snake_case form of its key, so the mapping
     // lands here rather than diverging the published name from the file it writes.
     if (args.enforcement_mode) gateArgs.enforcementMode = args.enforcement_mode;
     if (args.description) gateArgs.description = args.description;
+    if (args.subject) gateArgs.subject = args.subject;
     if (args.guidance) gateArgs.guidance = args.guidance;
     if (args.pass_criteria !== undefined) {
+      // A bare string only ever existed to populate `required_patterns`, which is gone
+      // (B9: never had an evaluator). The MCP schema now rejects bare strings at the
+      // boundary (`gatePassCriteriaSchema`, resource-manager.schema.ts), so this filter is
+      // type-level safety only — it should never drop a value a validated caller sent.
       const normalizedPassCriteria: NonNullable<GateManagerInput['pass_criteria']> = (
         args.pass_criteria ?? []
-      ).map((criteria) => {
-        if (typeof criteria === 'string') {
-          return { required_patterns: [criteria] };
-        }
-        return criteria;
-      });
+      ).filter(
+        (criteria): criteria is NonNullable<GateManagerInput['pass_criteria']>[number] =>
+          typeof criteria !== 'string'
+      );
       gateArgs.pass_criteria = normalizedPassCriteria;
     }
     if (args.activation) {
@@ -465,6 +502,64 @@ export class ResourceManagerRouter {
     }
 
     return await this.frameworkManager.handleAction(frameworkArgs, context);
+  }
+
+  /**
+   * Route to category manager
+   */
+  private async routeToCategoryManager(
+    args: ResourceManagerInput,
+    context: Record<string, unknown>
+  ): Promise<ToolResponse> {
+    // Pass-through, no renaming, with ONE mapping: `register_with_mcp` / `mcp_prompt_mode` are
+    // the snake_case tool parameters for the `category.yaml` keys `registerWithMcp` /
+    // `mcpPromptMode`, exactly as `enforcement_mode` is for the gate key `enforcementMode` ten
+    // lines up. The mapping lands here rather than diverging the published parameter name from
+    // the file key it writes.
+    const categoryArgs: CategoryManagerInput = {
+      action: args.action as CategoryManagerActionId,
+    };
+
+    if (args.id) categoryArgs.id = args.id;
+    if (args.name) categoryArgs.name = args.name;
+    if (args.description) categoryArgs.description = args.description;
+    if (args.register_with_mcp !== undefined) {
+      categoryArgs.registerWithMcp = args.register_with_mcp;
+    }
+    if (args.mcp_prompt_mode !== undefined) {
+      categoryArgs.mcpPromptMode = args.mcp_prompt_mode;
+    }
+    if (args.confirm !== undefined) {
+      categoryArgs.confirm = args.confirm;
+    }
+    if (args.preview_action !== undefined) {
+      categoryArgs.preview_action = args.preview_action as 'delete' | 'rollback';
+    }
+    if (args.source_workspace !== undefined) {
+      categoryArgs.source_workspace = args.source_workspace;
+    }
+    if (args.reason) {
+      categoryArgs.reason = args.reason;
+    }
+
+    // Versioning parameters (pass through directly - canonical names)
+    if (args.version !== undefined) {
+      categoryArgs.version = args.version;
+    }
+    if (args.from_version !== undefined) {
+      categoryArgs.from_version = args.from_version;
+    }
+    if (args.to_version !== undefined) {
+      categoryArgs.to_version = args.to_version;
+    }
+    if (args.skip_version !== undefined) {
+      categoryArgs.skip_version = args.skip_version;
+    }
+    if (args.limit !== undefined) {
+      categoryArgs.limit = args.limit;
+    }
+
+    return await this.categoryManager.handleAction(categoryArgs, context);
   }
 
   /**

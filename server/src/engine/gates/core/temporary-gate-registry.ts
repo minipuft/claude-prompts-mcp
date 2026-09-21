@@ -6,7 +6,7 @@
  * Provides automatic cleanup, scope management, and integration with existing gate systems.
  */
 
-import type { GateDefinition, GatePassCriteria, LightweightGateDefinition } from '../types.js';
+import type { GatePassCriteria, LightweightGateDefinition } from '../types.js';
 
 import { Logger } from '#infra/logging/index.js';
 
@@ -210,42 +210,6 @@ export class TemporaryGateRegistry {
     return gates;
   }
 
-  /**
-   * Get all active temporary gates
-   */
-  getAllTemporaryGates(): TemporaryGateDefinition[] {
-    return Array.from(this.temporaryGates.values());
-  }
-
-  /**
-   * Convert temporary gate to standard gate definition
-   */
-  convertToStandardGate(tempGate: TemporaryGateDefinition): GateDefinition {
-    const base: GateDefinition = {
-      id: tempGate.id,
-      name: tempGate.name,
-      type: tempGate.type,
-      description: tempGate.description,
-      requirements: [], // Temporary gates use simplified criteria
-      failureAction: 'retry',
-      guidance: tempGate.guidance,
-      retry_config: {
-        max_attempts: 3,
-        improvement_hints: true,
-        preserve_context: true,
-      },
-      activation: {
-        explicit_request: true,
-      },
-    };
-
-    if (tempGate.pass_criteria !== undefined) {
-      base.pass_criteria = tempGate.pass_criteria;
-    }
-
-    return base;
-  }
-
   convertToLightweightGate(tempGate: TemporaryGateDefinition): LightweightGateDefinition {
     const lightweight: LightweightGateDefinition = {
       id: tempGate.id,
@@ -352,82 +316,6 @@ export class TemporaryGateRegistry {
   }
 
   /**
-   * Clean up all gates for a chain execution
-   * Removes all chain-scoped gates and associated step-scoped gates
-   */
-  cleanupChainExecution(chainExecutionId: string): number {
-    this.logger.debug(`[TEMP GATE REGISTRY] Cleaning up chain execution: ${chainExecutionId}`);
-
-    let totalCleaned = 0;
-
-    // Clean up chain-scoped gates
-    totalCleaned += this.cleanupScope('chain', chainExecutionId);
-
-    // Clean up any step-scoped gates associated with this chain
-    const stepScopesToClean: string[] = [];
-    for (const [scopeKey, scopeInfo] of this.scopeManagement.entries()) {
-      if (scopeInfo.scope_type === 'step' && scopeKey.includes(chainExecutionId)) {
-        stepScopesToClean.push(scopeKey);
-      }
-    }
-
-    for (const scopeKey of stepScopesToClean) {
-      this.cleanupScopeByKey(scopeKey);
-      totalCleaned++;
-    }
-
-    this.logger.info(
-      `[TEMP GATE REGISTRY] Chain ${chainExecutionId} cleanup: ${totalCleaned} gates removed`
-    );
-    return totalCleaned;
-  }
-
-  /**
-   * Clean up all gates for an execution scope
-   * Convenience method for execution-scoped cleanups
-   */
-  cleanupExecutionScope(executionId: string): number {
-    return this.cleanupScope('execution', executionId);
-  }
-
-  /**
-   * Get registry statistics
-   */
-  getStatistics() {
-    const now = Date.now();
-    const gates = Array.from(this.temporaryGates.values());
-
-    const expiredCount = gates.filter((g) => g.expires_at && g.expires_at <= now).length;
-    const byScope = gates.reduce(
-      (acc, gate) => {
-        acc[gate.scope] = (acc[gate.scope] || 0) + 1;
-        return acc;
-      },
-      {} as Record<string, number>
-    );
-
-    const bySource = gates.reduce(
-      (acc, gate) => {
-        acc[gate.source] = (acc[gate.source] || 0) + 1;
-        return acc;
-      },
-      {} as Record<string, number>
-    );
-
-    return {
-      totalGates: this.temporaryGates.size,
-      maxCapacity: this.maxMemoryGates,
-      utilizationPercent: Math.round((this.temporaryGates.size / this.maxMemoryGates) * 100),
-      expiredGates: expiredCount,
-      activeScopes: this.scopeManagement.size,
-      activeCleanupTimers: this.cleanupTimers.size,
-      gatesByScope: byScope,
-      gatesBySource: bySource,
-      memoryUsageEstimate: this.estimateMemoryUsage(),
-    };
-  }
-
-  /**
    * Force cleanup to free memory
    */
   private performCleanup(): void {
@@ -504,18 +392,6 @@ export class TemporaryGateRegistry {
   }
 
   /**
-   * Estimate memory usage
-   */
-  private estimateMemoryUsage(): number {
-    // Rough estimation: 1KB per gate + scope overhead
-    const gateSize = this.temporaryGates.size * 1024;
-    const scopeSize = this.scopeManagement.size * 256;
-    const timerSize = this.cleanupTimers.size * 64;
-
-    return gateSize + scopeSize + timerSize;
-  }
-
-  /**
    * Validate user-provided custom ID
    * Prevents collision with auto-generated IDs and enforces format requirements
    */
@@ -541,23 +417,6 @@ export class TemporaryGateRegistry {
     }
 
     return true;
-  }
-
-  /**
-   * Cleanup all resources
-   */
-  destroy(): void {
-    this.logger.debug('[TEMP GATE REGISTRY] Destroying registry');
-
-    // Clear all timers
-    for (const timer of this.cleanupTimers.values()) {
-      clearTimeout(timer);
-    }
-
-    // Clear all data
-    this.temporaryGates.clear();
-    this.scopeManagement.clear();
-    this.cleanupTimers.clear();
   }
 }
 

@@ -1,0 +1,20 @@
+id: research_synthesis
+name: Research Synthesis
+category: analysis
+description: >-
+  Consolidate and reconcile findings into coherent insights.
+  Step 3 of the research chain.
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: topic
+    type: string
+    description: The topic being researched
+    required: true
+  - name: key_findings
+    type: string
+    description: Key findings from deep investigation
+    required: false
+  - name: purpose
+    type: string
+    description: Research purpose for framing synthesis
+    required: false

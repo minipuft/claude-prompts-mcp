@@ -48,6 +48,7 @@ _I have a specific problem to solve._
 _I need to look up syntax or API details._
 
 - **[MCP Tools](reference/mcp-tools.md)**: `prompt_engine`, `resource_manager`, `system_control`.
+- **[Configuration](reference/configuration.md)**: `config.jsonc`/`config.json` lookup order, value precedence, and editor validation.
 - **[Prompt Schema](reference/prompt-yaml-schema.md)**: `prompt.yaml` configuration.
 - **[Chain Schema](reference/chain-schema.md)**: `chainSteps` configuration.
 - **[Workflow IR](reference/workflow-ir.md)**: Node/edge shape, caps, and rejection vocabulary for a submitted workflow.

@@ -9,6 +9,7 @@
 
 import type { ChainOperatorExecutor } from '#engine/execution/operators/chain-operator-executor.js';
 import type { ParsingSystem } from '#engine/execution/parsers/index.js';
+import type { RoutedToolCall } from '#engine/execution/pipeline/routing/tool-routing.js';
 import type { ExecutionPlanner } from '#engine/execution/planning/execution-planner.js';
 import type { PromptReferenceResolver } from '#engine/execution/reference/prompt-reference-resolver.js';
 import type { ScriptReferenceResolver } from '#engine/execution/reference/script-reference-resolver.js';
@@ -45,7 +46,6 @@ export interface PipelineMcpToolsAccess {
 export interface PipelineDependencies {
   // ── Core Infrastructure ──
   logger: Logger;
-  serverRoot: string;
   configManager: ConfigManager;
 
   // ── Parsing & Planning ──
@@ -93,9 +93,5 @@ export interface PipelineDependencies {
   getConvertedPrompts: () => ConvertedPrompt[];
 
   // ── Tool routing callback ──
-  routeToTool: (
-    targetTool: string,
-    params: Record<string, unknown>,
-    originalCommand: string
-  ) => Promise<ToolResponse>;
+  routeToTool: (call: RoutedToolCall) => Promise<ToolResponse>;
 }

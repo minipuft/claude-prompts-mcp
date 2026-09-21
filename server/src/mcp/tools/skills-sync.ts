@@ -12,6 +12,8 @@ import {
   runSkillsSyncCommand,
   type ResourceType,
   type SkillsSyncOutput,
+  type SkillsSyncPaths,
+  type SkillsSyncRunReport,
 } from '#modules/skills-sync/service.js';
 
 export const SKILLS_SYNC_OPERATIONS = [
@@ -83,6 +85,11 @@ function createStructuredResponse(
 export class ConsolidatedSkillsSync {
   constructor(
     private readonly logger: Logger,
+    // Resolved by the caller, once per request, through the server's own `PathResolver` --
+    // this class runs only inside `system_control` (see `skills-sync-action-handler.ts`), so
+    // it takes the already-resolved directories rather than re-deriving them from the
+    // environment the way the standalone CLI wrapper does.
+    private readonly paths: SkillsSyncPaths,
     private readonly dbManager?: DatabasePort
   ) {}
 
@@ -105,7 +112,7 @@ export class ConsolidatedSkillsSync {
   }
 
   private async getStatus(): Promise<ToolResponse> {
-    const configPath = getSkillsSyncConfigPath();
+    const configPath = getSkillsSyncConfigPath(this.paths);
     // No initializer: the try assigns true, the catch assigns false.
     let configExists: boolean;
     let selectionSource: SkillsSyncStatus['selectionSource'] = 'none';
@@ -249,7 +256,7 @@ export class ConsolidatedSkillsSync {
     };
 
     try {
-      await runSkillsSyncCommand(
+      const report = await runSkillsSyncCommand(
         {
           command: operation,
           client: args.client,
@@ -265,13 +272,23 @@ export class ConsolidatedSkillsSync {
           force: args.force,
           dbManager: this.dbManager,
         },
-        output
+        output,
+        this.paths
       );
 
-      const text = logs.length > 0 ? logs.join('\n') : `skills_sync ${operation} completed.`;
+      const summary = this.summarizeRunReport(operation, args, report);
+      const text =
+        summary.length > 0
+          ? logs.length > 0
+            ? `${summary}\n\n${logs.join('\n')}`
+            : summary
+          : logs.length > 0
+            ? logs.join('\n')
+            : `skills_sync ${operation} completed.`;
       return createStructuredResponse(text, false, {
         action: operation,
         lines: logs,
+        report,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -288,11 +305,81 @@ export class ConsolidatedSkillsSync {
       );
     }
   }
+
+  /**
+   * "Files written" plus, when the report carries one, its per-client breakdown — the shape
+   * `export`, `sync`, and `pull` all render identically. Pulled out of `summarizeRunReport` so
+   * that shared shape is written once rather than duplicated per branch, which is also what kept
+   * the caller's cognitive complexity under the enforced limit.
+   */
+  private writtenLines(report: SkillsSyncRunReport, clientLabel: string): string[] {
+    const lines: string[] = [
+      report.preview
+        ? `Files written (client: ${clientLabel}): 0 (preview — no files were written)`
+        : `Files written (client: ${clientLabel}): ${report.written}`,
+    ];
+    if (report.writtenByClient != null) {
+      for (const [client, count] of Object.entries(report.writtenByClient)) {
+        lines.push(`  - ${client}: ${count}`);
+      }
+    }
+    return lines;
+  }
+
+  /**
+   * States the run's counts from the report `runSkillsSyncCommand` returns, instead of leaving
+   * the caller to infer what happened from prose log lines or by inspecting folders directly.
+   *
+   * Renders only the fields each command actually populates: `resources` is meaningful for every
+   * command that loads the canonical resource set, `pruned` only for `export` and `sync`, `drift`
+   * only for `diff`, and `written` for every command that writes files — `export`/`sync`/`pull`
+   * break it out by client via `writtenByClient`, `clone` does not (it parses one external file
+   * rather than loading a per-client resource set, so it never populates `resources` either).
+   */
+  private summarizeRunReport(
+    operation: Exclude<SkillsSyncOperation, 'status'>,
+    args: SkillsSyncInput,
+    report: SkillsSyncRunReport
+  ): string {
+    const lines: string[] = [];
+    const clientLabel = args.client ?? 'all';
+
+    if (operation === 'export' || operation === 'sync') {
+      lines.push(`Resources loaded: ${report.resources}`);
+      lines.push(...this.writtenLines(report, clientLabel));
+      if (report.pruned > 0) {
+        lines.push(`Managed directories pruned: ${report.pruned}`);
+      }
+    } else if (operation === 'diff') {
+      const driftedCount = (report.drift ?? []).reduce(
+        (sum, group) => sum + group.entries.length,
+        0
+      );
+      lines.push(`Resources loaded: ${report.resources}`);
+      lines.push(`Drifted resources (client: ${clientLabel}): ${driftedCount}`);
+    } else if (operation === 'pull') {
+      lines.push(`Resources loaded: ${report.resources}`);
+      lines.push(...this.writtenLines(report, clientLabel));
+    } else {
+      lines.push(
+        report.preview
+          ? `Files written: 0 (preview — no files were written)`
+          : `Files written: ${report.written}`
+      );
+    }
+
+    if (report.failures.length > 0) {
+      lines.push(`Failures: ${report.failures.length}`);
+    }
+
+    return lines.join('\n');
+  }
 }
 
 export function createConsolidatedSkillsSync(
   logger: Logger,
+  paths: SkillsSyncPaths,
   dbManager?: DatabasePort
 ): ConsolidatedSkillsSync {
-  return new ConsolidatedSkillsSync(logger, dbManager);
+  return new ConsolidatedSkillsSync(logger, paths, dbManager);
 }

@@ -14,6 +14,7 @@
 
 import { z } from 'zod/v4';
 
+import { ARTIFACT_KINDS } from '#engine/gates/utils/artifact-kinds.js';
 import { linearize } from '#modules/workflow-ir/linearizer.js';
 import {
   EXPORTER_ONLY_STEP_KEYS,
@@ -47,7 +48,8 @@ export const ArgumentValidationSchema = z
      */
     allowedValues: z.array(z.union([z.string(), z.number(), z.boolean()])).optional(),
   })
-  .partial();
+  .partial()
+  .strict();
 
 export type ArgumentValidationYaml = z.infer<typeof ArgumentValidationSchema>;
 
@@ -110,6 +112,58 @@ function validateComposerInputArgument(
       code: 'custom',
       path: ['composer', 'inputArgument'],
       message: `Composer inputArgument '${inputArgument}' must reference a string argument`,
+    });
+  }
+}
+
+/**
+ * Schema for a prompt's top-level `artifacts:` declaration (ruling B13).
+ *
+ * This is how a run tells the gate system what it is about to touch, and it is the ONLY such
+ * channel: no engine request parameter carries artifacts, deliberately — the prompt author
+ * declares the shape, the invocation supplies the paths.
+ *
+ * Two halves, both optional and freely combined:
+ * - `produces` names kinds this prompt always yields, whatever it is invoked with.
+ * - `fromArgument` names one declared argument whose value is a path list; the engine classifies
+ *   each path through `classifyArtifactPath` and unions the result with `produces`.
+ *
+ * `.strict()` because a misspelled key here fails silently in the worst way: the gate the author
+ * was aiming at simply never attaches, and nothing says so.
+ */
+export const PromptArtifactsSchema = z
+  .object({
+    /** Artifact kinds this prompt always produces. */
+    produces: z.array(z.enum(ARTIFACT_KINDS)).min(1).optional(),
+    /** Name of a declared argument carrying the paths this run touches. */
+    fromArgument: z.string().min(1).optional(),
+  })
+  .strict();
+
+export type PromptArtifactsYaml = z.infer<typeof PromptArtifactsSchema>;
+
+/**
+ * `artifacts.fromArgument` must name an argument this prompt actually declares.
+ *
+ * Same failure shape `validateComposerInputArgument` above closes, and the same reason it is a
+ * schema error rather than a runtime warning: an argument name that matches nothing resolves to
+ * no paths, which resolves to no artifacts, which silently drops every artifact-scoped gate.
+ */
+function validateArtifactFromArgument(
+  data: {
+    arguments: PromptArgumentYaml[];
+    artifacts?: PromptArtifactsYaml;
+  },
+  ctx: z.RefinementCtx
+): void {
+  const fromArgument = data.artifacts?.fromArgument;
+  if (fromArgument === undefined) return;
+
+  if (!data.arguments.some((candidate) => candidate.name === fromArgument)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['artifacts', 'fromArgument'],
+      message: `artifacts.fromArgument names \`${fromArgument}\`, which is not one of this prompt's arguments`,
     });
   }
 }
@@ -250,7 +304,7 @@ export const PromptInjectionRuleSchema = z
     enabled: z.boolean().optional(),
     /** How often to inject during chain execution */
     frequency: z
-      .object({
+      .strictObject({
         mode: z.enum(['every', 'first-only', 'never']),
         interval: z.number().int().positive().optional(),
       })
@@ -302,6 +356,78 @@ export const CategorySchema = z.object({
 });
 
 export type CategoryYaml = z.infer<typeof CategorySchema>;
+
+/**
+ * Result of category schema validation.
+ *
+ * Same shape as `PromptSchemaValidationResult` / `GateSchemaValidationResult` because
+ * `ResourceVerificationService` switches over all three and reads exactly these three fields.
+ */
+export interface CategorySchemaValidationResult {
+  /** Whether validation passed */
+  valid: boolean;
+  /** Validation errors (blocking issues) */
+  errors: string[];
+  /** Validation warnings (non-blocking issues) */
+  warnings: string[];
+  /** Parsed data if validation passed */
+  data?: CategoryYaml;
+}
+
+/**
+ * Validate a `category.yaml` document against `CategorySchema`.
+ *
+ * WHY THIS EXISTS RATHER THAN `isValidCategory` (P4.7, 2026-09-11).
+ * `category.yaml` is the one resource document nothing validates ON LOAD: `loader.ts` reads it
+ * with a bare `loadYamlFileSync(...) as Partial<Category>` cast, so a malformed file degrades
+ * silently to the loader's derived defaults instead of failing. The tool that writes the file
+ * therefore cannot assume the loader will catch its output — it has to be the check. A refusal
+ * has to name the field that failed, and `isValidCategory` returns a boolean, so it cannot be
+ * that check. `CategorySchema` stays the single owner of the shape; this is the entry point that
+ * can report against it.
+ *
+ * `expectedId` mirrors `validateGateSchema`/`validatePromptYaml`, and matters MORE here than for
+ * either: the loader derives a category's id from the DIRECTORY NAME and never reads the `id`
+ * key, so a file whose `id` disagrees with its directory is served under the directory's name
+ * while declaring another. That divergence is unobservable at load; it is refused at write.
+ *
+ * @param data - Raw YAML data to validate
+ * @param expectedId - Expected ID (the category directory name)
+ */
+export function validateCategorySchema(
+  data: unknown,
+  expectedId?: string
+): CategorySchemaValidationResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  const result = CategorySchema.safeParse(data);
+  if (!result.success) {
+    for (const issue of result.error.issues) {
+      const path = issue.path.length > 0 ? `${issue.path.join('.')}: ` : '';
+      errors.push(`${path}${issue.message}`);
+    }
+    return { valid: false, errors, warnings };
+  }
+
+  const definition = result.data;
+
+  if (expectedId !== undefined && definition.id !== expectedId) {
+    errors.push(`ID '${definition.id}' does not match directory '${expectedId}'`);
+  }
+
+  const validationResult: CategorySchemaValidationResult = {
+    valid: errors.length === 0,
+    errors,
+    warnings,
+  };
+
+  if (errors.length === 0) {
+    validationResult.data = definition;
+  }
+
+  return validationResult;
+}
 
 // ============================================
 // Main Prompt Data Schema
@@ -464,6 +590,14 @@ export const PromptYamlSchema = z
     /** Gate configuration for validation */
     gateConfiguration: PromptGateConfigurationSchema.optional(),
 
+    // Artifact declaration (ruling B13)
+    /**
+     * What this run touches, in the fixed `ArtifactKind` vocabulary. Read by the execution
+     * planner, which unions `produces` with the kinds classified out of `fromArgument`'s value
+     * and hands the result to gate activation.
+     */
+    artifacts: PromptArtifactsSchema.optional(),
+
     // Injection control
     /** Prompt-level injection control (resolved between step and chain config) */
     injection: PromptInjectionConfigSchema.optional(),
@@ -521,7 +655,8 @@ export const PromptYamlSchema = z
         'Prompt must have userMessageTemplate/userMessageTemplateFile, chainSteps, or systemMessage defined',
     }
   )
-  .superRefine(validateComposerInputArgument);
+  .superRefine(validateComposerInputArgument)
+  .superRefine(validateArtifactFromArgument);
 
 export type PromptYaml = z.infer<typeof PromptYamlSchema>;
 
@@ -549,7 +684,31 @@ export interface PromptYamlValidationResult {
  * exists, so the loader could not order the run at all). Cycle detection IS `linearize`, not a
  * second traversal — one implementation of the ordering rule, shared with the Workflow IR path.
  */
+/**
+ * What to DO about a rejected edge set, appended once to whatever `collectChainEdgeErrors` found.
+ *
+ * Until P4.65 `edges` was not a `resource_manager` parameter, so the refusal above named a defect
+ * whose only remedy was a hand edit of `prompt.yaml` — which this project forbids. The parameter
+ * exists now, and the message says so: the refusal is still loud and still at the cause, and the
+ * reader is told the one call that satisfies it rather than being left to find it.
+ */
+const CHAIN_EDGE_REMEDY =
+  'Chain edges and chain steps are validated as ONE state: send `edges` in the same ' +
+  '`resource_manager` update that changes `chain_steps`, repointing or dropping the edges the ' +
+  'new steps no longer support. `unset: ["edges"]` drops every edge and keeps the authored step ' +
+  'order.';
+
 function collectChainEdgeErrors(
+  steps: ReadonlyArray<{ id?: string; stepName: string; promptId: string }>,
+  edges: ReadonlyArray<{ from: string; to: string }> | undefined
+): string[] {
+  const errors = collectChainEdgeDefects(steps, edges);
+  if (errors.length > 0) errors.push(CHAIN_EDGE_REMEDY);
+  return errors;
+}
+
+/** The defects themselves — an endpoint naming no step, or a cycle. See `collectChainEdgeErrors`. */
+function collectChainEdgeDefects(
   steps: ReadonlyArray<{ id?: string; stepName: string; promptId: string }>,
   edges: ReadonlyArray<{ from: string; to: string }> | undefined
 ): string[] {
@@ -807,6 +966,12 @@ export function isValidPromptData(data: unknown): data is PromptDataYaml {
 
 /**
  * Check if a value is a valid category definition.
+ *
+ * NOT the check a WRITE should use — `validateCategorySchema` is (P4.7). A boolean cannot name
+ * the field that failed, and `category.yaml` is validated nowhere else: `loader.ts` casts the
+ * parsed document rather than parsing it, so a refusal at write time is the only signal an
+ * operator ever gets about a malformed one. Kept as the type guard it is, alongside the
+ * identically-shaped `isValidPromptData` / `isValidGateDefinition`.
  *
  * @param data - Value to check
  * @returns true if data is a valid category definition

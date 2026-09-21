@@ -4,7 +4,7 @@ OpenTelemetry-based tracing for the Claude Prompts MCP server. Provides producti
 
 ## Quick Start
 
-Add to `config.json`:
+Add to `config.jsonc` (`config.json` is also still read):
 
 ```json
 {
@@ -61,18 +61,48 @@ Note: `telemetry.mode` and `telemetry.exporterEndpoint` changes require server r
 
 Events are attached to the active root span via the hook system:
 
-| Event Name              | Source          | Status  | Description                          |
-| ----------------------- | --------------- | ------- | ------------------------------------ |
-| `gate.passed`           | Gate evaluation | Active  | Gate passed validation               |
-| `gate.failed`           | Gate evaluation | Active  | Gate failed validation               |
-| `gate.retry_exhausted`  | Gate system     | Active  | All retry attempts consumed          |
-| `gate.response_blocked` | Gate system     | Active  | Response blocked due to gate failure |
-| `chain.step_complete`   | Chain execution | Planned | Chain step finished                  |
-| `chain.complete`        | Chain execution | Planned | Full chain completed                 |
-| `chain.failed`          | Chain execution | Planned | Chain execution failed               |
+| Event Name              | Source          | Status | Description                             |
+| ----------------------- | --------------- | ------ | --------------------------------------- |
+| `gate.passed`           | Gate evaluation | Active | Gate passed validation                  |
+| `gate.failed`           | Gate evaluation | Active | Gate failed validation                  |
+| `gate.retry_exhausted`  | Gate system     | Active | All retry attempts consumed             |
+| `gate.response_blocked` | Gate system     | Active | Response blocked due to gate failure    |
+| `chain.step_complete`   | Step capture    | Active | A chain step's real output was captured |
+| `chain.complete`        | Chain run store | Active | A run reached `completed`               |
+| `chain.failed`          | Chain run store | Active | A run reached `failed` or `cancelled`   |
+
+Each chain event fires once, where the owning service records the fact and after its persist
+resolves: `StepCaptureService` for a captured step, and `ChainSessionStore` for the run's
+terminal status. A placeholder capture — the STDIO stand-in for output that has not arrived —
+emits nothing, so `chain.step_complete` counts real step results only.
+
+Clients also receive these as MCP notifications: `notifications/chain/step_complete`,
+`notifications/chain/complete` (whose `status` names the terminal state — `completed`,
+`failed` or `cancelled`) and `notifications/framework/changed`. `validate:hook-producers`
+fails the build if any registerable event loses its producer again.
+
+> [!IMPORTANT]
+> **A notification is delivered on the channel of the tool call that caused it**, on both
+> transports. All six events — the three gate events, the two chain events and the framework
+> event — are raised while a `prompt_engine`, `system_control` or `resource_manager` call is
+> still in flight, so the emitter sends through that call's own `mcpReq.notify`. Under
+> Streamable HTTP that is the POST's `text/event-stream` body, which is why a client must send
+> `Accept: application/json, text/event-stream` and read **every** message on the stream, not
+> only the one whose `id` matches its request.
+>
+> This is the only channel SDK v2 offers a stateless server: protocol revision 2026-07-28
+> removed sessions, `createMcpHandler` builds a fresh `McpServer` per request, and the one
+> unsolicited push that remains — `subscriptions/listen`, reached through the handler's
+> notifier — carries a closed set of list-changed and resource-updated events and nothing else.
+> An event raised outside any tool call therefore has **no HTTP channel**; it falls back to the
+> server instance `serveStdio` pinned, and there are no such events today.
 
 > [!NOTE]
-> Chain events are defined in the hook registry and observer but not yet emitted by chain operator code. Gate and pipeline stage events are fully active.
+> On the final step of a gated chain, `chain/complete` is delivered **before** the last
+> `chain/step_complete`: the PASS verdict advances past the last node, which latches the run
+> terminal, before the step's response is captured. Treat `chain/complete` as "the run ended",
+> not as "no further events". The ordering itself is a defect in advance-on-PASS, filed against
+> `GateVerdictProcessor`.
 
 ### Attributes
 
@@ -90,37 +120,39 @@ Safe business-context attributes on trace spans (all prefixed `cpm.*`):
 
 These attributes follow the [wide-event pattern](https://loggingsucks.com/) — one comprehensive event per request with full business context for incident queries.
 
-| Attribute                    | Type    | Description                         | Incident Query                  |
-| ---------------------------- | ------- | ----------------------------------- | ------------------------------- |
-| `cpm.duration.total_ms`      | number  | Total pipeline duration (ms)        | "Show slow requests"            |
-| `cpm.stages.executed_count`  | number  | Number of stages that ran           | "Pipeline utilization"          |
-| `cpm.stages.skipped`         | string  | Comma-separated skipped stage names | "Why didn't X run?"             |
-| `cpm.stages.slowest`         | string  | Name of the slowest stage           | "What's the bottleneck?"        |
-| `cpm.stages.slowest_ms`      | number  | Duration of slowest stage (ms)      | "How slow was the bottleneck?"  |
-| `cpm.had_early_exit`         | boolean | Whether all stages executed         | "Incomplete executions"         |
-| `cpm.gates.names`            | string  | Comma-separated applied gate IDs    | "Show failures by gate"         |
-| `cpm.gates.passed_count`     | number  | Gates that passed                   | "Gate pass rate"                |
-| `cpm.gates.failed_count`     | number  | Gates that failed                   | "Which gates fail most?"        |
-| `cpm.gates.blocked`          | boolean | Response blocked by gate            | "Show blocked requests"         |
-| `cpm.gates.retry_exhausted`  | boolean | Retry attempts exhausted            | "Retry exhaustion rate"         |
-| `cpm.gates.enforcement_mode` | string  | Gate enforcement mode               | "Enforcement mode distribution" |
-| `cpm.chain.is_chain`         | boolean | Whether this is a chain execution   | "Chain vs single failure rate"  |
-| `cpm.chain.step_index`       | number  | Current chain step number           | "Which step fails?"             |
-| `cpm.chain.id`               | string  | Chain session identifier            | "Chain execution timeline"      |
-| `cpm.framework.id`           | string  | Active framework ID                 | "Failures by framework"         |
-| `cpm.framework.enabled`      | boolean | Whether framework is active         | "Framework adoption"            |
-| `cpm.scope.source`           | string  | Identity scope source               | "Scope distribution"            |
-| `cpm.error.type`             | string  | Error message (on failure only)     | "Error grouping"                |
+| Attribute                     | Type    | Description                                                                          | Incident Query                            |
+| ----------------------------- | ------- | ------------------------------------------------------------------------------------ | ----------------------------------------- |
+| `cpm.duration.total_ms`       | number  | Total pipeline duration (ms)                                                         | "Show slow requests"                      |
+| `cpm.stages.executed_count`   | number  | Number of stages that ran                                                            | "Pipeline utilization"                    |
+| `cpm.stages.skipped`          | string  | Comma-separated skipped stage names                                                  | "Why didn't X run?"                       |
+| `cpm.stages.slowest`          | string  | Name of the slowest stage                                                            | "What's the bottleneck?"                  |
+| `cpm.stages.slowest_ms`       | number  | Duration of slowest stage (ms)                                                       | "How slow was the bottleneck?"            |
+| `cpm.had_early_exit`          | boolean | Whether all stages executed                                                          | "Incomplete executions"                   |
+| `cpm.gates.names`             | string  | Comma-separated applied gate IDs                                                     | "Show failures by gate"                   |
+| `cpm.gates.passed_count`      | number  | Gates that passed                                                                    | "Gate pass rate"                          |
+| `cpm.gates.failed_count`      | number  | Gates that failed                                                                    | "Which gates fail most?"                  |
+| `cpm.gates.blocked`           | boolean | Response blocked by gate                                                             | "Show blocked requests"                   |
+| `cpm.gates.retry_exhausted`   | boolean | Retry attempts exhausted                                                             | "Retry exhaustion rate"                   |
+| `cpm.gates.enforcement_mode`  | string  | Gate enforcement mode                                                                | "Enforcement mode distribution"           |
+| `cpm.chain.is_chain`          | boolean | Whether this is a chain execution                                                    | "Chain vs single failure rate"            |
+| `cpm.chain.step_index`        | number  | Current chain step number                                                            | "Which step fails?"                       |
+| `cpm.chain.id`                | string  | Chain session identifier                                                             | "Chain execution timeline"                |
+| `cpm.framework.id`            | string  | Active framework ID                                                                  | "Failures by framework"                   |
+| `cpm.framework.enabled`       | boolean | Whether framework is active                                                          | "Framework adoption"                      |
+| `cpm.scope.source`            | string  | Identity scope source (best of org/workspace)                                        | "Scope distribution"                      |
+| `cpm.scope.continuity_source` | string  | Source of the workspace id that actually resolves the continuity/state-isolation key | "Was the scoping key real or a fallback?" |
+| `cpm.error.type`              | string  | Error message (on failure only)                                                      | "Error grouping"                          |
 
 #### Other Business Attributes
 
-| Attribute                 | Type   | Description                |
-| ------------------------- | ------ | -------------------------- |
-| `cpm.prompt.id`           | string | Resolved prompt identifier |
-| `cpm.operator.types`      | string | Applied operator types     |
-| `cpm.chain.current_step`  | number | Current chain step         |
-| `cpm.chain.total_steps`   | number | Total chain steps          |
-| `cpm.gates.applied_count` | number | Number of applied gates    |
+| Attribute                   | Type   | Description                                                                                             |
+| --------------------------- | ------ | ------------------------------------------------------------------------------------------------------- |
+| `cpm.prompt.id`             | string | Resolved prompt identifier                                                                              |
+| `cpm.operator.types`        | string | Applied operator types                                                                                  |
+| `cpm.chain.current_step`    | number | Current chain step                                                                                      |
+| `cpm.chain.total_steps`     | number | Total chain steps                                                                                       |
+| `cpm.gates.applied_count`   | number | Number of applied gates                                                                                 |
+| `cpm.gates.temporary_count` | number | Number of applied gates that are temporary (request-scoped) rather than framework- or inline-registered |
 
 ### Explicitly Excluded (default)
 

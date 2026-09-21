@@ -21,6 +21,7 @@ import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals
 import { SqliteEngine } from '../../../src/infra/database/index.js';
 import { enforceRetention } from '../../../src/infra/database/retention.js';
 import { TABLE_CONTRACTS } from '../../../src/infra/database/table-contracts.js';
+import { testScratchPath } from '../../helpers/scratch-path.js';
 
 const mockLogger = {
   info: jest.fn() as jest.Mock,
@@ -29,7 +30,7 @@ const mockLogger = {
   debug: jest.fn() as jest.Mock,
 };
 
-const testDir = path.join(process.cwd(), 'tests/tmp/retention-test');
+const testDir = testScratchPath('retention-test');
 
 function capFor(table: string): number {
   const contract = TABLE_CONTRACTS.find((c) => c.table === table);
@@ -61,7 +62,9 @@ describe('Retention enforcement (6.4)', () => {
   beforeEach(async () => {
     await fs.rm(testDir, { recursive: true, force: true });
     await fs.mkdir(testDir, { recursive: true });
-    engine = await SqliteEngine.getInstance(testDir, mockLogger as any);
+    engine = await SqliteEngine.getInstance(mockLogger as any, {
+      dbPath: path.join(testDir, 'runtime-state', 'state.db'),
+    });
     await engine.initialize();
   });
 
@@ -144,7 +147,9 @@ describe('Retention enforcement (6.4)', () => {
     seedChanges(engine, cap + 10);
     await engine.shutdown();
 
-    const reopened = await SqliteEngine.getInstance(testDir, mockLogger as any);
+    const reopened = await SqliteEngine.getInstance(mockLogger as any, {
+      dbPath: path.join(testDir, 'runtime-state', 'state.db'),
+    });
     await reopened.initialize();
 
     expect(countOf(reopened, 'resource_changes')).toBe(cap);

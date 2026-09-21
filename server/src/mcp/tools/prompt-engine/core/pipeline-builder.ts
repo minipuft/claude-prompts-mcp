@@ -13,7 +13,7 @@
  *                 └── PipelineStage[] (22 stages)
  */
 
-import * as path from 'node:path';
+import { describeUndeclaredParameterRefusal } from '../../shared/undeclared-parameters.js';
 
 import type { GateService } from '#engine/gates/services/gate-service-interface.js';
 import type { PipelineDependencies } from './pipeline-dependencies.js';
@@ -124,15 +124,20 @@ export class PipelineBuilder {
     const lifecycleStage = new ExecutionLifecycleStage(temporaryGateRegistry, deps.logger);
 
     const identityResolutionStage = new IdentityResolutionStage(() => {
+      // No "did the operator configure identity?" guard any more: the loader resolves the whole
+      // section (row 6.2 / R57), so `mode` is always set and the guard that used to stand here
+      // could only ever be false. It was not inert — a config with launch defaults but no
+      // explicit `identity.mode` (what `applyRuntimeIdentityOverrides` produces for every
+      // ordinary launch) took the `null` branch, and the stage then resolved identity with NO
+      // launch defaults and NO transport, discarding the derived workspace id.
       const identityConfig = deps.configManager.getConfig().identity;
-      if (!identityConfig?.mode) {
-        return null;
-      }
       return {
         mode: identityConfig.mode,
-        allowPerRequestOverride: identityConfig.allowPerRequestOverride ?? true,
+        allowPerRequestOverride: identityConfig.allowPerRequestOverride,
         launchDefaults: identityConfig.launchDefaults,
-        transportMode: deps.configManager.getConfig().transport,
+        // Not `getConfig().transport` — `Config` carries no such member (transport is
+        // launch-time-only, Ruling R30). `getTransportMode()` is the launch-option-aware read.
+        transportMode: deps.configManager.getTransportMode(),
       };
     }, deps.logger);
 
@@ -197,7 +202,9 @@ export class PipelineBuilder {
     // Script auto-execute stage
     const scriptAutoExecuteStage = new ScriptAutoExecuteStage(
       this.resolveResourceManagerHandler(),
-      deps.logger
+      deps.logger,
+      // The same refusal the tool boundary runs, injected because layer 2 may not import layer 4.
+      (params) => describeUndeclaredParameterRefusal('resource_manager', params)
     );
 
     // ── Stages 10-15: Judge, Gates, Framework, Session, Injection ──
@@ -308,7 +315,9 @@ export class PipelineBuilder {
     const stepCaptureService = new StepCaptureService(
       deps.chainSessionStore,
       deps.logger,
-      deps.executionRecordStore
+      deps.executionRecordStore,
+      deps.hookRegistry,
+      deps.notificationEmitter
     );
     const unknownObservationProcessor = new UnknownObservationProcessor(
       deps.chainSessionStore,
@@ -356,8 +365,10 @@ export class PipelineBuilder {
       debug: false,
       gateSystemEnabled: () => deps.lightweightGateSystem.isGateSystemEnabled(),
     });
+    // The runtime root, not the package: the Python Stop hook finds this file beside `state.db`,
+    // and a package-relative one ignored MCP_RUNTIME_ROOT and was wiped by every plugin update.
     const verifyActiveStateStore = createVerifyActiveStateStore(deps.logger, {
-      runtimeStateDir: path.join(deps.serverRoot, 'runtime-state'),
+      runtimeStateDir: deps.configManager.getRuntimeStateDirectory(),
     });
     const shellVerificationStage = createShellVerificationStage(
       shellVerifyExecutor,
@@ -385,8 +396,9 @@ export class PipelineBuilder {
     // Phase guard verification stage
     const phaseGuardVerificationStage = createPhaseGuardVerificationStage(
       () => deps.frameworkManager,
-      () =>
-        deps.configManager.getConfig().phaseGuards ?? { mode: 'enforce' as const, maxRetries: 2 },
+      // Resolved by the config loader, not here: the literal that used to sit on this line was
+      // one of three statements of the same pair (row 6.2 / R57).
+      () => deps.configManager.getConfig().phaseGuards,
       deps.chainSessionStore,
       deps.logger
     );

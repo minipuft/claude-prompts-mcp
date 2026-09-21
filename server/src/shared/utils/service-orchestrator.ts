@@ -41,21 +41,6 @@ export class ServiceOrchestrator {
     entry.started = true;
   }
 
-  async stopService(name: string): Promise<void> {
-    const entry = this.services.get(name);
-    if (entry === undefined || entry.started === false) {
-      return;
-    }
-    await entry.service.stop();
-    entry.started = false;
-  }
-
-  async startAll(): Promise<void> {
-    for (const [name] of this.services) {
-      await this.startService(name);
-    }
-  }
-
   async stopAll(): Promise<void> {
     const entries = Array.from(this.services.values());
     for (const entry of entries.reverse()) {

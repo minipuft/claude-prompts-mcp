@@ -13,8 +13,6 @@
  *                 └── PipelineStage[] (22 stages)
  */
 
-import * as path from 'node:path';
-
 import { ChainSessionRouter } from './chain-session-router.js';
 import { PipelineBuilder } from './pipeline-builder.js';
 import { ToolDescriptionLoader } from '../../tool-description-loader.js';
@@ -23,6 +21,7 @@ import { renderPromptEngineGuide } from '../utils/guide.js';
 
 import type { ParsingSystem } from '#engine/execution/parsers/index.js';
 import type { PromptExecutionPipeline } from '#engine/execution/pipeline/index.js';
+import type { RoutedToolCall } from '#engine/execution/pipeline/routing/tool-routing.js';
 import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { GateManager } from '#engine/gates/gate-manager.js';
 import type { ScriptToolRuntime } from '#engine/gates/services/script-tool-criterion-runner.js';
@@ -31,7 +30,7 @@ import type { PersistedArgumentHistory } from '#modules/text-refs/types.js';
 import type { RemainderSubmission, WorkflowIR } from '#modules/workflow-ir/types.js';
 import type { UnknownObservation } from '#shared/types/chain-session.js';
 import type { GateSpecification, McpToolRequest } from '#shared/types/execution.js';
-import type { StateStore, StateStoreOptions } from '#shared/types/persistence.js';
+import type { DatabasePort, StateStore, StateStoreOptions } from '#shared/types/persistence.js';
 
 import { ChainOperatorExecutor } from '#engine/execution/operators/chain-operator-executor.js';
 import {
@@ -67,8 +66,12 @@ import {
   ExecutionRecordStore,
   createExecutionRecordStore,
 } from '#modules/chains/execution-record-store.js';
-import { createChainSessionStore } from '#modules/chains/manager.js';
-import { StyleManager, createStyleManager } from '#modules/formatting/index.js';
+import { createChainSessionStore, type ChainSessionStore } from '#modules/chains/manager.js';
+import {
+  StyleManager,
+  createStyleManager,
+  getDefaultStyleDefinitionLoader,
+} from '#modules/formatting/index.js';
 import { PromptAssetManager } from '#modules/prompts/index.js';
 import { ContentAnalyzer } from '#modules/semantic/content-analyzer.js';
 import { TextReferenceStore, ArgumentHistoryTracker } from '#modules/text-refs/index.js';
@@ -102,6 +105,13 @@ export class PromptExecutor {
   private readonly gateReferenceResolver: GateReferenceResolver;
   private readonly gateGuidanceRenderer: GateGuidanceRenderer;
   private readonly chainSessionStore: ChainSessionService;
+  /**
+   * The same instance as `chainSessionStore`, kept at its concrete type for the one call that
+   * is not part of the service contract: `setRunAnnouncementChannels`. A structural `in` check
+   * would type-check too, but it turns a wiring mistake into a silent skip — and a run-terminal
+   * announcement that never fires is precisely the defect this wiring exists to close.
+   */
+  private readonly chainSessionStoreInstance: ChainSessionStore;
   private readonly argumentHistoryTracker: ArgumentHistoryTracker;
 
   /** Execution log writer (Tier 5). Created when setDatabasePort wires the DB. */
@@ -120,6 +130,13 @@ export class PromptExecutor {
   private readonly gateManager: GateManager;
   /** StyleManager for dynamic style guidance (# operator) */
   private styleManager?: StyleManager;
+  /**
+   * Settles once `initializeStyleManager()` has run to completion (success or handled
+   * failure). The constructor kicks that load off in the background, so a caller reading
+   * `styleManager` before it settles would see `undefined` even when the load is about to
+   * succeed; `resolveStyleManager()` awaits this instead of racing it.
+   */
+  private styleManagerReady!: Promise<void>;
   /** Resolver for {{ref:prompt_id}} references in templates */
   private referenceResolver?: PromptReferenceResolver;
   /** Resolver for {{script:id}} references in templates */
@@ -131,6 +148,13 @@ export class PromptExecutor {
    * than holding the instance.
    */
   private scriptToolRuntime?: ScriptToolRuntime;
+  /**
+   * Same instance as `scriptToolRuntime.loader`, held separately and concretely typed:
+   * `scriptToolRuntime.loader` is a `ScriptLoader` port (deliberately minimal, crossing the
+   * `engine/` boundary), so it carries no `clearCache()`. Script hot reload needs one to
+   * invalidate a workspace-tier script edit between reloads.
+   */
+  private workspaceScriptLoader?: WorkspaceScriptLoader;
   /** Hook registry for pipeline event emissions */
   private hookRegistry?: HookRegistryPort;
   /** Notification emitter for MCP client notifications */
@@ -140,7 +164,6 @@ export class PromptExecutor {
   private readonly workspaceScope: StateStoreOptions | undefined;
 
   private convertedPrompts: ConvertedPrompt[] = [];
-  private readonly serverRoot: string;
 
   constructor(
     logger: Logger,
@@ -150,7 +173,8 @@ export class PromptExecutor {
     textReferenceStore: TextReferenceStore,
     gateManager: GateManager,
     mcpToolsManager?: any,
-    promptGuidanceService?: PromptGuidanceService
+    promptGuidanceService?: PromptGuidanceService,
+    databasePort?: DatabasePort
   ) {
     this.logger = logger;
     this.promptManager = promptManager;
@@ -158,25 +182,23 @@ export class PromptExecutor {
     this.gateManager = gateManager; // Store for registry-based gate selection
     this.responseFormatter = new ResponseFormatter();
     this.executionPlanner = new ExecutionPlanner(semanticAnalyzer, logger);
-    this.parsingSystem = createParsingSystem(logger);
+    // `@id` detection asks the framework manager on every parse, so a framework created, updated
+    // or deleted while the server runs is recognized the same moment the rest of the server sees
+    // it. Until the manager arrives, every `@word` is treated as a framework operator.
+    this.parsingSystem = createParsingSystem(
+      logger,
+      (normalizedId) =>
+        this.frameworkManager === undefined || this.frameworkManager.has(normalizedId)
+    );
     this.inlineGateParser = createSymbolicCommandParser(logger);
     this.mcpToolsManager = mcpToolsManager;
     this.promptGuidanceService = promptGuidanceService;
-
-    const resolvedServerRoot =
-      typeof configManager.getServerRoot === 'function' ? configManager.getServerRoot() : undefined;
-    if (!resolvedServerRoot) {
-      throw new Error(
-        'PromptExecutor requires serverRoot: configManager.getServerRoot() returned undefined'
-      );
-    }
-    this.serverRoot = resolvedServerRoot;
 
     const sessionConfig = configManager.getChainSessionConfig?.();
     // Read before either store is constructed: `applyRuntimeIdentityOverrides` has already
     // populated this during runtime bootstrap (deriving from cwd when nothing explicit was
     // given), and a value read after construction never reaches the constructed store.
-    const launchWorkspaceId = configManager.getConfig().identity?.launchDefaults?.workspaceId;
+    const launchWorkspaceId = configManager.getConfig().identity.launchDefaults.workspaceId;
     const workspaceScope =
       launchWorkspaceId != null ? { workspaceId: launchWorkspaceId } : undefined;
 
@@ -188,12 +210,15 @@ export class PromptExecutor {
     const chainSessionOptions = {
       ...(sessionConfig
         ? {
-            defaultSessionTimeoutMs: sessionConfig.sessionTimeoutMinutes * 60 * 1000,
+            defaultSessionTimeoutMs: sessionConfig.timeoutMinutes * 60 * 1000,
             reviewSessionTimeoutMs: sessionConfig.reviewTimeoutMinutes * 60 * 1000,
             cleanupIntervalMs: sessionConfig.cleanupIntervalMinutes * 60 * 1000,
           }
         : {}),
       ...(workspaceScope !== undefined ? { defaultScope: workspaceScope } : {}),
+      // Given at construction because the store begins initializing in its constructor: a port
+      // that arrives only through `setDatabasePort` leaves it warning "persistence disabled" first.
+      ...(databasePort !== undefined ? { databasePort } : {}),
     };
 
     this.argumentHistoryTracker = new ArgumentHistoryTracker(logger, 50);
@@ -202,13 +227,13 @@ export class PromptExecutor {
       logger.warn('Failed to initialize ArgumentHistoryTracker:', error);
     });
 
-    this.chainSessionStore = createChainSessionStore(
+    this.chainSessionStoreInstance = createChainSessionStore(
       logger,
       textReferenceStore,
-      this.serverRoot,
       chainSessionOptions,
       this.argumentHistoryTracker
     );
+    this.chainSessionStore = this.chainSessionStoreInstance;
     const temporaryGateRegistry = createTemporaryGateRegistry(logger, {
       maxMemoryGates: 100,
       defaultExpirationMs: 30 * 60 * 1000,
@@ -236,6 +261,9 @@ export class PromptExecutor {
 
         return Array.from(identifiers);
       },
+      // A provider, not a snapshot: `system_control` can change `gates.harnessCovers` /
+      // `gates.reminderTokenBudget` after startup, and the renderer reads it per render.
+      gatesConfigProvider: () => this.configManager.getGatesConfig(),
     });
 
     this.chainSessionRouter = new ChainSessionRouter(
@@ -254,8 +282,9 @@ export class PromptExecutor {
       this.executionPlanner.setGateManager(this.gateManager);
     }
 
-    // Initialize StyleManager asynchronously
-    void this.initializeStyleManager();
+    // Initialize StyleManager asynchronously; `resolveStyleManager()` is how a caller waits
+    // for it rather than reading `styleManager` mid-load.
+    this.styleManagerReady = this.initializeStyleManager();
 
     this.logger.info('[PromptExecutor] Initialized pipeline dependencies');
   }
@@ -265,10 +294,14 @@ export class PromptExecutor {
     this.chainSessionRouter.updatePrompts(convertedPrompts);
     // Create reference resolver with updated prompts
     this.referenceResolver = new PromptReferenceResolver(this.logger, convertedPrompts);
-    // Create script reference resolver with workspace loader
+    // Create script reference resolver with workspace loader. `getScriptsDirectory()` resolves
+    // through `PathResolver` (workspace `resources/scripts/` when a custom workspace is
+    // configured, the package tree only as the no-resolver fallback) — the package root this
+    // used to read never saw a workspace script.
     const scriptLoader = new WorkspaceScriptLoader({
-      workspaceScriptsPath: path.join(this.serverRoot, 'resources', 'scripts'),
+      workspaceScriptsPath: this.configManager.getScriptsDirectory(),
     });
+    this.workspaceScriptLoader = scriptLoader;
     const scriptExecutor = createScriptExecutor({ debug: false });
     this.scriptReferenceResolver = new ScriptReferenceResolver(
       this.logger,
@@ -290,11 +323,6 @@ export class PromptExecutor {
     this.chainOperatorExecutor = this.createChainOperatorExecutor();
     this.resetPipeline();
     void this.initializePromptGuidanceService();
-
-    // Update parsing system with registered framework IDs for quote-aware @framework detection
-    // This allows @docs/, @mention, etc. to be treated as literal text while @CAGEERF works
-    const frameworkIds = new Set(frameworkManager.getFrameworkIds(false));
-    this.parsingSystem.updateRegisteredFrameworkIds(frameworkIds);
   }
 
   setToolDescriptionLoader(manager: ToolDescriptionLoader): void {
@@ -320,6 +348,10 @@ export class PromptExecutor {
         'PromptExecutor.setDatabasePort called without an argument-history store; argument history will not persist.'
       );
     }
+    // Still forwarded: an executor constructed without a port (tests, and any composition that
+    // opens the database late) gets its chain persistence here. When the store was constructed
+    // with this same port the call is inert — its re-arm is guarded by `!runRegistry`, and the
+    // chained step re-checks after `initPromise` settles — so no second registry or load occurs.
     if ('setDatabasePort' in this.chainSessionStore) {
       (this.chainSessionStore as { setDatabasePort(db: unknown): void }).setDatabasePort(db);
     }
@@ -329,18 +361,32 @@ export class PromptExecutor {
 
   setHookRegistry(hookRegistry: HookRegistryPort): void {
     this.hookRegistry = hookRegistry;
+    this.forwardRunAnnouncementChannels();
   }
 
   setNotificationEmitter(emitter: McpNotificationEmitterPort): void {
     this.notificationEmitter = emitter;
+    this.forwardRunAnnouncementChannels();
+  }
+
+  /**
+   * Hand the chain session store the channels it announces a terminal run status on.
+   *
+   * Re-forwarded from both setters rather than once after both: the composition root sets them
+   * one at a time, and a store that received only the first would announce on one channel for
+   * the life of the process.
+   */
+  private forwardRunAnnouncementChannels(): void {
+    this.chainSessionStoreInstance.setRunAnnouncementChannels({
+      ...(this.hookRegistry !== undefined ? { hookRegistry: this.hookRegistry } : {}),
+      ...(this.notificationEmitter !== undefined
+        ? { notificationEmitter: this.notificationEmitter }
+        : {}),
+    });
   }
 
   setGateStateStore(gateStateStore: any): void {
     this.lightweightGateSystem.setGateStateStore(gateStateStore, this.workspaceScope);
-  }
-
-  getLightweightGateSystem(): LightweightGateSystem {
-    return this.lightweightGateSystem;
   }
 
   getGateGuidanceRenderer(): GateGuidanceRenderer {
@@ -792,48 +838,61 @@ export class PromptExecutor {
     });
   }
 
-  private async routeToTool(
-    targetTool: string,
-    params: Record<string, any>,
-    originalCommand: string
-  ): Promise<ToolResponse> {
+  /**
+   * `call` is discriminated on `targetTool` (row B.61): switching on it narrows
+   * `call.translatedParams` along with it, so the `system_control` branch's
+   * `handleAction(call.translatedParams, {})` is checked against `SystemControlActionId` at
+   * compile time instead of erasing to `Record<string, any>` before it gets there — this is the
+   * in-process caller that skips the MCP SDK's schema validation `system_control`'s registered
+   * `registerTool` callback gets for free.
+   */
+  private async routeToTool(call: RoutedToolCall): Promise<ToolResponse> {
     if (!this.mcpToolsManager) {
       throw new Error('MCP tool registry unavailable');
     }
 
     try {
-      switch (targetTool) {
+      switch (call.targetTool) {
         case 'resource_manager': {
           const resourceHandler = this.mcpToolsManager.getResourceManagerHandler?.();
           if (resourceHandler) {
-            return resourceHandler(params, {});
+            return resourceHandler(call.translatedParams, {});
           }
-          return this.buildPromptListFallback(params?.['search_query']);
+          return this.buildPromptListFallback(call.translatedParams?.['search_query']);
         }
         case 'system_control':
           if (this.mcpToolsManager.systemControl) {
-            return this.mcpToolsManager.systemControl.handleAction(params, {});
+            return this.mcpToolsManager.systemControl.handleAction(call.translatedParams, {});
           }
           break;
         case 'prompt_engine_guide':
-          return this.generatePromptEngineGuide(params?.['goal']);
+          return this.generatePromptEngineGuide(call.translatedParams?.['goal']);
         case 'prompt_engine_invalid_command':
           return this.responseFormatter.formatErrorResponse(
             'Commands must start with a real prompt id after `>>`. Use resource_manager(resource_type:"prompt", action:"list") to find valid ids before executing.'
           );
-        default:
-          break;
+        default: {
+          // Exhaustive by construction: `RoutedToolCall` names every `targetTool` this router
+          // dispatches, so a fifth variant added there without a case here fails typecheck
+          // instead of falling through silently (CLAUDE.md § Correction-Triggered Learning —
+          // the shape this row exists to close was exactly a case nothing checked).
+          const unreachable: never = call;
+          throw new Error(`Unknown target tool: ${JSON.stringify(unreachable)}`);
+        }
       }
 
-      throw new Error(`Unknown target tool: ${targetTool}`);
+      // Reached only via the `system_control` case's `break` above, when the manager itself is
+      // unavailable — every OTHER case returns. Named separately from the `default` throw so this
+      // message does not claim "unknown" about a tool this switch does recognize.
+      throw new Error(`system_control manager unavailable for target tool: ${call.targetTool}`);
     } catch (error) {
       const message =
         error instanceof Error
-          ? `Tool routing failed (${targetTool}): ${error.message}`
-          : `Tool routing failed (${targetTool}): ${String(error)}`;
+          ? `Tool routing failed (${call.targetTool}): ${error.message}`
+          : `Tool routing failed (${call.targetTool}): ${String(error)}`;
       this.logger.error('[PromptExecutor] Tool routing failed', {
-        targetTool,
-        originalCommand,
+        targetTool: call.targetTool,
+        originalCommand: call.originalCommand,
         error,
       });
       return this.responseFormatter.formatErrorResponse(message);
@@ -937,11 +996,18 @@ export class PromptExecutor {
     }
 
     try {
-      this.styleManager = await createStyleManager(this.logger, {
-        loaderConfig: {
-          stylesDir: path.join(this.serverRoot, 'resources', 'styles'),
-        },
-      });
+      // THE loader, not a second one configured from a second derivation of the same roots
+      // (P4.31, ruling R22). `runtime/module-initializer.ts` resolves the style roots through
+      // `PathResolver` and configures this singleton before any `McpToolRouter` exists, and the
+      // merged refusal view the resource indexer reads is that instance's. Building a loader here
+      // from `ConfigManager.getStylesDirectory()` plus a locally-recomputed overlay order produced
+      // a second instance holding a second refusal collection — the one style hot reload then
+      // refreshed, while the indexed one stayed frozen at its startup contents. Two derivations of
+      // one question, agreeing only at startup.
+      //
+      // Called with no argument on purpose: the configuring caller is the composition root, and a
+      // second caller passing config would silently win or silently lose depending on order.
+      this.styleManager = await createStyleManager(this.logger, getDefaultStyleDefinitionLoader());
       this.logger.info('[PromptExecutor] StyleManager initialized');
     } catch (error) {
       this.logger.warn('[PromptExecutor] Failed to initialize StyleManager', {
@@ -949,6 +1015,29 @@ export class PromptExecutor {
       });
       // StyleManager is optional - pipeline will fall back to hardcoded styles
     }
+  }
+
+  /**
+   * Resolve the style manager the pipeline renders `#style` guidance from, once its
+   * background load has settled. Callers that need a wired instance — hot reload
+   * registration is the current one — must await this rather than reading `styleManager`
+   * synchronously, which can still be `undefined` while the load is in flight. Resolves to
+   * `undefined` only when `initializeStyleManager()` failed and logged the reason.
+   */
+  async resolveStyleManager(): Promise<StyleManager | undefined> {
+    await this.styleManagerReady;
+    return this.styleManager;
+  }
+
+  /**
+   * Clear cached script-tool definitions — prompt-local and workspace alike — on the
+   * `WorkspaceScriptLoader` instance `{{script:id}}` resolution currently reads. Rebuilt fresh
+   * on every `updateData()`, so this only matters between reloads: a workspace script edit that
+   * reaches hot reload (`runtime/script-hot-reload.ts`) without also touching the prompts tree
+   * would otherwise keep serving whatever this instance already cached.
+   */
+  clearScriptToolCache(): void {
+    this.workspaceScriptLoader?.clearCache();
   }
 
   private resetPipeline(): void {
@@ -1037,7 +1126,6 @@ export class PromptExecutor {
 
       const builder = new PipelineBuilder({
         logger: this.logger,
-        serverRoot: this.serverRoot,
         configManager: this.configManager,
         parsingSystem: this.parsingSystem,
         executionPlanner: this.executionPlanner,
@@ -1080,7 +1168,8 @@ export function createPromptExecutor(
   textReferenceStore: TextReferenceStore,
   gateManager: GateManager,
   mcpToolsManager?: any,
-  promptGuidanceService?: PromptGuidanceService
+  promptGuidanceService?: PromptGuidanceService,
+  databasePort?: DatabasePort
 ): PromptExecutor {
   return new PromptExecutor(
     logger,
@@ -1090,7 +1179,8 @@ export function createPromptExecutor(
     textReferenceStore,
     gateManager,
     mcpToolsManager,
-    promptGuidanceService
+    promptGuidanceService,
+    databasePort
   );
 }
 

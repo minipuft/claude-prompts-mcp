@@ -25,6 +25,13 @@ describe('UPDATE_FIELDS map', () => {
       mcp_prompt_mode: 'mcpPromptMode',
       subagent_model: 'subagentModel',
       agent_type: 'agentType',
+      // P4.65: a chain's dependency edges joined the preserved set for the same reason — the
+      // converter drops them, so only the on-disk YAML holds the authored value.
+      edges: 'edges',
+      // P4.82: the last two keys `PromptYamlSchema` accepted that nothing could write. There are
+      // now none, and `prompt-authoring-contract.test.ts` is the gate that keeps it that way.
+      budget: 'budget',
+      artifacts: 'artifacts',
     });
   });
 

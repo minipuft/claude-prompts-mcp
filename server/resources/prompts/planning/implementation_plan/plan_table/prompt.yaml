@@ -2,7 +2,7 @@ id: plan_table
 name: Plan-Table (Step 4)
 description: >-
   Step 4 of the implementation planning chain. Produces the tier-gated
-  implementation table — task rows with a Status column strategicImplement
+  implementation table — task rows with a Status column strategic_implement
   compiles directly into a workflow submission — plus per-task verification,
   justification for new files, execution dispatch, open questions with status,
   and a changelog entry.

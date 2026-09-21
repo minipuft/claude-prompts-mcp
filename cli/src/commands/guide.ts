@@ -39,14 +39,14 @@ const CLI_ACTIONS: CliAction[] = [
     id: 'init',
     command: 'cpm init [path]',
     category: 'workspace',
-    description: 'Initialize a new workspace with starter prompts and config.json',
+    description: 'Initialize a new workspace with starter prompts and config.jsonc',
     keywords: ['setup', 'start', 'bootstrap', 'new', 'workspace', 'config'],
   },
   {
     id: 'config',
     command: 'cpm config <list|get|set|validate|reset|keys>',
     category: 'workspace',
-    description: 'Manage workspace configuration (config.json)',
+    description: 'Manage workspace configuration (config.jsonc)',
     keywords: ['config', 'settings', 'configure', 'setup', 'mode', 'toggle', 'transport'],
   },
   {

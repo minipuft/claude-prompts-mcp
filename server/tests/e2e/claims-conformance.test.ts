@@ -497,6 +497,31 @@ async function runScenario(active: StreamableHttpMcpClient, scenario: Scenario):
 const SHARED = CORPUS.filter((s) => s.workspace === 'shared');
 const ISOLATED = CORPUS.filter((s) => s.workspace === 'isolated');
 
+/**
+ * Guards both partitions in one place rather than one `it('loads a non-empty corpus')` per
+ * describe below.
+ *
+ * `it.each` over an empty array generates zero test cases — it does not fail, it disappears. A
+ * mistyped or renamed `workspace:` value in a corpus file (e.g. `isolated` -> `shared`) silently
+ * empties one partition's `it.each` and the suite reports green having run nothing for it, which
+ * is exactly the mutating half: `resource_manager` create/update/delete/rollback claims. A single
+ * assertion here, checked before either server spawns, names which partition emptied rather than
+ * requiring a reader to notice a missing row count in the test output.
+ */
+describe('claims conformance corpus', () => {
+  it('has a non-empty corpus for every workspace partition', () => {
+    const empty = (
+      [
+        ['shared', SHARED],
+        ['isolated', ISOLATED],
+      ] as const
+    )
+      .filter(([, scenarios]) => scenarios.length === 0)
+      .map(([workspace]) => workspace);
+    expect(empty).toEqual([]);
+  });
+});
+
 describe('claims conformance', () => {
   let proc: ChildProcess | null = null;
   let client: StreamableHttpMcpClient | null = null;
@@ -532,10 +557,6 @@ describe('claims conformance', () => {
     if (proc) await killServer(proc);
     if (runtimeRoot) await fs.rm(runtimeRoot, { recursive: true, force: true });
   }, 20000);
-
-  it('loads a non-empty corpus', () => {
-    expect(SHARED.length).toBeGreaterThan(0);
-  });
 
   it.each(SHARED.map((s) => [s.id, s] as const))(
     '%s',

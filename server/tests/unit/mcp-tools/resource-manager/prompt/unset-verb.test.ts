@@ -51,6 +51,32 @@ const SEED_VALUES: Record<string, unknown> = {
   mcpPromptMode: 'expand',
   subagentModel: 'fast',
   agentType: 'general-purpose',
+  // An edge addresses step ids, so its seed needs a chain with TWO steps to connect — the
+  // companion below supplies them. `child-two` is the slug `mintNodeIds` derives from
+  // `stepName: 'Child Two'`.
+  edges: [{ from: 'child', to: 'child-two' }],
+  // A declared structural cap may only NARROW the server default, so every value here is at or
+  // below `DEFAULT_WORKFLOW_CAPS`.
+  budget: { maxInsertions: 1, pauseOnBlocking: true },
+  // `fromArgument` must name a DECLARED argument, so this seed carries one too (companion below).
+  artifacts: { produces: ['plan'], fromArgument: 'topic' },
+};
+
+/**
+ * Fields whose seed cannot stand alone, and what has to be written beside them.
+ *
+ * Both entries exist for the same reason: the value is validated AGAINST another field, so a
+ * lone seed is refused by the post-write check rather than landing and being removable.
+ */
+const SEED_COMPANIONS: Record<string, Record<string, unknown>> = {
+  composer: { arguments: SEED_VALUES['arguments'] },
+  artifacts: { arguments: SEED_VALUES['arguments'] },
+  edges: {
+    chainSteps: [
+      { promptId: 'child', stepName: 'Child' },
+      { promptId: 'child', stepName: 'Child Two' },
+    ],
+  },
 };
 
 describe('unset — the remove verb (P2.1)', () => {
@@ -145,9 +171,10 @@ describe('unset — the remove verb (P2.1)', () => {
       '`unset: [%s]` removes %s from the written prompt.yaml',
       async (parameter, dataKey) => {
         const id = `unset_${parameter}`;
-        // `composer` is the one field with a cross-field rule — its `inputArgument` must name a
-        // declared argument — so its seed carries that argument alongside it.
-        const companion = dataKey === 'composer' ? { arguments: SEED_VALUES['arguments'] } : {};
+        // Two fields carry a cross-field rule — `composer.inputArgument` must name a declared
+        // argument, and an edge endpoint must name a declared step — so their seeds carry the
+        // field they are validated against. See `SEED_COMPANIONS`.
+        const companion = SEED_COMPANIONS[dataKey] ?? {};
         await seed(id, { ...companion, [dataKey]: SEED_VALUES[dataKey] });
 
         // Positive control: the seed landed. Without this, a field that never wrote in the first

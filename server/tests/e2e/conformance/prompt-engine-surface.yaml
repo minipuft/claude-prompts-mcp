@@ -133,3 +133,39 @@ scenarios:
       - tool: prompt_engine
         args: { cancel: true, chain_id: 'chain-conformance-nonexistent#1' }
     expect: { error_contains: 'Cancel Not Applied' }
+
+  # ── P4.93 / R50: an undeclared key is refused by name, over the real transport ──────────────
+  #
+  # Zod STRIPPED an unknown key before the registered callback ran, so `{command, force_restrt}`
+  # answered with a normal prompt list and `isError:false` — measured on f711401b. Only a real
+  # `tools/call` can see that: a unit case hands the executor its object and never crosses the
+  # registered schema. The schema is now `.passthrough()` so the key arrives and is named.
+  - id: pe-refuses-a-key-its-contract-does-not-declare
+    claim_source: >-
+      docs/reference/mcp-tools.md § Undeclared parameters — "a key the tool does not declare is
+      refused by name, on all three tools". Implemented by describeUndeclaredParameterRefusal
+      (mcp/tools/shared/undeclared-parameters.ts).
+    requests:
+      - tool: prompt_engine
+        args: { command: '>>listprompts', force_restrt: true }
+    expect:
+      error_contains: "'force_restrt' is not a parameter of prompt_engine"
+
+  - id: pe-suggests-the-declared-spelling-of-a-near-miss
+    claim_source: >-
+      docs/reference/mcp-tools.md § Undeclared parameters — the refusal suggests the nearest
+      declared name when the edit distance is small, so a typo costs one round trip, not a hunt.
+    requests:
+      - tool: prompt_engine
+        args: { command: '>>listprompts', force_restrt: true }
+    expect:
+      error_contains: "Did you mean 'force_restart'?"
+
+  - id: pe-still-accepts-the-declared-parameter-the-typo-missed
+    claim_source: >-
+      The positive control for the two rows above: a refusal that fired on everything would
+      satisfy both. The same call with the parameter spelled as the contract spells it answers.
+    requests:
+      - tool: prompt_engine
+        args: { command: '>>listprompts', force_restart: true }
+    expect: { ok: true }

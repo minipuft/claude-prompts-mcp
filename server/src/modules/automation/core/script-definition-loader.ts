@@ -39,7 +39,6 @@ import { DEFAULT_EXECUTION_CONFIG } from '../types.js';
 import type {
   LoadedScriptTool,
   ScriptToolLoaderConfig,
-  ScriptToolLoaderStats,
   ScriptToolLoadFailure,
   ScriptToolLoadReport,
   JSONSchemaDefinition,
@@ -205,17 +204,6 @@ export class ScriptToolDefinitionLoader {
   }
 
   /**
-   * Load all available tools for a prompt (discovery + load).
-   *
-   * @param promptDir - Absolute path to the prompt directory
-   * @param promptId - ID of the parent prompt
-   * @returns Array of all successfully loaded tools
-   */
-  loadAllToolsForPrompt(promptDir: string, promptId: string): LoadedScriptTool[] {
-    return this.loadAllToolsForPromptDetailed(promptDir, promptId).tools;
-  }
-
-  /**
    * Load all available tools for a prompt, reporting the ones that dropped out.
    *
    * A tool present on disk but unloadable is otherwise indistinguishable from a
@@ -283,18 +271,6 @@ export class ScriptToolDefinitionLoader {
     const normalizedId = toolId.toLowerCase();
     const cacheKey = join(promptDir, 'tools', normalizedId);
     this.cache.delete(cacheKey);
-  }
-
-  /**
-   * Get loader statistics.
-   */
-  getStats(): ScriptToolLoaderStats {
-    return {
-      cacheSize: this.cache.size,
-      cacheHits: this.stats.cacheHits,
-      cacheMisses: this.stats.cacheMisses,
-      loadErrors: this.stats.loadErrors,
-    };
   }
 
   // ============================================================================

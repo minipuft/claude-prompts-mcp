@@ -29,42 +29,31 @@
  * older than `src/` — verifying a stale binary returns green for code that is not running.
  */
 import { spawn } from 'node:child_process';
-import { mkdtempSync, openSync, readdirSync, statSync } from 'node:fs';
+import { once } from 'node:events';
+import { mkdtempSync, openSync } from 'node:fs';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { buildServerEnv, createHermeticRoots } from './lib/hermetic-server-env.js';
+import { checkDistFreshness } from './lib/dist-freshness.js';
+
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = path.join(SERVER_ROOT, 'dist', 'index.js');
 const WS = mkdtempSync(path.join(tmpdir(), 'unknown-interrupt-drive-'));
 
-/** Newest mtime under a directory. Staleness must never be under-reported. */
-function newestMtime(dir) {
-  let newest = 0;
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name);
-    const mtime = entry.isDirectory() ? newestMtime(full) : statSync(full).mtimeMs;
-    if (mtime > newest) newest = mtime;
-  }
-  return newest;
-}
-
+/**
+ * Staleness must never be under-reported — comparison lives in `lib/dist-freshness.js`, shared
+ * with `verify-mcp-surface.mjs` and `tests/e2e/helpers/child-env.ts`.
+ */
 function refuseStaleDist() {
-  let distMtime;
-  try {
-    distMtime = statSync(DIST).mtimeMs;
-  } catch {
-    console.error(`✗ ${DIST} missing — run \`npm run build\` first`);
+  const result = checkDistFreshness(DIST, path.join(SERVER_ROOT, 'src'));
+  if (!result.fresh) {
+    console.error(`✗ ${result.reason}`);
     process.exit(1);
   }
-  const srcMtime = newestMtime(path.join(SERVER_ROOT, 'src'));
-  if (srcMtime > distMtime) {
-    const lagMin = Math.round((srcMtime - distMtime) / 60_000);
-    console.error(`✗ dist/ is stale — src is ${lagMin} min newer. Run \`npm run build\` first.`);
-    process.exit(1);
-  }
-  console.log(`✓ dist/ current — built ${new Date(distMtime).toISOString().slice(11, 19)}`);
+  console.log(`✓ dist/ current — built ${new Date(result.builtAt).toISOString().slice(11, 19)}`);
 }
 
 function reservePort() {
@@ -77,14 +66,18 @@ function reservePort() {
   });
 }
 
-function spawnServer(port) {
+function spawnServer(port, roots) {
   const log = openSync(path.join(WS, `server-${port}.log`), 'w');
-  const env = { ...process.env, PORT: String(port), MCP_WORKSPACE: SERVER_ROOT };
-  // The server skips main() under JEST_WORKER_ID, and an inherited --experimental-vm-modules
-  // leaks the parent's flags into a plain node process.
-  delete env.NODE_OPTIONS;
-  delete env.NODE_ENV;
-  delete env.JEST_WORKER_ID;
+  // The shared scrub (lib/hermetic-server-env.js): jest markers make the child skip main(), and
+  // the ambient MCP_* path overrides would point it at the operator's tree. The workspace is set
+  // on purpose, after the scrub. So is the runtime root, to a directory this run removes: unset,
+  // it falls back to the workspace, whose `state.db` keeps the operator's persisted
+  // `system_control` toggles, and those would reach this drive.
+  const env = buildServerEnv({
+    PORT: String(port),
+    MCP_WORKSPACE: SERVER_ROOT,
+    ...roots.env,
+  });
   return spawn('node', [DIST, '--transport=streamable-http', '--quiet'], {
     env,
     stdio: ['ignore', log, log],
@@ -181,7 +174,8 @@ const UNKNOWN_THREE = 'live-drive-isolation';
 refuseStaleDist();
 
 const port = await reservePort();
-const server = spawnServer(port);
+const roots = createHermeticRoots('unknown-interrupt');
+const server = spawnServer(port, roots);
 try {
   const base = `http://127.0.0.1:${port}`;
   await waitHealth(base);
@@ -328,7 +322,12 @@ try {
     (notAnAppend.rpcError ?? notAnAppend.text).slice(0, 120).replace(/\n/g, ' ')
   );
 } finally {
-  server.kill();
+  // Wait for exit before removing the runtime root: a server still shutting down writes there.
+  if (server.exitCode === null && server.signalCode === null) {
+    server.kill();
+    await once(server, 'exit');
+  }
+  roots.cleanup();
 }
 
 if (failures.length > 0) {

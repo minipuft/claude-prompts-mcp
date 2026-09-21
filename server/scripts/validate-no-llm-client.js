@@ -27,10 +27,11 @@
  * `src/mcp/tools/prompt-engine/utils/validation.ts`. Forbidding the string would fail on code that
  * has nothing to do with this retirement.
  *
- * RETIREMENT CONDITION: delete this guard when the deprecated `analysis` config section is removed
- * in the next major. At that point ALLOWLIST must be empty — the section is the only reason any
- * `llmIntegration` reference survives. If it is not empty then, the entries left are real
- * reintroductions and want reading, not deleting.
+ * ALLOWLIST emptied when the deprecated `analysis` config section was removed in 5.0 — that
+ * section was the only reason any `llmIntegration` reference survived. The guard itself is not
+ * retired: it still forbids re-adding an outbound model client, which is independent of the
+ * analysis section, so it now stands on its own with no exceptions. A non-empty ALLOWLIST from
+ * here on names a real reintroduction and wants reading, not deleting.
  *
  * `--self-test` proves each rule can still fail.
  *
@@ -83,23 +84,7 @@ const FORBIDDEN = [
  * temporary label. Every entry here closes on the same event, which is why the guard retires
  * wholesale rather than entry by entry.
  */
-const ALLOWLIST = [
-  {
-    file: 'src/infra/config/index.ts',
-    why: 'parses and defaults the deprecated section, folds its inert spelling, and emits the deprecation warning',
-    closedBy: 'removal of the `analysis` config section in the next major',
-  },
-  {
-    file: 'src/shared/types/core-config.ts',
-    why: 'declares the types describing the still-parsed section',
-    closedBy: 'removal of the `analysis` config section in the next major',
-  },
-  {
-    file: 'src/shared/types/index.ts',
-    why: 're-exports those types',
-    closedBy: 'removal of the `analysis` config section in the next major',
-  },
-];
+const ALLOWLIST = [];
 
 /** Terms that are legitimate only inside the allowlisted config plumbing. */
 const SCOPED = ['llmIntegration', 'LLMIntegrationConfig'];
@@ -211,10 +196,10 @@ const SELF_TEST_CASES = [
     expectViolation: true,
   },
   {
-    rule: 'the same term inside the plumbing is accepted',
+    rule: 'the term is caught even in the file the retired plumbing used to exempt',
     file: 'src/infra/config/index.ts',
     line: 'const llmIntegration: LLMIntegrationConfig = {',
-    expectViolation: false,
+    expectViolation: true,
   },
   {
     rule: 'the unrelated GateValidationResult homonym is accepted',

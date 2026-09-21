@@ -57,17 +57,6 @@ export const commandDescriptorSchema = z.object({
 export type CommandDescriptor = z.infer<typeof commandDescriptorSchema>;
 
 /**
- * Framework-aware description variants shown in MCP tool registration
- * based on whether framework system is enabled or disabled.
- */
-export const frameworkAwareDescriptionSchema = z.object({
-  enabled: z.string().min(1),
-  disabled: z.string().min(1),
-});
-
-export type FrameworkAwareDescription = z.infer<typeof frameworkAwareDescriptionSchema>;
-
-/**
  * Tool-level description metadata for MCP registration.
  * This is the SSOT for tool descriptions - generates tool-descriptions.contracts.json.
  */
@@ -77,7 +66,6 @@ export const toolDescriptionSchema = z.object({
   category: z.enum(['execution', 'management', 'system']),
   /** Pattern-matched examples that help LLMs recognize when to invoke this tool */
   triggerExamples: z.array(z.string()).optional(),
-  frameworkAware: frameworkAwareDescriptionSchema,
 });
 
 export type ToolDescription = z.infer<typeof toolDescriptionSchema>;

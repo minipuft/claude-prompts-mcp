@@ -13,9 +13,12 @@
  *
  * **Scope, stated so a green run is not over-read**: only `{ maxRows }` is enforced here.
  * `{ maxRowsPerResource }` needs partition columns that differ per table, and `version_history` —
- * its only holder — already prunes correctly at both of its write sites. A second, generic pass
- * over the same rows would add a way to be wrong without adding coverage. `maxAgeDays` has no
- * declarer today and is deliberately unimplemented rather than speculatively written.
+ * its only holder — prunes at its own write sites, through the one implementation both of its
+ * writers call (`cli-shared/version-history-rows.ts` `pruneVersionHistory`). Its declared 50 is
+ * the DEFAULT bound, not a fixed one: an operator's `versioning.maxVersions` replaces it, which
+ * is a second reason this pass must not also trim the table — a generic sweep here would know
+ * only the declaration and would delete rows the operator's setting says to keep. `maxAgeDays`
+ * has no declarer today and is deliberately unimplemented rather than speculatively written.
  */
 
 import { TABLE_CONTRACTS } from './table-contracts.js';

@@ -90,7 +90,6 @@ describe('unknown observations, schema through ledger', () => {
       .mockImplementation(() => {}) as unknown as jest.SpiedFunction<() => void>;
 
     store = new ChainSessionStore(createLogger(), new TextReferenceStore(createLogger()), {
-      serverRoot: '/tmp/test-unknown-observations-flow',
       cleanupIntervalMs: 1000,
     });
     await store.createSession('sess-1', 'chain-demo', 3);
@@ -210,7 +209,6 @@ describe('inserted-node review scope: the run-step view join (P5-F4)', () => {
       .mockImplementation(() => {}) as unknown as jest.SpiedFunction<() => void>;
 
     store = new ChainSessionStore(createLogger(), new TextReferenceStore(createLogger()), {
-      serverRoot: '/tmp/test-inserted-node-review-scope',
       cleanupIntervalMs: 1000,
     });
     await store.createSession('sess-ins', 'chain-ins', 3, {}, { nodes: NODES });
@@ -393,7 +391,6 @@ describe('unknowns ledger, persistence round-trip', () => {
     const logger = createLogger();
     const textReferenceStore = new TextReferenceStore(logger);
     const options = {
-      serverRoot: '/tmp/test-unknown-observations-roundtrip',
       cleanupIntervalMs: 1000,
     };
 

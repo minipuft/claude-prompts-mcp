@@ -5,6 +5,8 @@
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { PromptData, Category } from '#modules/prompts/types.js';
+import type { ResourceFileLocatorPort } from '#shared/utils/resource-file-set.js';
+import type { QuarantineView } from '#shared/utils/resource-quarantine.js';
 
 import { FrameworkManager } from '#engine/frameworks/framework-manager.js';
 import { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';
@@ -56,6 +58,22 @@ export interface PromptResourceDependencies {
   frameworkManager?: FrameworkManager;
   onRefresh: () => Promise<void>;
   onRestart: (reason: string) => Promise<void>;
+  /**
+   * Live view of the prompt files the loader refused.
+   *
+   * Bound once, by reference — see `PromptAssetManager.getQuarantine`. Optional only because the
+   * unit suites construct this dependency bag directly; the server always supplies it, and a
+   * missing view degrades to today's behaviour rather than to a wrong answer.
+   */
+  quarantine?: QuarantineView;
+  /**
+   * How a checkpoint finds the files it is recording (owner ruling R65).
+   *
+   * Threaded from the composition root rather than built here: it wraps `resolveResourceRoots`,
+   * which lives in `runtime/` and which `mcp/` may not import (`no-imports-into-runtime`).
+   * Absent, a version row is recorded without a file tree — today's behaviour.
+   */
+  resourceFileLocator?: ResourceFileLocatorPort;
 }
 
 export interface PromptResourceData {

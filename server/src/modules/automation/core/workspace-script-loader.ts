@@ -11,7 +11,7 @@
  * Implements `ScriptLoader` interface for use with `ScriptReferenceResolver`.
  */
 
-import { existsSync, readdirSync, readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 
 import { ScriptToolDefinitionLoader } from './script-definition-loader.js';
@@ -178,43 +178,6 @@ export class WorkspaceScriptLoader implements ScriptLoader {
     paths.push(join(this.workspaceScriptsPath, normalizedId));
 
     return paths;
-  }
-
-  /**
-   * Discover all available script IDs in the workspace scripts directory.
-   *
-   * @returns Array of script IDs found
-   */
-  discoverWorkspaceScripts(): string[] {
-    if (!existsSync(this.workspaceScriptsPath)) {
-      return [];
-    }
-
-    try {
-      const entries = readdirSync(this.workspaceScriptsPath, { withFileTypes: true });
-      return entries
-        .filter((entry) => {
-          if (!entry.isDirectory()) return false;
-          const toolYamlPath = join(this.workspaceScriptsPath, entry.name, 'tool.yaml');
-          return existsSync(toolYamlPath);
-        })
-        .map((entry) => entry.name.toLowerCase())
-        .sort();
-    } catch (error) {
-      if (this.debug) {
-        process.stderr.write(
-          `[WorkspaceScriptLoader] Failed to discover workspace scripts: ${String(error)}\n`
-        );
-      }
-      return [];
-    }
-  }
-
-  /**
-   * Get the workspace scripts path.
-   */
-  getWorkspaceScriptsPath(): string {
-    return this.workspaceScriptsPath;
   }
 
   /**

@@ -3,6 +3,8 @@ import * as path from 'node:path';
 
 import type { Logger } from '#shared/types/index.js';
 
+import { isExcludedCategoryDirectoryName } from '#shared/utils/prompt-layout.js';
+
 /** Minimal interface for checking YAML prompt presence in a directory. */
 export interface YamlPromptChecker {
   hasYamlPrompts(dir: string): boolean;
@@ -33,13 +35,8 @@ export async function discoverPromptDirectories(
     const entries = await fs.readdir(promptsDir, { withFileTypes: true });
 
     for (const entry of entries) {
-      if (
-        entry.isDirectory() &&
-        entry.name !== 'node_modules' &&
-        entry.name !== 'backup' &&
-        !entry.name.startsWith('.') &&
-        !entry.name.startsWith('_')
-      ) {
+      // The loader's category rule, so the watcher observes exactly the categories it serves.
+      if (entry.isDirectory() && !isExcludedCategoryDirectoryName(entry.name)) {
         const fullPath = path.join(promptsDir, entry.name);
         const hasYaml = checker.hasYamlPrompts(fullPath);
 
@@ -47,28 +44,48 @@ export async function discoverPromptDirectories(
       }
     }
   } catch (error) {
-    logger.error('Failed to discover prompt directories:', error);
+    // A directory that does not exist yet has no categories. The observer watches it once it is
+    // created, which for a custom workspace's resources directory is the first write.
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      logger.error('Failed to discover prompt directories:', error);
+    }
   }
 
   return directories;
 }
 
 /**
- * Build a deduplicated map of watch targets from prompt directories,
- * framework directories, and auxiliary reload directories.
+ * Build a deduplicated map of watch targets from prompt directories and auxiliary reload
+ * directories (framework, gate, style, script tools, change tracking).
  */
 export function buildWatchTargets(
   promptsDir: string,
   categoryDirs: WatchTarget[],
   options?: {
-    frameworkDirectories?: string[];
     auxiliaryDirectories?: string[][];
+    /**
+     * Every other root the prompt loader reads — the bundled tree and any workspace overlay.
+     *
+     * The catalog is composed from all of them at load time, so an edit in any of them changes
+     * what the server serves; watching only the primary meant an edit to a bundled-only or
+     * overlay-only prompt was never observed and the stale body was served until a restart.
+     */
+    promptRoots?: string[];
   }
 ): WatchTarget[] {
   const targets = new Map<string, WatchTarget>();
 
   // Main prompts directory
   targets.set(promptsDir, { path: promptsDir });
+
+  // Every other root the loader composes the catalog from
+  if (options?.promptRoots !== undefined) {
+    for (const dir of options.promptRoots) {
+      if (dir !== '') {
+        targets.set(dir, { path: dir });
+      }
+    }
+  }
 
   // Category directories
   for (const dir of categoryDirs) {
@@ -77,15 +94,6 @@ export function buildWatchTargets(
       target.category = dir.category;
     }
     targets.set(dir.path, target);
-  }
-
-  // Framework directories
-  if (options?.frameworkDirectories) {
-    for (const dir of options.frameworkDirectories) {
-      if (dir) {
-        targets.set(dir, { path: dir });
-      }
-    }
   }
 
   // Auxiliary reload directories

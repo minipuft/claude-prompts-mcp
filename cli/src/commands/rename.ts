@@ -1,7 +1,12 @@
-import { renameResource, runValidatedMutation } from '@cli-shared/index.js';
-import { resolveWorkspace, findResource, scanReferences } from '../lib/workspace.js';
+import { renameHistoryResource, renameResource, runValidatedMutation } from '@cli-shared/index.js';
+import {
+  resolveWorkspace,
+  findResource,
+  isServedPromptName,
+  scanReferences,
+} from '../lib/workspace.js';
 import { output, icons, color } from '../lib/output.js';
-import { TYPE_MAP, TYPE_CONFIG, singularName } from '../lib/types.js';
+import { TYPE_MAP, historyRef, singularName } from '../lib/types.js';
 import { printValidationFailure } from '../lib/resource-validation.js';
 
 interface RenameOptions {
@@ -39,6 +44,16 @@ export async function rename(options: RenameOptions): Promise<number> {
     return 1;
   }
 
+  // A prompt renamed to a name the loader skips would vanish from the catalog while every file
+  // still validates, so the name is checked against the loader's own rules first.
+  const newName = options.newId.split('/').pop() ?? '';
+  if (type === 'prompts' && !isServedPromptName(match.form, newName)) {
+    console.error(
+      `Cannot rename prompt '${options.oldId}' to '${options.newId}': the server does not serve a prompt named '${newName}'.`,
+    );
+    return 1;
+  }
+
   // Check target doesn't already exist
   const existing = findResource(workspace, type, options.newId);
   if (existing) {
@@ -46,14 +61,11 @@ export async function rename(options: RenameOptions): Promise<number> {
     return 1;
   }
 
-  const config = TYPE_CONFIG[type];
   const mutation = runValidatedMutation({
     resourceType: type,
-    resourceId: options.oldId,
-    resourceDir: match.dir,
-    entryFile: config.entryFile,
+    location: match,
     validate: !options.noValidate,
-    mutate: () => renameResource(match.dir, config.entryFile, options.oldId!, options.newId!),
+    mutate: () => renameResource(match, match.id, options.newId!),
   });
 
   if (!mutation.success) {
@@ -70,10 +82,15 @@ export async function rename(options: RenameOptions): Promise<number> {
   }
   const result = mutation.operation;
 
+  // History follows only a rename that stuck: one that validation rolled back returned above with
+  // its files where they were, and its rows must still be where the files are. Keyed by the
+  // composite id, so a chain's steps (`chain/step`) move with it.
+  renameHistoryResource(result.newPath!, historyRef(type, match.id), options.newId!);
+
   const refs = scanReferences(workspace, options.oldId!);
 
   if (options.json) {
-    output({ id: options.newId, oldId: options.oldId, type: singularName(type), oldDir: result.oldDir, newDir: result.newDir, references: refs }, { json: true });
+    output({ id: options.newId, oldId: options.oldId, type: singularName(type), oldPath: result.oldPath, newPath: result.newPath, references: refs }, { json: true });
   } else {
     console.log(`Renamed ${singularName(type)} '${options.oldId}' -> '${options.newId}'`);
     if (refs.length > 0) {

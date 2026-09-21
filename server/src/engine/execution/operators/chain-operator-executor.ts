@@ -1,6 +1,7 @@
 // @lifecycle canonical - Executes chain operator steps within the pipeline.
 import { hasFrameworkGuidance } from '../../frameworks/utils/framework-detection.js';
 import { DEFAULT_GATE_RETRY_CONFIG } from '../../gates/constants.js';
+import { GATE_ATTESTATION_LINE } from '../../gates/guidance/GateGuidanceRenderer.js';
 import { buildDelegatedStepLines } from '../delegation/brief.js';
 import { handoffNodeToken } from '../delegation/handoff-contract.js';
 import { DelegationRenderer } from '../delegation/renderer.js';
@@ -679,10 +680,7 @@ export class ChainOperatorExecutor {
       sections.push('\n\n' + filteredFrameworkGateIds.map((id) => `- ${id}`).join('\n'));
     }
 
-    sections.push('\n\n**Post-Execution Review Guidelines:**');
-    sections.push(
-      'Review your output against these quality standards before finalizing your response.'
-    );
+    sections.push('\n\n' + GATE_ATTESTATION_LINE);
     sections.push('---');
 
     return sections.join('');

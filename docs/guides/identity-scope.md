@@ -83,7 +83,7 @@ For Claude Desktop, add the flags to your MCP server configuration:
 When deployed behind an API gateway (Kong, Envoy, NGINX) that injects identity headers:
 
 ```bash
-# The port comes from the PORT env var or `server.port` in config.json.
+# The port comes from the PORT env var or `server.port` in your config file.
 # There is no --port flag; the CLI parses with strict:false, so one would be
 # accepted silently and ignored.
 PORT=3000 node dist/index.js --transport=streamable-http
@@ -100,9 +100,9 @@ The server reads these headers automatically:
 
 OAuth token claims (via `authInfo.extra`) take priority over headers when both are present.
 
-## Configure via config.json
+## Configure via config.jsonc
 
-Add an `identity` section to your `config.json`:
+Add an `identity` section to your `config.jsonc` (`config.json` is also still read):
 
 ```json
 {

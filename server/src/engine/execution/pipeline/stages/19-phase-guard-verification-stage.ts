@@ -37,7 +37,7 @@ export const PHASE_GUARD_GATE_ID = '__phase_guard__';
 
 type FrameworkRegistryProvider = FrameworkGuideProvider;
 
-type PhaseGuardsConfigProvider = () => PhaseGuardsConfig | undefined;
+type PhaseGuardsConfigProvider = () => PhaseGuardsConfig;
 
 /**
  * Phase Guard Verification Stage — thin orchestration layer.
@@ -64,7 +64,7 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
     this.logEntry(context);
 
     // 1. Get phase guard config — skip if mode is "off"
-    const config = this.configProvider() ?? { mode: 'enforce' as const, maxRetries: 2 };
+    const config = this.configProvider();
     if (config.mode === 'off') {
       this.logExit({ skipped: 'Phase guards disabled (mode: off)' });
       return;

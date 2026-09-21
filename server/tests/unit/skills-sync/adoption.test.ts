@@ -75,4 +75,15 @@ describe('isAdoptableSkillMarkdown (F10)', () => {
       false
     );
   });
+
+  it('refuses frontmatter that is not valid YAML instead of throwing', () => {
+    // Measured against a real ~/.claude/skills (2026-09-15): a hand-written skill's
+    // `description:` held an unquoted colon, and the frontmatter reader threw on it.
+    const badFrontmatter = skillMd(
+      'name: Bad Skill\ndescription: a thing: with a colon',
+      REAL_ORPHAN_BODY
+    );
+    expect(() => isAdoptableSkillMarkdown(badFrontmatter)).not.toThrow();
+    expect(isAdoptableSkillMarkdown(badFrontmatter)).toBe(false);
+  });
 });

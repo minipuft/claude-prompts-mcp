@@ -39,14 +39,24 @@ import {
   SQLITE_INTERNAL_TABLES,
   VIEW_CONTRACTS,
 } from './table-contracts.js';
+import {
+  DANGLING_ENTRY_SQL,
+  EMPTY_TREE_SQL,
+  describeVersionTreeRepair,
+  planVersionTreeRepair,
+  type VersionTreeRow,
+} from './version-tree-fsck.js';
 
-import type { DatabasePort } from '#shared/types/persistence.js';
+import type { DatabasePort, TransactionMode } from '#shared/types/persistence.js';
 import type { Logger } from '../logging/index.js';
+
+import { sweepUnreferencedObjects } from '#cli-shared/object-store.js';
+import { STATE_DB_WRITER_PRAGMAS } from '#shared/utils/runtime-state-location.js';
 
 /**
  * Bump this when changing the embedded schema. Triggers drop-and-recreate.
  *
- * v28: replaces the v24 delegation-acknowledgment boolean on `execution_records` with
+ * v30: replaces the v24 delegation-acknowledgment boolean on `execution_records` with
  * `handoff_evidence TEXT` (delegation handoff contract, Tier 2 / R1).
  *
  * The boolean was a PROJECTION of a four-valued fact and lost the other three. It could only be
@@ -66,8 +76,92 @@ import type { Logger } from '../logging/index.js';
  * this repo read the retired boolean (grep across `minipuft-plugins`, `gemini-prompts` and
  * `opencode-prompts` at the v20 rename found no reader of any `execution_records` column, and no
  * hook opens it), and `execution_records` is `ephemeral`, so this bump drops its rows and no old
- * row can reach v28 to be interpreted under the new name. `DROPPED_ON_THIS_BUMP` stays empty and
+ * row can reach v30 to be interpreted under the new name. `DROPPED_ON_THIS_BUMP` stays empty and
  * `DROPPED_AT_VERSION` does not move.
+ *
+ * v29: adds `objects` and `version_entries` — the content-addressed store that backs byte-exact
+ * resource rollback — and two nullable columns on `version_history`, `tree_hash` and
+ * `tree_origin`.
+ *
+ * **Both new tables are `durable`, and that classification is the whole of this bump's risk.**
+ * `DURABLE_TABLE_NAMES` derives from `posture` in `table-contracts.ts`, so a table declared
+ * `ephemeral` here would be silently dropped by the NEXT bump while `version_history.tree_hash`
+ * stayed non-NULL — a row pointing at a tree that is not there. `objects` holds file bytes that
+ * exist nowhere else once the resource on disk has moved on, which is the definition of durable.
+ *
+ * They are declared AFTER `version_history` in `TABLE_CONTRACTS`, because `DURABLE_TABLE_NAMES`
+ * preserves that order and `restoreDurableTables` replays it: a child row must be re-inserted
+ * after the parent it references, or the restore breaks the moment `PRAGMA foreign_keys` is on.
+ *
+ * The store is ADDITIVE. `version_history.snapshot` keeps holding the projection every reader
+ * already reads, so losing every object degrades rollback to today's projection path and never
+ * loses history. That is why a garbage collector may sit in front of `objects` at all.
+ *
+ * Both new columns are nullable with NO DDL DEFAULT, for the reason `chain_run_nodes.origin` has
+ * none: `validate:no-phantom-columns` exempts defaulted columns, so a default would hide a dropped
+ * writer from the one gate built to catch it. NULL is a real value — it means the row is
+ * projection-only and restores through `SnapshotContract`, which is every row that predates this
+ * bump. No backfill is performed or wanted: materialising a tree from a projection would fabricate
+ * file bytes that never existed on disk.
+ *
+ * `tree_origin` ships in the SAME bump as `tree_hash` rather than arriving with the writer that
+ * binds it, because the two are one fact: `tree_origin` is NULL exactly when `tree_hash` is, and
+ * adding it later would cost a second `SCHEMA_VERSION` bump and a second durable snapshot/restore
+ * round trip over the one table in this database that nothing regenerates. Its vocabulary is the
+ * file-set enumerator's — `'primary' | 'overlay' | 'bundled' | 'unknown'` — and the enumerator
+ * remains its SSOT; nothing here imports or re-declares it.
+ *
+ * The two foreign keys are DECLARED and, on both writers, ENFORCED — which is not what the design
+ * for this slice assumed. `rg "foreign_keys"` over `server/src` and `cli/src` returns nothing, and
+ * the conclusion drawn from that absence ("so SQLite's default of off applies") is wrong here:
+ * `node:sqlite`'s `DatabaseSync` turns foreign keys ON by default
+ * (`enableForeignKeyConstraints`), and both openers of `state.db` that WRITE — this engine and
+ * `cli-shared/version-history.ts` — are `DatabaseSync`. Measured 2026-09-20: `PRAGMA foreign_keys`
+ * reads 1 on a fresh connection. The Python hooks open read-only through `sqlite3`, where the
+ * default really is off, but a reader cannot violate a constraint.
+ *
+ * So `ON DELETE CASCADE` DOES fire and `ON DELETE RESTRICT` DOES refuse, today, for both writers.
+ * Two consequences the DDL alone does not show:
+ *   * `restoreDurableTables` replays `DURABLE_TABLE_NAMES` in declaration order, so `objects` and
+ *     `version_entries` must stay declared after `version_history` in `table-contracts.ts` — with
+ *     constraints live, a child restored before its parent is refused outright;
+ *   * `dropAllTables` drops in `sqlite_master` order, which puts `version_history` before both new
+ *     tables, so its implicit DELETE cascades the manifest empty before either is dropped.
+ *
+ * What is NOT closed: the guarantee is inherited from a driver default rather than asserted by
+ * this repo, and it is per connection — a future opener (another language, the `sqlite3` CLI, a
+ * connection that turns the pragma off) can still leave a dangling entry behind. That residue is
+ * what the startup referential check finds, and it is why the check is not made redundant by the
+ * constraints being live.
+ *
+ * `version_history` is `durable`, so its rows ride the snapshot/restore round-trip and come back
+ * with `tree_hash` NULL by column intersection. A v28-era server opening a v29 database drops both
+ * new tables (they are not in ITS `DURABLE_TABLE_NAMES`) and keeps `version_history` intact: the
+ * downgrade costs byte-exact restore, never history, and the startup check repairs the rows whose
+ * trees it took with it.
+ *
+ * `DROPPED_ON_THIS_BUMP` stays empty and `DROPPED_AT_VERSION` does not move: nothing is discarded.
+ *
+ * v28: adds `idx_version_history_key`, a UNIQUE index on
+ * `(tenant_id, resource_type, resource_id, version)` — the key `version_history` always meant and
+ * never enforced.
+ *
+ * A version number identifies a row within a resource's history; every reader selects by it. Two
+ * rows could share one, and the producer that made that happen was the CLI's `rename_history`: it
+ * re-keyed a resource's rows with a bare `UPDATE ... SET resource_id`, so renaming onto an id that
+ * still carried history — a deleted resource's rows survive it by design, which every delete path
+ * says out loud — merged two sequences and left two rows claiming to be v1. `getVersion`,
+ * `compareVersions` and `rollback` then restored whichever SQLite returned first. The producer was
+ * fixed with the index: the rename now renumbers the incoming rows to continue after the target's
+ * newest version, in one transaction.
+ *
+ * `version_history` is `durable`, so this bump takes the snapshot/restore round-trip — and a
+ * database that ALREADY holds duplicates would fail that restore on the new index. It does not:
+ * `renumberDuplicateVersionHistory` runs between the snapshot and the restore and renumbers
+ * colliding rows deterministically by `created_at` then `id`, keeping every row and every
+ * chronology. That is this bump's migration, and it is the whole of it — no dual write, no flag,
+ * no engine-resident code that re-runs forever, since a v28 database cannot produce a duplicate.
+ * `DROPPED_ON_THIS_BUMP` stays empty and `DROPPED_AT_VERSION` does not move: nothing is discarded.
  *
  * v27: adds `delegated` and `args_json` to `chain_run_nodes` (row A.5, remainder node fields).
  *
@@ -109,7 +203,7 @@ import type { Logger } from '../logging/index.js';
  *
  * v24: adds `declared_sections_json` to `chain_run_nodes` (phase-guard declaration contract)
  * and a delegation-acknowledgment boolean to `execution_records` (S8, R-4; replaced by
- * `handoff_evidence` at v28 above). Both are
+ * `handoff_evidence` at v30 above). Both are
  * nullable with no DDL DEFAULT — rationale at each column's DDL comment. Both tables are
  * `ephemeral`, so the bump is free of the durable snapshot/restore path: `DROPPED_ON_THIS_BUMP`
  * stays empty and `DROPPED_AT_VERSION` does not move.
@@ -257,7 +351,7 @@ import type { Logger } from '../logging/index.js';
  * `respondedAt`, which changes the `substate_json` shape in `execution_records`. Rows written by
  * v15 would decode to a lifecycle value outside `StepLifecycle`, so they must not survive.
  */
-const SCHEMA_VERSION = 28;
+const SCHEMA_VERSION = 30;
 
 /**
  * Tables whose rows exist nowhere else and therefore survive a SCHEMA_VERSION bump.
@@ -307,11 +401,81 @@ const DROPPED_AT_VERSION: number = 19;
 type DurableSnapshot = Map<string, Array<Record<string, unknown>>>;
 
 /**
+ * The history key a row belongs to, as one string.
+ *
+ * `JSON.stringify` rather than a joined separator: a resource id may contain any character,
+ * so any literal separator can be forged into another history's key — and a NUL one makes this
+ * source file binary to `rg`, which silently blinds every text gate that scans it.
+ */
+function versionHistoryGroupKey(row: Record<string, unknown>): string {
+  return JSON.stringify(
+    [row['tenant_id'], row['resource_type'], row['resource_id']].map((part) => String(part ?? ''))
+  );
+}
+
+/**
+ * Renumber `version_history` rows so no two in one history share a version. PURE.
+ *
+ * The v28 migration (see the SCHEMA_VERSION docblock). Rows written before v28 could collide,
+ * because the CLI's rename merged two histories under one id, so the restore into the newly
+ * unique-indexed table would otherwise throw — and the restore's own failure mode is to abort
+ * startup, which for a durable table nothing regenerates is worse than the duplicate.
+ *
+ * Deterministic and order-preserving: within a history, rows are walked oldest-first by
+ * `created_at` then `id` (the write order, which is the only chronology these rows carry), and
+ * each keeps its own version unless that would repeat or go backwards, in which case it takes the
+ * next free number. A history that was already unique and ascending is left byte-identical, so the
+ * migration is a no-op for every database that never renamed onto occupied history.
+ *
+ * Mutates `version` on the given rows and returns how many it changed.
+ */
+function renumberDuplicateVersionHistory(rows: Array<Record<string, unknown>>): number {
+  const groups = new Map<string, Array<Record<string, unknown>>>();
+  for (const row of rows) {
+    const key = versionHistoryGroupKey(row);
+    const group = groups.get(key);
+    if (group === undefined) {
+      groups.set(key, [row]);
+    } else {
+      group.push(row);
+    }
+  }
+
+  let renumbered = 0;
+  for (const group of groups.values()) {
+    group.sort((left, right) => {
+      const byDate = String(left['created_at'] ?? '').localeCompare(
+        String(right['created_at'] ?? '')
+      );
+      return byDate !== 0 ? byDate : Number(left['id'] ?? 0) - Number(right['id'] ?? 0);
+    });
+
+    let previous = 0;
+    for (const row of group) {
+      const declared = Number(row['version'] ?? 0);
+      const assigned = declared > previous ? declared : previous + 1;
+      if (assigned !== declared) {
+        row['version'] = assigned;
+        renumbered += 1;
+      }
+      previous = assigned;
+    }
+  }
+
+  return renumbered;
+}
+
+/**
  * Database configuration options
  */
 export interface DatabaseConfig {
-  /** Path to the database file (default: runtime-state/state.db) */
-  dbPath?: string;
+  /**
+   * Path to the database file. Required, with no default: the only defaultable anchor an engine
+   * could see is the package directory, which is read-only under a sandboxed MCP child and
+   * replaced by every Claude Code plugin update. The composition root resolves it through
+   * `PathResolver.getStateDatabasePath()` and hands it down.
+   */
+  dbPath: string;
   /** Enable verbose SQL logging */
   verbose?: boolean;
 }
@@ -331,40 +495,38 @@ export class SqliteEngine implements DatabasePort {
   private readonly verbose: boolean;
   private initialized: boolean = false;
 
-  private constructor(serverRoot: string, logger: Logger, config: DatabaseConfig = {}) {
+  private constructor(logger: Logger, config: DatabaseConfig) {
+    if (config.dbPath.trim() === '') {
+      // `new DatabaseSync('')` opens an anonymous temporary database, so an empty path would
+      // persist nothing while every write reported success.
+      throw new Error('SqliteEngine requires a non-empty dbPath.');
+    }
     this.logger = logger;
     this.verbose = config.verbose ?? false;
-
-    // Set paths
-    this.dbPath = config.dbPath ?? path.join(serverRoot, 'runtime-state', 'state.db');
+    this.dbPath = config.dbPath;
   }
 
   /**
    * Get or create the SqliteEngine singleton
    *
-   * A singleton drops the config of every call after the first. Five of the six call sites pass
-   * no `dbPath` and fall back to `serverRoot` — the PACKAGE directory — while the sixth passes
-   * the PathResolver-derived runtime path. Which one ran first therefore decided where
-   * `state.db` lived, and the tracker happening to initialize early is the only reason
-   * `MCP_WORKSPACE` was honored at all. Ordering is not a place to keep an invariant, so a
-   * later caller that disagrees about the path is named rather than silently ignored.
+   * A singleton drops the config of every call after the first, so every caller names the path it
+   * expects and a later caller that disagrees is refused rather than silently served another file.
+   * Until B.62 `dbPath` was optional and fell back to `serverRoot/runtime-state/state.db` — the
+   * PACKAGE directory — and six call sites relied on the composition root having opened the
+   * engine first with the right path. Which one ran first decided where `state.db` lived.
    */
-  static async getInstance(
-    serverRoot: string,
-    logger: Logger,
-    config?: DatabaseConfig
-  ): Promise<SqliteEngine> {
+  static async getInstance(logger: Logger, config: DatabaseConfig): Promise<SqliteEngine> {
     if (!SqliteEngine.instance) {
-      SqliteEngine.instance = new SqliteEngine(serverRoot, logger, config);
+      SqliteEngine.instance = new SqliteEngine(logger, config);
       return SqliteEngine.instance;
     }
 
-    const requested = config?.dbPath;
-    if (requested !== undefined && requested !== SqliteEngine.instance.dbPath) {
+    const requested = config.dbPath;
+    if (requested !== SqliteEngine.instance.dbPath) {
       throw new Error(
         `SqliteEngine is already open at ${SqliteEngine.instance.dbPath}, but a later caller ` +
-          `requested ${requested}. The composition root must claim the singleton with the ` +
-          `PathResolver-derived path before any consumer calls getInstance().`
+          `requested ${requested}. Every caller must resolve state.db through the same ` +
+          `PathResolver (getStateDatabasePath, directly or through ConfigManager).`
       );
     }
     return SqliteEngine.instance;
@@ -398,9 +560,25 @@ export class SqliteEngine implements DatabasePort {
       // Enable WAL mode for concurrent reader access (Python hooks, skills-sync CLI)
       this.db.exec('PRAGMA journal_mode=WAL');
 
+      // The per-connection pragmas every WRITER of this file sets, from the one list both writers
+      // read (`STATE_DB_WRITER_PRAGMAS`) — this server and `cpm` cannot share a module tree, so a
+      // hand-typed copy on either side is how the two would drift into disagreeing about how
+      // patient this file is, or about whether its foreign keys hold. `journal_mode` stays here:
+      // it is written into the file and persists, so it belongs to whoever creates it.
+      for (const pragma of STATE_DB_WRITER_PRAGMAS) {
+        this.db.exec(pragma);
+      }
+
       // Ensure schema is current (creates or recreates if version mismatch)
-      this.ensureSchema();
+      const schemaOutcome = this.ensureSchema();
       this.assertSchemaMatchesContracts();
+
+      // Referential check A over the v29 object store. Skipped on a database this call just
+      // created: there is nothing to check, and running it would spend two queries per boot of
+      // every fresh install to confirm that empty tables agree with each other.
+      if (schemaOutcome !== 'created') {
+        this.repairVersionTrees();
+      }
 
       this.initialized = true;
 
@@ -472,10 +650,15 @@ export class SqliteEngine implements DatabasePort {
   }
 
   /**
-   * Begin a transaction
+   * Begin a transaction.
+   *
+   * Defaults to SQLite's DEFERRED, which takes no lock until the first write — so two connections
+   * can both read, and the second to write is refused. A body that reads a value and writes it back
+   * (`MAX(version)` + INSERT) must pass `'immediate'`, which takes the write lock at BEGIN and makes
+   * the pair one unit.
    */
-  beginTransaction(): void {
-    this.run('BEGIN TRANSACTION');
+  beginTransaction(mode: TransactionMode = 'deferred'): void {
+    this.run(mode === 'immediate' ? 'BEGIN IMMEDIATE' : 'BEGIN TRANSACTION');
   }
 
   /**
@@ -495,8 +678,8 @@ export class SqliteEngine implements DatabasePort {
   /**
    * Execute multiple statements in a transaction
    */
-  async transaction<T>(fn: () => T | Promise<T>): Promise<T> {
-    this.beginTransaction();
+  async transaction<T>(fn: () => T | Promise<T>, mode: TransactionMode = 'deferred'): Promise<T> {
+    this.beginTransaction(mode);
     try {
       const result = await fn();
       this.commit();
@@ -515,8 +698,12 @@ export class SqliteEngine implements DatabasePort {
    * snapshot/restore round-trip is what lets durable rows survive while still letting
    * their DDL evolve — preserving the table in place instead would freeze its shape,
    * because applySchema uses CREATE TABLE IF NOT EXISTS.
+   *
+   * The three outcomes are named rather than returned as a boolean because a caller needs to tell
+   * "this database already existed" from "this call created it" — a startup check over rows has
+   * nothing to do in the second case, and `false` said both.
    */
-  private ensureSchema(): boolean {
+  private ensureSchema(): 'current' | 'created' | 'recreated' {
     const currentVersion = this.getCurrentSchemaVersion();
 
     if (currentVersion === SCHEMA_VERSION) {
@@ -524,7 +711,7 @@ export class SqliteEngine implements DatabasePort {
       // version-match boot otherwise (see applyViews docblock).
       this.applyViews();
       this.logger.info(`Database schema is up to date (version ${currentVersion})`);
-      return false;
+      return 'current';
     }
 
     if (currentVersion === 0) {
@@ -532,18 +719,75 @@ export class SqliteEngine implements DatabasePort {
       this.logger.info(`Schema version ${SCHEMA_VERSION} applied`);
       // Not a recreate: a fresh database has no durable rows to protect, so the purge below runs
       // as a no-op and records its marker.
-      return false;
+      return 'created';
     }
 
     this.logger.info(
       `Schema version mismatch (have ${currentVersion}, need ${SCHEMA_VERSION}), recreating...`
     );
     const preserved = this.snapshotDurableTables();
+    this.normalizeVersionHistorySnapshot(preserved);
     this.dropAllTables();
     this.applySchema();
     this.restoreDurableTables(preserved);
     this.logger.info(`Schema version ${SCHEMA_VERSION} applied`);
-    return true;
+    return 'recreated';
+  }
+
+  /**
+   * Referential check A over the v29 object store, plus its repair. Runs on every startup.
+   *
+   * An intact database logs NOTHING and writes nothing — silence is the honest output, and it is
+   * also what keeps this affordable on every boot. The decision is pure and lives in
+   * `version-tree-fsck.ts`; this method is the I/O half, which is here rather than in a versioning
+   * module because `validate:arch` forbids `infra/` from importing upward.
+   *
+   * A repair is a DEGRADE: the affected rows go back to the projection path they used at v28.
+   * Nothing here deletes a `version_history` row, so no history can be lost by a false positive —
+   * the worst outcome of a wrong verdict is a byte-exact restore downgraded to a merging one.
+   *
+   * SQL failures are not swallowed. A dangling entry is a bookkeeping fact this repairs; a
+   * database that cannot execute the repair is a different problem, and initialize() reports it.
+   */
+  private repairVersionTrees(): void {
+    const dangling = this.query<VersionTreeRow>(DANGLING_ENTRY_SQL);
+    const emptyTrees = this.query<VersionTreeRow>(EMPTY_TREE_SQL);
+    const plan = planVersionTreeRepair(dangling, emptyTrees);
+
+    if (plan.rowIds.length === 0) {
+      return;
+    }
+
+    const placeholders = plan.rowIds.map(() => '?').join(', ');
+    this.beginTransaction('immediate');
+    try {
+      // The tenants whose manifest rows are about to go, read BEFORE the delete — afterwards
+      // there is nothing left to read them from, and an object is only reachable through a
+      // manifest row of its own tenant.
+      const affected = this.query<{ tenant_id: string }>(
+        `SELECT DISTINCT tenant_id FROM version_entries WHERE version_row_id IN (${placeholders})`,
+        [...plan.rowIds]
+      );
+      this.run(`DELETE FROM version_entries WHERE version_row_id IN (${placeholders})`, [
+        ...plan.rowIds,
+      ]);
+      this.run(`UPDATE version_history SET tree_hash = NULL WHERE id IN (${placeholders})`, [
+        ...plan.rowIds,
+      ]);
+      // Same class as the prune and both deletes: a path that drops manifest rows must drop the
+      // objects they were the last reference to, in the same transaction. This repair is the one
+      // member of that class that removes no `version_history` row, which is exactly why a search
+      // for `DELETE FROM version_history` would have missed it.
+      for (const { tenant_id: tenantId } of affected) {
+        sweepUnreferencedObjects(this, tenantId);
+      }
+      this.commit();
+    } catch (error) {
+      this.rollback();
+      throw error;
+    }
+
+    this.logger.info(describeVersionTreeRepair(plan));
   }
 
   /**
@@ -586,6 +830,27 @@ export class SqliteEngine implements DatabasePort {
     }
 
     return snapshot;
+  }
+
+  /**
+   * Make the snapshotted `version_history` rows satisfy v28's unique key before they are restored.
+   *
+   * The boundary for the pure renumbering above: it decides, this logs. One line, with the count,
+   * because an operator whose rollback history was silently re-numbered deserves to see it in the
+   * startup log — and silence is the honest output when nothing collided.
+   */
+  private normalizeVersionHistorySnapshot(snapshot: DurableSnapshot): void {
+    const rows = snapshot.get('version_history');
+    if (rows === undefined) {
+      return;
+    }
+    const renumbered = renumberDuplicateVersionHistory(rows);
+    if (renumbered > 0) {
+      this.logger.info(
+        `version_history: renumbered ${renumbered} row(s) that shared a version with another row ` +
+          'in the same history (schema v28 unique key); no rows were discarded.'
+      );
+    }
   }
 
   /**
@@ -748,7 +1013,79 @@ export class SqliteEngine implements DatabasePort {
         snapshot TEXT NOT NULL,
         diff_summary TEXT DEFAULT '',
         description TEXT DEFAULT '',
-        created_at TEXT NOT NULL
+        created_at TEXT NOT NULL,
+        -- v29: the hash of this row's recorded file set, or NULL for a projection-only row.
+        -- A CACHE over version_entries, which is authoritative -- it buys O(1) "did anything
+        -- change" and gives the startup check a recomputable claim. Nullable with NO DDL DEFAULT,
+        -- the chain_run_nodes.origin precedent: validate:no-phantom-columns exempts defaulted
+        -- columns, so a default would hide a dropped writer from the gate built to catch it.
+        -- NULL is a real value -- the row restores through SnapshotContract, as every pre-v29 row
+        -- does -- so nothing here is backfilled.
+        tree_hash TEXT,
+        -- v29: which root class the recorded bytes were read FROM -- one of the file-set
+        -- enumerator's four values, 'primary' | 'overlay' | 'bundled' | 'unknown'. Not validated
+        -- by a CHECK, for the same reason no other vocabulary column in this schema carries one:
+        -- the owning enumerator is the SSOT and a second copy here would drift from it.
+        --
+        -- It exists because a restore is not root-agnostic. Bytes recorded from the BUNDLED
+        -- catalog restore into the workspace as a NEW override, which is a different act from
+        -- restoring a workspace file over itself, and the preview has to say so. Deriving it at
+        -- restore time is not available: the roots are resolved per process, so a row written
+        -- under one root layout would be re-classified under another.
+        --
+        -- NULL iff tree_hash is NULL -- a projection-only row read no root. Nullable with no DDL
+        -- DEFAULT, the same reasoning as tree_hash: a default would exempt it from
+        -- validate:no-phantom-columns, and 'primary' is exactly the value a dropped writer would
+        -- be papered over with.
+        tree_origin TEXT
+      );
+
+      -- v29: content-addressed file bytes, keyed PER WORKSPACE.
+      --
+      -- The key is (tenant_id, hash), not hash alone: one state.db serves every project on the
+      -- machine, and a global key would make one workspace's blob the storage for another's
+      -- identical file. Cross-workspace dedup is the thing given up, deliberately; in exchange
+      -- there is no surface, even in principle, on which one workspace can observe that another
+      -- holds a given byte sequence. tenant_id is the value the OWNING version_history row
+      -- carries, resolved once and passed down -- never re-derived here.
+      CREATE TABLE IF NOT EXISTS objects (
+        tenant_id TEXT NOT NULL,
+        -- 'sha256:<hex>'. Content-addressed, so an identical file written twice is one row.
+        hash TEXT NOT NULL,
+        bytes BLOB NOT NULL,
+        -- length(bytes), redundant by construction and cheap: it is the integrity check that
+        -- costs no re-hash, so a truncated BLOB round-trip is visible without reading every byte.
+        size INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (tenant_id, hash)
+      );
+
+      -- v29: the manifest. One row per (version row, path) -- this IS the tree, as a table rather
+      -- than as a parseable object, so reachability is one SQL predicate instead of a recursive
+      -- walk over blobs that can themselves fail to parse.
+      --
+      -- FOREIGN KEYS ARE LIVE ON BOTH WRITERS, contrary to what a grep for PRAGMA foreign_keys
+      -- over this repo suggests: node:sqlite's DatabaseSync enables them by default, and both writing
+      -- openers are DatabaseSync. So the CASCADE fires and the RESTRICT refuses, today. The
+      -- Python hooks open read-only through sqlite3, where the default is off -- a reader cannot
+      -- violate a constraint.
+      --
+      -- Do NOT read that as "the cascade can be relied on to prune entries": it is a per-CONNECTION
+      -- driver default, not something this repo asserts, and any opener that turns it off writes
+      -- into the same file. A prune should delete its entries explicitly, and the startup
+      -- referential check is what finds the rows an opener without constraints left behind.
+      CREATE TABLE IF NOT EXISTS version_entries (
+        version_row_id INTEGER NOT NULL REFERENCES version_history(id) ON DELETE CASCADE,
+        -- Denormalised from the owning version_history row so the object reference can be a
+        -- single composite key. It is not a second scope channel: it is one half of the foreign
+        -- key below, and the only value it may ever hold is the parent row's own tenant_id.
+        tenant_id TEXT NOT NULL,
+        -- POSIX, RELATIVE to the resource's root directory. Never absolute: a restore re-roots
+        -- onto the primary resource root, and an absolute path would write outside it.
+        path TEXT NOT NULL,
+        object_hash TEXT NOT NULL,
+        PRIMARY KEY (version_row_id, path),
+        FOREIGN KEY (tenant_id, object_hash) REFERENCES objects(tenant_id, hash) ON DELETE RESTRICT
       );
 
       CREATE TABLE IF NOT EXISTS resource_changes (
@@ -884,7 +1221,7 @@ export class SqliteEngine implements DatabasePort {
         -- statements never outlives the process at all.
         interrupts_raised INTEGER,
         remainders_accepted INTEGER,
-        -- Delegation handoff evidence (v28, replacing the v24 acknowledgment boolean).
+        -- Delegation handoff evidence (v30, replacing the v24 acknowledgment boolean).
         -- Bound at capture time by StepCaptureService for EVERY delegated step, in both
         -- evidence modes: the REASON the resume was or was not acceptable, as
         -- resolveHandoffEvidenceReason returned it. 'ok' — the HANDOFF RESULT trailer named
@@ -915,6 +1252,15 @@ export class SqliteEngine implements DatabasePort {
       CREATE INDEX IF NOT EXISTS idx_resource_changes_tenant ON resource_changes(tenant_id, timestamp);
       CREATE INDEX IF NOT EXISTS idx_ssm_client_scope ON skills_sync_manifests(client, scope);
       CREATE INDEX IF NOT EXISTS idx_version_history_resource ON version_history(tenant_id, resource_type, resource_id);
+      -- A version number is an IDENTITY within a resource's history, not an attribute of a row:
+      -- every reader selects by it (getVersion, compareVersions, rollback), so two rows sharing
+      -- one makes those reads return whichever SQLite reached first. This index is also the gate
+      -- that closes the class — it refuses a duplicate from ANY writer, including one nobody
+      -- enumerated, which a name-keyed source scan could not do.
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_version_history_key ON version_history(tenant_id, resource_type, resource_id, version);
+      -- The reachability index: the sweep and the startup check both ask "is this object
+      -- referenced by any entry in this workspace", which is exactly this key.
+      CREATE INDEX IF NOT EXISTS idx_version_entries_object ON version_entries(tenant_id, object_hash);
       CREATE INDEX IF NOT EXISTS idx_version_history_workspace ON version_history(workspace_id);
       CREATE INDEX IF NOT EXISTS idx_version_history_organization ON version_history(organization_id);
       CREATE INDEX IF NOT EXISTS idx_resource_changes_workspace ON resource_changes(workspace_id);
@@ -1136,13 +1482,6 @@ export class SqliteEngine implements DatabasePort {
       const msg = error instanceof Error ? error.message : String(error);
       this.logger.warn(`WAL checkpoint skipped during shutdown: ${msg}`);
     }
-  }
-
-  /**
-   * Get database file path (for testing/debugging)
-   */
-  getDbPath(): string {
-    return this.dbPath;
   }
 
   /**

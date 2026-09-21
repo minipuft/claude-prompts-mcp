@@ -125,18 +125,6 @@ describe('YAML Framework Loading', () => {
     });
   });
 
-  describe('YAML Loading Fail-Fast Behavior', () => {
-    it('loader provides stats for monitoring', () => {
-      const loader = getDefaultRuntimeLoader();
-      const stats = loader.getStats();
-
-      expect(stats).toBeDefined();
-      expect(typeof stats.cacheSize).toBe('number');
-      expect(typeof stats.cacheHits).toBe('number');
-      expect(typeof stats.cacheMisses).toBe('number');
-    });
-  });
-
   // Tier 3.3/3.4 of plans/phase-guard-declaration-contract-2026-08-15.md: wires the
   // previously-dead validatePhasesSchema (F1) into the loader so a guards block with
   // no section_header is refused at load, instead of reaching the runtime evaluator
@@ -247,7 +235,10 @@ describe('YAML Framework Loading', () => {
         expect(definition).toBeDefined();
       }
 
-      expect(loader.getStats().loadErrors).toBe(0);
+      // `getStats().loadErrors` had no production caller and was deleted (R36, unreached-methods
+      // baseline, 2026-09-17); quarantine is the live equivalent — a validator that newly
+      // refuses a shipped resource records it there.
+      expect(loader.getQuarantine().size).toBe(0);
       resetDefaultRuntimeLoader();
     });
   });

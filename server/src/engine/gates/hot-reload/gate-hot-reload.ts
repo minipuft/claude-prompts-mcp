@@ -15,7 +15,7 @@ import type { Logger } from '#infra/logging/index.js';
 import type { GateRegistry } from '../registry/gate-registry.js';
 import type {
   GateActivationRules,
-  GateDefinitionYaml,
+  LoadedGateDefinition,
   GatePassCriteria,
   GateRetryConfig,
 } from '../types.js';
@@ -155,6 +155,29 @@ export class GateHotReloadCoordinator {
   }
 
   /**
+   * Unregister every runtime gate whose definition is no longer in any root.
+   *
+   * The deletion half of a reconciliation, mirroring `FrameworkHotReloadCoordinator.reconcile`: a
+   * gate created and removed before its folder was watched was registered by its create and never
+   * announced as gone. Only `yaml-runtime` entries are considered, so a `temporary` gate or one
+   * registered in code is never mistaken for a missing file.
+   *
+   * @returns the ids that were unregistered
+   */
+  async reconcile(): Promise<string[]> {
+    const removed: string[] = [];
+    for (const entry of this.registry.getGuideEntries(false)) {
+      const gateId = entry.guide.gateId.toLowerCase();
+      if (entry.source !== 'yaml-runtime' || this.loader.gateExists(gateId)) {
+        continue;
+      }
+      await this.handleGateDeletion(gateId);
+      removed.push(gateId);
+    }
+    return removed;
+  }
+
+  /**
    * Handle gate deletion - unregister from registry
    */
   private async handleGateDeletion(gateId: string): Promise<void> {
@@ -213,7 +236,7 @@ export class GateHotReloadCoordinator {
       }
 
       // Step 3: Create new guide from definition
-      const normalizedDefinition: GateDefinitionYaml = {
+      const normalizedDefinition: LoadedGateDefinition = {
         id: definition.id,
         name: definition.name,
         type: definition.type,
@@ -229,24 +252,18 @@ export class GateHotReloadCoordinator {
       if (definition.guidance) {
         normalizedDefinition.guidance = definition.guidance;
       }
+      if (definition.subject) {
+        normalizedDefinition.subject = definition.subject;
+      }
       if (definition.pass_criteria) {
         normalizedDefinition.pass_criteria = definition.pass_criteria.map((criteria) => {
           const normalizedCriteria: GatePassCriteria = {
             type: criteria.type,
           };
 
-          if (criteria.min_length !== undefined) {
-            normalizedCriteria.min_length = criteria.min_length;
-          }
-          if (criteria.max_length !== undefined) {
-            normalizedCriteria.max_length = criteria.max_length;
-          }
-          if (criteria.required_patterns) {
-            normalizedCriteria.required_patterns = criteria.required_patterns;
-          }
-          if (criteria.forbidden_patterns) {
-            normalizedCriteria.forbidden_patterns = criteria.forbidden_patterns;
-          }
+          // min_length/max_length/required_patterns/forbidden_patterns/regex_patterns/
+          // keyword_count are deliberately not copied — they were never evaluated (B9) and
+          // are rejected at load, so GatePassCriteria no longer declares them.
           if (criteria.framework) {
             normalizedCriteria.framework = criteria.framework;
           }
@@ -270,18 +287,6 @@ export class GateHotReloadCoordinator {
               qualityIndicators[indicator] = normalizedIndicator;
             }
             normalizedCriteria.quality_indicators = qualityIndicators;
-          }
-          if (criteria.prompt_template) {
-            normalizedCriteria.prompt_template = criteria.prompt_template;
-          }
-          if (criteria.pass_threshold !== undefined) {
-            normalizedCriteria.pass_threshold = criteria.pass_threshold;
-          }
-          if (criteria.regex_patterns) {
-            normalizedCriteria.regex_patterns = criteria.regex_patterns;
-          }
-          if (criteria.keyword_count) {
-            normalizedCriteria.keyword_count = criteria.keyword_count;
           }
 
           return normalizedCriteria;
@@ -336,31 +341,6 @@ export class GateHotReloadCoordinator {
       this.logger.error(`Failed to hot reload gate '${gateId}':`, error);
       throw error;
     }
-  }
-
-  /**
-   * Get hot reload statistics
-   */
-  getStats(): GateHotReloadStats {
-    return { ...this.stats };
-  }
-
-  /**
-   * Reset statistics
-   */
-  resetStats(): void {
-    this.stats = {
-      reloadsAttempted: 0,
-      reloadsSucceeded: 0,
-      reloadsFailed: 0,
-    };
-  }
-
-  /**
-   * Get the definition loader being used
-   */
-  getLoader(): GateDefinitionLoader {
-    return this.loader;
   }
 }
 

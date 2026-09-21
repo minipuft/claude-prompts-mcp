@@ -2,7 +2,7 @@ import { describe, test, expect, beforeEach, jest } from '@jest/globals';
 
 import { PromptExecutor } from '../../../../src/mcp/tools/prompt-engine/core/prompt-executor.js';
 
-import type { ConfigManager } from '../../../../src/infra/config/index.js';
+import type { ConfigManager } from '../../../../src/shared/types/config-manager.js';
 import type { Logger } from '../../../../src/infra/logging/index.js';
 import type { PromptAssetManager } from '../../../../src/modules/prompts/index.js';
 import type { ContentAnalyzer as SemanticAnalyzer } from '../../../../src/modules/semantic/content-analyzer.js';
@@ -27,10 +27,20 @@ const mockConfigManager: ConfigManager = {
     server: { name: 'test', version: '1.0.0' },
     gates: {},
     frameworks: {},
+    identity: { mode: 'permissive', allowPerRequestOverride: true, launchDefaults: {} },
   }),
   getFrameworksConfig: jest.fn().mockReturnValue({}),
   getChainSessionConfig: jest.fn().mockReturnValue(undefined),
   getServerRoot: jest.fn().mockReturnValue(process.cwd()),
+  // Never the package directory: an unwritable path makes any unexpected write fail loudly.
+  getRuntimeStateDirectory: jest.fn().mockReturnValue('/nonexistent-runtime-root/runtime-state'),
+  getSchemaValidation: () => undefined,
+  getConfigValueWithSource: jest.fn().mockReturnValue({
+    key: 'server.port',
+    value: undefined,
+    source: 'default',
+  }),
+  listConfigKeys: jest.fn().mockResolvedValue([]),
   on: jest.fn(),
   off: jest.fn(),
 } as any;
@@ -49,7 +59,6 @@ const mockSemanticAnalyzer: SemanticAnalyzer = {
 const mockTextReferenceStore: TextReferenceStore = {
   storeChainStepResult: jest.fn(),
   getChainStepResults: jest.fn().mockReturnValue({}),
-  getChainStepResult: jest.fn().mockReturnValue(null),
   getChainStepMetadata: jest.fn().mockReturnValue(null),
   buildChainVariables: jest.fn().mockReturnValue({}),
   clearChainStepResults: jest.fn(),

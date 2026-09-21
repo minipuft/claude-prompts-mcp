@@ -23,7 +23,6 @@ export class AnalyticsActionHandler extends ActionHandler {
       default:
         return await this.getAnalytics({
           include_history: args.include_history,
-          reset_analytics: args.reset_analytics,
         });
     }
   }
@@ -53,7 +52,9 @@ export class AnalyticsActionHandler extends ActionHandler {
     this.resetAnalyticsData();
 
     if (this.frameworkStateStore) {
-      this.frameworkStateStore.resetMetrics();
+      // The caller's workspace, as this handler's status read is scoped. Unscoped, a reset
+      // from one workspace cleared the launch workspace's counters instead.
+      this.frameworkStateStore.resetMetrics(this.requestScope);
     }
 
     let response = `# 🔄 Metrics Reset Completed\n\n`;
@@ -113,16 +114,57 @@ export class AnalyticsActionHandler extends ActionHandler {
     return this.createMinimalSystemResponse(response, 'switch_history');
   }
 
-  private async getAnalytics(args: {
-    include_history?: boolean;
-    reset_analytics?: boolean;
-  }): Promise<ToolResponse> {
-    const { include_history = false, reset_analytics = false } = args;
+  /**
+   * A gate's pass/fail tally across the ledger page, plus the number of reviewed records.
+   *
+   * `gateValidationCount` had no writer anywhere — it was initialized to `0` here and in the
+   * router and read only by the report, so "Gate Validations: 0" and "Gate Adoption Rate: 0%"
+   * were printed on a server that had run hundreds of gated steps (P4.77). It is now refreshed
+   * from `execution_records`, which since P4.76 carries the reviewer's per-gate verdicts.
+   *
+   * Refreshed on read rather than incremented on write: the ledger already holds every verdict
+   * with its own scope filter, and a second running counter would be a fact with two sources
+   * that drift apart on restart, since the counter is in memory and the ledger is not.
+   */
+  private tallyGateVerdicts(): {
+    reviewedRecords: number;
+    attestations: number;
+    byGate: Map<string, { passed: number; failed: number }>;
+  } {
+    const byGate = new Map<string, { passed: number; failed: number }>();
+    let reviewedRecords = 0;
+    let attestations = 0;
 
-    if (reset_analytics) {
-      this.resetAnalyticsData();
-      return this.createMinimalSystemResponse('📊 Analytics have been reset to zero.', 'analytics');
+    for (const record of this.context.executionRecordStore?.queryRecent(
+      undefined,
+      this.requestScope
+    ) ?? []) {
+      const verdicts = record.gateVerdicts;
+      if (verdicts.length === 0) continue;
+      reviewedRecords += 1;
+      for (const verdict of verdicts) {
+        // A reminder has no evaluator — the reviewer attests to it. Counting one beside an
+        // evaluated check would average a self-declaration into a pass rate, so it is listed
+        // as an attestation and never as a pass.
+        if (verdict.tier === 'reminder') {
+          attestations += 1;
+          continue;
+        }
+        const tally = byGate.get(verdict.gateId) ?? { passed: 0, failed: 0 };
+        if (verdict.verdict === 'PASS') tally.passed += 1;
+        else tally.failed += 1;
+        byGate.set(verdict.gateId, tally);
+      }
     }
+
+    return { reviewedRecords, attestations, byGate };
+  }
+
+  private async getAnalytics(args: { include_history?: boolean }): Promise<ToolResponse> {
+    const { include_history = false } = args;
+
+    const gateTally = this.tallyGateVerdicts();
+    this.context.systemAnalytics.gateValidationCount = gateTally.reviewedRecords;
 
     const analytics = this.context.systemAnalytics;
     const successRate = this.getSuccessRate();
@@ -156,6 +198,21 @@ export class AnalyticsActionHandler extends ActionHandler {
         ? Math.round((analytics.gateValidationCount / analytics.totalExecutions) * 100)
         : 0
     }%\n`;
+
+    // Per gate, not just a total: a 90% adoption rate over one gate that always passes and one
+    // that always fails is two different systems, and the total cannot tell them apart. Omitted
+    // entirely when no record carries a verdict, so the section appears only once there is
+    // something in it.
+    if (gateTally.byGate.size > 0) {
+      response += '\n**Per-Gate Outcomes** (reviewed steps in the ledger)\n\n';
+      for (const [gateId, tally] of gateTally.byGate) {
+        response += `- \`${gateId}\`: ${tally.passed} passed / ${tally.failed} failed\n`;
+      }
+    }
+    if (gateTally.attestations > 0) {
+      response += `\n**Reminder Attestations**: ${gateTally.attestations} (self-declared, not graded)\n`;
+    }
+    response += '\n';
 
     if (analytics.memoryUsage) {
       response += '## 💾 System Resources\n\n';

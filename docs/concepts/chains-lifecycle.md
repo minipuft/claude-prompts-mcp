@@ -417,6 +417,10 @@ Resubmit with chain_id and user_response containing that block.
 ````
 
 Setting `execution.delegation.evidence: advisory` accepts the same reply instead of refusing it.
+It is an ordinary settable config key — `cpm config set execution.delegation.evidence advisory`
+writes it into your workspace config file, and that write is recorded as a config version like any
+other, so `cpm config rollback` can undo it. See the
+[configuration reference](../reference/configuration.md).
 In both modes, every delegated step's execution record carries a `handoff_evidence` reason: `ok`
 (the trailer named this node), `trailer` (no `HANDOFF RESULT` heading), `node-line` (a heading
 with no `node:` line), or `node-mismatch` (a `node:` line naming some other node). A step that

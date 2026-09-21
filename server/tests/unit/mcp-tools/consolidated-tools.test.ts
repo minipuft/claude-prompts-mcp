@@ -55,6 +55,7 @@ describe('Consolidated MCP tool factories', () => {
         gates: {
           definitionsDirectory: 'gates',
         },
+        identity: { mode: 'permissive', allowPerRequestOverride: true, launchDefaults: {} },
       }),
       getPromptsDirectory: () => '/test/prompts',
       getResolvedPromptsDirectory: () => '/test/prompts',
@@ -64,10 +65,12 @@ describe('Consolidated MCP tool factories', () => {
         enableDynamicToolDescriptions: false,
       }),
       getServerRoot: () => process.cwd(),
+      // Never the package directory: an unwritable path makes any unexpected write fail loudly.
+      getRuntimeStateDirectory: () => '/nonexistent-runtime-root/runtime-state',
       getVersioningConfig: () => ({
         enabled: true,
-        max_versions: 50,
-        auto_version: true,
+        maxVersions: 50,
+        autoVersion: true,
       }),
       on: () => {},
     };
@@ -75,7 +78,6 @@ describe('Consolidated MCP tool factories', () => {
     const mockTextReferenceStore = {
       storeChainStepResult: () => {},
       getChainStepResults: () => ({}),
-      getChainStepResult: () => null,
       getChainStepMetadata: () => null,
       buildChainVariables: () => ({}),
       clearChainStepResults: () => {},

@@ -23,6 +23,9 @@ export * from './metrics.js';
 // Injection control types and defaults (cross-cutting: infra/config + engine/injection)
 export * from './injection.js';
 
+// system_control action vocabulary (cross-cutting: engine/tool-routing + mcp/system-control)
+export * from './system-control.js';
+
 // Chain session types (cross-cutting: engine + modules + mcp)
 export {
   type ChainSession,
@@ -41,6 +44,7 @@ export {
   type GateReviewHistoryEntry,
   type GateReviewExecutionContext,
   type GateReviewPrompt,
+  type GateVerdictSummary,
   type PendingGateReview,
   type FormatterExecutionContext,
   type ChainNode,
@@ -63,16 +67,12 @@ import type { ContentAnalysisResult } from './core-config.js';
 import type { StateStoreOptions } from './persistence.js';
 
 export type {
-  AdvancedConfig,
-  AnalysisConfig,
   BaseMessageContent,
   ChainSessionConfig,
   Config,
   ExecutionConfig,
   FrameworkInjectionConfig,
   ResolvedFrameworkConfig,
-  LLMIntegrationConfig,
-  LLMProvider,
   LoggingConfig,
   Message,
   MessageContent,
@@ -80,7 +80,6 @@ export type {
   FrameworkSettings,
   PromptsConfig,
   ResourcesConfig,
-  SemanticAnalysisConfig,
   ServerConfig,
   TextMessageContent,
   ToolDescriptionsOptions,
@@ -101,7 +100,11 @@ export type {
   TelemetryAttributePolicy,
   TelemetryConfig,
 } from './core-config.js';
-export { DEFAULT_VERSIONING_CONFIG, DEFAULT_TELEMETRY_CONFIG } from './core-config.js';
+export {
+  DEFAULT_VERSIONING_CONFIG,
+  DEFAULT_TELEMETRY_CONFIG,
+  DEFAULT_GATES_CONFIG,
+} from './core-config.js';
 
 // Request identity types (workspace/organization scoping)
 export type {
@@ -149,10 +152,6 @@ export interface PromptArgument {
   };
 }
 
-// GatesConfig (shared-layer) re-exported from core-config as GateSystemSettings.
-// Aliased here for backward compatibility.
-export { type GateSystemSettings as GatesConfig } from './core-config.js';
-
 // ContentAnalysisResult is now exported from ./core-config.js above.
 
 // VersioningConfig and DEFAULT_VERSIONING_CONFIG are now exported from ./core-config.js above.
@@ -187,14 +186,6 @@ export interface ToolDescription {
   parameters?: Record<string, ToolParameter | string>;
   shortDescription?: string;
   category?: string;
-  frameworkAware?: {
-    enabled?: string;
-    disabled?: string;
-    parametersEnabled?: Record<string, ToolParameter | string>;
-    parametersDisabled?: Record<string, ToolParameter | string>;
-    frameworks?: Record<string, string>;
-    frameworkParameters?: Record<string, Record<string, ToolParameter | string>>;
-  };
 }
 
 export interface ToolDescriptionsConfig {
@@ -337,6 +328,56 @@ export type ChangeSource = 'filesystem' | 'mcp-tool' | 'external';
 
 /** Type of tracked resource */
 export type TrackedResourceType = 'prompt' | 'gate';
+
+/** Kind of change recorded against a resource */
+export type ChangeOperation = 'added' | 'modified' | 'removed';
+
+/** Individual change entry in the audit log */
+export interface ResourceChangeEntry {
+  timestamp: string;
+  source: ChangeSource;
+  operation: ChangeOperation;
+  resourceType: TrackedResourceType;
+  resourceId: string;
+  filePath: string;
+  contentHash: string;
+  previousHash?: string;
+}
+
+/** Parameters for recording one change */
+export interface LogChangeParams {
+  source: ChangeSource;
+  operation: ChangeOperation;
+  resourceType: TrackedResourceType;
+  resourceId: string;
+  filePath: string;
+  content?: string;
+}
+
+/** Query parameters for reading back recorded changes */
+export interface GetChangesParams {
+  limit?: number;
+  source?: ChangeSource;
+  resourceType?: TrackedResourceType;
+  since?: string;
+  resourceId?: string;
+}
+
+/**
+ * The write-and-read surface of the resource change audit log.
+ *
+ * The concrete implementation is `ResourceChangeTracker` in infra/observability/tracking/, which
+ * owns a SQLite connection and a hash cache; the composition root registers it through
+ * `shared/core/resource-change-log.js`. mcp/ tools depend on this interface rather than on either
+ * of those, for the same reason `ApiRouterPort` exists above: a layer that names the concrete
+ * holder has taken a dependency on how the application is assembled.
+ */
+export interface ResourceChangeLogPort {
+  /** Record one change. Implementations persist; callers treat failure as non-fatal. */
+  logChange(params: LogChangeParams): Promise<void>;
+  /** Read back recorded changes, newest first. */
+  getChanges(params?: GetChangesParams): Promise<ResourceChangeEntry[]>;
+}
 
 // Automation/script-tool types (cross-layer: engine + modules)
 export * from './automation.js';
@@ -509,6 +550,19 @@ export interface HookRegistryPort {
     context: PipelineHookContext
   ): Promise<void>;
   emitResponseBlocked(gateIds: string[], context: PipelineHookContext): Promise<void>;
+  /**
+   * The chain emissions belong here for the same reason the gate ones do: the services that
+   * own the chain lifecycle facts -- `engine/execution/capture` for a step's completion and
+   * `modules/chains` for the run's terminal status -- hold the registry as this port.
+   */
+  emitStepComplete(
+    chainId: string,
+    stepIndex: number,
+    output: string,
+    context: PipelineHookContext
+  ): Promise<void>;
+  emitChainComplete(chainId: string, context: PipelineHookContext): Promise<void>;
+  emitChainFailed(chainId: string, reason: string, context: PipelineHookContext): Promise<void>;
 }
 
 /** Gate failure notification payload. */
@@ -541,6 +595,41 @@ export interface RetryExhaustedNotification {
   maxAttempts: number;
 }
 
+/** Active-framework change notification payload. */
+export interface FrameworkChangedNotification {
+  /** Previous framework ID (if any) */
+  from?: string;
+  /** New framework ID */
+  to: string;
+  /** Reason for the change */
+  reason: string;
+}
+
+/** Chain step complete notification payload. */
+export interface ChainStepCompleteNotification {
+  /** Chain ID */
+  chainId: string;
+  /** Step index that completed (1-based ordinal, matching the rendered step numbering) */
+  stepIndex: number;
+  /** Whether the step passed or failed */
+  status: 'passed' | 'failed';
+}
+
+/** Chain run terminal notification payload. */
+export interface ChainCompleteNotification {
+  /** Chain ID */
+  chainId: string;
+  /** Total steps in the run */
+  totalSteps: number;
+  /**
+   * Terminal run status. Carries `cancelled` as well as `completed`/`failed` because
+   * `cancelled` is one of the three sticky terminal statuses a run can reach
+   * (`TERMINAL_RUN_STATUSES`); collapsing it onto `failed` would tell a client a run
+   * errored when an operator ended it.
+   */
+  status: 'completed' | 'failed' | 'cancelled';
+}
+
 /**
  * MCP notification emitter interface (mcp/ contract).
  * mcp/ stores and forwards to engine/ pipeline stages.
@@ -557,6 +646,12 @@ export interface McpNotificationEmitterPort {
   emitGateFailed(notification: GateFailedNotification): void;
   emitResponseBlocked(notification: ResponseBlockedNotification): void;
   emitRetryExhausted(notification: RetryExhaustedNotification): void;
+  /** `engine/frameworks` holds the emitter as this port and announces a persisted switch. */
+  emitFrameworkChanged(notification: FrameworkChangedNotification): void;
+  /** `engine/execution/capture` announces a captured step. */
+  emitChainStepComplete(notification: ChainStepCompleteNotification): void;
+  /** `modules/chains` announces a run that reached a terminal status. */
+  emitChainComplete(notification: ChainCompleteNotification): void;
 }
 
 // ===== Hot Reload Types =====

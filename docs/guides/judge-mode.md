@@ -57,7 +57,7 @@ evaluation:
 
 ### Global Defaults
 
-In `framework.yaml` or `config.json`:
+In `framework.yaml` or your config file (`config.jsonc`, or `config.json`):
 
 ```yaml
 gates:

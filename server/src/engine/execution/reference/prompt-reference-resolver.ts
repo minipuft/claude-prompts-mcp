@@ -263,14 +263,6 @@ export class PromptReferenceResolver {
   }
 
   /**
-   * Check if a template contains any {{ref:...}} patterns.
-   */
-  hasReferences(template: string): boolean {
-    REFERENCE_PATTERN.lastIndex = 0;
-    return REFERENCE_PATTERN.test(template);
-  }
-
-  /**
    * Find a prompt by ID in the registry.
    */
   private findPrompt(promptId: string): ConvertedPrompt | undefined {

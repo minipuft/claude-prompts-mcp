@@ -11,66 +11,100 @@
  * That divergence is the defect this module exists to prevent. Measured 2026-08-29 against a live
  * STDIO server: the loaders served 119 prompts across 16 categories while `resource_index` held
  * 78 across 11, because the indexer walked only the primary root. Every Python hook reads the
- * index, so `strategicImplement` and `design_muse` — bundled, loaded, executable — did not exist
+ * index, so `strategic_implement` and `design_muse` — bundled, loaded, executable — did not exist
  * as far as the prompt router was concerned.
  *
  * Callers that need precedence-ordered directories use {@link orderedResourceRoots}; callers
  * feeding a loader's `{primary, additional[]}` shape use {@link ResourceRoots} directly.
  */
 
+import { existsSync } from 'node:fs';
+
 import type { ResourceRootMap } from '#infra/database/resource-indexer.js';
+import type { ResourceType } from '#modules/versioning/types.js';
+import type {
+  ResourceFileLocatorPort,
+  ResourceLocationResult,
+} from '#shared/utils/resource-file-set.js';
 import type { PathResolver } from './paths.js';
+
+import { locateResourceEntry, resourceEntryFileName } from '#shared/utils/resource-file-set.js';
+import { resourceRootPrecedence } from '#shared/utils/resource-root-lookup.js';
 
 /** Every directory that contributes definitions of one resource type, in precedence order. */
 export interface ResourceRoots {
-  /** The root the loader treats as primary; a same-id definition here wins. */
+  /** The writable root: where a `resource_manager` write lands, and what the inventory reports. */
   primary: string | undefined;
-  /** Workspace directories layered over the primary. */
+  /**
+   * Workspace directories layered over the primary. Highest precedence, later entry wins.
+   *
+   * Includes a candidate that does not exist yet: every consumer of this set fixes it once, at
+   * startup, and an overlay created later must still be read and watched. An absent root reads
+   * as empty. Report only the ones that exist ({@link existingOverlays}).
+   */
   overlays: string[];
-  /** The package's own directory, when it is a source distinct from the primary. */
+  /** The package's own directory, when it is a source distinct from the primary. Lowest. */
   bundled: string | undefined;
-  /** What the loader takes as its fallback list: overlays, then the bundled tree last. */
-  additional: string[];
+  /**
+   * The loader's lookup list: EVERY contributing root, highest precedence first — primary included.
+   *
+   * It was called `additional` for the loader config key it feeds (`additionalGatesDirs` and its
+   * two siblings), and that name stopped describing the contents at P4.27: the primary is neither
+   * the top nor the bottom of the order, so a list that omitted it could not say where it sits.
+   * Renamed here, at the producing end. The three config keys keep their names — renaming them
+   * reaches `mcp/tools/prompt-engine/core/prompt-executor.ts` and ~30 test call sites for no
+   * behaviour change, and each loader's config docstring now states that the primary is inside the
+   * list it receives.
+   */
+  lookupDirs: string[];
 }
 
 /**
  * Resolve the contributing roots for one resource type.
  *
- * Pure apart from the resolver's own `existsSync` probes. The bundled directory goes LAST in
- * `additional`, not into `overlays`: all three loaders resolve an id as `primary ?? additional[0]
- * ?? …`, so trailing it yields "workspace wins, bundled definitions stay reachable" — the
- * semantics `src/index.ts`'s help has always documented but the code did not implement. Omitted
- * entirely on an ordinary install, where the primary already IS the bundle.
+ * Which directories contribute is decided here; their ORDER is decided by
+ * `resourceRootPrecedence` in `shared/`. This was one of TWO callers until P4.31 — the pipeline
+ * derived the style roots a second time for a style loader of its own, and the two could only
+ * agree by inspection. That second derivation and the second loader behind it are gone; the
+ * composition root resolves the style roots once, here.
+ *
+ * Until P4.27 the three flat-layout loaders resolved `primary ??
+ * additional` and the docstring here justified it as "workspace wins"; that held only while the
+ * workspace WAS the primary, so an operator's `<workspace>/gates/foo` lost to
+ * `<workspace>/resources/gates/foo` while their `<workspace>/prompts/foo` won. Two answers to one
+ * question.
+ *
+ * Pure apart from the resolver's own `existsSync` probes.
  */
 export function resolveResourceRoots(
   pathResolver: PathResolver | undefined,
   resourceType: string,
   primary: string | undefined
 ): ResourceRoots {
-  const overlays = pathResolver?.getOverlayResourceDirs(resourceType, primary) ?? [];
+  const overlays = pathResolver?.getOverlayResourceCandidates(resourceType, primary) ?? [];
   const candidate = pathResolver?.getBundledResourceDir(resourceType);
   const bundled = candidate !== undefined && candidate !== primary ? candidate : undefined;
-  const additional =
-    bundled !== undefined && !overlays.includes(bundled) ? [...overlays, bundled] : overlays;
-  return { primary, overlays, bundled, additional };
+  const lookupDirs = resourceRootPrecedence({ primary, overlays, bundled });
+  return { primary, overlays, bundled, lookupDirs };
+}
+
+/** The overlays that exist right now — what an inventory line may honestly report. */
+export function existingOverlays(roots: ResourceRoots): string[] {
+  return roots.overlays.filter((dir) => existsSync(dir));
 }
 
 /**
- * The same roots as a flat list ordered LOWEST precedence first, deduplicated.
+ * The same roots as a flat list ordered LOWEST precedence first.
  *
- * `ResourceRoots.additional` is a loader fallback list — a lookup order, where the first hit wins
- * and the bundled tree therefore trails. A consumer that instead *accumulates* (the indexer scans
- * every root into one map) needs the opposite arrangement: bundled first so a later root's
- * same-id definition overwrites it. Reusing `additional` there would index the bundled copy over
- * the workspace one and invert the documented "same ID = custom wins".
+ * Literally the reverse of the loader lookup list, and derived from it rather than rebuilt beside
+ * it — the two readings of one order, not two orders. A loader looks an id UP, so the first hit
+ * wins and the highest-precedence root leads; the indexer ACCUMULATES every root into one id-keyed
+ * map, so the highest-precedence root must land last and overwrite. Stating the second arrangement
+ * independently is how the indexer once walked only the primary while the loaders walked three
+ * roots, which is the defect this module's header records.
  */
 function orderedResourceRoots(roots: ResourceRoots): string[] {
-  const ordered = [
-    ...(roots.bundled !== undefined ? [roots.bundled] : []),
-    ...(roots.primary !== undefined ? [roots.primary] : []),
-    ...roots.overlays,
-  ];
-  return [...new Set(ordered)];
+  return [...roots.lookupDirs].reverse();
 }
 
 /**
@@ -89,10 +123,12 @@ const INDEXED_TYPE_DIRS = {
 /**
  * The roots the resource indexer must walk so its rows describe the catalog the loaders serve.
  *
- * The indexer cannot compute this itself: it lives in `infra/` (Layer 1), which
- * `.dependency-cruiser.cjs` forbids from importing `runtime/`. So the runtime resolves the roots
- * and hands them down, which is the correct direction anyway — path policy is not a database
- * concern.
+ * The indexer cannot compute this itself: it lives in `infra/` (Layer 1), which the
+ * `no-imports-into-runtime` rule in `.dependency-cruiser.cjs` forbids from importing `runtime/`.
+ * So the runtime resolves the roots and hands them down, which is the correct direction anyway —
+ * path policy is not a database concern. (That rule is named here because it did not exist when
+ * this comment was written on 2026-08-29: the direction was the intent, and nothing checked it
+ * until 2026-09-15.)
  */
 export function indexerResourceRoots(pathResolver: PathResolver | undefined): ResourceRootMap {
   if (pathResolver === undefined) return {};
@@ -109,4 +145,77 @@ export function indexerResourceRoots(pathResolver: PathResolver | undefined): Re
     map[key] = orderedResourceRoots(resolveResourceRoots(pathResolver, dir, primaries[key]));
   }
   return map;
+}
+
+/**
+ * The directory each VERSIONED resource type is read from, and therefore checkpointed from.
+ *
+ * Distinct from {@link INDEXED_TYPE_DIRS} above and deliberately not merged with it: the indexer
+ * walks `styles` and never sees a `category`, while version history is kept for `category` and
+ * never for a style. The two sets overlap in three entries and answer different questions, and one
+ * table serving both would have to carry a "which consumer" flag per row.
+ *
+ * `category` maps to `prompts` because a category IS a `category.yaml` inside the prompts tree —
+ * it has no root of its own (`CategoryFileWriter.categoryDir`).
+ */
+const VERSIONED_TYPE_DIRS: Readonly<Record<ResourceType, 'prompts' | 'gates' | 'frameworks'>> = {
+  prompt: 'prompts',
+  category: 'prompts',
+  gate: 'gates',
+  framework: 'frameworks',
+};
+
+/**
+ * Build the locator the versioning service uses to find a resource's files from its id alone.
+ *
+ * WHY HERE. `VersionHistoryService` holds a type and an id; a checkpoint needs the entry FILE and
+ * the type's roots. Only `PathResolver` + {@link resolveResourceRoots} can close that gap, and both
+ * live in `runtime/`, which `mcp/`, `modules/` and `cli-shared/` may not import
+ * (`.dependency-cruiser.cjs`, `no-imports-into-runtime`). The remedy that rule names is the one
+ * used here: the port is declared in `shared/utils/resource-file-set.ts` beside the enumerator that
+ * consumes its answer, and the composition root hands the two together.
+ *
+ * Roots are re-resolved on every call rather than captured once, matching
+ * `getOverlayResourceDirs`'s contract: a workspace overlay created while the server ran must be
+ * checkpointable without a restart.
+ */
+export function createResourceFileLocator(
+  pathResolver: PathResolver | undefined
+): ResourceFileLocatorPort {
+  return {
+    async locate(resourceType, resourceId): Promise<ResourceLocationResult> {
+      if (pathResolver === undefined) {
+        return { located: false, reason: 'no path resolver was wired at the composition root' };
+      }
+      const typeDir = VERSIONED_TYPE_DIRS[resourceType];
+      const primary =
+        typeDir === 'prompts'
+          ? pathResolver.getPromptsPath()
+          : typeDir === 'gates'
+            ? pathResolver.getGatesPath()
+            : pathResolver.getFrameworksPath();
+
+      const roots = resolveResourceRoots(pathResolver, typeDir, primary);
+      const entryPath = await locateResourceEntry({
+        resourceType,
+        resourceId,
+        lookupDirs: roots.lookupDirs,
+      });
+      if (entryPath === undefined) {
+        const searched =
+          roots.lookupDirs.length > 0 ? roots.lookupDirs.join(', ') : 'none resolved';
+        return {
+          located: false,
+          reason:
+            `no ${resourceEntryFileName(resourceType)} for ${resourceType} '${resourceId}' under ` +
+            `any contributing root (${searched})`,
+        };
+      }
+      return {
+        located: true,
+        entryPath,
+        roots: { primary: roots.primary, overlays: roots.overlays, bundled: roots.bundled },
+      };
+    },
+  };
 }

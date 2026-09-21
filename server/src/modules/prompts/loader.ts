@@ -12,15 +12,15 @@
  * @see GateDefinitionLoader for the caching pattern this follows
  */
 
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 
+import { discoverCategoryDirectories } from './category-maintenance.js';
 import { CategoryManager, createCategoryManager } from './category-manager.js';
 import { parseMarkdownPromptContent } from './markdown-prompt-parser.js';
 import {
   type LoadedPromptFile,
-  discoverYamlPrompts,
   hasYamlPrompts,
   loadYamlPrompt as loadYamlPromptFn,
   loadAllYamlPrompts as loadAllYamlPromptsFn,
@@ -29,6 +29,11 @@ import {
 import type { Category, CategoryPromptsResult, PromptData } from './types.js';
 
 import { type Logger } from '#shared/types/index.js';
+import {
+  ResourceQuarantine,
+  type QuarantineSink,
+  type QuarantineView,
+} from '#shared/utils/resource-quarantine.js';
 import { loadYamlFileSync } from '#shared/utils/yaml/index.js';
 
 // Re-export types from yaml-prompt-loader for backward compatibility
@@ -41,17 +46,6 @@ export interface PromptLoaderConfig {
   debug?: boolean;
 }
 
-export interface PromptLoaderStats {
-  /** Number of cached prompt files */
-  cacheSize: number;
-  /** Cache hit count */
-  cacheHits: number;
-  /** Cache miss count */
-  cacheMisses: number;
-  /** Number of load errors encountered */
-  loadErrors: number;
-}
-
 export class PromptLoader {
   private logger: Logger;
   private categoryManager: CategoryManager;
@@ -61,6 +55,17 @@ export class PromptLoader {
   // Caching infrastructure (mirrors GateDefinitionLoader pattern)
   private promptFileCache = new Map<string, LoadedPromptFile>();
   private stats = { cacheHits: 0, cacheMisses: 0, loadErrors: 0 };
+  /**
+   * Files this loader refused, by root. ONE instance for the loader's lifetime.
+   *
+   * Published by reference rather than returned per load: the tool layer binds it once at wiring
+   * time and every later reload is already visible through the same object. A snapshot threaded
+   * through `updateData` would have to be re-passed at each of six call sites, which is the shape
+   * where one gets forgotten and the surface silently reports a stale catalog.
+   */
+  private readonly quarantine = new ResourceQuarantine();
+  /** Sink for the walk currently in progress; absent outside `loadFromDirectories`. */
+  private activeQuarantineSink: QuarantineSink | undefined;
 
   constructor(logger: Logger, config: PromptLoaderConfig = {}) {
     this.logger = logger;
@@ -96,16 +101,9 @@ export class PromptLoader {
     }
   }
 
-  /**
-   * Get loader statistics
-   */
-  getStats(): PromptLoaderStats {
-    return {
-      cacheSize: this.promptFileCache.size,
-      cacheHits: this.stats.cacheHits,
-      cacheMisses: this.stats.cacheMisses,
-      loadErrors: this.stats.loadErrors,
-    };
+  /** Live view of the prompt files that failed to load, across every root walked so far. */
+  getQuarantine(): QuarantineView {
+    return this.quarantine;
   }
 
   /**
@@ -133,15 +131,19 @@ export class PromptLoader {
       throw new Error(`Prompts directory not found: ${promptsDir}`);
     }
 
-    // Phase 1: Discover categories from directory structure
-    const entries = readdirSync(promptsDir, { withFileTypes: true });
-    const categoryDirs = entries.filter(
-      (entry) =>
-        entry.isDirectory() &&
-        !entry.name.startsWith('.') &&
-        !entry.name.startsWith('_') &&
-        entry.name !== 'backup'
-    );
+    // Everything previously recorded for THIS root is dropped before the walk, so a prompt
+    // repaired since the last load is simply never re-recorded. Clearing on begin rather than
+    // reconciling at the end means a walk that throws partway still describes the files it
+    // actually reached, instead of leaving a satisfied record standing as a live finding.
+    this.activeQuarantineSink = this.quarantine.beginRoot('prompt', promptsDir);
+
+    // Phase 1: Discover categories from directory structure.
+    //
+    // Delegated to `discoverCategoryDirectories` since P4.7. The rule for what counts as a
+    // category directory is now read by `resource_manager`'s category `list`/`inspect` too, and
+    // a second inline copy of the dot/underscore/`backup` filter would drift the day either side
+    // gained a rule.
+    const categoryDirs = discoverCategoryDirectories(promptsDir);
 
     this.logger.info(`   Found ${categoryDirs.length} category directories`);
 
@@ -152,8 +154,7 @@ export class PromptLoader {
     // not the total — is what this load contributed.
     const errorsBefore = this.stats.loadErrors;
 
-    for (const categoryEntry of categoryDirs) {
-      const categoryId = categoryEntry.name;
+    for (const categoryId of categoryDirs) {
       const categoryDir = path.join(promptsDir, categoryId);
 
       // Try to load category metadata from category.yaml (optional)
@@ -213,6 +214,8 @@ export class PromptLoader {
 
     // Load categories into CategoryManager
     await this.categoryManager.loadCategories(categories);
+
+    this.activeQuarantineSink = undefined;
 
     const invalid = this.stats.loadErrors - errorsBefore;
     this.logger.info(
@@ -299,23 +302,6 @@ export class PromptLoader {
     }
   }
 
-  /**
-   * Check if caching is enabled
-   */
-  isCacheEnabled(): boolean {
-    return this.enableCache;
-  }
-
-  /**
-   * Enable or disable caching at runtime
-   */
-  setCacheEnabled(enabled: boolean): void {
-    this.enableCache = enabled;
-    if (!enabled) {
-      this.clearCache();
-    }
-  }
-
   /** Build the shared context for YAML loading functions. */
   private get yamlCtx() {
     return {
@@ -324,15 +310,8 @@ export class PromptLoader {
       stats: this.stats,
       enableCache: this.enableCache,
       debug: this.debug,
+      quarantine: this.activeQuarantineSink,
     };
-  }
-
-  /**
-   * Discover YAML-based prompts in a category directory.
-   * @see discoverYamlPrompts in yaml-prompt-loader.ts for full documentation.
-   */
-  discoverYamlPrompts(categoryDir: string, prefix: string = ''): string[] {
-    return discoverYamlPrompts(categoryDir, prefix);
   }
 
   /**

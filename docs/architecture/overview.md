@@ -621,18 +621,42 @@ MCP notification sent to clients
 
 ### Watched Directories
 
-| Resource   | Directory Source                           | Registration                                         |
-| ---------- | ------------------------------------------ | ---------------------------------------------------- |
-| Prompts    | `getPromptsDirectory()` + category subdirs | `buildWatchTargets()` in `prompt-watch-setup.ts`     |
-| Gates      | `getGatesDirectory()`                      | `createGateHotReloadRegistration()` auxiliary reload |
-| Frameworks | `runtimeLoader.getFrameworksDir()`         | `framework-hot-reload.ts` auxiliary reload           |
-| Styles     | `loader.getStylesDir()`                    | `style-hot-reload.ts` auxiliary reload               |
+| Resource     | Directory Source                                                                                               | Registration                                              |
+| ------------ | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Prompts      | every root the catalog is composed from — primary, bundled, and each workspace overlay — plus category subdirs | `buildWatchTargets()` in `prompt-watch-setup.ts`          |
+| Gates        | `getWatchDirectories()` (primary gates dir plus every overlay, bundled included)                               | `createGateHotReloadRegistration()` auxiliary reload      |
+| Frameworks   | `getWatchDirectories()` (primary frameworks dir plus every overlay, bundled included)                          | `createFrameworkHotReloadRegistration()` auxiliary reload |
+| Styles       | `loader.getWatchDirectories()` (primary workspace styles dir plus every overlay, bundled included)             | `createStyleHotReloadRegistration()` auxiliary reload     |
+| Script tools | the prompts folder (prompt-local `tools/` folders) plus the workspace scripts folder (`getScriptsDirectory()`) | `buildScriptAuxiliaryReloadConfig()` auxiliary reload     |
+| Change log   | `trackedResourceRoots()` — primary prompts and gates dirs plus every overlay, **not** the bundled tree         | `buildResourceChangeTrackerAuxiliaryReloadConfig()`       |
+
+The prompts row watches each prompts root itself. Until 2026-09-17 the primary was watched through
+its PARENT — `<workspace>/resources`, or the whole workspace for a legacy `<workspace>/prompts` —
+because `startHotReload` still reduced its argument with `path.dirname` after callers had switched
+from a config-file path to the directory. Every other type keeps its own watcher, so nothing was
+observed only through that parent.
+
+An overlay counts as a root whether or not it exists yet (`getOverlayResourceCandidates()`): the
+loaders read an absent root as empty, and the watcher arms on it once it appears. Framework files
+take exactly one path, the auxiliary registration; there is no dedicated framework callback.
+
+### Folders created while the server runs
+
+`FileObserver` polls once a second for a registered directory that does not exist, then arms
+chokidar on it and reports every file already inside. Nothing can report an entry written AND
+removed inside that window, and the server may already hold it — `resource_manager` registers a
+created framework or gate directly. So once a late directory's watcher finishes its first scan,
+`HotReloadObserver` reconciles it: every auxiliary registration whose directories overlap it runs
+its required `reconcile` (frameworks and gates unregister runtime entries whose files are gone;
+styles and script tools drop their caches; the change log records removals), and the prompt catalog
+reloads in full. A shorter poll would only narrow the window.
 
 ### Limitations
 
 - **Debounce delay**: FileObserver uses ~500ms debounce, so rapid successive writes may batch into a single reload event.
 - **No write coordination**: If the MCP tool and CLI write the same resource simultaneously, the last write wins. This is acceptable because concurrent writes to the same resource are not an expected usage pattern.
 - **CLI writes are invisible until detected**: After a CLI write, the MCP server sees stale state until the FileObserver fires. Next MCP tool call after the debounce window will see updated state.
+- **A folder that exists at startup is not reconciled when its watcher arms.** Startup loads each root and then arms the watchers, about a second later on a polled filesystem; a change inside that gap is absorbed into the watcher's first scan. Only folders created after startup are reconciled (above). _(as of 2026-09-17 · flips when a startup root is also reconciled once its first scan completes)_
 
 ---
 
@@ -705,7 +729,7 @@ Each injection type resolves independently through a 7-level hierarchy. First ma
 ```
 Modifier → Runtime Override → Step Config → Chain Config → Category Config → Global Config → System Default
    ↑              ↑               ↑             ↑              ↑               ↑              ↑
- %clean     system_control    per-step      per-chain     per-category    config.json    hardcoded
+ %clean     system_control    per-step      per-chain     per-category    config.jsonc   hardcoded
 ```
 
 **Key internals**:
@@ -748,6 +772,12 @@ falling back to another transport.
 - **No protocol sessions.** Revision 2026-07-28 removed them; a fresh `McpServer` is built per
   request from the server factory and nothing is retained between exchanges. Cross-call state
   uses the repo's own run handles (`chain_id`), passed as ordinary tool arguments.
+
+- **Server notifications ride the causing request's stream.** The gate, chain and framework
+  notifications are raised while a tool call is in flight, so they are written onto that POST's
+  own `text/event-stream` response body through the SDK's per-request notifier. A client that
+  reads only the message whose `id` matches its request discards them.
+  → `docs/guides/telemetry-observability.md`
 
 **STDIO** keeps one `McpServer` for the life of the connection. That lifetime difference is the
 one place the transports genuinely diverge — see `CLAUDE.md` Core Principle 3.
@@ -847,7 +877,8 @@ See [Telemetry & Observability Guide](../guides/telemetry-observability.md) for 
 ### Styles (`src/modules/formatting/`)
 
 - **Manager**: Orchestrates style lifecycle
-- **Registry**: Hot-reloaded style definitions from `server/resources/styles/`
+- **Registry**: Hot-reloaded style definitions from `server/resources/styles/`, overlaid by a
+  workspace `resources/styles/{id}/` the same way prompts, gates and frameworks are
 - **Loader**: YAML + MD parsing with schema validation
 
 ### Execution (`src/engine/execution/`)

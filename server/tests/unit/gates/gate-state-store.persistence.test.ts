@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, jest, test } from '@jest/globals';
+import { afterAll, afterEach, beforeAll, describe, expect, jest, test } from '@jest/globals';
 
 import * as fs from 'fs';
 import * as os from 'os';
@@ -49,9 +49,29 @@ describe('GateStateStore (persistence)', () => {
   let tmpRoot: string;
   let dbManager: SqliteEngine;
 
+  /**
+   * Every store a test opens, cleaned up whether or not the test reached its own `cleanup()`.
+   * `initialize()` starts a 30s health interval that only `cleanup()` clears, so an assertion
+   * throwing before that call left the interval running and jest never exited.
+   */
+  const openStores: GateStateStore[] = [];
+  const openStore = (...args: ConstructorParameters<typeof GateStateStore>): GateStateStore => {
+    const store = new GateStateStore(...args);
+    openStores.push(store);
+    return store;
+  };
+
+  afterEach(async () => {
+    for (const store of openStores.splice(0)) {
+      await store.cleanup();
+    }
+  });
+
   beforeAll(async () => {
     tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gate-state-'));
-    dbManager = await SqliteEngine.getInstance(tmpRoot, createLogger() as any);
+    dbManager = await SqliteEngine.getInstance(createLogger() as any, {
+      dbPath: path.join(tmpRoot, 'runtime-state', 'state.db'),
+    });
     await dbManager.initialize();
   });
 
@@ -67,7 +87,7 @@ describe('GateStateStore (persistence)', () => {
   test('writes and restores gate state across instances', async () => {
     const logger = createLogger();
     const storeA = createStateStore(dbManager, logger);
-    const managerA = new GateStateStore(logger, storeA);
+    const managerA = openStore(logger, storeA);
     await managerA.initialize();
 
     await managerA.disableGateSystem('unit-disable');
@@ -76,7 +96,7 @@ describe('GateStateStore (persistence)', () => {
     expect(persisted.enabled).toBe(false);
 
     const storeB = createStateStore(dbManager, logger);
-    const managerB = new GateStateStore(logger, storeB);
+    const managerB = openStore(logger, storeB);
     await managerB.initialize();
 
     expect(managerB.getCurrentState().enabled).toBe(false);
@@ -88,7 +108,7 @@ describe('GateStateStore (persistence)', () => {
   test('isolates gate state and metrics by workspace scope key', async () => {
     const logger = createLogger();
     const store = createStateStore(dbManager, logger);
-    const manager = new GateStateStore(logger, store);
+    const manager = openStore(logger, store);
     await manager.initialize();
 
     const defaultBefore = manager.getCurrentState();
@@ -152,5 +172,73 @@ describe('GateStateStore (persistence)', () => {
     expect(rowA?.workspace_id).toBe('workspace-a');
 
     await manager.cleanup();
+  });
+
+  /**
+   * A toggle has to be read back by the NEXT process, not only by the instance that wrote it.
+   * The case above never restarts, and the unscoped restart case above only covers `default` —
+   * which is exactly the one scope that was already loaded at startup, so neither could see a
+   * workspace-scoped disable come back enabled after a restart.
+   */
+  test('a workspace-scoped toggle survives a restart on the same database', async () => {
+    const logger = createLogger();
+    const project = { workspaceId: 'restart-project' };
+
+    const first = openStore(logger, createStateStore(dbManager, logger), {
+      defaultScope: project,
+    });
+    await first.initialize();
+    await first.disableGateSystem('first-run', project);
+    await first.cleanup();
+
+    const second = openStore(logger, createStateStore(dbManager, logger), {
+      defaultScope: project,
+    });
+    await second.initialize();
+    expect(second.isGateSystemEnabled(project)).toBe(false);
+    // Loaded per scope, so an HTTP identity other than the launch scope is read back too.
+    expect(second.isGateSystemEnabled({ workspaceId: 'never-toggled' })).toBe(true);
+
+    await second.enableGateSystem('second-run', project);
+    await second.cleanup();
+
+    const third = openStore(logger, createStateStore(dbManager, logger));
+    await third.initialize();
+    expect(third.isGateSystemEnabled(project)).toBe(true);
+    await third.cleanup();
+  });
+
+  test('adopts a pre-isolation default row into the launch scope once', async () => {
+    const logger = createLogger();
+    const store = createStateStore(dbManager, logger);
+    const legacyDisabled: PersistedGateSystemState = {
+      enabled: false,
+      enabledAt: new Date().toISOString(),
+      enableReason: 'Disabled: before workspace isolation',
+      validationMetrics: {
+        totalValidations: 0,
+        successfulValidations: 0,
+        averageValidationTime: 0,
+        lastValidationTime: null,
+      },
+    };
+    // Written unscoped, the way every toggle was before 2026-08-27.
+    await store.save(legacyDisabled);
+
+    const adopting = { workspaceId: 'adopting-project' };
+    const manager = openStore(logger, store, { defaultScope: adopting });
+    await manager.initialize();
+    expect(manager.isGateSystemEnabled(adopting)).toBe(false);
+    expect(await store.exists(adopting)).toBe(true);
+    expect((await store.load(adopting)).enabled).toBe(false);
+    await manager.cleanup();
+
+    // A launch scope that already has its own row keeps it: adoption is not a re-sync.
+    const owning = { workspaceId: 'owning-project' };
+    await store.save({ ...legacyDisabled, enabled: true, enableReason: 'own row' }, owning);
+    const owner = openStore(logger, store, { defaultScope: owning });
+    await owner.initialize();
+    expect(owner.isGateSystemEnabled(owning)).toBe(true);
+    await owner.cleanup();
   });
 });

@@ -26,6 +26,7 @@ import type { IGateManager } from './types.js';
 
 import { Logger } from '#infra/logging/index.js';
 import { BaseResourceHandler } from '#shared/core/resource-manager/index.js';
+import { lazyQuarantineView, type QuarantineView } from '#shared/utils/resource-quarantine.js';
 
 /**
  * Configuration for GateManager
@@ -136,21 +137,6 @@ export class GateManager
   // ============================================================================
 
   /**
-   * Set the gate system state manager for synchronization
-   */
-  setStateManager(stateManager: GateStateStore): void {
-    this.stateManager = stateManager;
-    this.logger.debug('GateStateStore synchronized with GateManager');
-  }
-
-  /**
-   * Check if the gate system is enabled
-   */
-  isGateSystemEnabled(): boolean {
-    return this.isSystemEnabled();
-  }
-
-  /**
    * Select gates based on context criteria
    *
    * This is the primary method for getting gates that should be applied
@@ -187,6 +173,12 @@ export class GateManager
     }
     if (context.framework) {
       activationContext.framework = context.framework;
+    }
+    // B13: the run's declared artifacts. Copied on only when the caller supplied a non-empty list
+    // so an artifact-unaware caller leaves the field absent, which `isGateActiveForContext` reads
+    // as "this run declared nothing" — category gates are untouched either way.
+    if (context.declaredArtifacts !== undefined && context.declaredArtifacts.length > 0) {
+      activationContext.artifacts = context.declaredArtifacts;
     }
 
     // Get all enabled guides
@@ -268,6 +260,17 @@ export class GateManager
   getGateRegistry(): GateRegistry {
     this.ensureInitialized();
     return this.registry!;
+  }
+
+  /**
+   * Live view of the gate files the loader refused.
+   *
+   * Resolved on every call rather than bound once: the registry — and with it the loader that owns
+   * the collection — is built inside `initialize()`, so anything captured at construction would be
+   * the empty stand-in forever. Callers hold this manager, which is stable, and ask it each time.
+   */
+  getQuarantine(): QuarantineView {
+    return lazyQuarantineView(() => this.registry?.getLoader().getQuarantine());
   }
 
   /**

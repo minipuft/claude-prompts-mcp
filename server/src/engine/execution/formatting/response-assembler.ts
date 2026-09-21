@@ -7,8 +7,9 @@ import { isUnknownInterruptPending } from '../pipeline/decisions/index.js';
 import { PHASE_GUARD_GATE_ID } from '../pipeline/stages/19-phase-guard-verification-stage.js';
 
 import type { DeclaredSection } from '#engine/frameworks/declared-sections.js';
+import type { GateTier } from '#engine/gates/core/gate-tier.js';
 import type { RunStepView, RunStepViewProvider } from '#engine/gates/services/run-step-view.js';
-import type { GateReviewPrompt } from '#shared/types/chain-execution.js';
+import type { GateCheckResult, GateReviewPrompt } from '#shared/types/chain-execution.js';
 import type { RequestClientProfile } from '#shared/types/request-identity.js';
 import type {
   ChainFormattingContext,
@@ -19,7 +20,14 @@ import type { DelegationPayload } from '../delegation/types.js';
 import type { GateOperator } from '../parsers/types/operator-types.js';
 import type { ConvertedPrompt, ExecutionModifiers } from '../types.js';
 
-/** Max gates to list in the GATE_VERDICTS template */
+/**
+ * Max check-tier gates given a `per_gate` slot in the verdict template.
+ *
+ * Bounds the collected CHECK entries only — reminder-tier gates never count against this cap,
+ * since they render once in the `reminders` field rather than one `per_gate` entry each. The full
+ * `gateIds` list is still walked in original order so a run of leading reminders cannot push a
+ * later check off the template before it is even considered.
+ */
 const MAX_GATE_VERDICT_ENTRIES = 10;
 
 /**
@@ -208,7 +216,7 @@ export class ResponseAssembler {
       sections.push(declaredSectionsBlock);
     }
 
-    // Row 2.4, on THIS path too. Found by the live drive, not by the suite: `>>strategicImplement`
+    // Row 2.4, on THIS path too. Found by the live drive, not by the suite: `>>strategic_implement`
     // is a gated single prompt that gets a session, so it can declare observations, raise an
     // interrupt and reach here — and rendered nothing, while `structuredContent.chain_interrupt`
     // (attached in stage 21, outside the chain/single branch) was correctly present. A payload
@@ -232,7 +240,7 @@ export class ResponseAssembler {
    */
   formatBlockedResponse(context: ExecutionContext): string {
     const blockedGateIds = context.state.gates.blockedGateIds ?? [];
-    const gateInstructions = context.gateInstructions ?? '';
+    const gateInstructions = this.resolveBlockedReviewInstructions(context);
 
     const sections: string[] = [
       '## ⛔ Response Blocked',
@@ -243,10 +251,28 @@ export class ResponseAssembler {
       '',
     ];
 
-    if (gateInstructions !== '') {
-      sections.push('---');
+    // Why each one failed, from the reviewer's own per-gate entry. Without this the block names
+    // the gates and says nothing about them, which on a five-gate review is the same as naming
+    // none (P4.75). Absent per-gate detail, nothing is added and the block is unchanged.
+    const failedVerdicts = this.resolveFailedGateVerdicts(context);
+    if (failedVerdicts.size > 0) {
+      for (const [gateId, rationale] of failedVerdicts) {
+        sections.push(`- \`${gateId}\` — ${rationale}`);
+      }
       sections.push('');
+    }
+
+    sections.push('---');
+    sections.push('');
+    if (gateInstructions !== '') {
       sections.push(gateInstructions);
+    } else {
+      // Never silently. A block with no criteria is a retry loop with nothing to act on, and the
+      // omission used to be invisible: the `if` above simply skipped the section. Say which piece
+      // is missing so the absence is a report rather than a shorter response.
+      sections.push(
+        '**Gate review instructions are unavailable for this call** — the gate criteria could not be rendered. Inspect the gate definitions named above.'
+      );
     }
 
     sections.push('');
@@ -295,9 +321,14 @@ export class ResponseAssembler {
     const blockedGateIds = context.state.gates.blockedGateIds ?? [];
     const retryLimitExceeded = context.state.gates.retryLimitExceeded === true;
 
+    // The reviewer's own words for a gate it marked FAIL, when this call carried a per-gate
+    // block. The literal below survives only where no such entry exists — it says why the
+    // response is blocked, which is a different statement from why the gate failed, and it was
+    // the whole of `reason` until the per-gate detail had a reader (P4.75).
+    const failedVerdicts = this.resolveFailedGateVerdicts(context);
     const failedGates: Array<{ id: string; reason: string }> = blockedGateIds.map((id) => ({
       id,
-      reason: 'Gate failed (blockResponseOnFail enabled)',
+      reason: failedVerdicts.get(id) ?? 'Gate failed (blockResponseOnFail enabled)',
     }));
 
     const sessionRetryInfo = context.sessionContext?.pendingReview;
@@ -738,10 +769,86 @@ export class ResponseAssembler {
 
     const structuredTemplate = this.buildStructuredVerdictTemplate(
       pendingReview.gateIds ?? [],
-      pendingReview.prompts
+      pendingReview.prompts,
+      this.resolveGateTiers(context),
+      this.resolveCheckResults(context)
     );
 
-    return `\n---\n\n**${header}**${attemptInfo}\n\n${gatesLine}\n\nReview your output above against the gates, then submit:\n\n\`\`\`\nchain_id="${chainId}"\ngate_verdict=${structuredTemplate}\n\`\`\`\n\nSet \`"overall": "FAIL"\` and say what needs improvement if the gates are not met. Rationales are single-line.\n\nA legacy string form is still accepted: \`gate_verdict="GATE_REVIEW: PASS - [assessment]"\`.`;
+    return `\n---\n\n**${header}**${attemptInfo}\n\n${gatesLine}${this.buildFailedGateSummary(context)}\n\nReview your output above against the gates, then submit:\n\n\`\`\`\nchain_id="${chainId}"\ngate_verdict=${structuredTemplate}\n\`\`\`\n\nSet \`"overall": "FAIL"\` and say what needs improvement if the gates are not met. Rationales are single-line.\n\nA legacy string form is still accepted: \`gate_verdict="GATE_REVIEW: PASS - [assessment]"\`.`;
+  }
+
+  /**
+   * The gates the reviewer just marked FAIL, in its own words (P4.75).
+   *
+   * Added above the verdict template because without it a retry reply is the SAME full N-gate
+   * template the first attempt showed: the submitter has to re-derive which two of five it
+   * failed by re-reading its own echoed prior response. Naming them costs one block and makes
+   * the retry addressable.
+   *
+   * Empty string when this call carried no per-gate detail — an overall-only verdict, a PASS,
+   * or no verdict at all — so every existing reply renders byte-identical.
+   */
+  private buildFailedGateSummary(context: ExecutionContext): string {
+    const failed = this.resolveFailedGateVerdicts(context);
+    if (failed.size === 0) {
+      return '';
+    }
+
+    const lines = [...failed].map(([gateId, rationale]) => `- \`${gateId}\` — ${rationale}`);
+    return `\n\n**Gates you marked FAIL:**\n\n${lines.join('\n')}`;
+  }
+
+  /**
+   * Rationale per gate the reviewer marked FAIL on this call, keyed by gate id.
+   *
+   * Reads `context.state.gates.perGateVerdicts`, which `GateVerdictProcessor` wrote from the
+   * submission being processed in this same request — never an instance field, so STDIO (one
+   * server per connection) and Streamable HTTP (a fresh server per request) render the same
+   * reply from the same source.
+   *
+   * A FAIL entry whose rationale is empty still appears: the gate id is the fact worth
+   * carrying, and dropping the entry would make a terse reviewer look like a silent one.
+   */
+  private resolveFailedGateVerdicts(context: ExecutionContext): ReadonlyMap<string, string> {
+    const failed = new Map<string, string>();
+    for (const entry of context.state.gates.perGateVerdicts ?? []) {
+      if (entry.verdict !== 'FAIL') {
+        continue;
+      }
+      const rationale = entry.rationale ?? '';
+      failed.set(entry.gateId, rationale.length > 0 ? rationale : 'no rationale given');
+    }
+    return failed;
+  }
+
+  /**
+   * The gate review instructions a blocked response carries — the one thing a blocked caller can
+   * act on, from whichever of the two places this call actually put it.
+   *
+   * `context.gateInstructions` is written by gate enhancement on the SINGLE-PROMPT path only
+   * (`GateEnhancementService`, the enhanced-template tail). On a chain step the per-step gate text
+   * goes to `step.metadata['gateInstructions']` instead, and the rendered review — criteria,
+   * attempt counter, resubmit schema — is what `GateReviewStage` put in `context.executionResults`.
+   * Reading only the first field meant every blocked CHAIN step returned a stub naming the gates
+   * and nothing else, while `blockResponseOnFail`'s contract is that the review instructions ARE
+   * returned. Measured 2026-09-20: 291 characters, no criteria, no attempt counter.
+   *
+   * The execution result is admitted by its own predicate — `metadata.gateReview` present — not by
+   * merely existing. That metadata is stamped only by the review render, so the content is
+   * instruction text; on any other path `executionResults` holds the model output this block
+   * exists to suppress, and returning it would defeat the block. Verified on the render: it
+   * carries no `user_response` text.
+   */
+  private resolveBlockedReviewInstructions(context: ExecutionContext): string {
+    const enhanced = context.gateInstructions ?? '';
+    if (enhanced.trim() !== '') {
+      return enhanced;
+    }
+
+    const results = context.executionResults;
+    const isGateReviewRender = results?.metadata?.['gateReview'] !== undefined;
+
+    return isGateReviewRender && typeof results?.content === 'string' ? results.content : '';
   }
 
   /**
@@ -872,10 +979,33 @@ export class ResponseAssembler {
    */
   private buildStructuredVerdictTemplate(
     gateIds: readonly string[],
-    prompts: readonly GateReviewPrompt[]
+    prompts: readonly GateReviewPrompt[],
+    tiers: ReadonlyMap<string, GateTier>,
+    checkResults: ReadonlyMap<string, GateCheckResult>
   ): string {
     const promptMap = this.buildPromptLookup(prompts);
-    const entries = gateIds.slice(0, MAX_GATE_VERDICT_ENTRIES).map((gateId, index) => {
+
+    const entries: string[] = [];
+    const reminderIds: string[] = [];
+
+    // Walk the FULL advertised list, not a pre-sliced prefix: slicing before the walk let a run
+    // of leading reminders push a later check off the template before it was ever considered.
+    // The cap binds only the collected check entries (below); reminders are never counted against
+    // it because they render once in the `reminders` field rather than one `per_gate` slot each.
+    gateIds.forEach((gateId, position) => {
+      // The index is the gate's place in the ORIGINAL list, not its place among the entries:
+      // `parseGateVerdicts` matches `[n]` back to the advertised gate list, so renumbering the
+      // survivors after reminders are dropped (or a check is capped out) would point every
+      // verdict at the wrong gate.
+      const index = position + 1;
+      if ((tiers.get(gateId) ?? 'check') === 'reminder') {
+        reminderIds.push(gateId);
+        return;
+      }
+      if (entries.length >= MAX_GATE_VERDICT_ENTRIES) {
+        return;
+      }
+
       const prompt = promptMap.get(gateId);
       const label = prompt?.gateName ?? gateId;
       // Criteria carry the reviewer's actual checklist; dropping them would
@@ -883,12 +1013,49 @@ export class ResponseAssembler {
       // replaces. Quotes are escaped because this lands inside a JSON string.
       const criteria = prompt?.criteriaSummary;
       const suffix = criteria != null && criteria.length > 0 ? ` — ${criteria}` : '';
-      const rationale = `${label}${suffix}: <why>`.replace(/"/g, '\\"');
-      return `    {"index": ${index + 1}, "passed": true, "rationale": "${rationale}"}`;
+      // A recorded result is the engine's, so the template states it rather than asking for it
+      // — a slot the model fills is a slot it can fill wrongly, and the processor refuses a PASS
+      // over a recorded failure anyway. `<why>` survives only where nothing ran yet.
+      const recorded = checkResults.get(gateId);
+      const slot = recorded !== undefined ? `<recorded: ${recorded.summary}>` : '<why>';
+      const rationale = `${label}${suffix}: ${slot}`.replace(/"/g, '\\"');
+      const passed = recorded?.passed ?? true;
+      entries.push(`    {"index": ${index}, "passed": ${passed}, "rationale": "${rationale}"}`);
     });
 
     const perGate = entries.length > 0 ? `,\n  "per_gate": [\n${entries.join(',\n')}\n  ]` : '';
-    return `{\n  "overall": "PASS",\n  "rationale": "<overall assessment>"${perGate}\n}`;
+    // One field for every reminder, never one entry each (ruling B4). Pre-listed under
+    // `satisfied` because that is the common answer; an id that did not apply moves to
+    // `not_applicable` WITH a reason, which the schema requires.
+    const reminders =
+      reminderIds.length > 0
+        ? `,\n  "reminders": {"satisfied": [${reminderIds
+            .map((id) => `"${id.replace(/"/g, '\\"')}"`)
+            .join(', ')}], "not_applicable": []}`
+        : '';
+    return `{\n  "overall": "PASS",\n  "rationale": "<overall assessment>"${perGate}${reminders}\n}`;
+  }
+
+  /**
+   * Tier per gate for the verdict template, from the pending review `GateReviewStage` recorded.
+   *
+   * Read off the review rather than loaded here: this assembler takes no gate provider and is
+   * synchronous, and giving it one to answer a question the gate-review stage has already
+   * answered would put a second reader on the gate registry for no new fact.
+   *
+   * An id with no recorded tier answers `check`, which is the pre-B4 shape — every advertised
+   * gate gets a `per_gate` slot. That keeps a run whose review has not reached stage 20 (the
+   * single-prompt CTA) rendering exactly what it rendered before.
+   */
+  private resolveGateTiers(context: ExecutionContext): ReadonlyMap<string, GateTier> {
+    const tiers = context.sessionContext?.pendingReview?.gateTiers;
+    return new Map(Object.entries(tiers ?? {}));
+  }
+
+  /** Recorded check results for the pending review, keyed by gate id (empty when none ran). */
+  private resolveCheckResults(context: ExecutionContext): ReadonlyMap<string, GateCheckResult> {
+    const results = context.sessionContext?.pendingReview?.checkResults ?? [];
+    return new Map(results.map((result) => [result.gateId, result]));
   }
 
   /**
@@ -1062,14 +1229,19 @@ export class ResponseAssembler {
     const pendingReview = context.sessionContext?.pendingReview;
     const structuredTemplate = this.buildStructuredVerdictTemplate(
       gateIds,
-      pendingReview?.prompts ?? []
+      pendingReview?.prompts ?? [],
+      this.resolveGateTiers(context),
+      this.resolveCheckResults(context)
     );
 
     lines.push('**Review Required**');
     lines.push('');
     lines.push(`**Gates**: ${gateIds.join(', ')}`);
     lines.push('');
-    lines.push('Review your output against the gate criteria, then submit:');
+    // Names what the two halves of the template are for. "Review your output against the gate
+    // criteria" asked for a self-grade on every gate, which is what produced five "not
+    // applicable" rationales per run and no caught defect (ruling B4).
+    lines.push('Checks are recorded by the engine; attest reminders in one field, then submit:');
     lines.push('');
     lines.push('```');
     lines.push(`chain_id="${chainId}"`);

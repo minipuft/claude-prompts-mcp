@@ -48,7 +48,7 @@ const unknownIdSchema = z
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Unknown id must be kebab-case (e.g. "cache-ttl-unknown")');
 
 /** Opens a ledger entry for a newly-surfaced unknown. */
-export const unknownDiscoveredSchema = z.object({
+export const unknownDiscoveredSchema = z.strictObject({
   type: z.literal('unknown_discovered'),
   id: unknownIdSchema,
   statement: z.string().min(1, 'Unknown statement cannot be empty'),
@@ -70,7 +70,7 @@ export const unknownDiscoveredSchema = z.object({
 });
 
 /** Closes an existing ledger entry. `statement` carries the resolution statement. */
-export const unknownResolvedSchema = z.object({
+export const unknownResolvedSchema = z.strictObject({
   type: z.literal('unknown_resolved'),
   id: unknownIdSchema,
   statement: z.string().min(1, 'Unknown statement cannot be empty'),
@@ -149,10 +149,54 @@ const singleLineRationale = z
   .regex(/^[^\r\n]+$/, 'Rationale must be a single line — no line breaks');
 
 /** One gate's result. `index` is 1-based, matching the advertised gate list. */
-export const gateVerdictEntrySchema = z.object({
+export const gateVerdictEntrySchema = z.strictObject({
   index: z.number().int().positive('Gate index is 1-based'),
   passed: z.boolean(),
   rationale: singleLineRationale,
+});
+
+/**
+ * A gate id as it appears in the rendered `REMINDERS:` line.
+ *
+ * The line is a flat format — ids joined by `,`, segments split on `;`, a reason wrapped in
+ * `()` — so an id carrying any of those characters would not survive the round trip. Rejected
+ * here rather than escaped in the renderer, for the same reason the rationale rules above are:
+ * the constraints belong on the input.
+ */
+const reminderGateId = z
+  .string()
+  .trim()
+  .min(1, 'Gate id cannot be empty')
+  .regex(/^[^\s,;()]+$/, 'Gate id may not contain whitespace, "," ";" "(" or ")"');
+
+/**
+ * A reason a reminder did not apply. Single-line, and free of the two characters that delimit
+ * it once rendered.
+ */
+const reminderReason = z
+  .string()
+  .trim()
+  .min(1, 'Reason cannot be empty')
+  .regex(/^[^\r\n]+$/, 'Reason must be a single line — no line breaks')
+  .regex(/^[^;)]+$/, 'Reason may not contain ";" or ")" — both delimit the rendered line');
+
+/** One reminder declared inapplicable. A bare id is not accepted; the reason is the point. */
+export const gateVerdictReminderExemptionSchema = z.strictObject({
+  id: reminderGateId,
+  reason: reminderReason,
+});
+
+/**
+ * The reminder attestation: one field for every reminder-tier gate the review advertised
+ * (ruling B4, `~/.claude/plans/gate-checks-and-reminders.md`).
+ *
+ * Both arrays default to empty so a client may send `reminders: {}` to say "nothing to attest"
+ * — present-and-empty renders as `REMINDERS: none`, which is a different statement from the
+ * field being absent, and the renderer keeps them distinguishable.
+ */
+export const gateVerdictRemindersSchema = z.strictObject({
+  satisfied: z.array(reminderGateId).default([]),
+  not_applicable: z.array(gateVerdictReminderExemptionSchema).default([]),
 });
 
 /**
@@ -162,10 +206,11 @@ export const gateVerdictEntrySchema = z.object({
  * cannot submit an unparseable verdict: there is no format to get wrong, so
  * the five fallback patterns never come into play.
  */
-export const gateVerdictSubmissionSchema = z.object({
+export const gateVerdictSubmissionSchema = z.strictObject({
   overall: z.enum(['PASS', 'FAIL']),
   rationale: singleLineRationale,
   per_gate: z.array(gateVerdictEntrySchema).optional(),
+  reminders: gateVerdictRemindersSchema.optional(),
 });
 
 /**
@@ -253,7 +298,7 @@ const PARAM_DEFAULTS = {
   cancel:
     "Stop the run named by 'chain_id' and block further progression. Requires 'chain_id'; nothing else is read. Distinct from 'force_restart': cancel ENDS this run and starts nothing, while force_restart abandons it and immediately begins a new one. The session's state and artifacts survive a cancel — remove them with system_control(action:\"session\", operation:\"clear\").",
   gate_verdict:
-    'Gate review result when resuming. PREFERRED (structured, cannot be malformed): {overall:"PASS"|"FAIL", rationale:"...", per_gate:[{index:1, passed:true, rationale:"..."}]}. Also accepts the legacy string "GATE_REVIEW: PASS - rationale". Rationales are single-line. Keep user_response for actual step output.',
+    'Gate review result when resuming. PREFERRED (structured, cannot be malformed): {overall:"PASS"|"FAIL", rationale:"...", per_gate:[{index:1, passed:true, rationale:"..."}], reminders:{satisfied:["id"], not_applicable:[{id:"id", reason:"..."}]}}. per_gate carries only check-tier gates; reminders attests the rest in one field. Also accepts the legacy string "GATE_REVIEW: PASS - rationale". Rationales are single-line. Keep user_response for actual step output.',
   gate_action:
     'Your move on a run that is waiting for one. AFTER A FAILED GATE exhausts its retry limit: "retry" resets the attempt count, "skip" bypasses the gate, "abort" stops execution. ON A RUN PAUSED BY A BLOCKING UNKNOWN (only when budget.pauseOnBlocking was declared): "resume" clears the pause and issues the investigation step as written, "accept_alternative" replaces the rest of the run with the nodes supplied in `remainder` on the SAME call (refused by name without one). "abort" and cancel:true exit either state.',
   user_response:
@@ -434,11 +479,16 @@ function buildWidestSchema(
  * Calling it twice with equal state yields an equal schema; nothing is cached
  * or carried between calls.
  *
- * Narrowing withdraws a parameter from what is *advertised*. It does not add a
- * rejection: Zod strips unknown keys by default and that default is kept, so a
- * client holding a stale `tools/list` has its leftover value dropped rather
- * than erroring. That matches the runtime, which already ignores gate ids from
- * every source while the gate system is off.
+ * Narrowing withdraws a parameter from what is *advertised*. The shape is
+ * `.passthrough()` so an unknown key ARRIVES rather than being stripped: the
+ * handler refuses it by name (`shared/undeclared-parameters.ts`, R50), and a
+ * client holding a stale `tools/list` that still sends `gate_verdict` is told
+ * the gate system is off instead of having the value silently dropped. Both
+ * used to answer success. A `.strict()` object here would reject one layer
+ * earlier with a zod message naming neither the tool nor the correction, and
+ * would put a second refusal path above the one that owns this class — the
+ * same reasoning `resource_manager.schema.ts` records for its own
+ * `.passthrough()`.
  *
  * @param verdictValidator - `(v: string) => boolean` for gate_verdict format validation
  * @param verdictMessage - validation error message for gate_verdict
@@ -455,10 +505,12 @@ export function buildPromptEngineSchema(
   // Absent state means "widest", matching `isGateSystemEnabled()`, which
   // defaults to enabled when no gate state store is wired.
   if (surface.state?.gateSystemEnabled === false) {
-    return withSourceExclusivity(z.object(buildCoreFields(resolve)));
+    return withSourceExclusivity(z.object(buildCoreFields(resolve)).passthrough());
   }
 
-  return withSourceExclusivity(buildWidestSchema(resolve, verdictValidator, verdictMessage));
+  return withSourceExclusivity(
+    buildWidestSchema(resolve, verdictValidator, verdictMessage).passthrough()
+  );
 }
 
 /** The four command sources, in the order the rejection message names them. */

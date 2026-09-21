@@ -105,7 +105,15 @@ class SimulatedResourceManager {
     data: Record<string, unknown>,
     options?: { skipVersion?: boolean }
   ): Promise<{ success: boolean }> {
-    // Save current state as version before update (unless skipped)
+    // Apply the update, THEN record the state it produced.
+    //
+    // Go-forward numbering (P7): version N holds what edit N produced, which is what every real
+    // processor does via `recordEditResult`. This simulator recorded the PRE-update state instead,
+    // a pre-P7 shape that never matched production and is now visibly wrong: the first such
+    // snapshot is byte-identical to the one `create` just wrote, and an unchanged write no longer
+    // spends a version. The old shape also never recorded the final state at all.
+    this.currentState = { ...this.currentState, ...data };
+
     if (
       !options?.skipVersion &&
       this.versionHistoryService.isAutoVersionEnabled() &&
@@ -115,12 +123,9 @@ class SimulatedResourceManager {
         this.resourceType,
         this.resourceId,
         this.currentState,
-        { description: 'Pre-update snapshot' }
+        { description: 'Post-update snapshot' }
       );
     }
-
-    // Apply update
-    this.currentState = { ...this.currentState, ...data };
 
     return { success: true };
   }
@@ -137,24 +142,6 @@ class SimulatedResourceManager {
     }
 
     return history;
-  }
-
-  async rollback(
-    version: number
-  ): Promise<{ success: boolean; restoredState?: Record<string, unknown> }> {
-    const result = await this.versionHistoryService.rollback(
-      this.resourceType,
-      this.resourceId,
-      version,
-      this.currentState
-    );
-
-    if (result.success && result.snapshot) {
-      this.currentState = result.snapshot as Record<string, unknown>;
-      return { success: true, restoredState: this.currentState };
-    }
-
-    return { success: false };
   }
 
   async compare(fromVersion: number, toVersion: number) {
@@ -203,14 +190,16 @@ describe('Version History Workflow Integration', () => {
     mockLogger = new MockLogger();
     mockConfigProvider = new MockVersioningConfigProvider({
       enabled: true,
-      max_versions: 10,
-      auto_version: true,
+      maxVersions: 10,
+      autoVersion: true,
     });
 
     // Temp dir first: the SQLite engine is created inside it so teardown removes both.
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'version-workflow-test-'));
 
-    dbManager = await SqliteEngine.getInstance(tempDir, mockLogger as unknown as Logger);
+    dbManager = await SqliteEngine.getInstance(mockLogger as unknown as Logger, {
+      dbPath: path.join(tempDir, 'runtime-state', 'state.db'),
+    });
     await dbManager.initialize();
 
     versionHistoryService = new VersionHistoryService({
@@ -372,8 +361,8 @@ describe('Version History Workflow Integration', () => {
       expect(alphaRows.map((r) => r.version)).toEqual([1, 2]);
 
       // Reads are scoped too, not just writes: alpha sees its own two versions and none of beta's.
-      expect(await alpha.getLatestVersion('prompt', 'shared-id')).toBe(2);
-      expect(await beta.getLatestVersion('prompt', 'shared-id')).toBe(1);
+      expect((await alpha.loadHistory('prompt', 'shared-id'))?.current_version).toBe(2);
+      expect((await beta.loadHistory('prompt', 'shared-id'))?.current_version).toBe(1);
     });
 
     /**
@@ -423,53 +412,6 @@ describe('Version History Workflow Integration', () => {
         `SELECT version FROM version_history WHERE tenant_id = 'ws-beta' AND resource_id = 'cross-id' ORDER BY version`
       );
       expect(betaAfter.map((r) => r.version)).toEqual([1, 2]);
-    });
-  });
-
-  describe('Rollback Workflow', () => {
-    it('should rollback to previous version and restore state', async () => {
-      const manager = new SimulatedResourceManager({
-        versionHistoryService,
-        resourceType: 'framework',
-        resourceId: 'custom',
-      });
-
-      // Version history flow:
-      // create: saves v1 { phases: ['analyze'] }
-      // update 1: saves pre-update state as v2 { phases: ['analyze'] }, then updates to ['analyze', 'plan']
-      // update 2: saves pre-update state as v3 { phases: ['analyze', 'plan'] }, then updates to full
-
-      await manager.create({ name: 'Custom Framework', phases: ['analyze'] });
-      await manager.update({ phases: ['analyze', 'plan'] });
-      await manager.update({ phases: ['analyze', 'plan', 'execute'] });
-
-      // Current state should have 3 phases
-      expect(manager.getCurrentState()['phases']).toEqual(['analyze', 'plan', 'execute']);
-
-      // Rollback to v3 (which captured ['analyze', 'plan'] before last update)
-      const rollbackResult = await manager.rollback(3);
-      expect(rollbackResult.success).toBe(true);
-      expect(rollbackResult.restoredState!['phases']).toEqual(['analyze', 'plan']);
-
-      // Manager state should be restored
-      expect(manager.getCurrentState()['phases']).toEqual(['analyze', 'plan']);
-
-      // History should now have 4 versions (rollback creates pre-rollback snapshot)
-      const history = await manager.history();
-      expect(history!.versions.length).toBeGreaterThanOrEqual(4);
-    });
-
-    it('should fail rollback to non-existent version', async () => {
-      const manager = new SimulatedResourceManager({
-        versionHistoryService,
-        resourceType: 'prompt',
-        resourceId: 'test',
-      });
-
-      await manager.create({ name: 'Test' });
-
-      const result = await manager.rollback(999);
-      expect(result.success).toBe(false);
     });
   });
 
@@ -526,7 +468,7 @@ describe('Version History Workflow Integration', () => {
       expect(history!.versions).toHaveLength(2);
 
       // Disable auto-versioning mid-session
-      mockConfigProvider.setConfig({ auto_version: false });
+      mockConfigProvider.setConfig({ autoVersion: false });
 
       // This update should NOT create a version
       await manager.update({ name: 'v3' });
@@ -535,7 +477,7 @@ describe('Version History Workflow Integration', () => {
       expect(history!.versions).toHaveLength(2); // No new version
 
       // Re-enable
-      mockConfigProvider.setConfig({ auto_version: true });
+      mockConfigProvider.setConfig({ autoVersion: true });
 
       await manager.update({ name: 'v4' });
 
@@ -543,9 +485,9 @@ describe('Version History Workflow Integration', () => {
       expect(history!.versions).toHaveLength(3); // New version created
     });
 
-    it('should apply max_versions limit dynamically', async () => {
+    it('should apply maxVersions limit dynamically', async () => {
       // Start with high limit
-      mockConfigProvider.setConfig({ max_versions: 100 });
+      mockConfigProvider.setConfig({ maxVersions: 100 });
 
       const manager = new SimulatedResourceManager({
         versionHistoryService,
@@ -563,7 +505,7 @@ describe('Version History Workflow Integration', () => {
       expect(history!.versions).toHaveLength(5);
 
       // Reduce limit to 3
-      mockConfigProvider.setConfig({ max_versions: 3 });
+      mockConfigProvider.setConfig({ maxVersions: 3 });
 
       // Next update should trigger pruning
       await manager.update({ name: 'v6' });
@@ -727,6 +669,53 @@ describe('Version History Workflow Integration', () => {
       expect(written).not.toHaveProperty('systemMessageFile');
 
       expect(onRefreshCalls).toBe(1);
+    });
+
+    /**
+     * P4.83 — `budget` and `artifacts` are recorded and restored, through the writer that keeps
+     * the file's comments.
+     *
+     * Before this row the snapshot omitted both, so the writer's on-disk preservation carried the
+     * CURRENT value forward on every rollback: a chain rolled back to a version with a different
+     * budget silently kept today's, under a message saying version 1 had been restored. The
+     * authored comment is asserted alongside, because a restore that put the declaration back
+     * while stripping the file's comments trades one loss for another.
+     */
+    it('restores the recorded budget and artifacts, keeping the file comments', async () => {
+      await seedDivergedPrompt({
+        budget: { maxInsertions: 3 },
+        artifacts: { produces: ['plan'] },
+      });
+
+      // The CURRENT on-disk declaration differs from the recorded one, and carries a comment the
+      // writer never produced — so a passing assertion cannot be the writer agreeing with itself.
+      const yamlPath = path.join(promptsDir, CATEGORY, PROMPT_ID, 'prompt.yaml');
+      await fs.writeFile(
+        yamlPath,
+        `${await fs.readFile(yamlPath, 'utf8')}\n# authored by hand, must survive a rollback\n` +
+          `budget:\n  maxInsertions: 1\nartifacts:\n  produces:\n    - docs\n`,
+        'utf8'
+      );
+      convertedPrompts[0]!['budget'] = { maxInsertions: 1 };
+      convertedPrompts[0]!['artifacts'] = { produces: ['docs'] };
+
+      // Positive control: the probe reads a file that really does hold the live values first.
+      expect(readPromptYaml()['budget']).toEqual({ maxInsertions: 1 });
+
+      const response = await processor.handleRollback({
+        action: 'rollback',
+        id: PROMPT_ID,
+        version: 1,
+        confirm: true,
+      });
+      expect(response.isError).toBe(false);
+
+      const written = readPromptYaml();
+      expect(written['budget']).toEqual({ maxInsertions: 3 });
+      expect(written['artifacts']).toEqual({ produces: ['plan'] });
+      expect(await fs.readFile(yamlPath, 'utf8')).toContain(
+        '# authored by hand, must survive a rollback'
+      );
     });
 
     it('restores an authored field the live prompt overwrote', async () => {

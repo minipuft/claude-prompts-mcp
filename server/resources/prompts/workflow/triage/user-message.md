@@ -73,9 +73,10 @@ After analysis, produce this EXACT format:
 **Source Spec**: [none | ticket URL | spec.md | checkpoint plan | user story]
 
 **Acceptance Criteria** (when source spec exists):
-| # | Criterion | Observable Behavior | Verification |
-|---|-----------|-------------------|--------------|
-| 1 | [what must be true] | [how to observe it] | [test type or manual check] |
+
+| #   | Criterion           | Observable Behavior | Verification                |
+| --- | ------------------- | ------------------- | --------------------------- |
+| 1   | [what must be true] | [how to observe it] | [test type or manual check] |
 
 **Problem Statement**:
 [Current state] → [Desired state]

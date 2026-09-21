@@ -37,6 +37,14 @@ export interface RuntimeLaunchOptions {
   quiet: boolean;
   startupTest: boolean;
   testEnvironment: boolean;
+  /**
+   * The `--transport` value `parseServerCliArgs` parsed (`'stdio'` when the flag is absent),
+   * exposing the same computation this module already does locally for the auto-quiet decision
+   * below. Row 4.13: this is now the value both callers of `TransportRouter.determineTransport`
+   * (`runtime/context.ts`, `runtime/startup-server.ts`) hand it directly — the router no longer
+   * takes `args`/`process.argv` or a `configManager` fallback, closing the last "two parsers" gap.
+   */
+  transport: string;
   /** Path-related options from CLI flags */
   paths: PathResolverCliOptions;
   /** Log level override from --log-level flag */
@@ -228,6 +236,7 @@ export function resolveRuntimeLaunchOptions(
     quiet: cli.quiet || autoQuiet,
     startupTest: cli.startupTest,
     testEnvironment: detectRuntimeTestEnvironment(fullArgv, cli),
+    transport,
     paths,
   };
 

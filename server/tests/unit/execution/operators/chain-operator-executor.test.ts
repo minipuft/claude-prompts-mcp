@@ -1,3 +1,7 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { describe, test, expect, beforeEach, jest } from '@jest/globals';
 
 import { ChainOperatorExecutor } from '../../../../src/engine/execution/operators/chain-operator-executor.js';
@@ -5,6 +9,9 @@ import { ChainOperatorExecutor } from '../../../../src/engine/execution/operator
 import type { DeclaredSection } from '../../../../src/engine/frameworks/declared-sections.js';
 import type { Logger } from '../../../../src/infra/logging/index.js';
 import type { ConvertedPrompt } from '../../../../src/shared/types/index.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const SRC_DIR = path.resolve(__dirname, '../../../../src');
 
 const mockLogger: Logger = {
   debug: jest.fn(),
@@ -295,6 +302,44 @@ describe('ChainOperatorExecutor', () => {
     expect(result.content).toContain('Analyze this code: alpha');
   });
 
+  test('renderSimpleGateGuidance fallback (no GateGuidanceRenderer configured) emits the shared attestation line, not the retired Post-Execution Review pair', async () => {
+    // `executor` (from beforeEach) is constructed with no gateGuidanceRenderer, so the gate
+    // review path falls through to the private renderSimpleGateGuidance fallback (row 0.9).
+    const pendingReview = {
+      combinedPrompt: '',
+      gateIds: [],
+      prompts: [
+        {
+          gateId: 'code-quality',
+          gateName: 'Code Quality',
+          criteriaSummary: 'Ensure code quality',
+        },
+      ],
+      createdAt: Date.now(),
+      attemptCount: 0,
+      maxAttempts: 3,
+    };
+
+    const result = await executor.renderStep({
+      executionType: 'gate_review',
+      pendingGateReview: pendingReview as any,
+      stepPrompts: [
+        {
+          stepNumber: 1,
+          promptId: 'analyze',
+          args: { code: 'alpha' },
+        },
+      ],
+      chainContext: { current_step: 1, currentStepArgs: { code: 'alpha' } },
+      additionalGateIds: [],
+    });
+
+    expect(result.content).toContain(
+      "Attest reminders in the verdict's `reminders` field; checks are recorded by the engine."
+    );
+    expect(result.content).not.toContain('Post-Execution Review Guidelines');
+  });
+
   test('renders original intent section when chainContext has original_args', async () => {
     const result = await executor.renderStep({
       executionType: 'normal',
@@ -583,5 +628,30 @@ describe('ChainOperatorExecutor', () => {
         expect(result.content).not.toContain('Required Sections');
       });
     });
+  });
+});
+
+describe('retired "Post-Execution Review Guidelines" pair — class guard', () => {
+  // Row 0.4 (GateGuidanceRenderer.ts) and row 0.9 (this file's chain-operator-executor.ts
+  // fallback) each retired one copy of the pair `**Post-Execution Review Guidelines:**` /
+  // `Review your output against these quality standards before finalizing your response.` in
+  // favor of the shared GATE_ATTESTATION_LINE. This is the enumeration that fails if a third
+  // copy is introduced anywhere under src/engine, instead of trusting the two known sites stay
+  // fixed forever (cleanup-standards.md "A fix at the sites you found is not a fix of the class").
+  const ENGINE_DIR = path.join(SRC_DIR, 'engine');
+  const RETIRED_LITERAL = 'Post-Execution Review Guidelines';
+
+  function listTsFiles(dir: string): string[] {
+    return readdirSync(dir, { recursive: true, encoding: 'utf-8' })
+      .filter((entry) => entry.endsWith('.ts'))
+      .map((entry) => path.join(dir, entry));
+  }
+
+  test('no file under src/engine contains the retired literal', () => {
+    const offenders = listTsFiles(ENGINE_DIR).filter((filePath) =>
+      readFileSync(filePath, 'utf-8').includes(RETIRED_LITERAL)
+    );
+
+    expect(offenders).toEqual([]);
   });
 });
