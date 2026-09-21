@@ -45,12 +45,7 @@ const RESOURCE_WRITERS = [
 ];
 
 /** Calling any of these means the command records a version row for what it produced. */
-const VERSION_RECORDERS = [
-  'rollbackVersion',
-  'recordResourceWrite',
-  'saveVersion',
-  'recordEditResult',
-];
+const VERSION_RECORDERS = ['rollbackVersion', 'recordResourceWrite', 'saveVersion'];
 
 /** The closed half: writes a resource AND records what the write produced. */
 const RECORDS_A_VERSION = ['rollback', 'create', 'toggle'];

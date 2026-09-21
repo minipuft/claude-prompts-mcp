@@ -216,7 +216,10 @@ describe('versioning.maxVersions is one bound for both writers', () => {
      */
     const WRITERS: Record<string, { position: number; optionsType: string }> = {
       saveVersion: { position: 5, optionsType: 'HistoryWriteOptions' },
-      recordEditResult: { position: 6, optionsType: 'HistoryWriteOptions' },
+      // `recordResourceWrite` replaced `recordEditResult` here on 2026-09-21: it is the writer
+      // every `cpm` edit and create now reaches, and its bound rides in the same object as the
+      // write callback rather than in an options argument of its own.
+      recordResourceWrite: { position: 3, optionsType: 'ResourceWriteRecord' },
       rollbackVersion: { position: 5, optionsType: 'RollbackRestore' },
     };
 

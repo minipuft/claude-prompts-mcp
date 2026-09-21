@@ -38,11 +38,11 @@ function snapshotIdentity(persistedJson: string): string {
 }
 
 /**
- * The description a prior-state row carries, on both of the CLI's paths that write one.
+ * The description a prior-state row carries, on the CLI's one path that writes one.
  *
- * Exported rather than repeated because `recordEditResultRow` and `recordCheckpointedWrite` write
- * the same kind of row from two different orderings, and a bridge row an operator can recognise in
- * `cpm history` on one path and not the other would read as two different events.
+ * Exported rather than inlined in `recordCheckpointedWrite` because the server writes the same
+ * sentence for the same event, and a bridge row an operator can recognise in `cpm history` but not
+ * in `resource_manager history` would read as two different events.
  */
 export const BRIDGE_DESCRIPTION = 'Bridge: prior live state (era transition or out-of-band edit)';
 
@@ -209,54 +209,6 @@ function appendVersionRow(
     maxVersions: request.max_versions ?? DEFAULT_MAX_VERSIONS,
   });
   return { version, recorded: true };
-}
-
-/**
- * Record the state PRODUCED by an edit, bridging any unrecorded prior state first.
- *
- * Mirrors `VersionHistoryService.recordEditResult` exactly (P7 go-forward numbering): version N
- * always holds the state edit N produced. Whenever the latest recorded snapshot differs from the
- * live pre-edit state (first update of a never-before-recorded resource, or an out-of-band edit),
- * that live state is bridged in first so it stays rollback-reachable; steady state records exactly
- * one row per edit. Both writers of `version_history` must agree on this, or a resource's "newest
- * version" means something different depending on which process wrote it.
- */
-export function recordEditResultRow(
-  db: DatabaseSync,
-  tenantId: string,
-  request: HistoryRowRequest,
-  edit: {
-    priorLiveSnapshot: Record<string, unknown>;
-    producedSnapshot: Record<string, unknown>;
-    description: string;
-    diffSummary: string;
-    /**
-     * The produced files, when the caller has already written them.
-     *
-     * Only the PRODUCED row can carry them here, because this function records both rows at once:
-     * a caller reaching it has written its files, so the disk describes the produced state and a
-     * tree on the bridge row would file the produced bytes under the row claiming the PRIOR one
-     * (ruling R66). An operation that wants both rows to carry their own bytes has to interleave
-     * the write between them — that is `recordCheckpointedWrite`, not this.
-     */
-    producedTree?: LoadedTree | null;
-  }
-): AppendOutcome & { bridged: boolean } {
-  const { priorLiveSnapshot, producedSnapshot, description, diffSummary } = edit;
-  // ONE equality rule, applied twice — the bridge is simply an append that may find nothing to
-  // do. It previously carried its own order-sensitive comparison while the record below carried
-  // none, so "is this already the newest state?" had two answers on one path.
-  const bridge = appendVersion(db, tenantId, request, priorLiveSnapshot, {
-    description: BRIDGE_DESCRIPTION,
-    diffSummary: '',
-    tree: null,
-  });
-  const outcome = appendVersion(db, tenantId, request, producedSnapshot, {
-    description,
-    diffSummary,
-    tree: edit.producedTree ?? null,
-  });
-  return { ...outcome, bridged: bridge.recorded };
 }
 
 /**

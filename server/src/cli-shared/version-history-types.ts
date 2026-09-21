@@ -46,7 +46,6 @@ export interface HistoryRequest extends HistoryRowRequest {
     | 'load_history'
     | 'get_version'
     | 'save_version'
-    | 'record_edit_result'
     | 'compare_versions'
     | 'delete_history'
     | 'rename_history';
@@ -55,8 +54,6 @@ export interface HistoryRequest extends HistoryRowRequest {
   from_version?: number;
   to_version?: number;
   snapshot?: Record<string, unknown>;
-  /** The on-disk state immediately BEFORE this edit — only read by `record_edit_result` for the bridge check. */
-  prior_snapshot?: Record<string, unknown>;
   /**
    * The resource's bytes, already read, for the row the disk currently describes.
    *
@@ -79,15 +76,13 @@ export interface HistoryResponse {
   to?: VersionEntry;
   version?: number;
   /**
-   * Set by `save_version` and `record_edit_result` — whether a row was inserted.
+   * Set by `save_version` — whether a row was inserted.
    *
    * False means the snapshot was identical to the newest recorded one, so `version` is the number
    * that already existed. A caller printing `version` without reading this announces a save that
    * did not happen.
    */
   recorded?: boolean;
-  /** Set by `record_edit_result` — true when a bridge row was inserted before the recorded result. */
-  bridged?: boolean;
   /**
    * Set alongside `success: false` by `load_history` when `resolveEffectiveTenantId` found the
    * guessed tenant empty AND more than one other tenant holding rows for this resource — refused

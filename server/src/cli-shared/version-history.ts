@@ -14,9 +14,9 @@
  * `VersionHistoryService` — and they must agree on what a version number means or a resource
  * edited by both accumulates a history where "the newest version" means two different things
  * depending on who last wrote it. Go-forward: version N holds the state edit N PRODUCED, not
- * the state that preceded it. `recordEditResult` and `rollbackVersion` carry the bridge-row logic
- * (self-healing v1 for a never-before-recorded resource, or an out-of-band edit) — see
- * `recordEditResult` below for the mechanism, mirrored line-for-line from the server's.
+ * the state that preceded it. `recordResourceWrite` and `rollbackVersion` carry the bridge-row
+ * logic (self-healing v1 for a never-before-recorded resource, or an out-of-band edit) — see
+ * `checkpointed-write.ts` for the mechanism, mirrored from the server's.
  *
  * **`rollbackVersion` is the one write that is not a dispatched action, and it is async.** It has
  * to hold the connection open ACROSS the file write so the prior-state row lands while the disk
@@ -42,7 +42,6 @@ import {
   appendVersion,
   deleteSubtree,
   loadRows,
-  recordEditResultRow,
   renameSubtree,
   selectVersion,
   toEntry,
@@ -165,7 +164,7 @@ function versionHistoryExists(db: DatabaseSync): boolean {
  *
  * `tenantId` is `resolveTenantId`'s derivation, unverified against this db. The five actions
  * that only ever act on EXISTING rows resolve their own `effectiveTenantId` via
- * `resolveEffectiveTenantId` before using it; `save_version`/`record_edit_result` use `tenantId`
+ * `resolveEffectiveTenantId` before using it; `save_version` uses `tenantId`
  * as given (a legitimate new write must not be redirected), and `rename_history` does too for a
  * narrower reason — see `resolveEffectiveTenantId`'s doc comment for both.
  */
@@ -204,22 +203,6 @@ function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): 
         tree: request.produced_tree ?? null,
       });
       return { success: true, version: outcome.version, recorded: outcome.recorded };
-    }
-
-    case 'record_edit_result': {
-      const result = recordEditResultRow(db, tenantId, request, {
-        priorLiveSnapshot: request.prior_snapshot ?? {},
-        producedSnapshot: request.snapshot ?? {},
-        description: request.description ?? '',
-        diffSummary: request.diff_summary ?? '',
-        producedTree: request.produced_tree ?? null,
-      });
-      return {
-        success: true,
-        version: result.version,
-        recorded: result.recorded,
-        bridged: result.bridged,
-      };
     }
 
     case 'compare_versions': {
@@ -364,9 +347,9 @@ export function compareVersions(
 /**
  * What a CLI history write needs beyond the snapshot itself.
  *
- * `maxVersions` rides here rather than as its own parameter because `recordEditResult` would
- * otherwise take seven, over the `max-params` ceiling — and because the bound belongs with the
- * other per-call facts the row records. Omitting it keeps {@link DEFAULT_MAX_VERSIONS}, which is
+ * `maxVersions` rides here rather than as its own parameter because the bound belongs with the
+ * other per-call facts the row records, and because `saveVersion` would otherwise take six
+ * positional parameters. Omitting it keeps {@link DEFAULT_MAX_VERSIONS}, which is
  * what a workspace that configured nothing gets; a `cpm` command supplies
  * {@link resolveConfiguredMaxVersions}.
  */
@@ -441,60 +424,6 @@ export function saveVersion(
 }
 
 /**
- * Record the state PRODUCED by an edit, bridging any unrecorded prior state first.
- *
- * Public CLI counterpart to `VersionHistoryService.recordEditResult` — same go-forward
- * numbering (version N holds what edit N produced) and same bridge-row rule, so a resource
- * edited alternately by the server and by `cpm` accumulates one consistent version sequence
- * rather than two disagreeing ones.
- */
-export function recordEditResult(
-  resourceDir: string,
-  resourceType: ResourceType,
-  resourceId: string,
-  priorLiveSnapshot: Record<string, unknown>,
-  producedSnapshot: Record<string, unknown>,
-  options?: HistoryWriteOptions
-): SaveVersionResult & { bridged: boolean } {
-  const request = createRequest(resourceDir, 'record_edit_result', { resourceType, resourceId });
-  if (request === null) {
-    return {
-      success: false,
-      error: 'Unable to resolve resource DB path',
-      bridged: false,
-      recorded: false,
-    };
-  }
-
-  const result = runSqlite({
-    ...(request as HistoryRequest),
-    prior_snapshot: priorLiveSnapshot,
-    snapshot: producedSnapshot,
-    diff_summary: options?.diff_summary ?? '',
-    description: options?.description ?? '',
-    created_at: new Date().toISOString(),
-    max_versions: options?.maxVersions ?? DEFAULT_MAX_VERSIONS,
-    // The server's assignment: a caller that RECORDS AN EDIT has already written the produced
-    // files, so the produced row is the one the disk describes and the bridge row is not.
-    produced_tree: options?.tree ?? null,
-  });
-  if (!result.success) {
-    return {
-      success: false,
-      error: result.error ?? 'Failed to record edit result',
-      bridged: false,
-      recorded: false,
-    };
-  }
-  return {
-    success: true,
-    version: result.version ?? 0,
-    recorded: result.recorded ?? false,
-    bridged: result.bridged ?? false,
-  };
-}
-
-/**
  * What one {@link recordResourceWrite} did — in three states, not two.
  *
  * `written: false` is the only failure, and it covers both halves of the atomicity guarantee: the
@@ -543,7 +472,7 @@ export interface ResourceWriteRecord {
  * through `rollbackVersion`, which additionally has to load its target first.
  *
  * **The tenant is the derived one, uncorrected** — the same rule `dispatch` applies to
- * `save_version` and `record_edit_result`, and for the same reason: `resolveEffectiveTenantId`
+ * `save_version`, and for the same reason: `resolveEffectiveTenantId`
  * redirects a write onto a tenant that already holds rows for this id, which is right for an
  * operation acting on EXISTING history (a rollback reads its target from there) and wrong for one
  * that may legitimately be starting a new one. A create under a fresh workspace has no rows by
