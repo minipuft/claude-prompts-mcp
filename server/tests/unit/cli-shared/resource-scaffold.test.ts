@@ -8,6 +8,7 @@ import {
   deleteResource,
   deleteResourceDir,
   resourceExists,
+  resolveResourceDir,
 } from '../../../src/cli-shared/resource-scaffold.js';
 import { loadHistory, saveVersion } from '../../../src/cli-shared/version-history.js';
 import { seedStateDbSchema } from '../../helpers/test-database.js';
@@ -21,6 +22,43 @@ describe('resource-scaffold', () => {
 
   afterEach(() => {
     rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  describe('resolveResourceDir', () => {
+    /**
+     * The invariant a version record depends on: the path answerable BEFORE the create is the path
+     * the create uses.
+     *
+     * `cpm create` names that directory as the version record's rollback target, and the
+     * transaction captures it as absent so a failed record removes it. If the two ever disagreed,
+     * the create would be recorded against a directory it did not write and a failed record would
+     * leave the real one behind — silently, since both halves would still "succeed".
+     */
+    it.each([
+      ['gates' as const, undefined],
+      ['frameworks' as const, undefined],
+      ['styles' as const, undefined],
+      ['prompts' as const, 'general'],
+      ['prompts' as const, 'analysis'],
+    ])('predicts where createResourceDir puts a %s', (type, category) => {
+      const predicted = resolveResourceDir(tempDir, type, 'probe', category);
+      const created = createResourceDir(tempDir, type, 'probe', { category, validate: false });
+
+      expect(created.success).toBe(true);
+      expect(created.path).toBe(predicted);
+      expect(existsSync(predicted)).toBe(true);
+    });
+
+    it('defaults a prompt with no category to general — the template writes the same value', () => {
+      // The control for the case above: the two paths differ in exactly the default, so a resolver
+      // that ignored `category` entirely would pass the parametrised test and fail here.
+      expect(resolveResourceDir(tempDir, 'prompts', 'probe')).toBe(
+        resolveResourceDir(tempDir, 'prompts', 'probe', 'general')
+      );
+      expect(resolveResourceDir(tempDir, 'prompts', 'probe', 'other')).not.toBe(
+        resolveResourceDir(tempDir, 'prompts', 'probe', 'general')
+      );
+    });
   });
 
   describe('resourceExists', () => {

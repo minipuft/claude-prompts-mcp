@@ -66,6 +66,7 @@ import type {
   HookRegistryPort,
   McpNotificationEmitterPort,
 } from '#shared/types/index.js';
+import type { ResourceFileLocatorPort } from '#shared/utils/resource-file-set.js';
 import type { FrameworkManagerDependencies } from './framework-manager/core/types.js';
 import type { ResourceManagerInput } from './resource-manager/core/types.js';
 import type { Implementation } from '@modelcontextprotocol/server';
@@ -182,6 +183,14 @@ export class McpToolRouter {
 
   // Callback references
   private onRestart?: (reason: string) => Promise<void>;
+
+  /**
+   * How every resource tool's version history finds the files it records (owner ruling R65).
+   *
+   * Set in `initialize` and read again in `setFrameworkManager`, which builds the fourth handler
+   * later — the three built in `initialize` could take it as a local, the framework one cannot.
+   */
+  private resourceFileLocator?: ResourceFileLocatorPort;
   private toolsChangedNotifier?: () => Promise<void>;
   /**
    * Handle to the registered `prompt_engine`, kept only for the STDIO reshape.
@@ -227,10 +236,15 @@ export class McpToolRouter {
     metricsCollector: MetricsCollector,
     // Undefined only when the composition root opened no database; `setDatabasePort` still wires
     // the remaining handlers afterwards.
-    databasePort?: import('#shared/types/persistence.js').DatabasePort
+    databasePort?: import('#shared/types/persistence.js').DatabasePort,
+    // How every resource tool's `VersionHistoryService` finds the files it checkpoints (R65).
+    // Held on the instance because the framework tool is built later, in `setFrameworkManager`,
+    // and a locator supplied only here would reach three of the four handlers.
+    resourceFileLocator?: ResourceFileLocatorPort
   ): Promise<void> {
     // Store callback references
     this.onRestart = onRestart;
+    this.resourceFileLocator = resourceFileLocator;
 
     this.semanticAnalyzer = createContentAnalyzer(this.logger);
     this.analyticsService = metricsCollector;
@@ -273,7 +287,8 @@ export class McpToolRouter {
       this.frameworkStateStore,
       this.frameworkManager,
       onRefresh,
-      onRestart
+      onRestart,
+      this.resourceFileLocator
     );
 
     // The loader's quarantine, bound by REFERENCE. Every later load writes through this same
@@ -298,6 +313,7 @@ export class McpToolRouter {
       gateManager: this.gateManager,
       configManager: this.configManager,
       onRefresh,
+      resourceFileLocator: this.resourceFileLocator,
     });
 
     // Initialize category manager tool. Constructed HERE rather than beside the framework tool
@@ -307,6 +323,7 @@ export class McpToolRouter {
       logger: this.logger,
       configManager: this.configManager,
       onRefresh,
+      resourceFileLocator: this.resourceFileLocator,
     });
 
     // Initialize framework manager tool (framework manager set later via setFrameworkManager)
@@ -693,6 +710,7 @@ export class McpToolRouter {
           // Re-register tools with updated descriptions
           await this.reregisterToolsWithUpdatedDescriptions();
         },
+        resourceFileLocator: this.resourceFileLocator,
       };
 
       if (this.frameworkStateStore != null) {
@@ -1425,7 +1443,8 @@ export async function createMcpToolRouter(
   onRestart: (reason: string) => Promise<void>,
   gateManager: GateManager,
   metricsCollector: MetricsCollector,
-  databasePort?: import('#shared/types/persistence.js').DatabasePort
+  databasePort?: import('#shared/types/persistence.js').DatabasePort,
+  resourceFileLocator?: ResourceFileLocatorPort
 ): Promise<McpToolRouter> {
   const manager = new McpToolRouter(
     logger,
@@ -1436,7 +1455,13 @@ export async function createMcpToolRouter(
     gateManager
   );
 
-  await manager.initialize(onRefresh, onRestart, metricsCollector, databasePort);
+  await manager.initialize(
+    onRefresh,
+    onRestart,
+    metricsCollector,
+    databasePort,
+    resourceFileLocator
+  );
   return manager;
 }
 

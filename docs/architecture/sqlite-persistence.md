@@ -9,10 +9,11 @@ critical constraints; this document owns the table map, history, and procedures.
 retention. This file is the orientation map and the traps — when the two disagree, the contract
 module wins and this file is stale.
 
-## The Map (10 declared tables + 2 views)
+## The Map (12 declared tables + 2 views)
 
-Not 9, and not 11. `tenants` was deleted at v19 (F10); `chain_run_registry` was deleted at v22
-(P3 Tier 4), replaced by the two per-row tables below. SQLite auto-creates `sqlite_sequence` for
+Not 11, and not 13. `tenants` was deleted at v19 (F10); `chain_run_registry` was deleted at v22
+(P3 Tier 4), replaced by the two per-row tables below; `objects` and `version_entries` were added
+at v29. SQLite auto-creates `sqlite_sequence` for
 any table declaring `AUTOINCREMENT`; it is never declared in `applySchema()` and is excluded via
 `SQLITE_INTERNAL_TABLES`. A startup assert written against a raw `sqlite_master` count throws on
 every boot.
@@ -25,6 +26,8 @@ every boot.
 | `resource_index`        | `resource-indexer.ts`                               | derived     | none            |
 | `skills_sync_manifests` | `modules/skills-sync/service.ts`                    | **durable** | client-scope    |
 | `version_history`       | `modules/versioning/version-history-service.ts`     | **durable** | workspace       |
+| `objects`               | `cli-shared/object-store.ts`                        | **durable** | workspace       |
+| `version_entries`       | `cli-shared/object-store.ts`                        | **durable** | workspace       |
 | `resource_changes`      | `observability/tracking/resource-change-tracker.ts` | derived     | workspace       |
 | `chain_runs`            | `modules/chains/run-registry.ts`                    | ephemeral   | run-owner-pid   |
 | `chain_run_nodes`       | `modules/chains/run-registry.ts`                    | ephemeral   | run-owner-pid\* |
@@ -82,11 +85,25 @@ telemetry object rather than adding a second one; both terminal-record writers a
 whole object into their row, so the both-writers invariant held structurally with no per-writer
 edit required.
 
-## Two Tables Are Durable — A Schema Bump Must Not Destroy Them
+## Four Tables Are Durable — A Schema Bump Must Not Destroy Them
+
+`objects` and `version_entries` joined this list at v29; the reasoning below is why the
+classification, not the DDL, is the risky part of that bump.
 
 `version_history` holds rollback snapshots that nothing regenerates. `skills_sync_manifests` drives
 orphan detection, and `applySyncPrune` deletes directories listed in it — losing it turns a prune
 into either a no-op or a deletion of the wrong thing.
+
+**One prune, one bound, both writers.** `maxRowsPerResource: 50` in the contract is the bound an
+unconfigured workspace gets; `versioning.maxVersions` replaces it. Both writers trim through
+`pruneVersionHistory` (`cli-shared/version-history-rows.ts`), which keeps the NEWEST N and takes
+the bound as an argument — it resolves no default of its own. The server passes its resolved
+`VersioningConfig`; `cpm` passes `resolveConfiguredMaxVersions(workspace)`, which reads the
+workspace config document through the same reader `cpm config` uses, honouring both the 5.0
+`versioning.maxVersions` and the 4.x `versioning.max_versions` spelling. Until 2026-09-21 the CLI
+bound a hardcoded 50 into every request, so a workspace set to keep three kept three after an MCP
+edit and fifty after a `cpm rollback` — against one file. `retention.ts` enforces no
+`maxRowsPerResource` for exactly this reason: a generic sweep would know only the declaration.
 
 **Durable is not unbounded: the rows are reclaimed by the delete of the resource they describe.**
 Its declared retention is per-resource (`maxRowsPerResource`), which bounds a LIVE resource's
@@ -105,6 +122,221 @@ recreated and its DDL freezes permanently.
 
 Adding a `NOT NULL` column with no default to a durable table makes the restore throw, naming the
 table. That is intended: the change needs a real migration.
+
+## The Object Store Is Additive — Schema v29
+
+`objects` holds raw file bytes keyed `(tenant_id, hash)`; `version_entries` is the manifest, one
+row per `(version row, path)`, and it IS the tree. `version_history.tree_hash` is a nullable cache
+over that manifest — the manifest is authoritative — and NULL means the row is projection-only.
+
+`version_history.tree_origin` records which root class the recorded bytes were read FROM, using
+the file-set enumerator's vocabulary: `primary` | `overlay` | `bundled` | `unknown`. The enumerator
+(`shared/utils/resource-file-set.ts`) stays the SSOT — there is no `CHECK` constraint here, because
+a second copy of a vocabulary is a second thing to keep in step. It exists because a restore is not
+root-agnostic: bytes recorded from the **bundled** catalog restore into the workspace as a NEW
+override, which is a different act from restoring a workspace file over itself, and the preview has
+to say so. It cannot be derived at restore time — roots are resolved per process, so a row written
+under one root layout would be re-classified under another. `tree_origin` is NULL exactly when
+`tree_hash` is; the two are one fact and ship in one schema version for that reason.
+
+### What writes a tree, and when
+
+`cli-shared/object-store.ts` is the sole writer of both tables. It lives there, rather than beside
+the server's versioning service, because both writers of `version_history` must produce the SAME
+`tree_hash` for the same files and `cli-shared/` is the only layer the server and `cpm` can share.
+It opens no transaction of its own: every statement runs inside the caller's existing
+`BEGIN IMMEDIATE`, in foreign-key order — objects, then the manifest, then the row's `tree_hash`
+and `tree_origin`. That is invariant WRITE-1: an object insert is always in the same transaction as
+the reference that justifies it, so a crash between them leaves neither.
+
+**The file READS are outside that lock, and `recordTree` is synchronous.** `readResourceTree` reads
+and hashes the bytes before the caller takes the lock; `recordTree` then runs SQL only. Nothing
+read needs the lock — objects are content-addressed, so a file that changes between the read and
+the commit produces a different tree rather than a wrong one — and holding a write lock on a file
+two processes share across disk I/O blocks the other one for as long as the disk takes. It is also
+what lets `cpm` share the recorder at all: that path is a fully synchronous `DatabaseSync`.
+
+The files it stores are the ones `resourceFileSet` enumerates, and it never enumerates for itself —
+one answer, shared by the recorder and any later restorer. Finding the resource from a type and an
+id is a third party's job again: `runtime/resource-roots.ts` builds a `ResourceFileLocatorPort` from
+`resolveResourceRoots` and the composition root threads it into each tool's `VersionHistoryService`,
+so root precedence keeps its one owner.
+
+**A row that records no tree is a degradation, not a failure.** An over-limit file (1 MiB per file,
+8 MiB per resource), an unreadable one, a resource no root holds, or a service with no locator
+leaves `tree_hash` NULL and emits one `warn` naming the resource and the reason. The version row is
+the thing nothing regenerates; refusing to write it because its bytes were too large would trade a
+degraded rollback for a lost version. A SQLite failure is the other case and propagates, rolling the
+caller's transaction back.
+
+**A row gets a tree exactly when the bytes on disk at record time ARE that row's state**, and only
+its caller knows that — so the answer is a per-row parameter, never a match against the bridge
+row's description text, which is presentation deciding durability.
+
+On the SERVER, `recordEditResult` appends the prior live state and then the produced state, and
+BOTH appends run at commit time, after the produced files are on disk. So the produced row
+qualifies and the bridge row does not: a tree on the bridge row would describe the produced bytes
+under a row whose snapshot is the prior state.
+
+**`cpm rollback` reaches the same rule by interleaving the write between its two rows.** It used
+to record both rows and restore the files afterwards, which left the file it produced described by
+no row at all: measured 2026-09-21, `Rollback to v1` carried `tree_hash` NULL while the bytes on
+disk hashed to something nothing had recorded, so `cpm history` listed a state a later rollback
+could not reproduce. `rollbackVersion` now takes the restore as a callback
+(`RollbackRestore.apply`) and drives it between the two appends: the prior-state row is written
+while the disk still holds the prior bytes, and the produced row once the restored bytes are
+there. Both rows carry the tree of the state they describe, and neither carries the other's.
+
+That ordering also gives the two rows the server's atomicity. `recordCheckpointedWrite`
+(`cli-shared/checkpointed-write.ts`) runs the restore and the produced append as the `mutate` and
+`commit` steps of the same `ResourceMutationTransaction` every server processor uses, so a failed
+restore claims nothing and a failed record puts the files back byte-identical. The prior-state row
+is deliberately OUTSIDE that transaction: it describes a state that genuinely existed, which is
+true whether or not the write that follows succeeds — and after a rolled-back write the files are
+once again exactly what it describes.
+
+Pinned by `tests/integration/versioning/cli-tree-parity.test.ts` (both rows' manifests, the
+already-current case, a failed restore, a failed record, and the command's own wiring) and by
+`tests/e2e/cli-rollback-parity.e2e.test.ts`, which drives the BUILT `cpm` binary against the
+server's own `state.db` and hashes the files afterwards. The same file asserts that a `cpm` write
+and a server write of identical files produce an identical `tree_hash` — one enumerator, one
+hasher, one recorder, reached from both sides.
+
+**One projection per resource type, read by both surfaces.** A version row's `snapshot` is a
+`SnapshotContract` projection. For gates, frameworks and categories, what that projection RECORDS
+lives in `src/modules/versioning/projections/`, which both `mcp/tools/**` and `cli-shared/` import;
+the tool-layer contracts keep only `restore`, which rebuilds a write model whose type is a tool-layer
+one. `cpm rollback` of a gate or a framework therefore records the state it replaced in the same
+shape `resource_manager` would, and no longer writes a "Bridge: prior live state" row for a
+server-written resource. Until 2026-09-21 it passed the raw YAML map instead — measured on one gate,
+`{id,name,description,type,severity,guidanceFile}` against the server's
+`{id,name,type,description,guidance}` with the markdown body inline — so the two could never compare
+equal and every such rollback bridged.
+
+**The prompt projection is the one that stayed behind, and the blocker is a budget, not a layer.**
+`canonicalPromptSnapshot` takes a loader-RESOLVED prompt (`userMessageTemplate` inlined, where
+`prompt.yaml` holds only `userMessageTemplateFile`), so building its input needs `loadYamlPrompt`
+AND `PromptConverter`. Measured 2026-09-21 as a reachable import from `cli-shared/`: the dev `cpm`
+bundle went 855.4 KB → 914.4 KB, **+59.0 KB**, which is 35.5 KB past the 900,000-byte
+`DEV_BUNDLE_BUDGET_BYTES` — `npm run build` fails. So `cpm rollback` of a prompt still records the
+raw `prompt.yaml` map and still bridges, and `cpm link-gate`/`unlink-gate` (which edit a prompt) and
+`cpm create` of a prompt records nothing at all. ☐ open as of 2026-09-21 · flips when a prompt's
+authored state is reachable from `cli-shared/` within the bundle budget. Writing a second,
+YAML-shaped prompt projection instead is the shape this arc exists to remove.
+
+**`cpm create` and `cpm toggle` record through the same ordering as of 2026-09-21.** A create
+records the produced state as version 1 with no prior-state row — nothing existed to bridge, which
+is the server's own create rule — and a toggle records as an edit, bridging the pre-flip state
+first if it was not already the newest row. Both run their append as the write's `commit`, so a
+failed record restores every target: for a create that means removing the directory the
+transaction captured as absent. `cpm create` of a gate or framework and `cpm toggle` of a
+framework therefore leave a row the server's next edit does not have to bridge — driven in
+`tests/e2e/cli-create-records-a-version.e2e.test.ts` and
+`tests/e2e/cli-toggle-records-a-version.e2e.test.ts`, each with an out-of-band-edit twin as the
+positive control for the missing bridge row.
+
+What still records nothing says so rather than staying silent, in `--json` and in the text, with
+the reason: a created prompt (the +59.0 KB blocker above), a created or toggled style (styles
+carry no version rows on either surface), and any write in a workspace with no `state.db` (the CLI
+never authors that schema). A silent non-record is the shape this arc removes.
+`tests/integration/versioning/cpm-write-records-a-version.test.ts` is the gate that fails the
+moment a still-blocked command starts recording, or a recording one stops.
+
+`cpm delete` purges the subtree, `cpm rename` re-keys it, and `cpm move` leaves it alone because a
+category move does not change the id a history row is keyed on. Those three are complete, not
+missing a row. The whole classification is enumerated from the command registry, with the open
+entries stamped, by `tests/integration/versioning/cpm-write-records-a-version.test.ts`: a command
+that starts writing resources without a classification fails there, and so does an entry whose
+stated blocker no longer holds.
+
+**Losing every object degrades rollback to the projection path; it never loses history.**
+`version_history.snapshot` keeps holding the projection every reader already reads, and it is not
+retired, not deduplicated into the store, and not backfilled. That is the whole reason a garbage
+collector may sit in front of `objects` at all: its miss path is the shipping code. Read any
+proposal to retire `snapshot` as a proposal to put a sweep in front of unrecoverable data.
+
+**Objects are keyed per workspace, not globally.** One `state.db` serves every project on the
+machine, so a global hash key would make one workspace's blob the storage for another's identical
+file. Cross-workspace dedup is what is given up; in exchange no surface exists, even in principle,
+on which one workspace could observe that another holds a given byte sequence. `tenant_id` here is
+the value the owning `version_history` row carries — resolved once and passed down, never
+re-derived in the store.
+
+**The foreign keys are declared, enforced, and now asserted — and the three are different
+things.** `rg "foreign_keys"` over `server/src` and `cli/src` used to return nothing, and the
+obvious reading of that absence was wrong: `node:sqlite`'s `DatabaseSync` enables foreign key
+constraints **by default**, and both openers that WRITE `state.db` are `DatabaseSync`. Measured
+2026-09-20 — `PRAGMA foreign_keys` reads `1` on a fresh connection.
+
+Enforcement was therefore inherited from the driver rather than owned by this repository, which is
+not a state a v29 invariant may rest on. `STATE_DB_WRITER_PRAGMAS`
+(`shared/utils/runtime-state-location.ts`) now carries `PRAGMA foreign_keys = ON` beside the shared
+`busy_timeout`, and both writers apply the whole list. **Be honest about what that line proves:
+removing the `foreign_keys` line changes no behaviour on this driver, and no test goes red when it
+is deleted.** It is an assertion, not a fix — what it buys is that a driver default change, a different Node, or a new
+opener written from that list cannot silently withdraw the guarantee.
+
+Every opener of `state.db`, and its foreign key posture:
+
+| Opener                                  | Driver               | Posture                                  |
+| --------------------------------------- | -------------------- | ---------------------------------------- |
+| `infra/database/sqlite-engine.ts`       | `node:sqlite`        | ON — applies `STATE_DB_WRITER_PRAGMAS`   |
+| `cli-shared/version-history.ts` (`cpm`) | `node:sqlite`        | ON — applies the same list               |
+| `hooks/lib/db_reader.py`                | `sqlite3`, `mode=ro` | off (driver default); read-only, so moot |
+
+`hooks/lib/hook_state_store.py` and `hooks/lib/verify_active_store.py` open `hooks-state.db` and
+`verify-state.db`, which are different files with different schemas.
+
+Two consequences that only show up at a schema bump: `restoreDurableTables` replays
+`DURABLE_TABLE_NAMES` in declaration order, so `objects` and `version_entries` must stay declared
+**after** `version_history` in `table-contracts.ts` or the restore is refused; and `dropAllTables`
+drops in `sqlite_master` order, which reaches `version_history` first and cascades the manifest
+empty before either new table is dropped. Both are pinned by
+`tests/integration/database/durable-round-trip.test.ts`, which is generated from `TABLE_CONTRACTS`:
+it seeds one row in every `durable` table, runs the recreate, requires every row back
+byte-identical, and **fails when a durable table has no seed** — so the next durable table anyone
+adds is covered by a red run rather than by someone remembering. It also reads the foreign key
+edges out of the engine's own DDL and checks the declared restore order against them.
+
+**Do not read enforcement as "the cascade prunes entries for us."** It is still a per-connection
+setting, so any opener that turns it off writes into the same file. The startup referential check
+is what finds what such an opener left behind.
+
+**Every path that removes rows of `version_history` or `version_entries` also sweeps that tenant's
+orphaned objects, in the SAME transaction.** An object is reachable only through
+`version_history → version_entries → objects`; nothing enumerates the table and there is no
+maintenance pass, so bytes whose last manifest row is gone are unreachable and unreclaimable. The
+sweep is `sweepUnreferencedObjects` (`cli-shared/object-store.ts`): `NOT EXISTS` against
+`version_entries`, scoped to one `tenant_id`, re-derived every time rather than tracked in a
+refcount column a crash could drift. Four callers, and the predicate has to name BOTH tables to
+find them all — one of the four deletes no `version_history` row at all:
+
+| Path                                                  | Where                                                          |
+| ----------------------------------------------------- | -------------------------------------------------------------- |
+| prune, on every append (both writers)                 | `pruneVersionHistory`, `cli-shared/version-history-rows.ts`    |
+| `deleteHistory`, from the four `handleDelete` bodies  | `modules/versioning/version-history-service.ts`                |
+| `cpm`'s `deleteVersionRows`                           | the `delete_history` dispatch, `cli-shared/version-history.ts` |
+| the startup referential repair (deletes ENTRIES only) | `SqliteEngine.repairVersionTrees`                              |
+
+The `NOT EXISTS` clause is the guard; the foreign key is the backstop. Both matter and they are not
+interchangeable — a sweep relying on the constraint would RAISE on a referenced object and abort
+the caller's whole transaction, taking its `version_history` deletes with it.
+
+**A rename is GC-neutral and needs no sweep.** `renameSubtree` re-keys `resource_id`/`version`
+only; entries key on `version_row_id` and objects on content, so neither moves. Pinned by
+`tests/integration/versioning/object-gc.test.ts`, which compares both tables as one value across a
+rename — "rename touches history" otherwise invites a speculative fix.
+
+**No backfill of pre-v29 rows, deliberately.** Materialising a tree from a projection would
+fabricate file bytes that never existed on disk, which is worse than a NULL. Old rows keep
+restoring the way they always did.
+
+**Downgrade is defined, and it costs fidelity rather than history.** A v28-era server opening a
+v29 database snapshots durable tables using ITS `DURABLE_TABLE_NAMES`, which does not contain the
+two new tables, so `dropAllTables` destroys every object and entry while `version_history` survives
+with `tree_hash` dropped by column intersection. **Lost: byte-exact restore. Not lost: any
+history.** No version-floor refusal guards this on purpose — it would turn a recoverable
+degradation into a server that will not start. Re-upgrading is repaired by the startup check.
 
 ## A Version Number Is an Identity, and Schema v28 Enforces It
 
@@ -166,6 +398,16 @@ of 0 and loses every race outright — WAL lets readers and one writer coexist, 
 writers coexist, and this file has three openers. The Python hooks are the third; they open
 read-only and inherit `sqlite3.connect`'s own 5-second default, the same number by coincidence
 rather than by contract, so changing the constant means checking `hooks/lib/db_reader.py` too.
+
+**The two lines of `STATE_DB_WRITER_PRAGMAS` are not equally inert, and until 2026-09-21 nothing
+said so.** Deleting the whole loop from the CLI's `openStateDb` left 501 tests green, which read
+as "the list is decorative" — true of `foreign_keys` on this driver, false of `busy_timeout`, and
+the two were indistinguishable. `tests/integration/database/cli-state-db-busy-timeout.test.ts`
+closes that half behaviourally: a child process holds `BEGIN IMMEDIATE` for 300 ms and a real CLI
+entry point (`deleteVersionRows`, reached by `cpm delete`) must WAIT for it and succeed, with a
+zero-patience connection against the same held lock as the positive control. `openStateDb` is
+private and closes its connection before any caller could read a pragma off it, so an observable
+probe is the only honest one.
 
 v28 is the worked example of a **real migration** on a durable table. `ensureSchema()` renumbers
 colliding rows between the snapshot and the restore (`renumberDuplicateVersionHistory`,

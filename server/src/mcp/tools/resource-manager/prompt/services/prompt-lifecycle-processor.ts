@@ -48,7 +48,11 @@ import type { PromptResourceInput } from '../../core/types.js';
 
 import { PromptReferenceValidator } from '#engine/execution/reference/index.js';
 import { purgeHistoryOnDelete } from '#modules/versioning/delete-purge.js';
-import { describeVersionRecord } from '#modules/versioning/index.js';
+import {
+  CREATE_ROW_DESCRIPTION,
+  UPDATE_ROW_DESCRIPTION,
+  describeVersionRecord,
+} from '#modules/versioning/index.js';
 import { ToolResponse } from '#shared/types/index.js';
 import { PromptError } from '#shared/utils/index.js';
 import { preferredRepairTarget } from '#shared/utils/resource-quarantine.js';
@@ -169,7 +173,7 @@ export class PromptLifecycleProcessor {
                   'prompt',
                   canonicalId,
                   normalizeReloadShape(canonicalPromptSnapshot(canonicalId, promptData)),
-                  { description: 'Created via resource_manager', diff_summary: '' }
+                  { description: CREATE_ROW_DESCRIPTION, diff_summary: '' }
                 );
               } catch (error) {
                 versionFailure = error instanceof Error ? error.message : String(error);
@@ -702,7 +706,7 @@ export class PromptLifecycleProcessor {
                   beforeContent as unknown as Record<string, unknown>,
                   { ...promptData },
                   {
-                    description: 'Update via resource_manager',
+                    description: UPDATE_ROW_DESCRIPTION,
                     diff_summary: `+${diffResult.stats.additions}/-${diffResult.stats.deletions}`,
                   }
                 );

@@ -9,7 +9,7 @@ import {
   getVersion,
   compareVersions,
   saveVersion,
-  recordEditResult,
+  recordResourceWrite,
   rollbackVersion,
   deleteVersionRows,
   renameHistoryResource,
@@ -83,6 +83,23 @@ function seedPromptHistory(resourceDir: string): void {
     }
   );
 }
+
+/**
+ * A rollback restore that enumerates nothing and writes nothing.
+ *
+ * These cases are about the ROWS a rollback writes, not the bytes: the fixtures here are a
+ * `state.db` with no resource files beside it, so enumeration legitimately fails and every row is
+ * recorded projection-only — which is what `loadTreeQuietly` is for. `cli-tree-parity.test.ts`
+ * owns the byte half, over a resource that actually exists.
+ */
+const ROWS_ONLY_RESTORE = {
+  enumerate: (): Promise<never> => Promise.reject(new Error('no resource files in this fixture')),
+  targets: [],
+  // Returns the snapshot it was handed: this fixture writes no files, so the state the restore
+  // produced IS the target state.
+  apply: (snapshot: Record<string, unknown>): Promise<Record<string, unknown>> =>
+    Promise.resolve(snapshot),
+};
 
 describe('version-history', () => {
   let tempDir: string;
@@ -215,9 +232,15 @@ describe('version-history', () => {
     // v3's recorded snapshot, so it is bridged as v4, and the RESTORED (target) content is
     // recorded as v5 — the newest version now holds what the rollback PRODUCED, not what
     // preceded it. Mirrors VersionHistoryService's rollback test exactly.
-    it('bridges an unrecorded live state, then records the restored content as newest', () => {
+    it('bridges an unrecorded live state, then records the restored content as newest', async () => {
       const currentSnapshot = { id: 'test-prompt', description: 'current' };
-      const result = rollbackVersion(promptDir, 'prompt', 'test-prompt', 1, currentSnapshot);
+      const result = await rollbackVersion(
+        promptDir,
+        PROMPT_REF,
+        1,
+        currentSnapshot,
+        ROWS_ONLY_RESTORE
+      );
 
       expect(result.success).toBe(true);
       expect(result.restored_version).toBe(1);
@@ -234,10 +257,16 @@ describe('version-history', () => {
       expect(restored!.description).toBe('Rollback to v1');
     });
 
-    it('records exactly one row when the live state is already the latest recorded snapshot', () => {
+    it('records exactly one row when the live state is already the latest recorded snapshot', async () => {
       // seedPromptHistory's v3 snapshot is exactly this — no bridge needed.
       const currentSnapshot = { id: 'test-prompt', description: 'v3 description' };
-      const result = rollbackVersion(promptDir, 'prompt', 'test-prompt', 1, currentSnapshot);
+      const result = await rollbackVersion(
+        promptDir,
+        PROMPT_REF,
+        1,
+        currentSnapshot,
+        ROWS_ONLY_RESTORE
+      );
 
       expect(result.saved_version).toBe(4);
       const restored = getVersion(promptDir, 4, PROMPT_REF);
@@ -245,29 +274,48 @@ describe('version-history', () => {
       expect(restored!.description).toBe('Rollback to v1');
     });
 
-    it('errors when target version does not exist, and consumes no version number', () => {
+    it('errors when target version does not exist, and consumes no version number', async () => {
       const before = loadHistory(promptDir, PROMPT_REF)!.current_version;
-      const result = rollbackVersion(promptDir, 'prompt', 'test-prompt', 99, {});
+      const result = await rollbackVersion(promptDir, PROMPT_REF, 99, {}, ROWS_ONLY_RESTORE);
       expect(result.success).toBe(false);
       expect(result.error).toContain('99');
       expect(loadHistory(promptDir, PROMPT_REF)!.current_version).toBe(before);
     });
   });
 
-  describe('recordEditResult', () => {
+  describe('recordResourceWrite', () => {
     // P7-F10: parity target — mirrors VersionHistoryService.recordEditResult row-for-row so the
     // two accepted writers of `version_history` never disagree on what a version number means.
-    it('first update of a never-before-recorded resource lays a bridge v1 and records v2', () => {
+    // It replaced the CLI's own `recordEditResult` on 2026-09-21: that function recorded both
+    // rows AFTER the write, which left the produced files described by no row, and it had no
+    // production caller left once every `cpm` write moved onto this ordering.
+    //
+    // The write itself is the identity here, and `targets` is empty: these cases are about the
+    // ROW arithmetic, and the file-level atomicity around it has its own test
+    // (`tests/integration/versioning/cpm-create-record-atomicity.test.ts`).
+    const recordEdit = async (
+      priorLive: Record<string, unknown>,
+      produced: Record<string, unknown>
+    ): ReturnType<typeof recordResourceWrite> =>
+      await recordResourceWrite(
+        promptDir,
+        { resourceType: 'prompt', resourceId: 'test-prompt' },
+        {
+          enumerate: () => Promise.reject(new Error('projection-only row')),
+          targets: [],
+          priorSnapshot: priorLive,
+          write: () => Promise.resolve(produced),
+          description: 'Update via resource_manager',
+        }
+      );
+
+    it('first update of a never-before-recorded resource lays a bridge v1 and records v2', async () => {
       const priorLive = { id: 'test-prompt', description: 'out-of-band' };
       const produced = { id: 'test-prompt', description: 'edited' };
 
-      const result = recordEditResult(promptDir, 'prompt', 'test-prompt', priorLive, produced, {
-        description: 'Update via resource_manager',
-      });
+      const result = await recordEdit(priorLive, produced);
 
-      expect(result.success).toBe(true);
-      expect(result.bridged).toBe(true);
-      expect(result.version).toBe(2);
+      expect(result).toMatchObject({ written: true, recorded: true, bridged: true, version: 2 });
 
       const bridge = getVersion(promptDir, 1, PROMPT_REF);
       expect(bridge!.snapshot).toEqual(priorLive);
@@ -278,31 +326,18 @@ describe('version-history', () => {
       expect(newest!.description).toBe('Update via resource_manager');
     });
 
-    it('subsequent update with an already-recorded live state records v3, no bridge', () => {
+    it('subsequent update with an already-recorded live state records v3, no bridge', async () => {
       const priorLive = { id: 'test-prompt', description: 'out-of-band' };
       const firstProduced = { id: 'test-prompt', description: 'edited' };
-      recordEditResult(promptDir, 'prompt', 'test-prompt', priorLive, firstProduced, {
-        description: 'Update via resource_manager',
-      });
+      await recordEdit(priorLive, firstProduced);
 
       // Live state now equals what the first edit produced — no bridge on the second edit.
       const secondProduced = { id: 'test-prompt', description: 'edited again' };
-      const result = recordEditResult(
-        promptDir,
-        'prompt',
-        'test-prompt',
-        firstProduced,
-        secondProduced,
-        { description: 'Update via resource_manager' }
-      );
+      const result = await recordEdit(firstProduced, secondProduced);
 
-      expect(result.bridged).toBe(false);
-      expect(result.version).toBe(3);
-      const newest = getVersion(promptDir, 3, PROMPT_REF);
-      expect(newest!.snapshot).toEqual(secondProduced);
-
-      const history = loadHistory(promptDir, PROMPT_REF);
-      expect(history!.versions).toHaveLength(3);
+      expect(result).toMatchObject({ written: true, recorded: true, bridged: false, version: 3 });
+      expect(getVersion(promptDir, 3, PROMPT_REF)!.snapshot).toEqual(secondProduced);
+      expect(loadHistory(promptDir, PROMPT_REF)!.versions).toHaveLength(3);
     });
   });
 
@@ -591,16 +626,19 @@ describe('version-history', () => {
       expect(history!.versions).toHaveLength(2);
     });
 
-    it('rollback records the restored version under the corrected tenant, never a new one', () => {
+    it('rollback records the restored version under the corrected tenant, never a new one', async () => {
       process.env['CLAUDE_PROJECT_DIR'] = '/srv/server-tenant';
       saveVersion(promptDir, 'prompt', 'test-prompt', { id: 'test-prompt', description: 'v1' });
       saveVersion(promptDir, 'prompt', 'test-prompt', { id: 'test-prompt', description: 'v2' });
 
       process.env['CLAUDE_PROJECT_DIR'] = '/home/user/cli-tenant';
-      const result = rollbackVersion(promptDir, 'prompt', 'test-prompt', 1, {
-        id: 'test-prompt',
-        description: 'v2',
-      });
+      const result = await rollbackVersion(
+        promptDir,
+        PROMPT_REF,
+        1,
+        { id: 'test-prompt', description: 'v2' },
+        ROWS_ONLY_RESTORE
+      );
 
       expect(result.success).toBe(true);
       expect(result.restored_version).toBe(1);

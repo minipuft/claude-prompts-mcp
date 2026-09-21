@@ -175,8 +175,14 @@ export function hashBytes(content: string | Uint8Array): string {
  * enumeration order not changing the answer. Sorting by path keeps that property without
  * sacrificing injectivity, because paths are unique — which is why a duplicate path is refused
  * rather than silently collapsed or double-counted.
+ *
+ * `content` accepts raw bytes as well as a string, because the object store hashes files it has
+ * not decoded: a `.png` beside a prompt, or a YAML holding a lone surrogate, has no lossless
+ * string form, and a set hashed from a decoded copy would not identify the bytes that were stored.
  */
-export function hashFileSet(files: ReadonlyArray<{ path: string; content: string }>): string {
+export function hashFileSet(
+  files: ReadonlyArray<{ path: string; content: string | Uint8Array }>
+): string {
   const seen = new Set<string>();
   for (const file of files) {
     if (seen.has(file.path)) {

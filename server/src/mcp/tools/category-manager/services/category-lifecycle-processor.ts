@@ -13,7 +13,11 @@ import type { CategoryCreationData, CategoryManagerInput } from '../core/types.j
 
 import { discoverYamlPromptsInCategory } from '#modules/prompts/category-maintenance.js';
 import { purgeHistoryOnDelete } from '#modules/versioning/delete-purge.js';
-import { describeVersionRecord, projectWriteModel } from '#modules/versioning/index.js';
+import {
+  UPDATE_ROW_DESCRIPTION,
+  describeVersionRecord,
+  projectWriteModel,
+} from '#modules/versioning/index.js';
 import { resolveContainedPath } from '#shared/utils/path-containment.js';
 
 export class CategoryLifecycleProcessor {
@@ -153,7 +157,7 @@ export class CategoryLifecycleProcessor {
                 beforeState,
                 afterState,
                 {
-                  description: 'Update via resource_manager',
+                  description: UPDATE_ROW_DESCRIPTION,
                   diff_summary: `+${diffResult.stats.additions}/-${diffResult.stats.deletions}`,
                 }
               );

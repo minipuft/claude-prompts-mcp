@@ -9,7 +9,10 @@ import type { ConfigManager, Logger } from '#shared/types/index.js';
 import type { FileContentChange } from '../../resource-manager/prompt/analysis/object-diff-generator.js';
 import type { CategoryCreationData } from '../core/types.js';
 
-import { CATEGORY_YAML_DECLARED_KEYS } from '#modules/prompts/category-yaml-keys.js';
+import {
+  CATEGORY_YAML_DECLARED_KEYS,
+  PRESERVED_CATEGORY_YAML_KEYS,
+} from '#modules/prompts/category-yaml-keys.js';
 import {
   ResourceMutationTransaction,
   ResourceVerificationService,
@@ -25,31 +28,6 @@ import { parseYaml } from '#shared/utils/yaml/yaml-parser.js';
 
 /** The `category.yaml` file name, in one place so reader and writer cannot disagree about it. */
 export const CATEGORY_YAML_FILENAME = 'category.yaml';
-
-/**
- * `category.yaml` keys `buildCategoryYaml` writes directly from `CategoryCreationData` — always,
- * because `CategorySchema` requires all three. Never candidates for the generic carry-forward
- * below: the code above already decides their fate.
- */
-const CATEGORY_YAML_PROJECTED_KEYS = ['id', 'name', 'description'] as const;
-
-/**
- * Authorable `category.yaml` keys `CategoryFileWriter` builds no value for — carried forward from
- * the on-disk file when the caller didn't supply one. Without this, ANY `resource_manager` update
- * on a hand-authored category setting these silently strips them back to loader defaults, which
- * is the same class already fixed for prompts (`PRESERVED_PROMPT_YAML_KEYS`) and gates
- * (`PRESERVED_GATE_YAML_KEYS`).
- *
- * Derived from `CATEGORY_YAML_DECLARED_KEYS` (the prompts-side walk of `CategorySchema`'s declared
- * object keys) minus the projected set, so a future schema field lands here automatically with
- * nothing to update by hand. There is no manual tail as there is for gates: `CategorySchema` is a
- * plain `z.object` with no `.passthrough()`, so every key it accepts is a key it declares.
- */
-export const PRESERVED_CATEGORY_YAML_KEYS = CATEGORY_YAML_DECLARED_KEYS.filter(
-  (key) => !(CATEGORY_YAML_PROJECTED_KEYS as readonly string[]).includes(key)
-);
-
-export { CATEGORY_YAML_PROJECTED_KEYS };
 
 /**
  * Every `category.yaml` key a category write decides (P4.67) — the projected keys

@@ -16,7 +16,12 @@ import {
   formatResourceInventory,
   type ResourceInventory,
 } from './resource-inventory.js';
-import { existingOverlays, resolveResourceRoots, type ResourceRoots } from './resource-roots.js';
+import {
+  createResourceFileLocator,
+  existingOverlays,
+  resolveResourceRoots,
+  type ResourceRoots,
+} from './resource-roots.js';
 import { resolveSkillsSyncPaths } from './skills-sync-paths.js';
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
@@ -485,7 +490,11 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
     callbacks.restartServer,
     gateManager,
     metricsCollector,
-    toolsDatabase
+    toolsDatabase,
+    // Built HERE, not in the tools layer: it wraps `resolveResourceRoots`, and `mcp/` may not
+    // import `runtime/` (`.dependency-cruiser.cjs`, `no-imports-into-runtime`). Owner ruling R65 —
+    // root precedence keeps its one owner and nothing downstream re-derives it.
+    createResourceFileLocator(pathResolver)
   );
 
   if (isVerbose) logger.info('🔄 Updating MCP tools manager data...');

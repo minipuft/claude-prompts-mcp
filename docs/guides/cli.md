@@ -142,7 +142,27 @@ cpm create style analytical --name "Analytical" --description "Structured analyt
 | `-w, --workspace <path>` | Workspace directory                  |
 | `--json`                 | JSON output                          |
 
-Exit codes: `0` created, `1` already exists or error.
+**A created gate or framework is recorded as version 1**, with the same description
+`resource_manager create` writes and no prior-state row — there is nothing to bridge, because
+nothing existed. `--json` reports `"recorded"` and `"version"`.
+
+A created **prompt** or **style** records nothing, and says so: `--json` carries
+`"recorded": false` with a `"not_recorded_reason"`, and the text output prints the same sentence.
+The two reasons are different in kind. Styles carry no version rows on either surface — nothing
+records them, so a rollback of one could only ever report "version not found". A prompt is
+blocked: its snapshot is projected from a loader-resolved prompt, and reaching that loader from
+the CLI bundle measured **+59.0 KB** on 2026-09-21, which is 35.5 KB over the dev bundle budget
+and fails the build. Recording a differently-shaped prompt snapshot instead would make every
+subsequent `resource_manager` edit write a bridge row. Use `resource_manager` where a prompt's
+history matters.
+
+A create in a workspace the server has never run in also records nothing — there is no
+`state.db`, and the CLI never authors that schema. The resource is still created, and the reason
+is reported.
+
+Exit codes: `0` created, `1` already exists or error. A create whose version row cannot be
+written is reported as a failure and leaves no files behind: the record runs inside the write's
+transaction, so the directory it captured as absent is removed again.
 
 ### delete
 
@@ -201,7 +221,25 @@ cpm rollback prompt action_plan 2 --workspace server
 cpm rollback gate code-quality 1 --json
 ```
 
-Saves the current state as a new version before restoring the target version (matching server behavior). The restored snapshot is written back to the resource YAML file.
+Saves the current state as a new version, writes the target version back over the resource YAML, then records the state that write PRODUCED as the newest version — the same order the server records an edit in. Both rows carry the resource's bytes as they stood when the row was written, so either state can later be restored byte-exactly.
+
+For a gate or a framework, both rows carry the SAME projection `resource_manager` records — one
+declaration per resource type, shared by the two surfaces. Rolling back a gate or framework the
+server last wrote therefore adds exactly one row and no "Bridge: prior live state" row, because the
+state being replaced now compares equal to the newest recorded one. A **prompt** rollback still
+bridges: the shared prompt projection takes a loader-resolved prompt, and reaching the prompt loader
+from the CLI bundle measured +59.0 KB against 24.1 KB of headroom (2026-09-21), so `cpm` still
+records a prompt's raw `prompt.yaml` map. ☐ open as of 2026-09-21 · flips when a prompt's authored
+state is reachable from `cli-shared/` within the bundle budget.
+
+Nothing is recorded when the target version is already the current state; `--json` reports that as `"recorded": false` alongside the version number that was already newest. A rollback that cannot write the file records no restored version at all, and a rollback whose version row cannot be written leaves the file byte-identical to what it was.
+
+Three commands record a version: `rollback`, `create` (gates and frameworks) and `toggle`
+(frameworks). `delete` purges the resource's history, `rename` re-keys it onto the new id, and
+`move` leaves it alone (a category move does not change the id history is keyed on). `link-gate`
+edits a prompt and still records nothing, for the measured prompt-projection reason under
+[create](#create) — the MCP server's `resource_manager` does record a version for that edit, so
+use it where the history matters.
 
 Exit codes: `0` success, `1` version not found or error.
 
@@ -258,7 +296,18 @@ cpm toggle style analytical --json
 | `-w, --workspace <path>` | Workspace directory                |
 | `--json`                 | JSON output                        |
 
-Flips `enabled: true` to `false` (or vice versa). Only frameworks and styles have an `enabled` field. Exit codes: `0` toggled, `1` error.
+Flips `enabled: true` to `false` (or vice versa). Only frameworks and styles have an `enabled` field.
+
+**A toggled framework records the state the flip produced**, as an edit: the state before the
+flip is bridged in first if it was not already the newest recorded row, so it stays
+rollback-reachable. `cpm rollback` to the version before the toggle restores every value and
+comment (the bytes differ by one blank line after the rewritten key — a property of the
+source-preserving serializer, not of the rollback).
+
+A toggled **style** records nothing and says so in `--json` (`"recorded": false` with
+`"not_recorded_reason"`) and in the text: styles carry no version rows on either surface.
+
+Exit codes: `0` toggled, `1` error.
 
 ### link-gate
 
@@ -426,7 +475,7 @@ Within a workspace, it checks `resources/<type>/` first, then `<type>/` as a leg
 
 ## Architecture
 
-The CLI is an esbuild bundle (~306KB) that imports shared logic from `server/src/cli-shared/`. Most commands run self-contained; versioning commands (`history`, `compare`, `rollback`) require `python3`/`python` to query SQLite (`runtime-state/state.db`).
+The CLI is an esbuild bundle (~306KB) that imports shared logic from `server/src/cli-shared/`. Every command runs self-contained: versioning commands (`history`, `compare`, `rollback`) read and write `runtime-state/state.db` through Node's built-in `node:sqlite`, which is why the CLI has no Python requirement.
 
 ```
 cli/

@@ -123,11 +123,11 @@ export {
   getVersion,
   compareVersions,
   saveVersion,
-  recordEditResult,
   rollbackVersion,
   deleteVersionRows,
   renameHistoryResource,
   formatHistoryTable,
+  resolveConfiguredMaxVersions,
 } from './version-history.js';
 
 // ── Resource scaffolding (node:fs only) ──────────────────────────────────────

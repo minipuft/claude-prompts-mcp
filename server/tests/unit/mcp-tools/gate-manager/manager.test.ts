@@ -10,9 +10,9 @@ import { GenericGateGuide } from '../../../../src/engine/gates/registry/generic-
 import {
   GATE_YAML_EXCLUDED_KEYS,
   GATE_YAML_PROJECTED_KEYS,
-  GateFileWriter,
   PRESERVED_GATE_YAML_KEYS,
-} from '../../../../src/mcp/tools/gate-manager/services/gate-file-writer.js';
+} from '../../../../src/engine/gates/core/gate-yaml-keys.js';
+import { GateFileWriter } from '../../../../src/mcp/tools/gate-manager/services/gate-file-writer.js';
 import { EMPTY_QUARANTINE_VIEW } from '../../../../src/shared/utils/resource-quarantine.js';
 import { gateSnapshotContract } from '../../../../src/mcp/tools/gate-manager/services/gate-snapshot-contract.js';
 import { loadYamlFileSync } from '../../../../src/shared/utils/yaml/index.js';

@@ -24,7 +24,7 @@ import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 
 import {
-  recordEditResult as cliRecordEditResult,
+  recordResourceWrite as cliRecordResourceWrite,
   loadHistory as cliLoadHistory,
   rollbackVersion as cliRollbackVersion,
   saveVersion as cliSaveVersion,
@@ -72,6 +72,16 @@ const PERMUTED = {
   description: 'original description',
   name: 'Shared gate',
   id: 'shared-gate',
+};
+
+/** Rows only: this fixture has a `state.db` and no resource files, so every row is projection-only. */
+const ROWS_ONLY_RESTORE = {
+  enumerate: (): Promise<never> => Promise.reject(new Error('no resource files in this fixture')),
+  targets: [],
+  // Returns the snapshot it was handed: this fixture writes no files, so the state the restore
+  // produced IS the target state.
+  apply: (snapshot: Record<string, unknown>): Promise<Record<string, unknown>> =>
+    Promise.resolve(snapshot),
 };
 
 describe('an unchanged write creates no version row', () => {
@@ -207,25 +217,31 @@ describe('an unchanged write creates no version row', () => {
       expect(countRows()).toBe(1);
     });
 
-    it('rolling back to the state already current records nothing', () => {
+    it('rolling back to the state already current records nothing', async () => {
       cliSaveVersion(resourceDir, 'gate', 'shared-gate', SNAPSHOT);
       cliSaveVersion(resourceDir, 'gate', 'shared-gate', { ...SNAPSHOT, description: 'v2' });
       expect(countRows()).toBe(2);
 
-      const toCurrent = cliRollbackVersion(resourceDir, 'gate', 'shared-gate', 2, {
-        ...SNAPSHOT,
-        description: 'v2',
-      });
+      const toCurrent = await cliRollbackVersion(
+        resourceDir,
+        { resourceType: 'gate', resourceId: 'shared-gate' },
+        2,
+        { ...SNAPSHOT, description: 'v2' },
+        ROWS_ONLY_RESTORE
+      );
       expect(toCurrent.success).toBe(true);
       expect(toCurrent.recorded).toBe(false);
       expect(toCurrent.saved_version).toBe(2);
       expect(countRows()).toBe(2);
 
       // Positive control: a rollback to a DIFFERENT version records exactly one row.
-      const real = cliRollbackVersion(resourceDir, 'gate', 'shared-gate', 1, {
-        ...SNAPSHOT,
-        description: 'v2',
-      });
+      const real = await cliRollbackVersion(
+        resourceDir,
+        { resourceType: 'gate', resourceId: 'shared-gate' },
+        1,
+        { ...SNAPSHOT, description: 'v2' },
+        ROWS_ONLY_RESTORE
+      );
       expect(real.recorded).toBe(true);
       expect(real.saved_version).toBe(3);
       expect(countRows()).toBe(3);
@@ -245,10 +261,22 @@ describe('an unchanged write creates no version row', () => {
       const server = await service.saveVersion('gate', 'shared-gate', SNAPSHOT);
       expect(server).toMatchObject({ version: 1, recorded: true });
 
-      const cli = cliRecordEditResult(resourceDir, 'gate', 'shared-gate', PERMUTED, PERMUTED, {
-        description: 'cpm edit producing the same state',
-      });
-      expect(cli).toMatchObject({ version: 1, recorded: false, bridged: false });
+      // Through `recordResourceWrite`, the writer a `cpm` edit actually reaches: it performs the
+      // write and records what the write produced, so the "write" here is the identity — the
+      // permuted state, already on disk — and the claim is that neither the bridge nor the
+      // produced append adds a row for it.
+      const cli = await cliRecordResourceWrite(
+        resourceDir,
+        { resourceType: 'gate', resourceId: 'shared-gate' },
+        {
+          enumerate: () => Promise.reject(new Error('no bytes — this row is projection-only')),
+          targets: [],
+          priorSnapshot: PERMUTED,
+          write: () => Promise.resolve(PERMUTED),
+          description: 'cpm edit producing the same state',
+        }
+      );
+      expect(cli).toMatchObject({ written: true, recorded: false });
       expect(countRows()).toBe(1);
     });
 
