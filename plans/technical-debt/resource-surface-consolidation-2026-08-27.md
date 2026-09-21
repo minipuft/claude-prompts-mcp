@@ -22,16 +22,17 @@ lifecycle it can actually reach.
 
 ## Now
 
-_Rewritten 2026-09-20._ The tail slice is on `feat/rsc-tail` and goes out as one PR under `publish:`.
+_Rewritten 2026-09-20._ The tail slice merged as #342 (`bdca52a8`) and P4.64 as #343 (`f711401b`). The
+hardening slice runs on `feat/rsc-hardening` (from `f711401b`), one worker branch per row.
 
-- **Closed in the tail slice:** P4.52, P4.65, P4.68, P4.71, P4.73–P4.82 and P4.84. P4.85 was killed
-  on a measured false premise.
-- **Closed after it:** P4.64 (R40), as its own PR.
-- **Open, not started:** P4.83, P4.86–P4.93. Owner calls among them: P4.88 (HTTP notification
-  channel), P4.92 (config backups nothing restores), P4.93 (undeclared keys on the other two tools).
-- **Owner's, outside the repo:** the `~/.claude` rename (P5.12 second half), P5.16, then P5.13.
-- **Constraint in force:** the tutorial session's branches re-merge after this PR. It changes what a
-  live `resource_manager` drive may send, moves `SCHEMA_VERSION` to 28 and lowers all four ratchets.
+- **Goal:** HTTP clients receive server notifications (P4.88), every tool refuses an undeclared key
+  (P4.93), and a design for content-addressed checkpoints exists before any of it is built (P4.92).
+- **Running:** P4.88 (R49), P4.93 (R50), and a read-only design row for P4.92 (R51).
+- **Next decision:** the owner's answers to the questions the P4.92 design returns, then its first
+  implementation rows.
+- **Constraint in force:** `publish:` covered the tail PR only; this slice's PR needs its own ruling.
+- **Open, not started:** P4.83, P4.86, P4.87, P4.89–P4.91. **Owner's, outside the repo:** the
+  `~/.claude` rename (P5.12 second half), P5.16, then P5.13.
 
 ## What already landed (do not redo)
 
@@ -652,6 +653,18 @@ Ruled before dispatching P4.43–P4.50, on `914b068c`. R23 and R24 stand as writ
   state its job in one sentence, then search for anything else that answers it (literal lists,
   private helpers, duplicated constants). A hit keeps the method and opens a row naming both sites.
   Two batches found ten such methods this way; a name search found none of them.
+- **R49 (P4.88, owner 2026-09-20: HTTP delivers notifications; planner: how) — the causing request
+  carries the event.** All six events happen during a tool call, so each is sent through that
+  request's own notification sender, which a stateless HTTP server supports. One emitter resolves
+  its sink per event. The worker confirms this against the SDK before building, or returns evidence.
+- **R50 (P4.93, owner 2026-09-20: a security risk worth a breaking change) — one refusal, three
+  tools.** The declared key set comes from each tool's contract. A `prompt_engine` gate parameter
+  sent while gates are disabled is declared-but-unavailable and says so. Script-tool output is
+  checked before it reaches the `resource_manager` router.
+- **R51 (P4.92, owner 2026-09-20) — a checkpoint is created only when content changed, is
+  identified by a content hash, and a restore applies only the difference.** The owner wants this
+  carried through every existing restore and modification interface, so the row starts with an
+  inventory and a design, not code.
 - **R29 follow-ups (ruled on the P4.45 handoff).** A method called only from tests counts as
   unreached. A stale baseline entry fails the check.
 
