@@ -56,7 +56,7 @@ describe('SQLite State Backend', () => {
 
     it('should have correct schema version', async () => {
       const version = dbManager.getSchemaVersion();
-      expect(version).toBe(29);
+      expect(version).toBe(30);
     });
 
     // These exercise run/queryOne/transaction, not any particular table. They used `tenants`,
@@ -270,7 +270,7 @@ describe('Schema version bump', () => {
   });
 
   it('recreates the schema at the current version', () => {
-    expect(engine.getSchemaVersion()).toBe(29);
+    expect(engine.getSchemaVersion()).toBe(30);
   });
 
   it('preserves version_history rows across the recreate', () => {

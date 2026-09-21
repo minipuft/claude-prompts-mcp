@@ -287,6 +287,15 @@ export const CONFIG_JSONC_TEMPLATE: string = `// Configuration for the claude-pr
 //     — Enable %judge modifier for framework comparison.
 //     — default: true
 //     "judge": true,
+
+//     — Delegated-step (\`==>\`) handoff settings.
+//     "delegation": {
+//       — What to do when a delegated step's resume does not carry the brief's HANDOFF RESULT
+//         trailer: 'required' refuses the resume, 'advisory' accepts it and records the reason.
+//       — default: "required"
+//       — one of: "required", "advisory"
+//       "evidence": "required",
+//     },
 //   },
 
 //   — Claude Code hook behavior (affects prompt-suggest.py output).

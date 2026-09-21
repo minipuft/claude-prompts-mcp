@@ -476,13 +476,16 @@ Pipeline stages are thin orchestrators (~60-210 lines). Domain logic lives in se
 
 ### Execution Domain (`engine/execution/`)
 
-| Service                  | Location                | Purpose                                                                     | Stage                 |
-| ------------------------ | ----------------------- | --------------------------------------------------------------------------- | --------------------- |
-| `ChainBlueprintResolver` | `execution/parsers/`    | Restore chain session blueprints for response-only mode                     | 01 CommandParsing     |
-| `SymbolicCommandBuilder` | `execution/parsers/`    | Build ParsedCommand from symbolic operator parse results                    | 01 CommandParsing     |
-| `StepCaptureService`     | `execution/capture/`    | Step result capture, placeholder generation                                 | 08 ResponseCapture    |
-| `ResponseAssembler`      | `execution/formatting/` | Response formatting, chain footer building, usage CTA, gate validation info | 10 ResponseFormatting |
-| `ChainOperatorExecutor`  | `execution/operators/`  | Chain step rendering, delegation CTA building                               | 09 StepExecution      |
+| Service                  | Location                | Purpose                                                                                                            | Stage                 |
+| ------------------------ | ----------------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------- |
+| `ChainBlueprintResolver` | `execution/parsers/`    | Restore chain session blueprints for response-only mode                                                            | 01 CommandParsing     |
+| `SymbolicCommandBuilder` | `execution/parsers/`    | Build ParsedCommand from symbolic operator parse results                                                           | 01 CommandParsing     |
+| `StepCaptureService`     | `execution/capture/`    | Step result capture, placeholder generation                                                                        | 08 ResponseCapture    |
+| `ResponseAssembler`      | `execution/formatting/` | Response formatting, chain footer building, usage CTA, gate validation info                                        | 10 ResponseFormatting |
+| `ChainOperatorExecutor`  | `execution/operators/`  | Chain step rendering, delegation CTA building                                                                      | 09 StepExecution      |
+| `handoff-contract.ts`    | `execution/delegation/` | Delegated node token derivation, `HANDOFF RESULT` trailer parsing, and the evidence decision a resume must satisfy | 08 ResponseCapture    |
+
+**Enforcement layering.** `handoff-contract.ts` is the one module that derives a delegated node's token, parses a worker's `HANDOFF RESULT` trailer, and decides whether a resume satisfies the configured `execution.delegation.evidence` mode; `StepCaptureService` and the ResponseCapture stage both call it rather than re-deriving any of the three. The stage refuses the resume when that decision is `missing` under `required`, and either way `execution_records.handoff_evidence` records which of the four reasons the resume carried. Client-side hooks — Claude Code's `delegation-enforce.py` — only tighten on top of this, denying a spawn call that is not pinned to the foreground; they never substitute for the server's own check.
 
 ### See Also
 

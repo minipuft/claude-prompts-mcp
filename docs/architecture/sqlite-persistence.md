@@ -13,7 +13,7 @@ module wins and this file is stale.
 
 Not 11, and not 13. `tenants` was deleted at v19 (F10); `chain_run_registry` was deleted at v22
 (P3 Tier 4), replaced by the two per-row tables below; `objects` and `version_entries` were added
-at v29. SQLite auto-creates `sqlite_sequence` for
+at v29. The schema is at v30. SQLite auto-creates `sqlite_sequence` for
 any table declaring `AUTOINCREMENT`; it is never declared in `applySchema()` and is excluded via
 `SQLITE_INTERNAL_TABLES`. A startup assert written against a raw `sqlite_master` count throws on
 every boot.
@@ -84,6 +84,26 @@ nothing reads it back.
 telemetry object rather than adding a second one; both terminal-record writers already spread that
 whole object into their row, so the both-writers invariant held structurally with no per-writer
 edit required.
+
+`execution_records.delegation_skipped` became `handoff_evidence TEXT` at v30 — a REPLACEMENT, with
+no dual-write window. The retired boolean was a projection of a four-valued fact: it could only be
+bound for a delegated step that also carried gate text, so an ungated delegated step recorded NULL,
+which is the same spelling as "not delegated". The text column records the REASON a delegated
+step's resume was or was not acceptable — `'ok' | 'trailer' | 'node-line' | 'node-mismatch'`, the
+enumeration `HANDOFF_EVIDENCE_REASONS` (`shared/types/handoff-evidence.ts`) owns and the column's
+`CHECK` repeats — for EVERY delegated step and in both evidence modes. NULL now means one thing:
+the step was not delegated. Its writer is a THIRD row type, distinct from the per-step and
+terminal writers above: the capture-time `completed` row `StepCaptureService` appends when a chain
+resume captures real step output. Nullable with **no DDL DEFAULT**, for the reason
+`chain_run_nodes.origin` has none.
+
+No migration was owed and none was written: `execution_records` is `ephemeral`, so the bump drops
+and recreates it, and no row written under the old name can reach v30 to be read under the new one.
+`DROPPED_ON_THIS_BUMP` stays empty and `DROPPED_AT_VERSION` does not move. Seven test harnesses
+hand-write this table's DDL rather than booting the engine;
+`tests/unit/infra/database/execution-records-ddl-parity.test.ts` enumerates them by shape and fails
+when one drifts from the engine's column set — which is how a copy left declaring the retired
+column was found after a clean textual merge.
 
 ## Four Tables Are Durable — A Schema Bump Must Not Destroy Them
 

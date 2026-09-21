@@ -101,6 +101,15 @@ const TREE_HASH = 'sha256:000000000000000000000000000000000000000000000000000000
  */
 const TREE_ORIGIN = 'bundled';
 
+/**
+ * What `SCHEMA_VERSION` reads today. A literal, because the engine does not export the constant;
+ * the sibling schema-literal assertions in `sqlite-backend.test.ts` and
+ * `chain-run-storage.integration.test.ts` carry the same number and move with it. This file's two
+ * properties are version-agnostic — a stale `schema_version` row against the CURRENT DDL performs
+ * whatever round trip the latest bump performs — so only this constant follows a bump.
+ */
+const CURRENT_SCHEMA_VERSION = 30;
+
 describe('schema v29 — the content-addressed store', () => {
   let testDir: string;
   let dbPath: string;
@@ -151,13 +160,13 @@ describe('schema v29 — the content-addressed store', () => {
       db.close();
     }
 
-    it('opens under v29 with every durable row intact and both tree columns NULL', async () => {
+    it('opens under the current schema with every durable row intact and both tree columns NULL', async () => {
       seedV28();
 
       const engine = await SqliteEngine.getInstance(logger as never, { dbPath });
       await engine.initialize();
 
-      expect(engine.getSchemaVersion()).toBe(29);
+      expect(engine.getSchemaVersion()).toBe(CURRENT_SCHEMA_VERSION);
 
       const history = engine.query<{
         version: number;
@@ -236,7 +245,7 @@ describe('schema v29 — the content-addressed store', () => {
       const engine = await SqliteEngine.getInstance(logger as never, { dbPath });
       await engine.initialize();
 
-      expect(engine.getSchemaVersion()).toBe(29);
+      expect(engine.getSchemaVersion()).toBe(CURRENT_SCHEMA_VERSION);
 
       const objects = engine.query<{ hash: string; bytes: Uint8Array; size: number }>(
         `SELECT hash, bytes, size FROM objects WHERE tenant_id = 'ws'`
