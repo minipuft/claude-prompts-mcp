@@ -1,4 +1,8 @@
-import { loadYamlFileSync, rollbackVersion } from '@cli-shared/index.js';
+import {
+  loadYamlFileSync,
+  resolveConfiguredMaxVersions,
+  rollbackVersion,
+} from '@cli-shared/index.js';
 import { serializeYamlPreservingSource } from '@shared/utils/yaml/yaml-document-writer.js';
 import { resolveWorkspace, findResource } from '../lib/workspace.js';
 import { output } from '../lib/output.js';
@@ -66,7 +70,18 @@ export async function rollback(options: RollbackOptions): Promise<number> {
   }
   const resourceType = singularName(type) as 'prompt' | 'gate' | 'framework';
 
-  const result = rollbackVersion(match.file, resourceType, match.id, targetVersion, currentData);
+  // The workspace's own `versioning.maxVersions`, not the built-in 50: a rollback writes rows and
+  // trims the history it wrote them into, and until now `cpm` trimmed to a hardcoded bound while
+  // the server trimmed to the configured one — the same resource kept a different number of
+  // versions depending on which process last touched it.
+  const result = rollbackVersion(
+    match.file,
+    resourceType,
+    match.id,
+    targetVersion,
+    currentData,
+    { maxVersions: resolveConfiguredMaxVersions(workspace) },
+  );
 
   if (!result.success) {
     console.error(result.error ?? 'Rollback failed.');

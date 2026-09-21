@@ -30,6 +30,7 @@
 import { existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 
+import { getConfigValue, readConfig } from './config-operations.js';
 import { resolveStateDbPath } from './version-history-location.js';
 import {
   SUBTREE_MATCH,
@@ -363,12 +364,55 @@ export function compareVersions(
 
 // ── Write operations ────────────────────────────────────────────────────────
 
+/**
+ * What a CLI history write needs beyond the snapshot itself.
+ *
+ * `maxVersions` rides here rather than as its own parameter because `recordEditResult` would
+ * otherwise take seven, over the `max-params` ceiling — and because the bound belongs with the
+ * other per-call facts the row records. Omitting it keeps {@link DEFAULT_MAX_VERSIONS}, which is
+ * what a workspace that configured nothing gets; a `cpm` command supplies
+ * {@link resolveConfiguredMaxVersions}.
+ */
+export interface HistoryWriteOptions extends SaveVersionOptions {
+  maxVersions?: number;
+}
+
+/**
+ * The row cap this workspace configured, or {@link DEFAULT_MAX_VERSIONS} when it configured none.
+ *
+ * **Why a `cpm` command must call this.** `versioning.maxVersions` is read by the SERVER through
+ * `infra/config`, which `cli-shared` may not import (`validate:arch`, `cli-shared-no-runtime`), so
+ * for years every CLI write bound the hardcoded default instead: an operator who set 3 kept 3
+ * after an MCP edit and 50 after a `cpm rollback`, against one file. This reads the workspace
+ * config DOCUMENT through the same reader `cpm config` uses, so the value is the one on disk and
+ * the resolution is not a second derivation of where the config lives.
+ *
+ * Both spellings are honoured — `versioning.maxVersions` is the 5.0 file name and
+ * `versioning.max_versions` the 4.x one the server still folds in
+ * (`infra/config/config-file-translation.ts`). A value that is not a positive integer falls back
+ * rather than throwing: a malformed setting must not make a rollback fail, and the server's own
+ * loader treats it the same way.
+ */
+export function resolveConfiguredMaxVersions(workspace: string): number {
+  const read = readConfig(workspace);
+  if (!read.success || read.config === undefined) {
+    return DEFAULT_MAX_VERSIONS;
+  }
+  for (const key of ['versioning.maxVersions', 'versioning.max_versions']) {
+    const value = getConfigValue(read.config, key);
+    if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+      return value;
+    }
+  }
+  return DEFAULT_MAX_VERSIONS;
+}
+
 export function saveVersion(
   resourceDir: string,
   resourceType: ResourceType,
   resourceId: string,
   snapshot: Record<string, unknown>,
-  options?: SaveVersionOptions
+  options?: HistoryWriteOptions
 ): SaveVersionResult {
   const request = createRequest(resourceDir, 'save_version', { resourceType, resourceId });
   if (request === null) {
@@ -381,7 +425,7 @@ export function saveVersion(
     diff_summary: options?.diff_summary ?? '',
     description: options?.description,
     created_at: new Date().toISOString(),
-    max_versions: DEFAULT_MAX_VERSIONS,
+    max_versions: options?.maxVersions ?? DEFAULT_MAX_VERSIONS,
   });
   if (!result.success) {
     return { success: false, error: result.error ?? 'Failed to save version', recorded: false };
@@ -403,7 +447,7 @@ export function recordEditResult(
   resourceId: string,
   priorLiveSnapshot: Record<string, unknown>,
   producedSnapshot: Record<string, unknown>,
-  options?: SaveVersionOptions
+  options?: HistoryWriteOptions
 ): SaveVersionResult & { bridged: boolean } {
   const request = createRequest(resourceDir, 'record_edit_result', { resourceType, resourceId });
   if (request === null) {
@@ -422,7 +466,7 @@ export function recordEditResult(
     diff_summary: options?.diff_summary ?? '',
     description: options?.description ?? '',
     created_at: new Date().toISOString(),
-    max_versions: DEFAULT_MAX_VERSIONS,
+    max_versions: options?.maxVersions ?? DEFAULT_MAX_VERSIONS,
   });
   if (!result.success) {
     return {
@@ -445,7 +489,8 @@ export function rollbackVersion(
   resourceType: ResourceType,
   resourceId: string,
   targetVersion: number,
-  currentSnapshot: Record<string, unknown>
+  currentSnapshot: Record<string, unknown>,
+  options?: HistoryWriteOptions
 ): RollbackResult & { snapshot?: Record<string, unknown> } {
   const request = createRequest(resourceDir, 'rollback', { resourceType, resourceId });
   if (request === null) {
@@ -457,7 +502,7 @@ export function rollbackVersion(
     target_version: targetVersion,
     current_snapshot: currentSnapshot,
     created_at: new Date().toISOString(),
-    max_versions: DEFAULT_MAX_VERSIONS,
+    max_versions: options?.maxVersions ?? DEFAULT_MAX_VERSIONS,
   });
   if (!result.success) {
     return { success: false, error: result.error ?? 'Rollback failed' };

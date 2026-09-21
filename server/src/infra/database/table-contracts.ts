@@ -229,6 +229,10 @@ export const TABLE_CONTRACTS: readonly TableContract[] = [
     owner: 'src/modules/versioning/version-history-service.ts',
     posture: 'durable',
     scope: 'workspace',
+    // The DEFAULT bound, which `versioning.maxVersions` replaces — so this number states the
+    // shape of the cap (per resource, not per table) and what an unconfigured workspace keeps,
+    // never a value a sweep may enforce behind the operator's back. Both writers trim through
+    // `pruneVersionHistory`; `retention.ts` deliberately enforces no `maxRowsPerResource`.
     retention: { maxRowsPerResource: 50 },
     readers: ['src/cli-shared/version-history.ts', 'src/cli-shared/version-history-scope.ts'],
     acceptedForeignWriters: [

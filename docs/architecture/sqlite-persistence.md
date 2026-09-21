@@ -94,6 +94,17 @@ classification, not the DDL, is the risky part of that bump.
 orphan detection, and `applySyncPrune` deletes directories listed in it — losing it turns a prune
 into either a no-op or a deletion of the wrong thing.
 
+**One prune, one bound, both writers.** `maxRowsPerResource: 50` in the contract is the bound an
+unconfigured workspace gets; `versioning.maxVersions` replaces it. Both writers trim through
+`pruneVersionHistory` (`cli-shared/version-history-rows.ts`), which keeps the NEWEST N and takes
+the bound as an argument — it resolves no default of its own. The server passes its resolved
+`VersioningConfig`; `cpm` passes `resolveConfiguredMaxVersions(workspace)`, which reads the
+workspace config document through the same reader `cpm config` uses, honouring both the 5.0
+`versioning.maxVersions` and the 4.x `versioning.max_versions` spelling. Until 2026-09-21 the CLI
+bound a hardcoded 50 into every request, so a workspace set to keep three kept three after an MCP
+edit and fifty after a `cpm rollback` — against one file. `retention.ts` enforces no
+`maxRowsPerResource` for exactly this reason: a generic sweep would know only the declaration.
+
 **Durable is not unbounded: the rows are reclaimed by the delete of the resource they describe.**
 Its declared retention is per-resource (`maxRowsPerResource`), which bounds a LIVE resource's
 history and says nothing about a dead one's — and until the four `resource_manager` delete handlers

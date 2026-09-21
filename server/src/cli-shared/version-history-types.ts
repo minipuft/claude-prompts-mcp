@@ -10,8 +10,17 @@
 
 import type { VersionEntry, HistoryFile } from '#modules/versioning/types.js';
 
-/** Trim a history to this many versions on every append. */
-export const DEFAULT_MAX_VERSIONS = 50;
+import { DEFAULT_VERSIONING_CONFIG } from '#shared/types/core-config.js';
+
+/**
+ * Trim a history to this many versions when the workspace configures no bound of its own.
+ *
+ * Derived from the server's `DEFAULT_VERSIONING_CONFIG` rather than restated: the two writers of
+ * `version_history` must agree on what an unconfigured workspace keeps, and a second literal is a
+ * second thing to forget. It is the FALLBACK only — an operator who set `versioning.maxVersions`
+ * gets that value on both surfaces (`resolveConfiguredMaxVersions`).
+ */
+export const DEFAULT_MAX_VERSIONS = DEFAULT_VERSIONING_CONFIG.maxVersions;
 
 export type ResourceType = 'prompt' | 'gate' | 'framework' | 'style';
 

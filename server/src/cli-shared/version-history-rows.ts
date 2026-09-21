@@ -13,8 +13,9 @@
 import { DEFAULT_MAX_VERSIONS } from './version-history-types.js';
 
 import type { HistoryFile, VersionEntry } from '#modules/versioning/types.js';
+import type { ObjectStoreDatabase } from './object-store.js';
 import type { HistoryRequest, HistoryResponse, HistoryRow } from './version-history-types.js';
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 
 import { RESOURCE_SUBTREE_MATCH } from '#modules/versioning/history-key.js';
 import { hashCanonical } from '#shared/utils/hash.js';
@@ -166,7 +167,12 @@ function appendVersionRow(
     description,
     request.created_at ?? new Date().toISOString()
   );
-  prune(db, tenantId, request, request.max_versions ?? DEFAULT_MAX_VERSIONS);
+  pruneVersionHistory(asObjectStoreDatabase(db), {
+    tenantId,
+    resourceType: request.resource_type,
+    resourceId: request.resource_id,
+    maxVersions: request.max_versions ?? DEFAULT_MAX_VERSIONS,
+  });
   return { version, recorded: true };
 }
 
@@ -207,29 +213,77 @@ export function recordEditResultRow(
   return { ...outcome, bridged: bridge.recorded };
 }
 
-function prune(
-  db: DatabaseSync,
-  tenantId: string,
-  request: HistoryRequest,
-  maxVersions: number
-): void {
-  db.prepare(
+/** What one prune acts on: one resource's rows under one tenant, and the bound they must fit. */
+export interface PruneVersionHistoryInput {
+  tenantId: string;
+  resourceType: string;
+  resourceId: string;
+  /** The operator's `versioning.maxVersions`, already resolved. Never a default decided here. */
+  maxVersions: number;
+}
+
+/**
+ * Trim one resource's history to `maxVersions`, NEWEST kept — the one implementation, for both
+ * writers of `version_history`.
+ *
+ * There were two, with different SQL and different bounds. The server counted before deleting and
+ * used the configured `versioning.maxVersions`; the CLI deleted unconditionally and used a
+ * hardcoded 50, because the configured value never reached its request. A workspace set to keep 3
+ * therefore kept 3 after a `resource_manager` edit and 50 after a `cpm rollback`, on the same
+ * resource in the same file — the operator's setting meant different things depending on which
+ * process last wrote. Retention is a property of the TABLE, not of the surface that reached it, so
+ * it is stated once here and both writers call it with a bound they resolved, never invented.
+ *
+ * Takes the two-method database shape `object-store.ts` declares rather than `DatabaseSync` or
+ * `DatabasePort`: those are the CLI's and the server's own connection types, and a function both
+ * must call can be written against neither. `asObjectStoreDatabase` adapts the CLI's.
+ *
+ * @returns how many rows the trim removed, so each caller can log its own count.
+ */
+export function pruneVersionHistory(
+  db: ObjectStoreDatabase,
+  input: PruneVersionHistoryInput
+): number {
+  const { tenantId, resourceType, resourceId, maxVersions } = input;
+  const key = [tenantId, resourceType, resourceId];
+
+  const counted = db.queryOne<{ cnt: number }>(
+    `SELECT COUNT(*) AS cnt FROM version_history
+     WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?`,
+    key
+  );
+  const total = Number(counted?.cnt ?? 0);
+  if (total <= maxVersions) {
+    return 0;
+  }
+
+  db.run(
     `DELETE FROM version_history
      WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?
        AND id NOT IN (
          SELECT id FROM version_history
          WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?
          ORDER BY version DESC LIMIT ?
-       )`
-  ).run(
-    tenantId,
-    request.resource_type,
-    request.resource_id,
-    tenantId,
-    request.resource_type,
-    request.resource_id,
-    maxVersions
+       )`,
+    [...key, ...key, maxVersions]
   );
+  return total - maxVersions;
+}
+
+/**
+ * The CLI's raw `DatabaseSync` as the two-method shape the shared history writes take.
+ *
+ * `node:sqlite` exposes `prepare`/`exec`, not `run(sql, params)`, so the adapter is unavoidable —
+ * it is four lines here instead of a second copy of every shared statement over there.
+ */
+function asObjectStoreDatabase(db: DatabaseSync): ObjectStoreDatabase {
+  return {
+    run: (sql, params = []) => {
+      db.prepare(sql).run(...(params as SQLInputValue[]));
+    },
+    queryOne: <T = Record<string, unknown>>(sql: string, params: unknown[] = []) =>
+      (db.prepare(sql).get(...(params as SQLInputValue[])) as T | undefined) ?? null,
+  };
 }
 
 export function loadRows(db: DatabaseSync, tenantId: string, request: HistoryRequest): HistoryFile {

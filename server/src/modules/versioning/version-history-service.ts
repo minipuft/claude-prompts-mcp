@@ -18,6 +18,7 @@ import type {
 } from './types.js';
 
 import { recordTree } from '#cli-shared/object-store.js';
+import { pruneVersionHistory } from '#cli-shared/version-history-rows.js';
 import { hashCanonical } from '#shared/utils/hash.js';
 import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
 import { resourceFileSet } from '#shared/utils/resource-file-set.js';
@@ -345,23 +346,19 @@ export class VersionHistoryService {
       ]
     );
 
-    // Prune old versions if exceeding max
-    const count = db.queryOne<{ cnt: number }>(
-      `SELECT COUNT(*) as cnt FROM version_history
-         WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?`,
-      [tenantId, resourceType, resourceId]
-    );
-
-    if (count && count.cnt > config.maxVersions) {
-      db.run(
-        `DELETE FROM version_history WHERE id NOT IN (
-            SELECT id FROM version_history
-            WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?
-            ORDER BY version DESC LIMIT ?
-          ) AND tenant_id = ? AND resource_type = ? AND resource_id = ?`,
-        [tenantId, resourceType, resourceId, config.maxVersions, tenantId, resourceType, resourceId]
+    // Trim through the ONE implementation both writers share (`cli-shared/version-history-rows`).
+    // It used to be restated here, with SQL and a bound that differed from the CLI's — which is
+    // how a workspace configured to keep three versions kept fifty after a `cpm` write.
+    const pruned = pruneVersionHistory(db, {
+      tenantId,
+      resourceType,
+      resourceId,
+      maxVersions: config.maxVersions,
+    });
+    if (pruned > 0) {
+      this.logger.debug(
+        `Pruned ${pruned} history row(s) for ${resourceId} to ${config.maxVersions} versions`
       );
-      this.logger.debug(`Pruned history for ${resourceId} to ${config.maxVersions} versions`);
     }
   }
 
