@@ -112,63 +112,6 @@ export class CategoryManager {
   }
 
   /**
-   * Get all categories
-   */
-  getCategories(): Category[] {
-    return [...this.categories];
-  }
-
-  /**
-   * Get category by ID
-   */
-  getCategoryById(id: string): Category | undefined {
-    return this.categories.find((cat) => cat.id === id);
-  }
-
-  /**
-   * Validate that all prompt categories exist
-   */
-  validatePromptCategories(prompts: PromptData[]): CategoryValidationResult {
-    const result: CategoryValidationResult = {
-      isValid: true,
-      issues: [],
-      warnings: [],
-    };
-
-    const categoryIds = new Set(this.categories.map((cat) => cat.id));
-    const usedCategories = new Set<string>();
-
-    for (const prompt of prompts) {
-      if (!prompt.category) {
-        result.issues.push(`Prompt '${prompt.id}' has no category assigned`);
-        result.isValid = false;
-        continue;
-      }
-
-      if (!categoryIds.has(prompt.category)) {
-        result.issues.push(
-          `Prompt '${prompt.id}' references non-existent category: ${prompt.category}`
-        );
-        result.isValid = false;
-        continue;
-      }
-
-      usedCategories.add(prompt.category);
-    }
-
-    // Check for unused categories
-    for (const category of this.categories) {
-      if (!usedCategories.has(category.id)) {
-        result.warnings.push(
-          `Category '${category.id}' (${category.name}) has no prompts assigned`
-        );
-      }
-    }
-
-    return result;
-  }
-
-  /**
    * Get prompts by category
    */
   getPromptsByCategory(prompts: PromptData[], categoryId: string): PromptData[] {
