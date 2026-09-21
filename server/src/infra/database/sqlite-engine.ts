@@ -56,7 +56,8 @@ import { STATE_DB_BUSY_TIMEOUT_MS } from '#shared/utils/runtime-state-location.j
  * Bump this when changing the embedded schema. Triggers drop-and-recreate.
  *
  * v29: adds `objects` and `version_entries` — the content-addressed store that backs byte-exact
- * resource rollback — and a nullable `tree_hash` on `version_history`.
+ * resource rollback — and two nullable columns on `version_history`, `tree_hash` and
+ * `tree_origin`.
  *
  * **Both new tables are `durable`, and that classification is the whole of this bump's risk.**
  * `DURABLE_TABLE_NAMES` derives from `posture` in `table-contracts.ts`, so a table declared
@@ -72,12 +73,19 @@ import { STATE_DB_BUSY_TIMEOUT_MS } from '#shared/utils/runtime-state-location.j
  * already reads, so losing every object degrades rollback to today's projection path and never
  * loses history. That is why a garbage collector may sit in front of `objects` at all.
  *
- * `tree_hash` is nullable with NO DDL DEFAULT, for the reason `chain_run_nodes.origin` has none:
- * `validate:no-phantom-columns` exempts defaulted columns, so a default would hide a dropped
+ * Both new columns are nullable with NO DDL DEFAULT, for the reason `chain_run_nodes.origin` has
+ * none: `validate:no-phantom-columns` exempts defaulted columns, so a default would hide a dropped
  * writer from the one gate built to catch it. NULL is a real value — it means the row is
  * projection-only and restores through `SnapshotContract`, which is every row that predates this
  * bump. No backfill is performed or wanted: materialising a tree from a projection would fabricate
  * file bytes that never existed on disk.
+ *
+ * `tree_origin` ships in the SAME bump as `tree_hash` rather than arriving with the writer that
+ * binds it, because the two are one fact: `tree_origin` is NULL exactly when `tree_hash` is, and
+ * adding it later would cost a second `SCHEMA_VERSION` bump and a second durable snapshot/restore
+ * round trip over the one table in this database that nothing regenerates. Its vocabulary is the
+ * file-set enumerator's — `'primary' | 'overlay' | 'bundled' | 'unknown'` — and the enumerator
+ * remains its SSOT; nothing here imports or re-declares it.
  *
  * The two foreign keys are DECLARED and, on both writers, ENFORCED — which is not what the design
  * for this slice assumed. `rg "foreign_keys"` over `server/src` and `cli/src` returns nothing, and
@@ -975,7 +983,23 @@ export class SqliteEngine implements DatabasePort {
         -- columns, so a default would hide a dropped writer from the gate built to catch it.
         -- NULL is a real value -- the row restores through SnapshotContract, as every pre-v29 row
         -- does -- so nothing here is backfilled.
-        tree_hash TEXT
+        tree_hash TEXT,
+        -- v29: which root class the recorded bytes were read FROM -- one of the file-set
+        -- enumerator's four values, 'primary' | 'overlay' | 'bundled' | 'unknown'. Not validated
+        -- by a CHECK, for the same reason no other vocabulary column in this schema carries one:
+        -- the owning enumerator is the SSOT and a second copy here would drift from it.
+        --
+        -- It exists because a restore is not root-agnostic. Bytes recorded from the BUNDLED
+        -- catalog restore into the workspace as a NEW override, which is a different act from
+        -- restoring a workspace file over itself, and the preview has to say so. Deriving it at
+        -- restore time is not available: the roots are resolved per process, so a row written
+        -- under one root layout would be re-classified under another.
+        --
+        -- NULL iff tree_hash is NULL -- a projection-only row read no root. Nullable with no DDL
+        -- DEFAULT, the same reasoning as tree_hash: a default would exempt it from
+        -- validate:no-phantom-columns, and 'primary' is exactly the value a dropped writer would
+        -- be papered over with.
+        tree_origin TEXT
       );
 
       -- v29: content-addressed file bytes, keyed PER WORKSPACE.

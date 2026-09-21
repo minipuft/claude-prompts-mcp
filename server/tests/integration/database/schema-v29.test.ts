@@ -1,7 +1,7 @@
 // @lifecycle test - Guards the v29 bump: durable rows survive it, and the new store survives the NEXT one
 /**
  * Schema v29 adds `objects` + `version_entries` (the content-addressed store behind byte-exact
- * rollback) and a nullable `version_history.tree_hash`.
+ * rollback) and two nullable `version_history` columns, `tree_hash` and `tree_origin`.
  *
  * TWO PROPERTIES, and the second is the one worth the file:
  *
@@ -94,6 +94,12 @@ const OBJECT_BYTES = new Uint8Array([
 ]);
 const OBJECT_HASH = 'sha256:0000000000000000000000000000000000000000000000000000000000000001';
 const TREE_HASH = 'sha256:00000000000000000000000000000000000000000000000000000000000000ff';
+/**
+ * Not `'primary'`: a value that is also the natural default cannot distinguish "carried across"
+ * from "silently re-defaulted". `'bundled'` is the one the restore has the most reason to get
+ * wrong, since it is what makes a rollback a workspace override rather than an overwrite.
+ */
+const TREE_ORIGIN = 'bundled';
 
 describe('schema v29 — the content-addressed store', () => {
   let testDir: string;
@@ -145,7 +151,7 @@ describe('schema v29 — the content-addressed store', () => {
       db.close();
     }
 
-    it('opens under v29 with every durable row intact and tree_hash NULL', async () => {
+    it('opens under v29 with every durable row intact and both tree columns NULL', async () => {
       seedV28();
 
       const engine = await SqliteEngine.getInstance(logger as never, { dbPath });
@@ -153,13 +159,21 @@ describe('schema v29 — the content-addressed store', () => {
 
       expect(engine.getSchemaVersion()).toBe(29);
 
-      const history = engine.query<{ version: number; description: string; tree_hash: unknown }>(
-        `SELECT version, description, tree_hash FROM version_history
+      const history = engine.query<{
+        version: number;
+        description: string;
+        tree_hash: unknown;
+        tree_origin: unknown;
+      }>(
+        `SELECT version, description, tree_hash, tree_origin FROM version_history
          WHERE resource_id = 'legacy' ORDER BY version`
       );
       expect(history.map((row) => row.description)).toEqual(['first', 'second']);
-      // No backfill: a row carried across the bump is projection-only by construction.
+      // No backfill: a row carried across the bump is projection-only by construction. Both
+      // columns are asserted, because they are one fact — tree_origin is NULL exactly when
+      // tree_hash is, and a backfill that invented one would have to invent the other.
       expect(history.map((row) => row.tree_hash)).toEqual([null, null]);
+      expect(history.map((row) => row.tree_origin)).toEqual([null, null]);
 
       const manifests = engine.query<{ resource_key: string }>(
         `SELECT resource_key FROM skills_sync_manifests`
@@ -183,9 +197,9 @@ describe('schema v29 — the content-addressed store', () => {
       engine.run(
         `INSERT INTO version_history
            (tenant_id, organization_id, workspace_id, resource_type, resource_id,
-            version, snapshot, diff_summary, description, created_at, tree_hash)
-         VALUES ('ws', NULL, 'ws', 'prompt', 'kept', 1, '{}', '', 'v1', ?, ?)`,
-        ['2026-01-01T00:00:00.000Z', TREE_HASH]
+            version, snapshot, diff_summary, description, created_at, tree_hash, tree_origin)
+         VALUES ('ws', NULL, 'ws', 'prompt', 'kept', 1, '{}', '', 'v1', ?, ?, ?)`,
+        ['2026-01-01T00:00:00.000Z', TREE_HASH, TREE_ORIGIN]
       );
       const row = engine.queryOne<{ id: number }>(
         `SELECT id FROM version_history WHERE resource_id = 'kept'`
@@ -251,11 +265,12 @@ describe('schema v29 — the content-addressed store', () => {
 
       // The entry still points at a version row that exists, with its id unchanged — a restore
       // that renumbered `version_history.id` would leave the manifest dangling.
-      const history = engine.queryOne<{ id: number; tree_hash: string }>(
-        `SELECT id, tree_hash FROM version_history WHERE resource_id = 'kept'`
+      const history = engine.queryOne<{ id: number; tree_hash: string; tree_origin: string }>(
+        `SELECT id, tree_hash, tree_origin FROM version_history WHERE resource_id = 'kept'`
       );
       expect(Number(history?.id)).toBe(versionRowId);
       expect(history?.tree_hash).toBe(TREE_HASH);
+      expect(history?.tree_origin).toBe(TREE_ORIGIN);
 
       // Positive control: the derived row is gone, so the recreate genuinely happened.
       expect(engine.query(`SELECT * FROM resource_index WHERE id = 'kept'`)).toHaveLength(0);

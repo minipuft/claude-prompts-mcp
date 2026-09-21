@@ -308,6 +308,21 @@ export const TABLE_CONTRACTS: readonly TableContract[] = [
           'Tier O.4 (object store write path) — saveVersion and the CLI row writer both name ' +
           'tree_hash in their INSERT list, at which point this entry fails the gate as satisfied.',
       },
+      {
+        subject: 'tree_origin',
+        reason:
+          'The same absence as tree_hash, and the same row closes both: the two are one fact, ' +
+          'since tree_origin is NULL exactly when tree_hash is. It ships in the same schema ' +
+          'version rather than with its writer because a later bump would cost a second durable ' +
+          'snapshot/restore round trip over the one table nothing regenerates. Its value ' +
+          "vocabulary is the file-set enumerator's — 'primary' | 'overlay' | 'bundled' | " +
+          "'unknown' (shared/utils/resource-file-set.ts) — which stays the SSOT: no CHECK " +
+          'constraint and no re-declaration here, because a second copy of a vocabulary is a ' +
+          'second thing to keep in step.',
+        closedBy:
+          'Tier O.4 (object store write path) — the same INSERT lists that close tree_hash name ' +
+          'tree_origin, and the two entries retire together.',
+      },
     ],
   },
   // v29: the content-addressed object store. Declared here, between version_history and the rest,

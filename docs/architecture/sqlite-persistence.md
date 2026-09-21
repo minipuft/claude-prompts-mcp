@@ -118,6 +118,16 @@ table. That is intended: the change needs a real migration.
 row per `(version row, path)`, and it IS the tree. `version_history.tree_hash` is a nullable cache
 over that manifest — the manifest is authoritative — and NULL means the row is projection-only.
 
+`version_history.tree_origin` records which root class the recorded bytes were read FROM, using
+the file-set enumerator's vocabulary: `primary` | `overlay` | `bundled` | `unknown`. The enumerator
+(`shared/utils/resource-file-set.ts`) stays the SSOT — there is no `CHECK` constraint here, because
+a second copy of a vocabulary is a second thing to keep in step. It exists because a restore is not
+root-agnostic: bytes recorded from the **bundled** catalog restore into the workspace as a NEW
+override, which is a different act from restoring a workspace file over itself, and the preview has
+to say so. It cannot be derived at restore time — roots are resolved per process, so a row written
+under one root layout would be re-classified under another. `tree_origin` is NULL exactly when
+`tree_hash` is; the two are one fact and ship in one schema version for that reason.
+
 **Losing every object degrades rollback to the projection path; it never loses history.**
 `version_history.snapshot` keeps holding the projection every reader already reads, and it is not
 retired, not deduplicated into the store, and not backfilled. That is the whole reason a garbage
