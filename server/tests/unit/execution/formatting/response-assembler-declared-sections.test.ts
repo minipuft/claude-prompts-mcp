@@ -51,7 +51,12 @@ function buildFrameworkContext(id: string): FrameworkExecutionContext {
   };
 }
 
-function createContext(overrides: { gated?: boolean; frameworkId?: string }): ExecutionContext {
+function createContext(overrides: {
+  gated?: boolean;
+  frameworkId?: string;
+  /** What `InjectionDecisionService` wrote at stage 14; omitted means it never ran. */
+  systemPromptInjected?: boolean;
+}): ExecutionContext {
   const context = new ExecutionContext({ command: `>>${basePrompt.id}` });
 
   context.executionResults = {
@@ -84,6 +89,15 @@ function createContext(overrides: { gated?: boolean; frameworkId?: string }): Ex
 
   if (overrides.frameworkId != null) {
     context.frameworkContext = buildFrameworkContext(overrides.frameworkId);
+  }
+
+  if (overrides.systemPromptInjected !== undefined) {
+    context.state.injection.systemPrompt = {
+      inject: overrides.systemPromptInjected,
+      reason: 'test',
+      source: 'prompt',
+      decidedAt: Date.now(),
+    };
   }
 
   // Mirrors execution-planner.ts:427-450 / OQ-1: a GATED single prompt receives a session; an
@@ -162,6 +176,58 @@ describe('ResponseAssembler – declared section headers (Tier 2.5/2.6)', () => 
 
     expect(result).not.toContain('Required Sections');
     expect(provider).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Issue #228, the residual. A prompt writing `injection.system-prompt.enabled: false` got no
+   * framework preamble and no framework-adherence gate, yet the response still told it to emit
+   * that framework's headers "verbatim; they are graded structurally". Each case below is a twin
+   * of the first, differing only in the injection decision stage 14 recorded.
+   */
+  describe('the framework opt-out (issue #228)', () => {
+    const provider = () => CAGEERF_SECTIONS;
+
+    test('an injected framework declares its headers — the positive control', () => {
+      const assembler = new ResponseAssembler(undefined, jest.fn(provider));
+      const context = createContext({
+        gated: true,
+        frameworkId: 'cageerf',
+        systemPromptInjected: true,
+      });
+
+      expect(assembler.formatSinglePromptResponse(context, {} as any)).toContain(
+        'Required Sections'
+      );
+    });
+
+    test('a suppressed framework system prompt declares nothing', () => {
+      const spy = jest.fn(provider);
+      const assembler = new ResponseAssembler(undefined, spy);
+      const context = createContext({
+        gated: true,
+        frameworkId: 'cageerf',
+        systemPromptInjected: false,
+      });
+
+      const result = assembler.formatSinglePromptResponse(context, {} as any);
+
+      expect(result).not.toContain('Required Sections');
+      expect(result).not.toContain('## Context');
+      // The skip precedes the provider: the framework was not put in front of the model, so
+      // there is no vocabulary to declare and no reason to resolve one.
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    test('an unrecorded decision still declares — absent is not suppressed', () => {
+      // Stage 14 not having run is not an opt-out. Reading `!== true` instead of `=== false`
+      // would silently stop declaring on every path that formats before injection control.
+      const assembler = new ResponseAssembler(undefined, jest.fn(provider));
+      const context = createContext({ gated: true, frameworkId: 'cageerf' });
+
+      expect(assembler.formatSinglePromptResponse(context, {} as any)).toContain(
+        'Required Sections'
+      );
+    });
   });
 
   test('no provider wired declares nothing, even when gated under a guarded framework', () => {
