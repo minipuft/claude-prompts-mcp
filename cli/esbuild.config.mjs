@@ -101,6 +101,9 @@ const JSONC_PARSER_ESM_ENTRY = resolveEsmEntry("jsonc-parser", SERVER_ROOT);
  * one exists. Serializer FORMATTING does differ — byte-identical on 24 of 105 — though all 105
  * round-trip to the same value.
  *
+ * The strictness parity checks added after that measurement took it to 840,813 — a 840,000
+ * ceiling would already be failing, which is the argument below making itself.
+ *
  * Set to 850,000 rather than the next 10,000 above the measurement: 839,424 leaves 576 bytes,
  * and this constant has twice been raised from a number that looked like enough headroom at the
  * time (see the two paragraphs above). 10,576 B is a working margin; 576 B is the next trivial
