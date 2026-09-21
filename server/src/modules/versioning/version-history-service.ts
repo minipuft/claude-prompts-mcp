@@ -6,6 +6,7 @@ import type { VersioningConfig, Logger } from '#shared/types/index.js';
 import type { DatabasePort, StateStoreOptions } from '#shared/types/persistence.js';
 import type {
   ResourceFileLocatorPort,
+  ResourceFileSet,
   ResourceLocationResult,
 } from '#shared/utils/resource-file-set.js';
 import type {
@@ -16,8 +17,10 @@ import type {
   ResourceType,
 } from './types.js';
 
+import { recordTree } from '#cli-shared/object-store.js';
 import { hashCanonical } from '#shared/utils/hash.js';
 import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
+import { resourceFileSet } from '#shared/utils/resource-file-set.js';
 
 /**
  * The identity of a snapshot, as the table stores it.
@@ -197,6 +200,28 @@ export class VersionHistoryService {
     snapshot: Record<string, unknown>,
     options?: SaveVersionOptions
   ): Promise<SaveVersionResult> {
+    return this.appendVersion(resourceType, resourceId, snapshot, options, true);
+  }
+
+  /**
+   * The body of {@link saveVersion}, plus whether this row may carry a file tree.
+   *
+   * `recordFiles` is the ONE structural difference between a produced row and a bridge row
+   * (ruling R66). It is deliberately not exposed on `SaveVersionOptions`: a caller outside this
+   * class has no way to know whether the files on disk describe the snapshot it is passing, and
+   * the two callers that do know are both in this file.
+   *
+   * The equality rule is untouched by it — skip-if-equal still runs on the snapshot's canonical
+   * hash, inside the transaction, exactly as before. A row that is not written records no tree
+   * because there is no row to hang one on, not because of a second comparison.
+   */
+  private async appendVersion(
+    resourceType: ResourceType,
+    resourceId: string,
+    snapshot: Record<string, unknown>,
+    options: SaveVersionOptions | undefined,
+    recordFiles: boolean
+  ): Promise<SaveVersionResult> {
     const config = this.getConfig();
 
     if (!config.enabled) {
@@ -255,6 +280,18 @@ export class VersionHistoryService {
           version,
           payload,
           options,
+        });
+        // Files LAST, inside the same lock the row was written under. That placement is invariant
+        // WRITE-1: an object insert and the manifest row that justifies it commit together or not
+        // at all, so a crash between them leaves neither — there is no window in which a stored
+        // object lacks a reference or a row points at a tree that is not there.
+        await this.recordFileTree({
+          db,
+          tenantId,
+          resourceType,
+          resourceId,
+          version,
+          recordFiles,
         });
         return { version, recorded: true };
       }, 'immediate');
@@ -325,6 +362,80 @@ export class VersionHistoryService {
         [tenantId, resourceType, resourceId, config.maxVersions, tenantId, resourceType, resourceId]
       );
       this.logger.debug(`Pruned history for ${resourceId} to ${config.maxVersions} versions`);
+    }
+  }
+
+  /**
+   * Record the files behind the row just inserted, or leave the row projection-only.
+   *
+   * Never throws for a resource it cannot store. The version row is the durable thing nothing
+   * regenerates; an over-limit file or a deleted directory must cost byte-exact rollback for that
+   * version, not the version itself. One `warn` names the resource and the reason, so a
+   * degradation is visible in the log rather than inferred from a NULL column much later.
+   *
+   * A SQLite failure is NOT caught here and propagates into the caller's transaction, which rolls
+   * back. That is the correct asymmetry: "these bytes do not fit" is a property of the resource,
+   * "this INSERT failed" is a property of the database, and only the second one means the row
+   * itself is untrustworthy.
+   */
+  private async recordFileTree(input: {
+    db: DatabasePort;
+    tenantId: string;
+    resourceType: ResourceType;
+    resourceId: string;
+    version: number;
+    recordFiles: boolean;
+  }): Promise<void> {
+    const { db, tenantId, resourceType, resourceId, version, recordFiles } = input;
+    if (!recordFiles) return;
+
+    const location = await this.locateResourceFiles(resourceType, resourceId);
+    if (!location.located) {
+      this.logger.warn(
+        `Recorded ${resourceType}/${resourceId} version ${version} without a file tree: ` +
+          `${location.reason}. Rollback to this version restores from its projection.`
+      );
+      return;
+    }
+
+    let files: ResourceFileSet;
+    try {
+      files = await resourceFileSet({
+        resourceType,
+        entryPath: location.entryPath,
+        roots: location.roots,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Recorded ${resourceType}/${resourceId} version ${version} without a file tree: ` +
+          `${message}. Rollback to this version restores from its projection.`
+      );
+      return;
+    }
+
+    // The row id is read back rather than taken from a driver's last-insert value: `DatabasePort`
+    // exposes none, and (tenant, type, id, version) is UNIQUE since schema v28, so this SELECT
+    // inside the same transaction identifies exactly the row just written.
+    const row = db.queryOne<{ id: number }>(
+      `SELECT id FROM version_history
+       WHERE tenant_id = ? AND resource_type = ? AND resource_id = ? AND version = ?`,
+      [tenantId, resourceType, resourceId, version]
+    );
+    if (row === null) {
+      this.logger.warn(
+        `Recorded ${resourceType}/${resourceId} version ${version} without a file tree: the row ` +
+          `could not be read back inside its own transaction.`
+      );
+      return;
+    }
+
+    const outcome = await recordTree(db, { tenantId, versionRowId: row.id, files });
+    if (!outcome.recorded) {
+      this.logger.warn(
+        `Recorded ${resourceType}/${resourceId} version ${version} without a file tree: ` +
+          `${outcome.reason}. Rollback to this version restores from its projection.`
+      );
     }
   }
 
@@ -428,8 +539,15 @@ export class VersionHistoryService {
    * out-of-band file edit), that live state is recorded first so it stays rollback-reachable.
    * Steady state records exactly one row per edit.
    *
-   * Called BEFORE the file write, with the state about to be produced — a persistence failure
-   * therefore still aborts the edit with nothing written (OQ-P7-6 posture, row 2.3).
+   * Called at COMMIT time, with the produced files already on disk. Every caller passes this as
+   * the `commit` callback of `ResourceMutationTransaction`, whose `run()` is
+   * `captureSnapshots → mutate → validate → commit` — so the write and its verification have both
+   * happened, and a throw here lands in the catch that restores every snapshot, leaving the files
+   * byte-identical. This docblock said the opposite ("Called BEFORE the file write") from P4.2,
+   * when SF-3 moved the record inside the transaction, until row O.4 measured it: the object store
+   * DEPENDS on this order, because it reads the bytes the edit produced.
+   *
+   * Pinned by `tests/integration/versioning/record-edit-result-ordering.test.ts`.
    */
   async recordEditResult(
     resourceType: ResourceType,
@@ -449,12 +567,29 @@ export class VersionHistoryService {
     // was always "no". Both calls now go through `saveVersion`, whose test runs inside its own
     // transaction: the bridge row appears exactly when the prior live state is unrecorded, and
     // `bridged` is simply whether that call wrote.
-    const bridge = await this.saveVersion(resourceType, resourceId, priorLiveSnapshot, {
-      description: 'Bridge: prior live state (era transition or out-of-band edit)',
-      diff_summary: '',
-    });
+    const bridge = await this.appendVersion(
+      resourceType,
+      resourceId,
+      priorLiveSnapshot,
+      {
+        description: 'Bridge: prior live state (era transition or out-of-band edit)',
+        diff_summary: '',
+      },
+      // No file tree, and the reason is the ordering this method runs under. Both appends happen
+      // in `commit`, AFTER the produced files are on disk, so an enumerator run inside either one
+      // reads the PRODUCED bytes. A tree on the bridge row would therefore describe the produced
+      // state under a row whose snapshot is the prior one, and a later byte-exact rollback would
+      // restore the wrong bytes while reporting full fidelity.
+      false
+    );
 
-    const result = await this.saveVersion(resourceType, resourceId, producedSnapshot, options);
+    const result = await this.appendVersion(
+      resourceType,
+      resourceId,
+      producedSnapshot,
+      options,
+      true
+    );
     return { ...result, bridged: bridge.recorded };
   }
 

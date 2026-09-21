@@ -11,7 +11,7 @@ remains in `server/.dependency-cruiser.cjs`.
 | Module | Source path | Kind | Lifecycle | Description | Docs | Public entry | Observed dependencies | Imported by |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `server-source` | `src` | application | canonical | Server source composition root. | — | `index.ts` | cli-shared<br>infra-config<br>infra-logging<br>runtime<br>shared-utils | — |
-| `cli-shared` | `src/cli-shared` | adapter | canonical | Shared implementation used by the standalone CLI integration surface. | — | `index.ts` | engine-frameworks<br>engine-gates<br>formatting<br>prompts<br>resources<br>shared-utils<br>versioning | mcp-tools<br>server-source<br>skills-sync |
+| `cli-shared` | `src/cli-shared` | adapter | canonical | Shared implementation used by the standalone CLI integration surface. | — | `index.ts` | engine-frameworks<br>engine-gates<br>formatting<br>prompts<br>resources<br>shared-utils<br>versioning | mcp-tools<br>server-source<br>skills-sync<br>versioning |
 | `execution-engine` | `src/engine` | layer | canonical | Client-guided execution, framework, and gate decision logic. | — | — | — | — |
 | `engine-execution` | `src/engine/execution` | domain | canonical | Parses commands and coordinates the staged client-guided execution pipeline. | — | — | chains<br>engine-frameworks<br>engine-gates<br>infra-database<br>infra-logging<br>shared-types<br>shared-utils<br>workflow-ir | automation<br>chains<br>engine-frameworks<br>engine-gates<br>mcp-http<br>mcp-tools<br>prompts<br>runtime<br>semantic<br>workflow-ir |
 | `engine-frameworks` | `src/engine/frameworks` | domain | canonical | Loads, validates, selects, and applies reasoning frameworks. | — | — | engine-execution<br>infra-database<br>infra-logging<br>shared-core<br>shared-types<br>shared-utils | cli-shared<br>engine-execution<br>mcp-tools<br>resources<br>runtime |
@@ -39,7 +39,7 @@ remains in `server/.dependency-cruiser.cjs`.
 | `semantic` | `src/modules/semantic` | domain | canonical | Owns semantic indexing and related retrieval behavior. | — | — | engine-execution<br>shared-types | mcp-tools |
 | `skills-sync` | `src/modules/skills-sync` | domain | canonical | Exports and synchronizes skills across supported clients. | — | — | cli-shared<br>engine-gates<br>resources<br>shared-types<br>shared-utils | mcp-tools<br>runtime |
 | `text-references` | `src/modules/text-refs` | domain | canonical | Tracks and resolves reusable text argument references. | — | `index.ts` | shared-types<br>shared-utils | chains<br>mcp-tools<br>prompts<br>runtime |
-| `versioning` | `src/modules/versioning` | domain | canonical | Owns version history, comparison, rollback, and resource snapshots. | — | `index.ts` | shared-types<br>shared-utils | cli-shared<br>mcp-tools<br>runtime<br>shared-utils |
+| `versioning` | `src/modules/versioning` | domain | canonical | Owns version history, comparison, rollback, and resource snapshots. | — | `index.ts` | cli-shared<br>shared-types<br>shared-utils | cli-shared<br>mcp-tools<br>runtime<br>shared-utils |
 | `workflow-ir` | `src/modules/workflow-ir` | domain | canonical | Validates and compiles planner-submitted workflow graphs. | `docs/reference/workflow-ir.md` | — | engine-execution<br>shared-types | engine-execution<br>mcp-tools<br>prompts<br>shared-types |
 | `runtime` | `src/runtime` | runtime | canonical | Application composition and process lifecycle entrypoints. | — | — | automation<br>engine-execution<br>engine-frameworks<br>engine-gates<br>formatting<br>hot-reload<br>infra-config<br>infra-database<br>infra-hooks<br>infra-http<br>infra-logging<br>infra-observability<br>mcp-http<br>mcp-tools<br>prompts<br>resources<br>shared-core<br>shared-types<br>shared-utils<br>skills-sync<br>text-references<br>versioning | server-source |
 | `shared` | `src/shared` | layer | canonical | Foundation types and pure utilities available to every source layer. | — | — | — | — |
@@ -251,6 +251,7 @@ flowchart LR
   module_skills_sync --> module_shared_utils
   module_text_references -. type .-> module_shared_types
   module_text_references --> module_shared_utils
+  module_versioning --> module_cli_shared
   module_versioning --> module_shared_types
   module_versioning --> module_shared_utils
   module_workflow_ir -. type .-> module_engine_execution
