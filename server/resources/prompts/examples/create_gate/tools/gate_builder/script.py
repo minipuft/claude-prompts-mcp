@@ -59,6 +59,15 @@ def validate_guidance(data: dict[str, Any]) -> tuple[list[str], list[str]]:
             "Both guidance and guidanceFile specified. Inline guidance will be used."
         )
 
+    # guidanceFile ALONE reaches the writer as nothing at all: there is no resource_manager
+    # parameter for it, and the gate's guidance.md is written from the inline `guidance` text.
+    # Said out loud here rather than left as an empty guidance.md nobody asked about.
+    if has_guidance_file and not has_guidance:
+        warnings.append(
+            "Only guidanceFile specified. The gate is written from inline guidance, so supply "
+            "the file's content as 'guidance' — otherwise the gate is created with none."
+        )
+
     return errors, warnings
 
 
@@ -153,12 +162,19 @@ def build_resource_manager_params(data: dict[str, Any]) -> dict[str, Any]:
         "description": data["description"],
     }
 
-    # Optional fields - only include if present
+    # (input field on THIS tool, parameter name on resource_manager). The two vocabularies are
+    # not the same and the pairs are where they meet — `enforcementMode` is this tool's input, and
+    # `enforcement_mode` is what resource_manager declares. They agreed by accident for six of the
+    # seven and not for that one, which since R46 is a refused call rather than a dropped field.
+    #
+    # `guidanceFile` is deliberately absent: resource_manager has no such parameter, because the
+    # writer produces `guidance.md` itself and records `guidanceFile: guidance.md` in gate.yaml
+    # from the inline `guidance` it was given. Sending a path could only name a file the writer is
+    # about to overwrite.
     optional_fields = [
         ("guidance", "guidance"),
-        ("guidanceFile", "guidanceFile"),
         ("severity", "severity"),
-        ("enforcementMode", "enforcementMode"),
+        ("enforcementMode", "enforcement_mode"),
         ("pass_criteria", "pass_criteria"),
         ("retry_config", "retry_config"),
         ("activation", "activation"),
