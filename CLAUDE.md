@@ -299,11 +299,8 @@ only while the gate system is enabled. The contract is the **union of every reac
 `tooling/contracts/prompt-engine.json`. Narrowing within that union is not breaking; adding or
 removing a union member is. The alternative reading (contract = shape at current state) makes
 every state change a major bump, which drains the major version of meaning. Since P4.93 a
-narrowed-away gate parameter is REFUSED rather than stripped, and refused with its own message --
-"declared, but not advertised right now" -- because "not a parameter of prompt_engine" would be
-false of a name the contract carries. The refusal is what makes the union reading legible to a
-client instead of only to this file: a stale `tools/list` now produces an error naming the toggle,
-where it used to produce a success describing a run that ignored the value.
+narrowed-away gate parameter is REFUSED, not stripped, with its own "declared, but not advertised
+right now" message -- "not a parameter" would be false of a name the contract carries.
 
 **`gate_verdict` accepts two shapes, and one of them is retiring.** The structured object
 (`{overall, rationale, per_gate[]}`) is schema-validated and cannot be malformed; the legacy
