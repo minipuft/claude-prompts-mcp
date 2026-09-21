@@ -7,13 +7,16 @@
  * file, the only cover was a hand-written test per table, which is cover for the tables somebody
  * remembered.
  *
- * THIS TEST IS GENERATED FROM `TABLE_CONTRACTS`, so it covers tables that do not exist yet. Two
+ * THIS TEST CHECKS `TABLE_CONTRACTS` AGAINST AN INDEPENDENT LIST — it is deliberately not
+ * generated from it, which the first draft was and which made it worthless (see `SEEDS`). Two
  * properties:
  *
- *   (a) ROUND TRIP — one row is seeded in EVERY durable table, the recreate path runs, and every
- *       row must come back byte-identical. A durable table with no seed entry FAILS the test
- *       rather than being skipped: that is the enumeration, and it is what makes the next durable
- *       table someone adds the next author's problem instead of a silent gap.
+ *   (a) ROUND TRIP — one row is seeded in every table the `SEEDS` map claims is durable, the
+ *       recreate path runs, and every row must come back byte-identical. `SEEDS` and
+ *       `DURABLE_TABLE_NAMES` are asserted equal as SETS, both directions, so a table demoted to
+ *       `ephemeral` is red and a new durable table with no seed is red. That pair of assertions is
+ *       the enumeration, and it is what makes the next durable table someone adds the next
+ *       author's problem instead of a silent gap.
  *
  *   (b) ORDER — `restoreDurableTables` replays `DURABLE_TABLE_NAMES` in declaration order, and
  *       since schema v29 that order is a CORRECTNESS requirement, not a nicety: foreign keys are
@@ -62,11 +65,20 @@ interface Seed {
 }
 
 /**
- * One row per durable table, in an order foreign keys accept.
+ * One row per table that MUST be durable, in an order foreign keys accept.
  *
- * Per-table knowledge cannot be generated — a valid row needs real column names and real values —
- * so it is a map, and the test below FAILS when a durable table is missing from it. That failure
- * is the point: it turns "somebody should test the new durable table" into a red run.
+ * **This map is the independent enumeration, and that is the whole design.** The obvious version
+ * of this test iterates `DURABLE_TABLE_NAMES` — and is worthless, because that list is DERIVED
+ * from `posture`: flipping a table to `ephemeral` removes it from the list, so the test stops
+ * checking it rather than failing. Measured here, on the first mutation run: `skills_sync_manifests`
+ * flipped to `ephemeral` and every case stayed green. A test whose enumeration comes from the thing
+ * under test cannot observe that thing being wrong.
+ *
+ * So the keys below are a hand-declared claim — "these tables hold rows that exist nowhere else" —
+ * and the test asserts SET EQUALITY against `DURABLE_TABLE_NAMES` in both directions. A posture
+ * flip on any of them is red; a new durable table with no seed here is red.
+ *
+ * Key order is the seeding order, and JS preserves it for string keys.
  */
 const SEEDS: Readonly<Record<string, Seed>> = {
   skills_sync_manifests: {
@@ -100,6 +112,9 @@ const SEEDS: Readonly<Record<string, Seed>> = {
     params: [SEED_VERSION_ROW_ID, SEED_HASH],
   },
 };
+
+/** The tables this file claims must be durable, in seeding order. Independent of `posture`. */
+const SEEDED_TABLES = Object.keys(SEEDS);
 
 /** BLOBs come back as Uint8Array, which `toEqual` compares by identity of shape — normalise. */
 function normalise(rows: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
@@ -171,13 +186,20 @@ describe('every durable table survives a schema recreate', () => {
     await fs.rm(testDir, { recursive: true, force: true });
   });
 
-  it('has a seed for every durable table', () => {
-    // The enumeration that closes the class. A durable table with no seed is not skipped here; it
-    // is a failure naming the table, because the alternative is a generated test that quietly
-    // covers less than its name claims.
+  it('declares exactly the tables the contracts call durable, in both directions', () => {
+    // Direction 1 — a table this file claims is durable but `posture` no longer says so. This is
+    // the mutation that matters: a posture flip REMOVES a table from DURABLE_TABLE_NAMES, so any
+    // check that iterates that list stops looking instead of failing.
+    const demoted = SEEDED_TABLES.filter((table) => !DURABLE_TABLE_NAMES.includes(table));
+    expect(demoted).toEqual([]);
+
+    // Direction 2 — a durable table with no seed. Not skipped: failed, naming it, because a
+    // generated test that quietly covers less than its name claims is worse than no test.
     const unseeded = DURABLE_TABLE_NAMES.filter((table) => SEEDS[table] === undefined);
     expect(unseeded).toEqual([]);
-    // Positive control: the map is keyed on real table names, not silently empty.
+
+    // Positive control: both lists are non-empty, so the two comparisons above are not vacuous.
+    expect(SEEDED_TABLES.length).toBeGreaterThan(0);
     expect(DURABLE_TABLE_NAMES.length).toBeGreaterThan(0);
   });
 
@@ -185,9 +207,9 @@ describe('every durable table survives a schema recreate', () => {
     const engine = await SqliteEngine.getInstance(logger as never, { dbPath });
     await engine.initialize();
 
-    // Seed in DURABLE_TABLE_NAMES order — the same order the restore replays, which with foreign
-    // keys enforced is the only order that works on the way in as well.
-    for (const table of DURABLE_TABLE_NAMES) {
+    // Seed over SEEDED_TABLES, not DURABLE_TABLE_NAMES: a table wrongly demoted to `ephemeral`
+    // must still be seeded and still be checked below, or the demotion hides itself.
+    for (const table of SEEDED_TABLES) {
       const seed = SEEDS[table] as Seed;
       engine.run(seed.sql, [...seed.params]);
     }
@@ -197,7 +219,7 @@ describe('every durable table survives a schema recreate', () => {
     engine.run(`INSERT INTO resource_index (id, type, name) VALUES ('seed', 'prompt', 'Seed')`);
 
     const before = new Map<string, Array<Record<string, unknown>>>();
-    for (const table of DURABLE_TABLE_NAMES) {
+    for (const table of SEEDED_TABLES) {
       before.set(table, normalise(engine.query(`SELECT * FROM "${table}"`)));
     }
 
@@ -210,7 +232,7 @@ describe('every durable table survives a schema recreate', () => {
     const reopened = await SqliteEngine.getInstance(logger as never, { dbPath });
     await reopened.initialize();
 
-    for (const table of DURABLE_TABLE_NAMES) {
+    for (const table of SEEDED_TABLES) {
       const after = normalise(reopened.query(`SELECT * FROM "${table}"`));
       expect({ table, rows: after }).toEqual({ table, rows: before.get(table) });
     }
