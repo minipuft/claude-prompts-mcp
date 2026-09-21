@@ -66,6 +66,8 @@ interface Harness {
   recordEditResult: jest.Mock;
   /** `rollback` double on `versionHistoryService` — unset by default; tests configure it. */
   rollback: RollbackMock;
+  /** Makes the byte path answer `refused` for the next `handleRollback` on this harness. */
+  refuseByteRestore: (reason: string) => void;
   /**
    * Every file the writer produced for this prompt, keyed by name. The writer externalises the two
    * text bodies to `user-message.md` / `system-message.md`, so reading `prompt.yaml` alone would
@@ -132,6 +134,18 @@ function createHarness(workspaceDir: string): Harness {
     success: false,
     error: 'rollback not configured for this test',
   }));
+  /**
+   * What the byte path answers, overridable per test.
+   *
+   * The PROJECTION path is what this harness's doubles describe — it configures a snapshot and
+   * never a file tree — so `projection-only` is the honest default, and exactly what a pre-v29 row
+   * answers. One case below flips it to `refused`, because a mutant that deleted that branch from
+   * a processor came back green when no test drove it.
+   */
+  let byteRestoreAnswer: { status: string; reason: string } = {
+    status: 'projection-only',
+    reason: 'this harness records no file trees',
+  };
 
   const context = {
     dependencies,
@@ -157,6 +171,12 @@ function createHarness(workspaceDir: string): Harness {
           ? { ok: true as const, entry: { snapshot: result.snapshot } }
           : { ok: false as const, error: result.error ?? 'Version not found' };
       },
+      /**
+       * The PROJECTION path, which is what this harness's doubles describe: it configures a
+       * snapshot, never a file tree. Answering "no tree" is exactly what a pre-v29 row answers,
+       * and it is the honest double — a missing method is a TypeError at the call site.
+       */
+      planByteRestore: async () => byteRestoreAnswer,
       commitEdit: async () => {
         const result = await rollback();
         return { version: result.saved_version ?? 0, bridged: false };
@@ -183,6 +203,9 @@ function createHarness(workspaceDir: string): Harness {
     context,
     promptsDir,
     logger,
+    refuseByteRestore: (reason: string) => {
+      byteRestoreAnswer = { status: 'refused', reason };
+    },
   };
 }
 
@@ -512,6 +535,50 @@ describe('tools/category preservation and create pre-verify (Fix A + Fix C)', ()
     expect(response.isError).toBe(false);
     const after = readParsedPromptYaml(harness);
     expect(after['tools']).toEqual(['my_tool']);
+  });
+
+  /**
+   * A byte-path refusal must not fall through to the projection path.
+   *
+   * The prompt half of the enumeration `preview-matches-write.integration.test.ts` carries for the
+   * other three processors. A mutant deleting the refusal branch from one processor came back
+   * green before these cases existed: the projection path produces a perfectly plausible rollback
+   * from a state the row explicitly says it can no longer vouch for.
+   */
+  test('rollback refuses when the byte path refuses, and writes nothing', async () => {
+    const dir = workspace();
+    const harness = createHarness(dir);
+    await seed(harness);
+    const before = harness.readFiles();
+
+    harness.rollback.mockResolvedValue({
+      success: true,
+      saved_version: 2,
+      snapshot: {
+        name: 'Patch Target',
+        category: CATEGORY,
+        description: 'A prompt used to exercise anchored patching',
+        userMessageTemplate: TEMPLATE,
+        systemMessage: 'Be precise.',
+      },
+    });
+    harness.refuseByteRestore(
+      "the recorded bytes of 'user-message.md' are missing from the object store"
+    );
+
+    const response = await new PromptVersioningProcessor(harness.context).handleRollback({
+      id: PROMPT_ID,
+      version: 1,
+      confirm: true,
+    } as never);
+
+    expect(response.isError).toBe(true);
+    expect((response.content[0] as { text: string }).text).toContain(
+      'missing from the object store'
+    );
+    // Nothing moved — a refusal that named the right thing while writing half the files would
+    // pass an assertion about its message alone.
+    expect(harness.readFiles()).toEqual(before);
   });
 
   /**

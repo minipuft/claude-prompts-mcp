@@ -1,5 +1,8 @@
 // @lifecycle canonical - What a complete recorded state is, and how it projects from and restores to disk.
 
+import { describeRestorePlan } from './restore-plan.js';
+
+import type { RestorePlan } from './restore-plan.js';
 import type { ResourceType } from './types.js';
 
 /**
@@ -195,16 +198,34 @@ export function describeRollbackPreview(
   resourceType: ResourceType,
   id: string,
   version: number,
-  diff: { hasChanges: boolean; formatted: string },
-  unrecordedFields?: readonly string[]
+  /** The write-model diff. `undefined` only when `filePlan` supersedes it. */
+  diff: { hasChanges: boolean; formatted: string } | undefined,
+  unrecordedFields?: readonly string[],
+  /**
+   * The byte-exact plan, when the target version recorded one.
+   *
+   * The SAME value the apply runs, rendered by the SAME function — not a second description of it.
+   * A preview whose text is derived independently can agree with the action today and drift from
+   * it at the next edit, and the drift is invisible: both halves keep passing their own tests.
+   * `tests/integration/versioning/byte-exact-rollback.test.ts` asserts the two as one value.
+   */
+  filePlan?: RestorePlan
 ): string {
   let text =
     `🔍 **Preview** — rollback of ${resourceType} '${id}' to version ${version}\n\n` +
     `Nothing was written: no file changed and no version row was recorded.\n\n`;
 
-  text += diff.hasChanges
-    ? `${diff.formatted}\n\n`
-    : `Version ${version} matches the current state — this rollback would change nothing.\n\n`;
+  if (filePlan !== undefined) {
+    // The file plan REPLACES the write-model diff rather than joining it. The diff renders what a
+    // projection-based write would land; on this path that write does not happen, and showing both
+    // would describe two different actions in one preview.
+    return `${text}${describeRestorePlan(filePlan)}\n\n${ROLLBACK_PREVIEW_FOOTER}`;
+  }
+
+  text +=
+    diff?.hasChanges === true
+      ? `${diff.formatted}\n\n`
+      : `Version ${version} matches the current state — this rollback would change nothing.\n\n`;
 
   if (unrecordedFields !== undefined && unrecordedFields.length > 0) {
     text +=
@@ -212,8 +233,12 @@ export function describeRollbackPreview(
       `Those would keep their current values.\n\n`;
   }
 
-  return `${text}💡 Re-send as \`action:"rollback"\` with \`confirm: true\` to apply it.`;
+  return `${text}${ROLLBACK_PREVIEW_FOOTER}`;
 }
+
+/** One sentence, so the byte branch and the projection branch cannot end differently. */
+const ROLLBACK_PREVIEW_FOOTER =
+  '💡 Re-send as `action:"rollback"` with `confirm: true` to apply it.';
 
 /**
  * What an update reply says about the version table, told by whether a row was written.

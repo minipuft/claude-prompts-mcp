@@ -294,6 +294,17 @@ function createHarness(frameworksDir: string): Harness {
       recordEditResult: jest.fn(async () => ({ version: 2, success: true, bridged: false })),
       resolveRollbackTarget,
       commitEdit: jest.fn(async () => ({ version: 3, bridged: false })),
+      /**
+       * These doubles exercise the PROJECTION path, so the byte path must answer "no tree".
+       *
+       * Stated rather than omitted: a missing method is a TypeError at the call site, and the
+       * honest double for a version row this harness never recorded files for is exactly the
+       * answer a pre-v29 row gives.
+       */
+      planByteRestore: jest.fn(async () => ({
+        status: 'projection-only',
+        reason: 'this harness records no file trees',
+      })),
     },
     onRefresh: jest.fn(async () => {}),
   } as unknown as FrameworkResourceContext;

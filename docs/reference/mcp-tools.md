@@ -1872,15 +1872,37 @@ That is the whole reason it is an action rather than the `dry_run` boolean it re
 `delete`, and the confirmation guard reads the action, so previewing a deletion demanded that the
 deletion be confirmed first. `dry_run` is removed — see the CHANGELOG's breaking-changes entry.
 
+### What a rollback restores
+
+**A version recorded since schema v29 restores its files byte for byte.** Those rows carry the
+resource's actual bytes in the object store, so a rollback writes them back verbatim — comments,
+key order, flow style, line endings, a BOM, a chain's `edges`, a prompt's `tools/{id}/` scripts.
+Nothing is re-rendered from a projection, which is why nothing is lost in the round trip. The reply
+names every file it wrote.
+
+**A rollback never deletes a file.** A file the resource has now that the target version did not
+record stays on disk, and the reply lists it by path as left in place. The honest consequence: the
+resource is then not byte-identical to that version, and `compare` against it shows the extra
+files. Delete them yourself if that is what you meant.
+
+A rollback of a resource served from the bundled package tree writes a workspace override, exactly
+as an update of one does — the bundled tree is never written to.
+
+Two states refuse rather than restore something else, because both mean the database disagrees with
+itself: a row that advertises a file tree whose recorded bytes are missing from the store, and a
+recorded path that resolves outside the resource's own directory. Both write nothing at all.
+
 ### What a rollback does not restore
 
-A version snapshot records the resource's authored surface, not every byte in its directory. What
-falls outside it is left to the file writers, which carry it forward from disk:
+Rows written before schema v29, bridge rows, and rows degraded to projection-only (an over-limit
+file, a resource whose files could not be located) have no recorded bytes and restore the older
+way: the version snapshot records the resource's authored surface, not every byte in its directory,
+and what falls outside it is left to the file writers, which carry it forward from disk:
 
 | Resource  | Not in the snapshot                                                             | What happens on rollback                                                                                                                                                    |
 | --------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | prompt    | `register_with_mcp`, `mcp_prompt_mode` (resolved through the category chain)    | keep their current on-disk values                                                                                                                                           |
-| prompt    | script tools under `tools/{id}/`                                                | left unchanged — **the response says so**                                                                                                                                   |
+| prompt    | script tools under `tools/{id}/`                                                | left unchanged — **the response says so**. A v29-era row restores them byte for byte instead, and then says nothing, because there is nothing left unrestored               |
 | gate      | `severity`, `enforcementMode`, `gate_type`, `evaluation`, `blockResponseOnFail` | carried forward from `gate.yaml` — still true after `severity`, `enforcementMode` and `gate_type` became settable, since they are preserved keys rather than projected ones |
 | framework | `phases` and the advanced authoring fields                                      | carried forward by the writer's merge                                                                                                                                       |
 

@@ -4,12 +4,15 @@ import { reregisterFramework } from './framework-reregistration.js';
 import { frameworkSnapshotContract } from './framework-snapshot-contract.js';
 import { isPreviewRequest } from '../../shared/preview-action.js';
 
+import type { RestorePlan } from '#modules/versioning/index.js';
 import type { ToolResponse } from '#shared/types/index.js';
 import type { FrameworkResourceContext } from '../core/context.js';
 import type { FrameworkManagerInput } from '../core/types.js';
 
 import {
+  applyByteRestore,
   describeIncompleteSnapshot,
+  describeRestorePlan,
   describeRollbackPreview,
   describeRollbackRecord,
 } from '#modules/versioning/index.js';
@@ -85,6 +88,18 @@ export class FrameworkVersioningProcessor {
     }
 
     const currentState = frameworkSnapshotContract.project(id, existingData);
+
+    // Does version N carry the FILES, or only their projection? See the same block in
+    // `gate-versioning-processor.ts` for what each of the three answers means; a `refused` is
+    // never downgraded to a fallback.
+    //
+    // Extracted into its own method here and inline in the other three processors, for one
+    // measured reason: this method was already the most branched of the four and the inline form
+    // took it to cognitive complexity 17, over the 15 the project blocks at.
+    const byteResponse = await this.tryByteRollback(args, id, version, { currentState, snapshot });
+    if (byteResponse !== undefined) {
+      return byteResponse;
+    }
 
     // A preview returns here — after validation, so it refuses an unrestorable version the same
     // way the real call does, and BEFORE the version row is recorded. The diff is projected from
@@ -187,6 +202,97 @@ export class FrameworkVersioningProcessor {
 
     return this.success(
       `${response}🔄 Re-registered — the restored content is live in this process`
+    );
+  }
+
+  /**
+   * The byte path's answer, or `undefined` to mean "this version has no tree — carry on".
+   *
+   * `undefined` is the only value that continues the caller; every other outcome is a complete
+   * reply. A `refused` therefore cannot be mistaken for "fall through", which is the one way this
+   * shape could reintroduce the silent fallback the refusal exists to prevent.
+   */
+  private async tryByteRollback(
+    args: FrameworkManagerInput,
+    id: string,
+    version: number,
+    states: { currentState: Record<string, unknown>; snapshot: Record<string, unknown> }
+  ): Promise<ToolResponse | undefined> {
+    const byteRestore = await this.ctx.versionHistoryService.planByteRestore(
+      'framework',
+      id,
+      version
+    );
+    if (byteRestore.status === 'refused') {
+      return this.error(`Rollback failed: ${byteRestore.reason}`);
+    }
+    if (byteRestore.status !== 'ready') {
+      return undefined;
+    }
+    if (isPreviewRequest(args)) {
+      return this.success(
+        describeRollbackPreview('framework', id, version, undefined, undefined, byteRestore.plan)
+      );
+    }
+    return this.restoreFrameworkBytes(id, version, byteRestore.plan, byteRestore.bytes, states);
+  }
+
+  /**
+   * Put version N's recorded bytes back, then record the state that produced.
+   *
+   * No `unrecordedFields` warning on this path, and its absence is the observable improvement. That
+   * warning exists because the framework writer DEEP-MERGES over the existing YAML and therefore
+   * cannot remove a key the snapshot never carried. A file-set restore replaces whole files, so
+   * every recorded field is restored and nothing is left at a current value — there is nothing to
+   * warn about. What CAN still differ from version N is a file the version never recorded, and
+   * `describeRestorePlan` names those by path (owner ruling R57).
+   */
+  private async restoreFrameworkBytes(
+    id: string,
+    version: number,
+    plan: RestorePlan,
+    bytes: ReadonlyMap<string, Uint8Array>,
+    states: { currentState: Record<string, unknown>; snapshot: Record<string, unknown> }
+  ): Promise<ToolResponse> {
+    let restoreOutcome: { version?: number; recorded: boolean } | undefined;
+
+    const outcome = await applyByteRestore({
+      plan,
+      bytes,
+      commit: async (): Promise<void> => {
+        restoreOutcome = await this.ctx.versionHistoryService.commitEdit(
+          'framework',
+          id,
+          states.currentState,
+          states.snapshot,
+          { description: `Rollback to v${version}`, diff_summary: '' }
+        );
+      },
+    });
+
+    if (!outcome.applied) {
+      return this.error(`Rollback failed: ${outcome.error}`);
+    }
+    if (restoreOutcome === undefined) {
+      throw new Error(
+        `Rollback of framework '${id}' reported a successful restore without recording a version`
+      );
+    }
+
+    const registered = await reregisterFramework(this.ctx, id);
+    await this.ctx.onRefresh?.();
+
+    const response =
+      `✅ Framework '${id}' rolled back to version ${version}, byte for byte\n\n` +
+      `${describeRestorePlan(plan)}\n\n` +
+      `${describeRollbackRecord(restoreOutcome)}\n`;
+
+    return this.success(
+      registered
+        ? `${response}🔄 Re-registered — the restored content is live in this process`
+        : `${response}⚠️ The files were written, but the in-memory framework still holds its ` +
+            `pre-rollback content and will until the server restarts. See the server log for why ` +
+            `registration failed.`
     );
   }
 
