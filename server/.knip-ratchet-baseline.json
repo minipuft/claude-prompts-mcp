@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-20T17:34:30.391Z",
+  "generatedAt": "2026-09-21T00:19:56.627Z",
   "totals": {
-    "findings": 1133
+    "findings": 1132
   },
   "byCategory": {
     "binaries": 8,
@@ -12,7 +12,7 @@
     "devDependencies": 0,
     "duplicates": 0,
     "enumMembers": 0,
-    "exports": 459,
+    "exports": 458,
     "files": 10,
     "namespaceMembers": 0,
     "optionalPeerDependencies": 0,

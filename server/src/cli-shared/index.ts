@@ -85,12 +85,11 @@ export {
   type StyleSchemaValidationResult,
 } from '#modules/formatting/core/style-schema.js';
 
-// ── YAML utilities (js-yaml + node:fs only) ─────────────────────────────────
+// ── YAML utilities (the `yaml` package + node:fs only) ─────────────────────
 
 export {
   parseYaml,
   parseYamlOrThrow,
-  serializeYaml,
   formatYamlError,
   loadYamlFile,
   loadYamlFileSync,

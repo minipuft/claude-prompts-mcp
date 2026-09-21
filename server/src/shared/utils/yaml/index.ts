@@ -24,7 +24,6 @@
 export {
   parseYaml,
   parseYamlOrThrow,
-  serializeYaml,
   formatYamlError,
   type YamlParseOptions,
   type YamlParseError,

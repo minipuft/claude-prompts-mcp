@@ -33,11 +33,11 @@ import {
 } from './resource-validation.js';
 
 import { isExcludedCategoryDirectoryName } from '#shared/utils/prompt-layout.js';
+import { loadYamlFileSync } from '#shared/utils/yaml/index.js';
 import {
   readYamlSourceSync,
   serializeYamlPreservingSource,
 } from '#shared/utils/yaml/yaml-document-writer.js';
-import { loadYamlFileSync } from '#shared/utils/yaml/index.js';
 
 // ── Where a resource lives ──────────────────────────────────────────────────
 
