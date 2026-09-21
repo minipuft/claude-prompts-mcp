@@ -719,7 +719,7 @@ export class GateEnhancementService {
     let added = 0;
 
     for (const gateId of gateIds) {
-      const config = readRegistryGateExecutionConfig(gateManager, gateId);
+      const config = readRegistryGateExecutionConfig(gateManager, gateId, this.logger);
       if (config.blockResponseOnFail) {
         context.gates.addBlockingGate(gateId);
       }
@@ -1031,37 +1031,37 @@ interface RegistryGateExecutionConfig {
 /**
  * What the gate registry says about how one `registry-auto` gate executes.
  *
- * Every way of finding nothing — no manager, no registry, no guide, or a registry that throws —
- * yields the neutral config, which leaves the gate applying with no retry limit and no block.
  * Reads the registry but touches no execution state, so the caller owns the accumulator writes.
+ *
+ * Two absences are legitimate and are the ONLY ones handled here, each by its own predicate:
+ * no `GateManager` was wired at all, and a guide the registry no longer answers for — a gate
+ * disabled or reloaded between `selectGates` naming it and this read, which is narrow but real
+ * under hot reload. The second is logged with the gate id, because "selected, then gone" is a
+ * fact worth seeing rather than a default worth assuming.
+ *
+ * Nothing else is caught. This body used to sit inside `catch {}` defaulting
+ * `blockResponseOnFail` to false, which is a guard standing exactly where its defect would live:
+ * any throw turned a gate the operator declared as blocking into a gate that silently does not
+ * block, and its `retry_config.max_attempts` into the built-in 2. A registry read that throws is
+ * a broken registry, and the caller — a pipeline stage with a diagnostics boundary — must see it.
  */
 function readRegistryGateExecutionConfig(
   gateManager: GateManager | undefined,
-  gateId: string
+  gateId: string,
+  logger: Logger
 ): RegistryGateExecutionConfig {
-  let retryLimit: number | undefined;
-  let blockResponseOnFail = false;
-
-  if (gateManager) {
-    try {
-      const registry = gateManager.getGateRegistry();
-      const gate = registry?.getGuide(gateId);
-
-      if (gate) {
-        const retryConfig = gate.getRetryConfig();
-        if (retryConfig?.max_attempts !== undefined) {
-          retryLimit = retryConfig.max_attempts;
-        }
-
-        const definition = gate.getDefinition();
-        if (definition.blockResponseOnFail === true) {
-          blockResponseOnFail = true;
-        }
-      }
-    } catch {
-      // Gate registry lookup failed - continue without config
-    }
+  if (gateManager === undefined) {
+    return { blockResponseOnFail: false };
   }
+
+  const gate = gateManager.getGateRegistry().getGuide(gateId);
+  if (gate === undefined) {
+    logger.warn('[GateEnhancementService] Selected gate is absent from the registry', { gateId });
+    return { blockResponseOnFail: false };
+  }
+
+  const retryLimit = gate.getRetryConfig()?.max_attempts;
+  const blockResponseOnFail = gate.getDefinition().blockResponseOnFail === true;
 
   return retryLimit !== undefined ? { retryLimit, blockResponseOnFail } : { blockResponseOnFail };
 }
