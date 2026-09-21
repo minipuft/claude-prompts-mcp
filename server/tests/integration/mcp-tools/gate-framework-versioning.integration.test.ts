@@ -2035,7 +2035,14 @@ describe('framework registry coherence — production-shaped refresh (G2)', () =
     expect(text).toContain(path.join('no-such-framework', 'framework.yaml'));
   });
 
-  it('does not promise a version_history purge its live path never performs (G4)', async () => {
+  /**
+   * G4 used to assert the OPPOSITE: the preview said the rows "are NOT removed", and the claim was
+   * kept honest by matching a live path that never purged. P4.79 made the live path purge, so the
+   * old assertion now pins a lie — the promise and the behaviour still have to agree, and the way
+   * they agree has flipped. The preview half stays exactly as strict: a preview writes nothing and
+   * purges nothing.
+   */
+  it('promises a version_history purge, and its preview performs neither half (G4)', async () => {
     await create();
 
     const response = await lifecycle.handleDelete({
@@ -2045,10 +2052,11 @@ describe('framework registry coherence — production-shaped refresh (G2)', () =
     } as FrameworkManagerInput);
 
     const text = response.content[0]!.text!;
-    expect(text).toContain('are NOT removed');
-    expect(text).not.toContain('Would purge');
-    // The dry run must still be a dry run.
+    expect(text).toContain('Would also purge');
+    expect(text).not.toContain('are NOT removed');
+    // The preview must still be a preview: the file is there AND the rows are.
     expect(existsSync(path.join(frameworksDir, ID, 'framework.yaml'))).toBe(true);
+    expect((await versionHistoryService.loadHistory('framework', ID))?.versions.length).toBe(1);
   });
 
   /**

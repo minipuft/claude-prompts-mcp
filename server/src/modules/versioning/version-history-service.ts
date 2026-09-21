@@ -2,6 +2,8 @@
 
 import { isDeepStrictEqual } from 'node:util';
 
+import { RESOURCE_SUBTREE_MATCH } from './history-key.js';
+
 import type { VersioningConfig, Logger } from '#shared/types/index.js';
 import type { DatabasePort, StateStoreOptions } from '#shared/types/persistence.js';
 import type {
@@ -11,6 +13,8 @@ import type {
   SaveVersionOptions,
   ResourceType,
 } from './types.js';
+
+import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
 
 interface VersionRow {
   id: number;
@@ -27,8 +31,6 @@ interface VersionRow {
  * Interface for config provider - allows ConfigManager or test doubles.
  * Requires both versioning config and serverRoot for SQLite access.
  */
-import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
-
 export interface VersioningConfigProvider {
   getVersioningConfig(): VersioningConfig;
   getServerRoot(): string;
@@ -510,25 +512,59 @@ export class VersionHistoryService {
   }
 
   /**
-   * Delete version history for a resource.
-   * Called when a resource is deleted.
+   * Purge the version history of a resource, and of every id beneath it.
+   *
+   * Called when a resource is deleted — by all four `resource_manager` delete handlers, and by
+   * nothing else. It was called by nobody at all until this was wired: the rows of a deleted
+   * resource survived it permanently, unreachable by any action (rollback resolves the resource
+   * first) and never reclaimed, and re-creating the same id later inherited a stranger's history.
+   * `cpm delete` purged them the whole time, so the two surfaces disagreed about what delete means.
+   *
+   * SUBTREE, not one id: a chain's steps keep their history under `chain/step`, and deleting the
+   * chain deletes them too, so their rows go with it rather than staying behind under ids nothing
+   * serves. The predicate is imported rather than written here — `cli-shared` uses the same one,
+   * and two copies of it would be the same cross-surface disagreement one layer down.
+   *
+   * **Throws on failure**, like `saveVersion` on this table and for the same reason: returning
+   * `false` let every caller log and proceed, reporting a delete that only half happened. The
+   * caller decides what to tell the operator; it must not be told the purge succeeded.
+   *
+   * Returns how many rows were removed, which is what lets a reply state what it did.
    */
-  async deleteHistory(resourceType: ResourceType, resourceId: string): Promise<boolean> {
+  async deleteHistory(resourceType: ResourceType, resourceId: string): Promise<number> {
+    // Disabled versioning wrote no rows, so there are none to purge — the same early return
+    // `saveVersion` makes, for the same reason. Without it a delete on a server with versioning
+    // off would fail on a database this service never opened.
+    if (!this.getConfig().enabled) {
+      return 0;
+    }
+
     try {
       const db = this.getDb();
       const tenantId = this.resolveTenantId();
+      const params = [tenantId, resourceType, resourceId, resourceId];
 
+      const before = db.queryOne<{ cnt: number }>(
+        `SELECT COUNT(*) as cnt FROM version_history
+         WHERE tenant_id = ? AND resource_type = ? AND ${RESOURCE_SUBTREE_MATCH}`,
+        params
+      );
       db.run(
         `DELETE FROM version_history
-         WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?`,
-        [tenantId, resourceType, resourceId]
+         WHERE tenant_id = ? AND resource_type = ? AND ${RESOURCE_SUBTREE_MATCH}`,
+        params
       );
 
-      this.logger.debug(`Deleted history for ${resourceType}/${resourceId}`);
-      return true;
+      const removed = before?.cnt ?? 0;
+      this.logger.debug(`Deleted ${removed} history row(s) for ${resourceType}/${resourceId}`);
+      return removed;
     } catch (error) {
-      this.logger.error(`Failed to delete history for ${resourceType}/${resourceId}: ${error}`);
-      return false;
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to delete history for ${resourceType}/${resourceId}: ${message}`);
+      throw new Error(
+        `Failed to purge version history for ${resourceType}/${resourceId}: ${message}`,
+        { cause: error }
+      );
     }
   }
 

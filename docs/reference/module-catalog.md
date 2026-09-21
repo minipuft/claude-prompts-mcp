@@ -126,7 +126,7 @@ flowchart LR
   module_cli_shared --> module_prompts
   module_cli_shared --> module_resources
   module_cli_shared --> module_shared_utils
-  module_cli_shared -. type .-> module_versioning
+  module_cli_shared --> module_versioning
   module_engine_execution -. type .-> module_chains
   module_engine_execution --> module_engine_frameworks
   module_engine_execution --> module_engine_gates

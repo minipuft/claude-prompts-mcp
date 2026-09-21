@@ -47,6 +47,7 @@ import type { QuarantinedResource } from '#shared/utils/resource-quarantine.js';
 import type { PromptResourceInput } from '../../core/types.js';
 
 import { PromptReferenceValidator } from '#engine/execution/reference/index.js';
+import { purgeHistoryOnDelete } from '#modules/versioning/delete-purge.js';
 import { ToolResponse } from '#shared/types/index.js';
 import { PromptError } from '#shared/utils/index.js';
 import { preferredRepairTarget } from '#shared/utils/resource-quarantine.js';
@@ -844,9 +845,9 @@ export class PromptLifecycleProcessor {
     //
     // It was read on `rollback` and ignored here — the gate was on the RECOVERABLE verb and absent
     // from the unrecoverable one. Delete has no undo through the tool surface: the prompt's
-    // `version_history` rows survive (nothing calls `deleteHistory` on this path), but
-    // `handleRollback` returns "Prompt not found" when the prompt is gone, so those snapshots are
-    // unreachable by any action.
+    // `version_history` rows are purged with it (below), and were they kept they would be
+    // unreachable anyway, since `handleRollback` returns "Prompt not found" once the prompt is
+    // gone.
     //
     // The dependency list is computed BEFORE the gate so the refusal can name what would break.
     // Reporting the blast radius and then proceeding anyway — the previous behaviour — told the
@@ -872,6 +873,7 @@ export class PromptLifecycleProcessor {
             text:
               `🔍 **Preview** — deletion of prompt '${id}' (${promptToDelete.name})\n\n` +
               `Nothing was removed.\n${blastRadius}\n` +
+              `📜 Would also purge its \`version_history\` rows — a preview purges nothing\n\n` +
               `⚠️ Deletion cannot be undone — rollback cannot restore a deleted prompt.\n\n` +
               `💡 Re-send as \`action:"delete"\` with \`confirm: true\` to apply it.`,
           },
@@ -912,6 +914,19 @@ export class PromptLifecycleProcessor {
 
     const result = await this.fileOperations.deletePromptImplementation(args.id);
     response += `${result.message}\n\n`;
+
+    // AFTER the removal, and only once it has returned. The other order destroys the rollback
+    // history of a prompt still on disk when the removal fails, which is unrecoverable; this
+    // order's failure mode is rows left behind, which is the state before this was wired.
+    // Subtree-aware in the service, so a chain takes its steps' history (`chain/step`) with it.
+    const purge = await purgeHistoryOnDelete(
+      this.context.versionHistoryService,
+      'prompt',
+      id,
+      'files removed'
+    );
+    if (purge.failure !== undefined) throw new PromptError(purge.failure);
+    response += `📜 Version history purged: ${purge.removed} row(s)\n\n`;
     response += `✅ **Prompt successfully removed from system**\n`;
 
     await this.handleSystemRefresh(args.full_restart, `Prompt deleted: ${args.id}`);

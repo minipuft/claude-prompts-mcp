@@ -12,6 +12,7 @@ import type { CategoryResourceContext } from '../core/context.js';
 import type { CategoryCreationData, CategoryManagerInput } from '../core/types.js';
 
 import { discoverYamlPromptsInCategory } from '#modules/prompts/category-maintenance.js';
+import { purgeHistoryOnDelete } from '#modules/versioning/delete-purge.js';
 import { projectWriteModel } from '#modules/versioning/index.js';
 import { resolveContainedPath } from '#shared/utils/path-containment.js';
 
@@ -221,8 +222,7 @@ export class CategoryLifecycleProcessor {
           (promptsHeld === 0
             ? `🗂️ The directory would then be empty and is removed with the declaration\n`
             : '') +
-          `📜 Its \`version_history\` rows are NOT removed — they survive and become unreachable, ` +
-          `since rollback resolves the declaration first\n` +
+          `📜 Would also purge its \`version_history\` rows — a preview purges nothing\n` +
           `⚠️ Deletion cannot be undone — rollback cannot restore a deleted category.\n\n` +
           `💡 Re-send as \`action:"delete"\` with \`confirm: true\` to apply it.`
       );
@@ -251,11 +251,25 @@ export class CategoryLifecycleProcessor {
       // the response below reports which of the two happened rather than asserting both.
     }
 
+    // AFTER the removal, and only if it succeeded. The other order destroys the rollback history
+    // of a declaration still on disk when the `fs.rm` fails, which is unrecoverable; this order's
+    // failure mode is rows left behind, which is the state before this was wired. The prompts the
+    // category holds are untouched here, exactly as their files are — this purges the history of
+    // the `category.yaml` declaration, which is this handler's resource.
+    const purge = await purgeHistoryOnDelete(
+      this.ctx.versionHistoryService,
+      'category',
+      id,
+      `declaration removed: ${located.yamlPath}`
+    );
+    if (purge.failure !== undefined) return this.error(purge.failure);
+
     await this.ctx.onRefresh?.();
 
     return this.success(
       `✅ Category '${id}' declaration deleted\n\n` +
         `📁 Removed: ${located.yamlPath}\n\n` +
+        `📜 Version history purged: ${purge.removed} row(s)\n\n` +
         (directoryRemoved
           ? `🗂️ The directory held no prompts and was removed with it\n\n`
           : `📦 ${promptsHeld} prompt(s) in ${located.categoryDir} were NOT removed — the ` +

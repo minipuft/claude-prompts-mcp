@@ -16,6 +16,7 @@ import type { FrameworkDraftValidator } from './framework-draft-validator.js';
 import type { FrameworkResourceContext } from '../core/context.js';
 import type { FrameworkManagerInput, FrameworkCreationData } from '../core/types.js';
 
+import { purgeHistoryOnDelete } from '#modules/versioning/delete-purge.js';
 import { projectWriteModel } from '#modules/versioning/index.js';
 import { resolveContainedPath } from '#shared/utils/path-containment.js';
 import { preferredRepairTarget } from '#shared/utils/resource-quarantine.js';
@@ -488,6 +489,44 @@ export class FrameworkLifecycleProcessor {
     );
   }
 
+  /**
+   * The refusal for a delete of an id that has no directory at the writable root.
+   *
+   * Extracted from `handleDelete` because it owns a decision — WHICH of two refusals the operator
+   * gets, and the wording that sends them to the right remedy — rather than naming a step, and it
+   * is the one region of that handler that nests three deep. The handler keeps the guard.
+   */
+  private missingFrameworkRefusal(id: string, frameworksDir: string): ToolResponse {
+    // P1.3 — a framework served from the bundled tree is loaded and selectable; refusing it as
+    // "directory not found" described a path that was never meant to exist.
+    //
+    // This branch does NOT carry the shipped frameworks, and a comment here said it did until
+    // 2026-09-07. It could not: the whole branch is unreachable while `frameworkDir` exists,
+    // which it does at the configured root for every shipped id, and its inner test additionally
+    // requires the bundled root to DIFFER from the resources root — equal in a default install.
+    // A claim of coverage from a branch that cannot execute is the shape that hid this defect,
+    // so what remains here is only the case it can serve: an operator whose resources root is
+    // separate from the bundle naming something that exists only in the bundle.
+    const bundledRoot = this.ctx.configManager.getBundledResourceDirectory('frameworks');
+    if (bundledRoot !== undefined && path.resolve(bundledRoot) !== path.resolve(frameworksDir)) {
+      const bundledDir = resolveContainedPath(bundledRoot, id.toLowerCase());
+      if (existsSync(bundledDir)) {
+        return this.error(
+          `'${id}' ships with the server and is served from the bundled resources tree ` +
+            `(${bundledDir}), which is read-only — deleting it is not possible. ` +
+            `Your resources root is ${frameworksDir}. Update it instead: the update copies it ` +
+            // "over the bundled one", not bare "takes precedence" — this branch compares the
+            // writable root to the bundled tree only, and the writable root is no longer the top
+            // of the order. An operator with a workspace overlay reading the unqualified clause
+            // would be told their copy wins a contest it can lose. The gate twin already says it
+            // this way; the prompt twin (`prompt/operations/file-operations.ts`) does not.
+            `into your own root first and your copy takes precedence over the bundled one.`
+        );
+      }
+    }
+    return this.error(`Framework '${id}' not found. Nothing was removed.`);
+  }
+
   async handleDelete(args: FrameworkManagerInput): Promise<ToolResponse> {
     const { id } = args;
 
@@ -521,34 +560,7 @@ export class FrameworkLifecycleProcessor {
     }
 
     if (!existsSync(frameworkDir)) {
-      // P1.3 — a framework served from the bundled tree is loaded and selectable; refusing it as
-      // "directory not found" described a path that was never meant to exist.
-      //
-      // This branch does NOT carry the shipped frameworks, and a comment here said it did until
-      // 2026-09-07. It could not: the whole branch is unreachable while `frameworkDir` exists,
-      // which it does at the configured root for every shipped id, and its inner test additionally
-      // requires the bundled root to DIFFER from the resources root — equal in a default install.
-      // A claim of coverage from a branch that cannot execute is the shape that hid this defect,
-      // so what remains here is only the case it can serve: an operator whose resources root is
-      // separate from the bundle naming something that exists only in the bundle.
-      const bundledRoot = this.ctx.configManager.getBundledResourceDirectory('frameworks');
-      if (bundledRoot !== undefined && path.resolve(bundledRoot) !== path.resolve(frameworksDir)) {
-        const bundledDir = resolveContainedPath(bundledRoot, id.toLowerCase());
-        if (existsSync(bundledDir)) {
-          return this.error(
-            `'${id}' ships with the server and is served from the bundled resources tree ` +
-              `(${bundledDir}), which is read-only — deleting it is not possible. ` +
-              `Your resources root is ${frameworksDir}. Update it instead: the update copies it ` +
-              // "over the bundled one", not bare "takes precedence" — this branch compares the
-              // writable root to the bundled tree only, and the writable root is no longer the top
-              // of the order. An operator with a workspace overlay reading the unqualified clause
-              // would be told their copy wins a contest it can lose. The gate twin already says it
-              // this way; the prompt twin (`prompt/operations/file-operations.ts`) does not.
-              `into your own root first and your copy takes precedence over the bundled one.`
-          );
-        }
-      }
-      return this.error(`Framework '${id}' not found. Nothing was removed.`);
+      return this.missingFrameworkRefusal(id, frameworksDir);
     }
 
     // A preview reports what would be removed and returns before anything is. Deletion is the one
@@ -559,12 +571,7 @@ export class FrameworkLifecycleProcessor {
         `🔍 **Preview** — deletion of framework '${id}'\n\n` +
           `Nothing was removed.\n\n` +
           `📁 Would remove the directory: ${frameworkDir}\n` +
-          // Corrects a claim the live path never made good on: deletion is `fs.rm` +
-          // `removeFramework` and touches no database row. The version rows survive and become
-          // unreachable, since rollback resolves the framework first — the same wording, and the
-          // same reason, as the gate-side correction in `b7102dd9`.
-          `📜 Its \`version_history\` rows are NOT removed — they survive and become unreachable, ` +
-          `since rollback resolves the framework first\n` +
+          `📜 Would also purge its \`version_history\` rows — a preview purges nothing\n` +
           `⚠️ Deletion cannot be undone — rollback cannot restore a deleted framework.\n\n` +
           `💡 Re-send as \`action:"delete"\` with \`confirm: true\` to apply it.`
       );
@@ -580,6 +587,17 @@ export class FrameworkLifecycleProcessor {
         }`
       );
     }
+
+    // AFTER the removal, and only if it succeeded. The other order destroys the rollback history
+    // of a resource that is still on disk when the `fs.rm` fails, which is unrecoverable; this
+    // order's failure mode is rows left behind, which is the state before this was wired.
+    const purge = await purgeHistoryOnDelete(
+      this.ctx.versionHistoryService,
+      'framework',
+      id,
+      `directory removed: ${frameworkDir}`
+    );
+    if (purge.failure !== undefined) return this.error(purge.failure);
 
     // Unregister framework from in-memory registry, moving a selection that named it to the
     // configured default. Throws when that move fails to persist.
@@ -598,6 +616,7 @@ export class FrameworkLifecycleProcessor {
     return this.success(
       `✅ Framework '${id}' deleted successfully\n\n` +
         `📁 Directory removed: ${frameworkDir}\n\n` +
+        `📜 Version history purged: ${purge.removed} row(s)\n\n` +
         (unregistered
           ? `🔄 Framework unregistered from the registry`
           : `ℹ️ It was not in the framework registry, so only the files were removed`)

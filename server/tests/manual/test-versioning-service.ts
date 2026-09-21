@@ -183,9 +183,9 @@ async function main() {
 
     // Test 8: Delete history
     console.log('--- Test 8: Delete history ---');
-    const deleteResult = await service.deleteHistory(TEST_DIR);
+    const removedRows = await service.deleteHistory('prompt', TEST_DIR);
 
-    assert(deleteResult, 'Delete should succeed');
+    assert(removedRows > 0, 'Delete should remove at least one row');
 
     const historyAfterDelete = await service.loadHistory(TEST_DIR);
     assert(historyAfterDelete === null, 'History should be deleted');

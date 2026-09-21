@@ -39,6 +39,7 @@ import type {
   SaveVersionOptions,
 } from '#modules/versioning/types.js';
 
+import { RESOURCE_SUBTREE_MATCH } from '#modules/versioning/history-key.js';
 import {
   configFileFormat,
   findWorkspaceConfigFiles,
@@ -380,12 +381,8 @@ interface HistoryRow {
 
 const ENTRY_COLUMNS = 'version, snapshot, diff_summary, description, created_at';
 
-/**
- * Matches a resource id and every id below it; binds the id twice. Appending `/` to the column
- * makes the id itself and its descendants one prefix test: `chain` and `chain/step` both start
- * `chain/`, and `chain_other` does not.
- */
-const SUBTREE_MATCH = `substr(resource_id || '/', 1, length(?) + 1) = ? || '/'`;
+/** Imported, not written here — `deleteHistory` matches the same set over MCP. */
+const SUBTREE_MATCH = RESOURCE_SUBTREE_MATCH;
 
 function toEntry(row: HistoryRow): VersionEntry {
   return {

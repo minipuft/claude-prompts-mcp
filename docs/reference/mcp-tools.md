@@ -1771,8 +1771,16 @@ been restored.
 the current state and the version you would restore, writing no file and recording no version; it
 still refuses an incomplete snapshot, so the preview and the real call agree. With
 `preview_action:"delete"` it reports what would be removed — for a prompt, that includes the prompts
-that reference it. Neither needs `confirm`: `preview` is not a destructive action, so there is
-nothing to confirm.
+that reference it — and it purges nothing. Neither needs `confirm`: `preview` is not a destructive
+action, so there is nothing to confirm.
+
+**A real `delete` purges the resource's version history with it**, for all four resource types, and
+the reply says how many rows it removed. Deleting a chain takes its steps' history too, since a step
+is recorded under the composite id `chain/step`. This is what `cpm delete` always did; over
+`resource_manager` the rows used to survive — unreachable by any action, because rollback resolves
+the resource first, and inherited by whatever was created under that id next. One caveat remains:
+rows `cpm` wrote are keyed by the tenant id the CLI resolved, which is not yet always the one the
+server resolves for the same workspace, so an MCP delete purges what the MCP surface wrote.
 
 <!-- preview-vocabulary: migration-note -->
 
