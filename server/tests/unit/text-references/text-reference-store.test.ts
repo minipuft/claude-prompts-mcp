@@ -40,13 +40,12 @@ describe('TextReferenceStore.buildChainVariables', () => {
     expect(variables.step_results).toEqual({ 1: 'drafted', 2: 'reviewed' });
   });
 
-  test('a stored result is addressable by node id, not by position', () => {
+  test('stored metadata is addressable by node id, not by position', () => {
     const manager = new TextReferenceStore(logger);
     manager.storeChainStepResult('chain-3', 'draft', 'drafted', { note: 'first' }, 1);
 
-    expect(manager.getChainStepResult('chain-3', 'draft')).toBe('drafted');
     expect(manager.getChainStepMetadata('chain-3', 'draft')).toEqual({ note: 'first' });
-    expect(manager.getChainStepResult('chain-3', 'nope')).toBeNull();
+    expect(manager.getChainStepMetadata('chain-3', 'nope')).toBeNull();
   });
 });
 
