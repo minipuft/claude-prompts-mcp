@@ -1,13 +1,9 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-20T22:58:45.430Z",
-  "total": 29,
+  "generatedAt": "2026-09-21T00:22:58.870Z",
+  "total": 23,
   "methods": [
     "ArgumentHistoryTracker.getLatestArguments",
-    "AttributePolicyEnforcer.isAllowed",
-    "CategoryManager.getCategories",
-    "CategoryManager.getCategoryById",
-    "CategoryManager.validatePromptCategories",
     "ChainSessionStore.updateStepResult",
     "EnhancedLogger.initLogFile",
     "EnhancedLogger.logMemoryUsage",
@@ -29,8 +25,6 @@
     "PromptAnalyzer.requiresFramework",
     "ServerLifecycle.restart",
     "SqliteEngine.getSchemaVersion",
-    "TelemetryLifecycle.getRuntime",
-    "TelemetryLifecycle.isEnabled",
     "VersionHistoryService.deleteHistory"
   ],
   "reasons": {
@@ -50,6 +44,9 @@
     "PerformanceMonitor.onAlert": "see PerformanceMonitor.getMetricsHistory — same class, same AnalyticsService duplicate (P4.52, 2026-09-20).",
     "PerformanceMonitor.startMonitoring": "see PerformanceMonitor.getMetricsHistory — same class, same AnalyticsService duplicate (P4.52, 2026-09-20).",
     "PendingConfirmationTracker.hasPending": "sole non-destructive test-observation window for pending-confirmation state: checkAndClearPending clears on match (single-use), so hasPending is the only way tests assert a pending confirmation exists without consuming it — 10 call sites in pending-confirmation-tracker.test.ts (P4.52, 2026-09-20).",
-    "PendingConfirmationTracker.clear": "has its own dedicated behavioral test (multi-entry clear + hasPending verification), not merely incidental teardown; kept as tested capability alongside hasPending (P4.52, 2026-09-20)."
+    "PendingConfirmationTracker.clear": "has its own dedicated behavioral test (multi-entry clear + hasPending verification), not merely incidental teardown; kept as tested capability alongside hasPending (P4.52, 2026-09-20).",
+    "SqliteEngine.getSchemaVersion": "live duplicate at SqliteEngine.getCurrentSchemaVersion (private, same file): byte-identical `SELECT MAX(version) as version FROM schema_version` query with the same try/catch-to-0 fallback, used internally by ensureSchema(). This public method is exercised only by tests (chain-run-storage.integration.test.ts, sqlite-backend.test.ts). Two answers to one question is evidence of a defect, not surplus; left un-wired pending an owner call on which is canonical (P4.52 reimplementation probe, 2026-09-20).",
+    "ExecutionRecordStore.queryByChain": "sole test-observation window for the `WHERE chain_id = ?` predicate and its tenant scoping (AC4/AC5, execution-record-store.integration.test.ts); the only production readers (analytics-action-handler.ts, execution-history-action-handler.ts) call queryRecent(), which never filters by chain_id or session_id in JS — verified, not just assumed. Both write and query sides are documented as intentional in-process consumers in this class's own header (P4.52, 2026-09-20).",
+    "ExecutionRecordStore.queryBySession": "sole test-observation window for the `WHERE session_id = ?` predicate and its tenant scoping (AC3/AC4/AC5, execution-record-store.integration.test.ts); see ExecutionRecordStore.queryByChain — same class, same finding (P4.52, 2026-09-20)."
   }
 }
