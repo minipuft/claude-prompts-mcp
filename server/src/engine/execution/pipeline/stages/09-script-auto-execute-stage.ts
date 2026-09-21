@@ -139,23 +139,19 @@ export class ScriptAutoExecuteStage extends BasePipelineStage {
       // Get script state once (already initialized with autoExecuteResults by helper)
       const scripts = context.ensureScriptState();
 
-      try {
-        const toolResult = await this.resourceManagerHandler(autoExecute.params, {});
-        scripts.autoExecuteResults.set(toolId, toolResult);
-        autoExecuteCount++;
+      // NO try/catch. A handler throw belongs to the pipeline's single error boundary, the same
+      // one `assertParamsAreDeclared` throws into. The catch that used to stand here converted a
+      // throw into a stored `isError` result — the second half of the same false success the
+      // `isError` check below closes, reached by a different route.
+      const toolResult = await this.resourceManagerHandler(autoExecute.params, {});
+      this.assertToolAccepted(toolId, autoExecute.tool, toolResult);
 
-        context.diagnostics.info(this.name, `Auto-executed ${autoExecute.tool} for ${toolId}`, {
-          isError: toolResult.isError,
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        context.diagnostics.error(this.name, `Auto-execute failed for ${toolId}: ${message}`);
+      scripts.autoExecuteResults.set(toolId, toolResult);
+      autoExecuteCount++;
 
-        scripts.autoExecuteResults.set(toolId, {
-          content: [{ type: 'text', text: `Auto-execute failed: ${message}` }],
-          isError: true,
-        });
-      }
+      context.diagnostics.info(this.name, `Auto-executed ${autoExecute.tool} for ${toolId}`, {
+        isError: toolResult.isError,
+      });
     }
 
     this.logExit({ autoExecuted: autoExecuteCount });
@@ -177,6 +173,36 @@ export class ScriptAutoExecuteStage extends BasePipelineStage {
 
     throw new Error(
       `Script tool '${toolId}' emitted an auto_execute call that is refused. ${refusal}`
+    );
+  }
+
+  /**
+   * Throw when the tool answered the auto-execute with an error.
+   *
+   * P4.93 closed ONE class here — an undeclared parameter — by refusing before the call. Every
+   * other way the router says no arrived as a `ToolResponse` with `isError: true`, was written
+   * into `autoExecuteResults`, and was reported through `context.diagnostics.info`, which nothing
+   * downstream reads: `18-execution-stage.ts` never consults it. Measured 2026-09-20 by drive
+   * through `prompt_engine`: a parameter the resource type does not own, an unconfirmed
+   * destructive `delete`, and a schema-invalid `limit` each rendered the prompt and answered
+   * `isError: false`. The mutation did not happen and the caller was told it had.
+   *
+   * The remedy is the CHANNEL, not a new report: `prompt_engine`'s error is what a caller reads,
+   * and the pipeline's single error boundary is the only thing that reaches it. The router's own
+   * message is carried verbatim — it already names the parameter, the resource type, or the
+   * confirmation it wanted, and rewriting it here would produce a second, worse vocabulary.
+   */
+  private assertToolAccepted(toolId: string, tool: string, result: ToolResponse): void {
+    if (result.isError !== true) return;
+
+    const message = result.content
+      .map((part) => (typeof part.text === 'string' ? part.text : ''))
+      .join('\n')
+      .trim();
+
+    throw new Error(
+      `Script tool '${toolId}' emitted an auto_execute call that ${tool} refused. ` +
+        (message.length > 0 ? message : `${tool} reported an error with no message.`)
     );
   }
 }
