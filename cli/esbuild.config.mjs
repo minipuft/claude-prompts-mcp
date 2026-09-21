@@ -138,9 +138,32 @@ const JSONC_PARSER_ESM_ENTRY = resolveEsmEntry("jsonc-parser", SERVER_ROOT);
  * 13.7 KB. Re-measure both bundles before quoting any of these.
  *
  * BUNDLE_BUDGET_BYTES (shipped, minified) is untouched for the fourth time.
+ *
+ * Raised to 1,000,000 on 2026-09-21 (row O.8, owner ruling). What crossed it: `cpm rollback`
+ * now resolves its restore through the SAME planner `resource_manager rollback` uses
+ * (`modules/versioning/byte-restore.ts` → `restore-plan.ts`), which is what makes the two
+ * surfaces put the same bytes back rather than agreeing by inspection. Measured by stubbing each
+ * piece out and rebuilding, from 889,452 B at the step's base:
+ *
+ *   | reachable                                                    | bundle       |
+ *   | ------------------------------------------------------------ | ------------ |
+ *   | base (`8db356df`)                                             | 889,452 B    |
+ *   | + `writeRestoredFiles`/`restoreTargets`/`--preview` plumbing  | ~894,976 B   |
+ *   | + `resolveByteRestore` reachable                              | ~901,734 B   |
+ *   | + `describeRestorePlan` in the command                        | 902,976 B    |
+ *
+ * The two middle rows are derived from the build's own printed KB (±512 B) because each was a
+ * throwaway stub; the first and last are `stat` on the emitted file. 902,976 B against 900,000 is
+ * an overshoot of 2,976 B — a feature that cannot be had for less,
+ * because the alternative to reaching the shared planner is a second implementation of "which
+ * bytes land on an operator's disk". The step is 100,000 rather than another 3,000 for the reason
+ * the 2026-09-20 entry above records: this constant has now been raised four times, three of them
+ * by a margin that the next merge consumed. 1,000,000 leaves 97,037 B.
+ *
+ * BUNDLE_BUDGET_BYTES (shipped, minified) is untouched for the fifth time.
  */
 export const BUNDLE_BUDGET_BYTES = 512_000; // 500KB — shipped (minified)
-export const DEV_BUNDLE_BUDGET_BYTES = 900_000; // 879KB — unminified dev build
+export const DEV_BUNDLE_BUDGET_BYTES = 1_000_000; // 977KB — unminified dev build
 
 /** Absolute path to the server source tree the CLI shares code with. */
 const SERVER_SRC = join(SERVER_ROOT, "src");
