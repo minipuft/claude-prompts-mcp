@@ -1,4 +1,5 @@
-import { loadYamlFileSync, serializeYaml, rollbackVersion } from '@cli-shared/index.js';
+import { loadYamlFileSync, rollbackVersion } from '@cli-shared/index.js';
+import { serializeYamlPreservingSource } from '@shared/utils/yaml/yaml-document-writer.js';
 import { resolveWorkspace, findResource } from '../lib/workspace.js';
 import { output } from '../lib/output.js';
 import { TYPE_MAP, TYPE_CONFIG, singularName, isVersionedType } from '../lib/types.js';
@@ -108,7 +109,17 @@ export async function rollback(options: RollbackOptions): Promise<number> {
       }
     }
 
-    writeFileSync(yamlPath, serializeYaml({ ...currentData, ...restorable }), 'utf8');
+    // Source-preserving, like every other resource write: a rollback that restored the right
+    // values while stripping the file's comments would be a different kind of data loss.
+    const { readFileSync } = await import('node:fs');
+    writeFileSync(
+      yamlPath,
+      serializeYamlPreservingSource(
+        { ...currentData, ...restorable },
+        readFileSync(yamlPath, 'utf8'),
+      ).content,
+      'utf8',
+    );
   }
 
   if (options.json) {

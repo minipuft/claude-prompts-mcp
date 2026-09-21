@@ -17,7 +17,11 @@ import {
   type ResourceWriteCommitOptions,
 } from '#modules/resources/services/index.js';
 import { resolveContainedPath } from '#shared/utils/path-containment.js';
-import { parseYaml, serializeYaml } from '#shared/utils/yaml/yaml-parser.js';
+import {
+  readYamlSource,
+  serializeYamlPreservingSource,
+} from '#shared/utils/yaml/yaml-document-writer.js';
+import { parseYaml } from '#shared/utils/yaml/yaml-parser.js';
 
 /**
  * gate.yaml keys `buildGateYaml` writes directly from `GateCreationData` — always
@@ -347,7 +351,8 @@ export class GateFileWriter {
       );
       files.push({
         relativePath: 'gate.yaml',
-        content: serializeYaml(gateYamlData, { sortKeys: false }),
+        content: serializeYamlPreservingSource(gateYamlData, await readYamlSource(yamlPath))
+          .content,
       });
     }
     if (writesGuidance) {

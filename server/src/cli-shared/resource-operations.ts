@@ -33,7 +33,11 @@ import {
 } from './resource-validation.js';
 
 import { isExcludedCategoryDirectoryName } from '#shared/utils/prompt-layout.js';
-import { loadYamlFileSync, serializeYaml } from '#shared/utils/yaml/index.js';
+import { loadYamlFileSync } from '#shared/utils/yaml/index.js';
+import {
+  readYamlSourceSync,
+  serializeYamlPreservingSource,
+} from '#shared/utils/yaml/yaml-document-writer.js';
 
 // ── Where a resource lives ──────────────────────────────────────────────────
 
@@ -562,11 +566,16 @@ export function toggleEnabled(yamlPath: string): ToggleResult {
 
 /**
  * Add or remove a gate from a prompt's gateConfiguration.include array.
- * Uses full parse→serialize (comments are lost, but structural edits justify reformatting).
+ *
+ * Writes through the same source-preserving serializer the MCP writers use, so a prompt a person
+ * commented keeps those comments when `cpm` edits it. Adding or removing a list entry changes the
+ * file's structure, so this lands on the document tier: comments survive, and a long scalar this
+ * edit did not name may be re-wrapped.
  */
 export function linkGate(yamlPath: string, gateId: string, remove = false): LinkGateResult {
   try {
     const data = loadYamlFileSync<Record<string, unknown>>(yamlPath);
+    const existingSource = readYamlSourceSync(yamlPath);
 
     if (data === undefined) {
       return { success: false, error: `Failed to parse ${basename(yamlPath)}` };
@@ -589,7 +598,7 @@ export function linkGate(yamlPath: string, gateId: string, remove = false): Link
         (data['gateConfiguration'] as Record<string, unknown>)['include'] = filtered;
       }
 
-      writeFileSync(yamlPath, serializeYaml(data), 'utf8');
+      writeFileSync(yamlPath, serializeYamlPreservingSource(data, existingSource).content, 'utf8');
       return { success: true, action: 'removed', include: filtered };
     } else {
       // Add gate to include array
@@ -603,7 +612,7 @@ export function linkGate(yamlPath: string, gateId: string, remove = false): Link
       }
 
       include.push(gateId);
-      writeFileSync(yamlPath, serializeYaml(data), 'utf8');
+      writeFileSync(yamlPath, serializeYamlPreservingSource(data, existingSource).content, 'utf8');
       return { success: true, action: 'added', include };
     }
   } catch (error) {

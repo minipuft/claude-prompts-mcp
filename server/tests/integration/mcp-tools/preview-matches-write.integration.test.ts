@@ -856,6 +856,65 @@ describe('a gate, framework or category diff names the files and lines its write
     });
   });
 
+  /**
+   * The seeded gate above is written BY the writer, so it is already in the serializer's preferred
+   * shape and cannot demonstrate anything the serializer would otherwise normalize away. This case
+   * replaces it with a HAND-AUTHORED `gate.yaml` — a leading comment, a trailing comment, a comment
+   * between sections — and then checks the two properties together: the reported diff still
+   * reproduces the write byte-for-byte, and the write kept every comment.
+   *
+   * Both halves matter. A preview that matched a write which had stripped the comments would pass
+   * the first assertion alone.
+   */
+  test('gate update: a preview over a hand-authored file matches a write that keeps its comments', async () => {
+    const gatesDir = tempRoot();
+    const harness = await createGateHarness(gatesDir);
+
+    const yamlPath = join(gatesDir, GATE_ID, 'gate.yaml');
+    const authored = [
+      '# Authored by hand — this ordering is meaningful to a reader, not to a parser.',
+      `id: ${GATE_ID}`,
+      'name: Preview Probe',
+      'type: validation',
+      'description: The recorded description',
+      '',
+      'guidanceFile: guidance.md # lives beside this file',
+      '',
+    ].join('\n');
+    writeFileSync(yamlPath, authored, 'utf8');
+    await harness.registry.reload(GATE_ID);
+
+    const before = readTree(gatesDir);
+    const commentsBefore = (authored.match(/^\s*#/gm) ?? []).length;
+    expect(commentsBefore).toBe(1);
+
+    const update = await harness.lifecycle.handleUpdate({
+      action: 'update',
+      id: GATE_ID,
+      description: 'A different description',
+    } as GateManagerInput);
+    expect(update.isError).toBe(false);
+
+    const after = readTree(gatesDir);
+    const diff = fencedDiffOf(update);
+
+    // 1. The reported diff reproduces the write, file for file and line for line.
+    expect(expectDiffReproducesWrite(diff, before, after)).toEqual([`${GATE_ID}/gate.yaml`]);
+
+    // 2. The write it describes kept the author's comments, and moved only the edited line.
+    const written = readFileSync(yamlPath, 'utf8');
+    expect((written.match(/^\s*#/gm) ?? []).length).toBe(commentsBefore);
+    // The trailing comment is not line-leading, so the count above cannot see it. It is the one
+    // most easily lost by a re-render, which is why it is asserted by its text.
+    expect(written).toContain('# lives beside this file');
+    const authoredLines = authored.split('\n');
+    const writtenLines = written.split('\n');
+    const moved = authoredLines
+      .map((line, index) => (line === writtenLines[index] ? -1 : index + 1))
+      .filter((index) => index !== -1);
+    expect(moved).toEqual([5]);
+  });
+
   test('framework rollback: the preview names the framework files and lines the rollback restores', async () => {
     const frameworksDir = tempRoot();
     await seedFramework(frameworksDir);

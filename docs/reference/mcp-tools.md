@@ -1141,8 +1141,13 @@ about a partial write.
 its stored value, and so does `version`: no parameter sets it, and only `create` writes `1.0.0`. A
 file whose content the update does not change is not written at all, so its comments and
 formatting survive. An edit to `quality_indicators` rewrites `phases.yaml` and leaves
-`framework.yaml` byte-identical. A file the update does change is rewritten whole, and loses its
-comments.
+`framework.yaml` byte-identical.
+
+A file the update _does_ change is edited rather than re-rendered. Where every changed field is a
+plain value, only that field's own lines move: comments, blank lines, key order, quoting style and
+the wrapping of untouched block scalars are left exactly as authored. A change that alters the
+file's structure — adding or removing a key, or changing the length of a list — still re-renders
+the document, which keeps the comments but may re-wrap a long value.
 
 </details>
 

@@ -22,8 +22,11 @@ import {
 } from '#modules/resources/services/index.js';
 import { safeWriteFile } from '#shared/utils/file-transactions.js';
 import { resolveContainedPath } from '#shared/utils/path-containment.js';
+import {
+  readYamlSourceSync,
+  serializeYamlPreservingSource,
+} from '#shared/utils/yaml/yaml-document-writer.js';
 import { loadYamlFile } from '#shared/utils/yaml/yaml-file-loader.js';
-import { serializeYaml } from '#shared/utils/yaml/yaml-parser.js';
 
 // ============================================================================
 // Types
@@ -595,6 +598,15 @@ export class FrameworkFileWriter {
 
     const files: PlannedFrameworkFile[] = [];
 
+    // Where the files this write replaces live RIGHT NOW. For the first local edit of a bundled
+    // framework, `frameworkDir` does not exist yet and the prior text — comments included — is
+    // still in the bundled tree that copy-on-write is about to duplicate. Reading `frameworkDir`
+    // alone would find nothing there and re-render the framework from scratch, which is exactly
+    // the layout loss this write is avoiding, on the one edit most likely to hit an authored file.
+    const priorFrameworkDir = existsSync(frameworkDir)
+      ? frameworkDir
+      : this.resolveExistingFrameworkDir(data.id);
+
     const frameworkYaml = this.planFrameworkYamlData(
       data,
       existingData?.framework ?? null,
@@ -603,7 +615,10 @@ export class FrameworkFileWriter {
     if (frameworkYaml !== null) {
       files.push({
         relativePath: 'framework.yaml',
-        content: serializeYaml(frameworkYaml, { sortKeys: false }),
+        content: serializeYamlPreservingSource(
+          frameworkYaml,
+          readYamlSourceSync(join(priorFrameworkDir ?? frameworkDir, 'framework.yaml'))
+        ).content,
       });
     }
 
@@ -611,7 +626,10 @@ export class FrameworkFileWriter {
     if (phasesData !== null) {
       files.push({
         relativePath: companionFiles.phasesFile,
-        content: serializeYaml(phasesData, { sortKeys: false }),
+        content: serializeYamlPreservingSource(
+          phasesData,
+          readYamlSourceSync(join(priorFrameworkDir ?? frameworkDir, companionFiles.phasesFile))
+        ).content,
       });
     }
 

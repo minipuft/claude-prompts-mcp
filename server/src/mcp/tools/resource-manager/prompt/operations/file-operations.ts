@@ -33,6 +33,10 @@ import {
 import { safeWriteFile } from '#shared/utils/file-transactions.js';
 import { resolveContainedPath } from '#shared/utils/path-containment.js';
 import { slugifyCategoryDirectory } from '#shared/utils/resource-ids.js';
+import {
+  readYamlSource,
+  serializeYamlPreservingSource,
+} from '#shared/utils/yaml/yaml-document-writer.js';
 import { parseYaml, serializeYaml } from '#shared/utils/yaml/yaml-parser.js';
 
 export interface FileOperationsDependencies extends Pick<
@@ -1040,7 +1044,10 @@ export class FileOperations {
       );
       files.push({
         relativePath: 'prompt.yaml',
-        content: serializeYaml(promptYamlData, { sortKeys: false }),
+        content: serializeYamlPreservingSource(
+          promptYamlData,
+          priorYamlPath !== null ? await readYamlSource(priorYamlPath) : undefined
+        ).content,
       });
     }
 
