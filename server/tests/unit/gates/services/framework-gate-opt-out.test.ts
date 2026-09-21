@@ -58,6 +58,13 @@ interface Scenario {
   readonly enableFrameworkGates?: boolean;
   /** Active framework id; `undefined` means no framework is active. */
   readonly activeFrameworkId?: string | undefined;
+  /** The prompt author's `gateConfiguration.exclude`. */
+  readonly exclude?: readonly string[];
+  /**
+   * Whether the run could identify the framework's gate ids at all. `false` passes an empty set,
+   * which is what a missing or failing `GateLoader` produces.
+   */
+  readonly frameworkGatesIdentified?: boolean;
 }
 
 /**
@@ -68,6 +75,16 @@ interface Scenario {
  * the outcomes under test.
  */
 const resolveGateIds = async (scenario: Scenario = {}): Promise<readonly string[]> => {
+  // Composed rather than spread per field: `framework_gates` and `exclude` are two keys of ONE
+  // block, and the `exclude`-alone case must be a twin of the control differing in that key only.
+  const gateConfiguration: Record<string, unknown> = {};
+  if (scenario.frameworkGates !== undefined) {
+    gateConfiguration['framework_gates'] = scenario.frameworkGates;
+  }
+  if (scenario.exclude !== undefined) {
+    gateConfiguration['exclude'] = [...scenario.exclude];
+  }
+
   const prompt = {
     id: 'demo',
     name: 'demo',
@@ -76,9 +93,7 @@ const resolveGateIds = async (scenario: Scenario = {}): Promise<readonly string[
     userMessageTemplate: 'Do the thing.',
     systemMessage: '',
     arguments: [],
-    ...(scenario.frameworkGates === undefined
-      ? {}
-      : { gateConfiguration: { framework_gates: scenario.frameworkGates } }),
+    ...(Object.keys(gateConfiguration).length === 0 ? {} : { gateConfiguration }),
     ...(scenario.systemPromptInjection === undefined
       ? {}
       : { injection: { 'system-prompt': { enabled: scenario.systemPromptInjection } } }),
@@ -111,7 +126,7 @@ const resolveGateIds = async (scenario: Scenario = {}): Promise<readonly string[
     scenario.enableFrameworkGates === false
       ? ({ ...GATES_CONFIG, enableFrameworkGates: false } as GateSystemSettings)
       : GATES_CONFIG,
-    new Set([FRAMEWORK_GATE])
+    scenario.frameworkGatesIdentified === false ? new Set<string>() : new Set([FRAMEWORK_GATE])
   );
 
   // `executionPlan` is assigned through `as never` above, so it must be re-typed to be read.
@@ -162,9 +177,80 @@ describe('default framework gate honours the resolver vetoes (F2)', () => {
     expect(gateIds).not.toContain(FRAMEWORK_GATE);
   });
 
+  /**
+   * The case a ranked veto cannot express. With no framework gate ids identified there is
+   * nothing for a veto to name, so the veto set is empty — but the fallback exists precisely to
+   * supply a framework gate when none was identified, so it must still be refused.
+   *
+   * Control below: the same unidentified state with no opt-out still appends.
+   */
+  test('`framework_gates: false` withholds it even when no framework gate ids resolve', async () => {
+    const gateIds = await resolveGateIds({
+      frameworkGates: false,
+      frameworkGatesIdentified: false,
+    });
+
+    expect(gateIds).not.toContain(FRAMEWORK_GATE);
+    expect(gateIds).toContain(PLANNED_GATE);
+  });
+
+  test('unidentified framework gate ids alone do not withhold it', async () => {
+    const gateIds = await resolveGateIds({ frameworkGatesIdentified: false });
+
+    expect(gateIds).toContain(FRAMEWORK_GATE);
+  });
+
   test('`framework_gates: true` is not treated as an opt-out', async () => {
     const gateIds = await resolveGateIds({ frameworkGates: true });
 
     expect(gateIds).toContain(FRAMEWORK_GATE);
+  });
+});
+
+/**
+ * Issue #228. The residual of F2: the append consulted the three FRAMEWORK conditions and nothing
+ * else, so the author's `exclude` list — a veto `GateSetResolver` builds and applies correctly one
+ * line earlier — was invisible to it and the gate came straight back.
+ *
+ * The pre-existing coverage combined `exclude` with `framework_gates: false`, which puts a
+ * framework veto in play and makes the append skip for a different reason; the case had no test
+ * that could fail. Every scenario below therefore sets `exclude` and NOTHING else — a twin of the
+ * control in exactly one key.
+ */
+describe('the default framework gate honours `exclude` (issue #228)', () => {
+  test('`exclude: [framework-compliance]` alone withholds it — the shipped defect', async () => {
+    const gateIds = await resolveGateIds({ exclude: [FRAMEWORK_GATE] });
+
+    expect(gateIds).not.toContain(FRAMEWORK_GATE);
+    // Discriminates "this gate was withheld" from "nothing resolved at all".
+    expect(gateIds).toContain(PLANNED_GATE);
+  });
+
+  test('excluding an unrelated gate does not withhold it', async () => {
+    const gateIds = await resolveGateIds({ exclude: ['some-other-gate'] });
+
+    expect(gateIds).toContain(FRAMEWORK_GATE);
+  });
+
+  /**
+   * The CLASS, not the site. `ensureDefaultFrameworkGate` is today the only code that adds a gate
+   * id after the resolver has applied its vetoes, but a future one would arrive the same way: an
+   * id in the served set that no veto was ever asked about.
+   *
+   * So this enumerates the set from the run itself rather than from a literal list — every id the
+   * control resolves must disappear when the author excludes it alone. A new appender puts its id
+   * in the control set, and the loop then demands that id honour `exclude` too.
+   */
+  test('every gate the control resolves can be excluded by id, one at a time', async () => {
+    const control = await resolveGateIds();
+    expect(control.length).toBeGreaterThan(1);
+
+    for (const gateId of control) {
+      const withoutIt = await resolveGateIds({ exclude: [gateId] });
+      expect({ excluded: gateId, resolved: withoutIt }).toEqual({
+        excluded: gateId,
+        resolved: control.filter((id) => id !== gateId),
+      });
+    }
   });
 });

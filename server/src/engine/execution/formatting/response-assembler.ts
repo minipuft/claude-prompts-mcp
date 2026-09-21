@@ -1095,7 +1095,8 @@ export class ResponseAssembler {
    * Declared phase-guard headers for the framework active on this single-prompt execution, or
    * `[]` when this execution will not be graded by stage 19 at all.
    *
-   * Three independent skip conditions (Tier 2.6), each a separate reason to declare nothing:
+   * Four independent skip conditions (Tier 2.6; the fourth added for issue #228), each a
+   * separate reason to declare nothing:
    *
    * 1. No provider wired — pre-Tier-2 behavior, byte-identical.
    * 2. No session (`context.sessionContext?.sessionId` absent) — an UNGATED single prompt never
@@ -1105,6 +1106,23 @@ export class ResponseAssembler {
    *    will never be graded against them would spend tokens for nothing.
    * 3. No framework resolves, or the resolved framework declares no guarded phases — `provider()`
    *    itself returns `[]` for both, so no separate check is needed.
+   * 4. The framework's system prompt was NOT injected for this execution — the prompt author
+   *    wrote `injection.system-prompt.enabled: false`, or a modifier suppressed it. Telling a
+   *    prompt that opted out of a framework to emit that framework's headers "verbatim; they
+   *    are graded structurally" states two things that are not true of it: it was not given the
+   *    framework, and on this path nothing grades it. Read from `state.injection`, the decision
+   *    `InjectionDecisionService` wrote at stage 14 — the same decision that withheld the
+   *    framework preamble from the very response this block would be appended to, never a
+   *    second derivation of it.
+   *
+   * Condition 4 is deliberately NOT mirrored onto the chain surface
+   * (`chain-operator-executor.resolveDeclaredSections`), which documents the opposite ruling for
+   * its own path and is correct there: stage 19's declared-header set is RUN-WIDE, so a sibling
+   * step that declared a header keeps that header blocking for the whole run, and withholding
+   * the vocabulary from one opted-out step would grade it against headers it was never shown.
+   * No such set exists here — the single-prompt path records no `declaredSections` into the
+   * session at all (`18-execution-stage.ts:206` writes them only for a chain node), so nothing
+   * downstream can be made unsatisfiable by this skip.
    *
    * Reads through the provider on every call — no cache — so framework hot-reload keeps working,
    * matching the chain path's `resolveDeclaredSections`.
@@ -1116,6 +1134,10 @@ export class ResponseAssembler {
     }
 
     if (context.sessionContext?.sessionId === undefined) {
+      return [];
+    }
+
+    if (context.state.injection.systemPrompt?.inject === false) {
       return [];
     }
 
