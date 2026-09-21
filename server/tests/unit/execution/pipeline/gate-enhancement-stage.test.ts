@@ -47,8 +47,11 @@ const createMockGateLoader = (
  * is YAML-declared and covered by tests/integration/gates/gate-category-selection.test.ts.
  *
  * @param registryGuides - `gate id -> GateGuide` the mock registry's `getGuide` looks up. Omitted
- * (the default) keeps `getGateRegistry()` returning `undefined`, same as before this parameter
- * existed, so every caller that does not pass it is unaffected.
+ * (the default) yields an EMPTY registry, which is the state a caller that passes nothing is
+ * describing: a manager that is initialized and holds no guide for this id. It used to return
+ * `undefined` from `getGateRegistry()`, which the real manager cannot do — it is typed
+ * `GateRegistry` and throws when uninitialized — and the reader only tolerated it because a bare
+ * `catch {}` swallowed the resulting TypeError along with everything else (P4.94).
  */
 const createMockGateManager = (registryGuides?: Record<string, GateGuide>): GateManager => {
   const categoryGateMapping: Record<string, string[]> = {
@@ -79,9 +82,7 @@ const createMockGateManager = (registryGuides?: Record<string, GateGuide>): Gate
     reloadGate: jest.fn(),
     getGateRegistry: jest
       .fn()
-      .mockReturnValue(
-        registryGuides ? { getGuide: (gateId: string) => registryGuides[gateId] } : undefined
-      ),
+      .mockReturnValue({ getGuide: (gateId: string) => (registryGuides ?? {})[gateId] }),
     getRegistryStats: jest.fn().mockReturnValue({ totalGates: 0 }),
     getStatus: jest.fn(),
     isGateSystemEnabled: jest.fn().mockReturnValue(true),
@@ -783,8 +784,8 @@ describe('GateEnhancementStage', () => {
    * A registry-auto gate's `retry_config.max_attempts` and `blockResponseOnFail` are read off
    * the registry guide and written into the accumulator by
    * `GateEnhancementService.addRegistryGatesWithRetryConfig` — a step no other test in this file
-   * drives, since `createMockGateManager()` previously left `getGateRegistry()` returning
-   * `undefined` (no guide, neutral config). These two tests supply real guides (parsed through
+   * drives, since `createMockGateManager()`'s default registry holds no guide for any id
+   * (neutral config). These two tests supply real guides (parsed through
    * `GateDefinitionSchema`, same as the production loader) via the `registryGuides` param added
    * above, and pin both effects through the accumulator's own public readers.
    */
