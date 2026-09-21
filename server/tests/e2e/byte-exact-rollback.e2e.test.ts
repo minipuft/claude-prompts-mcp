@@ -41,14 +41,18 @@ import {
 /**
  * The bytes no writer in this repository would ever produce.
  *
- * A BOM, CRLF endings, a non-ASCII character, a trailing space and a line with nothing on it.
- * Written as an explicit byte array so the fixture cannot be normalised by an editor, a formatter
- * or a `utf8` round trip on the way in.
+ * A BOM, CRLF endings, a non-ASCII character, a trailing space, an empty line — and one byte
+ * that is not valid UTF-8 at all. The last one was added after a mutation came back GREEN: a
+ * restore that decodes to a string and re-encodes is LOSSLESS for everything above it, so without
+ * a byte that cannot survive a text round trip, "written verbatim" was being asserted by a fixture
+ * a text path would also have passed. `0x80` is a continuation byte with no lead, so
+ * `Buffer.toString('utf8')` replaces it with U+FFFD and nothing puts it back.
  */
-const HAND_AUTHORED_GUIDANCE = Buffer.from(
-  '﻿# Guidance — café ☕\r\n\r\nLine with a trailing space \r\nEnd.\r\n',
-  'utf8'
-);
+const HAND_AUTHORED_GUIDANCE = Buffer.concat([
+  Buffer.from('﻿# Guidance — café ☕\r\n\r\nLine with a trailing space ', 'utf8'),
+  Buffer.from([0x80]),
+  Buffer.from('\r\nEnd.\r\n', 'utf8'),
+]);
 
 const HAND_COMMENT = '# hand-authored: this comment must survive a rollback — café ☕\n';
 
