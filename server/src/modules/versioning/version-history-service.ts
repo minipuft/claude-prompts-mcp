@@ -5,6 +5,10 @@ import { RESOURCE_SUBTREE_MATCH } from './history-key.js';
 import type { VersioningConfig, Logger } from '#shared/types/index.js';
 import type { DatabasePort, StateStoreOptions } from '#shared/types/persistence.js';
 import type {
+  ResourceFileLocatorPort,
+  ResourceLocationResult,
+} from '#shared/utils/resource-file-set.js';
+import type {
   VersionEntry,
   HistoryFile,
   SaveVersionResult,
@@ -73,16 +77,50 @@ export class VersionHistoryService {
    */
   private scope?: StateStoreOptions;
 
+  /**
+   * How this service turns a (type, id) into the files on disk that ARE that resource.
+   *
+   * INJECTED, never re-derived (owner ruling R65). Root precedence has exactly one owner
+   * (`runtime/resource-roots.ts`), and a second derivation of it here would decide, independently,
+   * which of a bundled and a workspace definition a checkpoint records — the two could only agree
+   * by inspection, and the failure is silent: a rollback restores the wrong file.
+   *
+   * Optional because the unit suites construct this service directly and a missing locator
+   * degrades a row to projection-only — today's behaviour — rather than to a wrong answer. Every
+   * construction in `src/` supplies one, which
+   * `tests/unit/versioning/version-history-locator-wiring.test.ts` enumerates and enforces.
+   */
+  private resourceFileLocator?: ResourceFileLocatorPort;
+
   constructor(deps: {
     logger: Logger;
     configManager: VersioningConfigProvider;
     dbManager?: DatabasePort;
     scope?: StateStoreOptions;
+    resourceFileLocator?: ResourceFileLocatorPort;
   }) {
     this.logger = deps.logger;
     this.configProvider = deps.configManager;
     this.dbManager = deps.dbManager ?? null;
     this.scope = deps.scope;
+    this.resourceFileLocator = deps.resourceFileLocator;
+  }
+
+  /**
+   * Where this resource's entry file and contributing roots are, or why they could not be found.
+   *
+   * The single reason this service holds a locator at all. A caller that gets `located: false`
+   * records the version WITHOUT a file tree and warns once — never a failed save, because the
+   * projection in `snapshot` is what every reader already uses.
+   */
+  private async locateResourceFiles(
+    resourceType: ResourceType,
+    resourceId: string
+  ): Promise<ResourceLocationResult> {
+    if (this.resourceFileLocator === undefined) {
+      return { located: false, reason: 'no resource file locator was injected into this service' };
+    }
+    return this.resourceFileLocator.locate(resourceType, resourceId);
   }
 
   /** Late-bind DatabasePort and its scope (setter injection, matching codebase convention). */

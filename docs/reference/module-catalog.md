@@ -39,9 +39,9 @@ remains in `server/.dependency-cruiser.cjs`.
 | `semantic` | `src/modules/semantic` | domain | canonical | Owns semantic indexing and related retrieval behavior. | — | — | engine-execution<br>shared-types | mcp-tools |
 | `skills-sync` | `src/modules/skills-sync` | domain | canonical | Exports and synchronizes skills across supported clients. | — | — | cli-shared<br>engine-gates<br>resources<br>shared-types<br>shared-utils | mcp-tools<br>runtime |
 | `text-references` | `src/modules/text-refs` | domain | canonical | Tracks and resolves reusable text argument references. | — | `index.ts` | shared-types<br>shared-utils | chains<br>mcp-tools<br>prompts<br>runtime |
-| `versioning` | `src/modules/versioning` | domain | canonical | Owns version history, comparison, rollback, and resource snapshots. | — | `index.ts` | shared-types<br>shared-utils | cli-shared<br>mcp-tools<br>shared-utils |
+| `versioning` | `src/modules/versioning` | domain | canonical | Owns version history, comparison, rollback, and resource snapshots. | — | `index.ts` | shared-types<br>shared-utils | cli-shared<br>mcp-tools<br>runtime<br>shared-utils |
 | `workflow-ir` | `src/modules/workflow-ir` | domain | canonical | Validates and compiles planner-submitted workflow graphs. | `docs/reference/workflow-ir.md` | — | engine-execution<br>shared-types | engine-execution<br>mcp-tools<br>prompts<br>shared-types |
-| `runtime` | `src/runtime` | runtime | canonical | Application composition and process lifecycle entrypoints. | — | — | automation<br>engine-execution<br>engine-frameworks<br>engine-gates<br>formatting<br>hot-reload<br>infra-config<br>infra-database<br>infra-hooks<br>infra-http<br>infra-logging<br>infra-observability<br>mcp-http<br>mcp-tools<br>prompts<br>resources<br>shared-core<br>shared-types<br>shared-utils<br>skills-sync<br>text-references | server-source |
+| `runtime` | `src/runtime` | runtime | canonical | Application composition and process lifecycle entrypoints. | — | — | automation<br>engine-execution<br>engine-frameworks<br>engine-gates<br>formatting<br>hot-reload<br>infra-config<br>infra-database<br>infra-hooks<br>infra-http<br>infra-logging<br>infra-observability<br>mcp-http<br>mcp-tools<br>prompts<br>resources<br>shared-core<br>shared-types<br>shared-utils<br>skills-sync<br>text-references<br>versioning | server-source |
 | `shared` | `src/shared` | layer | canonical | Foundation types and pure utilities available to every source layer. | — | — | — | — |
 | `shared-core` | `src/shared/core` | shared | canonical | Core abstractions shared without importing upper layers. | — | — | shared-types<br>shared-utils | engine-frameworks<br>engine-gates<br>mcp-tools<br>runtime |
 | `shared-types` | `src/shared/types` | shared | canonical | Cross-layer TypeScript contracts and data shapes. | — | `index.ts` | workflow-ir | automation<br>chains<br>engine-execution<br>engine-frameworks<br>engine-gates<br>formatting<br>hot-reload<br>infra-config<br>infra-database<br>infra-hooks<br>infra-http<br>infra-logging<br>infra-observability<br>mcp-http<br>mcp-metadata<br>mcp-tools<br>prompts<br>resources<br>runtime<br>semantic<br>shared-core<br>shared-utils<br>skills-sync<br>text-references<br>versioning<br>workflow-ir |
@@ -231,6 +231,7 @@ flowchart LR
   module_runtime --> module_shared_utils
   module_runtime --> module_skills_sync
   module_runtime --> module_text_references
+  module_runtime -. type .-> module_versioning
   module_semantic --> module_engine_execution
   module_semantic -. type .-> module_shared_types
   module_server_source --> module_cli_shared

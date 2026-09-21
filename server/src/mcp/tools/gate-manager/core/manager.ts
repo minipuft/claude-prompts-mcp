@@ -32,6 +32,7 @@ export class GateToolHandler {
     this.versionHistoryService = new VersionHistoryService({
       logger: deps.logger,
       configManager: deps.configManager,
+      resourceFileLocator: deps.resourceFileLocator,
     });
 
     const ctx: GateResourceContext = {
