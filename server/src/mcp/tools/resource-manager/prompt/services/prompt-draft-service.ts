@@ -18,7 +18,6 @@ import { normalizePromptId } from '#shared/utils/resource-ids.js';
 interface PreparedPromptDraft {
   canonicalId: string;
   promptData: Record<string, unknown>;
-  warnings: string[];
 }
 
 export type PromptDraftInput = Omit<PromptResourceInput, 'action'> & {
@@ -26,8 +25,7 @@ export type PromptDraftInput = Omit<PromptResourceInput, 'action'> & {
 };
 
 export type PromptDraftResult =
-  | { valid: true; draft: PreparedPromptDraft; errors: [] }
-  | { valid: false; errors: string[]; warnings: string[] };
+  { valid: true; draft: PreparedPromptDraft; errors: [] } | { valid: false; errors: string[] };
 
 /** Pure draft preparation shared by `validate` and `create`. */
 export class PromptDraftService {
@@ -70,27 +68,33 @@ export class PromptDraftService {
     errors.push(...toolErrors);
 
     if (errors.length > 0) {
-      return { valid: false, errors, warnings: [] };
+      return { valid: false, errors };
     }
 
     const promptData = this.buildPromptData(args, canonicalId);
     const diagnosis = diagnosePromptWrite(null, promptData);
     errors.push(...diagnosis.blocking.map((defect) => defect.message));
 
+    // A step naming a prompt that does not exist is a refusal, not a warning next to a saved
+    // file. `canonicalId` is passed as the chain id so the steps this same call scaffolds
+    // (`<chainId>/<step>`) are accepted — nothing else creates them.
     const chainSteps = Array.isArray(promptData['chainSteps']) ? promptData['chainSteps'] : [];
-    const warnings = validateChainStepReferences(
-      chainSteps,
-      this.promptsProvider().map((prompt) => prompt.id)
-    ).warnings;
+    errors.push(
+      ...validateChainStepReferences(
+        chainSteps,
+        canonicalId,
+        this.promptsProvider().map((prompt) => prompt.id)
+      ).problems
+    );
 
     if (errors.length > 0) {
-      return { valid: false, errors, warnings };
+      return { valid: false, errors };
     }
 
     return {
       valid: true,
       errors: [],
-      draft: { canonicalId, promptData, warnings },
+      draft: { canonicalId, promptData },
     };
   }
 
