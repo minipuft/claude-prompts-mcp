@@ -153,7 +153,7 @@ function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): 
     }
 
     case 'save_version': {
-      const version = appendVersion(
+      const outcome = appendVersion(
         db,
         tenantId,
         request,
@@ -161,7 +161,7 @@ function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): 
         request.description ?? '',
         request.diff_summary ?? ''
       );
-      return { success: true, version };
+      return { success: true, version: outcome.version, recorded: outcome.recorded };
     }
 
     case 'record_edit_result': {
@@ -171,7 +171,12 @@ function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): 
         description: request.description ?? '',
         diffSummary: request.diff_summary ?? '',
       });
-      return { success: true, version: result.version, bridged: result.bridged };
+      return {
+        success: true,
+        version: result.version,
+        recorded: result.recorded,
+        bridged: result.bridged,
+      };
     }
 
     case 'compare_versions': {
@@ -218,6 +223,9 @@ function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): 
       return {
         success: true,
         saved_version: result.version,
+        // False when the target version was already the current state: nothing to restore and
+        // nothing to record, so `saved_version` is the number that was already newest.
+        recorded: result.recorded,
         restored_version: target,
         snapshot: restoredSnapshot,
       };
@@ -360,7 +368,7 @@ export function saveVersion(
 ): SaveVersionResult {
   const request = createRequest(resourceDir, 'save_version', { resourceType, resourceId });
   if (request === null) {
-    return { success: false, error: 'Unable to resolve resource DB path' };
+    return { success: false, error: 'Unable to resolve resource DB path', recorded: false };
   }
 
   const result = runSqlite({
@@ -372,9 +380,9 @@ export function saveVersion(
     max_versions: DEFAULT_MAX_VERSIONS,
   });
   if (!result.success) {
-    return { success: false, error: result.error ?? 'Failed to save version' };
+    return { success: false, error: result.error ?? 'Failed to save version', recorded: false };
   }
-  return { success: true, version: result.version ?? 0 };
+  return { success: true, version: result.version ?? 0, recorded: result.recorded ?? false };
 }
 
 /**
@@ -395,7 +403,12 @@ export function recordEditResult(
 ): SaveVersionResult & { bridged: boolean } {
   const request = createRequest(resourceDir, 'record_edit_result', { resourceType, resourceId });
   if (request === null) {
-    return { success: false, error: 'Unable to resolve resource DB path', bridged: false };
+    return {
+      success: false,
+      error: 'Unable to resolve resource DB path',
+      bridged: false,
+      recorded: false,
+    };
   }
 
   const result = runSqlite({
@@ -412,9 +425,15 @@ export function recordEditResult(
       success: false,
       error: result.error ?? 'Failed to record edit result',
       bridged: false,
+      recorded: false,
     };
   }
-  return { success: true, version: result.version ?? 0, bridged: result.bridged ?? false };
+  return {
+    success: true,
+    version: result.version ?? 0,
+    recorded: result.recorded ?? false,
+    bridged: result.bridged ?? false,
+  };
 }
 
 export function rollbackVersion(
@@ -442,6 +461,7 @@ export function rollbackVersion(
   return {
     success: true,
     saved_version: result.saved_version,
+    recorded: result.recorded ?? false,
     restored_version: result.restored_version,
     snapshot: result.snapshot,
   };

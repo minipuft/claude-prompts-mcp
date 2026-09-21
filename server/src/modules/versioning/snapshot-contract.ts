@@ -196,6 +196,30 @@ export function describeRollbackPreview(
   return `${text}💡 Re-send as \`action:"rollback"\` with \`confirm: true\` to apply it.`;
 }
 
+/**
+ * What an update reply says about the version table, told by whether a row was written.
+ *
+ * Centralised for the same reason `describeIncompleteSnapshot` is: eight call sites each composed
+ * their own sentence, and every one of them read only the version NUMBER — which a write that
+ * changed nothing still returns, because it is the number that was already there. "Version 7
+ * saved" about a row somebody else wrote is the same class of lie as a rollback announcing a
+ * version it did not fully restore.
+ */
+export function describeVersionRecord(result: { version?: number; recorded: boolean }): string {
+  const view = ' (use `action:"history"` to view)';
+  return result.recorded
+    ? `📜 **Version ${result.version}** saved${view}`
+    : `📜 No change to record — still at version ${result.version}${view}`;
+}
+
+/** The same distinction for a rollback: the restored state got a row, or was already current. */
+export function describeRollbackRecord(result: { version?: number; recorded: boolean }): string {
+  return result.recorded
+    ? `📜 Restored state recorded as version ${result.version}`
+    : `📜 Already at version ${result.version} — the restored state was the current one, so no ` +
+        `version was recorded`;
+}
+
 export function describeIncompleteSnapshot(
   resourceType: ResourceType,
   id: string,

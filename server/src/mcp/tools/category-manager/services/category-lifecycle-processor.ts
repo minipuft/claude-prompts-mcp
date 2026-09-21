@@ -13,7 +13,7 @@ import type { CategoryCreationData, CategoryManagerInput } from '../core/types.j
 
 import { discoverYamlPromptsInCategory } from '#modules/prompts/category-maintenance.js';
 import { purgeHistoryOnDelete } from '#modules/versioning/delete-purge.js';
-import { projectWriteModel } from '#modules/versioning/index.js';
+import { describeVersionRecord, projectWriteModel } from '#modules/versioning/index.js';
 import { resolveContainedPath } from '#shared/utils/path-containment.js';
 
 export class CategoryLifecycleProcessor {
@@ -141,7 +141,7 @@ export class CategoryLifecycleProcessor {
     // Auto-versioning runs as the writer transaction's `commit` step, not ahead of it (P4.2 /
     // SF-3). Inlined rather than extracted to a helper on purpose — `validate:mutation-atomicity`
     // reads the record's position lexically.
-    let versionSaved: number | undefined;
+    let versionOutcome: { version?: number; recorded: boolean } | undefined;
     const skipVersion = args.skip_version === true;
     const commitOptions =
       this.ctx.versionHistoryService.isAutoVersionEnabled() && !skipVersion
@@ -157,8 +157,10 @@ export class CategoryLifecycleProcessor {
                   diff_summary: `+${diffResult.stats.additions}/-${diffResult.stats.deletions}`,
                 }
               );
-              versionSaved = versionResult.version;
-              this.ctx.logger.debug(`Saved version ${versionSaved} for category ${id}`);
+              versionOutcome = versionResult;
+              this.ctx.logger.debug(
+                `${versionResult.recorded ? 'Saved' : 'Matched'} version ${versionResult.version} for category ${id}`
+              );
             },
           }
         : {};
@@ -177,8 +179,8 @@ export class CategoryLifecycleProcessor {
       `✅ Category '${id}' updated successfully\n\n` +
       `📁 Files updated:\n${result.paths?.map((p) => `  - ${p}`).join('\n')}\n\n`;
 
-    if (versionSaved !== undefined) {
-      response += `📜 **Version ${versionSaved}** saved (use \`action:"history"\` to view)\n\n`;
+    if (versionOutcome !== undefined) {
+      response += `${describeVersionRecord(versionOutcome)}\n\n`;
     }
 
     if (diffResult.hasChanges) {

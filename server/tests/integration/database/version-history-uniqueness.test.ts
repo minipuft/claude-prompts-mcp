@@ -322,7 +322,10 @@ describe('version_history uniqueness', () => {
         rollback: () => engine.rollback(),
         queryOne: (sql: string, params?: unknown[]) => {
           const result = engine.queryOne(sql, params);
-          if (sql.includes('MAX(version)') && !fired) {
+          // The seam is the newest-row read `saveVersion` makes INSIDE its transaction — which
+          // since S1.3 selects the row (version + snapshot) rather than `MAX(version)`, because
+          // the same read now answers both "what number is next" and "is this state unchanged".
+          if (sql.includes('ORDER BY version DESC LIMIT 1') && !fired) {
             fired = true;
             try {
               interference.run();

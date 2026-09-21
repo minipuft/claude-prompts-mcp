@@ -52,6 +52,16 @@ export interface HistoryFile {
 export interface SaveVersionResult {
   success: boolean;
   version?: number;
+  /**
+   * Whether a row was actually inserted.
+   *
+   * `version` alone cannot say. A write whose snapshot is identical to the newest recorded one
+   * creates no row and returns the version that already existed, so a reply reading only `version`
+   * would tell the operator "Version 7 saved" about a row written minutes ago by someone else.
+   * Required rather than optional, and false rather than absent on the disabled path: a second
+   * writer that forgets to set it should fail to compile, not default to claiming a save.
+   */
+  recorded: boolean;
   error?: string;
 }
 
@@ -60,6 +70,13 @@ export interface SaveVersionResult {
  */
 export interface RollbackResult {
   success: boolean;
+  /**
+   * Whether the rollback recorded a row for the restored state.
+   *
+   * False when the target version is already the current state: there is nothing to restore and
+   * nothing to record, so `saved_version` is the version that was already newest.
+   */
+  recorded?: boolean;
   /**
    * The newest version number after the rollback — go-forward semantics (P7): this row holds
    * the RESTORED content, not the pre-rollback state. A bridge row for the pre-rollback live

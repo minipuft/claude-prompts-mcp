@@ -17,7 +17,7 @@ import type { FrameworkResourceContext } from '../core/context.js';
 import type { FrameworkManagerInput, FrameworkCreationData } from '../core/types.js';
 
 import { purgeHistoryOnDelete } from '#modules/versioning/delete-purge.js';
-import { projectWriteModel } from '#modules/versioning/index.js';
+import { describeVersionRecord, projectWriteModel } from '#modules/versioning/index.js';
 import { resolveContainedPath } from '#shared/utils/path-containment.js';
 import { preferredRepairTarget } from '#shared/utils/resource-quarantine.js';
 
@@ -222,7 +222,7 @@ export class FrameworkLifecycleProcessor {
     // restores those files — so neither a version row describing a write that never happened nor a
     // file no version row describes is reachable. Sequencing the two steps could only choose which
     // of those two the caller got; both orderings were shipped here and one was reverted.
-    let versionSaved: number | undefined;
+    let versionOutcome: { version?: number; recorded: boolean } | undefined;
     const skipVersion = args.skip_version === true;
     const commitOptions =
       this.ctx.versionHistoryService.isAutoVersionEnabled() && !skipVersion
@@ -242,8 +242,10 @@ export class FrameworkLifecycleProcessor {
                   diff_summary: `+${diffResult.stats.additions}/-${diffResult.stats.deletions}`,
                 }
               );
-              versionSaved = versionResult.version;
-              this.ctx.logger.debug(`Saved version ${versionSaved} for framework ${id}`);
+              versionOutcome = versionResult;
+              this.ctx.logger.debug(
+                `${versionResult.recorded ? 'Saved' : 'Matched'} version ${versionResult.version} for framework ${id}`
+              );
             },
           }
         : {};
@@ -277,8 +279,8 @@ export class FrameworkLifecycleProcessor {
       `${registered ? `✅ Framework '${id}' updated successfully` : `⚠️ Framework '${id}' was written to disk but the edit is NOT live in this process`}\n\n` +
       `📁 Files updated:\n${result.paths?.map((p) => `  - ${p}`).join('\n')}\n\n`;
 
-    if (versionSaved !== undefined) {
-      response += `📜 **Version ${versionSaved}** saved (use \`action:"history"\` to view)\n\n`;
+    if (versionOutcome !== undefined) {
+      response += `${describeVersionRecord(versionOutcome)}\n\n`;
     }
 
     if (diffResult.hasChanges) {
@@ -354,7 +356,7 @@ export class FrameworkLifecycleProcessor {
       frameworkSnapshotContract.projectedFields
     );
 
-    let versionSaved: number | undefined;
+    let versionOutcome: { version?: number; recorded: boolean } | undefined;
     const skipVersion = args.skip_version === true;
     const commitOptions =
       this.ctx.versionHistoryService.isAutoVersionEnabled() && !skipVersion
@@ -374,8 +376,10 @@ export class FrameworkLifecycleProcessor {
                   diff_summary: '',
                 }
               );
-              versionSaved = versionResult.version;
-              this.ctx.logger.debug(`Saved repair version ${versionSaved} for framework ${id}`);
+              versionOutcome = versionResult;
+              this.ctx.logger.debug(
+                `${versionResult.recorded ? 'Saved' : 'Matched'} repair version ${versionResult.version} for framework ${id}`
+              );
             },
           }
         : {};
@@ -404,12 +408,15 @@ export class FrameworkLifecycleProcessor {
     // recorded" — became a lie the moment the record above was added, and a version line is the
     // one place an operator checks before trusting `rollback`.
     const versionLine =
-      versionSaved !== undefined
-        ? `📜 **Version ${versionSaved}** recorded — the repaired state, with no diff: a ` +
-          `quarantined framework has no prior loadable state to compare against (use ` +
-          `\`action:"history"\` to view).\n`
-        : `📜 No version was recorded — auto-versioning is off for this server, or ` +
-          `\`skip_version\` was set on this call.\n`;
+      versionOutcome === undefined
+        ? `📜 No version was recorded — auto-versioning is off for this server, or ` +
+          `\`skip_version\` was set on this call.\n`
+        : versionOutcome.recorded
+          ? `📜 **Version ${versionOutcome.version}** recorded — the repaired state, with no diff: a ` +
+            `quarantined framework has no prior loadable state to compare against (use ` +
+            `\`action:"history"\` to view).\n`
+          : `📜 The repaired state already matches version ${versionOutcome.version}, so no new ` +
+            `version was recorded (use \`action:"history"\` to view).\n`;
 
     return this.success(
       `Repair written for quarantined framework '${target.id}'\n\n` +
