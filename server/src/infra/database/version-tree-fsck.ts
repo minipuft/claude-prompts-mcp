@@ -3,12 +3,20 @@
  * Referential check A over `objects` / `version_entries`, and the repair it implies.
  *
  * THE FAILURE IT EXISTS FOR. `version_history.tree_hash` is non-NULL exactly when the row's file
- * bytes are recorded in the store. Three things can break that claim while every gate stays green:
+ * bytes are recorded in the store. Two things can break that claim while every gate stays green:
  * a v28-era server opening a v29 database drops both new tables and keeps `version_history`
- * (§Downgrade in `docs/architecture/sqlite-persistence.md`); `PRAGMA foreign_keys` is off on every
- * connection, so a third opener can delete a referenced object and nothing refuses it; and a
- * hand-rolled prune can delete entries without the row that owns them. In all three the row claims
- * a tree that is not there, and the only symptom is a rollback that reads bytes it cannot find.
+ * (§Downgrade in `docs/architecture/sqlite-persistence.md`); and an opener WITHOUT foreign key
+ * constraints deletes a referenced object, or deletes entries without the row that owns them. In
+ * both the row claims a tree that is not there, and the only symptom is a rollback that reads
+ * bytes it cannot find.
+ *
+ * The second case is narrower than a reading of the DDL suggests, and narrower than this slice's
+ * design assumed. `node:sqlite` enables foreign keys BY DEFAULT, so both writers of `state.db`
+ * already refuse a delete of a referenced object — measured 2026-09-20, `PRAGMA foreign_keys`
+ * reads 1 on a fresh `DatabaseSync`. What is left is that the guarantee is a per-CONNECTION driver
+ * default this repository does not assert: another language, the `sqlite3` CLI, or a connection
+ * that turns the pragma off writes into the same file. This check is what stands in that gap, so
+ * it does not retire when the constraints are made explicit.
  *
  * THE REPAIR IS A DEGRADE, NOT A DELETION. An affected row's `tree_hash` goes back to NULL and its
  * entries are removed, which returns the row to exactly the behaviour it had at v28: it restores
