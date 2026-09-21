@@ -196,6 +196,44 @@ describe('Streamable HTTP notification delivery', () => {
     expect(finalCall).toContain('notifications/chain/step_complete');
   }, 90000);
 
+  /**
+   * P4.96 re-measurement, at a real client. The row reported that an ungated `%clean` chain
+   * reaching "Execution complete" never delivers `chain/complete`, though a gated one does. It
+   * does not reproduce: the whole sequence below is what arrives, and `chain/complete` is both
+   * present and LAST — the correct order, which the gated case above is still defective on.
+   *
+   * Pinned as ONE sequence rather than as counts, because position is the whole claim. Note the
+   * terminal text differs between the two paths: an ungated run says "Chain complete", a gated
+   * one "Chain execution complete", so a drive that breaks on the gated wording alone keeps
+   * calling a finished run.
+   */
+  test('an ungated %clean chain delivers the whole sequence, chain/complete last', async () => {
+    const start = await callTool('prompt_engine', {
+      command: '%clean >>quick_decision topic:"an ungated run"',
+    });
+    // Positive control: the starting call announces nothing, so the sequence below is what the
+    // resumes produced rather than whatever the probe happens to pick up.
+    expect(methodsOf(start)).toEqual([]);
+    const chainId = chainIdOf(start.text);
+
+    const sequence: string[] = [];
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const outcome = await callTool('prompt_engine', {
+        chain_id: chainId,
+        user_response: `Step ${attempt + 1}: PostgreSQL, SQLite, DuckDB.`,
+      });
+      sequence.push(...methodsOf(outcome));
+      if (/Chain (execution )?complete/i.test(outcome.text)) break;
+    }
+
+    expect(sequence).toEqual([
+      'notifications/chain/step_complete',
+      'notifications/chain/step_complete',
+      'notifications/chain/step_complete',
+      'notifications/chain/complete',
+    ]);
+  }, 90000);
+
   test('a framework switch delivers framework/changed on the causing call', async () => {
     const switched = await callTool('system_control', {
       action: 'framework',
