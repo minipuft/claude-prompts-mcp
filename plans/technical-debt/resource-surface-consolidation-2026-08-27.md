@@ -2,7 +2,7 @@
 title: "resource_manager surface consolidation — where resources live and what is authorable"
 date: 2026-08-27
 status: active
-publish: push+merge (2026-09-20 · owner ruling · the `feat/rsc-tail` PR on a green full suite and live drive; the P4.64 dependency PR needs its own ruling)
+publish: push+merge (2026-09-20 · owner rulings · the tail PR #342; then the hardening slice and the checkpoint slices that follow it, each on a green full suite)
 tags: []
 ---
 
@@ -27,10 +27,10 @@ hardening slice runs on `feat/rsc-hardening` (from `f711401b`), one worker branc
 
 - **Goal:** HTTP clients receive server notifications (P4.88), every tool refuses an undeclared key
   (P4.93), and a design for content-addressed checkpoints exists before any of it is built (P4.92).
-- **Running:** P4.88 (R49), P4.93 (R50), and a read-only design row for P4.92 (R51).
-- **Next decision:** the owner's answers to the questions the P4.92 design returns, then its first
-  implementation rows.
-- **Constraint in force:** `publish:` covered the tail PR only; this slice's PR needs its own ruling.
+- **Running:** P4.88 (R49), P4.93 (R50), content identity for P4.92 with P4.83 (R52), and the
+  store design row (R52, R53).
+- **Next decision:** the store design's open questions.
+- **Constraint in force:** `publish:` covers this slice and the checkpoint slices after it.
 - **Open, not started:** P4.83, P4.86, P4.87, P4.89–P4.91. **Owner's, outside the repo:** the
   `~/.claude` rename (P5.12 second half), P5.16, then P5.13.
 
@@ -665,6 +665,18 @@ Ruled before dispatching P4.43–P4.50, on `914b068c`. R23 and R24 stand as writ
   identified by a content hash, and a restore applies only the difference.** The owner wants this
   carried through every existing restore and modification interface, so the row starts with an
   inventory and a design, not code.
+- **R52 (P4.92, owner 2026-09-20) — a full content-addressed store.** Versions point into an
+  objects table keyed by content hash. The design row recommended a hash column only; the owner
+  chose the store. Content identity still lands first, because the store is keyed by it: one
+  canonical hash, skip-if-equal on both writers, and the prompt snapshot carrying `edges` and
+  `tools` (P4.83). A second design row covers the schema, garbage collection in front of a durable
+  table, the migration, and how `cpm` reads and writes the format, before any store code.
+- **R53 (P4.92, owner 2026-09-20) — config is checkpointed like a resource.** The measured writer
+  is `backupConfig` on `cpm config set` and `reset`, not `createConfigBackup`, which no production
+  caller enables. Config edits record a version under the same rule and `cpm` can restore one; the
+  timestamped backup files go when that lands.
+- **R54 (P4.92, owner 2026-09-20) — accept the one-time skills-sync hash churn**, named in the log.
+  The current hash is not injective: it sorts its inputs and joins them with no separator.
 - **R29 follow-ups (ruled on the P4.45 handoff).** A method called only from tests counts as
   unreached. A stale baseline entry fails the check.
 
