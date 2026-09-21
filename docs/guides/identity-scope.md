@@ -166,6 +166,35 @@ Scopes that have never been written adopt the configured `frameworks.defaultFram
 whatever another workspace is currently using. One exception covers upgrades: the first scoped load
 adopts a pre-scoping `default` row if one exists, so an existing install does not appear to reset.
 
+### Config Version History Is Scoped By the File, Not By the Workspace
+
+One exception to everything above, and it is deliberate: the `version_history` rows recording
+changes to a **config file** are keyed by that file's own directory, not by the resolved workspace
+scope.
+
+Config is the only checkpointed thing written by processes that do not share a working directory.
+`cpm config set`, `cpm enable`/`cpm disable` and `cpm config rollback` run from wherever the
+operator is; `system_control gates`/`framework` with `persist: true` writes the same file from
+wherever the server was launched — typically a fixed install path serving many workspaces. Under a
+cwd-derived scope those were two tenants, so one config file grew two histories, each numbered from
+1, and `cpm config history` listed only the last writer's.
+
+The tenant is therefore `config:` plus 16 hex characters of a SHA-256 over the config file's
+symlink-resolved **directory** (`shared/utils/config-scope.ts`). What follows:
+
+- Two workspaces sharing one `state.db` keep two config histories, because they are two
+  directories. Neither can list or roll back the other's.
+- One config file reached from two working directories — with or without `--workspace-id`, by the
+  CLI or over MCP — is one history.
+- The directory rather than the filename, because a directory holds at most one config (both names
+  present is refused everywhere as ambiguous) and renaming `config.jsonc` to `config.json` must not
+  orphan the history of the same settings.
+- A workspace with no config of its own: the server writes the packaged `config.json`, and that
+  file's history keys off ITS directory like any other.
+
+Rows recorded before this rule are not re-keyed and are not listed. Nothing is lost in practice:
+the next config write records the current file as a fresh version 1 before changing it.
+
 ### Client Profile Resolution Priority (Handoff Routing)
 
 The server resolves handoff client profile through this hierarchy (first match wins):
@@ -228,6 +257,7 @@ In practice:
 | Gate system state  | Yes                | Enable/disable, health metrics, validation history   |
 | Argument history   | Yes                | Per-workspace argument tracking                      |
 | Resource index     | No                 | Shared file-based resources (prompts, gates, styles) |
+| Config history     | By FILE, not scope | See "Config Version History Is Scoped By the File"   |
 
 ## Troubleshooting
 

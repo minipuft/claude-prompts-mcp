@@ -139,6 +139,28 @@ export function resolveEffectiveTenantId(
   guessedTenantId: string,
   request: HistoryRowRequest
 ): { tenantId: string; ambiguousCandidateCount?: number } {
+  // A config row is REFUSED here rather than corrected, and the refusal is the point (P4.109).
+  //
+  // This correction rests on one premise: that `resource_type` + `resource_id` name ONE resource,
+  // so a row carrying them under another tenant is the same resource seen from another scope. That
+  // premise is false for config, and only for config — every workspace's config file is keyed
+  // `('config','config')`, so "exactly one other tenant holds rows for this resource" reads as a
+  // correction when it is in fact ANOTHER PROJECT'S CONFIG HISTORY. Correcting onto it would list,
+  // and then roll back to, a file the operator has never seen.
+  //
+  // Nothing has to correct a config tenant anyway: `configTenantId(configPath)` is exact, derived
+  // from the file both processes name rather than guessed from a cwd either happened to have. So a
+  // config request arriving here means a new reader resolved its tenant the generic way, and the
+  // loud failure belongs at that cause rather than one layer out as a wrong history.
+  if (request.resource_type === 'config') {
+    throw new Error(
+      'config version history is scoped by the config FILE, not by a workspace guess: resolve it ' +
+        'with configTenantId(configPath) from #shared/utils/config-scope.js and pass it explicitly. ' +
+        'Every workspace keys its config rows under the same resource_type/resource_id, so this ' +
+        "correction would silently serve another project's config history."
+    );
+  }
+
   const guessHasRows =
     db
       .prepare(

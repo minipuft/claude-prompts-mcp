@@ -142,10 +142,23 @@ under one root layout would be re-classified under another. `tree_origin` is NUL
 ### The config file is a checkpointed resource too
 
 `version_history.resource_type` is a bare `TEXT` with no `CHECK`, and since ruling R53 it also
-carries the literal `'config'`, with `resource_id = 'config'`, scoped by `tenant_id` like every
-other row. No schema change was needed — the same widening `'category'` took at P4.7.
+carries the literal `'config'`, with `resource_id = 'config'`. No schema change was needed — the
+same widening `'category'` took at P4.7.
 
-Three things make it different from the four resource types, and all three are deliberate:
+Four things make it different from the four resource types, and all four are deliberate:
+
+- **Its `tenant_id` is not a workspace scope.** It is `config:` plus a 16-hex digest of the config
+  file's symlink-resolved directory (`shared/utils/config-scope.ts`), because config is the only
+  checkpointed thing whose writers do not share a working directory: `cpm` runs from the operator's
+  cwd and `system_control … persist: true` from the server's install path, and a cwd-derived scope
+  made those two tenants for one file. Every reader and writer calls that one function; a config
+  request reaching the generic workspace guess is refused by name, because the guess's correction
+  keys on `resource_type`/`resource_id` and every workspace's config shares the same pair — it
+  would serve another project's history. Two workspaces on one `state.db` are still two
+  directories, so they are still isolated. Rows written before this rule (between #347 and the fix,
+  both unreleased) are not re-keyed: the old tenant does not identify a config FILE and the rows
+  carry only a basename, so a re-key has no derivable target. The next write bridges the current
+  file as a fresh version 1.
 
 - **It is not a `ResourceType`.** Only `cli-shared/version-history-types.ts`'s union gained the
   literal. The published `resource_manager` union did not: config stays read-only over MCP, as it
@@ -442,7 +455,7 @@ with the count. Without it the restore would hit the new index and abort startup
 write and no flag: a v28 database cannot produce a duplicate, so the migration is a no-op forever
 after, and it needs no `DROPPED_ON_THIS_BUMP` entry because nothing is discarded.
 
-## `tenant_id` Means Two Things — It Used to Mean Three
+## `tenant_id` Means Three Things — Two of Them Are Not a Workspace
 
 The PID meaning got its own name at v20. `chain_sessions` and `chain_runs` now declare
 `run_owner_pid`, so no column name carries both a run owner and a workspace.
@@ -452,9 +465,12 @@ The PID meaning got its own name at v20. `chain_sessions` and `chain_runs` now d
 | Server PID          | `run_owner_pid` | `chain_sessions`, `chain_runs`                                  | Row dies with the process — a session key, not a tenant |
 | Workspace id        | `tenant_id`     | `kv_state`, `version_history`, `resource_changes`               | Genuine isolation (Tier 4)                              |
 | Literal `'default'` | `tenant_id`     | `execution_records`, and any table with no workspace configured | No isolation                                            |
+| Config file id      | `tenant_id`     | `version_history` rows with `resource_type = 'config'`          | `config:<digest>` — the file's directory, not a scope   |
 
-Two meanings still share `tenant_id`, and a filter written against the wrong one is still not
-type-detectable — but the two that were furthest apart no longer collide. The rename was a clean
+Three meanings share `tenant_id`, and a filter written against the wrong one is still not
+type-detectable — but the two that were furthest apart no longer collide, and the config one that
+joined at P4.109 is distinguishable at a glance, since nothing else in this column contains a
+colon. The rename was a clean
 break with no dual-write: zero downstream readers were measured across `minipuft-plugins`,
 `gemini-prompts` and `opencode-prompts`, and both tables are `derived`/`ephemeral` with rows
 DELETEd per-PID, so no old-format row could survive the bump that renamed them. `run_owner_pid`

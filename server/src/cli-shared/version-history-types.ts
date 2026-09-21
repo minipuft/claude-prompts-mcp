@@ -67,6 +67,16 @@ export interface HistoryRequest extends HistoryRowRequest {
     | 'delete_history'
     | 'rename_history';
   db_path: string;
+  /**
+   * The tenant this request acts under, already resolved by the caller.
+   *
+   * Absent is the ordinary case: the dispatcher derives a workspace guess and corrects it against
+   * the database. Present means the caller knows the answer exactly and it must NOT be corrected —
+   * today that is config, whose tenant is a function of the config file's own path
+   * (`configTenantId`, `#shared/utils/config-scope.js`) rather than of any process's cwd. A config
+   * request arriving WITHOUT it is refused by name; see `runSqlite`.
+   */
+  tenant_id?: string;
   version?: number;
   from_version?: number;
   to_version?: number;
