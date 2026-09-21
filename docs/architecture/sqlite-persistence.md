@@ -9,10 +9,11 @@ critical constraints; this document owns the table map, history, and procedures.
 retention. This file is the orientation map and the traps — when the two disagree, the contract
 module wins and this file is stale.
 
-## The Map (10 declared tables + 2 views)
+## The Map (12 declared tables + 2 views)
 
-Not 9, and not 11. `tenants` was deleted at v19 (F10); `chain_run_registry` was deleted at v22
-(P3 Tier 4), replaced by the two per-row tables below. SQLite auto-creates `sqlite_sequence` for
+Not 11, and not 13. `tenants` was deleted at v19 (F10); `chain_run_registry` was deleted at v22
+(P3 Tier 4), replaced by the two per-row tables below; `objects` and `version_entries` were added
+at v29. SQLite auto-creates `sqlite_sequence` for
 any table declaring `AUTOINCREMENT`; it is never declared in `applySchema()` and is excluded via
 `SQLITE_INTERNAL_TABLES`. A startup assert written against a raw `sqlite_master` count throws on
 every boot.
@@ -25,6 +26,8 @@ every boot.
 | `resource_index`        | `resource-indexer.ts`                               | derived     | none            |
 | `skills_sync_manifests` | `modules/skills-sync/service.ts`                    | **durable** | client-scope    |
 | `version_history`       | `modules/versioning/version-history-service.ts`     | **durable** | workspace       |
+| `objects`               | `modules/versioning/version-history-service.ts`     | **durable** | workspace       |
+| `version_entries`       | `modules/versioning/version-history-service.ts`     | **durable** | workspace       |
 | `resource_changes`      | `observability/tracking/resource-change-tracker.ts` | derived     | workspace       |
 | `chain_runs`            | `modules/chains/run-registry.ts`                    | ephemeral   | run-owner-pid   |
 | `chain_run_nodes`       | `modules/chains/run-registry.ts`                    | ephemeral   | run-owner-pid\* |
@@ -82,7 +85,10 @@ telemetry object rather than adding a second one; both terminal-record writers a
 whole object into their row, so the both-writers invariant held structurally with no per-writer
 edit required.
 
-## Two Tables Are Durable — A Schema Bump Must Not Destroy Them
+## Four Tables Are Durable — A Schema Bump Must Not Destroy Them
+
+`objects` and `version_entries` joined this list at v29; the reasoning below is why the
+classification, not the DDL, is the risky part of that bump.
 
 `version_history` holds rollback snapshots that nothing regenerates. `skills_sync_manifests` drives
 orphan detection, and `applySyncPrune` deletes directories listed in it — losing it turns a prune
@@ -105,6 +111,86 @@ recreated and its DDL freezes permanently.
 
 Adding a `NOT NULL` column with no default to a durable table makes the restore throw, naming the
 table. That is intended: the change needs a real migration.
+
+## The Object Store Is Additive — Schema v29
+
+`objects` holds raw file bytes keyed `(tenant_id, hash)`; `version_entries` is the manifest, one
+row per `(version row, path)`, and it IS the tree. `version_history.tree_hash` is a nullable cache
+over that manifest — the manifest is authoritative — and NULL means the row is projection-only.
+
+`version_history.tree_origin` records which root class the recorded bytes were read FROM, using
+the file-set enumerator's vocabulary: `primary` | `overlay` | `bundled` | `unknown`. The enumerator
+(`shared/utils/resource-file-set.ts`) stays the SSOT — there is no `CHECK` constraint here, because
+a second copy of a vocabulary is a second thing to keep in step. It exists because a restore is not
+root-agnostic: bytes recorded from the **bundled** catalog restore into the workspace as a NEW
+override, which is a different act from restoring a workspace file over itself, and the preview has
+to say so. It cannot be derived at restore time — roots are resolved per process, so a row written
+under one root layout would be re-classified under another. `tree_origin` is NULL exactly when
+`tree_hash` is; the two are one fact and ship in one schema version for that reason.
+
+**Losing every object degrades rollback to the projection path; it never loses history.**
+`version_history.snapshot` keeps holding the projection every reader already reads, and it is not
+retired, not deduplicated into the store, and not backfilled. That is the whole reason a garbage
+collector may sit in front of `objects` at all: its miss path is the shipping code. Read any
+proposal to retire `snapshot` as a proposal to put a sweep in front of unrecoverable data.
+
+**Objects are keyed per workspace, not globally.** One `state.db` serves every project on the
+machine, so a global hash key would make one workspace's blob the storage for another's identical
+file. Cross-workspace dedup is what is given up; in exchange no surface exists, even in principle,
+on which one workspace could observe that another holds a given byte sequence. `tenant_id` here is
+the value the owning `version_history` row carries — resolved once and passed down, never
+re-derived in the store.
+
+**The foreign keys are declared, enforced, and now asserted — and the three are different
+things.** `rg "foreign_keys"` over `server/src` and `cli/src` used to return nothing, and the
+obvious reading of that absence was wrong: `node:sqlite`'s `DatabaseSync` enables foreign key
+constraints **by default**, and both openers that WRITE `state.db` are `DatabaseSync`. Measured
+2026-09-20 — `PRAGMA foreign_keys` reads `1` on a fresh connection.
+
+Enforcement was therefore inherited from the driver rather than owned by this repository, which is
+not a state a v29 invariant may rest on. `STATE_DB_WRITER_PRAGMAS`
+(`shared/utils/runtime-state-location.ts`) now carries `PRAGMA foreign_keys = ON` beside the shared
+`busy_timeout`, and both writers apply the whole list. **Be honest about what that line proves:
+removing it changes no behaviour on this driver, and no test goes red when it is deleted.** It is
+an assertion, not a fix — what it buys is that a driver default change, a different Node, or a new
+opener written from that list cannot silently withdraw the guarantee.
+
+Every opener of `state.db`, and its foreign key posture:
+
+| Opener                                  | Driver               | Posture                                  |
+| --------------------------------------- | -------------------- | ---------------------------------------- |
+| `infra/database/sqlite-engine.ts`       | `node:sqlite`        | ON — applies `STATE_DB_WRITER_PRAGMAS`   |
+| `cli-shared/version-history.ts` (`cpm`) | `node:sqlite`        | ON — applies the same list               |
+| `hooks/lib/db_reader.py`                | `sqlite3`, `mode=ro` | off (driver default); read-only, so moot |
+
+`hooks/lib/hook_state_store.py` and `hooks/lib/verify_active_store.py` open `hooks-state.db` and
+`verify-state.db`, which are different files with different schemas.
+
+Two consequences that only show up at a schema bump: `restoreDurableTables` replays
+`DURABLE_TABLE_NAMES` in declaration order, so `objects` and `version_entries` must stay declared
+**after** `version_history` in `table-contracts.ts` or the restore is refused; and `dropAllTables`
+drops in `sqlite_master` order, which reaches `version_history` first and cascades the manifest
+empty before either new table is dropped. Both are pinned by
+`tests/integration/database/durable-round-trip.test.ts`, which is generated from `TABLE_CONTRACTS`:
+it seeds one row in every `durable` table, runs the recreate, requires every row back
+byte-identical, and **fails when a durable table has no seed** — so the next durable table anyone
+adds is covered by a red run rather than by someone remembering. It also reads the foreign key
+edges out of the engine's own DDL and checks the declared restore order against them.
+
+**Do not read enforcement as "the cascade prunes entries for us."** It is still a per-connection
+setting, so any opener that turns it off writes into the same file. A prune deletes its entries
+explicitly, and the startup referential check is what finds what such an opener left behind.
+
+**No backfill of pre-v29 rows, deliberately.** Materialising a tree from a projection would
+fabricate file bytes that never existed on disk, which is worse than a NULL. Old rows keep
+restoring the way they always did.
+
+**Downgrade is defined, and it costs fidelity rather than history.** A v28-era server opening a
+v29 database snapshots durable tables using ITS `DURABLE_TABLE_NAMES`, which does not contain the
+two new tables, so `dropAllTables` destroys every object and entry while `version_history` survives
+with `tree_hash` dropped by column intersection. **Lost: byte-exact restore. Not lost: any
+history.** No version-floor refusal guards this on purpose — it would turn a recoverable
+degradation into a server that will not start. Re-upgrading is repaired by the startup check.
 
 ## A Version Number Is an Identity, and Schema v28 Enforces It
 

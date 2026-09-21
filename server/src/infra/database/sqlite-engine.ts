@@ -39,14 +39,84 @@ import {
   SQLITE_INTERNAL_TABLES,
   VIEW_CONTRACTS,
 } from './table-contracts.js';
+import {
+  DANGLING_ENTRY_SQL,
+  EMPTY_TREE_SQL,
+  describeVersionTreeRepair,
+  planVersionTreeRepair,
+  type VersionTreeRow,
+} from './version-tree-fsck.js';
 
 import type { DatabasePort, TransactionMode } from '#shared/types/persistence.js';
 import type { Logger } from '../logging/index.js';
 
-import { STATE_DB_BUSY_TIMEOUT_MS } from '#shared/utils/runtime-state-location.js';
+import { STATE_DB_WRITER_PRAGMAS } from '#shared/utils/runtime-state-location.js';
 
 /**
  * Bump this when changing the embedded schema. Triggers drop-and-recreate.
+ *
+ * v29: adds `objects` and `version_entries` — the content-addressed store that backs byte-exact
+ * resource rollback — and two nullable columns on `version_history`, `tree_hash` and
+ * `tree_origin`.
+ *
+ * **Both new tables are `durable`, and that classification is the whole of this bump's risk.**
+ * `DURABLE_TABLE_NAMES` derives from `posture` in `table-contracts.ts`, so a table declared
+ * `ephemeral` here would be silently dropped by the NEXT bump while `version_history.tree_hash`
+ * stayed non-NULL — a row pointing at a tree that is not there. `objects` holds file bytes that
+ * exist nowhere else once the resource on disk has moved on, which is the definition of durable.
+ *
+ * They are declared AFTER `version_history` in `TABLE_CONTRACTS`, because `DURABLE_TABLE_NAMES`
+ * preserves that order and `restoreDurableTables` replays it: a child row must be re-inserted
+ * after the parent it references, or the restore breaks the moment `PRAGMA foreign_keys` is on.
+ *
+ * The store is ADDITIVE. `version_history.snapshot` keeps holding the projection every reader
+ * already reads, so losing every object degrades rollback to today's projection path and never
+ * loses history. That is why a garbage collector may sit in front of `objects` at all.
+ *
+ * Both new columns are nullable with NO DDL DEFAULT, for the reason `chain_run_nodes.origin` has
+ * none: `validate:no-phantom-columns` exempts defaulted columns, so a default would hide a dropped
+ * writer from the one gate built to catch it. NULL is a real value — it means the row is
+ * projection-only and restores through `SnapshotContract`, which is every row that predates this
+ * bump. No backfill is performed or wanted: materialising a tree from a projection would fabricate
+ * file bytes that never existed on disk.
+ *
+ * `tree_origin` ships in the SAME bump as `tree_hash` rather than arriving with the writer that
+ * binds it, because the two are one fact: `tree_origin` is NULL exactly when `tree_hash` is, and
+ * adding it later would cost a second `SCHEMA_VERSION` bump and a second durable snapshot/restore
+ * round trip over the one table in this database that nothing regenerates. Its vocabulary is the
+ * file-set enumerator's — `'primary' | 'overlay' | 'bundled' | 'unknown'` — and the enumerator
+ * remains its SSOT; nothing here imports or re-declares it.
+ *
+ * The two foreign keys are DECLARED and, on both writers, ENFORCED — which is not what the design
+ * for this slice assumed. `rg "foreign_keys"` over `server/src` and `cli/src` returns nothing, and
+ * the conclusion drawn from that absence ("so SQLite's default of off applies") is wrong here:
+ * `node:sqlite`'s `DatabaseSync` turns foreign keys ON by default
+ * (`enableForeignKeyConstraints`), and both openers of `state.db` that WRITE — this engine and
+ * `cli-shared/version-history.ts` — are `DatabaseSync`. Measured 2026-09-20: `PRAGMA foreign_keys`
+ * reads 1 on a fresh connection. The Python hooks open read-only through `sqlite3`, where the
+ * default really is off, but a reader cannot violate a constraint.
+ *
+ * So `ON DELETE CASCADE` DOES fire and `ON DELETE RESTRICT` DOES refuse, today, for both writers.
+ * Two consequences the DDL alone does not show:
+ *   * `restoreDurableTables` replays `DURABLE_TABLE_NAMES` in declaration order, so `objects` and
+ *     `version_entries` must stay declared after `version_history` in `table-contracts.ts` — with
+ *     constraints live, a child restored before its parent is refused outright;
+ *   * `dropAllTables` drops in `sqlite_master` order, which puts `version_history` before both new
+ *     tables, so its implicit DELETE cascades the manifest empty before either is dropped.
+ *
+ * What is NOT closed: the guarantee is inherited from a driver default rather than asserted by
+ * this repo, and it is per connection — a future opener (another language, the `sqlite3` CLI, a
+ * connection that turns the pragma off) can still leave a dangling entry behind. That residue is
+ * what the startup referential check finds, and it is why the check is not made redundant by the
+ * constraints being live.
+ *
+ * `version_history` is `durable`, so its rows ride the snapshot/restore round-trip and come back
+ * with `tree_hash` NULL by column intersection. A v28-era server opening a v29 database drops both
+ * new tables (they are not in ITS `DURABLE_TABLE_NAMES`) and keeps `version_history` intact: the
+ * downgrade costs byte-exact restore, never history, and the startup check repairs the rows whose
+ * trees it took with it.
+ *
+ * `DROPPED_ON_THIS_BUMP` stays empty and `DROPPED_AT_VERSION` does not move: nothing is discarded.
  *
  * v28: adds `idx_version_history_key`, a UNIQUE index on
  * `(tenant_id, resource_type, resource_id, version)` — the key `version_history` always meant and
@@ -256,7 +326,7 @@ import { STATE_DB_BUSY_TIMEOUT_MS } from '#shared/utils/runtime-state-location.j
  * `respondedAt`, which changes the `substate_json` shape in `execution_records`. Rows written by
  * v15 would decode to a lifecycle value outside `StepLifecycle`, so they must not survive.
  */
-const SCHEMA_VERSION = 28;
+const SCHEMA_VERSION = 29;
 
 /**
  * Tables whose rows exist nowhere else and therefore survive a SCHEMA_VERSION bump.
@@ -465,19 +535,25 @@ export class SqliteEngine implements DatabasePort {
       // Enable WAL mode for concurrent reader access (Python hooks, skills-sync CLI)
       this.db.exec('PRAGMA journal_mode=WAL');
 
-      // Wait for a lock another connection holds, rather than failing at once.
-      //
-      // WAL lets readers and one writer coexist; it does not make two writers coexist, and this
-      // file has three openers (this server, `cpm`, the Python hooks). Unset, this connection took
-      // SQLite's default of 0 and lost every race outright — a `version_history` save meeting the
-      // CLI mid-write threw instead of waiting the few milliseconds the CLI needed. The value is
-      // `STATE_DB_BUSY_TIMEOUT_MS`, the same constant the CLI's own connection reads, so the two
-      // cannot drift into disagreeing about how patient this file is.
-      this.db.exec(`PRAGMA busy_timeout = ${STATE_DB_BUSY_TIMEOUT_MS}`);
+      // The per-connection pragmas every WRITER of this file sets, from the one list both writers
+      // read (`STATE_DB_WRITER_PRAGMAS`) — this server and `cpm` cannot share a module tree, so a
+      // hand-typed copy on either side is how the two would drift into disagreeing about how
+      // patient this file is, or about whether its foreign keys hold. `journal_mode` stays here:
+      // it is written into the file and persists, so it belongs to whoever creates it.
+      for (const pragma of STATE_DB_WRITER_PRAGMAS) {
+        this.db.exec(pragma);
+      }
 
       // Ensure schema is current (creates or recreates if version mismatch)
-      this.ensureSchema();
+      const schemaOutcome = this.ensureSchema();
       this.assertSchemaMatchesContracts();
+
+      // Referential check A over the v29 object store. Skipped on a database this call just
+      // created: there is nothing to check, and running it would spend two queries per boot of
+      // every fresh install to confirm that empty tables agree with each other.
+      if (schemaOutcome !== 'created') {
+        this.repairVersionTrees();
+      }
 
       this.initialized = true;
 
@@ -597,8 +673,12 @@ export class SqliteEngine implements DatabasePort {
    * snapshot/restore round-trip is what lets durable rows survive while still letting
    * their DDL evolve — preserving the table in place instead would freeze its shape,
    * because applySchema uses CREATE TABLE IF NOT EXISTS.
+   *
+   * The three outcomes are named rather than returned as a boolean because a caller needs to tell
+   * "this database already existed" from "this call created it" — a startup check over rows has
+   * nothing to do in the second case, and `false` said both.
    */
-  private ensureSchema(): boolean {
+  private ensureSchema(): 'current' | 'created' | 'recreated' {
     const currentVersion = this.getCurrentSchemaVersion();
 
     if (currentVersion === SCHEMA_VERSION) {
@@ -606,7 +686,7 @@ export class SqliteEngine implements DatabasePort {
       // version-match boot otherwise (see applyViews docblock).
       this.applyViews();
       this.logger.info(`Database schema is up to date (version ${currentVersion})`);
-      return false;
+      return 'current';
     }
 
     if (currentVersion === 0) {
@@ -614,7 +694,7 @@ export class SqliteEngine implements DatabasePort {
       this.logger.info(`Schema version ${SCHEMA_VERSION} applied`);
       // Not a recreate: a fresh database has no durable rows to protect, so the purge below runs
       // as a no-op and records its marker.
-      return false;
+      return 'created';
     }
 
     this.logger.info(
@@ -626,7 +706,49 @@ export class SqliteEngine implements DatabasePort {
     this.applySchema();
     this.restoreDurableTables(preserved);
     this.logger.info(`Schema version ${SCHEMA_VERSION} applied`);
-    return true;
+    return 'recreated';
+  }
+
+  /**
+   * Referential check A over the v29 object store, plus its repair. Runs on every startup.
+   *
+   * An intact database logs NOTHING and writes nothing — silence is the honest output, and it is
+   * also what keeps this affordable on every boot. The decision is pure and lives in
+   * `version-tree-fsck.ts`; this method is the I/O half, which is here rather than in a versioning
+   * module because `validate:arch` forbids `infra/` from importing upward.
+   *
+   * A repair is a DEGRADE: the affected rows go back to the projection path they used at v28.
+   * Nothing here deletes a `version_history` row, so no history can be lost by a false positive —
+   * the worst outcome of a wrong verdict is a byte-exact restore downgraded to a merging one.
+   *
+   * SQL failures are not swallowed. A dangling entry is a bookkeeping fact this repairs; a
+   * database that cannot execute the repair is a different problem, and initialize() reports it.
+   */
+  private repairVersionTrees(): void {
+    const dangling = this.query<VersionTreeRow>(DANGLING_ENTRY_SQL);
+    const emptyTrees = this.query<VersionTreeRow>(EMPTY_TREE_SQL);
+    const plan = planVersionTreeRepair(dangling, emptyTrees);
+
+    if (plan.rowIds.length === 0) {
+      return;
+    }
+
+    const placeholders = plan.rowIds.map(() => '?').join(', ');
+    this.beginTransaction('immediate');
+    try {
+      this.run(`DELETE FROM version_entries WHERE version_row_id IN (${placeholders})`, [
+        ...plan.rowIds,
+      ]);
+      this.run(`UPDATE version_history SET tree_hash = NULL WHERE id IN (${placeholders})`, [
+        ...plan.rowIds,
+      ]);
+      this.commit();
+    } catch (error) {
+      this.rollback();
+      throw error;
+    }
+
+    this.logger.info(describeVersionTreeRepair(plan));
   }
 
   /**
@@ -852,7 +974,79 @@ export class SqliteEngine implements DatabasePort {
         snapshot TEXT NOT NULL,
         diff_summary TEXT DEFAULT '',
         description TEXT DEFAULT '',
-        created_at TEXT NOT NULL
+        created_at TEXT NOT NULL,
+        -- v29: the hash of this row's recorded file set, or NULL for a projection-only row.
+        -- A CACHE over version_entries, which is authoritative -- it buys O(1) "did anything
+        -- change" and gives the startup check a recomputable claim. Nullable with NO DDL DEFAULT,
+        -- the chain_run_nodes.origin precedent: validate:no-phantom-columns exempts defaulted
+        -- columns, so a default would hide a dropped writer from the gate built to catch it.
+        -- NULL is a real value -- the row restores through SnapshotContract, as every pre-v29 row
+        -- does -- so nothing here is backfilled.
+        tree_hash TEXT,
+        -- v29: which root class the recorded bytes were read FROM -- one of the file-set
+        -- enumerator's four values, 'primary' | 'overlay' | 'bundled' | 'unknown'. Not validated
+        -- by a CHECK, for the same reason no other vocabulary column in this schema carries one:
+        -- the owning enumerator is the SSOT and a second copy here would drift from it.
+        --
+        -- It exists because a restore is not root-agnostic. Bytes recorded from the BUNDLED
+        -- catalog restore into the workspace as a NEW override, which is a different act from
+        -- restoring a workspace file over itself, and the preview has to say so. Deriving it at
+        -- restore time is not available: the roots are resolved per process, so a row written
+        -- under one root layout would be re-classified under another.
+        --
+        -- NULL iff tree_hash is NULL -- a projection-only row read no root. Nullable with no DDL
+        -- DEFAULT, the same reasoning as tree_hash: a default would exempt it from
+        -- validate:no-phantom-columns, and 'primary' is exactly the value a dropped writer would
+        -- be papered over with.
+        tree_origin TEXT
+      );
+
+      -- v29: content-addressed file bytes, keyed PER WORKSPACE.
+      --
+      -- The key is (tenant_id, hash), not hash alone: one state.db serves every project on the
+      -- machine, and a global key would make one workspace's blob the storage for another's
+      -- identical file. Cross-workspace dedup is the thing given up, deliberately; in exchange
+      -- there is no surface, even in principle, on which one workspace can observe that another
+      -- holds a given byte sequence. tenant_id is the value the OWNING version_history row
+      -- carries, resolved once and passed down -- never re-derived here.
+      CREATE TABLE IF NOT EXISTS objects (
+        tenant_id TEXT NOT NULL,
+        -- 'sha256:<hex>'. Content-addressed, so an identical file written twice is one row.
+        hash TEXT NOT NULL,
+        bytes BLOB NOT NULL,
+        -- length(bytes), redundant by construction and cheap: it is the integrity check that
+        -- costs no re-hash, so a truncated BLOB round-trip is visible without reading every byte.
+        size INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (tenant_id, hash)
+      );
+
+      -- v29: the manifest. One row per (version row, path) -- this IS the tree, as a table rather
+      -- than as a parseable object, so reachability is one SQL predicate instead of a recursive
+      -- walk over blobs that can themselves fail to parse.
+      --
+      -- FOREIGN KEYS ARE LIVE ON BOTH WRITERS, contrary to what a grep for PRAGMA foreign_keys
+      -- over this repo suggests: node:sqlite's DatabaseSync enables them by default, and both writing
+      -- openers are DatabaseSync. So the CASCADE fires and the RESTRICT refuses, today. The
+      -- Python hooks open read-only through sqlite3, where the default is off -- a reader cannot
+      -- violate a constraint.
+      --
+      -- Do NOT read that as "the cascade can be relied on to prune entries": it is a per-CONNECTION
+      -- driver default, not something this repo asserts, and any opener that turns it off writes
+      -- into the same file. A prune should delete its entries explicitly, and the startup
+      -- referential check is what finds the rows an opener without constraints left behind.
+      CREATE TABLE IF NOT EXISTS version_entries (
+        version_row_id INTEGER NOT NULL REFERENCES version_history(id) ON DELETE CASCADE,
+        -- Denormalised from the owning version_history row so the object reference can be a
+        -- single composite key. It is not a second scope channel: it is one half of the foreign
+        -- key below, and the only value it may ever hold is the parent row's own tenant_id.
+        tenant_id TEXT NOT NULL,
+        -- POSIX, RELATIVE to the resource's root directory. Never absolute: a restore re-roots
+        -- onto the primary resource root, and an absolute path would write outside it.
+        path TEXT NOT NULL,
+        object_hash TEXT NOT NULL,
+        PRIMARY KEY (version_row_id, path),
+        FOREIGN KEY (tenant_id, object_hash) REFERENCES objects(tenant_id, hash) ON DELETE RESTRICT
       );
 
       CREATE TABLE IF NOT EXISTS resource_changes (
@@ -1017,6 +1211,9 @@ export class SqliteEngine implements DatabasePort {
       -- that closes the class — it refuses a duplicate from ANY writer, including one nobody
       -- enumerated, which a name-keyed source scan could not do.
       CREATE UNIQUE INDEX IF NOT EXISTS idx_version_history_key ON version_history(tenant_id, resource_type, resource_id, version);
+      -- The reachability index: the sweep and the startup check both ask "is this object
+      -- referenced by any entry in this workspace", which is exactly this key.
+      CREATE INDEX IF NOT EXISTS idx_version_entries_object ON version_entries(tenant_id, object_hash);
       CREATE INDEX IF NOT EXISTS idx_version_history_workspace ON version_history(workspace_id);
       CREATE INDEX IF NOT EXISTS idx_version_history_organization ON version_history(organization_id);
       CREATE INDEX IF NOT EXISTS idx_resource_changes_workspace ON resource_changes(workspace_id);

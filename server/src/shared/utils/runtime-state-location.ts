@@ -44,3 +44,33 @@ export const STATE_DB_FILE_NAME = 'state.db';
  * value means checking `hooks/lib/db_reader.py` too.
  */
 export const STATE_DB_BUSY_TIMEOUT_MS = 5000;
+
+/**
+ * Every per-connection PRAGMA a WRITER of `state.db` must set, in order, as one list.
+ *
+ * `busy_timeout` already lived here because both writers need the same value and the CLI cannot
+ * import `runtime/`. `foreign_keys` joins it for a sharper reason: without this line the schema's
+ * foreign keys are still enforced, because `node:sqlite`'s `DatabaseSync` turns them on by
+ * default — measured 2026-09-20, `PRAGMA foreign_keys` reads 1 on a fresh connection. That is a
+ * property of the DRIVER, not a commitment this repository makes, and since schema v29 the
+ * correctness of `version_entries` depends on it: the manifest's `ON DELETE CASCADE` and the
+ * object store's `ON DELETE RESTRICT` are what stop a delete from stranding rows.
+ *
+ * So the line is an ASSERTION, and it is honest about what it can and cannot prove. Removing it
+ * changes no behaviour on this driver today, and no test can be written that goes red when it is
+ * deleted — say so rather than pretending otherwise. What it buys is that a driver default change,
+ * a Node version whose `DatabaseSync` decides differently, or a new opener written from this list
+ * cannot silently withdraw the guarantee. What IS testable, and is tested, is the behaviour itself
+ * and the live value on each opener's connection.
+ *
+ * NOT `journal_mode=WAL`: that one is written into the database file and persists, so it belongs
+ * to whoever creates the file (the engine) rather than to every connection.
+ *
+ * The Python hooks are a third opener and cannot import this. `db_reader.py` connects read-only
+ * (`mode=ro`) through `sqlite3`, where foreign keys default to OFF — which costs nothing, because
+ * a reader cannot violate a constraint.
+ */
+export const STATE_DB_WRITER_PRAGMAS: readonly string[] = [
+  `PRAGMA busy_timeout = ${STATE_DB_BUSY_TIMEOUT_MS}`,
+  'PRAGMA foreign_keys = ON',
+];
