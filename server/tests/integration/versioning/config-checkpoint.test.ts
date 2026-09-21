@@ -25,7 +25,7 @@ import {
   resetConfigRecorded,
   setConfigValueRecorded,
 } from '../../../src/cli-shared/config-checkpoint.js';
-import { loadHistory } from '../../../src/cli-shared/version-history.js';
+import { loadConfigHistory } from '../../../src/cli-shared/config-restore.js';
 import { hashBytes } from '../../../src/shared/utils/hash.js';
 import { seedStateDbSchema } from '../../helpers/test-database.js';
 import { testScratchPath } from '../../helpers/scratch-path.js';
@@ -48,7 +48,14 @@ const HAND_AUTHORED_JSONC = `{
 }
 `;
 
-const CONFIG_REF = { resourceType: CONFIG_RESOURCE_TYPE, resourceId: CONFIG_RESOURCE_ID } as const;
+/**
+ * Read back through the PRODUCTION reader, not a hand-built ref.
+ *
+ * A config row's tenant is a function of the config file's path (`configTenantId`, P4.109), so a
+ * ref assembled here would have to restate that derivation — and a test that restates the thing it
+ * is checking cannot fail when the derivation moves. `loadConfigHistory` is what `cpm config
+ * history` calls.
+ */
 
 describe('a config write is recorded as a version', () => {
   let workspace: string;
@@ -57,7 +64,7 @@ describe('a config write is recorded as a version', () => {
 
   /** Oldest first — `loadHistory` returns newest first, and every assertion below reads forward. */
   const rows = (): Array<{ version: number; description: string; snapshot: unknown }> =>
-    (loadHistory(workspace, CONFIG_REF)?.versions ?? [])
+    (loadConfigHistory(workspace)?.versions ?? [])
       .map((entry) => ({
         version: entry.version,
         description: entry.description,
