@@ -18,6 +18,8 @@ import { resolveDispatchAction } from '../../shared/preview-action.js';
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { PromptData, Category } from '#modules/prompts/types.js';
+import type { ResourceFileLocatorPort } from '#shared/utils/resource-file-set.js';
+import type { QuarantineView } from '#shared/utils/resource-quarantine.js';
 import type { PromptResourceActionId } from '../../../metadata/definitions/prompt-resource.js';
 import type { ActionDescriptor } from '../../../metadata/definitions/types.js';
 import type { PromptResourceHandlerPort } from '../core/types.js';
@@ -26,7 +28,7 @@ import { FrameworkManager } from '#engine/frameworks/framework-manager.js';
 import { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';
 import { ContentAnalyzer } from '#modules/semantic/content-analyzer.js';
 import { VersionHistoryService } from '#modules/versioning/index.js';
-import { logMcpToolChange } from '#runtime/resource-change-tracking.js';
+import { logMcpToolChange } from '#shared/core/resource-change-log.js';
 import { type Logger, ToolResponse, ConfigManager } from '#shared/types/index.js';
 import { ValidationError, handleError as utilsHandleError } from '#shared/utils/index.js';
 import { slugifyCategoryDirectory } from '#shared/utils/resource-ids.js';
@@ -70,6 +72,7 @@ export class PromptResourceHandler implements PromptResourceHandlerPort {
     this.versionHistoryService = new VersionHistoryService({
       logger: this.logger,
       configManager: dependencies.configManager,
+      resourceFileLocator: dependencies.resourceFileLocator,
     });
 
     const context: PromptResourceContext = {
@@ -126,6 +129,19 @@ export class PromptResourceHandler implements PromptResourceHandlerPort {
   setFrameworkManager(frameworkManager: FrameworkManager): void {
     this.dependencies.frameworkManager = frameworkManager;
     this.logger.debug('Framework manager set in PromptResourceHandler');
+  }
+
+  /**
+   * Bind the loader's live quarantine view.
+   *
+   * A setter rather than an eighth constructor argument: the factory is already at seven, and the
+   * value is one live object for the process's lifetime, which is the same reason
+   * `setFrameworkManager` exists. Passing it through `updateData` instead would give every reload
+   * path its own chance to omit it.
+   */
+  setQuarantine(quarantine: QuarantineView): void {
+    this.dependencies.quarantine = quarantine;
+    this.logger.debug('Prompt quarantine view bound to PromptResourceHandler');
   }
 
   async handleAction(
@@ -329,7 +345,8 @@ export function createPromptResourceHandler(
   frameworkStateStore: FrameworkStateStore | undefined,
   frameworkManager: FrameworkManager | undefined,
   onRefresh: () => Promise<void>,
-  onRestart: (reason: string) => Promise<void>
+  onRestart: (reason: string) => Promise<void>,
+  resourceFileLocator?: ResourceFileLocatorPort
 ): PromptResourceHandler {
   const dependencies: PromptResourceDependencies = {
     logger,
@@ -339,6 +356,7 @@ export function createPromptResourceHandler(
     onRestart,
     ...(frameworkStateStore ? { frameworkStateStore } : {}),
     ...(frameworkManager ? { frameworkManager } : {}),
+    ...(resourceFileLocator !== undefined ? { resourceFileLocator } : {}),
   };
 
   return new PromptResourceHandler(dependencies);

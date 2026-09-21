@@ -12,21 +12,21 @@
  * checker cannot see, and one that only shows up when the server starts.
  *
  * This file defines and exports; nothing here re-exports anything, so it is not the compat shim
- * shape `validate:no-crosslayer-reexport` bars. `prompt-engine.schema.ts` re-exports these three
- * names so no existing import path changed.
+ * shape the ESLint rule `claude/no-compat-reexport-shim` bars. `prompt-engine.schema.ts`
+ * re-exports these three names so no existing import path changed.
  */
 
 import { z } from 'zod/v4';
 
 /** Quick inline gate: {name, description} */
-export const customCheckSchema = z.object({
+export const customCheckSchema = z.strictObject({
   name: z.string().min(1, 'Custom check name cannot be empty'),
   description: z.string().min(1, 'Custom check description cannot be empty'),
 });
 
 /** Full gate definition with optional fields */
 export const temporaryGateObjectSchema = z
-  .object({
+  .strictObject({
     id: z.string().min(1, 'Gate ID cannot be empty').optional(),
     template: z.string().min(1, 'Template reference cannot be empty').optional(),
     name: z.string().optional(),

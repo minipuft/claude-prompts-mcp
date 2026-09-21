@@ -15,6 +15,8 @@ import chokidar, { type ChokidarOptions, type FSWatcher } from 'chokidar';
 
 import type { ConfigManager, Logger } from '#shared/types/index.js';
 
+import { USER_CONFIG_FILENAMES } from '#shared/utils/config-file-format.js';
+
 /**
  * File change event types
  */
@@ -57,7 +59,7 @@ export interface FileChangeEvent {
 /**
  * Framework integration capabilities
  */
-export interface FrameworkIntegration {
+interface FrameworkIntegration {
   enabled: boolean;
   analyzeChanges: boolean;
   cacheInvalidation: boolean;
@@ -153,6 +155,15 @@ const DEFAULT_CONFIG: FileObserverConfig = {
   pollingInterval: 300,
 };
 
+/** How often a directory that does not exist yet is checked for, until it does. */
+const PENDING_DIRECTORY_POLL_MS = 1000;
+
+/**
+ * Emitted with the directory path once a directory that did not exist when it was registered has
+ * appeared AND its watcher finished the initial scan. Listeners reconcile what they hold from it.
+ */
+export const LATE_DIRECTORY_ARMED = 'lateDirectoryArmed';
+
 /**
  * FileObserver class
  * Provides robust file system watching with event-driven architecture
@@ -166,6 +177,10 @@ export class FileObserver extends EventEmitter {
   private isStarted: boolean = false;
   private startTime: number = 0;
   private retryCount: number = 0;
+  /** Directories registered before they exist, each with the timer waiting for it. */
+  private pendingDirectories: Map<string, NodeJS.Timeout> = new Map();
+  /** Directories that appeared after they were registered, whose existing files are reported. */
+  private directoriesCreatedLate: Set<string> = new Set();
   private configManager: ConfigManager | undefined;
   private auxiliaryDirectories: string[] = [];
   private sigintHandler: (() => void) | undefined;
@@ -265,6 +280,11 @@ export class FileObserver extends EventEmitter {
     }
     this.debounceTimers.clear();
 
+    for (const timer of this.pendingDirectories.values()) {
+      clearInterval(timer);
+    }
+    this.pendingDirectories.clear();
+
     // Close all watchers (chokidar close() returns a Promise)
     const closePromises = Array.from(this.watchers.entries()).map(async ([watchPath, watcher]) => {
       try {
@@ -300,7 +320,7 @@ export class FileObserver extends EventEmitter {
       throw new Error('FileObserver must be started before adding watchers');
     }
 
-    if (this.watchers.has(directoryPath)) {
+    if (this.watchers.has(directoryPath) || this.pendingDirectories.has(directoryPath)) {
       this.logger.debug(`Directory already being watched: ${directoryPath}`);
       return;
     }
@@ -312,10 +332,15 @@ export class FileObserver extends EventEmitter {
         throw new Error(`Path is not a directory: ${directoryPath}`);
       }
 
+      const createdLate = this.directoriesCreatedLate.has(directoryPath);
+
       // Configure chokidar options
       const watchOptions: ChokidarOptions = {
         persistent: true,
-        ignoreInitial: true,
+        // A directory created after startup may already hold files written, or edited, before its
+        // watcher armed; the poll can trail the write by a second. Reporting them lets that edit
+        // reload instead of being absorbed into the watcher's starting snapshot.
+        ignoreInitial: !createdLate,
         followSymlinks: true,
         depth: this.config.recursive ? undefined : 0,
         ignored: this.config.ignoredPatterns,
@@ -329,6 +354,19 @@ export class FileObserver extends EventEmitter {
       };
 
       const watcher = chokidar.watch(directoryPath, watchOptions);
+
+      // A directory that appeared after it was registered had a window — the pending poll, then
+      // this watcher's initial scan — in which nothing observed it. `ignoreInitial: false` above
+      // reports what is there once the scan runs, but nothing can report what was written AND
+      // removed inside the window, and the server may already hold it: a `resource_manager`
+      // create registers its entry directly. So once the scan is done, the directory is announced
+      // for reconciliation, and the owners compare what they hold against the disk. A shorter
+      // poll would only narrow the window.
+      if (createdLate) {
+        watcher.once('ready', () => {
+          this.emit(LATE_DIRECTORY_ARMED, directoryPath);
+        });
+      }
 
       // Handle chokidar events
       watcher
@@ -354,6 +392,10 @@ export class FileObserver extends EventEmitter {
         }${this.shouldUsePolling ? ' (polling)' : ''}`
       );
     } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        this.watchOnceCreated(directoryPath, category);
+        return;
+      }
       this.logger.error(`Failed to watch directory ${directoryPath}:`, error);
       if (this.retryCount < this.config.maxRetries) {
         this.retryCount++;
@@ -366,6 +408,32 @@ export class FileObserver extends EventEmitter {
         throw error;
       }
     }
+  }
+
+  /**
+   * Start watching a directory once it exists.
+   *
+   * A custom workspace's `resources/<type>/` is created by its first write, after the watchers
+   * were registered at startup. Retrying three times and then throwing left every later edit in
+   * that directory unobserved until a restart. Polled rather than watched through a parent: the
+   * nearest existing parent is usually the workspace, which can also be the runtime root the
+   * server writes its logs under.
+   */
+  private watchOnceCreated(directoryPath: string, category?: string): void {
+    this.logger.info(
+      `👁️ FileObserver: ${directoryPath} does not exist yet; watching it once it is created`
+    );
+    const timer = setInterval(() => {
+      if (!fs.existsSync(directoryPath)) return;
+      clearInterval(timer);
+      this.pendingDirectories.delete(directoryPath);
+      this.directoriesCreatedLate.add(directoryPath);
+      this.watchDirectory(directoryPath, category).catch((error: unknown) => {
+        this.logger.error(`Failed to watch created directory ${directoryPath}:`, error);
+      });
+    }, PENDING_DIRECTORY_POLL_MS);
+    timer.unref();
+    this.pendingDirectories.set(directoryPath, timer);
   }
 
   /**
@@ -390,38 +458,6 @@ export class FileObserver extends EventEmitter {
       filename,
       category
     );
-  }
-
-  /**
-   * Remove a directory from watching
-   */
-  async unwatchDirectory(directoryPath: string): Promise<void> {
-    const watcher = this.watchers.get(directoryPath);
-    if (!watcher) {
-      this.logger.debug(`Directory not being watched: ${directoryPath}`);
-      return;
-    }
-
-    try {
-      await watcher.close();
-      this.watchers.delete(directoryPath);
-      this.stats.watchersActive = this.watchers.size;
-
-      // Clear any pending debounce timers for this directory
-      const timersToRemove: string[] = [];
-      for (const [key, timer] of this.debounceTimers.entries()) {
-        if (key.startsWith(directoryPath)) {
-          clearTimeout(timer);
-          timersToRemove.push(key);
-        }
-      }
-      timersToRemove.forEach((key) => this.debounceTimers.delete(key));
-
-      this.logger.info(`🚫 FileObserver: Stopped watching directory: ${directoryPath}`);
-    } catch (error) {
-      this.logger.error(`Failed to stop watching directory ${directoryPath}:`, error);
-      throw error;
-    }
   }
 
   /**
@@ -549,21 +585,10 @@ export class FileObserver extends EventEmitter {
 
     this.logger.info(`🔄 FileObserver: File ${event.type}: ${event.filename}`);
 
-    // Emit specific event types
+    // One event, classified by its flags. `HotReloadObserver` is this class's only owner and
+    // routes on `isPromptFile`/`isConfigFile`/`isAuxiliaryFile`; per-type events named after those
+    // flags had no listener anywhere.
     this.emit('fileChange', event);
-    this.emit(`file:${event.type}`, event);
-
-    if (event.isPromptFile) {
-      this.emit('promptFileChange', event);
-    }
-
-    if (event.isConfigFile) {
-      this.emit('configFileChange', event);
-    }
-
-    if (event.isFrameworkFile) {
-      this.emit('frameworkFileChange', event);
-    }
   }
 
   /**
@@ -651,8 +676,9 @@ export class FileObserver extends EventEmitter {
   private isConfigFile(filename: string, fullPath?: string): boolean {
     const basename = path.basename(filename);
 
-    // Standard config files
-    if (basename === 'config.json') {
+    // Standard config files — both dialects (`config.jsonc`, `config.json`); see
+    // `USER_CONFIG_FILENAMES` for which names the workspace config may take.
+    if ((USER_CONFIG_FILENAMES as readonly string[]).includes(basename)) {
       return true;
     }
 
@@ -739,35 +765,6 @@ export class FileObserver extends EventEmitter {
   }
 
   /**
-   * Get current configuration
-   */
-  getConfig(): FileObserverConfig {
-    return { ...this.config };
-  }
-
-  /**
-   * Update configuration
-   */
-  updateConfig(newConfig: Partial<FileObserverConfig>): void {
-    this.config = { ...this.config, ...newConfig };
-    this.logger.info('FileObserver configuration updated');
-  }
-
-  /**
-   * Get list of watched directories
-   */
-  getWatchedDirectories(): string[] {
-    return Array.from(this.watchers.keys());
-  }
-
-  /**
-   * Check if FileObserver is running
-   */
-  isRunning(): boolean {
-    return this.isStarted;
-  }
-
-  /**
    * Analyze framework impact of file changes
    *  Basic analysis without complex framework dependencies
    */
@@ -789,61 +786,6 @@ export class FileObserver extends EventEmitter {
       affectedFrameworks,
       analysisInvalidated,
       performanceImpact,
-    };
-  }
-
-  /**
-   * Enable framework integration
-   */
-  enableFrameworkIntegration(options: Partial<FrameworkIntegration> = {}): void {
-    this.config.frameworkIntegration = {
-      enabled: true,
-      analyzeChanges: true,
-      cacheInvalidation: true,
-      performanceTracking: true,
-      ...options,
-    };
-    this.logger.info('Framework integration enabled for FileObserver');
-  }
-
-  /**
-   * Disable framework integration
-   */
-  disableFrameworkIntegration(): void {
-    this.config.frameworkIntegration = {
-      enabled: false,
-      analyzeChanges: false,
-      cacheInvalidation: false,
-      performanceTracking: false,
-    };
-    this.logger.info('Framework integration disabled for FileObserver');
-  }
-
-  /**
-   * Check if framework integration is enabled
-   */
-  isFrameworkIntegrationEnabled(): boolean {
-    return this.config.frameworkIntegration?.enabled ?? false;
-  }
-
-  /**
-   * Get debug information
-   */
-  getDebugInfo(): {
-    isRunning: boolean;
-    config: FileObserverConfig;
-    stats: FileObserverStats;
-    watchedDirectories: string[];
-    activeDebounceTimers: number;
-    frameworkIntegration: FrameworkIntegration | undefined;
-  } {
-    return {
-      isRunning: this.isRunning(),
-      config: this.getConfig(),
-      stats: this.getStats(),
-      watchedDirectories: this.getWatchedDirectories(),
-      activeDebounceTimers: this.debounceTimers.size,
-      frameworkIntegration: this.config.frameworkIntegration,
     };
   }
 }

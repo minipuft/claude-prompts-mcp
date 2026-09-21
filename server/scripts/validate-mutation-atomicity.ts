@@ -17,8 +17,8 @@
  * typecheck, both ratchets, `validate:all` and 3026 unit tests. This check is what fails when a
  * seventh call site appears outside a `commit:`, rather than the class being rediscovered.
  *
- * WHAT IT CHECKS. Every call to `.recordEditResult(...)` or `.commitEdit(...)` under
- * `src/mcp/tools/` has a `commit:` property assignment among its ancestors.
+ * WHAT IT CHECKS. Every call to `.recordEditResult(...)`, `.commitEdit(...)` or `.saveVersion(...)`
+ * under `src/mcp/tools/` has a `commit:` property assignment among its ancestors.
  *
  * Parsed with the TypeScript AST rather than matched by text: a regex cannot tell a call inside a
  * `commit` callback from one merely near it, and brace counting misreads braces in strings and
@@ -36,8 +36,18 @@ import ts from 'typescript';
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SCAN_ROOT = path.join(SERVER_ROOT, 'src', 'mcp', 'tools');
 
-/** The two version-history writers. Both persist and both throw; neither may stand alone. */
-const RECORDING_METHODS = ['recordEditResult', 'commitEdit'] as const;
+/**
+ * Every version-history writer. All three persist and all three throw; none may stand alone.
+ *
+ * `saveVersion` is the primitive the other two are built on, and it was absent from this list
+ * while no call site under `src/mcp/tools/` used it — so the enumeration was complete by accident
+ * rather than by construction. TWO call sites arrived independently and each would have been
+ * invisible to this gate: the create path (a create has no prior state to bridge) and a
+ * quarantined resource's repair (no prior LOADABLE state to bridge). A durable write the gate
+ * cannot see is the shape this gate exists to prevent, whatever the method is called. Adding the
+ * name makes the gate stricter; it relaxes nothing.
+ */
+const RECORDING_METHODS = ['recordEditResult', 'commitEdit', 'saveVersion'] as const;
 
 export interface UnguardedRecord {
   file: string;
@@ -141,6 +151,16 @@ class P {
 }
 `;
 
+/** The repair path's primitive, placed outside the transaction — P4.20's own pre-fix shape. */
+const SAVE_VERSION_PRE_FIX_SHAPE = `
+class P {
+  async repairQuarantined() {
+    const saved = await this.versionHistoryService.saveVersion('gate', id, after);
+    return this.writer.write(data);
+  }
+}
+`;
+
 /** A `commit:` on a DIFFERENT object must not launder a bare call — the check's own blind spot. */
 const NEARBY_COMMIT_SHAPE = `
 class P {
@@ -168,6 +188,11 @@ function selfTest(): number {
       name: 'a bare commitEdit on the rollback path is reported',
       source: ROLLBACK_PRE_FIX_SHAPE,
       expect: (f) => f.length === 1 && f[0]?.method === 'commitEdit',
+    },
+    {
+      name: 'a bare saveVersion on the repair path is reported',
+      source: SAVE_VERSION_PRE_FIX_SHAPE,
+      expect: (f) => f.length === 1 && f[0]?.method === 'saveVersion',
     },
     {
       name: 'a commit callback elsewhere in the method does not launder a bare call',

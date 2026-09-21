@@ -18,6 +18,7 @@
 
 import { McpServer } from '@modelcontextprotocol/server';
 
+import { CategoryToolHandler, createCategoryToolHandler } from './category-manager/index.js';
 import { FrameworkToolHandler, createFrameworkToolHandler } from './framework-manager/index.js';
 import { GateToolHandler, createGateToolHandler } from './gate-manager/index.js';
 import { PromptExecutor, createPromptExecutor } from './prompt-engine/index.js';
@@ -37,6 +38,13 @@ import {
   type ToolSurfaceState,
   type ResourceManagerInput as ResourceManagerSchemaInput,
 } from './schemas/index.js';
+import { deriveStructuredMessage } from './shared/structured-message.js';
+import {
+  GATE_PARAMETERS_UNAVAILABLE,
+  describeUndeclaredParameterRefusal,
+  type ContractToolName,
+  type UnavailableParameters,
+} from './shared/undeclared-parameters.js';
 import {
   ConsolidatedSystemControl,
   createConsolidatedSystemControl,
@@ -46,7 +54,9 @@ import { ToolDescriptionLoader } from './tool-description-loader.js';
 import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { GateManager } from '#engine/gates/gate-manager.js';
 import type { ChainSessionStore } from '#modules/chains/manager.js';
+import type { StyleManager } from '#modules/formatting/index.js';
 import type { Category, PromptData } from '#modules/prompts/types.js';
+import type { SkillsSyncPaths } from '#modules/skills-sync/service.js';
 import type { GateSpecification } from '#shared/types/execution.js';
 import type {
   StateStoreOptions,
@@ -56,11 +66,12 @@ import type {
   HookRegistryPort,
   McpNotificationEmitterPort,
 } from '#shared/types/index.js';
+import type { ResourceFileLocatorPort } from '#shared/utils/resource-file-set.js';
 import type { FrameworkManagerDependencies } from './framework-manager/core/types.js';
 import type { ResourceManagerInput } from './resource-manager/core/types.js';
 import type { Implementation } from '@modelcontextprotocol/server';
 
-import { FrameworkManager, createFrameworkManager } from '#engine/frameworks/framework-manager.js';
+import { FrameworkManager } from '#engine/frameworks/framework-manager.js';
 import { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';
 import {
   isValidGateVerdict,
@@ -75,6 +86,7 @@ import { PromptAssetManager } from '#modules/prompts/index.js';
 // Gate evaluator removed - now using Framework validation
 import { createContentAnalyzer } from '#modules/semantic/content-analyzer.js';
 import { TextReferenceStore } from '#modules/text-refs/index.js';
+import { withRequestNotifications } from '#shared/utils/request-notification-scope.js';
 // Schemas now hand-written in ./schemas/ (replaced generated mcp-schemas.ts)
 
 // REMOVED: ExecutionCoordinator and ChainOrchestrator - modular chain system removed
@@ -146,6 +158,7 @@ export class McpToolRouter {
   private promptResourceHandler!: PromptResourceHandler;
   private systemControl!: ConsolidatedSystemControl;
   private gateManagerTool!: GateToolHandler;
+  private categoryManagerTool!: CategoryToolHandler;
   private frameworkManagerTool!: FrameworkToolHandler;
   /** Database port received before `frameworkManagerTool` existed; applied at its construction. */
   private pendingDatabasePort?: {
@@ -170,6 +183,14 @@ export class McpToolRouter {
 
   // Callback references
   private onRestart?: (reason: string) => Promise<void>;
+
+  /**
+   * How every resource tool's version history finds the files it records (owner ruling R65).
+   *
+   * Set in `initialize` and read again in `setFrameworkManager`, which builds the fourth handler
+   * later — the three built in `initialize` could take it as a local, the framework one cannot.
+   */
+  private resourceFileLocator?: ResourceFileLocatorPort;
   private toolsChangedNotifier?: () => Promise<void>;
   /**
    * Handle to the registered `prompt_engine`, kept only for the STDIO reshape.
@@ -212,16 +233,30 @@ export class McpToolRouter {
   async initialize(
     onRefresh: () => Promise<void>,
     onRestart: (reason: string) => Promise<void>,
-    metricsCollector: MetricsCollector
+    metricsCollector: MetricsCollector,
+    // Undefined only when the composition root opened no database; `setDatabasePort` still wires
+    // the remaining handlers afterwards.
+    databasePort?: import('#shared/types/persistence.js').DatabasePort,
+    // How every resource tool's `VersionHistoryService` finds the files it checkpoints (R65).
+    // Held on the instance because the framework tool is built later, in `setFrameworkManager`,
+    // and a locator supplied only here would reach three of the four handlers.
+    resourceFileLocator?: ResourceFileLocatorPort
   ): Promise<void> {
     // Store callback references
     this.onRestart = onRestart;
+    this.resourceFileLocator = resourceFileLocator;
 
     this.semanticAnalyzer = createContentAnalyzer(this.logger);
     this.analyticsService = metricsCollector;
 
     // Initialize gate system manager for runtime gate control
-    this.gateStateStore = createGateStateStore(this.logger, this.configManager.getServerRoot());
+    // The launch workspace is the key a toggle with no identity is written under, so it is the
+    // scope a pre-isolation `default` row is adopted into (see `GateStateStore`).
+    const launchWorkspaceId = this.configManager.getConfig().identity.launchDefaults.workspaceId;
+    const stateDbPath = this.configManager.getStateDatabasePath();
+    this.gateStateStore = createGateStateStore(this.logger, stateDbPath, {
+      ...(launchWorkspaceId != null ? { defaultScope: { workspaceId: launchWorkspaceId } } : {}),
+    });
     await this.gateStateStore.initialize();
 
     this.logger.info('Content analyzer initialized');
@@ -235,8 +270,11 @@ export class McpToolRouter {
       this.semanticAnalyzer,
       this.textReferenceStore,
       this.gateManager,
-      this // Pass manager reference for analytics data flow
-      // Removed executionCoordinator - chains now use LLM-driven execution
+      this, // Pass manager reference for analytics data flow
+      undefined, // promptGuidanceService
+      // The chain session store is built inside the executor's constructor, so its port has to
+      // arrive here rather than through the later `setDatabasePort` cascade.
+      databasePort
     );
 
     // Set gate system manager in prompt engine
@@ -249,8 +287,15 @@ export class McpToolRouter {
       this.frameworkStateStore,
       this.frameworkManager,
       onRefresh,
-      onRestart
+      onRestart,
+      this.resourceFileLocator
     );
+
+    // The loader's quarantine, bound by REFERENCE. Every later load writes through this same
+    // object, so `list`, `inspect` and the repair path in `update` see the current set without
+    // anything re-passing it. Wired here because this is the one place that holds both the
+    // prompt manager and the resource handler.
+    this.promptResourceHandler.setQuarantine(this.promptManager.getQuarantine());
 
     // Initialize 5 core consolidated tools
 
@@ -268,6 +313,17 @@ export class McpToolRouter {
       gateManager: this.gateManager,
       configManager: this.configManager,
       onRefresh,
+      resourceFileLocator: this.resourceFileLocator,
+    });
+
+    // Initialize category manager tool. Constructed HERE rather than beside the framework tool
+    // because it needs nothing the framework manager provides — and `onRefresh` is the whole of
+    // its registration route, so the earliest construction point is the correct one.
+    this.categoryManagerTool = createCategoryToolHandler({
+      logger: this.logger,
+      configManager: this.configManager,
+      onRefresh,
+      resourceFileLocator: this.resourceFileLocator,
     });
 
     // Initialize framework manager tool (framework manager set later via setFrameworkManager)
@@ -337,6 +393,7 @@ export class McpToolRouter {
     this.promptExecutor.setDatabasePort(db, argHistoryStore);
     this.promptResourceHandler.setDatabasePort(db, scope);
     this.gateManagerTool.setDatabasePort(db, scope);
+    this.categoryManagerTool.setDatabasePort(db, scope);
     // The framework tool does not exist yet at the composition root's call order —
     // `module-initializer` calls this at :291 and `setFrameworkManager()` (which constructs the
     // tool) at :308. The existence guard below therefore never fired, and framework versioning
@@ -362,6 +419,17 @@ export class McpToolRouter {
     // here is what turns `export` from "writes skills, drops every manifest row"
     // into an export that `diff` and `prune` can subsequently see.
     this.systemControl.setDatabasePort(db);
+  }
+
+  /**
+   * Give `system_control`'s skills-sync handler the server's own path resolution, so a
+   * `--workspace` flag (or `MCP_WORKSPACE`) resolves the same sources and `skills-sync.yaml`
+   * a running server reads and writes elsewhere. Independent of `setDatabasePort`: path
+   * resolution does not need persistence, so this is wired regardless of whether a database
+   * is configured for this run.
+   */
+  setSkillsSyncPathsProvider(provider: () => SkillsSyncPaths): void {
+    this.systemControl.setSkillsSyncPathsProvider(provider);
   }
 
   /**
@@ -432,6 +500,28 @@ export class McpToolRouter {
     return {
       gateSystemEnabled: this.gateStateStore?.isGateSystemEnabled(this.servingUnitScope) ?? true,
     };
+  }
+
+  /**
+   * The tool's error response for an argument key its contract does not declare, or `null`.
+   *
+   * Stands here, at the registered callback, rather than inside each tool's router, because this
+   * is the only point on the `prompt_engine` path where an undeclared key still EXISTS: the
+   * handler below rebuilds its arguments through an explicit allowlist, so a key not named there
+   * is gone before any router sees it. `system_control` keeps its refusal beside it so one rule
+   * lives in one place. `resource_manager` is the exception and stays in its own router, because
+   * its second half — a declared key owned by another `resource_type` — is router knowledge
+   * (`resource-manager/core/parameter-ownership.ts`).
+   */
+  private refuseUndeclaredParameters(
+    tool: ContractToolName,
+    args: object,
+    unavailable?: UnavailableParameters
+  ): { content: { type: 'text'; text: string }[]; isError: true } | null {
+    const refusal = describeUndeclaredParameterRefusal(tool, args, unavailable);
+    if (refusal === null) return null;
+    this.logger.warn(`${tool} refused undeclared parameter(s): ${refusal.split('\n')[0] ?? ''}`);
+    return { content: [{ type: 'text', text: `❌ ${refusal}` }], isError: true };
   }
 
   /**
@@ -587,22 +677,21 @@ export class McpToolRouter {
   }
 
   /**
-   * Initialize and set framework manager (called after framework state manager)
+   * Adopt the framework manager the framework state store built (call setFrameworkStateStore first).
+   *
+   * One manager serves the tools and the state store: `resource_manager` and hot reload change the
+   * frameworks it holds, and the state store resolves the active framework against that same set.
+   * A manager of the router's own would hold frameworks the state store cannot resolve.
    */
-  async setFrameworkManager(existingFrameworkManager?: FrameworkManager): Promise<void> {
+  setFrameworkManager(): void {
     if (this.frameworkManager == null) {
-      // Use provided framework manager or create a new one
-      this.frameworkManager =
-        existingFrameworkManager ??
-        (await createFrameworkManager(this.logger, {
-          defaultFramework: this.configManager.getFrameworksConfig().defaultFramework,
-        }));
-
-      // FIX: Connect frameworkStateStore if it was set before frameworkManager was created
-      // This handles the startup order where setFrameworkStateStore() is called first
-      if (this.frameworkStateStore != null) {
-        this.frameworkManager.setFrameworkStateStore(this.frameworkStateStore);
+      const frameworkManager = this.frameworkStateStore?.getFrameworkManager();
+      if (frameworkManager == null) {
+        throw new Error(
+          'setFrameworkManager() needs an initialized framework state store: call setFrameworkStateStore() first'
+        );
       }
+      this.frameworkManager = frameworkManager;
 
       this.promptExecutor.setFrameworkManager(this.frameworkManager);
       this.systemControl.setFrameworkManager(this.frameworkManager);
@@ -621,6 +710,7 @@ export class McpToolRouter {
           // Re-register tools with updated descriptions
           await this.reregisterToolsWithUpdatedDescriptions();
         },
+        resourceFileLocator: this.resourceFileLocator,
       };
 
       if (this.frameworkStateStore != null) {
@@ -644,6 +734,7 @@ export class McpToolRouter {
         promptResourceHandler: this.promptResourceHandler,
         gateManager: this.gateManagerTool,
         frameworkManager: this.frameworkManagerTool,
+        categoryManager: this.categoryManagerTool,
       });
       this.logger.debug('ResourceManagerRouter initialized for unified resource management');
 
@@ -665,11 +756,7 @@ export class McpToolRouter {
 
       // REMOVED: ChainOrchestrator initialization - modular chain system removed
 
-      if (existingFrameworkManager != null) {
-        this.logger.info('Framework manager integrated with MCP tools (shared instance)');
-      } else {
-        this.logger.info('Framework manager initialized and integrated with MCP tools');
-      }
+      this.logger.info('Framework manager integrated with MCP tools (shared with framework state)');
     }
   }
 
@@ -689,6 +776,26 @@ export class McpToolRouter {
   }
 
   /**
+   * Resolve the style manager the pipeline renders `#style` guidance from, for runtime
+   * integrations that need a wired instance (e.g. style hot reload). Delegates to
+   * PromptExecutor, which owns the canonical instance and loads it in the background, so this
+   * is async rather than a synchronous `getX()` like `getFrameworkManager()` above.
+   */
+  async resolveStyleManager(): Promise<StyleManager | undefined> {
+    return this.promptExecutor.resolveStyleManager();
+  }
+
+  /**
+   * Clear the script-tool cache the pipeline currently resolves `{{script:id}}` against.
+   * Delegates to PromptExecutor, which owns the canonical `WorkspaceScriptLoader` instance —
+   * runtime integrations that watch the workspace scripts folder call this, the same shape
+   * `resolveStyleManager()` above gives style hot reload.
+   */
+  clearScriptToolCache(): void {
+    this.promptExecutor.clearScriptToolCache();
+  }
+
+  /**
    * Get metrics collector for MCP resource access.
    */
   getMetricsCollector(): MetricsCollector {
@@ -697,7 +804,21 @@ export class McpToolRouter {
 
   /**
    * Get resource manager handler for auto-execute functionality.
-   * Returns a function that can execute resource_manager actions internally.
+   *
+   * Returns a function that runs a `resource_manager` action internally, for a caller that never
+   * crosses the MCP boundary — today, a script tool's `auto_execute` block (stage 09).
+   *
+   * It validates through `resourceManagerInputSchema` FIRST, because that is the one thing the
+   * registered path gets for free and this one did not: the SDK parses `arguments` against the
+   * registered schema and hands the handler the result, so a registered call reaching the router
+   * has had its types, enums and shapes checked. This path used to pass the script's object
+   * through `as any`. Measured 2026-09-20: `{resource_type:"prompt", action:"list", limit:
+   * "not-a-number"}` from a script reached the router untyped, where the same call over MCP is
+   * rejected. One `safeParse` is the whole reuse — the schema is the SSOT for both paths, so
+   * there is no second validator to keep in step.
+   *
+   * A failure is returned as an error `ToolResponse` rather than thrown, so it travels the same
+   * channel every other router refusal does and stage 09 fails the step on it.
    */
   getResourceManagerHandler():
     | ((
@@ -709,7 +830,28 @@ export class McpToolRouter {
     if (router == null) {
       return null;
     }
-    return (args, context) => router.handleAction(args as any, context);
+    return async (args, context) => {
+      const parsed = resourceManagerInputSchema.safeParse(args);
+      if (!parsed.success) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text:
+                `resource_manager rejected these parameters: ` +
+                parsed.error.issues
+                  .map((issue) => {
+                    const where = issue.path.join('.');
+                    return `${where.length > 0 ? where : '(root)'}: ${issue.message}`;
+                  })
+                  .join('; '),
+            },
+          ],
+          isError: true,
+        };
+      }
+      return router.handleAction(parsed.data as ResourceManagerInput, context);
+    };
   }
 
   // REMOVED: wireExecutionCoordinator - ExecutionCoordinator removed
@@ -790,8 +932,21 @@ export class McpToolRouter {
             openWorldHint: false,
           },
         },
-        async (args: PromptEngineInput, extra: unknown) => {
+        withRequestNotifications(async (args: PromptEngineInput, extra: unknown) => {
           try {
+            // Ahead of the allowlist below, which is where an undeclared key would otherwise
+            // vanish. The gate trio is DECLARED but withdrawn from the advertised surface while
+            // gates are off, so it gets the "not advertised right now" message, never "not a
+            // parameter" — the contract names it (CLAUDE.md §Public API Contract).
+            const undeclared = this.refuseUndeclaredParameters(
+              'prompt_engine',
+              args,
+              this.readToolSurfaceState().gateSystemEnabled === false
+                ? GATE_PARAMETERS_UNAVAILABLE
+                : undefined
+            );
+            if (undeclared !== null) return undeclared;
+
             // Normalize and validate string inputs (trim whitespace, filter empty values)
             const trimmedCommand = args.command?.trim();
             const trimmedChainId = args.chain_id?.trim();
@@ -931,12 +1086,11 @@ export class McpToolRouter {
               _sdkExtra: this.enrichExtraWithClientInfo(extra),
             });
 
+            const structuredContent = deriveStructuredMessage(toolResponse);
             return {
               content: toolResponse.content,
               isError: toolResponse.isError,
-              ...(toolResponse.structuredContent != null
-                ? { structuredContent: toolResponse.structuredContent }
-                : {}),
+              ...(structuredContent != null ? { structuredContent } : {}),
             };
           } catch (error) {
             this.logger.error(
@@ -952,7 +1106,7 @@ export class McpToolRouter {
               isError: true,
             };
           }
-        }
+        })
       );
       this.logger.debug('✅ prompt_engine tool registered successfully');
     } catch (error) {
@@ -1014,18 +1168,20 @@ export class McpToolRouter {
             openWorldHint: false,
           },
         },
-        async (args: SystemControlInput, extra: unknown) => {
+        withRequestNotifications(async (args: SystemControlInput, extra: unknown) => {
           try {
+            const undeclared = this.refuseUndeclaredParameters('system_control', args);
+            if (undeclared !== null) return undeclared;
+
             const toolResponse = await this.systemControl.handleAction(
               args,
               this.enrichExtraWithClientInfo(extra)
             );
+            const structuredContent = deriveStructuredMessage(toolResponse);
             return {
               content: toolResponse.content,
               isError: toolResponse.isError,
-              ...(toolResponse.structuredContent != null
-                ? { structuredContent: toolResponse.structuredContent }
-                : {}),
+              ...(structuredContent != null ? { structuredContent } : {}),
             };
           } catch (error) {
             this.logger.error(
@@ -1041,7 +1197,7 @@ export class McpToolRouter {
               isError: true,
             };
           }
-        }
+        })
       );
       this.logger.debug('✅ system_control tool registered successfully');
     } catch (error) {
@@ -1069,7 +1225,8 @@ export class McpToolRouter {
         {
           title: 'Resource Manager',
           description: resourceManagerDescription,
-          // Hand-written schema — includes .passthrough() for advanced framework fields
+          // Hand-written schema. `.passthrough()` is deliberate: an undeclared key must reach
+          // the router, which refuses it by name (parameter-ownership.ts, R46).
           inputSchema: resourceManagerInputSchema,
           // `delete` and `rollback` overwrite or remove authored resources; deletion cannot be
           // undone, since rollback cannot restore a deleted resource. Clients that surface
@@ -1082,7 +1239,7 @@ export class McpToolRouter {
             openWorldHint: false,
           },
         },
-        async (args: ResourceManagerSchemaInput, extra: unknown) => {
+        withRequestNotifications(async (args: ResourceManagerSchemaInput, extra: unknown) => {
           try {
             const router = this.resourceManagerRouter;
             if (router == null) {
@@ -1091,18 +1248,17 @@ export class McpToolRouter {
                 isError: true,
               };
             }
-            // Cast to ResourceManagerInput - the generated schema uses .passthrough() so advanced
-            // framework fields flow through, but router expects the more specific local type
+            // Cast to ResourceManagerInput — the schema is `.passthrough()` so an undeclared key
+            // survives to the router, which refuses it; the router's own type is the narrow one.
             const toolResponse = await router.handleAction(
               args as ResourceManagerInput,
               (this.enrichExtraWithClientInfo(extra) ?? {}) as Record<string, unknown>
             );
+            const structuredContent = deriveStructuredMessage(toolResponse);
             return {
               content: toolResponse.content,
               isError: toolResponse.isError,
-              ...(toolResponse.structuredContent != null
-                ? { structuredContent: toolResponse.structuredContent }
-                : {}),
+              ...(structuredContent != null ? { structuredContent } : {}),
             };
           } catch (error) {
             this.logger.error(
@@ -1118,7 +1274,7 @@ export class McpToolRouter {
               isError: true,
             };
           }
-        }
+        })
       );
       this.logger.debug('✅ resource_manager tool registered successfully');
     } catch (error) {
@@ -1286,7 +1442,9 @@ export async function createMcpToolRouter(
   onRefresh: () => Promise<void>,
   onRestart: (reason: string) => Promise<void>,
   gateManager: GateManager,
-  metricsCollector: MetricsCollector
+  metricsCollector: MetricsCollector,
+  databasePort?: import('#shared/types/persistence.js').DatabasePort,
+  resourceFileLocator?: ResourceFileLocatorPort
 ): Promise<McpToolRouter> {
   const manager = new McpToolRouter(
     logger,
@@ -1297,7 +1455,13 @@ export async function createMcpToolRouter(
     gateManager
   );
 
-  await manager.initialize(onRefresh, onRestart, metricsCollector);
+  await manager.initialize(
+    onRefresh,
+    onRestart,
+    metricsCollector,
+    databasePort,
+    resourceFileLocator
+  );
   return manager;
 }
 

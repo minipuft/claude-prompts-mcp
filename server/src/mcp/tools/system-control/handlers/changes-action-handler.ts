@@ -4,11 +4,11 @@ import { ActionHandler } from '../core/action-handler-base.js';
 
 import type { ToolResponse, ChangeSource, TrackedResourceType } from '#shared/types/index.js';
 
-import { getResourceChangeTracker } from '#runtime/resource-change-tracking.js';
+import { getResourceChangeLog } from '#shared/core/resource-change-log.js';
 
 export class ChangesActionHandler extends ActionHandler {
   async execute(args: any): Promise<ToolResponse> {
-    const tracker = getResourceChangeTracker();
+    const tracker = getResourceChangeLog();
 
     if (tracker === undefined) {
       return this.createMinimalSystemResponse(
@@ -28,14 +28,14 @@ export class ChangesActionHandler extends ActionHandler {
   }
 
   private async listChanges(args: Record<string, unknown>): Promise<ToolResponse> {
-    const tracker = getResourceChangeTracker();
+    const tracker = getResourceChangeLog();
     if (tracker === undefined) {
       throw new Error('Resource change tracker not initialized');
     }
 
     const limit = typeof args['limit'] === 'number' ? args['limit'] : 50;
     const source = args['source'] as ChangeSource | undefined;
-    const resourceType = args['resourceType'] as TrackedResourceType | undefined;
+    const resourceType = args['resource_type'] as TrackedResourceType | undefined;
     const since = args['since'] as string | undefined;
 
     const changes = await tracker.getChanges({
@@ -91,7 +91,7 @@ export class ChangesActionHandler extends ActionHandler {
     response += '---\n';
     response += '💡 **Filter options:**\n';
     response += '- `source`: "filesystem" | "mcp-tool" | "external"\n';
-    response += '- `resourceType`: "prompt" | "gate"\n';
+    response += '- `resource_type`: "prompt" | "gate"\n';
     response += '- `since`: ISO timestamp (e.g., "2026-01-20T00:00:00Z")\n';
     response += '- `limit`: Number of entries to return (default: 50)\n';
 

@@ -492,11 +492,4 @@ export class HierarchyResolver {
   ): InjectionTypeConfig['target'] {
     return this.findInHierarchy(injectionType, input, 'target') ?? 'both';
   }
-
-  /**
-   * Get the resolution priority order for documentation/debugging.
-   */
-  getResolutionPriority(): readonly InjectionDecisionSource[] {
-    return RESOLUTION_PRIORITY;
-  }
 }

@@ -45,7 +45,7 @@ resource_manager(resource_type:"framework", action:"switch", id:"cageerf")
 > **Off by default.** `resources.registerWithMcp` ships as `false`, because the tools cover the same
 > discovery more cheaply. Until you enable it, `resources/list` returns an empty list and every URI
 > below answers `Resource not found`. Turn it on with `cpm enable resources`, or set
-> `resources.registerWithMcp: true` in `config.json`, then restart the server.
+> `resources.registerWithMcp: true` in `config.jsonc` (`config.json` is also still read), then restart the server.
 
 MCP Resources provide a **read-only, token-efficient** alternative to tool-based list/inspect operations. Use resources when you need to:
 
@@ -242,7 +242,7 @@ prompt_engine(command:">>brainstorm * 5 topic:'startup ideas'")
 prompt_engine(command:">>analyze * 2 --> >>summarize")
 
 # Each iteration uses the same plan_path
-prompt_engine(command:">>strategicImplement * 3 plan_path:'./plan.md'")
+prompt_engine(command:">>strategic_implement * 3 plan_path:'./plan.md'")
 ```
 
 **Varied Arguments per Step (use explicit chain):**
@@ -503,7 +503,7 @@ Full field reference, the linearization rule, and the complete rejection vocabul
 
 #### Compiling a plan tier into a submission
 
-You rarely hand-write a submission. `>>strategicImplement` compiles one from a tier-gated plan
+You rarely hand-write a submission. `>>strategic_implement` compiles one from a tier-gated plan
 file — the table `>>implementation_plan` emits — one tier per submission:
 
 | Plan artifact                   | Compiles to                                                               |
@@ -514,10 +514,14 @@ file — the table `>>implementation_plan` emits — one tier per submission:
 | `gates: <id>` in a row's Verify | That node's `inlineGateIds`, so review fires ON the row                   |
 | The tier's gate criterion       | A run-level gate whose `target_step_id` is the tier's LAST node id        |
 | `execution_dispatch` Agent cell | `subagentModel` (`heavy`/`standard`/`fast`); `main thread` emits no field |
+| A delegated row                 | A node whose `promptId` is `strategic_worker` — the worker brief          |
 
 A row with no Depends keeps its declared place, which is what the linearization does with it
 anyway. Rows already marked ✓ are skipped. Gate verdicts, tier acceptance, open-question rulings,
-and the scope check are never compiled into a node — they stay with the calling session.
+handoff acceptance, branch merges, and the scope check are never compiled into a node — they stay
+with the calling planner session, which dispatches rows rather than editing source. `subagentModel`
+is a hint and binds nothing; the `Agent` tool binds a model per spawn and `Workflow` `agent()` binds
+model plus effort.
 
 ### Shell Verification Gates (Ralph Mode)
 
@@ -624,21 +628,33 @@ See [Script Tools Guide](../guides/script-tools.md) for building your own.
 
 ## `resource_manager` — Unified Resource Management
 
-Create, update, delete, and manage prompts, gates, and frameworks through a single unified interface.
+Create, update, delete, and manage prompts, gates, frameworks, and prompt categories through a single unified interface.
 
 ### Basic Syntax
 
 ```bash
-resource_manager(resource_type:"prompt|gate|framework", action:"...", ...)
+resource_manager(resource_type:"prompt|gate|framework|category", action:"...", ...)
 ```
 
 ### Resource Types
 
-| Type        | Description                   | Specific Actions                         |
-| ----------- | ----------------------------- | ---------------------------------------- |
-| `prompt`    | Template and chain management | `analyze_type`, `analyze_gates`, `guide` |
-| `gate`      | Quality validation criteria   | —                                        |
-| `framework` | Execution frameworks          | `switch`                                 |
+| Type        | Description                     | Specific Actions                         |
+| ----------- | ------------------------------- | ---------------------------------------- |
+| `prompt`    | Template and chain management   | `analyze_type`, `analyze_gates`, `guide` |
+| `gate`      | Quality validation criteria     | —                                        |
+| `framework` | Execution frameworks            | `switch`                                 |
+| `category`  | A prompt category's declaration | —                                        |
+
+**`category` manages a `category.yaml`, not the directory of prompts around it.** A category
+exists because a directory exists under the prompts root; `category.yaml` is the optional document
+that gives it a name, a description, and the two MCP defaults its prompts inherit. So `create`
+succeeds on a directory that already holds prompts — that is the first declaration, not a
+duplicate — and `delete` removes the declaration and leaves every prompt in place, falling the
+category back to a name and description derived from its directory name. The directory is removed
+only when the declaration was the last thing in it.
+
+`reload` takes no `id` for this type. There is no per-category registry entry; the whole category
+set is rebuilt by the same walk that loads prompts.
 
 ### Common Actions
 
@@ -720,6 +736,12 @@ Successful prompt writes return a machine-readable receipt with `config_path`, `
 `resource_root`, `affected_files`, category ship status, refresh status, whether the expected state
 loaded after refresh, and the current version. A write whose refreshed registry does not match the
 produced prompt is reported as an error, even when the filesystem transaction itself succeeded.
+
+Any `resource_manager` result that carries both readable `content` text and `structuredContent` —
+`validate`, `create`, `preview`, `update`, and `inspect` all do — also carries the same text in
+`structuredContent.message`. Some MCP clients hand the model only `structuredContent` when a
+result carries both, so a client reading solely the JSON half still receives the write receipt,
+preview notice, or validation outcome. A result with `content` text only is unaffected.
 
 Maintain an existing prompt through one bounded sequence:
 
@@ -844,6 +866,13 @@ already the signal to keep the current value, so before `unset` they could not b
 Unsetting `system_message` also deletes `system-message.md`, so no orphan file is left pointing at
 nothing.
 
+**Prompts only.** `unset` is a prompt parameter, and sending it with `resource_type:"gate"`,
+`"framework"` or `"category"` is refused by name before anything is written — removing a field
+from those resources is not implemented, and the call used to answer "updated successfully", spend
+a version, and change nothing. That refusal is not special to `unset`: every parameter the
+tool publishes names the resource types that read it, and sending one to a type that does not read
+it is refused rather than ignored.
+
 **Refused by name:** `name`, `category`, `description`, `user_message_template`. They stay fully
 settable — send a new value to change one — but a prompt missing any of them does not load, so
 clearing them is not offered. Sending a field and unsetting it in the same call is also refused,
@@ -860,6 +889,105 @@ rather than resolved in an order you cannot see.
 
 Only the last row destroys a file you sent no replacement for, which is why it is the only
 `update` that requires `confirm:true`.
+
+### Undeclared parameters
+
+**All three tools refuse an argument key their contract does not declare, naming the key.** This is
+a security property, not a tidiness one — see [Why this is a security
+property](#why-this-is-a-security-property) below.
+
+```
+'chain_step' is not a parameter of resource_manager.
+'force_restrt' is not a parameter of prompt_engine.  Did you mean 'force_restart'?
+'previw' and 'confirmed' are not parameters of system_control.
+```
+
+One refusal serves all three (`server/src/mcp/tools/shared/undeclared-parameters.ts`). It reads the
+declared key set from the tool's **contract** (`server/tooling/contracts/*.json`) — the same set
+`tools/list` publishes and a client validates against — names **every** undeclared key in one
+message, and suggests the nearest declared name when the spelling is close (`enforcementMode` →
+`enforcement_mode`). The refusal happens before dispatch, so nothing is written and no version is
+spent.
+
+`resource_manager` has a second, narrower refusal beside it: a parameter that IS declared but
+belongs to another `resource_type` is refused naming the types that read it (see the per-type
+refusal above). That one names only the first offender, because the owner list is the same
+correction for all of them.
+
+#### A declared parameter the current state does not advertise
+
+`prompt_engine` publishes a **union**: `gates`, `gate_verdict` and `gate_action` appear in
+`tools/list` only while the gate system is enabled. A client holding a stale `tools/list` that
+still sends one gets its own message, not "not a parameter" — the contract does name it:
+
+```
+'gate_verdict' is a parameter of prompt_engine, but not one this server is advertising right now:
+the gate system is disabled, so nothing reads a gate parameter. Enable it with
+`system_control action:"gates", operation:"enable"`, or drop it from this call.
+```
+
+#### Why this is a security property
+
+Until this refusal, an undeclared key was accepted, read by nobody, and the call answered
+**success**. Measured over both transports before the fix: `prompt_engine {command, force_restrt}`
+returned a normal prompt list, and `system_control {action:"status", previw:true}` returned a normal
+status overview — both `isError: false`.
+
+The cost is not a dropped convenience flag. A caller — or a model following a prompt-injected
+instruction — that sends a **safety** flag under a slightly wrong name got a success reply while the
+server did the unguarded thing: a `preview` / `confirm` / `persist` typo ran the guarded action
+unguarded.
+This repository has already paid that once, through exactly this mechanism: a `skills_sync` preview
+wrote 33 real files because the registered schema dropped the undeclared flag. Refusing by name
+turns the whole class into a loud error at the boundary.
+
+#### Scope
+
+- **Top-level `arguments` keys only.** `_meta` is a client-protocol field carried on `params`,
+  beside `arguments`, never inside it, so it is out of reach and needs no exemption.
+- **Nested object keys are covered too, by a different mechanism.** Every object schema reachable
+  from a tool's parameters refuses an unknown key, naming the path it sits at
+  (`arguments.0: Unrecognized key: "requred"`). That is zod's own refusal rather than the
+  suggestion-carrying one above: a nested key is rejected during validation, so the call never
+  reaches the handler that would name a correction. `tests/unit/mcp-tools/nested-object-strictness.test.ts`
+  walks the whole reachable graph and fails on any object that is neither closed nor listed below,
+  so a new nested object cannot join the class unclassified.
+- **Deliberately open, with reasons** — the only objects where an unknown key still survives:
+  - the three tools' top-level parameters, so the refusal above can name the key and suggest a fix;
+  - `chain_steps[]` and `chain_step_data`, because a chain step is an opaque object by decision
+    (contrast the sibling `arguments`, which is a typed contract).
+- **`gate_verdict` is refused but its path is not printed.** It is a union of the structured object
+  and the legacy string, and a union failure is reported as one issue whose sub-issues are nested,
+  so a client sees `gate_verdict: Invalid input`. The safety property holds regardless — a
+  misspelled `passed` is rejected outright, where it used to be dropped and leave the field absent,
+  which reads as FAIL. The legacy string form is unchanged.
+- **Published schemas stay open at the top level.** `additionalProperties` is not set to `false` on
+  a tool's own parameters, deliberately: the key has to ARRIVE for the server to name it and suggest
+  a correction. Nested objects DO publish `additionalProperties: false`, which is what lets a client
+  catch a nested typo before it sends.
+- **Script tools are covered too** — see
+  [script-tools.md § Security Model](../guides/script-tools.md#security-model).
+
+### Chain edges
+
+A chain may declare `edges` beside its steps — `{from, to}` dependency constraints naming step ids
+(an explicit step `id`, or the kebab slug minted from `stepName`). They are ordering constraints,
+never control flow; see [chain-schema.md](chain-schema.md#edges) for what the loader does with them.
+
+**Edges and steps are one state.** An edge naming a step the chain does not declare, or a cycle, is
+refused and the whole write is rolled back. So a `chain_steps` rewrite that drops a step an edge
+still names must send the corrected `edges` in the same call:
+
+```bash
+resource_manager(
+  resource_type:"prompt", action:"update", id:"my_chain",
+  chain_steps:[{promptId:"research", stepName:"Research"}, {promptId:"draft", stepName:"Draft"}],
+  edges:[{from:"research", to:"draft"}]
+)
+```
+
+To drop every edge and keep the authored step order instead, send `unset:["edges"]`. Omitting
+`edges` PRESERVES whatever the prompt already declares, like every other carried-forward field.
 
 ### Gates
 
@@ -879,10 +1007,10 @@ resource_manager(
   action:"create",
   id:"source-verification",
   name:"Source Verification",
-  gate_type:"validation",
+  type:"validation",
   description:"Ensures all claims are properly sourced",
-  guidance:"All factual claims must cite sources. No unsourced statistics.",
-  pass_criteria:["All claims have citations", "Sources are authoritative"]
+  guidance:"All factual claims must cite sources; sources must be authoritative. No unsourced statistics.",
+  pass_criteria:[{type:"inline_guidance"}]
 )
 
 # Update a gate
@@ -919,36 +1047,71 @@ resource_manager(
 )
 ```
 
+### Categories
+
+```bash
+# List every category across the bundled, primary and overlay prompt roots
+resource_manager(resource_type:"category", action:"list")
+
+# Inspect one — renders only what category.yaml declares
+resource_manager(resource_type:"category", action:"inspect", id:"analysis")
+
+# Author the declaration a directory of prompts never had
+resource_manager(
+  resource_type:"category",
+  action:"create",
+  id:"analysis",
+  name:"Analysis",
+  description:"Analytical and research prompts",
+  mcp_prompt_mode:"launch"
+)
+
+# Change one field; the rest is carried forward from the file
+resource_manager(resource_type:"category", action:"update", id:"analysis", description:"Updated")
+
+# Remove the declaration. Prompts in the directory are NOT removed.
+resource_manager(resource_type:"category", action:"delete", id:"analysis", confirm:true)
+```
+
 <details>
 <summary><strong>Key Parameters by Resource Type</strong></summary>
 
 **Prompt Parameters:**
 
-| Parameter               | Purpose                                                                                                                                  |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `category`              | Prompt category tag                                                                                                                      |
-| `user_message_template` | Prompt body with `{{variables}}`                                                                                                         |
-| `system_message`        | Optional system message                                                                                                                  |
-| `arguments`             | Array of `{name, type?, required?, description?, defaultValue?, validation?}`                                                            |
-| `argument_updates`      | Update-only per-field overlay onto existing arguments by `name` — see [Argument Updates](#argument-updates-partial-argument-edit)        |
-| `patch`                 | Anchored replacements for `update` — see [Patch Mode](#patch-mode-partial-update)                                                        |
-| `preview_action`        | With `action:"preview"`: which mutation to render — `update` (prompt only), `rollback`, or `delete`. Writes nothing, consumes no version |
-| `expected_version`      | Prompt update concurrency token from `inspect`; stale values refuse before versioning or writing                                         |
-| `unset`                 | Update-only: CLEAR the named fields — see [Removing a field](#removing-a-field-unset)                                                    |
-| `chain_steps`           | Chain step definitions                                                                                                                   |
-| `chain_step_operation`  | `add \| remove \| reorder \| update` — omit it to replace the whole array                                                                |
-| `tool_operation`        | Update-only: `add` unions with the current tool binding, `remove` unbinds AND deletes — see [Removing a field](#removing-a-field-unset)  |
-| `tool_ids`              | Tool ids for `tool_operation:"remove"`; refused without it                                                                               |
-| `gate_configuration`    | Gate include/exclude lists                                                                                                               |
-| `injection`             | Prompt-level injection control — `system-prompt`, `gate-guidance`, `style-guidance`                                                      |
-| `register_with_mcp`     | Register as a native MCP prompt — **freezes the prompt against its category/global default**                                             |
-| `mcp_prompt_mode`       | `expand` (plain text) or `launch` (route through `prompt_engine`) — **same freeze**                                                      |
-| `subagent_model`        | `heavy \| standard \| fast` capability hint for `==>` delegated steps                                                                    |
-| `agent_type`            | Default host agent for this prompt's `==>` delegated steps                                                                               |
+| Parameter               | Purpose                                                                                                                                                        |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `category`              | Prompt category tag                                                                                                                                            |
+| `user_message_template` | Prompt body with `{{variables}}`                                                                                                                               |
+| `system_message`        | Optional system message                                                                                                                                        |
+| `arguments`             | Array of `{name, type?, required?, description?, defaultValue?, validation?}`                                                                                  |
+| `argument_updates`      | Update-only per-field overlay onto existing arguments by `name` — see [Argument Updates](#argument-updates-partial-argument-edit)                              |
+| `patch`                 | Anchored replacements for `update` — see [Patch Mode](#patch-mode-partial-update)                                                                              |
+| `preview_action`        | With `action:"preview"`: which mutation to render — `update` (prompt only), `rollback`, or `delete`. Writes nothing, consumes no version                       |
+| `expected_version`      | Prompt update concurrency token from `inspect`; stale values refuse before versioning or writing                                                               |
+| `unset`                 | Update-only: CLEAR the named fields — see [Removing a field](#removing-a-field-unset)                                                                          |
+| `chain_steps`           | Chain step definitions — every `promptId` must name a registered prompt or the write is refused                                                                |
+| `chain_step_operation`  | `add \| remove \| reorder \| update` — omit it to replace the whole array                                                                                      |
+| `budget`                | Chain run-level budget — `maxNodes`, `maxFanOut`, `maxInsertions`, `declaredCostCeiling`, `pauseOnBlocking`. A declared cap may only narrow the server default |
+| `artifacts`             | What this run touches — `produces` (artifact kinds) and `fromArgument` (a declared argument carrying paths). Artifact-scoped gates attach from it              |
+| `edges`                 | Chain dependency edges — `{from, to}` naming step ids. Send with `chain_steps` when a rewrite invalidates one; see [Chain edges](#chain-edges)                 |
+| `tool_operation`        | Update-only: `add` unions with the current tool binding, `remove` unbinds AND deletes — see [Removing a field](#removing-a-field-unset)                        |
+| `tool_ids`              | Tool ids for `tool_operation:"remove"`; refused without it                                                                                                     |
+| `gate_configuration`    | Gate include/exclude lists                                                                                                                                     |
+| `injection`             | Prompt-level injection control — `system-prompt`, `gate-guidance`, `style-guidance`                                                                            |
+| `register_with_mcp`     | Register as a native MCP prompt — **freezes the prompt against its category/global default**                                                                   |
+| `mcp_prompt_mode`       | `expand` (plain text) or `launch` (route through `prompt_engine`) — **same freeze**                                                                            |
+| `subagent_model`        | `heavy \| standard \| fast` capability hint for `==>` delegated steps                                                                                          |
+| `agent_type`            | Default host agent for this prompt's `==>` delegated steps                                                                                                     |
 
 `type` accepts `string \| number \| boolean \| object \| array`. `required:true` alone does not
 block execution — enforcement only arms when the argument also declares a `validation` block
 (`pattern`, `minLength`, `maxLength`).
+
+A chain step naming a prompt that does not exist refuses the whole call, with one addressed line
+per step (`step 2 references unknown promptId 'run_smoke_tests'`) — nothing is written, nothing is
+scaffolded, and no version is consumed. The one exemption is a step named `<promptId>/<step>`, one
+level deep, which this same call scaffolds into a sub-prompt directory. See
+[Step References Must Resolve](../concepts/chains-lifecycle.md#step-references-must-resolve).
 
 The last five are written into `prompt.yaml` verbatim and are otherwise carried forward untouched:
 supply one and it is set, omit it and the prompt keeps whatever it already declared. Two of them
@@ -958,16 +1121,29 @@ value that outranks all of them permanently — the prompt stops following any l
 category or global default, and only another explicit call moves it again. Set them when this
 prompt must differ from its category; leave them out when it should follow along.
 
-Rollback restores `injection`, `subagent_model` and `agent_type` from the target version's
-snapshot. `register_with_mcp` and `mcp_prompt_mode` keep their current on-disk value across a
-rollback — a recorded value for those two cannot be distinguished from an inherited default in
-older history rows, so restoring one could silently freeze a prompt that never declared it.
+Rollback restores `injection`, `subagent_model`, `agent_type`, `budget` and `artifacts` from the
+target version's snapshot. `register_with_mcp` and `mcp_prompt_mode` keep their current on-disk
+value across a rollback — a recorded value for those two cannot be distinguished from an inherited
+default in older history rows, so restoring one could silently freeze a prompt that never declared
+it.
+
+**A chain's `edges` and its `tools` id list are recorded by no version, and a rollback leaves both
+at their current on-disk value.** Neither survives loading — the loader linearises `edges` into
+step order and drops them, and `tools` survives only as loaded definitions, not as the authored
+ids — so the only source for either is the file itself, which four of the seven places that build
+a prompt snapshot cannot read. Recording them at some of those places and not the others would
+make every prompt edit write a duplicate history row and every prompt write report a false
+post-write verification failure, so they are left out rather than half-recorded. ☐ open as of
+2026-09-20 · closes when a loaded prompt carries the path to its own entry file. Until then, a
+rollback of a chain whose edges have changed restores everything else and leaves the edges alone —
+re-send them with `edges:` on an `update`.
 
 **Gate Parameters:**
 
 | Parameter          | Purpose                                                                      |
 | ------------------ | ---------------------------------------------------------------------------- |
-| `gate_type`        | `validation` (pass/fail) or `guidance` (advisory)                            |
+| `type`             | `validation` (pass/fail) or `guidance` (advisory)                            |
+| `gate_type`        | `framework` \| `category` \| `custom`. Default `custom`                      |
 | `severity`         | `critical` \| `high` \| `medium` \| `low`. Default `medium`                  |
 | `enforcement_mode` | `blocking` \| `advisory` \| `informational`. Absent, derived from `severity` |
 | `guidance`         | Gate criteria content                                                        |
@@ -977,9 +1153,39 @@ older history rows, so restoring one could silently freeze a prompt that never d
 Omitting `severity` or `enforcement_mode` on an update leaves the gate's current value alone; it
 does not reset to the default.
 
-`gate_type` writes the `gate.yaml` key **`type`**. The separate `gate.yaml` key `gate_type`
-(`framework` \| `category` \| `custom`) is not authorable through the tool — its name is taken by
-this parameter — so it is carried forward from the file and edited by hand.
+Every gate parameter is named for the `gate.yaml` key it writes. `type` and `gate_type` are two
+different keys and each has its own parameter: `type` is the validation/guidance behaviour,
+`gate_type` is the classification the loader filters framework gates on. **Breaking change
+(P4.10):** the parameter now called `type` was published as `gate_type` until this release, where
+it took the other key's name and left that key unauthorable. Sending the validation/guidance value
+under `gate_type` is now rejected by the schema — send it under `type`.
+
+Omitting `gate_type` on an update leaves the gate's current value alone, the same way `severity`
+and `enforcement_mode` do.
+
+**Category Parameters:**
+
+| Parameter           | Purpose                                                                              |
+| ------------------- | ------------------------------------------------------------------------------------ |
+| `id`                | The category **directory name** under the prompts root — what the loader names it by |
+| `name`              | Display name. Absent, the loader derives one from the id                             |
+| `description`       | Description. Absent, the loader derives `Prompts in the <id> category`               |
+| `register_with_mcp` | The category-level MCP-registration default every prompt in it inherits              |
+| `mcp_prompt_mode`   | `expand` or `launch` — the category-level default every prompt in it inherits        |
+
+`id`, `name` and `description` are all required to `create`; `CategorySchema` requires all three
+and the write is refused without them. The two inheritance defaults are carried forward on an
+update that omits them, the way gate `severity` is — supply one and it is set, omit it and the
+file keeps what it declared.
+
+Unlike the prompt-level versions of the same two parameters, these carry **no freeze hazard**:
+this IS the middle level of the `prompt → category → global` chain, so a prompt that declares
+nothing keeps following whatever the category says.
+
+`inspect` renders a field only when `category.yaml` declares it, and says so plainly when the file
+is absent. Nothing validates a `category.yaml` on load — the loader casts the parsed document — so
+the write-time check is the only one there is, and a document whose `id` disagrees with its
+directory is refused rather than silently served under the directory's name.
 
 **Framework Parameters:**
 
@@ -991,8 +1197,9 @@ this parameter — so it is carried forward from the file and edited by hand.
 | `persist`                | Save switch to config (for `switch` action) |
 
 **Framework advanced parameters.** All eleven were accepted before they were documented; they are
-now declared in the tool schema, so a client can read each one's shape from the contract. Six land
-in `framework.yaml`, five in `phases.yaml` — which matters when reasoning about a partial write.
+now declared in the tool schema, so a client can read each one's shape from the contract. Four land
+in `framework.yaml`, six in `phases.yaml` and one in its own file, which matters when reasoning
+about a partial write.
 
 | Parameter                     | Lands in         | Purpose                                                                             |
 | ----------------------------- | ---------------- | ----------------------------------------------------------------------------------- |
@@ -1007,6 +1214,18 @@ in `framework.yaml`, five in `phases.yaml` — which matters when reasoning abou
 | `template_enhancements`       | `phases.yaml`    | System/user prompt additions and contextual hints                                   |
 | `execution_flow`              | `phases.yaml`    | Pre/post/validation hooks around execution                                          |
 | `quality_indicators`          | `phases.yaml`    | Per-phase keywords and patterns for compliance scoring                              |
+
+**What a framework `update` keeps.** Everything the call does not change. A field you omit keeps
+its stored value, and so does `version`: no parameter sets it, and only `create` writes `1.0.0`. A
+file whose content the update does not change is not written at all, so its comments and
+formatting survive. An edit to `quality_indicators` rewrites `phases.yaml` and leaves
+`framework.yaml` byte-identical.
+
+A file the update _does_ change is edited rather than re-rendered. Where every changed field is a
+plain value, only that field's own lines move: comments, blank lines, key order, quoting style and
+the wrapping of untouched block scalars are left exactly as authored. A change that alters the
+file's structure — adding or removing a key, or changing the length of a list — still re-renders
+the document, which keeps the comments but may re-wrap a long value.
 
 </details>
 
@@ -1038,16 +1257,70 @@ system_control(action:"gates", operation:"list")
 
 ### Actions
 
-| Action              | Operations                            | Purpose                   |
-| ------------------- | ------------------------------------- | ------------------------- |
-| `status`            | —                                     | Runtime overview          |
-| `framework`         | `list`, `switch`, `enable`, `disable` | Framework management      |
-| `gates`             | `list`, `enable`, `disable`, `status` | Gate management           |
-| `analytics`         | —                                     | Execution metrics         |
-| `config`            | —                                     | View config overlays      |
-| `changes`           | `list`                                | Resource change audit log |
-| `session`           | `list`, `inspect`, `clear`            | Chain session lifecycle   |
-| `execution_history` | `list`                                | Chain execution ledger    |
+| Action              | Operations                                          | Parameters                                                                                                            | Purpose                                                                                                                                  |
+| ------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `status`            | —                                                   | `show_details`, `include_history`, `include_metrics`                                                                  | Runtime overview                                                                                                                         |
+| `framework`         | `list`, `switch`, `enable`, `disable`               | `framework`, `reason`, `persist`, `show_details`                                                                      | Framework management                                                                                                                     |
+| `gates`             | `list`, `enable`, `disable`, `status`, `health`     | `search_query`, `reason`, `persist`                                                                                   | Gate management                                                                                                                          |
+| `analytics`         | `view`, `history`, `reset`                          | `include_history`; `limit` for history; `confirm: true` for reset                                                     | Execution metrics                                                                                                                        |
+| `config`            | `list`, `keys`, `get`, `validate`                   | `config: { key, value?, operation }` for `get` (one key's value + source) or `validate` (a per-key candidate check)   | Read-only: whole configuration, declared schema keys, one key's value, or a validity check — see [Config Operations](#config-operations) |
+| `maintenance`       | `restart`                                           | `confirm: true`, `reason`                                                                                             | Server restart                                                                                                                           |
+| `guide`             | —                                                   | `topic`, `include_planned`                                                                                            | Operation overview                                                                                                                       |
+| `injection`         | `status`, `override`, `reset`                       | `type`, `enabled`, `scope`, `scope_id`, `expires_in_ms` for override                                                  | Session injection overrides                                                                                                              |
+| `changes`           | `list`                                              | `source`, `resource_type`, `since`, `limit`                                                                           | Resource change audit log                                                                                                                |
+| `session`           | `list`, `inspect`, `clear`                          | `session_id`, `show_details`                                                                                          | Chain session lifecycle                                                                                                                  |
+| `execution_history` | `list`                                              | `limit`                                                                                                               | Chain execution ledger                                                                                                                   |
+| `skills_sync`       | `status`, `export`, `sync`, `diff`, `pull`, `clone` | `client`, `scope`, `resource_type`, `id`, `preview`, `preview_detail`, `prune`, `output`, `file`, `category`, `force` | Export canonical resources as client skills — [Skills Sync](../guides/skills-sync.md)                                                    |
+
+Every parameter is declared in the tool's input schema, which drops any field it does not declare
+before the action runs. Two names are shared across actions with different values: `scope` is
+`user` or `project` for `skills_sync` and `session`, `chain` or `step` for an injection override,
+and `resource_type` takes `prompt`, `gate`, `framework` or `style` for `skills_sync` while the
+change log records only `prompt` and `gate`. Each action refuses a value that belongs to the other.
+
+### Config Operations
+
+Read-only over MCP: `list` (the whole loaded configuration), `keys` (the dot-path keys the
+packaged `config.schema.json` declares), `get` (one key's effective value and where it came from),
+and `validate` (the load-time schema check, or a per-key candidate check via the nested `config`
+object).
+
+```bash
+# The whole loaded configuration
+system_control(action:"config", operation:"list")
+
+# Every dot-path key the schema declares
+system_control(action:"config", operation:"keys")
+
+# One key's effective value and source
+system_control(action:"config", operation:"get", config:{key:"server.name", operation:"get"})
+
+# The check the server already ran against your config file at load time
+system_control(action:"config", operation:"validate")
+
+# Whether a value would be valid for a key, without writing it
+system_control(action:"config", operation:"validate", config:{key:"logging.level", value:"debug", operation:"validate"})
+```
+
+`get` answers with the key, its effective value as JSON, and a `source` — `file` (the config file
+sets it), `default` (the built-in default; the file does not set it and the loader resolves every
+section at load time, so this is the value the server actually uses), or `environment` (an
+environment variable overrides the file and default). There is no fourth label: a key with no
+default in any layer still answers `default` with an `undefined` value, rather than an unresolved
+state. A key `keys` does not list is refused, naming `keys` as the way to see what is declared; a
+`get` with no key is refused the same way.
+
+`set`, `reset`, and `restore` are not served here. Any other operation — or a request naming none
+at all — is refused by name rather than answered with a listing, which is what a malformed request
+used to fall back to. Change a value with `cpm config set <key> <value>` or reset with
+`cpm config reset --force`.
+
+This is not "configuration cannot be written over MCP": `system_control(action:"gates"|"framework",
+operation:"enable"|"disable", persist:true)` still records that one setting in your config file
+(`config.jsonc`, or `config.json`). The
+boundary is narrower than a blanket read-only surface — a caller cannot name an arbitrary key or
+value to write, or restore a backup; an action can only ask the server to persist its own one
+setting, under a key the server itself chooses and validates.
 
 ### Execution History
 
@@ -1096,6 +1369,34 @@ them; they exist so history is available to reason about later. The line is omit
 session with no terminal record yet, and for records written before these fields existed — an
 absent line means "not measured", never "zero".
 
+#### Per-gate verdict lines
+
+`gates fired` counts submissions and never says which gate held the run up. A record whose step
+was reviewed with a `per_gate` list now renders one indented line per graded gate under it:
+
+```
+- `completed` step 1 · draft · 2026-09-20T12:00:00.000Z · 41ms
+  - ✓ `api-documentation` PASS — contract annotated
+  - ✗ `test-coverage` FAIL (attempt 2) — error path untested
+  - ≡ `style-guide` PASS — attested satisfied
+```
+
+`≡` marks a **reminder-tier** gate: one with no evaluator, which the reviewer attested to via the
+verdict's `reminders` field rather than being graded against. It is recorded because the
+attestation is a fact worth auditing, and marked differently because it is not a check that
+passed.
+
+The gate id is the one the review advertised, resolved from the submitted `[n]` position at the
+parse boundary; an index naming no advertised gate is dropped rather than guessed, so it appears
+nowhere. A record whose review carried no `per_gate` list renders exactly as before — including
+every record written before this was recorded, so an existing ledger is unchanged.
+
+`system_control(action:"analytics")` reads the same rows: **Gate Validations** is the number of
+ledger records carrying at least one verdict, and a **Per-Gate Outcomes** list breaks it into
+passed/failed per gate id. Reminder attestations are counted separately, as **Reminder
+Attestations**, and never inside a gate's pass rate. Both sections are omitted when no record
+carries what they report.
+
 ### Session Operations
 
 ```bash
@@ -1143,8 +1444,8 @@ system_control(action:"changes", operation:"list", source:"filesystem")
 system_control(action:"changes", operation:"list", source:"mcp-tool")
 
 # Filter by resource type
-system_control(action:"changes", operation:"list", resourceType:"prompt")
-system_control(action:"changes", operation:"list", resourceType:"gate")
+system_control(action:"changes", operation:"list", resource_type:"prompt")
+system_control(action:"changes", operation:"list", resource_type:"gate")
 
 # Filter by time
 system_control(action:"changes", operation:"list", since:"2026-01-20T00:00:00Z")
@@ -1155,11 +1456,13 @@ system_control(action:"changes", operation:"list", limit:10)
 
 **Change Sources:**
 
-| Source       | Meaning                                    |
-| ------------ | ------------------------------------------ |
-| `filesystem` | Hot-reload detected file change            |
-| `mcp-tool`   | Created/updated via `resource_manager`     |
-| `external`   | Changed while server was down (on startup) |
+| Source       | Meaning                                                                                                       |
+| ------------ | ------------------------------------------------------------------------------------------------------------- |
+| `filesystem` | Hot-reload detected file change                                                                               |
+| `mcp-tool`   | Created/updated via `resource_manager`                                                                        |
+| `external`   | Changed while server was down (on startup), or removed before a folder created while it ran was first watched |
+
+**Which folders are tracked:** your primary prompts and gates folders, and every workspace overlay (`<workspace>/prompts`, `<workspace>/gates`) — including one created while the server runs. A resource that exists in more than one of them is recorded once, for the copy that is served, so editing a copy another folder overrides records nothing. The bundled catalog is tracked only when it is your primary folder (no workspace configured): it changes only when the package is updated.
 
 **Why this matters:** Debug sync issues between your editor and the server. Track which prompts changed during a session. Audit who modified what before a deploy.
 
@@ -1484,25 +1787,32 @@ the resource's live state before the edit (the first edit after this behavior sh
 out-of-band file change), a self-healing "Bridge" row is recorded first so no state becomes
 unreachable.
 
+**An edit that changes nothing records nothing.** Both writers — `resource_manager` and `cpm` —
+compare the incoming snapshot against the newest recorded one, inside the same transaction that
+assigns the version number, and skip the insert when they match. The reply says so rather than
+naming a version it did not write: `📜 No change to record — still at version N`. Key ORDER is not
+a difference (two records holding the same data compare equal however their keys were emitted);
+array order is, because the order of `chain_steps` or `arguments` is part of the state.
+
 ### Configuration
 
-Enable/disable in `config.json`:
+Enable/disable in `config.jsonc` (`config.json` is also still read):
 
 ```json
 {
   "versioning": {
     "enabled": true,
-    "max_versions": 50,
-    "auto_version": true
+    "maxVersions": 50,
+    "autoVersion": true
   }
 }
 ```
 
-| Setting        | Default | Purpose                                  |
-| -------------- | ------- | ---------------------------------------- |
-| `enabled`      | `true`  | Enable version tracking globally         |
-| `max_versions` | `50`    | Maximum versions retained (FIFO pruning) |
-| `auto_version` | `true`  | Auto-save on updates (can skip per-call) |
+| Setting       | Default | Purpose                                  |
+| ------------- | ------- | ---------------------------------------- |
+| `enabled`     | `true`  | Enable version tracking globally         |
+| `maxVersions` | `50`    | Maximum versions retained (FIFO pruning) |
+| `autoVersion` | `true`  | Auto-save on updates (can skip per-call) |
 
 ### View History
 
@@ -1551,8 +1861,16 @@ been restored.
 the current state and the version you would restore, writing no file and recording no version; it
 still refuses an incomplete snapshot, so the preview and the real call agree. With
 `preview_action:"delete"` it reports what would be removed — for a prompt, that includes the prompts
-that reference it. Neither needs `confirm`: `preview` is not a destructive action, so there is
-nothing to confirm.
+that reference it — and it purges nothing. Neither needs `confirm`: `preview` is not a destructive
+action, so there is nothing to confirm.
+
+**A real `delete` purges the resource's version history with it**, for all four resource types, and
+the reply says how many rows it removed. Deleting a chain takes its steps' history too, since a step
+is recorded under the composite id `chain/step`. This is what `cpm delete` always did; over
+`resource_manager` the rows used to survive — unreachable by any action, because rollback resolves
+the resource first, and inherited by whatever was created under that id next. One caveat remains:
+rows `cpm` wrote are keyed by the tenant id the CLI resolved, which is not yet always the one the
+server resolves for the same workspace, so an MCP delete purges what the MCP surface wrote.
 
 <!-- preview-vocabulary: migration-note -->
 
@@ -1560,17 +1878,39 @@ That is the whole reason it is an action rather than the `dry_run` boolean it re
 `delete`, and the confirmation guard reads the action, so previewing a deletion demanded that the
 deletion be confirmed first. `dry_run` is removed — see the CHANGELOG's breaking-changes entry.
 
+### What a rollback restores
+
+**A version recorded since schema v29 restores its files byte for byte.** Those rows carry the
+resource's actual bytes in the object store, so a rollback writes them back verbatim — comments,
+key order, flow style, line endings, a BOM, a chain's `edges`, a prompt's `tools/{id}/` scripts.
+Nothing is re-rendered from a projection, which is why nothing is lost in the round trip. The reply
+names every file it wrote.
+
+**A rollback never deletes a file.** A file the resource has now that the target version did not
+record stays on disk, and the reply lists it by path as left in place. The honest consequence: the
+resource is then not byte-identical to that version, and `compare` against it shows the extra
+files. Delete them yourself if that is what you meant.
+
+A rollback of a resource served from the bundled package tree writes a workspace override, exactly
+as an update of one does — the bundled tree is never written to.
+
+Two states refuse rather than restore something else, because both mean the database disagrees with
+itself: a row that advertises a file tree whose recorded bytes are missing from the store, and a
+recorded path that resolves outside the resource's own directory. Both write nothing at all.
+
 ### What a rollback does not restore
 
-A version snapshot records the resource's authored surface, not every byte in its directory. What
-falls outside it is left to the file writers, which carry it forward from disk:
+Rows written before schema v29, bridge rows, and rows degraded to projection-only (an over-limit
+file, a resource whose files could not be located) have no recorded bytes and restore the older
+way: the version snapshot records the resource's authored surface, not every byte in its directory,
+and what falls outside it is left to the file writers, which carry it forward from disk:
 
-| Resource  | Not in the snapshot                                                             | What happens on rollback                                                                                                                                       |
-| --------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| prompt    | `register_with_mcp`, `mcp_prompt_mode` (resolved through the category chain)    | keep their current on-disk values                                                                                                                              |
-| prompt    | script tools under `tools/{id}/`                                                | left unchanged — **the response says so**                                                                                                                      |
-| gate      | `severity`, `enforcementMode`, `gate_type`, `evaluation`, `blockResponseOnFail` | carried forward from `gate.yaml` — still true after `severity` and `enforcementMode` became settable, since they are preserved keys rather than projected ones |
-| framework | `phases` and the advanced authoring fields                                      | carried forward by the writer's merge                                                                                                                          |
+| Resource  | Not in the snapshot                                                             | What happens on rollback                                                                                                                                                    |
+| --------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| prompt    | `register_with_mcp`, `mcp_prompt_mode` (resolved through the category chain)    | keep their current on-disk values                                                                                                                                           |
+| prompt    | script tools under `tools/{id}/`                                                | left unchanged — **the response says so**. A v29-era row restores them byte for byte instead, and then says nothing, because there is nothing left unrestored               |
+| gate      | `severity`, `enforcementMode`, `gate_type`, `evaluation`, `blockResponseOnFail` | carried forward from `gate.yaml` — still true after `severity`, `enforcementMode` and `gate_type` became settable, since they are preserved keys rather than projected ones |
+| framework | `phases` and the advanced authoring fields                                      | carried forward by the writer's merge                                                                                                                                       |
 
 Where a rollback restores only part of a resource, the response names what it did not restore.
 Frameworks additionally report any projected field the target version never recorded, because the
@@ -1640,8 +1980,20 @@ All flags accept both `--flag=value` and `--flag value` formats.
 ```bash
 node dist/index.js --transport stdio \
   --workspace /path/to/workspace \
-  --config /path/to/config.json
+  --config /path/to/config.jsonc
 ```
+
+A path setting the server cannot use stops it before it serves anything, on every transport,
+exiting non-zero with the reason on stderr: the variable or flag, the value, the resolved path,
+what is wrong, and what removing the setting would fall back to. `--config` and `MCP_CONFIG_PATH`
+must name a readable config file, parsed strictly as JSON unless the path ends `.jsonc`, in which
+case comments and a trailing comma are accepted; `--workspace`, `MCP_WORKSPACE` and
+`MCP_RESOURCES_PATH` must name an existing directory; and a workspace config, when one exists, must
+be a readable JSON object. A workspace naming both `config.jsonc` and `config.json` also refuses to
+start, naming both paths — keep one. Each of these used to start a server on something else —
+ignored settings, a freshly created empty workspace, the bundled catalog in place of yours — with
+nothing reporting it. A workspace with no config file uses the packaged one, and an empty value
+counts as unset.
 
 There are no per-resource-type flags. `--prompts`, `--gates`, `--frameworks`, `--styles` and
 `--scripts` were documented here but are parsed nowhere in the server; point `--workspace` (or
@@ -1661,18 +2013,18 @@ There are no per-resource-type flags. `--prompts`, `--gates`, `--frameworks`, `-
 `--transport=sse` was removed with the SDK v2 upgrade and now **exits with an error** naming
 `streamable-http`. It does not fall back to another transport: a removed option that silently
 resolved to something else started the server on a transport nobody asked for and reported
-success. The same check applies to `transport` in `config.json`.
+success. The same check applies to `transport` in your config file.
 
 ### Environment Variables
 
-| Variable                    | Description                                          |
-| --------------------------- | ---------------------------------------------------- |
-| `MCP_WORKSPACE`             | Workspace root for config resolution                 |
-| `MCP_RESOURCES_PATH`        | Base path for all resources (prompts/, gates/, etc.) |
-| `MCP_CONFIG_PATH`           | Override config.json path                            |
-| `MCP_SERVER_ROOT`           | Server package root, used by skills export           |
-| `MCP_SHELL_PRESETS_PATH`    | Override the gate shell-preset definitions file      |
-| `MCP_VERDICT_PATTERNS_PATH` | Override the gate verdict-pattern definitions file   |
+| Variable                    | Description                                                                                                         |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `MCP_WORKSPACE`             | Workspace root for config resolution; must be an existing directory, or the server refuses to start                 |
+| `MCP_RESOURCES_PATH`        | Base path for all resources (prompts/, gates/, etc.); must be an existing directory, or the server refuses to start |
+| `MCP_CONFIG_PATH`           | Override the config file path (`.jsonc` or `.json`); must name a readable file, or the server refuses to start      |
+| `MCP_SERVER_ROOT`           | Server package root, used by skills export                                                                          |
+| `MCP_SHELL_PRESETS_PATH`    | Override the gate shell-preset definitions file                                                                     |
+| `MCP_VERDICT_PATTERNS_PATH` | Override the gate verdict-pattern definitions file                                                                  |
 
 Per-resource-type variables (`MCP_PROMPTS_PATH`, `MCP_GATES_PATH`, `MCP_FRAMEWORKS_PATH`,
 `MCP_STYLES_PATH`, `MCP_SCRIPTS_PATH`) were documented here but are read nowhere in the server.
@@ -1686,6 +2038,8 @@ Path resolution follows this priority (first match wins):
 
 Workspace resources overlay the bundled ones. There is no per-resource-type override layer —
 the two tiers previously documented above these (CLI flags and individual env vars) do not exist.
+A set `MCP_RESOURCES_PATH` that does not exist is not "no match": it refuses startup rather than
+falling through to the package defaults, which would serve the bundled catalog under your name.
 
 **Example: MCP config with custom resources**
 
@@ -1712,15 +2066,16 @@ the two tiers previously documented above these (CLI flags and individual env va
 
 ## Reference
 
-| Component          | Location                                                  |
-| ------------------ | --------------------------------------------------------- |
-| Prompt definitions | `server/resources/prompts/{category}/{id}/prompt.yaml`    |
-| Gate definitions   | `server/resources/gates/{id}/gate.yaml`                   |
-| Style definitions  | `server/resources/styles/{id}/style.yaml`                 |
-| Frameworks         | `server/resources/frameworks/{id}/framework.yaml`         |
-| Chain sessions     | SQLite (`runtime-state/state.db`, table `chain_sessions`) |
-| Resource changes   | `runtime-state/resource-changes.jsonl`                    |
-| Server config      | `server/config.json`                                      |
+| Component               | Location                                                                                                                                                             |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Prompt definitions      | `server/resources/prompts/{category}/{id}/prompt.yaml`                                                                                                               |
+| Gate definitions        | `server/resources/gates/{id}/gate.yaml`                                                                                                                              |
+| Style definitions       | `server/resources/styles/{id}/style.yaml` (package default; a workspace `resources/styles/{id}/` overlays it, same as prompts/gates/frameworks)                      |
+| Script tool definitions | `server/resources/scripts/{id}/tool.yaml` (workspace `resources/scripts/{id}/` when a custom workspace is configured; see [Script Tools](../guides/script-tools.md)) |
+| Frameworks              | `server/resources/frameworks/{id}/framework.yaml`                                                                                                                    |
+| Chain sessions          | SQLite (`runtime-state/state.db`, table `chain_sessions`)                                                                                                            |
+| Resource changes        | `runtime-state/resource-changes.jsonl`                                                                                                                               |
+| Server config           | `server/config.json`                                                                                                                                                 |
 
 **Related docs:**
 

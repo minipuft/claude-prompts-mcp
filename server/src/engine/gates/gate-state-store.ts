@@ -13,7 +13,13 @@ import type { StateStoreOptions } from '#infra/database/stores/interface.js';
 import { SqliteEngine } from '#infra/database/sqlite-engine.js';
 import { SqliteStateStore } from '#infra/database/stores/sqlite-store.js';
 import { Logger } from '#infra/logging/index.js';
-import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
+import {
+  DEFAULT_IDENTITY_SCOPE_ID,
+  resolveContinuityScopeId,
+} from '#shared/utils/request-identity-scope.js';
+
+/** The `kv_state` discriminator every gate toggle is written under. */
+const GATE_STATE_KEY = 'gates';
 
 /**
  * Gate system state interface
@@ -68,6 +74,18 @@ export interface GateSystemToggleRequest {
 }
 
 /**
+ * Construction options.
+ */
+export interface GateStateStoreOptions {
+  /**
+   * The launch workspace scope — the key a toggle arriving with no identity of its own is
+   * written under, and the key the advertised tool surface reads. Used only to adopt a
+   * pre-isolation `default` row into it; unscoped calls still resolve to `default`.
+   */
+  defaultScope?: StateStoreOptions;
+}
+
+/**
  * Gate system events
  */
 export interface GateSystemEvents {
@@ -83,22 +101,31 @@ export interface GateSystemEvents {
 export class GateStateStore extends EventEmitter {
   private scopedStates: Map<string, GateSystemState> = new Map();
   private logger: Logger;
-  private readonly serverRoot: string;
+  /** The server's `state.db`; undefined exactly when a `stateStore` was injected instead. */
+  private readonly stateDbPath: string | undefined;
   private stateStore?: SqliteStateStore<PersistedGateSystemState>;
   private healthCheckInterval?: NodeJS.Timeout;
+  private readonly defaultScope?: StateStoreOptions;
 
+  /**
+   * @param stateStoreOrDbPath an injected store, or the path of the server's `state.db` to open
+   *   one against. Required: before B.62 it was optional and an absent value opened
+   *   `runtime-state/state.db` relative to whatever the process's working directory was.
+   */
   constructor(
     logger: Logger,
-    stateStoreOrDir?: SqliteStateStore<PersistedGateSystemState> | string
+    stateStoreOrDbPath: SqliteStateStore<PersistedGateSystemState> | string,
+    options: GateStateStoreOptions = {}
   ) {
     super();
     this.logger = logger;
+    this.defaultScope = options.defaultScope;
 
-    if (stateStoreOrDir instanceof SqliteStateStore) {
-      this.stateStore = stateStoreOrDir;
-      this.serverRoot = '';
+    if (stateStoreOrDbPath instanceof SqliteStateStore) {
+      this.stateStore = stateStoreOrDbPath;
+      this.stateDbPath = undefined;
     } else {
-      this.serverRoot = stateStoreOrDir ?? '';
+      this.stateDbPath = stateStoreOrDbPath;
     }
 
     // Initialize default scope state
@@ -142,14 +169,14 @@ export class GateStateStore extends EventEmitter {
   async initialize(): Promise<void> {
     try {
       // Load persisted state if available
-      await this.loadStateFromFile();
+      await this.loadPersistedStates();
 
       // Start health monitoring
       this.startHealthMonitoring();
 
-      const defaultState = this.getOrCreateScopedState();
+      const launchState = this.getOrCreateScopedState(this.defaultScope);
       this.logger.info(
-        `🚪 Gate System Manager initialized - System ${defaultState.enabled ? 'enabled' : 'disabled'}`
+        `🚪 Gate System Manager initialized - System ${launchState.enabled ? 'enabled' : 'disabled'}`
       );
     } catch (error) {
       this.logger.error('Failed to initialize GateStateStore:', error);
@@ -158,17 +185,117 @@ export class GateStateStore extends EventEmitter {
   }
 
   /**
-   * Load state from SQLite
+   * Load every persisted gate toggle, one row per scope.
+   *
+   * All of them, at startup, because `isGateSystemEnabled` is synchronous: it is read while the
+   * tool schema is built, with no await in reach. A scope missing from memory used to be created
+   * ENABLED without consulting SQLite, and the only scope loaded here was the literal `default`
+   * — so a toggle written under a workspace survived in `state.db` and was never read back.
+   * Measured 2026-09-14: `system_control gates disable` narrowed `prompt_engine` until the next
+   * restart, then the three gate parameters came back. Loading only the launch scope would fix
+   * STDIO and leave every HTTP identity beyond it with the same miss.
+   *
+   * The row's `tenant_id` is the in-memory key: `SqliteStateStore.save` writes
+   * `resolveContinuityScopeId` of the scope there, which is what `resolveStateKey` computes.
    */
-  private async loadStateFromFile(scope?: StateStoreOptions): Promise<void> {
+  private async loadPersistedStates(): Promise<void> {
+    const stateStore = await this.ensureStateStore();
+    const loadedKeys = new Set<string>();
+
+    try {
+      const rows = stateStore.query<{ tenant_id: string; state: unknown }>(
+        `SELECT tenant_id, state FROM ${stateStore.getTableName()} WHERE key = ?`,
+        [GATE_STATE_KEY]
+      );
+
+      for (const row of rows) {
+        const persistedState: unknown =
+          typeof row.state === 'string' ? JSON.parse(row.state) : row.state;
+        if (!this.isValidPersistedState(persistedState)) {
+          this.logger.warn(
+            `⚠️ Invalid gate state format for scope '${row.tenant_id}', using defaults`
+          );
+          continue;
+        }
+        this.applyPersistedState(
+          this.getOrCreateScopedState({ continuityScopeId: row.tenant_id }),
+          persistedState
+        );
+        loadedKeys.add(row.tenant_id);
+      }
+
+      this.logger.info(`✅ Loaded gate system state for ${loadedKeys.size} scope(s)`);
+    } catch (error) {
+      this.logger.warn(
+        `⚠️ Failed to load gate system state: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+      this.logger.info('📁 Using default gate system state');
+      return;
+    }
+
+    await this.adoptLegacyGlobalState(loadedKeys);
+  }
+
+  /**
+   * Adopt the pre-isolation `default` row into the launch scope, once.
+   *
+   * Before 2026-08-27 a toggle with no resolvable identity was written under `default`; since
+   * then the same toggle is written under the launch workspace, and nothing reads `default` for
+   * it. Without this, an operator who disabled gates before that change finds them enabled again.
+   * Copied rather than moved, as `FrameworkStateStore` does: other workspaces sharing this
+   * `state.db` may not have adopted it yet. Once the launch scope has its own row, that row wins
+   * and this is a no-op.
+   */
+  private async adoptLegacyGlobalState(loadedKeys: ReadonlySet<string>): Promise<void> {
+    const launchKey = this.resolveStateKey(this.defaultScope);
+    if (
+      launchKey === DEFAULT_IDENTITY_SCOPE_ID ||
+      loadedKeys.has(launchKey) ||
+      !loadedKeys.has(DEFAULT_IDENTITY_SCOPE_ID)
+    ) {
+      return;
+    }
+
+    const legacyState = this.getOrCreateScopedState();
+    const launchState = this.getOrCreateScopedState(this.defaultScope);
+    launchState.enabled = legacyState.enabled;
+    launchState.enabledAt = new Date(legacyState.enabledAt);
+    launchState.enableReason = legacyState.enableReason;
+
+    await this.saveStateToFile(this.defaultScope);
+    this.logger.info(
+      `✅ Adopted pre-isolation gate state (${legacyState.enabled ? 'enabled' : 'disabled'}) for scope '${launchKey}'`
+    );
+  }
+
+  private applyPersistedState(target: GateSystemState, persisted: PersistedGateSystemState): void {
+    target.enabled = persisted.enabled;
+    target.enabledAt = new Date(persisted.enabledAt);
+    target.enableReason = persisted.enableReason;
+    target.validationMetrics = {
+      ...target.validationMetrics,
+      ...persisted.validationMetrics,
+      lastValidationTime: persisted.validationMetrics.lastValidationTime
+        ? new Date(persisted.validationMetrics.lastValidationTime)
+        : null,
+    };
+  }
+
+  private async ensureStateStore(): Promise<SqliteStateStore<PersistedGateSystemState>> {
     // Initialize SQLite state store if not injected via constructor
     if (!this.stateStore) {
-      const dbManager = await SqliteEngine.getInstance(this.serverRoot, this.logger);
+      if (this.stateDbPath === undefined) {
+        // The constructor sets exactly one of the two, so this is a broken invariant, not a state.
+        throw new Error('GateStateStore has neither an injected store nor a state.db path.');
+      }
+      const dbManager = await SqliteEngine.getInstance(this.logger, { dbPath: this.stateDbPath });
       this.stateStore = new SqliteStateStore<PersistedGateSystemState>(
         dbManager,
         {
           tableName: 'kv_state',
-          key: 'gates',
+          key: GATE_STATE_KEY,
           stateColumn: 'state',
           defaultState: () => ({
             enabled: true,
@@ -185,39 +312,7 @@ export class GateStateStore extends EventEmitter {
         this.logger
       );
     }
-
-    const currentState = this.getOrCreateScopedState(scope);
-
-    try {
-      const persistedState = await this.stateStore.load(scope);
-
-      if (this.isValidPersistedState(persistedState)) {
-        currentState.enabled = persistedState.enabled;
-        currentState.enabledAt = new Date(persistedState.enabledAt);
-        currentState.enableReason = persistedState.enableReason;
-        currentState.validationMetrics = {
-          ...currentState.validationMetrics,
-          ...persistedState.validationMetrics,
-          lastValidationTime: persistedState.validationMetrics.lastValidationTime
-            ? new Date(persistedState.validationMetrics.lastValidationTime)
-            : null,
-        };
-
-        this.logger.info(
-          `✅ Loaded gate system state: ${persistedState.enabled ? 'enabled' : 'disabled'}`
-        );
-      } else {
-        this.logger.warn('⚠️ Invalid gate state format, using defaults');
-        await this.saveStateToFile(scope);
-      }
-    } catch (error) {
-      this.logger.warn(
-        `⚠️ Failed to load gate system state: ${
-          error instanceof Error ? error.message : String(error)
-        }`
-      );
-      this.logger.info('📁 Using default gate system state');
-    }
+    return this.stateStore;
   }
 
   /**
@@ -248,7 +343,7 @@ export class GateStateStore extends EventEmitter {
   /**
    * Validate persisted state structure
    */
-  private isValidPersistedState(state: any): boolean {
+  private isValidPersistedState(state: any): state is PersistedGateSystemState {
     return (
       state &&
       typeof state.enabled === 'boolean' &&
@@ -448,7 +543,8 @@ export class GateStateStore extends EventEmitter {
  */
 export function createGateStateStore(
   logger: Logger,
-  stateStoreOrDir?: SqliteStateStore<PersistedGateSystemState> | string
+  stateStoreOrDbPath: SqliteStateStore<PersistedGateSystemState> | string,
+  options: GateStateStoreOptions = {}
 ): GateStateStore {
-  return new GateStateStore(logger, stateStoreOrDir);
+  return new GateStateStore(logger, stateStoreOrDbPath, options);
 }

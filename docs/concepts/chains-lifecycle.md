@@ -46,6 +46,35 @@ Repeat until all steps complete.
 
 ---
 
+## Step References Must Resolve
+
+Every `chainSteps[].promptId` names a prompt the server can serve, in the form the registry serves
+it under: bare (`readme_improver`) for a top-level prompt, `parent/step` for a nested one.
+
+Three boundaries check that, and they answer the same way:
+
+| Boundary                               | Behaviour                                                                                                                                                                                        |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `resource_manager` `create` / `update` | **Refuses the write**, one addressed line per bad step (`step 2 references unknown promptId 'run_smoke_tests'`). Nothing is written, nothing is scaffolded, and no version is consumed           |
+| Startup and hot reload                 | One `WARN` per broken chain, carrying `{chainId, unresolvedSteps:[{stepIndex, promptId}]}`. The chain still loads and is still served — the run refuses at the step, not the whole catalog       |
+| `npm run validate:prompts` (CI)        | Fails, naming each chain and step position. It resolves against the ONE root it is pointed at, so an overlay chain referencing a bundled prompt is checked at load, where both roots are visible |
+
+One exemption, and only at the write: a step named `<chainId>/<step>` is accepted even when nothing
+is registered under it, because the same call scaffolds that directory. The exemption is exactly one
+level deep — `my_chain/phase/step` is refused, because the scaffold does not create that either.
+
+```yaml
+# Accepted: `readme_improver` exists; `my_chain/summarize` is scaffolded by this write
+id: my_chain
+chainSteps:
+  - promptId: readme_improver
+    stepName: "Improve (1/2)"
+  - promptId: my_chain/summarize
+    stepName: "Summarize (2/2)"
+```
+
+---
+
 ## Session Management
 
 Chains persist across messages. You don't need to feed the entire history back to the model.
@@ -417,6 +446,10 @@ Resubmit with chain_id and user_response containing that block.
 ````
 
 Setting `execution.delegation.evidence: advisory` accepts the same reply instead of refusing it.
+It is an ordinary settable config key — `cpm config set execution.delegation.evidence advisory`
+writes it into your workspace config file, and that write is recorded as a config version like any
+other, so `cpm config rollback` can undo it. See the
+[configuration reference](../reference/configuration.md).
 In both modes, every delegated step's execution record carries a `handoff_evidence` reason: `ok`
 (the trailer named this node), `trailer` (no `HANDOFF RESULT` heading), `node-line` (a heading
 with no `node:` line), or `node-mismatch` (a `node:` line naming some other node). A step that

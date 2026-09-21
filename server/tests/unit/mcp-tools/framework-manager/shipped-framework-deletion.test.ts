@@ -34,6 +34,8 @@ describe('framework deletion refuses what the server ships', () => {
   let workspaceDir: string;
   let frameworksDir: string;
   let ctx: FrameworkResourceContext;
+  let removeFramework: ReturnType<typeof jest.fn>;
+  let configuredDefault: string;
 
   const makeFrameworkDir = (id: string): string => {
     const dir = join(frameworksDir, id);
@@ -46,6 +48,9 @@ describe('framework deletion refuses what the server ships', () => {
     workspaceDir = mkdtempSync(join(tmpdir(), 'cpm-shipped-fw-'));
     frameworksDir = join(workspaceDir, 'resources', 'frameworks');
     mkdirSync(frameworksDir, { recursive: true });
+    removeFramework = jest.fn(async () => true);
+    // The packaged default, which ships, unless a test names a framework of its own.
+    configuredDefault = 'cageerf';
 
     ctx = {
       logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
@@ -53,7 +58,7 @@ describe('framework deletion refuses what the server ships', () => {
       // stub returning a hardcoded answer would test the mock rather than the shipped set.
       frameworkManager: {
         isShippedFramework: (id: string) => isShippedFrameworkId(id),
-        unregister: jest.fn(() => true),
+        removeFramework,
       },
       configManager: {
         getServerRoot: () => workspaceDir,
@@ -61,10 +66,13 @@ describe('framework deletion refuses what the server ships', () => {
         // A default install: no distinct bundled tree. This is the configuration in which the old
         // bundled-tree branch was unreachable.
         getBundledResourceDirectory: () => undefined,
+        getFrameworksConfig: () => ({ defaultFramework: configuredDefault }),
       },
       fileService: { deleteFramework: jest.fn(async () => true) },
       textDiffService: {},
-      versionHistoryService: {},
+      // `deleteHistory` is reached on the success path: a delete purges the history of what it
+      // removed. Zero rows is the honest answer for a double with no database behind it.
+      versionHistoryService: { deleteHistory: jest.fn(async () => 0) },
     } as unknown as FrameworkResourceContext;
   });
 
@@ -106,5 +114,57 @@ describe('framework deletion refuses what the server ships', () => {
 
     expect(JSON.stringify(result)).toMatch(/ships with the server/i);
     expect(existsSync(dir)).toBe(true);
+  });
+
+  /*
+   * The configured default is where the active framework goes when its own framework is removed,
+   * so deleting it would leave that selection with nothing to resolve to. The refusal has to come
+   * before the directory is removed and before the framework is unregistered: a refusal raised
+   * after either one reports an error over a framework that is already gone.
+   */
+  it('refuses to delete the configured default framework, whatever case names it, and removes nothing', async () => {
+    const dir = makeFrameworkDir('team-default');
+    configuredDefault = 'TEAM-DEFAULT';
+    const processor = new FrameworkLifecycleProcessor(ctx, validator);
+
+    const result = await processor.handleDelete(del('team-default'));
+
+    expect(JSON.stringify(result)).toMatch(/team-default/);
+    expect(JSON.stringify(result)).toMatch(/frameworks\.defaultFramework/);
+    expect(existsSync(dir)).toBe(true);
+    expect(removeFramework).not.toHaveBeenCalled();
+  });
+
+  it('a preview of deleting the configured default reports the same refusal', async () => {
+    makeFrameworkDir('team-default');
+    configuredDefault = 'team-default';
+    const processor = new FrameworkLifecycleProcessor(ctx, validator);
+
+    const result = await processor.handleDelete({
+      action: 'preview',
+      preview_action: 'delete',
+      id: 'team-default',
+    } as unknown as FrameworkManagerInput);
+
+    expect(JSON.stringify(result)).toMatch(/frameworks\.defaultFramework/);
+    expect(JSON.stringify(result)).not.toMatch(/Preview/);
+  });
+
+  it('follows a change to the configured default made after the processor was built', async () => {
+    const oldDefaultDir = makeFrameworkDir('team-a');
+    const newDefaultDir = makeFrameworkDir('team-b');
+    configuredDefault = 'team-a';
+    const processor = new FrameworkLifecycleProcessor(ctx, validator);
+
+    configuredDefault = 'team-b';
+
+    const refused = await processor.handleDelete(del('team-b'));
+    expect(JSON.stringify(refused)).toMatch(/frameworks\.defaultFramework/);
+    expect(existsSync(newDefaultDir)).toBe(true);
+
+    const allowed = await processor.handleDelete(del('team-a'));
+    expect(JSON.stringify(allowed)).not.toMatch(/frameworks\.defaultFramework/);
+    expect(existsSync(oldDefaultDir)).toBe(false);
+    expect(removeFramework).toHaveBeenCalledWith('team-a');
   });
 });

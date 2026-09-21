@@ -89,20 +89,20 @@ repo/
 <details>
 <summary><strong>Available Scripts</strong> (run inside <code>server/</code>)</summary>
 
-| Command                                     | Description                                 |
-| ------------------------------------------- | ------------------------------------------- |
-| `npm run build`                             | esbuild bundle to `dist/index.js`           |
-| `npm run typecheck`                         | Strict TypeScript checks without emit       |
-| `npm run lint` / `lint:fix`                 | ESLint validation + autofix                 |
-| `npm run lint:ratchet`                      | Fail if ESLint violations increased         |
-| `npm run validate:format`                   | Prettier check on repo-level JSON/MD/YAML   |
-| `npm run validate:all`                      | Full validation suite (deps + architecture) |
-| `npm run validate:arch`                     | Dependency Cruiser architecture rules       |
-| `npm test`                                  | Unit suite only (see `test:integration`)    |
-| `npm run test:integration`                  | Integration tests only                      |
-| `npm run test:coverage`                     | Coverage report (target: >80%)              |
-| `npm run generate:contracts`                | Regenerate MCP schemas from contracts       |
-| `npm run start:stdio` / `start:development` | STDIO / Streamable HTTP for manual testing  |
+| Command                                     | Description                                                                     |
+| ------------------------------------------- | ------------------------------------------------------------------------------- |
+| `npm run build`                             | esbuild bundle to `dist/index.js`                                               |
+| `npm run typecheck`                         | Strict TypeScript checks without emit                                           |
+| `npm run lint` / `lint:fix`                 | ESLint validation + autofix                                                     |
+| `npm run lint:ratchet`                      | Fail if ESLint violations increased, or decreased without lowering the baseline |
+| `npm run validate:format`                   | Prettier check on every tracked JSON/MD/YAML (repo + server)                    |
+| `npm run validate:all`                      | Full validation suite (deps + architecture)                                     |
+| `npm run validate:arch`                     | Dependency Cruiser architecture rules                                           |
+| `npm test`                                  | Unit suite only (see `test:integration`)                                        |
+| `npm run test:integration`                  | Integration tests only                                                          |
+| `npm run test:coverage`                     | Coverage report (target: >80%)                                                  |
+| `npm run generate:contracts`                | Regenerate MCP schemas from contracts                                           |
+| `npm run start:stdio` / `start:development` | STDIO / Streamable HTTP for manual testing                                      |
 
 </details>
 
@@ -287,6 +287,35 @@ npm run typecheck && npm run lint:ratchet && npm test && npm run validate:all
 > Pre-push hooks select the appropriate route automatically. If a push is blocked, fix
 > the issue -- don't bypass hooks.
 
+### Adding or editing a validation script
+
+Two gates read **every** script in the repo, so no check scoped to the file you edited will see
+them. Run both when you add a `server/scripts/validate-*` or root `scripts/*` entry, when you add or
+remove an export, or when you add a file's first import:
+
+```bash
+node scripts/validate-suite-membership.js   # ~0.1s -- every validator declares what it touches
+node scripts/knip-ratchet.js check          # ~1min -- unused exports, files, types
+```
+
+`validate:suite-membership` fails until the new script has a `SUITE` entry declaring its substrate
+(`io`, `reads`, `spawn`, `converse`, ...). The detector re-derives those textually from the source
+and strips comments and regex literals but **not strings** -- so a signal token inside a self-test
+fixture string counts. Declare it on the SUITE entry with a comment rather than rewriting the source
+to hide it; `validate:contributing`'s entry is the precedent.
+
+A new validator also belongs in `validate:all`, which CI runs whole. A step added to a hook that CI
+does not run breaks the gate contract described above.
+
+Two more things a new validator owes its readers:
+
+- **A self-test that fires on the defect that motivated it.** Verify both directions -- restore the
+  pre-fix content and show the gate exits non-zero, then show it passes on the finished tree. A gate
+  that cannot catch its own motivating instance is not a gate.
+- **Its blind spots, stated in its own header.** A narrow gate with a documented blind spot is worth
+  more than a broad one with silent false negatives. If it exempts a symbol by name, make it fail
+  closed when that symbol disappears -- otherwise a rename widens the exemption to everything.
+
 ## Issues & Pull Requests
 
 ### Opening an Issue
@@ -300,21 +329,33 @@ pre-filled from your branch instead of typing into it -- the session that did th
 **edit** the reader's artifact, not author it from inside its own reasoning:
 
 ```bash
-cd server
-npm run pr:body -- --out /tmp/pr-body.md           # skeleton: commit subjects, plan link, open rows, largest diffs
-$EDITOR /tmp/pr-body.md                              # fill every ___ and empty table cell
-node ../scripts/validate-pr-body.mjs --body-file /tmp/pr-body.md --title "feat(scope): outcome"
-gh pr create --title "feat(scope): outcome" --body-file /tmp/pr-body.md
+TITLE="feat(scope): outcome"
+npm run pr:body -- --out /tmp/pr-body.md              # skeleton: commit subjects, plan link, open rows, largest diffs
+$EDITOR /tmp/pr-body.md                               # fill every ___ and empty table cell
+npm run pr:check -- --body-file /tmp/pr-body.md --title "$TITLE"
+gh pr create --title "$TITLE" --body-file /tmp/pr-body.md
 ```
 
 **Note**: `gh pr create --body "..."` BYPASSES the template silently. Use `--body-file`.
 
-The `PR Conventions` workflow runs the same validator on every PR and lints the title with the
-repo's own `commitlint.config.mjs`. It is a **required** context (since 2026-09-02) on every
-non-bot PR; bot PRs (renovate, release-please) are exempt from the authored-body checks because
-their bodies are machine-owned. The validator fails on surviving `___` placeholders, unfilled
-verification rows, and a non-finalized `Plan:` footer. CI also auto-comments a validation summary
-and the changed-file list -- never maintain those by hand.
+**`pr:check` is the whole gate, not half of it.** The `PR Conventions` workflow's gating steps on
+a non-bot PR are two positive controls, the body check, and `commitlint` on the title -- and
+`pr:check` runs every one of them locally, from the repo root, in about a second. Run it before
+`gh pr create`; a green run means that workflow will be green too.
+
+That completeness is enforced, not promised. `scripts/pr-check.mjs` names each workflow step it
+mirrors and `server/tests/unit/scripts/pr-check-ci-parity.test.ts` reads the workflow file and
+fails when the two sets diverge, so a fifth gating step added to CI breaks the suite until the
+local mirror catches up. _Until 2026-09-15 this section named only the body check. The title is
+judged separately -- the script that checks the body says outright that it "does not read the
+title beyond its type" -- so following these instructions exactly still shipped an unchecked
+title, which is how #283 failed on `subject-case` after passing locally._
+
+The `PR Conventions` workflow is a **required** context (since 2026-09-02) on every non-bot PR;
+bot PRs (renovate, release-please) are exempt from the authored-body checks because their bodies
+are machine-owned. The body check fails on surviving `___` placeholders, unfilled verification
+rows, and a non-finalized `Plan:` footer. CI also auto-comments a validation summary and the
+changed-file list -- never maintain those by hand.
 
 **The body is a two-register document.** Reader voice above the fold (the 400-word budget counts
 only this -- fenced blocks, tables, and `<details>` content are exempt); below it, an optional

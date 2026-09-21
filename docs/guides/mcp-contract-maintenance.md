@@ -16,6 +16,13 @@ activation rule lives in `.claude/rules/mcp-contracts.md`.
 - Parameter metadata → generated to `_generated/*.generated.ts`
 - TypeScript documentation and parameter tables
 
+The generated tool description is what every client reads, whichever framework is active. A
+framework's `toolDescriptions` entry is appended after it under an `ACTIVE FRAMEWORK [TYPE]:`
+heading and never replaces it, so the action list, resource types and syntax live in the contract
+alone. A labelled list in a contract description (`ACTIONS: a | b`) must name exactly the values of
+the enum it restates. `npm run validate:framework-tool-descriptions` checks both that and the
+bundled frameworks' guidance.
+
 Contracts no longer generate Zod schemas — `mcp-schemas.ts` has been removed.
 
 ## Critical: Upstream Verification

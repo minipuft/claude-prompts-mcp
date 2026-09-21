@@ -18,6 +18,7 @@ import * as path from 'node:path';
 import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 
 import { SqliteEngine } from '../../../src/infra/database/index.js';
+import { testScratchPath } from '../../helpers/scratch-path.js';
 
 const mockLogger = {
   info: jest.fn() as jest.Mock,
@@ -26,7 +27,7 @@ const mockLogger = {
   debug: jest.fn() as jest.Mock,
 };
 
-const testDir = path.join(process.cwd(), 'tests/tmp/wal-checkpoint-test');
+const testDir = testScratchPath('wal-checkpoint-test');
 const walPath = path.join(testDir, 'runtime-state', 'state.db-wal');
 
 /** Write enough rows that the WAL is unambiguously non-empty before we checkpoint. */
@@ -67,7 +68,9 @@ describe('WAL checkpoint on shutdown', () => {
   });
 
   it('truncates a grown WAL when the engine shuts down', async () => {
-    const engine = await SqliteEngine.getInstance(testDir, mockLogger as any);
+    const engine = await SqliteEngine.getInstance(mockLogger as any, {
+      dbPath: path.join(testDir, 'runtime-state', 'state.db'),
+    });
     await engine.initialize();
 
     growWal(engine);
@@ -82,7 +85,9 @@ describe('WAL checkpoint on shutdown', () => {
   });
 
   it('still closes the database when the checkpoint fails', async () => {
-    const engine = await SqliteEngine.getInstance(testDir, mockLogger as any);
+    const engine = await SqliteEngine.getInstance(mockLogger as any, {
+      dbPath: path.join(testDir, 'runtime-state', 'state.db'),
+    });
     await engine.initialize();
     growWal(engine);
 

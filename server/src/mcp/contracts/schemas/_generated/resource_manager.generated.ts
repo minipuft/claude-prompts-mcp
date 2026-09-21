@@ -31,6 +31,9 @@ export type resource_managerParamName =
   | 'enabled_only'
   | 'confirm'
   | 'reason'
+  | 'full_restart'
+  | 'goal'
+  | 'include_legacy'
   | 'category'
   | 'user_message_template'
   | 'system_message'
@@ -43,6 +46,13 @@ export type resource_managerParamName =
   | 'tool_ids'
   | 'unset'
   | 'chain_steps'
+  | 'chain_step_operation'
+  | 'chain_step_index'
+  | 'chain_step_data'
+  | 'chain_step_order'
+  | 'edges'
+  | 'budget'
+  | 'artifacts'
   | 'tools'
   | 'gate_configuration'
   | 'composer'
@@ -53,10 +63,11 @@ export type resource_managerParamName =
   | 'agent_type'
   | 'execution_hint'
   | 'filter'
-  | 'format'
   | 'detail'
   | 'search_query'
+  | 'type'
   | 'gate_type'
+  | 'subject'
   | 'severity'
   | 'enforcement_mode'
   | 'guidance'
@@ -90,15 +101,16 @@ export type resource_managerParamName =
 export const resource_managerParameters: ToolParameter[] = [
   {
     name: 'resource_type',
-    type: 'enum[prompt|gate|framework]',
-    description: 'Type of resource to manage. Routes to appropriate handler.',
+    type: 'enum[prompt|gate|framework|category]',
+    description:
+      "Type of resource to manage. Routes to appropriate handler. `category` manages a prompt category's `category.yaml` — the directory holding the prompts is NOT the resource, so `delete` removes the declaration and leaves every prompt in place.",
     required: true,
     status: 'working',
     compatibility: 'canonical',
   },
   {
     name: 'action',
-    type: 'enum[create|validate|update|delete|reload|list|inspect|analyze_type|analyze_gates|guide|switch|history|rollback|compare]',
+    type: 'enum[create|validate|update|delete|reload|list|inspect|preview|analyze_type|analyze_gates|guide|switch|history|rollback|compare]',
     description:
       'Operation to perform. Prompt-only: validate/analyze_type/analyze_gates/guide. validate checks a creation draft without writing. preview renders what update/delete/rollback would do without writing, naming its target in `preview_action`; it is not destructive, so it takes no `confirm`. Framework-only: switch. Versioning: history/rollback/compare.',
     required: true,
@@ -148,6 +160,33 @@ export const resource_managerParameters: ToolParameter[] = [
     description: 'Audit reason for reload/delete/switch operations.',
     status: 'working',
     compatibility: 'canonical',
+  },
+  {
+    name: 'full_restart',
+    type: 'boolean',
+    description:
+      '[Prompt] For reload, create, update and delete: restart the server instead of hot-reloading prompts. Default: false.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'goal',
+    type: 'string',
+    description:
+      '[Prompt guide] What you are trying to do; the guide ranks its suggested actions against it.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'include_legacy',
+    type: 'boolean',
+    description:
+      '[Prompt guide] Show full details for actions that are not marked working. Default: false.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
   },
   {
     name: 'category',
@@ -211,7 +250,7 @@ export const resource_managerParameters: ToolParameter[] = [
   },
   {
     name: 'preview_action',
-    type: 'string',
+    type: 'enum[update|delete|rollback]',
     description:
       'Required with `action:"preview"`, and refused without it — it names WHICH mutation is being previewed. `update` (prompt only): returns the resulting text bodies and the diff, for a full update or a `patch`. `rollback` (prompt|gate|framework): returns the diff between the current state and the version you would restore, and still refuses a version whose snapshot is incomplete. `delete` (prompt|gate|framework): reports what would be removed, including the prompts that reference it. A preview writes nothing, records no version, and needs no `confirm` — it is not a destructive action. `update` is refused for gate and framework, which have no update preview path and would perform the update.',
     status: 'working',
@@ -220,7 +259,7 @@ export const resource_managerParameters: ToolParameter[] = [
   },
   {
     name: 'tool_operation',
-    type: '"add" | "remove"',
+    type: 'enum[add|remove]',
     description:
       '[Prompt] Update-only: how a `tools` change relates to the CURRENT binding. Omit it and a supplied `tools` array REPLACES the binding, so a narrowed array unbinds the dropped ids and leaves their `tools/{id}/` files on disk — the non-destructive default. `add` unions the supplied definitions with what is already bound. `remove` names ids in `tool_ids`, unbinds them AND deletes their directories, and therefore requires `confirm: true`: it is the only `update` that destroys a file the caller sent no replacement for.',
     status: 'working',
@@ -240,24 +279,88 @@ export const resource_managerParameters: ToolParameter[] = [
     name: 'unset',
     type: 'array<string>',
     description:
-      '[Prompt] Update-only: CLEAR these fields, naming them as the tool parameters you would use to set them. Supplying a value SETS it and omitting it PRESERVES it, so before this there was no way to say REMOVE — `system_message: ""` set an empty body rather than dropping the key, and for the fields the writer carries forward off disk (`tools`, `injection`, `register_with_mcp`, `mcp_prompt_mode`, `subagent_model`, `agent_type`, `composer`) omission was already the preserve signal. Unsettable: agent_type, arguments, chain_steps, composer, gate_configuration, injection, mcp_prompt_mode, register_with_mcp, subagent_model, system_message, tools. `name`, `category`, `description` and `user_message_template` are refused by name: they stay settable, but a prompt missing one does not load. Unsetting `system_message` also deletes `system-message.md`; unsetting `tools` unbinds without deleting `tools/{id}/`. A field both supplied and unset in one call is refused rather than resolved in an unseen order.',
+      '[Prompt] Update-only: CLEAR these fields, naming them as the tool parameters you would use to set them. Supplying a value SETS it and omitting it PRESERVES it, so before this there was no way to say REMOVE — `system_message: ""` set an empty body rather than dropping the key, and for the fields the writer carries forward off disk (`tools`, `injection`, `register_with_mcp`, `mcp_prompt_mode`, `subagent_model`, `agent_type`, `composer`) omission was already the preserve signal. Unsettable: agent_type, arguments, artifacts, budget, chain_steps, composer, edges, gate_configuration, injection, mcp_prompt_mode, register_with_mcp, subagent_model, system_message, tools. `name`, `category`, `description` and `user_message_template` are refused by name: they stay settable, but a prompt missing one does not load. Unsetting `system_message` also deletes `system-message.md`; unsetting `tools` unbinds without deleting `tools/{id}/`. A field both supplied and unset in one call is refused rather than resolved in an unseen order.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
   },
   {
     name: 'chain_steps',
-    type: 'array<step>',
-    description: '[Prompt] Chain steps definition for multi-step prompts.',
+    type: 'array<object>',
+    description:
+      '[Prompt] Chain steps definition for multi-step prompts. Each entry: promptId and stepName required; optional id (kebab-case, minted from stepName when omitted), args, inputMapping, outputMapping, visibility, subagentModel, agentType, framework, retries, inlineGateIds, inlineGateCriteria, delegated. Extra keys pass through uninterpreted.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'chain_step_operation',
+    type: 'enum[add|remove|reorder|update]',
+    description:
+      '[Prompt] Update-only: edit ONE step instead of replacing the whole array. Omit it and a supplied `chain_steps` replaces every step. `add` inserts `chain_step_data` at `chain_step_index`; `remove` drops the step at `chain_step_index`; `reorder` applies `chain_step_order`; `update` overlays `chain_step_data` onto the step at `chain_step_index`, the per-step analogue of `argument_updates`.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'chain_step_index',
+    type: 'number',
+    description:
+      '[Prompt] Target index for `chain_step_operation` add (insertion point), remove, or update (step to edit). Zero-based, and refused outside the current step range.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'chain_step_data',
+    type: 'object',
+    description:
+      '[Prompt] Step definition for `chain_step_operation: "add"` (the whole step) or `"update"` (the fields to overlay). Same shape as one entry of `chain_steps`.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'chain_step_order',
+    type: 'array<number>',
+    description:
+      '[Prompt] New index order for `chain_step_operation: "reorder"`. Must be a permutation of [0..n-1] for the current step count; anything else is refused rather than partially applied.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'edges',
+    type: 'array<object<{from:string,to:string}>>',
+    description:
+      '[Prompt] Dependency edges between this chain\'s steps, each `{from, to}` naming a step id — an explicit step `id`, or the kebab-case slug minted from `stepName`. Ordering constraints, not control flow: the loader linearizes them into `chainSteps` order at load time. An edge naming a step the chain does not declare, or a cycle, is refused and the write is rolled back — so a `chain_steps` rewrite that drops a step an edge still names must send the corrected `edges` in the SAME call, which is validated as one state. Send `unset: ["edges"]` to drop every edge and keep the authored step order.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'budget',
+    type: 'object<{maxNodes?:number,maxFanOut?:number,maxInsertions?:number,declaredCostCeiling?:number,pauseOnBlocking?:boolean}>',
+    description:
+      '[Prompt] Run-level budget for a chain, the same shape and the same caps a submitted Workflow IR declares. A declared structural cap may only NARROW the server default, so a value above it is refused here rather than silently clamped, and an unrecognized key is refused rather than dropped. `pauseOnBlocking: true` HOLDS the run on a blocking unknown until a `gate_action` verb clears it. Send `unset: ["budget"]` to drop the declaration and run on the server defaults.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'artifacts',
+    type: 'object<{produces?:string[],fromArgument?:string}>',
+    description:
+      '[Prompt] What this prompt\'s run touches, in the fixed artifact-kind vocabulary (source, test, docs, readme, plan, changelog, config, prompt, gate, pr-body). `produces` names kinds it always yields; `fromArgument` names one declared argument whose value carries the paths this run touches, and must match an argument the prompt declares — the two union. This is the only channel a run has for declaring artifacts, and artifact-scoped gates attach from it. Send `unset: ["artifacts"]` to declare nothing.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
   },
   {
     name: 'tools',
-    type: 'array<{id,name,script,description?,runtime?,schema?,trigger?,confirm?,strict?,timeout?}>',
+    type: 'array<unknown>',
     description:
-      '[Prompt] Script tools to create with the prompt. Each tool creates files in tools/{id}/ subdirectory. Required: id, name, script. Optional: description, runtime (python|node|shell|auto), schema (JSON Schema object), trigger (schema_match|explicit|always|never), confirm, strict, timeout.',
+      '[Prompt] Script tools to create with the prompt. Each tool creates files in tools/{id}/ subdirectory. Required: id, name, script. Optional: description, runtime (python|node|shell|auto), schema (JSON Schema object), trigger (schema_match|explicit|always|never), confirm, strict, timeout. Element shape is not constrained at this boundary — it is validated against the script tool schema when written.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
@@ -293,7 +396,7 @@ export const resource_managerParameters: ToolParameter[] = [
     name: 'register_with_mcp',
     type: 'boolean',
     description:
-      '[Prompt] Whether this prompt registers as a native MCP prompt. FREEZE HAZARD: this value is normally resolved prompt -> category -> global -> default true; setting it writes an explicit prompt-level value that overrides all three permanently, so the prompt stops following any later change to its category or global default. Omit unless this prompt must differ from its category.',
+      '[Prompt | Category] Whether prompts register as native MCP prompts. On resource_type prompt — FREEZE HAZARD: this value is normally resolved prompt -> category -> global -> default true; setting it writes an explicit prompt-level value that overrides all three permanently, so the prompt stops following any later change to its category or global default. Omit unless this prompt must differ from its category. On resource_type category it writes registerWithMcp into category.yaml, which is that middle level — no freeze hazard, since every prompt in the category still inherits it unless it declares its own.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
@@ -302,7 +405,7 @@ export const resource_managerParameters: ToolParameter[] = [
     name: 'mcp_prompt_mode',
     type: 'enum[expand|launch]',
     description:
-      '[Prompt] Native MCP prompt behaviour: expand (plain template text) or launch (route through prompt_engine). FREEZE HAZARD: normally resolved prompt -> category -> default expand; an explicit value overrides both permanently and the prompt stops following any later change to its category default. Omit unless this prompt must differ from its category.',
+      '[Prompt | Category] Native MCP prompt behaviour: expand (plain template text) or launch (route through prompt_engine). On resource_type prompt — FREEZE HAZARD: normally resolved prompt -> category -> default expand; an explicit value overrides both permanently and the prompt stops following any later change to its category default. Omit unless this prompt must differ from its category. On resource_type category it writes mcpPromptMode into category.yaml, the default every prompt in the category inherits.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
@@ -341,14 +444,6 @@ export const resource_managerParameters: ToolParameter[] = [
     includeInDescription: false,
   },
   {
-    name: 'format',
-    type: 'enum[table|json|text]',
-    description: '[Prompt] Output format for list/inspect.',
-    status: 'working',
-    compatibility: 'canonical',
-    includeInDescription: false,
-  },
-  {
     name: 'detail',
     type: 'enum[summary|full]',
     description:
@@ -366,10 +461,28 @@ export const resource_managerParameters: ToolParameter[] = [
     includeInDescription: false,
   },
   {
-    name: 'gate_type',
+    name: 'type',
     type: 'enum[validation|guidance]',
     description:
-      "[Gate] Gate type: validation (pass/fail) or guidance (advisory). Default: validation. Writes the gate.yaml key 'type'; the separate gate.yaml key 'gate_type' (framework|category|custom) is not authorable through this tool.",
+      "[Gate] Gate type: validation (pass/fail) or guidance (advisory). Default: validation. Writes the gate.yaml key 'type'.",
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'gate_type',
+    type: 'enum[framework|category|custom]',
+    description:
+      "[Gate] Gate classification. Default: custom. Writes the gate.yaml key 'gate_type'; 'framework' marks a gate that requires an active framework and is filtered out when framework gates are disabled.",
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'subject',
+    type: 'string',
+    description:
+      "[Gate] Free kebab-case tag naming what this gate reminds about (e.g. 'code-quality'). An installation's `gates.harnessCovers` (config.jsonc, or config.json) suppresses reminder-tier gates whose subject it lists; check-tier gates (shell_verify, script_tool) are never suppressed. Lowercase letters, digits and hyphens only.",
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
@@ -402,8 +515,9 @@ export const resource_managerParameters: ToolParameter[] = [
   },
   {
     name: 'pass_criteria',
-    type: 'array<string>',
-    description: '[Gate] Structured pass criteria definitions.',
+    type: 'array<object>',
+    description:
+      "[Gate] Structured pass criteria definitions. Each entry is an object, not a bare string: optional type (inline_guidance|framework_compliance|shell_verify|script_tool) plus the fields that type reads — framework compliance's framework/min_compliance_score/severity/quality_indicators, shell verification's shell_command/shell_timeout/shell_working_dir/shell_env/shell_max_attempts/shell_preset/shell_stdin_source/shell_response_env_var, or script tool's script_tool_id/script_tool_input/script_tool_timeout/script_tool_working_dir.",
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
@@ -443,9 +557,9 @@ export const resource_managerParameters: ToolParameter[] = [
   },
   {
     name: 'phases',
-    type: 'array<object>',
+    type: 'array<unknown>',
     description:
-      '[Framework] Phase definitions: id, name, description, prompts. The advanced fields this description used to fold in are declared as their own parameters below.',
+      '[Framework] Phase definitions: id, name, description, prompts. The advanced fields this description used to fold in are declared as their own parameters below. Element shape is not constrained at this boundary; the framework loader rejects a malformed entry when phases.yaml is read back.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
@@ -713,7 +827,7 @@ export const resource_managerCommands: ToolCommand[] = [
   {
     id: 'prompt:list',
     summary: 'List prompts with filters.',
-    parameters: ['resource_type', 'action', 'filter', 'format', 'detail', 'search_query'],
+    parameters: ['resource_type', 'action', 'filter', 'detail', 'search_query'],
     status: 'working',
   },
   {
@@ -731,7 +845,7 @@ export const resource_managerCommands: ToolCommand[] = [
   {
     id: 'prompt:guide',
     summary: 'Get action suggestions for prompt management.',
-    parameters: ['resource_type', 'action'],
+    parameters: ['resource_type', 'action', 'goal', 'include_legacy'],
     status: 'working',
   },
   {
@@ -742,6 +856,7 @@ export const resource_managerCommands: ToolCommand[] = [
       'action',
       'id',
       'name',
+      'type',
       'gate_type',
       'description',
       'guidance',
@@ -759,6 +874,7 @@ export const resource_managerCommands: ToolCommand[] = [
       'action',
       'id',
       'name',
+      'type',
       'gate_type',
       'description',
       'guidance',
@@ -772,6 +888,44 @@ export const resource_managerCommands: ToolCommand[] = [
     id: 'gate:list',
     summary: 'List all registered gates.',
     parameters: ['resource_type', 'action', 'enabled_only'],
+    status: 'working',
+  },
+  {
+    id: 'category:create',
+    summary:
+      "Author a prompt category's category.yaml. Succeeds on a directory that already holds prompts — that is the first declaration, not a duplicate.",
+    parameters: [
+      'resource_type',
+      'action',
+      'id',
+      'name',
+      'description',
+      'register_with_mcp',
+      'mcp_prompt_mode',
+    ],
+    status: 'working',
+  },
+  {
+    id: 'category:update',
+    summary:
+      "Update a category's declaration. Only provided fields change; omitted fields are carried forward from the file on disk.",
+    parameters: [
+      'resource_type',
+      'action',
+      'id',
+      'name',
+      'description',
+      'register_with_mcp',
+      'mcp_prompt_mode',
+      'skip_version',
+    ],
+    status: 'working',
+  },
+  {
+    id: 'category:list',
+    summary:
+      'List every category across the bundled, primary and overlay prompt roots, marking which declare a category.yaml and which have their name and description derived from the directory name.',
+    parameters: ['resource_type', 'action'],
     status: 'working',
   },
   {
@@ -824,7 +978,7 @@ export const resource_managerCommands: ToolCommand[] = [
   {
     id: 'common:inspect',
     summary: 'Inspect resource details.',
-    parameters: ['resource_type', 'action', 'id', 'detail', 'format'],
+    parameters: ['resource_type', 'action', 'id', 'detail'],
     status: 'working',
   },
   {

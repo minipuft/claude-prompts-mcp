@@ -2,24 +2,11 @@ id: educational-clarity
 name: Educational Content Clarity
 type: validation
 description: Ensures educational content is clear, well-structured, and pedagogically sound
+subject: education
 guidanceFile: guidance.md
 
 pass_criteria:
   - type: inline_guidance
-    min_length: 400
-    required_patterns:
-      - example
-      - step
-      - understand
-      - learn
-  - type: inline_guidance
-    keyword_count:
-      example: 2
-      for example: 1
-    regex_patterns:
-      - '^##\s+.*$'
-      - '^\d+\.\s+.*$'
-      - '^\s*[-*]\s+.*$'
 
 retry_config:
   max_attempts: 2

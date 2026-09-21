@@ -137,6 +137,8 @@ const createInMemoryDb = (): { db: DatabaseSync; port: DatabasePort } => {
       unknowns_closed INTEGER,
       nodes_inserted INTEGER,
       nodes_skipped INTEGER,
+      interrupts_raised INTEGER,
+      remainders_accepted INTEGER,
       handoff_evidence TEXT CHECK (
         handoff_evidence IS NULL
         OR handoff_evidence IN ('ok', 'trailer', 'node-line', 'node-mismatch')
@@ -320,7 +322,6 @@ describe('a delegated step resumed through the real blueprint restore (Tier 2 ro
       .mockImplementation(() => {}) as unknown as jest.SpiedFunction<() => void>;
 
     sessionStore = new ChainSessionStore(logger, new StubTextReferenceStore() as any, {
-      serverRoot: '/tmp/test-delegated-resume-brief',
       cleanupIntervalMs: 60_000,
     });
 

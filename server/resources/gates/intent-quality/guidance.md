@@ -38,3 +38,17 @@ When secondary type is declared, primary determines route. Secondary adds a cons
 - Acceptance criteria without observable behaviors (untestable)
 - Compound work type but secondary type not declared
 - External dependencies listed without version
+
+## Checklist
+
+- Work Type is one of: bug_fix, feature, refactor, explore, optimize
+- Secondary Type is declared: none or a valid work type
+- Confidence level is specified: high, medium, or low
+- Scope includes at least one specific file path or system name
+- Risk level is assessed: low, medium, or high
+- External Dependencies declared: none or lib@version
+- Source Spec declared: none or reference to spec/ticket/plan
+- Acceptance Criteria extracted when Source Spec exists, each with observable behavior and verification method
+- Problem Statement follows 'Current state → Desired state' format
+- Recommended Approach provides actionable next steps (2-3 sentences)
+- Next Phase matches Work Type routing: bug_fix→/testing, feature→/refactoring, refactor→/refactoring, explore→continue, optimize→profile

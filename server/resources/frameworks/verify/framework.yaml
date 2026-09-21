@@ -15,11 +15,10 @@ gates:
 toolDescriptions:
   prompt_engine:
     description: >-
-      PROMPT ENGINE [VERIFY]: Resume content validation with V.E.R.I.F.Y
-      framework: Voice authenticity, Evidence verification, Resonance mapping,
-      Inspect patterns, Field isolation, Yield presentation.
+      Resume content validation with V.E.R.I.F.Y: Voice authenticity, Evidence verification,
+      Resonance mapping, Inspect patterns, Field isolation, Yield presentation.
     parameters:
-      command: Resume or application content audit prompt
+      command: The prompt to run is a resume or application content audit.
 frameworkGates:
   - id: voice_authenticity
     name: Voice Authenticity

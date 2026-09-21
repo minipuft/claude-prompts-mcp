@@ -60,6 +60,15 @@ export interface FrameworkDefinition {
   applicableTypes: string[];
   priority: number;
   enabled: boolean;
+  /**
+   * Root directory the definition behind this framework was loaded FROM (P4.18).
+   *
+   * Carried from `FrameworkResourceDefinition.sourceRoot`, which the loader stamps. Present so the
+   * served catalog can answer "which root is answering this id" without a second derivation —
+   * `FrameworkDefinition` is a projection of the guide, and provenance is the one fact the
+   * quarantine report needs that the projection used to drop.
+   */
+  sourceRoot?: string | undefined;
 }
 
 /**
@@ -288,6 +297,14 @@ export interface FrameworkGuide {
   /** The framework type discriminator */
   readonly type: FrameworkType;
   readonly version: string;
+  /**
+   * Root directory the definition behind this guide was loaded from (P4.18).
+   *
+   * Optional because a guide can be constructed from a definition that never came off disk (a
+   * custom guide registered in-process). A plain string rather than the definition object: this
+   * module is the types layer and must not import `definitions/`.
+   */
+  readonly sourceRoot?: string | undefined;
 
   /**
    * Guide the creation of new prompts using this framework

@@ -43,7 +43,13 @@ import type {
   UnknownLedgerEntry,
   UnknownObservation,
 } from '#shared/types/chain-session.js';
-import type { Logger } from '#shared/types/index.js';
+import type {
+  ChainCompleteNotification,
+  HookRegistryPort,
+  Logger,
+  McpNotificationEmitterPort,
+  PipelineHookContext,
+} from '#shared/types/index.js';
 import type { DatabasePort, StateStoreOptions } from '#shared/types/persistence.js';
 
 // Single owner of unknowns-ledger transition rules. Imported rather than restated here so
@@ -177,10 +183,19 @@ export type SessionClearedCallback = (
 ) => void | Promise<void>;
 
 export interface ChainSessionStoreOptions {
-  serverRoot?: string;
   defaultSessionTimeoutMs?: number;
   reviewSessionTimeoutMs?: number;
   cleanupIntervalMs?: number;
+  /**
+   * Database the store persists through, supplied at construction.
+   *
+   * The constructor starts `initialize()` immediately, so a port that arrives only through
+   * `setDatabasePort()` leaves the store observable without persistence until the setter runs —
+   * and every start warned "persistence disabled" for a store that went on to persist. Supplying
+   * it here makes the first initialization the real one. A `DatabasePort` passed as the positional
+   * fourth argument takes precedence; that slot is the tests' injection point.
+   */
+  databasePort?: DatabasePort;
   /**
    * Workspace scope stamped on the `chain_sessions` hook projection.
    *
@@ -239,6 +254,8 @@ export class ChainSessionStore implements ChainSessionService {
     return { ...this.pidScope, ...(this.workspaceScope ?? {}) };
   }
   private initPromise!: Promise<void>;
+  private hookRegistry?: HookRegistryPort;
+  private notificationEmitter?: McpNotificationEmitterPort;
 
   constructor(
     logger: Logger,
@@ -256,6 +273,9 @@ export class ChainSessionStore implements ChainSessionService {
     } else if (dbEngineOrTracker !== undefined) {
       this.injectedDbEngine = dbEngineOrTracker;
     }
+    // Read by `initialize()` below. Production passes the tracker positionally, so the port has
+    // to travel in the options object rather than in the shared fourth slot.
+    this.injectedDbEngine ??= options.databasePort;
 
     this.defaultSessionTimeoutMs = options.defaultSessionTimeoutMs ?? DEFAULT_SESSION_TIMEOUT_MS;
     this.reviewSessionTimeoutMs =
@@ -273,6 +293,19 @@ export class ChainSessionStore implements ChainSessionService {
     // Initialize asynchronously — store promise so callers can await it
     this.initPromise = this.initialize();
     this.startCleanupScheduler();
+  }
+
+  /**
+   * Late-bind the run-lifecycle announcement channels (setter injection, matching
+   * `setDatabasePort` above). Both are built by the composition root after this store, so
+   * neither can travel through the constructor.
+   */
+  setRunAnnouncementChannels(channels: {
+    hookRegistry?: HookRegistryPort;
+    notificationEmitter?: McpNotificationEmitterPort;
+  }): void {
+    this.hookRegistry = channels.hookRegistry;
+    this.notificationEmitter = channels.notificationEmitter;
   }
 
   /** Late-bind DatabasePort (setter injection, matching codebase convention). */
@@ -929,6 +962,7 @@ export class ChainSessionStore implements ChainSessionService {
     );
 
     await this.saveSessions();
+    await this.announceRunTerminal(session, target);
     return true;
   }
 
@@ -1039,7 +1073,63 @@ export class ChainSessionStore implements ChainSessionService {
     this.logger.info(`[ChainRunStatus] Cancelled session ${sessionId} (was '${currentStatus}')`);
 
     await this.saveSessions();
+    await this.announceRunTerminal(session, 'cancelled');
     return true;
+  }
+
+  /**
+   * Announce that a run reached a terminal status, to hook consumers and to the client.
+   *
+   * Called from the two methods that WRITE `runStatus` — `transitionRunStatus` and
+   * `cancelChain` — each after its own `saveSessions()` resolves, so a client is never told a
+   * run ended before the row saying so is durable. Both writers return early when the status is
+   * already what is being set and refuse a transition out of a terminal status, which is what
+   * makes this exactly-once per run rather than once per caller: `advanceStep` re-advancing past
+   * the same final node, or a second `cancelChain`, reaches neither call.
+   *
+   * A non-terminal transition announces nothing; `working -> working` is not an event.
+   *
+   * One catch around both channels, matching `GateVerdictProcessor.emitGateEvents`. An
+   * announcement that fails must not turn a persisted terminal status into a failed call —
+   * that would make the run look live to its next caller.
+   */
+  private async announceRunTerminal(session: ChainSession, status: ChainRunStatus): Promise<void> {
+    if (!isTerminalRunStatus(status)) return;
+    if (this.hookRegistry === undefined && this.notificationEmitter === undefined) return;
+
+    // `isTerminalRunStatus` is a boolean predicate over the shared TERMINAL_RUN_STATUSES list,
+    // not a type guard, so the narrowing it just proved has to be restated for the payload.
+    const terminalStatus = status as ChainCompleteNotification['status'];
+    const { chainId } = session;
+    const totalSteps = totalOf(session.state.nodes);
+
+    try {
+      const hookContext: PipelineHookContext = {
+        executionId: session.sessionId,
+        executionType: 'chain',
+        chainId,
+        currentStep: currentOrdinal(session.state.nodes, session.state.currentNodeId),
+        frameworkEnabled: false,
+      };
+
+      if (status === 'completed') {
+        await this.hookRegistry?.emitChainComplete(chainId, hookContext);
+      } else {
+        await this.hookRegistry?.emitChainFailed(chainId, `run ${status}`, hookContext);
+      }
+
+      this.notificationEmitter?.emitChainComplete({
+        chainId,
+        totalSteps,
+        status: terminalStatus,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `[ChainRunStatus] Failed to announce terminal status '${status}' for ${chainId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
   }
 
   /**
@@ -1132,6 +1222,14 @@ export class ChainSessionStore implements ChainSessionService {
 
   /**
    * Update an existing step result (e.g., replace placeholder with LLM output)
+   *
+   * Restored 2026-09-20 (P4.52 reimplementation probe): `updateSessionState` above answers a
+   * near-identical question (update a step's result + metadata, transition state, persist) and
+   * is the one 18-execution-stage/step-capture-service actually call. Two methods answering the
+   * same job — one live, one not — is evidence of a defect, not proof this one is surplus.
+   * Deleting it also would have orphaned `TextReferenceStore.getChainStepMetadata`, whose only
+   * production caller was this method — a class outside this row's scope. Left un-wired pending
+   * an owner decision on which of the two should be canonical.
    */
   async updateStepResult(
     sessionId: string,
@@ -2512,27 +2610,6 @@ export class ChainSessionStore implements ChainSessionService {
   }
 
   /**
-   * Validate session integrity
-   */
-  validateSession(sessionId: string): { valid: boolean; issues: string[] } {
-    const session = this.activeSessions.get(sessionId);
-    const issues: string[] = [];
-
-    if (!session) {
-      issues.push('Session not found');
-      return { valid: false, issues };
-    }
-
-    // Check for stale session
-    const hoursSinceActivity = (Date.now() - session.lastActivity) / 3600000;
-    if (hoursSinceActivity > 1) {
-      issues.push(`Session stale: ${hoursSinceActivity.toFixed(1)} hours since last activity`);
-    }
-
-    return { valid: issues.length === 0, issues };
-  }
-
-  /**
    * Apply a batch of typed unknown observations to the session's ledger.
    *
    * Transition rules are NOT restated here — `computeUnknownLedger` is their single
@@ -2796,17 +2873,8 @@ export type {
 export function createChainSessionStore(
   logger: Logger,
   textReferenceStore: TextReferenceStore,
-  serverRoot: string,
-  options?: Omit<ChainSessionStoreOptions, 'serverRoot'>,
+  options: ChainSessionStoreOptions = {},
   argumentHistoryTracker?: ArgumentHistoryTracker
 ): ChainSessionStore {
-  return new ChainSessionStore(
-    logger,
-    textReferenceStore,
-    {
-      serverRoot,
-      ...options,
-    },
-    argumentHistoryTracker
-  );
+  return new ChainSessionStore(logger, textReferenceStore, options, argumentHistoryTracker);
 }

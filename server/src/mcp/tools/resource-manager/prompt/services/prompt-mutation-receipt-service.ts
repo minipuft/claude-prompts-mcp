@@ -59,7 +59,15 @@ export class PromptMutationReceiptService {
 
     if (input.fullRestart) {
       setTimeout(() => {
-        void this.context.dependencies.onRestart(input.reason);
+        // The receipt already told the caller `restart_pending`. Detached and uncaught, a
+        // restart that failed left that status true forever and logged nothing anywhere.
+        this.context.dependencies.onRestart(input.reason).catch((error: unknown) => {
+          this.context.dependencies.logger.error(
+            `[PromptMutationReceiptService] Restart after ${input.action} of '${input.id}' failed: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
+        });
       }, 1000);
       refreshResult = { loadedAfterRefresh: null, refreshStatus: 'restart_pending' };
     } else {
@@ -96,10 +104,10 @@ export class PromptMutationReceiptService {
       const loaded = this.context
         .getData()
         .convertedPrompts.find((prompt) => prompt.id === input.id);
-      const expectedSnapshot = this.normalizeReloadShape(
+      const expectedSnapshot = normalizeReloadShape(
         canonicalPromptSnapshot(input.id, input.expectedPrompt)
       );
-      const loadedSnapshot = this.normalizeReloadShape(canonicalPromptSnapshot(input.id, loaded));
+      const loadedSnapshot = normalizeReloadShape(canonicalPromptSnapshot(input.id, loaded));
       const matches = loaded !== undefined && isDeepStrictEqual(loadedSnapshot, expectedSnapshot);
       if (matches) return { loadedAfterRefresh: true, refreshStatus: 'loaded' };
 
@@ -132,31 +140,37 @@ export class PromptMutationReceiptService {
       (field) => !isDeepStrictEqual(expected[field], loaded[field])
     );
   }
+}
 
-  /** Match the loader's documented defaults before comparing authored state after refresh. */
-  private normalizeReloadShape(snapshot: Record<string, unknown>): Record<string, unknown> {
-    const normalized = JSON.parse(JSON.stringify(snapshot)) as Record<string, unknown>;
-    normalized['systemMessage'] = normalized['systemMessage'] ?? '';
-    // `category` survives a round trip only as its directory slug.
-    //
-    // The write puts the prompt under `slugifyCategoryDirectory(category)`, and `loader.ts:186`
-    // then overwrites `prompt.category` with the directory-derived id regardless of what the file
-    // declares. So the authored value is what the operator typed and the reloaded value is always
-    // the slug, and comparing them directly made every create with a spaced category report
-    // `❌ Post-write verification failed (mismatched: category)` for a write that was correct in
-    // every respect — measured 2026-08-30 with `My Category`. Applied to BOTH sides rather than
-    // only the expected one: the transform is idempotent, so slugging an already-slugged value is
-    // a no-op, and a symmetric normalization cannot drift into asserting which side is which.
-    if (typeof normalized['category'] === 'string') {
-      normalized['category'] = slugifyCategoryDirectory(normalized['category']);
-    }
-    if (Array.isArray(normalized['arguments'])) {
-      normalized['arguments'] = normalized['arguments'].map((argument: unknown) => {
-        if (argument === null || typeof argument !== 'object') return argument;
-        const fields = argument as Record<string, unknown>;
-        return { ...fields, required: fields['required'] ?? false };
-      });
-    }
-    return normalized;
+/**
+ * Match the loader's documented defaults before comparing authored state against a loaded one.
+ *
+ * Exported for `PromptLifecycleProcessor`'s create-path version snapshot: the recorded
+ * state must match what a post-refresh load produces, or the first update bridges a "mismatch"
+ * that is really just these same loader defaults this function already accounts for here.
+ */
+export function normalizeReloadShape(snapshot: Record<string, unknown>): Record<string, unknown> {
+  const normalized = JSON.parse(JSON.stringify(snapshot)) as Record<string, unknown>;
+  normalized['systemMessage'] = normalized['systemMessage'] ?? '';
+  // `category` survives a round trip only as its directory slug.
+  //
+  // The write puts the prompt under `slugifyCategoryDirectory(category)`, and `loader.ts:186`
+  // then overwrites `prompt.category` with the directory-derived id regardless of what the file
+  // declares. So the authored value is what the operator typed and the reloaded value is always
+  // the slug, and comparing them directly made every create with a spaced category report
+  // `❌ Post-write verification failed (mismatched: category)` for a write that was correct in
+  // every respect — measured 2026-08-30 with `My Category`. Applied to BOTH sides rather than
+  // only the expected one: the transform is idempotent, so slugging an already-slugged value is
+  // a no-op, and a symmetric normalization cannot drift into asserting which side is which.
+  if (typeof normalized['category'] === 'string') {
+    normalized['category'] = slugifyCategoryDirectory(normalized['category']);
   }
+  if (Array.isArray(normalized['arguments'])) {
+    normalized['arguments'] = normalized['arguments'].map((argument: unknown) => {
+      if (argument === null || typeof argument !== 'object') return argument;
+      const fields = argument as Record<string, unknown>;
+      return { ...fields, required: fields['required'] ?? false };
+    });
+  }
+  return normalized;
 }

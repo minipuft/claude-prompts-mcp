@@ -11,6 +11,10 @@ import { ValidationContext } from '../core/types.js';
 import type { PromptResourceActionId } from '../../../../metadata/definitions/prompt-resource.js';
 import type { ToolDefinitionInput } from '../../core/types.js';
 
+import {
+  describeUnresolvedChainStep,
+  resolveChainSteps,
+} from '#modules/prompts/chain-step-resolution.js';
 import { ResourceVerificationService } from '#modules/resources/services/index.js';
 import { ValidationError } from '#shared/utils/index.js';
 
@@ -46,6 +50,18 @@ export const UPDATE_FIELDS: Record<string, string> = {
   mcp_prompt_mode: 'mcpPromptMode',
   subagent_model: 'subagentModel',
   agent_type: 'agentType',
+  // P4.65. `edges` joins the preserved set for the same reason `tools` sits outside this map's
+  // reach: `ConvertedPrompt` carries no `edges` (the loader has already linearized them into
+  // `chainSteps` order), so the caller building `promptData` cannot read the current value and
+  // the writer must fall back to the on-disk YAML. The entry here is what lets an explicitly
+  // supplied value win that fallback — which is the whole remedy for a `chain_steps` rewrite
+  // that invalidates an edge the chain still declares.
+  edges: 'edges',
+  // P4.82. The last two chain/prompt-level keys `PromptYamlSchema` accepted that nothing could
+  // write. Measured 2026-09-20: `update` carrying either answered "Prompt Updated", saved a
+  // version, and left the file unchanged, and `create` carrying both wrote neither.
+  budget: 'budget',
+  artifacts: 'artifacts',
 };
 
 /**
@@ -81,6 +97,17 @@ export const UNSETTABLE_FIELDS: Record<string, string> = {
   mcp_prompt_mode: 'mcpPromptMode',
   subagent_model: 'subagentModel',
   agent_type: 'agentType',
+  // P4.65. Dropping every edge is a legitimate remedy for a chain whose steps changed — it
+  // restores the authored `chainSteps` order, which is what a chain with no edges already runs
+  // in. Omission is the preserve signal for `edges` like every other key here, so without this
+  // entry there would be no way to say REMOVE: `edges: []` writes an empty list rather than
+  // dropping the key.
+  edges: 'edges',
+  // P4.82. Both are optional in `PromptYamlSchema`, so their absence is a state the loader
+  // already handles: a chain with no `budget` runs on the server defaults, and a prompt with no
+  // `artifacts` declares nothing — which is deliberately distinct from declaring some other kind.
+  budget: 'budget',
+  artifacts: 'artifacts',
 };
 
 /** A resolved `unset` list, or the refusal explaining which name stopped it. */
@@ -139,7 +166,7 @@ function describeUnsettableRefusal(name: string): string {
 }
 
 /**
- * The three preserved fields the canonical snapshot projects, and the two it cannot.
+ * The preserved fields the canonical snapshot projects, and the ones it cannot.
  *
  * A field belongs here only when the projection SOURCE holds its authored value. `ConvertedPrompt`
  * copies `subagentModel` and `agentType` verbatim from the prompt's own YAML (converter.ts:165-169,
@@ -154,11 +181,30 @@ function describeUnsettableRefusal(name: string): string {
  * default it was inheriting, on every edit, without anyone asking. That is DEV-T1-3's hazard made
  * unconditional. They reach the YAML only when a caller sets them explicitly.
  */
+/*
+ * `budget` and `artifacts` joined at P4.83, and they pass the same test the four above do: the
+ * converter copies each verbatim from the prompt's own YAML behind a `!== undefined` guard
+ * (converter.ts:177-178, :192-193), so present-on-the-source means authored, and absent stays
+ * absent. Until then the snapshot omitted them, which made a rollback unable to restore either —
+ * the writer's on-disk preservation carried the CURRENT value forward instead, so rolling a chain
+ * back to a version with a different `budget` silently kept today's.
+ *
+ * `edges` and the authored `tools` id list are the half of P4.83 this list CANNOT close, and the
+ * reason is a property of the source rather than a judgement: `ConvertedPrompt` carries neither
+ * (the loader linearises edges into `chainSteps` order and drops them; `tools` survives only as
+ * loaded `scriptTools` definitions, not as the authored ids). Their only readable source is the
+ * on-disk YAML, which four of this function's seven call sites cannot reach — see the note on
+ * `canonicalPromptSnapshot` below. Recorded as open, with the condition that closes it, rather
+ * than half-projected: a field present on the record side and absent on the compare side bridges
+ * every edit into a durable table, silently.
+ */
 export const SNAPSHOT_PRESERVED_FIELDS = [
   'composer',
   'injection',
   'subagentModel',
   'agentType',
+  'budget',
+  'artifacts',
 ] as const;
 
 /**
@@ -174,6 +220,21 @@ export const SNAPSHOT_PRESERVED_FIELDS = [
  * plus `tools` (which only ever arrives via `args.tools` — the live prompt carries loaded
  * `scriptTools`, not the raw id list, so the prior value is not reconstructable here and the key
  * is deliberately absent).
+ *
+ * **This function takes ONE source, and that bounds what P4.83 could close.** `edges` and the
+ * authored `tools` id list live only in the on-disk YAML, and of the seven call sites here, four
+ * cannot reach it: `prompt-discovery-processor` and `prompt-mutation-receipt-service` hold no
+ * `FileOperations` at all, and `ConvertedPrompt` records no path to its own entry file (only
+ * `sourceRoot`, the root), so even the two sites that do hold one would have to re-derive the
+ * loader's single-file-vs-directory layout rule. Adding the YAML as a second source WITHOUT
+ * reaching every site forks the projection, and a forked projection is not a cosmetic gap: the
+ * receipt compares `canonicalPromptSnapshot(writeModel)` against
+ * `canonicalPromptSnapshot(reloadedPrompt)`, so a YAML-fed write model versus a loader-fed reload
+ * would report `❌ Post-write verification failed (mismatched: edges, tools)` on every prompt
+ * write, and `recordEditResult` would bridge every edit into a durable table. ☐ open as of
+ * 2026-09-20 · closes when `ConvertedPrompt` carries its own entry path (one field, stamped by
+ * the converter where `promptDir` already is) so every call site can read the YAML from the
+ * source it already holds — at which point `edges` and `tools` join the list above.
  *
  * The `SNAPSHOT_PRESERVED_FIELDS` tail (OQ-P7-8) is preserve-if-present, never defaulted: absent
  * on the source stays absent from the projection. Without it a recorded snapshot omits a field the
@@ -584,32 +645,31 @@ export function applyChainStepOperation(
 
 export interface ChainStepReferenceValidation {
   valid: boolean;
-  warnings: string[];
+  /** One addressed line per step whose `promptId` names nothing this write will produce. */
+  problems: string[];
 }
 
 /**
- * Validate that chain step promptId references point to registered prompts.
- * Non-blocking — returns warnings, does not throw.
- * Skips nested references (containing '/') since those are sub-prompts.
+ * Validate that a chain's step `promptId`s point at prompts that exist — the WRITE posture.
+ *
+ * BLOCKING. A step naming an unregistered prompt used to be a warning next to a saved file, and
+ * the run failed at that step one invocation later, far from the write that introduced it.
+ *
+ * The classification is `modules/prompts/chain-step-resolution.ts`, shared with the load-time
+ * diagnostic and the CI check so all three cannot disagree. What is local to this boundary is the
+ * POSTURE: `scaffolded-by-this-write` is accepted here, because `scaffoldChainStepDirectories`
+ * creates exactly those directories later in the same call. Nowhere else may accept it.
  */
 export function validateChainStepReferences(
   steps: unknown[],
+  chainId: string,
   registeredIds: string[]
 ): ChainStepReferenceValidation {
-  const warnings: string[] = [];
-  const idSet = new Set(registeredIds);
+  const problems = resolveChainSteps(steps, chainId, registeredIds)
+    .filter((reference) => reference.resolution === 'unresolved')
+    .map(describeUnresolvedChainStep);
 
-  for (let i = 0; i < steps.length; i++) {
-    const step = steps[i] as Record<string, unknown> | null;
-    const promptId = step?.['promptId'];
-    if (typeof promptId === 'string' && promptId.length > 0) {
-      if (!promptId.includes('/') && !idSet.has(promptId)) {
-        warnings.push(`Step ${i + 1} references unknown promptId '${promptId}'`);
-      }
-    }
-  }
-
-  return { valid: warnings.length === 0, warnings };
+  return { valid: problems.length === 0, problems };
 }
 
 // ---------------------------------------------------------------------------

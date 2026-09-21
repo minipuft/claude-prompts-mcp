@@ -12,6 +12,7 @@ import * as path from 'node:path';
 import { jest, describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 
 import { SqliteEngine, ResourceIndexer } from '../../../src/infra/database/index.js';
+import { testScratchPath } from '../../helpers/scratch-path.js';
 
 const mockLogger = {
   info: jest.fn() as jest.Mock,
@@ -21,7 +22,7 @@ const mockLogger = {
 };
 
 describe('ResourceIndexer — live server resources', () => {
-  const testDir = path.join(process.cwd(), 'tests/tmp/indexer-live-test');
+  const testDir = testScratchPath('indexer-live-test');
   const resourcesDir = path.join(process.cwd(), 'resources');
   let dbManager: SqliteEngine;
   let indexer: ResourceIndexer;
@@ -30,7 +31,9 @@ describe('ResourceIndexer — live server resources', () => {
     await fs.rm(testDir, { recursive: true, force: true });
     await fs.mkdir(testDir, { recursive: true });
 
-    dbManager = await SqliteEngine.getInstance(testDir, mockLogger as any);
+    dbManager = await SqliteEngine.getInstance(mockLogger as any, {
+      dbPath: path.join(testDir, 'runtime-state', 'state.db'),
+    });
     await dbManager.initialize();
 
     indexer = new ResourceIndexer(dbManager, mockLogger as any, {
@@ -53,7 +56,9 @@ describe('ResourceIndexer — live server resources', () => {
   });
 
   it('should index prompts from server/resources/prompts/', async () => {
-    const prompts = indexer.queryByType('prompt');
+    const prompts = dbManager.query<{ id: string; type: string; file_path: string | null }>(
+      "SELECT * FROM resource_index WHERE type = 'prompt'"
+    );
     expect(prompts.length).toBeGreaterThan(0);
 
     // Every prompt should have an id and file_path
@@ -65,7 +70,9 @@ describe('ResourceIndexer — live server resources', () => {
   });
 
   it('should index gates from server/resources/gates/', async () => {
-    const gates = indexer.queryByType('gate');
+    const gates = dbManager.query<{ id: string; type: string }>(
+      "SELECT * FROM resource_index WHERE type = 'gate'"
+    );
     expect(gates.length).toBeGreaterThan(0);
 
     for (const gate of gates) {
@@ -75,7 +82,9 @@ describe('ResourceIndexer — live server resources', () => {
   });
 
   it('should index frameworks from server/resources/frameworks/', async () => {
-    const frameworks = indexer.queryByType('framework');
+    const frameworks = dbManager.query<{ id: string; type: string }>(
+      "SELECT * FROM resource_index WHERE type = 'framework'"
+    );
     expect(frameworks.length).toBeGreaterThan(0);
 
     for (const m of frameworks) {
@@ -85,33 +94,15 @@ describe('ResourceIndexer — live server resources', () => {
   });
 
   it('should index styles from server/resources/styles/', async () => {
-    const styles = indexer.queryByType('style');
+    const styles = dbManager.query<{ id: string; type: string }>(
+      "SELECT * FROM resource_index WHERE type = 'style'"
+    );
     expect(styles.length).toBeGreaterThan(0);
 
     for (const s of styles) {
       expect(s.id).toBeTruthy();
       expect(s.type).toBe('style');
     }
-  });
-
-  it('should report accurate stats matching per-type query counts', () => {
-    const stats = indexer.getStats();
-
-    expect(stats.prompt).toBe(indexer.queryByType('prompt').length);
-    expect(stats.gate).toBe(indexer.queryByType('gate').length);
-    expect(stats.framework).toBe(indexer.queryByType('framework').length);
-    expect(stats.style).toBe(indexer.queryByType('style').length);
-
-    // Total should be positive
-    const total = stats.prompt + stats.gate + stats.framework + stats.style;
-    expect(total).toBeGreaterThan(0);
-  });
-
-  it('should find known prompts via search', () => {
-    // The prompts directory has categories like "analysis", "development", "general"
-    // Search for something likely to exist
-    const results = indexer.search('analysis');
-    expect(results.length).toBeGreaterThan(0);
   });
 
   it('should re-sync without changes (all unchanged)', async () => {

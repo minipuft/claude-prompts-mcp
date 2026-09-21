@@ -30,7 +30,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { buildServerEnv } from './helpers/child-env.js';
+import { buildServerEnv, createHermeticRoots } from './helpers/child-env.js';
 
 const SERVER_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const PACKAGE_RESOURCES = path.join(SERVER_ROOT, 'resources');
@@ -50,9 +50,17 @@ class ProbeServer {
 
   constructor(readonly workspace: string) {}
 
+  /**
+   * This server's own `HOME` and runtime root, separate from `workspace` on purpose: a
+   * skills_sync export writes client skill folders under `$HOME`, and folding them into the
+   * workspace would put them in the same tree these tests assert about.
+   */
+  private readonly roots = createHermeticRoots('resource-write-destination');
+
   async start(): Promise<void> {
     this.proc = spawn('node', [path.join(SERVER_ROOT, 'dist', 'index.js'), '--transport=stdio'], {
       env: buildServerEnv({
+        ...this.roots.env,
         MCP_RESOURCES_PATH: path.join(this.workspace, 'resources'),
         MCP_WORKSPACE: this.workspace,
       }),
@@ -130,12 +138,16 @@ class ProbeServer {
    * resource-path-containment's ProbeServer; the timeout keeps a wedged child from hanging.
    */
   async stop(): Promise<void> {
-    if (this.proc === undefined || this.proc.exitCode !== null) return;
-    await new Promise<void>((resolve) => {
-      this.proc.once('exit', () => resolve());
-      this.proc.kill();
-      setTimeout(resolve, 5_000);
-    });
+    try {
+      if (this.proc === undefined || this.proc.exitCode !== null) return;
+      await new Promise<void>((resolve) => {
+        this.proc.once('exit', () => resolve());
+        this.proc.kill();
+        setTimeout(resolve, 5_000);
+      });
+    } finally {
+      this.roots.cleanup();
+    }
   }
 }
 
@@ -204,7 +216,9 @@ describe('resource writes resolve through PathResolver (D8 Arc 1)', () => {
       type: 'validation',
       description: 'Asserts gate writes honor MCP_RESOURCES_PATH.',
       guidance: 'probe guidance',
-      pass_criteria: [{ type: 'inline_guidance', description: 'probe criterion' }],
+      // `description` is not a declared pass-criterion field. It used to be stripped here, so
+      // this fixture believed it wrote a criterion description and did not (P4.97).
+      pass_criteria: [{ type: 'inline_guidance', severity: 'warn' }],
     });
 
     expect(result.isError).toBe(false);

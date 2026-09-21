@@ -3,13 +3,18 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { GateDefinitionLoader } from '../../../../src/engine/gates/core/gate-definition-loader.js';
 import { GateDefinitionSchema } from '../../../../src/engine/gates/core/gate-schema.js';
 import { GateToolHandler } from '../../../../src/mcp/tools/gate-manager/core/manager.js';
+import { GenericGateGuide } from '../../../../src/engine/gates/registry/generic-gate-guide.js';
 import {
   GATE_YAML_EXCLUDED_KEYS,
   GATE_YAML_PROJECTED_KEYS,
   PRESERVED_GATE_YAML_KEYS,
-} from '../../../../src/mcp/tools/gate-manager/services/gate-file-writer.js';
+} from '../../../../src/engine/gates/core/gate-yaml-keys.js';
+import { GateFileWriter } from '../../../../src/mcp/tools/gate-manager/services/gate-file-writer.js';
+import { EMPTY_QUARANTINE_VIEW } from '../../../../src/shared/utils/resource-quarantine.js';
+import { gateSnapshotContract } from '../../../../src/mcp/tools/gate-manager/services/gate-snapshot-contract.js';
 import { loadYamlFileSync } from '../../../../src/shared/utils/yaml/index.js';
 
 import type { GateManager } from '../../../../src/engine/gates/gate-manager.js';
@@ -79,7 +84,10 @@ describe('GateToolHandler', () => {
   let gatesDir: string;
   let logger: Logger;
   let gateManager: jest.Mocked<
-    Pick<GateManager, 'has' | 'unregister' | 'reload' | 'list' | 'getStats' | 'get'>
+    Pick<
+      GateManager,
+      'has' | 'unregister' | 'reload' | 'list' | 'getStats' | 'get' | 'getQuarantine'
+    >
   >;
   let manager: GateToolHandler;
   let onRefresh: jest.Mock<() => Promise<void>>;
@@ -94,6 +102,10 @@ describe('GateToolHandler', () => {
 
     gateManager = {
       has: jest.fn(() => false),
+      // P4.19 — `create` and `update` both consult the quarantine on the branch where `has(id)`
+      // is false. This fixture has no loader and therefore no refused files; the empty view is
+      // the honest answer, and NOT a stored production wiring (see `lazyQuarantineView`).
+      getQuarantine: jest.fn(() => EMPTY_QUARANTINE_VIEW),
       unregister: jest.fn(() => true),
       reload: jest.fn(async () => true),
       list: jest.fn(() => []),
@@ -132,6 +144,8 @@ describe('GateToolHandler', () => {
         id: 'new-gate',
         name: 'New Gate',
         description: 'Gate description',
+        // No trailing newline on purpose: `GateFileWriter` appends exactly one for content that
+        // lacks it, so this doubles as the "create" case of that contract.
         guidance: 'Gate guidance',
       },
       {}
@@ -141,7 +155,9 @@ describe('GateToolHandler', () => {
     expect(result.isError).toBe(false);
     expect(existsSync(join(gateDir, 'gate.yaml'))).toBe(true);
     expect(existsSync(join(gateDir, 'guidance.md'))).toBe(true);
-    expect(readFileSync(join(gateDir, 'guidance.md'), 'utf8')).toBe('Gate guidance');
+    // MUTATION KILLED: reverting `ensureTrailingNewline` to a no-op makes this fail — the file
+    // would stay `'Gate guidance'` with no trailing `\n`.
+    expect(readFileSync(join(gateDir, 'guidance.md'), 'utf8')).toBe('Gate guidance\n');
     expect(onRefresh).toHaveBeenCalledTimes(1);
     expect((result.content[0] as { text: string }).text).toContain('created successfully');
   });
@@ -262,6 +278,68 @@ describe('GateToolHandler', () => {
     expect((result.content[0] as { text: string }).text).not.toContain('requires confirmation');
   });
 
+  describe('gate.yaml key names (P4.10)', () => {
+    // `type` and `gate_type` are two DIFFERENT gate.yaml keys. Until P4.10 the tool published
+    // one parameter named `gate_type` that wrote the key `type`, so the real `gate_type` key —
+    // the framework/category/custom classification `gate-loader.ts` filters framework gates on —
+    // had no parameter at all. Both of these assert the KEY IN THE WRITTEN FILE, not that the
+    // call returned ok: a handler that accepted the argument and dropped it would return ok.
+
+    function readWrittenGateYaml(id: string): Record<string, unknown> {
+      const yamlPath = join(gatesDir, id, 'gate.yaml');
+      return loadYamlFileSync(yamlPath) as Record<string, unknown>;
+    }
+
+    // KILLED BY: removing `gate_type` from the `gateData` object literal in
+    // `GateLifecycleProcessor.handleCreate` — `resolvePreservedGateYamlFields` then finds no
+    // supplied value, no existing file to fall back to, and writes no `gate_type` key.
+    test("create with gate_type: 'framework' writes gate_type: framework to gate.yaml", async () => {
+      const result = await manager.handleAction(
+        {
+          action: 'create',
+          id: 'classified-gate',
+          name: 'Classified Gate',
+          type: 'validation',
+          gate_type: 'framework',
+          description: 'A framework-scoped gate',
+          guidance: 'Framework guidance',
+        },
+        {}
+      );
+
+      expect(result.isError).toBe(false);
+      const written = readWrittenGateYaml('classified-gate');
+      expect(written['gate_type']).toBe('framework');
+      // 'framework' is non-default: the loader resolves an absent key to 'custom', so a write
+      // that dropped the value would leave the key absent rather than produce this string.
+      expect(written['type']).toBe('validation');
+    });
+
+    // KILLED BY: hardcoding `type: 'validation'` in `GateFileWriter.buildGateYaml` (or dropping
+    // `type` from the `handleCreate` gateData literal, which makes the processor's
+    // `type || 'validation'` fallback write 'validation').
+    test("create with type: 'guidance' writes type: guidance to gate.yaml", async () => {
+      const result = await manager.handleAction(
+        {
+          action: 'create',
+          id: 'advisory-gate',
+          name: 'Advisory Gate',
+          type: 'guidance',
+          description: 'An advisory gate',
+          guidance: 'Advisory guidance',
+        },
+        {}
+      );
+
+      expect(result.isError).toBe(false);
+      const written = readWrittenGateYaml('advisory-gate');
+      expect(written['type']).toBe('guidance');
+      // The other half of the pair stays absent when nobody set it — proving the two keys are
+      // independent rather than one value written twice.
+      expect(written['gate_type']).toBeUndefined();
+    });
+  });
+
   describe('update preservation', () => {
     // Regression coverage for resource-manager-settability-matrix-2026-08-13 §4 gap #1:
     // `activation`/`retry_config`/`pass_criteria` had no fallback to the existing gate on
@@ -316,7 +394,7 @@ describe('GateToolHandler', () => {
       gateManager.get.mockReturnValue(
         createFakeGate({
           gateId: 'gate-c',
-          pass_criteria: [{ type: 'inline_guidance', min_length: 120 }],
+          pass_criteria: [{ type: 'inline_guidance' }],
         })
       );
 
@@ -327,7 +405,7 @@ describe('GateToolHandler', () => {
 
       expect(result.isError).toBe(false);
       const written = readWrittenGateYaml('gate-c');
-      expect(written['pass_criteria']).toEqual([{ type: 'inline_guidance', min_length: 120 }]);
+      expect(written['pass_criteria']).toEqual([{ type: 'inline_guidance' }]);
     });
 
     test('update explicitly supplying activation/retry_config/pass_criteria overrides the existing value', async () => {
@@ -337,7 +415,7 @@ describe('GateToolHandler', () => {
           gateId: 'gate-d',
           activation: { prompt_categories: ['docs'] },
           retry_config: { max_attempts: 5 },
-          pass_criteria: [{ type: 'inline_guidance', min_length: 120 }],
+          pass_criteria: [{ type: 'inline_guidance' }],
         })
       );
 
@@ -347,7 +425,7 @@ describe('GateToolHandler', () => {
           id: 'gate-d',
           activation: { prompt_categories: ['code'], explicit_request: true },
           retry_config: { max_attempts: 1 },
-          pass_criteria: [{ type: 'inline_guidance', min_length: 50 }],
+          pass_criteria: [{ type: 'framework_compliance' }],
         },
         {}
       );
@@ -359,14 +437,17 @@ describe('GateToolHandler', () => {
         explicit_request: true,
       });
       expect(written['retry_config']).toEqual({ max_attempts: 1 });
-      expect(written['pass_criteria']).toEqual([{ type: 'inline_guidance', min_length: 50 }]);
+      expect(written['pass_criteria']).toEqual([{ type: 'framework_compliance' }]);
     });
 
     // Regression coverage for the writer-side gap left after the above:
     // `GateFileWriter.buildGateYaml` never wrote `severity`/`enforcementMode`/`gate_type` at
     // all — not even conditionally — so no fallback in `gate-lifecycle-processor.ts` could have
     // saved them; the fix has to live in the writer, reading the on-disk file directly.
-    test('update preserves severity/enforcementMode/gate_type not settable via GateManagerInput', async () => {
+    //
+    // All three are settable now (P4.4, P4.10), which does NOT make this redundant: preservation
+    // is the OMITTED-value branch, and the update below supplies none of them.
+    test('update omitting severity/enforcementMode/gate_type preserves the on-disk values', async () => {
       gateManager.has.mockReturnValue(true);
       gateManager.get.mockReturnValue(
         createFakeGate({ gateId: 'gate-e', description: 'Existing description' })
@@ -410,8 +491,9 @@ describe('GateToolHandler', () => {
     // must be classified into GATE_YAML_PROJECTED_KEYS, GATE_YAML_EXCLUDED_KEYS, or
     // PRESERVED_GATE_YAML_KEYS — silently falling through either bucket re-opens the data-loss
     // hole this describe block exists to close. Does NOT catch a new passthrough-ONLY field
-    // (one never added to the Zod object shape) — see the `evaluation`/`blockResponseOnFail`
-    // note on `PRESERVED_GATE_YAML_KEYS` in gate-file-writer.ts for that residual gap.
+    // (one never added to the Zod object shape at all) — a load-bearing key read at runtime but
+    // never declared on the schema is invisible to `Object.keys(GateDefinitionSchema.shape)` and
+    // so to this test too.
     test('projected + excluded + preserved keys cover every declared gate.yaml schema key', () => {
       const schemaKeys = Object.keys(GateDefinitionSchema.shape);
       const covered = new Set<string>([
@@ -422,6 +504,266 @@ describe('GateToolHandler', () => {
 
       const uncovered = schemaKeys.filter((key) => !covered.has(key));
       expect(uncovered).toEqual([]);
+    });
+  });
+
+  describe('update leaves omitted guidance.md byte-identical', () => {
+    // Unlike `createFakeGate` above (a hand-written stub whose `getGuidance()` returns whatever
+    // string the test passed it), this drives the REAL load path: `GateDefinitionLoader` reads
+    // `guidance.md` off disk and `GenericGateGuide` wraps that definition exactly the way
+    // production's `GateRegistry` does. That is load-bearing here — the defect this guards
+    // lived in the loader's inlining step, not in `gate-lifecycle-processor.ts`'s fallback
+    // expression, so a stub that never calls the loader could not have caught it.
+    function writeRealGate(id: string, guidanceContent: string): string {
+      const gateDir = join(gatesDir, id);
+      mkdirSync(gateDir, { recursive: true });
+      writeFileSync(
+        join(gateDir, 'gate.yaml'),
+        [
+          `id: ${id}`,
+          'name: Newline Gate',
+          'type: validation',
+          'description: Existing description',
+          'guidanceFile: guidance.md',
+          '',
+        ].join('\n'),
+        'utf8'
+      );
+      writeFileSync(join(gateDir, 'guidance.md'), guidanceContent, 'utf8');
+      return gateDir;
+    }
+
+    test('update supplying only activation leaves guidance.md byte-identical', async () => {
+      const gateId = 'newline-gate';
+      const guidanceContent = 'Check the newline.\n';
+      writeRealGate(gateId, guidanceContent);
+
+      const loader = new GateDefinitionLoader({ gatesDir });
+      const definition = loader.loadGate(gateId);
+      expect(definition).toBeDefined();
+      const realGuide = new GenericGateGuide(definition!);
+
+      gateManager.has.mockReturnValue(true);
+      gateManager.get.mockReturnValue(realGuide);
+
+      const result = await manager.handleAction(
+        {
+          action: 'update',
+          id: gateId,
+          activation: { prompt_categories: ['docs'] },
+        },
+        {}
+      );
+
+      expect(result.isError).toBe(false);
+      // MUTATION KILLED: re-introducing `.trim()` in `gate-definition-loader.ts`'s
+      // `inlineReferencedFiles` makes this fail — the rewritten file loses its trailing `\n` and
+      // no longer matches `guidanceContent`. Confirmed by applying that mutation, re-running this
+      // file (red), and reverting (see tests/unit/gates/core/gate-definition-loader.test.ts for
+      // the isolated repro of the same mutation).
+      const rewritten = readFileSync(join(gatesDir, gateId, 'guidance.md'), 'utf8');
+      expect(rewritten).toBe(guidanceContent);
+    });
+
+    test('update explicitly supplying guidance still rewrites it to the new value', async () => {
+      const gateId = 'newline-gate-explicit';
+      writeRealGate(gateId, 'Old guidance.\n');
+
+      const loader = new GateDefinitionLoader({ gatesDir });
+      const definition = loader.loadGate(gateId);
+      const realGuide = new GenericGateGuide(definition!);
+
+      gateManager.has.mockReturnValue(true);
+      gateManager.get.mockReturnValue(realGuide);
+
+      const result = await manager.handleAction(
+        { action: 'update', id: gateId, guidance: 'New guidance.\n' },
+        {}
+      );
+
+      expect(result.isError).toBe(false);
+      const rewritten = readFileSync(join(gatesDir, gateId, 'guidance.md'), 'utf8');
+      expect(rewritten).toBe('New guidance.\n');
+    });
+  });
+
+  /**
+   * tutorial-rework B.28 — `gate.yaml` and `guidance.md` are two independently-scoped writes, not one write
+   * that always touches both. Before this fix, `buildGateYaml` unconditionally built (and
+   * `planGateWrite` unconditionally wrote) `gate.yaml` on every update, so a guidance-only call
+   * re-serialized it into the writer's own key order and dropped any hand-authored comment — a
+   * bug invisible to `update supplying only activation leaves guidance.md byte-identical` above,
+   * because that test's gate was ITSELF written by the writer, so re-serializing it produced the
+   * same bytes back. A hand-authored `gate.yaml`, with a comment and a scrambled key order the
+   * writer would never emit, is what makes the re-serialization visible.
+   */
+  describe('write-scope narrowing (tutorial-rework B.28): gate.yaml and guidance.md are rewritten independently', () => {
+    const GATE_ID = 'scoped-write-gate';
+    const HAND_AUTHORED_YAML = [
+      '# Hand-authored — this comment and the scrambled key order below must survive any update',
+      '# that does not touch a gate.yaml-resident field.',
+      'name: Scoped Write Gate',
+      'severity: high',
+      `id: ${GATE_ID}`,
+      'type: validation',
+      'activation:',
+      '  prompt_categories: [code]',
+      'description: Proves gate.yaml write scope is narrowed to supplied fields.',
+      'guidanceFile: guidance.md',
+      'gate_type: custom',
+      '',
+    ].join('\n');
+
+    function seedHandAuthoredGate(guidanceContent: string): string {
+      const gateDir = join(gatesDir, GATE_ID);
+      mkdirSync(gateDir, { recursive: true });
+      writeFileSync(join(gateDir, 'gate.yaml'), HAND_AUTHORED_YAML, 'utf8');
+      writeFileSync(join(gateDir, 'guidance.md'), guidanceContent, 'utf8');
+      return gateDir;
+    }
+
+    // The real load path, like `writeRealGate` above — `existingDefinition` in
+    // `gate-lifecycle-processor.ts` has to read the ACTUAL hand-authored values (not a test
+    // double's arbitrary stub) for the omitted fields to merge back byte-for-byte.
+    function loadRealGate(): GateGuide {
+      const loader = new GateDefinitionLoader({ gatesDir });
+      const definition = loader.loadGate(GATE_ID);
+      expect(definition).toBeDefined();
+      return new GenericGateGuide(definition!);
+    }
+
+    test('guidance-only update leaves a hand-authored gate.yaml byte-identical (comment and key order included), and its diff names only guidance.md', async () => {
+      const gateDir = seedHandAuthoredGate('Original guidance.\n');
+      const before = readFileSync(join(gateDir, 'gate.yaml'), 'utf8');
+
+      gateManager.has.mockReturnValue(true);
+      gateManager.get.mockReturnValue(loadRealGate());
+
+      const result = await manager.handleAction(
+        { action: 'update', id: GATE_ID, guidance: 'Updated guidance only.\n' },
+        {}
+      );
+
+      expect(result.isError).toBe(false);
+      // MUTATION KILLED: reverting `planGateWrite`'s `writesYaml` narrowing back to
+      // unconditionally true (`buildGateYaml`'s pre-fix behaviour) makes this fail — `gate.yaml`
+      // comes back re-serialized into the writer's own key order with the comment dropped, even
+      // though this call named only `guidance`. Confirmed by making that revert, re-running this
+      // file (red on this assertion), and restoring the narrowing.
+      const after = readFileSync(join(gateDir, 'gate.yaml'), 'utf8');
+      expect(after).toBe(before);
+
+      const text = (result.content[0] as { text: string }).text;
+      expect(text).toContain(`${GATE_ID}/guidance.md`);
+      expect(text).not.toContain(`${GATE_ID}/gate.yaml`);
+    });
+
+    test('activation-only update rewrites gate.yaml and leaves guidance.md byte-identical', async () => {
+      const gateDir = seedHandAuthoredGate('Guidance stays put.\n');
+      const guidanceBefore = readFileSync(join(gateDir, 'guidance.md'), 'utf8');
+
+      gateManager.has.mockReturnValue(true);
+      gateManager.get.mockReturnValue(loadRealGate());
+
+      const result = await manager.handleAction(
+        { action: 'update', id: GATE_ID, activation: { prompt_categories: ['docs'] } },
+        {}
+      );
+
+      expect(result.isError).toBe(false);
+      const guidanceAfter = readFileSync(join(gateDir, 'guidance.md'), 'utf8');
+      expect(guidanceAfter).toBe(guidanceBefore);
+
+      const yamlAfter = readFileSync(join(gateDir, 'gate.yaml'), 'utf8');
+      expect(yamlAfter).not.toBe(HAND_AUTHORED_YAML);
+      const parsed = loadYamlFileSync(join(gateDir, 'gate.yaml')) as Record<string, unknown>;
+      expect(parsed['activation']).toEqual({ prompt_categories: ['docs'] });
+      // The positive control's other half: fields the writer builds no value for (preserved, not
+      // projected) still carry forward across a write that DOES touch gate.yaml.
+      expect(parsed['severity']).toBe('high');
+      expect(parsed['gate_type']).toBe('custom');
+
+      const text = (result.content[0] as { text: string }).text;
+      expect(text).toContain(`${GATE_ID}/gate.yaml`);
+      expect(text).not.toContain(`${GATE_ID}/guidance.md`);
+    });
+  });
+
+  /**
+   * Ruling on tutorial-rework B.18: a `version_history` snapshot
+   * recorded BEFORE the guidance.md verbatim-load fix holds `.trim()`'d guidance — lossy, and not
+   * invertible, since `.trim()` cannot say whether the original had zero, one, or more trailing
+   * newlines. Every shipped, Prettier-formatted `guidance.md` ends in exactly one, so restoring
+   * with one is the faithful reconstruction. Fixed once in `GateFileWriter.writeGateFiles` (via
+   * `ensureTrailingNewline`), the single write path create, update, AND rollback all pass through
+   * — tested here directly against the writer, the same way `gate-file-service.test.ts` does,
+   * rather than through the full `GateVersioningProcessor.handleRollback` (which needs a
+   * SQLite-backed `VersionHistoryService` this file's `configManager` stub deliberately disables).
+   */
+  describe('GateFileWriter appends exactly one trailing newline to unterminated guidance', () => {
+    function gateFileWriterConfigManager(): ConfigManager {
+      return {
+        getGatesDirectory: () => gatesDir,
+        getBundledResourceDirectory: () => undefined,
+      } as unknown as ConfigManager;
+    }
+
+    test('rollback/restore of a pre-fix snapshot (no trailing newline) writes guidance.md ending with exactly one \\n', async () => {
+      const gateId = 'rollback-newline-gate';
+      mkdirSync(join(gatesDir, gateId), { recursive: true });
+
+      // The pre-fix shape: `gateSnapshotContract.project()` recorded `.trim()`'d guidance before
+      // this fix existed. `restore` is what `handleRollback` calls on a resolved version row.
+      const preFixSnapshot = {
+        id: gateId,
+        name: 'Newline Gate',
+        type: 'validation',
+        description: 'Existing description',
+        guidance: 'Check the thing.', // no trailing \n — the pre-fix, lossy, recorded value
+      };
+      const restore = gateSnapshotContract.restore(gateId, preFixSnapshot);
+      expect(restore.ok).toBe(true);
+      if (!restore.ok) return;
+
+      const writer = new GateFileWriter({ logger, configManager: gateFileWriterConfigManager() });
+      const writeResult = await writer.writeGateFiles(restore.writeModel);
+      expect(writeResult.success).toBe(true);
+
+      // MUTATION KILLED: reverting `ensureTrailingNewline` to `return guidance;` unconditionally
+      // makes this fail — the restored file would stay `'Check the thing.'` with no `\n`.
+      // Confirmed by applying that mutation, re-running this file (red), and reverting.
+      const written = readFileSync(join(gatesDir, gateId, 'guidance.md'), 'utf8');
+      expect(written).toBe('Check the thing.\n');
+    });
+
+    test('create with guidance lacking a trailing newline writes exactly one', async () => {
+      const writer = new GateFileWriter({ logger, configManager: gateFileWriterConfigManager() });
+      const writeResult = await writer.writeGateFiles({
+        id: 'create-newline-gate',
+        name: 'Create Newline Gate',
+        type: 'validation',
+        description: 'Existing description',
+        guidance: 'No newline yet',
+      });
+
+      expect(writeResult.success).toBe(true);
+      const written = readFileSync(join(gatesDir, 'create-newline-gate', 'guidance.md'), 'utf8');
+      expect(written).toBe('No newline yet\n');
+    });
+
+    test('content already ending in a newline is written unchanged — no collapsing of extra trailing newlines', async () => {
+      const writer = new GateFileWriter({ logger, configManager: gateFileWriterConfigManager() });
+      const writeResult = await writer.writeGateFiles({
+        id: 'multi-newline-gate',
+        name: 'Multi Newline Gate',
+        type: 'validation',
+        description: 'Existing description',
+        guidance: 'Already terminated.\n\n\n',
+      });
+
+      expect(writeResult.success).toBe(true);
+      const written = readFileSync(join(gatesDir, 'multi-newline-gate', 'guidance.md'), 'utf8');
+      expect(written).toBe('Already terminated.\n\n\n');
     });
   });
 });

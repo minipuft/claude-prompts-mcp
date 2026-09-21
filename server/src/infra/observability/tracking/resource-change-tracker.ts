@@ -34,54 +34,32 @@ import { SqliteStateStore } from '../../database/stores/sqlite-store.js';
 import { Logger } from '../../logging/index.js';
 
 import type { StateStoreOptions } from '#infra/database/stores/interface.js';
-import type { ChangeSource, TrackedResourceType } from '#shared/types/index.js';
+import type {
+  ChangeSource,
+  ChangeOperation,
+  GetChangesParams,
+  LogChangeParams,
+  ResourceChangeEntry,
+  ResourceChangeLogPort,
+  TrackedResourceType,
+} from '#shared/types/index.js';
 
 import { enforceRetention } from '#infra/database/retention.js';
 import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
 
-export type { ChangeSource, TrackedResourceType } from '#shared/types/index.js';
-
 /**
- * Type of change operation
+ * The log's data contract lives in `shared/types` — `ResourceChangeLogPort` and the four shapes
+ * below — because mcp/ reads this log and may not import infra/. Re-exported here so the module
+ * that implements the contract is still a place to import it from.
  */
-export type ChangeOperation = 'added' | 'modified' | 'removed';
-
-/**
- * Individual change entry in the log
- */
-export interface ResourceChangeEntry {
-  timestamp: string;
-  source: ChangeSource;
-  operation: ChangeOperation;
-  resourceType: TrackedResourceType;
-  resourceId: string;
-  filePath: string;
-  contentHash: string;
-  previousHash?: string;
-}
-
-/**
- * Parameters for logging a change
- */
-export interface LogChangeParams {
-  source: ChangeSource;
-  operation: ChangeOperation;
-  resourceType: TrackedResourceType;
-  resourceId: string;
-  filePath: string;
-  content?: string;
-}
-
-/**
- * Query parameters for retrieving changes
- */
-export interface GetChangesParams {
-  limit?: number;
-  source?: ChangeSource;
-  resourceType?: TrackedResourceType;
-  since?: string;
-  resourceId?: string;
-}
+export type {
+  ChangeSource,
+  ChangeOperation,
+  GetChangesParams,
+  LogChangeParams,
+  ResourceChangeEntry,
+  TrackedResourceType,
+} from '#shared/types/index.js';
 
 /**
  * Configuration for the tracker
@@ -98,10 +76,8 @@ export interface ResourceChangeTrackerConfig {
    * settable, range-validated (50-5000), and consumed by nothing.
    */
   maxEntries: number;
-  /** Server root directory (for SqliteEngine singleton) */
-  serverRoot: string;
-  /** Explicit writable SQLite path decided by the runtime composition root. */
-  dbPath?: string;
+  /** Writable SQLite path decided by the runtime composition root (`PathResolver`). */
+  dbPath: string;
   /** Whether to track prompts */
   trackPrompts: boolean;
   /** Whether to track gates */
@@ -119,9 +95,12 @@ export interface ResourceChangeTrackerConfig {
   defaultScope?: StateStoreOptions;
 }
 
-const DEFAULT_CONFIG: ResourceChangeTrackerConfig = {
+/** What a caller must supply: the database path, which has no default, and optionally the rest. */
+type ResourceChangeTrackerOptions = Partial<ResourceChangeTrackerConfig> &
+  Pick<ResourceChangeTrackerConfig, 'dbPath'>;
+
+const DEFAULT_CONFIG: Omit<ResourceChangeTrackerConfig, 'dbPath'> = {
   maxEntries: 1000,
-  serverRoot: '',
   trackPrompts: true,
   trackGates: true,
 };
@@ -130,7 +109,7 @@ const DEFAULT_CONFIG: ResourceChangeTrackerConfig = {
  * ResourceChangeTracker class
  * Provides audit logging and hash tracking for resource changes via SQLite
  */
-export class ResourceChangeTracker {
+export class ResourceChangeTracker implements ResourceChangeLogPort {
   private logger: Logger;
   private config: ResourceChangeTrackerConfig;
   private hashCache: Map<string, string> = new Map();
@@ -138,13 +117,9 @@ export class ResourceChangeTracker {
   private hashStore?: SqliteStateStore<Record<string, string>>;
   private initialized: boolean = false;
 
-  constructor(logger: Logger, config: Partial<ResourceChangeTrackerConfig> = {}) {
+  constructor(logger: Logger, config: ResourceChangeTrackerOptions) {
     this.logger = logger;
     this.config = { ...DEFAULT_CONFIG, ...config };
-
-    if (this.config.serverRoot === '') {
-      throw new Error('ResourceChangeTracker requires serverRoot configuration');
-    }
   }
 
   /**
@@ -158,9 +133,7 @@ export class ResourceChangeTracker {
     this.logger.debug('ResourceChangeTracker: Initializing...');
 
     // Initialize SqliteEngine and hash store (idempotent — no-op if already initialized)
-    this.dbManager = await SqliteEngine.getInstance(this.config.serverRoot, this.logger, {
-      ...(this.config.dbPath !== undefined ? { dbPath: this.config.dbPath } : {}),
-    });
+    this.dbManager = await SqliteEngine.getInstance(this.logger, { dbPath: this.config.dbPath });
     await this.dbManager.initialize();
 
     this.hashStore = new SqliteStateStore<Record<string, string>>(
@@ -383,18 +356,43 @@ export class ResourceChangeTracker {
       resourceType: TrackedResourceType;
       resourceId: string;
       filePath: string;
+      /**
+       * The owning loader refused this file, so it is on disk and NOT in the catalog.
+       *
+       * A plain boolean rather than a quarantine handle: all this loop needs to know is whether
+       * the file entered the catalog, and the caller already holds the collection that answers
+       * that. Threading the collection down here would give the tracker a second way to ask a
+       * question the loader has already answered.
+       */
+      refused?: boolean;
     }>
-  ): Promise<{ added: number; modified: number; removed: number }> {
+  ): Promise<{ added: number; modified: number; removed: number; refused: number }> {
     if (!this.initialized) {
       await this.initialize();
     }
 
-    const result = { added: 0, modified: 0, removed: 0 };
+    const result = { added: 0, modified: 0, removed: 0, refused: 0 };
     const currentKeys = new Set<string>();
 
     for (const resource of resources) {
       const cacheKey = this.getCacheKey(resource.resourceType, resource.resourceId);
       currentKeys.add(cacheKey);
+
+      // A refusal is a THIRD disposition, not a variant of either other one.
+      //
+      // Not `added`: `resource_changes` is supposed to mean a resource entered the catalog, and
+      // this one did not — logging it told an operator a prompt was available that `prompt_engine`
+      // rejects. Not `removed` either: the key stays in `currentKeys` above, so the sweep below
+      // does not fire, because the file is still sitting on disk where they left it.
+      //
+      // The hash is deliberately NOT written. That is what makes the repair fire the event at the
+      // moment the resource actually enters the catalog: a file broken on its first sighting stays
+      // uncached and logs `added` once repaired, and a file that was valid, broke, and was repaired
+      // keeps its old hash and logs `modified`.
+      if (resource.refused === true) {
+        result.refused++;
+        continue;
+      }
 
       try {
         const content = await fs.readFile(resource.filePath, 'utf-8');
@@ -434,31 +432,13 @@ export class ResourceChangeTracker {
       }
     }
 
-    // Check for removed resources
-    for (const [cacheKey, _hash] of this.hashCache) {
-      if (!currentKeys.has(cacheKey)) {
-        // Split on the FIRST separator only. The cache key is `${resourceType}/${resourceId}` and
-        // a resourceId may itself contain '/' (a categorised prompt, a tool under its parent), so
-        // a plain split() truncates the id at its first segment and reports a removal for a
-        // resource that was never tracked under that name.
-        const separatorIndex = cacheKey.indexOf('/');
-        const resourceType = cacheKey.slice(0, separatorIndex) as TrackedResourceType;
-        const resourceId = cacheKey.slice(separatorIndex + 1);
-        await this.logChange({
-          source: 'external',
-          operation: 'removed',
-          resourceType,
-          resourceId,
-          filePath: `(removed: ${cacheKey})`,
-        });
-        result.removed++;
-      }
-    }
+    result.removed = await this.logRemovals(currentKeys);
 
-    if (result.added > 0 || result.modified > 0 || result.removed > 0) {
+    if (result.added > 0 || result.modified > 0 || result.removed > 0 || result.refused > 0) {
       this.logger.info(
         `📊 ResourceChangeTracker: Baseline comparison - ` +
-          `${result.added} added, ${result.modified} modified, ${result.removed} removed (external)`
+          `${result.added} added, ${result.modified} modified, ${result.removed} removed, ` +
+          `${result.refused} refused by their loader and not logged as a change (external)`
       );
     }
 
@@ -466,55 +446,53 @@ export class ResourceChangeTracker {
   }
 
   /**
-   * Get the current hash for a resource
+   * Log a removal for every cached resource absent from `present`, comparing no content.
+   *
+   * The reconciliation half of {@link compareBaseline}, for a folder that appeared while the
+   * server ran: its present files arrive as watcher events, but an entry written and removed
+   * before the folder was watched arrives as nothing, while its `added` row stands.
+   *
+   * @returns the number of removals logged
    */
-  getResourceHash(resourceType: TrackedResourceType, resourceId: string): string | undefined {
-    const cacheKey = this.getCacheKey(resourceType, resourceId);
-    return this.hashCache.get(cacheKey);
-  }
-
-  /**
-   * Get all cached hashes
-   */
-  getAllHashes(): Map<string, string> {
-    return new Map(this.hashCache);
-  }
-
-  /**
-   * Get tracker statistics
-   */
-  async getStats(): Promise<{
-    cachedHashes: number;
-    totalChanges: number;
-  }> {
-    let totalChanges = 0;
-    try {
-      const result = this.dbManager?.queryOne<{ cnt: number }>(
-        'SELECT COUNT(*) as cnt FROM resource_changes'
-      );
-      totalChanges = result?.cnt ?? 0;
-    } catch {
-      // Table may not exist yet
+  async sweepRemovals(
+    present: ReadonlyArray<{ resourceType: TrackedResourceType; resourceId: string }>
+  ): Promise<number> {
+    if (!this.initialized) {
+      await this.initialize();
     }
-
-    return {
-      cachedHashes: this.hashCache.size,
-      totalChanges,
-    };
+    return this.logRemovals(
+      new Set(
+        present.map((resource) => this.getCacheKey(resource.resourceType, resource.resourceId))
+      )
+    );
   }
 
   /**
-   * Clear all tracking data (for testing or reset)
+   * Log a removal for every cached resource the current walk did not see, and return the count.
+   *
+   * Extracted from `compareBaseline` so that method stays under the cognitive-complexity limit
+   * once refusals became a third disposition there. It is also the half that reads the cache as a
+   * KEY SET rather than a hash store, which is a different question from the comparison above.
    */
-  async clear(): Promise<void> {
-    this.hashCache.clear();
-
-    if (this.dbManager) {
-      this.dbManager.run('DELETE FROM resource_changes');
-      await this.hashStore!.save({});
+  private async logRemovals(currentKeys: ReadonlySet<string>): Promise<number> {
+    let removed = 0;
+    for (const cacheKey of this.hashCache.keys()) {
+      if (currentKeys.has(cacheKey)) continue;
+      // Split on the FIRST separator only. The cache key is `${resourceType}/${resourceId}` and
+      // a resourceId may itself contain '/' (a categorised prompt, a tool under its parent), so
+      // a plain split() truncates the id at its first segment and reports a removal for a
+      // resource that was never tracked under that name.
+      const separatorIndex = cacheKey.indexOf('/');
+      await this.logChange({
+        source: 'external',
+        operation: 'removed',
+        resourceType: cacheKey.slice(0, separatorIndex) as TrackedResourceType,
+        resourceId: cacheKey.slice(separatorIndex + 1),
+        filePath: `(removed: ${cacheKey})`,
+      });
+      removed++;
     }
-
-    this.logger.info('ResourceChangeTracker: All tracking data cleared');
+    return removed;
   }
 }
 
@@ -523,7 +501,7 @@ export class ResourceChangeTracker {
  */
 export function createResourceChangeTracker(
   logger: Logger,
-  config: Partial<ResourceChangeTrackerConfig> = {}
+  config: ResourceChangeTrackerOptions
 ): ResourceChangeTracker {
   return new ResourceChangeTracker(logger, config);
 }

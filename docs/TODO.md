@@ -38,7 +38,9 @@ What's next for Claude Prompts MCP.
 
 **Solution**: Run a prompt N times with variations. Score against gates automatically. Surface the winner.
 
-**Expect**:
+**Expect** — a SKETCH of a surface that does not exist. `optimize` is not a declared
+`prompt_engine` parameter, and the server refuses an undeclared argument key by name, so this is
+not a call anyone can make today:
 
 ```
 prompt_engine(command:">>code_review", optimize:{runs:10, gate:"quality-score"})
@@ -55,7 +57,8 @@ prompt_engine(command:">>code_review", optimize:{runs:10, gate:"quality-score"})
 
 **Solution**: Optional remote sync. Push/pull to shared workspace. Usage stats across team.
 
-**Expect**:
+**Expect** — a SKETCH, on the same terms as above. Neither `action:"push"` nor `workspace` is
+declared, and both would be refused by name:
 
 ```
 resource_manager(resource_type:"prompt", action:"push", workspace:"team-acme")
@@ -91,7 +94,7 @@ resource_manager(resource_type:"prompt", action:"push", workspace:"team-acme")
 
 Found 2026-07-28 while authoring a prompt with `inline_gate_definitions`. All reproduced against v2.1.0.
 
-**Tier-gated plan**: [arg-gate-pipeline-fixes.md](../plans/reference/technical-debt/arg-gate-pipeline-fixes.md) — T0 ✓ and T1 ✓ complete ([ADR 0001](adr/0001-gate-resolution-precedence.md) accepted). **T1.5 (one owner for gate resolution) now blocks T2/T3** — discovery found gate selection split across three places, two of them unreachable. Resume with `>>strategicImplement task:"execute tier T1.5" plan_path:"plans/reference/technical-debt/arg-gate-pipeline-fixes.md"`.
+**Tier-gated plan**: [arg-gate-pipeline-fixes.md](../plans/reference/technical-debt/arg-gate-pipeline-fixes.md) — T0 ✓ and T1 ✓ complete ([ADR 0001](adr/0001-gate-resolution-precedence.md) accepted). **T1.5 (one owner for gate resolution) now blocks T2/T3** — discovery found gate selection split across three places, two of them unreachable. Resume with `>>strategic_implement task:"execute tier T1.5" plan_path:"plans/reference/technical-debt/arg-gate-pipeline-fixes.md"`.
 
 - [x] **Typed prompt inputs bypass the command-string grammar.** _(Completed 2026-08-23.)_ The earlier escape-aware serializer fixed apostrophes for scalar `options`, but objects and arrays still collapsed to `[object Object]`. Request normalization now carries `inputs` and legacy `options` as typed state; parsing merges them after command parsing with inline → inputs → options → defaults precedence. Manual command strings retain the documented escape rules, while structured callers preserve nested values, quotes, and backslashes without serialization.
 

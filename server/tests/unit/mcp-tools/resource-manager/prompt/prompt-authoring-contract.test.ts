@@ -6,6 +6,16 @@ import { GateAnalyzer } from '../../../../../src/mcp/tools/resource-manager/prom
 import { ObjectDiffGenerator } from '../../../../../src/mcp/tools/resource-manager/prompt/analysis/object-diff-generator.js';
 import { PromptAnalyzer } from '../../../../../src/mcp/tools/resource-manager/prompt/analysis/prompt-analyzer.js';
 import { PromptLifecycleProcessor } from '../../../../../src/mcp/tools/resource-manager/prompt/services/prompt-lifecycle-processor.js';
+import {
+  UNSETTABLE_FIELDS,
+  UPDATE_FIELDS,
+} from '../../../../../src/mcp/tools/resource-manager/prompt/utils/validation.js';
+import { resourceManagerInputSchema } from '../../../../../src/mcp/tools/schemas/resource-manager.schema.js';
+import { workflowBudgetSchema } from '../../../../../src/mcp/tools/schemas/workflow-ir.schema.js';
+import {
+  PromptArtifactsSchema,
+  PromptYamlSchema,
+} from '../../../../../src/modules/prompts/prompt-schema.js';
 
 import type { PromptResourceContext } from '../../../../../src/mcp/tools/resource-manager/prompt/core/context.js';
 import type { ConfigManager, Logger } from '../../../../../src/shared/types/index.js';
@@ -27,6 +37,7 @@ interface Harness {
     }>
   >;
   recordEditResult: jest.Mock;
+  saveVersion: jest.Mock;
   onRefresh: jest.Mock;
 }
 
@@ -40,6 +51,8 @@ function createHarness(
     getResolvedPromptsDirectory: () => '/workspace/prompts',
   } as unknown as ConfigManager;
   let currentVersion = options.currentVersion ?? 4;
+  /** Version numbers `saveVersion` has assigned to ids that did not exist before this harness. */
+  const createdVersions = new Map<string, number>();
   let pendingPrompt: Record<string, unknown> | undefined;
   let convertedPrompts: Record<string, unknown>[] = [
     {
@@ -94,14 +107,24 @@ function createHarness(
       };
     }
   );
-  const loadHistory = jest.fn(async (_type: string, id: string) =>
-    id === 'existing_prompt' || pendingPrompt?.['id'] === id
-      ? ({ current_version: currentVersion } as never)
-      : null
-  );
+  const loadHistory = jest.fn(async (_type: string, id: string) => {
+    if (id === 'existing_prompt') return { current_version: currentVersion } as never;
+    const created = createdVersions.get(id);
+    return created !== undefined && pendingPrompt?.['id'] === id
+      ? ({ current_version: created } as never)
+      : null;
+  });
   const recordEditResult = jest.fn(async () => {
     currentVersion += 1;
     return { success: true, version: currentVersion, bridged: false };
+  });
+  // The create-path writer: no prior state to bridge, so it saves version 1 for a
+  // fresh id directly — mirroring `saveVersion`'s real MAX(existing)+1 arithmetic, which an id
+  // with no rows yet resolves to 1 on its own. Untyped rest params (matching `recordEditResult`
+  // above): an explicitly typed signature here does not structurally match `jest.Mock`.
+  const saveVersion = jest.fn(async (...args: unknown[]) => {
+    createdVersions.set(args[1] as string, 1);
+    return { success: true, version: 1 };
   });
   const context = {
     dependencies,
@@ -109,11 +132,12 @@ function createHarness(
     gateAnalyzer: new GateAnalyzer(dependencies as never),
     comparisonEngine: new ComparisonEngine(logger),
     textDiffService: new ObjectDiffGenerator(),
-    fileOperations: { updatePromptImplementation },
+    fileOperations: { updatePromptImplementation, projectPromptWrite: jest.fn(async () => []) },
     versionHistoryService: {
       isAutoVersionEnabled: () => true,
       loadHistory,
       recordEditResult,
+      saveVersion,
     },
     getData: () => ({ convertedPrompts }),
   } as unknown as PromptResourceContext;
@@ -122,6 +146,7 @@ function createHarness(
     processor: new PromptLifecycleProcessor(context),
     updatePromptImplementation,
     recordEditResult,
+    saveVersion,
     onRefresh,
   };
 }
@@ -207,10 +232,32 @@ describe('prompt validate/create authoring contract', () => {
         resource_root: '/workspace/prompts',
         refresh_status: 'loaded',
         loaded_after_refresh: true,
-        current_version: 4,
+        // The created state is recorded as version 1, not 0.
+        current_version: 1,
       },
     });
     expect(harness.onRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  // A create records the created state as version 1 — through `saveVersion` directly, never
+  // through `recordEditResult` (there is no prior state to bridge).
+  test('records the created state as version 1 through saveVersion, not recordEditResult', async () => {
+    const harness = createHarness();
+
+    await harness.processor.createPrompt({
+      id: 'created_prompt',
+      ...draftBase,
+      user_message_template: 'Create {{input}}',
+    } as never);
+
+    expect(harness.saveVersion).toHaveBeenCalledTimes(1);
+    expect(harness.saveVersion).toHaveBeenCalledWith(
+      'prompt',
+      'created_prompt',
+      expect.objectContaining({ id: 'created_prompt' }),
+      expect.objectContaining({ description: expect.stringContaining('Created') })
+    );
+    expect(harness.recordEditResult).not.toHaveBeenCalled();
   });
 
   test('marks a write as failed when refresh does not expose the produced state', async () => {
@@ -278,5 +325,93 @@ describe('prompt update optimistic concurrency', () => {
     expect(response.isError).toBe(true);
     expect(harness.updatePromptImplementation).not.toHaveBeenCalled();
     expect(harness.recordEditResult).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The class P4.65 belongs to: a `prompt.yaml` key the loader accepts that no tool parameter writes.
+ *
+ * `edges` was one of these. It was schema-valid, load-bearing (`collectChainEdgeErrors` refuses a
+ * chain whose edges no longer match its steps), and unreachable from `resource_manager` — so the
+ * only remedy for a refusal was a hand edit of `prompt.yaml`, which this project forbids. Fixing
+ * `edges` alone would close one instance; this closes the CLASS, by failing when a new key joins
+ * `PromptYamlSchema` without being classified.
+ *
+ * Deliberately a classification, not a "must be settable" rule: two keys legitimately are not, and
+ * each carries the observation that would flip it.
+ */
+describe('every prompt.yaml key the loader accepts is classified', () => {
+  /**
+   * Keys the WRITER owns: it produces the message files, so it decides their pointers. A caller
+   * sets the BODY (`system_message`, `user_message_template`) and the writer decides where it goes.
+   */
+  const WRITER_OWNED = new Set(['systemMessageFile', 'userMessageTemplateFile']);
+
+  const SETTABLE = new Set<string>([
+    // The resource identity — the `id` parameter, not a field overlay.
+    'id',
+    // Reaches `promptData` directly from `args.tools` rather than through `UPDATE_FIELDS`.
+    'tools',
+    ...Object.values(UPDATE_FIELDS),
+  ]);
+
+  /**
+   * There is deliberately NO third category.
+   *
+   * This gate shipped (P4.65) with two stamped exceptions, `budget` and `artifacts`, each carrying
+   * an as-of date and a falsifier. P4.82 read both against their own documentation — a chain's
+   * budget and a prompt's artifact declaration are things an AUTHOR states, and the docs say so in
+   * those words — so both became settable and the exception list emptied. Re-introducing one means
+   * arguing that a key `PromptYamlSchema` accepts is not authored by the person authoring the
+   * prompt, which is a claim worth making explicitly rather than by adding a row.
+   */
+  test('no key is left unclassified, and nothing is exempt', () => {
+    const unclassified = Object.keys(PromptYamlSchema.shape).filter(
+      (key) => !SETTABLE.has(key) && !WRITER_OWNED.has(key)
+    );
+
+    expect(unclassified).toEqual([]);
+  });
+
+  test('every classification still names a key the loader accepts', () => {
+    // The other direction: a stale entry documents a key that is gone.
+    const accepted = new Set(Object.keys(PromptYamlSchema.shape));
+    const stale = [...WRITER_OWNED, ...SETTABLE].filter((key) => !accepted.has(key));
+
+    expect(stale).toEqual([]);
+  });
+
+  test('every settable prompt.yaml key is also clearable, or is one a prompt cannot load without', () => {
+    // `unset` refuses the four structural fields BY NAME rather than writing a prompt that fails
+    // its next load; everything else optional in the loader's schema must be clearable, or
+    // "supply to set, omit to preserve" leaves it write-once.
+    const STRUCTURAL = new Set(['id', 'name', 'category', 'description', 'userMessageTemplate']);
+    const settableParameters = Object.entries(UPDATE_FIELDS).filter(
+      ([, dataKey]) => !STRUCTURAL.has(dataKey)
+    );
+    const unclearable = settableParameters
+      .filter(([parameter]) => UNSETTABLE_FIELDS[parameter] === undefined)
+      .map(([parameter]) => parameter);
+
+    expect(unclearable).toEqual([]);
+  });
+
+  test("budget and artifacts are validated by the loader's own schemas, not copies", () => {
+    // IDENTITY, not equivalence. The tool's bound on a structural cap has to BE the loader's
+    // bound: a restatement here would be a second place for `DEFAULT_WORKFLOW_CAPS` to drift from,
+    // and it would still refuse an over-cap value — just later, after a write and a rollback,
+    // which no conformance assertion on the refusal TEXT can tell apart from the boundary case.
+    const shape = resourceManagerInputSchema.shape as Record<string, { unwrap?: () => unknown }>;
+    expect(shape['budget']?.unwrap?.()).toBe(workflowBudgetSchema);
+    expect(shape['artifacts']?.unwrap?.()).toBe(PromptArtifactsSchema);
+  });
+
+  test('the three keys this class was found through are settable and clearable', () => {
+    // Named rather than left implicit in the sweeps above, which would stay green if any of them
+    // were dropped from both maps at once.
+    for (const key of ['edges', 'budget', 'artifacts']) {
+      expect(UPDATE_FIELDS[key]).toBe(key);
+      expect(UNSETTABLE_FIELDS[key]).toBe(key);
+    }
   });
 });

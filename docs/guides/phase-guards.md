@@ -158,7 +158,7 @@ Phase guard behavior is controlled by the `phaseGuards.mode` config setting:
 
 ### Configuration
 
-In `config.json`:
+In `config.jsonc` (`config.json` is also still read):
 
 ```json
 {

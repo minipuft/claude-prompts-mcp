@@ -1,4 +1,3 @@
-import { join } from 'node:path';
 import { loadYamlFileSync } from '@cli-shared/index.js';
 import { resolveWorkspace, resolveResourceDir, discoverResourcePaths } from '../lib/workspace.js';
 import { output } from '../lib/output.js';
@@ -47,11 +46,10 @@ export async function inspect(options: InspectOptions): Promise<number> {
     return 1;
   }
 
-  const filePath = join(match.dir, config.entryFile);
-  const data = loadYamlFileSync<Record<string, unknown>>(filePath);
+  const data = loadYamlFileSync<Record<string, unknown>>(match.file);
 
   if (!data) {
-    console.error(`Failed to load: ${filePath}`);
+    console.error(`Failed to load: ${match.file}`);
     return 1;
   }
 

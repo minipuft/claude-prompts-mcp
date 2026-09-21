@@ -9,7 +9,9 @@ import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:
 import { dirname, join } from 'node:path';
 
 import { type ResourceValidationResult, validateResourceFile } from './resource-validation.js';
-import { deleteVersionRows } from './version-history.js';
+import { deleteVersionRows, type HistoryResourceRef } from './version-history.js';
+
+import type { ResourceLocation } from './resource-operations.js';
 
 type ResourceType = 'prompts' | 'gates' | 'frameworks' | 'styles';
 
@@ -65,6 +67,14 @@ function promptYaml(id: string, opts: CreateResourceOptions): string {
     '#         - Criterion one',
     '#         - Criterion two',
     '',
+    '# --- Gate Hook Enforcement (uncomment to mechanically enforce gates on Claude Code) ---',
+    '# Default is prose-only: the exported skill describes gates but does not block the turn.',
+    '# Opting in ships a Stop hook (Claude Code only) that blocks until a PASS verdict is',
+    '# emitted. Leave this off for a skill invoked by Agent-tool subagents (a worker skill,',
+    '# for example): the hook registers at session scope and was measured firing at the',
+    "# PLANNER session's own stop rather than the subagent's (Ruling A3, 2026-09-14).",
+    '# enforceGateHooks: true',
+    '',
     '# --- Chain Steps (uncomment for multi-step workflows) ---',
     '# chainSteps:',
     '#   - promptId: step_one',
@@ -91,7 +101,6 @@ function gateYaml(id: string, opts: CreateResourceOptions): string {
     '',
     'pass_criteria:',
     '  - type: inline_guidance',
-    '    min_length: 50',
     '',
     '# --- Activation Rules (uncomment to scope when this gate triggers) ---',
     '# activation:',
@@ -106,15 +115,16 @@ function gateYaml(id: string, opts: CreateResourceOptions): string {
     '#   improvement_hints: true',
     '#   preserve_context: true',
     '',
-    '# --- Advanced Pass Criteria Examples ---',
+    '# --- Pass Criteria Examples ---',
+    '# A gate is a reminder unless a criterion carries a real evaluator (shell_verify or',
+    '# script_tool); everything else — including this default inline_guidance entry — is',
+    '# self-assessed prose. Put the reminder text in `guidance`/`guidanceFile` above, not on',
+    '# the criterion: pattern/length fields (required_patterns, keyword_count, ...) never had',
+    '# an evaluator and are rejected at load.',
     '# pass_criteria:',
     '#   - type: inline_guidance',
-    '#     required_patterns:',
-    "#       - '## Summary'",
-    '#     keyword_count:',
-    '#       example: 1',
-    '#     regex_patterns:',
-    "#       - '^\\d+\\.\\s+'",
+    '#   - type: shell_verify',
+    "#     shell_command: ['npm', 'test']",
     '',
   ].join('\n');
 }
@@ -234,24 +244,50 @@ function cleanupEmptyPromptCategory(resourceDir: string): void {
 // ── Public API ──────────────────────────────────────────────────────────────
 
 /**
- * Check if a resource already exists at the expected path.
+ * The path already holding this id in this category, in whichever form the loader would see
+ * first — or `undefined` when neither exists.
+ *
+ * Checks BOTH forms a prompt can take, not just the directory one: the loader's directory-wins
+ * rule (`prompt-layout.ts`) means `{cat}/{id}.yaml` and `{cat}/{id}/prompt.yaml` name the SAME
+ * id, so a check that tested only the directory let `create` write a directory beside an existing
+ * single-file prompt — the loader then serves the new empty directory in the file's place, and
+ * the file goes on existing, unserved, until someone notices. Gates, frameworks and styles have no
+ * single-file form (`prompt-layout.ts` — only prompts do), so the directory path is the only one
+ * that applies to them.
  */
 export function resourceExists(
   baseDir: string,
   type: ResourceType,
   id: string,
   category?: string
-): boolean {
-  if (type === 'prompts' && category !== undefined && category !== '') {
-    return existsSync(join(baseDir, category, id, ENTRY_FILES[type]));
+): string | undefined {
+  const parentDir =
+    type === 'prompts' && category !== undefined && category !== ''
+      ? join(baseDir, category)
+      : baseDir;
+  const dirPath = join(parentDir, id, ENTRY_FILES[type]);
+  if (existsSync(dirPath)) return dirPath;
+  if (type === 'prompts') {
+    const filePath = join(parentDir, `${id}.yaml`);
+    if (existsSync(filePath)) return filePath;
   }
-  return existsSync(join(baseDir, id, ENTRY_FILES[type]));
+  return undefined;
 }
 
 /**
- * Create a resource directory with template YAML and companion file.
+ * Where {@link createResourceDir} will put this resource — answerable BEFORE the create runs.
+ *
+ * Exported because a caller that records a version has to name the create's rollback target, and
+ * the target of a create is the directory that does not exist yet: `ResourceMutationTransaction`
+ * captures it as absent and restores it by removing it, so a failed version record leaves nothing
+ * behind. `createResourceDir` only reports the path it used in its RESULT, which is after the
+ * files are on disk and too late to have named a target.
+ *
+ * Exported rather than re-derived at the call site for the usual reason: the prompt branch folds
+ * `category ?? 'general'` into the path, and a second copy of that default is a second thing to
+ * keep in step with the template `promptYaml` writes.
  */
-function resolveResourceDir(
+export function resolveResourceDir(
   baseDir: string,
   type: ResourceType,
   id: string,
@@ -263,6 +299,7 @@ function resolveResourceDir(
   return join(baseDir, id);
 }
 
+/** Create a resource directory with template YAML and companion file. */
 export function createResourceDir(
   baseDir: string,
   type: ResourceType,
@@ -330,6 +367,10 @@ function validateAndFinalize(
 /**
  * Clean up a newly-created resource directory on failure.
  * Only removes if the directory didn't exist before creation.
+ *
+ * Files only. A create writes no history, so there is none of its own to remove, and rows already
+ * stored under this id belong to an earlier resource of the same name: `resource_manager` keeps a
+ * deleted prompt's history, so a failed create must not be what erases it.
  */
 function cleanupCreatedDir(
   resourceDir: string,
@@ -340,24 +381,62 @@ function cleanupCreatedDir(
     return { success: true };
   }
 
-  const result = deleteResourceDir(resourceDir);
+  try {
+    rmSync(resourceDir, { recursive: true, force: true });
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
   if (type === 'prompts') {
     cleanupEmptyPromptCategory(resourceDir);
   }
-  return result;
+  return { success: true };
 }
 
 /**
  * Delete a resource directory and its version history.
+ *
+ * `ref` names the history to delete: the resource's type and the id it is served under. The rows of
+ * every id below it go too, so deleting a chain directory takes its steps' history with its steps.
  */
-export function deleteResourceDir(resourceDir: string): { success: boolean; error?: string } {
+export function deleteResourceDir(
+  resourceDir: string,
+  ref: HistoryResourceRef
+): { success: boolean; error?: string } {
   try {
     if (!existsSync(resourceDir)) {
       return { success: false, error: `Directory does not exist: ${resourceDir}` };
     }
 
-    deleteVersionRows(resourceDir);
+    deleteVersionRows(resourceDir, ref);
     rmSync(resourceDir, { recursive: true, force: true });
+    return { success: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { success: false, error: message };
+  }
+}
+
+/**
+ * Delete one resource, in whichever form it takes, and its version history.
+ *
+ * A directory-form resource goes with its directory, as `deleteResourceDir` always did. A
+ * single-file prompt goes as that FILE and nothing else: the directory around it is a category or a
+ * chain, holding other prompts. Removing it non-recursively means a location that somehow named a
+ * directory as its file fails instead of emptying one.
+ */
+export function deleteResource(
+  location: ResourceLocation,
+  ref: HistoryResourceRef
+): { success: boolean; error?: string } {
+  if (location.form === 'dir') {
+    return deleteResourceDir(location.dir, ref);
+  }
+  try {
+    if (!existsSync(location.file)) {
+      return { success: false, error: `File does not exist: ${location.file}` };
+    }
+    deleteVersionRows(location.file, ref);
+    rmSync(location.file);
     return { success: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

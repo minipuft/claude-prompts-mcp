@@ -98,7 +98,7 @@ function createProcessor() {
     dependencies,
     promptAnalyzer: new PromptAnalyzer(dependencies),
     gateAnalyzer: new GateAnalyzer(dependencies as never),
-    fileOperations: { updatePromptImplementation },
+    fileOperations: { updatePromptImplementation, projectPromptWrite: jest.fn(async () => []) },
     getData: () => ({ convertedPrompts }),
     versionHistoryService: createTestVersionHistory(),
   } as unknown as PromptResourceContext;
@@ -248,7 +248,7 @@ describe('PromptLifecycleProcessor.updatePrompt gate_configuration handling', ()
       dependencies,
       promptAnalyzer: new PromptAnalyzer(dependencies),
       gateAnalyzer: new GateAnalyzer(dependencies as never),
-      fileOperations: { updatePromptImplementation },
+      fileOperations: { updatePromptImplementation, projectPromptWrite: jest.fn(async () => []) },
       getData: () => ({ convertedPrompts: [currentPrompt] }),
       versionHistoryService: createTestVersionHistory(),
       textDiffService: new ObjectDiffGenerator(),
@@ -357,7 +357,7 @@ describe('PromptLifecycleProcessor preserved-field parameters (OQ-P7-8)', () => 
       dependencies,
       promptAnalyzer: new PromptAnalyzer(dependencies),
       gateAnalyzer: new GateAnalyzer(dependencies as never),
-      fileOperations: { updatePromptImplementation },
+      fileOperations: { updatePromptImplementation, projectPromptWrite: jest.fn(async () => []) },
       getData: () => ({ convertedPrompts: [currentPrompt] }),
       versionHistoryService: createTestVersionHistory(),
       textDiffService: new ObjectDiffGenerator(),
@@ -559,7 +559,7 @@ describe('PromptLifecycleProcessor.updatePrompt version-save failure', () => {
       dependencies,
       promptAnalyzer: new PromptAnalyzer(dependencies),
       gateAnalyzer: new GateAnalyzer(dependencies as never),
-      fileOperations: { updatePromptImplementation },
+      fileOperations: { updatePromptImplementation, projectPromptWrite: jest.fn(async () => []) },
       getData: () => ({ convertedPrompts: [currentPrompt] }),
       versionHistoryService: {
         ...createTestVersionHistory(true),
@@ -636,7 +636,7 @@ describe('PromptLifecycleProcessor.updatePrompt version-save failure', () => {
       dependencies,
       promptAnalyzer: new PromptAnalyzer(dependencies),
       gateAnalyzer: new GateAnalyzer(dependencies as never),
-      fileOperations: { updatePromptImplementation },
+      fileOperations: { updatePromptImplementation, projectPromptWrite: jest.fn(async () => []) },
       getData: () => ({ convertedPrompts: [currentPrompt] }),
       versionHistoryService: {
         ...createTestVersionHistory(true),
@@ -817,5 +817,163 @@ describe('deletePrompt confirmation (HANDLER_OWNED_CONFIRMATION)', () => {
 
     // A refusal that still deleted would satisfy every assertion above.
     expect(context.fileOperations.deletePrompt).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * P4.39 — the prompt repair response says WHICH root serves, and stops reporting a served prompt
+ * as absent from the catalog.
+ *
+ * TWO DEFECTS, ONE BRANCH TABLE. The gate and framework repair paths split into three outcomes at
+ * P4.34 — repaired, refused-file-in-another-root, still-refused — and this one kept two. A prompt
+ * write always lands under `getResolvedPromptsDirectory()`: `planPromptWrite` composes `promptDir`
+ * from it, and `sourceRoot` only selects a subtree to copy IN. So a refused file in the BUNDLED
+ * tree is left exactly as broken while a working copy appears in the primary, and the two-outcome
+ * renderer reported that as `Still quarantined … the prompt remains absent from the catalog` —
+ * false in its second clause, because the prompt was in the catalog, served from the copy the same
+ * call had just written. Reachable today: the repair path is entered when nothing in the catalog
+ * answers the id, and a malformed bundled prompt nothing else claims is exactly that.
+ *
+ * The second defect is the one P4.34 fixed on the two twins and left here: `<id> is served again`
+ * asserted a serving outcome from the fact of writing. It is now `formatRepairServingLine` over the
+ * `sourceRoot` the reloaded catalog entry carries — the same renderer, so the three surfaces
+ * cannot drift.
+ *
+ * WHY A STUBBED QUARANTINE AND CATALOG. Both inputs are post-refresh observations, and the point
+ * of each case is what the renderer does with a given pair. Driving them from a real loader would
+ * make the fixture the subject. The pairs themselves are not invented: each is a state the loader
+ * produces, named in the case.
+ */
+describe('PromptLifecycleProcessor.updatePrompt repair outcome (P4.39)', () => {
+  const PRIMARY = '/test/prompts';
+  const BUNDLED = '/pkg/resources/prompts';
+  const OVERLAY = '/ws/prompts';
+
+  interface RepairScenario {
+    /** Root the quarantine record was stamped with — where the refused file actually lives. */
+    readonly recordRoot: string;
+    /** Whether that same file is STILL refused after the write and reload. */
+    readonly stillRefused: boolean;
+    /** `sourceRoot` on the catalog entry after the reload, or undefined when nothing serves it. */
+    readonly servedFrom: string | undefined;
+  }
+
+  async function repair(scenario: RepairScenario): Promise<string> {
+    const logger = createLogger();
+    const record = {
+      type: 'prompt' as const,
+      id: 'broken_prompt',
+      category: 'probecat',
+      root: scenario.recordRoot,
+      path: `${scenario.recordRoot}/probecat/broken_prompt/prompt.yaml`,
+      error: 'arguments: expected array, received string',
+    };
+    // Empty BEFORE the write — that emptiness is what routes `updatePrompt` into its repair
+    // branch at all (`currentPrompt === undefined`). `onRefresh` then publishes the served state
+    // the scenario describes, which is what the outcome line reads.
+    const convertedPrompts: Record<string, unknown>[] = [];
+    // Stateful on purpose, because the two readings are DIFFERENT observations and conflating
+    // them silently skips the branch under test: `resolveRepairTarget` reads the quarantine
+    // BEFORE the write (the file is refused, or there is no repair to do at all), and
+    // `formatRepairOutcome` reads it again AFTER the reload. A stub that answered "not refused"
+    // to both left `repairTarget` undefined and sent the call down the ordinary update path,
+    // where no outcome line is rendered at all — measured while writing these cases.
+    let reloaded = false;
+    const onRefresh = jest.fn(async () => {
+      reloaded = true;
+      convertedPrompts.splice(0, convertedPrompts.length);
+      if (scenario.servedFrom !== undefined) {
+        convertedPrompts.push({ id: 'broken_prompt', sourceRoot: scenario.servedFrom });
+      }
+    });
+    const refusedNow = (): boolean => !reloaded || scenario.stillRefused;
+    const quarantine = {
+      list: () => (refusedNow() ? [record] : []),
+      byId: (id: string) => (refusedNow() && id === record.id ? [record] : []),
+      isRefused: (filePath: string) => refusedNow() && filePath === record.path,
+      get size() {
+        return refusedNow() ? 1 : 0;
+      },
+    };
+    const dependencies = {
+      logger,
+      configManager: createTestConfigManager(PRIMARY),
+      semanticAnalyzer: createSemanticAnalyzer(),
+      quarantine,
+      onRefresh,
+      onRestart: jest.fn(async () => {}),
+    };
+    const context = {
+      dependencies,
+      promptAnalyzer: new PromptAnalyzer(dependencies),
+      gateAnalyzer: new GateAnalyzer(dependencies as never),
+      fileOperations: {
+        updatePromptImplementation: jest.fn(async () => ({
+          message: 'written',
+          affectedFiles: [`${PRIMARY}/probecat/broken_prompt/prompt.yaml`],
+        })),
+        projectPromptWrite: jest.fn(async () => []),
+      },
+      getData: () => ({ convertedPrompts }),
+      versionHistoryService: createTestVersionHistory(),
+      textDiffService: new ObjectDiffGenerator(),
+      comparisonEngine: new ComparisonEngine(logger),
+    } as unknown as PromptResourceContext;
+
+    const response = await new PromptLifecycleProcessor(context).updatePrompt({
+      id: 'broken_prompt',
+      name: 'Broken Prompt',
+      description: 'repaired through the tool',
+      user_message_template: 'Repaired body',
+    });
+    return textOf(response);
+  }
+
+  test('FALSIFIER — a refused file in another root is not reported as an absent prompt', async () => {
+    // The state a malformed BUNDLED prompt produces: the write lands in the primary, that copy
+    // serves, and the bundled file is untouched and still refused.
+    const text = await repair({
+      recordRoot: BUNDLED,
+      stillRefused: true,
+      servedFrom: PRIMARY,
+    });
+
+    expect(text).toContain('was in another root and was not touched');
+    expect(text).toContain(`${BUNDLED}/probecat/broken_prompt/prompt.yaml`);
+    expect(text).toContain('`broken_prompt` is served from your copy in /test/prompts');
+    // The false clause this case exists to remove — the prompt IS in the catalog.
+    expect(text).not.toContain('remains absent from the catalog');
+  });
+
+  test('a repair of the file in the writable root reports it repaired, and which root serves', async () => {
+    const text = await repair({ recordRoot: PRIMARY, stillRefused: false, servedFrom: PRIMARY });
+
+    expect(text).toContain('**Repaired**');
+    expect(text).toContain('`broken_prompt` is served from your copy in /test/prompts');
+    // P4.34's claim, asserted from the fact of writing rather than measured.
+    expect(text).not.toContain('is served again');
+  });
+
+  test('FALSIFIER — a root that outranks the write is named, and the copy called inert', async () => {
+    // The repaired file loads, and an overlay outranks the root it was written to — so the copy
+    // is not what answers. Unreachable from `updatePrompt` today (a valid overlay prompt would
+    // have filled the catalog and skipped the repair branch), and asserted anyway: the renderer
+    // must be correct on the branch before the entry condition moves, not after.
+    const text = await repair({ recordRoot: PRIMARY, stillRefused: false, servedFrom: OVERLAY });
+
+    expect(text).toContain('**Repaired**');
+    expect(text).toContain(`still served from ${OVERLAY}, which outranks ${PRIMARY}`);
+    expect(text).toContain('is NOT what answers');
+    expect(text).not.toContain('served from your copy');
+  });
+
+  test('POSITIVE CONTROL — a file that did not load is still reported as still quarantined', async () => {
+    // The third branch, unchanged by this row. Without it the two assertions above would be
+    // satisfied by a renderer that never says "still quarantined" at all.
+    const text = await repair({ recordRoot: PRIMARY, stillRefused: true, servedFrom: undefined });
+
+    expect(text).toContain('**Still quarantined**');
+    expect(text).toContain('remains absent from the catalog');
+    expect(text).not.toContain('was in another root');
   });
 });

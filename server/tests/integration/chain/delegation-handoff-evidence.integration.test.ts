@@ -402,7 +402,6 @@ describe('delegation handoff evidence at resume (Tier 2 row 2.7)', () => {
       .mockImplementation(() => {}) as unknown as jest.SpiedFunction<() => void>;
 
     sessionStore = new ChainSessionStore(logger, new StubTextReferenceStore() as any, {
-      serverRoot: '/tmp/test-delegation-handoff-evidence',
       cleanupIntervalMs: 60_000,
     });
   });

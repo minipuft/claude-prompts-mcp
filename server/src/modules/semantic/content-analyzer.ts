@@ -30,8 +30,9 @@ const CACHE_EXPIRY_MS = 300000; // 5 minutes
  * It used to be constructed with `SemanticAnalysisConfig`, stored it, and exposed it through
  * `getConfig`/`updateConfig` — but read no field from it. The last real read (a model-integration
  * term in the cache key) went with the LLM side client, and both accessors had zero callers
- * outside tests. The `analysis.semanticAnalysis` config section is still parsed and still warns at
- * startup; it simply no longer reaches this class, because it never fed a decision here.
+ * outside tests. The `analysis.semanticAnalysis` config section was removed in 5.0 — a 4.x file
+ * carrying it is dropped on load with a notice — and it never reached this class anyway, because
+ * it never fed a decision here.
  */
 export class ContentAnalyzer implements ContentAnalyzerPort {
   private logger: Logger;
@@ -70,24 +71,6 @@ export class ContentAnalyzer implements ContentAnalyzerPort {
 
     this.logger.debug(`Analysis completed for prompt: ${prompt.id || 'unknown'}`);
     return analysis;
-  }
-
-  /**
-   * Clear analysis cache
-   */
-  clearCache(): void {
-    this.analysisCache.clear();
-    this.logger.info('Content analysis cache cleared');
-  }
-
-  /**
-   * Get analysis performance statistics
-   */
-  getPerformanceStats() {
-    return {
-      cacheSize: this.analysisCache.size,
-      cacheEnabled: CACHE_ANALYSIS,
-    };
   }
 
   // Cache and utility methods
@@ -146,6 +129,7 @@ export class ContentAnalyzer implements ContentAnalyzerPort {
         'Prompt content is not inspected; only its shape is reported',
         'Framework recommendation not available',
         'Chain detection handled by command parser',
+        'Gate suggestion not available; this analyzer has no access to the gate registry',
       ],
       warnings: [],
 
@@ -163,7 +147,11 @@ export class ContentAnalyzer implements ContentAnalyzerPort {
       },
 
       complexity: 'low',
-      suggestedGates: ['basic_validation'],
+      // Never a hardcoded id: this analyzer has no gate registry to resolve one against, so
+      // suggesting a name here would be a name the caller cannot use — `GateAnalyzer` is the
+      // rule-based recommender that names real, registry-backed gates (see
+      // `resource-manager/prompt/analysis/gate-analyzer.ts`).
+      suggestedGates: [],
 
       frameworkRecommendation: {
         shouldUseFramework: false,

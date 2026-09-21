@@ -20,6 +20,7 @@ import {
   type SkillsSyncOptions,
   type SkillsSyncOutput,
 } from '../../../src/modules/skills-sync/service.js';
+import { resolveSkillsSyncPaths } from '../../../src/runtime/skills-sync-paths.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -141,7 +142,8 @@ describe('Pull Command Integration', () => {
     const out = silentOutput();
     await runSkillsSyncCommand(
       { command: 'export', client: clientId, scope: 'user' } as SkillsSyncOptions,
-      out
+      out,
+      resolveSkillsSyncPaths()
     );
     return path.join(outputDir, promptId, 'SKILL.md');
   }
@@ -196,7 +198,8 @@ describe('Pull Command Integration', () => {
     const pullOut = silentOutput();
     await runSkillsSyncCommand(
       { command: 'pull', client: 'claude-code', scope: 'user' } as SkillsSyncOptions,
-      pullOut
+      pullOut,
+      resolveSkillsSyncPaths()
     );
 
     // Verify: system-message.md should be UNCHANGED (conditionals preserved)
@@ -240,7 +243,8 @@ describe('Pull Command Integration', () => {
     const pullOut = silentOutput();
     await runSkillsSyncCommand(
       { command: 'pull', client: 'claude-code', scope: 'user' } as SkillsSyncOptions,
-      pullOut
+      pullOut,
+      resolveSkillsSyncPaths()
     );
 
     // Verify: system-message.md should be updated with reverse-compiled content
@@ -277,7 +281,8 @@ describe('Pull Command Integration', () => {
     const pullOut = silentOutput();
     await runSkillsSyncCommand(
       { command: 'pull', client: 'claude-code', scope: 'user' } as SkillsSyncOptions,
-      pullOut
+      pullOut,
+      resolveSkillsSyncPaths()
     );
 
     // Verify: prompt.yaml should have updated name and description
@@ -304,7 +309,8 @@ describe('Pull Command Integration', () => {
     const pullOut = silentOutput();
     await runSkillsSyncCommand(
       { command: 'pull', client: 'claude-code', scope: 'user' } as SkillsSyncOptions,
-      pullOut
+      pullOut,
+      resolveSkillsSyncPaths()
     );
 
     // Should report no changes
@@ -332,7 +338,8 @@ describe('Pull Command Integration', () => {
         scope: 'user',
         preview: true,
       } as SkillsSyncOptions,
-      pullOut
+      pullOut,
+      resolveSkillsSyncPaths()
     );
 
     // Should report the change
@@ -386,7 +393,8 @@ describe('Pull Command Integration', () => {
     const pullOut = silentOutput();
     await runSkillsSyncCommand(
       { command: 'pull', client: 'claude-code', scope: 'user' } as SkillsSyncOptions,
-      pullOut
+      pullOut,
+      resolveSkillsSyncPaths()
     );
 
     // system-message.md should be UNCHANGED (Nunjucks conditionals preserved)
@@ -443,7 +451,8 @@ describe('Pull Command Integration', () => {
         // and stops, which is the behaviour the old `--dry-run` had.
         previewDetail: 'diff',
       } as SkillsSyncOptions,
-      pullOut
+      pullOut,
+      resolveSkillsSyncPaths()
     );
 
     // Should show diff output (unified diff format)

@@ -87,6 +87,17 @@ export const SHELL_VERIFY_DEFAULTS = {
 } as const;
 
 // ============================================================================
+// Reminder Guidance Constants
+// ============================================================================
+
+/**
+ * Estimator the gate guidance renderer uses to size reminder output against
+ * `gates.reminderTokenBudget`: `Math.ceil(chars / REMINDER_CHARS_PER_TOKEN)`.
+ * A coarse constant on purpose — the budget is a ceiling, not a measurement.
+ */
+export const REMINDER_CHARS_PER_TOKEN = 4;
+
+// ============================================================================
 // Shell Verification Presets - MIGRATED TO YAML
 // ============================================================================
 // Presets are now loaded dynamically from:

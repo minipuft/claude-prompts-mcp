@@ -1,8 +1,12 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { ContentAnalyzer } from '../../../../../src/modules/semantic/content-analyzer.js';
+import { GateLoader } from '../../../../../src/engine/gates/core/gate-loader.js';
+import { GateAnalyzer } from '../../../../../src/mcp/tools/resource-manager/prompt/analysis/gate-analyzer.js';
 import { PromptAnalyzer } from '../../../../../src/mcp/tools/resource-manager/prompt/analysis/prompt-analyzer.js';
+import { ContentAnalyzer } from '../../../../../src/modules/semantic/content-analyzer.js';
 
+import type { ConvertedPrompt } from '../../../../../src/engine/execution/types.js';
+import type { PromptResourceDependencies } from '../../../../../src/mcp/tools/resource-manager/prompt/core/types.js';
 import type { Logger } from '../../../../../src/shared/types/index.js';
 
 const createLogger = () =>
@@ -45,14 +49,16 @@ describe('PromptAnalyzer.analyzePromptIntelligence', () => {
     expect(result.feedback).toContain(result.classification.executionType);
   });
 
-  test('includes the suggested gates the classification carries', async () => {
+  // `ContentAnalyzer` suggests no gates (it has no gate registry to check a name against), so
+  // the feedback line carries no "Suggested gates:" clause. Pinned here rather than asserting a
+  // nonzero count: a previous version hardcoded `suggestedGates: ['basic_validation']`, a gate id
+  // that never existed in `resources/gates/`, and this test previously required that fabricated
+  // list to be nonempty.
+  test('carries no suggested-gates clause, because the analyzer suggests none', async () => {
     const result = await createAnalyzer().analyzePromptIntelligence(promptData);
 
-    expect(result.classification.suggestedGates.length).toBeGreaterThan(0);
-    expect(result.feedback).toContain('Suggested gates:');
-    for (const gate of result.classification.suggestedGates) {
-      expect(result.feedback).toContain(gate);
-    }
+    expect(result.classification.suggestedGates).toEqual([]);
+    expect(result.feedback).not.toContain('Suggested gates:');
   });
 
   test('returns the classification alongside the feedback', async () => {
@@ -94,5 +100,116 @@ describe('PromptAnalyzer icon selection', () => {
 
     expect(result.classification.analysisMode).toBe('fallback');
     expect(result.feedback.startsWith('🚨')).toBe(true);
+  });
+});
+
+/**
+ * A hardcoded gate id in a create/update-prompt reply is a claim the caller cannot act on unless
+ * it resolves through the gate registry — `resources/gates/` is the only source of truth for what
+ * a gate id names. `basic_validation` shipped in exactly this reply without ever existing there.
+ * These tests drive every gate-suggesting path reachable from a prompt-analysis reply against the
+ * REAL, bundled `GateLoader` (no mock — a mock would only assert that it returns what it was told
+ * to, which proves nothing about whether a suggested id is real) and fail if any of them ever
+ * names an id the registry cannot resolve.
+ */
+describe('gate suggestions resolve through the gate registry', () => {
+  const gateLoader = new GateLoader(createLogger());
+
+  function createPrompt(partial: Partial<ConvertedPrompt> = {}): ConvertedPrompt {
+    return {
+      id: 'prompt',
+      name: 'Prompt',
+      description: 'Test prompt',
+      category: 'general',
+      userMessageTemplate: 'Hello {{name}}',
+      arguments: [{ name: 'name', type: 'string', required: true }],
+      ...partial,
+    };
+  }
+
+  test('positive control: a fabricated id does not resolve — proving this check can fail', async () => {
+    const availableGates = await gateLoader.listAvailableGates();
+
+    expect(availableGates.length).toBeGreaterThan(0);
+    // The exact id this suite exists to catch. If a gate by this name is ever added, swap in
+    // another id nothing defines — the point is a name the registry does NOT resolve.
+    expect(availableGates).not.toContain('basic_validation');
+  });
+
+  test('ContentAnalyzer and PromptAnalyzer never suggest a gate id the registry cannot resolve', async () => {
+    const availableGates = new Set(await gateLoader.listAvailableGates());
+
+    const direct = await new ContentAnalyzer(createLogger()).analyzePrompt(createPrompt());
+    for (const gateId of direct.suggestedGates) {
+      expect(availableGates.has(gateId)).toBe(true);
+    }
+
+    const normalPath = await createAnalyzer().analyzePromptIntelligence(promptData);
+    for (const gateId of normalPath.classification.suggestedGates) {
+      expect(availableGates.has(gateId)).toBe(true);
+    }
+
+    // The failure fallback is the other reachable source of `suggestedGates` in this reply.
+    const throwingAnalyzer = new PromptAnalyzer({
+      logger: createLogger(),
+      semanticAnalyzer: {
+        analyzePrompt: jest.fn(async () => {
+          throw new Error('analysis exploded');
+        }),
+      } as never,
+    });
+    const fallbackPath = await throwingAnalyzer.analyzePromptIntelligence(promptData);
+    expect(fallbackPath.classification.analysisMode).toBe('fallback');
+    for (const gateId of fallbackPath.classification.suggestedGates) {
+      expect(availableGates.has(gateId)).toBe(true);
+    }
+  });
+
+  // `GateAnalyzer` is the second, separate gate-suggesting channel a create-prompt reply calls
+  // (`prompt-lifecycle-processor.ts`, "Suggested Gates: Consider adding these gates"). Driven
+  // across every content signal `analyzePromptContent` branches on, plus every category
+  // `getCategoryGateMapping` maps, so the union of `recommendedGates` collected here is the full
+  // set the analyzer can ever produce — not just whatever one prompt happens to trigger.
+  test('GateAnalyzer never recommends a gate id the registry cannot resolve', async () => {
+    const dependencies = { logger: createLogger() } as unknown as PromptResourceDependencies;
+    const gateAnalyzer = new GateAnalyzer(dependencies);
+    const availableGates = new Set(await gateLoader.listAvailableGates());
+
+    const contentTriggerTemplates = [
+      'Write a function and a class with a variable and a method',
+      'Research and investigate this topic; analyze and examine the study',
+      'Learn and understand this; explain it clearly',
+      'This covers technical specification, implementation, and architecture',
+      'Please structure and organize this; outline the steps',
+    ];
+    const categories = [
+      'analysis',
+      'education',
+      'development',
+      'research',
+      'debugging',
+      'documentation',
+      'content_processing',
+      'general',
+    ];
+
+    const recommended = new Set<string>();
+    for (const userMessageTemplate of contentTriggerTemplates) {
+      for (const category of categories) {
+        const result = await gateAnalyzer.analyzePromptForGates(
+          createPrompt({ userMessageTemplate, category })
+        );
+        for (const gateId of result.recommendedGates) {
+          recommended.add(gateId);
+        }
+      }
+    }
+
+    // Guards the guard: if nothing was ever recommended, the loop above stopped exercising the
+    // branches it claims to, and every assertion below would pass vacuously.
+    expect(recommended.size).toBeGreaterThan(0);
+    for (const gateId of recommended) {
+      expect(availableGates.has(gateId)).toBe(true);
+    }
   });
 });

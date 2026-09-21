@@ -29,18 +29,64 @@ npx claude-prompts --workspace=/path/to/workspace
 MCP_WORKSPACE=/path/to/workspace npx claude-prompts
 ```
 
-### Config JSON Syntax Error
+### "Refusing to start: ... is set to ..."
 
-**Cause**: Invalid JSON in `config.json` blocks startup.
+**Cause**: A path you set cannot be used, so the server stopped before serving instead of running on
+something you did not ask for. The message names the variable or flag, its value, the path it
+resolved to, what is wrong, and what removing the setting would fall back to. It fires for:
 
-**Fix**:
+- `MCP_WORKSPACE` / `--workspace` or `MCP_RESOURCES_PATH` naming a path that does not exist or is
+  not a directory. The server no longer creates a missing workspace.
+- `MCP_CONFIG_PATH` / `--config` naming a file that is missing, a directory, unreadable, or invalid
+  (JSON for a `.json` path, JSONC for a `.jsonc` path).
+- A config file inside your workspace (`config.jsonc` or `config.json`) that is unreadable, a
+  directory, invalid, or valid JSON that is not an object.
+
+**Fix**: correct the path in your client config, create the directory, or unset the setting. A
+relative value resolves against the server's working directory, which for most clients is not your
+shell's, so prefer absolute paths. To check a config file:
 
 ```bash
+# config.json (strict JSON)
 node -e "JSON.parse(require('fs').readFileSync('config.json'))"
+
+# config.jsonc — cpm tolerates comments and a trailing comma the same way the server does
+cpm config validate -w /path/to/workspace
 ```
 
+### "holds both config.jsonc (...) and config.json (...)"
+
+**Cause**: Your workspace directory contains both `config.jsonc` and `config.json`. Nothing on disk
+says which one the server would read, so rather than guess (and silently prefer `.jsonc`), the
+server refuses to start, and every `cpm config` subcommand refuses the same way, naming both paths.
+
+**Fix**: delete whichever file you are not using. `config.jsonc` is the current name and the one
+that accepts comments; `config.json` is still read if you keep it instead — but a workspace may hold
+only one of the two.
+
+### A comment in `config.json` fails to parse
+
+**Cause**: `config.jsonc` and `config.json` are two different dialects, chosen entirely by the
+file's extension — `.jsonc` tolerates `//` and `/* */` comments and a trailing comma before `}`/`]`,
+`.json` stays strict `JSON.parse`. A `//` comment or a trailing comma in a file named `config.json`
+is a syntax error there, even though the identical content parses in a file named `config.jsonc`.
+
+**Fix**: rename the file to `config.jsonc` (delete any `config.json` left in the same directory
+first — see above), or remove the comments and trailing commas to keep it as strict `config.json`.
+
+### Config JSON Syntax Error in the packaged config
+
+**Cause**: Only the `config.json` shipped with the server still falls back instead of refusing:
+invalid JSON there logs `Error loading configuration` and `Using default configuration` to stderr,
+and the server starts on built-in defaults.
+
+**Fix**: reinstall the package, or point `MCP_CONFIG_PATH` at a valid config file.
+
 > [!NOTE]
-> For all CLI flags and environment variables, see the [CLI Configuration](../reference/mcp-tools.md#cli-configuration) section in the MCP Tools reference.
+> For the config file lookup order and precedence chain, see the [Configuration
+> Reference](../reference/configuration.md). For all CLI flags and environment variables, see the
+> [CLI Configuration](../reference/mcp-tools.md#cli-configuration) section in the MCP Tools
+> reference.
 
 ---
 
@@ -69,10 +115,42 @@ node -e "JSON.parse(require('fs').readFileSync('config.json'))"
 
 1. Check `system_control(action: "status")` to verify server is running
 2. Restart Claude Desktop to refresh MCP connections
-3. Verify `prompts.registerWithMcp: true` in `config.json`
+3. Verify `prompts.registerWithMcp: true` in your config file
 
 > [!NOTE]
 > For per-client setup instructions, see the [Client Integration Guide](./client-integration.md) or the [Quick Start](../../README.md#quick-start) in the README.
+
+### "'x' is not a parameter of prompt_engine / system_control / resource_manager"
+
+**Cause**: the call carried an argument key the tool's contract does not declare — usually a
+misspelling, a camelCase spelling of a snake_case parameter, or a parameter borrowed from another
+tool.
+
+**Fix**: use the name the message suggests, or drop the key. The full declared list is one call
+away: `resource_manager(resource_type:"prompt", action:"guide")`, `system_control(action:"guide")`,
+or the tool description for `prompt_engine`.
+
+**Why it is an error rather than being ignored**: such a key used to be dropped silently while the
+call answered **success**. A mistyped _safety_ flag — `preview`, `confirm`, `persist` — therefore
+reported a guarded action while running it unguarded. See
+[mcp-tools.md § Undeclared parameters](../reference/mcp-tools.md#undeclared-parameters).
+
+### "'gate_verdict' is a parameter of prompt_engine, but not one this server is advertising right now"
+
+**Cause**: the gate system is disabled, so `prompt_engine` withdraws `gates`, `gate_verdict` and
+`gate_action` from its advertised surface. The spelling is right; the state is wrong. A client
+holding a cached `tools/list` from before the toggle is the usual source.
+
+**Fix**: `system_control(action:"gates", operation:"enable")`, or drop the parameter. Re-listing
+tools after the toggle stops the client from sending it again.
+
+### "Script tool 'x' emitted an auto_execute call that is refused"
+
+**Cause**: a script tool's `auto_execute.params` named a key `resource_manager` does not declare.
+The script — not the caller — is what needs editing.
+
+**Fix**: open the named script's `tools/<id>/` folder and correct the emitted key. See
+[script-tools.md § Auto-execute parameters are checked](./script-tools.md#auto-execute-parameters-are-checked-not-forwarded).
 
 ---
 
@@ -150,7 +228,7 @@ system_control(action: "framework", operation: "switch", framework: "CAGEERF")
 
 **Fix**:
 
-1. Check `frameworks.enabled: true` in `config.json`
+1. Check `frameworks.enabled: true` in your config file
 2. Remove `%clean` or `%lean` modifiers from command
 3. Use `%guided` to force injection
 

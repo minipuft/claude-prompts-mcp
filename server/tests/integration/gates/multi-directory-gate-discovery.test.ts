@@ -2,7 +2,8 @@
  * Integration test for multi-directory gate discovery.
  *
  * Tests that GateDefinitionLoader correctly discovers and loads gates
- * from both primary (flat) and additional (flat + grouped) directories.
+ * from both primary (flat) and additional (flat + grouped) directories, and that an overlay
+ * outranks the primary on a same-id conflict (P4.27).
  */
 
 import { describe, test, expect, beforeAll, afterAll } from '@jest/globals';
@@ -22,8 +23,6 @@ function gateYaml(id: string, name: string, opts?: { guidanceFile?: string }): s
     `description: Test gate ${id}`,
     `pass_criteria:`,
     `  - type: inline_guidance`,
-    `    required_patterns:`,
-    `      - test`,
   ];
   if (opts?.guidanceFile) {
     lines.push(`guidanceFile: ${opts.guidanceFile}`);
@@ -86,7 +85,6 @@ describe('Multi-Directory Gate Discovery', () => {
   test('discovers gates from primary directory only (regression)', () => {
     const loader = new GateDefinitionLoader({
       gatesDir: primaryDir,
-      validateOnLoad: false,
     });
 
     const ids = loader.discoverGates();
@@ -97,7 +95,6 @@ describe('Multi-Directory Gate Discovery', () => {
     const loader = new GateDefinitionLoader({
       gatesDir: primaryDir,
       additionalGatesDirs: [additionalDir],
-      validateOnLoad: false,
     });
 
     const ids = loader.discoverGates();
@@ -114,7 +111,6 @@ describe('Multi-Directory Gate Discovery', () => {
     const loader = new GateDefinitionLoader({
       gatesDir: primaryDir,
       additionalGatesDirs: [additionalDir],
-      validateOnLoad: false,
     });
 
     const gate = loader.loadGate('pre-flight-completion');
@@ -127,7 +123,6 @@ describe('Multi-Directory Gate Discovery', () => {
     const loader = new GateDefinitionLoader({
       gatesDir: primaryDir,
       additionalGatesDirs: [additionalDir],
-      validateOnLoad: false,
     });
 
     const gate = loader.loadGate('pre-flight-completion');
@@ -135,8 +130,15 @@ describe('Multi-Directory Gate Discovery', () => {
     expect(gate!.guidance).toBe('# Pre-Flight Guidance');
   });
 
-  test('primary gate wins on ID conflict', () => {
-    // Create a conflicting gate in additional dir with same ID as primary
+  /**
+   * REWRITTEN AT P4.27. This case asserted "primary gate wins on ID conflict" — the defect in test
+   * form. Prompts have loaded bundle -> primary -> overlays with a later result winning since P1.0a
+   * ("same ID = custom wins"), and the resource indexer agrees; the three flat-layout kinds were
+   * the only ones resolving `primary ?? additional`, and the docstring that justified it held only
+   * while the workspace WAS the primary. An overlay now outranks the primary for gates too.
+   */
+  test('an overlay gate wins on ID conflict', () => {
+    // A conflicting gate in an overlay dir with the same ID as one in the primary
     const conflictDir = mkdtempSync(join(tmpdir(), 'gates-conflict-'));
     const cqDir = join(conflictDir, 'code-quality');
     mkdirSync(cqDir);
@@ -146,13 +148,18 @@ describe('Multi-Directory Gate Discovery', () => {
       const loader = new GateDefinitionLoader({
         gatesDir: primaryDir,
         additionalGatesDirs: [conflictDir],
-        validateOnLoad: false,
       });
 
       const gate = loader.loadGate('code-quality');
       expect(gate).toBeDefined();
-      // Primary wins — name should be from primary, not additional
-      expect(gate!.name).toBe('Code Quality');
+      // The overlay wins — the name comes from the overlay, not the primary.
+      expect(gate!.name).toBe('OVERRIDDEN Code Quality');
+      // …and it is the overlay the definition reports itself as served from.
+      expect(gate!.sourceRoot).toBe(conflictDir);
+
+      // POSITIVE CONTROL, same loader: an id the overlay does NOT define still comes from the
+      // primary, so the line above is not passing because the primary stopped being consulted.
+      expect(loader.loadGate('test-coverage')?.name).toBe('Test Coverage');
     } finally {
       rmSync(conflictDir, { recursive: true, force: true });
     }
@@ -162,7 +169,6 @@ describe('Multi-Directory Gate Discovery', () => {
     const loader = new GateDefinitionLoader({
       gatesDir: primaryDir,
       additionalGatesDirs: ['/no/such/path'],
-      validateOnLoad: false,
     });
 
     // Should not throw, should work with primary only
@@ -174,47 +180,16 @@ describe('Multi-Directory Gate Discovery', () => {
     const loader = new GateDefinitionLoader({
       gatesDir: primaryDir,
       additionalGatesDirs: [additionalDir],
-      validateOnLoad: false,
     });
 
     const dirs = loader.getWatchDirectories();
     expect(dirs).toEqual([primaryDir, additionalDir]);
   });
 
-  test('gateExists checks both primary and additional directories', () => {
-    const loader = new GateDefinitionLoader({
-      gatesDir: primaryDir,
-      additionalGatesDirs: [additionalDir],
-      validateOnLoad: false,
-    });
-
-    // Primary gate
-    expect(loader.gateExists('code-quality')).toBe(true);
-    // Additional grouped gate
-    expect(loader.gateExists('pre-flight-completion')).toBe(true);
-    // Additional flat gate
-    expect(loader.gateExists('standalone')).toBe(true);
-    // Non-existent
-    expect(loader.gateExists('no-such-gate')).toBe(false);
-  });
-
-  test('getStats includes additional directories', () => {
-    const loader = new GateDefinitionLoader({
-      gatesDir: primaryDir,
-      additionalGatesDirs: [additionalDir],
-      validateOnLoad: false,
-    });
-
-    const stats = loader.getStats();
-    expect(stats.gatesDir).toBe(primaryDir);
-    expect(stats.additionalGatesDirs).toEqual([additionalDir]);
-  });
-
   test('loads flat gate from additional directory', () => {
     const loader = new GateDefinitionLoader({
       gatesDir: primaryDir,
       additionalGatesDirs: [additionalDir],
-      validateOnLoad: false,
     });
 
     const gate = loader.loadGate('standalone');

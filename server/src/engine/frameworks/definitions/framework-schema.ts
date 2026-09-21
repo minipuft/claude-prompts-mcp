@@ -158,10 +158,20 @@ export type FrameworkYaml = z.infer<typeof FrameworkSchema>;
 // Validation Utilities
 // ============================================
 
-export interface FrameworkSchemaValidationResult {
+export interface FrameworkSchemaValidationResult<T = unknown> {
   valid: boolean;
   errors: string[];
   warnings: string[];
+  /**
+   * The validator's parsed output, schema defaults included, when validation passed.
+   *
+   * Shared between `validateFrameworkSchema` (framework.yaml) and `validatePhasesSchema`
+   * (phases.yaml) — the two schemas default different fields, so the type is generic rather
+   * than fixed to either shape. `validatePhasesSchema` is the one caller that currently reads
+   * this: `ExecutionStepSchema.dependencies` is the only `.default(` in this file, and it lives
+   * on the phases side (P4.51).
+   */
+  data?: T;
 }
 
 /**
@@ -218,7 +228,9 @@ export function validateFrameworkSchema(
  * @param data - Raw YAML data from phases.yaml
  * @returns Validation result with errors and warnings
  */
-export function validatePhasesSchema(data: unknown): FrameworkSchemaValidationResult {
+export function validatePhasesSchema(
+  data: unknown
+): FrameworkSchemaValidationResult<PhasesFileYaml> {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -289,9 +301,17 @@ export function validatePhasesSchema(data: unknown): FrameworkSchemaValidationRe
     warnings.push('No executionSteps defined');
   }
 
-  return {
+  const validationResult: FrameworkSchemaValidationResult<PhasesFileYaml> = {
     valid: errors.length === 0,
     errors,
     warnings,
   };
+
+  // The defaulted parse (`executionSteps[].dependencies` included) — not the raw phases object
+  // the caller inlined before this ran. Mirrors `validateStyleSchema` (P4.51, P4.49).
+  if (errors.length === 0) {
+    validationResult.data = phases;
+  }
+
+  return validationResult;
 }

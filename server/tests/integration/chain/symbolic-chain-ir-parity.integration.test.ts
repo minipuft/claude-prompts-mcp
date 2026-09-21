@@ -278,7 +278,9 @@ describe('row A.2 — a `-->` command compiles through the Workflow IR without c
   beforeAll(async () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'symbolic-ir-parity-'));
     logger = createLogger();
-    engine = await SqliteEngine.getInstance(tmpDir, logger);
+    engine = await SqliteEngine.getInstance(logger, {
+      dbPath: path.join(tmpDir, 'runtime-state', 'state.db'),
+    });
     await engine.initialize();
   });
 

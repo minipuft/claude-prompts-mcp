@@ -339,7 +339,8 @@ def authored_id(candidate: str, info: PromptInfo | None = None) -> str:
     Resolution is case-insensitive on both sides -- command-parser.ts folds case
     to find the prompt and then returns `found.id` -- so the folded lookup key is
     an implementation detail. Printing that key teaches a spelling that does not
-    exist: two ids carry case today, `strategicImplement` and `diagnosisCard`.
+    exist. No bundled id carries case, but the API still accepts one, so a
+    library can hold a camelCase id and must be shown it as written.
 
     Takes the record where the caller already has one, so display resolves
     through the registry rather than through whatever string was used to look it

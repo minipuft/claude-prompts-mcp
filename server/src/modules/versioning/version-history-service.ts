@@ -1,17 +1,50 @@
 // @lifecycle canonical - Core service for managing resource version history
 
-import { isDeepStrictEqual } from 'node:util';
+import { resolveByteRestore } from './byte-restore.js';
+import { RESOURCE_SUBTREE_MATCH } from './history-key.js';
 
+import type { LoadedTree } from '#cli-shared/object-store.js';
 import type { VersioningConfig, Logger } from '#shared/types/index.js';
 import type { DatabasePort, StateStoreOptions } from '#shared/types/persistence.js';
+import type {
+  ResourceFileLocatorPort,
+  ResourceFileSet,
+  ResourceLocationResult,
+  ResourceRootOrigin,
+} from '#shared/utils/resource-file-set.js';
+import type { ByteRestoreAvailability } from './byte-restore.js';
 import type {
   VersionEntry,
   HistoryFile,
   SaveVersionResult,
-  RollbackResult,
   SaveVersionOptions,
   ResourceType,
 } from './types.js';
+
+import {
+  readResourceTree,
+  recordTree,
+  sweepUnreferencedObjects,
+} from '#cli-shared/object-store.js';
+import { pruneVersionHistory } from '#cli-shared/version-history-rows.js';
+import { hashCanonical } from '#shared/utils/hash.js';
+import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
+import { resourceFileSet } from '#shared/utils/resource-file-set.js';
+
+/**
+ * The identity of a snapshot, as the table stores it.
+ *
+ * Hashed from the PERSISTED text rather than from the live object, on both sides of every
+ * comparison. That is what makes the test symmetric: a live snapshot can hold an `undefined`
+ * member or a key order a loader happened to produce, neither of which survives the column, so
+ * comparing a live object against a stored row directly answers a different question than
+ * "will this row equal the one already there". `hashCanonical` then removes key order from the
+ * answer entirely — the property CHANGELOG 4.0.0 claimed for the whole system and which, until
+ * now, held on the server path only.
+ */
+function snapshotIdentity(persistedJson: string): string {
+  return hashCanonical(JSON.parse(persistedJson));
+}
 
 interface VersionRow {
   id: number;
@@ -28,8 +61,6 @@ interface VersionRow {
  * Interface for config provider - allows ConfigManager or test doubles.
  * Requires both versioning config and serverRoot for SQLite access.
  */
-import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
-
 export interface VersioningConfigProvider {
   getVersioningConfig(): VersioningConfig;
   getServerRoot(): string;
@@ -58,16 +89,50 @@ export class VersionHistoryService {
    */
   private scope?: StateStoreOptions;
 
+  /**
+   * How this service turns a (type, id) into the files on disk that ARE that resource.
+   *
+   * INJECTED, never re-derived (owner ruling R65). Root precedence has exactly one owner
+   * (`runtime/resource-roots.ts`), and a second derivation of it here would decide, independently,
+   * which of a bundled and a workspace definition a checkpoint records — the two could only agree
+   * by inspection, and the failure is silent: a rollback restores the wrong file.
+   *
+   * Optional because the unit suites construct this service directly and a missing locator
+   * degrades a row to projection-only — today's behaviour — rather than to a wrong answer. Every
+   * construction in `src/` supplies one, which
+   * `tests/unit/versioning/version-history-locator-wiring.test.ts` enumerates and enforces.
+   */
+  private resourceFileLocator?: ResourceFileLocatorPort;
+
   constructor(deps: {
     logger: Logger;
     configManager: VersioningConfigProvider;
     dbManager?: DatabasePort;
     scope?: StateStoreOptions;
+    resourceFileLocator?: ResourceFileLocatorPort;
   }) {
     this.logger = deps.logger;
     this.configProvider = deps.configManager;
     this.dbManager = deps.dbManager ?? null;
     this.scope = deps.scope;
+    this.resourceFileLocator = deps.resourceFileLocator;
+  }
+
+  /**
+   * Where this resource's entry file and contributing roots are, or why they could not be found.
+   *
+   * The single reason this service holds a locator at all. A caller that gets `located: false`
+   * records the version WITHOUT a file tree and warns once — never a failed save, because the
+   * projection in `snapshot` is what every reader already uses.
+   */
+  private async locateResourceFiles(
+    resourceType: ResourceType,
+    resourceId: string
+  ): Promise<ResourceLocationResult> {
+    if (this.resourceFileLocator === undefined) {
+      return { located: false, reason: 'no resource file locator was injected into this service' };
+    }
+    return this.resourceFileLocator.locate(resourceType, resourceId);
   }
 
   /** Late-bind DatabasePort and its scope (setter injection, matching codebase convention). */
@@ -124,7 +189,7 @@ export class VersionHistoryService {
 
   isAutoVersionEnabled(): boolean {
     const config = this.getConfig();
-    return config.enabled && config.auto_version;
+    return config.enabled && config.autoVersion;
   }
 
   /**
@@ -144,72 +209,127 @@ export class VersionHistoryService {
     snapshot: Record<string, unknown>,
     options?: SaveVersionOptions
   ): Promise<SaveVersionResult> {
+    return this.appendVersion(resourceType, resourceId, snapshot, options, true);
+  }
+
+  /**
+   * The body of {@link saveVersion}, plus whether this row may carry a file tree.
+   *
+   * `recordFiles` is the ONE structural difference between a produced row and a bridge row
+   * (ruling R66). It is deliberately not exposed on `SaveVersionOptions`: a caller outside this
+   * class has no way to know whether the files on disk describe the snapshot it is passing, and
+   * the two callers that do know are both in this file.
+   *
+   * The equality rule is untouched by it — skip-if-equal still runs on the snapshot's canonical
+   * hash, inside the transaction, exactly as before. A row that is not written records no tree
+   * because there is no row to hang one on, not because of a second comparison.
+   */
+  private async appendVersion(
+    resourceType: ResourceType,
+    resourceId: string,
+    snapshot: Record<string, unknown>,
+    options: SaveVersionOptions | undefined,
+    recordFiles: boolean
+  ): Promise<SaveVersionResult> {
     const config = this.getConfig();
 
     if (!config.enabled) {
-      return { success: true, version: 0 };
+      return { success: true, version: 0, recorded: false };
     }
 
     try {
       const db = this.getDb();
       const tenantId = this.resolveTenantId();
 
-      // Get current max version
-      const row = db.queryOne<{ max_version: number | null }>(
-        `SELECT MAX(version) as max_version FROM version_history
-         WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?`,
-        [tenantId, resourceType, resourceId]
-      );
-      const currentVersion = row?.max_version ?? 0;
-      const newVersion = currentVersion + 1;
+      // `MAX(version)` and the INSERT that consumes it are ONE unit, under the write lock.
+      //
+      // The number this reads is the number it writes back, so anything committing between the two
+      // makes the INSERT land on a stale maximum. Two rows then share a version — and since schema
+      // v28 that is a UNIQUE violation rather than a silent duplicate, which turns a rare wrong
+      // rollback into a failed save, but only a transaction removes the window. `version_history`
+      // has two accepted writers (this service and `cli-shared/version-history.ts`) against one
+      // file, so the racing connection is a real configuration, not a hypothetical. IMMEDIATE, not
+      // deferred: a deferred transaction takes no lock until the write, by which point both readers
+      // already hold the same stale maximum.
+      //
+      // The prune is inside deliberately — it already ran adjacent to the insert, reads the count
+      // this insert produced, and deletes by it.
+      //
+      // No retry loop, because one is not needed: a contending writer WAITS on the lock. Both
+      // connections to this file set `busy_timeout` from `STATE_DB_BUSY_TIMEOUT_MS`, so the loser
+      // of a race blocks for the few milliseconds the winner's transaction takes and then proceeds.
+      // A retry here would be a second, worse implementation of that wait, in the wrong layer.
+      // Serialised ONCE, outside the lock: this text is both what the equality test measures and
+      // what the INSERT binds, so the two cannot describe different states.
+      const payload = JSON.stringify(snapshot);
 
-      // Insert new version
-      db.run(
-        `INSERT INTO version_history (tenant_id, organization_id, workspace_id, resource_type, resource_id, version, snapshot, diff_summary, description, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
+      // The resource's bytes are read here, ABOVE the write lock. Nothing about them needs it:
+      // objects are content-addressed, so a file that changes between this read and the commit
+      // produces a different tree rather than a wrong one, and holding the lock across disk I/O
+      // blocks the other writer of this one file for as long as the disk takes.
+      const prepared = recordFiles
+        ? await this.prepareFileTree(resourceType, resourceId)
+        : undefined;
+      let treeReason = prepared !== undefined && 'reason' in prepared ? prepared.reason : undefined;
+
+      const outcome = await db.transaction(async () => {
+        // The newest row's number AND its snapshot, read together. The equality decision lives
+        // INSIDE this transaction deliberately: decided before `BEGIN IMMEDIATE`, two processes
+        // could each compare against a maximum the other was about to replace and each conclude
+        // "unchanged", so a genuine change would go unrecorded by both. `version_history` has two
+        // accepted writers against one file, so that is a real configuration.
+        const row = db.queryOne<{ version: number; snapshot: string }>(
+          `SELECT version, snapshot FROM version_history
+         WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?
+         ORDER BY version DESC LIMIT 1`,
+          [tenantId, resourceType, resourceId]
+        );
+
+        if (row !== null && snapshotIdentity(row.snapshot) === snapshotIdentity(payload)) {
+          return { version: row.version, recorded: false };
+        }
+
+        const version = (row?.version ?? 0) + 1;
+        this.insertAndPrune({
+          db,
           tenantId,
-          this.scope?.organizationId ?? null,
-          this.scope?.workspaceId ?? null,
           resourceType,
           resourceId,
-          newVersion,
-          JSON.stringify(snapshot),
-          options?.diff_summary ?? '',
-          options?.description ?? `Version ${newVersion}`,
-          new Date().toISOString(),
-        ]
-      );
-
-      // Prune old versions if exceeding max
-      const count = db.queryOne<{ cnt: number }>(
-        `SELECT COUNT(*) as cnt FROM version_history
-         WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?`,
-        [tenantId, resourceType, resourceId]
-      );
-
-      if (count && count.cnt > config.max_versions) {
-        db.run(
-          `DELETE FROM version_history WHERE id NOT IN (
-            SELECT id FROM version_history
-            WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?
-            ORDER BY version DESC LIMIT ?
-          ) AND tenant_id = ? AND resource_type = ? AND resource_id = ?`,
-          [
+          version,
+          payload,
+          options,
+        });
+        // The STATEMENTS that store the files run last, inside the same lock the row was written
+        // under. That placement is invariant WRITE-1: an object insert and the manifest row that
+        // justifies it commit together or not at all, so a crash between them leaves neither. The
+        // file READS are not in here — they happened above, before the lock was taken.
+        if (prepared !== undefined && 'tree' in prepared) {
+          treeReason = this.attachFileTree({
+            db,
             tenantId,
             resourceType,
             resourceId,
-            config.max_versions,
-            tenantId,
-            resourceType,
-            resourceId,
-          ]
+            version,
+            tree: prepared.tree,
+          });
+        }
+        return { version, recorded: true };
+      }, 'immediate');
+
+      // Warned once, and only for a row that exists: an unchanged write records nothing, so a
+      // degradation reported there would describe a version nobody wrote.
+      if (outcome.recorded && treeReason !== undefined) {
+        this.logger.warn(
+          `Recorded ${resourceType}/${resourceId} version ${outcome.version} without a file ` +
+            `tree: ${treeReason}. Rollback to this version restores from its projection.`
         );
-        this.logger.debug(`Pruned history for ${resourceId} to ${config.max_versions} versions`);
       }
-
-      this.logger.debug(`Saved version ${newVersion} for ${resourceType}/${resourceId}`);
-      return { success: true, version: newVersion };
+      this.logger.debug(
+        outcome.recorded
+          ? `Saved version ${outcome.version} for ${resourceType}/${resourceId}`
+          : `No change to record for ${resourceType}/${resourceId}; still at version ${outcome.version}`
+      );
+      return { success: true, version: outcome.version, recorded: outcome.recorded };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.error(`Failed to save version for ${resourceId}: ${message}`);
@@ -218,6 +338,124 @@ export class VersionHistoryService {
         { cause: error }
       );
     }
+  }
+
+  /** The write half of `saveVersion`, run inside its transaction: the row, then the trim. */
+  private insertAndPrune(input: {
+    db: DatabasePort;
+    tenantId: string;
+    resourceType: ResourceType;
+    resourceId: string;
+    version: number;
+    /** The snapshot as `saveVersion` serialised it — the same text its equality test measured. */
+    payload: string;
+    options?: SaveVersionOptions;
+  }): void {
+    const { db, tenantId, resourceType, resourceId, payload, options } = input;
+    const newVersion = input.version;
+    const config = this.getConfig();
+
+    // Insert new version
+    db.run(
+      `INSERT INTO version_history (tenant_id, organization_id, workspace_id, resource_type, resource_id, version, snapshot, diff_summary, description, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        tenantId,
+        this.scope?.organizationId ?? null,
+        this.scope?.workspaceId ?? null,
+        resourceType,
+        resourceId,
+        newVersion,
+        payload,
+        options?.diff_summary ?? '',
+        options?.description ?? `Version ${newVersion}`,
+        new Date().toISOString(),
+      ]
+    );
+
+    // Trim through the ONE implementation both writers share (`cli-shared/version-history-rows`).
+    // It used to be restated here, with SQL and a bound that differed from the CLI's — which is
+    // how a workspace configured to keep three versions kept fifty after a `cpm` write.
+    const pruned = pruneVersionHistory(db, {
+      tenantId,
+      resourceType,
+      resourceId,
+      maxVersions: config.maxVersions,
+    });
+    if (pruned > 0) {
+      this.logger.debug(
+        `Pruned ${pruned} history row(s) for ${resourceId} to ${config.maxVersions} versions`
+      );
+    }
+  }
+
+  /**
+   * Record the files behind the row just inserted, or leave the row projection-only.
+   *
+   * Never throws for a resource it cannot store. The version row is the durable thing nothing
+   * regenerates; an over-limit file or a deleted directory must cost byte-exact rollback for that
+   * version, not the version itself. One `warn` names the resource and the reason, so a
+   * degradation is visible in the log rather than inferred from a NULL column much later.
+   *
+   * A SQLite failure is NOT caught here and propagates into the caller's transaction, which rolls
+   * back. That is the correct asymmetry: "these bytes do not fit" is a property of the resource,
+   * "this INSERT failed" is a property of the database, and only the second one means the row
+   * itself is untrustworthy.
+   */
+  private async prepareFileTree(
+    resourceType: ResourceType,
+    resourceId: string
+  ): Promise<{ tree: LoadedTree } | { reason: string }> {
+    const location = await this.locateResourceFiles(resourceType, resourceId);
+    if (!location.located) {
+      return { reason: location.reason };
+    }
+
+    let files: ResourceFileSet;
+    try {
+      files = await resourceFileSet({
+        resourceType,
+        entryPath: location.entryPath,
+        roots: location.roots,
+      });
+    } catch (error) {
+      return { reason: error instanceof Error ? error.message : String(error) };
+    }
+    return readResourceTree(files);
+  }
+
+  /**
+   * Point the row just inserted at bytes already read, or say why it stays projection-only.
+   *
+   * Runs INSIDE the caller's transaction and is synchronous: every I/O this used to do now
+   * happens in `prepareFileTree`, above the lock. Returns a reason instead of warning, because
+   * the caller warns once and only when a row was actually written — a degradation reported for
+   * a write that skip-if-equal declined would describe a row that does not exist.
+   */
+  private attachFileTree(input: {
+    db: DatabasePort;
+    tenantId: string;
+    resourceType: ResourceType;
+    resourceId: string;
+    version: number;
+    tree: LoadedTree;
+  }): string | undefined {
+    const { db, tenantId, resourceType, resourceId, version, tree } = input;
+
+    // The row id is read back rather than taken from a driver's last-insert value: `DatabasePort`
+    // exposes none, and (tenant, type, id, version) is UNIQUE since schema v28, so this SELECT
+    // inside the same transaction identifies exactly the row just written.
+    const row = db.queryOne<{ id: number }>(
+      `SELECT id FROM version_history
+       WHERE tenant_id = ? AND resource_type = ? AND resource_id = ? AND version = ?`,
+      [tenantId, resourceType, resourceId, version]
+    );
+    if (row === null) {
+      return 'the row could not be read back inside its own transaction';
+    }
+
+    const outcome = recordTree(db, { tenantId, versionRowId: row.id, tree });
+    return outcome.recorded ? undefined : outcome.reason;
   }
 
   /**
@@ -306,26 +544,6 @@ export class VersionHistoryService {
   }
 
   /**
-   * Get the latest version number for a resource.
-   */
-  async getLatestVersion(resourceType: ResourceType, resourceId: string): Promise<number> {
-    try {
-      const db = this.getDb();
-      const tenantId = this.resolveTenantId();
-
-      const row = db.queryOne<{ max_version: number | null }>(
-        `SELECT MAX(version) as max_version FROM version_history
-         WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?`,
-        [tenantId, resourceType, resourceId]
-      );
-
-      return row?.max_version ?? 0;
-    } catch {
-      return 0;
-    }
-  }
-
-  /**
    * Record the state PRODUCED by an edit, bridging any unrecorded prior state first.
    *
    * Go-forward numbering (P7-D2 mechanism 1, OQ-P7-3): version N holds the state edit N
@@ -340,8 +558,15 @@ export class VersionHistoryService {
    * out-of-band file edit), that live state is recorded first so it stays rollback-reachable.
    * Steady state records exactly one row per edit.
    *
-   * Called BEFORE the file write, with the state about to be produced — a persistence failure
-   * therefore still aborts the edit with nothing written (OQ-P7-6 posture, row 2.3).
+   * Called at COMMIT time, with the produced files already on disk. Every caller passes this as
+   * the `commit` callback of `ResourceMutationTransaction`, whose `run()` is
+   * `captureSnapshots → mutate → validate → commit` — so the write and its verification have both
+   * happened, and a throw here lands in the catch that restores every snapshot, leaving the files
+   * byte-identical. This docblock said the opposite ("Called BEFORE the file write") from P4.2,
+   * when SF-3 moved the record inside the transaction, until row O.4 measured it: the object store
+   * DEPENDS on this order, because it reads the bytes the edit produced.
+   *
+   * Pinned by `tests/integration/versioning/record-edit-result-ordering.test.ts`.
    */
   async recordEditResult(
     resourceType: ResourceType,
@@ -351,40 +576,40 @@ export class VersionHistoryService {
     options?: SaveVersionOptions
   ): Promise<SaveVersionResult & { bridged: boolean }> {
     if (!this.isEnabled()) {
-      return { success: true, version: 0, bridged: false };
+      return { success: true, version: 0, bridged: false, recorded: false };
     }
 
-    const bridged = !(await this.latestSnapshotMatches(
+    // ONE equality rule, applied twice. The bridge used to have its own comparison
+    // (`isDeepStrictEqual` against the newest row, decided outside the write lock) while the
+    // record below had none at all, so the same question — "is this state already the newest
+    // one?" — was answered by two different implementations on two paths, and the second answer
+    // was always "no". Both calls now go through `saveVersion`, whose test runs inside its own
+    // transaction: the bridge row appears exactly when the prior live state is unrecorded, and
+    // `bridged` is simply whether that call wrote.
+    const bridge = await this.appendVersion(
       resourceType,
       resourceId,
-      priorLiveSnapshot
-    ));
-    if (bridged) {
-      await this.saveVersion(resourceType, resourceId, priorLiveSnapshot, {
+      priorLiveSnapshot,
+      {
         description: 'Bridge: prior live state (era transition or out-of-band edit)',
         diff_summary: '',
-      });
-    }
+      },
+      // No file tree, and the reason is the ordering this method runs under. Both appends happen
+      // in `commit`, AFTER the produced files are on disk, so an enumerator run inside either one
+      // reads the PRODUCED bytes. A tree on the bridge row would therefore describe the produced
+      // state under a row whose snapshot is the prior one, and a later byte-exact rollback would
+      // restore the wrong bytes while reporting full fidelity.
+      false
+    );
 
-    const result = await this.saveVersion(resourceType, resourceId, producedSnapshot, options);
-    return { ...result, bridged };
-  }
-
-  /** True when the newest recorded snapshot structurally equals the given live state. */
-  private async latestSnapshotMatches(
-    resourceType: ResourceType,
-    resourceId: string,
-    live: Record<string, unknown>
-  ): Promise<boolean> {
-    const latest = await this.getLatestVersion(resourceType, resourceId);
-    if (latest === 0) return false;
-    const entry = await this.getVersion(resourceType, resourceId, latest);
-    if (entry === null) return false;
-    // Snapshots cross a JSON persistence boundary, which drops `undefined` object members while
-    // preserving array order. Compare against that persisted shape, but use structural equality so
-    // loader-induced object key reordering does not create a phantom bridge row.
-    const persistedLive = JSON.parse(JSON.stringify(live)) as Record<string, unknown>;
-    return isDeepStrictEqual(entry.snapshot, persistedLive);
+    const result = await this.appendVersion(
+      resourceType,
+      resourceId,
+      producedSnapshot,
+      options,
+      true
+    );
+    return { ...result, bridged: bridge.recorded };
   }
 
   /**
@@ -415,6 +640,59 @@ export class VersionHistoryService {
   }
 
   /**
+   * Whether `version` can be restored from its recorded BYTES, and what doing so would do.
+   *
+   * PURE READ, like {@link resolveRollbackTarget} beside it — no file and no row moves, which is
+   * what lets `preview_action:'rollback'` call this and print the very plan an apply would run.
+   * The two call it with the same arguments and get the same value, so a preview cannot describe
+   * a different action than the one that follows it.
+   *
+   * Three answers (see `ByteRestoreAvailability`): `ready`, `projection-only` — the row carries no
+   * tree, so the caller uses today's `SnapshotContract.restore` path unchanged — and `refused`,
+   * where the caller must write nothing. A `refused` is never downgraded to a fallback here: a row
+   * advertising a tree whose objects are gone, or a recorded path that escapes the resource root,
+   * is a database that disagrees with itself, and quietly restoring something else instead is the
+   * failure this whole route exists to remove.
+   */
+  async planByteRestore(
+    resourceType: ResourceType,
+    resourceId: string,
+    version: number
+  ): Promise<ByteRestoreAvailability> {
+    if (!this.isEnabled()) {
+      return { status: 'projection-only', reason: 'versioning is disabled' };
+    }
+    const db = this.getDb();
+    const tenantId = this.resolveTenantId();
+
+    const row = db.queryOne<{ id: number; tree_hash: string | null; tree_origin: string | null }>(
+      `SELECT id, tree_hash, tree_origin FROM version_history
+       WHERE tenant_id = ? AND resource_type = ? AND resource_id = ? AND version = ?`,
+      [tenantId, resourceType, resourceId, version]
+    );
+    if (row?.tree_hash == null) {
+      return {
+        status: 'projection-only',
+        reason: `version ${version} recorded no file tree`,
+      };
+    }
+
+    return resolveByteRestore({
+      db,
+      tenantId,
+      resourceType,
+      resourceId,
+      version,
+      versionRowId: row.id,
+      // The enumerator's own vocabulary, written by `recordTree` and read straight back. Widened
+      // to `unknown` rather than defaulted to `primary`, because a row whose origin nobody could
+      // classify must not read as one this process owns.
+      recordedOrigin: (row.tree_origin ?? 'unknown') as ResourceRootOrigin,
+      location: await this.locateResourceFiles(resourceType, resourceId),
+    });
+  }
+
+  /**
    * Record the state an edit produced, bridging the prior live state when it is unrecorded.
    *
    * Phase two of three. Named for what a caller does with it rather than for the mechanism:
@@ -438,66 +716,6 @@ export class VersionHistoryService {
       producedSnapshot,
       options
     );
-  }
-
-  /**
-   * Rollback to a previous version.
-   *
-   * Go-forward semantics (OQ-P7-3): the target is validated BEFORE anything is written, so a
-   * refused rollback consumes no version number (DEV-T2-6's defect). The restored state is then
-   * recorded as the newest version — a rollback is an edit, and version N holds what edit N
-   * produced. The live pre-rollback state needs no dedicated "Pre-rollback snapshot" row: under
-   * these semantics it is already the previous version, and when it is not (old-era rows,
-   * out-of-band edits) the bridge records it.
-   *
-   * RESTORABILITY is not checked here — only existence. A caller that can reject the snapshot
-   * (because its snapshot contract finds a required field missing) must use
-   * `resolveRollbackTarget` + `commitEdit` instead, so the rejection happens before any write.
-   * This convenience wrapper remains for callers with no such rejection to make.
-   */
-  async rollback(
-    resourceType: ResourceType,
-    resourceId: string,
-    targetVersion: number,
-    currentSnapshot: Record<string, unknown>
-  ): Promise<RollbackResult & { snapshot?: Record<string, unknown> }> {
-    const resolved = await this.resolveRollbackTarget(resourceType, resourceId, targetVersion);
-    if (!resolved.ok) {
-      return { success: false, error: resolved.error };
-    }
-    const targetEntry = resolved.entry;
-
-    try {
-      // Record the RESTORED state as the newest version, bridging the live state first if it is
-      // not already recorded. A persistence failure throws and is caught below — a rollback that
-      // reports failure and restores nothing, with the target validated above so the refusal
-      // path writes no rows at all.
-      const saveResult = await this.commitEdit(
-        resourceType,
-        resourceId,
-        currentSnapshot,
-        targetEntry.snapshot,
-        {
-          description: `Rollback to v${targetVersion}`,
-          diff_summary: '',
-        }
-      );
-
-      this.logger.info(
-        `Rollback ${resourceType}/${resourceId}: recorded v${saveResult.version} (restored from v${targetVersion}${saveResult.bridged ? ', live state bridged' : ''})`
-      );
-
-      return {
-        success: true,
-        saved_version: saveResult.version,
-        restored_version: targetVersion,
-        snapshot: targetEntry.snapshot,
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Rollback failed for ${resourceId}: ${message}`);
-      return { success: false, error: message };
-    }
   }
 
   /**
@@ -534,25 +752,67 @@ export class VersionHistoryService {
   }
 
   /**
-   * Delete version history for a resource.
-   * Called when a resource is deleted.
+   * Purge the version history of a resource, and of every id beneath it.
+   *
+   * Called when a resource is deleted — by all four `resource_manager` delete handlers, and by
+   * nothing else. It was called by nobody at all until this was wired: the rows of a deleted
+   * resource survived it permanently, unreachable by any action (rollback resolves the resource
+   * first) and never reclaimed, and re-creating the same id later inherited a stranger's history.
+   * `cpm delete` purged them the whole time, so the two surfaces disagreed about what delete means.
+   *
+   * SUBTREE, not one id: a chain's steps keep their history under `chain/step`, and deleting the
+   * chain deletes them too, so their rows go with it rather than staying behind under ids nothing
+   * serves. The predicate is imported rather than written here — `cli-shared` uses the same one,
+   * and two copies of it would be the same cross-surface disagreement one layer down.
+   *
+   * **Throws on failure**, like `saveVersion` on this table and for the same reason: returning
+   * `false` let every caller log and proceed, reporting a delete that only half happened. The
+   * caller decides what to tell the operator; it must not be told the purge succeeded.
+   *
+   * Returns how many rows were removed, which is what lets a reply state what it did.
    */
-  async deleteHistory(resourceType: ResourceType, resourceId: string): Promise<boolean> {
+  async deleteHistory(resourceType: ResourceType, resourceId: string): Promise<number> {
+    // Disabled versioning wrote no rows, so there are none to purge — the same early return
+    // `saveVersion` makes, for the same reason. Without it a delete on a server with versioning
+    // off would fail on a database this service never opened.
+    if (!this.getConfig().enabled) {
+      return 0;
+    }
+
     try {
       const db = this.getDb();
       const tenantId = this.resolveTenantId();
+      const params = [tenantId, resourceType, resourceId, resourceId];
 
-      db.run(
-        `DELETE FROM version_history
-         WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?`,
-        [tenantId, resourceType, resourceId]
-      );
+      // One transaction, IMMEDIATE: the count this reports, the delete it reports on, and the
+      // sweep of the objects that delete orphaned are one unit. The count is inside too — read
+      // above the lock it can be a number another writer has already changed.
+      const removed = await db.transaction(async () => {
+        const before = db.queryOne<{ cnt: number }>(
+          `SELECT COUNT(*) as cnt FROM version_history
+           WHERE tenant_id = ? AND resource_type = ? AND ${RESOURCE_SUBTREE_MATCH}`,
+          params
+        );
+        db.run(
+          `DELETE FROM version_history
+           WHERE tenant_id = ? AND resource_type = ? AND ${RESOURCE_SUBTREE_MATCH}`,
+          params
+        );
+        // The manifest rows went by cascade; the objects behind them are reachable from nothing
+        // else, and nothing ever enumerates the table to find them later.
+        sweepUnreferencedObjects(db, tenantId);
+        return before?.cnt ?? 0;
+      }, 'immediate');
 
-      this.logger.debug(`Deleted history for ${resourceType}/${resourceId}`);
-      return true;
+      this.logger.debug(`Deleted ${removed} history row(s) for ${resourceType}/${resourceId}`);
+      return removed;
     } catch (error) {
-      this.logger.error(`Failed to delete history for ${resourceType}/${resourceId}: ${error}`);
-      return false;
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to delete history for ${resourceType}/${resourceId}: ${message}`);
+      throw new Error(
+        `Failed to purge version history for ${resourceType}/${resourceId}: ${message}`,
+        { cause: error }
+      );
     }
   }
 

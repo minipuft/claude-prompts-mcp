@@ -10,7 +10,10 @@
  * `tsconfig.test.json` closes the visibility gap but reports a large existing backlog,
  * so it cannot simply be added to CI. This ratchet does what `eslint-ratchet.js` does
  * for lint: compare per-file diagnostic counts against a committed baseline and fail
- * only when a count increases, allowing the backlog to be paid down incrementally.
+ * when a count increases OR decreases, allowing the backlog to be paid down
+ * incrementally while refusing to let a stale (too-high) ceiling sit unnoticed. A
+ * decrease names the file and the one command (`npm run typecheck:tests:ratchet:baseline`)
+ * that locks the lower count in; lowering never needs `--allow-increase`, only a rise does.
  *
  * Usage:
  * - Update baseline (intentional): `npm run typecheck:tests:ratchet:baseline`
@@ -21,6 +24,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 const BASELINE_PATH = path.resolve(process.cwd(), '.typecheck-tests-ratchet-baseline.json');
 const PROJECT = 'tsconfig.test.json';
@@ -110,7 +114,18 @@ function assertParsed(summary, fatals, tscOutput, exitCode) {
  *
  * By file rather than by error code: the point is to stop a newly broken test file from
  * landing, and a per-code total would let a new TS2554 in one file hide behind a fixed
- * TS2554 in another. Codes are still summarized, for the report only.
+ * TS2554 in another. Codes are still summarized, for the report only — `byCode` is NEVER
+ * read by `compare()` or `findUnauthorizedIncreases()` below, only by `handleUpdateBaseline`
+ * for the printed summary and by the caller reading the committed JSON. This is deliberate,
+ * not an oversight: the same file total can shift between codes run to run (a diagnostic
+ * that used to read as one TS code can read as a different one once an unrelated import
+ * elsewhere resolves differently) with the file's own error COUNT unchanged, and gating on
+ * `byCode` would read that as a regression when the property this ratchet exists to catch
+ * — a newly-broken test file — has not happened. Measured 2026-09-16 on this exact baseline:
+ * `byFile` was byte-identical across a regeneration while `byCode` moved one diagnostic from
+ * TS2459 to TS2345, confirmed by running `tsc` against the untouched pre-regeneration commit
+ * and finding the same TS2459=14/TS2345=92 split — the committed baseline's TS2459=15/
+ * TS2345=91 was already stale relative to a clean run of its own tree, unrelated to this row.
  *
  * Only `tests/` is counted. `tsconfig.test.json` also includes `src/`, which
  * `npm run typecheck` already checks against the stricter build config — counting it
@@ -146,17 +161,25 @@ function summarize(tscOutput) {
  * Compare a baseline against the current run.
  *
  * `regressions` — a file's count went up, or a file not in the baseline reported at all.
- * `vanished`    — a file the baseline tracked produced no diagnostics.
+ * `vanished`    — a file the baseline tracked produced no diagnostics at all.
+ * `decreases`   — a file's count went down but the file still reports (a lower, nonzero
+ *   count). `check()` FAILS on these (row B.67): a ratchet that only watches for increases
+ *   is a ceiling nobody lowers, so a later file can regain up to that same amount of debt
+ *   and still pass. A file whose count reaches exactly 0 leaves `byFile` entirely (see
+ *   `summarize()`), so that case is `vanished`, not `decreases` — reported once, not doubled.
  *
- * The second finding exists for the same reason it does in `eslint-ratchet.js`: zero is
+ * The `vanished` finding exists for the same reason it does in `eslint-ratchet.js`: zero is
  * not greater than N, so a file that stops being checked reads as a file that was fixed.
  * A test file can leave the compiler's view by being renamed, deleted, or dropped from
  * the `include` globs, and the totals fall in every case. Both readings are reported
  * because counts alone cannot separate them.
+ *
+ * Reads `byFile` only — `byCode` is informational (see the comment in `summarize()`).
  */
-function compare(baseline, current) {
+export function compare(baseline, current) {
   const regressions = [];
   const vanished = [];
+  const decreases = [];
 
   const baselineByFile = baseline.byFile ?? {};
   const currentByFile = current.byFile ?? {};
@@ -164,15 +187,21 @@ function compare(baseline, current) {
   for (const file of new Set([...Object.keys(baselineByFile), ...Object.keys(currentByFile)])) {
     const before = baselineByFile[file] ?? 0;
     const after = currentByFile[file] ?? 0;
+    const stillReports = Object.hasOwn(currentByFile, file);
+
+    if (before > 0 && !stillReports) {
+      vanished.push({ file, baseline: before });
+      continue;
+    }
 
     if (after > before) {
       regressions.push({ file, baseline: before, current: after });
-    } else if (before > 0 && !Object.hasOwn(currentByFile, file)) {
-      vanished.push({ file, baseline: before });
+    } else if (after < before) {
+      decreases.push({ file, baseline: before, current: after });
     }
   }
 
-  return { regressions, vanished };
+  return { regressions, vanished, decreases };
 }
 
 async function loadJson(filePath) {
@@ -197,20 +226,164 @@ function assertNoFatals(fatals) {
   );
 }
 
-async function handleUpdateBaseline() {
+/**
+ * Parse repeatable `--allow-increase <key> <reason>` pairs from the argv tail.
+ *
+ * Shape kept identical across all three ratchets (eslint-ratchet.js, knip-ratchet.js,
+ * typecheck-tests-ratchet.js) even though the logic is duplicated rather than shared: none of
+ * the three currently import from a common `lib/` module, and this repo's existing convention
+ * (each ratchet reimplements its own `compare`/`compareSummaries`) already accepts that
+ * duplication over introducing a new shared module for three call sites.
+ */
+export function parseAllowIncreaseArgs(argv) {
+  const overrides = new Map();
+  for (let i = 0; i < argv.length; i += 1) {
+    if (argv[i] !== '--allow-increase') continue;
+    const key = argv[i + 1];
+    const reason = argv[i + 2];
+    if (!key || !reason || key.startsWith('--') || reason.startsWith('--')) {
+      throw new Error(
+        '[typecheck-tests-ratchet] --allow-increase requires two arguments: <file> "<reason>". ' +
+          `Got: ${JSON.stringify(argv.slice(i, i + 3))}`
+      );
+    }
+    overrides.set(key, reason);
+    i += 2;
+  }
+  return overrides;
+}
+
+/**
+ * A file's ceiling may only rise when the caller named it via `--allow-increase`.
+ *
+ * A file absent from the baseline compares against an implicit 0, so a file that starts failing
+ * for the first time is an increase from zero and needs the same explicit override as a file
+ * whose count grew. A file that disappears entirely compares against an implicit 0 on the
+ * CURRENT side, which is a decrease — never an increase — so it never needs an override;
+ * `check()` already reports that case as `vanished` (left the compiler's view) separately from
+ * progress.
+ *
+ * Reads `byFile` only — `byCode` is informational (see the comment in `summarize()`) and is
+ * never compared here or anywhere else in this script.
+ */
+export function findUnauthorizedIncreases(baselineByFile, currentByFile, overrides) {
+  const increases = [];
+  const allFiles = new Set([
+    ...Object.keys(baselineByFile ?? {}),
+    ...Object.keys(currentByFile ?? {}),
+  ]);
+
+  for (const file of allFiles) {
+    const before = baselineByFile?.[file] ?? 0;
+    const after = currentByFile?.[file] ?? 0;
+
+    if (after > before && !overrides.has(file)) {
+      increases.push({ file, before, after });
+    }
+  }
+
+  return increases.sort((a, b) => a.file.localeCompare(b.file));
+}
+
+function formatRefusal(increases) {
+  const example = increases[0];
+  return [
+    `[typecheck-tests-ratchet] Refusing to update baseline: ${increases.length} file(s) would ` +
+      'increase without an explicit override.',
+    '',
+    'Lowering a ceiling is always free. Raising one requires naming the file:',
+    ...increases.map((i) => `- ${i.file}: baseline=${i.before} current=${i.after}`),
+    '',
+    'To accept one of these intentionally, pass --allow-increase <file> "<reason>" for EACH file',
+    'listed above (repeatable flag), e.g.:',
+    '  npm run typecheck:tests:ratchet:baseline -- --allow-increase ' +
+      `${example.file} "reason for the increase"`,
+    '',
+    'The reason is written into the committed baseline file (overrideLog), where a reviewer',
+    'sees it in the same diff as the ceiling change.',
+  ].join('\n');
+}
+
+/**
+ * Pure: build the overrideLog to persist, given the overrides accepted this run.
+ *
+ * Only overrides that were actually NEEDED (the file's count genuinely rose) are logged — an
+ * `--allow-increase` passed for a file that did not increase this run is a no-op, reported
+ * separately by the caller, not written to the log.
+ */
+export function buildOverrideLog(
+  previousOverrideLog,
+  overrides,
+  baselineByFile,
+  currentByFile,
+  generatedAt
+) {
+  const overrideLog = [...(previousOverrideLog ?? [])];
+  const unused = [];
+
+  for (const [file, reason] of overrides ?? []) {
+    const before = baselineByFile?.[file] ?? 0;
+    const after = currentByFile?.[file] ?? 0;
+    if (after > before) {
+      overrideLog.push({ date: generatedAt, file, reason, before, after });
+    } else {
+      unused.push(file);
+    }
+  }
+
+  return { overrideLog, unused };
+}
+
+async function handleUpdateBaseline(argv) {
+  const overrides = parseAllowIncreaseArgs(argv);
   const { output, exitCode } = runTsc();
   const { summary, fatals } = summarize(output);
   assertParsed(summary, fatals, output, exitCode);
   assertNoFatals(fatals);
 
+  // No prior baseline (first run) leaves this null — nothing to compare against, nothing to refuse.
+  let previousBaseline = null;
+  try {
+    previousBaseline = await loadJson(BASELINE_PATH);
+  } catch {
+    // Keep the pre-initialized null.
+  }
+
+  if (previousBaseline) {
+    const unauthorized = findUnauthorizedIncreases(
+      previousBaseline.byFile ?? {},
+      summary.byFile,
+      overrides
+    );
+    if (unauthorized.length > 0) {
+      throw new Error(formatRefusal(unauthorized));
+    }
+  }
+
+  const generatedAt = new Date().toISOString();
+  const { overrideLog, unused } = buildOverrideLog(
+    previousBaseline?.overrideLog,
+    overrides,
+    previousBaseline?.byFile,
+    summary.byFile,
+    generatedAt
+  );
+  for (const file of unused) {
+    console.log(
+      `[typecheck-tests-ratchet] Note: --allow-increase ${file} was passed but ${file} did ` +
+        'not increase this run; ignored.'
+    );
+  }
+
   const baseline = {
     schemaVersion: 1,
-    generatedAt: new Date().toISOString(),
+    generatedAt,
     project: PROJECT,
     scope: 'tests/',
     totals: summary.totals,
     byCode: sortedByKey(summary.byCode),
     byFile: sortedByKey(summary.byFile),
+    ...(overrideLog.length > 0 ? { overrideLog } : {}),
   };
 
   await writeFile(BASELINE_PATH, `${JSON.stringify(baseline, null, 2)}\n`, 'utf8');
@@ -236,8 +409,8 @@ async function handleCheck() {
   assertParsed(summary, fatals, output, exitCode);
   assertNoFatals(fatals);
 
-  const { regressions, vanished } = compare(baseline, summary);
-  if (regressions.length === 0 && vanished.length === 0) {
+  const { regressions, vanished, decreases } = compare(baseline, summary);
+  if (regressions.length === 0 && vanished.length === 0 && decreases.length === 0) {
     console.log(
       `[typecheck-tests-ratchet] OK: ${summary.totals.errors} errors in tests/ (no regressions)`
     );
@@ -245,7 +418,9 @@ async function handleCheck() {
   }
 
   const lines = [
-    `[typecheck-tests-ratchet] FAIL: ${regressions.length + vanished.length} file problems detected.`,
+    `[typecheck-tests-ratchet] FAIL: ${
+      regressions.length + vanished.length + decreases.length
+    } file problems detected.`,
   ];
 
   if (regressions.length > 0) {
@@ -281,23 +456,45 @@ async function handleCheck() {
     );
   }
 
+  if (decreases.length > 0) {
+    lines.push(
+      '',
+      'Files whose type errors decreased (the ceiling is stale — lowering it is always free,',
+      'never needs --allow-increase):',
+      ...decreases
+        .sort((a, b) => a.file.localeCompare(b.file))
+        .map(
+          (d) =>
+            `- ${d.file}: baseline=${d.baseline} current=${d.current} (-${d.baseline - d.current})`
+        ),
+      '',
+      'Run: npm run typecheck:tests:ratchet:baseline'
+    );
+  }
+
   console.error(lines.join('\n'));
   process.exitCode = 1;
 }
 
-const mode = process.argv[2] ?? 'check';
+// Guarded so importing the pure functions above (compare, parseAllowIncreaseArgs,
+// findUnauthorizedIncreases, buildOverrideLog) for tests does not spawn tsc or touch the
+// committed baseline as a side effect — the same pattern run-validation-suite.js uses to let
+// validate-suite-membership.js import `SUITE` without running the suite.
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const mode = process.argv[2] ?? 'check';
 
-try {
-  if (mode === 'update-baseline') {
-    await handleUpdateBaseline();
-  } else if (mode === 'check') {
-    await handleCheck();
-  } else {
-    throw new Error(
-      `[typecheck-tests-ratchet] Unknown mode "${mode}". Expected: "check" or "update-baseline".`
-    );
+  try {
+    if (mode === 'update-baseline') {
+      await handleUpdateBaseline(process.argv.slice(3));
+    } else if (mode === 'check') {
+      await handleCheck();
+    } else {
+      throw new Error(
+        `[typecheck-tests-ratchet] Unknown mode "${mode}". Expected: "check" or "update-baseline".`
+      );
+    }
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
   }
-} catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exitCode = 1;
 }

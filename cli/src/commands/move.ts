@@ -1,5 +1,4 @@
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { movePromptCategory, runValidatedMutation } from '@cli-shared/index.js';
 import { resolveWorkspace, resolveResourceDir, findResource } from '../lib/workspace.js';
 import { output } from '../lib/output.js';
@@ -45,20 +44,16 @@ export async function move(options: MoveOptions): Promise<number> {
   }
 
   // Read current category for display
-  const yamlPath = join(match.dir, 'prompt.yaml');
-  const content = readFileSync(yamlPath, 'utf8');
+  const content = readFileSync(match.file, 'utf8');
   const catMatch = /^category:\s*(.+)$/m.exec(content);
   const oldCategory = catMatch?.[1]?.trim() ?? 'unknown';
 
   const promptsBaseDir = resolveResourceDir(workspace, 'prompts');
   const mutation = runValidatedMutation({
     resourceType: 'prompts',
-    resourceId: options.id,
-    resourceDir: match.dir,
-    entryFile: 'prompt.yaml',
+    location: match,
     validate: !options.noValidate,
-    mutate: () =>
-      movePromptCategory(match.dir, 'prompt.yaml', options.id!, options.category!, promptsBaseDir),
+    mutate: () => movePromptCategory(match, match.id, options.category!, promptsBaseDir),
   });
 
   if (!mutation.success) {
@@ -76,7 +71,7 @@ export async function move(options: MoveOptions): Promise<number> {
   const result = mutation.operation;
 
   if (options.json) {
-    output({ id: options.id, oldCategory, newCategory: options.category, oldDir: result.oldDir, newDir: result.newDir }, { json: true });
+    output({ id: options.id, oldCategory, newCategory: options.category, oldPath: result.oldPath, newPath: result.newPath }, { json: true });
   } else {
     console.log(`Moved prompt '${options.id}': ${oldCategory} -> ${options.category}`);
     console.log(`Note: chain steps referencing '${oldCategory}/${options.id}' may need updating to '${options.category}/${options.id}'.`);

@@ -63,6 +63,12 @@ function extractSwitchCases(source: string, anchor: string, check: string): stri
     throw new Error(`${check}: unable to locate switch body after anchor "${anchor}"`);
   }
   const body = switchMatch[1];
+  // The capture group in the switch-body pattern is mandatory (no trailing `?`), so a
+  // successful `switchMatch` guarantees it captured — undefined here means the regex or
+  // its caller changed shape, not a legitimate absence.
+  if (body === undefined) {
+    throw new Error(`${check}: switch body capture group did not match after anchor "${anchor}"`);
+  }
   const matches: string[] = body.match(/case\s+["']([^"']+)["']/g) ?? [];
   return matches.map((caseLine) => caseLine.replace(/case\s+["']([^"']+)["'].*/, '$1'));
 }
@@ -104,15 +110,26 @@ async function verifyPromptEngine(): Promise<void> {
   if (!interfaceMatch) {
     throw new Error(`${check}: unable to locate McpToolRequest interface`);
   }
+  // The capture group is mandatory in the pattern, so a successful match guarantees it —
+  // undefined here means the regex or its caller changed shape, not a legitimate absence.
+  const interfaceBody = interfaceMatch[1];
+  if (interfaceBody === undefined) {
+    throw new Error(`${check}: McpToolRequest interface capture group did not match`);
+  }
 
   // Match field names but exclude fields typed as `never` (blocked parameters).
   const fieldRegex = /readonly\s+([a-zA-Z0-9_]+)\??:\s*([^;]+);/g;
   const fields = new Set<string>();
   let match: RegExpExecArray | null;
-  while ((match = fieldRegex.exec(interfaceMatch[1])) !== null) {
+  while ((match = fieldRegex.exec(interfaceBody)) !== null) {
     const fieldName = match[1];
-    const fieldType = match[2].trim();
-    if (fieldType !== 'never') {
+    const fieldType = match[2];
+    // Both capture groups are mandatory in the pattern (neither has a trailing `?`), so a
+    // successful `match` guarantees both — undefined here means the regex changed shape.
+    if (fieldName === undefined || fieldType === undefined) {
+      throw new Error(`${check}: field regex matched "${match[0]}" but a capture group is missing`);
+    }
+    if (fieldType.trim() !== 'never') {
       fields.add(fieldName);
     }
   }

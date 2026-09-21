@@ -443,3 +443,96 @@ describe('ExecutionPlanner', () => {
     });
   });
 });
+
+/**
+ * B13: the planner is where "the prompt declared an artifact block" becomes "this run touches
+ * these kinds". It is the only place the two halves meet — `produces` is on the prompt,
+ * `fromArgument`'s value is on the parsed command — so if it does not union them here, nothing
+ * downstream can.
+ */
+describe('ExecutionPlanner — B13 declaredArtifacts', () => {
+  let logger: Logger;
+
+  beforeEach(() => {
+    logger = createLogger();
+  });
+
+  /** Captures the selection context the resolver hands the registry. */
+  const createCapturingGateManager = () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const manager = {
+      selectGates: jest.fn((context: Record<string, unknown>) => {
+        calls.push(context);
+        return {
+          selectedIds: [],
+          guides: [],
+          skippedIds: [],
+          metadata: { selectionMethod: 'category', selectionTime: 0 },
+        };
+      }),
+    };
+    return { manager, calls };
+  };
+
+  const parsedWithArgs = (promptArgs: Record<string, unknown>): ParsedCommand => ({
+    promptId: 'demo',
+    rawArgs: '',
+    format: 'simple',
+    confidence: 1,
+    promptArgs,
+    metadata: {
+      originalCommand: '>>demo',
+      parseStrategy: 'simple',
+      detectedFormat: 'simple',
+      warnings: [],
+    },
+  });
+
+  test('fromArgument classifies the named argument value into kinds, in table order', async () => {
+    const { manager, calls } = createCapturingGateManager();
+    const planner = new ExecutionPlanner(createAnalyzer(), logger);
+    planner.setGateManager(manager as never);
+
+    await planner.createPlan({
+      parsedCommand: parsedWithArgs({ files: 'server/tests/x.test.ts, README.md' }),
+      convertedPrompt: {
+        ...basePrompt,
+        arguments: [{ name: 'files', required: true }],
+        artifacts: { fromArgument: 'files' },
+      } as ConvertedPrompt,
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.['declaredArtifacts']).toEqual(['test', 'readme']);
+  });
+
+  test('produces unions with the classified paths, deduped', async () => {
+    const { manager, calls } = createCapturingGateManager();
+    const planner = new ExecutionPlanner(createAnalyzer(), logger);
+    planner.setGateManager(manager as never);
+
+    await planner.createPlan({
+      parsedCommand: parsedWithArgs({ files: 'a.test.ts' }),
+      convertedPrompt: {
+        ...basePrompt,
+        arguments: [{ name: 'files', required: true }],
+        artifacts: { produces: ['plan', 'test'], fromArgument: 'files' },
+      } as ConvertedPrompt,
+    });
+
+    expect(calls[0]?.['declaredArtifacts']).toEqual(['test', 'plan']);
+  });
+
+  test('a prompt with no artifacts block leaves the selection context clean', async () => {
+    const { manager, calls } = createCapturingGateManager();
+    const planner = new ExecutionPlanner(createAnalyzer(), logger);
+    planner.setGateManager(manager as never);
+
+    await planner.createPlan({
+      parsedCommand: parsedWithArgs({ files: 'a.test.ts' }),
+      convertedPrompt: basePrompt,
+    });
+
+    expect(calls[0]).not.toHaveProperty('declaredArtifacts');
+  });
+});

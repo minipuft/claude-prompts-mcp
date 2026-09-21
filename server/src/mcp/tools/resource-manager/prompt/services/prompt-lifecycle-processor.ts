@@ -1,13 +1,17 @@
 // @lifecycle canonical - Prompt create/update/delete operations.
 
+import * as path from 'node:path';
+
 import { PromptDraftService, type PromptDraftInput } from './prompt-draft-service.js';
 import {
+  normalizeReloadShape,
   PromptMutationReceiptService,
   type PromptMutationReceipt,
 } from './prompt-mutation-receipt-service.js';
 import { isPreviewRequest } from '../../../shared/preview-action.js';
+import { formatRepairServingLine } from '../../../shared/quarantine-report.js';
 import { ComparisonEngine } from '../analysis/comparison-engine.js';
-import { ObjectDiffGenerator } from '../analysis/object-diff-generator.js';
+import { ObjectDiffGenerator, type DiffResult } from '../analysis/object-diff-generator.js';
 import { PromptAnalyzer } from '../analysis/prompt-analyzer.js';
 import { PromptResourceContext } from '../core/context.js';
 import { mergeArgumentUpdates, type PromptArgumentUpdate } from '../operations/argument-updates.js';
@@ -15,6 +19,7 @@ import {
   ALL_PROMPT_DATA_KEYS,
   FileOperations,
   NO_WRITE_INTENT,
+  type PromptWriteIntent,
 } from '../operations/file-operations.js';
 import {
   PATCH_TARGET_FIELDS,
@@ -38,11 +43,19 @@ import {
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { PromptData } from '#modules/prompts/types.js';
+import type { QuarantinedResource } from '#shared/utils/resource-quarantine.js';
 import type { PromptResourceInput } from '../../core/types.js';
 
 import { PromptReferenceValidator } from '#engine/execution/reference/index.js';
+import { purgeHistoryOnDelete } from '#modules/versioning/delete-purge.js';
+import {
+  CREATE_ROW_DESCRIPTION,
+  UPDATE_ROW_DESCRIPTION,
+  describeVersionRecord,
+} from '#modules/versioning/index.js';
 import { ToolResponse } from '#shared/types/index.js';
 import { PromptError } from '#shared/utils/index.js';
+import { preferredRepairTarget } from '#shared/utils/resource-quarantine.js';
 
 export class PromptLifecycleProcessor {
   private readonly context: PromptResourceContext;
@@ -79,7 +92,6 @@ export class PromptLifecycleProcessor {
           action: 'validate',
           valid: false,
           errors: result.errors,
-          warnings: result.warnings,
           mutated: false,
         },
         isError: true,
@@ -93,8 +105,7 @@ export class PromptLifecycleProcessor {
           type: 'text' as const,
           text:
             `✅ **Prompt draft valid**: \`${result.draft.canonicalId}\`\n\n` +
-            `Nothing written; no version recorded. Re-send with action:"create" to persist it.` +
-            this.formatWarnings(result.draft.warnings),
+            `Nothing written; no version recorded. Re-send with action:"create" to persist it.`,
         },
       ],
       structuredContent: {
@@ -102,7 +113,6 @@ export class PromptLifecycleProcessor {
         valid: true,
         normalized_id: result.draft.canonicalId,
         draft: result.draft.promptData,
-        warnings: result.draft.warnings,
         current_version: currentVersion,
         mutated: false,
       },
@@ -126,7 +136,6 @@ export class PromptLifecycleProcessor {
           action: 'create',
           valid: false,
           errors: prepared.errors,
-          warnings: prepared.warnings,
           mutated: false,
         },
         isError: true,
@@ -134,17 +143,74 @@ export class PromptLifecycleProcessor {
     }
 
     const promptData = prepared.draft.promptData as any;
-    const { canonicalId, warnings: chainIntegrityWarnings } = prepared.draft;
+    const { canonicalId } = prepared.draft;
     const displayName = String(promptData['name']);
     const description = String(promptData['description']);
+
+    // The created state is recorded as version 1 — the same `saveVersion` numbering every edit
+    // uses (MAX(existing)+1), which a resource with no rows yet resolves to 1 on its own. No
+    // bridge: a create has no prior live state to carry across, unlike an edit of an unrecorded
+    // resource. Runs as the writer transaction's `commit` step (P4.2 / SF-3 contract, matching
+    // `updatePrompt` below) so a persistence failure aborts the create with nothing written.
+    //
+    // Recorded through `canonicalPromptSnapshot` + `normalizeReloadShape` — the SAME projection
+    // and loader-default normalization `PromptMutationReceiptService` applies to the "expected"
+    // side of its own post-refresh comparison. Measured: recording the raw draft `promptData`
+    // carried keys the loader never produces (`isChain`, `tools`) and omitted `systemMessage`'s
+    // loader default, so the first update's prior-state check never matched and always bridged.
+    let versionFailure: string | undefined;
+    const skipVersion = args.skip_version === true;
+    const commitOptions =
+      this.context.versionHistoryService.isAutoVersionEnabled() && !skipVersion
+        ? {
+            commit: async (): Promise<void> => {
+              try {
+                await this.context.versionHistoryService.saveVersion(
+                  'prompt',
+                  canonicalId,
+                  normalizeReloadShape(canonicalPromptSnapshot(canonicalId, promptData)),
+                  { description: CREATE_ROW_DESCRIPTION, diff_summary: '' }
+                );
+              } catch (error) {
+                versionFailure = error instanceof Error ? error.message : String(error);
+                throw error;
+              }
+            },
+          }
+        : {};
 
     // `create` owns the WHOLE state being written — there is no prior file to narrow a scope
     // against — so it passes the full key set rather than computing one (Fix B, tier-b-
     // settability-proposal §2 / §5 increment 3).
-    const writeResult = await this.fileOperations.updatePromptImplementation(
-      promptData,
-      ALL_PROMPT_DATA_KEYS
-    );
+    let writeResult;
+    try {
+      writeResult = await this.fileOperations.updatePromptImplementation(
+        promptData,
+        ALL_PROMPT_DATA_KEYS,
+        undefined,
+        NO_WRITE_INTENT,
+        commitOptions
+      );
+    } catch (error) {
+      if (versionFailure === undefined) throw error;
+
+      this.context.dependencies.logger.error(
+        `Aborting creation of prompt ${canonicalId}: ${versionFailure}`
+      );
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text:
+              `❌ **Prompt creation aborted**: the version snapshot could not be saved.\n\n` +
+              `${versionFailure}\n\n` +
+              `💡 Nothing was written for '${canonicalId}'. Retry, or pass ` +
+              `\`skip_version: true\` to create without recording a version.`,
+          },
+        ],
+        isError: true,
+      };
+    }
     const analysis = await this.promptAnalyzer.analyzePromptIntelligence(promptData);
 
     // The headline is composed at the END, once verification has run — see `mutationHeadline`.
@@ -201,13 +267,6 @@ export class PromptLifecycleProcessor {
       }
     }
 
-    if (chainIntegrityWarnings.length > 0) {
-      response += `\n⚠️ **Chain Integrity Warnings**:\n`;
-      for (const warning of chainIntegrityWarnings) {
-        response += `- ${warning}\n`;
-      }
-    }
-
     const verification = await this.receiptService.complete({
       action: 'create',
       id: canonicalId,
@@ -230,7 +289,6 @@ export class PromptLifecycleProcessor {
         action: 'create',
         valid: true,
         receipt: verification.receipt,
-        warnings: chainIntegrityWarnings,
         mutated: true,
       },
       isError: !verification.verified,
@@ -241,6 +299,35 @@ export class PromptLifecycleProcessor {
     validateRequiredFields(args, ['id']);
 
     const currentPrompt = this.getConvertedPrompts().find((prompt) => prompt.id === args.id);
+    // The repair target: a file on disk the loader refused, whose id nothing in the catalog
+    // answers to. Consulted ONLY when the catalog has no entry, so a serving prompt is never
+    // redirected by a quarantined namesake — the valid resource wins unconditionally, because
+    // resolution never looks here.
+    //
+    // Without this, an update on an unloadable id produced the worst available outcome. Measured
+    // 2026-09-11 against `dist/`: `update` with a full body answered `✅ **Prompt Updated**` and
+    // wrote a SECOND prompt at `general/<id>` — the category `canonicalPromptSnapshot` falls back
+    // to — reported `Moved prompt '<id>' from '<id>' to 'general'` (nothing moved), and left the
+    // broken file exactly as it was. The record supplies the true category and root, so the write
+    // lands on the file that is actually broken.
+    // Read once and reused below (`resolveRepairTarget`, the P4.59 refusal): a second
+    // `String(args.id)` call site would be a second unsafe access on the same `any` for no
+    // reason `requestedId` does not already cover.
+    const requestedId = String(args.id);
+    const repairTarget =
+      currentPrompt === undefined ? this.resolveRepairTarget(requestedId) : undefined;
+
+    // P4.59 — an id that is neither loaded nor quarantined is refused HERE, before any patch or
+    // diagnosis logic runs. Without this, `updatePrompt` fell through to the same path a repair
+    // uses (`canonicalPromptSnapshot(id, undefined)` — an empty draft, `category: 'general'`) for
+    // an id nobody asked to create, and the first thing to notice was whichever check the empty
+    // draft failed first: a `patch` against `id:"plan_table"` (only addressable as
+    // `implementation_plan/plan_table`) reached `applyTemplatePatches` against an empty
+    // `userMessageTemplate` and refused `anchor_not_found` — a true statement about an anchor
+    // that was never going to exist, pointing at the wrong cause.
+    if (currentPrompt === undefined && repairTarget === undefined) {
+      return this.refuseUnknownPromptId(requestedId);
+    }
     const concurrencyRefusal = await this.checkExpectedVersion(args as PromptResourceInput);
     if (concurrencyRefusal !== undefined) {
       return concurrencyRefusal;
@@ -281,6 +368,14 @@ export class PromptLifecycleProcessor {
       ...canonicalPromptSnapshot(args.id, currentPrompt),
       tools: args.tools,
     };
+
+    // Ahead of the `UPDATE_FIELDS` merge, so an explicitly supplied `category` still wins and
+    // still moves the prompt. What this replaces is the FALLBACK: `canonicalPromptSnapshot`
+    // defaults an unknown prompt's category to `general`, which for a quarantined file is a
+    // category it does not live in.
+    if (repairTarget !== undefined) {
+      promptData.category = repairTarget.category;
+    }
 
     // Fix B (tier-b-settability-proposal §2 write-scope narrowing): the union of every
     // `promptData` key THIS call actually touches. `FileOperations` uses it to decide which
@@ -478,14 +573,40 @@ export class PromptLifecycleProcessor {
       }
     }
 
-    // Chain step reference validation (non-blocking warnings)
-    let chainIntegrityWarnings: string[] = [];
+    // A step naming a prompt that does not exist is a refusal, not a warning next to a saved
+    // file: the run used to fail at that step one invocation later, far from the write that
+    // introduced it. The chain's own `<chainId>/<step>` children are exempt — the write below
+    // scaffolds exactly those.
+    //
+    // Scoped to steps THIS call authors, which is what `suppliedKeys` means everywhere else in
+    // this method. A caller that sends `edges` or `unset` and no chain-step parameter is not
+    // writing a step, and blocking it would make a chain already broken on disk uneditable —
+    // including by the edit that repairs it. That is the split `diagnosePromptWrite` already
+    // draws below between `blocking` (introduced by this edit) and `preExisting` (logged, not
+    // blocked), applied to the same question one paragraph earlier.
     if (promptData.chainSteps && promptData.chainSteps.length > 0) {
-      const allPromptIds = this.getConvertedPrompts().map((p) => p.id);
-      chainIntegrityWarnings = validateChainStepReferences(
+      // Read the id through `promptFields`, the indexed `Record` this method already uses for
+      // exactly this reason — `promptData` is `any` and a member access on it is unchecked.
+      const chainId = String(promptFields['id']);
+      const chainIntegrity = validateChainStepReferences(
         promptData.chainSteps,
-        allPromptIds
-      ).warnings;
+        chainId,
+        this.getConvertedPrompts().map((p) => p.id)
+      );
+      if (!chainIntegrity.valid) {
+        if (suppliedKeys.has('chainSteps')) {
+          return this.blockedUpdate(
+            `❌ **Prompt update blocked** — a chain step names a prompt that does not exist:\n\n` +
+              `${chainIntegrity.problems.map((problem) => `- ${problem}`).join('\n')}\n\n` +
+              `💡 Nothing was written and no version was consumed. Create the missing prompt, or ` +
+              `nest the step under '${chainId}/' so this call scaffolds it.`
+          );
+        }
+        this.context.dependencies.logger.warn(
+          `Chain '${chainId}' has pre-existing unresolvable chain step(s) (not introduced by ` +
+            `this edit): ${chainIntegrity.problems.join('; ')}`
+        );
+      }
     }
 
     // Reference validation for template changes. A patch changes a template without any full-body
@@ -527,7 +648,14 @@ export class PromptLifecycleProcessor {
     if (diagnosis.blocking.length > 0) {
       const details = diagnosis.blocking.map((defect) => `• ${defect.message}`).join('\n');
       return this.blockedUpdate(
-        `❌ **Prompt update blocked** — the resulting prompt is invalid:\n\n${details}\n\n💡 Nothing was written and no version was consumed.`
+        `❌ **Prompt update blocked** — the resulting prompt is invalid:\n\n${details}\n\n` +
+          (repairTarget !== undefined
+            ? `🚧 \`${repairTarget.id}\` is quarantined — the file at \`${repairTarget.path}\` ` +
+              `failed to load (${repairTarget.error}), so there is no loaded state to merge onto ` +
+              `and a repair has to supply the whole prompt. The content that failed validation is ` +
+              `deliberately not read back here.\n\n`
+            : '') +
+          `💡 Nothing was written and no version was consumed.`
       );
     }
     if (diagnosis.preExisting.length > 0) {
@@ -538,11 +666,25 @@ export class PromptLifecycleProcessor {
       );
     }
 
+    // One projection of the write serves the preview, the version's diff summary and the update's
+    // own diff. It is resolved from the plan the writer applies, with the arguments the writer is
+    // handed below, so every diff this call reports names the files the write lands in and the
+    // lines that change in them.
+    const writeIntent: PromptWriteIntent = { unsetKeys, toolBinding, removedToolIds };
+    const diffResult = this.textDiffService.generateFileChangeDiff(
+      await this.fileOperations.projectPromptWrite(
+        promptData,
+        suppliedKeys,
+        currentPrompt?.sourceRoot,
+        writeIntent
+      )
+    );
+
     // A preview returns the produced bodies and the diff and stops here — ahead of the version
     // record and the write, so neither happens. It is the operator's pre-check that an anchor
     // matched before a version is spent.
     if (isPreviewRequest(args)) {
-      return this.renderPreview(beforeContent, promptData, patchedFields, diagnosis.preExisting);
+      return this.renderPreview(promptData, diffResult, patchedFields, diagnosis.preExisting);
     }
 
     // `recordEditResult` throws on persistence failure (P7-D2, OQ-P7-6), and the update ABORTS on
@@ -559,7 +701,7 @@ export class PromptLifecycleProcessor {
     // written and verified, and if it throws the transaction restores them. `versionFailure` is
     // what lets this method still tell an operator WHICH half failed, since both now surface as
     // one rejected write.
-    let versionSaved: number | undefined;
+    let versionOutcome: { version?: number; recorded: boolean } | undefined;
     let versionFailure: string | undefined;
     const skipVersion = args.skip_version === true;
     const commitOptions =
@@ -572,23 +714,19 @@ export class PromptLifecycleProcessor {
             // position lexically, and a gate that cannot see the property is not guarding it.
             commit: async (): Promise<void> => {
               try {
-                const diffForVersion = this.textDiffService.generatePromptDiff(
-                  beforeContent,
-                  promptData
-                );
                 const versionResult = await this.context.versionHistoryService.recordEditResult(
                   'prompt',
                   promptData.id,
                   beforeContent as unknown as Record<string, unknown>,
                   { ...promptData },
                   {
-                    description: 'Update via resource_manager',
-                    diff_summary: `+${diffForVersion.stats.additions}/-${diffForVersion.stats.deletions}`,
+                    description: UPDATE_ROW_DESCRIPTION,
+                    diff_summary: `+${diffResult.stats.additions}/-${diffResult.stats.deletions}`,
                   }
                 );
-                versionSaved = versionResult.version;
+                versionOutcome = versionResult;
                 this.context.dependencies.logger.debug(
-                  `Saved version ${versionSaved} for prompt ${promptData.id}`
+                  `${versionResult.recorded ? 'Saved' : 'Matched'} version ${versionResult.version} for prompt ${promptData.id}`
                 );
               } catch (error) {
                 versionFailure = error instanceof Error ? error.message : String(error);
@@ -606,8 +744,8 @@ export class PromptLifecycleProcessor {
       result = await this.fileOperations.updatePromptImplementation(
         promptData,
         suppliedKeys,
-        currentPrompt?.sourceRoot,
-        { unsetKeys, toolBinding, removedToolIds },
+        currentPrompt?.sourceRoot ?? repairTarget?.root,
+        writeIntent,
         commitOptions
       );
     } catch (error) {
@@ -631,7 +769,6 @@ export class PromptLifecycleProcessor {
       };
     }
     const afterAnalysis = await this.promptAnalyzer.analyzePromptIntelligence(promptData);
-    const diffResult = this.textDiffService.generatePromptDiff(beforeContent, promptData);
 
     // The headline is composed at the END, once verification has run — see `mutationHeadline`.
     let response = `${result.message}\n\n`;
@@ -640,8 +777,8 @@ export class PromptLifecycleProcessor {
       response += `🩹 **Patched**: ${patchedFields.map((field) => `\`${field}\``).join(', ')} (${patchOperations.length} operation(s))\n\n`;
     }
 
-    if (versionSaved !== undefined) {
-      response += `📜 **Version ${versionSaved}** saved (use \`action:"history"\` to view)\n\n`;
+    if (versionOutcome !== undefined) {
+      response += `${describeVersionRecord(versionOutcome)}\n\n`;
     }
 
     if (diffResult.hasChanges) {
@@ -669,13 +806,6 @@ export class PromptLifecycleProcessor {
       });
     }
 
-    if (chainIntegrityWarnings.length > 0) {
-      response += `\n⚠️ **Chain Integrity Warnings**:\n`;
-      for (const warning of chainIntegrityWarnings) {
-        response += `- ${warning}\n`;
-      }
-    }
-
     const verification = await this.receiptService.complete({
       action: 'update',
       id: String(args.id),
@@ -686,6 +816,9 @@ export class PromptLifecycleProcessor {
       reason: `Prompt updated: ${String(args.id)}`,
     });
     response += this.formatMutationReceipt(verification.receipt);
+    if (repairTarget !== undefined) {
+      response += this.formatRepairOutcome(repairTarget);
+    }
 
     return {
       content: [
@@ -724,9 +857,9 @@ export class PromptLifecycleProcessor {
     //
     // It was read on `rollback` and ignored here — the gate was on the RECOVERABLE verb and absent
     // from the unrecoverable one. Delete has no undo through the tool surface: the prompt's
-    // `version_history` rows survive (nothing calls `deleteHistory` on this path), but
-    // `handleRollback` returns "Prompt not found" when the prompt is gone, so those snapshots are
-    // unreachable by any action.
+    // `version_history` rows are purged with it (below), and were they kept they would be
+    // unreachable anyway, since `handleRollback` returns "Prompt not found" once the prompt is
+    // gone.
     //
     // The dependency list is computed BEFORE the gate so the refusal can name what would break.
     // Reporting the blast radius and then proceeding anyway — the previous behaviour — told the
@@ -752,6 +885,7 @@ export class PromptLifecycleProcessor {
             text:
               `🔍 **Preview** — deletion of prompt '${id}' (${promptToDelete.name})\n\n` +
               `Nothing was removed.\n${blastRadius}\n` +
+              `📜 Would also purge its \`version_history\` rows — a preview purges nothing\n\n` +
               `⚠️ Deletion cannot be undone — rollback cannot restore a deleted prompt.\n\n` +
               `💡 Re-send as \`action:"delete"\` with \`confirm: true\` to apply it.`,
           },
@@ -792,6 +926,19 @@ export class PromptLifecycleProcessor {
 
     const result = await this.fileOperations.deletePromptImplementation(args.id);
     response += `${result.message}\n\n`;
+
+    // AFTER the removal, and only once it has returned. The other order destroys the rollback
+    // history of a prompt still on disk when the removal fails, which is unrecoverable; this
+    // order's failure mode is rows left behind, which is the state before this was wired.
+    // Subtree-aware in the service, so a chain takes its steps' history (`chain/step`) with it.
+    const purge = await purgeHistoryOnDelete(
+      this.context.versionHistoryService,
+      'prompt',
+      id,
+      'files removed'
+    );
+    if (purge.failure !== undefined) throw new PromptError(purge.failure);
+    response += `📜 Version history purged: ${purge.removed} row(s)\n\n`;
     response += `✅ **Prompt successfully removed from system**\n`;
 
     await this.handleSystemRefresh(args.full_restart, `Prompt deleted: ${args.id}`);
@@ -803,6 +950,106 @@ export class PromptLifecycleProcessor {
   }
 
   /** One shape for every pre-write refusal on the update path: error response, nothing written. */
+  /**
+   * The quarantine record an unqualified `update` on this id means, if any.
+   *
+   * WRITABLE root first: `preferredRepairTarget` prefers the primary because that is the root a
+   * `resource_manager` write lands in, so an operator repairing `foo` edits the copy they can
+   * actually edit rather than the bundled one they cannot. NOT precedence — since P4.27 the primary
+   * is outranked by every overlay (`shared/utils/resource-root-lookup.ts` §resourceRootPrecedence),
+   * and this docstring cited that precedence back when the two happened to agree.
+   */
+  private resolveRepairTarget(id: string): QuarantinedResource | undefined {
+    const records = this.context.dependencies.quarantine?.byId(id) ?? [];
+    if (records.length === 0) return undefined;
+    return preferredRepairTarget(
+      records,
+      this.context.dependencies.configManager.getResolvedPromptsDirectory()
+    );
+  }
+
+  /**
+   * Say, in the update's own response, what happened to the refused file AND which root serves now.
+   *
+   * This is the row's falsifier rendered at the surface an operator reads. The receipt above
+   * already forced a refresh, so the quarantine and the catalog have both been rebuilt from disk
+   * by the time this runs: a record still standing for the same path means the file is still
+   * refused, whatever the write reported. Saying nothing when the repair worked would leave "did
+   * it load?" answerable only by a second call.
+   *
+   * THREE OUTCOMES, NOT TWO — the gate and framework twins had this split and prompts did not.
+   * A prompt write always lands under `getResolvedPromptsDirectory()` (`planPromptWrite` composes
+   * `promptDir` from it; `sourceRoot` only selects a subtree to copy IN, never where to write),
+   * so a refused file in another root is left exactly as broken while a working copy appears in
+   * the primary. Two outcomes reported that as `Still quarantined … the prompt remains absent
+   * from the catalog`, and the second clause was false: the prompt was in the catalog, served
+   * from the copy this call had just written. Reachable today — a malformed prompt in the bundled
+   * tree whose id nothing else claims takes exactly this path.
+   *
+   * WHICH ROOT SERVES is measured, not inferred: `sourceRoot` off the reloaded catalog entry, the
+   * stamp `PromptLoader` wrote. `formatRepairServingLine` is the one renderer allowed to turn that
+   * into a sentence, so this and the two twins cannot drift.
+   */
+  private formatRepairOutcome(repairTarget: QuarantinedResource): string {
+    const stillRefused = (this.context.dependencies.quarantine?.byId(repairTarget.id) ?? []).some(
+      (record) => record.path === repairTarget.path
+    );
+    const writtenRoot = this.context.dependencies.configManager.getResolvedPromptsDirectory();
+    const servedFrom = this.getConvertedPrompts().find(
+      (prompt) => prompt.id === repairTarget.id
+    )?.sourceRoot;
+    const serving = formatRepairServingLine(repairTarget.id, writtenRoot, servedFrom);
+
+    if (!stillRefused) {
+      return (
+        `\n🩹 **Repaired**: \`${repairTarget.path}\` now loads and its quarantine record is ` +
+        `cleared.\n` +
+        serving
+      );
+    }
+
+    // Root, not full path: the write reuses the record's own category (`promptData.category` is
+    // set from it above), so a record whose root IS the write root names the same file.
+    if (path.resolve(repairTarget.root) !== path.resolve(writtenRoot)) {
+      return (
+        `\n🚧 **The refused file was in another root and was not touched.** This repair wrote ` +
+        `your copy under \`${writtenRoot}\`; \`${repairTarget.path}\` stays quarantined.\n` +
+        serving
+      );
+    }
+
+    return (
+      `\n🚧 **Still quarantined**: \`${repairTarget.path}\` did not load after the write — ` +
+      `the prompt remains absent from the catalog.\n`
+    );
+  }
+
+  /**
+   * Refuse an `update` whose id is neither loaded nor quarantined (P4.59) — named as unknown,
+   * ahead of any patch or diagnosis logic that would otherwise reach for content that does not
+   * exist. A bare id that matches the last `/`-segment of exactly one loaded nested chain step is
+   * the id-convention trap this row exists to catch (a step is only addressable by its composite
+   * id, `parent/step`): named as a suggestion. Several matches are listed rather than guessed at.
+   */
+  private refuseUnknownPromptId(id: string): ToolResponse {
+    const nestedMatches = this.getConvertedPrompts()
+      .map((prompt) => prompt.id)
+      .filter((promptId) => promptId.includes('/') && promptId.split('/').pop() === id);
+
+    const suggestion =
+      nestedMatches.length === 1
+        ? `\n\n💡 \`${id}\` is only addressable by its composite id — did you mean \`${nestedMatches[0]}\`?`
+        : nestedMatches.length > 1
+          ? `\n\n💡 \`${id}\` matches several nested steps, each only addressable by its composite ` +
+            `id: ${nestedMatches.map((match) => `\`${match}\``).join(', ')}.`
+          : '';
+
+    return this.blockedUpdate(
+      `❌ **Prompt update blocked**: unknown prompt \`${id}\`. Nothing was written and no ` +
+        `version was consumed.${suggestion}`
+    );
+  }
+
   private blockedUpdate(text: string): ToolResponse {
     return {
       content: [{ type: 'text' as const, text }],
@@ -815,13 +1062,11 @@ export class PromptLifecycleProcessor {
    * of both the version record and the file write, so this method is the whole effect of the call.
    */
   private renderPreview(
-    beforeContent: ConvertedPrompt | null,
     promptData: Record<string, unknown>,
+    diff: DiffResult,
     patchedFields: readonly PatchTargetField[],
     preExisting: readonly PromptWriteDefect[]
   ): ToolResponse {
-    const diff = this.textDiffService.generatePromptDiff(beforeContent, promptData);
-
     let text = `🔍 **Preview** — nothing written, no version recorded for \`${String(promptData['id'])}\`\n\n`;
     if (patchedFields.length > 0) {
       text += `🩹 Patched field(s): ${patchedFields.map((field) => `\`${field}\``).join(', ')}\n\n`;
@@ -922,11 +1167,6 @@ export class PromptLifecycleProcessor {
       `- Current version: \`${receipt.current_version}\`\n` +
       `- Affected files:${files}\n`
     );
-  }
-
-  private formatWarnings(warnings: readonly string[]): string {
-    if (warnings.length === 0) return '';
-    return `\n\nWarnings:\n${warnings.map((warning) => `- ${warning}`).join('\n')}`;
   }
 
   private async handleSystemRefresh(fullRestart: boolean = false, reason: string): Promise<void> {

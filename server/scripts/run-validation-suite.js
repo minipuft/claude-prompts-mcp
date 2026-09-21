@@ -76,6 +76,13 @@ export const SUITE = [
     converse: 'unexamined',
   },
   {
+    script: 'typecheck:scripts',
+    io: 'read',
+    reads: ['spawn'],
+    converse:
+      "CHECKED — a planted type error in a new scripts/*.ts file (scripts/_planted_row05.ts, `const x: number = 'not a number'`) is reported by file name and the run exits non-zero; deleting the file returns the run to exit 0",
+  },
+  {
     script: 'typecheck:tests:ratchet',
     io: 'read',
     reads: ['file', 'spawn'],
@@ -84,8 +91,29 @@ export const SUITE = [
   {
     script: 'validate:knip-ratchet',
     io: 'read',
-    reads: ['file', 'spawn'],
+    reads: ['file', 'spawn', 'walk'],
     converse: 'unexamined',
+  },
+  {
+    // The METHOD layer knip 6 cannot see (it has no `classMembers` issue type). Beside the knip
+    // ratchet because a reader of that green needs this one to know what it did not cover.
+    // `spawn` is TEXTUAL: the regeneration hint strings carry `npm run`; the script starts no
+    // process. Declared rather than worked around, as validate:test-directory-membership does.
+    script: 'validate:unreached-methods',
+    io: 'read',
+    reads: ['file', 'spawn'],
+    converse:
+      'CHECKED both ways — a finding absent from the baseline fails naming file:line, and a baseline entry no longer found (deleted or now called) fails as stale. Positive control 2026-09-16: the live scan named ResourceIndexer.getValidStyles and getValidFrameworks before P4.46 deleted them; the self-test holds a one-caller twin, a same-named method on another class, a structural port, an implemented interface and a generic one. UNCHECKED and known — computed access (`obj[name]()`) and string-dispatched entry points read as unreached (false findings, never false silence)',
+  },
+  {
+    // Beside the method ratchet because it covers the other half of the same family: a
+    // module-level exported FUNCTION nobody calls. No baseline — unlike an owner API kept for a
+    // dynamic caller, a parse half with no reader has no legitimate steady state.
+    script: 'validate:unread-parsers',
+    io: 'read',
+    reads: ['declared'],
+    converse:
+      'CHECKED — the self-test plants a called parser and its uncalled twin in one program and separates them, plus the three shapes that produced false consumers: a re-export (how parseLLMReview looked used), a test-only caller, and a {@link} in a docblock. Positive control 2026-09-20 on the live tree: deleting the single call to parseGateVerdictReminders makes the check fail naming it, and restoring it passes. UNCHECKED and known — a parser reached only by computed access or string dispatch reads as unread (false finding, never false silence)',
   },
   {
     // First, because every step after it is only as trustworthy as the tree it ran against.
@@ -95,6 +123,20 @@ export const SUITE = [
     io: 'read',
     reads: ['file'],
     converse: 'unexamined',
+  },
+  {
+    // `spawn` is a TEXTUAL match, not a behavioural one: the SPAWN substrate pattern includes
+    // `\bnpm run\b`, and validate-test-directory-membership.js's self-test fixtures carry that
+    // literal inside synthetic `package.json` script strings ('npm run test:unit') used to prove
+    // the delegation-following logic. The script spawns no process and imports only node:fs,
+    // node:os, node:path and node:url. Declared rather than worked around, for the reason
+    // validate:contributing and validate:hermetic-child-env already declare it: the detector is
+    // textual by design and omitting a matched substrate fails.
+    script: 'validate:test-directory-membership',
+    io: 'read',
+    reads: ['file', 'spawn', 'walk'],
+    converse:
+      "CHECKED both ways — the self-test drives a fixture tree with a planted stray *.test.ts outside every declared directory (must report, naming the file) and a clean fixture with only allowed-directory tests plus a non-test file at tests/ root (must stay silent); a synthetic declared-directory audit also proves the drift check fires when a directory string no longer appears in any CI-run script's resolved command — following one level of npm-run indirection (test:ci -> test:unit), rejecting a shared-prefix false match (tests/unit vs tests/unit-renamed), a missing CI script, and a self-referential delegation cycle, each independently. The motivating instance (server/tests/tool-description-loader.test.ts) is the fifth case, restored as a positive control after the real move and confirmed to fail naming that exact path",
   },
   {
     script: 'validate:format',
@@ -177,8 +219,9 @@ export const SUITE = [
   {
     script: 'validate:config-schema',
     io: 'read',
-    reads: ['file'],
-    converse: 'unexamined',
+    reads: ['file', 'spawn', 'walk'],
+    converse:
+      'CHECKED both ways — the self-test drives the SHIPPED schema with the shipped config (must stay silent; without this positive control every rejection below would pass against a schema that rejects everything), misspelled keys at depth 1 and 2 in three different sections (must report; these are the motivating instances, since before 2026-09-11 `additionalProperties: false` sat at the root only and all 27 subsections accepted anything), a root-level unknown and a wrongly-typed port (must report, proving the per-section change did not displace what already worked). Case 2 asserts the property STRUCTURALLY, so a subsection added later without `additionalProperties: false` fails here; falsified 2026-09-11 by stripping it from the top-level `gates` section (reported `gates`) and by swapping every occurrence for `unevaluatedProperties` (reported all 27 — that keyword is accepted and IGNORED by AJV under draft-07 with strict:false, which is why case 8 bans it outright). The same self-test also covers the generated `config.jsonc` template: a hand-edited copy must be reported as drifted, and the template must carry exactly the document members `cpm init` writes.',
   },
   {
     script: 'validate:gate-index',
@@ -316,6 +359,13 @@ export const SUITE = [
     converse: 'unexamined',
   },
   {
+    script: 'validate:hook-producers',
+    io: 'read',
+    reads: ['declared'],
+    converse:
+      'CHECKED — the self-test plants an emission whose only callers are the fan-out layer and a test fixture, plus a same-named decoy on an unrelated class, and asserts exactly the orphan is flagged',
+  },
+  {
     script: 'validate:state-field-writers',
     io: 'read',
     reads: ['file'],
@@ -357,6 +407,13 @@ export const SUITE = [
       'CHECKED — falsified 2026-08-27 by restoring the truncating expression at both surviving producers (serving-unit-scope.ts, prompt-executor.ts); the gate reported both. Its one accepted exception audits as load-bearing, so a green run is not a run that reached nothing',
   },
   {
+    script: 'validate:telemetry-attribute-emitters',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse:
+      'CHECKED — falsified 2026-09-20 by adding a fake SAFE_BUSINESS_ATTRIBUTES entry with no emitter (reported) and by removing the entry (green); a real entry with its emitter deleted also reddens. Blind spot stated in the header: a computed/dynamic key (`attrs[name] = value`) would not match the quoted-key predicate — no producer in this codebase uses that shape today',
+  },
+  {
     script: 'validate:hooks-registered',
     io: 'read',
     reads: ['file', 'walk'],
@@ -366,7 +423,7 @@ export const SUITE = [
   {
     script: 'validate:hook-harness:self-test',
     io: 'read',
-    reads: ['file'],
+    reads: ['file', 'spawn'],
     converse: 'unexamined',
   },
   {
@@ -384,11 +441,19 @@ export const SUITE = [
       'CHECKED both ways — UNWIRED (a check in no SUITE) and FALSE REASON (an exception whose consumers vanished); the header records that only the first was guarded originally',
   },
   {
+    // `spawn` is a TEXTUAL match, not a behavioural one: the SPAWN substrate pattern includes
+    // `spawnSync`, and validate-hermetic-child-env.js carries that literal in three self-test
+    // fixture strings that exercise its server-spawn classifier. The script starts no process and
+    // imports only node:fs, node:path and node:url. Declared rather than worked around, because the
+    // detector is textual by design and omitting a matched substrate fails.
     script: 'validate:hermetic-child-env',
     io: 'read',
-    reads: ['file', 'walk'],
+    // `spawn` is re-derived from self-test FIXTURE strings (`spawnSync(tsc, …)`,
+    // `execFileSync('git', …)`) — the checker itself launches no process. Declared rather than
+    // dodged by rewriting the fixtures, since the fixtures are what prove the classifier.
+    reads: ['file', 'spawn', 'walk'],
     converse:
-      'CHECKED — the self-test runs the predicate over a real `...process.env` spread (must match), a buildServerEnv call (must not), and a doc-comment mentioning the spread (must not); a positive control reintroducing a spread at a real call site exits 1',
+      'CHECKED 2026-09-16 — every server spawn SITE (per call, tests/ + scripts/, through a second binding or a local import) must pass an env, not pass env: process.env, and sit in a file importing the builder; every call to the env builder must state HOME. Positive controls: planted e2e spawn with no env exits 1 naming the line; planted builder call with no HOME exits 1; planted script reaching the entry through `const args` exits 1; a git-only planted script stays green; pre-fix HEAD content yields 15 HOME findings. UNCHECKED and known — an entry spelling the classifier does not recognise, and the provenance of an env value (presence is checked, not that the builder produced it)',
   },
   {
     script: 'validate:shipped-frameworks',
@@ -398,11 +463,53 @@ export const SUITE = [
       'CHECKED both ways — the self-test drives the comparator with an agreeing set (must stay silent), a framework on disk but undeclared (must report; this is the motivating instance, since an undeclared shipped framework was deletable from the bundled tree), a declared id with no directory (must report, because the registry loads every shipped id fail-fast), and both together; the live set is compared against this checkout as a fifth case',
   },
   {
+    script: 'validate:framework-tool-descriptions',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse:
+      'CHECKED both ways — the self-test drives the rules with guidance naming one enum value in prose (must stay silent), a restated ACTIONS pipe list (must report; this is the motivating instance, since four bundled frameworks served 7 of 15 resource_manager actions), a label whose last word is a contract label and a restated tool heading, a quoted enum list in a parameter, a parameter and a tool no contract declares, a composition that replaces the contract text (must report) beside the real one (must stay silent), and a contract pipe list that agrees with its enum (silent) or omits and adds values (both reported); the live frameworks and contracts are the final case, and a run that finds no contract, no framework, or no toolDescriptions entry exits 1 rather than passing on a probe that observed nothing',
+  },
+  {
     script: 'validate:mutation-atomicity',
     io: 'read',
     reads: ['file', 'walk'],
     converse:
       'CHECKED both ways — the self-test drives the predicate over a record inside a `commit` callback (must stay silent), record-before-write on an update path and a bare `commitEdit` on a rollback path (both must report; these are the motivating instances, and one of them shipped and was reverted), and a `commit` callback elsewhere in the same method as a bare call (must still report, since a nearby callback must not launder it); the live tree is the fifth case, and a scan finding no recording call at all exits 1 rather than passing on a probe that observed nothing',
+  },
+  {
+    script: 'validate:refusal-aware-consumers',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse:
+      'CHECKED both ways — the self-test drives the predicate over a wired indexer and baseline call (must stay silent), an indexer config omitting `quarantine` and a baseline call missing its fourth argument (both must report; these are the motivating instances), and a `quarantine` named on the line above an unwired config (must still report, since proximity must not launder it); the live tree is the fifth case, and a scan finding no call site at all exits 1 rather than passing on a probe that observed nothing. All three production call sites were individually unwired and each exits 1 — the property-form config, the shorthand-form config, and the positional argument',
+  },
+  {
+    script: 'validate:serving-claims',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse:
+      'CHECKED both ways — the self-test drives the predicate over the shipped pre-fix text of every site that motivated it (the two P4.34 repair responses, the category `inspect` line, and both bundled-delete refusals; all five must report) AND over each fixed form plus the sanctioned renderer and a pure report (all must stay silent); the live tree is the eleventh case. The comment blind spot is asserted as a case rather than left implicit, so narrowing it later is a test change and not a silent widening. NOT checked: that a named comparand is the CORRECT one — `takes precedence over the moon` passes, because naming is what makes a claim checkable by a reader and correctness is not lexically decidable',
+  },
+  {
+    script: 'validate:reload-assertions',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse:
+      "CHECKED both ways — the self-test drives the motivating before/after size comparison after `reloadPromptData` (must report) and twins that each differ in one thing: plus a body read (silent), `loadPromptData` for the reload (silent), plus a `toBe(true)` status (still reports), the size through a local, a same-file helper, a beforeEach hook and a reload builder's `handler` (each reports), the builder alone (silent), and a reload named only by the case title (reports) or only by a describe title (silent — asserted blind spot). The live tree is the last case, and a scan selecting no reload case or no size assertion in one exits 1. Positive controls 2026-09-16 on hot-reload-root-parity.integration.test.ts: replacing the bundled-edit case's body read with `expect(list.length).toBe(3)` reported that case, and deleting the body read beside the size check at the file's last case reported that one; both restored. NOT checked: whether a non-size assertion can actually see content (id presence clears a case), and a reload reached only by writing a watched file and polling",
+  },
+  {
+    // `spawn` is a TEXTUAL match, not a behavioural one, for the reason
+    // validate:test-directory-membership already declares it: this script's SPAWN_BINDINGS set
+    // lists the literals 'spawn', 'spawnSync', 'execFile' and 'fork' so it can recognise a test
+    // that drives production in a CHILD process, where an import form says nothing. It spawns no
+    // process itself and imports only node:fs, node:path, node:url and typescript. Declared rather
+    // than worked around, because the detector is a superset by design and omitting a matched
+    // substrate fails.
+    script: 'validate:test-subject-claims',
+    io: 'read',
+    reads: ['file', 'spawn', 'walk'],
+    converse:
+      'CHECKED both ways — the self-test drives the predicate over both P4.29 motivating headers verbatim (a "real modules" list whose three handlers are bound only by `import type`, and an `@lifecycle` line claiming startup wiring from a file that value-imports nothing under src/runtime/ and spawns nothing; each must report, naming the symbol or the claim), and over their rewritten forms, a `create<Subject>` factory standing in for its class, a claimed interface, a startup claim backed by a spawned child, a headerless file and a single-capital export name in prose (all must stay silent). The live tree is the ninth case; it found a third instance (`framework-creation.test.ts` naming the framework manager as "real registration" four lines above naming its registry as mocked), and a scan finding no test file or no src export exits 1 rather than passing on a probe that observed nothing',
   },
   {
     script: 'validate:declared-surface',
@@ -419,11 +526,33 @@ export const SUITE = [
       'CHECKED both ways — the self-test runs each predicate over a real `dry_run` declaration, JSON key, CLI flag and HTTP route (must match), the replacement parameter and two comments explaining the removal (must not), and the inline-code gap that made an earlier prose rule flag two true sentences; the satisfied-exception arm fails an exemption whose file no longer contains the word',
   },
   {
+    // `spawn` is a TEXTUAL match, not a behavioural one: the self-test embeds the pre-fix
+    // fixture's own error string verbatim, which contains the literal `npm run build`. The
+    // script starts no process and imports only node:fs, node:path and node:url. Declared rather
+    // than reworded around, for the reason validate:hermetic-child-env and
+    // validate:test-directory-membership already declare it: the detector is textual by design
+    // and omitting a matched substrate fails.
+    script: 'validate:dist-freshness-consumers',
+    io: 'read',
+    reads: ['file', 'spawn', 'walk'],
+    converse:
+      'CHECKED both ways — the self-test drives the predicate over the real pre-fix `verify-unknown-interrupt.mjs` text (direct-chain `statSync(DIST).mtimeMs`, must report), its fixed replacement (must not, since it has no local stat/mtime call), a twin that keeps the pre-fix shape but adds the import (must be exempted, and the suppressed finding is asserted so the exemption is proven to fire on the shape and not on an absence of one), `dist-freshness.js`’s own shape exempted by path only, and a false-positive control drawn from `validate-preview-vocabulary.js` (mentions `dist` as a skip-list entry, stats an unrelated `full`, must not report); the live tree is the sixth case. A control also ran the CLI end-to-end against the pre-fix file swapped into place (exit 1, naming the line) and restored (exit 0). NOT resolved: a generic `newestMtime`-shaped walker called elsewhere with a dist-flavored argument, where the function body itself never mentions `dist` — stated as a blind spot in the file header rather than silently claimed closed',
+  },
+  {
     script: 'validate:prompts',
     io: 'read',
     reads: ['file', 'walk'],
     converse:
-      "CHECKED both ways — the self-test asserts a valid prompt is NOT reported alongside a prompt with an empty description and a gate missing `guidance`, both of which must be; it runs the loader's own `validatePromptYaml` and `normalizeInlineGateDefinitions` rather than reimplementing either, so it cannot drift into accepting what the server drops",
+      "CHECKED both ways — the self-test asserts a valid prompt, and a chain whose steps resolve, are NOT reported, alongside a prompt with an empty description, a gate missing `guidance` and a chain step naming no prompt, all three of which must be; it runs the loader's own `validatePromptYaml`, `normalizeInlineGateDefinitions` and `resolveChainSteps` rather than reimplementing any of them, so it cannot drift into accepting what the server drops; it also asserts that a gate declaring no `activation` block is reported unless its id appears in a prompt's `gateConfiguration.include` or a chain step's `inlineGateIds` — an opt-in gate nobody opts into is dead, and `--self-test` covers all four activation/inclusion combinations; it also walks a fixture tree in which every skipped path (`tools` below the root, `_drafts`) has a twin differing only in that name or depth, and asserts the walked set exactly. Falsified 2026-09-21 by stubbing `findChainProblems` to return nothing: the chain arm exits 1",
+  },
+  {
+    // After `validate:prompts`, whose walk is one of the sites this step requires to share the
+    // loader's skip rules.
+    script: 'validate:prompt-walks',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse:
+      "CHECKED both ways — the self-test drives 19 fixtures, and each silent case differs from a reporting one in ONE identifier: `'gate.yaml'` for `'prompt.yaml'`, a homonym module for `prompt-layout`, `import type` for `import`, `.some()` for `.length`, a callback naming no layout predicate. A two-module case proves a lister called with `'prompt.yaml'` from another file is a walk and the same call with `'gate.yaml'` is not; the live tree is the last case. Positive controls on 2026-09-16: removing the `isReservedPromptDirectoryName` import from each of the loader, the baseline walk, the indexer, `validate-prompts.ts`, `category-maintenance.ts` and `skills-sync/service.ts`, one at a time, reported that file; renaming the one exception's path reported it as naming no file. NOT checked: a walk that names no marker anywhere, or reaches its listing only through a callee without passing the marker (header §WHAT IT CANNOT SEE), and whether an adopted predicate is applied at the right depth — `tests/integration/prompts/` pins that",
   },
   {
     script: 'validate:agent-plugins',
@@ -508,10 +637,26 @@ function runStep(step, index, total) {
  */
 const RECEIPT_PATH = path.join(SERVER_ROOT, '.cache', 'validation-receipt.json');
 
+/**
+ * Where THIS run records its receipt.
+ *
+ * A `--manifest` run is not the suite — it is a fixture list, which is how
+ * `tests/unit/scripts/validation-suite-runner.test.ts` drives two deliberately missing steps. Until
+ * 2026-09-16 such a run wrote the real receipt, so every `test:unit` replaced a developer's
+ * `firstSeen` history with two fixture names, and the next real `validate:all` reported every
+ * pre-existing failure as `NEW this run` — the one question the receipt exists to answer. Found by
+ * the tree-state guard, which reported `server/.cache/` appearing during a unit-test run. The
+ * fixture's receipt now lives beside its manifest and goes when the manifest's directory does.
+ */
+function receiptPathFor(manifestPath) {
+  if (manifestPath === undefined) return RECEIPT_PATH;
+  return path.join(path.dirname(path.resolve(manifestPath)), 'validation-receipt.json');
+}
+
 /** Previous run's receipt, or null. Never throws — a missing receipt is the normal first run. */
-function readReceipt() {
+function readReceipt(receiptPath) {
   try {
-    return JSON.parse(readFileSync(RECEIPT_PATH, 'utf8'));
+    return JSON.parse(readFileSync(receiptPath, 'utf8'));
   } catch {
     return null;
   }
@@ -527,8 +672,8 @@ function readReceipt() {
  *
  * Fails soft: a receipt that cannot be written must never turn a green suite red.
  */
-function writeReceipt(results) {
-  const previous = readReceipt();
+function writeReceipt(results, receiptPath) {
+  const previous = readReceipt(receiptPath);
   const seenBefore = new Map(
     (previous?.failing ?? []).map((entry) => [entry.script, entry.firstSeen])
   );
@@ -542,9 +687,9 @@ function writeReceipt(results) {
     }));
 
   try {
-    mkdirSync(path.dirname(RECEIPT_PATH), { recursive: true });
+    mkdirSync(path.dirname(receiptPath), { recursive: true });
     writeFileSync(
-      RECEIPT_PATH,
+      receiptPath,
       `${JSON.stringify({ ts: now, steps: results.length, failing }, null, 2)}\n`
     );
   } catch {
@@ -598,7 +743,7 @@ async function main() {
   const results = suite.map((step, index) => runStep(step, index, suite.length));
   const totalMs = Number((process.hrtime.bigint() - startedAt) / 1_000_000n);
 
-  printSummary(results, totalMs, writeReceipt(results));
+  printSummary(results, totalMs, writeReceipt(results, receiptPathFor(manifestPath)));
   process.exit(results.some((entry) => entry.status !== 0) ? 1 : 0);
 }
 

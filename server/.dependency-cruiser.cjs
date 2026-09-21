@@ -6,10 +6,14 @@ module.exports = {
     // ============================================
     // Layer hierarchy: shared(L0) → infra(L1) → engine(L2) → modules(L3) → mcp(L4)
     // Each layer can only import from layers below it.
-    // runtime/ is the application composition boundary and may wire all five layers.
+    // runtime/ is the application composition boundary and may wire all five layers. The reverse
+    // edge is `no-imports-into-runtime` below — the header described that direction for a year
+    // while nothing enforced it (measured 2026-09-15: a planted `modules/` → `#runtime/paths.js`
+    // import cruised with 0 errors, while the `modules/` → `#infra/config` control failed, so the
+    // harness was working and the rule was simply absent).
     // cli-shared/ is a host adapter outside the server request path. Its observed imports remain
     // visible in the generated module catalog; no second permission policy is encoded in
-    // module.yaml descriptors.
+    // module.yaml descriptors. What IS encoded is `cli-shared-no-runtime` below.
 
     // --- Layer 0: shared/ (foundation, imports nothing) ---
     {
@@ -145,6 +149,47 @@ module.exports = {
       },
     },
 
+    // --- Composition boundary: runtime/ (wires every layer, imported by none) ---
+    {
+      name: 'no-imports-into-runtime',
+      comment:
+        'runtime/ is the composition root: it wires shared/infra/engine/modules/mcp together and ' +
+        'owns process lifecycle. Nothing below it may import it. An upward edge into runtime/ ' +
+        'means a layer has taken a dependency on HOW the application happens to be assembled — ' +
+        'the singletons it holds, the order it initializes them in — which is the one thing a ' +
+        'composition root exists to keep out of the layers.\n\n' +
+        'The remedy is the one already used for ApiRouterPort and DatabasePort: declare the ' +
+        'contract in shared/types, implement it where the implementation belongs, and let ' +
+        'runtime/ hand the two together. src/index.ts is deliberately outside the `from` set — it ' +
+        'is the process entry point, not a layer.\n\n' +
+        'Type-only edges are errors here too, unlike the layer rules above, which grandfather a ' +
+        'backlog of type-only imports at `warn`. There is no backlog to grandfather: this ' +
+        'direction measured zero type-only edges when the rule was written, and a type reached ' +
+        'from the composition root is a contract that belongs in shared/ regardless.',
+      severity: 'error',
+      from: { path: '^src/(shared|infra|engine|modules|mcp|cli-shared)/' },
+      to: { path: '^src/runtime/' },
+    },
+    {
+      name: 'cli-shared-no-runtime',
+      comment:
+        'cli-shared/ must not REACH server runtime wiring — runtime/, infra/, or mcp/ — through ' +
+        'any chain of imports. The CLI bundles this barrel on its own (esbuild, its own ' +
+        'package.json, Node >=18.18 rather than the server floor), so a transitive edge into ' +
+        'transport, config loading, or logging pulls the whole server into the CLI bundle.\n\n' +
+        '`reachable` rather than a direct-edge path, because the claim being defended is about ' +
+        'the closure, not the first hop: cli-shared legitimately imports schema modules from ' +
+        'modules/ and engine/, and the way infra/ arrives is through one of those, never directly.\n\n' +
+        'Added 2026-09-15. `src/cli-shared/index.ts` and docs/guides/cli.md had both cited this ' +
+        'rule BY NAME since the CLI split, and it did not exist — tests/unit/cli-shared/' +
+        'import-isolation.test.ts ran depcruise over the barrel and asserted "no dependency ' +
+        'violations found" against a rule set that expressed nothing about cli-shared. Measured ' +
+        'before adding: 32 modules in the barrel closure, 0 in infra/, runtime/, or mcp/.',
+      severity: 'error',
+      from: { path: '^src/cli-shared/' },
+      to: { path: '^src/(infra|runtime|mcp)/', reachable: true },
+    },
+
     // ============================================
     // LAYER SPECIFIER FORM
     // ============================================
@@ -224,21 +269,15 @@ module.exports = {
         dependencyTypesNot: ['type-only'],
       },
     },
-    {
-      name: 'no-runtime-state-direct-access',
-      comment: 'Runtime state should be accessed via managers, not directly.',
-      severity: 'warn',
-      from: {
-        pathNot: [
-          'src/modules/chains/manager\\.ts$',
-          'src/engine/frameworks/framework-state-manager\\.ts$',
-          'src/engine/gates/gate-state-manager\\.ts$',
-        ],
-      },
-      to: {
-        path: 'runtime-state/',
-      },
-    },
+    // `no-runtime-state-direct-access` was deleted here on 2026-09-15. It read
+    // `to: { path: 'runtime-state/' }` with three exempted source files, and it could not fire in
+    // either half. `runtime-state/` is a directory the server WRITES at run time; no module
+    // resolves inside it, so the `to` set was empty of modules by construction, and
+    // dependency-cruiser sees import edges, not the string literals that would be the real risk.
+    // Two of its three exemptions had also stopped existing — `framework-state-manager.ts` and
+    // `gate-state-manager.ts` are `*-state-store.ts` now. A rule that cannot fire reads as
+    // coverage while providing none. The boundary it gestured at (state reached through a store,
+    // not opened directly) is held by `modules-no-infra-static` and the DatabasePort contract.
     {
       name: 'no-mcp-tools-to-execution-internals',
       comment: 'MCP tools should use the execution pipeline, not internal execution modules.',

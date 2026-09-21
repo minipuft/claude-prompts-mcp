@@ -89,6 +89,25 @@ export function collectManifestManagedSkillDirs(
   return managedSkillDirs;
 }
 
+/**
+ * Load skill frontmatter YAML, or null when it will not parse as a mapping.
+ *
+ * This frontmatter comes from a directory the operator edits by hand, so a bad
+ * file — invalid YAML, or valid YAML that is not a mapping — is a fact to
+ * skip, not a reason to abort the run. Every reader of skill frontmatter in
+ * this module goes through here so the "abort vs. skip" decision is made once.
+ */
+function parseFrontmatterOrNull(frontmatterRaw: string): Record<string, unknown> | null {
+  let parsed: unknown;
+  try {
+    parsed = yaml.load(frontmatterRaw);
+  } catch {
+    return null;
+  }
+  if (parsed == null || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  return parsed as Record<string, unknown>;
+}
+
 function parseManagedMarkerRecord(record: Record<string, unknown>): ManagedSkillMarker | null {
   const managedBy = record['managed-by'];
   if (managedBy !== SKILLS_SYNC_MANAGED_BY) return null;
@@ -116,11 +135,10 @@ export function parseManagedSkillMarker(skillMarkdown: string): ManagedSkillMark
   const frontmatterRaw = fmMatch[1];
   if (frontmatterRaw == null) return null;
 
-  const frontmatter = yaml.load(frontmatterRaw);
-  if (frontmatter == null || typeof frontmatter !== 'object' || Array.isArray(frontmatter))
-    return null;
+  const frontmatter = parseFrontmatterOrNull(frontmatterRaw);
+  if (frontmatter == null) return null;
 
-  return parseManagedMarkerRecord(frontmatter as Record<string, unknown>);
+  return parseManagedMarkerRecord(frontmatter);
 }
 
 /**
@@ -154,11 +172,11 @@ export function isAdoptableSkillMarkdown(skillMarkdown: string): boolean {
   const frontmatterRaw = fmMatch[1];
   if (frontmatterRaw == null) return false;
 
-  const frontmatter = yaml.load(frontmatterRaw);
-  if (frontmatter == null || typeof frontmatter !== 'object' || Array.isArray(frontmatter)) {
+  const frontmatter = parseFrontmatterOrNull(frontmatterRaw);
+  if (frontmatter == null) {
     return false;
   }
-  const fm = frontmatter as Record<string, unknown>;
+  const fm = frontmatter;
   if (typeof fm['name'] !== 'string' || fm['name'].length === 0) return false;
   if (typeof fm['description'] !== 'string' || fm['description'].length === 0) return false;
 
@@ -204,12 +222,12 @@ export function injectManagedSkillMarker(
   const frontmatterRaw = fmMatch[1];
   if (frontmatterRaw == null) return skillMarkdown;
 
-  const frontmatter = yaml.load(frontmatterRaw);
-  if (frontmatter == null || typeof frontmatter !== 'object' || Array.isArray(frontmatter)) {
+  const frontmatter = parseFrontmatterOrNull(frontmatterRaw);
+  if (frontmatter == null) {
     return skillMarkdown;
   }
 
-  const fm = frontmatter as Record<string, unknown>;
+  const fm = frontmatter;
   fm['managed-by'] = SKILLS_SYNC_MANAGED_BY;
   fm['managed-client'] = marker.clientId;
   fm['managed-scope'] = marker.scope;

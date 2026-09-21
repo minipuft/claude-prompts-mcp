@@ -1,6 +1,28 @@
 // @lifecycle canonical - What a complete recorded state is, and how it projects from and restores to disk.
 
+import { describeRestorePlan } from './restore-plan.js';
+
+import type { RestorePlan } from './restore-plan.js';
 import type { ResourceType } from './types.js';
+
+/**
+ * The description a version row carries for the state a CREATE produced.
+ *
+ * `version_history` has two accepted writers, and a row's `description` is the only prose an
+ * operator reading `cpm history` or `resource_manager history` ever sees about what produced it.
+ * `VersionHistoryService` additionally separates eras by description convention — post-fix rows
+ * name the action that produced them, bridge rows say so explicitly — so the text is part of the
+ * row contract rather than a label each call site is free to phrase. It was a literal at three
+ * sites here and would have become a fourth in `cli-shared/`; one owner, quoted verbatim, is why
+ * a `cpm`-written row and a `resource_manager`-written row for the same event read identically.
+ *
+ * Sibling of `BRIDGE_DESCRIPTION` (`cli-shared/version-history-rows.ts`), which already had to be
+ * shared for exactly this reason.
+ */
+export const CREATE_ROW_DESCRIPTION = 'Created via resource_manager';
+
+/** The same, for the state an UPDATE produced. */
+export const UPDATE_ROW_DESCRIPTION = 'Update via resource_manager';
 
 /**
  * Outcome of reconstructing a write model from a recorded snapshot.
@@ -176,16 +198,34 @@ export function describeRollbackPreview(
   resourceType: ResourceType,
   id: string,
   version: number,
-  diff: { hasChanges: boolean; formatted: string },
-  unrecordedFields?: readonly string[]
+  /** The write-model diff. `undefined` only when `filePlan` supersedes it. */
+  diff: { hasChanges: boolean; formatted: string } | undefined,
+  unrecordedFields?: readonly string[],
+  /**
+   * The byte-exact plan, when the target version recorded one.
+   *
+   * The SAME value the apply runs, rendered by the SAME function — not a second description of it.
+   * A preview whose text is derived independently can agree with the action today and drift from
+   * it at the next edit, and the drift is invisible: both halves keep passing their own tests.
+   * `tests/integration/versioning/byte-exact-rollback.test.ts` asserts the two as one value.
+   */
+  filePlan?: RestorePlan
 ): string {
   let text =
     `🔍 **Preview** — rollback of ${resourceType} '${id}' to version ${version}\n\n` +
     `Nothing was written: no file changed and no version row was recorded.\n\n`;
 
-  text += diff.hasChanges
-    ? `${diff.formatted}\n\n`
-    : `Version ${version} matches the current state — this rollback would change nothing.\n\n`;
+  if (filePlan !== undefined) {
+    // The file plan REPLACES the write-model diff rather than joining it. The diff renders what a
+    // projection-based write would land; on this path that write does not happen, and showing both
+    // would describe two different actions in one preview.
+    return `${text}${describeRestorePlan(filePlan)}\n\n${ROLLBACK_PREVIEW_FOOTER}`;
+  }
+
+  text +=
+    diff?.hasChanges === true
+      ? `${diff.formatted}\n\n`
+      : `Version ${version} matches the current state — this rollback would change nothing.\n\n`;
 
   if (unrecordedFields !== undefined && unrecordedFields.length > 0) {
     text +=
@@ -193,7 +233,35 @@ export function describeRollbackPreview(
       `Those would keep their current values.\n\n`;
   }
 
-  return `${text}💡 Re-send as \`action:"rollback"\` with \`confirm: true\` to apply it.`;
+  return `${text}${ROLLBACK_PREVIEW_FOOTER}`;
+}
+
+/** One sentence, so the byte branch and the projection branch cannot end differently. */
+const ROLLBACK_PREVIEW_FOOTER =
+  '💡 Re-send as `action:"rollback"` with `confirm: true` to apply it.';
+
+/**
+ * What an update reply says about the version table, told by whether a row was written.
+ *
+ * Centralised for the same reason `describeIncompleteSnapshot` is: eight call sites each composed
+ * their own sentence, and every one of them read only the version NUMBER — which a write that
+ * changed nothing still returns, because it is the number that was already there. "Version 7
+ * saved" about a row somebody else wrote is the same class of lie as a rollback announcing a
+ * version it did not fully restore.
+ */
+export function describeVersionRecord(result: { version?: number; recorded: boolean }): string {
+  const view = ' (use `action:"history"` to view)';
+  return result.recorded
+    ? `📜 **Version ${result.version}** saved${view}`
+    : `📜 No change to record — still at version ${result.version}${view}`;
+}
+
+/** The same distinction for a rollback: the restored state got a row, or was already current. */
+export function describeRollbackRecord(result: { version?: number; recorded: boolean }): string {
+  return result.recorded
+    ? `📜 Restored state recorded as version ${result.version}`
+    : `📜 Already at version ${result.version} — the restored state was the current one, so no ` +
+        `version was recorded`;
 }
 
 export function describeIncompleteSnapshot(

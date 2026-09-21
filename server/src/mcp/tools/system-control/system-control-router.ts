@@ -1,9 +1,7 @@
 // @lifecycle canonical - Thin router for system_control MCP tool actions.
 
-import {
-  SYSTEM_CONTROL_ACTION_IDS,
-  type SystemControlActionId,
-} from '../../metadata/definitions/system-control.js';
+import * as path from 'node:path';
+
 import { recordActionInvocation } from '../../metadata/usage-tracker.js';
 import { SafeConfigWriter, createSafeConfigWriter } from '../config-utils.js';
 import { createStructuredResponse } from './core/response-utils.js';
@@ -24,9 +22,12 @@ import { ResponseFormatter } from '../prompt-engine/processors/response-formatte
 import type { PromptGuidanceService } from '#engine/frameworks/prompt-guidance/index.js';
 import type { GateGuidanceRenderer } from '#engine/gates/guidance/GateGuidanceRenderer.js';
 import type { ExecutionRecordStore } from '#modules/chains/execution-record-store.js';
+import type { SkillsSyncPaths } from '#modules/skills-sync/service.js';
+import type { SystemControlInput } from '../schemas/system-control.schema.js';
 import type { ActionHandler } from './core/action-handler-base.js';
 import type { SystemAnalytics, SystemControlContext } from './core/types.js';
 
+import { type ConfigKey } from '#cli-shared/config-input-validator.js';
 import { FrameworkManager } from '#engine/frameworks/framework-manager.js';
 import { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';
 import { GateStateStore } from '#engine/gates/gate-state-store.js';
@@ -39,6 +40,10 @@ import {
   type DatabasePort,
   StateStoreOptions,
 } from '#shared/types/index.js';
+import {
+  SYSTEM_CONTROL_ACTION_IDS,
+  type SystemControlActionId,
+} from '#shared/types/system-control.js';
 import { resolveRequestIdentity } from '#shared/utils/request-identity-resolver.js';
 import {
   buildIdentityScope,
@@ -69,6 +74,7 @@ export class ConsolidatedSystemControl implements SystemControlContext {
   chainSessionStore?: ChainSessionService;
   executionRecordStore?: ExecutionRecordStore;
   databasePort?: DatabasePort;
+  skillsSyncPaths?: () => SkillsSyncPaths;
   configManager?: ConfigManager;
   safeConfigWriter?: SafeConfigWriter;
   onRestart?: (reason: string) => Promise<void>;
@@ -127,11 +133,6 @@ export class ConsolidatedSystemControl implements SystemControlContext {
     }
   }
 
-  setRestartCallback(onRestart: (reason: string) => Promise<void>): void {
-    this.onRestart = onRestart;
-    this.logger.debug('Restart callback configured for system control');
-  }
-
   setToolSurfaceChangedHandler(handler: () => Promise<void>): void {
     this.onToolSurfaceChanged = handler;
   }
@@ -148,6 +149,10 @@ export class ConsolidatedSystemControl implements SystemControlContext {
 
   setDatabasePort(databasePort: DatabasePort): void {
     this.databasePort = databasePort;
+  }
+
+  setSkillsSyncPathsProvider(provider: () => SkillsSyncPaths): void {
+    this.skillsSyncPaths = provider;
   }
 
   setChainSessionStore(chainSessionStore: ChainSessionService): void {
@@ -228,13 +233,12 @@ export class ConsolidatedSystemControl implements SystemControlContext {
     try {
       const result = await this.safeConfigWriter.updateConfigValue(
         'gates.enabled',
-        String(enabled),
-        { createBackup: false }
+        String(enabled)
       );
       if (!result.success) {
         return `⚠️ Failed to persist gates.enabled: ${result.message || result.error}`;
       }
-      return `📁 Persisted gates.enabled=${enabled} to config.json.`;
+      return `📁 Persisted gates.enabled=${enabled} to ${path.basename(this.safeConfigWriter.getConfigPath())}.`;
     } catch (error) {
       this.logger.warn('Failed to persist gates.enabled', error);
       return `⚠️ Failed to persist gates.enabled: ${error instanceof Error ? error.message : String(error)}`;
@@ -246,11 +250,14 @@ export class ConsolidatedSystemControl implements SystemControlContext {
       return '⚠️ Persistence skipped (config writer unavailable).';
     }
 
-    // Every key here must appear in CONFIG_VALID_KEYS — updateConfigValue rejects anything else
-    // as "Unknown configuration key". Two of the three previously listed did not
+    // Every key here must appear in `CONFIG_VALID_KEYS` (src/cli-shared/_generated/config-keys.ts,
+    // generated from `ConfigFile`) — `updateConfigValue` rejects anything else as "Unknown
+    // configuration key". Two of the three previously listed did not
     // (`frameworks.injection.systemPrompt.enabled` and `gates.enableMethodologyGates`), and the
-    // loop returns on first failure, so persistence aborted before writing anything.
-    const keys = [
+    // loop returns on first failure, so persistence aborted before writing anything. The list is
+    // no longer hand-kept, so a key that stops existing in `ConfigFile` fails the typecheck here
+    // rather than at run time.
+    const keys: ConfigKey[] = [
       'frameworks.enabled',
       'frameworks.dynamicToolDescriptions',
       'gates.frameworkGates',
@@ -258,14 +265,12 @@ export class ConsolidatedSystemControl implements SystemControlContext {
 
     try {
       for (const key of keys) {
-        const result = await this.safeConfigWriter.updateConfigValue(key, String(enabled), {
-          createBackup: false,
-        });
+        const result = await this.safeConfigWriter.updateConfigValue(key, String(enabled));
         if (!result.success) {
           return `⚠️ Failed to persist ${key}: ${result.message || result.error}`;
         }
       }
-      return `📁 Persisted framework toggles (${keys.join(', ')}) to ${enabled} in config.json.`;
+      return `📁 Persisted framework toggles (${keys.join(', ')}) to ${enabled} in ${path.basename(this.safeConfigWriter.getConfigPath())}.`;
     } catch (error) {
       this.logger.warn('Failed to persist framework toggles', error);
       return `⚠️ Failed to persist framework toggles: ${error instanceof Error ? error.message : String(error)}`;
@@ -329,10 +334,7 @@ export class ConsolidatedSystemControl implements SystemControlContext {
 
   // ── Action dispatch ─────────────────────────────────────────────────
 
-  async handleAction(
-    args: { action: string; [key: string]: any },
-    extra: any
-  ): Promise<ToolResponse> {
+  async handleAction(args: SystemControlInput, extra: any): Promise<ToolResponse> {
     const { action } = args;
     this.logger.info(`⚙️ System Control: Executing action "${action}"`);
 
@@ -340,6 +342,12 @@ export class ConsolidatedSystemControl implements SystemControlContext {
     recordActionInvocation('system_control', action, 'received');
 
     try {
+      // `args: SystemControlInput` already guarantees `action` is a real action id for every
+      // TYPED caller (`registerTool`'s zod-validated callback, and `PromptExecutor.routeToTool`
+      // since row B.61). This check stays for the caller a type cannot stop: `handleAction` is a
+      // public method callable directly (as the test suite does) with an `as any`/`as unknown`
+      // escape hatch, and the message here is what such a caller sees instead of whatever the
+      // wrong action handler would have done with an id it does not recognize.
       if (!isSystemControlActionId(action)) {
         recordActionInvocation('system_control', action, 'unknown', {
           error: `Unknown action: ${action}`,
@@ -393,7 +401,7 @@ export class ConsolidatedSystemControl implements SystemControlContext {
       extra && typeof extra === 'object'
         ? resolveContinuityScopeId(resolveRequestIdentity(extra as Record<string, unknown>))
         : 'default';
-    const launchWorkspaceId = this.configManager?.getConfig().identity?.launchDefaults?.workspaceId;
+    const launchWorkspaceId = this.configManager?.getConfig().identity.launchDefaults.workspaceId;
     const workspaceId = requestScopeId !== 'default' ? requestScopeId : launchWorkspaceId;
 
     return buildIdentityScope({ continuityScopeId: requestScopeId, workspaceId });

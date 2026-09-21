@@ -3,16 +3,26 @@ import { existsSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
+import { ensureTrailingNewline } from './gate-file-writer.js';
 import { gateSnapshotContract } from './gate-snapshot-contract.js';
 import { isPreviewRequest } from '../../shared/preview-action.js';
+import { formatRepairServingLine } from '../../shared/quarantine-report.js';
 
 import type { ToolResponse } from '#shared/types/index.js';
+import type { QuarantinedResource } from '#shared/utils/resource-quarantine.js';
 import type { GateResourceContext } from '../core/context.js';
 import type { GateManagerInput, GateCreationData } from '../core/types.js';
 
-import { projectWriteModel } from '#modules/versioning/index.js';
-import { logMcpToolChange } from '#runtime/resource-change-tracking.js';
+import { purgeHistoryOnDelete } from '#modules/versioning/delete-purge.js';
+import {
+  CREATE_ROW_DESCRIPTION,
+  UPDATE_ROW_DESCRIPTION,
+  describeVersionRecord,
+  projectWriteModel,
+} from '#modules/versioning/index.js';
+import { logMcpToolChange } from '#shared/core/resource-change-log.js';
 import { resolveContainedPath } from '#shared/utils/path-containment.js';
+import { preferredRepairTarget } from '#shared/utils/resource-quarantine.js';
 
 export class GateLifecycleProcessor {
   constructor(private readonly ctx: GateResourceContext) {}
@@ -29,6 +39,8 @@ export class GateLifecycleProcessor {
       retry_config,
       severity,
       enforcementMode,
+      gate_type,
+      subject,
     } = args;
 
     if (!id) return this.error('Gate ID is required for create action');
@@ -38,6 +50,28 @@ export class GateLifecycleProcessor {
 
     if (this.ctx.gateManager.has(id)) {
       return this.error(`Gate '${id}' already exists. Use update action to modify.`);
+    }
+
+    // `has(id)` is FALSE for a gate file the loader REFUSED, so without this branch `create` is
+    // the one verb that still overwrites a quarantined file and reports plain success — never
+    // mentioning that anything was there. That was tolerable while a quarantined gate was
+    // unreachable by every verb; once `handleUpdate` learned to repair one, an operator who
+    // reached for `create` instead got no signal at all, which is worse than uniform ignorance.
+    //
+    // Consulted ONLY here, on the branch where the registry has no entry, mirroring the
+    // discipline `handleUpdate` states: a REGISTERED gate is never redirected by a quarantined
+    // namesake in another root. The refusal names the refused file and the verb that repairs it,
+    // because "already exists" alone would send the operator looking for a gate `inspect` cannot
+    // show them.
+    const quarantined = this.resolveRepairTarget(id);
+    if (quarantined !== undefined) {
+      return this.error(
+        `Gate '${id}' already exists on disk, but the file at ${quarantined.path} failed to ` +
+          `load (${quarantined.error}), so the registry has no entry for it.\n\n` +
+          `\`create\` would overwrite that file without acknowledging it was there. Use ` +
+          `\`action: "update"\` with the whole gate body instead — that path repairs the refused ` +
+          `file and reports whether it loads afterwards.`
+      );
     }
 
     const gateData: GateCreationData = {
@@ -51,9 +85,47 @@ export class GateLifecycleProcessor {
       retry_config,
       severity,
       enforcementMode,
+      gate_type,
+      subject,
     };
 
-    const result = await this.ctx.gateFileService.writeGateFiles(gateData);
+    // The created state is recorded as version 1 — the same `saveVersion` MAX(existing)+1
+    // numbering every edit uses, which a fresh id resolves to 1 on its own. No bridge: a create
+    // has no prior live state to carry across, unlike an edit of an unrecorded gate. Runs as the
+    // writer's `commit` step (P4.2 / SF-3 contract, matching `handleUpdate` below) so a
+    // persistence failure aborts the create with nothing written.
+    //
+    // `guidance` is normalized through the SAME `ensureTrailingNewline` the writer applies to
+    // `guidance.md` — measured: recording the raw, un-normalized value here recorded a snapshot
+    // that a disk read-back never matches, so the first update bridged every single create.
+    const skipVersion = args.skip_version === true;
+    const commitOptions =
+      this.ctx.versionHistoryService.isAutoVersionEnabled() && !skipVersion
+        ? {
+            commit: async (): Promise<void> => {
+              await this.ctx.versionHistoryService.saveVersion(
+                'gate',
+                id,
+                projectWriteModel(
+                  id,
+                  { ...gateData, guidance: ensureTrailingNewline(gateData.guidance) },
+                  gateSnapshotContract.projectedFields
+                ),
+                { description: CREATE_ROW_DESCRIPTION, diff_summary: '' }
+              );
+            },
+          }
+        : {};
+
+    // `create` owns the WHOLE state being written — there is no prior file to narrow a scope
+    // against — so `suppliedKeys` is left at the writer's own default (every gate-data key)
+    // rather than computing one, the same convention `updatePromptImplementation`'s create
+    // caller uses in `prompt-lifecycle-processor.ts`.
+    const result = await this.ctx.gateFileService.writeGateFiles(
+      gateData,
+      undefined,
+      commitOptions
+    );
     if (!result.success) {
       return this.error(`Failed to create gate: ${result.error}`);
     }
@@ -106,11 +178,23 @@ export class GateLifecycleProcessor {
       retry_config,
       severity,
       enforcementMode,
+      gate_type,
+      subject,
     } = args;
 
     if (!id) return this.error('Gate ID is required for update action');
 
     if (!this.ctx.gateManager.has(id)) {
+      // The registry has no entry — which is also true of a gate file the loader REFUSED, and that
+      // file is the one `resource_manager` is the only sanctioned way to fix. Sending an operator
+      // to `create` there is a dead end: `handleCreate` refuses nothing (the registry does not
+      // have it) and then writes over the broken file with no acknowledgement that it was broken,
+      // so the one response that could have said what is wrong says nothing. Consulted ONLY on
+      // this branch, so a registered gate is never redirected by a quarantined namesake.
+      const repairTarget = this.resolveRepairTarget(id);
+      if (repairTarget !== undefined) {
+        return await this.repairQuarantinedGate(args, repairTarget);
+      }
       return this.error(`Gate '${id}' not found. Use create action to add new gate.`);
     }
 
@@ -143,10 +227,37 @@ export class GateLifecycleProcessor {
       // falls back to the on-disk value when the caller omits them. Reading them from
       // `existingDefinition` here would work by coincidence and would defeat the preservation
       // path the moment the two disagree — the loader applies a `severity` default, so the
-      // definition reports `medium` for a file that declares nothing.
+      // definition reports `medium` for a file that declares nothing. `gate_type` (P4.10) is
+      // the third such key and rides the same path.
       severity,
       enforcementMode,
+      gate_type,
+      subject,
     };
+
+    // The union of fields THIS call actually supplied, as opposed to `gateData` above — which
+    // already carries every field merged with its existing value, so it cannot itself say which
+    // were caller-supplied and which were only carried forward. `GateFileWriter` uses this to
+    // narrow which files a write touches: a key absent here leaves the corresponding file
+    // untouched (byte-identical) rather than re-serialized from `gateData`'s already-merged
+    // values. Mirrors `suppliedKeys` in `prompt-lifecycle-processor.ts` (Fix B write-scope
+    // narrowing).
+    const suppliedKeys = new Set(
+      Object.entries({
+        name,
+        type,
+        description,
+        guidance,
+        pass_criteria,
+        activation,
+        retry_config,
+        severity,
+        enforcementMode,
+        subject,
+      })
+        .filter(([, value]) => value !== undefined)
+        .map(([key]) => key)
+    );
 
     // The state this edit will PRODUCE. `gateData` already resolves every projected field —
     // supplied value, else the existing one — so it needs no merge base.
@@ -154,6 +265,13 @@ export class GateLifecycleProcessor {
       id,
       gateData as unknown as Record<string, unknown>,
       gateSnapshotContract.projectedFields
+    );
+
+    // One projection of the write serves the version's diff summary and the update's own diff. It
+    // is resolved from the plan the writer applies, with the payload and scope the writer is
+    // handed below, so both name exactly the files the write lands in and the lines that change.
+    const diffResult = this.ctx.textDiffService.generateFileChangeDiff(
+      await this.ctx.gateFileService.projectGateWrite(gateData, suppliedKeys)
     );
 
     // Auto-versioning — go-forward: version N holds the state edit N produced, so the newest
@@ -164,7 +282,7 @@ export class GateLifecycleProcessor {
     // Runs as the writer transaction's `commit` step, not ahead of it (P4.2 / SF-3) — see the
     // matching comment in `framework-lifecycle-processor.ts` for why ordering the record against
     // the write could only pick which failure mode the caller got.
-    let versionSaved: number | undefined;
+    let versionOutcome: { version?: number; recorded: boolean } | undefined;
     const skipVersion = args.skip_version === true;
     const commitOptions =
       this.ctx.versionHistoryService.isAutoVersionEnabled() && !skipVersion
@@ -173,28 +291,29 @@ export class GateLifecycleProcessor {
             // `framework-lifecycle-processor.ts`: `validate:mutation-atomicity` reads the record's
             // position lexically, and a gate that cannot see the property is not guarding it.
             commit: async (): Promise<void> => {
-              const diffForVersion = this.ctx.textDiffService.generateObjectDiff(
-                beforeState,
-                afterState,
-                `${id}/gate.yaml`
-              );
               const versionResult = await this.ctx.versionHistoryService.recordEditResult(
                 'gate',
                 id,
                 beforeState,
                 afterState,
                 {
-                  description: 'Update via resource_manager',
-                  diff_summary: `+${diffForVersion.stats.additions}/-${diffForVersion.stats.deletions}`,
+                  description: UPDATE_ROW_DESCRIPTION,
+                  diff_summary: `+${diffResult.stats.additions}/-${diffResult.stats.deletions}`,
                 }
               );
-              versionSaved = versionResult.version;
-              this.ctx.logger.debug(`Saved version ${versionSaved} for gate ${id}`);
+              versionOutcome = versionResult;
+              this.ctx.logger.debug(
+                `${versionResult.recorded ? 'Saved' : 'Matched'} version ${versionResult.version} for gate ${id}`
+              );
             },
           }
         : {};
 
-    const result = await this.ctx.gateFileService.writeGateFiles(gateData, commitOptions);
+    const result = await this.ctx.gateFileService.writeGateFiles(
+      gateData,
+      suppliedKeys,
+      commitOptions
+    );
     if (!result.success) {
       return this.error(`Failed to update gate: ${result.error}`);
     }
@@ -205,18 +324,12 @@ export class GateLifecycleProcessor {
     const reloaded = await this.ctx.gateManager.reload(id);
     this.trackChange('modified', id);
 
-    const diffResult = this.ctx.textDiffService.generateObjectDiff(
-      beforeState,
-      afterState,
-      `${id}/gate.yaml`
-    );
-
     let response =
       `✅ Gate '${id}' updated successfully\n\n` +
       `📁 Files updated:\n${result.paths?.map((p) => `  - ${p}`).join('\n')}\n\n`;
 
-    if (versionSaved !== undefined) {
-      response += `📜 **Version ${versionSaved}** saved (use \`action:"history"\` to view)\n\n`;
+    if (versionOutcome !== undefined) {
+      response += `${describeVersionRecord(versionOutcome)}\n\n`;
     }
 
     if (diffResult.hasChanges) {
@@ -229,6 +342,215 @@ export class GateLifecycleProcessor {
         `its previous content. See the server log.`;
 
     return this.success(response);
+  }
+
+  /**
+   * Rewrite a gate file the loader refused, from the caller's body alone.
+   *
+   * NOT a merge. There is no loaded definition to fall back on — that is what quarantined means —
+   * so every field `handleUpdate` would carry forward from `existingGate` has to arrive in this
+   * call, and the three the schema requires are demanded up front rather than written as blanks
+   * that fail validation a second time. The broken file's own content is not returned to the
+   * caller: it is the content that failed validation, and a gate's `guidance` and `description`
+   * are instruction delivered to the client LLM (CLAUDE.md §Instruction surface).
+   *
+   * A version row IS recorded, and it records the produced state only. `recordEditResult` is
+   * deliberately not used: it compares the prior live snapshot against the newest recorded row and
+   * writes a BRIDGE version of that prior state when they differ, and a quarantined gate's prior
+   * state is the content that failed validation — bridging it would either publish the broken
+   * bytes as a restorable version or throw inside the mutation. `saveVersion` with the produced
+   * snapshot alone is the honest record: `version_history` is durable and nothing regenerates it,
+   * so the edit most worth having a row for was the one that had none.
+   */
+  private async repairQuarantinedGate(
+    args: GateManagerInput,
+    target: QuarantinedResource
+  ): Promise<ToolResponse> {
+    // Coalesced to `''` up front so the three fields are plain strings from here on: the refusal
+    // below is the only thing that distinguishes absent from supplied, and once it has not fired
+    // there is nothing left for a non-null assertion to assert.
+    const name = args.name ?? '';
+    const description = args.description ?? '';
+    const guidance = args.guidance ?? '';
+    const missing = Object.entries({ name, description, guidance })
+      .filter(([, value]) => value === '')
+      .map(([field]) => field);
+
+    if (missing.length > 0) {
+      return this.error(
+        `🚧 Gate '${target.id}' is quarantined — the file at ${target.path} failed to load ` +
+          `(${target.error}).\n\n` +
+          `A repair supplies the WHOLE gate: there is no loaded state to merge onto, and the ` +
+          `content that failed validation is deliberately not returned here. Missing: ` +
+          `${missing.join(', ')}.`
+      );
+    }
+
+    const gateData: GateCreationData = {
+      id: String(args.id),
+      name,
+      type: args.type ?? 'validation',
+      description,
+      guidance,
+      pass_criteria: args.pass_criteria,
+      activation: args.activation,
+      retry_config: args.retry_config,
+      severity: args.severity,
+      enforcementMode: args.enforcementMode,
+      gate_type: args.gate_type,
+    };
+
+    // The state this repair will PRODUCE — the only state there is. `gateData` already resolves
+    // every projected field from the caller's body, and there is no merge base by construction.
+    const afterState = projectWriteModel(
+      String(args.id),
+      gateData as unknown as Record<string, unknown>,
+      gateSnapshotContract.projectedFields
+    );
+
+    let versionOutcome: { version?: number; recorded: boolean } | undefined;
+    const skipVersion = args.skip_version === true;
+    const commitOptions =
+      this.ctx.versionHistoryService.isAutoVersionEnabled() && !skipVersion
+        ? {
+            // Inlined at the call site for the same reason as `handleUpdate`'s:
+            // `validate:mutation-atomicity` reads the record's position lexically, and a record
+            // one indirection away is indistinguishable from the pre-fix shape.
+            commit: async (): Promise<void> => {
+              const versionResult = await this.ctx.versionHistoryService.saveVersion(
+                'gate',
+                String(args.id),
+                afterState,
+                {
+                  description: 'Repair of quarantined gate via resource_manager',
+                  // Empty, and it means something: there is no prior loadable state to diff
+                  // against, so a `+n/-n` here would be measured against a fiction.
+                  diff_summary: '',
+                }
+              );
+              versionOutcome = versionResult;
+              this.ctx.logger.debug(
+                `${versionResult.recorded ? 'Saved' : 'Matched'} repair version ${versionResult.version} for gate ${args.id}`
+              );
+            },
+          }
+        : {};
+
+    // `suppliedKeys` left to its default: a repair owns the WHOLE state being written, exactly as
+    // create and rollback do, so there is no narrower scope to compute. Passed explicitly because
+    // main added this parameter ahead of `options` after this call was written, and the commit
+    // options were silently arriving as the supplied-key set.
+    const result = await this.ctx.gateFileService.writeGateFiles(
+      gateData,
+      undefined,
+      commitOptions
+    );
+    if (!result.success) {
+      return this.error(`Failed to repair gate: ${result.error}`);
+    }
+
+    // Reloads through the loader, which clears its cache for this id and re-reads the file — so
+    // the quarantine is rebuilt from disk before `formatRepairOutcome` reads it back. Without this
+    // the outcome line would report the state the write was ASKED to produce rather than the one
+    // the loader observed, which is the whole assertion the row turns on.
+    await this.ctx.gateManager.reload(String(args.id));
+    this.trackChange('modified', String(args.id));
+
+    // The root a gate write resolves through — the same one `resolveRepairTarget` prefers, and the
+    // one `formatRepairOutcome` compares the served stamp against. Named once rather than reached
+    // for twice, so the path reported and the root ranked cannot describe different directories.
+    const writtenRoot = this.ctx.configManager.getGatesDirectory();
+    const writtenPath = path.join(writtenRoot, String(args.id).toLowerCase(), 'gate.yaml');
+
+    // Says what was recorded and why it carries no diff. The previous wording — "No version was
+    // recorded" — became a lie the moment the record above was added, and a version line is the
+    // one place an operator checks before trusting `rollback`.
+    const versionLine =
+      versionOutcome === undefined
+        ? `📜 No version was recorded — auto-versioning is off for this server, or ` +
+          `\`skip_version\` was set on this call.\n`
+        : versionOutcome.recorded
+          ? `📜 **Version ${versionOutcome.version}** recorded — the repaired state, with no diff: a ` +
+            `quarantined gate has no prior loadable state to compare against (use ` +
+            `\`action:"history"\` to view).\n`
+          : `📜 The repaired state already matches version ${versionOutcome.version}, so no new ` +
+            `version was recorded (use \`action:"history"\` to view).\n`;
+
+    return this.success(
+      `🩺 Repair written for quarantined gate '${target.id}'\n\n` +
+        `📁 Files written:\n${result.paths?.map((p) => `  - ${p}`).join('\n')}\n\n` +
+        versionLine +
+        this.formatRepairOutcome(target, writtenPath, writtenRoot)
+    );
+  }
+
+  /**
+   * The quarantine record an unqualified `update` on this id means, if any.
+   *
+   * WRITABLE root first: `preferredRepairTarget` prefers the primary because that is the root a
+   * `resource_manager` write lands in, so an operator repairing `foo` means the copy they can
+   * actually edit rather than the bundled one they cannot. NOT precedence — since P4.27 the primary
+   * is outranked by every overlay (`shared/utils/resource-root-lookup.ts` §resourceRootPrecedence),
+   * and this docstring cited that precedence back when the two happened to agree.
+   */
+  private resolveRepairTarget(id: string): QuarantinedResource | undefined {
+    const records = this.ctx.gateManager.getQuarantine().byId(id.toLowerCase());
+    if (records.length === 0) return undefined;
+    return preferredRepairTarget(records, this.ctx.configManager.getGatesDirectory());
+  }
+
+  /**
+   * Say, in the repair's own response, what happened to the refused file AND which root serves now.
+   *
+   * TWO INDEPENDENT FACTS, and they were fused into one claim. What happened to the refused file
+   * has three outcomes, not two: the write always lands in the WRITABLE root, and the refused file
+   * is not always there — a broken bundled gate is repaired by writing the primary, which leaves
+   * the bundled file exactly as broken as it was. Reporting that as "still quarantined" would read
+   * as a failed repair; reporting it as repaired would claim a file was fixed that was never
+   * written.
+   *
+   * WHICH ROOT SERVES is the second fact, and it does not follow from the first. This branch used
+   * to assert that the written file "takes precedence, so `<id>` now serves your copy", which
+   * P4.27 made false whenever the refused file sits in an overlay: overlays outrank the primary,
+   * so the repair lands in a root that does not answer. `formatRepairServingLine` reads the
+   * loader's own `sourceRoot` stamp back instead of re-deriving the order here.
+   */
+  private formatRepairOutcome(
+    target: QuarantinedResource,
+    writtenPath: string,
+    writtenRoot: string
+  ): string {
+    const stillRefused = this.ctx.gateManager
+      .getQuarantine()
+      .byId(target.id)
+      .some((record) => record.path === target.path);
+    // The root the reload above actually served this id from — the loader's stamp, not a second
+    // derivation of precedence. `list(false)` so a disabled gate still answers the question.
+    const servedFrom = this.ctx.gateManager
+      .list(false)
+      .find((gate) => gate.gateId.toLowerCase() === target.id)
+      ?.getDefinition().sourceRoot;
+    const serving = formatRepairServingLine(target.id, writtenRoot, servedFrom);
+
+    if (!stillRefused) {
+      return (
+        `\n🩹 **Repaired**: \`${target.path}\` now loads and its quarantine record is cleared.\n` +
+        serving
+      );
+    }
+
+    if (path.resolve(target.path) !== path.resolve(writtenPath)) {
+      return (
+        `\n🚧 **The refused file was in another root and was not touched.** This repair wrote ` +
+        `\`${writtenPath}\`; \`${target.path}\` stays quarantined.\n` +
+        serving
+      );
+    }
+
+    return (
+      `\n🚧 **Still quarantined**: \`${target.path}\` did not load after the write — the gate ` +
+      `remains absent from the registry. See the server log for the loader's reason.\n`
+    );
   }
 
   async handleDelete(args: GateManagerInput): Promise<ToolResponse> {
@@ -280,8 +602,7 @@ export class GateLifecycleProcessor {
         `🔍 **Preview** — deletion of gate '${id}'\n\n` +
           `Nothing was removed.\n\n` +
           `📁 Would remove the directory: ${gateDir}\n` +
-          `📜 Its \`version_history\` rows are NOT removed — they survive and become unreachable, ` +
-          `since rollback resolves the gate first\n` +
+          `📜 Would also purge its \`version_history\` rows — a preview purges nothing\n` +
           `⚠️ Deletion cannot be undone — rollback cannot restore a deleted gate.\n\n` +
           `💡 Re-send as \`action:"delete"\` with \`confirm: true\` to apply it.`
       );
@@ -294,6 +615,17 @@ export class GateLifecycleProcessor {
         `Failed to delete gate directory: ${error instanceof Error ? error.message : String(error)}`
       );
     }
+
+    // AFTER the removal, and only if it succeeded. The other order destroys the rollback history of
+    // a resource that is still on disk when the `fs.rm` fails, which is unrecoverable; this order's
+    // failure mode is rows left behind, which is exactly the state before this was wired.
+    const purge = await purgeHistoryOnDelete(
+      this.ctx.versionHistoryService,
+      'gate',
+      id,
+      `directory removed: ${gateDir}`
+    );
+    if (purge.failure !== undefined) return this.error(purge.failure);
 
     const unregistered = this.ctx.gateManager.unregister(id);
     if (!unregistered) {
@@ -310,6 +642,7 @@ export class GateLifecycleProcessor {
     return this.success(
       `✅ Gate '${id}' deleted successfully\n\n` +
         `📁 Directory removed: ${gateDir}\n\n` +
+        `📜 Version history purged: ${purge.removed} row(s)\n\n` +
         (unregistered
           ? `🔄 Gate unregistered from registry`
           : `ℹ️ It was not in the gate registry, so only the files were removed`)
@@ -331,6 +664,16 @@ export class GateLifecycleProcessor {
     // disk, and that becomes the error below.
     const reloadSuccess = await this.ctx.gateManager.reload(id);
     if (!reloadSuccess) {
+      // The loader has just re-read the file, so the quarantine describes THIS attempt. Naming the
+      // reason beats the old message, which told an operator to check whether a file exists in the
+      // one case where it provably does — the loader read it and refused it.
+      const refused = this.ctx.gateManager.getQuarantine().byId(id.toLowerCase());
+      if (refused.length > 0) {
+        return this.error(
+          `Failed to reload gate '${id}' — the file was read and refused:\n` +
+            refused.map((record) => `  - ${record.path}: ${record.error}`).join('\n')
+        );
+      }
       return this.error(
         `Failed to reload gate '${id}' — no gate definition could be loaded from disk. ` +
           `Check that ${path.join(this.ctx.configManager.getGatesDirectory(), id, 'gate.yaml')} exists.`

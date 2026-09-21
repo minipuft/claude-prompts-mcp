@@ -6,6 +6,7 @@
 import type { FrameworkManager } from '#engine/frameworks/framework-manager.js';
 import type { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';
 import type { ConfigManager, Logger } from '#shared/types/index.js';
+import type { ResourceFileLocatorPort } from '#shared/utils/resource-file-set.js';
 
 /**
  * Framework manager action identifiers
@@ -225,6 +226,14 @@ export interface FrameworkManagerDependencies {
   configManager: ConfigManager;
   onRefresh?: () => Promise<void>;
   onToolsUpdate?: () => Promise<void>;
+  /**
+   * How a checkpoint finds the files it is recording (owner ruling R65).
+   *
+   * Threaded from the composition root rather than built here: it wraps `resolveResourceRoots`,
+   * which lives in `runtime/` and which `mcp/` may not import (`no-imports-into-runtime`).
+   * Absent, a version row is recorded without a file tree — today's behaviour.
+   */
+  resourceFileLocator?: ResourceFileLocatorPort;
 }
 
 /**

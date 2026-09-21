@@ -169,11 +169,13 @@ gateConfiguration:
 
 #### Execution status
 
-Inline definitions are **not executed in this release** — they are displayed and analyzed only. They
-begin executing in the next release, gated by `gates.executeInlineGateDefinitions`, per the
-warn-then-arm migration in [ADR 0001 (d)](../adr/0001-gate-resolution-precedence.md). The warnings
-above are the point of the interval: they let an operator see, one release ahead, which prompts in
-their workspace would newly arm a gate.
+Inline definitions are **displayed and analyzed only by default in this release** — they are not
+registered as gates unless an operator opts in. Setting
+[`gates.executeInlineGateDefinitions: true`](gate-configuration.md#executing-a-prompts-inline-gate-definitions)
+executes them now; the default flips in the next release, per the warn-then-arm migration in
+[ADR 0001 (d)](../adr/0001-gate-resolution-precedence.md). The warnings above are the point of the
+interval: they let an operator see, one release ahead, which prompts in their workspace would newly
+arm a gate.
 
 When they do execute:
 

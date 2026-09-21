@@ -1,13 +1,17 @@
-// @lifecycle test - Integration test for ResourceIndexer sync and query
+// @lifecycle test - Integration test for ResourceIndexer sync
 /**
  * ResourceIndexer Integration Test
  *
  * Verifies that:
- * 1. syncAll() discovers and indexes file-based resources
- * 2. queryByType/queryByCategory/search return correct results
- * 3. getStats() reflects actual index counts
- * 4. Incremental sync detects modifications and removals
- * 5. Content hash comparison prevents unnecessary re-indexing
+ * 1. syncAll() discovers and indexes file-based resources into `resource_index`
+ * 2. Incremental sync detects modifications and removals
+ * 3. Content hash comparison prevents unnecessary re-indexing
+ * 4. Tool sync reports refusal, removal, and failure as distinct dispositions
+ *
+ * `resource_index` has no in-process read API (P4.37 removed the last of it — `queryByType`,
+ * `queryByCategory`, `search`, `getResource`, `getStats`, `queryTools`, `clear` — since nothing in
+ * `src/` called any of them on a `ResourceIndexer` instance; every real reader queries the table
+ * directly, which is what the assertions below do too).
  */
 
 import * as fs from 'node:fs/promises';
@@ -20,6 +24,8 @@ import {
   ResourceIndexer,
   reportResourceSyncFailures,
 } from '../../../src/infra/database/index.js';
+import { reportRefusedResources } from '../../../src/infra/database/resource-indexer.js';
+import { testScratchPath } from '../../helpers/scratch-path.js';
 
 // Mock logger
 const mockLogger = {
@@ -29,7 +35,7 @@ const mockLogger = {
   debug: jest.fn() as jest.Mock,
 };
 
-const TEST_DIR = path.join(process.cwd(), 'tests/tmp/indexer-test');
+const TEST_DIR = testScratchPath('indexer-test');
 const RESOURCES_DIR = path.join(TEST_DIR, 'resources');
 
 /**
@@ -56,6 +62,23 @@ async function createResource(
   await fs.writeFile(path.join(dir, yamlFileName), lines.join('\n'), 'utf-8');
 }
 
+/**
+ * Per-type row counts, read straight from `resource_index` — the test-side substitute for the
+ * `getStats()` method removed in P4.37 (no production caller ever reached it).
+ */
+function countByType(
+  db: SqliteEngine
+): Record<'prompt' | 'gate' | 'framework' | 'style' | 'tool', number> {
+  const stats = { prompt: 0, gate: 0, framework: 0, style: 0, tool: 0 };
+  const rows = db.query<{ type: string; count: number }>(
+    'SELECT type, COUNT(*) as count FROM resource_index GROUP BY type'
+  );
+  for (const row of rows) {
+    if (row.type in stats) stats[row.type as keyof typeof stats] = row.count;
+  }
+  return stats;
+}
+
 describe('ResourceIndexer', () => {
   let dbManager: SqliteEngine;
   let indexer: ResourceIndexer;
@@ -64,7 +87,9 @@ describe('ResourceIndexer', () => {
     await fs.rm(TEST_DIR, { recursive: true, force: true });
     await fs.mkdir(TEST_DIR, { recursive: true });
 
-    dbManager = await SqliteEngine.getInstance(TEST_DIR, mockLogger as any);
+    dbManager = await SqliteEngine.getInstance(mockLogger as any, {
+      dbPath: path.join(TEST_DIR, 'runtime-state', 'state.db'),
+    });
     await dbManager.initialize();
   });
 
@@ -120,7 +145,10 @@ describe('ResourceIndexer', () => {
       const result = await indexer.syncAll();
 
       expect(result.added).toBe(1);
-      const gate = indexer.getResource('gate', 'quality-check');
+      const gate = dbManager.queryOne<{ name: string; type: string }>(
+        'SELECT * FROM resource_index WHERE type = ? AND id = ?',
+        ['gate', 'quality-check']
+      );
       expect(gate).not.toBeNull();
       expect(gate!.name).toBe('Quality Check');
       expect(gate!.type).toBe('gate');
@@ -136,7 +164,10 @@ describe('ResourceIndexer', () => {
       const result = await indexer.syncAll();
 
       expect(result.added).toBe(1);
-      const meth = indexer.getResource('framework', 'cageerf');
+      const meth = dbManager.queryOne<{ name: string }>(
+        'SELECT * FROM resource_index WHERE type = ? AND id = ?',
+        ['framework', 'cageerf']
+      );
       expect(meth).not.toBeNull();
       expect(meth!.name).toBe('CAGEERF');
     });
@@ -151,7 +182,10 @@ describe('ResourceIndexer', () => {
       const result = await indexer.syncAll();
 
       expect(result.added).toBe(1);
-      const style = indexer.getResource('style', 'analytical');
+      const style = dbManager.queryOne<{ name: string }>(
+        'SELECT * FROM resource_index WHERE type = ? AND id = ?',
+        ['style', 'analytical']
+      );
       expect(style).not.toBeNull();
       expect(style!.name).toBe('Analytical Style');
     });
@@ -167,7 +201,7 @@ describe('ResourceIndexer', () => {
       expect(result.added).toBe(4);
       expect(result.errors).toBe(0);
 
-      const stats = indexer.getStats();
+      const stats = countByType(dbManager);
       expect(stats.prompt).toBe(1);
       expect(stats.gate).toBe(1);
       expect(stats.framework).toBe(1);
@@ -212,7 +246,10 @@ describe('ResourceIndexer', () => {
       expect(result.modified).toBe(1);
       expect(result.added).toBe(0);
 
-      const resource = indexer.getResource('prompt', 'evolving');
+      const resource = dbManager.queryOne<{ name: string; description: string }>(
+        'SELECT * FROM resource_index WHERE type = ? AND id = ?',
+        ['prompt', 'evolving']
+      );
       expect(resource!.name).toBe('Version 2');
       expect(resource!.description).toBe('Updated description');
     });
@@ -227,7 +264,10 @@ describe('ResourceIndexer', () => {
       const result = await indexer.syncAll();
       expect(result.removed).toBe(1);
 
-      const resource = indexer.getResource('prompt', 'temporary');
+      const resource = dbManager.queryOne(
+        'SELECT * FROM resource_index WHERE type = ? AND id = ?',
+        ['prompt', 'temporary']
+      );
       expect(resource).toBeNull();
     });
 
@@ -249,121 +289,19 @@ describe('ResourceIndexer', () => {
     });
   });
 
-  describe('query methods', () => {
-    beforeEach(async () => {
-      await createResource('prompts', 'analysis', {
-        id: 'analysis',
-        name: 'Analysis Prompt',
-        category: 'development',
-        description: 'Deep code analysis',
-      });
-      await createResource('prompts', 'review', {
-        id: 'review',
-        name: 'Review Prompt',
-        category: 'development',
-        description: 'Code review checklist',
-      });
-      await createResource('prompts', 'greeting', {
-        id: 'greeting',
-        name: 'Greeting',
-        category: 'general',
-        description: 'Simple greeting',
-      });
-      await createResource('gates', 'quality', {
-        id: 'quality',
-        name: 'Quality Gate',
-        description: 'Output quality check',
-      });
-      await indexer.syncAll();
-    });
-
-    it('queryByType returns resources of that type', () => {
-      const prompts = indexer.queryByType('prompt');
-      expect(prompts).toHaveLength(3);
-      expect(prompts.map((p) => p.id).sort()).toEqual(['analysis', 'greeting', 'review']);
-
-      const gates = indexer.queryByType('gate');
-      expect(gates).toHaveLength(1);
-      expect(gates[0].id).toBe('quality');
-    });
-
-    it('queryByCategory filters by type and category', () => {
-      const devPrompts = indexer.queryByCategory('prompt', 'development');
-      expect(devPrompts).toHaveLength(2);
-      expect(devPrompts.map((p) => p.id).sort()).toEqual(['analysis', 'review']);
-
-      const generalPrompts = indexer.queryByCategory('prompt', 'general');
-      expect(generalPrompts).toHaveLength(1);
-      expect(generalPrompts[0].id).toBe('greeting');
-    });
-
-    it('search matches by name, description, and id', () => {
-      // Search by name
-      const byName = indexer.search('Analysis');
-      expect(byName.some((r) => r.id === 'analysis')).toBe(true);
-
-      // Search by description
-      const byDesc = indexer.search('checklist');
-      expect(byDesc.some((r) => r.id === 'review')).toBe(true);
-
-      // Search by id
-      const byId = indexer.search('greeting');
-      expect(byId.some((r) => r.id === 'greeting')).toBe(true);
-    });
-
-    it('search can filter by type', () => {
-      const promptResults = indexer.search('quality', 'prompt');
-      expect(promptResults).toHaveLength(0); // "quality" is a gate, not a prompt
-
-      const gateResults = indexer.search('quality', 'gate');
-      expect(gateResults).toHaveLength(1);
-      expect(gateResults[0].id).toBe('quality');
-    });
-
-    it('getResource returns specific resource or null', () => {
-      const found = indexer.getResource('prompt', 'analysis');
-      expect(found).not.toBeNull();
-      expect(found!.name).toBe('Analysis Prompt');
-      expect(found!.category).toBe('development');
-
-      const notFound = indexer.getResource('prompt', 'nonexistent');
-      expect(notFound).toBeNull();
-    });
-
-    it('getStats returns per-type counts', () => {
-      const stats = indexer.getStats();
-      expect(stats.prompt).toBe(3);
-      expect(stats.gate).toBe(1);
-      expect(stats.framework).toBe(0);
-      expect(stats.style).toBe(0);
-    });
-  });
-
-  describe('clear', () => {
-    it('should remove all indexed resources', async () => {
-      await createResource('prompts', 'p1', { id: 'p1', name: 'P1' });
-      await createResource('gates', 'g1', { id: 'g1', name: 'G1' });
-      await indexer.syncAll();
-
-      const statsBefore = indexer.getStats();
-      expect(statsBefore.prompt).toBe(1);
-      expect(statsBefore.gate).toBe(1);
-
-      indexer.clear();
-
-      const statsAfter = indexer.getStats();
-      expect(statsAfter.prompt).toBe(0);
-      expect(statsAfter.gate).toBe(0);
-    });
-  });
-
-  // ── F6: a tool that fails to load must not read as a tool that was deleted ──
+  // ── F6 / P4.17: a tool that fails to load is neither `removed` nor published ──
   //
-  // The defect this describes: `loadTool` returns undefined rather than throwing,
-  // `loadToolsForPrompt` skipped it silently, and `syncTools` then DELETED its
-  // index row counting `removed++`. Validation failure and disk deletion were the
-  // same observable event, and `errors` stayed 0 for both.
-  describe('tool sync failure reporting', () => {
+  // The original defect (F6): `loadTool` returned undefined rather than throwing,
+  // `loadToolsForPrompt` skipped it silently, and `syncTools` then DELETED its index
+  // row counting `removed++`. Validation failure and disk deletion were the same
+  // observable event, and `errors` stayed 0 for both.
+  //
+  // F6's remedy kept the row so the removal sweep would leave it alone, which fixed
+  // the conflation and left a second one: every row in `resource_index` is what
+  // `skills-sync` reads, so a tool the loader refused was still advertised as an
+  // available tool. P4.17 gives it the `refused` disposition instead — no row, not
+  // `removed`, and not a sync `failure` either, because the indexer did its job.
+  describe('tool sync refusal reporting', () => {
     /**
      * A loader stub standing in for ScriptToolDefinitionLoader.
      *
@@ -406,7 +344,7 @@ describe('ResourceIndexer', () => {
       return withTools;
     }
 
-    it('reports a failing tool by id and reason instead of counting it removed', async () => {
+    it('reports a failing tool as refused by path, not as removed and not as a failure', async () => {
       // Index the tool successfully first, so there is a row that the removal
       // sweep could delete on the second pass.
       const warm = await indexOnePromptWith(
@@ -415,6 +353,7 @@ describe('ResourceIndexer', () => {
       const first = await warm.syncAll();
       expect(first.errors).toBe(0);
       expect(first.failures).toEqual([]);
+      expect(first.refused).toEqual([]);
 
       // Same tool, now failing validation — still present on disk.
       const cold = await indexOnePromptWith(
@@ -426,31 +365,78 @@ describe('ResourceIndexer', () => {
       const second = await cold.syncAll();
 
       expect(second.removed).toBe(0);
-      expect(second.errors).toBe(1);
-      expect(second.failures).toEqual([
+      // Not a sync failure: the indexer did exactly its job. One event, one disposition.
+      expect(second.errors).toBe(0);
+      expect(second.failures).toEqual([]);
+      expect(second.refused).toEqual([
         {
           type: 'tool',
           id: 'host_prompt/broken-parser',
-          reason: 'validation failed: missing script',
+          filePath: path.join(RESOURCES_DIR, 'prompts', 'host_prompt', 'tools', 'broken-parser'),
+          rowDeleted: true,
         },
       ]);
+      // `rowDeleted: true` is a claim about the table; check the table, not the claim.
+      expect(
+        dbManager.query<{ id: string }>("SELECT id FROM resource_index WHERE type = 'tool'")
+      ).toEqual([]);
     });
 
-    it('keeps the failing tool indexed rather than dropping it from the index', async () => {
+    it('drops the failing tool from the index, keeping its valid sibling', async () => {
+      // The published surface, which is the residual F6 left behind: every row in
+      // `resource_index` is what `skills-sync` reads, so a row kept "so the sweep leaves it
+      // alone" was still an offer.
       const warm = await indexOnePromptWith(
-        loaderReporting([{ id: 'broken-parser', name: 'Broken Parser' }], [])
+        loaderReporting(
+          [
+            { id: 'broken-parser', name: 'Broken Parser' },
+            { id: 'good-parser', name: 'Good Parser' },
+          ],
+          []
+        )
       );
       await warm.syncAll();
+      // Positive control on the fixture: both tools really were indexed and published first, so
+      // the absence below is a deletion and not a tool that never arrived.
+      expect(
+        dbManager
+          .query<{ id: string }>("SELECT id FROM resource_index WHERE type = 'tool'")
+          .map((r) => r.id)
+          .sort()
+      ).toEqual(['host_prompt/broken-parser', 'host_prompt/good-parser']);
 
       const cold = await indexOnePromptWith(
-        loaderReporting([], [{ toolId: 'broken-parser', reason: 'validation failed' }])
+        loaderReporting(
+          [{ id: 'good-parser', name: 'Good Parser' }],
+          [{ toolId: 'broken-parser', reason: 'validation failed' }]
+        )
       );
-      await cold.syncAll();
+      const result = await cold.syncAll();
 
       const rows = dbManager.query<{ id: string }>(
         "SELECT id FROM resource_index WHERE type = 'tool'"
       );
-      expect(rows.map((r) => r.id)).toEqual(['host_prompt/broken-parser']);
+      expect(rows.map((r) => r.id)).toEqual(['host_prompt/good-parser']);
+      expect(result.removed).toBe(0);
+    });
+
+    it('reports refused without a row deletion when the tool never indexed cleanly', async () => {
+      // `rowDeleted` distinguishes "a promise was withdrawn" from "one was never made"; a fixture
+      // that only ever fails proves the flag is read from the index rather than hardcoded true.
+      const cold = await indexOnePromptWith(
+        loaderReporting([], [{ toolId: 'never-loaded', reason: 'tool.yaml not found' }])
+      );
+      const result = await cold.syncAll();
+
+      expect(result.refused).toEqual([
+        {
+          type: 'tool',
+          id: 'host_prompt/never-loaded',
+          filePath: path.join(RESOURCES_DIR, 'prompts', 'host_prompt', 'tools', 'never-loaded'),
+          rowDeleted: false,
+        },
+      ]);
+      expect(result.removed).toBe(0);
     });
 
     it('still counts a genuinely deleted tool as removed', async () => {
@@ -470,35 +456,60 @@ describe('ResourceIndexer', () => {
       expect(result.failures).toEqual([]);
     });
 
-    it('reportResourceSyncFailures names every failure by id and reason', async () => {
-      // The two runtime call sites (module-initializer, application) discarded
-      // syncAll()'s return entirely. This is the composition they now perform.
+    it('reportRefusedResources names the refused tool by id and path', async () => {
+      // The runtime call sites report through `reportSyncFindings`, which fans out to all three
+      // reporters. A refused tool belongs to the refusal line, whose operator action is "repair
+      // this file" — not the failure line, which says the indexer could not do its job.
       const cold = await indexOnePromptWith(
         loaderReporting([], [{ toolId: 'broken-parser', reason: 'validation failed: no script' }])
       );
       const result = await cold.syncAll();
 
       mockLogger.warn.mockClear();
-      reportResourceSyncFailures(result, mockLogger as any);
+      reportRefusedResources(result, mockLogger as any);
 
       const warned = mockLogger.warn.mock.calls.map((c: unknown[]) => String(c[0])).join('\n');
       expect(warned).toContain('host_prompt/broken-parser');
-      expect(warned).toContain('validation failed: no script');
+      expect(warned).toContain(path.join('host_prompt', 'tools', 'broken-parser'));
     });
 
-    it('reportResourceSyncFailures says nothing on a clean sync', async () => {
+    it('the failure reporter stays silent about a refused tool, and the refusal reporter about a clean sync', async () => {
+      const cold = await indexOnePromptWith(
+        loaderReporting([], [{ toolId: 'broken-parser', reason: 'validation failed: no script' }])
+      );
+      const refusedResult = await cold.syncAll();
+
+      mockLogger.warn.mockClear();
+      reportResourceSyncFailures(refusedResult, mockLogger as any);
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+
       const clean = await indexOnePromptWith(
         loaderReporting([{ id: 'broken-parser', name: 'Broken Parser' }], [])
       );
-      const result = await clean.syncAll();
+      const cleanResult = await clean.syncAll();
 
       mockLogger.warn.mockClear();
-      reportResourceSyncFailures(result, mockLogger as any);
-
+      reportRefusedResources(cleanResult, mockLogger as any);
       expect(mockLogger.warn).not.toHaveBeenCalled();
     });
 
-    it('keeps errors and failures.length in step', async () => {
+    it('keeps errors and failures.length in step when the loader itself throws', async () => {
+      // The remaining producer of a tool `failure`: the loader threw, so this walk really could
+      // not do its job for that prompt and there is no per-tool id to refuse. Re-pointed here
+      // because refusals no longer inflate `errors` — a fixture that only refuses would assert
+      // the invariant against 0 === 0 and prove nothing.
+      const throwing = await indexOnePromptWith((() => {
+        throw new Error('tools directory unreadable');
+      }) as unknown as ReturnType<typeof loaderReporting>);
+      const result = await throwing.syncAll();
+
+      expect(result.errors).toBe(result.failures.length);
+      expect(result.errors).toBe(1);
+      expect(result.failures[0]?.id).toBe('host_prompt/<all tools>');
+      expect(result.refused).toEqual([]);
+    });
+
+    it('does not inflate errors when several tools are refused at once', async () => {
       const cold = await indexOnePromptWith(
         loaderReporting(
           [],
@@ -510,8 +521,12 @@ describe('ResourceIndexer', () => {
       );
       const result = await cold.syncAll();
 
-      expect(result.errors).toBe(result.failures.length);
-      expect(result.errors).toBe(2);
+      expect(result.errors).toBe(0);
+      expect(result.failures).toEqual([]);
+      expect(result.refused.map((entry) => entry.id)).toEqual([
+        'host_prompt/broken-parser',
+        'host_prompt/other-tool',
+      ]);
     });
   });
 
@@ -528,7 +543,7 @@ describe('ResourceIndexer', () => {
       const result = await selectiveIndexer.syncAll();
       expect(result.added).toBe(1); // Only the gate
 
-      const stats = selectiveIndexer.getStats();
+      const stats = countByType(dbManager);
       expect(stats.prompt).toBe(0);
       expect(stats.gate).toBe(1);
     });

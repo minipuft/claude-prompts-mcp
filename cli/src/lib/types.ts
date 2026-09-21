@@ -4,6 +4,8 @@
  * Extracted from list.ts and inspect.ts to eliminate duplication.
  */
 
+import type { HistoryResourceRef } from '@cli-shared/version-history.js';
+
 export type ResourceType = 'prompts' | 'gates' | 'frameworks' | 'styles';
 
 /**
@@ -25,9 +27,22 @@ export const TYPE_MAP: Record<string, ResourceType> = {
  */
 export const TYPE_CONFIG: Record<
   ResourceType,
-  { entryFile: string; nested: boolean; snapshotKeysNotInEntryFile?: readonly string[] }
+  {
+    entryFile: string;
+    nested: boolean;
+    snapshotKeysNotInEntryFile?: readonly string[];
+    snapshotKeyToEntryKey?: Readonly<Record<string, string>>;
+  }
 > = {
-  prompts: { entryFile: 'prompt.yaml', nested: true },
+  prompts: {
+    entryFile: 'prompt.yaml',
+    nested: true,
+    // Both are authored content held in companion files — `prompt.yaml` carries only the
+    // POINTERS, `systemMessageFile` and `userMessageTemplateFile`. Merging the bodies in left
+    // `prompt.yaml` declaring both a pointer and an inline body, two sources the loader resolves
+    // by reading the file and ignoring what the snapshot restored. Measured 2026-09-19.
+    snapshotKeysNotInEntryFile: ['systemMessage', 'userMessageTemplate'],
+  },
   // `guidance` is the markdown body of `guidance.md`. The server projects it into a gate snapshot
   // because it is authored content, but writing it back into `gate.yaml` would leave two
   // disagreeing guidance sources — which is why the server's writer excludes it from the YAML
@@ -38,6 +53,13 @@ export const TYPE_CONFIG: Record<
     nested: false,
     // Authored in `system-prompt.md`; `framework.yaml` names it `systemPromptGuidance`.
     snapshotKeysNotInEntryFile: ['system_prompt_guidance'],
+    // A snapshot records the AUTHORING-PAYLOAD spelling, because the server restores by handing
+    // it back to `FrameworkFileWriter`, which reads `tool_descriptions` and emits
+    // `toolDescriptions`. The CLI has no writer in between, so it renames here. Merging the
+    // payload spelling straight in added a second `tool_descriptions:` key beside the real
+    // `toolDescriptions:` — and reported `toolDescriptions` as "not restored" while writing it
+    // under a name nothing reads. Measured 2026-09-19.
+    snapshotKeyToEntryKey: { tool_descriptions: 'toolDescriptions' },
   },
   styles: { entryFile: 'style.yaml', nested: false },
 };
@@ -57,7 +79,7 @@ export function isVersionedType(
 /**
  * Singular display name for a resource type.
  */
-const SINGULAR: Record<ResourceType, string> = {
+const SINGULAR: Record<ResourceType, HistoryResourceRef['resourceType']> = {
   prompts: 'prompt',
   gates: 'gate',
   frameworks: 'framework',
@@ -66,4 +88,14 @@ const SINGULAR: Record<ResourceType, string> = {
 
 export function singularName(type: ResourceType): string {
   return SINGULAR[type];
+}
+
+/**
+ * The `version_history` key for a resource: its singular type and the id it is served under.
+ *
+ * Passed to every history call so the id is the composite one the server records
+ * (`chain/step`), not a guess from the path's last segment.
+ */
+export function historyRef(type: ResourceType, id: string): HistoryResourceRef {
+  return { resourceType: SINGULAR[type], resourceId: id };
 }

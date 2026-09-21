@@ -5,53 +5,127 @@ set -eu
 SERVER_DIR=server
 STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACMR)
 
-# Contract auto-regeneration: If contracts or generator changed, regenerate and stage
-CONTRACTS_CHANGED=$(printf '%s\n' "$STAGED_FILES" | grep "^server/tooling/contracts/.*\.json$" || true)
-GENERATOR_CHANGED=$(printf '%s\n' "$STAGED_FILES" | grep "^server/scripts/generate-contracts\.ts$" || true)
+# ---------------------------------------------------------------------------
+# Generated-file registry. `generator_for_artifact` is the lookup: one `case`
+# arm per generator, naming the npm script that rebuilds its artifact(s) and
+# the source paths whose staging justifies a change without rerunning it.
+# Add an arm here -- never a second ad hoc check -- when a new generated pair
+# lands under server/src/**/_generated/. A staged file matching no arm is
+# refused below instead of silently falling through to whichever generator
+# happened to be checked first (the bug this replaces: the old single-row
+# check named `generate:contracts` no matter which generated file was staged).
+# ---------------------------------------------------------------------------
+generator_for_artifact() {
+  # $1 = a staged path already known to match server/src/.../_generated/*.ts
+  # On match: sets GEN_NPM_SCRIPT / GEN_SOURCE_RE / GEN_ARTIFACT_PATHS and
+  # returns 0. On no match: returns 1 and leaves those three untouched.
+  #
+  # WHY GLOBALS, NOT A "field|field|field" STDOUT ROW: the source regex for
+  # a generator with 2+ sources is itself an alternation (`a\.ts|b\.ts`), so
+  # a caller-side `cut -d'|'` would split the regex apart wherever ITS OWN
+  # `|` lands -- silently truncating it into an unbalanced, unmatchable
+  # pattern. sh functions run in the caller's shell (no subshell), so setting
+  # variables directly sidesteps the collision instead of picking a "safer"
+  # delimiter that a future source path could still contain.
+  case "$1" in
+    server/src/mcp/contracts/schemas/_generated/*)
+      GEN_NPM_SCRIPT='generate:contracts'
+      GEN_SOURCE_RE='^server/(scripts/generate-contracts\.ts|tooling/contracts/.*\.json)$'
+      GEN_ARTIFACT_PATHS='server/src/mcp/contracts/schemas/_generated/'
+      ;;
+    server/src/cli-shared/_generated/config-keys.ts|server/src/cli-shared/_generated/config-template.ts)
+      GEN_NPM_SCRIPT='generate:config-schema'
+      GEN_SOURCE_RE='^server/(scripts/generate-config-schema\.ts|src/shared/types/config-file\.ts)$'
+      GEN_ARTIFACT_PATHS='server/config.schema.json server/src/cli-shared/_generated/config-keys.ts server/src/cli-shared/_generated/config-template.ts'
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
 
-if [ -n "$CONTRACTS_CHANGED" ] || [ -n "$GENERATOR_CHANGED" ]; then
-  echo "📝 Contract source changed - auto-regenerating..."
-  npm --prefix "$SERVER_DIR" run -s generate:contracts
-  # Stage regenerated files
-  git add server/src/mcp/contracts/schemas/_generated/
-  echo "✅ Generated files updated and staged"
+# Auto-regeneration: if a generator's source changed, regenerate and stage its
+# artifacts, whether or not the artifact itself is staged.
+regen_generator_if_source_staged() {
+  GEN_NPM_SCRIPT=$1
+  GEN_SOURCE_RE=$2
+  GEN_ARTIFACT_PATHS=$3
+  GEN_SOURCE_STAGED=$(printf '%s\n' "$STAGED_FILES" | grep -E "$GEN_SOURCE_RE" || true)
+  if [ -n "$GEN_SOURCE_STAGED" ]; then
+    echo "📝 $GEN_NPM_SCRIPT source changed - auto-regenerating..."
+    npm --prefix "$SERVER_DIR" run -s "$GEN_NPM_SCRIPT"
+    # Stage regenerated files
+    # shellcheck disable=SC2086 -- GEN_ARTIFACT_PATHS is an intentional word-split list
+    git add $GEN_ARTIFACT_PATHS
+    echo "✅ $GEN_NPM_SCRIPT artifacts updated and staged"
+  fi
+}
+
+regen_generator_if_source_staged \
+  'generate:contracts' \
+  '^server/(scripts/generate-contracts\.ts|tooling/contracts/.*\.json)$' \
+  'server/src/mcp/contracts/schemas/_generated/'
+
+regen_generator_if_source_staged \
+  'generate:config-schema' \
+  '^server/(scripts/generate-config-schema\.ts|src/shared/types/config-file\.ts)$' \
+  'server/config.schema.json server/src/cli-shared/_generated/config-keys.ts server/src/cli-shared/_generated/config-template.ts'
+
+# Prevent direct edits to generated files (without a justifying source change).
+# Exception 1: deletions are allowed if the source no longer exists (feature removal).
+# Exception 2: a staged artifact whose row's source is NOT staged is still
+# accepted if regenerating it changes nothing. This is what lets a NEW
+# artifact's first commit land when its source predates the generator --
+# exactly today's case: config-keys.ts is new, but config-file.ts, the type
+# it derives from, already existed and is not itself staged in this commit.
+# It passes only when regeneration reproduces the staged bytes, never merely
+# because a source file exists somewhere in history.
+MODIFIED_GEN_FILES=$(git diff --cached --name-only --diff-filter=M | grep "^server/src/.*_generated/.*\.ts$" || true)
+ADDED_GEN_FILES=$(git diff --cached --name-only --diff-filter=A | grep "^server/src/.*_generated/.*\.ts$" || true)
+DELETED_GEN_FILES=$(git diff --cached --name-only --diff-filter=D | grep "^server/src/.*_generated/.*\.ts$" || true)
+BLOCKABLE_GEN_FILES=$(printf '%s\n%s\n' "$MODIFIED_GEN_FILES" "$ADDED_GEN_FILES" | grep -v '^$' || true)
+
+if [ -n "$BLOCKABLE_GEN_FILES" ]; then
+  while IFS= read -r GEN_FILE; do
+    [ -z "$GEN_FILE" ] && continue
+
+    if ! generator_for_artifact "$GEN_FILE"; then
+      echo ""
+      echo "❌ Generated file staged with no registry owner: $GEN_FILE"
+      echo ""
+      echo "   generator_for_artifact() in .husky/pre-commit must name the generator"
+      echo "   that owns this path before it can be committed."
+      echo ""
+      exit 1
+    fi
+
+    GEN_SOURCE_STAGED=$(printf '%s\n' "$STAGED_FILES" | grep -E "$GEN_SOURCE_RE" || true)
+    if [ -n "$GEN_SOURCE_STAGED" ]; then
+      continue
+    fi
+
+    npm --prefix "$SERVER_DIR" run -s "$GEN_NPM_SCRIPT" >/dev/null
+    # shellcheck disable=SC2086 -- GEN_ARTIFACT_PATHS is an intentional word-split list
+    if git diff --quiet -- $GEN_ARTIFACT_PATHS; then
+      continue
+    fi
+
+    echo ""
+    echo "❌ Direct edits to a generated file detected: $GEN_FILE"
+    echo ""
+    echo "   Edit its source instead, then run: npm run $GEN_NPM_SCRIPT"
+    echo ""
+    exit 1
+  done <<EOF
+$BLOCKABLE_GEN_FILES
+EOF
 fi
 
-# Prevent direct edits to generated files (without contract/generator changes)
-# Exception: Deletions are allowed if the source contract doesn't exist (feature removal)
-MANUAL_GEN_EDITS=$(printf '%s\n' "$STAGED_FILES" | grep "^server/src/.*_generated/.*\.ts$" || true)
-if [ -n "$MANUAL_GEN_EDITS" ] && [ -z "$CONTRACTS_CHANGED" ] && [ -z "$GENERATOR_CHANGED" ]; then
-  # Check if these are deletions vs modifications
-  MODIFIED_GEN_FILES=$(git diff --cached --name-only --diff-filter=M | grep "^server/src/.*_generated/.*\.ts$" || true)
-  ADDED_GEN_FILES=$(git diff --cached --name-only --diff-filter=A | grep "^server/src/.*_generated/.*\.ts$" || true)
-  DELETED_GEN_FILES=$(git diff --cached --name-only --diff-filter=D | grep "^server/src/.*_generated/.*\.ts$" || true)
-
-  # Block modifications and additions (must go through regeneration)
-  if [ -n "$MODIFIED_GEN_FILES" ] || [ -n "$ADDED_GEN_FILES" ]; then
-    echo ""
-    echo "❌ Direct edits to generated files detected!"
-    echo ""
-    if [ -n "$MODIFIED_GEN_FILES" ]; then
-      echo "Modified: $MODIFIED_GEN_FILES"
-    fi
-    if [ -n "$ADDED_GEN_FILES" ]; then
-      echo "Added: $ADDED_GEN_FILES"
-    fi
-    echo ""
-    echo "Edit source files instead:"
-    echo "  - tooling/contracts/*.json (contract definitions)"
-    echo "  - scripts/generate-contracts.ts (generator logic)"
-    echo ""
-    echo "Then run: npm run generate:contracts"
-    exit 1
-  fi
-
-  # Allow deletions - these are valid when removing features/contracts
-  if [ -n "$DELETED_GEN_FILES" ]; then
-    echo "📝 Generated file deletions detected (feature removal):"
-    echo "   $DELETED_GEN_FILES"
-    echo "   ✅ Allowed - ensure source contracts were also removed"
-  fi
+# Allow deletions - these are valid when removing features/contracts
+if [ -n "$DELETED_GEN_FILES" ]; then
+  echo "📝 Generated file deletions detected (feature removal):"
+  echo "   $DELETED_GEN_FILES"
+  echo "   ✅ Allowed - ensure source contracts were also removed"
 fi
 
 # Run server-scoped lint-staged for files inside server/

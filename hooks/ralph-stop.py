@@ -22,10 +22,12 @@ import subprocess
 import sys
 import uuid
 from pathlib import Path
+from typing import Any, cast
 
 # Add hooks lib to path
 sys.path.insert(0, str(Path(__file__).parent / "lib"))
 
+from config_loader import load_config
 from db_reader import load_recoverable_chain_state
 from verify_active_store import (
     clear_verify_active_state,
@@ -60,15 +62,17 @@ def get_debug_log_path() -> Path:
     return get_runtime_state_dir(dev_fallback) / "ralph-debug.log"
 
 
-def get_config_path() -> Path:
-    """Get path to config.json."""
-    plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT", str(Path(__file__).parent.parent))
-    return Path(plugin_root) / "server" / "config.json"
-
-
 def load_context_isolation_config() -> dict:
     """
-    Load Ralph context isolation config from server config.json.
+    Load Ralph context isolation config from the user's config file.
+
+    `config_loader.load_config()` owns the lookup (`MCP_WORKSPACE`, then
+    `${CLAUDE_PLUGIN_DATA}`, then the packaged `server/` directory; `config.jsonc`
+    before `config.json` in each) and the parse (comment/trailing-comma stripping for
+    `.jsonc`, strict for `.json`), falling back to `DEFAULT_CONFIG` -- which carries no
+    `verification` section, so the `.get(..., {})` defaults below apply -- on any read
+    or parse failure. This hook never refuses to run because the operator's config is
+    missing or malformed.
 
     Config paths:
     - verification.inContextAttempts: Number of in-context attempts before spawning
@@ -77,7 +81,6 @@ def load_context_isolation_config() -> dict:
     - verification.isolation.timeout: Spawn timeout in seconds
     - verification.isolation.permissionMode: Permission mode (delegate/ask/deny)
     """
-    config_path = get_config_path()
     defaults = {
         "enabled": True,
         "inContextThreshold": 3,
@@ -86,23 +89,20 @@ def load_context_isolation_config() -> dict:
         "permissionMode": "delegate",
     }
 
-    if not config_path.exists():
-        return defaults
+    # `Config` only models the `hooks` section it owns; `verification` is a sibling
+    # top-level section config_loader does not type. Widen to Any here rather than
+    # teach config_loader a shape that belongs to ralph-stop's own config contract.
+    config = cast("dict[str, Any]", load_config())
+    verification = config.get("verification", {})
+    isolation = verification.get("isolation", {})
 
-    try:
-        config = json.loads(config_path.read_text())
-        verification = config.get("verification", {})
-        isolation = verification.get("isolation", {})
-
-        return {
-            "enabled": isolation.get("enabled", defaults["enabled"]),
-            "inContextThreshold": verification.get("inContextAttempts", defaults["inContextThreshold"]),
-            "maxBudgetPerSpawn": isolation.get("maxBudget", defaults["maxBudgetPerSpawn"]),
-            "spawnTimeout": isolation.get("timeout", defaults["spawnTimeout"]),
-            "permissionMode": isolation.get("permissionMode", defaults["permissionMode"]),
-        }
-    except (OSError, json.JSONDecodeError):
-        return defaults
+    return {
+        "enabled": isolation.get("enabled", defaults["enabled"]),
+        "inContextThreshold": verification.get("inContextAttempts", defaults["inContextThreshold"]),
+        "maxBudgetPerSpawn": isolation.get("maxBudget", defaults["maxBudgetPerSpawn"]),
+        "spawnTimeout": isolation.get("timeout", defaults["spawnTimeout"]),
+        "permissionMode": isolation.get("permissionMode", defaults["permissionMode"]),
+    }
 
 
 def load_verify_state(session_id: str | None = None) -> dict | None:

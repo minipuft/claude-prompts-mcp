@@ -4,6 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { PromptLoader } from '../../../src/modules/prompts/loader.js';
+import { discoverYamlPrompts } from '../../../src/modules/prompts/yaml-prompt-loader.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
 
 const createLogger = (): Logger =>
@@ -85,10 +86,7 @@ userMessageTemplate: A standalone prompt
   });
 
   test('discovers parent chain prompt AND nested step prompts', () => {
-    const logger = createLogger();
-    const loader = new PromptLoader(logger, {});
-
-    const discovered = loader.discoverYamlPrompts(promptsDir, '');
+    const discovered = discoverYamlPrompts(promptsDir, '');
 
     // Should find all 4 prompts:
     // - standalone.yaml
@@ -99,10 +97,7 @@ userMessageTemplate: A standalone prompt
   });
 
   test('nested prompts are discovered alongside their parent', () => {
-    const logger = createLogger();
-    const loader = new PromptLoader(logger, {});
-
-    const discovered = loader.discoverYamlPrompts(promptsDir, '');
+    const discovered = discoverYamlPrompts(promptsDir, '');
 
     // Extract relative paths for easier assertion
     const relativePaths = discovered.map((p) => path.relative(promptsDir, p));
@@ -150,10 +145,7 @@ userMessageTemplate: Hello from nested prompt
 `
     );
 
-    const logger = createLogger();
-    const loader = new PromptLoader(logger, {});
-
-    const discovered = loader.discoverYamlPrompts(promptsDir, '');
+    const discovered = discoverYamlPrompts(promptsDir, '');
 
     // Should find the nested prompt through plain directory
     expect(discovered.some((p) => p.includes('nested_prompt'))).toBe(true);

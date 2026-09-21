@@ -50,7 +50,6 @@ describe('ChainSessionStore', () => {
 
   test('cleans review sessions faster than chain sessions', async () => {
     manager = new ChainSessionStore(createLogger(), new StubTextReferenceStore() as any, {
-      serverRoot: '/tmp/test-chain-sessions',
       reviewSessionTimeoutMs: 5 * 60 * 1000,
       defaultSessionTimeoutMs: 60 * 60 * 1000,
       cleanupIntervalMs: 1000,
@@ -72,7 +71,6 @@ describe('ChainSessionStore', () => {
 
   test('does not advance currentStep when completing placeholders', async () => {
     manager = new ChainSessionStore(createLogger(), new StubTextReferenceStore() as any, {
-      serverRoot: '/tmp/test-chain-sessions-placeholder',
       cleanupIntervalMs: 1000,
     });
 
@@ -94,7 +92,6 @@ describe('ChainSessionStore', () => {
     });
 
     manager = new ChainSessionStore(createLogger(), textReferenceStore as any, {
-      serverRoot: '/tmp/test-chain-sessions-context',
       cleanupIntervalMs: 1000,
     });
 
@@ -170,7 +167,6 @@ describe('ChainSessionStore', () => {
 
   test('updateSessionBlueprint stores snapshot independently', async () => {
     manager = new ChainSessionStore(createLogger(), new StubTextReferenceStore() as any, {
-      serverRoot: '/tmp/test-chain-sessions-blueprint',
       cleanupIntervalMs: 1000,
     });
 
@@ -218,7 +214,6 @@ describe('ChainSessionStore', () => {
    */
   test('blueprint steps carry declared node identity across the store round-trip', async () => {
     manager = new ChainSessionStore(createLogger(), new StubTextReferenceStore() as any, {
-      serverRoot: '/tmp/test-chain-sessions-nodeid',
       cleanupIntervalMs: 1000,
     });
 
@@ -282,7 +277,6 @@ describe('ChainSessionStore — run-status lifecycle (Tier 2)', () => {
 
   const newManager = (suffix: string): ChainSessionStore =>
     new ChainSessionStore(createLogger(), new StubTextReferenceStore() as any, {
-      serverRoot: `/tmp/test-runstatus-${suffix}`,
       cleanupIntervalMs: 1000,
     });
 
@@ -434,7 +428,6 @@ describe('ChainSessionStore — unknowns ledger', () => {
 
   const newManager = (suffix: string): ChainSessionStore =>
     new ChainSessionStore(createLogger(), new StubTextReferenceStore() as any, {
-      serverRoot: `/tmp/test-unknowns-${suffix}`,
       cleanupIntervalMs: 1000,
     });
 
@@ -600,7 +593,6 @@ describe('ChainSessionStore — adaptive mutation (P4 Tier 2)', () => {
 
   const newManager = (suffix: string): ChainSessionStore =>
     new ChainSessionStore(createLogger(), new StubTextReferenceStore() as any, {
-      serverRoot: `/tmp/test-mutation-${suffix}`,
       cleanupIntervalMs: 1000,
     });
 

@@ -23,7 +23,6 @@ import { createMcpHandler } from '@modelcontextprotocol/server';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import express from 'express';
 
-import { ConfigLoader } from '../../config/index.js';
 import { Logger } from '../../logging/index.js';
 
 import type { TransportMode } from '#shared/types/index.js';
@@ -54,7 +53,6 @@ function assertTransportSupported(value: string, source: string): void {
  * Transport types supported by the server
  */
 export enum TransportType {
-  STDIO = 'stdio',
   STREAMABLE_HTTP = 'streamable-http',
   BOTH = 'both',
 }
@@ -88,29 +86,34 @@ export class TransportRouter {
   }
 
   /**
-   * Determine transport mode from command line arguments or configuration
-   * Priority: CLI args > config.transport > default (stdio)
+   * Narrow the transport value the caller already resolved at launch to a supported
+   * `TransportMode`.
+   *
+   * Transport is launch-time-only (Ruling R30): `config.json` itself cannot select it — a
+   * `server.transport` other than `"stdio"` refuses startup at load time, see
+   * `ConfigLoader.loadConfig`. Row 4.13: this used to parse `--transport` out of a raw
+   * `argv`-like array itself (`extractTransportArg`, a second, local copy of the parse
+   * `runtime/cli.ts`'s `parseServerCliArgs` already owns) and fell back to a `configManager`
+   * parameter's `getTransportMode()` when no flag was present. `infra/` cannot import
+   * `parseServerCliArgs` — `runtime/` is the composition root and nothing below it may import it
+   * (`.dependency-cruiser.cjs` `no-imports-into-runtime`) — so the fix is not a shared call, it is
+   * one fewer parse: `resolveRuntimeLaunchOptions` (row 4.12) already resolves `--transport` once,
+   * defaulting to `'stdio'` when the flag is absent (`RuntimeLaunchOptions.transport`), so both
+   * callers (`runtime/context.ts`, `runtime/startup-server.ts`) now hand this method that value
+   * directly instead of `args`/`process.argv`. The `configManager` fallback is gone with it: the
+   * one case it ever answered — "no `--transport` flag was given" — is resolved before this
+   * method runs, by the same default value this method used to fall back to.
    */
-  static determineTransport(args: string[], configManager: ConfigLoader): TransportMode {
-    // CLI argument takes highest priority
-    const transportArg = args.find((arg: string) => arg.startsWith('--transport='));
-    if (transportArg) {
-      const value = transportArg.split('=')[1] ?? '';
-      assertTransportSupported(value, '--transport');
-      if (value === 'stdio' || value === 'streamable-http' || value === 'both') {
-        return value;
-      }
-      // Use stderr to avoid corrupting STDIO protocol
-      console.error(
-        `[TransportRouter] Invalid --transport value: "${value}". Using config default.`
-      );
+  static determineTransport(transport: string): TransportMode {
+    assertTransportSupported(transport, '--transport');
+    if (transport === 'stdio' || transport === 'streamable-http' || transport === 'both') {
+      return transport;
     }
-
-    // Fall back to config value — which is a second way a removed transport can
-    // arrive, so it is checked too rather than trusted.
-    const configured = configManager.getTransportMode();
-    assertTransportSupported(String(configured), 'config.transport');
-    return configured;
+    // Use stderr to avoid corrupting STDIO protocol
+    console.error(
+      `[TransportRouter] Invalid --transport value: "${transport}". Using the default.`
+    );
+    return 'stdio';
   }
 
   /**
@@ -165,7 +168,22 @@ export class TransportRouter {
   setupStreamableHttpTransport(app: express.Application): void {
     this.logger.info('Setting up Streamable HTTP transport endpoints');
 
-    this.httpHandler = createMcpHandler(this.mcpServerFactory, { legacy: 'stateless' });
+    // `onerror` is what makes a failed request say why it failed. The handler
+    // answers a request it could not serve with `-32603 Internal server error`
+    // and reports the cause through this callback only — it returns that
+    // response rather than throwing, so `toNodeHandler`'s own `onerror` below
+    // never sees these. Without it, a failure while building a request's server
+    // was reported by nothing at all unless the failing stage happened to log
+    // for itself: the request failed, the next one succeeded, and no line
+    // anywhere named the cause.
+    this.httpHandler = createMcpHandler(this.mcpServerFactory, {
+      legacy: 'stateless',
+      onerror: (error: Error) => {
+        this.logger.error(
+          `Streamable HTTP request failed: ${error instanceof Error ? error.message : String(error)}`
+        );
+      },
+    });
 
     // `toNodeHandler` converts the Node request to a web-standard Request, calls
     // the handler, then writes the Response back, honoring SSE backpressure.
@@ -207,14 +225,6 @@ export class TransportRouter {
    */
   getTransportType(): TransportMode {
     return this.transport;
-  }
-
-  /**
-   * Check if STDIO transport should be active
-   * True for 'stdio' or 'both' modes
-   */
-  isStdio(): boolean {
-    return this.transport === TransportType.STDIO || this.transport === TransportType.BOTH;
   }
 
   /**

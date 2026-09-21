@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from workspace import get_runtime_state_dir
+from workspace import get_runtime_state_dir, get_state_db_path
 
 LOCK_RETRIES = 80
 LOCK_RETRY_DELAY_SECONDS = 0.025
@@ -19,7 +19,22 @@ STALE_LOCK_SECONDS = 30
 
 
 def get_verify_state_db_path() -> Path:
-    """Get path to verify-state.db in runtime-state."""
+    """Get path to verify-state.db — the file the MCP server writes, beside its state.db.
+
+    The server places both files in one directory, its runtime root's
+    runtime-state/ (paths.ts getRuntimeStatePath). get_state_db_path() already
+    resolves that directory the way the server does, including the Claude Code
+    plugin's CLAUDE_PLUGIN_DATA, so verify-state.db is read from beside the
+    state.db it finds. Resolving it separately through get_runtime_state_dir()
+    read {workspace}/server/runtime-state, which under the plugin is the install
+    directory the server no longer writes to.
+
+    With no state.db anywhere the server has not run, so there is no server
+    state to read; the hook-owned runtime-state directory is used instead.
+    """
+    state_db = get_state_db_path()
+    if state_db is not None:
+        return state_db.parent / "verify-state.db"
     dev_fallback = Path(__file__).parent.parent.parent / "runtime-state"
     runtime_dir = get_runtime_state_dir(dev_fallback)
     runtime_dir.mkdir(parents=True, exist_ok=True)

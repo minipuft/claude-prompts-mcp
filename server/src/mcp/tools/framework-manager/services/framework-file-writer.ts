@@ -8,9 +8,11 @@
 
 import { existsSync } from 'fs';
 import { cp, mkdir, readFile } from 'node:fs/promises';
-import { join } from 'path';
+import { isDeepStrictEqual } from 'node:util';
+import { join, relative, sep } from 'path';
 
 import type { ConfigManager, Logger } from '#shared/types/index.js';
+import type { FileContentChange } from '../../resource-manager/prompt/analysis/object-diff-generator.js';
 import type { FrameworkCreationData } from '../core/types.js';
 
 import {
@@ -20,8 +22,11 @@ import {
 } from '#modules/resources/services/index.js';
 import { safeWriteFile } from '#shared/utils/file-transactions.js';
 import { resolveContainedPath } from '#shared/utils/path-containment.js';
+import {
+  readYamlSourceSync,
+  serializeYamlPreservingSource,
+} from '#shared/utils/yaml/yaml-document-writer.js';
 import { loadYamlFile } from '#shared/utils/yaml/yaml-file-loader.js';
-import { serializeYaml } from '#shared/utils/yaml/yaml-parser.js';
 
 // ============================================================================
 // Types
@@ -51,9 +56,183 @@ export interface FrameworkFileResult {
   error?: string;
 }
 
+/** A file a framework write lands, addressed relative to the framework's own directory. */
+interface PlannedFrameworkFile {
+  relativePath: string;
+  content: string;
+}
+
+/**
+ * Everything one framework write does, resolved before anything is written.
+ *
+ * `writeFrameworkFiles` applies it and `projectFrameworkWrite` reports it. A diff built any other
+ * way — the framework's recorded fields rendered as one `framework.yaml`, say — misses
+ * `system-prompt.md`, `phases.yaml` and `judge-prompt.md`, and shows `framework.yaml` lines the
+ * merged file never holds (tutorial-rework B.20).
+ */
+interface FrameworkWritePlan {
+  frameworksDir: string;
+  frameworkDir: string;
+  /** The framework's bundled directory, copied to `frameworkDir` first; null when none is. */
+  copyOnWriteSource: string | null;
+  /** Where the files this write replaces are before it runs; null when there are none. */
+  priorDir: string | null;
+  files: PlannedFrameworkFile[];
+}
+
 // ============================================================================
 // Service Implementation
 // ============================================================================
+
+/**
+ * Values the writer supplies itself when a CREATE names none. A new framework needs both to load:
+ * the schema requires `version` and `enabled`.
+ *
+ * Never applied to an existing framework, where the stored value is the value. Until
+ * tutorial-rework B.65, `buildFrameworkYamlData` emitted `version: 1.0.0` on every call and the
+ * update merge laid it over the stored one, so a description edit took CAGEERF from 2.0.0 to 1.0.0
+ * (OQ-8: an update keeps everything it was not asked to change).
+ */
+const FRAMEWORK_CREATION_DEFAULTS: Readonly<Record<string, unknown>> = {
+  enabled: true,
+  version: '1.0.0',
+};
+
+/** Which of the two YAML documents a mapped field may be read from. */
+type MappedFieldSource = 'framework' | 'phases';
+
+/** The shape a raw value must have before it is accepted into the authoring payload. */
+type MappedFieldAccept = 'array' | 'present' | 'string' | 'boolean';
+
+interface MappedFrameworkField {
+  /** Key on `FrameworkCreationData` this lands under. */
+  readonly key: string;
+  /**
+   * Documents and keys to try IN ORDER. Mirrors the `??` chains this replaced, so a `null` at an
+   * earlier position falls through to a later one exactly as it did before.
+   */
+  readonly lookup: ReadonlyArray<readonly [MappedFieldSource, string]>;
+  readonly accept: MappedFieldAccept;
+}
+
+const ACCEPTS: Record<MappedFieldAccept, (value: unknown) => boolean> = {
+  array: (v) => Array.isArray(v),
+  present: (v) => v !== undefined && v !== null,
+  string: (v) => typeof v === 'string',
+  boolean: (v) => typeof v === 'boolean',
+};
+
+/**
+ * Every field `toFrameworkCreationData` reads back, declared once.
+ *
+ * YAML stores these camelCase (`frameworkGates`); the authoring payload spells them snake_case
+ * (`framework_gates`). Both are accepted on read, which is why several entries carry two lookups.
+ * ADDING A FIELD TO THE FRAMEWORK SCHEMA MEANS ADDING A ROW HERE — that coupling is the point:
+ * before this table, two fields were written to disk and never read back and nothing noticed.
+ */
+const MAPPED_FRAMEWORK_FIELDS: readonly MappedFrameworkField[] = [
+  { key: 'description', lookup: [['framework', 'description']], accept: 'string' },
+  { key: 'type', lookup: [['framework', 'type']], accept: 'string' },
+  { key: 'enabled', lookup: [['framework', 'enabled']], accept: 'boolean' },
+  { key: 'gates', lookup: [['framework', 'gates']], accept: 'present' },
+  { key: 'tool_descriptions', lookup: [['framework', 'tool_descriptions']], accept: 'present' },
+  { key: 'phases', lookup: [['phases', 'phases']], accept: 'array' },
+  {
+    key: 'framework_gates',
+    lookup: [
+      ['framework', 'frameworkGates'],
+      ['phases', 'framework_gates'],
+    ],
+    accept: 'array',
+  },
+  {
+    key: 'processing_steps',
+    lookup: [
+      ['phases', 'processingSteps'],
+      ['phases', 'processing_steps'],
+    ],
+    accept: 'array',
+  },
+  {
+    key: 'execution_steps',
+    lookup: [
+      ['phases', 'executionSteps'],
+      ['phases', 'execution_steps'],
+    ],
+    accept: 'array',
+  },
+  {
+    key: 'quality_indicators',
+    lookup: [
+      ['phases', 'qualityIndicators'],
+      ['phases', 'quality_indicators'],
+    ],
+    accept: 'present',
+  },
+  {
+    key: 'template_enhancements',
+    lookup: [
+      ['phases', 'templateEnhancements'],
+      ['phases', 'template_enhancements'],
+    ],
+    accept: 'present',
+  },
+  {
+    key: 'execution_flow',
+    lookup: [
+      ['phases', 'executionFlow'],
+      ['phases', 'execution_flow'],
+    ],
+    accept: 'present',
+  },
+  {
+    key: 'execution_type_enhancements',
+    lookup: [
+      ['phases', 'executionTypeEnhancements'],
+      ['phases', 'execution_type_enhancements'],
+    ],
+    accept: 'present',
+  },
+  {
+    key: 'framework_elements',
+    lookup: [
+      ['framework', 'frameworkElements'],
+      ['phases', 'framework_elements'],
+    ],
+    accept: 'present',
+  },
+  {
+    key: 'argument_suggestions',
+    lookup: [
+      ['framework', 'argumentSuggestions'],
+      ['phases', 'argument_suggestions'],
+    ],
+    accept: 'array',
+  },
+  {
+    key: 'template_suggestions',
+    lookup: [
+      ['framework', 'templateSuggestions'],
+      ['phases', 'template_suggestions'],
+    ],
+    accept: 'array',
+  },
+];
+
+/**
+ * Walk a field's lookup chain and return the first value that is neither `undefined` nor `null`.
+ * Skipping `null` reproduces `??`, which is what the hand-written chains used.
+ */
+function resolveMappedValue(
+  field: MappedFrameworkField,
+  sources: Record<MappedFieldSource, Record<string, unknown>>
+): unknown {
+  for (const [source, key] of field.lookup) {
+    const value = sources[source][key];
+    if (value !== undefined && value !== null) return value;
+  }
+  return undefined;
+}
 
 export class FrameworkFileWriter {
   private logger: Logger;
@@ -189,6 +368,17 @@ export class FrameworkFileWriter {
    * @param existing - Raw framework data loaded from disk
    * @returns Typed FrameworkCreationData or null if essential fields missing
    */
+  /**
+   * Read one framework.yaml/phases.yaml document back into the authoring payload shape.
+   *
+   * The field-by-field mapping is DECLARED in `MAPPED_FRAMEWORK_FIELDS` rather than written as one
+   * `if` per field (P4.13). Fifteen near-identical blocks put this function at cognitive
+   * complexity 28 against the ≤15 limit, and — the reason that mattered — two of the eleven
+   * advanced fields were simply missing from the sequence with nothing to notice it: `judge_prompt`
+   * and `execution_type_enhancements` were written to disk and never read back, for as long as
+   * they had existed (P4-F12). A table cannot silently omit an entry the way a sequence of blocks
+   * can, because the entry is the thing you add.
+   */
   toFrameworkCreationData(
     id: string,
     existing: ExistingFrameworkData
@@ -216,88 +406,25 @@ export class FrameworkFileWriter {
       system_prompt_guidance: systemGuidance,
     };
 
-    // Map optional fields from framework.yaml (use bracket notation)
-    const rawDescription = framework['description'];
-    const rawType = framework['type'];
-    const rawEnabled = framework['enabled'];
-    const rawGates = framework['gates'];
-    const rawToolDescriptions = framework['tool_descriptions'];
-
-    if (typeof rawDescription === 'string') data.description = rawDescription;
-    if (typeof rawType === 'string') data.type = rawType;
-    if (typeof rawEnabled === 'boolean') data.enabled = rawEnabled;
-    if (rawGates !== undefined && rawGates !== null) {
-      data.gates = rawGates;
-    }
-    if (rawToolDescriptions !== undefined && rawToolDescriptions !== null) {
-      data.tool_descriptions = rawToolDescriptions as NonNullable<
-        FrameworkCreationData['tool_descriptions']
-      >;
+    // `existing.judgePrompt` is already inlined from `judgePromptFile` by `loadExistingFramework`
+    // (above), so it is the one mapped field whose source is neither YAML document. It stays
+    // outside the table for that reason rather than by oversight.
+    if (typeof existing.judgePrompt === 'string') {
+      data.judge_prompt = existing.judgePrompt;
     }
 
-    // Map phases-related fields (may come from phases.yaml or framework.yaml)
-    // YAML uses camelCase (frameworkGates); framework_gates is the snake_case authoring-payload
-    // key. Accept both on read.
+    // `phases.yaml` is optional; when absent every phases-side key is read off framework.yaml.
     const phasesSource = phases ?? framework;
-    const rawPhases = phasesSource['phases'];
-    const rawFrameworkGates = framework['frameworkGates'] ?? phasesSource['framework_gates'];
-    const rawProcessingSteps = phasesSource['processingSteps'] ?? phasesSource['processing_steps'];
-    const rawExecutionSteps = phasesSource['executionSteps'] ?? phasesSource['execution_steps'];
-    const rawQualityIndicators =
-      phasesSource['qualityIndicators'] ?? phasesSource['quality_indicators'];
-    const rawTemplateEnhancements =
-      phasesSource['templateEnhancements'] ?? phasesSource['template_enhancements'];
-    const rawExecutionFlow = phasesSource['executionFlow'] ?? phasesSource['execution_flow'];
-    const rawFrameworkElements =
-      framework['frameworkElements'] ?? phasesSource['framework_elements'];
-    const rawArgumentSuggestions =
-      framework['argumentSuggestions'] ?? phasesSource['argument_suggestions'];
-    const rawTemplateSuggestions =
-      framework['templateSuggestions'] ?? phasesSource['template_suggestions'];
+    const sources: Record<MappedFieldSource, Record<string, unknown>> = {
+      framework,
+      phases: phasesSource,
+    };
 
-    if (Array.isArray(rawPhases)) {
-      data.phases = rawPhases as NonNullable<FrameworkCreationData['phases']>;
-    }
-    if (Array.isArray(rawFrameworkGates)) {
-      data.framework_gates = rawFrameworkGates as NonNullable<
-        FrameworkCreationData['framework_gates']
-      >;
-    }
-    if (Array.isArray(rawProcessingSteps)) {
-      data.processing_steps = rawProcessingSteps as NonNullable<
-        FrameworkCreationData['processing_steps']
-      >;
-    }
-    if (Array.isArray(rawExecutionSteps)) {
-      data.execution_steps = rawExecutionSteps as NonNullable<
-        FrameworkCreationData['execution_steps']
-      >;
-    }
-    if (rawQualityIndicators !== undefined && rawQualityIndicators !== null) {
-      data.quality_indicators = rawQualityIndicators as NonNullable<
-        FrameworkCreationData['quality_indicators']
-      >;
-    }
-    if (rawTemplateEnhancements !== undefined && rawTemplateEnhancements !== null) {
-      data.template_enhancements = rawTemplateEnhancements;
-    }
-    if (rawExecutionFlow !== undefined && rawExecutionFlow !== null) {
-      data.execution_flow = rawExecutionFlow;
-    }
-    if (rawFrameworkElements !== undefined && rawFrameworkElements !== null) {
-      data.framework_elements = rawFrameworkElements as NonNullable<
-        FrameworkCreationData['framework_elements']
-      >;
-    }
-    if (Array.isArray(rawArgumentSuggestions)) {
-      data.argument_suggestions = rawArgumentSuggestions as NonNullable<
-        FrameworkCreationData['argument_suggestions']
-      >;
-    }
-    if (Array.isArray(rawTemplateSuggestions)) {
-      data.template_suggestions = rawTemplateSuggestions as NonNullable<
-        FrameworkCreationData['template_suggestions']
-      >;
+    for (const field of MAPPED_FRAMEWORK_FIELDS) {
+      const value = resolveMappedValue(field, sources);
+      if (value !== undefined && ACCEPTS[field.accept](value)) {
+        (data as unknown as Record<string, unknown>)[field.key] = value;
+      }
     }
 
     return data;
@@ -313,19 +440,12 @@ export class FrameworkFileWriter {
     existingData?: ExistingFrameworkData | null,
     options: ResourceWriteCommitOptions = {}
   ): Promise<FrameworkFileResult> {
-    const frameworkDir = this.getFrameworkDir(data.id);
+    // Every byte this write lands is decided here, before the transaction opens; the mutation
+    // below applies the plan and decides nothing of its own, which is what keeps
+    // `projectFrameworkWrite` reporting the same files and contents.
+    const plan = this.planFrameworkWrite(data, existingData);
+    const { frameworkDir, copyOnWriteSource } = plan;
     const frameworkYamlPath = join(frameworkDir, 'framework.yaml');
-
-    // P1.2 — copy the whole source subtree up before editing, when the framework lives in the
-    // bundled tree and the write goes elsewhere. Same reasoning as prompts: the merge below
-    // reconstructs `framework.yaml` and `phases.yaml` from data, so anything else in the
-    // directory — `judge-prompt.md`, `system-prompt.md`, any file a future framework carries —
-    // would simply not exist at the destination.
-    const existingDir = this.resolveExistingFrameworkDir(data.id);
-    const copyOnWriteSource =
-      existingDir !== null && existingDir !== frameworkDir && !existsSync(frameworkDir)
-        ? existingDir
-        : null;
 
     const txResult = await this.mutationTransaction.run({
       targets: [{ path: frameworkDir, kind: 'directory' }],
@@ -343,54 +463,10 @@ export class FrameworkFileWriter {
         await mkdir(frameworkDir, { recursive: true });
         paths.push(frameworkDir);
 
-        // Build and merge framework.yaml
-        const newFrameworkData = this.buildFrameworkYamlData(data);
-        const finalFrameworkData =
-          existingData !== undefined && existingData !== null
-            ? this.deepMerge(existingData.framework, newFrameworkData)
-            : newFrameworkData;
-
-        const frameworkContent = serializeYaml(finalFrameworkData, { sortKeys: false });
-        await safeWriteFile(frameworkYamlPath, frameworkContent);
-        paths.push(frameworkYamlPath);
-
-        // Handle phases.yaml
-        const existingPhases = existingData?.phases ?? null;
-        const needsPhasesFile = this.needsPhasesFile(data) || existingPhases !== null;
-        if (needsPhasesFile) {
-          const newPhasesData = this.buildPhasesYamlData(data);
-          const hasNewPhasesData = Object.keys(newPhasesData).length > 0;
-          const finalPhasesData =
-            existingPhases !== null && hasNewPhasesData
-              ? this.deepMerge(existingPhases, newPhasesData)
-              : (existingPhases ?? newPhasesData);
-
-          if (Object.keys(finalPhasesData).length > 0) {
-            const phasesPath = join(frameworkDir, 'phases.yaml');
-            const phasesContent = serializeYaml(finalPhasesData, { sortKeys: false });
-            await safeWriteFile(phasesPath, phasesContent);
-            paths.push(phasesPath);
-          }
-        }
-
-        // Handle system-prompt.md
-        const systemPromptPath = join(frameworkDir, 'system-prompt.md');
-        const systemPromptContent = data.system_prompt_guidance ?? existingData?.systemPrompt ?? '';
-        if (systemPromptContent !== '') {
-          await safeWriteFile(systemPromptPath, systemPromptContent);
-          paths.push(systemPromptPath);
-        }
-
-        // Handle judge-prompt.md
-        const existingJudgePrompt = existingData?.judgePrompt ?? null;
-        const hasJudgePrompt = data.judge_prompt !== undefined || existingJudgePrompt !== null;
-        if (hasJudgePrompt) {
-          const judgePromptPath = join(frameworkDir, 'judge-prompt.md');
-          const judgePromptContent = data.judge_prompt ?? existingJudgePrompt ?? '';
-          if (judgePromptContent !== '') {
-            await safeWriteFile(judgePromptPath, judgePromptContent);
-            paths.push(judgePromptPath);
-          }
+        for (const file of plan.files) {
+          const filePath = join(frameworkDir, file.relativePath);
+          await safeWriteFile(filePath, file.content);
+          paths.push(filePath);
         }
 
         return { paths };
@@ -412,31 +488,259 @@ export class FrameworkFileWriter {
     return { success: true, paths: txResult.result?.paths ?? [] };
   }
 
+  /**
+   * What `writeFrameworkFiles(data, existingData)` would change on disk, file by file, without
+   * writing anything.
+   *
+   * Resolves the plan that method applies, so the files and contents are exactly that call's.
+   * Paths are relative to the frameworks root. A framework copied up from the bundled tree is read
+   * from its bundled files; both roots address it by the same id, so its path is the same on each
+   * side.
+   */
+  async projectFrameworkWrite(
+    data: Partial<FrameworkCreationData> & { id: string },
+    existingData?: ExistingFrameworkData | null
+  ): Promise<FileContentChange[]> {
+    const plan = this.planFrameworkWrite(data, existingData);
+    const prefix = relative(plan.frameworksDir, plan.frameworkDir);
+
+    const changes: FileContentChange[] = [];
+    for (const file of plan.files) {
+      const priorPath = plan.priorDir !== null ? join(plan.priorDir, file.relativePath) : null;
+      const relativePath = join(prefix, file.relativePath).split(sep).join('/');
+      changes.push({
+        path: relativePath,
+        previousPath: relativePath,
+        before:
+          priorPath !== null && existsSync(priorPath) ? await readFile(priorPath, 'utf8') : null,
+        after: file.content,
+      });
+    }
+    return changes;
+  }
+
+  /**
+   * Resolve where one framework write lands and the files it writes there, writing nothing.
+   *
+   * The single place those answers are decided, so `writeFrameworkFiles` and
+   * `projectFrameworkWrite` share them.
+   */
+  private planFrameworkWrite(
+    data: Partial<FrameworkCreationData> & { id: string },
+    existingData: ExistingFrameworkData | null | undefined
+  ): FrameworkWritePlan {
+    const frameworkDir = this.getFrameworkDir(data.id);
+
+    // P1.2 — copy the whole source subtree up before editing, when the framework lives in the
+    // bundled tree and the write goes elsewhere. Same reasoning as prompts: the files below are
+    // reconstructed from data, so anything else in the directory — `judge-prompt.md`,
+    // `system-prompt.md`, any file a future framework carries — would simply not exist at the
+    // destination.
+    const existingDir = this.resolveExistingFrameworkDir(data.id);
+    const copyOnWriteSource =
+      existingDir !== null && existingDir !== frameworkDir && !existsSync(frameworkDir)
+        ? existingDir
+        : null;
+
+    return {
+      frameworksDir: this.configManager.getFrameworksDirectory(),
+      frameworkDir,
+      copyOnWriteSource,
+      // A copy puts the prior tree at `frameworkDir` before any file is written, so the content a
+      // write replaces is the copy source's.
+      priorDir: existsSync(frameworkDir) ? frameworkDir : copyOnWriteSource,
+      files: this.planFrameworkFiles(data, existingData ?? null, frameworkDir),
+    };
+  }
+
+  /**
+   * The files a framework write lands, in write order, as the exact bytes each will hold.
+   *
+   * Write-scope narrowing, the framework counterpart of `planGateWrite` and `planPromptFiles`
+   * (tutorial-rework B.28 for gates, B.65 here). A create or a repair (`existingData === null`)
+   * owns the whole framework and lands every file it has content for. An edit of an existing
+   * framework lands a file only when merging the payload into it changes what it holds. Every file
+   * it does not change stays byte-identical, comments and flow style included, because it is never
+   * written. Before B.65 every update re-serialized `framework.yaml` and the phases file, including
+   * a phases file the update never named.
+   *
+   * The test is "the merge changes it" rather than the gate writer's "a key resident in it was
+   * supplied". Both give the same answer for a resident key with a new value. Only this one gives
+   * the right answer for the companion references: a phases edit emits `phasesFile`, which
+   * `framework.yaml` already declares with the same name. Keying on what was supplied would
+   * re-serialize `framework.yaml` for that reference alone.
+   */
+  private planFrameworkFiles(
+    data: Partial<FrameworkCreationData> & { id: string },
+    existingData: ExistingFrameworkData | null,
+    frameworkDir: string
+  ): PlannedFrameworkFile[] {
+    // The framework's OWN declared names win over the defaults — a hand-authored or seeded
+    // `framework.yaml` naming `custom-phases.yaml` keeps that name across every future write.
+    // Falls back to the canonical names only when nothing is declared (create, or an existing
+    // framework that never named one). Resolving before `buildFrameworkYamlData` runs means the
+    // `phasesFile`/`judgePromptFile` fields it writes and the file names below are always the
+    // same string — the prior code hardcoded the fallback into both, which silently renamed a
+    // framework's companion files the first time an update touched phases or judge_prompt, and
+    // orphaned the declared file with stale content on every update after that.
+    const companionFiles = {
+      phasesFile: this.resolveDeclaredFileName(
+        frameworkDir,
+        existingData?.framework['phasesFile'],
+        'phases.yaml'
+      ),
+      judgePromptFile: this.resolveDeclaredFileName(
+        frameworkDir,
+        existingData?.framework['judgePromptFile'],
+        'judge-prompt.md'
+      ),
+    };
+
+    const files: PlannedFrameworkFile[] = [];
+
+    // Where the files this write replaces live RIGHT NOW. For the first local edit of a bundled
+    // framework, `frameworkDir` does not exist yet and the prior text — comments included — is
+    // still in the bundled tree that copy-on-write is about to duplicate. Reading `frameworkDir`
+    // alone would find nothing there and re-render the framework from scratch, which is exactly
+    // the layout loss this write is avoiding, on the one edit most likely to hit an authored file.
+    const priorFrameworkDir = existsSync(frameworkDir)
+      ? frameworkDir
+      : this.resolveExistingFrameworkDir(data.id);
+
+    const frameworkYaml = this.planFrameworkYamlData(
+      data,
+      existingData?.framework ?? null,
+      companionFiles
+    );
+    if (frameworkYaml !== null) {
+      files.push({
+        relativePath: 'framework.yaml',
+        content: serializeYamlPreservingSource(
+          frameworkYaml,
+          readYamlSourceSync(join(priorFrameworkDir ?? frameworkDir, 'framework.yaml'))
+        ).content,
+      });
+    }
+
+    const phasesData = this.planPhasesYamlData(data, existingData?.phases ?? null);
+    if (phasesData !== null) {
+      files.push({
+        relativePath: companionFiles.phasesFile,
+        content: serializeYamlPreservingSource(
+          phasesData,
+          readYamlSourceSync(join(priorFrameworkDir ?? frameworkDir, companionFiles.phasesFile))
+        ).content,
+      });
+    }
+
+    if (this.changesText(data.system_prompt_guidance, existingData?.systemPrompt ?? null)) {
+      files.push({ relativePath: 'system-prompt.md', content: data.system_prompt_guidance });
+    }
+
+    if (this.changesText(data.judge_prompt, existingData?.judgePrompt ?? null)) {
+      files.push({ relativePath: companionFiles.judgePromptFile, content: data.judge_prompt });
+    }
+
+    return files;
+  }
+
+  /**
+   * The `framework.yaml` document this write lands, or null when it leaves the file as it is.
+   *
+   * On create, the payload plus `FRAMEWORK_CREATION_DEFAULTS` for whatever it left out. On an edit,
+   * the payload merged over the stored document, WITHOUT `id`: the id addresses the framework and
+   * the stored one stays. Null when that merge equals the stored document.
+   */
+  private planFrameworkYamlData(
+    data: Partial<FrameworkCreationData> & { id: string },
+    existingFramework: Record<string, unknown> | null,
+    companionFiles: { phasesFile: string; judgePromptFile: string }
+  ): Record<string, unknown> | null {
+    const supplied = this.buildFrameworkYamlData(data, companionFiles);
+    if (existingFramework === null) {
+      const created = { ...supplied };
+      for (const [key, value] of Object.entries(FRAMEWORK_CREATION_DEFAULTS)) {
+        created[key] ??= value;
+      }
+      return created;
+    }
+
+    const edits = Object.fromEntries(Object.entries(supplied).filter(([key]) => key !== 'id'));
+    const merged = this.deepMerge(existingFramework, edits);
+    return isDeepStrictEqual(merged, existingFramework) ? null : merged;
+  }
+
+  /**
+   * Whether a companion text file is written: the payload supplies non-empty content for it and
+   * that content differs from what the file holds. An empty string writes nothing, as before.
+   */
+  private changesText(supplied: string | undefined, existing: string | null): supplied is string {
+    return supplied !== undefined && supplied !== '' && supplied !== existing;
+  }
+
+  /**
+   * The companion file name a framework declares for one field, or `fallback` when it declares
+   * none.
+   *
+   * Validated by name against `frameworkDir` before it is ever joined into a path — the same
+   * class of guard `getFrameworkDir` applies to a caller-supplied id, just for a field the
+   * framework's OWN author controls (`framework.yaml`, hand-authored or seeded). A declared name
+   * like `../x.yaml` throws here rather than resolving outside the framework's folder.
+   */
+  private resolveDeclaredFileName(
+    frameworkDir: string,
+    declared: unknown,
+    fallback: string
+  ): string {
+    if (typeof declared !== 'string' || declared === '') {
+      return fallback;
+    }
+    resolveContainedPath(frameworkDir, declared);
+    return declared;
+  }
+
+  /**
+   * The merged `phases.yaml` document, or null when the write lands no phases file — including
+   * when merging the payload leaves the stored phases document as it is.
+   */
+  private planPhasesYamlData(
+    data: Partial<FrameworkCreationData>,
+    existingPhases: Record<string, unknown> | null
+  ): Record<string, unknown> | null {
+    const newPhasesData = this.buildPhasesYamlData(data);
+    if (existingPhases === null) {
+      return Object.keys(newPhasesData).length > 0 ? newPhasesData : null;
+    }
+    const merged = this.deepMerge(existingPhases, newPhasesData);
+    return isDeepStrictEqual(merged, existingPhases) ? null : merged;
+  }
+
   // ==========================================================================
   // YAML Data Builders
   // ==========================================================================
 
   /**
    * Build framework.yaml data from input (only sets defined fields)
+   *
+   * `companionFiles` names the files `phasesFile`/`judgePromptFile` point at when this write sets
+   * them — the framework's own declared names when it has any, the canonical defaults otherwise
+   * (`planFrameworkFiles` resolves which). Defaulted here too, so a direct caller with no
+   * declared framework still gets the canonical names rather than an undefined reference.
    */
   buildFrameworkYamlData(
-    data: Partial<FrameworkCreationData> & { id: string }
+    data: Partial<FrameworkCreationData> & { id: string },
+    companionFiles: { phasesFile: string; judgePromptFile: string } = {
+      phasesFile: 'phases.yaml',
+      judgePromptFile: 'judge-prompt.md',
+    }
   ): Record<string, unknown> {
     const yamlData: Record<string, unknown> = {};
-    const typeValue = data.type;
 
     // Core fields - id is always required
     yamlData['id'] = data.id.toLowerCase();
 
-    // Only set name if provided (for partial updates)
-    if (data.name !== undefined) {
-      yamlData['name'] = data.name;
-    }
-
-    if (typeValue !== undefined) {
-      yamlData['type'] = typeValue;
-    }
-
+    // Copied only when supplied, in the order a created file lists them.
+    //
     // `description` is read back by `toFrameworkCreationData`, carried in
     // OPTIONAL_FRAMEWORK_FIELDS, and reported in the update diff — but until 2026-08-17 it was
     // never written here, so `resource_manager framework update description:"..."` reported a
@@ -444,21 +748,25 @@ export class FrameworkFileWriter {
     // `writeFrameworkFiles` deep-merges over the existing YAML). Recording it in a version
     // snapshot while no write path could restore it is the same defect one layer up, which is
     // how it surfaced.
-    if (data.description !== undefined) {
-      yamlData['description'] = data.description;
+    //
+    // `enabled` was `data.enabled ?? true` until B.65, which laid `true` over the stored value on
+    // every edit. A create with none still gets `true`, from `FRAMEWORK_CREATION_DEFAULTS`.
+    const suppliedFields: ReadonlyArray<readonly [string, unknown]> = [
+      ['name', data.name],
+      ['type', data.type],
+      ['description', data.description],
+      ['enabled', data.enabled],
+      ['systemPromptGuidance', data.system_prompt_guidance],
+    ];
+    for (const [key, value] of suppliedFields) {
+      if (value !== undefined) {
+        yamlData[key] = value;
+      }
     }
 
-    // Enabled defaults to true
-    yamlData['enabled'] = data.enabled ?? true;
-
-    // System prompt guidance
-    if (data.system_prompt_guidance !== undefined) {
-      yamlData['systemPromptGuidance'] = data.system_prompt_guidance;
-    }
-
-    // Check if phases.yaml is needed
+    // Check if a phases file is needed
     if (this.needsPhasesFile(data)) {
-      yamlData['phasesFile'] = 'phases.yaml';
+      yamlData['phasesFile'] = companionFiles.phasesFile;
     }
 
     // Optional fields (only if defined)
@@ -483,12 +791,11 @@ export class FrameworkFileWriter {
       yamlData['argumentSuggestions'] = data.argument_suggestions;
     }
     if (data.judge_prompt !== undefined) {
-      yamlData['judgePromptFile'] = 'judge-prompt.md';
+      yamlData['judgePromptFile'] = companionFiles.judgePromptFile;
     }
 
-    // Always set version for new frameworks
-    yamlData['version'] ??= '1.0.0';
-
+    // No `version`: the payload has no field for it. A create gets one from
+    // `FRAMEWORK_CREATION_DEFAULTS`; an edit keeps the stored one (B.65).
     return yamlData;
   }
 

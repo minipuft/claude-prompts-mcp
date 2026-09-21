@@ -10,13 +10,14 @@ import { spawn, ChildProcess } from 'child_process';
 import path from 'path';
 import { tmpdir } from 'os';
 import { fileURLToPath } from 'url';
-import { promises as fs } from 'fs';
+import { promises as fs, readFileSync } from 'fs';
 import {
   getAvailablePort,
   startServerWithHttp,
   waitForHealth,
   killServer,
   StreamableHttpMcpClient,
+  httpGet,
   httpPost,
   parseJsonOrSse,
   ModernMcpClient,
@@ -25,7 +26,7 @@ import {
   SERVER_PATH as HTTP_SERVER_PATH,
 } from './helpers/http-mcp-client.js';
 
-import { buildServerEnv } from './helpers/child-env.js';
+import { buildServerEnv, createHermeticRoots, type HermeticRoots } from './helpers/child-env.js';
 
 // ESM equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -34,6 +35,12 @@ const __dirname = path.dirname(__filename);
 const PROJECT_ROOT = path.resolve(__dirname, '../../..');
 const SERVER_PATH = path.join(PROJECT_ROOT, 'server', 'dist', 'index.js');
 
+// Ground truth for the version tests below — read from disk, never a literal (#287: /health and
+// `initialize` both reported a hard-coded '1.0.0' regardless of what this file said).
+const SERVER_PACKAGE_VERSION: string = JSON.parse(
+  readFileSync(path.join(PROJECT_ROOT, 'server', 'package.json'), 'utf8')
+).version;
+
 // Keep track of spawned processes for cleanup
 let serverProcess: ChildProcess | null = null;
 let httpServerProcess: ChildProcess | null = null;
@@ -41,13 +48,32 @@ let httpServerPort: number | null = null;
 let streamableHttpServerProcess: ChildProcess | null = null;
 let streamableHttpServerPort: number | null = null;
 
+/** Roots created by `spawnServer`, drained in `afterEach`. */
+const spawnedRoots: HermeticRoots[] = [];
+
+/** Hand a pair to the `afterEach` drain and return it, for a spawn that wants only one half. */
+function trackRoots(roots: HermeticRoots): HermeticRoots {
+  spawnedRoots.push(roots);
+  return roots;
+}
+
 /**
  * Helper to spawn MCP server with proper env
+ *
+ * `MCP_WORKSPACE` here is PROJECT_ROOT — the repository — so a child with no runtime root of its
+ * own resolves the runtime root FROM the workspace and writes `runtime-state/state.db` and
+ * `logs/mcp-server.log` at the repo root. That is not hypothetical: it is what a fully green
+ * `test:e2e` left behind on every run until 2026-09-15 (18/18 suites passing, three ignored
+ * directories in the tree). The pair is created unconditionally, and an explicit `runtimeRoot`
+ * overrides only that half.
  */
 function spawnServer(runtimeRoot?: string): ChildProcess {
+  const roots = createHermeticRoots('mcp-server-smoke');
+  spawnedRoots.push(roots);
   return spawn('node', [SERVER_PATH, '--transport=stdio', '--quiet'], {
     cwd: path.join(PROJECT_ROOT, 'server'),
     env: buildServerEnv({
+      ...roots.env,
       MCP_WORKSPACE: PROJECT_ROOT,
       MCP_RESOURCES_PATH: path.join(PROJECT_ROOT, 'server', 'resources'),
       ...(runtimeRoot !== undefined ? { MCP_RUNTIME_ROOT: runtimeRoot } : {}),
@@ -128,6 +154,7 @@ describe('MCP Server Smoke Tests', () => {
       streamableHttpServerProcess = null;
       streamableHttpServerPort = null;
     }
+    while (spawnedRoots.length > 0) spawnedRoots.pop()?.cleanup();
   });
 
   describe('Server Entry Point', () => {
@@ -171,9 +198,11 @@ describe('MCP Server Smoke Tests', () => {
 
     it('writes state and logs beneath an explicit runtime root', async () => {
       const runtimeRoot = await fs.mkdtemp(path.join(tmpdir(), 'claude-prompts-runtime-'));
+      const roots = createHermeticRoots('smoke-explicit-runtime-root');
       const startup = spawn('node', [SERVER_PATH, '--startup-test', '--client=codex'], {
         cwd: path.join(PROJECT_ROOT, 'server'),
         env: buildServerEnv({
+          ...roots.env,
           NODE_ENV: 'production',
           CI: 'false',
           GITHUB_ACTIONS: 'false',
@@ -198,12 +227,14 @@ describe('MCP Server Smoke Tests', () => {
       await fs.access(path.join(runtimeRoot, 'runtime-state', 'state.db'));
       await fs.access(path.join(runtimeRoot, 'logs', 'mcp-server.log'));
       await fs.rm(runtimeRoot, { recursive: true, force: true });
+      roots.cleanup();
     }, 30000);
 
     // The sibling above pins MCP_RUNTIME_ROOT, which every consumer reads through one resolver
-    // call. MCP_WORKSPACE is the path a plugin host actually sets (`.mcp.json` maps
-    // ${CLAUDE_PLUGIN_ROOT} onto it) and it reaches the same place only via getRuntimeRoot()'s
-    // fallback — a different branch, and the one that was never asserted. It stayed correct
+    // call. The Claude Code `.mcp.json` sets both MCP_WORKSPACE and MCP_RUNTIME_ROOT to
+    // ${CLAUDE_PLUGIN_DATA}, but a host that sets MCP_WORKSPACE with no runtime root, or a blank
+    // one, reaches the same place only via getRuntimeRoot()'s fallback — a different branch, and
+    // the one that was never asserted. It stayed correct
     // only because ResourceChangeTracker happened to claim the SqliteEngine singleton first;
     // five of the six getInstance call sites pass no dbPath and fall back to the PACKAGE
     // directory, which is read-only under a sandboxed MCP child.
@@ -212,8 +243,11 @@ describe('MCP Server Smoke Tests', () => {
       const startup = spawn('node', [SERVER_PATH, '--startup-test', '--client=codex'], {
         cwd: path.join(PROJECT_ROOT, 'server'),
         // No MCP_RUNTIME_ROOT: this case is about the fallback to MCP_WORKSPACE, and the helper
-        // scrubs an inherited one rather than each caller remembering to blank it.
+        // scrubs an inherited one rather than each caller remembering to blank it. `HOME` is the
+        // one key the pair still has to supply — it is required, never scrubbed, and this case
+        // deliberately withholds the other half.
         env: buildServerEnv({
+          HOME: trackRoots(createHermeticRoots('smoke-workspace-fallback')).home,
           NODE_ENV: 'production',
           CI: 'false',
           GITHUB_ACTIONS: 'false',
@@ -394,7 +428,31 @@ describe('MCP Server Smoke Tests', () => {
       expect(capabilities).toHaveProperty('serverInfo');
       expect((capabilities as { serverInfo: { name: string } }).serverInfo).toHaveProperty('name');
 
+      // #287: serverInfo.version must be the actual package version, not a hard-coded default.
+      expect((capabilities as { serverInfo: { version: string } }).serverInfo.version).toBe(
+        SERVER_PACKAGE_VERSION
+      );
+
       await client.close();
+    }, 20000);
+
+    it('/health reports the package version', async () => {
+      // #287: /health reported a hard-coded '1.0.0' regardless of server/package.json.
+      streamableHttpServerPort = await getAvailablePort();
+      const baseUrl = `http://localhost:${streamableHttpServerPort}`;
+
+      streamableHttpServerProcess = startServerWithHttp(streamableHttpServerPort, {
+        transport: 'streamable-http',
+        debug: true,
+      });
+
+      await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
+
+      const response = await httpGet(`${baseUrl}/health`);
+      expect(response.status).toBe(200);
+      const body = JSON.parse(response.body) as { status: string; version: string };
+      expect(body.status).toBe('ok');
+      expect(body.version).toBe(SERVER_PACKAGE_VERSION);
     }, 20000);
 
     it('server registers expected MCP tools via Streamable HTTP', async () => {
@@ -591,11 +649,13 @@ describe('MCP Server Smoke Tests', () => {
         1
       )) as {
         isError: boolean;
+        content?: Array<{ type: string; text: string }>;
         structuredContent?: {
           action?: string;
           id?: string;
           resource_root?: string;
           current_version?: number;
+          message?: string;
         };
       };
 
@@ -606,6 +666,12 @@ describe('MCP Server Smoke Tests', () => {
       });
       expect(result.structuredContent?.resource_root).toContain('resources/prompts');
       expect(typeof result.structuredContent?.current_version).toBe('number');
+
+      // Claude Code 2.1.272 hands the model only `structuredContent` when a result carries both
+      // channels (anthropics/claude-code#9962, #55677, #15412, #64316) — so the readable `content`
+      // text this result also carries must be mirrored into `structuredContent.message`, or it
+      // never reaches the model.
+      expect(result.structuredContent?.message).toBe(result.content?.[0]?.text);
     }, 25000);
 
     it('rejects a request whose headers omit the method', async () => {

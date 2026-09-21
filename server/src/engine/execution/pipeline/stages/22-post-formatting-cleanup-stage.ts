@@ -36,8 +36,9 @@ export class PostFormattingCleanupStage extends BasePipelineStage {
     this.logEntry(context);
 
     const sessionId = context.sessionContext?.sessionId;
+    let blueprintPersisted = false;
     if (sessionId && this.chainSessionStore && context.executionPlan && context.parsedCommand) {
-      this.persistBlueprint(sessionId, context);
+      blueprintPersisted = await this.persistBlueprint(sessionId, context);
     }
 
     if (this.temporaryGateRegistry) {
@@ -45,12 +46,17 @@ export class PostFormattingCleanupStage extends BasePipelineStage {
     }
 
     this.logExit({
-      blueprintPersisted: Boolean(sessionId && this.chainSessionStore),
+      blueprintPersisted,
       gatesCleaned: Boolean(this.temporaryGateRegistry),
     });
   }
 
-  private persistBlueprint(sessionId: string, context: ExecutionContext): void {
+  /**
+   * @returns whether the blueprint reached the store. Reported rather than assumed: the exit
+   *   line used to say `blueprintPersisted: true` whenever a store was present, which was the
+   *   same answer for a write that threw.
+   */
+  private async persistBlueprint(sessionId: string, context: ExecutionContext): Promise<boolean> {
     const blueprint: SessionBlueprint = {
       parsedCommand: this.clone(context.parsedCommand!),
       executionPlan: this.clone(context.executionPlan!),
@@ -61,12 +67,17 @@ export class PostFormattingCleanupStage extends BasePipelineStage {
     }
 
     try {
-      this.chainSessionStore!.updateSessionBlueprint(sessionId, blueprint);
+      // Awaited. `updateSessionBlueprint` is async, so the catch below could not see a rejected
+      // write: the failure surfaced as an unhandled rejection with nothing logged here, and the
+      // stage reported the blueprint persisted either way.
+      await this.chainSessionStore!.updateSessionBlueprint(sessionId, blueprint);
+      return true;
     } catch (error) {
       this.logger.warn('[PostFormattingCleanupStage] Failed to update session blueprint', {
         sessionId,
         error,
       });
+      return false;
     }
   }
 

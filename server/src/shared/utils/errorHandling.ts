@@ -1,27 +1,12 @@
-// @lifecycle canonical - Shared error helpers that surface structured MCP responses.
+// @lifecycle canonical - Shared error classes and the standalone handleError() helper.
 /**
  * Consolidated Error Handling System
- * Combines basic error classes with MCP structured response capabilities
+ *
+ * Error classes (`BaseError` and its subclasses) plus the standalone `handleError()` function
+ * that logs and renders one for a caller holding a plain `Logger`. The singleton `ErrorHandler`
+ * class this module used to also export had zero consumers (measured 2026-09-17, P4.52/R36) and
+ * was removed along with the `toStructuredResponse()` method that existed only to serve it.
  */
-
-// Define StructuredToolResponse locally to avoid circular dependency
-interface StructuredToolResponse {
-  content: Array<{
-    type: 'text';
-    text: string;
-  }>;
-  isError?: boolean;
-  metadata?: {
-    tool: string;
-    action: string;
-    timestamp: string;
-    executionTime?: number;
-    framework?: string;
-    errorType?: string;
-    errorCode?: string;
-    [key: string]: unknown;
-  };
-}
 
 // Error context interface for enhanced error handling
 export interface ErrorContext {
@@ -78,36 +63,6 @@ export abstract class BaseError extends Error {
     this.context = context;
     this.timestamp = new Date().toISOString();
     Error.captureStackTrace(this, this.constructor);
-  }
-
-  /**
-   * Get structured error response for MCP protocol
-   */
-  toStructuredResponse(): StructuredToolResponse {
-    const metadata: StructuredToolResponse['metadata'] = {
-      tool: this.context.tool || 'unknown',
-      action: this.context.action || 'unknown',
-      timestamp: this.timestamp,
-      errorCode: this.code,
-    };
-
-    if (this.context.framework !== undefined) {
-      metadata.framework = this.context.framework;
-    }
-    if (this.context.errorType !== undefined) {
-      metadata.errorType = this.context.errorType;
-    }
-
-    return {
-      content: [
-        {
-          type: 'text',
-          text: this.getEnhancedMessage(),
-        },
-      ],
-      isError: true,
-      metadata,
-    };
   }
 
   /**
@@ -440,90 +395,6 @@ export interface Logger {
 }
 
 /**
- * Enhanced error handler with recovery strategies and MCP support
- */
-export class ErrorHandler {
-  private static instance: ErrorHandler;
-  private retryStrategies = new Map<string, (error: BaseError) => boolean>();
-
-  private constructor() {
-    this.setupDefaultRetryStrategies();
-  }
-
-  public static getInstance(): ErrorHandler {
-    if (!ErrorHandler.instance) {
-      ErrorHandler.instance = new ErrorHandler();
-    }
-    return ErrorHandler.instance;
-  }
-
-  /**
-   * Handle error with context and return structured response
-   */
-  handleError(error: unknown, context: ErrorContext): StructuredToolResponse {
-    if (error instanceof BaseError) {
-      return error.toStructuredResponse();
-    }
-
-    // Convert unknown errors to BaseError
-    const message = error instanceof Error ? error.message : String(error);
-    const baseError = new (class extends BaseError {
-      constructor(message: string, code: string, context: ErrorContext) {
-        super(message, code, context);
-      }
-    })(message, 'UNKNOWN_ERROR', {
-      ...context,
-      suggestions: ['An unexpected error occurred. Please try again or contact support.'],
-      recoveryOptions: ['Try the operation again', 'Check system status', 'Contact support'],
-    });
-
-    return baseError.toStructuredResponse();
-  }
-
-  /**
-   * Create validation error with enhanced context
-   */
-  createValidationError(
-    message: string,
-    context: ErrorContext,
-    validationResult?: ValidationResult
-  ): ValidationError {
-    return new ValidationError(message, context, validationResult);
-  }
-
-  /**
-   * Add retry strategy for specific error patterns
-   */
-  addRetryStrategy(errorCode: string, strategy: (error: BaseError) => boolean): void {
-    this.retryStrategies.set(errorCode, strategy);
-  }
-
-  /**
-   * Check if error is retryable
-   */
-  isRetryable(error: BaseError): boolean {
-    const strategy = this.retryStrategies.get(error.code);
-    return strategy
-      ? strategy(error)
-      : Boolean(error.context.recoveryOptions && error.context.recoveryOptions.length > 0);
-  }
-
-  /**
-   * Setup default retry strategies
-   */
-  private setupDefaultRetryStrategies(): void {
-    this.addRetryStrategy('VALIDATION_ERROR', () => false); // User must fix input
-    this.addRetryStrategy('CONFIG_ERROR', () => false); // User must fix config
-    this.addRetryStrategy('FRAMEWORK_ERROR', (error) =>
-      Boolean(error.context.recoveryOptions && error.context.recoveryOptions.length > 0)
-    );
-    this.addRetryStrategy('EXECUTION_ERROR', (error) =>
-      Boolean(error.context.recoveryOptions && error.context.recoveryOptions.length > 0)
-    );
-  }
-}
-
-/**
  * Validation helper functions
  */
 export class ValidationHelpers {
@@ -578,9 +449,6 @@ export class ValidationHelpers {
     return this.createValidationResult(errors || []);
   }
 }
-
-// Export default error handler instance
-export const errorHandler = ErrorHandler.getInstance();
 
 // Standardized error handling (backwards compatible)
 export function handleError(

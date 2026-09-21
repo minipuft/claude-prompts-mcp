@@ -131,7 +131,7 @@ function collectSourceFiles(sourceRoot: string, directory: string, into: string[
 /**
  * The shape a definition has to take to count: a top-level `export` of the symbol itself. A
  * re-export gives a symbol a second import path without defining it, so it deliberately does not
- * match — that is the same distinction `validate:no-crosslayer-reexport` draws.
+ * match — that is the same distinction the ESLint rule `claude/no-compat-reexport-shim` draws.
  */
 function definitionPattern(symbol: string): RegExp {
   return new RegExp(

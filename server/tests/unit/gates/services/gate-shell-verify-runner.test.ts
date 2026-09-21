@@ -157,7 +157,7 @@ describe('runGateShellVerifications', () => {
           name: 'Code Quality',
           type: 'validation',
           description: 'LLM review',
-          pass_criteria: [{ type: 'llm_self_check' }],
+          pass_criteria: [{ type: 'inline_guidance' }],
         },
       ]),
     } as any;

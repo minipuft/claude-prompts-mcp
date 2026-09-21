@@ -141,17 +141,29 @@ function projectClaudeCodePlugin(canonical, placeholderMap) {
 /**
  * Canonical `mcp.json` → `.mcp.json`.
  *
- * Three fields do not cross, and each has a reason that is not "the old file lacked it":
- *   `$schema`           same as above — wrong spec for this consumer.
- *   `type: "stdio"`     the Agent Plugins mcp schema requires it; Claude Code's `.mcp.json` has
- *                       never carried it. Adding it would be a behavior change to every existing
- *                       install, so it belongs in its own commit with its own justification, not
- *                       smuggled in by the first render.
- *   `MCP_RUNTIME_ROOT`  its value is `${PLUGIN_DATA}`, an Agent Plugins placeholder. Claude Code
- *                       does not define it, so the variable would reach the server as the literal
- *                       string `${PLUGIN_DATA}` and the runtime would write state to a directory
- *                       with that name. Dropping it is what preserves today's behavior, where
- *                       `MCP_WORKSPACE` alone locates runtime state.
+ * Three fields differ from the canonical file, and each has a reason that is not "the old file
+ * lacked it":
+ *   `$schema`           dropped — same as above, wrong spec for this consumer.
+ *   `type: "stdio"`     dropped — the Agent Plugins mcp schema requires it; Claude Code's
+ *                       `.mcp.json` has never carried it. Adding it would be a behavior change to
+ *                       every existing install, so it belongs in its own commit with its own
+ *                       justification, not smuggled in by a render.
+ *   `MCP_WORKSPACE`     takes the runtime root's value — `${PLUGIN_DATA}`, rendered as
+ *                       `${CLAUDE_PLUGIN_DATA}` — instead of the canonical `${PLUGIN_ROOT}`. Claude
+ *                       Code replaces the plugin root on every update (install paths are
+ *                       versioned), so a workspace there keeps nothing across one, while
+ *                       `${CLAUDE_PLUGIN_DATA}` is the directory it keeps. Claude Code 2.1.272
+ *                       substitutes that placeholder in `env` and creates the directory before the
+ *                       server starts (measured 2026-09-14), which matters because the server
+ *                       refuses a workspace that does not exist. The canonical file keeps
+ *                       `${PLUGIN_ROOT}` because Codex was measured without `PLUGIN_DATA` in the
+ *                       MCP server's environment, where a literal placeholder workspace would
+ *                       refuse startup.
+ *
+ * `MCP_RUNTIME_ROOT` crosses with only its placeholder respelled. Claude Code defines a data
+ * directory placeholder, `${CLAUDE_PLUGIN_DATA}`, and `placeholderMap` maps `${PLUGIN_DATA}` onto
+ * it. A canonical server with `env` but no runtime root throws rather than rendering a workspace in
+ * the plugin root.
  *
  * Keys are sorted because the published file is sorted; source order here is the canonical file's,
  * which is grouped for reading rather than alphabetized.
@@ -165,13 +177,24 @@ function projectClaudeCodeMcp(canonical, placeholderMap) {
       kept[key] = value;
     }
     if (kept.env) {
-      const env = { ...kept.env };
-      delete env.MCP_RUNTIME_ROOT;
-      kept.env = sortKeys(env);
+      kept.env = sortKeys(withPersistentWorkspace(name, kept.env));
     }
     servers[name] = sortKeys(kept);
   }
   return rewritePlaceholders({ mcpServers: servers }, placeholderMap);
+}
+
+/** The Claude Code workspace is the runtime root's directory — see `projectClaudeCodeMcp`. */
+function withPersistentWorkspace(serverName, env) {
+  const runtimeRoot = env.MCP_RUNTIME_ROOT;
+  if (typeof runtimeRoot !== "string" || runtimeRoot.trim() === "") {
+    throw new Error(
+      `mcp.json[${serverName}]: env declares no MCP_RUNTIME_ROOT, so the Claude Code projection ` +
+        `has no persistent directory for MCP_WORKSPACE. Rendering the canonical workspace instead ` +
+        `would put it in the plugin root, which Claude Code replaces on every update.`,
+    );
+  }
+  return { ...env, MCP_WORKSPACE: runtimeRoot };
 }
 
 /**
@@ -226,11 +249,29 @@ function renderTarget(target) {
     const canonical = JSON.parse(
       readFileSync(path.join(REPO, render.from), "utf8"),
     );
-    return {
-      to: render.to,
-      bytes: serialize(projection(canonical, target.placeholderMap)),
-    };
+    const bytes = serialize(projection(canonical, target.placeholderMap));
+    assertPlaceholdersMapped(bytes, target.client, render.to);
+    return { to: render.to, bytes };
   });
+}
+
+/** `${PLUGIN_ROOT}`, `${PLUGIN_DATA}` — Agent Plugins spellings, never a client's. */
+const AGENT_PLUGINS_PLACEHOLDER = /\$\{PLUGIN_[A-Z_]+\}/;
+
+/**
+ * An Agent Plugins placeholder left in a projection reaches its client as a literal string, so the
+ * server would be handed a directory named `${PLUGIN_DATA}`. `placeholderMap` is the only thing that
+ * prevents it, and `--check` cannot see a missing entry — the published file is rendered from the
+ * same map — so the render refuses instead of shipping it.
+ */
+function assertPlaceholdersMapped(bytes, client, to) {
+  const unmapped = bytes.match(AGENT_PLUGINS_PLACEHOLDER);
+  if (unmapped) {
+    throw new Error(
+      `render-targets.json[${client}]: ${to} would carry the Agent Plugins placeholder ` +
+        `${unmapped[0]} verbatim. Map it in the target's placeholderMap.`,
+    );
+  }
 }
 
 function renderAll(config) {
@@ -293,8 +334,18 @@ function write(config) {
  */
 function selfTest() {
   const failures = [];
+  let cases = 0;
   const expect = (label, condition) => {
+    cases += 1;
     if (!condition) failures.push(label);
+  };
+  const throws = (fn) => {
+    try {
+      fn();
+      return false;
+    } catch {
+      return true;
+    }
   };
 
   const canonicalPlugin = {
@@ -331,21 +382,34 @@ function selfTest() {
   };
   const mcp = projectClaudeCodeMcp(canonicalMcp, {
     "${PLUGIN_ROOT}": "${CLAUDE_PLUGIN_ROOT}",
+    "${PLUGIN_DATA}": "${CLAUDE_PLUGIN_DATA}",
   });
   expect("mcp projection drops $schema", !("$schema" in mcp));
   expect("mcp projection drops type", !("type" in mcp.mcpServers.s));
   expect(
-    "mcp projection drops MCP_RUNTIME_ROOT",
-    !("MCP_RUNTIME_ROOT" in mcp.mcpServers.s.env),
+    "mcp projection keeps MCP_RUNTIME_ROOT on the plugin data directory",
+    mcp.mcpServers.s.env.MCP_RUNTIME_ROOT === "${CLAUDE_PLUGIN_DATA}",
+  );
+  expect(
+    "mcp projection puts MCP_WORKSPACE on the plugin data directory",
+    mcp.mcpServers.s.env.MCP_WORKSPACE === "${CLAUDE_PLUGIN_DATA}",
   );
   expect(
     "mcp projection sorts server keys",
     Object.keys(mcp.mcpServers.s).join() === "args,command,env",
   );
   expect(
-    "mcp projection rewrites the placeholder in nested values",
-    mcp.mcpServers.s.args[0] === "${CLAUDE_PLUGIN_ROOT}/server/dist/index.js" &&
-      mcp.mcpServers.s.env.MCP_WORKSPACE === "${CLAUDE_PLUGIN_ROOT}",
+    "mcp projection keeps the server entry point in the plugin root",
+    mcp.mcpServers.s.args[0] === "${CLAUDE_PLUGIN_ROOT}/server/dist/index.js",
+  );
+  expect(
+    "mcp projection with env but no MCP_RUNTIME_ROOT throws",
+    throws(() =>
+      projectClaudeCodeMcp(
+        { mcpServers: { s: { command: "node", env: { MCP_WORKSPACE: "w" } } } },
+        {},
+      ),
+    ),
   );
 
   expect(
@@ -359,14 +423,6 @@ function selfTest() {
     serialize({ a: 1 }) === '{\n  "a": 1\n}\n',
   );
 
-  const throws = (fn) => {
-    try {
-      fn();
-      return false;
-    } catch {
-      return true;
-    }
-  };
   expect(
     "unknown renderKind throws",
     throws(() => renderTarget({ client: "c", renderKind: "guessed" })),
@@ -392,6 +448,35 @@ function selfTest() {
     ),
   );
 
+  // The placeholder guard, through the real entry point and the real canonical `mcp.json`. The
+  // pair keeps the refusal honest: the same render with the full map must succeed, or the first
+  // case could be passing on an unrelated throw.
+  const claudeMcpTarget = (placeholderMap) => ({
+    client: "c",
+    renderKind: "projection",
+    placeholderMap,
+    renders: [{ projection: "claude-code/mcp", from: "mcp.json", to: "x" }],
+  });
+  expect(
+    "a projection left holding an unmapped Agent Plugins placeholder throws",
+    throws(() =>
+      renderTarget(
+        claudeMcpTarget({ "${PLUGIN_ROOT}": "${CLAUDE_PLUGIN_ROOT}" }),
+      ),
+    ),
+  );
+  expect(
+    "the same projection with every placeholder mapped renders",
+    !throws(() =>
+      renderTarget(
+        claudeMcpTarget({
+          "${PLUGIN_ROOT}": "${CLAUDE_PLUGIN_ROOT}",
+          "${PLUGIN_DATA}": "${CLAUDE_PLUGIN_DATA}",
+        }),
+      ),
+    ),
+  );
+
   // The drift detector itself, on a synthetic pair — the real corpus is checked by `--check`.
   expect(
     "firstDifference names the differing line",
@@ -400,12 +485,14 @@ function selfTest() {
 
   if (failures.length > 0) {
     console.error(
-      `render-distributions --self-test: ${failures.length} case(s) failed`,
+      `render-distributions --self-test: ${failures.length} of ${cases} case(s) failed`,
     );
     failures.forEach((label) => console.error(`  ✗ ${label}`));
     process.exit(1);
   }
-  console.log("render-distributions --self-test: 13/13 cases pass.");
+  console.log(
+    `render-distributions --self-test: ${cases}/${cases} cases pass.`,
+  );
 }
 
 function main() {

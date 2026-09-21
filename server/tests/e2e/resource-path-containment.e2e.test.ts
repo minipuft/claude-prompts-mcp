@@ -15,6 +15,15 @@
  * BOTH directions are asserted per type. A test that only proves traversal is refused passes just
  * as well against a server that refuses everything, which is the likelier regression once a guard
  * is tightened later — so every refusal case is paired with a benign create that must succeed.
+ *
+ * AND every refusal names WHY, which the pairing alone does not give you. Measured 2026-09-20:
+ * the framework payloads here carried `execution_guidance`, a parameter name that exists nowhere
+ * in this repository outside these two lines. It was accepted and ignored — a probe server built
+ * with and without it wrote byte-identical `framework.yaml` files — so the traversal row was
+ * refused for containment while the control passed, and both read as correct. When R46 turned an
+ * undeclared key into a refusal, the control went red and the traversal row kept passing FOR THE
+ * WRONG REASON: refused at the parameter check, never reaching the path guard this file exists to
+ * test. A negative assertion that does not name its cause cannot tell those apart.
  */
 
 import { describe, expect, it, beforeAll, afterAll } from '@jest/globals';
@@ -24,9 +33,20 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { buildServerEnv } from './helpers/child-env.js';
+import { buildServerEnv, createHermeticRoots } from './helpers/child-env.js';
 
 const SERVER_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+
+/**
+ * The two guards' own words. Measured 2026-09-20 against `dist/`.
+ *
+ * Two, not one, and the split is the finding: a prompt's `category` is refused by NAME validation
+ * before any path is resolved, while a gate's or framework's `id` reaches `resolveContainedPath`.
+ * Both are correct refusals of the same attack, but they are different guards — and a row that
+ * asserted only "it failed" could not say which one answered, or whether either did.
+ */
+const CATEGORY_NAME_REFUSAL = 'must be a single directory name';
+const CONTAINED_PATH_REFUSAL = 'Refusing to write outside the resource root';
 
 interface JsonRpcResponse {
   id?: number;
@@ -48,9 +68,17 @@ class ContainmentServer {
 
   constructor(readonly workspace: string) {}
 
+  /**
+   * This server's own `HOME` and runtime root, separate from `workspace` on purpose: a
+   * skills_sync export writes client skill folders under `$HOME`, and folding them into the
+   * workspace would put them in the same tree these tests assert about.
+   */
+  private readonly roots = createHermeticRoots('resource-path-containment');
+
   async start(): Promise<void> {
     this.proc = spawn('node', [path.join(SERVER_ROOT, 'dist', 'index.js'), '--transport=stdio'], {
       env: buildServerEnv({
+        ...this.roots.env,
         MCP_RESOURCES_PATH: path.join(this.workspace, 'resources'),
         MCP_WORKSPACE: this.workspace,
         MCP_RUNTIME_ROOT: path.join(this.workspace, 'runtime'),
@@ -123,12 +151,16 @@ class ContainmentServer {
    * exit removes the race; the timeout keeps a wedged child from hanging the run.
    */
   async stop(): Promise<void> {
-    if (this.proc === undefined || this.proc.exitCode !== null) return;
-    await new Promise<void>((resolve) => {
-      this.proc.once('exit', () => resolve());
-      this.proc.kill();
-      setTimeout(resolve, 5_000);
-    });
+    try {
+      if (this.proc === undefined || this.proc.exitCode !== null) return;
+      await new Promise<void>((resolve) => {
+        this.proc.once('exit', () => resolve());
+        this.proc.kill();
+        setTimeout(resolve, 5_000);
+      });
+    } finally {
+      this.roots.cleanup();
+    }
   }
 }
 
@@ -190,6 +222,7 @@ describe('a caller-supplied segment cannot steer a write out of the resources ro
       });
 
       expect(result.isError).toBe(true);
+      expect(result.text).toContain(CATEGORY_NAME_REFUSAL);
       expect(await strayWorkspaceEntries(workspace)).toEqual([]);
     });
 
@@ -207,6 +240,7 @@ describe('a caller-supplied segment cannot steer a write out of the resources ro
       });
 
       expect(result.isError).toBe(true);
+      expect(result.text).toContain(CATEGORY_NAME_REFUSAL);
       expect(await strayWorkspaceEntries(workspace)).toEqual([]);
     });
 
@@ -275,6 +309,7 @@ describe('a caller-supplied segment cannot steer a write out of the resources ro
       });
 
       expect(result.isError).toBe(true);
+      expect(result.text).toContain(CONTAINED_PATH_REFUSAL);
       expect(await strayWorkspaceEntries(workspace)).toEqual([]);
     });
 
@@ -301,7 +336,6 @@ describe('a caller-supplied segment cannot steer a write out of the resources ro
         name: 'Traversal Framework',
         description: 'traversal probe',
         system_prompt_guidance: 'You are a probe.',
-        execution_guidance: 'Run the probe.',
         phases: [{ id: 'one', name: 'One', description: 'first', order: 1 }],
         framework_gates: [
           { id: 'probe-gate', name: 'Probe Gate', description: 'd', priority: 'medium' },
@@ -309,6 +343,7 @@ describe('a caller-supplied segment cannot steer a write out of the resources ro
       });
 
       expect(result.isError).toBe(true);
+      expect(result.text).toContain(CONTAINED_PATH_REFUSAL);
       expect(await strayWorkspaceEntries(workspace)).toEqual([]);
     });
 
@@ -322,7 +357,6 @@ describe('a caller-supplied segment cannot steer a write out of the resources ro
         name: 'Benign Framework',
         description: 'benign control',
         system_prompt_guidance: 'You are a probe.',
-        execution_guidance: 'Run the probe.',
         phases: [{ id: 'one', name: 'One', description: 'first', order: 1 }],
         framework_gates: [
           { id: 'probe-gate', name: 'Probe Gate', description: 'd', priority: 'medium' },

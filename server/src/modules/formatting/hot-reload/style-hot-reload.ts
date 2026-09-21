@@ -146,6 +146,19 @@ export class StyleHotReloadCoordinator {
   }
 
   /**
+   * Drop every cached style definition so the next read comes from disk.
+   *
+   * Styles have no registry: the loader's cache IS what the server serves, so a style created and
+   * removed before its folder was watched stays servable only through that cache. Clearing all of
+   * it is exact — `StyleManager` reads through the loader on every request — and costs one
+   * re-parse per style next used.
+   */
+  async reconcile(): Promise<void> {
+    this.loader.clearCache();
+    this.logger.debug('Style cache cleared for reconciliation');
+  }
+
+  /**
    * Handle style deletion - clear from cache
    * Note: Styles don't have a registry, just a loader cache
    */
@@ -208,31 +221,6 @@ export class StyleHotReloadCoordinator {
       throw error;
     }
   }
-
-  /**
-   * Get hot reload statistics
-   */
-  getStats(): StyleHotReloadStats {
-    return { ...this.stats };
-  }
-
-  /**
-   * Reset statistics
-   */
-  resetStats(): void {
-    this.stats = {
-      reloadsAttempted: 0,
-      reloadsSucceeded: 0,
-      reloadsFailed: 0,
-    };
-  }
-
-  /**
-   * Get the definition loader being used
-   */
-  getLoader(): StyleDefinitionLoader {
-    return this.loader;
-  }
 }
 
 /**
@@ -247,7 +235,11 @@ export function createStyleHotReloadRegistration(
   const coordinator = new StyleHotReloadCoordinator(logger, loader, config);
 
   return {
-    directories: [loader.getStylesDir()],
+    // Primary directory plus every additional overlay directory the loader was configured with
+    // (`getWatchDirectories()`) — mirrors `GateDefinitionLoader`'s registration in
+    // `engine/gates/hot-reload/gate-hot-reload.ts`. `loader.getStylesDir()` alone would miss a
+    // workspace overlay directory entirely.
+    directories: loader.getWatchDirectories(),
     handler: (event: StyleHotReloadEvent) => coordinator.handleStyleChange(event),
     coordinator,
   };

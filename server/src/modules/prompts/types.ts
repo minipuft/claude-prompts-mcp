@@ -90,29 +90,3 @@ export interface CategoryValidationResult {
   issues: string[];
   warnings: string[];
 }
-
-/**
- * Category statistics
- */
-export interface CategoryStatistics {
-  totalCategories: number;
-  categoriesWithPrompts: number;
-  emptyCategoriesCount: number;
-  averagePromptsPerCategory: number;
-  categoryBreakdown: Array<{
-    category: Category;
-    promptCount: number;
-  }>;
-}
-
-/**
- * Category-prompt relationship data
- */
-export interface CategoryPromptRelationship {
-  categoryId: string;
-  categoryName: string;
-  promptIds: string[];
-  promptCount: number;
-  hasChains: boolean;
-  hasTemplates: boolean;
-}

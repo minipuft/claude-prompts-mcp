@@ -26,6 +26,7 @@ export type {
   GateActivationRules,
   GateActivationContext,
   GateDefinitionYaml,
+  LoadedGateDefinition,
   GateRetryConfig,
   // Registry types
   GateSource,
@@ -199,6 +200,13 @@ export interface LightweightGateDefinition {
   type: 'validation' | 'guidance';
   /** Description of what this gate checks/guides */
   description: string;
+  /**
+   * Free kebab-case tag naming what this gate reminds about (e.g. `code-quality`). An
+   * installation's `gates.harnessCovers` (config.json) suppresses reminders whose subject
+   * it lists; checks (`shell_verify`/`script_tool`) are never suppressed. Surfaced by the
+   * generated gate index.
+   */
+  subject?: string;
   /** Severity level for prioritization (defaults to 'medium') */
   severity?: 'critical' | 'high' | 'medium' | 'low';
   /** Enforcement mode override (defaults to severity-based mapping) */
@@ -241,36 +249,6 @@ export interface LightweightGateDefinition {
    * instead of self-review. Loaded from gate.yaml `evaluation` key.
    */
   evaluation?: JudgeEvaluationConfig;
-}
-
-/**
- * Unified gate configuration settings.
- * Consolidates all gate-related config.
- */
-export interface GatesConfig {
-  /** Enable/disable the gate subsystem entirely */
-  enabled: boolean;
-  /** Directory containing gate definitions (e.g., 'gates' for server/gates/{id}/) */
-  definitionsDirectory?: string;
-  /** Enable framework-specific gates (auto-added based on active framework) */
-  enableFrameworkGates?: boolean;
-  /**
-   * Execute a prompt's `inline_gate_definitions` instead of only displaying them.
-   *
-   * **Default `false`, and that default is the migration.** ADR 0001 (d) sequences this over two
-   * releases: this release logs a warning for every malformed definition it drops so an operator
-   * can see which of their workspace prompts would newly arm a gate; the next release flips this
-   * default to `true`. Arming enforcement an author may have written and forgotten is the risk
-   * being ramped, and workspaces overlaid via `MCP_WORKSPACE` cannot be inventoried from here.
-   *
-   * Retirement, per `cleanup-standards.md` — a gate that cannot be retired is a bug:
-   * - **Evidence that flips it**: one release in which the warn logs show no unexpected prompts
-   *   arming gates.
-   * - **Commit that deletes it**: the release N+1 change bakes `true` and removes this field
-   *   together with the `executeInlineGateDefinitions === true` branches. A knob parked at its
-   *   baked value is a parallel system with a nicer name.
-   */
-  executeInlineGateDefinitions?: boolean;
 }
 
 /**

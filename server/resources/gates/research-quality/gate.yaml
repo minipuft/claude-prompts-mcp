@@ -2,21 +2,11 @@ id: research-quality
 name: Research Quality Guidelines
 type: validation
 description: Ensures thorough research with proper citations and credible sources
+subject: research
 guidanceFile: guidance.md
 
 pass_criteria:
   - type: inline_guidance
-    min_length: 300
-    required_patterns:
-      - according to
-      - source
-      - published
-      - research
-      - study
-  - type: inline_guidance
-    keyword_count:
-      according to: 1
-      source: 2
 
 retry_config:
   max_attempts: 3

@@ -25,7 +25,6 @@ export class GateAccumulator {
   private readonly gates = new Map<string, GateEntry>();
   private readonly blockingGates = new Set<string>();
   private readonly logger: Logger;
-  private frozen = false;
 
   constructor(logger: Logger) {
     this.logger = logger;
@@ -41,11 +40,6 @@ export class GateAccumulator {
    * @returns true if gate was added/updated, false if skipped
    */
   add(gateId: string, source: GateSource, metadata?: Record<string, unknown>): boolean {
-    if (this.frozen) {
-      this.logger.warn('[GateAccumulator] Attempted to add gate after freeze', { gateId, source });
-      return false;
-    }
-
     const trimmedId = gateId?.trim();
     if (!trimmedId) {
       return false;
@@ -141,36 +135,6 @@ export class GateAccumulator {
   }
 
   /**
-   * Freeze the accumulator - no more additions allowed.
-   * Call this after all stages have contributed.
-   */
-  freeze(): void {
-    this.frozen = true;
-    this.logger.debug('[GateAccumulator] Frozen with gates', {
-      count: this.gates.size,
-      sources: this.getSourceCounts(),
-    });
-  }
-
-  /**
-   * Check if accumulator is frozen.
-   */
-  isFrozen(): boolean {
-    return this.frozen;
-  }
-
-  /**
-   * Clear all gates (for testing or reset).
-   */
-  clear(): void {
-    if (this.frozen) {
-      this.logger.warn('[GateAccumulator] Attempted to clear after freeze');
-      return;
-    }
-    this.gates.clear();
-  }
-
-  /**
    * Get total gate count.
    */
   get size(): number {
@@ -234,12 +198,5 @@ export class GateAccumulator {
    */
   getBlockingGateIds(): readonly string[] {
     return Array.from(this.blockingGates);
-  }
-
-  /**
-   * Check if a specific gate is marked as blocking.
-   */
-  isBlockingGate(gateId: string): boolean {
-    return this.blockingGates.has(gateId?.trim());
   }
 }

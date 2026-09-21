@@ -13,16 +13,23 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import * as path from 'node:path';
 
-import { validatePromptYaml, type PromptYaml } from './prompt-schema.js';
+import { validatePromptYaml, type PromptArtifactsYaml, type PromptYaml } from './prompt-schema.js';
 
 import type { VisibilityItem } from '#shared/types/chain-execution.js';
 import type { PromptInjectionConfig, PromptInjectionRule } from '#shared/types/injection.js';
+import type { QuarantineSink } from '#shared/utils/resource-quarantine.js';
 import type { PromptData } from './types.js';
 
 import { linearize } from '#modules/workflow-ir/linearizer.js';
 import { type Logger, PromptArgument } from '#shared/types/index.js';
 import { INJECTION_TYPES } from '#shared/types/injection.js';
 import { mintNodeIds } from '#shared/utils/node-order.js';
+import {
+  isIgnoredPromptEntryName,
+  isReservedPromptDirectoryName,
+  isSingleFilePromptName,
+  singleFilePromptBaseName,
+} from '#shared/utils/prompt-layout.js';
 import { loadYamlFileSync } from '#shared/utils/yaml/index.js';
 
 // ============================================
@@ -54,6 +61,14 @@ export interface LoadedPromptFile {
     }>;
   };
   injection?: PromptInjectionConfig;
+  /**
+   * The prompt's `artifacts:` declaration (ruling B13), carried verbatim from YAML.
+   *
+   * Carried here as well as on `PromptData` because the CONVERTER reads the loaded file, not
+   * `PromptData` — the same reason `gateConfiguration` and `injection` sit on both. A declaration
+   * carried at fewer than both is silently dead by the time gate activation asks for it.
+   */
+  artifacts?: PromptArtifactsYaml;
   chainSteps?: Array<{
     promptId: string;
     stepName: string;
@@ -100,6 +115,14 @@ export interface YamlLoadContext {
   readonly stats: { cacheHits: number; cacheMisses: number; loadErrors: number };
   readonly enableCache: boolean;
   readonly debug: boolean;
+  /**
+   * Where refused files are recorded, when this load is a root walk.
+   *
+   * Optional because `loadYamlPrompt` is also called for a single known file
+   * (`PromptLoader.loadPromptFile`), which THROWS on failure rather than dropping the prompt —
+   * there is no silent absence there for a record to explain. A walk always supplies one.
+   */
+  readonly quarantine?: QuarantineSink | undefined;
 }
 
 // ============================================
@@ -295,9 +318,15 @@ export function discoverYamlPrompts(categoryDir: string, prefix: string = ''): s
   const nestedPaths: string[] = [];
 
   for (const entry of entries) {
-    if (entry.name.startsWith('.') || entry.name.startsWith('_')) continue;
+    if (isIgnoredPromptEntryName(entry.name)) continue;
 
     if (entry.isDirectory()) {
+      // A prompt's `tools/` is reserved for script tools and nothing below it is a prompt — the
+      // rule `#shared/utils/prompt-layout.js` states and now owns. Without it this function, which
+      // DEFINES what is served, recursed in and served `{prompt}/tools/{toolId}` as a prompt id,
+      // overlapping the composite id the script tool already answers to.
+      if (isReservedPromptDirectoryName(entry.name)) continue;
+
       // Directory pattern: {prompt_id}/prompt.yaml
       const promptYamlPath = path.join(categoryDir, entry.name, 'prompt.yaml');
       const nestedPrefix = prefix.length > 0 ? `${prefix}/${entry.name}` : entry.name;
@@ -314,23 +343,12 @@ export function discoverYamlPrompts(categoryDir: string, prefix: string = ''): s
       // This enables chain directories to contain both the parent prompt AND nested step prompts
       const nested = discoverYamlPrompts(path.join(categoryDir, entry.name), nestedPrefix);
       nestedPaths.push(...nested);
-    } else if (
-      entry.isFile() &&
-      entry.name.endsWith('.yaml') &&
-      entry.name !== 'prompts.yaml' &&
-      entry.name !== 'category.yaml' &&
-      entry.name !== 'prompt.yaml' &&
-      // `tool.yaml` is a script-tool manifest under a prompt's reserved `tools/${id}/`
-      // directory, reached because discovery ALWAYS recurses (above). It is a reserved
-      // filename in the same sense as the three preceding it — not a prompt in a shape the
-      // prompt schema could ever accept. Without this, every boot logged
-      // `[PromptLoader] Invalid YAML in .../tools/word_count/tool.yaml: Prompt must have
-      // userMessageTemplate/... defined` at ERROR level for a file that is not a prompt,
-      // which is how a log level stops meaning anything.
-      entry.name !== 'tool.yaml'
-    ) {
-      // File pattern: {prompt_id}.yaml (skip metadata and directory-indicator files)
-      const baseName = entry.name.replace(/\.yaml$/, '');
+    } else if (entry.isFile() && isSingleFilePromptName(entry.name)) {
+      // File pattern: {prompt_id}.yaml. The reserved-filename rule lives in
+      // `#shared/utils/prompt-layout.js` because the resource indexer and the startup baseline
+      // comparison walk the same tree and must agree with this function about what a prompt is —
+      // they did not, and each was wrong in its own direction (see that module).
+      const baseName = singleFilePromptBaseName(entry.name);
       const id = prefix.length > 0 ? `${prefix}/${baseName}` : baseName;
       // Only add if no directory version exists
       if (!discoveries.has(id)) {
@@ -668,6 +686,25 @@ export function loadYamlPrompt(
     promptId = isFile ? path.basename(promptPath, '.yaml') : path.basename(promptPath);
   }
 
+  /**
+   * Refuse this file, and RECORD the refusal when this load is a root walk.
+   *
+   * One helper rather than four inline `ctx.quarantine?.record(...)` calls: every early return
+   * below is a prompt that vanishes from the catalog, and the whole point of quarantine is that
+   * none of them may vanish silently. A site that forgets to record is indistinguishable from the
+   * behaviour this change exists to remove, so there is exactly one way to leave.
+   */
+  const refuse = (error: string): null => {
+    ctx.stats.loadErrors++;
+    ctx.quarantine?.record({
+      id: promptId,
+      category: categoryRoot !== undefined ? path.basename(categoryRoot) : '',
+      path: yamlPath,
+      error,
+    });
+    return null;
+  };
+
   // Check cache first
   // Compute relative file path for PromptData.file
   // - Directory format: {id}/prompt.yaml
@@ -712,8 +749,7 @@ export function loadYamlPrompt(
       ctx.logger.error(
         `[PromptLoader] Invalid YAML in ${yamlPath}: ${validation.errors.join(', ')}`
       );
-      ctx.stats.loadErrors++;
-      return null;
+      return refuse(validation.errors.join(', '));
     }
 
     if (validation.warnings.length > 0 && ctx.debug) {
@@ -723,8 +759,7 @@ export function loadYamlPrompt(
     yamlData = validation.data!;
   } catch (e) {
     ctx.logger.error(`[PromptLoader] Failed to load YAML from ${yamlPath}:`, e);
-    ctx.stats.loadErrors++;
-    return null;
+    return refuse(`could not be parsed: ${e instanceof Error ? e.message : String(e)}`);
   }
 
   // Inline file references (only applicable for directory format)
@@ -750,8 +785,7 @@ export function loadYamlPrompt(
       userMessageTemplate = readFileSync(userMessagePath, 'utf-8');
     } else {
       ctx.logger.error(`[PromptLoader] userMessageTemplateFile not found: ${userMessagePath}`);
-      ctx.stats.loadErrors++;
-      return null;
+      return refuse(`userMessageTemplateFile not found: ${yamlData.userMessageTemplateFile}`);
     }
   } else if (yamlData.userMessageTemplate) {
     userMessageTemplate = yamlData.userMessageTemplate;
@@ -766,8 +800,9 @@ export function loadYamlPrompt(
     ctx.logger.error(
       `[PromptLoader] Prompt requires userMessageTemplate, userMessageTemplateFile, chainSteps, or systemMessage: ${yamlPath}`
     );
-    ctx.stats.loadErrors++;
-    return null;
+    return refuse(
+      'declares none of userMessageTemplate, userMessageTemplateFile, chainSteps or systemMessage'
+    );
   }
 
   const loadedContent: LoadedPromptFile = {
@@ -796,6 +831,10 @@ export function loadYamlPrompt(
   }
 
   applyInjectionConfig(loadedContent, yamlData.injection);
+
+  if (yamlData.artifacts !== undefined) {
+    loadedContent.artifacts = yamlData.artifacts;
+  }
 
   const normalizedChainSteps = normalizeChainSteps(yamlData.chainSteps, yamlData.edges);
   if (normalizedChainSteps) {

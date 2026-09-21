@@ -8,11 +8,11 @@ module.exports = {
     '<rootDir>/tests/**/*.test.ts'
   ],
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'], // Re-enabled with working ES module support
-  // Fails the run if any suite writes into `server/resources`. Diff-based, so it only reports what
-  // THIS run added — see tests/helpers/package-resources-guard.cjs for why it is a gate and not a
-  // cleanup hook.
-  globalSetup: '<rootDir>/tests/helpers/package-resources-guard.setup.cjs',
-  globalTeardown: '<rootDir>/tests/helpers/package-resources-guard.teardown.cjs',
+  // Fails the run if any suite leaves anything in the working tree. Diff-based, so it only reports
+  // what THIS run added — see tests/helpers/tree-state-guard.cjs for why it is a gate and not a
+  // cleanup hook, and for why it watches the whole tree rather than `server/resources` alone.
+  globalSetup: '<rootDir>/tests/helpers/tree-state-guard.setup.cjs',
+  globalTeardown: '<rootDir>/tests/helpers/tree-state-guard.teardown.cjs',
   transform: {
     '^.+\\.ts$': ['ts-jest', {
       useESM: true,

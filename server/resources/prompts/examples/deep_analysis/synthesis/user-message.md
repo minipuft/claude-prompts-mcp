@@ -12,7 +12,11 @@ How do the themes interrelate? What patterns emerged?
 
 ## Implications
 
-What does this mean for practical application or future exploration?
+What does this mean for practical application, for the people it affects, and for future exploration?
+
+## Critical Assessment
+
+How far can these findings be trusted? For each key insight, note the strength of the evidence behind it, any limitations or likely bias in its sources, and whether it rests on evidence or on inference.
 
 ## Open Questions
 

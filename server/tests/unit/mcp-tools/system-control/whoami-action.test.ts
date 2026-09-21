@@ -15,7 +15,11 @@ describe('System Control legacy whoami action', () => {
   test('rejects deprecated whoami action with current action list', async () => {
     const systemControl = createConsolidatedSystemControl(createLogger(), () => Promise.resolve());
 
-    await expect(systemControl.handleAction({ action: 'whoami' }, {})).rejects.toThrow(
+    // `as any`: `handleAction`'s `action` is typed `SystemControlActionId` since row B.61, so
+    // `'whoami'` no longer compiles as a real caller's value would. This test still needs to
+    // reach the RUNTIME refusal `handleAction` keeps for a caller a type cannot stop — see the
+    // comment on that check in system-control-router.ts.
+    await expect(systemControl.handleAction({ action: 'whoami' } as any, {})).rejects.toThrow(
       /Unknown action: whoami/
     );
   });

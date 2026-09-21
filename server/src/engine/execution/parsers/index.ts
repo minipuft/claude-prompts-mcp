@@ -45,16 +45,6 @@ export {
   type WorkflowCommandResult,
 } from './workflow-command-builder.js';
 
-// Context resolution system
-export {
-  ContextResolver,
-  createContextResolver,
-  type ContextResolution,
-  type ContextProvider,
-  type ContextSource,
-  type ContextAggregationOptions,
-} from '../context/context-resolver.js';
-
 // Backward compatibility wrapper removed - migration completed
 // Legacy parsing methods are preserved through deprecated redirects in consolidated-prompt-engine.ts
 
@@ -67,7 +57,8 @@ export type { ValidationResult, ValidationError, ValidationWarning } from '../ty
 
 import { ArgumentParser, createArgumentParser } from './argument-parser.js';
 import { UnifiedCommandParser, createUnifiedCommandParser } from './command-parser.js';
-import { ContextResolver, createContextResolver } from '../context/context-resolver.js';
+
+import type { FrameworkIdLookup } from './symbolic-operator-parser.js';
 
 import { Logger } from '#infra/logging/index.js';
 
@@ -77,12 +68,6 @@ import { Logger } from '#infra/logging/index.js';
 export interface ParsingSystem {
   commandParser: UnifiedCommandParser;
   argumentParser: ArgumentParser;
-  contextResolver: ContextResolver;
-  /**
-   * Update the set of registered framework IDs for quote-aware @framework detection.
-   * Call this when FrameworkManager becomes available.
-   */
-  updateRegisteredFrameworkIds(frameworkIds: Set<string>): void;
 }
 
 /**
@@ -91,33 +76,26 @@ export interface ParsingSystem {
  * Creates a fully configured parsing system with:
  * - Unified command parser with multi-strategy support
  * - Argument processor with validation and type coercion
- * - Context resolver with intelligent fallbacks
  *
  * @param logger Logger instance for system-wide logging
- * @param registeredFrameworkIds Optional set of registered framework IDs (uppercase).
- *   When provided, only @framework operators matching registered IDs are detected.
- *   Unregistered @word patterns (like @docs/, @mention) are silently skipped.
+ * @param isRegisteredFramework Optional lookup for quote-aware @framework detection, asked on
+ *   every parse. When provided, only @framework operators it accepts are detected, and other
+ *   @word patterns (like @docs/, @mention) stay literal text.
  * @returns Complete parsing system ready for use
  */
 export function createParsingSystem(
   logger: Logger,
-  registeredFrameworkIds?: Set<string>
+  isRegisteredFramework?: FrameworkIdLookup
 ): ParsingSystem {
-  const commandParser = createUnifiedCommandParser(logger, registeredFrameworkIds);
+  const commandParser = createUnifiedCommandParser(logger, isRegisteredFramework);
   const argumentParser = createArgumentParser(logger);
-  const contextResolver = createContextResolver(logger);
 
   logger.info('Parsing system initialized successfully');
   logger.info('- Unified command parser with multi-strategy support');
   logger.info('- Argument parser with validation pipeline');
-  logger.info('- Context resolver with intelligent fallbacks');
 
   return {
     commandParser,
     argumentParser,
-    contextResolver,
-    updateRegisteredFrameworkIds: (frameworkIds: Set<string>) => {
-      commandParser.updateRegisteredFrameworkIds(frameworkIds);
-    },
   };
 }

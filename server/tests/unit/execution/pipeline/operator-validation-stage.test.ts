@@ -16,8 +16,9 @@ const createLogger = (): Logger => ({
 describe('OperatorValidationStage', () => {
   test('skips when no operators detected', async () => {
     const validator = { validateAndNormalize: jest.fn() } as unknown as FrameworkValidator;
-    const stage = new OperatorValidationStage(validator, createLogger());
-    const context = new ExecutionContext({ command: '>>demo' });
+    const logger = createLogger();
+    const stage = new OperatorValidationStage(validator, logger);
+    const context = new ExecutionContext({ command: '>>demo' }, logger);
     context.parsedCommand = {
       promptId: 'demo',
       rawArgs: '',
@@ -40,7 +41,13 @@ describe('OperatorValidationStage', () => {
     await stage.execute(context);
 
     expect(validator.validateAndNormalize).not.toHaveBeenCalled();
-    expect(context.diagnostics.getByStage('OperatorValidation')).toEqual([]);
+    // Nothing in production reads diagnostics back (P4.52); the stage's only diagnostic
+    // call is the "Normalized framework operators" debug entry, which fires on the
+    // logger via DiagnosticAccumulator.add() — confirm it never fires on the skip path.
+    expect(logger.debug).not.toHaveBeenCalledWith(
+      expect.stringContaining('Normalized framework operators'),
+      expect.anything()
+    );
   });
 
   describe('subagentModel → delegated normalization', () => {
@@ -148,9 +155,10 @@ describe('OperatorValidationStage', () => {
     const validator = {
       validateAndNormalize: jest.fn().mockReturnValue({ normalizedId: 'CAGEERF' }),
     } as unknown as FrameworkValidator;
-    const stage = new OperatorValidationStage(validator, createLogger());
+    const logger = createLogger();
+    const stage = new OperatorValidationStage(validator, logger);
 
-    const context = new ExecutionContext({ command: '@cageerf >>demo' });
+    const context = new ExecutionContext({ command: '@cageerf >>demo' }, logger);
     context.parsedCommand = {
       promptId: 'demo',
       rawArgs: '',
@@ -186,8 +194,11 @@ describe('OperatorValidationStage', () => {
       normalizedId: 'CAGEERF',
     });
     expect(context.parsedCommand?.executionPlan?.frameworkOverride).toBe('CAGEERF');
-    expect(context.diagnostics.getByStage('OperatorValidation')).toMatchObject([
-      { level: 'debug', context: { normalizedFrameworkOperators: 1 } },
-    ]);
+    // Nothing in production reads diagnostics back (P4.52); observe the same entry through
+    // the logger side effect DiagnosticAccumulator.add() always performs.
+    expect(logger.debug).toHaveBeenCalledWith(
+      '[OperatorValidation] Normalized framework operators',
+      { normalizedFrameworkOperators: 1 }
+    );
   });
 });

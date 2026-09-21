@@ -2,11 +2,24 @@ import { describe, expect, test } from '@jest/globals';
 
 import {
   detectToolRoutingCommand,
-  type ToolRoutingResult,
+  type RoutedToolCall,
 } from '../../../src/mcp/tools/prompt-engine/utils/tool-routing.js';
 
-function route(command: string): ToolRoutingResult {
-  return detectToolRoutingCommand(command);
+/**
+ * Routes a command and asserts it required routing, narrowing the result to `RoutedToolCall` so
+ * `targetTool`/`translatedParams` are readable without an inline guard per call site.
+ *
+ * `ToolRoutingResult` is a discriminated union on `requiresRouting` since row B.61 — the same
+ * change that lets `PromptExecutor.routeToTool` narrow `translatedParams` off `targetTool` also
+ * means the `{ requiresRouting: false }` variant carries neither field, so a caller has to check
+ * the tag before reading them, exactly like `RequestNormalizationStage.tryRouteCommand` does.
+ */
+function route(command: string): RoutedToolCall {
+  const result = detectToolRoutingCommand(command);
+  if (!result.requiresRouting) {
+    throw new Error(`expected "${command}" to require routing`);
+  }
+  return result;
 }
 
 describe('tool routing detection', () => {
@@ -81,12 +94,13 @@ describe('tool routing detection', () => {
     expect(invalidResult.requiresRouting).toBe(true);
     expect(invalidResult.targetTool).toBe('prompt_engine_invalid_command');
 
-    // ">> what is mcp?" passes because "what" is a plausible prompt id
-    const plausibleResult = route('>> what is mcp?');
+    // ">> what is mcp?" passes because "what" is a plausible prompt id — not routed, so read
+    // straight off `detectToolRoutingCommand` rather than the throwing `route()` helper.
+    const plausibleResult = detectToolRoutingCommand('>> what is mcp?');
     expect(plausibleResult.requiresRouting).toBe(false);
   });
 
   test('returns passthrough result when no routing is required', () => {
-    expect(route('>>write_proposal topic="AI"').requiresRouting).toBe(false);
+    expect(detectToolRoutingCommand('>>write_proposal topic="AI"').requiresRouting).toBe(false);
   });
 });

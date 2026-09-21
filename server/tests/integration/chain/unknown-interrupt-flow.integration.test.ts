@@ -137,7 +137,6 @@ describe('mid-chain blocking-unknown interrupt (rows 2.1-2.3)', () => {
       .mockImplementation(() => {}) as unknown as jest.SpiedFunction<() => void>;
 
     store = new ChainSessionStore(createLogger(), new StubTextReferenceStore() as never, {
-      serverRoot: '/tmp/test-unknown-interrupt-flow',
       cleanupIntervalMs: 60_000,
     });
     await store.createSession('sess-1', 'chain-demo#1', 3, {}, { nodes: NODES });
@@ -573,7 +572,7 @@ describe('interrupt rendering: text section and structuredContent (row 2.4)', ()
   });
 
   test('a GATED SINGLE PROMPT with a session renders the interrupt too', async () => {
-    // Found by the live drive, not by the suite: `>>strategicImplement` is a single prompt that
+    // Found by the live drive, not by the suite: `>>strategic_implement` is a single prompt that
     // gets a session, so it reaches `formatSinglePromptResponse` — which rendered no interrupt
     // section while stage 21 still attached `structuredContent.chain_interrupt`. The two halves
     // of one payload disagreed.

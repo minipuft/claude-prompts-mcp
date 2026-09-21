@@ -11,7 +11,21 @@ const __dirname = path.dirname(__filename);
  * This is the critical gate for Phase 0 — if cli-shared leaks runtime deps,
  * the CLI package cannot bundle independently.
  *
- * Uses dependency-cruiser to trace the actual import graph.
+ * Uses dependency-cruiser to trace the actual import graph. The claim in the title below is
+ * carried by the `cli-shared-no-runtime` rule in `.dependency-cruiser.cjs`, which is `reachable`
+ * and therefore sees the closure. Before that rule existed (added 2026-09-15) this file asserted
+ * "no dependency violations found" against a rule set that said nothing about cli-shared at all —
+ * it was green because nothing was being asked, not because nothing was wrong.
+ *
+ * **It asserts ERRORS, not "no output".** Until 2026-09-21 it required the literal success
+ * marker, which also fails on any `warn` anywhere in the reachable closure — including
+ * `shared-cross-layer-type-only`, a rule whose own comment says it merely TRACKS type-only edges
+ * for future consolidation. A type-only edge cannot leak a runtime dependency into the CLI bundle:
+ * the emit erases it. So the strict form made a tracking rule able to fail a test about bundling,
+ * and it fired the moment `version-history-rows.ts` reached the object store's types. The error
+ * severity — which `cli-shared-no-runtime` carries — is asserted at zero and by name, and the
+ * cruise is required to have actually walked a graph, so "no errors" cannot come from a cruise
+ * that examined nothing.
  */
 describe('cli-shared import isolation', () => {
   const serverRoot = path.resolve(__dirname, '../../..');
@@ -27,9 +41,18 @@ describe('cli-shared import isolation', () => {
       }
     );
 
-    // dependency-cruiser outputs "✔ no dependency violations found" on success,
-    // or lists violations on failure. Check for the success marker.
-    expect(result).toContain('no dependency violations found');
+    const clean = result.includes('no dependency violations found');
+    // "x 3 dependency violations (1 errors, 2 warnings). 52 modules, 120 dependencies cruised."
+    const summary = /\((\d+) errors?, (\d+) warnings?\)\. (\d+) modules/.exec(result);
+
+    // The positive control for the probe: a cruise that resolved no graph would report zero
+    // errors too. A clean run states its module count in the success marker's own line, so one
+    // of the two shapes must be present and must name a non-trivial module count.
+    const modules = Number(summary?.[3] ?? /(\d+) modules/.exec(result)?.[1] ?? '0');
+    expect(modules).toBeGreaterThan(10);
+
+    expect(result).not.toContain('cli-shared-no-runtime');
+    expect(clean ? 0 : Number(summary?.[1] ?? 'NaN')).toBe(0);
   });
 
   it('barrel file exports prompt schemas', async () => {

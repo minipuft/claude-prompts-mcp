@@ -1,0 +1,214 @@
+{
+  "framework_builder": {
+    "emitsResourceManagerCall": true,
+    "input": {
+      "id": "probe-framework",
+      "name": "Probe Framework",
+      "type": "PROBE",
+      "version": "1.0.0",
+      "enabled": true,
+      "description": "A framework used only to exercise the builder's output mapping.",
+      "system_prompt_guidance": "Apply the PROBE framework systematically:\n\n**Phase1**: Do the 1th thing thoroughly and record what it produced.\n**Phase2**: Do the 2th thing thoroughly and record what it produced.\n**Phase3**: Do the 3th thing thoroughly and record what it produced.",
+      "phases": [
+        {
+          "id": "phase_one",
+          "name": "Phase One",
+          "description": "Establish the ground facts"
+        },
+        {
+          "id": "phase_two",
+          "name": "Phase Two",
+          "description": "Act on the ground facts"
+        }
+      ],
+      "gates": {
+        "include": ["framework-compliance"]
+      },
+      "framework_gates": [
+        {
+          "id": "phase_one_quality",
+          "name": "Phase One Quality",
+          "description": "Verify phase one",
+          "frameworkArea": "phase_one",
+          "priority": "high",
+          "validationCriteria": ["a", "b"]
+        },
+        {
+          "id": "phase_two_quality",
+          "name": "Phase Two Quality",
+          "description": "Verify phase two",
+          "frameworkArea": "phase_two",
+          "priority": "high",
+          "validationCriteria": ["a", "b"]
+        }
+      ],
+      "framework_elements": {
+        "requiredSections": ["Ground Facts", "Actions"],
+        "sectionDescriptions": {
+          "Ground Facts": "What is true",
+          "Actions": "What to do",
+          "Findings": "What resulted"
+        }
+      },
+      "argument_suggestions": [
+        {
+          "name": "topic",
+          "description": "What to probe",
+          "frameworkReason": "Phase One needs a subject"
+        },
+        {
+          "name": "depth",
+          "description": "How far to probe",
+          "frameworkReason": "Phase Two needs a bound"
+        }
+      ],
+      "template_suggestions": [
+        {
+          "name": "probe_report",
+          "description": "Report template",
+          "frameworkJustification": "Phase Two output shape"
+        }
+      ],
+      "processing_steps": [
+        {
+          "id": "s1",
+          "name": "S1",
+          "description": "d",
+          "frameworkBasis": "PROBE Phase 1",
+          "order": 1,
+          "required": true
+        },
+        {
+          "id": "s2",
+          "name": "S2",
+          "description": "d",
+          "frameworkBasis": "PROBE Phase 2",
+          "order": 2,
+          "required": true
+        },
+        {
+          "id": "s3",
+          "name": "S3",
+          "description": "d",
+          "frameworkBasis": "PROBE Phase 2",
+          "order": 3,
+          "required": false
+        }
+      ],
+      "execution_steps": [
+        {
+          "id": "e1",
+          "name": "E1",
+          "description": "d",
+          "dependencies": [],
+          "expected_output": "o1"
+        },
+        {
+          "id": "e2",
+          "name": "E2",
+          "description": "d",
+          "dependencies": ["e1"],
+          "expected_output": "o2"
+        },
+        {
+          "id": "e3",
+          "name": "E3",
+          "description": "d",
+          "dependencies": ["e2"],
+          "expected_output": "o3"
+        }
+      ],
+      "tool_descriptions": {
+        "prompt_engine": {
+          "description": "Runs the probe."
+        }
+      },
+      "quality_indicators": {
+        "phase_one": {
+          "keywords": ["ground"],
+          "patterns": ["ground .*"]
+        },
+        "phase_two": {
+          "keywords": ["action"],
+          "patterns": ["action .*"]
+        }
+      },
+      "execution_flow": {
+        "preProcessingSteps": ["e1"],
+        "postProcessingSteps": ["e3"],
+        "validationSteps": ["e2"]
+      },
+      "judge_prompt": "Judge whether both phases were carried out and recorded.",
+      "template_enhancements": {
+        "probe_report": "Add a findings section."
+      },
+      "execution_type_enhancements": {
+        "chain": "Carry ground facts between steps."
+      }
+    }
+  },
+  "gate_builder": {
+    "emitsResourceManagerCall": true,
+    "input": {
+      "id": "probe-gate",
+      "name": "Probe Gate",
+      "type": "validation",
+      "description": "A gate used only to exercise the builder's output mapping",
+      "guidance": "Check that the probe recorded what it observed.",
+      "guidanceFile": "guidance.md",
+      "severity": "high",
+      "enforcementMode": "advisory",
+      "pass_criteria": [
+        {
+          "type": "inline_guidance"
+        }
+      ],
+      "retry_config": {
+        "maxRetries": 1
+      },
+      "activation": {
+        "artifacts": ["plan"]
+      }
+    }
+  },
+  "prompt_builder": {
+    "emitsResourceManagerCall": true,
+    "input": {
+      "id": "probe_prompt",
+      "name": "Probe Prompt",
+      "category": "examples",
+      "description": "A prompt used only to exercise the builder's output mapping",
+      "userMessageTemplate": "Probe {{topic}}",
+      "systemMessage": "You are a probe.",
+      "arguments": [
+        {
+          "name": "topic",
+          "description": "what to probe"
+        }
+      ],
+      "gateConfiguration": {
+        "include": ["framework-compliance"]
+      },
+      "chainSteps": [
+        {
+          "promptId": "probe_prompt",
+          "stepName": "Only Step"
+        }
+      ],
+      "registerWithMcp": true,
+      "tools": []
+    }
+  },
+  "text_digest": {
+    "emitsResourceManagerCall": false,
+    "input": {
+      "text": "probe"
+    }
+  },
+  "word_count": {
+    "emitsResourceManagerCall": false,
+    "input": {
+      "text": "probe text"
+    }
+  }
+}

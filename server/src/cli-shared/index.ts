@@ -1,13 +1,21 @@
 /**
  * cli-shared — Re-export barrel for schemas and utilities shared between server and CLI.
  *
- * CRITICAL CONSTRAINT: This module uses ONLY relative imports.
- * No @shared/*, @engine/*, @modules/* path aliases.
- * This keeps the dependency graph transparent for the CLI's esbuild alias.
+ * CRITICAL CONSTRAINT: nothing reachable from this barrel may live in `infra/`, `runtime/`, or
+ * `mcp/`. The CLI bundles it independently — its own esbuild run, its own package.json, a Node
+ * floor of >=18.18 against the server's >=22.13 — so one transitive edge into config loading,
+ * logging, or a transport drags the server into the CLI bundle. Schema and utility modules in
+ * `shared/`, `engine/`, and `modules/` are fair game and are what the re-exports below reach.
  *
- * Import isolation is enforced by:
- *   1. dependency-cruiser rule `cli-shared-no-runtime`
- *   2. Unit test `import-isolation.test.ts`
+ * Enforced by:
+ *   1. dependency-cruiser rule `cli-shared-no-runtime` — a `reachable` rule, so it sees the whole
+ *      closure and not just the first hop
+ *   2. Unit test `tests/unit/cli-shared/import-isolation.test.ts`, which cruises this barrel alone
+ *
+ * This header used to say the module uses ONLY relative imports and no path aliases. That was
+ * false against its own body from the day the `#`-subpath specifiers landed, and the rule it named
+ * did not exist until 2026-09-15 — so the one file a reader would check to learn the constraint
+ * described neither the code nor the enforcement.
  */
 
 // ── Prompt schemas (pure Zod) ────────────────────────────────────────────────
@@ -77,12 +85,11 @@ export {
   type StyleSchemaValidationResult,
 } from '#modules/formatting/core/style-schema.js';
 
-// ── YAML utilities (js-yaml + node:fs only) ─────────────────────────────────
+// ── YAML utilities (the `yaml` package + node:fs only) ─────────────────────
 
 export {
   parseYaml,
   parseYamlOrThrow,
-  serializeYaml,
   formatYamlError,
   loadYamlFile,
   loadYamlFileSync,
@@ -116,11 +123,11 @@ export {
   getVersion,
   compareVersions,
   saveVersion,
-  recordEditResult,
   rollbackVersion,
   deleteVersionRows,
   renameHistoryResource,
   formatHistoryTable,
+  resolveConfiguredMaxVersions,
 } from './version-history.js';
 
 // ── Resource scaffolding (node:fs only) ──────────────────────────────────────
@@ -174,14 +181,15 @@ export {
   getConfigValue,
   setConfigValue,
   writeConfigAtomic,
-  backupConfig,
   generateDefaultConfig,
   initConfig,
+  resetConfig,
   validateConfig,
   getConfigKeyInfo,
   type ConfigReadResult,
   type ConfigSetResult,
   type ConfigInitResult,
+  type ConfigResetResult,
   type ConfigValidationResult,
   type ConfigKeyInfo,
 } from './config-operations.js';

@@ -26,8 +26,9 @@
  *
  * ZERO DEPENDENCIES. Node builtins and git only.
  *
- * Usage (inside server/):
+ * Usage (from the repo root):
  *   npm run pr:body -- [--base origin/main] [--plan plans/x.md] [--out /tmp/pr-body.md]
+ *   npm run pr:check -- --body-file <file> --title "<title>"   # every gate CI runs, body AND title
  */
 
 import { execFileSync } from 'node:child_process';
@@ -200,7 +201,7 @@ function main() {
   }
   const { warnings } = checkBody(result, facts.subjects[0] ?? '');
   for (const w of warnings) console.error(`note: ${w}`);
-  console.error('Fill every ___ and empty table cell; then: node scripts/validate-pr-body.mjs --body-file <file> --title "<title>"');
+  console.error('Fill every ___ and empty table cell; then: npm run pr:check -- --body-file <file> --title "<title>"');
 }
 
 main();

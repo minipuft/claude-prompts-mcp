@@ -8,6 +8,8 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
+import { buildServerEnv, createHermeticRoots } from './lib/hermetic-server-env.js';
+
 const SERVER_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 // Measured from the production release build on 2026-08-02:
 // 1,952,004 packed and 8,223,607 unpacked bytes. Keep deterministic headroom rather than
@@ -175,11 +177,21 @@ function main() {
       [join(installedRoot, installedPackage.bin.cpm), '--version'],
       { cwd: consumer }
     );
-    const server = spawnSync(
-      process.execPath,
-      [join(installedRoot, installedPackage.bin['claude-prompts']), '--help'],
-      { cwd: consumer, encoding: 'utf8', stdio: 'pipe' }
-    );
+    // No `env` would inherit the caller's: under jest markers the server skips main() and prints
+    // no help, so the artifact would fail for a reason the tarball does not have. The temp roots
+    // keep the installed binary's own writes off the developer's home and out of the consumer
+    // fixture — `--help` should touch neither, and this is what makes that an assertion.
+    const roots = createHermeticRoots('package-artifact');
+    let server;
+    try {
+      server = spawnSync(
+        process.execPath,
+        [join(installedRoot, installedPackage.bin['claude-prompts']), '--help'],
+        { cwd: consumer, encoding: 'utf8', stdio: 'pipe', env: buildServerEnv({ ...roots.env }) }
+      );
+    } finally {
+      roots.cleanup();
+    }
     const runtimeViolations = findRuntimeViolations(
       sourcePackage.version,
       installedPackage.version,

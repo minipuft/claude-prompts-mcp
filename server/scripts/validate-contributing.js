@@ -16,11 +16,12 @@
  * STDIO only, because the other transport the row named did not exist. The bug was on both.
  *
  * ZERO DEPENDENCIES, ON PURPOSE
- * `CONTRIBUTING.md` classifies as `docs` scope (scripts/classify-validation-scope.js), and ci.yml
- * guards "Setup Node.js" on `scope != 'docs'` and "Install dependencies" on `scope == 'full'`. There
- * is no node_modules on the docs route. A validator that imported anything would be unrunnable on
- * exactly the pull requests that edit CONTRIBUTING, which is the only time it matters. Node builtins
- * only. Keep it that way.
+ * `CONTRIBUTING.md` classifies as `docs` scope, or as `hooks` when it rides with a `hooks/**`
+ * change (scripts/classify-validation-scope.js). ci.yml runs this check on both lightweight routes
+ * and guards "Install dependencies" on `scope == 'full'`, so there is no node_modules on either
+ * route, `docs` or `hooks`. A validator that imported anything would be unrunnable on exactly the
+ * pull requests that edit CONTRIBUTING, which is the only time it matters. Node builtins only. Keep
+ * it that way.
  *
  * DECLARED BLIND SPOT
  * This checks that named commands EXIST. It does not check that a documented gate SEQUENCE matches
@@ -37,7 +38,30 @@ import path from 'node:path';
 const SERVER_ROOT = path.resolve(new URL('..', import.meta.url).pathname);
 const REPO_ROOT = path.resolve(SERVER_ROOT, '..');
 const CONTRIBUTING = path.join(REPO_ROOT, 'CONTRIBUTING.md');
-const PACKAGE_JSON = path.join(SERVER_ROOT, 'package.json');
+
+/**
+ * Every manifest CONTRIBUTING may legitimately name a script from.
+ *
+ * BOTH, since 2026-09-15. This read `server/package.json` alone, so a command that exists at the
+ * repo root was reported as dead — the gate's model of "the repo's npm scripts" was one workspace
+ * narrower than the prose it judges, and the failure mode is a FALSE POSITIVE that pushes an author
+ * to move a working script rather than to fix the gate. The PR-boundary commands (`pr:body`,
+ * `pr:check`) live at the root because `commitlint` does; documenting them tripped this.
+ */
+const PACKAGE_JSONS = [
+  path.join(SERVER_ROOT, 'package.json'),
+  path.join(REPO_ROOT, 'package.json'),
+];
+
+/** The union of script names across every manifest above. */
+function knownScripts() {
+  const merged = {};
+  for (const manifest of PACKAGE_JSONS) {
+    const { scripts = {} } = JSON.parse(readFileSync(manifest, 'utf8'));
+    Object.assign(merged, scripts);
+  }
+  return merged;
+}
 
 /**
  * Node builtin module specifiers look exactly like `namespace:script`.
@@ -171,8 +195,7 @@ function main() {
   }
 
   const markdown = readFileSync(CONTRIBUTING, 'utf8');
-  const { scripts } = JSON.parse(readFileSync(PACKAGE_JSON, 'utf8'));
-  const dead = findDeadCommands(markdown, scripts);
+  const dead = findDeadCommands(markdown, knownScripts());
   const total = collectReferences(markdown).length;
 
   if (dead.length === 0) {
@@ -188,7 +211,9 @@ function main() {
   for (const entry of dead) {
     console.error(`  CONTRIBUTING.md:${entry.line}  ${entry.command}  (${entry.form} form)`);
   }
-  console.error('\nEither add the script to server/package.json or correct CONTRIBUTING.md.');
+  console.error(
+    '\nEither add the script to server/package.json or package.json, or correct CONTRIBUTING.md.'
+  );
   process.exit(1);
 }
 

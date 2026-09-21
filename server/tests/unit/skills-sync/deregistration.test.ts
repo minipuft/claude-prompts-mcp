@@ -11,12 +11,13 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
 import { mkdtempSync } from 'node:fs';
-import { rm, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as yaml from 'js-yaml';
 
 import { loadSkillsSyncExports } from '../../../src/runtime/data-loader.js';
+import { PathResolver } from '../../../src/runtime/paths.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
 
 const silentLogger = {
@@ -27,6 +28,26 @@ const silentLogger = {
 } as unknown as Logger;
 
 const ALL_PROMPTS = ['development/dev-workflow', 'general/other', 'analysis/deep_analysis'];
+
+// A workspace or resources path exported by the developer's shell would otherwise decide which
+// skills-sync.yaml these tests read.
+let savedEnv: Record<string, string | undefined>;
+
+beforeEach(() => {
+  savedEnv = {
+    MCP_WORKSPACE: process.env['MCP_WORKSPACE'],
+    MCP_RESOURCES_PATH: process.env['MCP_RESOURCES_PATH'],
+  };
+  delete process.env['MCP_WORKSPACE'];
+  delete process.env['MCP_RESOURCES_PATH'];
+});
+
+afterEach(() => {
+  for (const [key, value] of Object.entries(savedEnv)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+});
 
 describe('skills-sync auto-deregistration', () => {
   let serverRoot: string;
@@ -44,7 +65,11 @@ describe('skills-sync auto-deregistration', () => {
   }
 
   async function load(): Promise<Set<string>> {
-    return loadSkillsSyncExports(serverRoot, silentLogger, ALL_PROMPTS);
+    return loadSkillsSyncExports(
+      new PathResolver({ cli: {}, packageRoot: serverRoot }),
+      silentLogger,
+      ALL_PROMPTS
+    );
   }
 
   it('reads the canonical `registrations` shape', async () => {
@@ -91,7 +116,7 @@ describe('skills-sync auto-deregistration', () => {
   });
 
   it('returns an empty set when the config file is absent', async () => {
-    expect((await loadSkillsSyncExports(serverRoot, silentLogger, ALL_PROMPTS)).size).toBe(0);
+    expect((await load()).size).toBe(0);
   });
 
   it('emits keys as `category/id`, matching the registry lookup key', async () => {
@@ -103,5 +128,60 @@ describe('skills-sync auto-deregistration', () => {
     const result = await load();
     expect(result.has('development/dev-workflow')).toBe(true);
     expect(result.has('dev-workflow')).toBe(false);
+  });
+});
+
+describe('skills-sync auto-deregistration reads the file skills sync registers into', () => {
+  // Skills sync reads and writes the workspace's skills-sync.yaml when the workspace holds one. A
+  // server that read only the package's copy kept a workspace-registered prompt in prompts/list,
+  // so the client was offered it twice: once as a skill, once as an MCP prompt.
+  let tmpDir: string;
+  let packageRoot: string;
+  let workspace: string;
+
+  beforeEach(async () => {
+    tmpDir = mkdtempSync(path.join(os.tmpdir(), 'skills-dereg-workspace-'));
+    packageRoot = path.join(tmpDir, 'package');
+    workspace = path.join(tmpDir, 'workspace');
+    await mkdir(packageRoot, { recursive: true });
+    await mkdir(workspace, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  async function registerIn(root: string, promptKey: string): Promise<void> {
+    await writeFile(
+      path.join(root, 'skills-sync.yaml'),
+      yaml.dump({ registrations: { 'claude-code': { user: [`prompt:${promptKey}`] } } })
+    );
+  }
+
+  /** The exported set the server computes at startup, given `--workspace` when named. */
+  async function loadAtStartup(workspaceFlag?: string): Promise<Set<string>> {
+    const cli = workspaceFlag === undefined ? {} : { workspace: workspaceFlag };
+    return loadSkillsSyncExports(new PathResolver({ cli, packageRoot }), silentLogger, ALL_PROMPTS);
+  }
+
+  it('reads the workspace skills-sync.yaml over the package copy', async () => {
+    process.env['MCP_WORKSPACE'] = workspace;
+    await registerIn(packageRoot, 'development/dev-workflow');
+    await registerIn(workspace, 'general/other');
+
+    expect([...(await loadAtStartup())]).toEqual(['general/other']);
+  });
+
+  it('follows a workspace named by the --workspace flag, which sets no environment variable', async () => {
+    await registerIn(workspace, 'general/other');
+
+    expect([...(await loadAtStartup(workspace))]).toEqual(['general/other']);
+  });
+
+  it('reads the package skills-sync.yaml when the workspace holds none', async () => {
+    process.env['MCP_WORKSPACE'] = workspace;
+    await registerIn(packageRoot, 'development/dev-workflow');
+
+    expect([...(await loadAtStartup())]).toEqual(['development/dev-workflow']);
   });
 });

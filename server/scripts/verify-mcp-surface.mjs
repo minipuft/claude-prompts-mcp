@@ -29,22 +29,32 @@
  * the measured history above is kept so nobody re-derives the SSE hang as a live constraint.
  *
  * SAFETY: every call is read-only. Nothing here creates, updates or deletes a resource, and the
- * run asserts afterwards that `state.db` and the workspace resources were left alone.
+ * run asserts afterwards that `server/resources` was left alone (`checkNoMutation`). The checkout's
+ * `state.db` is not asserted on because it is never opened: the spawned server runs on a temp
+ * runtime root this run creates and removes (`spawnServer`), so it is untouched by construction.
  *
  * Exit 0 when every check passes; exit 1 with the failing lines otherwise.
  */
 
 import { spawn } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { once } from 'node:events';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 import { VERDICT, auditExceptions } from './lib/exception-hygiene.js';
+import { buildServerEnv, createHermeticRoots } from './lib/hermetic-server-env.js';
+import { checkDistFreshness as checkDistFreshnessCore } from './lib/dist-freshness.js';
 
 const SERVER_ROOT = path.resolve(new URL('..', import.meta.url).pathname);
 const REPO_ROOT = path.resolve(SERVER_ROOT, '..');
 const DIST_ENTRY = path.join(SERVER_ROOT, 'dist', 'index.js');
+
+/** The version every surface that reports its own identity must answer with (#287). */
+const PACKAGE_VERSION = JSON.parse(
+  readFileSync(path.join(SERVER_ROOT, 'package.json'), 'utf8')
+).version;
 
 /** Wall-clock ceiling for the whole run; a hang must fail loudly, never sit forever. */
 const HEALTH_TIMEOUT_MS = 25_000;
@@ -231,40 +241,24 @@ function record(name, ok, detail) {
   console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`);
 }
 
-/** Newest mtime under a directory, ignoring nothing — staleness must not be under-reported. */
-function newestMtime(dir) {
-  let newest = 0;
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name);
-    const mtime = entry.isDirectory() ? newestMtime(full) : statSync(full).mtimeMs;
-    if (mtime > newest) newest = mtime;
-  }
-  return newest;
-}
-
 /**
  * `dist/` is the runtime SSOT and does not track `src/`.
  *
  * Verifying a stale binary is worse than not verifying at all: it returns green for code that is
  * not running. This exact trap cost a wasted restart on 2026-07-31, when dist was three hours
  * older than the change under test.
+ *
+ * The comparison itself lives in `lib/dist-freshness.js`, shared with
+ * `tests/e2e/helpers/child-env.ts` — this wrapper only turns the shared result into this script's
+ * two labeled PASS/FAIL rows.
  */
 function checkDistFreshness() {
-  let distMtime;
-  try {
-    distMtime = statSync(DIST_ENTRY).mtimeMs;
-  } catch {
-    record('dist/ built', false, `${DIST_ENTRY} missing — run \`npm run build\``);
+  const result = checkDistFreshnessCore(DIST_ENTRY, path.join(SERVER_ROOT, 'src'));
+  if (!result.fresh) {
+    record(result.kind === 'missing' ? 'dist/ built' : 'dist/ current', false, result.reason);
     return false;
   }
-
-  const srcMtime = newestMtime(path.join(SERVER_ROOT, 'src'));
-  if (srcMtime > distMtime) {
-    const lagMin = Math.round((srcMtime - distMtime) / 60_000);
-    record('dist/ current', false, `src is ${lagMin} min newer — run \`npm run build\` first`);
-    return false;
-  }
-  record('dist/ current', true, `built ${new Date(distMtime).toISOString().slice(11, 19)}`);
+  record('dist/ current', true, `built ${new Date(result.builtAt).toISOString().slice(11, 19)}`);
   return true;
 }
 
@@ -281,15 +275,28 @@ function reservePort() {
 /**
  * Spawn the built server on streamable-http.
  *
- * NODE_OPTIONS/NODE_ENV/JEST_WORKER_ID are stripped for the same reason the e2e helper strips
- * them: the server skips `main()` when JEST_WORKER_ID is set, and an inherited
+ * The environment comes from `lib/hermetic-server-env.js`, the list the e2e suite scrubs too:
+ * the server skips `main()` when JEST_WORKER_ID is set, and an inherited
  * `--experimental-vm-modules` leaks the parent's flags into a plain node process.
+ *
+ * The path overrides are scrubbed by the same list. MCP_WORKSPACE is then set explicitly;
+ * MCP_RESOURCES_PATH would override it for resources, so a shell pointed at a personal library
+ * had this check prove the tools answer against a catalog no
+ * installed user has — which is how README commands naming prompts the package did not ship
+ * passed every local check (plans/readme-install-path-2026-09-13.md). MCP_CONFIG_PATH and
+ * MCP_RUNTIME_ROOT would likewise hand the answer to whoever ran the script.
+ *
+ * Scrubbing MCP_RUNTIME_ROOT is not enough on its own, so it is then set to a directory this run
+ * creates and removes. Unset, the runtime root falls back to the workspace, whose `state.db`
+ * carries the operator's persisted `system_control` toggles — a gates disable there would reach
+ * this verification too.
  */
-function spawnServer(port) {
-  const env = { ...process.env, PORT: String(port), MCP_WORKSPACE: REPO_ROOT };
-  delete env.NODE_OPTIONS;
-  delete env.NODE_ENV;
-  delete env.JEST_WORKER_ID;
+function spawnServer(port, roots) {
+  const env = buildServerEnv({
+    PORT: String(port),
+    MCP_WORKSPACE: REPO_ROOT,
+    ...roots.env,
+  });
 
   return spawn('node', [DIST_ENTRY, '--transport=streamable-http', '--quiet'], {
     cwd: SERVER_ROOT,
@@ -432,6 +439,20 @@ async function runSurfaceChecks(baseUrl) {
   const protocolVersion = initialized?.result?.protocolVersion;
   record('initialize', Boolean(protocolVersion), protocolVersion && `protocol ${protocolVersion}`);
   if (!protocolVersion) return;
+
+  const serverVersion = initialized?.result?.serverInfo?.version;
+  record(
+    'initialize reports package version',
+    serverVersion === PACKAGE_VERSION,
+    `serverInfo.version ${serverVersion} vs package.json ${PACKAGE_VERSION}`
+  );
+
+  const healthBody = await fetch(`${baseUrl}/health`).then((response) => response.json());
+  record(
+    '/health reports package version',
+    healthBody?.version === PACKAGE_VERSION,
+    `/health version ${healthBody?.version} vs package.json ${PACKAGE_VERSION}`
+  );
 
   const listed = await client.send('tools/list', {});
   const listedTools = listed?.result?.tools ?? [];
@@ -585,13 +606,18 @@ const WRONG_BUT_WELL_FORMED = {
     ')\nSelection source: registrations\nConfigured registrations: 4\n\nClients:\n- claude-code: scoped (2), no manifest entries\n- cursor: unregistered, no manifest entries\n',
 };
 
-/** Where the action registry lives. Parsed, not imported — this file must stay dependency-free. */
+/**
+ * Where the action registry lives. Parsed, not imported — this file must stay dependency-free.
+ *
+ * Moved from mcp/metadata/definitions/system-control.ts to shared/types/system-control.ts (row
+ * B.61 follow-up): that module's layer sat above engine/, so a routed system_control call could
+ * only be typed against it with an upward cross-layer import.
+ */
 const SYSTEM_CONTROL_ACTIONS_SOURCE = path.join(
   SERVER_ROOT,
   'src',
-  'mcp',
-  'metadata',
-  'definitions',
+  'shared',
+  'types',
   'system-control.ts'
 );
 
@@ -794,7 +820,8 @@ async function main() {
   }
 
   const port = await reservePort();
-  const server = spawnServer(port);
+  const roots = createHermeticRoots('verify-mcp');
+  const server = spawnServer(port, roots);
   const baseUrl = `http://127.0.0.1:${port}`;
 
   let stderr = '';
@@ -812,7 +839,12 @@ async function main() {
   } catch (error) {
     record('surface checks', false, error instanceof Error ? error.message : String(error));
   } finally {
-    server.kill('SIGTERM');
+    // Wait for exit before removing the runtime root: a server still shutting down writes there.
+    if (server.exitCode === null && server.signalCode === null) {
+      server.kill('SIGTERM');
+      await once(server, 'exit');
+    }
+    roots.cleanup();
   }
 
   checkNoMutation(baseline);
