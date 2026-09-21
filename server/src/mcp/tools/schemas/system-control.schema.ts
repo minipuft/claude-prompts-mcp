@@ -89,7 +89,7 @@ function buildSystemControlShape(resolve: DescriptionResolver = identity) {
     // alone (see config-action-handler.ts); `set` was removed from this surface (R27) and never
     // populated this object with that value.
     config: z
-      .object({
+      .strictObject({
         key: z.string(),
         value: z.string().optional(),
         operation: z.enum(['validate', 'get']),

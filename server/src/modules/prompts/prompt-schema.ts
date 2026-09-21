@@ -48,7 +48,8 @@ export const ArgumentValidationSchema = z
      */
     allowedValues: z.array(z.union([z.string(), z.number(), z.boolean()])).optional(),
   })
-  .partial();
+  .partial()
+  .strict();
 
 export type ArgumentValidationYaml = z.infer<typeof ArgumentValidationSchema>;
 
@@ -303,7 +304,7 @@ export const PromptInjectionRuleSchema = z
     enabled: z.boolean().optional(),
     /** How often to inject during chain execution */
     frequency: z
-      .object({
+      .strictObject({
         mode: z.enum(['every', 'first-only', 'never']),
         interval: z.number().int().positive().optional(),
       })

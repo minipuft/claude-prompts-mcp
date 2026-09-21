@@ -786,7 +786,21 @@ export class McpToolRouter {
 
   /**
    * Get resource manager handler for auto-execute functionality.
-   * Returns a function that can execute resource_manager actions internally.
+   *
+   * Returns a function that runs a `resource_manager` action internally, for a caller that never
+   * crosses the MCP boundary — today, a script tool's `auto_execute` block (stage 09).
+   *
+   * It validates through `resourceManagerInputSchema` FIRST, because that is the one thing the
+   * registered path gets for free and this one did not: the SDK parses `arguments` against the
+   * registered schema and hands the handler the result, so a registered call reaching the router
+   * has had its types, enums and shapes checked. This path used to pass the script's object
+   * through `as any`. Measured 2026-09-20: `{resource_type:"prompt", action:"list", limit:
+   * "not-a-number"}` from a script reached the router untyped, where the same call over MCP is
+   * rejected. One `safeParse` is the whole reuse — the schema is the SSOT for both paths, so
+   * there is no second validator to keep in step.
+   *
+   * A failure is returned as an error `ToolResponse` rather than thrown, so it travels the same
+   * channel every other router refusal does and stage 09 fails the step on it.
    */
   getResourceManagerHandler():
     | ((
@@ -798,7 +812,28 @@ export class McpToolRouter {
     if (router == null) {
       return null;
     }
-    return (args, context) => router.handleAction(args as any, context);
+    return async (args, context) => {
+      const parsed = resourceManagerInputSchema.safeParse(args);
+      if (!parsed.success) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text:
+                `resource_manager rejected these parameters: ` +
+                parsed.error.issues
+                  .map((issue) => {
+                    const where = issue.path.join('.');
+                    return `${where.length > 0 ? where : '(root)'}: ${issue.message}`;
+                  })
+                  .join('; '),
+            },
+          ],
+          isError: true,
+        };
+      }
+      return router.handleAction(parsed.data as ResourceManagerInput, context);
+    };
   }
 
   // REMOVED: wireExecutionCoordinator - ExecutionCoordinator removed
