@@ -186,7 +186,7 @@ export async function waitForHealth(
 /**
  * Simple HTTP GET request
  */
-async function httpGet(url: string): Promise<{ status: number; body: string }> {
+export async function httpGet(url: string): Promise<{ status: number; body: string }> {
   return new Promise((resolve, reject) => {
     http
       .get(url, (res) => {
