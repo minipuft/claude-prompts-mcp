@@ -17,10 +17,12 @@
  * content, and a later byte-exact rollback would restore the wrong state at full confidence.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import { describe, it, expect, afterEach } from '@jest/globals';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import type { VersioningConfigProvider } from '../../../src/modules/versioning/version-history-service.js';
 import type { ResourceFileLocatorPort } from '../../../src/shared/utils/resource-file-set.js';
@@ -165,6 +167,41 @@ describe('the two writers produce one checkpoint format', () => {
     } finally {
       await ctx.cleanup();
     }
+  });
+
+  it('has the cpm rollback COMMAND supplying a tree, not just the function accepting one', () => {
+    // Every case here calls `rollbackVersion` directly, which proves the function records what it
+    // is given and says nothing about whether anything gives it anything. Without this, removing
+    // the enumeration from `cli/src/commands/rollback.ts` leaves the whole suite green and the
+    // feature dead — measured: that mutant was caught only by driving the built binary by hand.
+    const source = readFileSync(
+      path.resolve(
+        path.dirname(fileURLToPath(import.meta.url)),
+        '../../../../cli/src/commands/rollback.ts'
+      ),
+      'utf8'
+    );
+    // The control for the reader itself: the file must be the one that calls rollbackVersion,
+    // and it must enumerate and read the bytes at all.
+    expect(source).toMatch(/rollbackVersion\s*\(/);
+    expect(source).toMatch(/resourceFileSet\s*\(/);
+    expect(source).toMatch(/readResourceTree\s*\(/);
+    // It must KEEP what it read — computing a tree and dropping it is the shape this catches.
+    expect(source).toMatch(/=\s*loaded\.tree/);
+
+    // And the call itself must carry it. Read from the call's own text, brace-balanced, so the
+    // word `tree` appearing anywhere else in the file cannot answer for the argument.
+    const open = source.indexOf('(', source.search(/rollbackVersion\s*\(/));
+    let depth = 0;
+    let call = '';
+    for (let i = open; i < source.length; i += 1) {
+      const ch = source[i] as string;
+      if ('([{'.includes(ch)) depth += 1;
+      if (')]}'.includes(ch)) depth -= 1;
+      call += ch;
+      if (depth === 0) break;
+    }
+    expect(call).toMatch(/\btree\b/);
   });
 
   it('still rolls back on a pre-v29 database, where there is no store to record into', async () => {
