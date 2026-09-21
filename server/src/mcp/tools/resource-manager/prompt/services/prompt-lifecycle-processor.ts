@@ -92,9 +92,6 @@ export class PromptLifecycleProcessor {
           action: 'validate',
           valid: false,
           errors: result.errors,
-          // The key stays in the response shape; nothing feeds it. Chain integrity was its only
-          // producer and is now a refusal (an entry in `errors`), which is the point of the fix.
-          warnings: [],
           mutated: false,
         },
         isError: true,
@@ -116,7 +113,6 @@ export class PromptLifecycleProcessor {
         valid: true,
         normalized_id: result.draft.canonicalId,
         draft: result.draft.promptData,
-        warnings: [],
         current_version: currentVersion,
         mutated: false,
       },
@@ -140,7 +136,6 @@ export class PromptLifecycleProcessor {
           action: 'create',
           valid: false,
           errors: prepared.errors,
-          warnings: [],
           mutated: false,
         },
         isError: true,
@@ -294,7 +289,6 @@ export class PromptLifecycleProcessor {
         action: 'create',
         valid: true,
         receipt: verification.receipt,
-        warnings: [],
         mutated: true,
       },
       isError: !verification.verified,
@@ -1157,11 +1151,6 @@ export class PromptLifecycleProcessor {
       `- Current version: \`${receipt.current_version}\`\n` +
       `- Affected files:${files}\n`
     );
-  }
-
-  private formatWarnings(warnings: readonly string[]): string {
-    if (warnings.length === 0) return '';
-    return `\n\nWarnings:\n${warnings.map((warning) => `- ${warning}`).join('\n')}`;
   }
 
   private async handleSystemRefresh(fullRestart: boolean = false, reason: string): Promise<void> {
