@@ -51,6 +51,11 @@ const SERVER_ROOT = path.resolve(new URL('..', import.meta.url).pathname);
 const REPO_ROOT = path.resolve(SERVER_ROOT, '..');
 const DIST_ENTRY = path.join(SERVER_ROOT, 'dist', 'index.js');
 
+/** The version every surface that reports its own identity must answer with (#287). */
+const PACKAGE_VERSION = JSON.parse(
+  readFileSync(path.join(SERVER_ROOT, 'package.json'), 'utf8')
+).version;
+
 /** Wall-clock ceiling for the whole run; a hang must fail loudly, never sit forever. */
 const HEALTH_TIMEOUT_MS = 25_000;
 const RPC_TIMEOUT_MS = 20_000;
@@ -434,6 +439,20 @@ async function runSurfaceChecks(baseUrl) {
   const protocolVersion = initialized?.result?.protocolVersion;
   record('initialize', Boolean(protocolVersion), protocolVersion && `protocol ${protocolVersion}`);
   if (!protocolVersion) return;
+
+  const serverVersion = initialized?.result?.serverInfo?.version;
+  record(
+    'initialize reports package version',
+    serverVersion === PACKAGE_VERSION,
+    `serverInfo.version ${serverVersion} vs package.json ${PACKAGE_VERSION}`
+  );
+
+  const healthBody = await fetch(`${baseUrl}/health`).then((response) => response.json());
+  record(
+    '/health reports package version',
+    healthBody?.version === PACKAGE_VERSION,
+    `/health version ${healthBody?.version} vs package.json ${PACKAGE_VERSION}`
+  );
 
   const listed = await client.send('tools/list', {});
   const listedTools = listed?.result?.tools ?? [];
