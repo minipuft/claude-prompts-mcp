@@ -78,7 +78,6 @@ describe('Consolidated MCP tool factories', () => {
     const mockTextReferenceStore = {
       storeChainStepResult: () => {},
       getChainStepResults: () => ({}),
-      getChainStepResult: () => null,
       getChainStepMetadata: () => null,
       buildChainVariables: () => ({}),
       clearChainStepResults: () => {},
