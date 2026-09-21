@@ -202,8 +202,26 @@ server's own `state.db` and hashes the files afterwards. The same file asserts t
 and a server write of identical files produce an identical `tree_hash` — one enumerator, one
 hasher, one recorder, reached from both sides.
 
-`cpm`'s edit commands (`link-gate`, `rename`, `move`) record no version at all, and so record no
-tree; `rollback` is the CLI's only version-writing path today.
+**`rollback` is still the CLI's only version-writing path, and the reason the others cannot join it
+is a projection, not an ordering.** `cpm create`, `cpm link-gate` and `cpm toggle` each write a
+resource and record nothing. A version row's `snapshot` is a `SnapshotContract` projection, and all
+four contracts live under `src/mcp/tools/**` — which `cli-shared/` may not reach
+(`.dependency-cruiser.cjs`, `cli-shared-no-runtime`, `reachable: true`; measured by planting the
+import, `validate:arch` went from 0 errors to 48) and which `cli/src` cannot resolve at all, having
+no `@mcp` alias. The second half is not an import: `project(id, live)` takes the server's LOADED
+model, whose gate `guidance` is the inlined body of `guidanceFile` and whose prompt template is
+resolved rather than a `userMessageTemplateFile` pointer, and `cpm` runs no loader that produces
+either. Writing a CLI-side projection instead would be a second projection of one resource, which
+is the shape this whole arc exists to remove — and `cpm` already has one, which is why every
+`cpm rollback` of a server-written resource bridges: it passes the raw YAML map as the prior-state
+snapshot.
+
+`cpm delete` purges the subtree, `cpm rename` re-keys it, and `cpm move` leaves it alone because a
+category move does not change the id a history row is keyed on. Those three are complete, not
+missing a row. The whole classification is enumerated from the command registry, with the open
+entries stamped, by `tests/integration/versioning/cpm-write-records-a-version.test.ts`: a command
+that starts writing resources without a classification fails there, and so does an entry whose
+stated blocker no longer holds.
 
 **Losing every object degrades rollback to the projection path; it never loses history.**
 `version_history.snapshot` keeps holding the projection every reader already reads, and it is not
