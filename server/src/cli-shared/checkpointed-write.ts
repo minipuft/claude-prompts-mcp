@@ -61,8 +61,17 @@ export interface CheckpointedWriteInput {
   enumerate: () => Promise<ResourceFileSet>;
   /** Every path the write may touch — what gets restored if the record fails. */
   targets: ResourceMutationTarget[];
-  /** The projection of the state on disk right now, from the resource's own contract. */
-  priorSnapshot: Record<string, unknown>;
+  /**
+   * The projection of the state on disk right now, from the resource's own contract.
+   *
+   * **Absent means a CREATE**, and that is the whole difference between the two shapes of write
+   * this module records. A create has no prior live state to bridge — nothing existed — so it
+   * writes one row, which `appendVersion`'s `MAX(version)+1` numbering resolves to version 1 for a
+   * fresh id. That is the server's own rule, stated in `handleCreate` of each lifecycle
+   * processor; passing `{}` instead would record an empty snapshot as version 1 and make version 2
+   * look like an edit of a resource that had no fields.
+   */
+  priorSnapshot?: Record<string, unknown>;
   /** Performs the write and returns the projection of the state it produced. */
   write: () => Promise<Record<string, unknown>>;
   description: string;
@@ -109,12 +118,16 @@ export async function recordCheckpointedWrite(
   request: HistoryRowRequest,
   input: CheckpointedWriteInput
 ): Promise<CheckpointedWriteResult> {
-  const priorTree = await loadTreeQuietly(input.enumerate);
-  const bridge = appendVersion(db, tenantId, request, input.priorSnapshot, {
-    description: BRIDGE_DESCRIPTION,
-    diffSummary: '',
-    tree: priorTree,
-  });
+  // A create skips the bridge entirely rather than bridging an empty snapshot: there was no prior
+  // state, so there is nothing true to say about one.
+  const bridge =
+    input.priorSnapshot === undefined
+      ? { recorded: false }
+      : appendVersion(db, tenantId, request, input.priorSnapshot, {
+          description: BRIDGE_DESCRIPTION,
+          diffSummary: '',
+          tree: await loadTreeQuietly(input.enumerate),
+        });
 
   let produced: Record<string, unknown> = {};
   const transaction = new ResourceMutationTransaction();

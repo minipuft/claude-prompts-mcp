@@ -21,7 +21,10 @@ import { GateDefinitionLoader } from '../../../src/engine/gates/core/gate-defini
 import { GenericGateGuide } from '../../../src/engine/gates/registry/generic-gate-guide.js';
 import { gateSnapshotContract } from '../../../src/mcp/tools/gate-manager/services/gate-snapshot-contract.js';
 import { frameworkSnapshotContract } from '../../../src/mcp/tools/framework-manager/services/framework-snapshot-contract.js';
-import { projectResourceSnapshot } from '../../../src/cli-shared/resource-snapshot.js';
+import {
+  projectResourceSnapshot,
+  sharesServerSnapshotProjection,
+} from '../../../src/cli-shared/resource-snapshot.js';
 import { loadYamlFileSync } from '../../../src/shared/utils/yaml/index.js';
 import { testScratchPath } from '../../helpers/scratch-path.js';
 
@@ -137,5 +140,28 @@ describe('one projection per resource type, read by both surfaces', () => {
     expect(cli.reason).toContain('+59.0 KB');
     expect(cli.reason).toContain('2026-09-21');
     expect(cli.snapshot['userMessageTemplateFile']).toBe('user-message.md');
+  });
+
+  it('answers the discriminant the same way in advance as it does with the files', () => {
+    // A caller that must DECIDE before it writes (a create has no file to project yet) reads
+    // `sharesServerSnapshotProjection`. The two answers come from one table by construction; this
+    // is what fails if someone reintroduces a hand-written type list beside it.
+    const gateYaml = join(root, 'gates', 'alpha', 'gate.yaml');
+    const frameworkYaml = join(root, 'frameworks', 'beta', 'framework.yaml');
+
+    const cases: Array<['prompt' | 'gate' | 'framework', string]> = [
+      ['gate', gateYaml],
+      ['framework', frameworkYaml],
+      ['prompt', join(root, 'prompt.yaml')],
+    ];
+    for (const [type, entry] of cases) {
+      const declared = loadYamlFileSync<Record<string, unknown>>(entry) ?? {};
+      expect(sharesServerSnapshotProjection(type)).toBe(
+        projectResourceSnapshot(type, 'x', entry, declared).shared
+      );
+    }
+    // Both polarities actually occur, so the equality above is not vacuously true of one value.
+    expect(sharesServerSnapshotProjection('gate')).toBe(true);
+    expect(sharesServerSnapshotProjection('prompt')).toBe(false);
   });
 });

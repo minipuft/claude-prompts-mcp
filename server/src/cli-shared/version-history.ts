@@ -495,6 +495,149 @@ export function recordEditResult(
 }
 
 /**
+ * What one {@link recordResourceWrite} did — in three states, not two.
+ *
+ * `written: false` is the only failure, and it covers both halves of the atomicity guarantee: the
+ * write threw, or the row could not be appended and the transaction put every target back. Either
+ * way there is no resource and no row. `written: true, recorded: false` is not a failure — it is a
+ * workspace with no version history to write into, reported by name so a caller can say so.
+ */
+export type ResourceWriteOutcome =
+  | { written: true; recorded: true; version: number; bridged: boolean }
+  | { written: true; recorded: false; reason: string }
+  | { written: false; rolledBack: boolean; error: string };
+
+/**
+ * What one `cpm` write records: how to reach its files, how to perform it, and what it produced.
+ *
+ * Sibling of {@link RollbackRestore}, and deliberately not the same type: a rollback's write is
+ * driven by a snapshot this module reads out of the table first, while an ordinary write already
+ * knows what it is going to do. What they share is the ORDERING, which is
+ * `recordCheckpointedWrite`'s and is stated once there.
+ */
+export interface ResourceWriteRecord {
+  /** The resource's files, re-enumerated on each call — see `CheckpointedWriteInput.enumerate`. */
+  enumerate: () => Promise<ResourceFileSet>;
+  /** Every path `write` may touch; restored byte-identical if the version record fails. */
+  targets: ResourceMutationTarget[];
+  /**
+   * The state on disk right now, projected through the resource's own contract.
+   *
+   * **Omitted for a create.** See `CheckpointedWriteInput.priorSnapshot`: a create has no prior
+   * live state, so it records one row and that row is version 1.
+   */
+  priorSnapshot?: Record<string, unknown>;
+  /** Perform the write and return the projection of the state it produced. Throwing aborts it. */
+  write: () => Promise<Record<string, unknown>>;
+  description: string;
+  diffSummary?: string;
+  /** The workspace's own bound — {@link resolveConfiguredMaxVersions}. */
+  maxVersions?: number;
+}
+
+/**
+ * Perform a `cpm` write and record the state it produced, in the server's order.
+ *
+ * The one entry point for every `cpm` command that writes a resource it did not read out of the
+ * version table. `cpm create` and `cpm toggle` reach it; `cpm rollback` reaches the same ordering
+ * through `rollbackVersion`, which additionally has to load its target first.
+ *
+ * **The tenant is the derived one, uncorrected** — the same rule `dispatch` applies to
+ * `save_version` and `record_edit_result`, and for the same reason: `resolveEffectiveTenantId`
+ * redirects a write onto a tenant that already holds rows for this id, which is right for an
+ * operation acting on EXISTING history (a rollback reads its target from there) and wrong for one
+ * that may legitimately be starting a new one. A create under a fresh workspace has no rows by
+ * construction, and redirecting it would file the new resource's history under someone else's
+ * scope.
+ */
+export async function recordResourceWrite(
+  resourceDir: string,
+  ref: HistoryResourceRef,
+  record: ResourceWriteRecord
+): Promise<ResourceWriteOutcome> {
+  const dbPath = resolveStateDbPath(resourceDir);
+  if (dbPath === null || !isNonEmptyString(ref.resourceType) || !isNonEmptyString(ref.resourceId)) {
+    return await writeUnrecorded(record, 'no state.db could be located for this workspace');
+  }
+  const opened = openStateDb(dbPath);
+  if ('error' in opened) {
+    return await writeUnrecorded(record, opened.error);
+  }
+
+  const { db } = opened;
+  const request: HistoryRowRequest = {
+    resource_type: ref.resourceType,
+    resource_id: ref.resourceId,
+    created_at: new Date().toISOString(),
+    max_versions: record.maxVersions ?? DEFAULT_MAX_VERSIONS,
+  };
+  try {
+    const result = await recordCheckpointedWrite(db, resolveTenantId(dbPath), request, {
+      enumerate: record.enumerate,
+      targets: record.targets,
+      priorSnapshot: record.priorSnapshot,
+      write: record.write,
+      description: record.description,
+      diffSummary: record.diffSummary,
+    });
+    if (!result.success) {
+      return { written: false, rolledBack: result.rolledBack, error: result.error };
+    }
+    // `recorded: false` from the append means the produced state was ALREADY the newest recorded
+    // row — a real outcome, not an unavailable history, so it carries that reason rather than the
+    // unavailability one.
+    return result.outcome.recorded
+      ? {
+          written: true,
+          recorded: true,
+          version: result.outcome.version,
+          bridged: result.outcome.bridged,
+        }
+      : {
+          written: true,
+          recorded: false,
+          reason: `the produced state already matches version ${result.outcome.version}`,
+        };
+  } catch (error) {
+    return {
+      written: false,
+      rolledBack: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * Perform the write with no transaction and no row, because there is no history to write into.
+ *
+ * **This is not a degraded record; it is the absence of one, reported.** A workspace the server
+ * has never run in has no `state.db` and no `version_history` table — the CLI never creates either
+ * (`runSqlite`) — and refusing the write there would make `cpm create` unusable in exactly the
+ * workspace `cpm init` just made. The server's equivalent is `isAutoVersionEnabled()` returning
+ * false: the writer runs with no `commit` step at all.
+ *
+ * The reason is returned rather than swallowed, because a create that silently records nothing is
+ * the defect shape this whole seam exists to remove.
+ */
+async function writeUnrecorded(
+  record: ResourceWriteRecord,
+  reason: string
+): Promise<ResourceWriteOutcome> {
+  try {
+    await record.write();
+  } catch (error) {
+    return {
+      written: false,
+      rolledBack: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+  return { written: true, recorded: false, reason };
+}
+
+/**
  * How a rollback puts the target version back on disk, and which files that touches.
  *
  * `apply` exists so the RESTORE happens between the two rows rather than after both of them.

@@ -45,10 +45,41 @@ const RESOURCE_WRITERS = [
 ];
 
 /** Calling any of these means the command records a version row for what it produced. */
-const VERSION_RECORDERS = ['rollbackVersion', 'saveVersion', 'recordEditResult'];
+const VERSION_RECORDERS = [
+  'rollbackVersion',
+  'recordResourceWrite',
+  'saveVersion',
+  'recordEditResult',
+];
 
 /** The closed half: writes a resource AND records what the write produced. */
-const RECORDS_A_VERSION = ['rollback'];
+const RECORDS_A_VERSION = ['rollback', 'create'];
+
+/**
+ * Records for some resource types and, by measurement, cannot yet for others.
+ *
+ * A third table rather than a second entry in `CANNOT_RECORD_YET`, because a command cannot be in
+ * two halves at once and collapsing the distinction loses the fact an operator needs: `cpm create
+ * gate` writes a row and `cpm create prompt` does not. Each entry names the types still blocked
+ * and is stamped like any other open marker.
+ *
+ * The check below is not "the entry exists": it reads `cli-shared/resource-snapshot.ts` and
+ * requires the blocked type to still be absent from the projector table there, so lifting the
+ * blocker without moving this entry fails here.
+ */
+const RECORDS_SOME_TYPES: Record<
+  string,
+  { blockedTypes: string[]; asOf: string; flipsWhen: string }
+> = {
+  create: {
+    blockedTypes: ['prompt'],
+    asOf: '2026-09-21',
+    flipsWhen:
+      'the prompt projection becomes reachable from `cli-shared` under the dev bundle budget — ' +
+      'measured 2026-09-21 as a reachable import at +59.0 KB, which is 35.5 KB over the ' +
+      '900,000-byte `DEV_BUNDLE_BUDGET_BYTES` and fails `npm run build` outright.',
+  },
+};
 
 /** Writes a resource, and a version row would be wrong rather than missing. */
 const HISTORY_HANDLED_WITHOUT_A_VERSION: Record<string, string> = {
@@ -105,12 +136,6 @@ const CANNOT_RECORD_YET: Record<string, { asOf: string; flipsWhen: string }> = {
     asOf: '2026-09-21',
     flipsWhen:
       'the same projection reaches `cli-shared/` — `toggle` edits gates and frameworks too.',
-  },
-  create: {
-    asOf: '2026-09-21',
-    flipsWhen:
-      'the same projection reaches `cli-shared/`. The server records a created resource as ' +
-      'version 1, so this one needs the produced projection and no prior-state row.',
   },
 };
 
@@ -214,17 +239,42 @@ describe('every cpm command that writes a resource is classified against what it
     expect(satisfied).toEqual([]);
   });
 
+  it('has every RECORDS_SOME_TYPES entry still blocked on the types it names', () => {
+    const projection = readFileSync(
+      path.resolve(CLI_SRC, '..', '..', 'server', 'src', 'cli-shared', 'resource-snapshot.ts'),
+      'utf8'
+    );
+    // `SHARED_PROJECTORS` is the SSOT for which types project through the server's contract. A
+    // blocked type appearing as a key there means the exception is satisfied and the entry is now
+    // a lie — a finding, not a pass.
+    const projectorKeys = /const SHARED_PROJECTORS[\s\S]*?= \{([\s\S]*?)\n\};/.exec(projection);
+    expect(projectorKeys).not.toBeNull();
+
+    for (const [name, marker] of Object.entries(RECORDS_SOME_TYPES)) {
+      expect(marker.asOf).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(marker.flipsWhen.length).toBeGreaterThan(30);
+      expect(RECORDS_A_VERSION).toContain(name);
+
+      for (const blocked of marker.blockedTypes) {
+        expect(new RegExp(`^\\s{2}${blocked}:`, 'm').test(projectorKeys![1]!)).toBe(false);
+      }
+    }
+    // The control: a type that IS projected is found by the same match, so a regex that stopped
+    // matching anything could not report every blocked type as still blocked.
+    expect(/^\s{2}gate:/m.test(projectorKeys![1]!)).toBe(true);
+  });
+
   it('detects a planted writer that records nothing — the probe sees something', () => {
     // The positive control for `calls()`, which every assertion above rests on. Two sources
     // differing in ONE identifier: the writer is present in both, the recorder in only one.
     const writesOnly = `import { linkGate } from '@cli-shared/index.js';\nlinkGate(file, id);\n`;
-    const writesAndRecords = `${writesOnly}saveVersion(dir, ref, id, snapshot);\n`;
+    const writesAndRecords = `${writesOnly}recordResourceWrite(dir, ref, input);\n`;
 
     expect(calls(writesOnly, RESOURCE_WRITERS)).toEqual(['linkGate']);
     expect(calls(writesOnly, VERSION_RECORDERS)).toEqual([]);
-    expect(calls(writesAndRecords, VERSION_RECORDERS)).toEqual(['saveVersion']);
+    expect(calls(writesAndRecords, VERSION_RECORDERS)).toEqual(['recordResourceWrite']);
     // An IMPORT is not a call: the name appearing in an import list must not answer for a call
     // site, or deleting the only call while leaving the import behind reads as coverage.
-    expect(calls(`import { saveVersion } from 'x';\n`, VERSION_RECORDERS)).toEqual([]);
+    expect(calls(`import { recordResourceWrite } from 'x';\n`, VERSION_RECORDERS)).toEqual([]);
   });
 });
