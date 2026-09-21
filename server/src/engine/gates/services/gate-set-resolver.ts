@@ -106,8 +106,26 @@ export interface GateResolutionResult extends StageTwoResult {
    * either `GateManager` or `TemporaryGateRegistry` — dropped before Stage 2 ever sees them, so
    * they cannot be attributed to a veto. Diagnostics only; the caller is expected to surface
    * this the same way it already surfaces `vetoed` (P6-F14).
+   *
+   * @see acceptsUnrankedGate for the question an appender asks.
    */
   readonly unregistered: ReadonlyMap<string, string>;
+  /**
+   * Whether a gate id may still be added to this resolution with NO source rank — a fallback
+   * beneath every declared source.
+   *
+   * This is the ONE question code that appends after resolution asks, and it exists so that
+   * such code never re-derives a veto's inputs for itself. An unranked append is bound by
+   * EVERY veto this resolution built, whatever each veto's `bindsUpToRank`; re-deriving one
+   * family of vetoes at the append site answers a narrower question, and until 2026-09-21
+   * `GateEnhancementService.ensureDefaultFrameworkGate` did exactly that — it re-derived the
+   * three framework conditions and so never saw the prompt's `exclude` list, re-adding by
+   * fallback a gate the author had named for removal (issue #228).
+   *
+   * Asking `vetoed` instead would not answer it either: that map names only ids Stage 1
+   * actually accumulated, and a fallback id is by definition one no ranked source supplied.
+   */
+  readonly acceptsUnrankedGate: (gateId: string) => boolean;
 }
 
 /**
@@ -125,10 +143,30 @@ interface GateVeto {
   readonly rejects: (gateId: string) => boolean;
 }
 
+/** The veto set for one resolution, plus what it could not express as a ranked veto. */
+interface BuiltVetoes {
+  readonly vetoes: readonly GateVeto[];
+  /**
+   * A framework veto applies, but the framework's gate ids could not be identified — see
+   * `buildFrameworkVetoes`. Only `acceptsUnrankedGate` reads it.
+   */
+  readonly withholdsUnidentifiedFrameworkGates: boolean;
+}
+
 const RANK = GATE_SOURCE_PRIORITY;
 
+/**
+ * The gate appended as an unranked fallback when a framework is active and nothing else supplied
+ * a framework gate.
+ *
+ * Declared here rather than at the append site, beside the veto set that decides whether the
+ * append may happen at all — an appender that has to import the id lands on
+ * `GateResolutionResult.acceptsUnrankedGate` on the way.
+ */
+export const DEFAULT_FRAMEWORK_GATE_ID = 'framework-compliance';
+
 /** The three conditions that withhold the active framework's gates. */
-export interface FrameworkVetoInput {
+interface FrameworkVetoInput {
   /** Whether a framework system prompt is actually injected for this execution. */
   readonly frameworkInjected: boolean;
   /** Operator switch `gatesConfig.enableFrameworkGates`; `undefined` means enabled. */
@@ -138,7 +176,7 @@ export interface FrameworkVetoInput {
 }
 
 /** A framework veto that applies, and the highest source rank it may remove. */
-export interface FrameworkVeto {
+interface FrameworkVeto {
   readonly name: string;
   readonly bindsUpToRank: number;
 }
@@ -146,18 +184,17 @@ export interface FrameworkVeto {
 /**
  * Which framework vetoes apply to this execution, with the rank each binds up to.
  *
- * Exported because two callers need the same three conditions for different reasons. This
- * resolver turns each into a ranked `GateVeto`. `GateEnhancementService` appends a default
- * `framework-compliance` when nothing else supplied a framework gate, and that append is
- * BELOW every declared source — so it must not happen while any veto applies, whatever that
- * veto's `bindsUpToRank`.
+ * Module-private, deliberately. It was exported while `GateEnhancementService` re-derived the
+ * same three conditions to decide whether its unranked fallback could append; that second
+ * derivation WAS the #228 defect, because three conditions are not the veto set — `exclude` is
+ * also in it. The appender now asks `GateResolutionResult.acceptsUnrankedGate`, and exporting
+ * these again would re-offer the subset that caused both failures.
  *
  * Read the ranks as scoping the vetoes against ranked sources only; they say nothing about a
- * fallback that has no rank. Until 2026-08-18 the append consulted `enableFrameworkGates`
- * alone and silently reinstated the gate the resolver had just withheld — so `framework_gates:
- * false` and an uninjected framework were both unobservable at the service boundary.
+ * fallback that has no rank, which is why `acceptsUnrankedGate` ignores `bindsUpToRank`
+ * entirely.
  */
-export function applicableFrameworkVetoes(input: FrameworkVetoInput): FrameworkVeto[] {
+function applicableFrameworkVetoes(input: FrameworkVetoInput): FrameworkVeto[] {
   const applicable: FrameworkVeto[] = [];
 
   if (!input.frameworkInjected) {
@@ -211,8 +248,13 @@ export class GateSetResolver {
   async resolve(input: GateResolutionInput): Promise<GateResolutionResult> {
     const accumulated = this.accumulate(input);
     const { registered, unregistered } = this.dropUnregistered(accumulated);
-    const vetoes = await this.buildVetoes(input);
-    return { ...this.applyVetoes(registered, vetoes), unregistered };
+    const { vetoes, withholdsUnidentifiedFrameworkGates } = await this.buildVetoes(input);
+    return {
+      ...this.applyVetoes(registered, vetoes),
+      unregistered,
+      acceptsUnrankedGate: (gateId: string): boolean =>
+        !withholdsUnidentifiedFrameworkGates && !vetoes.some((veto) => veto.rejects(gateId)),
+    };
   }
 
   // ==========================================================================
@@ -394,7 +436,7 @@ export class GateSetResolver {
   // Stage 2 — veto set (unordered)
   // ==========================================================================
 
-  private async buildVetoes(input: GateResolutionInput): Promise<GateVeto[]> {
+  private async buildVetoes(input: GateResolutionInput): Promise<BuiltVetoes> {
     const vetoes: GateVeto[] = [];
 
     const modifierVeto = buildModifierVeto(input.modifiers);
@@ -413,9 +455,13 @@ export class GateSetResolver {
       });
     }
 
-    vetoes.push(...(await this.buildFrameworkVetoes(input)));
+    const framework = await this.buildFrameworkVetoes(input);
+    vetoes.push(...framework.vetoes);
 
-    return vetoes;
+    return {
+      vetoes,
+      withholdsUnidentifiedFrameworkGates: framework.withholdsUnidentified,
+    };
   }
 
   /**
@@ -425,8 +471,15 @@ export class GateSetResolver {
    * Their binding ranks differ on purpose: nesting is a coherence invariant and the config
    * switch is operator intent, so both bind every rank; `framework_gates: false` is an author
    * preference and stops at rank 60, like `exclude`.
+   *
+   * `withholdsUnidentified` reports the one case a ranked veto cannot express: a framework veto
+   * applies, but the framework's gate ids could not be identified, so no veto names anything.
+   * Ranked sources are unaffected — nothing was identified to remove — but an UNRANKED fallback
+   * exists precisely for that case and must not fire, so `acceptsUnrankedGate` refuses outright.
    */
-  private async buildFrameworkVetoes(input: GateResolutionInput): Promise<GateVeto[]> {
+  private async buildFrameworkVetoes(
+    input: GateResolutionInput
+  ): Promise<{ vetoes: GateVeto[]; withholdsUnidentified: boolean }> {
     const applicable = applicableFrameworkVetoes({
       frameworkInjected: input.frameworkInjected,
       frameworkGatesEnabled: input.frameworkGatesEnabled,
@@ -434,16 +487,19 @@ export class GateSetResolver {
     });
 
     if (applicable.length === 0) {
-      return [];
+      return { vetoes: [], withholdsUnidentified: false };
     }
 
     const frameworkGateIds = await this.resolveFrameworkGateIds(input);
     if (frameworkGateIds.size === 0) {
-      return [];
+      return { vetoes: [], withholdsUnidentified: true };
     }
 
     const rejects = (gateId: string): boolean => frameworkGateIds.has(gateId);
-    return applicable.map((veto) => ({ ...veto, rejects }));
+    return {
+      vetoes: applicable.map((veto) => ({ ...veto, rejects })),
+      withholdsUnidentified: false,
+    };
   }
 
   /** Caller-supplied ids win over a registry read; the registry is the fallback. */
