@@ -95,12 +95,21 @@ Three payload sites, not two (notes deviation 2).
 non-placeholder output; stage 19 stamps `stepNumber`/`nodeId` into the review metadata; `resolveReviewStep` resolves node id
 first, then the ordinal, then `current_step` (the legacy fallback, kept and asserted). Consequence handled in stage 20:
 `resolveCarriedRender` keeps stage 18's render when the reviewed node differs from the node the run stands on, so a delegated
-N+1 still arrives with its brief and token. Live drive A/B on the same call: HEAD's review body quotes neither step (the task
-sits inside the brief, labelled with step N's Improvements Needed); with the fix it quotes `## Creative Framework` (step 1) and
-not `## Analytical Framework`. Gate: typecheck clean; `lint:ratchet` 3095/970 no regression; `typecheck:tests:ratchet` 367 no
-regression; `validate:arch` 0 errors / 17 warnings; `validate:domain-ownership` 15 capabilities / 5 modules; `validate:all`
-58/58; path-scoped jest 68 suites / 806 tests. Complexity unchanged: stage 16 `execute` 14, stage 19 `execute` 15,
-`captureStep` 14, every `chain-operator-executor` function identical to HEAD; stage 20 `execute` 17 → 16. Deviations 22-24.
+N+1 still arrives with its brief and token. Deviations 22-24.
+
+Re-measured on the merged tree after `main` took #271 as squash `02852fd7` (2026-09-21, merge `7cd1b938`):
+live drive A/B on one call, `>>drv_draft ==> >>drv_review` under packaged CAGEERF over Streamable HTTP, step 1
+resumed with a reply carrying no declared section — pre-fix `## Original Task Instructions` reads
+`Do the DrvReview work.` (step 2, inside the brief) and the review body ahead of the brief is empty; with the
+fix it reads `Do the DrvDraft work.` (step 1) and step 2's brief and `node: n2` token are carried below it.
+Positive control in the same run: a conforming step 1 (each declared section past the framework's
+`min_length: 100`) raises no review and step 2 renders normally. Gate: typecheck clean;
+`typecheck:tests:ratchet` 353 no regression; `lint:ratchet` green after lowering
+`strict-boolean-expressions` 1840 → 1839 (totals 2738 → 2737 — the carried-render join retires the old
+ternary); knip ratchet 1119 no regression; `validate:unreached-methods` 22/856; `validate:arch` 0 errors /
+19 warnings; `validate:domain-ownership` 14 capabilities / 5 modules; `validate:suite-membership` 71 wired;
+`validate:all` 71/71; jest `tests/unit/execution` 73 suites / 1082 tests, `tests/integration/chain` 15
+suites / 161 tests; `build` + `verify:mcp` 20/20. Complexity: stage 20 `execute` 19 → 18 against main.
 
 Tier 2 gate: `npm run typecheck && npm run lint:ratchet && npm run typecheck:tests:ratchet && npm run test:all && npm run validate:arch && npm run validate:domain-ownership`
 
