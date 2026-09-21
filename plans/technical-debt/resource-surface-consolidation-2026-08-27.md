@@ -677,6 +677,14 @@ Ruled before dispatching P4.43–P4.50, on `914b068c`. R23 and R24 stand as writ
   timestamped backup files go when that lands.
 - **R54 (P4.92, owner 2026-09-20) — accept the one-time skills-sync hash churn**, named in the log.
   The current hash is not injective: it sorts its inputs and joins them with no separator.
+- **R55 (P4.92, owner 2026-09-20) — the store is additive; `version_history.snapshot` stays.** The
+  objects table holds each resource file's raw bytes. Losing every object degrades a rollback to
+  the projection path that ships today, never to lost history. Old rows are not backfilled.
+- **R56 (P4.92, owner 2026-09-20) — objects are keyed per workspace, `(tenant_id, hash)`.** The
+  design recommended global objects; the owner chose isolation over cross-project dedup on a
+  `state.db` every project shares. No client ever selects or sees an object either way.
+- **R57 (P4.92, owner 2026-09-20) — a restore never deletes a file.** It writes only the paths whose
+  recorded hash differs, and names any file the target version did not record as left in place.
 - **R29 follow-ups (ruled on the P4.45 handoff).** A method called only from tests counts as
   unreached. A stale baseline entry fails the check.
 
