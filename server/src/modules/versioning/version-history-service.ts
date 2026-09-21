@@ -532,6 +532,13 @@ export class VersionHistoryService {
    * Returns how many rows were removed, which is what lets a reply state what it did.
    */
   async deleteHistory(resourceType: ResourceType, resourceId: string): Promise<number> {
+    // Disabled versioning wrote no rows, so there are none to purge — the same early return
+    // `saveVersion` makes, for the same reason. Without it a delete on a server with versioning
+    // off would fail on a database this service never opened.
+    if (!this.getConfig().enabled) {
+      return 0;
+    }
+
     try {
       const db = this.getDb();
       const tenantId = this.resolveTenantId();

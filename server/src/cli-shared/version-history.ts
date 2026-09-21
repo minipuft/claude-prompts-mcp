@@ -381,12 +381,7 @@ interface HistoryRow {
 
 const ENTRY_COLUMNS = 'version, snapshot, diff_summary, description, created_at';
 
-/**
- * Matches a resource id and every id below it; binds the id twice.
- *
- * Imported, not written here: `VersionHistoryService.deleteHistory` matches the same set over MCP,
- * and the two surfaces have already disagreed once about what deleting a resource's history means.
- */
+/** Imported, not written here — `deleteHistory` matches the same set over MCP. */
 const SUBTREE_MATCH = RESOURCE_SUBTREE_MATCH;
 
 function toEntry(row: HistoryRow): VersionEntry {
