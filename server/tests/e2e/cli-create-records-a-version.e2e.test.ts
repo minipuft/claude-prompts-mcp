@@ -56,6 +56,7 @@ interface VersionRow {
   version: number;
   description: string;
   tree_hash: string | null;
+  snapshot: string;
   id: number;
 }
 
@@ -106,7 +107,7 @@ describe('cpm create records what it wrote (Streamable HTTP)', () => {
     const db = new DatabaseSync(path.join(workspace, 'runtime-state', 'state.db'));
     const rows = db
       .prepare(
-        `SELECT id, version, description, tree_hash FROM version_history
+        `SELECT id, version, description, tree_hash, snapshot FROM version_history
          WHERE resource_type = ? AND resource_id = ? ORDER BY version`
       )
       .all(type, id) as unknown as VersionRow[];
@@ -157,6 +158,14 @@ describe('cpm create records what it wrote (Streamable HTTP)', () => {
     // The same sentence `resource_manager create` writes — one owner, `CREATE_ROW_DESCRIPTION`.
     expect(rows[0]!.description).toBe('Created via resource_manager');
     expect(rows[0]!.tree_hash).toMatch(/^sha256:/);
+
+    // The row's VALUE, not just its existence: the snapshot must be the state the create wrote,
+    // which is what a later rollback restores. A row carrying an empty or pre-write projection
+    // would satisfy every assertion above.
+    const snapshot = JSON.parse(rows[0]!.snapshot) as Record<string, unknown>;
+    expect(snapshot['id']).toBe(id);
+    expect(snapshot['name']).toBe(`N ${id}`);
+    expect(snapshot['description']).toBe(`D ${id}`);
 
     const entries = treeEntries(rows[0]!.id);
     // The entry file AND its companion, not just the one `cpm` happened to write last.
