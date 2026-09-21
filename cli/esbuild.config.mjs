@@ -102,7 +102,9 @@ const JSONC_PARSER_ESM_ENTRY = resolveEsmEntry("jsonc-parser", SERVER_ROOT);
  * round-trip to the same value.
  *
  * The strictness parity checks added after that measurement took it to 840,813 — a 840,000
- * ceiling would already be failing, which is the argument below making itself.
+ * ceiling would already be failing, which is the argument below making itself. Merging main
+ * (#341, #342) took it to 845,835, leaving 4,165 B: the branch's own work accounts for none of
+ * that last step, and the margin is thin again on the same axis.
  *
  * Set to 850,000 rather than the next 10,000 above the measurement: 839,424 leaves 576 bytes,
  * and this constant has twice been raised from a number that looked like enough headroom at the
