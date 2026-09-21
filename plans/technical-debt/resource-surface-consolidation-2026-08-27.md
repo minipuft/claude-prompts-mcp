@@ -696,6 +696,15 @@ Ruled before dispatching P4.43–P4.50, on `914b068c`. R23 and R24 stand as writ
   their ports. The context is readable only inside the call that entered it, which is the property
   the no-global-current-request rule protects, and a test asserts it in process and over the wire.
   It flips if an event is ever emitted from a detached callback, where the context is absent.
+- **R59 (P4.97, planner 2026-09-20, following the owner's P4.93 ruling) — the refusal goes one
+  level down.** A misspelled key inside `gate_verdict`, an observation, an inline gate or
+  `system_control` `config` is refused naming its path. Deliberately open objects stay open, listed.
+- **R60 (P4.83, planner 2026-09-20) — one prompt projection, proven symmetric before it widens.**
+  `edges` and `tools` come from the on-disk YAML through the reader that already preserves them;
+  `budget` and `artifacts` join the preserved snapshot fields. A test first shows every call site's
+  projection of one prompt hashes equal.
+- **Dev `cpm` bundle budget 900,000 (owner 2026-09-20).** The merged branch measured 849,743 of
+  850,000 before the shared content hash added 2,722. The shipped 512,000 budget is unchanged.
 - **R29 follow-ups (ruled on the P4.45 handoff).** A method called only from tests counts as
   unreached. A stale baseline entry fails the check.
 
