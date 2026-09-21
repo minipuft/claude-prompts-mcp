@@ -36,8 +36,8 @@ import { existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 
 import { recordCheckpointedWrite } from './checkpointed-write.js';
-import { hasObjectStore } from './object-store.js';
 import { getConfigValue, readConfig } from './config-operations.js';
+import { hasObjectStore } from './object-store.js';
 import { resolveStateDbPath } from './version-history-location.js';
 import {
   appendVersion,
