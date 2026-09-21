@@ -53,7 +53,7 @@ const VERSION_RECORDERS = [
 ];
 
 /** The closed half: writes a resource AND records what the write produced. */
-const RECORDS_A_VERSION = ['rollback', 'create'];
+const RECORDS_A_VERSION = ['rollback', 'create', 'toggle'];
 
 /**
  * Records for some resource types and, by measurement, cannot yet for others.
@@ -98,44 +98,35 @@ const HISTORY_HANDLED_WITHOUT_A_VERSION: Record<string, string> = {
 };
 
 /**
- * Writes a resource, records nothing, and CANNOT until a second projection stops being the only
- * way to express what it produced.
+ * Writes a resource, records nothing, and CANNOT until the prompt projection is reachable.
  *
- * Every entry names the same blocker, measured 2026-09-21 and stated once here:
+ * The blocker moved, and this is what it is now. Until 2026-09-21 the reason was an IMPORT rule:
+ * all four `SnapshotContract` implementations lived under `src/mcp/tools/**`, which `cli-shared/`
+ * may not reach. That is fixed — gate, framework and category now project from
+ * `modules/versioning/projections/`, which both surfaces import, and `cli-shared/
+ * resource-snapshot.ts` is the CLI's entry to them.
  *
- *   A version row's `snapshot` is a `SnapshotContract` projection. All four contracts live under
- *   `src/mcp/tools/**` (`gate-snapshot-contract.ts`, `framework-snapshot-contract.ts`,
- *   `category-snapshot-contract.ts`, and `promptSnapshotContract` in
- *   `prompt-versioning-processor.ts`). `cli-shared/` may not reach `src/mcp/` —
- *   `.dependency-cruiser.cjs` rule `cli-shared-no-runtime`, severity error, `reachable: true` —
- *   and `cli/src` cannot resolve them either: `cli/tsconfig.json` and `cli/esbuild.config.mjs`
- *   alias `@cli-shared`, `@shared`, `@engine` and `@modules`, and no `@mcp`. Measured by planting
- *   the import in `cli-shared/checkpointed-write.ts`: `validate:arch` went from 0 errors to 48
- *   `cli-shared-no-runtime` violations.
+ * What remains is a BUDGET, measured rather than argued. A prompt snapshot is projected from a
+ * loader-RESOLVED `ConvertedPrompt` — `userMessageTemplate` is the inlined body where `prompt.yaml`
+ * holds only `userMessageTemplateFile` — so building one from the CLI needs `loadYamlPrompt` AND
+ * `PromptConverter`. Measured as a reachable import on 2026-09-21: the `cpm` bundle went
+ * 855.4 KB → 914.4 KB, **+59.0 KB**, which is 35.5 KB over the 900,000-byte
+ * `DEV_BUNDLE_BUDGET_BYTES`, and `npm run build` fails outright. The budget was not raised.
  *
- *   The second half is not an import at all. `project(id, live)` takes the server's LOADED model —
- *   a gate's `live.getGuidance()` inlines the body of `guidanceFile`, and a prompt's
- *   `userMessageTemplate` is the resolved template, not the `userMessageTemplateFile` pointer a
- *   raw YAML read returns. `cpm` runs no loader that produces either.
- *
- * Writing a CLI-side projection instead is the defect this slice exists to remove, and `cpm`
- * already has one: `cli/src/commands/rollback.ts` passes `loadYamlFileSync(...)` — the raw YAML
- * map — as the prior-state snapshot, so a gate's `cpm`-written row carries `severity` and
- * `guidanceFile` where the server's carries `guidance` holding the markdown body. That is why
- * every `cpm rollback` of a server-written resource bridges.
+ * Writing a second, YAML-shaped prompt projection instead is the defect this slice exists to
+ * remove: the bridge decision is `hashCanonical` equality, so a differently-shaped snapshot can
+ * never compare equal and EVERY server edit of a `cpm`-written prompt would bridge.
  */
 const CANNOT_RECORD_YET: Record<string, { asOf: string; flipsWhen: string }> = {
+  // `link-gate` edits a PROMPT's `gateConfiguration`, so it is blocked by the prompt projection
+  // and by nothing else: gates and frameworks already record through `cpm create` and
+  // `cpm toggle`.
   'link-gate': {
     asOf: '2026-09-21',
     flipsWhen:
-      'a prompt projection the CLI can build reaches `cli-shared/` — either the contract moves ' +
-      'out of `src/mcp/tools/` into a layer `cli-shared` may import, or the CLI gains a loader ' +
-      'that resolves `userMessageTemplateFile`/`systemMessageFile` the way the server does.',
-  },
-  toggle: {
-    asOf: '2026-09-21',
-    flipsWhen:
-      'the same projection reaches `cli-shared/` — `toggle` edits gates and frameworks too.',
+      'the prompt projection becomes reachable from `cli-shared` under the dev bundle budget — ' +
+      'measured 2026-09-21 as a reachable import at +59.0 KB, which is 35.5 KB over the ' +
+      '900,000-byte `DEV_BUNDLE_BUDGET_BYTES` and fails `npm run build` outright.',
   },
 };
 

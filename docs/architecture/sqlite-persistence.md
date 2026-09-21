@@ -220,13 +220,27 @@ AND `PromptConverter`. Measured 2026-09-21 as a reachable import from `cli-share
 bundle went 855.4 KB → 914.4 KB, **+59.0 KB**, which is 35.5 KB past the 900,000-byte
 `DEV_BUNDLE_BUDGET_BYTES` — `npm run build` fails. So `cpm rollback` of a prompt still records the
 raw `prompt.yaml` map and still bridges, and `cpm link-gate`/`unlink-gate` (which edit a prompt) and
-`cpm create` of a prompt still record nothing. ☐ open as of 2026-09-21 · flips when a prompt's
+`cpm create` of a prompt records nothing at all. ☐ open as of 2026-09-21 · flips when a prompt's
 authored state is reachable from `cli-shared/` within the bundle budget. Writing a second,
 YAML-shaped prompt projection instead is the shape this arc exists to remove.
 
-`cpm create` and `cpm toggle` still record nothing; the shared projection is what unblocks them for
-gates and frameworks, and `tests/integration/versioning/cpm-write-records-a-version.test.ts` is the
-gate that fails the moment one of them starts recording while still classified as unable to.
+**`cpm create` and `cpm toggle` record through the same ordering as of 2026-09-21.** A create
+records the produced state as version 1 with no prior-state row — nothing existed to bridge, which
+is the server's own create rule — and a toggle records as an edit, bridging the pre-flip state
+first if it was not already the newest row. Both run their append as the write's `commit`, so a
+failed record restores every target: for a create that means removing the directory the
+transaction captured as absent. `cpm create` of a gate or framework and `cpm toggle` of a
+framework therefore leave a row the server's next edit does not have to bridge — driven in
+`tests/e2e/cli-create-records-a-version.e2e.test.ts` and
+`tests/e2e/cli-toggle-records-a-version.e2e.test.ts`, each with an out-of-band-edit twin as the
+positive control for the missing bridge row.
+
+What still records nothing says so rather than staying silent, in `--json` and in the text, with
+the reason: a created prompt (the +59.0 KB blocker above), a created or toggled style (styles
+carry no version rows on either surface), and any write in a workspace with no `state.db` (the CLI
+never authors that schema). A silent non-record is the shape this arc removes.
+`tests/integration/versioning/cpm-write-records-a-version.test.ts` is the gate that fails the
+moment a still-blocked command starts recording, or a recording one stops.
 
 `cpm delete` purges the subtree, `cpm rename` re-keys it, and `cpm move` leaves it alone because a
 category move does not change the id a history row is keyed on. Those three are complete, not
