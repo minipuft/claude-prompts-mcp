@@ -16,11 +16,23 @@
  */
 
 import { describe, expect, it, jest } from '@jest/globals';
-import { mkdtemp, rm, writeFile } from 'fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
 import { ConfigLoader } from '../../../../src/infra/config/index.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Read from package.json directly, not through `getServerVersion()` — comparing the fixture
+// against the function under test would pass however that function drifted from the file it is
+// supposed to read (see #287: `DEFAULT_SERVER_CONFIG.version` was a hard-coded '1.0.0' for the
+// entire 4.x line, and a fixture reading the same constant the code read would never have caught
+// it).
+const SERVER_PACKAGE_VERSION: string = JSON.parse(
+  await readFile(path.join(__dirname, '../../../../package.json'), 'utf8')
+).version;
 
 /** Writes `raw` as the config file and returns the resolved `Config` it loads to. */
 async function resolve(raw: Record<string, unknown>) {
@@ -154,7 +166,7 @@ describe('config file -> runtime config mapping', () => {
     // `frameworks.injection.systemPrompt.frequency`) — a future drift between the two goes red
     // here first.
     const DEFAULTS = {
-      server: { name: 'claude-prompts', version: '1.0.0', port: 9090 },
+      server: { name: 'claude-prompts', version: SERVER_PACKAGE_VERSION, port: 9090 },
       prompts: { directory: 'resources/prompts', registerWithMcp: true },
       // No `analysis`: the section is not a config key any more, so the loader defaults nothing
       // for it and `Config.analysis` stays unset.
