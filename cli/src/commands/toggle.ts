@@ -16,7 +16,7 @@ import {
 } from '@cli-shared/resource-snapshot.js';
 import { recordResourceWrite } from '@cli-shared/version-history.js';
 import type { ResourceLocation } from '@cli-shared/resource-operations.js';
-import { UPDATE_ROW_DESCRIPTION } from '@modules/versioning/snapshot-contract.js';
+import { updateRowDescription } from '@modules/versioning/snapshot-contract.js';
 import { resourceFileSet } from '@shared/utils/resource-file-set.js';
 import { resolveWorkspace, findResource, resolveResourceDir, discoverResourcePaths } from '../lib/workspace.js';
 import { output } from '../lib/output.js';
@@ -172,7 +172,7 @@ async function toggleAndRecord(
     };
   }
 
-  const prior = projectResourceSnapshot('framework', id, match.file, declared);
+  const prior = await projectResourceSnapshot('framework', id, match.file, declared);
   let mutation: ValidatedMutationResult<ToggleResult> = {
     success: false,
     operation: { success: false, error: 'toggle did not run' },
@@ -199,9 +199,9 @@ async function toggleAndRecord(
           throw new Error(mutation.error ?? mutation.operation.error ?? 'Toggle failed.');
         }
         const produced = loadYamlFileSync<Record<string, unknown>>(match.file) ?? declared;
-        return projectResourceSnapshot('framework', id, match.file, produced).snapshot;
+        return (await projectResourceSnapshot('framework', id, match.file, produced)).snapshot;
       },
-      description: UPDATE_ROW_DESCRIPTION,
+      description: updateRowDescription('cpm'),
       diffSummary: 'enabled toggled',
       maxVersions: resolveConfiguredMaxVersions(workspace),
     },

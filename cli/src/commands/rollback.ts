@@ -86,7 +86,7 @@ export async function rollback(options: RollbackOptions): Promise<number> {
   // `{id,name,description,type,severity,guidanceFile}` where the server wrote
   // `{id,name,type,description,guidance}` with the markdown body inline, and EVERY `cpm rollback`
   // of a server-written gate therefore recorded a bridge row describing a change nobody made.
-  const priorState = projectResourceSnapshot(resourceType, match.id, yamlPath, currentData);
+  const priorState = await projectResourceSnapshot(resourceType, match.id, yamlPath, currentData);
 
   // Write the restored snapshot back, MERGED over what is on disk rather than replacing it.
   //
@@ -145,7 +145,7 @@ export async function rollback(options: RollbackOptions): Promise<number> {
     // merge above leaves every key the snapshot does not carry at its current value, and it never
     // touches a companion file — a gate's `guidance.md` still holds whatever it held — so the
     // target snapshot is not what this write produced.
-    return projectResourceSnapshot(resourceType, match.id, yamlPath, merged).snapshot;
+    return (await projectResourceSnapshot(resourceType, match.id, yamlPath, merged)).snapshot;
   };
 
   // The workspace's own `versioning.maxVersions`, not the built-in 50: a rollback writes rows and
@@ -174,19 +174,16 @@ export async function rollback(options: RollbackOptions): Promise<number> {
       // The byte path, when version N recorded one. Same shape the server's injected locator
       // returns, so both surfaces hand `resolveByteRestore` the same thing and get the same plan.
       location: { located: true, entryPath: match.file, roots },
-      // A PROMPT still uses `cpm`'s own projection for its SNAPSHOT — the shared prompt projection
-      // needs the loader and the converter, +59.0 KB, which does not fit the bundle budget
-      // (as of 2026-09-21 · flips when the dev cpm budget clears that). Its FILES restore
-      // byte-exactly like any other type: the snapshot and the bytes are different questions.
-      reproject: () => {
+      // Every type — prompt included since 2026-09-21 — projects through the server's own
+      // contract here, so the snapshot this rollback records and the one `resource_manager` would
+      // record for the same state are the same value.
+      reproject: async () => {
         // Re-read from disk, because the byte restore replaced the file wholesale. `notRestored`
         // is cleared rather than left over: it is the merging path's report of snapshot keys the
         // entry file kept, and a byte restore has no such keys — every recorded file was replaced.
         const onDisk = loadYamlFileSync<Record<string, unknown>>(yamlPath) ?? currentData;
         notRestored.length = 0;
-        return Promise.resolve(
-          projectResourceSnapshot(resourceType, match.id, yamlPath, onDisk).snapshot,
-        );
+        return (await projectResourceSnapshot(resourceType, match.id, yamlPath, onDisk)).snapshot;
       },
       ...(options.preview === true ? { preview: true } : {}),
     },

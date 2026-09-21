@@ -26,6 +26,8 @@ export { applyByteRestore } from './byte-restore.js';
 export {
   CREATE_ROW_DESCRIPTION,
   UPDATE_ROW_DESCRIPTION,
+  createRowDescription,
+  updateRowDescription,
   missingRequiredFields,
   copyPresentFields,
   canonicalizeSnapshot,
@@ -58,3 +60,7 @@ export {
   CATEGORY_OPTIONAL_SNAPSHOT_FIELDS,
   projectCategorySnapshot,
 } from './projections/category-snapshot.js';
+export {
+  SNAPSHOT_PRESERVED_FIELDS,
+  canonicalPromptSnapshot,
+} from './projections/prompt-snapshot.js';

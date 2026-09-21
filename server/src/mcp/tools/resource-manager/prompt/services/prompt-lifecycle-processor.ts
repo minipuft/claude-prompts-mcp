@@ -33,7 +33,6 @@ import {
   UPDATE_FIELDS,
   type PromptWriteDefect,
   applyChainStepOperation,
-  canonicalPromptSnapshot,
   diagnosePromptWrite,
   resolveUnsetFields,
   validateChainStepReferences,
@@ -51,6 +50,7 @@ import { purgeHistoryOnDelete } from '#modules/versioning/delete-purge.js';
 import {
   CREATE_ROW_DESCRIPTION,
   UPDATE_ROW_DESCRIPTION,
+  canonicalPromptSnapshot,
   describeVersionRecord,
 } from '#modules/versioning/index.js';
 import { ToolResponse } from '#shared/types/index.js';
