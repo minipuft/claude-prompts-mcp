@@ -131,13 +131,24 @@ on which one workspace could observe that another holds a given byte sequence. `
 the value the owning `version_history` row carries — resolved once and passed down, never
 re-derived in the store.
 
-**The foreign keys are declared and NOT enforced.** Nothing in `server/src` or `cli/src` sets
-`PRAGMA foreign_keys`, and SQLite defaults it off, per connection. So the `ON DELETE CASCADE` from
-`version_entries` to `version_history` does not fire — whatever prunes a version row must delete
-its entries explicitly — and the `ON DELETE RESTRICT` toward `objects` does not refuse a delete of
-a still-referenced object. They state the intended semantics at the place the schema is read, and
-a later slice turns them on with one pragma. Until then the startup referential check is what
-notices a dangling entry.
+**The foreign keys are declared and — contrary to what a grep suggests — enforced.**
+`rg "foreign_keys"` over `server/src` and `cli/src` returns nothing, and the obvious reading of
+that absence is wrong: `node:sqlite`'s `DatabaseSync` enables foreign key constraints by default,
+and both openers that WRITE `state.db` (the engine, and `cli-shared/version-history.ts`) are
+`DatabaseSync`. Measured 2026-09-20 — `PRAGMA foreign_keys` reads `1` on a fresh connection. The
+Python hooks open read-only through `sqlite3`, where the default really is off; a reader cannot
+violate a constraint.
+
+Two consequences that only show up at a schema bump: `restoreDurableTables` replays
+`DURABLE_TABLE_NAMES` in declaration order, so `objects` and `version_entries` must stay declared
+**after** `version_history` in `table-contracts.ts` or the restore is refused; and `dropAllTables`
+drops in `sqlite_master` order, which reaches `version_history` first and cascades the manifest
+empty before either new table is dropped.
+
+**Do not read this as "the cascade prunes entries for us."** It is a per-connection driver default
+this repository does not assert, so any opener that turns it off writes into the same file. A prune
+deletes its entries explicitly, and the startup referential check is what finds what an opener
+without constraints left behind.
 
 **No backfill of pre-v29 rows, deliberately.** Materialising a tree from a projection would
 fabricate file bytes that never existed on disk, which is worse than a NULL. Old rows keep

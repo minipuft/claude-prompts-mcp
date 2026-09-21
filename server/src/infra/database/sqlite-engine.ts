@@ -39,6 +39,13 @@ import {
   SQLITE_INTERNAL_TABLES,
   VIEW_CONTRACTS,
 } from './table-contracts.js';
+import {
+  DANGLING_ENTRY_SQL,
+  EMPTY_TREE_SQL,
+  describeVersionTreeRepair,
+  planVersionTreeRepair,
+  type VersionTreeRow,
+} from './version-tree-fsck.js';
 
 import type { DatabasePort, TransactionMode } from '#shared/types/persistence.js';
 import type { Logger } from '../logging/index.js';
@@ -72,12 +79,28 @@ import { STATE_DB_BUSY_TIMEOUT_MS } from '#shared/utils/runtime-state-location.j
  * bump. No backfill is performed or wanted: materialising a tree from a projection would fabricate
  * file bytes that never existed on disk.
  *
- * The two foreign keys are DECLARED but NOT ENFORCED: nothing in `server/src` or `cli/src` sets
- * `PRAGMA foreign_keys = ON`, and SQLite defaults it off, per connection. So today the
- * `ON DELETE CASCADE` on `version_entries.version_row_id` does not fire — the prune must delete
- * entries explicitly — and the `ON DELETE RESTRICT` toward `objects` does not refuse a delete of a
- * still-referenced object. What they buy now is the shape of the contract and the readiness of the
- * DDL; what catches the damage in the meantime is the startup referential check.
+ * The two foreign keys are DECLARED and, on both writers, ENFORCED — which is not what the design
+ * for this slice assumed. `rg "foreign_keys"` over `server/src` and `cli/src` returns nothing, and
+ * the conclusion drawn from that absence ("so SQLite's default of off applies") is wrong here:
+ * `node:sqlite`'s `DatabaseSync` turns foreign keys ON by default
+ * (`enableForeignKeyConstraints`), and both openers of `state.db` that WRITE — this engine and
+ * `cli-shared/version-history.ts` — are `DatabaseSync`. Measured 2026-09-20: `PRAGMA foreign_keys`
+ * reads 1 on a fresh connection. The Python hooks open read-only through `sqlite3`, where the
+ * default really is off, but a reader cannot violate a constraint.
+ *
+ * So `ON DELETE CASCADE` DOES fire and `ON DELETE RESTRICT` DOES refuse, today, for both writers.
+ * Two consequences the DDL alone does not show:
+ *   * `restoreDurableTables` replays `DURABLE_TABLE_NAMES` in declaration order, so `objects` and
+ *     `version_entries` must stay declared after `version_history` in `table-contracts.ts` — with
+ *     constraints live, a child restored before its parent is refused outright;
+ *   * `dropAllTables` drops in `sqlite_master` order, which puts `version_history` before both new
+ *     tables, so its implicit DELETE cascades the manifest empty before either is dropped.
+ *
+ * What is NOT closed: the guarantee is inherited from a driver default rather than asserted by
+ * this repo, and it is per connection — a future opener (another language, the `sqlite3` CLI, a
+ * connection that turns the pragma off) can still leave a dangling entry behind. That residue is
+ * what the startup referential check finds, and it is why the check is not made redundant by the
+ * constraints being live.
  *
  * `version_history` is `durable`, so its rows ride the snapshot/restore round-trip and come back
  * with `tree_hash` NULL by column intersection. A v28-era server opening a v29 database drops both
@@ -515,8 +538,15 @@ export class SqliteEngine implements DatabasePort {
       this.db.exec(`PRAGMA busy_timeout = ${STATE_DB_BUSY_TIMEOUT_MS}`);
 
       // Ensure schema is current (creates or recreates if version mismatch)
-      this.ensureSchema();
+      const schemaOutcome = this.ensureSchema();
       this.assertSchemaMatchesContracts();
+
+      // Referential check A over the v29 object store. Skipped on a database this call just
+      // created: there is nothing to check, and running it would spend two queries per boot of
+      // every fresh install to confirm that empty tables agree with each other.
+      if (schemaOutcome !== 'created') {
+        this.repairVersionTrees();
+      }
 
       this.initialized = true;
 
@@ -636,8 +666,12 @@ export class SqliteEngine implements DatabasePort {
    * snapshot/restore round-trip is what lets durable rows survive while still letting
    * their DDL evolve — preserving the table in place instead would freeze its shape,
    * because applySchema uses CREATE TABLE IF NOT EXISTS.
+   *
+   * The three outcomes are named rather than returned as a boolean because a caller needs to tell
+   * "this database already existed" from "this call created it" — a startup check over rows has
+   * nothing to do in the second case, and `false` said both.
    */
-  private ensureSchema(): boolean {
+  private ensureSchema(): 'current' | 'created' | 'recreated' {
     const currentVersion = this.getCurrentSchemaVersion();
 
     if (currentVersion === SCHEMA_VERSION) {
@@ -645,7 +679,7 @@ export class SqliteEngine implements DatabasePort {
       // version-match boot otherwise (see applyViews docblock).
       this.applyViews();
       this.logger.info(`Database schema is up to date (version ${currentVersion})`);
-      return false;
+      return 'current';
     }
 
     if (currentVersion === 0) {
@@ -653,7 +687,7 @@ export class SqliteEngine implements DatabasePort {
       this.logger.info(`Schema version ${SCHEMA_VERSION} applied`);
       // Not a recreate: a fresh database has no durable rows to protect, so the purge below runs
       // as a no-op and records its marker.
-      return false;
+      return 'created';
     }
 
     this.logger.info(
@@ -665,7 +699,49 @@ export class SqliteEngine implements DatabasePort {
     this.applySchema();
     this.restoreDurableTables(preserved);
     this.logger.info(`Schema version ${SCHEMA_VERSION} applied`);
-    return true;
+    return 'recreated';
+  }
+
+  /**
+   * Referential check A over the v29 object store, plus its repair. Runs on every startup.
+   *
+   * An intact database logs NOTHING and writes nothing — silence is the honest output, and it is
+   * also what keeps this affordable on every boot. The decision is pure and lives in
+   * `version-tree-fsck.ts`; this method is the I/O half, which is here rather than in a versioning
+   * module because `validate:arch` forbids `infra/` from importing upward.
+   *
+   * A repair is a DEGRADE: the affected rows go back to the projection path they used at v28.
+   * Nothing here deletes a `version_history` row, so no history can be lost by a false positive —
+   * the worst outcome of a wrong verdict is a byte-exact restore downgraded to a merging one.
+   *
+   * SQL failures are not swallowed. A dangling entry is a bookkeeping fact this repairs; a
+   * database that cannot execute the repair is a different problem, and initialize() reports it.
+   */
+  private repairVersionTrees(): void {
+    const dangling = this.query<VersionTreeRow>(DANGLING_ENTRY_SQL);
+    const emptyTrees = this.query<VersionTreeRow>(EMPTY_TREE_SQL);
+    const plan = planVersionTreeRepair(dangling, emptyTrees);
+
+    if (plan.rowIds.length === 0) {
+      return;
+    }
+
+    const placeholders = plan.rowIds.map(() => '?').join(', ');
+    this.beginTransaction('immediate');
+    try {
+      this.run(`DELETE FROM version_entries WHERE version_row_id IN (${placeholders})`, [
+        ...plan.rowIds,
+      ]);
+      this.run(`UPDATE version_history SET tree_hash = NULL WHERE id IN (${placeholders})`, [
+        ...plan.rowIds,
+      ]);
+      this.commit();
+    } catch (error) {
+      this.rollback();
+      throw error;
+    }
+
+    this.logger.info(describeVersionTreeRepair(plan));
   }
 
   /**
@@ -926,16 +1002,16 @@ export class SqliteEngine implements DatabasePort {
       -- than as a parseable object, so reachability is one SQL predicate instead of a recursive
       -- walk over blobs that can themselves fail to parse.
       --
-      -- FOREIGN KEYS ARE DECLARED AND NOT ENFORCED. No opener sets PRAGMA foreign_keys, and
-      -- SQLite defaults it off per connection, so today:
-      --   * ON DELETE CASCADE does NOT fire -- whatever prunes a version row must delete its
-      --     entries explicitly, and must not rely on the cascade to do it;
-      --   * ON DELETE RESTRICT does NOT refuse a delete of a still-referenced object -- the
-      --     sweep's own NOT EXISTS clause is the only thing standing there.
-      -- The declarations still earn their place: they state the intended semantics where the
-      -- schema is read, and they are what a later row turns on with one pragma. Until then the
-      -- startup referential check is what notices a dangling entry, and it repairs rather than
-      -- throws.
+      -- FOREIGN KEYS ARE LIVE ON BOTH WRITERS, contrary to what a grep for PRAGMA foreign_keys
+      -- over this repo suggests: node:sqlite's DatabaseSync enables them by default, and both writing
+      -- openers are DatabaseSync. So the CASCADE fires and the RESTRICT refuses, today. The
+      -- Python hooks open read-only through sqlite3, where the default is off -- a reader cannot
+      -- violate a constraint.
+      --
+      -- Do NOT read that as "the cascade can be relied on to prune entries": it is a per-CONNECTION
+      -- driver default, not something this repo asserts, and any opener that turns it off writes
+      -- into the same file. A prune should delete its entries explicitly, and the startup
+      -- referential check is what finds the rows an opener without constraints left behind.
       CREATE TABLE IF NOT EXISTS version_entries (
         version_row_id INTEGER NOT NULL REFERENCES version_history(id) ON DELETE CASCADE,
         -- Denormalised from the owning version_history row so the object reference can be a

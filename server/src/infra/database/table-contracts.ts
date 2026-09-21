@@ -388,9 +388,11 @@ export const TABLE_CONTRACTS: readonly TableContract[] = [
     finding:
       'Same state as objects: schema at row O.2, write path at Tier O.4, so every column carries ' +
       'an acceptedPhantomColumns entry until then. The ON DELETE CASCADE toward version_history ' +
-      'is declared and NOT enforced — no opener sets PRAGMA foreign_keys — so whatever prunes a ' +
-      'version row must delete these rows explicitly rather than rely on the cascade. Closed by ' +
-      'Tier O.4 for the writer, and by the tier that turns the pragma on for the cascade.',
+      'IS enforced on both writers — node:sqlite enables foreign keys by default, measured ' +
+      '2026-09-20, contrary to what a grep for PRAGMA foreign_keys suggests — but that is a ' +
+      'per-connection driver default this repo does not assert, so a prune must still delete ' +
+      'these rows explicitly. Closed by Tier O.4 for the writer, and by the tier that makes the ' +
+      'constraint guarantee explicit rather than inherited.',
     acceptedPhantomColumns: [
       {
         subject: 'version_row_id',
