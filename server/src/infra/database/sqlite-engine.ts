@@ -48,6 +48,45 @@ import { STATE_DB_BUSY_TIMEOUT_MS } from '#shared/utils/runtime-state-location.j
 /**
  * Bump this when changing the embedded schema. Triggers drop-and-recreate.
  *
+ * v29: adds `objects` and `version_entries` — the content-addressed store that backs byte-exact
+ * resource rollback — and a nullable `tree_hash` on `version_history`.
+ *
+ * **Both new tables are `durable`, and that classification is the whole of this bump's risk.**
+ * `DURABLE_TABLE_NAMES` derives from `posture` in `table-contracts.ts`, so a table declared
+ * `ephemeral` here would be silently dropped by the NEXT bump while `version_history.tree_hash`
+ * stayed non-NULL — a row pointing at a tree that is not there. `objects` holds file bytes that
+ * exist nowhere else once the resource on disk has moved on, which is the definition of durable.
+ *
+ * They are declared AFTER `version_history` in `TABLE_CONTRACTS`, because `DURABLE_TABLE_NAMES`
+ * preserves that order and `restoreDurableTables` replays it: a child row must be re-inserted
+ * after the parent it references, or the restore breaks the moment `PRAGMA foreign_keys` is on.
+ *
+ * The store is ADDITIVE. `version_history.snapshot` keeps holding the projection every reader
+ * already reads, so losing every object degrades rollback to today's projection path and never
+ * loses history. That is why a garbage collector may sit in front of `objects` at all.
+ *
+ * `tree_hash` is nullable with NO DDL DEFAULT, for the reason `chain_run_nodes.origin` has none:
+ * `validate:no-phantom-columns` exempts defaulted columns, so a default would hide a dropped
+ * writer from the one gate built to catch it. NULL is a real value — it means the row is
+ * projection-only and restores through `SnapshotContract`, which is every row that predates this
+ * bump. No backfill is performed or wanted: materialising a tree from a projection would fabricate
+ * file bytes that never existed on disk.
+ *
+ * The two foreign keys are DECLARED but NOT ENFORCED: nothing in `server/src` or `cli/src` sets
+ * `PRAGMA foreign_keys = ON`, and SQLite defaults it off, per connection. So today the
+ * `ON DELETE CASCADE` on `version_entries.version_row_id` does not fire — the prune must delete
+ * entries explicitly — and the `ON DELETE RESTRICT` toward `objects` does not refuse a delete of a
+ * still-referenced object. What they buy now is the shape of the contract and the readiness of the
+ * DDL; what catches the damage in the meantime is the startup referential check.
+ *
+ * `version_history` is `durable`, so its rows ride the snapshot/restore round-trip and come back
+ * with `tree_hash` NULL by column intersection. A v28-era server opening a v29 database drops both
+ * new tables (they are not in ITS `DURABLE_TABLE_NAMES`) and keeps `version_history` intact: the
+ * downgrade costs byte-exact restore, never history, and the startup check repairs the rows whose
+ * trees it took with it.
+ *
+ * `DROPPED_ON_THIS_BUMP` stays empty and `DROPPED_AT_VERSION` does not move: nothing is discarded.
+ *
  * v28: adds `idx_version_history_key`, a UNIQUE index on
  * `(tenant_id, resource_type, resource_id, version)` — the key `version_history` always meant and
  * never enforced.
@@ -256,7 +295,7 @@ import { STATE_DB_BUSY_TIMEOUT_MS } from '#shared/utils/runtime-state-location.j
  * `respondedAt`, which changes the `substate_json` shape in `execution_records`. Rows written by
  * v15 would decode to a lifecycle value outside `StepLifecycle`, so they must not survive.
  */
-const SCHEMA_VERSION = 28;
+const SCHEMA_VERSION = 29;
 
 /**
  * Tables whose rows exist nowhere else and therefore survive a SCHEMA_VERSION bump.
@@ -852,7 +891,63 @@ export class SqliteEngine implements DatabasePort {
         snapshot TEXT NOT NULL,
         diff_summary TEXT DEFAULT '',
         description TEXT DEFAULT '',
-        created_at TEXT NOT NULL
+        created_at TEXT NOT NULL,
+        -- v29: the hash of this row's recorded file set, or NULL for a projection-only row.
+        -- A CACHE over version_entries, which is authoritative -- it buys O(1) "did anything
+        -- change" and gives the startup check a recomputable claim. Nullable with NO DDL DEFAULT,
+        -- the chain_run_nodes.origin precedent: validate:no-phantom-columns exempts defaulted
+        -- columns, so a default would hide a dropped writer from the gate built to catch it.
+        -- NULL is a real value -- the row restores through SnapshotContract, as every pre-v29 row
+        -- does -- so nothing here is backfilled.
+        tree_hash TEXT
+      );
+
+      -- v29: content-addressed file bytes, keyed PER WORKSPACE.
+      --
+      -- The key is (tenant_id, hash), not hash alone: one state.db serves every project on the
+      -- machine, and a global key would make one workspace's blob the storage for another's
+      -- identical file. Cross-workspace dedup is the thing given up, deliberately; in exchange
+      -- there is no surface, even in principle, on which one workspace can observe that another
+      -- holds a given byte sequence. tenant_id is the value the OWNING version_history row
+      -- carries, resolved once and passed down -- never re-derived here.
+      CREATE TABLE IF NOT EXISTS objects (
+        tenant_id TEXT NOT NULL,
+        -- 'sha256:<hex>'. Content-addressed, so an identical file written twice is one row.
+        hash TEXT NOT NULL,
+        bytes BLOB NOT NULL,
+        -- length(bytes), redundant by construction and cheap: it is the integrity check that
+        -- costs no re-hash, so a truncated BLOB round-trip is visible without reading every byte.
+        size INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (tenant_id, hash)
+      );
+
+      -- v29: the manifest. One row per (version row, path) -- this IS the tree, as a table rather
+      -- than as a parseable object, so reachability is one SQL predicate instead of a recursive
+      -- walk over blobs that can themselves fail to parse.
+      --
+      -- FOREIGN KEYS ARE DECLARED AND NOT ENFORCED. No opener sets PRAGMA foreign_keys, and
+      -- SQLite defaults it off per connection, so today:
+      --   * ON DELETE CASCADE does NOT fire -- whatever prunes a version row must delete its
+      --     entries explicitly, and must not rely on the cascade to do it;
+      --   * ON DELETE RESTRICT does NOT refuse a delete of a still-referenced object -- the
+      --     sweep's own NOT EXISTS clause is the only thing standing there.
+      -- The declarations still earn their place: they state the intended semantics where the
+      -- schema is read, and they are what a later row turns on with one pragma. Until then the
+      -- startup referential check is what notices a dangling entry, and it repairs rather than
+      -- throws.
+      CREATE TABLE IF NOT EXISTS version_entries (
+        version_row_id INTEGER NOT NULL REFERENCES version_history(id) ON DELETE CASCADE,
+        -- Denormalised from the owning version_history row so the object reference can be a
+        -- single composite key. It is not a second scope channel: it is one half of the foreign
+        -- key below, and the only value it may ever hold is the parent row's own tenant_id.
+        tenant_id TEXT NOT NULL,
+        -- POSIX, RELATIVE to the resource's root directory. Never absolute: a restore re-roots
+        -- onto the primary resource root, and an absolute path would write outside it.
+        path TEXT NOT NULL,
+        object_hash TEXT NOT NULL,
+        PRIMARY KEY (version_row_id, path),
+        FOREIGN KEY (tenant_id, object_hash) REFERENCES objects(tenant_id, hash) ON DELETE RESTRICT
       );
 
       CREATE TABLE IF NOT EXISTS resource_changes (
@@ -1017,6 +1112,9 @@ export class SqliteEngine implements DatabasePort {
       -- that closes the class — it refuses a duplicate from ANY writer, including one nobody
       -- enumerated, which a name-keyed source scan could not do.
       CREATE UNIQUE INDEX IF NOT EXISTS idx_version_history_key ON version_history(tenant_id, resource_type, resource_id, version);
+      -- The reachability index: the sweep and the startup check both ask "is this object
+      -- referenced by any entry in this workspace", which is exactly this key.
+      CREATE INDEX IF NOT EXISTS idx_version_entries_object ON version_entries(tenant_id, object_hash);
       CREATE INDEX IF NOT EXISTS idx_version_history_workspace ON version_history(workspace_id);
       CREATE INDEX IF NOT EXISTS idx_version_history_organization ON version_history(organization_id);
       CREATE INDEX IF NOT EXISTS idx_resource_changes_workspace ON resource_changes(workspace_id);

@@ -115,6 +115,26 @@ export interface ViewContract {
  */
 export const SQLITE_INTERNAL_TABLES: readonly string[] = ['sqlite_sequence'];
 
+/**
+ * Why every column of `objects` and `version_entries` is an accepted phantom today.
+ *
+ * Shared text rather than nine near-identical paragraphs, because they are nine instances of ONE
+ * fact — the schema landed a row before the write path did — and nine separately-worded copies
+ * would drift into reading like nine separate decisions. Each entry still stands alone in the
+ * gate's output, which is what the gate needs.
+ */
+const OBJECT_STORE_PENDING_WRITER =
+  'Schema v29 (row O.2) declares the content-addressed store; the write path lands at row O.4. ' +
+  'This is a real absence, not a parse blind spot: no module names this column anywhere yet, and ' +
+  'no row exists in any database. The alternative — shipping the DDL with no exception — would ' +
+  'have needed the gate silenced or the column defaulted, and a default is exactly what makes a ' +
+  'missing writer invisible.';
+
+const OBJECT_STORE_PENDING_WRITER_CLOSED_BY =
+  'Tier O.4 (object store write path) — the owner and its accepted CLI foreign writer both name ' +
+  'every column of this table, at which point this entry fails the gate as satisfied and is ' +
+  'deleted together with the rest of the set.';
+
 export const TABLE_CONTRACTS: readonly TableContract[] = [
   {
     table: 'schema_version',
@@ -272,6 +292,127 @@ export const TABLE_CONTRACTS: readonly TableContract[] = [
     // Phantom exceptions removed by Tier 4: saveVersion now binds organization_id and workspace_id
     // from the service's injected scope. They were still listed after the writers landed, and the
     // gate said nothing — an exception suppresses its finding whether or not it is still true.
+    acceptedPhantomColumns: [
+      {
+        subject: 'tree_hash',
+        reason:
+          'Declared at schema v29 with no writer yet, and that is the honest state rather than a ' +
+          'false positive: row O.2 lands the schema, row O.4 lands the write path that binds it. ' +
+          'A NULL tree_hash is meaningful — the row is projection-only and restores through ' +
+          'SnapshotContract — so every row in every database today legitimately carries NULL. ' +
+          'The startup referential check WRITES this column (it NULLs a row whose tree is no ' +
+          'longer reachable), but it writes it from the engine, which this gate does not count as ' +
+          'a writer for any table; counting a repair path as the writer would be the wrong claim ' +
+          'anyway, since a column only ever set back to NULL has no producer.',
+        closedBy:
+          'Tier O.4 (object store write path) — saveVersion and the CLI row writer both name ' +
+          'tree_hash in their INSERT list, at which point this entry fails the gate as satisfied.',
+      },
+    ],
+  },
+  // v29: the content-addressed object store. Declared here, between version_history and the rest,
+  // because DURABLE_TABLE_NAMES preserves this order and restoreDurableTables replays it — a child
+  // row must be re-inserted after the parent it references.
+  {
+    table: 'objects',
+    owner: 'src/modules/versioning/version-history-service.ts',
+    // The classification this whole slice turns on. DURABLE_TABLE_NAMES derives from `posture`,
+    // so `ephemeral` here would mean the next SCHEMA_VERSION bump silently dropped every object
+    // while version_history.tree_hash stayed non-NULL — a row pointing at a tree that is not
+    // there. The bytes exist nowhere else once the file on disk has moved on.
+    posture: 'durable',
+    // Per-workspace by owner ruling: the key is (tenant_id, hash), and tenant_id is the value the
+    // owning version_history row carries. Cross-workspace dedup is given up on purpose — one
+    // state.db serves every project on the machine.
+    scope: 'workspace',
+    retention: 'unbounded-justified',
+    retentionRationale:
+      'The referenced closure of version_history, which is itself capped at ' +
+      'maxRowsPerResource: 50, times the files per resource, times a per-blob byte limit the ' +
+      'write path enforces. Bounded by (capped rows × files × file size), not by time — and ' +
+      'reclaimed by the sweep when the rows that referenced an object are pruned or deleted.',
+    readers: ['src/infra/database/sqlite-engine.ts'],
+    finding:
+      'No writer yet: this row declares the schema (row O.2) and the startup referential check ' +
+      'reads it, while the write path lands at Tier O.4. Every column therefore carries an ' +
+      'acceptedPhantomColumns entry closed by that tier, and the two cli-shared foreign-writer ' +
+      'entries version_history carries are deliberately NOT declared here — an exception for a ' +
+      'write that does not happen yet is a stale exception on arrival. Closed by Tier O.4.',
+    acceptedPhantomColumns: [
+      {
+        subject: 'tenant_id',
+        reason: OBJECT_STORE_PENDING_WRITER,
+        closedBy: OBJECT_STORE_PENDING_WRITER_CLOSED_BY,
+      },
+      {
+        subject: 'hash',
+        reason: OBJECT_STORE_PENDING_WRITER,
+        closedBy: OBJECT_STORE_PENDING_WRITER_CLOSED_BY,
+      },
+      {
+        subject: 'bytes',
+        reason: OBJECT_STORE_PENDING_WRITER,
+        closedBy: OBJECT_STORE_PENDING_WRITER_CLOSED_BY,
+      },
+      {
+        subject: 'size',
+        reason: OBJECT_STORE_PENDING_WRITER,
+        closedBy: OBJECT_STORE_PENDING_WRITER_CLOSED_BY,
+      },
+      {
+        subject: 'created_at',
+        reason:
+          OBJECT_STORE_PENDING_WRITER +
+          ' Deliberately carries no DDL DEFAULT, unlike every other created_at in this schema: a ' +
+          'default would exempt it from this gate, and the targeted sweep reads it as a grace ' +
+          'window, so a dropped writer must fail loudly rather than read as "written now".',
+        closedBy: OBJECT_STORE_PENDING_WRITER_CLOSED_BY,
+      },
+    ],
+  },
+  {
+    table: 'version_entries',
+    owner: 'src/modules/versioning/version-history-service.ts',
+    // Same reasoning as `objects`, and the two must agree: an ephemeral manifest over a durable
+    // blob store would lose every reference and leave the sweep looking at unreachable bytes.
+    posture: 'durable',
+    // Its own tenant_id is not a second scope channel — it is one half of the composite foreign
+    // key into objects, and the only value it may hold is its parent version_history row's.
+    scope: 'workspace',
+    retention: 'unbounded-justified',
+    retentionRationale:
+      'One row per (version row, file). Bounded by the same capped closure as objects: ' +
+      'version_history is capped at maxRowsPerResource: 50 and these rows are deleted with the ' +
+      'version row they describe.',
+    readers: ['src/infra/database/sqlite-engine.ts'],
+    finding:
+      'Same state as objects: schema at row O.2, write path at Tier O.4, so every column carries ' +
+      'an acceptedPhantomColumns entry until then. The ON DELETE CASCADE toward version_history ' +
+      'is declared and NOT enforced — no opener sets PRAGMA foreign_keys — so whatever prunes a ' +
+      'version row must delete these rows explicitly rather than rely on the cascade. Closed by ' +
+      'Tier O.4 for the writer, and by the tier that turns the pragma on for the cascade.',
+    acceptedPhantomColumns: [
+      {
+        subject: 'version_row_id',
+        reason: OBJECT_STORE_PENDING_WRITER,
+        closedBy: OBJECT_STORE_PENDING_WRITER_CLOSED_BY,
+      },
+      {
+        subject: 'tenant_id',
+        reason: OBJECT_STORE_PENDING_WRITER,
+        closedBy: OBJECT_STORE_PENDING_WRITER_CLOSED_BY,
+      },
+      {
+        subject: 'path',
+        reason: OBJECT_STORE_PENDING_WRITER,
+        closedBy: OBJECT_STORE_PENDING_WRITER_CLOSED_BY,
+      },
+      {
+        subject: 'object_hash',
+        reason: OBJECT_STORE_PENDING_WRITER,
+        closedBy: OBJECT_STORE_PENDING_WRITER_CLOSED_BY,
+      },
+    ],
   },
   {
     table: 'resource_changes',
