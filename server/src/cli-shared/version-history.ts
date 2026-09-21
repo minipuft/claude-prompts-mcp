@@ -51,6 +51,7 @@ import type {
   RollbackResult,
   SaveVersionOptions,
 } from '#modules/versioning/types.js';
+import type { LoadedTree } from './object-store.js';
 import type { HistoryRequest, HistoryResponse, ResourceType } from './version-history-types.js';
 
 import { STATE_DB_WRITER_PRAGMAS } from '#shared/utils/runtime-state-location.js';
@@ -158,14 +159,11 @@ function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): 
     }
 
     case 'save_version': {
-      const outcome = appendVersion(
-        db,
-        tenantId,
-        request,
-        request.snapshot ?? {},
-        request.description ?? '',
-        request.diff_summary ?? ''
-      );
+      const outcome = appendVersion(db, tenantId, request, request.snapshot ?? {}, {
+        description: request.description ?? '',
+        diffSummary: request.diff_summary ?? '',
+        tree: request.produced_tree ?? null,
+      });
       return { success: true, version: outcome.version, recorded: outcome.recorded };
     }
 
@@ -175,6 +173,8 @@ function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): 
         producedSnapshot: request.snapshot ?? {},
         description: request.description ?? '',
         diffSummary: request.diff_summary ?? '',
+        bridgeTree: request.bridge_tree ?? null,
+        producedTree: request.produced_tree ?? null,
       });
       return {
         success: true,
@@ -224,6 +224,8 @@ function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): 
         producedSnapshot: restoredSnapshot,
         description: `Rollback to v${target}`,
         diffSummary: '',
+        bridgeTree: request.bridge_tree ?? null,
+        producedTree: request.produced_tree ?? null,
       });
       return {
         success: true,
@@ -371,6 +373,14 @@ export function compareVersions(
  */
 export interface HistoryWriteOptions extends SaveVersionOptions {
   maxVersions?: number;
+  /**
+   * The resource's bytes as they are on disk RIGHT NOW, already read by the caller.
+   *
+   * Supplied by `cpm rollback` alone today; every other CLI write leaves it absent and records a
+   * projection-only row, which is the behaviour those paths have always had. Which ROW it lands
+   * on is decided per operation — see `rollbackVersion`.
+   */
+  tree?: LoadedTree | null;
 }
 
 /**
@@ -422,6 +432,8 @@ export function saveVersion(
     description: options?.description,
     created_at: new Date().toISOString(),
     max_versions: options?.maxVersions ?? DEFAULT_MAX_VERSIONS,
+    // One row, and the caller says whether the disk holds the state it is passing.
+    produced_tree: options?.tree ?? null,
   });
   if (!result.success) {
     return { success: false, error: result.error ?? 'Failed to save version', recorded: false };
@@ -463,6 +475,10 @@ export function recordEditResult(
     description: options?.description ?? '',
     created_at: new Date().toISOString(),
     max_versions: options?.maxVersions ?? DEFAULT_MAX_VERSIONS,
+    // The server's assignment: a caller that RECORDS AN EDIT has already written the produced
+    // files, so the produced row is the one the disk describes and the bridge row is not.
+    produced_tree: options?.tree ?? null,
+    bridge_tree: null,
   });
   if (!result.success) {
     return {
@@ -499,6 +515,18 @@ export function rollbackVersion(
     current_snapshot: currentSnapshot,
     created_at: new Date().toISOString(),
     max_versions: options?.maxVersions ?? DEFAULT_MAX_VERSIONS,
+    // MEASURED, not assumed: `cpm rollback` calls this BEFORE it writes the restored file
+    // (`cli/src/commands/rollback.ts` — the merge and `writeFileSync` come after this returns).
+    // So at the moment both rows are written, the bytes on disk are the state this call was
+    // handed as `currentSnapshot` — the BRIDGE row's state. The produced row claims the RESTORED
+    // state, which is not on disk yet, so it stays projection-only: a tree there would file the
+    // pre-rollback bytes under the row claiming the restored content, and a later byte-exact
+    // rollback would restore the wrong state while reporting full fidelity.
+    //
+    // This is the inverse of the server's assignment and it is the same rule, not an exception to
+    // it: a row gets a tree exactly when the disk describes that row's state.
+    bridge_tree: options?.tree ?? null,
+    produced_tree: null,
   });
   if (!result.success) {
     return { success: false, error: result.error ?? 'Rollback failed' };

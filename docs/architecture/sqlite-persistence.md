@@ -149,6 +149,13 @@ It opens no transaction of its own: every statement runs inside the caller's exi
 and `tree_origin`. That is invariant WRITE-1: an object insert is always in the same transaction as
 the reference that justifies it, so a crash between them leaves neither.
 
+**The file READS are outside that lock, and `recordTree` is synchronous.** `readResourceTree` reads
+and hashes the bytes before the caller takes the lock; `recordTree` then runs SQL only. Nothing
+read needs the lock — objects are content-addressed, so a file that changes between the read and
+the commit produces a different tree rather than a wrong one — and holding a write lock on a file
+two processes share across disk I/O blocks the other one for as long as the disk takes. It is also
+what lets `cpm` share the recorder at all: that path is a fully synchronous `DatabaseSync`.
+
 The files it stores are the ones `resourceFileSet` enumerates, and it never enumerates for itself —
 one answer, shared by the recorder and any later restorer. Finding the resource from a type and an
 id is a third party's job again: `runtime/resource-roots.ts` builds a `ResourceFileLocatorPort` from
@@ -162,11 +169,27 @@ the thing nothing regenerates; refusing to write it because its bytes were too l
 degraded rollback for a lost version. A SQLite failure is the other case and propagates, rolling the
 caller's transaction back.
 
-**Bridge rows never carry a tree, structurally.** `recordEditResult` appends the prior live state
-and then the produced state, and BOTH appends run at commit time — after the produced files are on
-disk. An enumerator run inside either one therefore reads the produced bytes, so a tree on the
-bridge row would describe the produced state under a row whose snapshot is the prior one. The
-distinction is a parameter, not a match against the bridge row's description text.
+**A row gets a tree exactly when the bytes on disk at record time ARE that row's state**, and only
+its caller knows that — so the answer is a per-row parameter, never a match against the bridge
+row's description text, which is presentation deciding durability.
+
+On the SERVER, `recordEditResult` appends the prior live state and then the produced state, and
+BOTH appends run at commit time, after the produced files are on disk. So the produced row
+qualifies and the bridge row does not: a tree on the bridge row would describe the produced bytes
+under a row whose snapshot is the prior state.
+
+**`cpm rollback` is the same rule with the opposite answer, and it is not an exception.**
+`rollbackVersion` runs BEFORE `cli/src/commands/rollback.ts` writes the restored file, so the disk
+still holds the PRE-rollback state — the bridge row's state. The bridge row therefore carries the
+tree and the produced row stays projection-only. Reading the server's assignment as a rule about
+row KINDS would, on that path, file the pre-rollback bytes under the row claiming the restored
+content, and a later byte-exact rollback would restore the wrong state at full confidence. Pinned
+by `tests/integration/versioning/cli-tree-parity.test.ts`, which also asserts that a `cpm` write
+and a server write of identical files produce an identical `tree_hash` — one enumerator, one
+hasher, one recorder, reached from both sides.
+
+`cpm`'s edit commands (`link-gate`, `rename`, `move`) record no version at all, and so record no
+tree; `rollback` is the CLI's only version-writing path today.
 
 **Losing every object degrades rollback to the projection path; it never loses history.**
 `version_history.snapshot` keeps holding the projection every reader already reads, and it is not

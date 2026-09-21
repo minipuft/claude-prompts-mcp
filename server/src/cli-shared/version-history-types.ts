@@ -9,6 +9,7 @@
  */
 
 import type { VersionEntry, HistoryFile } from '#modules/versioning/types.js';
+import type { LoadedTree } from './object-store.js';
 
 import { DEFAULT_VERSIONING_CONFIG } from '#shared/types/core-config.js';
 
@@ -45,6 +46,14 @@ export interface HistoryRequest {
   snapshot?: Record<string, unknown>;
   /** The on-disk state immediately BEFORE this edit — only read by `record_edit_result`/`rollback` for the bridge check. */
   prior_snapshot?: Record<string, unknown>;
+  /**
+   * The resource's bytes, already read, for whichever row the disk currently describes.
+   *
+   * Absent means projection-only, which is every action but `rollback` today. See
+   * `recordEditResultRow` for why the answer is per ROW rather than per row kind.
+   */
+  bridge_tree?: LoadedTree | null;
+  produced_tree?: LoadedTree | null;
   description?: string;
   diff_summary?: string;
   target_version?: number;

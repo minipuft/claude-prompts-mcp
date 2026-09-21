@@ -10,11 +10,11 @@
  * Split out of `version-history.ts` when that file crossed the 1000-line gate; a pure move.
  */
 
-import { sweepUnreferencedObjects } from './object-store.js';
+import { recordTree, sweepUnreferencedObjects } from './object-store.js';
 import { DEFAULT_MAX_VERSIONS } from './version-history-types.js';
 
 import type { HistoryFile, VersionEntry } from '#modules/versioning/types.js';
-import type { ObjectStoreDatabase } from './object-store.js';
+import type { LoadedTree, ObjectStoreDatabase } from './object-store.js';
 import type { HistoryRequest, HistoryResponse, HistoryRow } from './version-history-types.js';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 
@@ -121,12 +121,11 @@ export function appendVersion(
   tenantId: string,
   request: HistoryRequest,
   snapshot: Record<string, unknown>,
-  description: string,
-  diffSummary: string
+  row: AppendRowFacts
 ): AppendOutcome {
   db.exec('BEGIN IMMEDIATE');
   try {
-    const outcome = appendVersionRow(db, tenantId, request, snapshot, description, diffSummary);
+    const outcome = appendVersionRow(db, tenantId, request, snapshot, row);
     db.exec('COMMIT');
     return outcome;
   } catch (error) {
@@ -135,15 +134,24 @@ export function appendVersion(
   }
 }
 
+/** What a row records beyond its snapshot: its prose, and the bytes it may claim. */
+export interface AppendRowFacts {
+  description: string;
+  diffSummary: string;
+  /** Non-null only when the bytes on disk RIGHT NOW are this row's state. */
+  tree?: LoadedTree | null;
+}
+
 /** The body of `appendVersion`, which owns the transaction around it. */
 function appendVersionRow(
   db: DatabaseSync,
   tenantId: string,
   request: HistoryRequest,
   snapshot: Record<string, unknown>,
-  description: string,
-  diffSummary: string
+  row: AppendRowFacts
 ): AppendOutcome {
+  const { description, diffSummary } = row;
+  const tree = row.tree ?? null;
   // Serialised once: the text the equality test measures is the text the INSERT binds.
   const payload = JSON.stringify(snapshot);
   const latest = latestRow(db, tenantId, request);
@@ -168,7 +176,24 @@ function appendVersionRow(
     description,
     request.created_at ?? new Date().toISOString()
   );
-  pruneVersionHistory(asObjectStoreDatabase(db), {
+  const store = asObjectStoreDatabase(db);
+  // The SAME recorder the server calls, over bytes the caller read before this transaction
+  // opened. One implementation is the whole point: a `cpm` write and a server write of identical
+  // files must produce identical `tree_hash`, and two copies of the enumeration-plus-hashing
+  // could only agree by inspection.
+  if (tree !== null) {
+    const row = db
+      .prepare(
+        `SELECT id FROM version_history
+         WHERE tenant_id = ? AND resource_type = ? AND resource_id = ? AND version = ?`
+      )
+      .get(tenantId, request.resource_type, request.resource_id, version) as
+      { id: number } | undefined;
+    if (row !== undefined) {
+      recordTree(store, { tenantId, versionRowId: Number(row.id), tree });
+    }
+  }
+  pruneVersionHistory(store, {
     tenantId,
     resourceType: request.resource_type,
     resourceId: request.resource_id,
@@ -196,21 +221,35 @@ export function recordEditResultRow(
     producedSnapshot: Record<string, unknown>;
     description: string;
     diffSummary: string;
+    /**
+     * Which of the two rows, if either, the bytes on disk describe RIGHT NOW.
+     *
+     * Per row rather than one flag, because the answer is not a property of the row's KIND — it
+     * is a property of when this call runs relative to the file write, and the two callers differ.
+     * A server edit records after writing, so the produced row qualifies and the bridge row does
+     * not. `cpm rollback` records BEFORE restoring, so the disk still holds the pre-rollback
+     * state: the bridge row qualifies and the produced row does not. Reading R66 as "bridge rows
+     * never get a tree" would, on that path, file the pre-rollback bytes under the row claiming
+     * the restored state — full fidelity reported over the wrong content.
+     */
+    bridgeTree?: LoadedTree | null;
+    producedTree?: LoadedTree | null;
   }
 ): AppendOutcome & { bridged: boolean } {
   const { priorLiveSnapshot, producedSnapshot, description, diffSummary } = edit;
   // ONE equality rule, applied twice — the bridge is simply an append that may find nothing to
   // do. It previously carried its own order-sensitive comparison while the record below carried
   // none, so "is this already the newest state?" had two answers on one path.
-  const bridge = appendVersion(
-    db,
-    tenantId,
-    request,
-    priorLiveSnapshot,
-    'Bridge: prior live state (era transition or out-of-band edit)',
-    ''
-  );
-  const outcome = appendVersion(db, tenantId, request, producedSnapshot, description, diffSummary);
+  const bridge = appendVersion(db, tenantId, request, priorLiveSnapshot, {
+    description: 'Bridge: prior live state (era transition or out-of-band edit)',
+    diffSummary: '',
+    tree: edit.bridgeTree ?? null,
+  });
+  const outcome = appendVersion(db, tenantId, request, producedSnapshot, {
+    description,
+    diffSummary,
+    tree: edit.producedTree ?? null,
+  });
   return { ...outcome, bridged: bridge.recorded };
 }
 

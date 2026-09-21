@@ -3,8 +3,12 @@ import {
   resolveConfiguredMaxVersions,
   rollbackVersion,
 } from '@cli-shared/index.js';
+// Imported from the defining module, not through the barrel: a barrel re-export with no consumer
+// inside `server/src` reads to knip as an unused export, and this one already has one there.
+import { readResourceTree } from '@cli-shared/object-store.js';
+import { resourceFileSet } from '@shared/utils/resource-file-set.js';
 import { serializeYamlPreservingSource } from '@shared/utils/yaml/yaml-document-writer.js';
-import { resolveWorkspace, findResource } from '../lib/workspace.js';
+import { resolveWorkspace, resolveResourceDir, findResource } from '../lib/workspace.js';
 import { output } from '../lib/output.js';
 import { TYPE_MAP, TYPE_CONFIG, singularName, isVersionedType } from '../lib/types.js';
 
@@ -70,6 +74,27 @@ export async function rollback(options: RollbackOptions): Promise<number> {
   }
   const resourceType = singularName(type) as 'prompt' | 'gate' | 'framework';
 
+  // The resource's bytes as they are RIGHT NOW, read before any row is written — this call
+  // records the pre-rollback state as the bridge row, and the restore below is what changes the
+  // files afterwards. Same enumerator and same recorder the server uses, so a `cpm` checkpoint
+  // and a server checkpoint of identical files carry identical `tree_hash`.
+  //
+  // Never fatal: a resource whose bytes cannot be enumerated or read is recorded
+  // projection-only, exactly as `cpm` has always recorded it. A rollback must not fail because a
+  // checkpoint could not be taken.
+  let tree = null;
+  try {
+    const files = await resourceFileSet({
+      resourceType,
+      entryPath: match.file,
+      roots: { primary: resolveResourceDir(workspace, type) },
+    });
+    const loaded = await readResourceTree(files);
+    if ('tree' in loaded) tree = loaded.tree;
+  } catch {
+    tree = null;
+  }
+
   // The workspace's own `versioning.maxVersions`, not the built-in 50: a rollback writes rows and
   // trims the history it wrote them into, and until now `cpm` trimmed to a hardcoded bound while
   // the server trimmed to the configured one — the same resource kept a different number of
@@ -80,7 +105,7 @@ export async function rollback(options: RollbackOptions): Promise<number> {
     match.id,
     targetVersion,
     currentData,
-    { maxVersions: resolveConfiguredMaxVersions(workspace) },
+    { maxVersions: resolveConfiguredMaxVersions(workspace), tree },
   );
 
   if (!result.success) {

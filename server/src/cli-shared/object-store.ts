@@ -79,17 +79,20 @@ export interface RecordTreeInput {
   /** `version_history.id` of the row already inserted in this transaction. */
   versionRowId: number;
   /**
-   * The files that ARE this resource, or `null` for a row that must stay projection-only.
+   * The bytes that ARE this resource, already read, or `null` for a projection-only row.
    *
-   * `null` is the BRIDGE row's answer and the distinction is structural, not textual (ruling R66).
-   * A bridge row's snapshot is the state BEFORE the edit, while its record runs at commit time —
-   * after the produced files are on disk — so any tree recorded against it would describe the
-   * produced bytes under a row claiming the prior state. That is worse than no tree: a later
-   * byte-exact rollback would restore the wrong state while reporting full fidelity. Matching the
-   * bridge row's description string instead would be presentation deciding durability, and would
-   * stop working the day someone rewords it.
+   * **A row gets a tree exactly when the bytes on disk at record time ARE that row's state**, and
+   * only its caller can know that — which is why the answer arrives as an argument rather than
+   * being decided here from a description string, which is presentation deciding durability and
+   * would stop working the day someone rewords it (ruling R66).
+   *
+   * On the SERVER the produced row qualifies and the bridge row does not: both records run at
+   * commit time, after the produced files are on disk, so a tree on the bridge row would describe
+   * the produced bytes under a row claiming the PRIOR state — worse than no tree, because a later
+   * byte-exact rollback would restore the wrong state while reporting full fidelity. On `cpm
+   * rollback` the ordering is inverted and so is the answer; see `rollbackVersion`.
    */
-  files: ResourceFileSet | null;
+  tree: LoadedTree | null;
 }
 
 export type RecordTreeOutcome =
@@ -104,18 +107,39 @@ export type RecordTreeOutcome =
  * them by default, measured 2026-09-20 — so a different order does not merely read oddly, it
  * raises and takes the caller's whole transaction with it.
  */
-export async function recordTree(
-  db: ObjectStoreDatabase,
-  input: RecordTreeInput
-): Promise<RecordTreeOutcome> {
-  const { tenantId, versionRowId, files } = input;
-  if (files === null) {
+/**
+ * Whether this database HAS an object store.
+ *
+ * `cpm` opens whatever `state.db` it finds, and one written by a server older than v29 has
+ * neither table — the same situation `version-history.ts` already handles by asking whether
+ * `version_history` exists before using it. Both entry points below answer "nothing to do"
+ * rather than throwing: a `cpm rollback` or `cpm delete` must not fail because a checkpoint
+ * could not be taken, and an absent store means provably zero objects, so the sweep loses
+ * nothing either. On the server the engine owns this DDL and asserts it at startup, so the check
+ * is one `sqlite_master` lookup that always answers yes — and a NO there still surfaces, because
+ * `recordTree` returns a reason its caller warns about rather than a silent skip.
+ */
+function objectStoreExists(db: ObjectStoreDatabase): boolean {
+  return (
+    db.queryOne<{ name: string }>(
+      `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'objects'`
+    ) !== null
+  );
+}
+
+export function recordTree(db: ObjectStoreDatabase, input: RecordTreeInput): RecordTreeOutcome {
+  const { tenantId, versionRowId, tree } = input;
+  if (tree === null) {
     return { recorded: false, reason: 'projection-only by request (bridge row)' };
   }
+  if (!objectStoreExists(db)) {
+    return {
+      recorded: false,
+      reason: 'this state.db has no object store — its schema predates v29',
+    };
+  }
 
-  const contents = await readFileSet(files);
-  if ('reason' in contents) return { recorded: false, reason: contents.reason };
-
+  const contents = tree;
   const treeHash = hashFileSet(
     contents.entries.map((entry) => ({ path: entry.path, content: entry.bytes }))
   );
@@ -142,7 +166,7 @@ export async function recordTree(
 
   db.run(`UPDATE version_history SET tree_hash = ?, tree_origin = ? WHERE id = ?`, [
     treeHash,
-    files.origin,
+    contents.origin,
     versionRowId,
   ]);
 
@@ -174,16 +198,7 @@ export async function recordTree(
  * @returns how many objects were removed.
  */
 export function sweepUnreferencedObjects(db: ObjectStoreDatabase, tenantId: string): number {
-  // A `state.db` written by a pre-v29 server has no store at all, and `cpm` opens whatever file it
-  // finds — the same reason this module's sibling asks whether `version_history` exists before
-  // using it. Absent tables mean provably zero objects, so skipping loses nothing; throwing would
-  // make `cpm delete` fail against a database an older server created. The check is here rather
-  // than at the CLI call sites because both surfaces reach the sweep through one prune, and on the
-  // server it costs one `sqlite_master` lookup that always answers yes.
-  const present = db.queryOne<{ name: string }>(
-    `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'objects'`
-  );
-  if (present === null) {
+  if (!objectStoreExists(db)) {
     return 0;
   }
 
@@ -214,15 +229,28 @@ interface LoadedFile {
   hash: string;
 }
 
+/** One resource's bytes, read and hashed, ready for `recordTree` to store under a row. */
+export interface LoadedTree {
+  entries: LoadedFile[];
+  /** The enumerator's own `origin`, carried through so `tree_origin` is never re-derived. */
+  origin: string;
+}
+
 /**
  * Read every file of the set, or say why the resource cannot be stored.
+ *
+ * **Called BEFORE the caller's `BEGIN IMMEDIATE`, deliberately.** File I/O under the write lock
+ * blocks the other writer of this one file for as long as the disk takes, and nothing read here
+ * needs the lock: the bytes are hashed by content, so a file that changes between this read and
+ * the commit produces a different tree, not a wrong one. It also makes `recordTree` synchronous,
+ * which is what lets the `cpm` writer — a fully synchronous `DatabaseSync` path — share it.
  *
  * Both limits are checked here, before any statement runs, so an over-limit resource costs no
  * partial write that the caller would then have to undo.
  */
-async function readFileSet(
+export async function readResourceTree(
   files: ResourceFileSet
-): Promise<{ entries: LoadedFile[] } | { reason: string }> {
+): Promise<{ tree: LoadedTree } | { reason: string }> {
   const entries: LoadedFile[] = [];
   let total = 0;
 
@@ -254,5 +282,5 @@ async function readFileSet(
   if (entries.length === 0) {
     return { reason: 'the enumerator reported no files' };
   }
-  return { entries };
+  return { tree: { entries, origin: files.origin } };
 }
