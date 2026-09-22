@@ -225,6 +225,14 @@ skipped node never renders — the run proceeds straight to the next live node. 
 targeting, step totals, the CTA footer, and the Python hook projection all re-derive from the
 run's current (possibly mutated) node list rather than the original parse-time step list.
 
+**A step's own gate declarations bind its own set.** A chain accumulates gates as it walks — step
+N sees what steps 1..N-1 collected, plus anything the caller supplied for the run — but the set a
+step is actually given is filtered through that step's own `gateConfiguration` before it renders.
+So `exclude` on one step removes a gate for that step alone, whatever put it in the run, while a
+sibling that did not exclude it keeps it. The one thing `exclude` cannot remove is a gate the
+CALLER named in the `gates` parameter: that outranks a prompt author's preference, exactly as it
+does outside a chain.
+
 **Gates under mutation**: a gate whose `target_step_id` resolves to a node that later gets
 skipped never fires. A step-targeted gate also enters gate REVIEW only on the step it targets —
 an untargeted gate still reviews every step, run-wide inheritance unchanged. Known residual: a
