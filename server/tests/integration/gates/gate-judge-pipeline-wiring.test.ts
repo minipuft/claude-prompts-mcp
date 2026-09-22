@@ -8,6 +8,7 @@ import { ExecutionContext } from '../../../src/engine/execution/context/executio
 import { GateReviewStage } from '../../../src/engine/execution/pipeline/stages/20-gate-review-stage.js';
 import { createGateLoader } from '../../../src/engine/gates/core/gate-loader.js';
 import { GATE_VERDICT_REQUIRED_FORMAT } from '../../../src/engine/gates/core/gate-verdict-contract.js';
+import { JUDGE_OUTPUT_PLACEHOLDER } from '../../../src/engine/gates/core/review-utils.js';
 import { GateFileWriter } from '../../../src/mcp/tools/gate-manager/services/index.js';
 
 import type { LightweightGateDefinition } from '../../../src/engine/gates/types.js';
@@ -162,6 +163,23 @@ describe('Judge Gate Pipeline Wiring', () => {
     expect(metadata.judge.modelHint).toBe('haiku');
     expect(metadata.judge.judgePrompt).toContain(GATE_VERDICT_REQUIRED_FORMAT);
     expect(metadata.judge.judgePrompt).toContain('## Judge Evaluation');
+  });
+
+  test('the output slot is left for the client, not filled with the review render (P4.133)', async () => {
+    const judgeGate: LightweightGateDefinition = {
+      ...baseGate,
+      id: 'judge-gate',
+      evaluation: { mode: 'judge' },
+    };
+
+    const { stage, context } = createStageWithGates({ 'judge-gate': judgeGate });
+    await stage.execute(context);
+
+    const judgePrompt = (context.executionResults?.metadata as any).judge.judgePrompt as string;
+    // The review is rendered before the output it judges exists; the render is instructions.
+    expect(context.executionResults?.content).toContain('Generated output');
+    expect(judgePrompt).not.toContain('Generated output');
+    expect(judgePrompt).toContain(JUDGE_OUTPUT_PLACEHOLDER);
   });
 
   test('GateReviewStage omits metadata.judge when all gates are self mode', async () => {
