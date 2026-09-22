@@ -48,8 +48,16 @@ version: 1.0.0
 type: BETA
 description: A framework
 enabled: true
+systemPromptGuidance: inline system prompt
 `;
-const SYSTEM_PROMPT = 'system prompt body\n';
+/** The one source (R91): the inline `systemPromptGuidance` above. */
+const SYSTEM_PROMPT = 'inline system prompt';
+/**
+ * A legacy `system-prompt.md` left in a workspace framework, holding DIFFERENT text. Neither
+ * surface may read it — the runtime never served it, so a snapshot recording it would describe a
+ * framework nobody runs.
+ */
+const LEGACY_SYSTEM_PROMPT_FILE = 'legacy file body nobody serves\n';
 
 /**
  * Three prompt layouts, hand-authored, because the entry-file-to-root mapping differs in each.
@@ -112,7 +120,11 @@ describe('one projection per resource type, read by both surfaces', () => {
     writeFileSync(join(root, 'gates', 'alpha', 'guidance.md'), GUIDANCE, 'utf8');
     mkdirSync(join(root, 'frameworks', 'beta'), { recursive: true });
     writeFileSync(join(root, 'frameworks', 'beta', 'framework.yaml'), FRAMEWORK_YAML, 'utf8');
-    writeFileSync(join(root, 'frameworks', 'beta', 'system-prompt.md'), SYSTEM_PROMPT, 'utf8');
+    writeFileSync(
+      join(root, 'frameworks', 'beta', 'system-prompt.md'),
+      LEGACY_SYSTEM_PROMPT_FILE,
+      'utf8'
+    );
     mkdirSync(join(root, 'prompts', 'demo', 'chain_demo', 'step_one'), { recursive: true });
     writeFileSync(join(root, 'prompts', 'demo', 'inline_demo.yaml'), INLINE_PROMPT_YAML, 'utf8');
     writeFileSync(
@@ -168,18 +180,18 @@ describe('one projection per resource type, read by both surfaces', () => {
     const server = frameworkSnapshotContract.project('beta', {
       framework,
       phases: null,
-      systemPrompt: SYSTEM_PROMPT,
       judgePrompt: null,
       frameworkPath: entryPath,
       phasesPath: null,
-      systemPromptPath: join(root, 'frameworks', 'beta', 'system-prompt.md'),
       judgePromptPath: null,
     });
     const cli = await projectResourceSnapshot('framework', 'beta', entryPath, framework);
 
     expect(cli.shared).toBe(true);
     expect(JSON.stringify(cli.snapshot)).toBe(JSON.stringify(server));
+    // The inline text, on both surfaces, with a differing `system-prompt.md` beside it on disk.
     expect(server['system_prompt_guidance']).toBe(SYSTEM_PROMPT);
+    expect(cli.snapshot['system_prompt_guidance']).toBe(SYSTEM_PROMPT);
   });
 
   it('records a gate with no guidance.md the way the server does — an empty string, not an absent key', async () => {

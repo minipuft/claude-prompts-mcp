@@ -35,7 +35,7 @@ export class StatusActionHandler extends ActionHandler {
       throw new Error('Framework state manager not initialized');
     }
 
-    const health = this.frameworkStateStore.getSystemHealth();
+    const health = this.frameworkStateStore.getSystemHealth(this.requestScope);
     const statusIcon = health.status === 'healthy' ? '✅' : '⚠️';
 
     const isFrameworkEnabled = health.frameworkSystemEnabled;
@@ -75,7 +75,7 @@ export class StatusActionHandler extends ActionHandler {
       throw new Error('Framework state manager not initialized');
     }
 
-    const health = this.frameworkStateStore.getSystemHealth();
+    const health = this.frameworkStateStore.getSystemHealth(this.requestScope);
     const statusIcon = health.status === 'healthy' ? '✅' : '⚠️';
 
     let response = `${statusIcon} **System Health Status**: ${health.status}\n\n`;
@@ -100,7 +100,7 @@ export class StatusActionHandler extends ActionHandler {
 
     try {
       if (this.frameworkStateStore) {
-        const health = this.frameworkStateStore.getSystemHealth();
+        const health = this.frameworkStateStore.getSystemHealth(this.requestScope);
         response += `Framework State: ${health.status}\n`;
         response += `Active Framework: ${health.activeFramework}\n`;
       }
@@ -118,7 +118,7 @@ export class StatusActionHandler extends ActionHandler {
       throw new Error('Framework state manager not initialized');
     }
 
-    const health = this.frameworkStateStore.getSystemHealth();
+    const health = this.frameworkStateStore.getSystemHealth(this.requestScope);
 
     let response = `🎯 **Framework System Status**\n\n`;
 

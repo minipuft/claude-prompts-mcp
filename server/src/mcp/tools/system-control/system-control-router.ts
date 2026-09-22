@@ -175,8 +175,8 @@ export class ConsolidatedSystemControl implements SystemControlContext {
 
   createMinimalSystemResponse(text: string, action: string): ToolResponse {
     const now = Date.now();
-    const frameworkState = this.frameworkStateStore?.getCurrentState();
-    const systemHealth = this.frameworkStateStore?.getSystemHealth?.();
+    const frameworkState = this.frameworkStateStore?.getCurrentState(this.requestScope);
+    const systemHealth = this.frameworkStateStore?.getSystemHealth?.(this.requestScope);
     const frameworkEnabled =
       systemHealth?.frameworkSystemEnabled ?? frameworkState?.frameworkSystemEnabled ?? false;
 
@@ -395,7 +395,7 @@ export class ConsolidatedSystemControl implements SystemControlContext {
   private extractScope(extra: unknown): StateStoreOptions | undefined {
     const requestScopeId =
       extra && typeof extra === 'object'
-        ? resolveContinuityScopeId(resolveRequestIdentity(extra as Record<string, unknown>))
+        ? resolveContinuityScopeId(resolveRequestIdentity(extra))
         : 'default';
     const launchWorkspaceId = this.configManager?.getConfig().identity.launchDefaults.workspaceId;
     const workspaceId = requestScopeId !== 'default' ? requestScopeId : launchWorkspaceId;

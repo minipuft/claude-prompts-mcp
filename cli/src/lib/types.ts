@@ -51,15 +51,20 @@ export const TYPE_CONFIG: Record<
   frameworks: {
     entryFile: 'framework.yaml',
     nested: false,
-    // Authored in `system-prompt.md`; `framework.yaml` names it `systemPromptGuidance`.
-    snapshotKeysNotInEntryFile: ['system_prompt_guidance'],
     // A snapshot records the AUTHORING-PAYLOAD spelling, because the server restores by handing
     // it back to `FrameworkFileWriter`, which reads `tool_descriptions` and emits
     // `toolDescriptions`. The CLI has no writer in between, so it renames here. Merging the
     // payload spelling straight in added a second `tool_descriptions:` key beside the real
     // `toolDescriptions:` — and reported `toolDescriptions` as "not restored" while writing it
     // under a name nothing reads. Measured 2026-09-19.
-    snapshotKeyToEntryKey: { tool_descriptions: 'toolDescriptions' },
+    //
+    // `system_prompt_guidance` is renamed for the same reason. It was excluded while the system
+    // prompt was also written to `system-prompt.md`, so a `cpm rollback` never restored it; its
+    // one source is now `framework.yaml`'s `systemPromptGuidance` (R91).
+    snapshotKeyToEntryKey: {
+      tool_descriptions: 'toolDescriptions',
+      system_prompt_guidance: 'systemPromptGuidance',
+    },
   },
   styles: { entryFile: 'style.yaml', nested: false },
 };

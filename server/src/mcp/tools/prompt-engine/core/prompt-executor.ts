@@ -830,7 +830,7 @@ export class PromptExecutor {
     if (sdkExtra === null || typeof sdkExtra !== 'object') {
       return undefined;
     }
-    const identity = resolveRequestIdentity(sdkExtra as Record<string, unknown>);
+    const identity = resolveRequestIdentity(sdkExtra);
     return buildIdentityScope({
       continuityScopeId: resolveContinuityScopeId(identity),
       workspaceId: identity.workspaceId,

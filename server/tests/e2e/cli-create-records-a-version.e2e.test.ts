@@ -170,9 +170,10 @@ describe('cpm create records what it wrote (Streamable HTTP)', () => {
     expect(snapshot['description']).toBe(`D ${id}`);
 
     const entries = treeEntries(rows[0]!.id);
-    // The entry file AND its companion, not just the one `cpm` happened to write last.
+    // Every file the create wrote, not just the one `cpm` happened to write last. A framework
+    // has no companion: its system prompt is the inline `systemPromptGuidance` (R91).
     expect(entries.map((entry) => entry.path).sort()).toEqual(
-      type === 'gate' ? ['gate.yaml', 'guidance.md'] : ['framework.yaml', 'system-prompt.md']
+      type === 'gate' ? ['gate.yaml', 'guidance.md'] : ['framework.yaml']
     );
     expect(path.join(workspace, 'resources', plural, id)).toBe(reply['path']);
   });
