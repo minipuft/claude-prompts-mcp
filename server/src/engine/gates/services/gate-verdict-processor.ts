@@ -557,7 +557,7 @@ export class GateVerdictProcessor {
 
     switch (enforcementMode) {
       case 'blocking':
-        this.handleBlockingFail(context, session, sessionId, capturedGateIds, verdictPayload);
+        await this.handleBlockingFail(context, sessionId, capturedGateIds, verdictPayload);
         return undefined;
 
       case 'advisory':
@@ -582,13 +582,22 @@ export class GateVerdictProcessor {
     }
   }
 
-  private handleBlockingFail(
+  /**
+   * Blocking FAIL: flag the hold and announce it, in ONE order — `retryExhausted`, then
+   * `responseBlocked`, then `failed` (P4.117).
+   *
+   * Every event is awaited, as the advisory and informational handlers' are (row B.54). Fired and
+   * forgotten, the three interleaved with each other and finished after the response had been
+   * built, and a throw outside `emitGateEvents`' own catch became an unhandled rejection nothing
+   * reported. Awaited, the order is the order written here and any failure reaches the caller's
+   * call.
+   */
+  private async handleBlockingFail(
     context: ExecutionContext,
-    _session: ChainSession,
     sessionId: string,
     capturedGateIds: string[],
     verdictPayload: { rationale: string }
-  ): void {
+  ): Promise<void> {
     const pendingReview = this.chainSessionStore.getPendingGateReview(sessionId);
     const isRetryExhausted =
       pendingReview !== undefined && this.chainSessionStore.isRetryLimitExceeded(sessionId);
@@ -603,7 +612,7 @@ export class GateVerdictProcessor {
         gateIds: pendingReview.gateIds,
       });
 
-      void this.emitGateEvents(
+      await this.emitGateEvents(
         context,
         'retryExhausted',
         pendingReview.gateIds,
@@ -618,10 +627,10 @@ export class GateVerdictProcessor {
       context.diagnostics.info('GateVerdictProcessor', 'Response content blocked by gate failure', {
         blockedGateIds,
       });
-      void this.emitGateEvents(context, 'responseBlocked', blockedGateIds);
+      await this.emitGateEvents(context, 'responseBlocked', blockedGateIds);
     }
 
-    void this.emitGateEvents(context, 'failed', capturedGateIds, verdictPayload.rationale);
+    await this.emitGateEvents(context, 'failed', capturedGateIds, verdictPayload.rationale);
     context.diagnostics.info('GateVerdictProcessor', 'Gate FAIL - blocking mode, awaiting retry');
   }
 
