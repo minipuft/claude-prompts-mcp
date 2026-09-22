@@ -275,16 +275,17 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     // One submission, one recorded attempt (P4.116). A deferred FAIL opens a review and records
     // the verdict against it; handing the same `gate_verdict` to the pending path recorded it a
     // second time and spent two retry attempts on one call.
-    const pendingResult = deferredResult.verdictRecorded
-      ? deferredResult
-      : await this.verdictProcessor.processPendingReviewVerdict(
-          context,
-          this.chainSessionStore.getSession(sessionId, scopeOptions) ?? session,
-          sessionId,
-          currentStepAtStart,
-          deferredResult.userResponse,
-          sessionContext
-        );
+    const pendingResult =
+      deferredResult.verdictRecorded === true
+        ? deferredResult
+        : await this.verdictProcessor.processPendingReviewVerdict(
+            context,
+            this.chainSessionStore.getSession(sessionId, scopeOptions) ?? session,
+            sessionId,
+            currentStepAtStart,
+            deferredResult.userResponse,
+            sessionContext
+          );
     if (pendingResult.earlyExit) {
       await this.settleVerdict(
         context,

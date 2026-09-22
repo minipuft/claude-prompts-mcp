@@ -233,14 +233,7 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
       };
     }
 
-    // Stage 18 latched completion before this review existed: on the final step the capture has
-    // already walked the run past its last node. The latch is `isRunComplete`, which an
-    // outstanding review holds open, so it is read again here, where its input just changed —
-    // otherwise this one reply says both "complete" and "awaiting your verdict" (P4.119 / R96).
-    if (context.state.session.chainComplete === true) {
-      const run = this.chainSessionStore.getSession(sessionId, context.getScopeOptions());
-      context.state.session.chainComplete = run !== undefined && isRunComplete(run);
-    }
+    this.relatchRunCompletion(context, sessionId);
 
     this.logExit({
       passed: false,
@@ -248,6 +241,20 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
       failedPhases: result.failedPhases,
       maxAttempts,
     });
+  }
+
+  /**
+   * Read the completion latch again after this stage opened a review (P4.119 / R96).
+   *
+   * Stage 18 latched completion before the review existed: on the final step the capture has
+   * already walked the run past its last node. The latch is `isRunComplete`, which an outstanding
+   * review holds open, so it is re-read where its input just changed — otherwise one reply says
+   * both "complete" and "awaiting your verdict".
+   */
+  private relatchRunCompletion(context: ExecutionContext, sessionId: string): void {
+    if (context.state.session.chainComplete !== true) return;
+    const run = this.chainSessionStore.getSession(sessionId, context.getScopeOptions());
+    context.state.session.chainComplete = run !== undefined && isRunComplete(run);
   }
 
   /**
