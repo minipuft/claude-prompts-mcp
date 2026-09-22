@@ -108,7 +108,7 @@ const TREE_ORIGIN = 'bundled';
  * properties are version-agnostic — a stale `schema_version` row against the CURRENT DDL performs
  * whatever round trip the latest bump performs — so only this constant follows a bump.
  */
-const CURRENT_SCHEMA_VERSION = 30;
+const CURRENT_SCHEMA_VERSION = 31;
 
 describe('schema v29 — the content-addressed store', () => {
   let testDir: string;

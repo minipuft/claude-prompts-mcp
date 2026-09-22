@@ -13,7 +13,7 @@ module wins and this file is stale.
 
 Not 11, and not 13. `tenants` was deleted at v19 (F10); `chain_run_registry` was deleted at v22
 (P3 Tier 4), replaced by the two per-row tables below; `objects` and `version_entries` were added
-at v29. The schema is at v30. SQLite auto-creates `sqlite_sequence` for
+at v29. The schema is at v31. SQLite auto-creates `sqlite_sequence` for
 any table declaring `AUTOINCREMENT`; it is never declared in `applySchema()` and is excluded via
 `SQLITE_INTERNAL_TABLES`. A startup assert written against a raw `sqlite_master` count throws on
 every boot.
@@ -118,9 +118,21 @@ No migration was owed and none was written: `execution_records` is `ephemeral`, 
 and recreates it, and no row written under the old name can reach v30 to be read under the new one.
 `DROPPED_ON_THIS_BUMP` stays empty and `DROPPED_AT_VERSION` does not move. Seven test harnesses
 hand-write this table's DDL rather than booting the engine;
-`tests/unit/infra/database/execution-records-ddl-parity.test.ts` enumerates them by shape and fails
+`tests/unit/infra/database/ddl-copy-parity.test.ts` enumerates them by shape and fails
 when one drifts from the engine's column set — which is how a copy left declaring the retired
 column was found after a clean textual merge.
+
+`chain_run_nodes.spawned_at INTEGER` arrived at v31 with detached delegation (a chain step
+declared `await: run`). It records when a detached step's brief was rendered — the one way a node
+enters the detached lifecycle — and it is what lets a run refuse to COMPLETE while a spawned
+detached node has not reported, across a cold load. It is the only new column: "reported" is
+already on the row (`milestone = 'completed'` with `is_placeholder = 0`, a real captured output),
+and the `await` declaration stays on the step in the run's blueprint, where every other step
+declaration lives. `unreportedDetachedNodeIds` (`shared/types/chain-execution.ts`) is the single
+reader of the pair. Nullable with no DDL DEFAULT, NULL on every blocking node and on a detached node
+the run has not reached. `chain_run_nodes` is `ephemeral`, so the bump drops and recreates it and
+no migration is written; `DROPPED_ON_THIS_BUMP` stays empty. No test hand-writes this table's DDL
+today; the parity test holds any copy added later to the engine's column set.
 
 ## Four Tables Are Durable — A Schema Bump Must Not Destroy Them
 

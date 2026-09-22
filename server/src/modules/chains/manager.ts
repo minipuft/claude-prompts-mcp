@@ -849,6 +849,9 @@ export class ChainSessionStore implements ChainSessionService {
         : existing?.declaredSections !== undefined
           ? { declaredSections: existing.declaredSections }
           : {}),
+      // Sticky for the same reason: a detached node is spawned once, at render, and the run's
+      // completion guard reads it at every later milestone (Tier 4).
+      ...(existing?.spawnedAt !== undefined ? { spawnedAt: existing.spawnedAt } : {}),
     };
 
     session.state.stepStates.set(nodeId, metadata);

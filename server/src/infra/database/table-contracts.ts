@@ -417,6 +417,14 @@ export const TABLE_CONTRACTS: readonly TableContract[] = [
     //                     alone, so a declaration the node does not carry is a declaration the
     //                     run can never see. Partial population BY ROW TYPE again — every
     //                     planned and inserted node leaves both NULL.
+    //
+    // v31 (delegation Tier 4) added one more, also in the owner's INSERT list:
+    //   spawned_at      — when a detached (`await: run`) step's brief was rendered, the one way a
+    //                     node enters the detached lifecycle. Read back as `StepMetadata.spawnedAt`
+    //                     by `unreportedDetachedNodeIds`, which the run-completion guard reads.
+    //                     "Reported" has no column of its own: it is `milestone = 'completed'`
+    //                     with `is_placeholder = 0`, already on this row. Partial population BY
+    //                     ROW TYPE — NULL on every blocking node.
     // None needs an `acceptedPhantomColumns` entry — all appear in the owner's INSERT list.
   },
   {
