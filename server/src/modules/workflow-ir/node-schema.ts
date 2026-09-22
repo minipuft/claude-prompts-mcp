@@ -65,7 +65,7 @@ export type StepVisibilityYaml = z.infer<typeof StepVisibilitySchema>;
  * Mirrors `StepAwaitMode` in `shared/types/chain-execution.ts` (SSOT for the type), kept as a
  * literal Zod enum because Zod needs runtime values.
  */
-export const StepAwaitSchema = z.enum(['node', 'run']);
+const StepAwaitSchema = z.enum(['node', 'run']);
 
 /**
  * Structural caps the server enforces. A submission's `budget` may narrow these, never widen —

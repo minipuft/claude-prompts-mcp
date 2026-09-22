@@ -11,6 +11,8 @@
  * Engine code should cast to ParsedCommand when full type access is needed.
  */
 
+import { unreportedDetachedNodeIds } from './chain-execution.js';
+
 import type {
   StepMilestone,
   ChainNode,
@@ -352,8 +354,28 @@ export const isTerminalRunStatus = (status: ChainRunStatus | undefined): boolean
  */
 export const isRunComplete = (session: {
   runStatus?: ChainRunStatus;
-  state: { currentNodeId: string | null };
-}): boolean => isTerminalRunStatus(session.runStatus) || session.state.currentNodeId === null;
+  state: {
+    currentNodeId: string | null;
+    nodes?: readonly Pick<ChainNode, 'id'>[];
+    stepStates?: ReadonlyMap<string, StepMetadata>;
+  };
+}): boolean =>
+  isTerminalRunStatus(session.runStatus) ||
+  (session.state.currentNodeId === null && !isRunHeldOpen(session.state));
+
+/**
+ * True when a run has walked past its last node but may not complete yet: a detached
+ * (`await: run`) node it spawned has not reported (Tier 4). Such a run is NOT complete — its
+ * status stays non-terminal, a resume reaches it, and the only thing it will accept is the owed
+ * result (or a cancel). PURE; `unreportedDetachedNodeIds` is the one derivation.
+ */
+export const isRunHeldOpen = (state: {
+  currentNodeId: string | null;
+  nodes?: readonly Pick<ChainNode, 'id'>[];
+  stepStates?: ReadonlyMap<string, StepMetadata>;
+}): boolean =>
+  state.currentNodeId === null &&
+  unreportedDetachedNodeIds(state.nodes ?? [], state.stepStates).length > 0;
 
 export interface GateReviewOutcomeUpdate {
   verdict: 'PASS' | 'FAIL';
@@ -469,6 +491,16 @@ export interface ChainSessionService {
     isPlaceholder?: boolean
   ): Promise<boolean>;
   isStepComplete(sessionId: string, nodeId: string): boolean;
+  /**
+   * Mark a detached (`await: run`) node spawned — its brief was rendered. Idempotent; persisted.
+   * The one way a node enters the detached lifecycle the completion guard reads (Tier 4).
+   */
+  markNodeSpawned(sessionId: string, nodeId: string): Promise<boolean>;
+  /**
+   * Ask again for `completed` on a run standing past its last node — the call a late detached
+   * report makes once it lands. `transitionRunStatus` still decides; false while anything is owed.
+   */
+  completeHeldRun(sessionId: string): Promise<boolean>;
   /**
    * Transition the run-level lifecycle status. Refuses transitions out of terminal
    * states (completed/failed/cancelled). Returns true on accepted transition,

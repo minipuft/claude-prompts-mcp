@@ -55,6 +55,7 @@ import type { DatabasePort, StateStoreOptions } from '#shared/types/persistence.
 // Single owner of unknowns-ledger transition rules. Imported rather than restated here so
 // the rules cannot drift between the capture seam that validates and the store that persists.
 import { computeUnknownLedger } from '#engine/execution/capture/unknown-observation-processor.js';
+import { unreportedDetachedNodeIds } from '#shared/types/chain-execution.js';
 import { isTerminalRunStatus } from '#shared/types/chain-session.js';
 import { parseRunNumber, stripRunNumber } from '#shared/utils/chain-id-codec.js';
 // Node identity is what the store addresses by; every integer position it emits is derived
@@ -954,6 +955,23 @@ export class ChainSessionStore implements ChainSessionService {
       return false;
     }
 
+    // The detached-delegation close guard (Tier 4). A run may not COMPLETE while a detached node
+    // it spawned has not reported: completing would announce a finished run to every hook and
+    // client while a worker's result for it is still on its way, and that result would then have
+    // no live run to land on. Only `completed` is held. `cancelled` and `failed` stay open on
+    // purpose — they are how an operator ends a run whose worker will never report, so holding
+    // them too would leave a lost worker with no exit. A node the run never spawned is not owed
+    // anything and is not counted (`unreportedDetachedNodeIds`).
+    if (target === 'completed') {
+      const owed = unreportedDetachedNodeIds(session.state.nodes, session.state.stepStates);
+      if (owed.length > 0) {
+        this.logger.info(
+          `[ChainRunStatus] Holding session ${sessionId} open: detached node(s) ${owed.join(', ')} spawned and not yet reported`
+        );
+        return false;
+      }
+    }
+
     session.runStatus = target;
     if (isTerminalRunStatus(target)) {
       session.runCompletedAt = Date.now();
@@ -967,6 +985,55 @@ export class ChainSessionStore implements ChainSessionService {
     await this.saveSessions();
     await this.announceRunTerminal(session, target);
     return true;
+  }
+
+  /**
+   * Mark a detached (`await: run`) node SPAWNED — its brief was just rendered to the client.
+   *
+   * The one way a node enters the detached lifecycle, and the fact the completion guard in
+   * {@link transitionRunStatus} reads: from here until the node holds a real captured output, the
+   * run may pass it but may not complete. Idempotent — a re-render keeps the first spawn time,
+   * which `setStepState` then carries forward across every later milestone. Awaited persistence:
+   * the obligation must survive the process, because the worker's result can arrive after it.
+   *
+   * @returns false when the session does not exist (the caller logs; nothing was recorded).
+   */
+  async markNodeSpawned(sessionId: string, nodeId: string): Promise<boolean> {
+    const session = this.activeSessions.get(sessionId);
+    if (session === undefined) {
+      this.logger.warn(`[StepLifecycle] Cannot mark ${nodeId} spawned: no session ${sessionId}`);
+      return false;
+    }
+    session.state.stepStates ??= new Map<string, StepMetadata>();
+    const existing = session.state.stepStates.get(nodeId);
+    if (existing?.spawnedAt !== undefined) {
+      return true;
+    }
+    const now = Date.now();
+    session.state.stepStates.set(nodeId, {
+      ...(existing ?? { state: lifecycleForMilestone('rendered'), isPlaceholder: false }),
+      renderedAt: existing?.renderedAt ?? now,
+      spawnedAt: now,
+    });
+    session.lastActivity = now;
+    await this.saveSessions();
+    return true;
+  }
+
+  /**
+   * Complete a run the detached close guard was holding, once nothing is owed any more.
+   *
+   * A run that walked past its last node while a detached node was unreported stands on no node
+   * with a non-terminal status. When that node's late result lands, nothing re-advances — so this
+   * is the other place `completed` is asked for, and {@link transitionRunStatus} still decides.
+   * A no-op (false) for a run still standing on a node, and for one still owed a report.
+   */
+  async completeHeldRun(sessionId: string): Promise<boolean> {
+    // Undefined (no session) and a node id (still standing somewhere) both answer "not held".
+    if (this.activeSessions.get(sessionId)?.state.currentNodeId !== null) {
+      return false;
+    }
+    return this.transitionRunStatus(sessionId, 'completed');
   }
 
   /**
