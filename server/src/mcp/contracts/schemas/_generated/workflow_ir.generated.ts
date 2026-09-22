@@ -38,7 +38,7 @@ export const workflow_irParameters: ToolParameter[] = [
     name: 'nodes',
     type: 'array<object>',
     description:
-      '[Workflow IR] The steps of the run, in declaration order. Each node: {id (kebab-case, unique), promptId, stepName?, args?, inputMapping?, outputMapping?, visibility?{withhold[],expose[]}, subagentModel?(heavy|standard|fast), agentType?, framework?, retries?, inlineGateIds?, inlineGateCriteria?, delegated?}. Declaration order is the tiebreak the linearizer drains its ready set by, so a workflow with no edges runs exactly in the order written.',
+      '[Workflow IR] The steps of the run, in declaration order. Each node: {id (kebab-case, unique), promptId, stepName?, args?, inputMapping?, outputMapping?, visibility?{withhold[],expose[]}, subagentModel?(heavy|standard|fast), agentType?, framework?, retries?, inlineGateIds?, inlineGateCriteria?, delegated?, await?(node|run)}. Declaration order is the tiebreak the linearizer drains its ready set by, so a workflow with no edges runs exactly in the order written.',
     required: true,
     status: 'working',
     compatibility: 'canonical',
@@ -47,7 +47,8 @@ export const workflow_irParameters: ToolParameter[] = [
       "Kebab-case. `target_step_id`'s second `n\\d+` alternative is not repeated here and is redundant against kebab-case anyway (`n1` already matches).",
       'Every field mirrors a ChainStepSchema field the runtime consumes. `delegation` is absent: its only reader is the skills-sync exporter, off raw YAML.',
       '`inlineGateCriteria` carries RAW `::`-style tokens, resolved per step at stage 11 by InlineGateProcessor; `inlineGateIds` carries already-resolved ids. They are siblings, not spellings of one another.',
-      "`delegated` is the DECLARATION of context isolation (the `==>` operator's landing field). markDelegatedStepPrompts at stage 06 stays the single producer of the runtime flag, reading `delegated || subagentModel`.",
+      "`delegated` is the DECLARATION of context isolation (the `==>` operator's landing field). markDelegatedStepPrompts at stage 06 stays the single producer of the runtime flag, reading `delegated || subagentModel || await === 'run'`.",
+      "`await: 'run'` makes the node DETACHED: the run renders its brief, marks it spawned and continues without waiting; the worker's result reports later on any resume whose HANDOFF RESULT trailer names the node, and the run cannot complete until it has. `await: 'node'` (the default) blocks as before.",
     ],
   },
   {

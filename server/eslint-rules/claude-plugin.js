@@ -763,8 +763,53 @@ const requireExceptionAuditRule = {
   },
 };
 
+/**
+ * Forbids a `catch` that names no error and runs no statement.
+ *
+ * `no-empty` does not cover this. Measured with a control on 2026-09-21 over the four spellings of
+ * an error-discarding catch — bindingless-and-empty, bindingless-with-a-comment,
+ * bound-and-empty, bound-with-a-comment — `no-empty` reported only the two whose block is
+ * literally empty. A comment inside the block suppresses it, by design, and all 24 bindingless
+ * swallows in `src/` and `scripts/` carried one. So the exact shape that throws an error away
+ * without naming it is the shape nothing reported.
+ *
+ * What this rule accepts, stated in the message rather than left to a reader of the source:
+ *   - a catch that does something: handles it, or rethrows it with `{ cause }`
+ *   - a catch that BINDS the error and explains the discard in one line, as
+ *     `catch (_error)` with a single comment saying why an error there is safe to ignore
+ *
+ * The binding is the point. Writing `_error` is a deliberate act that names what is being thrown
+ * away, and it makes the site greppable; a bare `catch {` is indistinguishable at a glance from a
+ * catch that handles something. This rule does not judge whether the discard is correct — it
+ * requires that someone decided it was.
+ */
+const noBindinglessEmptyCatchRule = {
+  meta: {
+    type: 'problem',
+    docs: {
+      description:
+        'Forbids a catch clause with no error binding and no statement, which `no-empty` does not report once the block holds a comment',
+    },
+    schema: [],
+    messages: {
+      bindinglessEmptyCatch:
+        'This catch discards an error without naming it, and nothing else reports it: `no-empty` accepts any block containing a comment. Either do something with the error — handle it, or rethrow it with `{ cause }` — or bind it and state the discard in one line: `catch (_error) { /* why an error here is safe to ignore */ }`. Never log-and-swallow at a persistence boundary; a state mutation throws and lets the caller decide.',
+    },
+  },
+  create(context) {
+    return {
+      CatchClause(node) {
+        if (node.param === null && node.body.body.length === 0) {
+          context.report({ node, messageId: 'bindinglessEmptyCatch' });
+        }
+      },
+    };
+  },
+};
+
 export const rules = {
   'require-exception-audit': requireExceptionAuditRule,
+  'no-bindingless-empty-catch': noBindinglessEmptyCatchRule,
   'no-context-deep-imports': noContextDeepImportsRule,
   'no-legacy-imports': noLegacyImportsRule,
   'require-file-lifecycle': requireLifecycleRule,

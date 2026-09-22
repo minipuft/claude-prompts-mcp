@@ -192,6 +192,12 @@ export const ScriptToolYamlSchema = z.object({
   runtime: ScriptRuntimeSchema.optional(),
   /** Path to JSON Schema file for inputs (default: 'schema.json') */
   schemaFile: z.string().optional(),
+  /**
+   * Path to a JSON Schema file for the object this tool writes to stdout
+   * (default: 'output-schema.json'). Optional, and enforced when present: the executor refuses
+   * output that does not match it, naming the tool and the fields that are wrong.
+   */
+  outputSchemaFile: z.string().optional(),
   /** Path to description markdown (default: 'description.md') */
   descriptionFile: z.string().optional(),
   /** Execution timeout in milliseconds (default: 30000) */

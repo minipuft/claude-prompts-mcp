@@ -296,6 +296,15 @@ export class ResourceManagerRouter {
     // `enforcementMode`; every tool parameter is the snake_case form of its key, so the mapping
     // lands here rather than diverging the published name from the file it writes.
     if (args.enforcement_mode) gateArgs.enforcementMode = args.enforcement_mode;
+    // `!== undefined`, not truthiness: `false` is a value a caller sends to CLEAR a blocking
+    // gate, and a truthiness test would drop it — the parameter would then be write-only in one
+    // direction, which is the silent no-op this router's ownership table exists to prevent.
+    if (args.block_response_on_fail !== undefined) {
+      gateArgs.blockResponseOnFail = args.block_response_on_fail;
+    }
+    // Same parameter and key name, so no spelling to map — only the presence test, which is the
+    // part that matters: the block is written whole or not at all.
+    if (args.evaluation !== undefined) gateArgs.evaluation = args.evaluation;
     if (args.description) gateArgs.description = args.description;
     if (args.subject) gateArgs.subject = args.subject;
     if (args.guidance) gateArgs.guidance = args.guidance;

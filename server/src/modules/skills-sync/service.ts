@@ -1,6 +1,10 @@
 // @lifecycle canonical - Exports canonical YAML resources to client-native skill packages.
-/* eslint-disable -- Lifted from CLI implementation; follow-up decomposition tracked in migration plan. */
-/* eslint-enable no-console -- this module runs inside the server, where stdout is the STDIO protocol channel; the console-backed CLI output lives in scripts/skills-sync.ts. */
+/* Rule-scoped exceptions for this file (P4.123), each measured 2026-09-22 with every other rule
+ * of the project in force here. An entry whose count reaches 0 is reported as an unused
+ * directive, which is the cue to delete it. */
+/* eslint-disable @typescript-eslint/strict-boolean-expressions -- 191 sites, as of 2026-09-22: truthiness tests over values read from `yaml.load(...) as T` casts, where each rewrite has to choose what '' / 0 / null mean at that site — a behaviour decision per site, not a mechanical fix. Flips when a site-by-site pass (or the decomposition below) takes the count to 0. */
+/* eslint-disable @typescript-eslint/no-unnecessary-condition -- 15 sites, as of 2026-09-22: the types those checks call impossible come from unvalidated `yaml.load(...) as T` casts, so the check is live against malformed YAML and deleting it changes behaviour. Flips when parsed input is schema-validated instead of cast. */
+/* eslint-disable @typescript-eslint/no-non-null-assertion, max-depth, max-params, max-lines, sonarjs/cognitive-complexity -- 23 / 32 / 2 / 1 / 19 warnings, as of 2026-09-22: structural, from one ~5,100-line module lifted whole from the CLI. Flips when the module is decomposed by responsibility (export, sync, diff, pull, adoption). */
 /**
  * Skills Sync CLI
  *
@@ -9,34 +13,15 @@
  *
  * Usage: tsx scripts/skills-sync.ts export|sync|diff|patch [options]
  */
-import { parseArgs } from 'node:util';
-import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync, realpathSync } from 'node:fs';
+import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import * as yaml from 'js-yaml';
-import { createTwoFilesPatch } from 'diff';
+import { parseArgs } from 'node:util';
 
-import { isGateActiveForContext } from '#engine/gates/utils/gate-activation.js';
-import { deriveGateTier, formatCheckLine, type GateTier } from '#engine/gates/core/gate-tier.js';
-import { computeContentHash } from '#shared/utils/hash.js';
-import { loadHistory } from '#cli-shared/version-history.js';
-import { assertUsableDirectorySetting } from '#shared/utils/path-setting.js';
-import { configFileFormat, parseConfigText } from '#shared/utils/config-file-format.js';
-import {
-  isExcludedCategoryDirectoryName,
-  isIgnoredPromptEntryName,
-  isReservedPromptDirectoryName,
-} from '#shared/utils/prompt-layout.js';
-import type { GateActivationContext, GateActivationRules } from '#engine/gates/types/index.js';
-import type { ArtifactKind } from '#engine/gates/utils/artifact-kinds.js';
-import type { DatabasePort } from '#shared/types/persistence.js';
-import {
-  ResourceMutationTransaction,
-  ResourceVerificationError,
-  ResourceVerificationService,
-  type ResourceVerificationType,
-} from '../resources/services/index.js';
+import { createTwoFilesPatch } from 'diff';
+import * as yaml from 'js-yaml';
+
 import {
   applyRegistrationMutations,
   previewRegistrationMutations,
@@ -50,6 +35,30 @@ import {
   parseManagedSkillMarker,
   type ManagedSkillDirMap,
 } from './sync-engine.js';
+import {
+  ResourceMutationTransaction,
+  ResourceVerificationError,
+  ResourceVerificationService,
+  type ResourceVerificationType,
+} from '../resources/services/index.js';
+
+import type { GateActivationContext, GateActivationRules } from '#engine/gates/types/index.js';
+import type { ArtifactKind } from '#engine/gates/utils/artifact-kinds.js';
+import type { DatabasePort, ToolIndexEntry } from '#shared/types/persistence.js';
+
+import { loadHistory } from '#cli-shared/version-history.js';
+import { deriveGateTier, formatCheckLine, type GateTier } from '#engine/gates/core/gate-tier.js';
+import { isGateActiveForContext } from '#engine/gates/utils/gate-activation.js';
+import { configFileFormat, parseConfigText } from '#shared/utils/config-file-format.js';
+import { frameworkLabel } from '#shared/utils/framework-label.js';
+import { computeContentHash } from '#shared/utils/hash.js';
+import { resolveContainedPath } from '#shared/utils/path-containment.js';
+import { assertUsableDirectorySetting } from '#shared/utils/path-setting.js';
+import {
+  isExcludedCategoryDirectoryName,
+  isIgnoredPromptEntryName,
+  isReservedPromptDirectoryName,
+} from '#shared/utils/prompt-layout.js';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -375,7 +384,6 @@ interface FrameworkYaml {
   enabled?: boolean;
   version?: string;
   phasesFile?: string;
-  systemPromptFile?: string;
   systemPromptGuidance?: string;
   gates?: unknown;
   frameworkGates?: unknown;
@@ -545,10 +553,6 @@ interface SyncManifestEntry {
   versionDate?: string; // When that version was created
   sourceSnapshot?: Record<string, string>; // Raw source files at export time, for drift diffing
 }
-
-import type { ToolIndexEntry } from '#shared/types/persistence.js';
-import { frameworkLabel } from '#shared/utils/framework-label.js';
-import { resolveContainedPath } from '#shared/utils/path-containment.js';
 
 export interface SkillsSyncOptions {
   command: string;
@@ -741,7 +745,9 @@ async function loadSyncConfig(configPath: string, paths: SkillsSyncPaths): Promi
     // With a workspace set the copy belongs there: it is read first, and an update replaces the package.
     const target = path.join(paths.workspace ?? paths.packageRoot, 'skills-sync.yaml');
     const message = `No skills-sync.yaml found. Copy the example to get started:\n  cp ${example} ${target}`;
-    throw new Error(error instanceof Error ? `${message}\n(${error.message})` : message);
+    throw new Error(error instanceof Error ? `${message}\n(${error.message})` : message, {
+      cause: error,
+    });
   }
 }
 
@@ -784,12 +790,12 @@ async function loadToolsCache(
             scriptPath: (meta['script_path'] as string) ?? 'script.py',
             contentHash: row.content_hash ?? '',
           };
-        } catch {
+        } catch (_error) {
           // Skip unparseable tool metadata
         }
       }
       if (Object.keys(result).length > 0) return result;
-    } catch {
+    } catch (_error) {
       // DB read failed
     }
   }
@@ -931,7 +937,7 @@ function resolveOutputDir(
     if (existsSync(resolved)) {
       resolved = realpathSync(resolved);
     }
-  } catch {
+  } catch (_error) {
     // Directory doesn't exist yet or can't be resolved — use logical path
   }
 
@@ -1114,7 +1120,7 @@ async function resolveActiveGateRefs(
       type: def.type,
       gateYamlContent: null,
       guidanceContent: def.guidance ?? null,
-      inlineDefinition: def as Record<string, unknown>,
+      inlineDefinition: def,
     });
   }
 
@@ -1316,7 +1322,11 @@ async function loadPromptIR(
     chainStepContents,
     docFiles,
     delegation: data.delegation === true ? true : undefined,
-    delegationAgent: data.delegationAgent ? data.delegationAgent : undefined,
+    // An empty string is dropped along with an absent one, as the truthiness test did.
+    delegationAgent:
+      data.delegationAgent !== undefined && data.delegationAgent !== ''
+        ? data.delegationAgent
+        : undefined,
     enforceGateHooks: data.enforceGateHooks === true ? true : undefined,
     gateData: null,
     frameworkData: null,
@@ -1378,16 +1388,13 @@ async function loadFrameworkIR(methDir: string): Promise<SkillIR> {
   const phasesRaw = await readOptionalFile(path.join(methDir, phasesFile));
   const phases = phasesRaw ? (yaml.load(phasesRaw) as unknown[]) : [];
 
-  const sysPromptFile = data.systemPromptFile;
-  const sysPromptContent = sysPromptFile
-    ? await readOptionalFile(path.join(methDir, sysPromptFile))
-    : null;
-
-  const guidance = data.systemPromptGuidance ?? sysPromptContent ?? '';
+  // One source for the system prompt (R91): the inline `systemPromptGuidance`, which is the text
+  // the runtime serves. A second, file-named key was read here while no writer emitted it and the
+  // server's schema never declared it, so an export could carry text the server never serves.
+  const guidance = data.systemPromptGuidance ?? '';
 
   const sourceContentsMap: Record<string, string> = { 'framework.yaml': raw };
   if (phasesRaw) sourceContentsMap[phasesFile] = phasesRaw;
-  if (sysPromptFile && sysPromptContent) sourceContentsMap[sysPromptFile] = sysPromptContent;
 
   return {
     id: data.id,
@@ -1718,31 +1725,6 @@ interface TemplateBranch {
 }
 
 /**
- * Select the branch text a skill reader gets from one parsed if/elif/else chain.
- *
- * First condition that evaluates truthy wins; otherwise the else branch when present
- * (F18 — at export nothing is supplied, so this is the usual path); otherwise a lone
- * bare-word `{% if %}` keeps its content, because that block is usually the primary
- * instruction path rather than a mutually-exclusive case. An elif or expression chain
- * without else renders empty: its branches are mutually exclusive by construction, and
- * emitting the first one would present case-specific instructions for a case that was
- * never chosen.
- */
-function selectBranch(branches: TemplateBranch[], supplied: SuppliedArgs): string {
-  const truthy = branches.find(
-    (b) => b.condition !== null && evaluateCondition(b.condition, supplied)
-  );
-  if (truthy) return truthy.raw.trim();
-  const elseBranch = branches.find((b) => b.condition === null);
-  if (elseBranch) return elseBranch.raw.trim();
-  const loneSimpleIf =
-    branches.length === 1 &&
-    branches[0]!.condition !== null &&
-    /^\s*\w+\s*$/.test(branches[0]!.condition);
-  return (loneSimpleIf ? branches[0]!.raw : '').trim();
-}
-
-/**
  * Compile every `{% if %}` chain in the segment, innermost nesting included.
  *
  * Walks tag tokens with depth counting so an outer chain's matching endif is found even
@@ -1788,6 +1770,12 @@ function compileTemplateChains(segment: string, supplied: SuppliedArgs): string 
     return before + openMatch[0] + compileTemplateChains(segment.slice(afterOpen), supplied);
   }
 
+  // First condition that evaluates truthy wins; otherwise the else branch when present (F18 — at
+  // export nothing is supplied, so this is the usual path); otherwise a lone bare-word
+  // `{% if %}` keeps its content, because that block is usually the primary instruction path
+  // rather than a mutually-exclusive case. An elif or expression chain without else renders
+  // empty: its branches are mutually exclusive by construction, and emitting the first one would
+  // present case-specific instructions for a case that was never chosen.
   const chosen = branches.find(
     (b) => b.condition !== null && evaluateCondition(b.condition, supplied)
   );
@@ -1884,7 +1872,7 @@ export function findTemplateFidelityGaps(ir: SkillIR): TemplateFidelityGap[] {
     // so every condition is falsy: the else branch wins and each if/elif branch is
     // dropped; a chain without else renders empty. Name the construct so the author
     // knows their conditional text may not appear in the exported skill.
-    for (const match of content.matchAll(/\{%-?\s*elif\b/g)) {
+    for (const _match of content.matchAll(/\{%-?\s*elif\b/g)) {
       gaps.push({
         kind: 'control-flow',
         detail: `${label}: {% elif %} compiles to the fallback — export renders only the else branch, or nothing without one`,
@@ -2419,7 +2407,7 @@ function partitionGateRefs(
   // the raw yaml text each registered ref already carries — so this constructs the minimal
   // `{ pass_criteria }` structure `deriveGateTier` actually reads.
   const tiered: TieredGateRef[] = registered.map((ref) => {
-    let parsed: GateYaml | null = null;
+    let parsed: GateYaml | null;
     try {
       parsed = ref.gateYamlContent ? (yaml.load(ref.gateYamlContent) as GateYaml) : null;
     } catch {
@@ -2782,7 +2770,7 @@ export function emitGateFiles(
     }
     // Machine-readable manifest entry — lets enforcement tooling (opencode-prompts
     // plugin) read gate ids and criteria without a YAML dependency. Plan row 2.3.
-    let parsed: Record<string, unknown> = {};
+    let parsed: Record<string, unknown>;
     try {
       parsed = (yaml.load(ref.gateYamlContent) as Record<string, unknown>) ?? {};
     } catch {
@@ -2790,10 +2778,10 @@ export function emitGateFiles(
     }
     manifestGates.push({
       id: ref.id,
-      ...((ref.name ?? parsed['name']) ? { name: (ref.name ?? parsed['name']) as string } : {}),
-      ...((ref.type ?? parsed['type']) ? { type: (ref.type ?? parsed['type']) as string } : {}),
+      ...((ref.name ?? parsed['name']) ? { name: ref.name ?? parsed['name'] } : {}),
+      ...((ref.type ?? parsed['type']) ? { type: ref.type ?? parsed['type'] } : {}),
       ...((ref.description ?? parsed['description'])
-        ? { description: (ref.description ?? parsed['description']) as string }
+        ? { description: ref.description ?? parsed['description'] }
         : {}),
       ...(Array.isArray(parsed['pass_criteria']) ? { pass_criteria: parsed['pass_criteria'] } : {}),
     });

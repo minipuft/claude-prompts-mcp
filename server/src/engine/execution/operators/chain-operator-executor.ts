@@ -2,7 +2,7 @@
 import { hasFrameworkGuidance } from '../../frameworks/utils/framework-detection.js';
 import { DEFAULT_GATE_RETRY_CONFIG } from '../../gates/constants.js';
 import { GATE_ATTESTATION_LINE } from '../../gates/guidance/GateGuidanceRenderer.js';
-import { buildDelegatedStepLines } from '../delegation/brief.js';
+import { buildDelegatedStepCallToAction, buildDelegatedStepLines } from '../delegation/brief.js';
 import { handoffNodeToken } from '../delegation/handoff-contract.js';
 import { DelegationRenderer } from '../delegation/renderer.js';
 import { isFrameworkInjected } from '../pipeline/decisions/injection/index.js';
@@ -619,11 +619,7 @@ export class ChainOperatorExecutor {
     // renders WITH step N+1's own brief, one resume later.
     const nextStep = !isFinalStep ? stepPrompts[currentStepIndex + 1] : undefined;
     const callToAction = isCurrentDelegated
-      ? `Spawn the sub-agent per the HANDOFF INSTRUCTIONS above, then resume with chain_id and user_response="<sub-agent result>"${
-          briefHasGates
-            ? ' — review its Proposed Gate Review before submitting your gate_verdict'
-            : ''
-        }.`
+      ? buildDelegatedStepCallToAction(step, briefHasGates)
       : nextStep?.delegated === true
         ? this.buildDelegationCTA(
             stepPrompts,

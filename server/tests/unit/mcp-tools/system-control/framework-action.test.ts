@@ -30,11 +30,17 @@ describe('System Control framework action scope propagation', () => {
     const systemControl = createConsolidatedSystemControl(createLogger(), () => Promise.resolve());
     systemControl.setFrameworkManager(frameworkManager as any);
 
-    // Identity is read from token claims and request headers — a bare
-    // { organizationId, workspaceId } object carries no identity and resolves to no scope.
+    // Identity is read from token claims and request headers, both of which the SDK v2 puts
+    // under `http` — a bare { organizationId, workspaceId } object carries no identity.
     await systemControl.handleAction(
       { action: 'framework', operation: 'switch', framework: 'react' },
-      { requestInfo: { headers: { 'x-workspace-id': 'workspace-a' } } }
+      {
+        http: {
+          req: new Request('http://localhost/mcp', {
+            headers: { 'x-workspace-id': 'workspace-a' },
+          }),
+        },
+      }
     );
 
     // The scope argument is the point: without it every workspace's switch landed on
@@ -54,7 +60,7 @@ describe('System Control framework action scope propagation', () => {
     );
   });
 
-  test('framework list reads state store without identity-scoped args', async () => {
+  test('framework list with no request identity reads the process-default scope', async () => {
     const frameworkStateStore = {
       getCurrentState: jest.fn().mockReturnValue({
         activeFramework: 'react',
@@ -86,7 +92,183 @@ describe('System Control framework action scope propagation', () => {
       { organizationId: 'org-a', workspaceId: 'workspace-a' }
     );
 
-    expect(frameworkStateStore.getCurrentState).toHaveBeenCalledWith();
+    // `undefined` is the process default; the call still names its scope argument.
+    expect(frameworkStateStore.getCurrentState).toHaveBeenCalledWith(undefined);
     expect(frameworkManager.listFrameworks).toHaveBeenCalledWith();
+  });
+
+  // `status` reported the process-default row whatever workspace asked: a switch under
+  // `x-workspace-id: A` read back as the default framework under A. Every status operation
+  // and the shared response footer must read the request's own row.
+  test.each(['overview', 'health', 'diagnostics', 'framework_status'])(
+    'status %s reads the requesting workspace, not the process default',
+    async (operation) => {
+      const health = {
+        status: 'healthy',
+        activeFramework: 'react',
+        frameworkSystemEnabled: true,
+        availableFrameworks: ['react'],
+        lastSwitchTime: null,
+        switchingMetrics: {
+          totalSwitches: 0,
+          successfulSwitches: 0,
+          failedSwitches: 0,
+          averageResponseTime: 0,
+        },
+        issues: [],
+      };
+      const frameworkStateStore = {
+        getCurrentState: jest.fn().mockReturnValue({ activeFramework: 'react' }),
+        getSystemHealth: jest.fn().mockReturnValue(health),
+      };
+
+      const systemControl = createConsolidatedSystemControl(createLogger(), () =>
+        Promise.resolve()
+      );
+      systemControl.setFrameworkStateStore(frameworkStateStore as any);
+
+      await systemControl.handleAction(
+        { action: 'status', operation },
+        {
+          http: {
+            req: new Request('http://localhost/mcp', {
+              headers: { 'x-workspace-id': 'workspace-a' },
+            }),
+          },
+        }
+      );
+
+      const scope = { continuityScopeId: 'workspace-a', workspaceId: 'workspace-a' };
+      expect(frameworkStateStore.getSystemHealth.mock.calls.length).toBeGreaterThan(0);
+      for (const call of frameworkStateStore.getSystemHealth.mock.calls) {
+        expect(call).toEqual([scope]);
+      }
+      for (const call of frameworkStateStore.getCurrentState.mock.calls) {
+        expect(call).toEqual([scope]);
+      }
+    }
+  );
+});
+
+/**
+ * P4.114 — what a toggle SAYS about persistence, and whether `persist` reaches the writer.
+ *
+ * The framework handler dropped `persist` on the way in: the flag is declared on the tool, the
+ * call was accepted, and the enable/disable methods were invoked without it — so a caller asking
+ * for a persisted change got a plain success reply and an unchanged config file. The gate handler
+ * forwarded it all along, which is why the gate arm below is the control: the two differ in
+ * exactly the identifier under test.
+ */
+describe('a toggle reply states its persistence outcome', () => {
+  const makeFrameworkControl = (): {
+    systemControl: ReturnType<typeof createConsolidatedSystemControl>;
+    persistFrameworkConfig: jest.Mock;
+  } => {
+    const frameworkStateStore = {
+      getCurrentState: jest.fn().mockReturnValue({
+        frameworkSystemEnabled: true,
+        activeFramework: 'react',
+      }),
+      disableFrameworkSystem: jest.fn(async () => undefined),
+      enableFrameworkSystem: jest.fn(async () => undefined),
+    };
+    const systemControl = createConsolidatedSystemControl(createLogger(), () => Promise.resolve());
+    systemControl.setFrameworkStateStore(frameworkStateStore as any);
+    const persistFrameworkConfig = jest.fn(
+      async () =>
+        '📁 Persisted framework toggles as config version 7 — rollback puts the previous file back.'
+    );
+    (systemControl as unknown as { persistFrameworkConfig: unknown }).persistFrameworkConfig =
+      persistFrameworkConfig;
+    return {
+      systemControl,
+      persistFrameworkConfig: persistFrameworkConfig as unknown as jest.Mock,
+    };
+  };
+
+  const textOf = (response: unknown): string =>
+    ((response as { content?: Array<{ text?: string }> }).content ?? [])
+      .map((part) => part.text ?? '')
+      .join('\n');
+
+  test('without persist, it names the restart limit and writes nothing', async () => {
+    const { systemControl, persistFrameworkConfig } = makeFrameworkControl();
+
+    const response = await systemControl.handleAction(
+      { action: 'framework', operation: 'disable', reason: 'unit' },
+      {}
+    );
+
+    expect(textOf(response)).toContain('ends when the server restarts');
+    expect(persistFrameworkConfig).not.toHaveBeenCalled();
+  });
+
+  test('with persist, the writer runs and the reply carries its version', async () => {
+    const { systemControl, persistFrameworkConfig } = makeFrameworkControl();
+
+    const response = await systemControl.handleAction(
+      { action: 'framework', operation: 'disable', reason: 'unit', persist: true },
+      {}
+    );
+
+    expect(persistFrameworkConfig).toHaveBeenCalledWith(false);
+    expect(textOf(response)).toContain('config version 7');
+    expect(textOf(response)).not.toContain('ends when the server restarts');
+  });
+
+  // A toggle asking for the state it is already in used to return early, before any persistence
+  // ran — so `enable, persist: true` on an already-enabled system reported success and left the
+  // config file alone. The early reply now carries the same clause, and the persisted form runs
+  // the write (which records nothing when the file already says so, and says that).
+  test('a toggle that changes nothing still says whether it was persisted', async () => {
+    const frameworkStateStore = {
+      getCurrentState: jest.fn().mockReturnValue({
+        frameworkSystemEnabled: true,
+        activeFramework: 'react',
+      }),
+      enableFrameworkSystem: jest.fn(async () => undefined),
+    };
+    const systemControl = createConsolidatedSystemControl(createLogger(), () => Promise.resolve());
+    systemControl.setFrameworkStateStore(frameworkStateStore as any);
+    const persistFrameworkConfig = jest.fn(
+      async (_enabled: boolean) => '📁 Persisted framework toggles.'
+    );
+    (systemControl as unknown as { persistFrameworkConfig: unknown }).persistFrameworkConfig =
+      persistFrameworkConfig;
+
+    const plain = await systemControl.handleAction(
+      { action: 'framework', operation: 'enable', reason: 'unit' },
+      {}
+    );
+    expect(textOf(plain)).toContain('already enabled');
+    expect(textOf(plain)).toContain('ends when the server restarts');
+    expect(persistFrameworkConfig).not.toHaveBeenCalled();
+
+    const persisted = await systemControl.handleAction(
+      { action: 'framework', operation: 'enable', reason: 'unit', persist: true },
+      {}
+    );
+    expect(textOf(persisted)).toContain('already enabled');
+    expect(persistFrameworkConfig).toHaveBeenCalledWith(true);
+    expect(frameworkStateStore.enableFrameworkSystem).not.toHaveBeenCalled();
+  });
+
+  // The control, one identifier over: the gate handler's own toggle, whose plumbing was already
+  // correct, must report the same two ways.
+  test('a gate toggle without persist names the restart limit too', async () => {
+    const gateStateStore = {
+      getCurrentState: jest.fn().mockReturnValue({ enabled: true }),
+      disableGateSystem: jest.fn(async () => undefined),
+    };
+    const systemControl = createConsolidatedSystemControl(createLogger(), () => Promise.resolve());
+    systemControl.setGateStateStore(gateStateStore as any);
+
+    const response = await systemControl.handleAction(
+      { action: 'gates', operation: 'disable', reason: 'unit' },
+      {}
+    );
+
+    expect(textOf(response)).toContain('ends when the server restarts');
+    expect(textOf(response)).toContain('`gates.enabled`');
   });
 });

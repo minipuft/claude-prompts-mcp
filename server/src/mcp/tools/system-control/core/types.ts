@@ -19,13 +19,23 @@ import type {
 import type { ResponseFormatter } from '../../prompt-engine/processors/response-formatter.js';
 
 /**
- * System analytics — optimized for API performance and rich historical context.
+ * Facts about the server PROCESS, held in memory for the life of that process.
+ *
+ * Nothing here is scoped to a workspace, and nothing here may be reported as if it were — one
+ * `system_control analytics` reply serves one workspace, and every per-workspace figure in it
+ * comes from the execution ledger through `ActionHandler.tallyLedger`, which filters on the
+ * request's scope.
+ *
+ * It carried four execution counters until P4.87 — `totalExecutions`, `successfulExecutions`,
+ * `failedExecutions`, `averageExecutionTime`. No code ever wrote them: `updateAnalytics`, their
+ * only possible writer, has exactly one caller, which passes a tool-description reload summary
+ * and none of these names. So the report printed `Total Executions: 0` on a server that had run
+ * hundreds of prompts, `status` read the same zeroes as `Success Rate: 0%` while `analytics` read
+ * them as `100%`, and Gate Adoption Rate divided a real, workspace-scoped numerator by the
+ * constant zero. They are gone rather than wired: a per-process execution counter cannot answer
+ * a per-workspace question, and the ledger already answers it.
  */
 export interface SystemAnalytics {
-  totalExecutions: number;
-  successfulExecutions: number;
-  failedExecutions: number;
-  averageExecutionTime: number;
   gateValidationCount: number;
   uptime: number;
   memoryUsage?: NodeJS.MemoryUsage;

@@ -15,10 +15,12 @@ import { McpToolRouter } from '../tools/index.js';
 import { validateCategoryName } from '../tools/resource-manager/prompt/utils/validation.js';
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
+import type { CategoryManager } from '#modules/prompts/category-manager.js';
 import type { Category, PromptData } from '#modules/prompts/types.js';
 import type { ConfigManager, Logger, ToolResponse } from '#shared/types/index.js';
 import type { ResourceManagerInput } from '../tools/resource-manager/core/types.js';
 
+import { createCategoryManager } from '#modules/prompts/category-manager.js';
 import { PromptAssetManager } from '#modules/prompts/index.js';
 import {
   buildPromptCatalogDetail,
@@ -38,6 +40,7 @@ export class ApiRouter {
   private promptsData: PromptData[] = [];
   private categories: Category[] = [];
   private convertedPrompts: ConvertedPrompt[] = [];
+  private readonly categoryManager: CategoryManager;
   private readonly security: ApiSecurityBoundary;
   private readonly promptAuthority: PromptAuthorityApi;
 
@@ -55,6 +58,7 @@ export class ApiRouter {
     this.logger = logger;
     this.configManager = configManager;
     this.promptManager = promptManager;
+    this.categoryManager = createCategoryManager(logger);
     this.mcpToolsManager = mcpToolsManager;
     this.security = new ApiSecurityBoundary({
       readToken: options.catalogReadToken,
@@ -217,8 +221,8 @@ export class ApiRouter {
     app.get('/categories/:categoryId/prompts', (req: Request, res: Response) => {
       const categoryIdParam = req.params['categoryId'];
       const categoryId = Array.isArray(categoryIdParam) ? categoryIdParam[0] : categoryIdParam;
-      const categoryPrompts = this.convertedPrompts
-        .filter((prompt) => prompt.category === categoryId)
+      const categoryPrompts = this.categoryManager
+        .getPromptsByCategory(this.convertedPrompts, categoryId)
         .map(buildPromptCatalogSummary);
 
       if (categoryPrompts.length === 0) {

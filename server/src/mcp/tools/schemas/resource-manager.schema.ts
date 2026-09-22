@@ -18,6 +18,9 @@ import { z } from 'zod/v4';
 import { workflowBudgetSchema, workflowEdgeSchema } from './workflow-ir.schema.js';
 import { PATCH_TARGET_FIELDS } from '../resource-manager/prompt/operations/template-patch.js';
 import { PREVIEWABLE_ACTIONS } from '../shared/preview-action.js';
+import { refuseUndeclaredNestedKeys } from '../shared/undeclared-parameters.js';
+
+import type { JudgeEvaluationConfig } from '#engine/gates/judge/types.js';
 
 import {
   ArgumentValidationSchema,
@@ -132,7 +135,43 @@ const executionStepSchema = z.strictObject({
  * offers them either. A bare string is no longer accepted here: it only ever existed to
  * populate `required_patterns`. Author a reminder sentence into `guidance` instead, or use
  * `shell_verify`/`script_tool` for a real check.
+ *
+ * `description` is NOT declared, and that is a ruling rather than an omission (P4.103). Two
+ * fixtures sent one and believed they had written it; the strip default meant neither the write
+ * nor the read said otherwise. Searched before deciding, with a positive control — `shell_command`
+ * has 18 reader sites under `engine/gates/`, a per-criterion `description` has zero, no bundled
+ * `gate.yaml` declares one, and the per-gate `description` in the skills-sync manifest is a
+ * different field. Nothing consumes it, so declaring it would publish a key that goes nowhere.
+ * A criterion's prose belongs in the gate's `guidance`, which IS rendered to the reviewer.
+ * *(as of 2026-09-21 · flips when something READS a per-criterion description — the engine's
+ * criteria summary, a manifest, or a renderer — at which point declare it here and in
+ * `gate-schema.ts` together.)*
  */
+/**
+ * A gate's `evaluation` block — who reviews it (P4.121, owner ruling R90).
+ *
+ * Mirrors `GateJudgeEvaluationSchema` (gate-schema.ts) key for key and type for type. The three
+ * keys are exactly what the runtime reads: `resolveJudgeConfig` (`judge-prompt-builder.ts`) reads
+ * `mode` and `strict`, and `composeJudgeReviewPrompt` (`review-utils.ts`) reads `model` as the
+ * judge's model hint. Nothing else is read, and no bundled `gate.yaml` declares the block at all,
+ * so nothing is published beyond those three. A retired exemption once described the block as
+ * "mode, model hint, rubric" — there is no rubric key, in the schema or in any reader.
+ *
+ * Strict, not the loader's strip default: at the tool boundary an unrecognized inner key is
+ * refused by path (`evaluation.modle`) with the nearest declared key, where the loader would drop
+ * it and the gate would fall back to self-review silently. `mode` is required because a block
+ * without it does not load. Not exported: nothing outside this file parses the block on its own;
+ * `gate-pass-criteria-key-parity.test.ts` reaches it through `resourceManagerInputSchema.shape`.
+ */
+const gateEvaluationSchema: z.ZodType<JudgeEvaluationConfig> = z.strictObject(
+  {
+    mode: z.enum(['self', 'judge']),
+    model: z.string().optional(),
+    strict: z.boolean().optional(),
+  },
+  { error: refuseUndeclaredNestedKeys(() => gateEvaluationSchema) }
+);
+
 export const gatePassCriteriaSchema = z.strictObject({
   type: z
     .enum(['inline_guidance', 'framework_compliance', 'shell_verify', 'script_tool'])
@@ -502,6 +541,17 @@ export const resourceManagerInputSchema = z
      * so setting `severity` alone stays sufficient for the common case.
      */
     enforcement_mode: z.enum(['blocking', 'advisory', 'informational']).optional(),
+    /**
+     * [Gate] Withhold the step output when this gate is marked FAIL, returning the gate review
+     * in its place. Same preservation class as `severity`/`enforcement_mode`: omitted on update
+     * the existing value is carried forward, and an explicit `false` clears it.
+     */
+    block_response_on_fail: z.boolean().optional(),
+    /**
+     * [Gate] Who reviews this gate — see `gateEvaluationSchema` above. Written to `gate.yaml`
+     * whole: a supplied block replaces the existing one, an omitted one is carried forward.
+     */
+    evaluation: gateEvaluationSchema.optional(),
     /** [Gate] Gate guidance content. */
     guidance: z.string().optional(),
     /** [Gate] Structured pass criteria definitions — see `gatePassCriteriaSchema` above. */

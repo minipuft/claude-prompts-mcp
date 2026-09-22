@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
-import { ensureTrailingNewline } from './gate-file-writer.js';
+import { callerSuppliedGateKeys, ensureTrailingNewline } from './gate-file-writer.js';
 import { gateSnapshotContract } from './gate-snapshot-contract.js';
 import { isPreviewRequest } from '../../shared/preview-action.js';
 import { formatRepairServingLine } from '../../shared/quarantine-report.js';
@@ -41,6 +41,8 @@ export class GateLifecycleProcessor {
       enforcementMode,
       gate_type,
       subject,
+      blockResponseOnFail,
+      evaluation,
     } = args;
 
     if (!id) return this.error('Gate ID is required for create action');
@@ -87,6 +89,8 @@ export class GateLifecycleProcessor {
       enforcementMode,
       gate_type,
       subject,
+      blockResponseOnFail,
+      evaluation,
     };
 
     // The created state is recorded as version 1 — the same `saveVersion` MAX(existing)+1
@@ -180,6 +184,8 @@ export class GateLifecycleProcessor {
       enforcementMode,
       gate_type,
       subject,
+      blockResponseOnFail,
+      evaluation,
     } = args;
 
     if (!id) return this.error('Gate ID is required for update action');
@@ -233,6 +239,8 @@ export class GateLifecycleProcessor {
       enforcementMode,
       gate_type,
       subject,
+      blockResponseOnFail,
+      evaluation,
     };
 
     // The union of fields THIS call actually supplied, as opposed to `gateData` above — which
@@ -242,22 +250,14 @@ export class GateLifecycleProcessor {
     // untouched (byte-identical) rather than re-serialized from `gateData`'s already-merged
     // values. Mirrors `suppliedKeys` in `prompt-lifecycle-processor.ts` (Fix B write-scope
     // narrowing).
-    const suppliedKeys = new Set(
-      Object.entries({
-        name,
-        type,
-        description,
-        guidance,
-        pass_criteria,
-        activation,
-        retry_config,
-        severity,
-        enforcementMode,
-        subject,
-      })
-        .filter(([, value]) => value !== undefined)
-        .map(([key]) => key)
-    );
+    //
+    // Built by `callerSuppliedGateKeys`, which is bounded against `ALL_GATE_DATA_KEYS` by
+    // `settable-gate-fields.test.ts`, because the hand-written literal that used to stand here had
+    // already drifted: it omitted `gate_type`, so an update supplying only that key computed
+    // `writesYaml === false` and answered `✅ Gate 'x' updated successfully / 📁 Files updated`
+    // over a byte-identical `gate.yaml` (driven 2026-09-21, before P4.100). A settable key that
+    // reaches `GateCreationData` and not this set is a silent no-op with a success reply.
+    const suppliedKeys = callerSuppliedGateKeys(args);
 
     // The state this edit will PRODUCE. `gateData` already resolves every projected field —
     // supplied value, else the existing one — so it needs no merge base.
@@ -398,6 +398,8 @@ export class GateLifecycleProcessor {
       severity: args.severity,
       enforcementMode: args.enforcementMode,
       gate_type: args.gate_type,
+      blockResponseOnFail: args.blockResponseOnFail,
+      evaluation: args.evaluation,
     };
 
     // The state this repair will PRODUCE — the only state there is. `gateData` already resolves
@@ -694,7 +696,7 @@ export class GateLifecycleProcessor {
         resourceId: id,
         filePath,
       });
-    } catch {
+    } catch (_error) {
       // Gates directory may not be configured
     }
   }

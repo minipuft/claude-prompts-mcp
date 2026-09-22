@@ -98,6 +98,8 @@ export const PARAMETER_OWNERS: Readonly<Record<string, readonly ResourceType[]>>
   subject: ['gate'],
   severity: ['gate'],
   enforcement_mode: ['gate'],
+  block_response_on_fail: ['gate'],
+  evaluation: ['gate'],
   guidance: ['gate'],
   pass_criteria: ['gate'],
   activation: ['gate'],

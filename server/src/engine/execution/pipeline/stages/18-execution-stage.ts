@@ -1,5 +1,6 @@
 // @lifecycle canonical - Runs operator executors and orchestrates outputs.
 import { hasFrameworkGuidance } from '../../../frameworks/utils/framework-detection.js';
+import { collectDetachedNodeFacts, describeHeldRun } from '../../delegation/detached.js';
 import { planNodeDrivenRender } from '../../operators/node-step-projection.js';
 import { BasePipelineStage } from '../stage.js';
 
@@ -12,7 +13,7 @@ import type { ChainOperatorExecutor } from '../../operators/chain-operator-execu
 import type { ChainStepRenderResult } from '../../operators/types.js';
 import type { PromptReferenceResolver } from '../../reference/prompt-reference-resolver.js';
 
-import { isRunComplete } from '#shared/types/chain-session.js';
+import { isRunComplete, isRunHeldOpen } from '#shared/types/chain-session.js';
 import { processTemplateWithRefs } from '#shared/utils/jsonUtils.js';
 
 /**
@@ -75,6 +76,13 @@ export class StepExecutionStage extends BasePipelineStage {
       return;
     }
 
+    // A run past its last node that a detached node still owes a result (Tier 4): there is no
+    // step left to render, and it is not finished. The words are the delegation module's.
+    if (this.renderHeldRun(context)) {
+      this.logExit({ skipped: 'Run held open for a detached report' });
+      return;
+    }
+
     // Execute the prompt/chain step regardless of pending review
     // The ResponseFormattingStage will handle appending gate instructions
     // Use type guard for type-safe chain detection
@@ -107,6 +115,27 @@ export class StepExecutionStage extends BasePipelineStage {
       return isRunComplete(session);
     }
     return sessionContext.currentNodeId === null;
+  }
+
+  /**
+   * Render the held-run notice when the run has walked past its last node but is still owed a
+   * detached result. @returns true when it rendered (the stage is done).
+   */
+  private renderHeldRun(context: ExecutionContext): boolean {
+    const sessionContext = context.sessionContext;
+    if (sessionContext === undefined) return false;
+    const session = this.chainSessionStore.getSession(
+      sessionContext.sessionId,
+      context.getScopeOptions()
+    );
+    if (session === undefined || !isRunHeldOpen(session.state)) return false;
+    context.executionResults = {
+      content: describeHeldRun(
+        collectDetachedNodeFacts(context.parsedCommand?.steps, session.state)
+      ),
+      generatedAt: Date.now(),
+    };
+    return true;
   }
 
   private async executeChainStep(context: ExecutionContext): Promise<void> {
@@ -211,6 +240,14 @@ export class StepExecutionStage extends BasePipelineStage {
         false,
         renderResult.declaredSections
       );
+    }
+
+    // A detached step (`await: run`) is SPAWNED by this render — the one way a node enters the
+    // detached lifecycle the run's completion guard reads (Tier 4). Awaited: the obligation must
+    // be durable before the client can act on the brief. Keyed on the rendered step's own node id,
+    // for the reason the declaration record above is.
+    if (currentStep.await === 'run' && currentStep.nodeId !== undefined) {
+      await this.chainSessionStore.markNodeSpawned(session.sessionId, currentStep.nodeId);
     }
 
     if (this.executionRecordStore !== null) {

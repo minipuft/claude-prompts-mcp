@@ -128,6 +128,8 @@ interface DelegatedStepFacts {
   readonly agentType?: string;
   readonly subagentModel?: 'heavy' | 'standard' | 'fast';
   readonly inlineGateIds?: readonly string[];
+  /** `run` makes the step detached (Tier 4): the handoff tells the parent not to wait. */
+  readonly await?: 'node' | 'run';
   readonly metadata?: Record<string, unknown>;
   readonly convertedPrompt?: {
     readonly agentType?: string;
@@ -196,8 +198,31 @@ export function buildDelegatedStepLines(inputs: DelegatedStepPayloadInputs): {
         hasGates,
         gateGuidanceEnabled: inputs.gateGuidanceEnabled,
         nodeToken,
+        mode: step.await === 'run' ? 'detached' : 'blocking',
       }),
     ],
     hasGates,
   };
+}
+
+/**
+ * The one-line call to action under a CURRENT delegated step's render: what the parent does
+ * after spawning the worker. A blocking step waits for the worker's result; a detached step
+ * (`await: run`, Tier 4) moves on at once and reports the result later, routed by its token.
+ */
+export function buildDelegatedStepCallToAction(
+  step: DelegatedStepFacts,
+  hasGates: boolean
+): string {
+  if (step.await === 'run') {
+    return (
+      'Spawn the sub-agent in the background per the HANDOFF INSTRUCTIONS above, then resume ' +
+      'with chain_id and NO user_response to continue without waiting. When the worker finishes, ' +
+      `resume with its result as user_response — its "node: ${handoffNodeToken(step)}" line ` +
+      'routes it back to this step.'
+    );
+  }
+  return `Spawn the sub-agent per the HANDOFF INSTRUCTIONS above, then resume with chain_id and user_response="<sub-agent result>"${
+    hasGates ? ' — review its Proposed Gate Review before submitting your gate_verdict' : ''
+  }.`;
 }

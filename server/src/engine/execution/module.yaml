@@ -17,3 +17,5 @@ owns:
     symbol: InjectionDecisionService
   - capability: Delegation handoff evidence
     symbol: resolveHandoffEvidence
+  - capability: Detached report routing
+    symbol: resolveDetachedReport

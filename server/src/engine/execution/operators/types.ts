@@ -1,5 +1,9 @@
 // @lifecycle canonical - Type definitions for chain operator execution
-import type { PendingGateReview, VisibilityItem } from '#shared/types/chain-execution.js';
+import type {
+  PendingGateReview,
+  StepAwaitMode,
+  VisibilityItem,
+} from '#shared/types/chain-execution.js';
 import type { FrameworkExecutionContext } from '../../frameworks/types/index.js';
 import type { ConvertedPrompt, ExecutionPlan } from '../types.js';
 
@@ -37,6 +41,13 @@ export interface ChainStepPrompt {
   retries?: number;
   /** True if this step should be delegated to a sub-agent via Task tool */
   delegated?: boolean;
+  /**
+   * Whether the run waits for this step's worker (`node`, the default) or continues past it
+   * (`run`, detached delegation — Tier 4). A DECLARATION: `markDelegatedStepPrompts` (stage 06)
+   * marks an `await: run` step delegated, and the run's node lifecycle (spawned at render,
+   * reported when the worker's result lands) is what the run-completion guard reads.
+   */
+  readonly await?: StepAwaitMode;
   /** Host agent for delegation; undefined leaves the choice to the host strategy */
   agentType?: string;
   /** Capability hint for delegation model selection (step-level override) */

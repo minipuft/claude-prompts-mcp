@@ -404,6 +404,13 @@
                   },
                   "type": "object"
                 },
+                "await": {
+                  "enum": [
+                    "node",
+                    "run"
+                  ],
+                  "type": "string"
+                },
                 "delegated": {
                   "type": "boolean"
                 },
@@ -712,6 +719,13 @@
                     "type": "string"
                   },
                   "type": "object"
+                },
+                "await": {
+                  "enum": [
+                    "node",
+                    "run"
+                  ],
+                  "type": "string"
                 },
                 "delegated": {
                   "type": "boolean"
@@ -1069,6 +1083,9 @@
         },
         "type": "object"
       },
+      "block_response_on_fail": {
+        "type": "boolean"
+      },
       "budget": {
         "additionalProperties": false,
         "properties": {
@@ -1113,6 +1130,13 @@
               "type": "string"
             },
             "type": "object"
+          },
+          "await": {
+            "enum": [
+              "node",
+              "run"
+            ],
+            "type": "string"
           },
           "delegated": {
             "type": "boolean"
@@ -1250,6 +1274,13 @@
                 "type": "string"
               },
               "type": "object"
+            },
+            "await": {
+              "enum": [
+                "node",
+                "run"
+              ],
+              "type": "string"
             },
             "delegated": {
               "type": "boolean"
@@ -1415,6 +1446,28 @@
           "informational"
         ],
         "type": "string"
+      },
+      "evaluation": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "enum": [
+              "self",
+              "judge"
+            ],
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "strict": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "type": "object"
       },
       "execution_flow": {
         "additionalProperties": false,

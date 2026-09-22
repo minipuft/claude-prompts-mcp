@@ -55,6 +55,7 @@ import type { DatabasePort, StateStoreOptions } from '#shared/types/persistence.
 // Single owner of unknowns-ledger transition rules. Imported rather than restated here so
 // the rules cannot drift between the capture seam that validates and the store that persists.
 import { computeUnknownLedger } from '#engine/execution/capture/unknown-observation-processor.js';
+import { unreportedDetachedNodeIds } from '#shared/types/chain-execution.js';
 import { isTerminalRunStatus } from '#shared/types/chain-session.js';
 import { parseRunNumber, stripRunNumber } from '#shared/utils/chain-id-codec.js';
 // Node identity is what the store addresses by; every integer position it emits is derived
@@ -849,6 +850,9 @@ export class ChainSessionStore implements ChainSessionService {
         : existing?.declaredSections !== undefined
           ? { declaredSections: existing.declaredSections }
           : {}),
+      // Sticky for the same reason: a detached node is spawned once, at render, and the run's
+      // completion guard reads it at every later milestone (Tier 4).
+      ...(existing?.spawnedAt !== undefined ? { spawnedAt: existing.spawnedAt } : {}),
     };
 
     session.state.stepStates.set(nodeId, metadata);
@@ -951,6 +955,23 @@ export class ChainSessionStore implements ChainSessionService {
       return false;
     }
 
+    // The detached-delegation close guard (Tier 4). A run may not COMPLETE while a detached node
+    // it spawned has not reported: completing would announce a finished run to every hook and
+    // client while a worker's result for it is still on its way, and that result would then have
+    // no live run to land on. Only `completed` is held. `cancelled` and `failed` stay open on
+    // purpose — they are how an operator ends a run whose worker will never report, so holding
+    // them too would leave a lost worker with no exit. A node the run never spawned is not owed
+    // anything and is not counted (`unreportedDetachedNodeIds`).
+    if (target === 'completed') {
+      const owed = unreportedDetachedNodeIds(session.state.nodes, session.state.stepStates);
+      if (owed.length > 0) {
+        this.logger.info(
+          `[ChainRunStatus] Holding session ${sessionId} open: detached node(s) ${owed.join(', ')} spawned and not yet reported`
+        );
+        return false;
+      }
+    }
+
     session.runStatus = target;
     if (isTerminalRunStatus(target)) {
       session.runCompletedAt = Date.now();
@@ -964,6 +985,55 @@ export class ChainSessionStore implements ChainSessionService {
     await this.saveSessions();
     await this.announceRunTerminal(session, target);
     return true;
+  }
+
+  /**
+   * Mark a detached (`await: run`) node SPAWNED — its brief was just rendered to the client.
+   *
+   * The one way a node enters the detached lifecycle, and the fact the completion guard in
+   * {@link transitionRunStatus} reads: from here until the node holds a real captured output, the
+   * run may pass it but may not complete. Idempotent — a re-render keeps the first spawn time,
+   * which `setStepState` then carries forward across every later milestone. Awaited persistence:
+   * the obligation must survive the process, because the worker's result can arrive after it.
+   *
+   * @returns false when the session does not exist (the caller logs; nothing was recorded).
+   */
+  async markNodeSpawned(sessionId: string, nodeId: string): Promise<boolean> {
+    const session = this.activeSessions.get(sessionId);
+    if (session === undefined) {
+      this.logger.warn(`[StepLifecycle] Cannot mark ${nodeId} spawned: no session ${sessionId}`);
+      return false;
+    }
+    session.state.stepStates ??= new Map<string, StepMetadata>();
+    const existing = session.state.stepStates.get(nodeId);
+    if (existing?.spawnedAt !== undefined) {
+      return true;
+    }
+    const now = Date.now();
+    session.state.stepStates.set(nodeId, {
+      ...(existing ?? { state: lifecycleForMilestone('rendered'), isPlaceholder: false }),
+      renderedAt: existing?.renderedAt ?? now,
+      spawnedAt: now,
+    });
+    session.lastActivity = now;
+    await this.saveSessions();
+    return true;
+  }
+
+  /**
+   * Complete a run the detached close guard was holding, once nothing is owed any more.
+   *
+   * A run that walked past its last node while a detached node was unreported stands on no node
+   * with a non-terminal status. When that node's late result lands, nothing re-advances — so this
+   * is the other place `completed` is asked for, and {@link transitionRunStatus} still decides.
+   * A no-op (false) for a run still standing on a node, and for one still owed a report.
+   */
+  async completeHeldRun(sessionId: string): Promise<boolean> {
+    // Undefined (no session) and a node id (still standing somewhere) both answer "not held".
+    if (this.activeSessions.get(sessionId)?.state.currentNodeId !== null) {
+      return false;
+    }
+    return this.transitionRunStatus(sessionId, 'completed');
   }
 
   /**
@@ -1220,65 +1290,14 @@ export class ChainSessionStore implements ChainSessionService {
     return true;
   }
 
-  /**
-   * Update an existing step result (e.g., replace placeholder with LLM output)
-   *
-   * Restored 2026-09-20 (P4.52 reimplementation probe): `updateSessionState` above answers a
-   * near-identical question (update a step's result + metadata, transition state, persist) and
-   * is the one 18-execution-stage/step-capture-service actually call. Two methods answering the
-   * same job — one live, one not — is evidence of a defect, not proof this one is surplus.
-   * Deleting it also would have orphaned `TextReferenceStore.getChainStepMetadata`, whose only
-   * production caller was this method — a class outside this row's scope. Left un-wired pending
-   * an owner decision on which of the two should be canonical.
-   */
-  async updateStepResult(
-    sessionId: string,
-    nodeId: string,
-    stepResult: string,
-    stepMetadata?: Record<string, any>
-  ): Promise<boolean> {
-    const session = this.activeSessions.get(sessionId);
-    if (!session) {
-      if (this.logger) {
-        this.logger.warn(`Attempted to update result for non-existent session: ${sessionId}`);
-      }
-      return false;
-    }
-
-    const existingMetadata =
-      this.textReferenceStore.getChainStepMetadata(session.chainId, nodeId) || {};
-
-    const mergedMetadata = {
-      ...existingMetadata,
-      ...(stepMetadata || {}),
-      isPlaceholder: stepMetadata?.['isPlaceholder'] ?? false,
-      updatedAt: Date.now(),
-    };
-
-    const isPlaceholder = mergedMetadata.isPlaceholder;
-
-    // Update step state: if we're replacing a placeholder with real content, transition to RESPONSE_CAPTURED
-    if (!isPlaceholder) {
-      this.setStepState(sessionId, nodeId, 'responded', false);
-      this.logger?.debug(
-        `[StepLifecycle] Step ${nodeId} updated with real response, state transitioned to responded`
-      );
-    }
-
-    await this.persistStepResult(
-      session,
-      nodeId,
-      stepResult,
-      mergedMetadata,
-      mergedMetadata.isPlaceholder
-    );
-
-    session.lastActivity = Date.now();
-    session.state.lastUpdated = Date.now();
-
-    await this.saveSessions();
-    return true;
-  }
+  // `updateStepResult` lived here and was deleted 2026-09-21 (P4.91). It answered the same
+  // question as `updateSessionState` above — write a step's result and metadata, move the step's
+  // lifecycle, persist — and only a test ever called it. Its one behavioural difference was
+  // merging the metadata already stored for the node, which is the opposite of what the live
+  // capture path wants: the placeholder write and the real-response write are two different
+  // facts about a step, and carrying `placeholderSource` forward onto real output would make the
+  // captured step describe itself as a placeholder. `TextReferenceStore.getChainStepMetadata`
+  // went with it — this was its only caller, and nothing else asked that question.
 
   /**
    * Mark a step as COMPLETED and advance the step counter

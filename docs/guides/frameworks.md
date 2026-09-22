@@ -186,6 +186,8 @@ server/resources/frameworks/{id}/
 └── judge-prompt.md     # Optional: judge evaluation prompt for %judge modifier
 ```
 
+The system prompt guidance lives in `framework.yaml` as `systemPromptGuidance`, and that key is its only source. There is no separate system prompt file: a `system-prompt.md` left in a framework directory is not read, recorded in version history, or restored by a rollback.
+
 Files are hot-reloaded — edit and save, the server picks up changes automatically.
 
 ### Phase Guards (Assertions)

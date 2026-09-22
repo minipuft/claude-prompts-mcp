@@ -113,6 +113,8 @@ interface ChainRunNodeRow {
    */
   delegated: number | null;
   args_json: string | null;
+  /** v31 (Tier 4): when a detached step was spawned; NULL on every other node. */
+  spawned_at?: number | null;
 }
 
 /**
@@ -142,7 +144,7 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
       `SELECT n.session_id, n.node_id, n.position, n.prompt_id, n.step_name, n.milestone,
               n.is_placeholder, n.rendered_at, n.responded_at, n.completed_at,
               n.declared_sections_json,
-              n.origin, n.origin_unknown_id, n.delegated, n.args_json
+              n.origin, n.origin_unknown_id, n.delegated, n.args_json, n.spawned_at
          FROM chain_run_nodes n
          JOIN chain_runs r ON r.session_id = n.session_id
         WHERE r.run_owner_pid = ?
@@ -225,8 +227,9 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
           `INSERT INTO chain_run_nodes (
              session_id, node_id, position, prompt_id, step_name, milestone,
              is_placeholder, rendered_at, responded_at, completed_at,
-             origin, origin_unknown_id, declared_sections_json, delegated, args_json, updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             origin, origin_unknown_id, declared_sections_json, delegated, args_json, spawned_at,
+             updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             session.sessionId,
             node.id,
@@ -253,6 +256,8 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
             // nothing" and "declared not delegated" stay distinguishable on the row.
             node.delegated === undefined ? null : node.delegated ? 1 : 0,
             node.args === undefined ? null : JSON.stringify(node.args),
+            // Tier 4: the detached lifecycle's way in. NULL for every node never spawned.
+            metadata?.spawnedAt ?? null,
             updatedAt,
           ]
         );
@@ -316,7 +321,7 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
     const nodeRows = this.db.query<ChainRunNodeRow>(
       `SELECT session_id, node_id, position, prompt_id, step_name, milestone,
               is_placeholder, rendered_at, responded_at, completed_at,
-              declared_sections_json, origin, origin_unknown_id
+              declared_sections_json, origin, origin_unknown_id, spawned_at
          FROM chain_run_nodes
         WHERE session_id = ?
         ORDER BY position`,
@@ -476,6 +481,9 @@ function toStepStates(nodeRows: readonly ChainRunNodeRow[]): Map<string, StepMet
     if (node.rendered_at !== null) metadata.renderedAt = node.rendered_at;
     if (node.responded_at !== null) metadata.respondedAt = node.responded_at;
     if (node.completed_at !== null) metadata.completedAt = node.completed_at;
+    if (node.spawned_at !== undefined && node.spawned_at !== null) {
+      metadata.spawnedAt = node.spawned_at;
+    }
     const declared = parseDeclaredSections(node.declared_sections_json);
     if (declared !== undefined) metadata.declaredSections = declared;
     stepStates.set(node.node_id, metadata);

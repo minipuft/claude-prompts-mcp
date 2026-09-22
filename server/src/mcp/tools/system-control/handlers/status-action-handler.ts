@@ -35,7 +35,7 @@ export class StatusActionHandler extends ActionHandler {
       throw new Error('Framework state manager not initialized');
     }
 
-    const health = this.frameworkStateStore.getSystemHealth();
+    const health = this.frameworkStateStore.getSystemHealth(this.requestScope);
     const statusIcon = health.status === 'healthy' ? '✅' : '⚠️';
 
     const isFrameworkEnabled = health.frameworkSystemEnabled;
@@ -56,15 +56,15 @@ export class StatusActionHandler extends ActionHandler {
     }
 
     if (include_metrics) {
-      const analytics = this.context.systemAnalytics;
-      response += `📊 **Performance Metrics**:\n`;
-      response += `- Total Executions: ${analytics.totalExecutions}\n`;
-      response += `- Success Rate: ${
-        analytics.totalExecutions > 0
-          ? Math.round((analytics.successfulExecutions / analytics.totalExecutions) * 100)
-          : 0
-      }%\n`;
-      response += `- Average Execution Time: ${analytics.averageExecutionTime}ms\n\n`;
+      // The same scoped ledger read `analytics` uses, so the two actions cannot disagree about
+      // one workspace. They did: these three lines read process-wide counters nothing wrote, and
+      // rendered 0/0 as `Success Rate: 0%` where `analytics` rendered the same zeroes as 100%
+      // (P4.87).
+      const ledger = this.tallyLedger();
+      response += `📊 **Recorded Steps** (this workspace):\n`;
+      response += `- Steps Recorded: ${ledger.records}\n`;
+      response += `- Completed: ${ledger.completed}\n`;
+      response += `- Failed: ${ledger.failed}\n\n`;
     }
 
     return this.createMinimalSystemResponse(response, 'status');
@@ -75,7 +75,7 @@ export class StatusActionHandler extends ActionHandler {
       throw new Error('Framework state manager not initialized');
     }
 
-    const health = this.frameworkStateStore.getSystemHealth();
+    const health = this.frameworkStateStore.getSystemHealth(this.requestScope);
     const statusIcon = health.status === 'healthy' ? '✅' : '⚠️';
 
     let response = `${statusIcon} **System Health Status**: ${health.status}\n\n`;
@@ -100,7 +100,7 @@ export class StatusActionHandler extends ActionHandler {
 
     try {
       if (this.frameworkStateStore) {
-        const health = this.frameworkStateStore.getSystemHealth();
+        const health = this.frameworkStateStore.getSystemHealth(this.requestScope);
         response += `Framework State: ${health.status}\n`;
         response += `Active Framework: ${health.activeFramework}\n`;
       }
@@ -118,7 +118,7 @@ export class StatusActionHandler extends ActionHandler {
       throw new Error('Framework state manager not initialized');
     }
 
-    const health = this.frameworkStateStore.getSystemHealth();
+    const health = this.frameworkStateStore.getSystemHealth(this.requestScope);
 
     let response = `🎯 **Framework System Status**\n\n`;
 

@@ -64,7 +64,7 @@ export class PromptResourceHandler implements PromptResourceHandlerPort {
     this.logger = dependencies.logger;
     this.promptAnalyzer = new PromptAnalyzer(dependencies);
     this.comparisonEngine = new ComparisonEngine(this.logger);
-    this.gateAnalyzer = new GateAnalyzer(dependencies);
+    this.gateAnalyzer = new GateAnalyzer(dependencies, this.promptAnalyzer);
     this.textDiffService = new ObjectDiffGenerator();
     this.filterParser = new FilterParser(this.logger);
     this.promptMatcher = new PromptMatcher(this.logger);

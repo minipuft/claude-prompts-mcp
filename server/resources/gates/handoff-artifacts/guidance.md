@@ -10,10 +10,13 @@ listed path exists relative to the server's working directory.
 
 ## Operator setup
 
-The check runs `node`, so add it to the allowlist:
+The check runs `node` against the script that ships inside this gate's own directory, which the
+server resolves to an absolute path before spawning. An allowlist entry matches the whole command,
+exactly or as a `*` prefix, so the entry to add is:
 
 ```
-MCP_SHELL_VERIFY_ALLOWLIST=node
+MCP_SHELL_VERIFY_ALLOWLIST=node *
 ```
 
-Without it the executor refuses the command and records a failure.
+A bare `node` authorises the command `node` and nothing else. Without a matching entry the
+executor refuses the command and records a failure.

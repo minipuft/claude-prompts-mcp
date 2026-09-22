@@ -9,6 +9,9 @@
  * lint errors) in the gate review feedback — instead of generic "review your work".
  */
 
+import { existsSync } from 'node:fs';
+import * as path from 'node:path';
+
 import { getShellPreset } from '../config/shell-preset-loader.js';
 import {
   SHELL_STDIN_SOURCE_AGENT_RESPONSE,
@@ -20,6 +23,9 @@ import type { GateDefinitionProvider } from '../core/gate-loader.js';
 import type { ShellVerifyExecutor } from '../shell/shell-verify-executor.js';
 import type { GateShellVerifyResult } from '../shell/shell-verify-message-formatter.js';
 import type { ShellVerifyGate } from '../shell/types.js';
+
+import { gateShellScriptReferences } from '#shared/utils/gate-shell-script-reference.js';
+import { isPathInside } from '#shared/utils/path-containment.js';
 
 /** Optional context passed to gate shell verification — currently the agent response. */
 export interface GateShellVerifyRunContext {
@@ -52,15 +58,41 @@ type ShellVerifyCriteria = {
   shell_response_env_var?: string;
 };
 
+/**
+ * Absolutise the arguments that name a script the gate itself ships with.
+ *
+ * The gate directory is `{sourceRoot}/{id}`. An argument recognised by
+ * `gateShellScriptReferences` and present there is rewritten to its absolute path; everything
+ * else — flags, subcommands, paths naming the operator's own tree — is passed through untouched,
+ * so `['npm', 'test']` and a gate with no `sourceRoot` (a temporary, in-memory gate) behave
+ * exactly as before.
+ *
+ * The working directory is deliberately NOT changed. A check script reads the paths a handoff
+ * names, relative to where the work happened; pointing the child at the gate directory would make
+ * every such path resolve inside the package's own resources.
+ */
+function resolveGateShippedScripts(command: string[], gateDir: string | undefined): string[] {
+  if (gateDir === undefined) return command;
+  const shipped = new Set(gateShellScriptReferences(command));
+  return command.map((argument) => {
+    if (!shipped.has(argument)) return argument;
+    const candidate = path.resolve(gateDir, argument);
+    if (!isPathInside(gateDir, candidate) || !existsSync(candidate)) return argument;
+    return candidate;
+  });
+}
+
 /** Build a ShellVerifyGate from a criterion, applying preset and response injection. */
 function buildGateConfig(
   criteria: ShellVerifyCriteria,
-  runContext: GateShellVerifyRunContext | undefined
+  runContext: GateShellVerifyRunContext | undefined,
+  gateDir: string | undefined
 ): ShellVerifyGate | null {
-  const command = criteria.shell_command;
-  if (command == null || command.length === 0 || (command[0] ?? '').trim() === '') {
+  const declared = criteria.shell_command;
+  if (declared == null || declared.length === 0 || (declared[0] ?? '').trim() === '') {
     return null;
   }
+  const command = resolveGateShippedScripts(declared, gateDir);
 
   const presetValues =
     criteria.shell_preset != null ? getShellPreset(criteria.shell_preset) : undefined;
@@ -137,8 +169,10 @@ export async function runGateShellVerifications(
       continue;
     }
 
+    const gateDir = gate.sourceRoot !== undefined ? path.join(gate.sourceRoot, gate.id) : undefined;
+
     for (const criteria of shellCriteria) {
-      const gateConfig = buildGateConfig(criteria, runContext);
+      const gateConfig = buildGateConfig(criteria, runContext, gateDir);
       if (gateConfig === null) {
         continue;
       }

@@ -1,12 +1,18 @@
 import { createShellVerifyExecutor } from '../../../src/engine/gates/shell/shell-verify-executor.js';
-import { describe, expect, jest, test } from '@jest/globals';
+import { afterEach, describe, expect, jest, test } from '@jest/globals';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
 import { GateReviewStage } from '../../../src/engine/execution/pipeline/stages/20-gate-review-stage.js';
+import { createGateLoader } from '../../../src/engine/gates/core/gate-loader.js';
 import { GATE_VERDICT_REQUIRED_FORMAT } from '../../../src/engine/gates/core/gate-verdict-contract.js';
+import { GateFileWriter } from '../../../src/mcp/tools/gate-manager/services/index.js';
 
 import type { LightweightGateDefinition } from '../../../src/engine/gates/types.js';
 import type { GateDefinitionProvider } from '../../../src/engine/gates/core/gate-loader.js';
+import type { ConfigManager } from '../../../src/shared/types/index.js';
 
 import { DEFAULT_GATES_CONFIG } from '../../../src/shared/types/core-config.js';
 
@@ -77,9 +83,9 @@ function createRenderResult(content = 'Generated output') {
 function createStageWithGates(
   gates: Record<string, LightweightGateDefinition>,
   configEvaluation?: { defaultMode?: 'self' | 'judge'; strict?: boolean },
-  overrides?: { chainSessionStore?: any }
+  overrides?: { chainSessionStore?: any; loader?: GateDefinitionProvider }
 ) {
-  const loader = createMockLoader(gates);
+  const loader = overrides?.loader ?? createMockLoader(gates);
   const chainOperatorExecutor = {
     renderStep: jest.fn().mockResolvedValue(createRenderResult()),
   } as any;
@@ -336,5 +342,66 @@ describe('Shell Verify Auto-Pass', () => {
     // ShellVerificationStage signal alone is insufficient without GateReviewStage shell results.
     expect(metadata.gateReview.autoCleared).toBeUndefined();
     expect(chainOperatorExecutor.renderStep).toHaveBeenCalled();
+  });
+});
+
+/**
+ * P4.121 — the block the TOOL writes is the block the stage routes on.
+ *
+ * Every case above hands the stage a `LightweightGateDefinition` built in memory, so none of them
+ * shows that an `evaluation` written by `resource_manager`'s writer survives the round trip
+ * through gate.yaml and the real loader. Here the writer lays the file down, the real
+ * `GateLoader` reads it back, and the stage routes on what was read. The twin differs in ONE
+ * value (`mode`), so the absence of `metadata.judge` on it is a statement about `mode`.
+ */
+describe('Judge routing from a gate written by GateFileWriter (P4.121)', () => {
+  let workspaceDir: string | undefined;
+
+  afterEach(() => {
+    if (workspaceDir !== undefined) rmSync(workspaceDir, { recursive: true, force: true });
+    workspaceDir = undefined;
+  });
+
+  async function stageForAuthoredGate(mode: 'judge' | 'self') {
+    workspaceDir = mkdtempSync(join(tmpdir(), 'cpm-judge-authored-'));
+    const gatesDir = join(workspaceDir, 'gates');
+    const configManager = {
+      getGatesDirectory: () => gatesDir,
+      getBundledResourceDirectory: () => undefined,
+    } as unknown as ConfigManager;
+
+    const written = await new GateFileWriter({ logger: mockLogger, configManager }).writeGateFiles({
+      id: 'authored-gate',
+      name: 'Authored Gate',
+      type: 'validation',
+      description: 'written through the tool writer',
+      guidance: 'AUTHORED-CRITERIA',
+      pass_criteria: [{ type: 'inline_guidance' }],
+      evaluation: { mode, model: 'haiku-authored' },
+    });
+    expect(written.success).toBe(true);
+
+    const loader = createGateLoader(mockLogger, gatesDir) as unknown as GateDefinitionProvider;
+    return createStageWithGates({ 'authored-gate': baseGate }, undefined, { loader });
+  }
+
+  test('mode: judge routes the review to the judge, with the authored model hint', async () => {
+    const { stage, context } = await stageForAuthoredGate('judge');
+    await stage.execute(context);
+
+    const metadata = context.executionResults?.metadata as any;
+    expect(metadata.judge?.judgeGateIds).toEqual(['authored-gate']);
+    expect(metadata.judge?.modelHint).toBe('haiku-authored');
+    expect(metadata.judge?.judgePrompt).toContain('AUTHORED-CRITERIA');
+  });
+
+  test('CONTROL: the twin with mode: self is reviewed, and not by the judge', async () => {
+    const { stage, context } = await stageForAuthoredGate('self');
+    await stage.execute(context);
+
+    const metadata = context.executionResults?.metadata as any;
+    // Positive control for the absence: the review DID render for this gate.
+    expect(metadata.gateReview?.gateIds).toEqual(['authored-gate']);
+    expect(metadata.judge).toBeUndefined();
   });
 });

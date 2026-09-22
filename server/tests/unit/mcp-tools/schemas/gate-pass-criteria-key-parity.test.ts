@@ -8,9 +8,16 @@
  * test time naming exactly which key moved and on which side.
  */
 import { describe, expect, it } from '@jest/globals';
+import { z } from 'zod/v4';
 
-import { GatePassCriteriaSchema } from '../../../../src/engine/gates/core/gate-schema.js';
-import { gatePassCriteriaSchema } from '../../../../src/mcp/tools/schemas/resource-manager.schema.js';
+import {
+  GateDefinitionSchema,
+  GatePassCriteriaSchema,
+} from '../../../../src/engine/gates/core/gate-schema.js';
+import {
+  gatePassCriteriaSchema,
+  resourceManagerInputSchema,
+} from '../../../../src/mcp/tools/schemas/resource-manager.schema.js';
 
 type KeyedShape = Record<string, unknown>;
 
@@ -69,5 +76,45 @@ describe('gate pass_criteria key parity (MCP tool schema vs engine schema)', () 
     );
 
     expect(diff).toBe('');
+  });
+});
+
+/**
+ * P4.121 — the `evaluation` parameter mirrors the engine's per-gate judge block. Same drift risk
+ * as `pass_criteria` above, with one difference: the tool side is strict and the engine side
+ * strips, so a key present only on the tool side would be accepted, written, and dropped by the
+ * loader — the gate silently reviewing itself.
+ *
+ * Compared by key AND by each key's JSON Schema, because a type mismatch (`strict` a string on
+ * one side) passes a key-set comparison.
+ */
+describe('gate evaluation parity (MCP tool schema vs engine schema)', () => {
+  // `.unwrap()` peels `.optional()`; the object underneath is what each side declares.
+  const toolEvaluation = resourceManagerInputSchema.shape.evaluation.unwrap() as unknown as {
+    shape: KeyedShape;
+  };
+  const engineEvaluation = GateDefinitionSchema.shape.evaluation.unwrap() as unknown as {
+    shape: KeyedShape;
+  };
+
+  it('declares the same keys on both sides', () => {
+    expect(
+      diffKeySets(
+        'mcp evaluation',
+        toolEvaluation.shape,
+        'engine evaluation',
+        engineEvaluation.shape
+      )
+    ).toBe('');
+  });
+
+  it('declares each key with the same JSON Schema on both sides', () => {
+    const jsonOf = (schema: unknown): unknown => z.toJSONSchema(schema as z.ZodType);
+    for (const key of Object.keys(engineEvaluation.shape)) {
+      expect({ key, schema: jsonOf(toolEvaluation.shape[key]) }).toEqual({
+        key,
+        schema: jsonOf(engineEvaluation.shape[key]),
+      });
+    }
   });
 });

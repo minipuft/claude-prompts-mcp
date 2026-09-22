@@ -186,14 +186,17 @@ describe('Streamable HTTP notification delivery', () => {
       ).toBeLessThanOrEqual(1);
     }
 
-    // ORDERING (plan row P4.89, not fixed here): on the final step `chain/complete` is announced
-    // BEFORE the last `chain/step_complete`, because advance-on-PASS latches the run terminal
-    // ahead of capture. The channel must not DROP either one when the response is about to end,
-    // so the assertion is that both arrived on the SAME call — which is the case that would lose
-    // one if the stream closed at the first of them.
+    // ORDERING (plan row P4.89). Both events arrive on the SAME call — the case that would lose
+    // one if the stream closed at the first of them — and the step the call answered is
+    // announced BEFORE the run's terminal event. It was the other way round until the advance
+    // moved behind the capture: a client that stopped reading at `chain/complete` never saw the
+    // final `step_complete`, which is the position this asserts rather than the presence.
     const finalCall = perCall[perCall.length - 1] ?? [];
     expect(finalCall).toContain('notifications/chain/complete');
     expect(finalCall).toContain('notifications/chain/step_complete');
+    expect(finalCall.indexOf('notifications/chain/step_complete')).toBeLessThan(
+      finalCall.indexOf('notifications/chain/complete')
+    );
   }, 90000);
 
   /**

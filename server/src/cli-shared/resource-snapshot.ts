@@ -45,8 +45,8 @@ function readCompanion(entryPath: string, relativePath: string): string | undefi
  * Project a resource on disk onto the snapshot a version row records.
  *
  * `declared` is the parsed entry file — the caller has already read it, and re-reading it here
- * would let the two reads disagree across a concurrent write. Companion bodies (`guidance.md`,
- * `system-prompt.md`) are read here, because only this function knows which ones the projection
+ * would let the two reads disagree across a concurrent write. Companion bodies (a gate's
+ * `guidance.md`) are read here, because only this function knows which ones the projection
  * for that type needs.
  */
 export async function projectResourceSnapshot(
@@ -125,12 +125,9 @@ const SHARED_PROJECTORS: Partial<
       }),
     });
   },
-  framework: (id, entryPath, declared) =>
+  framework: (id, _entryPath, declared) =>
     Promise.resolve({
       shared: true as const,
-      snapshot: projectFrameworkSnapshot(id, {
-        framework: declared,
-        systemPrompt: readCompanion(entryPath, 'system-prompt.md'),
-      }),
+      snapshot: projectFrameworkSnapshot(id, { framework: declared }),
     }),
 };

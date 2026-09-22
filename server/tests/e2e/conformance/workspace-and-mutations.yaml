@@ -950,6 +950,132 @@ scenarios:
     # parameter) prints no Classification line at all and fails this row.
     expect: { text_contains: 'Classification: framework' }
 
+  - id: gate-create-then-inspect-reads-back-block-response-on-fail
+    claim_source: >-
+      resource_manager contract — `block_response_on_fail` (P4.100) reaches gate.yaml as the key
+      `blockResponseOnFail`, the key the pipeline reads to withhold a step's output on a FAIL.
+      `inspect` reads it back off the raw definition (gate-discovery-processor.ts).
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: gate
+          action: create
+          id: conformance_gate_block_response_readback
+          name: Conformance Gate Block Response Readback
+          type: validation
+          description: created by the conformance corpus
+          guidance: Guidance text
+          block_response_on_fail: true
+      - tool: resource_manager
+        args: { resource_type: gate, action: inspect, id: conformance_gate_block_response_readback }
+    # `true` is non-default: the key has no schema default, and `inspect` prints the line only
+    # when the raw definition declares it. A write that dropped the parameter — every write
+    # before P4.100, when the parameter did not exist — prints no line at all and fails this row.
+    expect: { text_contains: 'Blocks Response On Fail: true' }
+
+  - id: gate-update-clears-block-response-on-fail-with-false
+    claim_source: >-
+      resource_manager contract — `block_response_on_fail: false` is a VALUE, not an omission:
+      it clears the key on a gate that declared it, where an omitted parameter is carried
+      forward by PRESERVED_GATE_YAML_KEYS.
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: gate
+          action: create
+          id: conformance_gate_block_response_clear
+          name: Conformance Gate Block Response Clear
+          type: validation
+          description: created by the conformance corpus
+          guidance: Guidance text
+          block_response_on_fail: true
+      - tool: resource_manager
+        args:
+          resource_type: gate
+          action: update
+          id: conformance_gate_block_response_clear
+          block_response_on_fail: false
+      - tool: resource_manager
+        args: { resource_type: gate, action: inspect, id: conformance_gate_block_response_clear }
+    # The distinguishing assertion: a truthiness test anywhere on the path reads `false` as an
+    # omission, the carry-forward keeps the `true` this row's first request wrote, and the line
+    # reads `true` instead. `false` here is the whole claim.
+    expect: { text_contains: 'Blocks Response On Fail: false' }
+
+  - id: gate-create-then-inspect-reads-back-evaluation
+    claim_source: >-
+      resource_manager contract — `evaluation` (P4.121) reaches gate.yaml as the key the judge
+      routing reads (`resolveJudgeConfig`, `composeJudgeReviewPrompt`). `inspect` reads back the
+      declared keys, not resolved defaults (gate-discovery-processor.ts).
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: gate
+          action: create
+          id: conformance_gate_evaluation_readback
+          name: Conformance Gate Evaluation Readback
+          type: validation
+          description: created by the conformance corpus
+          guidance: Guidance text
+          evaluation: { mode: judge, model: haiku, strict: false }
+      - tool: resource_manager
+        args: { resource_type: gate, action: inspect, id: conformance_gate_evaluation_readback }
+    # Every key non-default: `strict: false` under `judge` is the opposite of the resolved
+    # default, so a line reading it proves the authored value, not a default, came back.
+    expect: { text_contains: 'Evaluation: judge (model: haiku, strict: false)' }
+
+  - id: gate-update-with-evaluation-alone-replaces-the-block
+    claim_source: >-
+      resource_manager contract — an update supplying ONLY `evaluation` writes gate.yaml
+      (`callerSuppliedGateKeys` narrows the write scope by it), and the block is written whole.
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: gate
+          action: create
+          id: conformance_gate_evaluation_update
+          name: Conformance Gate Evaluation Update
+          type: validation
+          description: created by the conformance corpus
+          guidance: Guidance text
+          evaluation: { mode: judge, model: haiku, strict: true }
+      - tool: resource_manager
+        args:
+          resource_type: gate
+          action: update
+          id: conformance_gate_evaluation_update
+          evaluation: { mode: self }
+      - tool: resource_manager
+        args: { resource_type: gate, action: inspect, id: conformance_gate_evaluation_update }
+    # The line ends at `self`: a write narrowed away would still read `judge (model: haiku, …)`,
+    # and a merge would read `self (model: haiku, strict: true)`. The newline pins the end.
+    expect: { text_contains: "Evaluation: self\n" }
+
+  - id: gate-update-without-evaluation-carries-it-forward
+    claim_source: >-
+      resource_manager contract — omitted on update, `evaluation` is carried forward from the
+      existing gate.yaml by PRESERVED_GATE_YAML_KEYS.
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: gate
+          action: create
+          id: conformance_gate_evaluation_carry
+          name: Conformance Gate Evaluation Carry
+          type: validation
+          description: created by the conformance corpus
+          guidance: Guidance text
+          evaluation: { mode: judge, model: haiku }
+      - tool: resource_manager
+        args:
+          resource_type: gate
+          action: update
+          id: conformance_gate_evaluation_carry
+          description: updated, saying nothing about evaluation
+      - tool: resource_manager
+        args: { resource_type: gate, action: inspect, id: conformance_gate_evaluation_carry }
+    expect: { text_contains: 'Evaluation: judge (model: haiku)' }
+
   - id: framework-create-then-inspect-reads-back-advanced-fields
     claim_source: >-
       resource_manager contract — the 11 framework advanced fields (P4.1/P4.5) reach

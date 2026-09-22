@@ -156,6 +156,7 @@ function compileNode(
       ? { inlineGateCriteria: [...node.inlineGateCriteria] }
       : {}),
     ...(node.delegated !== undefined ? { delegated: node.delegated } : {}),
+    ...(node.await !== undefined ? { await: node.await } : {}),
     ...(node.visibility !== undefined ? { visibility: cloneVisibility(node.visibility) } : {}),
   };
 }

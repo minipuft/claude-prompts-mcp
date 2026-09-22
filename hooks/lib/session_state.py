@@ -90,6 +90,8 @@ class ChainState(TypedDict, total=False):
     pending_delegation: bool
     delegation_agent_type: str
     delegation_model_hint: str
+    # "blocking" | "detached" — read off the server's rendered handoff (run_in_background value)
+    delegation_mode: str
 
 
 def _fallback_interrupt_exits() -> list[str]:
@@ -151,6 +153,7 @@ def clear_delegation_state(session_id: str) -> None:
     state["pending_delegation"] = False
     state.pop("delegation_agent_type", None)
     state.pop("delegation_model_hint", None)
+    state.pop("delegation_mode", None)
     save_session_state(session_id, state)
 
 

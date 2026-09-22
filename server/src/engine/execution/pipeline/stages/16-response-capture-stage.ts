@@ -1,6 +1,11 @@
 // @lifecycle canonical - Captures model responses and lifecycle decisions.
 import { UnknownObservationValidationError } from '../../capture/unknown-observation-processor.js';
 import {
+  collectDetachedNodeFacts,
+  describeLandedReport,
+  resolveDetachedReport,
+} from '../../delegation/detached.js';
+import {
   HANDOFF_RESULT_HEADING,
   handoffNodeToken,
   resolveHandoffEvidence,
@@ -18,13 +23,17 @@ import { BasePipelineStage } from '../stage.js';
 import type { Logger } from '#infra/logging/index.js';
 import type { ChainNode, PendingGateReview } from '#shared/types/chain-execution.js';
 import type {
+  ChainSession,
   SessionBlueprint,
   UnknownLedgerEntry,
   UnknownObservation,
 } from '#shared/types/chain-session.js';
 import type { ChainSessionService, ToolResponse } from '#shared/types/index.js';
 import type { GateEnhancementService } from '../../../gates/services/gate-enhancement-service.js';
-import type { GateVerdictProcessor } from '../../../gates/services/gate-verdict-processor.js';
+import type {
+  GateVerdictProcessor,
+  VerdictProcessingResult,
+} from '../../../gates/services/gate-verdict-processor.js';
 import type {
   RemainderApplication,
   RemainderProcessor,
@@ -32,9 +41,12 @@ import type {
 import type { StepCaptureService } from '../../capture/step-capture-service.js';
 import type { UnknownObservationProcessor } from '../../capture/unknown-observation-processor.js';
 import type { ExecutionContext, SessionContext } from '../../context/index.js';
+import type { DetachedNodeFacts } from '../../delegation/detached.js';
 import type { HandoffEvidence, HandoffEvidenceMode } from '../../delegation/handoff-contract.js';
+import type { ChainStepPrompt } from '../../operators/types.js';
 import type { ChainInterrupt, ChainMutation } from '../decisions/index.js';
 
+import { isRunHeldOpen } from '#shared/types/chain-session.js';
 import { currentOrdinal, totalOf } from '#shared/utils/node-order.js';
 
 /**
@@ -185,9 +197,15 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     this.alignSessionContext(context, sessionContext, session, currentStepAtStart);
 
     if (
-      !this.runHandoffEvidencePhase(context, sessionId, currentNodeIdAtStart, currentStepAtStart)
+      !(await this.runResumeAdmission(
+        context,
+        sessionContext,
+        session,
+        currentNodeIdAtStart,
+        currentStepAtStart
+      ))
     ) {
-      this.logExit({ handoffEvidence: 'refused' });
+      this.logExit({ resumeAdmission: 'answered' });
       return;
     }
 
@@ -248,6 +266,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       sessionContext
     );
     if (deferredResult.earlyExit) {
+      await this.settleVerdict(context, sessionId, session, currentStepAtStart, deferredResult);
       await this.ensurePostAdvanceReview(context);
       this.logExit({ gateVerdict: 'deferred', handled: true });
       return;
@@ -265,6 +284,14 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       sessionContext
     );
     if (pendingResult.earlyExit) {
+      await this.settleVerdict(
+        context,
+        sessionId,
+        session,
+        currentStepAtStart,
+        deferredResult,
+        pendingResult
+      );
       await this.ensurePostAdvanceReview(context);
       this.logExit({ gateVerdict: 'pending-review', handled: true });
       return;
@@ -285,9 +312,188 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       }
     );
 
+    await this.settleVerdict(
+      context,
+      sessionId,
+      session,
+      currentStepAtStart,
+      deferredResult,
+      pendingResult
+    );
+
     await this.ensurePostAdvanceReview(context);
 
     this.logExit({ captured: true });
+  }
+
+  /**
+   * Close out this call's verdict handling, in the one order the two halves require.
+   *
+   * 1. **Ledger** the submitted verdict — a no-op unless this call carried one and captured
+   *    nothing, which is the two-call pattern the retry prompt asks for (P4.86). Before the
+   *    advance, so the record describes the step the verdict graded rather than the one the run
+   *    moves to.
+   * 2. **Advance**, for every result that decided one. Verdict processing decides an advance and
+   *    does not perform it, because advancing past a run's final node announces the run terminal
+   *    — and until that moved here, the announcement reached the client ahead of the
+   *    `step_complete` for the step being answered (P4.89).
+   *
+   * Both results are applied rather than one being picked: a deferred FAIL can create the review
+   * the pending path then answers in the same call, so both can carry an advance. A second
+   * advance is harmless — `advanceStep` no-ops on a node the run has already passed, which is
+   * also what makes this safe after `StepCaptureService` advanced the run itself.
+   */
+  private async settleVerdict(
+    context: ExecutionContext,
+    sessionId: string,
+    session: NonNullable<ReturnType<ChainSessionService['getSession']>>,
+    currentStepAtStart: number,
+    ...results: readonly VerdictProcessingResult[]
+  ): Promise<void> {
+    this.stepCaptureService.ledgerSubmittedVerdict(context, sessionId, session, currentStepAtStart);
+
+    for (const result of results) {
+      if (result.deferredAdvance !== undefined) {
+        await this.verdictProcessor.applyDeferredAdvance(context, result.deferredAdvance);
+      }
+    }
+  }
+
+  /**
+   * Decide what this resume is FOR before anything else reads it: a detached node's late result,
+   * the parent moving past a detached node, or the ordinary resume of the step the run stands on.
+   *
+   * Two phases in one order. The detached phase runs first because its trailer can name a node
+   * other than the current one, and the handoff-evidence phase would read that as a mismatch on
+   * the current node. What the detached phase decides (`resolveDetachedReport`, a pure decision
+   * in `delegation/detached.ts`) is acted on here and nowhere else:
+   *
+   * - `report` — record the result on the node it names, ask the store to complete a run that
+   *   was only waiting on it, and answer with an acknowledgement. The pipeline stops: this reply
+   *   is not the current step's answer, so no capture, verdict or render may treat it as one.
+   * - `continue-past` — record the detached node's placeholder and advance past it; the rest of
+   *   this stage and the render then run for the step the run moved to. The evidence phase is
+   *   skipped: an empty reply at a detached node is the documented way to move on, not a
+   *   missing worker reply.
+   * - `review-pending` — a gate review holds the run: nothing detached happens here, and the
+   *   review's verdict path below decides the advance as it does for any step. The evidence phase
+   *   is skipped for the same reason as `continue-past`.
+   * - `refuse` — a refusal that names the node, before any mutation.
+   * - `not-detached` — the handoff-evidence phase, unchanged.
+   *
+   * @returns `false` when a response was set and the pipeline must stop.
+   */
+  private async runResumeAdmission(
+    context: ExecutionContext,
+    sessionContext: SessionContext,
+    session: ChainSession,
+    currentNodeIdAtStart: string | null,
+    currentStepAtStart: number
+  ): Promise<boolean> {
+    const sessionId = sessionContext.sessionId;
+    const reply = context.mcpRequest.user_response?.trim() ?? '';
+    const current = this.resolveResumeStep(context, currentNodeIdAtStart, currentStepAtStart);
+    const decision = resolveDetachedReport({
+      reply,
+      mode: this.resolveEvidenceMode(),
+      reviewPending: this.chainSessionStore.getPendingGateReview(sessionId) !== undefined,
+      current:
+        currentNodeIdAtStart === null || current === undefined
+          ? null
+          : {
+              token: handoffNodeToken(current),
+              delegated: current.delegated === true,
+              detached: current.await === 'run',
+            },
+      detachedNodes: collectDetachedNodeFacts(context.parsedCommand?.steps, session.state),
+    });
+
+    switch (decision.kind) {
+      case 'refuse':
+        context.setResponse(this.buildErrorResponse(decision.message));
+        return false;
+      case 'report':
+        await this.landDetachedReport(context, session, decision.node, reply);
+        return false;
+      case 'continue-past':
+        await this.stepCaptureService.passDetachedNode(
+          context,
+          sessionId,
+          session,
+          sessionContext,
+          {
+            nodeId: decision.node.nodeId,
+            ordinal: decision.node.stepNumber,
+          }
+        );
+        return true;
+      case 'review-pending':
+        return true;
+      case 'not-detached':
+        return this.runHandoffEvidencePhase(
+          context,
+          sessionId,
+          currentNodeIdAtStart,
+          currentStepAtStart
+        );
+    }
+  }
+
+  /**
+   * Record a late detached result on its own node, let the store complete a run that was only
+   * waiting on it, and answer the caller. Orchestration only: the writes are
+   * `StepCaptureService.recordDetachedReport`, the completion decision is the store's guard, and
+   * the words are `describeLandedReport`.
+   */
+  private async landDetachedReport(
+    context: ExecutionContext,
+    session: ChainSession,
+    node: DetachedNodeFacts,
+    reply: string
+  ): Promise<void> {
+    const sessionId = session.sessionId;
+    await this.stepCaptureService.recordDetachedReport(
+      context,
+      sessionId,
+      session,
+      { nodeId: node.nodeId, ordinal: node.stepNumber },
+      reply
+    );
+    const runCompleted = await this.chainSessionStore.completeHeldRun(sessionId);
+    const after =
+      this.chainSessionStore.getSession(sessionId, context.getScopeOptions()) ?? session;
+    const text = describeLandedReport(node, {
+      runCompleted,
+      held: isRunHeldOpen(after.state),
+      detachedNodes: collectDetachedNodeFacts(context.parsedCommand?.steps, after.state),
+    });
+    context.setResponse({
+      content: [{ type: 'text', text: `${text}\n\nChain: ${after.chainId}` }],
+      isError: false,
+    });
+  }
+
+  /** The configured evidence mode, or the shipped default when no getter was wired. */
+  private resolveEvidenceMode(): HandoffEvidenceMode {
+    return this.collaborators.handoffEvidenceMode?.() ?? resolveHandoffEvidenceMode(undefined);
+  }
+
+  /**
+   * The parse-time step a resume addresses: the node id is the identity, the ordinal is the
+   * fallback for a chain parsed before node-id minting — the same two-key resolution
+   * `ledgerCapturedStep` and stage 20 use.
+   */
+  private resolveResumeStep(
+    context: ExecutionContext,
+    currentNodeIdAtStart: string | null,
+    currentStepAtStart: number
+  ): ChainStepPrompt | undefined {
+    const steps = context.parsedCommand?.steps;
+    return (
+      (currentNodeIdAtStart !== null
+        ? steps?.find((candidate) => candidate.nodeId === currentNodeIdAtStart)
+        : undefined) ?? steps?.find((candidate) => candidate.stepNumber === currentStepAtStart)
+    );
   }
 
   /**
@@ -326,20 +532,14 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       return true;
     }
 
-    // The same two-key resolution `ledgerCapturedStep` and stage 20 use: the node id is the
-    // identity, the ordinal is the fallback for a chain parsed before node-id minting.
-    const steps = context.parsedCommand?.steps;
-    const step =
-      (currentNodeIdAtStart !== null
-        ? steps?.find((candidate) => candidate.nodeId === currentNodeIdAtStart)
-        : undefined) ?? steps?.find((candidate) => candidate.stepNumber === currentStepAtStart);
+    const step = this.resolveResumeStep(context, currentNodeIdAtStart, currentStepAtStart);
     if (step === undefined) {
       return true;
     }
 
     const evidence = resolveHandoffEvidence({
       delegated: step.delegated,
-      mode: this.collaborators.handoffEvidenceMode?.() ?? resolveHandoffEvidenceMode(undefined),
+      mode: this.resolveEvidenceMode(),
       expectedToken: handoffNodeToken(step),
       reply,
     });

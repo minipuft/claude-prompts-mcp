@@ -3,7 +3,12 @@
 import * as path from 'node:path';
 
 import { recordActionInvocation } from '../../metadata/usage-tracker.js';
-import { SafeConfigWriter, createSafeConfigWriter } from '../config-utils.js';
+import {
+  SafeConfigWriter,
+  createSafeConfigWriter,
+  describeRecordedVersion,
+  type ConfigWriteResult,
+} from '../config-utils.js';
 import { createStructuredResponse } from './core/response-utils.js';
 import { AnalyticsActionHandler } from './handlers/analytics-action-handler.js';
 import { ChangesActionHandler } from './handlers/changes-action-handler.js';
@@ -85,10 +90,6 @@ export class ConsolidatedSystemControl implements SystemControlContext {
 
   // ── Mutable runtime state ───────────────────────────────────────────
   systemAnalytics: SystemAnalytics = {
-    totalExecutions: 0,
-    successfulExecutions: 0,
-    failedExecutions: 0,
-    averageExecutionTime: 0,
     gateValidationCount: 0,
     uptime: 0,
     performanceTrends: [],
@@ -174,8 +175,8 @@ export class ConsolidatedSystemControl implements SystemControlContext {
 
   createMinimalSystemResponse(text: string, action: string): ToolResponse {
     const now = Date.now();
-    const frameworkState = this.frameworkStateStore?.getCurrentState();
-    const systemHealth = this.frameworkStateStore?.getSystemHealth?.();
+    const frameworkState = this.frameworkStateStore?.getCurrentState(this.requestScope);
+    const systemHealth = this.frameworkStateStore?.getSystemHealth?.(this.requestScope);
     const frameworkEnabled =
       systemHealth?.frameworkSystemEnabled ?? frameworkState?.frameworkSystemEnabled ?? false;
 
@@ -238,7 +239,11 @@ export class ConsolidatedSystemControl implements SystemControlContext {
       if (!result.success) {
         return `⚠️ Failed to persist gates.enabled: ${result.message || result.error}`;
       }
-      return `📁 Persisted gates.enabled=${enabled} to ${path.basename(this.safeConfigWriter.getConfigPath())}.`;
+      return (
+        `📁 Persisted gates.enabled=${enabled} to ` +
+        `${path.basename(this.safeConfigWriter.getConfigPath())}` +
+        `${describeRecordedVersion(result)}`
+      );
     } catch (error) {
       this.logger.warn('Failed to persist gates.enabled', error);
       return `⚠️ Failed to persist gates.enabled: ${error instanceof Error ? error.message : String(error)}`;
@@ -264,13 +269,21 @@ export class ConsolidatedSystemControl implements SystemControlContext {
     ];
 
     try {
+      // The LAST write's row is the one to report: the three keys are written one at a time, so
+      // each records its own version and the newest is what `cpm config rollback` would restore.
+      let last: ConfigWriteResult | undefined;
       for (const key of keys) {
         const result = await this.safeConfigWriter.updateConfigValue(key, String(enabled));
         if (!result.success) {
           return `⚠️ Failed to persist ${key}: ${result.message || result.error}`;
         }
+        last = result;
       }
-      return `📁 Persisted framework toggles (${keys.join(', ')}) to ${enabled} in ${path.basename(this.safeConfigWriter.getConfigPath())}.`;
+      return (
+        `📁 Persisted framework toggles (${keys.join(', ')}) to ${enabled} in ` +
+        `${path.basename(this.safeConfigWriter.getConfigPath())}` +
+        `${describeRecordedVersion(last)}`
+      );
     } catch (error) {
       this.logger.warn('Failed to persist framework toggles', error);
       return `⚠️ Failed to persist framework toggles: ${error instanceof Error ? error.message : String(error)}`;
@@ -279,43 +292,26 @@ export class ConsolidatedSystemControl implements SystemControlContext {
 
   // ── Analytics (called from McpToolRouter) ───────────────────────────
 
-  updateAnalytics(analytics: Partial<SystemAnalytics> & { currentExecution?: any }): void {
+  /**
+   * Refresh the process-wide facts and record a memory delta if one is worth keeping.
+   *
+   * It also pushed `executionTime` and `successRate` trends until P4.87. Both were unreachable:
+   * the first needed a `currentExecution` payload, the second the `totalExecutions` counter, and
+   * the one caller — `McpToolRouter.handleToolDescriptionChange` — passes neither. They went with
+   * the counters, and with the `Execution Mode Distribution` section that read `executionMode`
+   * off the trends they would have written.
+   */
+  updateAnalytics(analytics: Partial<SystemAnalytics>): void {
     Object.assign(this.systemAnalytics, analytics);
     this.systemAnalytics.uptime = Date.now() - this.startTime;
     this.systemAnalytics.memoryUsage = process.memoryUsage();
 
-    if (analytics.currentExecution) {
-      const currentExecution = analytics.currentExecution;
+    const memoryDelta = this.calculateMemoryDelta();
+    if (Math.abs(memoryDelta) > 1024 * 1024) {
       this.systemAnalytics.performanceTrends.push({
         timestamp: Date.now(),
-        metric: 'executionTime',
-        value: currentExecution.executionTime,
-        executionMode: currentExecution.executionMode,
-        framework: currentExecution.framework,
-        success: currentExecution.success,
-      });
-    }
-
-    if (this.systemAnalytics.memoryUsage) {
-      const memoryDelta = this.calculateMemoryDelta();
-      if (Math.abs(memoryDelta) > 1024 * 1024) {
-        this.systemAnalytics.performanceTrends.push({
-          timestamp: Date.now(),
-          metric: 'memoryDelta',
-          value: memoryDelta,
-        });
-      }
-    }
-
-    if (analytics.totalExecutions && analytics.totalExecutions % 10 === 0) {
-      const successRate =
-        analytics.totalExecutions > 0
-          ? ((analytics.successfulExecutions || 0) / analytics.totalExecutions) * 100
-          : 0;
-      this.systemAnalytics.performanceTrends.push({
-        timestamp: Date.now(),
-        metric: 'successRate',
-        value: successRate,
+        metric: 'memoryDelta',
+        value: memoryDelta,
       });
     }
 
@@ -399,7 +395,7 @@ export class ConsolidatedSystemControl implements SystemControlContext {
   private extractScope(extra: unknown): StateStoreOptions | undefined {
     const requestScopeId =
       extra && typeof extra === 'object'
-        ? resolveContinuityScopeId(resolveRequestIdentity(extra as Record<string, unknown>))
+        ? resolveContinuityScopeId(resolveRequestIdentity(extra))
         : 'default';
     const launchWorkspaceId = this.configManager?.getConfig().identity.launchDefaults.workspaceId;
     const workspaceId = requestScopeId !== 'default' ? requestScopeId : launchWorkspaceId;

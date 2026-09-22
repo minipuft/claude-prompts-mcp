@@ -9,7 +9,10 @@ guidanceFile: guidance.md
 
 pass_criteria:
   - type: shell_verify
-    shell_command: ['node', 'resources/gates/handoff-artifacts/check-artifacts.js']
+    # Named relative to THIS gate's own directory, not to the server's working directory: the
+    # script ships with the gate, so a checkpoint records it and a rollback restores it, and the
+    # runner resolves it wherever the gate was installed.
+    shell_command: ['node', 'check-artifacts.js']
     shell_stdin_source: agent_response
     shell_timeout: 10000
 

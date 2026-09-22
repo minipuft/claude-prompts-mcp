@@ -5,6 +5,7 @@ import { buildPipelineHookContext } from '../pipeline/hook-context.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { ExecutionRecordStore } from '#modules/chains/execution-record-store.js';
+import type { InputRequiredReason } from '#shared/types/chain-execution.js';
 import type {
   ChainSession,
   ChainSessionService,
@@ -23,7 +24,7 @@ const PLACEHOLDER_SOURCE = 'StepResponseCaptureStage';
  * Both are needed and neither derives the other cheaply here: the store is addressed by
  * `nodeId`, while placeholder text, output mappings and diagnostics are all positional.
  */
-interface StepTarget {
+export interface StepTarget {
   readonly ordinal: number;
   readonly nodeId: string;
 }
@@ -135,6 +136,59 @@ export class StepCaptureService {
       }
       throw error;
     }
+  }
+
+  /**
+   * Move a run past a DETACHED node the parent resumed without waiting for (Tier 4).
+   *
+   * The node's output does not exist yet, so it is recorded the way a response-less call has
+   * always recorded one — a placeholder, completed — and the run advances past it. The placeholder
+   * is what keeps the node OWED: `unreportedDetachedNodeIds` counts a spawned node until it holds
+   * a real output, which {@link recordDetachedReport} writes over this placeholder when the
+   * worker's result lands. Advancing past the run's last node this way leaves the run held open
+   * rather than completed — the store's completion guard decides that, not this method.
+   */
+  async passDetachedNode(
+    context: ExecutionContext,
+    sessionId: string,
+    session: ChainSession,
+    sessionContext: SessionContext,
+    target: StepTarget
+  ): Promise<void> {
+    await this.capturePlaceholder(sessionId, session.chainId, target, totalOf(session.state.nodes));
+    await this.chainSessionStore.advanceStep(sessionId, target.nodeId);
+    this.syncSessionContext(context, sessionId, sessionContext);
+  }
+
+  /**
+   * Record a detached node's LATE result on that node — not on the step the run stands on.
+   *
+   * The same writes an ordinary capture makes for a real output (store, completed lifecycle,
+   * capture-time execution record with its `handoff_evidence`, the step-complete announcement),
+   * with two deliberate omissions. It does not advance: the run passed this node when the parent
+   * moved on, and advancing again would move the CURRENT step. And it does not publish
+   * `capturedStep`, which tells the phase-guard stage which output this call graded — a late
+   * report is not the current step's answer, and grading it there would raise a review on a step
+   * that has not been answered.
+   */
+  async recordDetachedReport(
+    context: ExecutionContext,
+    sessionId: string,
+    session: ChainSession,
+    target: StepTarget,
+    reply: string
+  ): Promise<void> {
+    await this.chainSessionStore.updateSessionState(sessionId, target.nodeId, reply, {
+      isPlaceholder: false,
+      source: 'detached_report',
+      capturedAt: Date.now(),
+      outputMapping: this.getStepOutputMapping(context, target.ordinal),
+    });
+    await this.chainSessionStore.completeStep(sessionId, target.nodeId, {
+      preservePlaceholder: false,
+    });
+    this.ledgerCapturedStep(context, sessionId, session.chainId, target, reply);
+    await this.announceStepComplete(context, session.chainId, target, reply);
   }
 
   /**
@@ -283,11 +337,9 @@ export class StepCaptureService {
    * `processPendingReviewVerdict` before `captureStep`, so the verdicts are on request state by
    * the time this reads them.
    *
-   * ☐ The SPLIT shape is not covered (as of 2026-09-20 · flips when a verdict-only call is
-   * observed to append a row): when the response is sent on one call and the verdict on a
-   * later one, this row is already written and `captureStep` early-returns, so NO append fires
-   * on the verdict call at all and those verdicts reach no record. Closing that needs a new
-   * verdict-time row, which is a record-shape decision rather than a binding.
+   * The SPLIT shape — response on one call, verdict on a later one — is covered by
+   * {@link ledgerSubmittedVerdict}, which appends a SECOND row for the same step rather than
+   * rewriting this one (P4.86).
    */
   private ledgerCapturedStep(
     context: ExecutionContext,
@@ -334,6 +386,81 @@ export class StepCaptureService {
       ...(gateVerdicts !== undefined ? { gateVerdicts } : {}),
       scope: context.getScopeOptions(),
     });
+  }
+
+  /**
+   * Append the verdict-time row for a call that carried a gate verdict and captured nothing
+   * (P4.86).
+   *
+   * The two-call pattern — answer the step, then submit the verdict — is what the server's own
+   * retry prompt asks for on a failed review, and it reached no record at all: the step's
+   * `completed` row was written by the earlier call, so `captureStep` takes its
+   * completed-non-placeholder early return and {@link ledgerCapturedStep} never runs. The
+   * verdict, its per-gate entries and the fact that a review was answered existed only in that
+   * request's memory.
+   *
+   * A SECOND row for the same step, never an edit of the first: `execution_records` is
+   * append-only per step (see its contract), the earlier row is the true record of what the
+   * step produced and when, and a reader that wants the current picture resolves the latest
+   * record for the step — which is exactly what `v_execution_history` already does per session
+   * via `MAX(execution_id)` over monotonic ULIDs.
+   *
+   * Applicability is read off request state rather than passed in, because both facts are
+   * already published there and a stage re-deriving either could disagree with the service that
+   * wrote it:
+   *
+   * - `verdictDetection` is set by `GateVerdictProcessor` only for a verdict it PROCESSED. A
+   *   verdict refused over a recorded failing check never reaches it, and must not be recorded
+   *   as though the engine had accepted it.
+   * - `capturedStep` is set by {@link captureRealResponse} for the step captured on this call.
+   *   Present means {@link ledgerCapturedStep} already bound this call's verdicts (P4.76), so
+   *   recording them again would double-count the same submission.
+   *
+   * `status` is the STEP's lifecycle as this call leaves it, not the verdict's wording: a
+   * cleared review means the step is done, an uncleared one means the run is waiting on the
+   * submitter, which is what `input_required` says.
+   */
+  ledgerSubmittedVerdict(
+    context: ExecutionContext,
+    sessionId: string,
+    session: ChainSession,
+    currentStepAtStart: number
+  ): void {
+    if (this.executionRecordStore === null) return;
+
+    const detection = context.state.gates.verdictDetection;
+    if (detection === undefined || context.state.session.capturedStep !== undefined) return;
+
+    const target = this.resolveTarget(session, currentStepAtStart, true);
+    if (target === undefined) return;
+
+    const steps = context.parsedCommand?.steps;
+    const step =
+      steps?.find((candidate) => candidate.nodeId === target.nodeId) ??
+      steps?.find((candidate) => candidate.stepNumber === target.ordinal);
+
+    const gateVerdicts = context.state.gates.perGateVerdicts;
+    const submittedAt = Date.now();
+
+    this.executionRecordStore.append({
+      sessionId,
+      chainId: session.chainId,
+      stepNumber: target.ordinal,
+      nodeId: target.nodeId,
+      ...(step?.promptId !== undefined ? { promptId: step.promptId } : {}),
+      status: detection.outcome === 'cleared' ? 'completed' : 'input_required',
+      substate: { respondedAt: submittedAt },
+      startedAt: submittedAt,
+      ...(detection.outcome === 'cleared'
+        ? { completedAt: submittedAt }
+        : { inputRequired: describeOutstandingReview(session) }),
+      ...(gateVerdicts !== undefined ? { gateVerdicts } : {}),
+      scope: context.getScopeOptions(),
+    });
+
+    this.logger.debug(
+      `Recorded a ${detection.verdict} verdict for step ${target.ordinal} (${target.nodeId}) submitted without a response`
+    );
   }
 
   getStepOutputMapping(
@@ -463,4 +590,19 @@ export class StepCaptureService {
       );
     }
   }
+}
+
+/**
+ * Why a verdict-time record says the step is still waiting on its submitter.
+ *
+ * Read off the review the run is holding on, so the row names the gate and the attempt rather
+ * than restating the status in a second vocabulary. A run whose review was cleared between the
+ * snapshot and this call answers the generic reason instead of inventing a gate id.
+ */
+function describeOutstandingReview(session: ChainSession): InputRequiredReason {
+  const review = session.pendingGateReview;
+  const gateId = review?.gateIds[0];
+  return gateId === undefined || review === undefined
+    ? { kind: 'awaiting_response' }
+    : { kind: 'gate_review', gateId, attempt: review.attemptCount };
 }

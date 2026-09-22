@@ -273,6 +273,9 @@ export const REMAINDER_REFUSED_NODE_FIELDS: Readonly<Record<string, string>> = {
   inlineGateCriteria:
     'raw `::` tokens are resolved at parse time, which a contributed node has already passed; ' +
     'bind the gate with the `gates` parameter and its target_step_id',
+  await:
+    'a contributed node always blocks; declare `await: run` on a planned step so the run ' +
+    'knows before it starts which nodes it does not wait on',
 };
 
 /** Field names present on a submitted node that the remainder path refuses to accept. */

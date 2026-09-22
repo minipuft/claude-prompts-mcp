@@ -64,7 +64,6 @@ describe('FrameworkFileWriter honors declared companion file names', () => {
     if (opts.phasesFile !== undefined) lines.push(`phasesFile: ${opts.phasesFile}`);
     if (opts.judgePromptFile !== undefined) lines.push(`judgePromptFile: ${opts.judgePromptFile}`);
     writeFileSync(join(dir, 'framework.yaml'), lines.join('\n') + '\n');
-    writeFileSync(join(dir, 'system-prompt.md'), 'Apply declared-names principles.\n');
     if (opts.phasesFile !== undefined) {
       writeFileSync(
         join(dir, opts.phasesFile),
@@ -211,11 +210,9 @@ describe('FrameworkFileWriter honors declared companion file names', () => {
         phasesFile: '../../escaped-phases.yaml',
       },
       phases: null,
-      systemPrompt: null,
       judgePrompt: null,
       frameworkPath: join(dir, 'framework.yaml'),
       phasesPath: null,
-      systemPromptPath: join(dir, 'system-prompt.md'),
       judgePromptPath: null,
     };
 

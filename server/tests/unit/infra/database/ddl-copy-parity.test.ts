@@ -1,5 +1,9 @@
 /**
- * Every hand-written `execution_records` DDL in `tests/` declares the engine's column set.
+ * Every hand-written copy of an engine table's DDL in `tests/` declares the engine's column set.
+ *
+ * Covers `execution_records` (seven copies, the class this gate was written for) and
+ * `chain_run_nodes` (zero copies as of 2026-09-22, v31 — the table every test reaches through a
+ * real `SqliteEngine`; a copy added tomorrow is held to the engine's columns on the day it lands).
  *
  * Seven test files build an in-memory `execution_records` by copying the engine's `CREATE TABLE`
  * rather than booting `SqliteEngine`. That is a deliberate trade — an in-memory table is what
@@ -34,8 +38,8 @@ const ENGINE = path.resolve(TESTS_ROOT, '../src/infra/database/sqlite-engine.ts'
  * Walks parenthesis depth rather than matching a closing `);`, because `handoff_evidence` carries
  * a multi-line `CHECK (...)` whose own `)` would end the block early.
  */
-function executionRecordColumns(source: string): string[] | undefined {
-  const match = /CREATE TABLE(?: IF NOT EXISTS)? execution_records\s*\(/.exec(source);
+function tableColumns(source: string, table: string): string[] | undefined {
+  const match = new RegExp(`CREATE TABLE(?: IF NOT EXISTS)? ${table}\\s*\\(`).exec(source);
   if (match === null) return undefined;
 
   const bodyStart = match.index + match[0].length;
@@ -85,24 +89,54 @@ function testFiles(dir: string): string[] {
   return found;
 }
 
-describe('execution_records DDL parity', () => {
-  const engineColumns = executionRecordColumns(readFileSync(ENGINE, 'utf8'));
+/**
+ * Each table this gate holds copies of: the column its engine DDL must carry (the positive
+ * control — an extractor that read nothing would pass every copy vacuously), a retired column it
+ * must not, and the fewest copies the enumeration may find.
+ */
+const TABLES = [
+  {
+    table: 'execution_records',
+    present: 'handoff_evidence',
+    retired: 'delegation_skipped',
+    minCopies: 6,
+  },
+  // v31: the detached-delegation lifecycle column. No copy exists yet, so `minCopies` is 0 and
+  // the engine-side control is what this entry asserts until one does.
+  { table: 'chain_run_nodes', present: 'spawned_at', retired: 'reported_at', minCopies: 0 },
+] as const;
 
-  // POSITIVE CONTROL for the enumeration below: an empty copy list, or an engine the extractor
-  // could not read, would make every assertion vacuous.
+const TEST_SOURCES = testFiles(TESTS_ROOT).map((file) => ({
+  file,
+  source: readFileSync(file, 'utf8'),
+}));
+
+describe.each(TABLES)('$table DDL parity', ({ table, present, retired, minCopies }) => {
+  const engineColumns = tableColumns(readFileSync(ENGINE, 'utf8'), table);
+
   it('reads the engine DDL and finds the column the class was closed on', () => {
     expect(engineColumns).toBeDefined();
-    expect(engineColumns).toContain('handoff_evidence');
-    expect(engineColumns).not.toContain('delegation_skipped');
+    expect(engineColumns).toContain(present);
+    expect(engineColumns).not.toContain(retired);
   });
 
-  const copies = testFiles(TESTS_ROOT)
-    .map((file) => ({ file, columns: executionRecordColumns(readFileSync(file, 'utf8')) }))
-    .filter((entry): entry is { file: string; columns: string[] } => entry.columns !== undefined);
+  const copies = TEST_SOURCES.map(({ file, source }) => ({
+    file,
+    columns: tableColumns(source, table),
+  })).filter((entry): entry is { file: string; columns: string[] } => entry.columns !== undefined);
 
   it('finds every hand-written copy in tests/', () => {
-    expect(copies.length).toBeGreaterThanOrEqual(6);
+    expect(copies.length).toBeGreaterThanOrEqual(minCopies);
   });
+
+  // `it.each` over an empty table throws in Jest, so a table with no copies asserts the empty
+  // enumeration instead of registering zero cases.
+  if (copies.length === 0) {
+    it('has no hand-written copy to compare', () => {
+      expect(copies).toEqual([]);
+    });
+    return;
+  }
 
   it.each(copies.map((copy) => [path.relative(TESTS_ROOT, copy.file), copy] as const))(
     '%s declares the engine column set',

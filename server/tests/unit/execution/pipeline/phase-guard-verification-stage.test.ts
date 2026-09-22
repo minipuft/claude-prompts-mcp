@@ -728,6 +728,72 @@ describe('PhaseGuardVerificationStage', () => {
     // assertion is the one that must fail if the advisory filter is ever widened by accident.
     expect(store.setPendingGateReview).toHaveBeenCalledTimes(1);
   });
+
+  // ---- P4.113: a retry hint says what actually failed ----
+
+  /**
+   * The two fixtures below differ in ONE thing — the number of characters in the `## Context`
+   * body — and in nothing else: same guards, same header, same store, same framework. That is
+   * what makes the short one evidence about LENGTH rather than about the header being absent.
+   */
+  const SHORT_CONTEXT_OUTPUT = '## Context\n\nToo short.';
+  const LONG_CONTEXT_OUTPUT = `## Context\n\n${'Substantive context. '.repeat(12)}`;
+  const MIN_LENGTH_GUARDS = { required: true, min_length: 120 };
+
+  function runContextGuard(output: string) {
+    const guide = createMockGuide([
+      {
+        id: 'context',
+        name: 'Context',
+        section_header: '## Context',
+        guards: MIN_LENGTH_GUARDS,
+      },
+    ]);
+    const store = createMockSessionStore(['## Context']);
+    const stage = createPhaseGuardVerificationStage(
+      () => createRegistry(guide),
+      () => defaultConfig,
+      store,
+      logger
+    );
+    const ctx = withSession(createContext(createMcpRequest('>>test', output)));
+    ctx.frameworkContext = { selectedFramework: { id: 'cageerf', name: 'CAGEERF' } } as any;
+    return { stage, store, ctx };
+  }
+
+  test('a PRESENT-but-short section is told its length, not told to add the header', async () => {
+    const { stage, store, ctx } = runContextGuard(SHORT_CONTEXT_OUTPUT);
+
+    await stage.execute(ctx);
+
+    const review = (store.setPendingGateReview as jest.Mock).mock.calls[0][1] as any;
+    const hints = (review.retryHints as string[]).join('\n');
+    // The section IS in the output, so a hint telling the model to include it is false, and it
+    // contradicts the retry feedback directly above it, which names the measured length.
+    expect(hints).not.toContain('includes the required');
+    expect(hints).toContain('## Context');
+    expect(hints).toContain(`${SHORT_CONTEXT_OUTPUT.length - '## Context\n\n'.length} chars`);
+    expect(hints).toContain('at least 120 characters');
+  });
+
+  test('an ABSENT section is told to add the header — the two messages differ', async () => {
+    const { stage, store, ctx } = runContextGuard('Prose with no headers at all, long enough.');
+
+    await stage.execute(ctx);
+
+    const review = (store.setPendingGateReview as jest.Mock).mock.calls[0][1] as any;
+    const hints = (review.retryHints as string[]).join('\n');
+    expect(hints).toContain('includes the required "## Context" section');
+    expect(hints).not.toContain('chars');
+  });
+
+  test('positive control: the same fixture, long enough, raises no review at all', async () => {
+    const { stage, store, ctx } = runContextGuard(LONG_CONTEXT_OUTPUT);
+
+    await stage.execute(ctx);
+
+    expect(store.setPendingGateReview).not.toHaveBeenCalled();
+  });
 });
 
 /**

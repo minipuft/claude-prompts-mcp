@@ -50,8 +50,8 @@ export const FRAMEWORK_REQUIRED_SNAPSHOT_FIELDS = ['id', 'name', 'type', 'enable
 /**
  * Projected fields whose absence leaves the corresponding artifact untouched rather than fabricated.
  *
- * These are safe to omit. The writer leaves what is already on disk: `system-prompt.md` is not
- * written when no content is supplied for it, and unmentioned YAML keys survive the deep merge.
+ * These are safe to omit. The writer leaves what is already on disk: unmentioned YAML keys survive
+ * the deep merge.
  * But omitting them means that part of the framework is NOT rolled back, which is why `restore`
  * reports them as `unrecordedFields` instead of returning silently.
  */
@@ -60,16 +60,14 @@ export const FRAMEWORK_OPTIONAL_SNAPSHOT_FIELDS = FRAMEWORK_SNAPSHOT_PROJECTED_K
 );
 
 /**
- * Everything a framework snapshot is projected FROM: the parsed `framework.yaml` plus the body of
- * `system-prompt.md`.
+ * Everything a framework snapshot is projected FROM: the parsed `framework.yaml`.
  *
- * Both surfaces hold exactly this — the server as `ExistingFrameworkData`'s first and third
- * members, the CLI as two file reads — so neither needs the other's loader.
+ * The system prompt is part of it — `systemPromptGuidance` is its one source (R91), the text the
+ * runtime serves. Both surfaces hold exactly this, the server as `ExistingFrameworkData.framework`
+ * and the CLI as one file read, so neither needs the other's loader.
  */
 export interface FrameworkSnapshotSource {
   readonly framework: Record<string, unknown>;
-  /** `system-prompt.md`'s content, or absent when the framework declares it inline (or not at all). */
-  readonly systemPrompt?: string | null;
 }
 
 /** Project a framework onto exactly the authored state a version row records. */
@@ -94,9 +92,9 @@ export function projectFrameworkSnapshot(
     snapshot['tool_descriptions'] = yaml['toolDescriptions'];
   }
 
-  // The system prompt is authored in `system-prompt.md`, not in `framework.yaml`. Prefer the
-  // file; fall back to the inline YAML key for frameworks that predate the split file.
-  const systemPrompt = source.systemPrompt ?? yaml['systemPromptGuidance'];
+  // `systemPromptGuidance` is the YAML spelling; `system_prompt_guidance` the payload one, for the
+  // same reason as `tool_descriptions` above.
+  const systemPrompt = yaml['systemPromptGuidance'];
   if (systemPrompt != null) {
     snapshot['system_prompt_guidance'] = systemPrompt;
   }

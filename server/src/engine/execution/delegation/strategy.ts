@@ -141,6 +141,8 @@ export class ClaudeCodeStrategy implements DelegationStrategy {
    * Claude Code spawns subagents in the BACKGROUND by default (`run_in_background` defaults to
    * true) \u2014 a `blocking` node needs the parent to wait for the worker's result before resuming,
    * so this is the one strategy that pins it explicitly rather than trusting the host default.
+   * A `detached` node is pinned the other way, explicitly too: the run moves on without the
+   * worker, and the client's delegation hook tells the two apart by this rendered value.
    */
   formatToolCall(
     agentType: string | undefined,
@@ -153,7 +155,7 @@ export class ClaudeCodeStrategy implements DelegationStrategy {
       `  \u2022 subagent_type: "${agentType ?? CLAUDE_CODE_DEFAULT_AGENT_TYPE}"`,
     ];
     if (model != null) lines.push(`  \u2022 model: "${model}"`);
-    if (mode === 'blocking') lines.push('  \u2022 run_in_background: false');
+    lines.push(`  \u2022 run_in_background: ${mode === 'detached' ? 'true' : 'false'}`);
     return lines.join('\n');
   }
 

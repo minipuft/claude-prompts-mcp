@@ -16,7 +16,7 @@ For the full enforcement-mode taxonomy (`inline_guidance` / `framework_complianc
 
 | Gate | Tier | Severity | Activation | Subject | ~tokens | Description |
 |------|------|----------|------------|---------|---------|-------------|
-| `handoff-artifacts` | check | high | explicit only | evidence | 122 | Fails a delegated step whose handoff names no artifacts, or names one that does not exist where the check runs |
+| `handoff-artifacts` | check | high | explicit only | evidence | 191 | Fails a delegated step whose handoff names no artifacts, or names one that does not exist where the check runs |
 | `math-fidelity` | reminder | high | explicit only | math | 627 | New shader/GL math must ship as a complete derivation card: optical model naming the finest visible feature, continuous math with range contracts, MEASURED discretization (regime classified from probed numbers, never eyeballed), a LOCK/identity contract, an offline harness, and a live probe with a numeric threshold. |
 | `plan-quality` | reminder | high | artifacts: plan | planning | 39 | Ensures implementation plans are complete, actionable, and risk-aware |
 | `workflow-diagnosis` | reminder | high | workflow, refactoring | diagnosis | 233 | Validates that the Diagnosis Card synthesizes collected signals into a named pattern before implementation. Required when pre-flight has 2+ failures, multiple skills flag the same area, or multi-file changes are planned. |
@@ -65,4 +65,4 @@ For the full enforcement-mode taxonomy (`inline_guidance` / `framework_complianc
 
 ---
 
-*Generated: 2026-09-16*
+*Generated: 2026-09-22*

@@ -168,7 +168,7 @@ describe('GateVerdictProcessor.processPendingReviewVerdict (recorded check resul
     expect(message).toContain('npm test exit 1');
   });
 
-  test('a PASS over a recorded PASS advances as before', async () => {
+  test('a PASS over a recorded PASS still advances the run', async () => {
     const review = createReview([
       { gateId: 'test-suite', passed: true, summary: 'npm test exit 0' },
     ]);
@@ -187,8 +187,14 @@ describe('GateVerdictProcessor.processPendingReviewVerdict (recorded check resul
 
     expect(responses).toHaveLength(0);
     expect(store.recordGateReviewOutcome).toHaveBeenCalled();
-    expect(store.advanceStep).toHaveBeenCalled();
     expect(result.passClearedThisCall).toBe(true);
+
+    // P4.89: the advance is DECIDED here and performed by the stage after the step is captured,
+    // so the store must not have moved yet — and must move when the decision is applied.
+    expect(store.advanceStep).not.toHaveBeenCalled();
+    expect(result.deferredAdvance?.reason).toBe('gate-pass');
+    await processor.applyDeferredAdvance(context, result.deferredAdvance!);
+    expect(store.advanceStep).toHaveBeenCalled();
   });
 
   test('a FAIL is unaffected by a recorded failure — it agrees with the check', async () => {

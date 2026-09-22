@@ -395,6 +395,103 @@ describe('ResponseAssembler – chain-path CTA methods', () => {
       expect(result).toContain('Response Blocked');
       expect(result).not.toContain('Resume:');
     });
+
+    // ── P4.101 ────────────────────────────────────────────────────────────────
+    //
+    // The blocking branch returns before the ordinary review footer, so everything that footer
+    // carries — the attempt counter and the schema-validated resubmit template — was absent
+    // from the one reply a caller is meant to act on.
+
+    test('shows where the caller stands in the retry budget', () => {
+      const context = createChainContext({
+        currentStep: 1,
+        totalSteps: 2,
+        chainId: 'chain-blocked#1',
+        blockedGateIds: ['quality'],
+        responseBlocked: true,
+        pendingReview: makePendingReview({ attemptCount: 1, maxAttempts: 3 }),
+      });
+
+      const result = assembler.formatBlockedResponse(context);
+
+      expect(result).toContain('**Attempt 2 of 3** — 1 attempt remains after this one.');
+    });
+
+    test('the blocked reply and the review footer read ONE counter', () => {
+      const context = createChainContext({
+        currentStep: 1,
+        totalSteps: 2,
+        chainId: 'chain-blocked#1',
+        blockedGateIds: ['quality'],
+        responseBlocked: true,
+        pendingReview: makePendingReview({ attemptCount: 2, maxAttempts: 5 }),
+      });
+
+      // Two renderings, one source. Asserting them against each other rather than against two
+      // literals is what fails if a second computation appears on either side — the footer's
+      // `N/M` shorthand and the block's long form must still name the same attempt.
+      const blocked = assembler.formatBlockedResponse(context);
+      const footer = assembler.formatChainResponse(context, { isChainFormatting: true } as never);
+
+      expect(blocked).toContain('**Attempt 3 of 5**');
+      expect(footer).toContain('(attempt 3/5)');
+    });
+
+    test('omits the counter when the gate allows a single attempt', () => {
+      const context = createChainContext({
+        currentStep: 1,
+        totalSteps: 2,
+        chainId: 'chain-blocked#1',
+        blockedGateIds: ['quality'],
+        responseBlocked: true,
+        pendingReview: makePendingReview({ attemptCount: 0, maxAttempts: 1 }),
+      });
+
+      const result = assembler.formatBlockedResponse(context);
+
+      // "Attempt 1 of 1" is not a budget, and the review footer has always omitted it in this
+      // state. Positive control for the absence: the reply IS a block and DOES carry a resume.
+      expect(result).toContain('Response Blocked');
+      expect(result).toContain('Resume:');
+      expect(result).not.toContain('Attempt 1 of 1');
+    });
+
+    test('offers the structured verdict form, not only the legacy string', () => {
+      const context = createChainContext({
+        currentStep: 1,
+        totalSteps: 2,
+        chainId: 'chain-blocked#1',
+        blockedGateIds: ['quality'],
+        responseBlocked: true,
+        pendingReview: makePendingReview({ attemptCount: 1, maxAttempts: 3 }),
+      });
+
+      const result = assembler.formatBlockedResponse(context);
+
+      // The object form is schema-validated and cannot be malformed; the string form is read
+      // back with five fallback regexes. Steering a blocked caller into the fragile one, on the
+      // reply where getting it wrong costs an attempt, is what this reverses.
+      expect(result).toContain('"overall": "PASS"');
+      expect(result).toContain('"rationale"');
+      expect(result).toContain('A legacy string form is still accepted');
+    });
+
+    test('falls back to the bare resume line when no review is pending', () => {
+      const context = createChainContext({
+        currentStep: 1,
+        totalSteps: 2,
+        chainId: 'chain-blocked#1',
+        blockedGateIds: ['quality'],
+        responseBlocked: true,
+      });
+
+      const result = assembler.formatBlockedResponse(context);
+
+      // No pending review means no advertised gate list, so there is no template to key to.
+      // Inventing an empty one would advertise a shape the caller cannot fill.
+      expect(result).toContain('gate_verdict="GATE_REVIEW: PASS|FAIL - <reason>"');
+      expect(result).not.toContain('"overall": "PASS"');
+    });
   });
 
   describe('advisory warnings', () => {

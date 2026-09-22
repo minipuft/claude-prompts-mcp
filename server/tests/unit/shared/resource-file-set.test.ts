@@ -254,10 +254,48 @@ describe('resourceFileSet — gate', () => {
 
     expect(paths(result.files)).toEqual(['gate.yaml']);
   });
+
+  it('enumerates the shell_verify script a gate ships with', async () => {
+    const entry = await write(
+      'gates/evidence/gate.yaml',
+      "id: evidence\npass_criteria:\n  - type: shell_verify\n    shell_command: ['node', 'check.js']\n"
+    );
+    await write('gates/evidence/check.js', 'process.exit(0)');
+
+    const result = await resourceFileSet({ resourceType: 'gate', entryPath: entry });
+
+    expect(paths(result.files)).toEqual(['gate.yaml', 'check.js']);
+  });
+
+  it('claims no argument that does not name a file inside the gate', async () => {
+    const entry = await write(
+      'gates/suite/gate.yaml',
+      "id: suite\npass_criteria:\n  - type: shell_verify\n    shell_command: ['npm', 'test', '--silent']\n"
+    );
+    // The subcommand exists as a file in the gate directory, which is exactly the accident the
+    // extension rule bounds: `test` is an argument to npm, not a script this gate ships.
+    await write('gates/suite/test', 'not a script');
+
+    const result = await resourceFileSet({ resourceType: 'gate', entryPath: entry });
+
+    expect(paths(result.files)).toEqual(['gate.yaml']);
+  });
+
+  it('refuses a shell_verify argument that walks out of the gate root', async () => {
+    const entry = await write(
+      'gates/escape/gate.yaml',
+      "id: escape\npass_criteria:\n  - type: shell_verify\n    shell_command: ['node', '../../secrets.js']\n"
+    );
+    await write('secrets.js', 'process.exit(0)');
+
+    await expect(resourceFileSet({ resourceType: 'gate', entryPath: entry })).rejects.toThrow(
+      /outside its root/
+    );
+  });
 });
 
 describe('resourceFileSet — framework', () => {
-  it('enumerates the entry, its referenced companions, and the layout-named system prompt', async () => {
+  it('enumerates the entry and its referenced companions, and never a system-prompt.md', async () => {
     const entry = await write(
       'frameworks/focus/framework.yaml',
       'id: focus\nphasesFile: phases.yaml\njudgePromptFile: judge-prompt.md\n'
@@ -269,12 +307,9 @@ describe('resourceFileSet — framework', () => {
 
     const result = await resourceFileSet({ resourceType: 'framework', entryPath: entry });
 
-    expect(paths(result.files)).toEqual([
-      'framework.yaml',
-      'phases.yaml',
-      'judge-prompt.md',
-      'system-prompt.md',
-    ]);
+    // `system-prompt.md` is a stray here like `scratch.md` (R91): nothing reads it, so a restore
+    // that wrote it would write over a file no version recorded as the framework.
+    expect(paths(result.files)).toEqual(['framework.yaml', 'phases.yaml', 'judge-prompt.md']);
     expect(paths(result.files)).not.toContain('scratch.md');
   });
 

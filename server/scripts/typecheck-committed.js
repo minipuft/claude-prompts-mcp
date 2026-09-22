@@ -126,7 +126,7 @@ function main() {
       rmSync(scratch, { recursive: true, force: true });
       try {
         git(['worktree', 'prune']);
-      } catch {
+      } catch (_error) {
         /* nothing further to clean */
       }
     }

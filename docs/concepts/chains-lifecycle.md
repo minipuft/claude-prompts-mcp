@@ -470,6 +470,71 @@ call for a pending delegated step that does not carry that value — a client-si
 top of the server floor, never a substitute for it. Other clients may tighten the same way in
 their own hooks.
 
+### Detached steps (`await: run`)
+
+A delegated step blocks by default: the run pauses at it until the worker's result comes back. A
+chain step that declares `await: run` is **detached** — the run hands it to a worker and keeps
+going without the result, which reports later. Detached is opt-in per step, never the default,
+and it has no symbolic spelling: declare it on the step in YAML or on a `workflow` node.
+
+```yaml
+chainSteps:
+  - promptId: gather
+    stepName: Gather
+  - promptId: audit
+    stepName: Audit
+    await: run # detached: the run does not wait for this worker
+  - promptId: summarize
+    stepName: Summarize
+```
+
+`await: run` implies delegation, so the step needs no `==>` or `subagentModel` beside it. `await:
+node` is the explicit spelling of the default.
+
+**What the parent does.** The detached step renders its EXECUTION BRIEF like any delegated step,
+with its node token in the `HANDOFF RESULT` block. The handoff instructions differ:
+
+1. Spawn the worker **in the background** — Claude Code's handoff renders
+   `run_in_background: true` for a detached step (and `false` for a blocking one).
+2. Resume **at once** with `chain_id` and no `user_response`. The run moves past the detached step
+   and renders the next one. If the response that carried the brief also asks for a
+   `gate_verdict` (a gate review holding the run), send the verdict on that same call: the review
+   decides the advance, exactly as it does for any step, and the detached step is still owed its
+   result.
+3. When the worker finishes, resume with its reply as `user_response`, whatever step the run is on
+   by then. The reply's `node: <token>` line routes it to the detached step, not to the step the
+   run is standing on; the response acknowledges it, and the run is where it was.
+
+A worker that finishes before the parent has moved on reports the ordinary way — its trailer names
+the step the run is standing on, so it is captured and the run advances.
+
+**What the server refuses.** Each refusal names the node and changes nothing:
+
+- a trailer naming a node that is not a detached step of this run;
+- a trailer naming a detached step that has already reported (its first result stands);
+- a trailer naming a detached step the run has not rendered yet;
+- at a detached step, a non-empty reply with no trailer — it is either a worker result missing its
+  trailer or a note that would otherwise be captured as the step's output. The refusal offers both
+  fixes. Under `execution.delegation.evidence: advisory` the reply is captured as the result
+  instead.
+
+**A run cannot complete while a detached step it spawned has not reported.** If the parent moves
+past the last step while a result is outstanding, the run stays open: the response names each
+outstanding step and its token, and until one reports, a resume that reports nothing is refused
+with the same list. The result that closes the last gap completes the run. A step the run never
+reached (never rendered) is owed nothing and never holds a run open. A worker that will never
+report does not trap the run: `prompt_engine(chain_id:"…", cancel:true)` still ends it.
+
+The obligation survives a restart. The run records when each detached step was spawned
+(`chain_run_nodes.spawned_at`, [schema v31](../architecture/sqlite-persistence.md)), and a step
+has reported exactly when it holds a real captured output, so a result can land after the server
+that rendered the brief has gone.
+
+Bind no blocking gate to a detached step. The run moves past the step before its output exists,
+so a review that holds the run for a verdict on that output has nothing to grade when it fires;
+combining the two is not a supported shape in this release. The worker's Proposed Gate Review
+still arrives inside its result for the parent to read.
+
 ### Model Selection
 
 Each prompt (or individual chain step) can declare a `subagentModel` to control which model tier the sub-agent uses. The hint is client-agnostic — each client maps it to its own models.

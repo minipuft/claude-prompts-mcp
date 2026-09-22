@@ -340,6 +340,8 @@ export class CommandParsingStage extends BasePipelineStage {
             ? { inlineGateCriteria: [...step.inlineGateCriteria] }
             : {}),
           ...(step.delegated != null ? { delegated: step.delegated } : {}),
+          // Tier 4: detached delegation. Third stripper for `await`, carried with the other two.
+          ...(step.await != null ? { await: step.await } : {}),
           // Threaded, not consumed (P5 Tier 1): step-declared visibility policy, carried through
           // to the parse-time step list so it survives blueprint clone / cold-load round-trips.
           ...(step.visibility != null ? { visibility: step.visibility } : {}),

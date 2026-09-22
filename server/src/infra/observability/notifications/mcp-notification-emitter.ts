@@ -17,13 +17,13 @@
  *   `notifications/chain/failed`: one terminal event carrying its outcome means a client
  *   subscribes once and cannot miss an ending by listening to the wrong method.
  *
- * ORDERING CAVEAT, measured 2026-09-20 and NOT introduced by this wiring: on the final step of
- * a gated chain, the PASS verdict advances past the last node — latching the run `completed`
- * and announcing it — before `StepCaptureService` captures that step's response, so
- * `chain/complete` is delivered ~25ms BEFORE the last `chain/step_complete`. A client that
- * tears its handler down on `chain/complete` misses the final step event. The defect is in
- * `GateVerdictProcessor`'s advance-on-PASS running ahead of capture, not here; until it is
- * fixed, treat `chain/complete` as "the run ended", not as "no further events".
+ * ORDERING: `chain/complete` is the LAST event of a run, on every path. It was not, on a gated
+ * one, until P4.89: the PASS verdict advanced past the last node — latching the run `completed`
+ * and announcing it — roughly 25ms before `StepCaptureService` captured that step's response,
+ * so a client tearing its handler down on the terminal event missed the final
+ * `chain/step_complete`. `GateVerdictProcessor` now decides the advance and
+ * `StepResponseCaptureStage` performs it after the capture; the driven sequence is pinned in
+ * `tests/integration/hooks/chain-lifecycle-emission.integration.test.ts`.
  *
  * TRANSPORT. Every one of these six events is caused BY a tool call that is still in flight, so
  * the channel is the causing request's own notification sender, taken from the async context
