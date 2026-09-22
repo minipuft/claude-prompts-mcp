@@ -47,13 +47,13 @@ import { recordCheckpointedWrite } from './checkpointed-write.js';
 import { resetConfig, resolveConfigPath, setConfigValueAtPath } from './config-operations.js';
 import { readFileTree } from './object-store.js';
 import { resolveStateDbPath } from './version-history-location.js';
-import { resolveTenantId } from './version-history-scope.js';
 import { openStateDb, resolveConfiguredMaxVersions } from './version-history.js';
 
 import type { ConfigResetResult, ConfigSetResult } from './config-operations.js';
 import type { LoadedTree } from './object-store.js';
 import type { HistoryRowRequest } from './version-history-types.js';
 
+import { configTenantId } from '#shared/utils/config-scope.js';
 import { hashBytes } from '#shared/utils/hash.js';
 
 /**
@@ -62,6 +62,11 @@ import { hashBytes } from '#shared/utils/hash.js';
  * One id, not one per workspace: rows are already scoped by `tenant_id`, so two workspaces on one
  * `state.db` hold two histories under the same id, exactly as two workspaces holding a gate called
  * `alpha` do. A per-workspace id would be a second scope channel beside the one that already works.
+ *
+ * What scopes a config row is NOT the workspace scope every other row uses, though — it is
+ * `configTenantId(configPath)`, a function of the file's own path (`shared/utils/config-scope.ts`).
+ * Every surface that writes or reads one goes through that function, because the surfaces do not
+ * share a working directory and the workspace derivation is a cwd basename.
  */
 export const CONFIG_RESOURCE_TYPE = 'config' as const;
 export const CONFIG_RESOURCE_ID = 'config';
@@ -174,7 +179,11 @@ export async function recordConfigWrite(
     max_versions: resolveConfiguredMaxVersions(workspaceDir),
   };
   try {
-    const result = await recordCheckpointedWrite(db, resolveTenantId(dbPath), request, {
+    // The tenant is a function of THIS FILE's path, never of either process's cwd — see
+    // `configTenantId`. A server toggling `gates.enabled` from its install directory and a `cpm
+    // config set` run from the workspace are the same history exactly because they name the same
+    // file.
+    const result = await recordCheckpointedWrite(db, configTenantId(configPath), request, {
       loadTree: () => readConfigTree(configPath),
       targets: [{ path: configPath, kind: 'file' }],
       priorSnapshot: readConfigSnapshot(configPath),

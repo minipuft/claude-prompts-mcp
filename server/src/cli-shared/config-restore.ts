@@ -44,27 +44,40 @@ import {
 import { hasObjectStore, loadVersionTree } from './object-store.js';
 import { resolveStateDbPath } from './version-history-location.js';
 import { asObjectStoreDatabase } from './version-history-rows.js';
-import { resolveEffectiveTenantId, resolveTenantId } from './version-history-scope.js';
 import { openStateDb, loadHistory } from './version-history.js';
 
 import type { RestorePlan } from '#modules/versioning/restore-plan.js';
 import type { HistoryFile } from '#modules/versioning/types.js';
-import type { HistoryRowRequest } from './version-history-types.js';
+import type { HistoryResourceRef } from './version-history.js';
 import type { DatabaseSync } from 'node:sqlite';
 
 import { planRestore } from '#modules/versioning/restore-plan.js';
 import { configFileFormat, parseConfigText } from '#shared/utils/config-file-format.js';
+import { configTenantId } from '#shared/utils/config-scope.js';
 import { hashBytes } from '#shared/utils/hash.js';
 
-/** Which rows a config operation reads — the same key `config-checkpoint.ts` writes under. */
-const CONFIG_REF = {
-  resourceType: CONFIG_RESOURCE_TYPE,
-  resourceId: CONFIG_RESOURCE_ID,
-} as const;
+/**
+ * Which rows a config operation reads — the same key AND the same tenant `config-checkpoint.ts`
+ * writes under.
+ *
+ * A function rather than a constant because the tenant is a function of the config FILE's path
+ * (`configTenantId`, P4.109), not of the workspace scope every other resource uses: the server
+ * writes this file from its own install directory and `cpm` from the operator's, and a cwd-derived
+ * scope makes those two the same file with two histories. Carrying it on the ref means every
+ * dispatched action about config — load, get, compare — takes the same exact tenant and none of
+ * them is corrected against another workspace's rows.
+ */
+function configRef(configPath: string): HistoryResourceRef {
+  return {
+    resourceType: CONFIG_RESOURCE_TYPE,
+    resourceId: CONFIG_RESOURCE_ID,
+    tenantId: configTenantId(configPath),
+  };
+}
 
 /** Every recorded version of this workspace's config, newest first, or `null` when there are none. */
 export function loadConfigHistory(workspace: string): HistoryFile | null {
-  return loadHistory(workspace, CONFIG_REF);
+  return loadHistory(workspace, configRef(resolveConfigPath(workspace)));
 }
 
 /** What a rollback (or a preview of one) did, or the reason it was refused. */
@@ -145,7 +158,7 @@ function resolveRecordedConfig(
   }
   const { db } = opened;
   try {
-    const recorded = readRecordedConfigFile(db, dbPath, targetVersion);
+    const recorded = readRecordedConfigFile(db, configPath, targetVersion);
     if ('refusal' in recorded) {
       return recorded;
     }
@@ -197,7 +210,7 @@ function resolveRecordedConfig(
  */
 function readRecordedConfigFile(
   db: DatabaseSync,
-  dbPath: string,
+  configPath: string,
   targetVersion: number
 ): { path: string; hash: string; bytes: Uint8Array } | { refusal: string } {
   const store = asObjectStoreDatabase(db);
@@ -215,11 +228,10 @@ function readRecordedConfigFile(
     };
   }
 
-  const request: HistoryRowRequest = {
-    resource_type: CONFIG_RESOURCE_TYPE,
-    resource_id: CONFIG_RESOURCE_ID,
-  };
-  const tenantId = resolveEffectiveTenantId(db, resolveTenantId(dbPath), request).tenantId;
+  // The config file's own tenant, not a workspace guess and not a correction against whatever
+  // other rows this shared `state.db` holds — every workspace keys its config under the same
+  // `('config','config')` pair, so a correction here would restore another project's file.
+  const tenantId = configTenantId(configPath);
   const row = db
     .prepare(
       `SELECT id, tree_hash FROM version_history

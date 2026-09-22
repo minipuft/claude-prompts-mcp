@@ -34,7 +34,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { FileOperations } from '../../../../../src/mcp/tools/resource-manager/prompt/operations/file-operations.js';
-import { canonicalPromptSnapshot } from '../../../../../src/mcp/tools/resource-manager/prompt/utils/validation.js';
+import { canonicalPromptSnapshot } from '../../../../../src/modules/versioning/projections/prompt-snapshot.js';
 import {
   loadYamlPrompt,
   type LoadedPromptFile,

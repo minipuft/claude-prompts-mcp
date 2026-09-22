@@ -162,10 +162,23 @@ under one root layout would be re-classified under another. `tree_origin` is NUL
 ### The config file is a checkpointed resource too
 
 `version_history.resource_type` is a bare `TEXT` with no `CHECK`, and since ruling R53 it also
-carries the literal `'config'`, with `resource_id = 'config'`, scoped by `tenant_id` like every
-other row. No schema change was needed — the same widening `'category'` took at P4.7.
+carries the literal `'config'`, with `resource_id = 'config'`. No schema change was needed — the
+same widening `'category'` took at P4.7.
 
-Three things make it different from the four resource types, and all three are deliberate:
+Four things make it different from the four resource types, and all four are deliberate:
+
+- **Its `tenant_id` is not a workspace scope.** It is `config:` plus a 16-hex digest of the config
+  file's symlink-resolved directory (`shared/utils/config-scope.ts`), because config is the only
+  checkpointed thing whose writers do not share a working directory: `cpm` runs from the operator's
+  cwd and `system_control … persist: true` from the server's install path, and a cwd-derived scope
+  made those two tenants for one file. Every reader and writer calls that one function; a config
+  request reaching the generic workspace guess is refused by name, because the guess's correction
+  keys on `resource_type`/`resource_id` and every workspace's config shares the same pair — it
+  would serve another project's history. Two workspaces on one `state.db` are still two
+  directories, so they are still isolated. Rows written before this rule (between #347 and the fix,
+  both unreleased) are not re-keyed: the old tenant does not identify a config FILE and the rows
+  carry only a basename, so a re-key has no derivable target. The next write bridges the current
+  file as a fresh version 1.
 
 - **It is not a `ResourceType`.** Only `cli-shared/version-history-types.ts`'s union gained the
   literal. The published `resource_manager` union did not: config stays read-only over MCP, as it
@@ -249,8 +262,9 @@ and a server write of identical files produce an identical `tree_hash` — one e
 hasher, one recorder, reached from both sides.
 
 **One projection per resource type, read by both surfaces.** A version row's `snapshot` is a
-`SnapshotContract` projection. For gates, frameworks and categories, what that projection RECORDS
-lives in `src/modules/versioning/projections/`, which both `mcp/tools/**` and `cli-shared/` import;
+`SnapshotContract` projection. For every type — prompt, gate, framework and category — what that
+projection RECORDS lives in `src/modules/versioning/projections/`, which both `mcp/tools/**` and
+`cli-shared/` import;
 the tool-layer contracts keep only `restore`, which rebuilds a write model whose type is a tool-layer
 one. `cpm rollback` of a gate or a framework therefore records the state it replaced in the same
 shape `resource_manager` would, and no longer writes a "Bridge: prior live state" row for a
@@ -259,32 +273,44 @@ server-written resource. Until 2026-09-21 it passed the raw YAML map instead —
 `{id,name,type,description,guidance}` with the markdown body inline — so the two could never compare
 equal and every such rollback bridged.
 
-**The prompt projection is the one that stayed behind, and the blocker is a budget, not a layer.**
+**The prompt projection joined them on 2026-09-21, and what it cost was bundle, not layering.**
 `canonicalPromptSnapshot` takes a loader-RESOLVED prompt (`userMessageTemplate` inlined, where
-`prompt.yaml` holds only `userMessageTemplateFile`), so building its input needs `loadYamlPrompt`
-AND `PromptConverter`. Measured 2026-09-21 as a reachable import from `cli-shared/`: the dev `cpm`
-bundle went 855.4 KB → 914.4 KB, **+59.0 KB**, which is 35.5 KB past the 900,000-byte
-`DEV_BUNDLE_BUDGET_BYTES` — `npm run build` fails. So `cpm rollback` of a prompt still records the
-raw `prompt.yaml` map and still bridges, and `cpm link-gate`/`unlink-gate` (which edit a prompt) and
-`cpm create` of a prompt records nothing at all. ☐ open as of 2026-09-21 · flips when a prompt's
-authored state is reachable from `cli-shared/` within the bundle budget. Writing a second,
-YAML-shaped prompt projection instead is the shape this arc exists to remove.
+`prompt.yaml` holds only `userMessageTemplateFile`), so building its input needs the prompt loader.
+`cli-shared/prompt-projection.ts` runs `PromptLoader.loadFromDirectories` +
+`PromptConverter.convertMarkdownPromptsToJson` — the pair `PromptAssetManager.loadAndConvertPrompts`
+runs, used whole rather than reached past, because the WALK is what sets a prompt's `category` from
+its folder and `category` is a projected field. Measured: the dev `cpm` bundle went 918,220 B →
+986,048 B, **+66.2 KB**, against the 1,000,000-byte `DEV_BUNDLE_BUDGET_BYTES` (13,952 B of
+headroom); the shipped minified budget is untouched. Writing a second, YAML-shaped prompt
+projection instead was the shape this arc exists to remove: a differently-shaped snapshot can never
+hash-compare equal, so every server edit of a `cpm`-written prompt would have bridged forever.
 
-**`cpm create` and `cpm toggle` record through the same ordering as of 2026-09-21.** A create
-records the produced state as version 1 with no prior-state row — nothing existed to bridge, which
-is the server's own create rule — and a toggle records as an edit, bridging the pre-flip state
-first if it was not already the newest row. Both run their append as the write's `commit`, so a
-failed record restores every target: for a create that means removing the directory the
-transaction captured as absent. `cpm create` of a gate or framework and `cpm toggle` of a
-framework therefore leave a row the server's next edit does not have to bridge — driven in
+A prompt the loader cannot serve is not recorded as if it had been projected: the row is written
+through the same projection over the raw entry file, so the key set and ORDER still match, and the
+reply carries a `snapshot_degraded_reason` naming what is missing.
+
+**`cpm create`, `cpm toggle` and `cpm link-gate` record through the same ordering as of
+2026-09-21.** A create records the produced state as version 1 with no prior-state row — nothing
+existed to bridge, which is the server's own create rule — and a toggle or a gate link records as
+an edit, bridging the pre-write state first if it was not already the newest row. All run their
+append as the write's `commit`, so a failed record restores every target: for a create that means
+removing the directory the transaction captured as absent. They therefore leave a row the server's
+next edit does not have to bridge — driven in
 `tests/e2e/cli-create-records-a-version.e2e.test.ts` and
 `tests/e2e/cli-toggle-records-a-version.e2e.test.ts`, each with an out-of-band-edit twin as the
-positive control for the missing bridge row.
+positive control for the missing bridge row, and in both directions: a `cpm`-created prompt takes
+a server edit with no bridge, and a server-written prompt rolls back from `cpm` with no bridge.
+
+**A row's description names the surface that wrote it.** `createRowDescription(surface)` /
+`updateRowDescription(surface)` (`modules/versioning/snapshot-contract.ts`) are the one owner, so a
+`cpm` row reads `Created via cpm` / `Update via cpm` and a server row is unchanged. They were a
+pair of constants that `cpm` reused, which put `resource_manager` on every row `cpm` wrote — in the
+one sentence a history is consulted for, and the two surfaces undo differently.
 
 What still records nothing says so rather than staying silent, in `--json` and in the text, with
-the reason: a created prompt (the +59.0 KB blocker above), a created or toggled style (styles
-carry no version rows on either surface), and any write in a workspace with no `state.db` (the CLI
-never authors that schema). A silent non-record is the shape this arc removes.
+the reason: a created or toggled style (styles carry no version rows on either surface), and any
+write in a workspace with no `state.db` (the CLI never authors that schema). A silent non-record is
+the shape this arc removes.
 `tests/integration/versioning/cpm-write-records-a-version.test.ts` is the gate that fails the
 moment a still-blocked command starts recording, or a recording one stops.
 
@@ -462,7 +488,7 @@ with the count. Without it the restore would hit the new index and abort startup
 write and no flag: a v28 database cannot produce a duplicate, so the migration is a no-op forever
 after, and it needs no `DROPPED_ON_THIS_BUMP` entry because nothing is discarded.
 
-## `tenant_id` Means Two Things — It Used to Mean Three
+## `tenant_id` Means Three Things — Two of Them Are Not a Workspace
 
 The PID meaning got its own name at v20. `chain_sessions` and `chain_runs` now declare
 `run_owner_pid`, so no column name carries both a run owner and a workspace.
@@ -472,9 +498,12 @@ The PID meaning got its own name at v20. `chain_sessions` and `chain_runs` now d
 | Server PID          | `run_owner_pid` | `chain_sessions`, `chain_runs`                                  | Row dies with the process — a session key, not a tenant |
 | Workspace id        | `tenant_id`     | `kv_state`, `version_history`, `resource_changes`               | Genuine isolation (Tier 4)                              |
 | Literal `'default'` | `tenant_id`     | `execution_records`, and any table with no workspace configured | No isolation                                            |
+| Config file id      | `tenant_id`     | `version_history` rows with `resource_type = 'config'`          | `config:<digest>` — the file's directory, not a scope   |
 
-Two meanings still share `tenant_id`, and a filter written against the wrong one is still not
-type-detectable — but the two that were furthest apart no longer collide. The rename was a clean
+Three meanings share `tenant_id`, and a filter written against the wrong one is still not
+type-detectable — but the two that were furthest apart no longer collide, and the config one that
+joined at P4.109 is distinguishable at a glance, since nothing else in this column contains a
+colon. The rename was a clean
 break with no dual-write: zero downstream readers were measured across `minipuft-plugins`,
 `gemini-prompts` and `opencode-prompts`, and both tables are `derived`/`ephemeral` with rows
 DELETEd per-PID, so no old-format row could survive the bump that renamed them. `run_owner_pid`

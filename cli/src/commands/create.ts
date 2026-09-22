@@ -17,7 +17,7 @@ import {
 } from '@cli-shared/resource-snapshot.js';
 import { resolveResourceDir as resolveCreatedResourceDir } from '@cli-shared/resource-scaffold.js';
 import { recordResourceWrite } from '@cli-shared/version-history.js';
-import { CREATE_ROW_DESCRIPTION } from '@modules/versioning/snapshot-contract.js';
+import { createRowDescription } from '@modules/versioning/snapshot-contract.js';
 import { resourceFileSet } from '@shared/utils/resource-file-set.js';
 import { resolveWorkspace, resolveResourceDir } from '../lib/workspace.js';
 import { output } from '../lib/output.js';
@@ -121,6 +121,7 @@ export async function create(options: CreateOptions): Promise<number> {
         recorded: record.recorded,
         ...(record.version === undefined ? {} : { version: record.version }),
         ...(record.reason === undefined ? {} : { not_recorded_reason: record.reason }),
+        ...(record.degraded === undefined ? {} : { snapshot_degraded_reason: record.degraded }),
       },
       { json: true },
     );
@@ -131,6 +132,9 @@ export async function create(options: CreateOptions): Promise<number> {
         ? `Recorded as version ${record.version}.`
         : `No version was recorded: ${record.reason}`,
     );
+    if (record.degraded !== undefined) {
+      console.log(`Warning: the recorded snapshot is incomplete — ${record.degraded}`);
+    }
     // Advisory: warn if subsystem is disabled in config
     printSubsystemAdvisory(workspace, type);
   }
@@ -142,6 +146,15 @@ interface CreateRecordOutcome {
   recorded: boolean;
   version?: number;
   reason?: string;
+  /**
+   * Why the recorded snapshot is NOT the one the server would have projected.
+   *
+   * Present only for a prompt the loader refused: the row is written in the right SHAPE (same
+   * keys, same order) from the raw entry file, so it compares field-for-field against a server
+   * row, but the resolved message bodies are missing. Reported rather than swallowed — a
+   * quietly-degraded row is the defect shape this whole seam exists to remove.
+   */
+  degraded?: string;
 }
 
 interface CreateTarget {
@@ -158,9 +171,10 @@ interface CreateTarget {
  * **The branch is `sharesServerSnapshotProjection`, never a list of types here.** A `cpm`-written
  * row and a `resource_manager`-written row for the same resource must hash-compare equal or every
  * subsequent server edit bridges, so a type whose projection the CLI cannot build records NOTHING
- * rather than a second, differently-shaped snapshot. Today that is `prompt`, for the measured
- * bundle reason `resource-snapshot.ts` states and stamps; the moment that lifts, this branch
- * follows without being edited.
+ * rather than a second, differently-shaped snapshot. Every versioned type has one as of
+ * 2026-09-21 — the prompt's arrived when `cli-shared/` gained the loader and the converter — so
+ * this branch is currently unreachable and stays because the TABLE is what decides, not a list
+ * restated here.
  *
  * Silence is not an option on either path: a create that records nothing says so, in `--json` and
  * in the text, with the reason. A silent non-record is the defect shape this slice removes.
@@ -186,7 +200,7 @@ async function createAndRecord(
   const entryPath = join(resourceDir, TYPE_CONFIG[type].entryFile);
 
   if (!sharesServerSnapshotProjection(resourceType)) {
-    const blocked = projectResourceSnapshot(resourceType, id, entryPath, {});
+    const blocked = await projectResourceSnapshot(resourceType, id, entryPath, {});
     return {
       result: runCreate(),
       record: {
@@ -202,6 +216,7 @@ async function createAndRecord(
   // resource directory, which does not exist yet — the transaction captures it as absent and
   // restores it by removing it, so a failed record leaves no half-created resource behind.
   let result: CreateResourceResult = { success: false, error: 'create did not run' };
+  let degraded: string | undefined;
   const record = await recordResourceWrite(
     resourceDir,
     { resourceType, resourceId: id },
@@ -223,9 +238,11 @@ async function createAndRecord(
           throw new Error(result.error ?? 'create failed');
         }
         const declared = loadYamlFileSync<Record<string, unknown>>(entryPath) ?? {};
-        return projectResourceSnapshot(resourceType, id, entryPath, declared).snapshot;
+        const projected = await projectResourceSnapshot(resourceType, id, entryPath, declared);
+        if (!projected.shared) degraded = projected.reason;
+        return projected.snapshot;
       },
-      description: CREATE_ROW_DESCRIPTION,
+      description: createRowDescription('cpm'),
       maxVersions: resolveConfiguredMaxVersions(workspace),
     },
   );
@@ -249,9 +266,10 @@ async function createAndRecord(
       record: { recorded: false, reason: record.error },
     };
   }
+  const degradation = degraded === undefined ? {} : { degraded };
   return record.recorded
-    ? { result, record: { recorded: true, version: record.version } }
-    : { result, record: { recorded: false, reason: record.reason } };
+    ? { result, record: { recorded: true, version: record.version, ...degradation } }
+    : { result, record: { recorded: false, reason: record.reason, ...degradation } };
 }
 
 function printSubsystemAdvisory(workspace: string, type: string): void {
