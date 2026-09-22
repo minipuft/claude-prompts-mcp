@@ -324,8 +324,10 @@ export class WorkspaceScriptLoader implements ScriptLoader {
         result.outputSchema = JSON.parse(
           readFileSync(outputSchemaPath, 'utf-8')
         ) as JSONSchemaDefinition;
-      } catch {
-        // Schema file read failure - continue without an output contract
+      } catch (_error) {
+        // A declared output schema that does not parse leaves the tool without an output
+        // contract, the same way the input-schema read above degrades; the executor still
+        // requires JSON output. Matches the prompt-local loader's posture for this file.
       }
     }
 
