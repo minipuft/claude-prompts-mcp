@@ -292,9 +292,10 @@ describe('ChainOperatorExecutor delegation rendering (R-1)', () => {
       },
     ];
 
-    // `current_step: 2` is how stage 20 addresses the reviewed step when the pending review
-    // carries no step index of its own — which is every phase-guard review
-    // (19-phase-guard-verification-stage.ts:210 writes source/failedPhases/mode and nothing else).
+    // Since row 2.11 a phase-guard review NAMES the step it graded, so this is the case where
+    // the delegated step is the one that failed its own guards — its worker's reply came back
+    // without a required section. `current_step` agrees here, which is what makes this the
+    // reviewed-step-is-the-standing-step shape rather than the split one.
     const result = await executor.renderStep({
       executionType: 'gate_review',
       stepPrompts,
@@ -306,6 +307,7 @@ describe('ChainOperatorExecutor delegation rendering (R-1)', () => {
         createdAt: Date.now(),
         attemptCount: 0,
         maxAttempts: 3,
+        metadata: { source: 'phase-guard-verification', stepNumber: 2, nodeId: 'n2' },
       },
       additionalGateIds: ['__phase_guard__'],
     });
@@ -343,6 +345,7 @@ describe('ChainOperatorExecutor delegation rendering (R-1)', () => {
         // brief here would hand the worker a task the retry is not asking anyone to redo.
         attemptCount: 1,
         maxAttempts: 3,
+        metadata: { source: 'phase-guard-verification', stepNumber: 2, nodeId: 'n2' },
       },
       additionalGateIds: ['__phase_guard__'],
     });
