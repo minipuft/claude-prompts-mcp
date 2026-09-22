@@ -95,6 +95,11 @@ Resuming a run that already completed returns an "already complete" notice inste
 it. Resuming a run parked on its final step without an explicit `chain_id` no longer restarts it
 from step 1 — only an explicit `force_restart` does.
 
+A run is not complete while a gate review on it is outstanding. When the final step's answer fails
+its section check, the reply says `→ Final step N/N — awaiting gate verdict` and carries the review;
+the run accepts the verdict on the next call, and the reply to a PASS says `✓ Chain complete`. A
+completed run's reply, and a final step awaiting its verdict, carry no `Next:` line.
+
 > [!NOTE]
 > Chain sessions are scoped per workspace when [Identity Scope](../guides/identity-scope.md) is configured. Each workspace sees only its own active chains.
 
