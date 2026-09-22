@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-21T01:07:21.778Z",
-  "total": 22,
+  "generatedAt": "2026-09-22T05:26:25.477Z",
+  "total": 21,
   "methods": [
     "ArgumentHistoryTracker.getLatestArguments",
     "ChainSessionStore.updateStepResult",
@@ -11,7 +11,6 @@
     "ExecutionRecordStore.queryByChain",
     "ExecutionRecordStore.queryBySession",
     "GateAccumulator.getBySource",
-    "GateAccumulator.getEntries",
     "GateAccumulator.getEntry",
     "GateAccumulator.has",
     "GateStateStore.recordValidation",
@@ -29,9 +28,8 @@
   "reasons": {
     "GateStateStore.recordValidation": "kept per its own doc comment (gate-state-store.ts): the only caller, LightweightGateSystem.validateContent, was deleted with GateValidator when every criteria type moved to a pipeline stage, leaving getSystemHealth's totalValidations/successRate/lastValidationTime fields with no producer. Deleting the writer without the health fields would leave a reader describing a number nothing computes; revives when 20-gate-review-stage.ts wires in ground-truth results, or gets killed together with the health fields in a follow-up row (R36, P4.52, 2026-09-17).",
     "GateAccumulator.getBySource": "sole test-observation window for add()'s live dedup/priority-override contract at entry-source granularity; getAll() (live, id-only) can't express it (P4.52/R36)",
-    "GateAccumulator.getEntries": "sole test-observation window for add()'s live dedup/priority-override contract at entry-priority/metadata granularity; getAll() (live, id-only) can't express it (P4.52/R36)",
     "GateAccumulator.getEntry": "sole test-observation window for a single entry's live retryLimit metadata written by add(); getAll() (live, id-only) can't express it (P4.52/R36)",
-    "GateAccumulator.has": "sole test-observation window for add()'s live existence-after-dedup contract; kept alongside getEntries/getEntry/getBySource for the same reason (P4.52/R36)",
+    "GateAccumulator.has": "sole test-observation window for add()'s live existence-after-dedup contract; kept alongside getEntry/getBySource for the same reason (P4.52/R36)",
     "EnhancedLogger.initLogFile": "reached only through a duck-typed cast the static walker can't resolve: runtime/context.ts calls `(logger as any).initLogFile()` behind a `typeof ... === 'function'` guard, for every logger `createLogger()` returns (P4.52, 2026-09-20).",
     "EnhancedLogger.logStartupInfo": "live duplicate at ServerLifecycle.logSystemInfo (infra/http/index.ts): logs the identical pid/node-version/cwd facts inline instead of calling this method. Two answers to one question is evidence of a defect, not surplus; left un-wired pending an owner call on which is canonical (P4.52 reimplementation probe, 2026-09-20).",
     "EnhancedLogger.logMemoryUsage": "live duplicate at ServerLifecycle.logSystemInfo (infra/http/index.ts): logs the identical `Server process memory usage: ${JSON.stringify(process.memoryUsage())}` string inline instead of calling this method (P4.52 reimplementation probe, 2026-09-20).",

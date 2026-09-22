@@ -254,3 +254,175 @@ describe('the default framework gate honours `exclude` (issue #228)', () => {
     }
   });
 });
+
+/**
+ * P4.110. The same declaration on a CHAIN step could not remove the same gate, because a chain
+ * step's set was never built from that step's resolution alone: `enhanceChainSteps` seeds the
+ * caller's gates into a cumulative accumulator before the walk, and every earlier step leaves its
+ * accepted gates there. `stepApplicableGateIds` read that accumulator raw, so a gate that arrived
+ * from anywhere but this step's own resolution reached the step without passing its vetoes.
+ *
+ * The seeded canonical gate is the witness: it arrives at rank 40 (`framework-guide`), below the
+ * rank `exclude` binds to, so the resolver would have removed it — and did, on the single-prompt
+ * path, from the byte-identical `gateConfiguration`.
+ */
+const SEEDED_CANONICAL_GATE = 'seeded-canonical-gate';
+const SEEDED_CALLER_GATE = 'seeded-caller-gate';
+
+interface ChainScenario {
+  /** `gateConfiguration.exclude` on step 1 only — step 2 is its twin without the key. */
+  readonly excludeOnStepOne?: readonly string[];
+  /** Canonical ids the run seeds at rank 40, as a resolved `gates` parameter does. */
+  readonly seededCanonical?: readonly string[];
+  /** Temporary gate ids the run seeds at rank 80, as the caller's own `gates` spec does. */
+  readonly seededTemporary?: readonly string[];
+}
+
+/** promptId → the gate ids the service handed that step's enhancement. */
+const resolveChainStepGateIds = async (
+  scenario: ChainScenario = {}
+): Promise<Record<string, readonly string[]>> => {
+  const applied: Record<string, readonly string[]> = {};
+  const gateService = {
+    supportsValidation: jest.fn().mockReturnValue(false),
+    updateConfig: jest.fn(),
+    enhancePrompt: jest.fn(
+      async (prompt: { id: string; userMessageTemplate: string }, gateIds: readonly string[]) => {
+        applied[prompt.id] = [...gateIds];
+        return {
+          enhancedPrompt: prompt,
+          gateInstructionsInjected: true,
+          injectedGateIds: [],
+          instructionLength: 0,
+        };
+      }
+    ),
+  } as never;
+
+  const makePrompt = (id: string, exclude?: readonly string[]): ConvertedPrompt =>
+    ({
+      id,
+      name: id,
+      description: '',
+      category: 'analysis',
+      userMessageTemplate: `Do ${id}.`,
+      systemMessage: '',
+      arguments: [],
+      ...(exclude === undefined ? {} : { gateConfiguration: { exclude: [...exclude] } }),
+    }) as unknown as ConvertedPrompt;
+
+  const steps = [
+    {
+      stepNumber: 1,
+      nodeId: 'n1',
+      promptId: 'step-one',
+      args: {},
+      convertedPrompt: makePrompt('step-one', scenario.excludeOnStepOne),
+      executionPlan: { gates: [PLANNED_GATE] },
+    },
+    {
+      stepNumber: 2,
+      nodeId: 'n2',
+      promptId: 'step-two',
+      args: {},
+      convertedPrompt: makePrompt('step-two'),
+      executionPlan: { gates: [PLANNED_GATE] },
+    },
+  ];
+
+  const service = new GateEnhancementService(
+    gateService,
+    undefined,
+    () => 'cageerf',
+    () => undefined as never,
+    undefined,
+    new GateMetricsRecorder(undefined),
+    createLogger()
+  );
+
+  const context = new ExecutionContext({ command: '>>step-one --> >>step-two' } as never);
+  context.executionPlan = {
+    strategy: 'chain',
+    gates: [PLANNED_GATE],
+    requiresFramework: false,
+    requiresSession: true,
+    llmValidationEnabled: false,
+  } as never;
+
+  await service.enhanceChainSteps(
+    { type: 'chain', steps } as never,
+    context,
+    {
+      temporaryGateIds: [...(scenario.seededTemporary ?? [])],
+      canonicalGateIds: [...(scenario.seededCanonical ?? [SEEDED_CANONICAL_GATE])],
+    },
+    GATES_CONFIG,
+    new Set([FRAMEWORK_GATE])
+  );
+
+  return applied;
+};
+
+describe('a chain step honours its own `exclude` against the run-seeded set (P4.110)', () => {
+  test('control: a chain step that excludes nothing gets the seeded canonical gate', async () => {
+    const applied = await resolveChainStepGateIds();
+
+    expect(applied['step-one']).toContain(SEEDED_CANONICAL_GATE);
+    expect(applied['step-two']).toContain(SEEDED_CANONICAL_GATE);
+  });
+
+  test('a step excluding the seeded gate does not get it — the shipped defect', async () => {
+    const applied = await resolveChainStepGateIds({
+      excludeOnStepOne: [SEEDED_CANONICAL_GATE],
+    });
+
+    expect(applied['step-one']).not.toContain(SEEDED_CANONICAL_GATE);
+    // Discriminates "this gate was withheld" from "this step resolved nothing".
+    expect(applied['step-one']).toContain(PLANNED_GATE);
+  });
+
+  test('the SIBLING step, which excludes nothing, keeps it', async () => {
+    const applied = await resolveChainStepGateIds({
+      excludeOnStepOne: [SEEDED_CANONICAL_GATE],
+    });
+
+    expect(applied['step-two']).toContain(SEEDED_CANONICAL_GATE);
+  });
+
+  /**
+   * The ranked contract, unchanged: `exclude` is an author preference that binds up to rank 60,
+   * so it may not remove a gate the CALLER supplied at rank 80. Without this, the fix could have
+   * been written with `acceptsUnrankedGate` — which ignores every binding rank — and every other
+   * case here would still pass while a prompt author silently overruled the person invoking it.
+   */
+  test('a step`s exclude does NOT remove a gate the caller supplied at rank 80', async () => {
+    const applied = await resolveChainStepGateIds({
+      seededTemporary: [SEEDED_CALLER_GATE],
+      excludeOnStepOne: [SEEDED_CALLER_GATE],
+    });
+
+    expect(applied['step-one']).toContain(SEEDED_CALLER_GATE);
+  });
+
+  /**
+   * The CLASS, not the site. Any gate reaching a step's set without passing that step's
+   * resolution is the same defect, whoever put it there — the run's seed, an earlier step, or a
+   * future writer to the accumulator. Enumerated from the control run rather than from a literal
+   * list, so a new contributor puts its id in the control set and the loop then demands that id
+   * honour `exclude` too.
+   *
+   * Rank-80 ids are exempt by contract (the case above), and the control seeds none.
+   */
+  test('every gate the control step resolves can be excluded by id, one at a time', async () => {
+    const control = (await resolveChainStepGateIds())['step-one'] ?? [];
+    expect(control.length).toBeGreaterThan(1);
+
+    for (const gateId of control) {
+      const applied = await resolveChainStepGateIds({ excludeOnStepOne: [gateId] });
+      expect({ excluded: gateId, resolved: applied['step-one'] }).toEqual({
+        excluded: gateId,
+        resolved: control.filter((id) => id !== gateId),
+      });
+    }
+  });
+});
