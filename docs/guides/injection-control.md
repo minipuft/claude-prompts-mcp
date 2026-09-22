@@ -154,12 +154,15 @@ withheld together with the injection — see [ADR 0001](../adr/0001-gate-resolut
 Gates unrelated to framework are unaffected. `%judge` overrides the opt-out, because the judge
 selection phase requires the framework to be present.
 
-**It withholds the framework's declared section headers too.** A single prompt normally carries a
+**It withholds the framework's declared section headers too.** A prompt normally carries a
 `**Required Sections**` block naming the headers the active framework's phase guards grade. With
 `system-prompt.enabled: false` that block is omitted: the prompt was not given the framework, so
 instructing it to emit that framework's headers "verbatim" describes a contract it was never
-handed. Chain steps still declare their headers — a chain's guard vocabulary is run-wide, so one
-step withholding it would leave a sibling's headers grading output that never saw them.
+handed. **This holds per chain step.** A step that opts out declares nothing and is graded against
+nothing, while its siblings keep both their block and their guards — the phase guard reads the
+declaration each step's own render recorded, so one step's opt-out cannot loosen another's.
+Suppression by _frequency_ is a different thing and does not withhold the block: the step was
+given the framework, just not a second copy of its system prompt.
 
 <details>
 <summary><strong>Runtime Overrides (system_control)</strong></summary>

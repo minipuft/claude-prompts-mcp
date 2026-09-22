@@ -729,3 +729,128 @@ describe('PhaseGuardVerificationStage', () => {
     expect(store.setPendingGateReview).toHaveBeenCalledTimes(1);
   });
 });
+
+/**
+ * P4.111 / R85. The declared-header set is per NODE, not run-wide.
+ *
+ * Run-wide meant a step was graded on its SIBLINGS' vocabulary — headers a different prompt was
+ * shown. A chain step that declines the framework is never shown any of them, so it was blocked
+ * on a contract it was never given, which is precisely the unsatisfiable guard the declaration
+ * record exists to prevent.
+ *
+ * The three cases below differ only in what the GRADED node has on record, and the sibling's
+ * declaration is held constant so the union is never empty — without that, "does not block" would
+ * pass on a store that declares nothing anywhere.
+ */
+function createMultiNodeStore(
+  stepStates: Array<[string, { declaredSections?: readonly string[] }]>
+): ChainSessionService {
+  const session = {
+    state: {
+      stepStates: new Map(
+        stepStates.map(([nodeId, meta]) => [
+          nodeId,
+          {
+            state: 'working',
+            isPlaceholder: false,
+            ...(meta.declaredSections === undefined
+              ? {}
+              : { declaredSections: [...meta.declaredSections] }),
+          },
+        ])
+      ),
+    },
+  };
+  // Only `setPendingGateReview` is a jest.fn: it is the one call these cases assert on, and a
+  // plain stub for the rest keeps this helper off the tests typecheck ratchet.
+  return {
+    setPendingGateReview: jest
+      .fn<ChainSessionService['setPendingGateReview']>()
+      .mockResolvedValue(undefined),
+    getPendingGateReview: () => null,
+    getSession: () => session,
+    createSession: async () => undefined,
+    updateSession: async () => undefined,
+    clearPendingGateReview: async () => undefined,
+  } as unknown as ChainSessionService;
+}
+
+describe('the declared-header set is per node (P4.111)', () => {
+  /** Grades a reply with NO `## Context` section, against the store the case supplies. */
+  const gradeMissingContext = async (
+    store: ChainSessionService,
+    capturedNodeId: string | undefined
+  ): Promise<ChainSessionService> => {
+    const guide = createMockGuide([
+      { id: 'context', name: 'Context', section_header: '## Context', guards: { required: true } },
+    ]);
+    const stage = createPhaseGuardVerificationStage(
+      () => createRegistry(guide),
+      () => defaultConfig,
+      store,
+      createLogger()
+    );
+    const ctx = withSession(createContext(createMcpRequest('>>test', 'No context section here.')));
+    ctx.frameworkContext = { selectedFramework: { id: 'cageerf', name: 'CAGEERF' } } as never;
+    if (capturedNodeId !== undefined) {
+      ctx.state.session.capturedStep = { nodeId: capturedNodeId, ordinal: 2 };
+    }
+
+    await stage.execute(ctx);
+    return store;
+  };
+
+  test('CONTROL: the graded node declared the header, so the guard blocks', async () => {
+    const store = await gradeMissingContext(
+      createMultiNodeStore([
+        ['n1', { declaredSections: ['## Context'] }],
+        ['n2', { declaredSections: ['## Context'] }],
+      ]),
+      'n2'
+    );
+
+    expect(store.setPendingGateReview).toHaveBeenCalledTimes(1);
+  });
+
+  test('a node that declared NOTHING is not blocked on its sibling`s header', async () => {
+    const store = await gradeMissingContext(
+      createMultiNodeStore([
+        ['n1', { declaredSections: ['## Context'] }],
+        ['n2', { declaredSections: [] }],
+      ]),
+      'n2'
+    );
+
+    expect(store.setPendingGateReview).not.toHaveBeenCalled();
+  });
+
+  /**
+   * An ABSENT record is not an empty one. A gated chain step renders only through the gate-review
+   * path, which declares its headers and records nothing, so its node carries no array at all —
+   * and that still falls back to the run, as it did before this row. Reading absent as empty
+   * would silently stop enforcing on every gated step.
+   */
+  test('a node with NO recorded declaration falls back to the run-wide union', async () => {
+    const store = await gradeMissingContext(
+      createMultiNodeStore([
+        ['n1', { declaredSections: ['## Context'] }],
+        ['n2', {}],
+      ]),
+      'n2'
+    );
+
+    expect(store.setPendingGateReview).toHaveBeenCalledTimes(1);
+  });
+
+  test('a call that captured no step at all falls back to the run-wide union', async () => {
+    const store = await gradeMissingContext(
+      createMultiNodeStore([
+        ['n1', { declaredSections: ['## Context'] }],
+        ['n2', { declaredSections: [] }],
+      ]),
+      undefined
+    );
+
+    expect(store.setPendingGateReview).toHaveBeenCalledTimes(1);
+  });
+});

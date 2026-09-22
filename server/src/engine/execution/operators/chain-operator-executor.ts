@@ -5,6 +5,7 @@ import { GATE_ATTESTATION_LINE } from '../../gates/guidance/GateGuidanceRenderer
 import { buildDelegatedStepLines } from '../delegation/brief.js';
 import { handoffNodeToken } from '../delegation/handoff-contract.js';
 import { DelegationRenderer } from '../delegation/renderer.js';
+import { isFrameworkInjected } from '../pipeline/decisions/injection/index.js';
 import { decideVisibility } from '../pipeline/decisions/visibility/index.js';
 
 import type { BriefHistoryEntry } from '../delegation/brief.js';
@@ -602,9 +603,13 @@ export class ChainOperatorExecutor {
     }
 
     // Required Response Format — guides structured output for delivery verification.
-    // The declared section headers are resolved even when framework INJECTION is suppressed:
-    // suppression hides guidance, it does not disable stage 19, so withholding the vocabulary
-    // here would recreate the exact unsatisfiable-guard defect this tier removes.
+    // The declared section headers follow this step's OWN framework declaration (R85): a step
+    // that declined the framework declares nothing, and stage 19 grades it against nothing,
+    // because the record it reads is what this render wrote. Declaring them anyway — which is
+    // what this did until P4.111 — handed an opted-out step a contract from a framework it never
+    // saw, and the run-wide header set then blocked it on its siblings' vocabulary. Suppression
+    // by FREQUENCY is a different question and deliberately does not withhold them: the step was
+    // given the framework, just not a second copy of its system prompt.
     const declaredSections = this.resolveDeclaredSections(step);
     lines.push(this.buildResponseFormatSection(isFinalStep, gateGuidanceEnabled, declaredSections));
 
@@ -646,9 +651,13 @@ export class ChainOperatorExecutor {
       // What this render actually told the model. Reported rather than re-derived: the
       // verification stage may only block on a header the prompt named, and asking phases.yaml
       // after the fact cannot answer that — it is the same source the guard already reads.
-      ...(declaredSections.length > 0
-        ? { declaredSections: declaredSections.map((section) => section.header) }
-        : {}),
+      //
+      // Reported even when EMPTY, since P4.111. "This render declared nothing" and "no render
+      // recorded anything" are different facts and the guard acts on them differently: the first
+      // is a step that declined the framework and must be graded against nothing, the second is a
+      // node whose declaration was never written and which still falls back to the run's. An
+      // omitted key spells both, which is why the opt-out could not be told from a gap.
+      declaredSections: declaredSections.map((section) => section.header),
     };
   }
 
@@ -760,13 +769,34 @@ export class ChainOperatorExecutor {
   }
 
   /**
-   * Declared phase-guard headers for the framework active on this step, or `[]` when no provider
-   * is wired, no framework resolves, or the framework declares no guards. Reads through on every
-   * call — no cache — so framework hot-reload keeps working.
+   * Declared phase-guard headers for the framework active on this step, or `[]` when the
+   * framework system prompt is not injected for this render, no provider is wired, no framework
+   * resolves, or the framework declares no guards. Reads through on every call — no cache — so
+   * framework hot-reload keeps working.
+   *
+   * The opt-out test is `isFrameworkInjected` over THIS step's own modifiers and `injection`
+   * block — the same predicate `GateEnhancementService` already runs for the same step to decide
+   * whether that step's framework GATES apply, so a step's gates and its section vocabulary now
+   * answer to one declaration instead of two.
+   *
+   * Deliberately NOT the recorded `injectionState.systemPrompt.inject`: measured on this tree,
+   * that flag is already `false` on a chain's later steps for reasons that are not an opt-out
+   * (global-config frequency), so reading it withheld the headers from every step past the first,
+   * opted out or not — verified by the positive control in the drive. It answers "is the system
+   * prompt being emitted on THIS turn", not "did this prompt decline the framework".
+   *
+   * A step that declined the framework is not shown its system prompt, so declaring its section
+   * vocabulary would hand the model a contract from a framework it was never given; stage 19 then
+   * reads the same absence back (nothing recorded for that node) and grades it against nothing.
+   * Emission and grading follow one declaration (P4.111 / R85).
    */
   private resolveDeclaredSections(step?: ChainStepPrompt): DeclaredSection[] {
     const provider = this.collaborators?.declaredSectionsProvider;
-    if (!provider) {
+    const declinesFramework = !isFrameworkInjected({
+      modifiers: step?.executionPlan?.modifiers,
+      promptInjection: step?.convertedPrompt?.injection,
+    });
+    if (!provider || declinesFramework) {
       return [];
     }
 
