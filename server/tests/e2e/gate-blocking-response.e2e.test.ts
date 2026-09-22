@@ -269,6 +269,18 @@ describe.each([
     expect(blocked.text).toContain(BLOCK_GATE);
     expect(blocked.text).toContain(GUIDANCE_MARKER);
     expect(blocked.text).toContain('Required Response Format');
+
+    // P4.101 — the retry budget and the structured resubmit form. Both come from the ordinary
+    // review footer, which the blocking branch returns before, so a blocked caller could see
+    // neither: a loop bounded at five showed no remaining count and was offered only the legacy
+    // string, the one submission shape that can fail to parse.
+    //
+    // `2 of 5`, not merely "an attempt line": one attempt has been consumed by the verdict that
+    // caused this block, and 5 is the gate's own `retry_config`, not the built-in default of 2.
+    // Both halves of the number distinguish this from a counter reading a wrong source.
+    expect(blocked.text).toContain('**Attempt 2 of 5** — 3 attempts remain after this one.');
+    expect(blocked.text).toContain('"overall": "PASS"');
+    expect(blocked.text).toContain('A legacy string form is still accepted');
   }, 120000);
 
   test("max_attempts comes from the gate's retry_config, not the built-in default", async () => {
@@ -280,12 +292,14 @@ describe.each([
     const chainId = chainIdOf(start.text);
 
     const exhaustedOn: number[] = [];
+    const counters: string[] = [];
     for (let attempt = 1; attempt <= MAX_ATTEMPTS + 1; attempt++) {
       const outcome = await session.callTool('prompt_engine', {
         chain_id: chainId,
         user_response: `${OUTPUT_MARKER}: attempt ${attempt}.`,
         gate_verdict: `GATE_REVIEW: FAIL - attempt ${attempt} is not good enough`,
       });
+      counters.push(/\*\*Attempt \d+ of \d+\*\*/.exec(outcome.text)?.[0] ?? '(no counter)');
       const event = outcome.notifications.find(
         (n) => n.method === 'notifications/gate/retry_exhausted'
       );
@@ -299,6 +313,17 @@ describe.each([
     // The default is 2. Landing on attempt 5 is what says the gate's own value was read; the
     // assertion is the WHOLE fact (which attempt), not "eventually exhausted".
     expect(exhaustedOn).toEqual([MAX_ATTEMPTS]);
+
+    // P4.101 — the counter across the WHOLE bounded loop, as one ordered sequence rather than
+    // five independent "a number appeared" checks. It climbs, it clamps at the ceiling on the
+    // call that exhausts the budget, and it never reads past it.
+    expect(counters).toEqual([
+      '**Attempt 2 of 5**',
+      '**Attempt 3 of 5**',
+      '**Attempt 4 of 5**',
+      '**Attempt 5 of 5**',
+      '**Attempt 5 of 5**',
+    ]);
   }, 180000);
 
   /**
