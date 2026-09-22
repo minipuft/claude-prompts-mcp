@@ -3,6 +3,7 @@
 import type { FrameworkManager } from '#engine/frameworks/framework-manager.js';
 import type { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';
 import type { GateStateStore } from '#engine/gates/gate-state-store.js';
+import type { ExecutionRecord } from '#shared/types/chain-execution.js';
 import type {
   StateStoreOptions,
   ConfigManager,
@@ -10,6 +11,69 @@ import type {
   ToolResponse,
 } from '#shared/types/index.js';
 import type { SystemControlContext } from './types.js';
+
+/** What one scoped page of the execution ledger says about a workspace. */
+export interface LedgerTally {
+  records: number;
+  completed: number;
+  failed: number;
+  averageDurationMs: number;
+  reviewedRecords: number;
+  attestations: number;
+  byGate: Map<string, { passed: number; failed: number }>;
+}
+
+/**
+ * Fold one record's gate verdicts into the running tally.
+ *
+ * A reminder has no evaluator — the reviewer attests to it. Counting one beside an evaluated
+ * check would average a self-declaration into a pass rate, so it is listed as an attestation and
+ * never as a pass.
+ */
+function foldVerdicts(record: ExecutionRecord, tally: LedgerTally): void {
+  if (record.gateVerdicts.length === 0) return;
+  tally.reviewedRecords += 1;
+
+  for (const verdict of record.gateVerdicts) {
+    if (verdict.tier === 'reminder') {
+      tally.attestations += 1;
+      continue;
+    }
+    const gate = tally.byGate.get(verdict.gateId) ?? { passed: 0, failed: 0 };
+    if (verdict.verdict === 'PASS') gate.passed += 1;
+    else gate.failed += 1;
+    tally.byGate.set(verdict.gateId, gate);
+  }
+}
+
+/** Pure fold over an already-scoped page of records — the whole derivation, in one place. */
+function foldLedger(records: readonly ExecutionRecord[]): LedgerTally {
+  const tally: LedgerTally = {
+    records: records.length,
+    completed: 0,
+    failed: 0,
+    averageDurationMs: 0,
+    reviewedRecords: 0,
+    attestations: 0,
+    byGate: new Map(),
+  };
+
+  let durationTotal = 0;
+  let durationSamples = 0;
+
+  for (const record of records) {
+    if (record.status === 'completed') tally.completed += 1;
+    if (record.status === 'failed') tally.failed += 1;
+    if (record.completedAt !== undefined) {
+      durationTotal += record.completedAt - record.startedAt;
+      durationSamples += 1;
+    }
+    foldVerdicts(record, tally);
+  }
+
+  tally.averageDurationMs = durationSamples > 0 ? durationTotal / durationSamples : 0;
+  return tally;
+}
 
 /**
  * Base class for system_control action handlers.
@@ -58,14 +122,27 @@ export abstract class ActionHandler {
 
   // ── Formatting utilities ─────────────────────────────────────────────
 
-  protected getExecutionsByMode(): Record<string, number> {
-    const modeData: Record<string, number> = {};
-    this.context.systemAnalytics.performanceTrends.forEach((trend) => {
-      if (trend.executionMode) {
-        modeData[trend.executionMode] = (modeData[trend.executionMode] || 0) + 1;
-      }
-    });
-    return modeData;
+  /**
+   * Every per-workspace figure `system_control` reports, from one pass over the execution ledger
+   * filtered to the request's scope.
+   *
+   * One derivation and one query on purpose. Before P4.87 the gate tally read the ledger with
+   * this scope while every other figure in the same reply read a process-wide in-memory object,
+   * so one reply mixed two populations — and Gate Adoption Rate divided one by the other. A
+   * second running counter would drift from the ledger on restart anyway: the counter is in
+   * memory, the ledger is not.
+   *
+   * `queryRecent` pages (default 50, hard ceiling 500), so these are counts over the most recent
+   * page, not over all time. Callers say so when they render them.
+   *
+   * An `Execution Mode Distribution` section used to sit beside these, keyed on
+   * `performanceTrends[].executionMode`. Only `updateAnalytics` can write that field, and only
+   * from a `currentExecution` payload nobody passes, so the section rendered as a heading with
+   * nothing under it on every server. It is gone with the counters.
+   */
+  protected tallyLedger(): LedgerTally {
+    const records = this.context.executionRecordStore?.queryRecent(undefined, this.requestScope);
+    return foldLedger(records ?? []);
   }
 
   protected formatUptime(uptime: number): string {
@@ -108,12 +185,6 @@ export abstract class ActionHandler {
       default:
         return '❓';
     }
-  }
-
-  protected getSuccessRate(): number {
-    const total = this.context.systemAnalytics.totalExecutions;
-    if (total === 0) return 100;
-    return Math.round((this.context.systemAnalytics.successfulExecutions / total) * 100);
   }
 
   protected formatTrendContext(trend: {

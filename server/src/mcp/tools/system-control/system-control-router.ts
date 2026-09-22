@@ -85,10 +85,6 @@ export class ConsolidatedSystemControl implements SystemControlContext {
 
   // ── Mutable runtime state ───────────────────────────────────────────
   systemAnalytics: SystemAnalytics = {
-    totalExecutions: 0,
-    successfulExecutions: 0,
-    failedExecutions: 0,
-    averageExecutionTime: 0,
     gateValidationCount: 0,
     uptime: 0,
     performanceTrends: [],
@@ -279,43 +275,26 @@ export class ConsolidatedSystemControl implements SystemControlContext {
 
   // ── Analytics (called from McpToolRouter) ───────────────────────────
 
-  updateAnalytics(analytics: Partial<SystemAnalytics> & { currentExecution?: any }): void {
+  /**
+   * Refresh the process-wide facts and record a memory delta if one is worth keeping.
+   *
+   * It also pushed `executionTime` and `successRate` trends until P4.87. Both were unreachable:
+   * the first needed a `currentExecution` payload, the second the `totalExecutions` counter, and
+   * the one caller — `McpToolRouter.handleToolDescriptionChange` — passes neither. They went with
+   * the counters, and with the `Execution Mode Distribution` section that read `executionMode`
+   * off the trends they would have written.
+   */
+  updateAnalytics(analytics: Partial<SystemAnalytics>): void {
     Object.assign(this.systemAnalytics, analytics);
     this.systemAnalytics.uptime = Date.now() - this.startTime;
     this.systemAnalytics.memoryUsage = process.memoryUsage();
 
-    if (analytics.currentExecution) {
-      const currentExecution = analytics.currentExecution;
+    const memoryDelta = this.calculateMemoryDelta();
+    if (Math.abs(memoryDelta) > 1024 * 1024) {
       this.systemAnalytics.performanceTrends.push({
         timestamp: Date.now(),
-        metric: 'executionTime',
-        value: currentExecution.executionTime,
-        executionMode: currentExecution.executionMode,
-        framework: currentExecution.framework,
-        success: currentExecution.success,
-      });
-    }
-
-    if (this.systemAnalytics.memoryUsage) {
-      const memoryDelta = this.calculateMemoryDelta();
-      if (Math.abs(memoryDelta) > 1024 * 1024) {
-        this.systemAnalytics.performanceTrends.push({
-          timestamp: Date.now(),
-          metric: 'memoryDelta',
-          value: memoryDelta,
-        });
-      }
-    }
-
-    if (analytics.totalExecutions && analytics.totalExecutions % 10 === 0) {
-      const successRate =
-        analytics.totalExecutions > 0
-          ? ((analytics.successfulExecutions || 0) / analytics.totalExecutions) * 100
-          : 0;
-      this.systemAnalytics.performanceTrends.push({
-        timestamp: Date.now(),
-        metric: 'successRate',
-        value: successRate,
+        metric: 'memoryDelta',
+        value: memoryDelta,
       });
     }
 
