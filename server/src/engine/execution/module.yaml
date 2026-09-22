@@ -15,3 +15,5 @@ owns:
     symbol: ResponseAssembler
   - capability: Injection decisions
     symbol: InjectionDecisionService
+  - capability: Delegation handoff evidence
+    symbol: resolveHandoffEvidence
