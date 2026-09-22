@@ -950,6 +950,58 @@ scenarios:
     # parameter) prints no Classification line at all and fails this row.
     expect: { text_contains: 'Classification: framework' }
 
+  - id: gate-create-then-inspect-reads-back-block-response-on-fail
+    claim_source: >-
+      resource_manager contract — `block_response_on_fail` (P4.100) reaches gate.yaml as the key
+      `blockResponseOnFail`, the key the pipeline reads to withhold a step's output on a FAIL.
+      `inspect` reads it back off the raw definition (gate-discovery-processor.ts).
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: gate
+          action: create
+          id: conformance_gate_block_response_readback
+          name: Conformance Gate Block Response Readback
+          type: validation
+          description: created by the conformance corpus
+          guidance: Guidance text
+          block_response_on_fail: true
+      - tool: resource_manager
+        args: { resource_type: gate, action: inspect, id: conformance_gate_block_response_readback }
+    # `true` is non-default: the key has no schema default, and `inspect` prints the line only
+    # when the raw definition declares it. A write that dropped the parameter — every write
+    # before P4.100, when the parameter did not exist — prints no line at all and fails this row.
+    expect: { text_contains: 'Blocks Response On Fail: true' }
+
+  - id: gate-update-clears-block-response-on-fail-with-false
+    claim_source: >-
+      resource_manager contract — `block_response_on_fail: false` is a VALUE, not an omission:
+      it clears the key on a gate that declared it, where an omitted parameter is carried
+      forward by PRESERVED_GATE_YAML_KEYS.
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: gate
+          action: create
+          id: conformance_gate_block_response_clear
+          name: Conformance Gate Block Response Clear
+          type: validation
+          description: created by the conformance corpus
+          guidance: Guidance text
+          block_response_on_fail: true
+      - tool: resource_manager
+        args:
+          resource_type: gate
+          action: update
+          id: conformance_gate_block_response_clear
+          block_response_on_fail: false
+      - tool: resource_manager
+        args: { resource_type: gate, action: inspect, id: conformance_gate_block_response_clear }
+    # The distinguishing assertion: a truthiness test anywhere on the path reads `false` as an
+    # omission, the carry-forward keeps the `true` this row's first request wrote, and the line
+    # reads `true` instead. `false` here is the whole claim.
+    expect: { text_contains: 'Blocks Response On Fail: false' }
+
   - id: framework-create-then-inspect-reads-back-advanced-fields
     claim_source: >-
       resource_manager contract — the 11 framework advanced fields (P4.1/P4.5) reach

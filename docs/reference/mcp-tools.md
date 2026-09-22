@@ -956,11 +956,18 @@ turns the whole class into a loud error at the boundary.
   - the three tools' top-level parameters, so the refusal above can name the key and suggest a fix;
   - `chain_steps[]` and `chain_step_data`, because a chain step is an opaque object by decision
     (contrast the sibling `arguments`, which is a typed contract).
-- **`gate_verdict` is refused but its path is not printed.** It is a union of the structured object
-  and the legacy string, and a union failure is reported as one issue whose sub-issues are nested,
-  so a client sees `gate_verdict: Invalid input`. The safety property holds regardless — a
-  misspelled `passed` is rejected outright, where it used to be dropped and leave the field absent,
-  which reads as FAIL. The legacy string form is unchanged.
+- **`gate_verdict` names the full path and the nearest declared key.** It is a union of the
+  structured object and the legacy string, and a union failure is reported as ONE issue whose
+  sub-issues are nested, which the SDK does not render — so this parameter alone used to answer
+  `gate_verdict: Invalid input`, naming neither the key nor its position. It now answers
+  `'gate_verdict.per_gate[0].pased' is not a declared key — did you mean 'passed'?`, built from
+  the sub-issues that one validation pass already produced. Which branch reports is decided by the
+  value's own type: an object gets the structured branch's errors, a string gets the verdict-format
+  message, anything else is told what the parameter takes. The legacy string form is unchanged, and
+  the published `anyOf` is byte-identical to what it was.
+- **A criterion has no `description`.** `pass_criteria[]` declares the fields each `type` reads and
+  nothing else; a `description` on a criterion is refused. Nothing reads one — the reviewer-facing
+  prose is the gate's own `guidance`, which is what the criteria summary renders.
 - **Published schemas stay open at the top level.** `additionalProperties` is not set to `false` on
   a tool's own parameters, deliberately: the key has to ARRIVE for the server to name it and suggest
   a correction. Nested objects DO publish `additionalProperties: false`, which is what lets a client
@@ -1140,18 +1147,20 @@ re-send them with `edges:` on an `update`.
 
 **Gate Parameters:**
 
-| Parameter          | Purpose                                                                      |
-| ------------------ | ---------------------------------------------------------------------------- |
-| `type`             | `validation` (pass/fail) or `guidance` (advisory)                            |
-| `gate_type`        | `framework` \| `category` \| `custom`. Default `custom`                      |
-| `severity`         | `critical` \| `high` \| `medium` \| `low`. Default `medium`                  |
-| `enforcement_mode` | `blocking` \| `advisory` \| `informational`. Absent, derived from `severity` |
-| `guidance`         | Gate criteria content                                                        |
-| `pass_criteria`    | Array of success conditions                                                  |
-| `activation`       | When gate activates (categories, frameworks)                                 |
+| Parameter                | Purpose                                                                        |
+| ------------------------ | ------------------------------------------------------------------------------ |
+| `type`                   | `validation` (pass/fail) or `guidance` (advisory)                              |
+| `gate_type`              | `framework` \| `category` \| `custom`. Default `custom`                        |
+| `severity`               | `critical` \| `high` \| `medium` \| `low`. Default `medium`                    |
+| `enforcement_mode`       | `blocking` \| `advisory` \| `informational`. Absent, derived from `severity`   |
+| `block_response_on_fail` | `true` withholds the step output on a FAIL and returns the gate review instead |
+| `guidance`               | Gate criteria content                                                          |
+| `pass_criteria`          | Array of success conditions                                                    |
+| `activation`             | When gate activates (categories, frameworks)                                   |
 
-Omitting `severity` or `enforcement_mode` on an update leaves the gate's current value alone; it
-does not reset to the default.
+Omitting `severity`, `enforcement_mode` or `block_response_on_fail` on an update leaves the gate's
+current value alone; it does not reset to the default. `block_response_on_fail: false` is a value,
+not an omission — it clears the key on a gate that declared it.
 
 Every gate parameter is named for the `gate.yaml` key it writes. `type` and `gate_type` are two
 different keys and each has its own parameter: `type` is the validation/guidance behaviour,
@@ -1161,7 +1170,10 @@ it took the other key's name and left that key unauthorable. Sending the validat
 under `gate_type` is now rejected by the schema — send it under `type`.
 
 Omitting `gate_type` on an update leaves the gate's current value alone, the same way `severity`
-and `enforcement_mode` do.
+and `enforcement_mode` do. Until this release an update supplying ONLY `gate_type` reported
+`✅ Gate 'x' updated successfully` over a byte-identical `gate.yaml`: the key was absent from the
+set the writer narrows a write by, so no `gate.yaml` write was planned. That set is now derived
+from the writer's own key partition, so every settable gate key is covered by construction.
 
 **Category Parameters:**
 
@@ -1905,12 +1917,12 @@ file, a resource whose files could not be located) have no recorded bytes and re
 way: the version snapshot records the resource's authored surface, not every byte in its directory,
 and what falls outside it is left to the file writers, which carry it forward from disk:
 
-| Resource  | Not in the snapshot                                                             | What happens on rollback                                                                                                                                                    |
-| --------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| prompt    | `register_with_mcp`, `mcp_prompt_mode` (resolved through the category chain)    | keep their current on-disk values                                                                                                                                           |
-| prompt    | script tools under `tools/{id}/`                                                | left unchanged — **the response says so**. A v29-era row restores them byte for byte instead, and then says nothing, because there is nothing left unrestored               |
-| gate      | `severity`, `enforcementMode`, `gate_type`, `evaluation`, `blockResponseOnFail` | carried forward from `gate.yaml` — still true after `severity`, `enforcementMode` and `gate_type` became settable, since they are preserved keys rather than projected ones |
-| framework | `phases` and the advanced authoring fields                                      | carried forward by the writer's merge                                                                                                                                       |
+| Resource  | Not in the snapshot                                                             | What happens on rollback                                                                                                                                                                           |
+| --------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| prompt    | `register_with_mcp`, `mcp_prompt_mode` (resolved through the category chain)    | keep their current on-disk values                                                                                                                                                                  |
+| prompt    | script tools under `tools/{id}/`                                                | left unchanged — **the response says so**. A v29-era row restores them byte for byte instead, and then says nothing, because there is nothing left unrestored                                      |
+| gate      | `severity`, `enforcementMode`, `gate_type`, `evaluation`, `blockResponseOnFail` | carried forward from `gate.yaml` — still true after `severity`, `enforcementMode`, `gate_type` and `blockResponseOnFail` became settable, since they are preserved keys rather than projected ones |
+| framework | `phases` and the advanced authoring fields                                      | carried forward by the writer's merge                                                                                                                                                              |
 
 Where a rollback restores only part of a resource, the response names what it did not restore.
 Frameworks additionally report any projected field the target version never recorded, because the
