@@ -5,6 +5,7 @@
 
 import type { GatePassCriteriaYaml } from '#engine/gates/core/gate-schema.js';
 import type { GateManager } from '#engine/gates/gate-manager.js';
+import type { JudgeEvaluationConfig } from '#engine/gates/judge/types.js';
 import type { ConfigManager, Logger } from '#shared/types/index.js';
 import type { ResourceFileLocatorPort } from '#shared/utils/resource-file-set.js';
 
@@ -51,6 +52,12 @@ export interface GateManagerInput {
    * written, omitted it is carried forward. An explicit `false` is a value, not an omission.
    */
   blockResponseOnFail?: boolean;
+  /**
+   * Who reviews this gate — self-review or a context-isolated judge — plus the judge's model hint
+   * and strict framing. Same `PRESERVED_GATE_YAML_KEYS` route as the keys above, written whole:
+   * a supplied block replaces the existing one, an omitted one is carried forward.
+   */
+  evaluation?: JudgeEvaluationConfig;
   description?: string;
   /**
    * Free kebab-case tag naming what this gate reminds about (e.g. `code-quality`). An
@@ -145,4 +152,6 @@ export interface GateCreationData {
   subject?: GateManagerInput['subject'];
   /** Same class again (P4.100): the key that makes a gate withhold the step output on a FAIL. */
   blockResponseOnFail?: GateManagerInput['blockResponseOnFail'];
+  /** Same class again (P4.121): the judge-routing block, the last gate.yaml key with no parameter. */
+  evaluation?: GateManagerInput['evaluation'];
 }

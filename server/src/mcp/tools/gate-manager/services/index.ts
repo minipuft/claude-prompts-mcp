@@ -2,7 +2,6 @@
 export {
   ALL_GATE_DATA_KEYS,
   callerSuppliedGateKeys,
-  UNSETTABLE_GATE_DATA_KEYS,
   GateFileWriter,
   type GateFileWriterDependencies,
   type GateFileWriteResult,
