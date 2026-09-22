@@ -25,10 +25,10 @@ lifecycle it can actually reach.
 _Rewritten 2026-09-21._ #351 `31129181` landed the `cpm` history closure (P4.104, P4.107, P4.108,
 P4.109). Outside this plan and in the same session: #349 (the server reports its package version),
 #350 (issue #228), #268 (chain-step refusal, breaking) and #271 (delegated resume needs the handoff
-token, breaking) merged; #272 is at the PR boundary, retargeted onto `main`; one docs slice drops
+token, breaking) merged, then #272 `6a1ee229`; one docs slice drops
 the validation-gates section from the AGENTS.md projection (R77). Issues #228, #229 and #287 closed.
 
-- **Next slice, once #272 lands:** P4.86, P4.89, P4.100, P4.101, P4.103 (they edit the gate review
+- **Next slice, dispatched 2026-09-21:** P4.86, P4.89, P4.100, P4.101, P4.103 (they edit the gate review
   and step capture files #272 edits), with P4.110, P4.111 and P4.113 alongside, since they share the
   gate review stage.
 - **Open, not started:** P4.87, P4.90, P4.91, P4.99, P4.102, P4.105, P4.106 (R76), P4.112, P4.114.
