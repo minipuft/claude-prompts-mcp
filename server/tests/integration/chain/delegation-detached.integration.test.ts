@@ -87,7 +87,12 @@ const PROMPTS: ConvertedPrompt[] = [
  * `draft → review (await: run)`. `await` is the DECLARATION; the real stage 06 below turns it
  * into the delegated flag, so `delegated` is deliberately not written here.
  */
-const parsedSteps = (options: { detached: boolean; detachedLast?: boolean }) => {
+const parsedSteps = (options: {
+  detached: boolean;
+  detachedLast?: boolean;
+  /** Row 4.9: move the delegated step to the FRONT (`review → draft → summarize`). */
+  delegatedFirst?: boolean;
+}) => {
   const steps = [
     { stepNumber: 1, nodeId: 'n1', promptId: 'draft', args: {}, convertedPrompt: PROMPTS[0] },
     {
@@ -100,6 +105,14 @@ const parsedSteps = (options: { detached: boolean; detachedLast?: boolean }) => 
     },
     { stepNumber: 3, nodeId: 'n3', promptId: 'summarize', args: {}, convertedPrompt: PROMPTS[2] },
   ];
+  if (options.delegatedFirst === true) {
+    const [draft, review, summarize] = steps;
+    return [
+      { ...review!, stepNumber: 1 },
+      { ...draft!, stepNumber: 2 },
+      { ...summarize!, stepNumber: 3 },
+    ];
+  }
   return options.detachedLast === true ? steps.slice(0, 2) : steps;
 };
 
@@ -535,6 +548,58 @@ describe('detached delegation (await: run) through the pipeline', () => {
 
       expect(await sessionStore.cancelChain(sessionId)).toBe(true);
       expect(run().runStatus).toBe('cancelled');
+    });
+  });
+
+  describe('a delegated FIRST step (row 4.9)', () => {
+    // The call that opens the run is a brief, not a resume. Before row 4.9 the resume admission
+    // ran on it anyway and refused every chain whose first step is delegated with "the resume
+    // carries no worker reply". The delegated-second-step twin is every test above; the
+    // non-delegated-first twin is `renderDetached`'s own opening call.
+    test.each([
+      ['detached (await: run)', true, 'run_in_background: true'],
+      ['blocking (delegated: true)', false, 'run_in_background: false'],
+    ] as const)('%s: the opening call renders its brief', async (_label, detached, pin) => {
+      const pipeline = buildPipeline({
+        sessionStore,
+        recordStore,
+        logger,
+        steps: parsedSteps({ detached, delegatedFirst: true }),
+      });
+      const opened = await pipeline.execute({
+        command: '>>review --> >>draft --> >>summarize',
+      } as any);
+
+      expect(text(opened)).not.toContain('the resume carries no worker reply');
+      expect(opened.isError).not.toBe(true);
+      expect(text(opened)).toContain('EXECUTION BRIEF');
+      expect(text(opened)).toContain(`node: ${DETACHED}`);
+      expect(text(opened)).toContain(pin);
+      expect(run().state.currentNodeId).toBe(DETACHED);
+    });
+
+    test('the detached first step then moves on and reports late, exactly as a later one does', async () => {
+      const pipeline = buildPipeline({
+        sessionStore,
+        recordStore,
+        logger,
+        steps: parsedSteps({ detached: true, delegatedFirst: true }),
+      });
+      const brief = text(
+        await pipeline.execute({ command: '>>review --> >>draft --> >>summarize' } as any)
+      );
+      const { chainId } = run();
+
+      const moved = await pipeline.execute({ chain_id: chainId } as any);
+      expect(moved.isError).not.toBe(true);
+      expect(text(moved)).toContain('Do Draft.');
+      expect(run().state.currentNodeId).toBe('n1');
+
+      const landed = await pipeline.execute({
+        chain_id: chainId,
+        user_response: runFakeWorker(brief),
+      } as any);
+      expect(text(landed)).toContain(`✓ Detached node ${DETACHED} (step 1) reported`);
     });
   });
 
