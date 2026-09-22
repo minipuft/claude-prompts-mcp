@@ -36,7 +36,7 @@ const MAX_PROJECT_GUIDANCE_BYTES = 32 * 1024;
 const PROJECTED_HANDBOOK_SECTIONS = Object.freeze([
   "Core Principles",
   "Node.js Support Boundaries",
-  "Validation Gates (one contract, impact-aware subsets)",
+  "Pull Request Boundary",
   "Documentation Map",
   "Command Reference (run inside `server/`)",
   "Domain Ownership Matrix (ENFORCED)",
