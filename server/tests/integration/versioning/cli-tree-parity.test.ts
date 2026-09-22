@@ -33,7 +33,8 @@ import { testScratchPath } from '../../helpers/scratch-path.js';
 import { hashBytes } from '../../../src/shared/utils/hash.js';
 import { readResourceTree } from '../../../src/cli-shared/object-store.js';
 import { resourceFileSet } from '../../../src/shared/utils/resource-file-set.js';
-import { rollbackVersion, saveVersion } from '../../../src/cli-shared/version-history.js';
+import { rollbackVersion } from '../../../src/cli-shared/version-history.js';
+import { saveVersion } from '../../helpers/version-history-writer.js';
 import { resolveTenantId } from '../../../src/cli-shared/version-history-scope.js';
 import {
   DANGLING_ENTRY_SQL,

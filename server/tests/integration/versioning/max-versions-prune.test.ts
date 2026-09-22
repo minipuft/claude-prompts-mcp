@@ -32,10 +32,8 @@ import type { VersioningConfigProvider } from '../../../src/modules/versioning/v
 import { VersionHistoryService } from '../../../src/modules/versioning/version-history-service.js';
 import { createTestDatabaseManager, seedStateDbSchema } from '../../helpers/test-database.js';
 import { testScratchPath } from '../../helpers/scratch-path.js';
-import {
-  resolveConfiguredMaxVersions,
-  saveVersion,
-} from '../../../src/cli-shared/version-history.js';
+import { resolveConfiguredMaxVersions } from '../../../src/cli-shared/version-history.js';
+import { saveVersion } from '../../helpers/version-history-writer.js';
 import { DEFAULT_MAX_VERSIONS } from '../../../src/cli-shared/version-history-types.js';
 
 const TENANT = 'max-versions-tenant';
@@ -215,7 +213,9 @@ describe('versioning.maxVersions is one bound for both writers', () => {
      * property this scanner is about.
      */
     const WRITERS: Record<string, { position: number; optionsType: string }> = {
-      saveVersion: { position: 5, optionsType: 'HistoryWriteOptions' },
+      // `saveVersion` was removed from this list when it left `cli-shared` (P4.106): it had no
+      // `cpm` call site at all, and now lives in `tests/helpers/version-history-writer.ts`,
+      // where no bound a workspace configured applies to it.
       // `recordResourceWrite` replaced `recordEditResult` here on 2026-09-21: it is the writer
       // every `cpm` edit and create now reaches, and its bound rides in the same object as the
       // write callback rather than in an options argument of its own.

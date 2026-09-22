@@ -380,7 +380,10 @@ export default [
     },
     rules: {
       'no-console': 'off',
-      'no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      'no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
+      ],
     },
   },
 
@@ -414,7 +417,10 @@ export default [
       // `no-undef` is off for TS: the compiler owns undefined-symbol detection, and leaving it on
       // reports every type-only name as undefined.
       'no-undef': 'off',
-      'no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      'no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
+      ],
     },
   },
 
@@ -475,6 +481,29 @@ export default [
     },
     rules: {
       'claude/require-exception-audit': 'error',
+    },
+  },
+
+  // P4.102 — the one shape of silent swallow no other gate reports.
+  //
+  // Scoped to the whole `lint:ratchet` target (`src`, `scripts`, `eslint-rules`) rather than to
+  // `src` alone: the defect is a shape, not a layer, and 8 of the 24 sites found on 2026-09-21
+  // were in `scripts/`. `cli/src` has two more and is out of reach — that workspace runs no
+  // linter at all, which is a separate gap.
+  {
+    files: [
+      'src/**/*.ts',
+      'scripts/**/*.js',
+      'scripts/**/*.cjs',
+      'scripts/**/*.mjs',
+      'scripts/**/*.ts',
+      'eslint-rules/**/*.js',
+    ],
+    plugins: {
+      claude: claudePlugin,
+    },
+    rules: {
+      'claude/no-bindingless-empty-catch': 'error',
     },
   },
 

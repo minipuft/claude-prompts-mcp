@@ -8,13 +8,13 @@ import {
   loadHistory,
   getVersion,
   compareVersions,
-  saveVersion,
   recordResourceWrite,
   rollbackVersion,
   deleteVersionRows,
   renameHistoryResource,
   formatHistoryTable,
 } from '../../../src/cli-shared/version-history.js';
+import { saveVersion } from '../../helpers/version-history-writer.js';
 import type { HistoryFile } from '../../../src/modules/versioning/types.js';
 import type { HistoryResourceRef } from '../../../src/cli-shared/version-history.js';
 import { seedStateDbSchema } from '../../helpers/test-database.js';

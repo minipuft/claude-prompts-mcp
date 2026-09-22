@@ -34,11 +34,8 @@ import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals
 
 import { SqliteEngine } from '../../../src/infra/database/sqlite-engine.js';
 import { VersionHistoryService } from '../../../src/modules/versioning/version-history-service.js';
-import {
-  loadHistory,
-  renameHistoryResource,
-  saveVersion,
-} from '../../../src/cli-shared/version-history.js';
+import { loadHistory, renameHistoryResource } from '../../../src/cli-shared/version-history.js';
+import { saveVersion } from '../../helpers/version-history-writer.js';
 import { testScratchPath } from '../../helpers/scratch-path.js';
 import { STATE_DB_BUSY_TIMEOUT_MS } from '../../../src/shared/utils/runtime-state-location.js';
 

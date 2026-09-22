@@ -1,6 +1,7 @@
 // @lifecycle canonical - Handler for framework management operations.
 
 import { ActionHandler } from '../core/action-handler-base.js';
+import { describeTogglePersistence } from '../core/response-utils.js';
 
 import type { ToolResponse } from '#shared/types/index.js';
 
@@ -21,13 +22,18 @@ export class FrameworkActionHandler extends ActionHandler {
         return await this.listFrameworks({
           show_details: args.show_details,
         });
+      // `persist` is forwarded here, as the gate handler already did. It was dropped on the way
+      // in until P4.114, so `operation:"enable", persist:true` answered with a plain success and
+      // wrote nothing to config.json — the flag was declared, accepted, and read by nobody.
       case 'enable':
         return await this.enableFrameworkSystem({
           reason: args.reason,
+          persist: (args as { persist?: boolean }).persist,
         });
       case 'disable':
         return await this.disableFrameworkSystem({
           reason: args.reason,
+          persist: (args as { persist?: boolean }).persist,
         });
       case 'inspect':
         return await this.inspectFramework({ framework: args.framework });
@@ -272,7 +278,12 @@ export class FrameworkActionHandler extends ActionHandler {
     const currentState = this.frameworkStateStore.getCurrentState(this.requestScope);
     if (currentState.frameworkSystemEnabled) {
       return this.createMinimalSystemResponse(
-        `ℹ️ Framework system is already enabled.`,
+        `ℹ️ Framework system is already enabled.\n\n${describeTogglePersistence({
+          persist: args.persist,
+          note: args.persist === true ? await this.context.persistFrameworkConfig(true) : undefined,
+          setting: '`frameworks.enabled` and its companion toggles',
+          changed: false,
+        })}`,
         'enable_framework_system'
       );
     }
@@ -288,11 +299,11 @@ export class FrameworkActionHandler extends ActionHandler {
       this.requestScope
     );
 
-    const persistenceNotes: string[] = [];
-    if (args.persist) {
-      const note = await this.context.persistFrameworkConfig(true);
-      if (note) persistenceNotes.push(note);
-    }
+    const persistence = describeTogglePersistence({
+      persist: args.persist,
+      note: args.persist === true ? await this.context.persistFrameworkConfig(true) : undefined,
+      setting: '`frameworks.enabled` and its companion toggles',
+    });
 
     const response =
       `✅ **Framework System Enabled**\n\n` +
@@ -300,7 +311,7 @@ export class FrameworkActionHandler extends ActionHandler {
       `**Status**: Framework system is now active\n` +
       `**Active Framework**: ${currentState.activeFramework}\n\n` +
       `🎯 All prompt executions will now use framework-guided processing.` +
-      (persistenceNotes.length ? `\n\n${persistenceNotes.join('\n')}` : '');
+      `\n\n${persistence}`;
 
     return this.createMinimalSystemResponse(response, 'enable_framework_system');
   }
@@ -316,7 +327,13 @@ export class FrameworkActionHandler extends ActionHandler {
     const currentState = this.frameworkStateStore.getCurrentState(this.requestScope);
     if (!currentState.frameworkSystemEnabled) {
       return this.createMinimalSystemResponse(
-        `ℹ️ Framework system is already disabled.`,
+        `ℹ️ Framework system is already disabled.\n\n${describeTogglePersistence({
+          persist: args.persist,
+          note:
+            args.persist === true ? await this.context.persistFrameworkConfig(false) : undefined,
+          setting: '`frameworks.enabled` and its companion toggles',
+          changed: false,
+        })}`,
         'disable_framework_system'
       );
     }
@@ -328,11 +345,11 @@ export class FrameworkActionHandler extends ActionHandler {
       this.requestScope
     );
 
-    const persistenceNotes: string[] = [];
-    if (args.persist) {
-      const note = await this.context.persistFrameworkConfig(false);
-      if (note) persistenceNotes.push(note);
-    }
+    const persistence = describeTogglePersistence({
+      persist: args.persist,
+      note: args.persist === true ? await this.context.persistFrameworkConfig(false) : undefined,
+      setting: '`frameworks.enabled` and its companion toggles',
+    });
 
     const response =
       `⚠️ **Framework System Disabled**\n\n` +
@@ -340,7 +357,7 @@ export class FrameworkActionHandler extends ActionHandler {
       `**Status**: Framework system is now inactive\n` +
       `**Previous Framework**: ${currentState.activeFramework}\n\n` +
       `📝 Prompt executions will now use basic processing without framework guidance.` +
-      (persistenceNotes.length ? `\n\n${persistenceNotes.join('\n')}` : '');
+      `\n\n${persistence}`;
 
     return this.createMinimalSystemResponse(response, 'disable_framework_system');
   }

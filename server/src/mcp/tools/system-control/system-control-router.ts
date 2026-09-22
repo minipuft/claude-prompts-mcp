@@ -3,7 +3,12 @@
 import * as path from 'node:path';
 
 import { recordActionInvocation } from '../../metadata/usage-tracker.js';
-import { SafeConfigWriter, createSafeConfigWriter } from '../config-utils.js';
+import {
+  SafeConfigWriter,
+  createSafeConfigWriter,
+  describeRecordedVersion,
+  type ConfigWriteResult,
+} from '../config-utils.js';
 import { createStructuredResponse } from './core/response-utils.js';
 import { AnalyticsActionHandler } from './handlers/analytics-action-handler.js';
 import { ChangesActionHandler } from './handlers/changes-action-handler.js';
@@ -238,7 +243,11 @@ export class ConsolidatedSystemControl implements SystemControlContext {
       if (!result.success) {
         return `⚠️ Failed to persist gates.enabled: ${result.message || result.error}`;
       }
-      return `📁 Persisted gates.enabled=${enabled} to ${path.basename(this.safeConfigWriter.getConfigPath())}.`;
+      return (
+        `📁 Persisted gates.enabled=${enabled} to ` +
+        `${path.basename(this.safeConfigWriter.getConfigPath())}` +
+        `${describeRecordedVersion(result)}`
+      );
     } catch (error) {
       this.logger.warn('Failed to persist gates.enabled', error);
       return `⚠️ Failed to persist gates.enabled: ${error instanceof Error ? error.message : String(error)}`;
@@ -264,13 +273,21 @@ export class ConsolidatedSystemControl implements SystemControlContext {
     ];
 
     try {
+      // The LAST write's row is the one to report: the three keys are written one at a time, so
+      // each records its own version and the newest is what `cpm config rollback` would restore.
+      let last: ConfigWriteResult | undefined;
       for (const key of keys) {
         const result = await this.safeConfigWriter.updateConfigValue(key, String(enabled));
         if (!result.success) {
           return `⚠️ Failed to persist ${key}: ${result.message || result.error}`;
         }
+        last = result;
       }
-      return `📁 Persisted framework toggles (${keys.join(', ')}) to ${enabled} in ${path.basename(this.safeConfigWriter.getConfigPath())}.`;
+      return (
+        `📁 Persisted framework toggles (${keys.join(', ')}) to ${enabled} in ` +
+        `${path.basename(this.safeConfigWriter.getConfigPath())}` +
+        `${describeRecordedVersion(last)}`
+      );
     } catch (error) {
       this.logger.warn('Failed to persist framework toggles', error);
       return `⚠️ Failed to persist framework toggles: ${error instanceof Error ? error.message : String(error)}`;
