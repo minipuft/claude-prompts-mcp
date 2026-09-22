@@ -4,6 +4,7 @@ import { handoffNodeToken } from '../delegation/handoff-contract.js';
 import { DelegationRenderer } from '../delegation/renderer.js';
 import { getHandoffFooterInstruction } from '../delegation/strategy.js';
 import { isUnknownInterruptPending } from '../pipeline/decisions/index.js';
+import { isFrameworkInjected } from '../pipeline/decisions/injection/index.js';
 import { PHASE_GUARD_GATE_ID } from '../pipeline/stages/19-phase-guard-verification-stage.js';
 
 import type { DeclaredSection } from '#engine/frameworks/declared-sections.js';
@@ -1183,14 +1184,20 @@ export class ResponseAssembler {
    *    will never be graded against them would spend tokens for nothing.
    * 3. No framework resolves, or the resolved framework declares no guarded phases — `provider()`
    *    itself returns `[]` for both, so no separate check is needed.
-   * 4. The framework's system prompt was NOT injected for this execution — the prompt author
-   *    wrote `injection.system-prompt.enabled: false`, or a modifier suppressed it. Telling a
-   *    prompt that opted out of a framework to emit that framework's headers "verbatim; they
-   *    are graded structurally" states two things that are not true of it: it was not given the
-   *    framework, and on this path nothing grades it. Read from `state.injection`, the decision
-   *    `InjectionDecisionService` wrote at stage 14 — the same decision that withheld the
-   *    framework preamble from the very response this block would be appended to, never a
-   *    second derivation of it.
+   * 4. The prompt DECLINED the framework — the author wrote
+   *    `injection.system-prompt.enabled: false`, or a modifier suppressed it. Telling a prompt
+   *    that opted out of a framework to emit that framework's headers "verbatim; they are graded
+   *    structurally" states two things that are not true of it: it was not given the framework,
+   *    and on this path nothing grades it.
+   *
+   *    Judged by `isFrameworkInjected`, the SAME predicate the step's framework gates are
+   *    resolved with (`gate-enhancement-service.ts`), not by `state.injection.systemPrompt.inject`
+   *    as it was until now. Those answer different questions: the state field says whether the
+   *    system prompt was EMITTED THIS TURN, which frequency rules ("once per session") make false
+   *    for a prompt that never declined anything — and then the block is withheld from a prompt
+   *    stage 19 still grades, which is the "blocked on a contract it was never shown" shape this
+   *    condition exists to prevent, pointed the other way. One decision, both halves: the chain
+   *    surface reads the same predicate for its own opt-out.
    *
    * Condition 4 is deliberately NOT mirrored onto the chain surface
    * (`chain-operator-executor.resolveDeclaredSections`), which documents the opposite ruling for
@@ -1214,7 +1221,12 @@ export class ResponseAssembler {
       return [];
     }
 
-    if (context.state.injection.systemPrompt?.inject === false) {
+    if (
+      !isFrameworkInjected({
+        modifiers: context.getExecutionModifiers(),
+        promptInjection: context.parsedCommand?.convertedPrompt?.injection,
+      })
+    ) {
       return [];
     }
 
