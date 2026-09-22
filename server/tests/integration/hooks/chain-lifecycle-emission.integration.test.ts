@@ -489,17 +489,16 @@ describe('chain lifecycle events reach their registered consumers', () => {
     return { chainId };
   };
 
-  test('a gated final step announces the whole sequence — as measured', async () => {
+  test('a gated final step announces its step_complete BEFORE chain/complete', async () => {
     await driveGatedFinalStep();
 
-    // ☐ This pins the DEFECT, not the intent (as of 2026-09-21 · flips when the advance moves
-    // behind the capture and the last two entries swap). One value, not three counts: the defect
-    // is entirely positional, and every per-method assertion in this file stays green while
-    // `chain/complete` sits in the middle of the run it is reporting the end of.
+    // One value, not three counts: the defect was entirely positional, and every per-method
+    // assertion in this file stayed green while `chain/complete` sat in the middle of the run it
+    // reports the end of.
     expect(notificationSequence(mockServer)).toEqual([
       'notifications/chain/step_complete',
-      'notifications/chain/complete',
       'notifications/chain/step_complete',
+      'notifications/chain/complete',
     ]);
   });
 

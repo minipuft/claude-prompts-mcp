@@ -98,11 +98,14 @@ fails the build if any registerable event loses its producer again.
 > server instance `serveStdio` pinned, and there are no such events today.
 
 > [!NOTE]
-> On the final step of a gated chain, `chain/complete` is delivered **before** the last
-> `chain/step_complete`: the PASS verdict advances past the last node, which latches the run
-> terminal, before the step's response is captured. Treat `chain/complete` as "the run ended",
-> not as "no further events". The ordering itself is a defect in advance-on-PASS, filed against
-> `GateVerdictProcessor`.
+> **`chain/complete` is last.** Every step of a run announces its `chain/step_complete` before
+> the run announces its terminal event, including the final step of a gated run — a verdict
+> that clears a review decides the advance, and `StepResponseCaptureStage` performs it only
+> after the step has been captured and announced. Until 4.1 the gated case was the other way
+> round (the PASS advanced past the last node, latching the run terminal, while the step it
+> answered was still uncaptured), so a client that tore its handler down on `chain/complete`
+> missed the final step event. The same holds for an advisory or informational FAIL, which also
+> walks the run forward.
 
 ### Attributes
 

@@ -86,7 +86,7 @@ describe.each(['advisory', 'informational'] as const)(
         pendingReview: { gateIds: ['some-gate'] },
       };
 
-      await processor.processPendingReviewVerdict(
+      const result = await processor.processPendingReviewVerdict(
         context,
         session,
         'session-1',
@@ -94,6 +94,13 @@ describe.each(['advisory', 'informational'] as const)(
         'a response',
         sessionContext as never
       );
+
+      // P4.89 moved WHERE the advance happens, not whether its effect is observable: it is
+      // decided here and applied by the stage once the step has been captured and announced.
+      expect(store.advanceStep).not.toHaveBeenCalled();
+      expect(result.deferredAdvance?.reason).toBe(`${enforcementMode}-fail`);
+
+      await processor.applyDeferredAdvance(context, result.deferredAdvance!);
 
       // Positive control: the mutations this test measures were actually reached.
       expect(store.advanceStep).toHaveBeenCalled();
@@ -112,11 +119,17 @@ describe.each(['advisory', 'informational'] as const)(
         throw new Error('chain session store is unavailable');
       });
 
+      const result = await processor.processPendingReviewVerdict(
+        context,
+        session,
+        'session-1',
+        0,
+        'a response',
+        { currentStep: 0, currentNodeId: 'node-1' } as never
+      );
+
       await expect(
-        processor.processPendingReviewVerdict(context, session, 'session-1', 0, 'a response', {
-          currentStep: 0,
-          currentNodeId: 'node-1',
-        } as never)
+        processor.applyDeferredAdvance(context, result.deferredAdvance!)
       ).rejects.toThrow('chain session store is unavailable');
     });
   }

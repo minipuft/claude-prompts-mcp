@@ -24,7 +24,10 @@ import type {
 } from '#shared/types/chain-session.js';
 import type { ChainSessionService, ToolResponse } from '#shared/types/index.js';
 import type { GateEnhancementService } from '../../../gates/services/gate-enhancement-service.js';
-import type { GateVerdictProcessor } from '../../../gates/services/gate-verdict-processor.js';
+import type {
+  GateVerdictProcessor,
+  VerdictProcessingResult,
+} from '../../../gates/services/gate-verdict-processor.js';
 import type {
   RemainderApplication,
   RemainderProcessor,
@@ -248,6 +251,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       sessionContext
     );
     if (deferredResult.earlyExit) {
+      await this.applyDeferredAdvances(context, deferredResult);
       await this.ensurePostAdvanceReview(context);
       this.logExit({ gateVerdict: 'deferred', handled: true });
       return;
@@ -265,6 +269,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       sessionContext
     );
     if (pendingResult.earlyExit) {
+      await this.applyDeferredAdvances(context, deferredResult, pendingResult);
       await this.ensurePostAdvanceReview(context);
       this.logExit({ gateVerdict: 'pending-review', handled: true });
       return;
@@ -285,9 +290,35 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       }
     );
 
+    // AFTER the capture, which is the whole point of deferring it (P4.89).
+    await this.applyDeferredAdvances(context, deferredResult, pendingResult);
+
     await this.ensurePostAdvanceReview(context);
 
     this.logExit({ captured: true });
+  }
+
+  /**
+   * Apply the advance every result decided but deliberately did not perform.
+   *
+   * Verdict processing decides an advance and does not perform it, because advancing past a
+   * run's final node announces the run terminal — and until that moved here, the announcement
+   * reached the client ahead of the `step_complete` for the step being answered (P4.89).
+   *
+   * Both results are applied rather than one being picked: a deferred FAIL can create the review
+   * the pending path then answers in the same call, so both can carry an advance. A second
+   * advance is harmless — `advanceStep` no-ops on a node the run has already passed, which is
+   * also what makes this safe after `StepCaptureService` advanced the run itself.
+   */
+  private async applyDeferredAdvances(
+    context: ExecutionContext,
+    ...results: readonly VerdictProcessingResult[]
+  ): Promise<void> {
+    for (const result of results) {
+      if (result.deferredAdvance !== undefined) {
+        await this.verdictProcessor.applyDeferredAdvance(context, result.deferredAdvance);
+      }
+    }
   }
 
   /**
