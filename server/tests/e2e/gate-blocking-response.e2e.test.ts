@@ -40,6 +40,8 @@ const DIST_ENTRY = path.join(SERVER_ROOT, 'dist', 'index.js');
 
 const BLOCK_GATE = 'e2e-block';
 const CONTROL_GATE = 'e2e-noblock';
+/** P4.100: the same blocking gate, authored through `resource_manager` rather than planted. */
+const AUTHORED_GATE = 'e2e-authored-block';
 const MAX_ATTEMPTS = 5;
 /** Unique to this fixture's guidance, so finding it proves the CRITERIA travelled, not prose. */
 const GUIDANCE_MARKER = 'E2E-BLOCK-GUIDANCE-MARKER';
@@ -297,6 +299,63 @@ describe.each([
     // The default is 2. Landing on attempt 5 is what says the gate's own value was read; the
     // assertion is the WHOLE fact (which attempt), not "eventually exhausted".
     expect(exhaustedOn).toEqual([MAX_ATTEMPTS]);
+  }, 180000);
+
+  /**
+   * P4.100 — the same block, from a gate AUTHORED THROUGH THE TOOL.
+   *
+   * Every other case here plants `gate.yaml` by hand, which this repo's first Core Principle
+   * forbids an operator from doing. Until `block_response_on_fail` existed there was no other
+   * way to declare a blocking gate, so the feature was unreachable by any sanctioned route; the
+   * fixture files above proved the pipeline honoured a key nobody could write.
+   *
+   * Starts from an EMPTY workspace, so the gate under test is the one this test created.
+   */
+  test('a gate created through resource_manager with block_response_on_fail withholds the output', async () => {
+    const roots = createHermeticRoots('gate-blocking-e2e-authored');
+    const workspace = path.join(roots.root, 'workspace');
+    mkdirSync(workspace, { recursive: true });
+    const session = await startSession({
+      HOME: roots.home,
+      MCP_WORKSPACE: workspace,
+      MCP_RUNTIME_ROOT: roots.runtimeRoot,
+    });
+    cleanup.push(() => session.stop(), roots.cleanup);
+
+    const created = await session.callTool('resource_manager', {
+      resource_type: 'gate',
+      action: 'create',
+      id: AUTHORED_GATE,
+      name: AUTHORED_GATE,
+      description: 'authored through resource_manager, not by hand',
+      guidance: GUIDANCE_MARKER,
+      severity: 'high',
+      block_response_on_fail: true,
+      pass_criteria: [{ type: 'inline_guidance' }],
+      activation: { prompt_categories: [PROMPT_CATEGORY] },
+    });
+    // Positive control: the parameter was ACCEPTED. Before P4.100 this same call was refused by
+    // name ("'block_response_on_fail' is not a parameter of resource_manager"), so every
+    // assertion below would have been unreachable rather than false.
+    expect(created.text).toContain('created successfully');
+
+    const start = await session.callTool('prompt_engine', {
+      command: '>>quick_decision topic:"an authored blocking gate"',
+    });
+    const chainId = chainIdOf(start.text);
+
+    const blocked = await session.callTool('prompt_engine', {
+      chain_id: chainId,
+      user_response: `${OUTPUT_MARKER}: one, two, three.`,
+      gate_verdict: 'GATE_REVIEW: FAIL - the rejected options are not named',
+    });
+
+    expect(blocked.text).toContain('Response Blocked');
+    expect(blocked.text).not.toContain(OUTPUT_MARKER);
+    expect(blocked.text).toContain(AUTHORED_GATE);
+    expect(
+      methodsOf(blocked).filter((m) => m === 'notifications/gate/response_blocked')
+    ).toHaveLength(1);
   }, 180000);
 
   test('control: the twin gate without blockResponseOnFail neither withholds nor announces', async () => {

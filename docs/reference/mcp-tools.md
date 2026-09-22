@@ -1140,18 +1140,20 @@ re-send them with `edges:` on an `update`.
 
 **Gate Parameters:**
 
-| Parameter          | Purpose                                                                      |
-| ------------------ | ---------------------------------------------------------------------------- |
-| `type`             | `validation` (pass/fail) or `guidance` (advisory)                            |
-| `gate_type`        | `framework` \| `category` \| `custom`. Default `custom`                      |
-| `severity`         | `critical` \| `high` \| `medium` \| `low`. Default `medium`                  |
-| `enforcement_mode` | `blocking` \| `advisory` \| `informational`. Absent, derived from `severity` |
-| `guidance`         | Gate criteria content                                                        |
-| `pass_criteria`    | Array of success conditions                                                  |
-| `activation`       | When gate activates (categories, frameworks)                                 |
+| Parameter                | Purpose                                                                        |
+| ------------------------ | ------------------------------------------------------------------------------ |
+| `type`                   | `validation` (pass/fail) or `guidance` (advisory)                              |
+| `gate_type`              | `framework` \| `category` \| `custom`. Default `custom`                        |
+| `severity`               | `critical` \| `high` \| `medium` \| `low`. Default `medium`                    |
+| `enforcement_mode`       | `blocking` \| `advisory` \| `informational`. Absent, derived from `severity`   |
+| `block_response_on_fail` | `true` withholds the step output on a FAIL and returns the gate review instead |
+| `guidance`               | Gate criteria content                                                          |
+| `pass_criteria`          | Array of success conditions                                                    |
+| `activation`             | When gate activates (categories, frameworks)                                   |
 
-Omitting `severity` or `enforcement_mode` on an update leaves the gate's current value alone; it
-does not reset to the default.
+Omitting `severity`, `enforcement_mode` or `block_response_on_fail` on an update leaves the gate's
+current value alone; it does not reset to the default. `block_response_on_fail: false` is a value,
+not an omission — it clears the key on a gate that declared it.
 
 Every gate parameter is named for the `gate.yaml` key it writes. `type` and `gate_type` are two
 different keys and each has its own parameter: `type` is the validation/guidance behaviour,
@@ -1161,7 +1163,10 @@ it took the other key's name and left that key unauthorable. Sending the validat
 under `gate_type` is now rejected by the schema — send it under `type`.
 
 Omitting `gate_type` on an update leaves the gate's current value alone, the same way `severity`
-and `enforcement_mode` do.
+and `enforcement_mode` do. Until this release an update supplying ONLY `gate_type` reported
+`✅ Gate 'x' updated successfully` over a byte-identical `gate.yaml`: the key was absent from the
+set the writer narrows a write by, so no `gate.yaml` write was planned. That set is now derived
+from the writer's own key partition, so every settable gate key is covered by construction.
 
 **Category Parameters:**
 

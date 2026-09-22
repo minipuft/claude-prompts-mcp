@@ -1,5 +1,8 @@
 // @lifecycle canonical - Barrel exports for gate-manager service layer.
 export {
+  ALL_GATE_DATA_KEYS,
+  callerSuppliedGateKeys,
+  UNSETTABLE_GATE_DATA_KEYS,
   GateFileWriter,
   type GateFileWriterDependencies,
   type GateFileWriteResult,

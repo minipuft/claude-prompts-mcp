@@ -502,6 +502,12 @@ export const resourceManagerInputSchema = z
      * so setting `severity` alone stays sufficient for the common case.
      */
     enforcement_mode: z.enum(['blocking', 'advisory', 'informational']).optional(),
+    /**
+     * [Gate] Withhold the step output when this gate is marked FAIL, returning the gate review
+     * in its place. Same preservation class as `severity`/`enforcement_mode`: omitted on update
+     * the existing value is carried forward, and an explicit `false` clears it.
+     */
+    block_response_on_fail: z.boolean().optional(),
     /** [Gate] Gate guidance content. */
     guidance: z.string().optional(),
     /** [Gate] Structured pass criteria definitions — see `gatePassCriteriaSchema` above. */
