@@ -28,7 +28,7 @@ describe('System Control gate action scope propagation', () => {
       { organizationId: 'org-a', workspaceId: 'workspace-a' }
     );
 
-    // requestScope is undefined because raw extra lacks MCP SDK authInfo structure
+    // requestScope is undefined because raw extra lacks the SDK `http` carrier (headers, authInfo)
     expect(gateStateStore.getCurrentState).toHaveBeenCalledWith(undefined);
     expect(gateStateStore.enableGateSystem).toHaveBeenCalledWith('tenant-enable', undefined);
   });
@@ -57,7 +57,7 @@ describe('System Control gate action scope propagation', () => {
       { organizationId: 'org-a', workspaceId: 'workspace-a' }
     );
 
-    // requestScope is undefined because raw extra lacks MCP SDK authInfo structure
+    // requestScope is undefined because raw extra lacks the SDK `http` carrier (headers, authInfo)
     expect(gateStateStore.getCurrentState).toHaveBeenCalledWith(undefined);
     expect(gateStateStore.getSystemHealth).toHaveBeenCalledWith(undefined);
   });

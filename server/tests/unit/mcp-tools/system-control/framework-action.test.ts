@@ -30,11 +30,17 @@ describe('System Control framework action scope propagation', () => {
     const systemControl = createConsolidatedSystemControl(createLogger(), () => Promise.resolve());
     systemControl.setFrameworkManager(frameworkManager as any);
 
-    // Identity is read from token claims and request headers — a bare
-    // { organizationId, workspaceId } object carries no identity and resolves to no scope.
+    // Identity is read from token claims and request headers, both of which the SDK v2 puts
+    // under `http` — a bare { organizationId, workspaceId } object carries no identity.
     await systemControl.handleAction(
       { action: 'framework', operation: 'switch', framework: 'react' },
-      { requestInfo: { headers: { 'x-workspace-id': 'workspace-a' } } }
+      {
+        http: {
+          req: new Request('http://localhost/mcp', {
+            headers: { 'x-workspace-id': 'workspace-a' },
+          }),
+        },
+      }
     );
 
     // The scope argument is the point: without it every workspace's switch landed on
@@ -54,7 +60,7 @@ describe('System Control framework action scope propagation', () => {
     );
   });
 
-  test('framework list reads state store without identity-scoped args', async () => {
+  test('framework list with no request identity reads the process-default scope', async () => {
     const frameworkStateStore = {
       getCurrentState: jest.fn().mockReturnValue({
         activeFramework: 'react',
@@ -86,7 +92,60 @@ describe('System Control framework action scope propagation', () => {
       { organizationId: 'org-a', workspaceId: 'workspace-a' }
     );
 
-    expect(frameworkStateStore.getCurrentState).toHaveBeenCalledWith();
+    // `undefined` is the process default; the call still names its scope argument.
+    expect(frameworkStateStore.getCurrentState).toHaveBeenCalledWith(undefined);
     expect(frameworkManager.listFrameworks).toHaveBeenCalledWith();
   });
+
+  // `status` reported the process-default row whatever workspace asked: a switch under
+  // `x-workspace-id: A` read back as the default framework under A. Every status operation
+  // and the shared response footer must read the request's own row.
+  test.each(['overview', 'health', 'diagnostics', 'framework_status'])(
+    'status %s reads the requesting workspace, not the process default',
+    async (operation) => {
+      const health = {
+        status: 'healthy',
+        activeFramework: 'react',
+        frameworkSystemEnabled: true,
+        availableFrameworks: ['react'],
+        lastSwitchTime: null,
+        switchingMetrics: {
+          totalSwitches: 0,
+          successfulSwitches: 0,
+          failedSwitches: 0,
+          averageResponseTime: 0,
+        },
+        issues: [],
+      };
+      const frameworkStateStore = {
+        getCurrentState: jest.fn().mockReturnValue({ activeFramework: 'react' }),
+        getSystemHealth: jest.fn().mockReturnValue(health),
+      };
+
+      const systemControl = createConsolidatedSystemControl(createLogger(), () =>
+        Promise.resolve()
+      );
+      systemControl.setFrameworkStateStore(frameworkStateStore as any);
+
+      await systemControl.handleAction(
+        { action: 'status', operation },
+        {
+          http: {
+            req: new Request('http://localhost/mcp', {
+              headers: { 'x-workspace-id': 'workspace-a' },
+            }),
+          },
+        }
+      );
+
+      const scope = { continuityScopeId: 'workspace-a', workspaceId: 'workspace-a' };
+      expect(frameworkStateStore.getSystemHealth.mock.calls.length).toBeGreaterThan(0);
+      for (const call of frameworkStateStore.getSystemHealth.mock.calls) {
+        expect(call).toEqual([scope]);
+      }
+      for (const call of frameworkStateStore.getCurrentState.mock.calls) {
+        expect(call).toEqual([scope]);
+      }
+    }
+  );
 });

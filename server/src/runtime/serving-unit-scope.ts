@@ -15,8 +15,8 @@
  * toggle of the default row would reshape the surface for everyone.
  *
  * The derivation is deliberately the same one the per-call path uses
- * (`resolveRequestIdentity` → `resolveContinuityScopeId`), fed a synthetic
- * `extra` assembled from the context. Duplicating the claim and header
+ * (`resolveRequestIdentity` → `resolveContinuityScopeId`), fed the context
+ * re-shaped into the handler's `http` form. Duplicating the claim and header
  * precedence here instead would let the surface and the state it describes
  * drift apart.
  */
@@ -49,26 +49,6 @@ export interface ServingUnitContext {
   requestInfo?: { headers?: unknown } | undefined;
 }
 
-/** Normalize the SDK's `Headers` (or a plain object) into what the resolver reads. */
-function toHeaderRecord(headers: unknown): Record<string, unknown> | undefined {
-  if (headers == null) {
-    return undefined;
-  }
-  // `Request.headers` is a `Headers` instance, which is iterable but has no
-  // enumerable own properties — `asRecord` would see an empty object.
-  if (typeof (headers as Headers).forEach === 'function' && !Array.isArray(headers)) {
-    const record: Record<string, unknown> = {};
-    (headers as Headers).forEach((value, key) => {
-      record[key.toLowerCase()] = value;
-    });
-    return record;
-  }
-  if (typeof headers === 'object') {
-    return headers as Record<string, unknown>;
-  }
-  return undefined;
-}
-
 /**
  * The workspace scope this serving unit should read state for.
  *
@@ -95,10 +75,10 @@ export function resolveServingUnitScope(
     return buildIdentityScope({ workspaceId: launchDefaultWorkspaceId });
   }
 
-  const headers = toHeaderRecord(ctx.requestInfo?.headers);
+  // The factory receives the request as `requestInfo`; a handler receives the same request
+  // as `http.req`. Re-shaping it into the handler form keeps ONE reader of headers and claims.
   const identity = resolveRequestIdentity({
-    ...(ctx.authInfo != null ? { authInfo: ctx.authInfo } : {}),
-    ...(headers != null ? { headers } : {}),
+    http: { req: ctx.requestInfo, authInfo: ctx.authInfo },
   });
 
   // Emits all three keys, not just the resolved one. This function fed
