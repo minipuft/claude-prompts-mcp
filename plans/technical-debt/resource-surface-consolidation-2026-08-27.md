@@ -22,19 +22,21 @@ lifecycle it can actually reach.
 
 ## Now
 
-_Rewritten 2026-09-22._ Seven slices of the 2026-09-21 dispatch are through or at the PR boundary:
-#354 `deb51bb4` (P4.110, P4.111), #355 `e18346dc` (P4.86, P4.89, P4.113), #356 `a6efc8f3` (P4.100,
-P4.101, P4.103) merged; #357 (P4.102, P4.105, P4.106, P4.112, P4.114), #358 (P4.87, P4.90, P4.91,
-P4.99), #359 (P4.125: identity headers never reached HTTP state since 4.0.0) open; the framework
-single-source branch (P4.122, P4.123) and the `evaluation` parameter (P4.121) follow. Tier 4 of the
-delegation plan is dispatched under that plan's own ruling.
+_Rewritten 2026-09-22 (evening)._ The 2026-09-21 dispatch is fully landed: #354 `deb51bb4`, #355
+`e18346dc`, #356 `a6efc8f3`, #357 `f579625f`, #358 `378dcba4`, #359 `2aa26993` (identity headers
+never reached HTTP state since 4.0.0), #360 `d20280c1` (framework system prompt has one source),
+#361 `1ff3d9e0` (`evaluation` parameter, R90). Tier 4 of the delegation plan landed as #362
+`3ff285d6` under that plan's own ruling; its owner drive is that plan's row 4.7. Every row of that
+dispatch carries its receipt below. No slice is dispatched.
 
-- **Open, dispatched or queued:** P4.121, P4.122, P4.123.
-- **Open, not started:** P4.115–P4.120, P4.124, P4.126–P4.132.
+- **Open, not started:** P4.115–P4.120, P4.124, P4.126–P4.136. P4.133 is ruled (R92: render the
+  judge prompt); P4.134–P4.136 are the class rows the `evaluation` slice found.
   **Owner's, outside the repo:** the `~/.claude` rename (P5.12 second half), P5.16, then P5.13.
 - **Owner calls open:** P4.128 (remove `include_history` from the tool surface, or leave an
   empty list); P4.129–P4.131 are the next layer of header scoping and change what a header
-  client sees — worth one ruling on whether a header workspace is a full tenant.
+  client sees — one ruling on whether a header workspace is a full tenant decides all three.
+  The delegation plan's OQ5 (refuse `await: run` on a step with a blocking gate at load) is the
+  same interview.
 - **Dev `cpm` bundle:** about 11 KB of the 1,000,000 budget is left.
 
 ## What already landed (do not redo)
