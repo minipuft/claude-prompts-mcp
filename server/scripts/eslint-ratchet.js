@@ -348,7 +348,7 @@ async function handleUpdateBaseline(argv) {
   let previousBaseline = null;
   try {
     previousBaseline = await loadJson(BASELINE_PATH);
-  } catch {
+  } catch (_error) {
     // Keep the pre-initialized null.
   }
 

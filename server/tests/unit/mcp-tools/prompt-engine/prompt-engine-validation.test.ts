@@ -59,7 +59,6 @@ const mockSemanticAnalyzer: SemanticAnalyzer = {
 const mockTextReferenceStore: TextReferenceStore = {
   storeChainStepResult: jest.fn(),
   getChainStepResults: jest.fn().mockReturnValue({}),
-  getChainStepMetadata: jest.fn().mockReturnValue(null),
   buildChainVariables: jest.fn().mockReturnValue({}),
   clearChainStepResults: jest.fn(),
   getChainStats: jest.fn().mockReturnValue({ totalChains: 0, totalSteps: 0, chainsWithSteps: [] }),

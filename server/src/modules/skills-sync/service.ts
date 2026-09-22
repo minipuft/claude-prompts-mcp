@@ -790,12 +790,12 @@ async function loadToolsCache(
             scriptPath: (meta['script_path'] as string) ?? 'script.py',
             contentHash: row.content_hash ?? '',
           };
-        } catch {
+        } catch (_error) {
           // Skip unparseable tool metadata
         }
       }
       if (Object.keys(result).length > 0) return result;
-    } catch {
+    } catch (_error) {
       // DB read failed
     }
   }
@@ -937,7 +937,7 @@ function resolveOutputDir(
     if (existsSync(resolved)) {
       resolved = realpathSync(resolved);
     }
-  } catch {
+  } catch (_error) {
     // Directory doesn't exist yet or can't be resolved — use logical path
   }
 

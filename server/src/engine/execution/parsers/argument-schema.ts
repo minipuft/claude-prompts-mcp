@@ -180,7 +180,7 @@ export class ArgumentSchemaValidator {
         refined = refined.regex(pattern, {
           message: `Value must match pattern ${validation.pattern}`,
         });
-      } catch {
+      } catch (_error) {
         // Ignore invalid regex patterns to avoid breaking parsing
       }
     }

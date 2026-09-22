@@ -52,7 +52,7 @@ async function waitHealth(base) {
     try {
       const r = await fetch(`${base}/health`);
       if (r.ok) return;
-    } catch {
+    } catch (_error) {
       // not up yet
     }
     await new Promise((resolve) => setTimeout(resolve, 150));
@@ -66,7 +66,7 @@ function parseRpcBody(body) {
     if (trimmed.startsWith('data:')) {
       try {
         return JSON.parse(trimmed.slice(5));
-      } catch {
+      } catch (_error) {
         // keep scanning
       }
     }

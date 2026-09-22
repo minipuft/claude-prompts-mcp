@@ -355,7 +355,7 @@ export class CategoryFileWriter {
       if (entries.length === 0) {
         await rmdir(directory);
       }
-    } catch {
+    } catch (_error) {
       // Already gone, or not removable. Either way there is nothing further to clean up, and the
       // caller is already reporting a failure — a second error here would replace the real one.
     }

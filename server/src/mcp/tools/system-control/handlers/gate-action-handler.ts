@@ -1,6 +1,7 @@
 // @lifecycle canonical - Handler for gate system operations.
 
 import { ActionHandler } from '../core/action-handler-base.js';
+import { describeTogglePersistence } from '../core/response-utils.js';
 
 import type { ToolResponse } from '#shared/types/index.js';
 
@@ -70,7 +71,12 @@ export class GateActionHandler extends ActionHandler {
     const currentState = this.gateStateStore.getCurrentState(this.requestScope);
     if (currentState.enabled) {
       return this.createMinimalSystemResponse(
-        `ℹ️ Gate system is already enabled.`,
+        `ℹ️ Gate system is already enabled.\n\n${describeTogglePersistence({
+          persist: args.persist,
+          note: args.persist === true ? await this.context.persistGateConfig(true) : undefined,
+          setting: '`gates.enabled`',
+          changed: false,
+        })}`,
         'enable_gate_system'
       );
     }
@@ -81,11 +87,11 @@ export class GateActionHandler extends ActionHandler {
     );
     await this.refreshToolSurface();
 
-    const persistenceNotes: string[] = [];
-    if (args.persist) {
-      const note = await this.context.persistGateConfig(true);
-      if (note) persistenceNotes.push(note);
-    }
+    const persistence = describeTogglePersistence({
+      persist: args.persist,
+      note: args.persist === true ? await this.context.persistGateConfig(true) : undefined,
+      setting: '`gates.enabled`',
+    });
 
     const response =
       `✅ **Gate System Enabled**\n\n` +
@@ -93,7 +99,7 @@ export class GateActionHandler extends ActionHandler {
       `**Status**: Gate system is now active\n` +
       `**Validation**: Quality gates will now be applied to prompt executions\n\n` +
       `🔍 All template and chain executions will now include gate validation and guidance.` +
-      (persistenceNotes.length ? `\n\n${persistenceNotes.join('\n')}` : '');
+      `\n\n${persistence}`;
 
     return this.createMinimalSystemResponse(response, 'enable_gate_system');
   }
@@ -109,7 +115,12 @@ export class GateActionHandler extends ActionHandler {
     const currentState = this.gateStateStore.getCurrentState(this.requestScope);
     if (!currentState.enabled) {
       return this.createMinimalSystemResponse(
-        `ℹ️ Gate system is already disabled.`,
+        `ℹ️ Gate system is already disabled.\n\n${describeTogglePersistence({
+          persist: args.persist,
+          note: args.persist === true ? await this.context.persistGateConfig(false) : undefined,
+          setting: '`gates.enabled`',
+          changed: false,
+        })}`,
         'disable_gate_system'
       );
     }
@@ -120,11 +131,11 @@ export class GateActionHandler extends ActionHandler {
     );
     await this.refreshToolSurface();
 
-    const persistenceNotes: string[] = [];
-    if (args.persist) {
-      const note = await this.context.persistGateConfig(false);
-      if (note) persistenceNotes.push(note);
-    }
+    const persistence = describeTogglePersistence({
+      persist: args.persist,
+      note: args.persist === true ? await this.context.persistGateConfig(false) : undefined,
+      setting: '`gates.enabled`',
+    });
 
     const response =
       `⚠️ **Gate System Disabled**\n\n` +
@@ -132,7 +143,7 @@ export class GateActionHandler extends ActionHandler {
       `**Status**: Gate system is now inactive\n` +
       `**Impact**: Gate validation and guidance will be skipped\n\n` +
       `📝 Prompt executions will now skip quality gate validation.` +
-      (persistenceNotes.length ? `\n\n${persistenceNotes.join('\n')}` : '');
+      `\n\n${persistence}`;
 
     return this.createMinimalSystemResponse(response, 'disable_gate_system');
   }

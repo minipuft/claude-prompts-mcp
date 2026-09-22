@@ -6,6 +6,8 @@
  * Integrates with the temporary gate system to provide intelligent gate recommendations.
  */
 
+import { PromptAnalyzer } from './prompt-analyzer.js';
+
 import type { ConvertedPrompt, TemporaryGateDefinition } from '#engine/execution/types.js';
 import type { Logger } from '#shared/types/index.js';
 import type { PromptResourceDependencies } from '../core/types.js';
@@ -37,10 +39,17 @@ export interface GateAnalysisResult {
 export class GateAnalyzer {
   private logger: Logger;
   private dependencies: PromptResourceDependencies;
+  private promptAnalyzer: PromptAnalyzer;
 
-  constructor(dependencies: PromptResourceDependencies) {
+  /**
+   * `promptAnalyzer` is injectable so the handler shares its single instance; the default keeps
+   * every existing construction site working. It is never a second SCORER either way —
+   * `PromptAnalyzer` owns execution type and complexity, and this class only reads them.
+   */
+  constructor(dependencies: PromptResourceDependencies, promptAnalyzer?: PromptAnalyzer) {
     this.logger = dependencies.logger;
     this.dependencies = dependencies;
+    this.promptAnalyzer = promptAnalyzer ?? new PromptAnalyzer(dependencies);
   }
 
   /**
@@ -105,7 +114,12 @@ export class GateAnalyzer {
   }
 
   /**
-   * Extract gate suggestion context from prompt
+   * Extract gate suggestion context from prompt.
+   *
+   * Execution type and complexity are `PromptAnalyzer`'s to decide — this method used to derive
+   * both inline from a different formula, and the two disagreed about the complexity of 25 of the
+   * 51 bundled prompts (measured 2026-09-21): the inline formula weighed the raw template LENGTH,
+   * so a long prompt with two arguments scored `high` while the owner scored it `low`.
    */
   private extractGateSuggestionContext(prompt: ConvertedPrompt): {
     executionType: 'single' | 'chain';
@@ -114,28 +128,8 @@ export class GateAnalyzer {
     intentKeywords?: string[];
     complexity: 'low' | 'medium' | 'high';
   } {
-    // Determine execution type
-    let executionType: 'single' | 'chain' = 'single';
-    if (prompt.chainSteps && prompt.chainSteps.length > 0) {
-      executionType = 'chain';
-    } else if (prompt.systemMessage || (prompt.arguments && prompt.arguments.length > 2)) {
-      executionType = 'single';
-    }
-
-    // Determine complexity
-    let complexity: 'low' | 'medium' | 'high' = 'low';
-    const complexityIndicators = [
-      prompt.arguments?.length || 0,
-      prompt.chainSteps?.length || 0,
-      prompt.userMessageTemplate.length / 100,
-    ];
-    const complexityScore = complexityIndicators.reduce((a, b) => a + b, 0);
-
-    if (complexityScore > 10) {
-      complexity = 'high';
-    } else if (complexityScore > 5) {
-      complexity = 'medium';
-    }
+    const executionType = this.promptAnalyzer.detectExecutionType(prompt);
+    const complexity = this.promptAnalyzer.analyzeComplexity(prompt).level;
 
     // Extract intent keywords
     const intentKeywords = this.extractIntentKeywords(prompt.userMessageTemplate);

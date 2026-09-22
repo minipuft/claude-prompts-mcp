@@ -474,7 +474,7 @@ export class StyleDefinitionLoader {
             }
           }
         }
-      } catch {
+      } catch (_error) {
         // Ignore parse errors
       }
       const parent = dirname(dir);

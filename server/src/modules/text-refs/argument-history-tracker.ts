@@ -205,12 +205,10 @@ export class ArgumentHistoryTracker {
   }
 
   /**
-   * Get latest arguments for a session
+   * Get latest arguments for a session, or null when the session has no history.
    *
-   * Restored 2026-09-20 (P4.52 reimplementation probe): `buildReviewContext` below
-   * independently derives the identical value (last history entry's `originalArgs`, spread into
-   * a new object) inline instead of calling this method — a live duplicate, not proof this
-   * method is dead. Left un-wired pending an owner decision on which should call the other.
+   * The single derivation of that value: `buildReviewContext` calls it rather than spreading the
+   * last entry's `originalArgs` itself, and reads its null as "no history" (P4.91).
    */
   getLatestArguments(sessionId: string): Record<string, any> | null {
     const history = this.getSessionHistory(sessionId);
@@ -240,7 +238,11 @@ export class ArgumentHistoryTracker {
   ): ReviewContext {
     const history = this.getSessionHistory(sessionId);
 
-    if (history.length === 0) {
+    // `getLatestArguments` returns null in exactly the two cases this method used to branch on
+    // separately (no history, and a history whose last entry is missing), so one branch covers
+    // both and the spread lives in one place.
+    const originalArgs = this.getLatestArguments(sessionId);
+    if (originalArgs === null) {
       const reviewContext: ReviewContext = {
         originalArgs: {},
         previousResults: {},
@@ -250,19 +252,6 @@ export class ArgumentHistoryTracker {
       }
       return reviewContext;
     }
-
-    const latestEntry = history[history.length - 1];
-    if (!latestEntry) {
-      const reviewContext: ReviewContext = {
-        originalArgs: {},
-        previousResults: {},
-      };
-      if (currentStepNumber !== undefined) {
-        reviewContext.currentStep = currentStepNumber;
-      }
-      return reviewContext;
-    }
-    const originalArgs = { ...latestEntry.originalArgs };
 
     const previousResults: Record<number, string> = {};
     const stepsWithResults = new Set<number>();

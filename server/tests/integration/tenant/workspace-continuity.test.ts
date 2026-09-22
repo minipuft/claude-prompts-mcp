@@ -315,7 +315,6 @@ describe('Shared Workspace Continuity', () => {
     const textReferenceManagerStub = {
       storeChainStepResult: jest.fn(),
       buildChainVariables: jest.fn().mockReturnValue({}),
-      getChainStepMetadata: jest.fn().mockReturnValue(null),
       clearChainStepResults: jest.fn(),
     };
 

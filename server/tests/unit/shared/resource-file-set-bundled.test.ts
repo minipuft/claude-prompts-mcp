@@ -55,19 +55,15 @@ const FRAMEWORKS = path.join(RESOURCES, 'frameworks');
  *   directories rather than inside one. They are catalog-level files (`verdict-patterns.yaml` is
  *   read by the verdict parser, `shell-presets.yaml` by the shell allowlist), owned by the
  *   package, and no gate can checkpoint them because no gate contains them.
- * - `gates/handoff-artifacts/check-artifacts.js` is INSIDE a gate directory and is genuinely part
- *   of that gate — its `pass_criteria[0].shell_command` runs it. It is unclaimed because the
- *   command names it relative to the SERVER's working directory
- *   (`resources/gates/handoff-artifacts/check-artifacts.js`), not relative to the gate root, so
- *   no containment-preserving rule can reach it from the gate's own directory. Enumerating it
- *   would require resolving an arbitrary argv string against the process cwd, which is precisely
- *   the unbounded reference this module refuses. Reported as a finding for row O.1's planner.
+ * `gates/handoff-artifacts/check-artifacts.js` used to be a fourth entry: the gate named it
+ * relative to the SERVER's working directory, which no containment-preserving rule can reach from
+ * the gate's own directory. P4.105 moved the reference into the gate root, where it is an ordinary
+ * declared reference — so the script is claimed now, and this list is one shorter.
  */
 const EXPECTED_UNCLAIMED = [
   'gates/_index.md',
   'gates/config/shell-presets.yaml',
   'gates/config/verdict-patterns.yaml',
-  'gates/handoff-artifacts/check-artifacts.js',
 ];
 
 interface BundledResource {

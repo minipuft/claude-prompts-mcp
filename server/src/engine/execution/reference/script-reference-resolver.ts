@@ -328,7 +328,7 @@ export class ScriptReferenceResolver {
       if (typeof innerOutput === 'string') {
         try {
           parsedOutput = JSON.parse(innerOutput);
-        } catch {
+        } catch (_error) {
           // Keep as is if not valid JSON
         }
       }

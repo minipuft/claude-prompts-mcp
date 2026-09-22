@@ -295,7 +295,7 @@ async function handleUpdateBaseline(argv) {
   let previous = null;
   try {
     previous = await loadBaselineOrThrow();
-  } catch {
+  } catch (_error) {
     // First run: nothing to compare against.
   }
 

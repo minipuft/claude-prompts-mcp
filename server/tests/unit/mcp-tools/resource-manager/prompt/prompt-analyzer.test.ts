@@ -213,3 +213,88 @@ describe('gate suggestions resolve through the gate registry', () => {
     }
   });
 });
+
+/**
+ * ONE scorer decides a prompt's execution type and complexity (P4.90).
+ *
+ * `GateAnalyzer.extractGateSuggestionContext` used to re-derive both with its own formula, which
+ * weighed the raw template LENGTH where `PromptAnalyzer.analyzeComplexity` weighs template
+ * VARIABLES, chain steps and system-message size. Scored across the 51 bundled prompts on
+ * 2026-09-21 the two disagreed on 25 of them, in both directions — so a prompt could be `high` to
+ * the gate suggester and `low` to the analyzer in the same reply.
+ *
+ * `GateAnalyzer` has no public window onto the context it builds, but its first reasoning line
+ * renders both values verbatim ("Analyzed <type> with <level> complexity in <category> category"),
+ * so that line is the observation point. The fixtures below are chosen so the deleted formula and
+ * the surviving one land on DIFFERENT levels: if the inline derivation is ever restored, the
+ * rendered line stops matching `PromptAnalyzer` and these assertions go red.
+ */
+describe('one scorer owns execution type and complexity', () => {
+  const analyzer = createAnalyzer();
+  const gateAnalyzer = new GateAnalyzer(
+    { logger: createLogger() } as unknown as PromptResourceDependencies,
+    analyzer
+  );
+
+  function createPrompt(partial: Partial<ConvertedPrompt> = {}): ConvertedPrompt {
+    return {
+      id: 'prompt',
+      name: 'Prompt',
+      description: 'Test prompt',
+      category: 'general',
+      userMessageTemplate: 'Hello',
+      arguments: [],
+      ...partial,
+    };
+  }
+
+  /** The complexity level the DELETED inline formula would have produced. */
+  function retiredInlineLevel(prompt: ConvertedPrompt): 'low' | 'medium' | 'high' {
+    const score =
+      (prompt.arguments?.length || 0) +
+      (prompt.chainSteps?.length || 0) +
+      prompt.userMessageTemplate.length / 100;
+    if (score > 10) return 'high';
+    if (score > 5) return 'medium';
+    return 'low';
+  }
+
+  // A long prose template with no variables: the retired formula called it `high` on length
+  // alone, the owner calls it `low`.
+  const longTemplate = createPrompt({ userMessageTemplate: 'word '.repeat(300) });
+  // A six-step chain with a short template: the owner doubles chain steps and calls it `high`,
+  // the retired formula counted each step once and called it `medium`.
+  const shortChain = createPrompt({
+    userMessageTemplate: 'Go',
+    chainSteps: ['a', 'b', 'c', 'd', 'e', 'f'].map((id) => ({
+      promptId: id,
+      stepName: id,
+    })) as ConvertedPrompt['chainSteps'],
+  });
+
+  test('positive control: the fixtures are ones the two formulas score differently', () => {
+    // Without this, both assertions below could pass against either formula and prove nothing.
+    expect(retiredInlineLevel(longTemplate)).toBe('high');
+    expect(analyzer.analyzeComplexity(longTemplate).level).toBe('low');
+
+    expect(retiredInlineLevel(shortChain)).toBe('medium');
+    expect(analyzer.analyzeComplexity(shortChain).level).toBe('high');
+  });
+
+  test.each([
+    ['long prose template, no variables', longTemplate],
+    ['six-step chain, short template', shortChain],
+  ])('gate suggestions report %s exactly as PromptAnalyzer scored it', async (_label, prompt) => {
+    const result = await gateAnalyzer.analyzePromptForGates(prompt);
+
+    const expectedType = analyzer.detectExecutionType(prompt);
+    const expectedLevel = analyzer.analyzeComplexity(prompt).level;
+
+    expect(result.reasoning[0]).toBe(
+      `Analyzed ${expectedType} with ${expectedLevel} complexity in ${prompt.category} category`
+    );
+    // Names which derivation answered, so the assertion cannot keep passing once the retired
+    // formula comes back under a different level.
+    expect(result.reasoning[0]).not.toContain(`${retiredInlineLevel(prompt)} complexity`);
+  });
+});

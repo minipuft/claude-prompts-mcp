@@ -142,6 +142,12 @@ value; it cannot ask the server to persist anything else. `framework:switch` and
 `injection:override` have no `persist` option at all: an injection override lasts for the session
 only.
 
+**Every toggle reply says which of the two it was.** Without `persist`, the change is held in
+memory for that workspace and the reply says it ends when the server restarts. With `persist`, the
+reply names the config version the write recorded and the `cpm config rollback <n>` that puts the
+previous file back — or, when the file was already in that state, says that no version was
+recorded and why.
+
 **Edits keep your file intact.** `cpm config set` changes only the characters for the one key it's
 touching, so comments, key order, and formatting around it survive. A key that exists only as a
 commented-out example in the generated template gets inserted live, leaving the example where it
