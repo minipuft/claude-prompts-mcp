@@ -221,6 +221,7 @@ Read the relevant doc before editing. Update docs when behavior changes.
 | Framework validity      | FrameworkManager                                                     | Call `frameworkManager.getFramework(id)` -- never hardcode                                                                                    |
 | Injection decisions     | InjectionDecisionService (`execution/pipeline/decisions/injection/`) | Call `service.decide()`                                                                                                                       |
 | Style resolution        | StyleManager (`modules/formatting/style-manager.ts`)                 | Call `styleManager.getStyle()`                                                                                                                |
+| Delegation handoff evidence | `resolveHandoffEvidence` (`execution/delegation/handoff-contract.ts`) | Call `resolveHandoffEvidence(input)` -- a pure import, never re-parse the `HANDOFF RESULT` trailer inline                                    |
 
 ## MCP Tool Layer Structure
 
