@@ -808,6 +808,29 @@ Ruled before dispatching P4.43–P4.50, on `914b068c`. R23 and R24 stand as writ
   `focus/system-prompt.md` is removed, and `skills-sync`'s `systemPromptFile` reader is deleted.
 - **R92 (P4.133, planner 2026-09-22).** The judge prompt the stage builds is rendered into the
   review reply, as `judge-mode.md` promises; the stage's judge branch is not deleted.
+- **R93 (P4.128, owner 2026-09-22).** `include_history` is removed from `system_control analytics`
+  — contract, hand-written schema, generated metadata, handler, docs and the tool-schema snapshot in
+  one slice; a sent key is then refused by name as undeclared. Breaking (`feat(mcp-tools)!`), since
+  it narrows the tool-surface union. `performanceTrends` and `updateAnalytics` go with it unless
+  something else answers their question.
+- **R94 (P4.129–P4.132, owner 2026-09-22).** A header workspace is a full tenant. Under Streamable
+  HTTP the request's resolved scope decides which framework `prompt_engine` renders with, whether
+  the framework system is enabled and which framework is active (a never-seen workspace inherits
+  `frameworks.enabled` and `frameworks.defaultFramework` from config once), what version history and
+  chain-session listings return, and whose switches the switch history shows. No header and STDIO
+  keep the launch workspace's behaviour. One slice, four rows.
+- **R95 (delegation OQ5, owner 2026-09-22).** `await: run` on a step carrying a blocking step gate
+  is refused when the prompt loads, naming the step and the gate — the loader, `validate:prompts`
+  and the `resource_manager` chain-step write share one check. Recorded as R7 in the delegation
+  plan; the row is that plan's 4.8.
+- **R96 (P4.119, planner 2026-09-22).** One payload states one state. While the final step's review
+  is outstanding the reply says the run awaits its verdict and carries neither `✓ Chain complete` nor
+  `Next:`; once the verdict lands the reply says complete and carries no `Next:`. Mid-run replies
+  keep `Next:`. The completion latch owns the decision.
+- **Dispatch 2026-09-22 (evening), owner ruling "dispatch now" under R71:** `hdr` (P4.129–P4.132),
+  `sc` (P4.124, P4.127, P4.128), `gr3` (P4.115–P4.119), `tool` (P4.120, P4.134–P4.136), `jv`
+  (P4.126, P4.133), and the delegation plan's `dg` (row 4.8). Every row of P4.115–P4.136 is in a
+  slice.
 - **R29 follow-ups (ruled on the P4.45 handoff).** A method called only from tests counts as
   unreached. A stale baseline entry fails the check.
 
