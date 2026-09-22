@@ -303,6 +303,10 @@ export class GateLoader implements GateDefinitionProvider {
       ...(definition.activation !== undefined ? { activation: definition.activation } : {}),
       gate_type: definition.gate_type,
       ...(definition.evaluation !== undefined ? { evaluation: definition.evaluation } : {}),
+      // Provenance travels with the definition: a `shell_verify` criterion naming a script that
+      // ships inside the gate directory can only be resolved by something that knows which root
+      // served the gate.
+      ...(definition.sourceRoot !== undefined ? { sourceRoot: definition.sourceRoot } : {}),
     };
   }
 

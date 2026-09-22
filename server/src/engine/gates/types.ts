@@ -249,6 +249,17 @@ export interface LightweightGateDefinition {
    * instead of self-review. Loaded from gate.yaml `evaluation` key.
    */
   evaluation?: JudgeEvaluationConfig;
+
+  /**
+   * Root directory this gate was loaded FROM, carried over from `LoadedGateDefinition`.
+   *
+   * The gate's own directory is `{sourceRoot}/{id}`, and that is the only way a consumer can
+   * resolve a file the gate SHIPS WITH: a `shell_verify` script sitting beside `gate.yaml` is
+   * part of the resource, so naming it relative to the server's working directory makes it
+   * unresolvable wherever the server happens to have been launched from — which is the client's
+   * cwd, not this package. Absent for a temporary (in-memory) gate, which has no directory.
+   */
+  sourceRoot?: string;
 }
 
 /**
