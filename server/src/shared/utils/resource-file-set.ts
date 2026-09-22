@@ -54,6 +54,7 @@
 import { readdir, readFile, realpath, stat } from 'node:fs/promises';
 import * as path from 'node:path';
 
+import { gateShellScriptReferences } from './gate-shell-script-reference.js';
 import { isPathInside } from './path-containment.js';
 import {
   isExcludedCategoryDirectoryName,
@@ -307,6 +308,29 @@ async function addScriptTool(builder: FileSetBuilder, toolDir: string): Promise<
   await builder.addReference(toolDir, definition?.['descriptionFile'] ?? 'description.md');
 }
 
+/**
+ * Every gate-relative script argument declared by a gate's `shell_verify` criteria.
+ *
+ * Reads the entry file's own record rather than a parsed `GateDefinition`, because this module
+ * sits in Layer 0 and may not import the gate schema. The shape checks are therefore explicit: a
+ * `pass_criteria` that is not a list, an entry that is not a mapping, and a `shell_command` that
+ * is not a list of strings each contribute nothing, exactly as the loader treats them.
+ */
+function gateShellScriptArguments(definition: Record<string, unknown> | undefined): string[] {
+  const criteria = definition?.['pass_criteria'];
+  if (!Array.isArray(criteria)) return [];
+  const references: string[] = [];
+  for (const entry of criteria) {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    const command = (entry as Record<string, unknown>)['shell_command'];
+    if (!Array.isArray(command)) continue;
+    const parts = command.filter((part): part is string => typeof part === 'string');
+    if (parts.length !== command.length) continue;
+    references.push(...gateShellScriptReferences(parts));
+  }
+  return references;
+}
+
 /** Directory entries, sorted by name; an unreadable directory contributes nothing. */
 async function sortedEntries(dir: string): Promise<Dirent[]> {
   try {
@@ -408,6 +432,12 @@ export async function resourceFileSet(options: ResourceFileSetOptions): Promise<
     // Reference only — `GateDefinitionLoader` inlines `guidanceFile` and looks for nothing by
     // name, so a `guidance.md` no `gate.yaml` points at is a file the server never reads.
     await builder.addReference(resourceRoot, definition?.['guidanceFile']);
+    // A `shell_verify` script the gate ships with is a reference too, written in the argv rather
+    // than in a key of its own. `gateShellScriptReferences` decides which argument that is; the
+    // containment and existence checks are `addReference`'s, unchanged.
+    for (const reference of gateShellScriptArguments(definition)) {
+      await builder.addReference(resourceRoot, reference);
+    }
   } else if (resourceType === 'framework') {
     await builder.add(absoluteEntry);
     const definition = await readYamlMapping(absoluteEntry);

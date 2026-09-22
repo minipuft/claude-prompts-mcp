@@ -27,9 +27,12 @@ const stubLogger: Logger = {
 } as unknown as Logger;
 
 /** A `SafeConfigWriter` stand-in reporting success and a chosen `getConfigPath()`. */
-function makeSafeConfigWriter(configPath: string): SafeConfigWriter {
+function makeSafeConfigWriter(
+  configPath: string,
+  record: Record<string, unknown> = {}
+): SafeConfigWriter {
   return {
-    updateConfigValue: jest.fn(async () => ({ success: true, message: 'ok' })),
+    updateConfigValue: jest.fn(async () => ({ success: true, message: 'ok', ...record })),
     getConfigPath: jest.fn(() => configPath),
   } as unknown as SafeConfigWriter;
 }
@@ -85,5 +88,40 @@ describe('ConsolidatedSystemControl persist replies name the file actually writt
     expect(await router.persistFrameworkConfig(true)).toBe(
       '⚠️ Persistence skipped (config writer unavailable).'
     );
+  });
+});
+
+/**
+ * P4.114 — a persisted toggle names the version it recorded.
+ *
+ * Every config write has been a `version_history` row since #347, and the number is what a
+ * `cpm config rollback` takes; the reply reported the file and stopped there, so a persist that
+ * recorded nothing (an unchanged write) and one that recorded version 9 read identically.
+ */
+describe('a persist reply carries the version the write recorded', () => {
+  test('names the recorded version and the rollback that undoes it', async () => {
+    const router = new ConsolidatedSystemControl(stubLogger);
+    router.safeConfigWriter = makeSafeConfigWriter('/workspace/config.json', {
+      recordedVersion: 9,
+    });
+
+    const message = await router.persistGateConfig(true);
+
+    expect(message).toContain('as config version 9');
+    expect(message).toContain('cpm config rollback 9');
+  });
+
+  // POSITIVE CONTROL for the same clause: a write that recorded NOTHING must say so by reason,
+  // or "no version named" would also be what a broken version-reporting path produces.
+  test('says why no version was recorded when none was', async () => {
+    const router = new ConsolidatedSystemControl(stubLogger);
+    router.safeConfigWriter = makeSafeConfigWriter('/workspace/config.json', {
+      recordedReason: 'the file is unchanged',
+    });
+
+    const message = await router.persistGateConfig(true);
+
+    expect(message).toContain('No config version was recorded: the file is unchanged.');
+    expect(message).not.toContain('config version 9');
   });
 });

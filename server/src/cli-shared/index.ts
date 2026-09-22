@@ -122,7 +122,6 @@ export {
   loadHistory,
   getVersion,
   compareVersions,
-  saveVersion,
   rollbackVersion,
   deleteVersionRows,
   renameHistoryResource,

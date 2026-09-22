@@ -27,8 +27,8 @@ import {
   recordResourceWrite as cliRecordResourceWrite,
   loadHistory as cliLoadHistory,
   rollbackVersion as cliRollbackVersion,
-  saveVersion as cliSaveVersion,
 } from '../../../src/cli-shared/version-history.js';
+import { saveVersion as cliSaveVersion } from '../../helpers/version-history-writer.js';
 import { VersionHistoryService } from '../../../src/modules/versioning/version-history-service.js';
 import { createTestDatabaseManager } from '../../helpers/test-database.js';
 

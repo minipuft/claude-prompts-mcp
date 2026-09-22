@@ -46,7 +46,6 @@ import { getConfigValue, readConfig } from './config-operations.js';
 import { hasObjectStore } from './object-store.js';
 import { resolveStateDbPath } from './version-history-location.js';
 import {
-  appendVersion,
   asObjectStoreDatabase,
   deleteSubtree,
   loadRows,
@@ -62,9 +61,7 @@ import type { RestorePlan } from '#modules/versioning/restore-plan.js';
 import type {
   VersionEntry,
   HistoryFile,
-  SaveVersionResult,
   RollbackResult,
-  SaveVersionOptions,
   ResourceType as VersioningResourceType,
 } from '#modules/versioning/types.js';
 import type {
@@ -72,7 +69,6 @@ import type {
   ResourceLocationResult,
   ResourceRootOrigin,
 } from '#shared/utils/resource-file-set.js';
-import type { LoadedTree } from './object-store.js';
 import type {
   HistoryRequest,
   HistoryResponse,
@@ -263,15 +259,6 @@ function dispatch(
       return { success: true, entry: row !== undefined ? toEntry(row) : null };
     }
 
-    case 'save_version': {
-      const outcome = appendVersion(db, tenantId, request, request.snapshot ?? {}, {
-        description: request.description ?? '',
-        diffSummary: request.diff_summary ?? '',
-        tree: request.produced_tree ?? null,
-      });
-      return { success: true, version: outcome.version, recorded: outcome.recorded };
-    }
-
     case 'compare_versions': {
       const effectiveTenantId = effectiveTenant().tenantId;
       const fromVersion = Number(request.from_version);
@@ -413,27 +400,6 @@ export function compareVersions(
 // ── Write operations ────────────────────────────────────────────────────────
 
 /**
- * What a CLI history write needs beyond the snapshot itself.
- *
- * `maxVersions` rides here rather than as its own parameter because the bound belongs with the
- * other per-call facts the row records, and because `saveVersion` would otherwise take six
- * positional parameters. Omitting it keeps {@link DEFAULT_MAX_VERSIONS}, which is
- * what a workspace that configured nothing gets; a `cpm` command supplies
- * {@link resolveConfiguredMaxVersions}.
- */
-export interface HistoryWriteOptions extends SaveVersionOptions {
-  maxVersions?: number;
-  /**
-   * The resource's bytes as they are on disk RIGHT NOW, already read by the caller.
-   *
-   * Supplied by `cpm rollback` alone today; every other CLI write leaves it absent and records a
-   * projection-only row, which is the behaviour those paths have always had. Which ROW it lands
-   * on is decided per operation — see `rollbackVersion`.
-   */
-  tree?: LoadedTree | null;
-}
-
-/**
  * The row cap this workspace configured, or {@link DEFAULT_MAX_VERSIONS} when it configured none.
  *
  * **Why a `cpm` command must call this.** `versioning.maxVersions` is read by the SERVER through
@@ -461,34 +427,6 @@ export function resolveConfiguredMaxVersions(workspace: string): number {
     }
   }
   return DEFAULT_MAX_VERSIONS;
-}
-
-export function saveVersion(
-  resourceDir: string,
-  resourceType: ResourceType,
-  resourceId: string,
-  snapshot: Record<string, unknown>,
-  options?: HistoryWriteOptions
-): SaveVersionResult {
-  const request = createRequest(resourceDir, 'save_version', { resourceType, resourceId });
-  if (request === null) {
-    return { success: false, error: 'Unable to resolve resource DB path', recorded: false };
-  }
-
-  const result = runSqlite({
-    ...(request as HistoryRequest),
-    snapshot,
-    diff_summary: options?.diff_summary ?? '',
-    description: options?.description,
-    created_at: new Date().toISOString(),
-    max_versions: options?.maxVersions ?? DEFAULT_MAX_VERSIONS,
-    // One row, and the caller says whether the disk holds the state it is passing.
-    produced_tree: options?.tree ?? null,
-  });
-  if (!result.success) {
-    return { success: false, error: result.error ?? 'Failed to save version', recorded: false };
-  }
-  return { success: true, version: result.version ?? 0, recorded: result.recorded ?? false };
 }
 
 /**

@@ -28,7 +28,8 @@ import * as path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 import { SqliteEngine } from '../../../src/infra/database/index.js';
-import { deleteVersionRows, saveVersion } from '../../../src/cli-shared/version-history.js';
+import { deleteVersionRows } from '../../../src/cli-shared/version-history.js';
+import { saveVersion } from '../../helpers/version-history-writer.js';
 import { STATE_DB_BUSY_TIMEOUT_MS } from '../../../src/shared/utils/runtime-state-location.js';
 import { testScratchPath } from '../../helpers/scratch-path.js';
 
