@@ -29,6 +29,7 @@ import {
 import { pruneVersionHistory } from '#cli-shared/version-history-rows.js';
 import { hashCanonical } from '#shared/utils/hash.js';
 import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
+import { currentRequestStateScope } from '#shared/utils/request-state-scope.js';
 import { resourceFileSet } from '#shared/utils/resource-file-set.js';
 
 /**
@@ -143,9 +144,18 @@ export class VersionHistoryService {
     }
   }
 
-  /** Tenant key for this service's rows — the workspace, falling back to the shared default. */
+  /**
+   * The scope this call's rows belong to: the `resource_manager` request's own workspace when it
+   * named one (`request-state-scope.ts`), otherwise the launch workspace this service was built with.
+   * Every read, write and prune resolves through here, so one call never mixes the two.
+   */
+  private effectiveScope(): StateStoreOptions | undefined {
+    return currentRequestStateScope() ?? this.scope;
+  }
+
+  /** Tenant key for this call's rows — the workspace, falling back to the shared default. */
   private resolveTenantId(): string {
-    return resolveContinuityScopeId(this.scope);
+    return resolveContinuityScopeId(this.effectiveScope());
   }
 
   /**
@@ -361,8 +371,8 @@ export class VersionHistoryService {
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         tenantId,
-        this.scope?.organizationId ?? null,
-        this.scope?.workspaceId ?? null,
+        this.effectiveScope()?.organizationId ?? null,
+        this.effectiveScope()?.workspaceId ?? null,
         resourceType,
         resourceId,
         newVersion,
