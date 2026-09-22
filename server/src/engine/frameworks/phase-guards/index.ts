@@ -6,7 +6,11 @@
  * Parses LLM output by section headers and evaluates phase guards.
  */
 
-export { evaluatePhaseGuards, buildPhaseGuardPassSummary } from './phase-guard-evaluator.js';
+export {
+  evaluatePhaseGuards,
+  buildPhaseGuardPassSummary,
+  buildRetryHints,
+} from './phase-guard-evaluator.js';
 export { splitBySectionHeaders } from './section-splitter.js';
 export type { OutputSection } from './section-splitter.js';
 export type {
