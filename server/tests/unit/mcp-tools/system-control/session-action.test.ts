@@ -70,8 +70,39 @@ describe('System Control session action scope propagation', () => {
       { organizationId: 'org-acme' }
     );
 
-    expect(sessions.listActiveSessions).toHaveBeenCalledWith();
+    expect(sessions.listActiveSessions).toHaveBeenCalledWith(undefined, undefined);
     expect(getText(response)).toContain('Active Sessions');
+  });
+
+  // P4.131: a run started under one workspace header is not listed, or inspectable, under
+  // another. The header arrives where SDK v2 puts it, on a real `Request`.
+  const headerExtra = (workspaceId: string) => ({
+    http: {
+      req: new Request('http://localhost/mcp', { headers: { 'x-workspace-id': workspaceId } }),
+    },
+  });
+
+  test.each([
+    ['list', { operation: 'list' }],
+    ['inspect', { operation: 'inspect', session_id: 'sess-1' }],
+  ] as const)('%s reads through the workspace header scope', async (_name, args) => {
+    const sessions = createSessionStore();
+    sessions.getSession.mockReturnValue(undefined);
+    const systemControl = createSystemControl(sessions.store);
+
+    await systemControl
+      .handleAction({ action: 'session', ...args }, headerExtra('ws-a'))
+      .catch(() => undefined);
+
+    const expectedScope = expect.objectContaining({
+      continuityScopeId: 'ws-a',
+      workspaceId: 'ws-a',
+    });
+    if (args.operation === 'list') {
+      expect(sessions.listActiveSessions).toHaveBeenCalledWith(undefined, expectedScope);
+    } else {
+      expect(sessions.getSession).toHaveBeenCalledWith('sess-1', expectedScope);
+    }
   });
 
   test('uses default scope when extra identity info is missing', async () => {
@@ -80,7 +111,7 @@ describe('System Control session action scope propagation', () => {
 
     await systemControl.handleAction({ action: 'session', operation: 'list' }, {});
 
-    expect(sessions.listActiveSessions).toHaveBeenCalledWith();
+    expect(sessions.listActiveSessions).toHaveBeenCalledWith(undefined, undefined);
   });
 
   test('uses workspace as continuity scope when organization differs', async () => {
@@ -92,7 +123,7 @@ describe('System Control session action scope propagation', () => {
       { organizationId: 'org-acme', workspaceId: 'workspace-shared' }
     );
 
-    expect(sessions.listActiveSessions).toHaveBeenCalledWith();
+    expect(sessions.listActiveSessions).toHaveBeenCalledWith(undefined, undefined);
   });
 
   test('clear resolves a session id against the active listing before deleting', async () => {
@@ -174,7 +205,7 @@ describe('System Control session action scope propagation', () => {
       { organizationId: 'org-acme' }
     );
 
-    expect(sessions.getSession).toHaveBeenCalledWith('sess-1');
+    expect(sessions.getSession).toHaveBeenCalledWith('sess-1', undefined);
     expect(sessions.getChainContext).toHaveBeenCalledWith('sess-1');
     expect(getText(response)).toContain('Session Inspection');
   });

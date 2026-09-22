@@ -353,4 +353,61 @@ describe('FrameworkStateStore (persistence)', () => {
 
     await mgr.shutdown();
   });
+
+  // P4.130 — a workspace a request names for the first time starts from configuration, exactly as
+  // the launch workspace does. Before, it started disabled whatever the config said.
+  test('a never-seen scope starts with the configured enabled flag', async () => {
+    const logger = createLogger();
+    const enabled = await createFrameworkStateStore(logger, stateDbPath, {
+      initialSystemEnabled: () => true,
+    });
+    expect(enabled.isFrameworkSystemEnabled({ workspaceId: 'fresh-enabled-scope' })).toBe(true);
+    await enabled.shutdown();
+
+    // The twin: same store, configuration says off.
+    const disabled = await createFrameworkStateStore(logger, stateDbPath, {
+      initialSystemEnabled: () => false,
+    });
+    expect(disabled.isFrameworkSystemEnabled({ workspaceId: 'fresh-disabled-scope' })).toBe(false);
+    await disabled.shutdown();
+  });
+
+  // P4.129 — the active framework is answered per scope, not always for the launch workspace.
+  test('getActiveFramework answers for the scope it is given', async () => {
+    const logger = createLogger();
+    const mgr = await createFrameworkStateStore(logger, stateDbPath, {
+      defaultScope: { workspaceId: 'active-launch' },
+    });
+    const header = { workspaceId: 'active-header' };
+    await mgr.switchFramework({ targetFramework: 'cageerf', reason: 'launch baseline' });
+    await mgr.switchFramework({ targetFramework: 'react', reason: 'header' }, header);
+
+    expect(mgr.getActiveFramework(header).id.toLowerCase()).toBe('react');
+    expect(mgr.getActiveFramework().id.toLowerCase()).toBe('cageerf');
+
+    await mgr.shutdown();
+  });
+
+  // P4.132 — switch history is per scope, and survives a restart per scope.
+  test('switch history is kept and restored per scope', async () => {
+    const logger = createLogger();
+    const launch = { workspaceId: 'history-launch' };
+    const header = { workspaceId: 'history-header' };
+    const mgr = await createFrameworkStateStore(logger, stateDbPath, { defaultScope: launch });
+    await mgr.switchFramework({ targetFramework: 'react', reason: 'header switch' }, header);
+
+    expect(mgr.getSwitchHistory(10, header).map((entry) => entry.reason)).toEqual([
+      'header switch',
+    ]);
+    // Positive control above; the absence here is the row.
+    expect(mgr.getSwitchHistory(10)).toEqual([]);
+    await mgr.shutdown();
+
+    const reloaded = await createFrameworkStateStore(logger, stateDbPath, { defaultScope: launch });
+    const restored = reloaded.getSwitchHistory(10, header);
+    expect(restored.map((entry) => [entry.to, entry.reason])).toEqual([['react', 'header switch']]);
+    expect(restored[0]?.timestamp).toBeInstanceOf(Date);
+    expect(reloaded.getSwitchHistory(10)).toEqual([]);
+    await reloaded.shutdown();
+  });
 });
