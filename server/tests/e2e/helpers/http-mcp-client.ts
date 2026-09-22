@@ -753,10 +753,13 @@ export class ModernMcpClient {
       omitMethodHeader?: boolean;
       omitMeta?: boolean;
       partialMeta?: boolean;
+      /** Extra request headers, e.g. the identity headers a gateway injects. */
+      headers?: Record<string, string>;
     } = {}
   ): Promise<{ status: number; body: string; headers: http.IncomingHttpHeaders }> {
     const headers: Record<string, string> = {
       Accept: 'application/json, text/event-stream',
+      ...options.headers,
     };
     if (!options.omitMethodHeader) {
       headers['Mcp-Method'] = method;
@@ -780,7 +783,7 @@ export class ModernMcpClient {
     method: string,
     params: Record<string, unknown> = {},
     requestId = 1,
-    options: { toolName?: string } = {}
+    options: { toolName?: string; omitMeta?: boolean; headers?: Record<string, string> } = {}
   ): Promise<unknown> {
     const response = await this.send(method, params, requestId, options);
     if (response.status !== 200) {
@@ -797,9 +800,13 @@ export class ModernMcpClient {
   async callTool(
     name: string,
     args: Record<string, unknown> = {},
-    requestId = 1
+    requestId = 1,
+    options: { omitMeta?: boolean; headers?: Record<string, string> } = {}
   ): Promise<unknown> {
-    return this.request('tools/call', { name, arguments: args }, requestId, { toolName: name });
+    return this.request('tools/call', { name, arguments: args }, requestId, {
+      ...options,
+      toolName: name,
+    });
   }
 
   /**

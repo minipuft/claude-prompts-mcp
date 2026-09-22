@@ -88,10 +88,12 @@ describe('MCP identity boundary enforcement', () => {
       resolveOrRejectToolRequest(
         'prompt_engine',
         {
-          authInfo: {
-            extra: {
-              organizationId: 'org-request',
-              workspaceId: 'workspace-request',
+          http: {
+            authInfo: {
+              extra: {
+                organizationId: 'org-request',
+                workspaceId: 'workspace-request',
+              },
             },
           },
         },
@@ -154,10 +156,12 @@ describe('MCP identity boundary enforcement', () => {
       resolveOrRejectToolRequest(
         'system_control',
         {
-          authInfo: {
-            extra: {
-              organizationId: 'org-request',
-              workspaceId: 'workspace-request',
+          http: {
+            authInfo: {
+              extra: {
+                organizationId: 'org-request',
+                workspaceId: 'workspace-request',
+              },
             },
           },
         },
