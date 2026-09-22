@@ -78,14 +78,15 @@ export const system_controlParameters: ToolParameter[] = [
     name: 'operation',
     type: 'string',
     description:
-      'Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list; analytics view/reset/history; config list/keys/get/validate; maintenance restart; injection status/override/reset; session list/clear/inspect; changes list; execution_history list; skills_sync status/export/sync/diff/pull/clone).',
+      'Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list; analytics view/reset/history; config list/keys/get/validate; maintenance restart; injection status/override/reset; session list/clear/inspect; changes list; execution_history list/steps; skills_sync status/export/sync/diff/pull/clone).',
     status: 'working',
     compatibility: 'canonical',
   },
   {
     name: 'session_id',
     type: 'string',
-    description: 'Target session ID or chain ID for session operations.',
+    description:
+      'Target session ID or chain ID for session operations and for execution_history steps (the latest record of each step of that run).',
     status: 'working',
     compatibility: 'canonical',
   },

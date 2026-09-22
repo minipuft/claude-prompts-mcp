@@ -31,11 +31,50 @@ export class ExecutionHistoryActionHandler extends ActionHandler {
     switch (operation) {
       case 'list':
         return this.listRecent(args);
+      case 'steps':
+        return this.listLatestPerStep(args);
       default:
         throw new Error(
-          `Unknown execution_history operation: ${operation}. Valid operations: list`
+          `Unknown execution_history operation: ${operation}. Valid operations: list, steps`
         );
     }
+  }
+
+  /**
+   * One run's steps, each at its LATEST record (P4.118).
+   *
+   * `list` renders the whole series, so a step answered on one call and graded on the next
+   * shows `completed` above its verdict and a reader has to know which row wins. This resolves
+   * it: one line per step, the newest row's status and gate verdicts.
+   */
+  private listLatestPerStep(args: Record<string, unknown>): ToolResponse {
+    const store = this.context.executionRecordStore;
+    if (store === undefined) {
+      throw new Error('Execution record store not initialized');
+    }
+    const runId = args['session_id'];
+    if (typeof runId !== 'string' || runId.trim() === '') {
+      throw new Error(
+        'execution_history operation "steps" needs session_id: the session id or chain id of one run'
+      );
+    }
+
+    const records = store.queryLatestPerStep(runId, this.context.requestScope);
+    if (records.length === 0) {
+      return this.createMinimalSystemResponse(
+        `📭 **No Step Records**\n\nNo step of \`${runId}\` has been recorded for this scope.`,
+        'execution_history_steps'
+      );
+    }
+
+    const lines = [`📜 **Steps of \`${runId}\`** (latest record per step)`, ''];
+    for (const record of records) {
+      const step = record.stepNumber !== undefined ? `step ${record.stepNumber}` : 'step ?';
+      const prompt = record.promptId !== undefined ? ` · ${record.promptId}` : '';
+      lines.push(`- ${statusIcon(record.status)} \`${record.status}\` ${step}${prompt}`);
+      lines.push(...formatGateVerdictLines(record));
+    }
+    return this.createMinimalSystemResponse(lines.join('\n'), 'execution_history_steps');
   }
 
   /**

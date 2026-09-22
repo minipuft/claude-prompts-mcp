@@ -120,6 +120,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`system_control execution_history` can now show each step of a run at its latest record.** A verdict submitted on its own call is appended as a new row for its step, and nothing read it back by step: `list` shows the whole series, so a failed step still showed `completed` above its verdict. `operation:"steps"` with a `session_id` (the session or chain id) returns one line per step, from its newest row.
 - **A chain step held by a blocking gate is now graded on the section headers its gate review showed it.** That review is the step's only render, and nothing recorded what it declared, so the phase guard graded the step against every header any step in the run had been shown. The reviewed step's record now carries its own headers.
 - **A FAIL verdict sent together with the step's answer now spends one retry attempt, not two.** When no review was open yet, `prompt_engine` recorded the same `gate_verdict` twice in that one call, so the first FAIL already read `attempt 2/2` and left no retry. It is now recorded once; a second FAIL on a later call still counts as the second attempt.
 - **A blocking gate FAIL now announces its hook and notification events before the verdict call returns, in a fixed order.** `retryExhausted`, `responseBlocked` and `failed` were fired without being awaited, so they could interleave, arrive after the reply, and lose a failure outside the emitter's own catch. They now arrive in that order, inside the call.

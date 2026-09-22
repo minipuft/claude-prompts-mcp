@@ -1301,7 +1301,7 @@ system_control(action:"gates", operation:"list")
 | `injection`         | `status`, `override`, `reset`                       | `type`, `enabled`, `scope`, `scope_id`, `expires_in_ms` for override                                                  | Session injection overrides                                                                                                              |
 | `changes`           | `list`                                              | `source`, `resource_type`, `since`, `limit`                                                                           | Resource change audit log                                                                                                                |
 | `session`           | `list`, `inspect`, `clear`                          | `session_id`, `show_details`                                                                                          | Chain session lifecycle                                                                                                                  |
-| `execution_history` | `list`                                              | `limit`                                                                                                               | Chain execution ledger                                                                                                                   |
+| `execution_history` | `list`, `steps`                                     | `limit` for list; `session_id` for steps                                                                              | Chain execution ledger                                                                                                                   |
 | `skills_sync`       | `status`, `export`, `sync`, `diff`, `pull`, `clone` | `client`, `scope`, `resource_type`, `id`, `preview`, `preview_detail`, `prune`, `output`, `file`, `category`, `force` | Export canonical resources as client skills — [Skills Sync](../guides/skills-sync.md)                                                    |
 
 Every parameter is declared in the tool's input schema, which drops any field it does not declare
@@ -1364,7 +1364,15 @@ system_control(action:"execution_history", operation:"list")
 
 # Narrow the page (clamped to 500)
 system_control(action:"execution_history", operation:"list", limit:10)
+
+# One run, one line per step: each step at its LATEST record (session id or chain id)
+system_control(action:"execution_history", operation:"steps", session_id:"chain-quick_decision#1")
 ```
+
+A step's records are appended, never rewritten: `working` when it renders, `completed` when its
+answer is captured, and one more row when a gate verdict arrives on a call of its own. `list`
+shows that whole series; `steps` resolves it, so a step answered and then failed by its reviewer
+reads as `input_required` with the failing gate, not as `completed`.
 
 Distinct from `session`, which reports runs that are **currently live**: chain sessions are
 deleted per server PID at cleanup, so a finished run disappears from `session` but stays in

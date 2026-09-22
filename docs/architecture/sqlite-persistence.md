@@ -105,8 +105,10 @@ already written, so `captureStep` returns early and no append fired at all: the 
 per-gate entries reached no record. The verdict now gets its own row for the same step, APPENDED —
 the earlier row is left byte for byte as it was, because this table is append-only per step and
 that row is the true record of what the step produced and when. A reader that wants the current
-picture resolves the LATEST record for the step, which is what `v_execution_history` already does
-per session through `MAX(execution_id)` over monotonic ULIDs. The row's `status` is the step's
+picture resolves the LATEST record for the step through `MAX(execution_id)` over monotonic ULIDs:
+`ExecutionRecordStore.queryLatestPerStep`, surfaced as
+`system_control(action:"execution_history", operation:"steps", session_id)`, groups by node (or
+ordinal) the way `v_execution_history` groups by session. The row's `status` is the step's
 lifecycle as the call leaves it — `completed` when the verdict cleared the review,
 `input_required` (with an `input_required_json` naming the gate and the attempt) when it did not —
 and `gate_verdicts_json` carries the per-gate entries the submission resolved against the gates

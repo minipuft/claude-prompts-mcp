@@ -56,12 +56,14 @@ import { GateVerdictProcessor } from '../../../src/engine/gates/services/gate-ve
 import { ResponseFormatter } from '../../../src/mcp/tools/prompt-engine/processors/response-formatter.js';
 import { ExecutionRecordStore } from '../../../src/modules/chains/execution-record-store.js';
 import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
+import { ExecutionHistoryActionHandler } from '../../../src/mcp/tools/system-control/handlers/execution-history-action-handler.js';
 
 import type { PipelineStage } from '../../../src/engine/execution/pipeline/stage.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
 import type { ConvertedPrompt } from '../../../src/engine/execution/types.js';
 import type { ChainSession } from '../../../src/shared/types/chain-session.js';
 import type { DatabasePort } from '../../../src/shared/types/persistence.js';
+import type { SystemControlContext } from '../../../src/mcp/tools/system-control/core/types.js';
 
 const CHAIN_BASE = 'chain-lifecycle-demo';
 const GATE_ID = 'step-quality';
@@ -619,6 +621,59 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
       Record<string, unknown>
     >;
     expect(parsed[0]).toMatchObject({ gateId: GATE_ID, verdict: 'FAIL' });
+  });
+
+  /**
+   * P4.118: the verdict row above was written and never read back by step — `list` renders the
+   * whole series and `v_execution_history` resolves the latest row per SESSION. `steps` resolves
+   * it per step, so the step reads as what its verdict left it, not as what its answer did.
+   */
+  describe('execution_history steps reads each step at its latest record', () => {
+    const readHistory = async (args: Record<string, unknown>): Promise<string> => {
+      const handler = new ExecutionHistoryActionHandler({
+        executionRecordStore: recordStore,
+        createMinimalSystemResponse: (text: string) => ({ content: [{ type: 'text', text }] }),
+      } as unknown as SystemControlContext);
+      const response = await handler.execute({ action: 'execution_history', ...args });
+      return response.content[0]?.text ?? '';
+    };
+
+    const failVerdict = renderGateVerdict({
+      overall: 'FAIL',
+      rationale: 'the gate is not met',
+      per_gate: [{ index: 1, passed: false, rationale: 'no evidence of review' }],
+    });
+
+    test('a step whose FAIL arrived on its own call reads as its verdict row', async () => {
+      const sessionId = await driveAnswerThenVerdict(failVerdict);
+
+      const text = await readHistory({ operation: 'steps', session_id: sessionId });
+
+      expect(text).toContain('`input_required` step 1');
+      expect(text).not.toContain('`completed` step 1');
+      expect(text).toContain(`✗ \`${GATE_ID}\` FAIL`);
+      // One line per step: step 1's earlier `completed` and `working` rows are not repeated.
+      expect(text.match(/ step 1\b/g)).toHaveLength(1);
+    });
+
+    test('CONTROL: the series still holds the completed row the verdict superseded', async () => {
+      await driveAnswerThenVerdict(failVerdict);
+
+      const text = await readHistory({ operation: 'list' });
+
+      expect(text).toContain('`completed` step 1');
+      expect(text).toContain('`input_required` step 1');
+    });
+
+    test('the run is found by its chain id too', async () => {
+      const sessionId = await driveAnswerThenVerdict(failVerdict);
+      const chainId = onlySession().chainId;
+      expect(chainId).not.toBe(sessionId);
+
+      const text = await readHistory({ operation: 'steps', session_id: chainId });
+
+      expect(text).toContain('`input_required` step 1');
+    });
   });
 
   test('positive control: a second call carrying no verdict appends no verdict row', async () => {

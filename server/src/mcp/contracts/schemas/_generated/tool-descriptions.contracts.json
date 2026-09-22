@@ -1,6 +1,6 @@
 {
   "version": "3.0.0",
-  "lastUpdated": "2026-09-22T20:45:16.058Z",
+  "lastUpdated": "2026-09-22T22:55:54.757Z",
   "generatedFrom": "contracts",
   "tools": {
     "prompt_engine": {
@@ -57,8 +57,8 @@
       "category": "system",
       "parameters": {
         "action": "The operation to perform: status (runtime overview), framework (switch/enable/disable frameworks), gates (manage quality gates), analytics (usage metrics), config (read-only: list/keys/validate — writes go through the `cpm` CLI), maintenance (restart), guide (get recommendations), injection (session overrides for injected guidance), session (manage execution sessions — list/clear/inspect; cancel moved to prompt_engine), changes (resource change audit log), execution_history (chain execution ledger, newest first), skills_sync (export canonical resources to client skill packages — set operation to status|export|sync|diff|pull|clone).",
-        "operation": "Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list; analytics view/reset/history; config list/keys/get/validate; maintenance restart; injection status/override/reset; session list/clear/inspect; changes list; execution_history list; skills_sync status/export/sync/diff/pull/clone).",
-        "session_id": "Target session ID or chain ID for session operations.",
+        "operation": "Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list; analytics view/reset/history; config list/keys/get/validate; maintenance restart; injection status/override/reset; session list/clear/inspect; changes list; execution_history list/steps; skills_sync status/export/sync/diff/pull/clone).",
+        "session_id": "Target session ID or chain ID for session operations and for execution_history steps (the latest record of each step of that run).",
         "framework": "Target framework for switch operations. Use system_control(action:'framework', operation:'list') to see available frameworks.",
         "reason": "Audit reason for framework/gate toggles or admin actions.",
         "persist": "When true, gate/framework enable/disable changes are also written to the workspace config file (config.jsonc, or config.json if that is what exists).",
