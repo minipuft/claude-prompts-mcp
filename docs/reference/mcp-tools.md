@@ -923,6 +923,13 @@ belongs to another `resource_type` is refused naming the types that read it (see
 refusal above). That one names only the first offender, because the owner list is the same
 correction for all of them.
 
+The same refusal also checks the **action**: a parameter its resource type owns is still refused on
+an action that does not read it, naming the actions that do —
+`'severity' is not read by resource_type:"gate" action:"inspect" — only by action:"create" and
+"update".` Which actions read a parameter is the contract's own `commands[].parameters`
+(`<type>:<action>`, and `common:<action>` for every type), so the declaration a reader consults and
+the rule the router enforces are one list. `action:"preview"` reads what its `preview_action` reads.
+
 #### A declared parameter the current state does not advertise
 
 `prompt_engine` publishes a **union**: `gates`, `gate_verdict` and `gate_action` appear in

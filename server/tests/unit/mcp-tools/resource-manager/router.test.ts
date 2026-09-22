@@ -267,33 +267,30 @@ describe('ResourceManagerRouter', () => {
     });
 
     test('passes prompt validation and concurrency parameters through without coercion', async () => {
-      await router.handleAction(
+      // One call per action that reads them (P4.134): `validate` reads none of
+      // `expected_version`, `full_restart`, `goal` or `include_legacy`, and is refused them now.
+      const calls: Array<Record<string, unknown>> = [
         {
-          resource_type: 'prompt',
           action: 'validate',
           id: 'draft_prompt',
           name: 'Draft Prompt',
           description: 'Draft description',
           system_message: 'System-only prompt',
-          expected_version: 12,
-          full_restart: true,
-          goal: 'gate config',
-          include_legacy: true,
-        } as ResourceManagerInput,
-        {}
-      );
+        },
+        { action: 'update', id: 'draft_prompt', expected_version: 12, full_restart: true },
+        { action: 'guide', goal: 'gate config', include_legacy: true },
+      ];
 
-      expect(mockPromptResourceHandler.handleAction).toHaveBeenCalledWith(
-        expect.objectContaining({
-          action: 'validate',
-          expected_version: 12,
-          full_restart: true,
-          goal: 'gate config',
-          include_legacy: true,
-          system_message: 'System-only prompt',
-        }),
-        {}
-      );
+      for (const call of calls) {
+        await router.handleAction(
+          { resource_type: 'prompt', ...call } as unknown as ResourceManagerInput,
+          {}
+        );
+        expect(mockPromptResourceHandler.handleAction).toHaveBeenLastCalledWith(
+          expect.objectContaining(call),
+          {}
+        );
+      }
     });
   });
 

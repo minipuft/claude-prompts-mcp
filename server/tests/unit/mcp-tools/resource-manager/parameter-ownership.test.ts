@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import {
   COMMON_PARAMETERS,
   DECLARED_PARAMETERS,
+  PARAMETER_ACTIONS,
   PARAMETER_OWNERS,
   describeParameterRefusal,
 } from '../../../../src/mcp/tools/resource-manager/core/parameter-ownership.js';
@@ -35,6 +36,67 @@ const PROBE_VALUE: Readonly<Record<string, unknown>> = {
 };
 
 const probeFor = (parameter: string): unknown => PROBE_VALUE[parameter] ?? 'probe-value';
+
+/** The actions the contract says read `parameter` on `type` — P4.134's second dimension. */
+const readersOf = (parameter: string, type: ResourceType): string[] => [
+  ...(PARAMETER_ACTIONS.get(parameter)?.get(type) ?? []),
+];
+
+const firstReader = (parameter: string, type: ResourceType): string =>
+  readersOf(parameter, type)[0] ?? 'update';
+
+/** Actions a resource type accepts at all — the router refuses the rest before ownership. */
+const ACTIONS_BY_TYPE: Readonly<Record<ResourceType, readonly string[]>> = {
+  prompt: [
+    'create',
+    'validate',
+    'update',
+    'delete',
+    'reload',
+    'list',
+    'inspect',
+    'analyze_type',
+    'analyze_gates',
+    'guide',
+    'history',
+    'rollback',
+    'compare',
+  ],
+  gate: [
+    'create',
+    'update',
+    'delete',
+    'reload',
+    'list',
+    'inspect',
+    'history',
+    'rollback',
+    'compare',
+  ],
+  framework: [
+    'create',
+    'update',
+    'delete',
+    'reload',
+    'list',
+    'inspect',
+    'switch',
+    'history',
+    'rollback',
+    'compare',
+  ],
+  category: [
+    'create',
+    'update',
+    'delete',
+    'reload',
+    'list',
+    'inspect',
+    'history',
+    'rollback',
+    'compare',
+  ],
+};
 
 type MockHandler = {
   handleAction: jest.MockedFunction<
@@ -147,12 +209,14 @@ describe('resource_manager parameter ownership', () => {
 
       // Positive control for the same parameter: the refusal keys on the TYPE, not on the
       // parameter's presence. Without this, a guard that refused everything would pass above.
+      // Sent on an action that READS it (P4.134), which is not always `update`.
       for (const owner of owners) {
         test(`dispatches '${parameter}' on ${owner}`, async () => {
           const result = await router.handleAction(
             {
               resource_type: owner,
-              action: 'update',
+              action: firstReader(parameter, owner),
+              confirm: true,
               id: 'target',
               [parameter]: probeFor(parameter),
             } as unknown as ResourceManagerInput,
@@ -173,6 +237,123 @@ describe('resource_manager parameter ownership', () => {
         expect(describeParameterRefusal(resource_type, { ...args, resource_type })).toBeNull();
       }
     });
+  });
+
+  /**
+   * P4.134 — ownership per ACTION, not only per type.
+   *
+   * Measured before the fix: `resource_type:"gate", action:"inspect", severity:"high"` was
+   * forwarded to the gate handler, which read no `severity` on inspect, and answered success.
+   * The readers come from the contract's `commands[].parameters`, so these tests drive the
+   * whole (parameter × owning type × action) matrix from that one declaration.
+   */
+  describe('P4.134: a parameter the ACTION does not read', () => {
+    test('every owned parameter is declared on at least one command of each owning type', () => {
+      // The gate that keeps the contract honest: a parameter no command declares would be
+      // refused on every action, so its absence here is a contract gap, not a refusal.
+      const undeclared = Object.entries(PARAMETER_OWNERS).flatMap(([parameter, owners]) =>
+        owners
+          .filter((owner) => readersOf(parameter, owner).length === 0)
+          .map((owner) => `${owner}:${parameter}`)
+      );
+
+      expect(undeclared).toEqual([]);
+    });
+
+    test('the row: severity on gate inspect is refused by name; on update it dispatches', async () => {
+      const inspect = await router.handleAction(
+        {
+          resource_type: 'gate',
+          action: 'inspect',
+          id: 'g',
+          severity: 'high',
+        } as ResourceManagerInput,
+        {}
+      );
+      expect(inspect.isError).toBe(true);
+      expect(inspect.content[0]?.text).toContain(
+        `'severity' is not read by resource_type:"gate" action:"inspect" — only by action:"create" and "update".`
+      );
+      expect(handlers.gate.handleAction).not.toHaveBeenCalled();
+
+      // One identifier differs — the action — and the same key reaches the handler.
+      const update = await router.handleAction(
+        {
+          resource_type: 'gate',
+          action: 'update',
+          id: 'g',
+          severity: 'high',
+        } as ResourceManagerInput,
+        {}
+      );
+      expect(update.isError).toBe(false);
+      expect(handlers.gate.handleAction).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'update', severity: 'high' }),
+        expect.anything()
+      );
+    });
+
+    test('a preview reads what its target reads', async () => {
+      const result = await router.handleAction(
+        {
+          resource_type: 'prompt',
+          action: 'preview',
+          preview_action: 'update',
+          id: 'p',
+          patch: [{ field: 'description', find: 'a', replace: 'b' }],
+        } as unknown as ResourceManagerInput,
+        {}
+      );
+
+      expect(result.isError).toBe(false);
+      expect(handlers.prompt.handleAction).toHaveBeenCalled();
+    });
+
+    for (const [parameter, owners] of Object.entries(PARAMETER_OWNERS)) {
+      for (const owner of owners) {
+        const readers = readersOf(parameter, owner);
+        const nonReaders = ACTIONS_BY_TYPE[owner].filter((action) => !readers.includes(action));
+
+        for (const action of nonReaders) {
+          test(`refuses '${parameter}' on ${owner} ${action}`, async () => {
+            const result = await router.handleAction(
+              {
+                resource_type: owner,
+                action,
+                id: 'target',
+                confirm: true,
+                [parameter]: probeFor(parameter),
+              } as unknown as ResourceManagerInput,
+              {}
+            );
+
+            expect(result.isError).toBe(true);
+            expect(result.content[0]?.text).toContain(
+              `'${parameter}' is not read by resource_type:"${owner}" action:"${action}"`
+            );
+            expect(handlers[owner].handleAction).not.toHaveBeenCalled();
+          });
+        }
+
+        for (const action of readers) {
+          test(`dispatches '${parameter}' on ${owner} ${action}`, async () => {
+            const result = await router.handleAction(
+              {
+                resource_type: owner,
+                action,
+                id: 'target',
+                confirm: true,
+                [parameter]: probeFor(parameter),
+              } as unknown as ResourceManagerInput,
+              {}
+            );
+
+            expect(result.isError).toBe(false);
+            expect(handlers[owner].handleAction).toHaveBeenCalled();
+          });
+        }
+      }
+    }
   });
 
   describe('B.78: `unset` on a type that cannot remove a field', () => {
@@ -289,7 +470,12 @@ describe('resource_manager parameter ownership', () => {
             const result = await router.handleAction(
               {
                 resource_type: owner,
-                action: valid?.action ?? 'update',
+                // An owned parameter is sent on an action that reads it (P4.134).
+                action:
+                  valid?.action ??
+                  (PARAMETER_OWNERS[parameter] !== undefined
+                    ? firstReader(parameter, owner)
+                    : 'update'),
                 id: 'target',
                 [parameter]: valid?.probe ?? probeFor(parameter),
               } as unknown as ResourceManagerInput,
