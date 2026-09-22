@@ -188,6 +188,17 @@ describe('stripper 3 — the stage-04 projection onto ChainStepPrompt', () => {
     const context = await parseChain([{ promptId: 'setup', stepName: 'Setup' }]);
     expect(context.parsedCommand?.steps?.[0]).not.toHaveProperty('inlineGateIds');
   });
+
+  test('projects a detached declaration (`await: run`, delegation Tier 4) onto the runtime step', async () => {
+    // Same three-stripper rule: the loader carries it, this projection must too, or stage 06 never
+    // sees it and the step blocks. The undeclared sibling stays without the key.
+    const context = await parseChain([
+      { promptId: 'setup', stepName: 'Setup' },
+      { promptId: 'inline', stepName: 'Detached Step', await: 'run' },
+    ]);
+    expect(context.parsedCommand?.steps?.[1]?.await).toBe('run');
+    expect(context.parsedCommand?.steps?.[0]).not.toHaveProperty('await');
+  });
 });
 
 describe('the channel the projected field feeds', () => {

@@ -230,6 +230,15 @@ the legacy/execution-hint channel. Resolution precedence is: explicit inline arg
 | Gate (named) | `:: id:"text"` | `:: security:"no secrets"` | Named gate with trackable ID            |
 | Style        | `#id`          | `#analytical`              | Response formatting                     |
 
+**A delegated step can be detached.** `==>` always blocks: the run waits at the step until the
+worker's result comes back as `user_response`. A chain step (YAML `chainSteps[]` or a `workflow`
+node) that declares `await: run` is **detached** instead — its brief renders the same way, the
+parent spawns the worker in the background and resumes with `chain_id` and no `user_response` to
+move on, and the worker's result reports later on any resume whose `HANDOFF RESULT` trailer names
+the step's node token. A run cannot complete while a detached step it spawned has not reported.
+There is no symbolic spelling for it. See [Detached
+steps](../concepts/chains-lifecycle.md#detached-steps-await-run).
+
 **Repetition (`* N`) - Same Arguments:**
 
 The `* N` operator unfolds to a chain with **identical arguments** on each step:
