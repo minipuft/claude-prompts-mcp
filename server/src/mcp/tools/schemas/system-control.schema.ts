@@ -30,6 +30,7 @@ import type { DescriptionResolver } from './prompt-engine.schema.js';
 
 import { INJECTION_TYPES } from '#shared/types/injection.js';
 import { SYSTEM_CONTROL_ACTION_IDS } from '#shared/types/system-control.js';
+import { refuseUndeclaredKey } from '#shared/utils/nested-key-refusal.js';
 
 const identity: DescriptionResolver = (_name, fallback) => fallback;
 
@@ -89,11 +90,14 @@ function buildSystemControlShape(resolve: DescriptionResolver = identity) {
     // alone (see config-action-handler.ts); `set` was removed from this surface (R27) and never
     // populated this object with that value.
     config: z
-      .strictObject({
-        key: z.string(),
-        value: z.string().optional(),
-        operation: z.enum(['validate', 'get']),
-      })
+      .strictObject(
+        {
+          key: z.string(),
+          value: z.string().optional(),
+          operation: z.enum(['validate', 'get']),
+        },
+        { error: refuseUndeclaredKey }
+      )
       .optional()
       .describe(describe('config')),
 

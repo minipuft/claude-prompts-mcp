@@ -24,13 +24,15 @@ import { describe, expect, it } from '@jest/globals';
 import {
   DECLARED_PARAMETERS_BY_TOOL,
   GATE_PARAMETERS_UNAVAILABLE,
-  declaredKeysAt,
-  describeNestedSchemaRefusal,
   describeUndeclaredParameterRefusal,
-  formatKeyPath,
-  nearestDeclaredParameter,
   type ContractToolName,
 } from '../../../src/mcp/tools/shared/undeclared-parameters.js';
+import {
+  declaredKeysAt,
+  describeNestedSchemaRefusal,
+  formatKeyPath,
+  nearestDeclaredParameter,
+} from '../../../src/shared/utils/nested-key-refusal.js';
 import {
   gateVerdictSubmissionSchema,
   buildPromptEngineSchema,
@@ -370,9 +372,10 @@ describe('nested key refusal on a strict object (P4.121)', () => {
     const { ok, messages } = parseGate({ mode: 'judge', stirct: true });
 
     expect(ok).toBe(false);
+    // No "dropped and ignored before" line: `evaluation` was strict from its first release, so
+    // that sentence was never true of it (P4.135 — the adapter now serves every strict object).
     expect(messages).toEqual([
-      "'evaluation.stirct' is not a declared key — did you mean 'strict'?\n\n" +
-        'It was dropped and ignored before, which let a misspelled key read as an absent one.',
+      "'evaluation.stirct' is not a declared key — did you mean 'strict'?",
     ]);
   });
 

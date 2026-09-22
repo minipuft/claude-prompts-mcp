@@ -35,6 +35,8 @@
 
 import { z } from 'zod/v4';
 
+import { refuseUndeclaredKey } from '#shared/utils/nested-key-refusal.js';
+
 /**
  * A named item of chain-run context a step's `visibility` declaration can withhold from or
  * expose to that step's render. Mirrors `VisibilityItem` in `shared/types/chain-execution.ts`
@@ -52,10 +54,13 @@ export const VisibilityItemSchema = z.enum([
  * a PRIOR step's withhold, so the same item in both is a no-op, not an error.
  */
 export const StepVisibilitySchema = z
-  .object({
-    withhold: z.array(VisibilityItemSchema).optional(),
-    expose: z.array(VisibilityItemSchema).optional(),
-  })
+  .object(
+    {
+      withhold: z.array(VisibilityItemSchema).optional(),
+      expose: z.array(VisibilityItemSchema).optional(),
+    },
+    { error: refuseUndeclaredKey }
+  )
   .strict();
 
 export type StepVisibilityYaml = z.infer<typeof StepVisibilitySchema>;
@@ -126,102 +131,108 @@ export const workflowNodeIdSchema = z
  * (`yaml-prompt-loader.ts`) and the stage-04 projection — or it is silently dead (P6-F7).
  */
 export const workflowNodeSchema = z
-  .object({
-    id: workflowNodeIdSchema,
-    promptId: z.string().min(1, 'Step promptId is required'),
-    stepName: z.string().min(1).optional(),
-    /**
-     * Static arguments declared for this step.
-     *
-     * On the YAML path these OVERRIDE the run's invocation arguments for this step only — a
-     * declared constant beats what the caller happened to pass, which is the whole point of
-     * declaring it on the step. Upstream step results still arrive through `inputMapping`.
-     */
-    args: z.record(z.string(), z.unknown()).optional(),
-    /** Map upstream results into this step's variable names. */
-    inputMapping: z.record(z.string(), z.string()).optional(),
-    /** Publish this step's output under semantic names. */
-    outputMapping: z.record(z.string(), z.string()).optional(),
-    /** Per-step visibility policy. */
-    visibility: StepVisibilitySchema.optional(),
-    /** Client-agnostic capability hint for delegation model selection. */
-    subagentModel: z.enum(['heavy', 'standard', 'fast']).optional(),
-    /** Host agent to spawn for this step, overriding the prompt-level default. */
-    agentType: z.string().min(1).optional(),
-    /**
-     * Bare string, not an enum — frameworks are registry-resolved and
-     * `frameworkManager.getFramework(id)` is the only authority on validity (project CLAUDE.md).
-     * An unknown id resolves to the run-wide framework at `12-framework-stage.ts` rather than
-     * failing the load, because a framework that was renamed should degrade, not make the whole
-     * prompt unloadable.
-     */
-    framework: z.string().min(1).optional(),
-    /** Retry attempts on failure. */
-    retries: z.number().int().nonnegative().optional(),
-    /**
-     * Gate ids applied to this step, compiled to the existing `gates` + `target_step_id` channel
-     * (OQ-P6-8). Read by `GateEnhancementService.enhanceChainSteps` at rank `inline-operator`.
-     * An id naming no registered gate is NOT filtered here — every other gate source behaves the
-     * same way.
-     */
-    inlineGateIds: z.array(z.string().min(1)).optional(),
-    /**
-     * RAW `::` gate tokens for this step — ids and free text mixed, unresolved (row A.2, OQ-A2b).
-     *
-     * A SIBLING of `inlineGateIds`, not a spelling of it. `inlineGateIds` is already-resolved ids;
-     * this is the token list a `>>a :: code-quality --> >>b` command writes, which nothing can
-     * partition until the gate registry is in hand. `InlineGateProcessor.partitionGateCriteria`
-     * does that at stage 11, per step, splitting each token into a registered id or a temp-gate
-     * criterion — so this field's whole contract is "carry these verbatim to stage 11".
-     *
-     * WHY THIS IS A NODE FIELD AND NOT A RUN-LEVEL `gates[]` ENTRY. OQ-A2 originally routed `::`
-     * to `{criteria, target_step_id}` on the gate union, reading the union's SHAPE rather than its
-     * reader. Measured (DEV-TA2-1): `TemporaryGateRegistrar` either literalizes a canonical gate
-     * id into a temp-gate criterion (`resolveCanonicalGateId` returns early on any inline content)
-     * or resolves it canonically and then `continue`s, dropping `target_step_id` — never both.
-     * The loss is about TIMING, not spelling: stage 04, where the IR is built, has no registry.
-     * A declared node field is what survives to the stage that does.
-     */
-    inlineGateCriteria: z.array(z.string().min(1)).optional(),
-    /**
-     * DECLARED context isolation for this step — the `==>` operator's landing field (row A.2).
-     *
-     * A declaration, not the runtime flag. `OperatorValidationStage.markDelegatedStepPrompts`
-     * (stage 06) remains the ONLY producer of `ChainStepPrompt.delegated` as the runtime reads it;
-     * it now reads `step.delegated === true || step.subagentModel != null` rather than
-     * `subagentModel` alone. `compileNode` passes this through exactly as it passes
-     * `inlineGateIds` — one flag, one producer, on every path.
-     *
-     * Deliberately NOT mapped onto `subagentModel`: that conflates a context-isolation choice with
-     * a model-tier hint, which the retired delegation contract separated on purpose. YAML gains it
-     * through A.1's derivation, where it is additive — a chain step could previously only ask for
-     * isolation by naming a model tier it did not care about.
-     *
-     * Do not confuse it with the YAML-only `delegation` key ({@link EXPORTER_ONLY_STEP_KEYS}),
-     * which is an exporter marker with no runtime reader at all.
-     */
-    delegated: z.boolean().optional(),
-    /**
-     * Whether the run waits for this step's worker (`node`, the default) or continues past it
-     * (`run`) — detached delegation (delegation handoff contract, Tier 4, owner ruling R4).
-     *
-     * `run` is opt-in per step and implies delegation: `markDelegatedStepPrompts` (stage 06)
-     * marks an `await: run` step delegated, because a step the run does not wait on only makes
-     * sense when a worker runs it. The run renders the step's brief, marks the node spawned, and
-     * moves on; the worker's result reports later, routed back to this node by the node token in
-     * its `HANDOFF RESULT` trailer. The run cannot COMPLETE while a spawned detached node has not
-     * reported. `node` is the explicit spelling of the default and changes nothing.
-     */
-    await: StepAwaitSchema.optional(),
-  })
+  .object(
+    {
+      id: workflowNodeIdSchema,
+      promptId: z.string().min(1, 'Step promptId is required'),
+      stepName: z.string().min(1).optional(),
+      /**
+       * Static arguments declared for this step.
+       *
+       * On the YAML path these OVERRIDE the run's invocation arguments for this step only — a
+       * declared constant beats what the caller happened to pass, which is the whole point of
+       * declaring it on the step. Upstream step results still arrive through `inputMapping`.
+       */
+      args: z.record(z.string(), z.unknown()).optional(),
+      /** Map upstream results into this step's variable names. */
+      inputMapping: z.record(z.string(), z.string()).optional(),
+      /** Publish this step's output under semantic names. */
+      outputMapping: z.record(z.string(), z.string()).optional(),
+      /** Per-step visibility policy. */
+      visibility: StepVisibilitySchema.optional(),
+      /** Client-agnostic capability hint for delegation model selection. */
+      subagentModel: z.enum(['heavy', 'standard', 'fast']).optional(),
+      /** Host agent to spawn for this step, overriding the prompt-level default. */
+      agentType: z.string().min(1).optional(),
+      /**
+       * Bare string, not an enum — frameworks are registry-resolved and
+       * `frameworkManager.getFramework(id)` is the only authority on validity (project CLAUDE.md).
+       * An unknown id resolves to the run-wide framework at `12-framework-stage.ts` rather than
+       * failing the load, because a framework that was renamed should degrade, not make the whole
+       * prompt unloadable.
+       */
+      framework: z.string().min(1).optional(),
+      /** Retry attempts on failure. */
+      retries: z.number().int().nonnegative().optional(),
+      /**
+       * Gate ids applied to this step, compiled to the existing `gates` + `target_step_id` channel
+       * (OQ-P6-8). Read by `GateEnhancementService.enhanceChainSteps` at rank `inline-operator`.
+       * An id naming no registered gate is NOT filtered here — every other gate source behaves the
+       * same way.
+       */
+      inlineGateIds: z.array(z.string().min(1)).optional(),
+      /**
+       * RAW `::` gate tokens for this step — ids and free text mixed, unresolved (row A.2, OQ-A2b).
+       *
+       * A SIBLING of `inlineGateIds`, not a spelling of it. `inlineGateIds` is already-resolved ids;
+       * this is the token list a `>>a :: code-quality --> >>b` command writes, which nothing can
+       * partition until the gate registry is in hand. `InlineGateProcessor.partitionGateCriteria`
+       * does that at stage 11, per step, splitting each token into a registered id or a temp-gate
+       * criterion — so this field's whole contract is "carry these verbatim to stage 11".
+       *
+       * WHY THIS IS A NODE FIELD AND NOT A RUN-LEVEL `gates[]` ENTRY. OQ-A2 originally routed `::`
+       * to `{criteria, target_step_id}` on the gate union, reading the union's SHAPE rather than its
+       * reader. Measured (DEV-TA2-1): `TemporaryGateRegistrar` either literalizes a canonical gate
+       * id into a temp-gate criterion (`resolveCanonicalGateId` returns early on any inline content)
+       * or resolves it canonically and then `continue`s, dropping `target_step_id` — never both.
+       * The loss is about TIMING, not spelling: stage 04, where the IR is built, has no registry.
+       * A declared node field is what survives to the stage that does.
+       */
+      inlineGateCriteria: z.array(z.string().min(1)).optional(),
+      /**
+       * DECLARED context isolation for this step — the `==>` operator's landing field (row A.2).
+       *
+       * A declaration, not the runtime flag. `OperatorValidationStage.markDelegatedStepPrompts`
+       * (stage 06) remains the ONLY producer of `ChainStepPrompt.delegated` as the runtime reads it;
+       * it now reads `step.delegated === true || step.subagentModel != null` rather than
+       * `subagentModel` alone. `compileNode` passes this through exactly as it passes
+       * `inlineGateIds` — one flag, one producer, on every path.
+       *
+       * Deliberately NOT mapped onto `subagentModel`: that conflates a context-isolation choice with
+       * a model-tier hint, which the retired delegation contract separated on purpose. YAML gains it
+       * through A.1's derivation, where it is additive — a chain step could previously only ask for
+       * isolation by naming a model tier it did not care about.
+       *
+       * Do not confuse it with the YAML-only `delegation` key ({@link EXPORTER_ONLY_STEP_KEYS}),
+       * which is an exporter marker with no runtime reader at all.
+       */
+      delegated: z.boolean().optional(),
+      /**
+       * Whether the run waits for this step's worker (`node`, the default) or continues past it
+       * (`run`) — detached delegation (delegation handoff contract, Tier 4, owner ruling R4).
+       *
+       * `run` is opt-in per step and implies delegation: `markDelegatedStepPrompts` (stage 06)
+       * marks an `await: run` step delegated, because a step the run does not wait on only makes
+       * sense when a worker runs it. The run renders the step's brief, marks the node spawned, and
+       * moves on; the worker's result reports later, routed back to this node by the node token in
+       * its `HANDOFF RESULT` trailer. The run cannot COMPLETE while a spawned detached node has not
+       * reported. `node` is the explicit spelling of the default and changes nothing.
+       */
+      await: StepAwaitSchema.optional(),
+    },
+    { error: refuseUndeclaredKey }
+  )
   .strict();
 
 /** A dependency edge. Not control flow — the linearizer compiles edges to a total order. */
 export const workflowEdgeSchema = z
-  .object({
-    from: workflowNodeIdSchema,
-    to: workflowNodeIdSchema,
-  })
+  .object(
+    {
+      from: workflowNodeIdSchema,
+      to: workflowNodeIdSchema,
+    },
+    { error: refuseUndeclaredKey }
+  )
   .strict();
 
 /**
@@ -301,18 +312,21 @@ export interface WorkflowRejection {
  * run's blueprint per step exactly the way `maxInsertions` is (D-2).
  */
 export const workflowBudgetSchema = z
-  .object({
-    maxNodes: z.number().int().positive().max(DEFAULT_WORKFLOW_CAPS.maxNodes).optional(),
-    maxFanOut: z.number().int().positive().max(DEFAULT_WORKFLOW_CAPS.maxFanOut).optional(),
-    maxInsertions: z
-      .number()
-      .int()
-      .nonnegative()
-      .max(DEFAULT_WORKFLOW_CAPS.maxInsertions)
-      .optional(),
-    declaredCostCeiling: z.number().positive().optional(),
-    pauseOnBlocking: z.boolean().optional(),
-  })
+  .object(
+    {
+      maxNodes: z.number().int().positive().max(DEFAULT_WORKFLOW_CAPS.maxNodes).optional(),
+      maxFanOut: z.number().int().positive().max(DEFAULT_WORKFLOW_CAPS.maxFanOut).optional(),
+      maxInsertions: z
+        .number()
+        .int()
+        .nonnegative()
+        .max(DEFAULT_WORKFLOW_CAPS.maxInsertions)
+        .optional(),
+      declaredCostCeiling: z.number().positive().optional(),
+      pauseOnBlocking: z.boolean().optional(),
+    },
+    { error: refuseUndeclaredKey }
+  )
   .strict();
 
 /**
