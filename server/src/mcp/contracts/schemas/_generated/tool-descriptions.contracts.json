@@ -1,6 +1,6 @@
 {
   "version": "3.0.0",
-  "lastUpdated": "2026-09-22T22:44:33.675Z",
+  "lastUpdated": "2026-09-22T22:59:00.878Z",
   "generatedFrom": "contracts",
   "tools": {
     "prompt_engine": {
@@ -62,7 +62,7 @@
         "framework": "Target framework for switch operations. Use system_control(action:'framework', operation:'list') to see available frameworks.",
         "reason": "Audit reason for framework/gate toggles or admin actions.",
         "persist": "When true, gate/framework enable/disable changes are also written to the workspace config file (config.jsonc, or config.json if that is what exists).",
-        "show_details": "Include detailed output (status/analytics/framework/gate reports).",
+        "show_details": "Include detailed output (framework and session lists).",
         "include_metrics": "Include detailed metrics output (where supported).",
         "topic": "Guide topic when requesting guidance.",
         "include_planned": "For guide: set false to leave out operations marked planned. Default: true.",

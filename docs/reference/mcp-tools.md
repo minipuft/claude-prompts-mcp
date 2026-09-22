@@ -1281,7 +1281,7 @@ system_control(action:"framework", operation:"list")
 system_control(action:"framework", operation:"switch", framework:"ReACT")
 
 # View execution analytics
-system_control(action:"analytics", show_details:true)
+system_control(action:"analytics")
 
 # List available gates
 system_control(action:"gates", operation:"list")
@@ -1291,7 +1291,7 @@ system_control(action:"gates", operation:"list")
 
 | Action              | Operations                                          | Parameters                                                                                                            | Purpose                                                                                                                                  |
 | ------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `status`            | —                                                   | `show_details`, `include_metrics`                                                                                     | Runtime overview                                                                                                                         |
+| `status`            | —                                                   | `include_metrics`                                                                                                     | Runtime overview                                                                                                                         |
 | `framework`         | `list`, `switch`, `enable`, `disable`               | `framework`, `reason`, `persist`, `show_details`                                                                      | Framework management                                                                                                                     |
 | `gates`             | `list`, `enable`, `disable`, `status`, `health`     | `search_query`, `reason`, `persist`                                                                                   | Gate management                                                                                                                          |
 | `analytics`         | `view`, `history`, `reset`                          | `limit` for history; `confirm: true` for reset                                                                        | Execution metrics                                                                                                                        |
