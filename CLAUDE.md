@@ -24,6 +24,10 @@ The server floor is where `node:sqlite` is available without an experimental fla
 
 **CI is the contract; every other gate is a documented strict subset of it.**
 
+*(Not projected into `AGENTS.md` -- this is CI-routing history a Codex or OpenCode reader does not
+need to act on. `CONTRIBUTING.md` and the `Pull Request Boundary` section below carry the commands
+those readers actually run.)*
+
 The three gates once ran three different suites with no subset relation, so a green
 `pre-push` did not predict CI, and neither did the local full-validation wrapper that
 existed at the time -- that is how a pyrefly failure reached `main` from a clean local
@@ -133,12 +137,14 @@ checker states outright that it "does not read the title beyond its type", so fo
 instructions exactly still shipped an unchecked title (#283, `subject-case`, 2026-09-14). A
 hand-written body cost a second run three missing sections and a 488-word fold (#312, 2026-09-16).
 
-**This section is deliberately absent from `PROJECTED_HANDBOOK_SECTIONS`** in
-`scripts/sync-project-guidance.js`. The AGENTS.md projection measured 32,709 of its 32,768-byte
-ceiling before this section existed -- 59 bytes of headroom -- so projecting it would fail
-`guidance:check`. Codex and OpenCode reach the same contract through `CONTRIBUTING.md` §Pull
-Request Process and the usage text `pr-check.mjs` prints when invoked without arguments. Deciding
-what the projection should evict to make room is an owner call, not a silent one.
+**This section IS projected into `AGENTS.md`** (`PROJECTED_HANDBOOK_SECTIONS` in
+`scripts/sync-project-guidance.js`). It previously was not: the projection measured 32,709 of its
+32,768-byte ceiling with this section absent -- 59 bytes of headroom, not enough to add it. Evicting
+`## Validation Gates (one contract, impact-aware subsets)` (below) freed the room: that section is
+CI-routing detail a Codex or OpenCode reader does not need to act on, while this one is a command
+they run before every PR. Codex and OpenCode also still reach this contract through
+`CONTRIBUTING.md` §Pull Request Process and the usage text `pr-check.mjs` prints when invoked
+without arguments.
 
 ## Fleet Standards Upstream (`minipuft/repository-standards`)
 
@@ -221,6 +227,7 @@ Read the relevant doc before editing. Update docs when behavior changes.
 | Framework validity      | FrameworkManager                                                     | Call `frameworkManager.getFramework(id)` -- never hardcode                                                                                    |
 | Injection decisions     | InjectionDecisionService (`execution/pipeline/decisions/injection/`) | Call `service.decide()`                                                                                                                       |
 | Style resolution        | StyleManager (`modules/formatting/style-manager.ts`)                 | Call `styleManager.getStyle()`                                                                                                                |
+| Delegation handoff evidence | `resolveHandoffEvidence` (`execution/delegation/handoff-contract.ts`) | Call `resolveHandoffEvidence(input)` -- a pure import, never re-parse the `HANDOFF RESULT` trailer inline                                    |
 
 ## MCP Tool Layer Structure
 
