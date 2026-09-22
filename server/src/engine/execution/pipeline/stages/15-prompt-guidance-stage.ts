@@ -256,6 +256,7 @@ export class PromptGuidanceStage extends BasePipelineStage {
       const guidanceOptions: Parameters<PromptGuidanceService['applyGuidance']>[1] = {
         includeSystemPromptInjection: includeSystemPrompt,
         includeTemplateEnhancement: true,
+        scope: context.getScopeOptions(),
       };
 
       const frameworkOverride = this.getFrameworkOverride(context);

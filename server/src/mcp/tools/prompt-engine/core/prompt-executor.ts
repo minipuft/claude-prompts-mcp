@@ -1073,13 +1073,13 @@ export class PromptExecutor {
     );
   }
 
-  private async resolveFrameworkContextForPrompt(promptId: string) {
+  private async resolveFrameworkContextForPrompt(promptId: string, scope?: StateStoreOptions) {
     const prompt = this.convertedPrompts.find((p) => p.id === promptId);
     if (!prompt) {
       return null;
     }
 
-    const frameworkContext = await this.getFrameworkExecutionContext(prompt);
+    const frameworkContext = await this.getFrameworkExecutionContext(prompt, scope);
     if (!frameworkContext) {
       return {
         category: prompt.category,
@@ -1094,20 +1094,22 @@ export class PromptExecutor {
   }
 
   private async getFrameworkExecutionContext(
-    prompt: ConvertedPrompt
+    prompt: ConvertedPrompt,
+    scope: StateStoreOptions | undefined
   ): Promise<FrameworkExecutionContext | null> {
     if (!this.frameworkManager || !this.frameworkStateStore) {
       return null;
     }
 
-    if (!this.frameworkStateStore.isFrameworkSystemEnabled()) {
+    if (!this.frameworkStateStore.isFrameworkSystemEnabled(scope)) {
       return null;
     }
 
     try {
-      const activeFramework = this.frameworkStateStore.getActiveFramework();
+      const activeFramework = this.frameworkStateStore.getActiveFramework(scope);
       return this.frameworkManager.generateExecutionContext(prompt, {
         userPreference: activeFramework.type,
+        scope,
       });
     } catch (error) {
       this.logger.warn('[PromptExecutor] Failed to generate framework execution context', {
@@ -1148,8 +1150,8 @@ export class PromptExecutor {
         hookRegistry: this.hookRegistry,
         notificationEmitter: this.notificationEmitter,
         mcpToolsManager: this.mcpToolsManager,
-        getFrameworkStateEnabled: () =>
-          this.frameworkStateStore?.isFrameworkSystemEnabled() ?? false,
+        getFrameworkStateEnabled: (scope) =>
+          this.frameworkStateStore?.isFrameworkSystemEnabled(scope) ?? false,
         getAnalyticsService: () => this.analyticsService,
         getConvertedPrompts: () => this.convertedPrompts,
         routeToTool: this.routeToTool.bind(this),

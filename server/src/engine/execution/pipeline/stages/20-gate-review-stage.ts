@@ -430,6 +430,7 @@ export class GateReviewStage extends BasePipelineStage {
         chainContext,
         pendingGateReview: reviewForRender,
         additionalGateIds: reviewForRender.gateIds,
+        scope: context.getScopeOptions(),
       });
 
       // Resolve judge gates and compose context-isolated prompt if any gates use judge mode

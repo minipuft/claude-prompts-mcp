@@ -34,7 +34,31 @@ export interface PersistedFrameworkState {
   activeFramework: string;
   lastSwitchedAt: string;
   switchReason: string;
+  /**
+   * This scope's own framework switches, oldest first, capped at {@link SWITCH_HISTORY_LIMIT}.
+   * Optional: a row written before switch history was per scope carries none, and reads as empty.
+   */
+  switchHistory?: PersistedSwitchRecord[];
 }
+
+/** One framework switch, as a `kv_state` row stores it (the timestamp is ISO-8601). */
+export interface PersistedSwitchRecord {
+  from: string;
+  to: string;
+  timestamp: string;
+  reason: string;
+}
+
+/** One framework switch, as {@link FrameworkStateStore.getSwitchHistory} returns it. */
+export interface FrameworkSwitchRecord {
+  from: string;
+  to: string;
+  timestamp: Date;
+  reason: string;
+}
+
+/** Switches kept per scope. The row is rewritten on every switch, so it must stay small. */
+const SWITCH_HISTORY_LIMIT = 50;
 
 /**
  * Construction options for {@link FrameworkStateStore}.
@@ -53,6 +77,12 @@ export interface FrameworkStateStoreOptions {
    * without a restart. Absent means {@link DEFAULT_FRAMEWORK_ID}.
    */
   defaultFramework?: () => string;
+  /**
+   * Reads whether the framework system starts enabled, from configuration, for a scope with no
+   * persisted row: the launch workspace at startup and any workspace a request names for the first
+   * time. Read each time a scope is created, like `defaultFramework`. Absent means disabled.
+   */
+  initialSystemEnabled?: () => boolean;
   /** Scope applied when a caller supplies none — the project this process serves. */
   defaultScope?: StateStoreOptions;
 }
@@ -122,7 +152,8 @@ export class FrameworkStateStore extends EventEmitter {
   private scopedStates: Map<string, FrameworkState> = new Map();
   /** The scope each `scopedStates` key was resolved from, so the state under a key can be saved. */
   private scopesByKey: Map<string, StateStoreOptions | undefined> = new Map();
-  private switchHistory: Array<{ from: string; to: string; timestamp: Date; reason: string }> = [];
+  /** Each scope's switches, oldest first, keyed like `scopedStates`. */
+  private switchHistories: Map<string, FrameworkSwitchRecord[]> = new Map();
   private switchingMetrics = {
     totalSwitches: 0,
     successfulSwitches: 0,
@@ -134,6 +165,7 @@ export class FrameworkStateStore extends EventEmitter {
   /** The server's `state.db`, opened when no `stateStore` was injected. */
   private readonly stateDbPath: string;
   private readonly readDefaultFramework: () => string;
+  private readonly readInitialSystemEnabled: () => boolean;
   private readonly defaultScope?: StateStoreOptions;
   private stateStore?: SqliteStateStore<PersistedFrameworkState>;
   private notificationEmitter?: McpNotificationEmitterPort;
@@ -143,6 +175,7 @@ export class FrameworkStateStore extends EventEmitter {
     this.logger = logger;
     this.stateDbPath = stateDbPath;
     this.readDefaultFramework = options.defaultFramework ?? (() => DEFAULT_FRAMEWORK_ID);
+    this.readInitialSystemEnabled = options.initialSystemEnabled ?? (() => false);
     this.defaultScope = options.defaultScope;
 
     if (options.stateStore) {
@@ -152,10 +185,7 @@ export class FrameworkStateStore extends EventEmitter {
     // Seed the process's own scope, not the literal 'default' bucket — otherwise the
     // first read would miss it and re-seed under the real key.
     const defaultKey = resolveContinuityScopeId(this.defaultScope);
-    this.scopedStates.set(
-      defaultKey,
-      FrameworkStateStore.createDefaultState(this.readDefaultFramework())
-    );
+    this.scopedStates.set(defaultKey, this.createInitialState());
     this.scopesByKey.set(defaultKey, this.defaultScope);
   }
 
@@ -170,14 +200,19 @@ export class FrameworkStateStore extends EventEmitter {
     return scope ?? this.defaultScope;
   }
 
-  private static createDefaultState(defaultFramework: string): FrameworkState {
+  /**
+   * What a scope with no persisted row starts with — the launch workspace and a workspace a request
+   * names for the first time alike: the configured default framework and the configured enabled
+   * flag. The one answer to that question; both kinds of scope are created through it.
+   */
+  private createInitialState(): FrameworkState {
     return {
-      activeFramework: defaultFramework,
+      activeFramework: this.readDefaultFramework(),
       previousFramework: null,
       switchedAt: new Date(),
       switchReason: 'Initial framework selection',
       isHealthy: true,
-      frameworkSystemEnabled: false,
+      frameworkSystemEnabled: this.readInitialSystemEnabled(),
       switchingMetrics: {
         switchCount: 0,
         averageResponseTime: 0,
@@ -194,7 +229,7 @@ export class FrameworkStateStore extends EventEmitter {
     const key = this.resolveStateKey(scope);
     let state = this.scopedStates.get(key);
     if (!state) {
-      state = FrameworkStateStore.createDefaultState(this.readDefaultFramework());
+      state = this.createInitialState();
       this.scopedStates.set(key, state);
       this.scopesByKey.set(key, this.effectiveScope(scope));
     }
@@ -305,6 +340,7 @@ export class FrameworkStateStore extends EventEmitter {
         currentState.activeFramework = persistedState.activeFramework;
         currentState.switchedAt = new Date(persistedState.lastSwitchedAt);
         currentState.switchReason = persistedState.switchReason;
+        this.restoreSwitchHistory(this.resolveStateKey(scope), persistedState);
 
         this.logger.info(
           `✅ Loaded framework state: ${
@@ -384,6 +420,7 @@ export class FrameworkStateStore extends EventEmitter {
         state.activeFramework = persisted.activeFramework;
         state.switchedAt = new Date(persisted.lastSwitchedAt);
         state.switchReason = persisted.switchReason;
+        this.restoreSwitchHistory(row.tenant_id, persisted);
       }
     } catch (error) {
       this.logger.warn(
@@ -461,6 +498,10 @@ export class FrameworkStateStore extends EventEmitter {
       activeFramework: currentState.activeFramework,
       lastSwitchedAt: currentState.switchedAt.toISOString(),
       switchReason: currentState.switchReason,
+      switchHistory: this.historyFor(this.resolveStateKey(scope)).map((entry) => ({
+        ...entry,
+        timestamp: entry.timestamp.toISOString(),
+      })),
     };
 
     await this.stateStore.save(persistedState, this.effectiveScope(scope));
@@ -484,11 +525,14 @@ export class FrameworkStateStore extends EventEmitter {
   }
 
   /**
-   * Get active framework definition
+   * The framework a scope has selected.
+   *
+   * @param scope the request's scope. Omit only where no request exists (startup, a file watcher);
+   *   `validate:scoped-framework-reads` fails a scope-less read anywhere a request's scope is known.
    */
-  getActiveFramework(): FrameworkDefinition {
+  getActiveFramework(scope?: StateStoreOptions): FrameworkDefinition {
     this.ensureInitialized();
-    const defaultState = this.getOrCreateScopedState();
+    const defaultState = this.getOrCreateScopedState(scope);
     const framework = this.frameworkManager!.getFramework(defaultState.activeFramework);
     if (!framework) {
       throw new Error(`Active framework '${defaultState.activeFramework}' not found`);
@@ -557,12 +601,7 @@ export class FrameworkStateStore extends EventEmitter {
       switchedAt: new Date(),
       switchReason,
     });
-    this.switchHistory.push({
-      from: previous,
-      to: defaultFramework,
-      timestamp: new Date(),
-      reason: switchReason,
-    });
+    this.recordSwitch(scope, { from: previous, to: defaultFramework, reason: switchReason });
 
     await this.saveStateToFile(scope);
 
@@ -616,11 +655,9 @@ export class FrameworkStateStore extends EventEmitter {
     };
     this.scopedStates.set(key, updatedState);
 
-    // Record switch history
-    this.switchHistory.push({
+    this.recordSwitch(scope, {
       from: previousFramework,
       to: request.targetFramework,
-      timestamp: new Date(),
       reason: switchReason,
     });
 
@@ -694,7 +731,8 @@ export class FrameworkStateStore extends EventEmitter {
       status = 'error';
     }
 
-    const lastSwitch = this.switchHistory[this.switchHistory.length - 1];
+    const history = this.historyFor(this.resolveStateKey(scope));
+    const lastSwitch = history[history.length - 1];
     const lastSwitchTime = lastSwitch ? lastSwitch.timestamp : null;
 
     return {
@@ -709,13 +747,36 @@ export class FrameworkStateStore extends EventEmitter {
   }
 
   /**
-   * Get framework switch history
+   * One scope's framework switches, most recent first.
+   *
+   * @param scope the caller's scope. Before 2026-09-22 this was one process-wide list, so a switch
+   *   made under one workspace header appeared in every workspace's history.
    */
-  getSwitchHistory(
-    limit?: number
-  ): Array<{ from: string; to: string; timestamp: Date; reason: string }> {
-    const history = [...this.switchHistory].reverse(); // Most recent first
+  getSwitchHistory(limit?: number, scope?: StateStoreOptions): FrameworkSwitchRecord[] {
+    const history = [...this.historyFor(this.resolveStateKey(scope))].reverse();
     return limit ? history.slice(0, limit) : history;
+  }
+
+  private historyFor(key: string): FrameworkSwitchRecord[] {
+    return this.switchHistories.get(key) ?? [];
+  }
+
+  /** Append to a scope's history, in memory; the caller's `saveStateToFile` persists it. */
+  private recordSwitch(
+    scope: StateStoreOptions | undefined,
+    entry: Omit<FrameworkSwitchRecord, 'timestamp'>
+  ): void {
+    const key = this.resolveStateKey(scope);
+    const history = [...this.historyFor(key), { ...entry, timestamp: new Date() }];
+    this.switchHistories.set(key, history.slice(-SWITCH_HISTORY_LIMIT));
+  }
+
+  private restoreSwitchHistory(key: string, persisted: PersistedFrameworkState): void {
+    const entries = Array.isArray(persisted.switchHistory) ? persisted.switchHistory : [];
+    this.switchHistories.set(
+      key,
+      entries.map((entry) => ({ ...entry, timestamp: new Date(entry.timestamp) }))
+    );
   }
 
   /**
