@@ -302,6 +302,9 @@ export class ResourceManagerRouter {
     if (args.block_response_on_fail !== undefined) {
       gateArgs.blockResponseOnFail = args.block_response_on_fail;
     }
+    // Same parameter and key name, so no spelling to map — only the presence test, which is the
+    // part that matters: the block is written whole or not at all.
+    if (args.evaluation !== undefined) gateArgs.evaluation = args.evaluation;
     if (args.description) gateArgs.description = args.description;
     if (args.subject) gateArgs.subject = args.subject;
     if (args.guidance) gateArgs.guidance = args.guidance;

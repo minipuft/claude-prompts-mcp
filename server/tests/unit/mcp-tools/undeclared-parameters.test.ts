@@ -35,7 +35,10 @@ import {
   gateVerdictSubmissionSchema,
   buildPromptEngineSchema,
 } from '../../../src/mcp/tools/schemas/prompt-engine.schema.js';
-import { gatePassCriteriaSchema } from '../../../src/mcp/tools/schemas/resource-manager.schema.js';
+import {
+  gatePassCriteriaSchema,
+  resourceManagerInputSchema,
+} from '../../../src/mcp/tools/schemas/resource-manager.schema.js';
 
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const CONTRACT_FILE: Readonly<Record<ContractToolName, string>> = {
@@ -335,5 +338,52 @@ describe('nested key refusal (P4.103)', () => {
       expect(declared).toContain('shell_command');
       expect(declared).not.toContain('description');
     });
+  });
+});
+
+/**
+ * P4.121 — the same refusal for a strict object with no union around it: `resource_manager`'s
+ * `evaluation`. Zod hands the object's own `error` callback the `unrecognized_keys` issue with an
+ * absolute path, so `refuseUndeclaredNestedKeys` reuses `describeNestedSchemaRefusal` rather than
+ * adding a second message. Parsed through the REGISTERED root, so the path is the one a client
+ * sees, not one this test assembled.
+ */
+describe('nested key refusal on a strict object (P4.121)', () => {
+  const parseGate = (evaluation: unknown): { ok: boolean; messages: string[] } => {
+    const result = resourceManagerInputSchema.safeParse({
+      resource_type: 'gate',
+      action: 'update',
+      id: 'g',
+      evaluation,
+    });
+    return {
+      ok: result.success,
+      messages: result.success ? [] : result.error.issues.map((issue) => issue.message),
+    };
+  };
+
+  it('CONTROL: a well-formed block is accepted', () => {
+    expect(parseGate({ mode: 'judge', model: 'haiku', strict: true }).ok).toBe(true);
+  });
+
+  it('a misspelled key names its full path and the nearest declared key', () => {
+    const { ok, messages } = parseGate({ mode: 'judge', stirct: true });
+
+    expect(ok).toBe(false);
+    expect(messages).toEqual([
+      "'evaluation.stirct' is not a declared key — did you mean 'strict'?\n\n" +
+        'It was dropped and ignored before, which let a misspelled key read as an absent one.',
+    ]);
+  });
+
+  it("a wrong-typed value keeps zod's own path message — the override answers dropped keys only", () => {
+    const { ok, messages } = parseGate({ mode: 'judge', strict: 'yes' });
+
+    expect(ok).toBe(false);
+    expect(messages).toEqual(['Invalid input: expected boolean, received string']);
+  });
+
+  it('a block without mode is refused, because it would not load', () => {
+    expect(parseGate({ model: 'haiku' }).ok).toBe(false);
   });
 });

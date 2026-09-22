@@ -8,6 +8,7 @@ import {
   type QuarantineFinding,
 } from '../../shared/quarantine-report.js';
 
+import type { JudgeEvaluationConfig } from '#engine/gates/judge/types.js';
 import type { ToolResponse } from '#shared/types/index.js';
 import type { GateResourceContext } from '../core/context.js';
 import type { GateManagerInput } from '../core/types.js';
@@ -125,6 +126,7 @@ export class GateDiscoveryProcessor {
       definition.blockResponseOnFail !== undefined
         ? `\n  - Blocks Response On Fail: ${String(definition.blockResponseOnFail)}`
         : '';
+    const evaluationLine = formatEvaluationLine(definition.evaluation);
 
     // Announce the fallback. The served definition is correct and the operator asked about it —
     // but if a file for the same id failed to load, their edit to that file is inert, and nothing
@@ -142,7 +144,7 @@ export class GateDiscoveryProcessor {
         `  - ID: ${gate.gateId}\n` +
         `  - Type: ${typeIcon} ${gate.type}\n` +
         `  - Description: ${gate.description}` +
-        `${severityLine}${enforcementModeLine}${gateTypeLine}${blockResponseLine}\n\n` +
+        `${severityLine}${enforcementModeLine}${gateTypeLine}${blockResponseLine}${evaluationLine}\n\n` +
         `📝 Guidance:\n${guidancePreview}` +
         shadowedNote
     );
@@ -155,4 +157,20 @@ export class GateDiscoveryProcessor {
   private error(text: string): ToolResponse {
     return { content: [{ type: 'text', text: `❌ ${text}` }], isError: true };
   }
+}
+
+/**
+ * P4.121 — the `evaluation` block as `inspect` reads it back: the keys the author declared, never
+ * the resolved defaults, so an authored `strict: false` reads differently from no `strict` at all.
+ * Empty when the gate declares no block — its reviewer is then whatever
+ * `gates.evaluation.defaultMode` says, which is config, not this gate.
+ */
+function formatEvaluationLine(evaluation: JudgeEvaluationConfig | undefined): string {
+  if (evaluation === undefined) return '';
+  const details = [
+    ...(evaluation.model !== undefined ? [`model: ${evaluation.model}`] : []),
+    ...(evaluation.strict !== undefined ? [`strict: ${String(evaluation.strict)}`] : []),
+  ];
+  const suffix = details.length > 0 ? ` (${details.join(', ')})` : '';
+  return `\n  - Evaluation: ${evaluation.mode}${suffix}`;
 }

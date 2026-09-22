@@ -75,24 +75,14 @@ export const ALL_GATE_DATA_KEYS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Gate-data keys with no tool parameter, and why — the stamped half of the bound above.
- *
- * `evaluation` (judge routing: mode, model hint, rubric) is preserved on write and authorable
- * only by hand today. It stays out of this mapping because publishing it means publishing the
- * judge-routing sub-shape as a tool parameter, which is a contract decision, not a mapping
- * omission. *(as of 2026-09-21 · flips when `resource_manager` declares a parameter writing the
- * `evaluation` key, at which point it belongs in `callerSuppliedGateKeys` and out of here.)*
- */
-export const UNSETTABLE_GATE_DATA_KEYS: readonly string[] = ['evaluation'];
-
-/**
  * The `GateCreationData` keys THIS call supplied, under the names the writer narrows by.
  *
  * One mapping from tool input to gate-data key, rather than a literal repeated at each call site:
  * the literal it replaces had silently dropped `gate_type`, so a `gate_type`-only update planned
  * no `gate.yaml` write and still answered "updated successfully" over an unchanged file (driven
  * 2026-09-21). `settable-gate-fields.test.ts` bounds the mapping's key set against
- * {@link ALL_GATE_DATA_KEYS} in both directions, so a future schema field cannot join
+ * {@link ALL_GATE_DATA_KEYS} in both directions, with no exception list since `evaluation` became
+ * a parameter (P4.121), so a future schema field cannot join
  * `GateCreationData` without joining this.
  *
  * `!== undefined`, never truthiness: `blockResponseOnFail: false` is a caller CLEARING the key,
@@ -112,6 +102,7 @@ export function callerSuppliedGateKeys(args: GateManagerInput): ReadonlySet<stri
     gate_type: args.gate_type,
     subject: args.subject,
     blockResponseOnFail: args.blockResponseOnFail,
+    evaluation: args.evaluation,
   };
 
   return new Set(

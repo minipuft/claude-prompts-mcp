@@ -79,15 +79,6 @@ const EXEMPTIONS: Readonly<Record<string, readonly Exemption[]>> = {
         'value would name a file the writer does not produce.',
       stillExempt: () => true,
     },
-    {
-      key: 'evaluation',
-      reason:
-        'Declared on GateDefinitionSchema, preserved on update, and with no tool parameter: ' +
-        'publishing it means publishing the judge-routing sub-shape (mode, model hint, rubric) as ' +
-        'a tool parameter, which is a contract decision rather than an oversight. ' +
-        '`blockResponseOnFail` was the sibling entry here until P4.100 declared it.',
-      stillExempt: () => !('evaluation' in resourceManagerInputSchema.shape),
-    },
   ],
   framework: [
     {

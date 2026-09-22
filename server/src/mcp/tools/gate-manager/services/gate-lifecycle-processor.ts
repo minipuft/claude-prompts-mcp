@@ -42,6 +42,7 @@ export class GateLifecycleProcessor {
       gate_type,
       subject,
       blockResponseOnFail,
+      evaluation,
     } = args;
 
     if (!id) return this.error('Gate ID is required for create action');
@@ -89,6 +90,7 @@ export class GateLifecycleProcessor {
       gate_type,
       subject,
       blockResponseOnFail,
+      evaluation,
     };
 
     // The created state is recorded as version 1 — the same `saveVersion` MAX(existing)+1
@@ -183,6 +185,7 @@ export class GateLifecycleProcessor {
       gate_type,
       subject,
       blockResponseOnFail,
+      evaluation,
     } = args;
 
     if (!id) return this.error('Gate ID is required for update action');
@@ -237,6 +240,7 @@ export class GateLifecycleProcessor {
       gate_type,
       subject,
       blockResponseOnFail,
+      evaluation,
     };
 
     // The union of fields THIS call actually supplied, as opposed to `gateData` above — which
@@ -395,6 +399,7 @@ export class GateLifecycleProcessor {
       enforcementMode: args.enforcementMode,
       gate_type: args.gate_type,
       blockResponseOnFail: args.blockResponseOnFail,
+      evaluation: args.evaluation,
     };
 
     // The state this repair will PRODUCE — the only state there is. `gateData` already resolves

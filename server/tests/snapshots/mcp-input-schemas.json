@@ -1419,6 +1419,28 @@
         ],
         "type": "string"
       },
+      "evaluation": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "enum": [
+              "self",
+              "judge"
+            ],
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "strict": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "type": "object"
+      },
       "execution_flow": {
         "additionalProperties": false,
         "properties": {

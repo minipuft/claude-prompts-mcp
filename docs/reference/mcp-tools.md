@@ -1154,6 +1154,7 @@ re-send them with `edges:` on an `update`.
 | `severity`               | `critical` \| `high` \| `medium` \| `low`. Default `medium`                    |
 | `enforcement_mode`       | `blocking` \| `advisory` \| `informational`. Absent, derived from `severity`   |
 | `block_response_on_fail` | `true` withholds the step output on a FAIL and returns the gate review instead |
+| `evaluation`             | `{mode, model?, strict?}`: who reviews the gate, `self` or `judge`             |
 | `guidance`               | Gate criteria content                                                          |
 | `pass_criteria`          | Array of success conditions                                                    |
 | `activation`             | When gate activates (categories, frameworks)                                   |
@@ -1161,6 +1162,16 @@ re-send them with `edges:` on an `update`.
 Omitting `severity`, `enforcement_mode` or `block_response_on_fail` on an update leaves the gate's
 current value alone; it does not reset to the default. `block_response_on_fail: false` is a value,
 not an omission — it clears the key on a gate that declared it.
+
+`evaluation` writes the `gate.yaml` block of the same name, the one
+[judge mode](../guides/judge-mode.md) reads: `mode` is `self` or `judge` (required), `model` is
+a model hint for the judge, and `strict` asks for failures first (under `judge` it defaults to
+`true`). The block is written whole, so a supplied block replaces the gate's existing one rather
+than merging into it. Omitted on update, the existing block is kept. `{"mode": "self"}` returns a
+gate to self-review, but it is not the same as removing the block: a gate that declares no block
+follows `gates.evaluation.defaultMode`, and there is no parameter that removes the block yet. A key
+the block does not declare is refused by path with the nearest declared key
+(`'evaluation.stirct' is not a declared key — did you mean 'strict'?`).
 
 Every gate parameter is named for the `gate.yaml` key it writes. `type` and `gate_type` are two
 different keys and each has its own parameter: `type` is the validation/guidance behaviour,
@@ -1917,12 +1928,12 @@ file, a resource whose files could not be located) have no recorded bytes and re
 way: the version snapshot records the resource's authored surface, not every byte in its directory,
 and what falls outside it is left to the file writers, which carry it forward from disk:
 
-| Resource  | Not in the snapshot                                                             | What happens on rollback                                                                                                                                                                           |
-| --------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| prompt    | `register_with_mcp`, `mcp_prompt_mode` (resolved through the category chain)    | keep their current on-disk values                                                                                                                                                                  |
-| prompt    | script tools under `tools/{id}/`                                                | left unchanged — **the response says so**. A v29-era row restores them byte for byte instead, and then says nothing, because there is nothing left unrestored                                      |
-| gate      | `severity`, `enforcementMode`, `gate_type`, `evaluation`, `blockResponseOnFail` | carried forward from `gate.yaml` — still true after `severity`, `enforcementMode`, `gate_type` and `blockResponseOnFail` became settable, since they are preserved keys rather than projected ones |
-| framework | `phases` and the advanced authoring fields                                      | carried forward by the writer's merge                                                                                                                                                              |
+| Resource  | Not in the snapshot                                                             | What happens on rollback                                                                                                                                      |
+| --------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| prompt    | `register_with_mcp`, `mcp_prompt_mode` (resolved through the category chain)    | keep their current on-disk values                                                                                                                             |
+| prompt    | script tools under `tools/{id}/`                                                | left unchanged — **the response says so**. A v29-era row restores them byte for byte instead, and then says nothing, because there is nothing left unrestored |
+| gate      | `severity`, `enforcementMode`, `gate_type`, `evaluation`, `blockResponseOnFail` | carried forward from `gate.yaml` — still true after all five became settable, since they are preserved keys rather than projected ones                        |
+| framework | `phases` and the advanced authoring fields                                      | carried forward by the writer's merge                                                                                                                         |
 
 Where a rollback restores only part of a resource, the response names what it did not restore.
 Frameworks additionally report any projected field the target version never recorded, because the

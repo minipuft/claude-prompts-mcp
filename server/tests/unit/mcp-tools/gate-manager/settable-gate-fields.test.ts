@@ -23,7 +23,6 @@ import {
   ALL_GATE_DATA_KEYS,
   callerSuppliedGateKeys,
   GateFileWriter,
-  UNSETTABLE_GATE_DATA_KEYS,
 } from '../../../../src/mcp/tools/gate-manager/services/index.js';
 
 import type { GateManagerInput } from '../../../../src/mcp/tools/gate-manager/core/types.js';
@@ -185,6 +184,51 @@ describe('settable gate fields (P4.4)', () => {
     expect(result.success).toBe(true);
     expect(readGateYaml()['blockResponseOnFail']).toBe(true);
   });
+
+  // ── P4.121: `evaluation`, the last key of the class ───────────────────────
+  //
+  // The judge-routing block. Same preservation route, one difference that matters: it is an
+  // OBJECT, written whole. A supplied block replaces the file's block rather than merging into
+  // it, so returning a gate to `{mode: 'self'}` does not leave a judge's `model` behind.
+
+  it('writes a caller-supplied evaluation block into gate.yaml', async () => {
+    const service = new GateFileWriter({ logger, configManager });
+
+    const result = await service.writeGateFiles({
+      ...baseGate,
+      evaluation: { mode: 'judge', model: 'haiku', strict: false },
+    });
+
+    expect(result.success).toBe(true);
+    expect(readGateYaml()['evaluation']).toEqual({ mode: 'judge', model: 'haiku', strict: false });
+  });
+
+  it('replaces the whole evaluation block rather than merging into it', async () => {
+    const service = new GateFileWriter({ logger, configManager });
+
+    await service.writeGateFiles({
+      ...baseGate,
+      evaluation: { mode: 'judge', model: 'haiku', strict: true },
+    });
+    const result = await service.writeGateFiles({ ...baseGate, evaluation: { mode: 'self' } });
+
+    expect(result.success).toBe(true);
+    // `toEqual` on the whole block: a key-by-key merge would leave `model` and `strict` behind.
+    expect(readGateYaml()['evaluation']).toEqual({ mode: 'self' });
+  });
+
+  it('preserves an existing evaluation block when a later update omits the field', async () => {
+    const service = new GateFileWriter({ logger, configManager });
+
+    await service.writeGateFiles({ ...baseGate, evaluation: { mode: 'judge', model: 'haiku' } });
+    const result = await service.writeGateFiles({
+      ...baseGate,
+      description: 'updated, saying nothing about evaluation',
+    });
+
+    expect(result.success).toBe(true);
+    expect(readGateYaml()['evaluation']).toEqual({ mode: 'judge', model: 'haiku' });
+  });
 });
 
 /**
@@ -201,12 +245,11 @@ describe('settable gate fields (P4.4)', () => {
  */
 describe('callerSuppliedGateKeys covers every settable gate-data key (P4.100)', () => {
   /**
-   * Every gate-data key a caller can address, minus the ones deliberately without a parameter.
-   * The exception list is read from the source rather than restated, so retiring an entry there
-   * fails here until the mapping gains it.
+   * Every gate-data key a caller can address. There is no exception list: `evaluation` was the
+   * last key without a parameter, and P4.121 declared it, so every key the writer can narrow by is
+   * one a caller can supply.
    */
-  const settableKeys = (): string[] =>
-    [...ALL_GATE_DATA_KEYS].filter((key) => !UNSETTABLE_GATE_DATA_KEYS.includes(key)).sort();
+  const settableKeys = (): string[] => [...ALL_GATE_DATA_KEYS].sort();
 
   /** One value per key, under the TOOL's spelling of it. */
   const everyKeySupplied: GateManagerInput = {
@@ -224,6 +267,7 @@ describe('callerSuppliedGateKeys covers every settable gate-data key (P4.100)', 
     gate_type: 'framework',
     subject: 'code-quality',
     blockResponseOnFail: true,
+    evaluation: { mode: 'judge' },
   };
 
   it('reports every gate-data key when the caller supplies every one of them', () => {
@@ -248,6 +292,15 @@ describe('callerSuppliedGateKeys covers every settable gate-data key (P4.100)', 
     expect([
       ...callerSuppliedGateKeys({ action: 'update', id: 'covered', blockResponseOnFail: false }),
     ]).toEqual(['blockResponseOnFail']);
+  });
+
+  it('reports evaluation on an evaluation-only update (P4.121)', () => {
+    // Without this the block would be accepted by the schema, carried to `GateCreationData`, and
+    // then dropped by the write-scope narrowing: `writesYaml === false`, success reply, file
+    // unchanged — the `gate_type` defect again, one key later.
+    expect([
+      ...callerSuppliedGateKeys({ action: 'update', id: 'covered', evaluation: { mode: 'self' } }),
+    ]).toEqual(['evaluation']);
   });
 
   it('reports nothing when the call supplies nothing — the positive control for the four above', () => {
