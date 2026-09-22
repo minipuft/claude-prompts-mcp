@@ -27,7 +27,8 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 
-import { loadHistory, saveVersion } from '../../../src/cli-shared/version-history.js';
+import { loadHistory } from '../../../src/cli-shared/version-history.js';
+import { saveVersion } from '../../helpers/version-history-writer.js';
 import { SqliteEngine } from '../../../src/infra/database/index.js';
 import { testScratchPath } from '../../helpers/scratch-path.js';
 

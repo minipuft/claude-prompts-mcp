@@ -193,7 +193,7 @@ function resolveLocal(fromFile, specifier) {
   for (const candidate of [base, `${stem}.ts`, `${stem}.mjs`, `${stem}.js`]) {
     try {
       if (statSync(candidate).isFile()) return candidate;
-    } catch {
+    } catch (_error) {
       // Not this spelling.
     }
   }

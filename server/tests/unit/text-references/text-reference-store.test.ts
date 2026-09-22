@@ -40,13 +40,9 @@ describe('TextReferenceStore.buildChainVariables', () => {
     expect(variables.step_results).toEqual({ 1: 'drafted', 2: 'reviewed' });
   });
 
-  test('stored metadata is addressable by node id, not by position', () => {
-    const manager = new TextReferenceStore(logger);
-    manager.storeChainStepResult('chain-3', 'draft', 'drafted', { note: 'first' }, 1);
-
-    expect(manager.getChainStepMetadata('chain-3', 'draft')).toEqual({ note: 'first' });
-    expect(manager.getChainStepMetadata('chain-3', 'nope')).toBeNull();
-  });
+  // A third test here drove `getChainStepMetadata`, deleted with its only caller
+  // (`ChainSessionStore.updateStepResult`) in P4.91. Nothing else asked that question, so the
+  // test went with the method rather than being rewritten against a different subject.
 });
 
 /**

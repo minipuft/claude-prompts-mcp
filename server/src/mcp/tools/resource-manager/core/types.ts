@@ -330,6 +330,8 @@ export interface ResourceManagerInput {
   subject?: string;
   severity?: 'critical' | 'high' | 'medium' | 'low';
   enforcement_mode?: 'blocking' | 'advisory' | 'informational';
+  /** Writes the gate.yaml key `blockResponseOnFail` — withhold the step output on a FAIL. */
+  block_response_on_fail?: boolean;
   guidance?: string;
   pass_criteria?: Array<string | GatePassCriteria>;
   activation?: {

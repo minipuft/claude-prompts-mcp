@@ -56,15 +56,15 @@ export class StatusActionHandler extends ActionHandler {
     }
 
     if (include_metrics) {
-      const analytics = this.context.systemAnalytics;
-      response += `📊 **Performance Metrics**:\n`;
-      response += `- Total Executions: ${analytics.totalExecutions}\n`;
-      response += `- Success Rate: ${
-        analytics.totalExecutions > 0
-          ? Math.round((analytics.successfulExecutions / analytics.totalExecutions) * 100)
-          : 0
-      }%\n`;
-      response += `- Average Execution Time: ${analytics.averageExecutionTime}ms\n\n`;
+      // The same scoped ledger read `analytics` uses, so the two actions cannot disagree about
+      // one workspace. They did: these three lines read process-wide counters nothing wrote, and
+      // rendered 0/0 as `Success Rate: 0%` where `analytics` rendered the same zeroes as 100%
+      // (P4.87).
+      const ledger = this.tallyLedger();
+      response += `📊 **Recorded Steps** (this workspace):\n`;
+      response += `- Steps Recorded: ${ledger.records}\n`;
+      response += `- Completed: ${ledger.completed}\n`;
+      response += `- Failed: ${ledger.failed}\n\n`;
     }
 
     return this.createMinimalSystemResponse(response, 'status');

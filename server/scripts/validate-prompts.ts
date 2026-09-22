@@ -45,6 +45,10 @@ import {
   isExcludedCategoryDirectoryName,
   isIgnoredPromptEntryName,
   isReservedPromptDirectoryName,
+  isSingleFilePromptName,
+  promptIdFromDirectory,
+  promptIdFromSingleFile,
+  singleFilePromptBaseName,
 } from '../src/shared/utils/prompt-layout.js';
 import { isCanonicalPromptId, isKebabId } from '../src/shared/utils/resource-ids.js';
 import type { Logger } from '../src/shared/types/index.js';
@@ -104,7 +108,7 @@ const CONVENTION_EXCEPTIONS = new Map<string, ConventionException>([
  * this reads them rather than restating them, so the gate cannot drift from the rule it checks.
  */
 function findConventionProblems(file: string, rel: string): Problem[] {
-  const id = basename(dirname(file));
+  const id = localIdOf(file);
   const category = rel.split(/[/\\]/)[0] ?? '';
   const key = `${category}/${id}`;
   const problems: Problem[] = [];
@@ -142,7 +146,7 @@ function findStaleExceptions(
   exceptions: ReadonlyMap<string, ConventionException>
 ): string[] {
   const live = new Set(
-    files.map((f) => `${relative(root, f).split(/[/\\]/)[0] ?? ''}/${basename(dirname(f))}`)
+    files.map((f) => `${relative(root, f).split(/[/\\]/)[0] ?? ''}/${localIdOf(f)}`)
   );
   return [...exceptions.entries()]
     .filter(([key, exception]) => {
@@ -161,14 +165,24 @@ function findStaleExceptions(
 }
 
 /**
- * Every `prompt.yaml` beneath the root that the loader would serve, at any depth — nested chain
+ * Every prompt file beneath the root that the loader would serve, at any depth — nested chain
  * steps live deeper.
  *
- * The skips are the loader's, read from `prompt-layout.ts` rather than restated. Without them this
- * walk schema-checked files nothing serves: a `prompt.yaml` under a prompt's reserved `tools/`, or
- * anywhere below `_drafts/` or a root-level `backup/`, could fail CI as a prompt no MCP surface
- * ever answers. At the root the loader's category rule decides; `tools` is reserved only BELOW the
- * root — at the root it is an ordinary category, which the loader serves.
+ * BOTH LAYOUTS, because the loader serves both. This walk collected `prompt.yaml` alone until
+ * P4.112, while `discoverYamlPrompts` also serves `{category}/{id}.yaml` and
+ * `{category}/{folder}/{id}.yaml`. The bundled tree has none, so nothing misreported here — but a
+ * personal library reached through `--root`, which is the case this script's header names as the
+ * one that matters, had every single-file prompt unvalidated AND read as absent: a chain step
+ * naming one was reported as an unresolvable reference, a finding about the validator rather than
+ * about the tree.
+ *
+ * Which `.yaml` file is a prompt is `isSingleFilePromptName`'s answer, not a suffix test here:
+ * `category.yaml`, `tool.yaml` and `prompts.yaml` all parse as YAML and none is a prompt. The
+ * skips are the loader's for the same reason. Without them this walk schema-checked files nothing
+ * serves: a `prompt.yaml` under a prompt's reserved `tools/`, or anywhere below `_drafts/` or a
+ * root-level `backup/`, could fail CI as a prompt no MCP surface ever answers. At the root the
+ * loader's category rule decides; `tools` is reserved only BELOW the root — at the root it is an
+ * ordinary category, which the loader serves.
  */
 function findPromptFiles(dir: string, found: string[] = [], depth = 0): string[] {
   let entries;
@@ -187,7 +201,13 @@ function findPromptFiles(dir: string, found: string[] = [], depth = 0): string[]
           : isReservedPromptDirectoryName(entry.name);
       if (skipped) continue;
       findPromptFiles(full, found, depth + 1);
-    } else if (entry.name === 'prompt.yaml') found.push(full);
+    } else if (entry.name === 'prompt.yaml') {
+      found.push(full);
+    } else if (depth > 0 && isSingleFilePromptName(entry.name)) {
+      // `depth > 0`: a `.yaml` sitting directly at the prompts root would be its own category, and
+      // the loader serves no prompt there — `promptIdFromSingleFile` returns `undefined` for it.
+      found.push(full);
+    }
   }
   return found;
 }
@@ -231,8 +251,24 @@ function findDroppedGates(parsed: unknown): string[] {
  * it with the path-derived one.
  */
 function registeredIdOf(file: string, root: string): string {
-  const segments = relative(root, dirname(file)).split(/[/\\]/);
-  return segments.slice(1).join('/');
+  const served =
+    basename(file) === 'prompt.yaml'
+      ? promptIdFromDirectory(root, dirname(file))
+      : promptIdFromSingleFile(root, file);
+  // `undefined` means the loader serves nothing from that location, which this walk does not
+  // collect — so an empty id here would be a walk defect, and the empty string reports it as an
+  // unresolvable reference rather than silently matching a step named ''.
+  return served ?? '';
+}
+
+/**
+ * The id segment the LOADER validates a file's own `id:` against — the last segment of the served
+ * id, which for a single-file prompt is its filename and for a directory is the directory's name.
+ */
+function localIdOf(file: string): string {
+  return basename(file) === 'prompt.yaml'
+    ? basename(dirname(file))
+    : singleFilePromptBaseName(basename(file));
 }
 
 /**
@@ -283,10 +319,10 @@ function validateFile(file: string): Problem[] {
     return [{ file: rel, kind: 'schema', detail: `unparseable YAML: ${String(error)}` }];
   }
 
-  // `basename(dirname(file))` is the id the LOADER validates against — it derives the served id
-  // from the path and rejects a file whose `id:` disagrees. Omitting it here would accept a prompt
-  // the server then drops, which is the exact gap this script exists to close.
-  const result = validatePromptYaml(parsed, basename(dirname(file)));
+  // `localIdOf` is the id the LOADER validates against — it derives the served id from the path
+  // and rejects a file whose `id:` disagrees. Omitting it here would accept a prompt the server
+  // then drops, which is the exact gap this script exists to close.
+  const result = validatePromptYaml(parsed, localIdOf(file));
   if (!result.valid) {
     for (const issue of result.errors) {
       problems.push({ file: rel, kind: 'schema', detail: issue });
@@ -440,7 +476,7 @@ function run(root: string): Problem[] {
 // validator that accepts everything — the failure mode this file exists to catch. It asserts both
 // directions against fixtures written to a temp dir.
 if (SELF_TEST) {
-  const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = await import('node:fs');
+  const { mkdtempSync, mkdirSync, writeFileSync, renameSync, rmSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
 
   const dir = mkdtempSync(join(tmpdir(), 'validate-prompts-selftest-'));
@@ -527,7 +563,7 @@ if (SELF_TEST) {
     ...files.flatMap((file) => {
       const rel = relative(dir, file);
       const parsed = yaml.load(readFileSync(file, 'utf8'));
-      const schema = validatePromptYaml(parsed, basename(dirname(file)));
+      const schema = validatePromptYaml(parsed, localIdOf(file));
       const gates = findDroppedGates(parsed);
       return [
         ...(schema.valid ? [] : [{ file: rel, kind: 'schema' as const, detail: 'invalid' }]),
@@ -726,6 +762,83 @@ if (SELF_TEST) {
         `walked ${JSON.stringify(walked)}`
     );
 
+  // Single-file fixtures (P4.112) — the loader serves `{category}/{id}.yaml` and
+  // `{category}/{folder}/{id}.yaml`, and this walk collected neither until it read
+  // `isSingleFilePromptName`. Both halves are asserted: which files are collected, and that a
+  // chain step naming one RESOLVES. The second is the one that misreported — a single-file prompt
+  // the walk cannot see reads as a prompt that does not exist.
+  const singleDir = mkdtempSync(join(tmpdir(), 'validate-prompts-single-selftest-'));
+  const writeFile = (rel: string, body: string): void => {
+    mkdirSync(dirname(join(singleDir, rel)), { recursive: true });
+    writeFileSync(join(singleDir, rel), body, 'utf8');
+  };
+  const singlePrompt = (id: string): string =>
+    [
+      `id: ${id}`,
+      `name: ${id}`,
+      'category: good',
+      'description: A single-file prompt the loader serves.',
+      'userMessageTemplateFile: user-message.md',
+      '',
+    ].join('\n');
+
+  writeFile('good/single_prompt.yaml', singlePrompt('single_prompt'));
+  writeFile('good/nested/deep_prompt.yaml', singlePrompt('deep_prompt'));
+  // Twins that differ in ONE identifier each, so "the walk found nothing" cannot pass this:
+  writeFile('good/category.yaml', 'id: good\nname: Good\n'); // reserved name, never a prompt
+  writeFile('good/_draft_prompt.yaml', singlePrompt('_draft_prompt')); // ignored prefix
+  writeFile('root_level.yaml', singlePrompt('root_level')); // at the root: its own category
+  writeFile(
+    'good/single_chain/prompt.yaml',
+    [
+      'id: single_chain',
+      'name: Single Chain',
+      'category: good',
+      'description: A chain whose steps name single-file prompts.',
+      'userMessageTemplateFile: user-message.md',
+      'chainSteps:',
+      '  - promptId: single_prompt',
+      '    stepName: Step One',
+      '  - promptId: nested/deep_prompt',
+      '    stepName: Step Two',
+      '',
+    ].join('\n')
+  );
+
+  const singleWalked = findPromptFiles(singleDir)
+    .map((file) => relative(singleDir, file).split(/[/\\]/).join('/'))
+    .sort();
+  const expectedSingle = [
+    'good/nested/deep_prompt.yaml',
+    'good/single_chain/prompt.yaml',
+    'good/single_prompt.yaml',
+  ];
+  if (JSON.stringify(singleWalked) !== JSON.stringify(expectedSingle))
+    failures.push(
+      `the walk disagreed with the loader about single-file prompts: expected ` +
+        `${JSON.stringify(expectedSingle)}, walked ${JSON.stringify(singleWalked)}`
+    );
+
+  const singleChainProblems = findChainProblems(findPromptFiles(singleDir), singleDir);
+  if (singleChainProblems.length > 0)
+    failures.push(
+      `a chain naming single-file prompts was reported: ${JSON.stringify(singleChainProblems)}`
+    );
+
+  // The mutation, run as a fixture: rename the step's file and the SAME chain must fail. Without
+  // it, "no problems" above would also hold for a `findChainProblems` that reported nothing.
+  renameSync(join(singleDir, 'good/single_prompt.yaml'), join(singleDir, 'good/renamed.yaml'));
+  const renamedProblems = findChainProblems(findPromptFiles(singleDir), singleDir);
+  rmSync(singleDir, { recursive: true, force: true });
+  if (
+    !renamedProblems.some(
+      (problem) =>
+        problem.kind === 'chain' &&
+        problem.detail.includes("step 1 references unknown promptId 'single_prompt'")
+    )
+  )
+    failures.push('a chain step naming a renamed-away single-file prompt was NOT reported');
+
   // Stale-exception fixtures — a declared `scope: 'personal-library'` id must read as NOT stale
   // while absent (the declaration's normal state) and AS stale once it turns up in this root (the
   // declaration is now false); an undeclared id absent from the root is a renamed-away tracked id
@@ -773,7 +886,8 @@ if (SELF_TEST) {
     'validate:prompts --self-test OK — accepts a valid prompt and a resolvable chain, catches ' +
       'an invalid schema, a dropped gate and an unresolvable chain step, ' +
       'flags an orphan gate without false-positiving on activation/include/inlineGateIds, ' +
-      'walks only the prompt directories the loader serves, and tells a declared ' +
+      'walks the directory AND single-file layouts the loader serves and no others, ' +
+      'resolves a chain step naming a single-file prompt, and tells a declared ' +
       'personal-library exemption apart from a renamed-away tracked one'
   );
   process.exit(0);

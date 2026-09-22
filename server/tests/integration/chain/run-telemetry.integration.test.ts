@@ -49,7 +49,6 @@ class StubTextReferenceStore {
   storeChainStepResult = jest.fn();
   buildChainVariables = jest.fn().mockReturnValue({});
   clearChainStepResults = jest.fn();
-  getChainStepMetadata = jest.fn().mockReturnValue({});
 }
 
 const pendingReview = (): PendingGateReview => ({

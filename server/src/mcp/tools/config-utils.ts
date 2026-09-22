@@ -55,6 +55,33 @@ export interface ConfigWriteResult {
   message: string;
   error?: string;
   restartRequired?: boolean;
+  /**
+   * The `version_history` version this write recorded, when it recorded one.
+   *
+   * A write that changed the file always records a row (#347); an unchanged write records nothing
+   * and reports {@link recordedReason} instead. Both are reported rather than kept in a debug log,
+   * because the caller's reply is where an operator learns whether `cpm config rollback` has
+   * anything to put back — and a persist that recorded nothing looks identical to one that did.
+   */
+  recordedVersion?: number;
+  /** Why no version was recorded, when none was. */
+  recordedReason?: string;
+}
+
+/**
+ * The version clause a persist note ends with — recorded, or why nothing was.
+ *
+ * Returned as a SENTENCE ENDING (leading text, trailing period) so a caller composes one line
+ * rather than deciding punctuation per branch.
+ */
+export function describeRecordedVersion(result: ConfigWriteResult | undefined): string {
+  if (result?.recordedVersion !== undefined) {
+    return ` as config version ${result.recordedVersion} — \`cpm config rollback ${result.recordedVersion}\` puts the previous file back.`;
+  }
+  if (result?.recordedReason !== undefined) {
+    return `. No config version was recorded: ${result.recordedReason}.`;
+  }
+  return '.';
 }
 
 /**
@@ -145,6 +172,9 @@ export class SafeConfigWriter {
         success: true,
         message: `Configuration updated successfully: ${key} = ${value}`,
         restartRequired: this.requiresRestart(key),
+        ...(record.recorded
+          ? { recordedVersion: record.version }
+          : { recordedReason: record.reason }),
       };
     } catch (error) {
       this.logger.error(`Failed to update config ${key}:`, error);

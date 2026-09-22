@@ -56,6 +56,10 @@ function createContext(overrides: {
   frameworkId?: string;
   /** What `InjectionDecisionService` wrote at stage 14; omitted means it never ran. */
   systemPromptInjected?: boolean;
+  /** The prompt's OWN declaration about the framework — what the opt-out is judged on. */
+  declinesFramework?: boolean;
+  /** A command modifier that suppresses the framework (`%clean`). */
+  cleanModifier?: boolean;
 }): ExecutionContext {
   const context = new ExecutionContext({ command: `>>${basePrompt.id}` });
 
@@ -70,6 +74,7 @@ function createContext(overrides: {
     gates: overrides.gated ? ['some-gate'] : [],
     requiresFramework: overrides.frameworkId != null,
     requiresSession: Boolean(overrides.gated),
+    ...(overrides.cleanModifier === true ? { modifiers: { clean: true } } : {}),
   };
 
   context.parsedCommand = {
@@ -77,7 +82,10 @@ function createContext(overrides: {
     rawArgs: '',
     format: 'symbolic' as const,
     confidence: 0.9,
-    convertedPrompt: basePrompt,
+    convertedPrompt:
+      overrides.declinesFramework === true
+        ? { ...basePrompt, injection: { 'system-prompt': { enabled: false } } }
+        : basePrompt,
     promptArgs: { text: 'hello' },
     metadata: {
       originalCommand: `>>${basePrompt.id}`,
@@ -181,32 +189,34 @@ describe('ResponseAssembler – declared section headers (Tier 2.5/2.6)', () => 
   /**
    * Issue #228, the residual. A prompt writing `injection.system-prompt.enabled: false` got no
    * framework preamble and no framework-adherence gate, yet the response still told it to emit
-   * that framework's headers "verbatim; they are graded structurally". Each case below is a twin
-   * of the first, differing only in the injection decision stage 14 recorded.
+   * that framework's headers "verbatim; they are graded structurally".
+   *
+   * The opt-out is judged by `isFrameworkInjected` — the SAME predicate the step's framework
+   * gates are resolved with — not by `state.injection.systemPrompt.inject`, which answers
+   * whether the system prompt was EMITTED THIS TURN. Those come apart under a frequency rule
+   * ("once per session"): `inject` goes false for a prompt that declined nothing, and the block
+   * would be withheld from a prompt stage 19 still grades. Each case below is a twin of the
+   * control, differing only in the prompt's own declaration or one modifier.
    */
   describe('the framework opt-out (issue #228)', () => {
     const provider = () => CAGEERF_SECTIONS;
 
     test('an injected framework declares its headers — the positive control', () => {
       const assembler = new ResponseAssembler(undefined, jest.fn(provider));
-      const context = createContext({
-        gated: true,
-        frameworkId: 'cageerf',
-        systemPromptInjected: true,
-      });
+      const context = createContext({ gated: true, frameworkId: 'cageerf' });
 
       expect(assembler.formatSinglePromptResponse(context, {} as any)).toContain(
         'Required Sections'
       );
     });
 
-    test('a suppressed framework system prompt declares nothing', () => {
+    test('a prompt declaring `injection.system-prompt.enabled: false` declares nothing', () => {
       const spy = jest.fn(provider);
       const assembler = new ResponseAssembler(undefined, spy);
       const context = createContext({
         gated: true,
         frameworkId: 'cageerf',
-        systemPromptInjected: false,
+        declinesFramework: true,
       });
 
       const result = assembler.formatSinglePromptResponse(context, {} as any);
@@ -218,9 +228,37 @@ describe('ResponseAssembler – declared section headers (Tier 2.5/2.6)', () => 
       expect(spy).not.toHaveBeenCalled();
     });
 
+    test('a suppressing modifier declares nothing', () => {
+      const assembler = new ResponseAssembler(undefined, jest.fn(provider));
+      const context = createContext({
+        gated: true,
+        frameworkId: 'cageerf',
+        cleanModifier: true,
+      });
+
+      expect(assembler.formatSinglePromptResponse(context, {} as any)).not.toContain(
+        'Required Sections'
+      );
+    });
+
+    test('a turn that merely did not re-emit the system prompt still declares', () => {
+      // The correction this predicate makes. `state.injection.systemPrompt.inject === false` is
+      // what a frequency rule leaves behind on a prompt that declined nothing; reading it here
+      // withheld the header vocabulary from a prompt stage 19 goes on to grade — blocked on a
+      // contract it was never shown, which is the defect this condition exists to prevent.
+      const assembler = new ResponseAssembler(undefined, jest.fn(provider));
+      const context = createContext({
+        gated: true,
+        frameworkId: 'cageerf',
+        systemPromptInjected: false,
+      });
+
+      expect(assembler.formatSinglePromptResponse(context, {} as any)).toContain(
+        'Required Sections'
+      );
+    });
+
     test('an unrecorded decision still declares — absent is not suppressed', () => {
-      // Stage 14 not having run is not an opt-out. Reading `!== true` instead of `=== false`
-      // would silently stop declaring on every path that formats before injection control.
       const assembler = new ResponseAssembler(undefined, jest.fn(provider));
       const context = createContext({ gated: true, frameworkId: 'cageerf' });
 

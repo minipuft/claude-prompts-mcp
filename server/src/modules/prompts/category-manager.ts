@@ -4,10 +4,7 @@
  * Handles category management logic with validation, organization, and relationship tracking
  */
 
-import type { Category, PromptData } from './types.js';
-
-// Import category interfaces from prompts/types.ts instead of redefining
-import type { CategoryValidationResult } from './types.js';
+import type { Category, CategoryValidationResult } from './types.js';
 
 import { type Logger } from '#shared/types/index.js';
 
@@ -112,9 +109,19 @@ export class CategoryManager {
   }
 
   /**
-   * Get prompts by category
+   * Get prompts by category.
+   *
+   * The single answer to "which of these prompts belong to this category". Generic over the
+   * prompt shape and tolerant of an undefined id so that both callers can reach it: the HTTP
+   * catalog route filters `ConvertedPrompt[]` and holds a route parameter typed
+   * `string | undefined`, which is why it carried its own copy of this predicate until P4.91.
+   * Widening the signature is behaviour-preserving — `===` on `category` either way, no
+   * normalization, and an undefined id matches nothing.
    */
-  getPromptsByCategory(prompts: PromptData[], categoryId: string): PromptData[] {
+  getPromptsByCategory<T extends { category: string }>(
+    prompts: readonly T[],
+    categoryId: string | undefined
+  ): T[] {
     return prompts.filter((prompt) => prompt.category === categoryId);
   }
 }

@@ -7,7 +7,7 @@ import { overlayDecidedYamlKeys } from '../../shared/yaml-key-overlay.js';
 
 import type { ConfigManager, Logger } from '#shared/types/index.js';
 import type { FileContentChange } from '../../resource-manager/prompt/analysis/object-diff-generator.js';
-import type { GateCreationData } from '../core/types.js';
+import type { GateCreationData, GateManagerInput } from '../core/types.js';
 
 import {
   GATE_YAML_PROJECTED_KEYS,
@@ -69,7 +69,57 @@ const GATE_YAML_RESIDENT_KEYS: readonly string[] = [
  * the WHOLE state being written, not an edit to a subset of it, so neither has a narrower scope to
  * compute (mirrors `ALL_PROMPT_DATA_KEYS`'s role for prompts).
  */
-const ALL_GATE_DATA_KEYS: ReadonlySet<string> = new Set([...GATE_YAML_RESIDENT_KEYS, 'guidance']);
+export const ALL_GATE_DATA_KEYS: ReadonlySet<string> = new Set([
+  ...GATE_YAML_RESIDENT_KEYS,
+  'guidance',
+]);
+
+/**
+ * Gate-data keys with no tool parameter, and why — the stamped half of the bound above.
+ *
+ * `evaluation` (judge routing: mode, model hint, rubric) is preserved on write and authorable
+ * only by hand today. It stays out of this mapping because publishing it means publishing the
+ * judge-routing sub-shape as a tool parameter, which is a contract decision, not a mapping
+ * omission. *(as of 2026-09-21 · flips when `resource_manager` declares a parameter writing the
+ * `evaluation` key, at which point it belongs in `callerSuppliedGateKeys` and out of here.)*
+ */
+export const UNSETTABLE_GATE_DATA_KEYS: readonly string[] = ['evaluation'];
+
+/**
+ * The `GateCreationData` keys THIS call supplied, under the names the writer narrows by.
+ *
+ * One mapping from tool input to gate-data key, rather than a literal repeated at each call site:
+ * the literal it replaces had silently dropped `gate_type`, so a `gate_type`-only update planned
+ * no `gate.yaml` write and still answered "updated successfully" over an unchanged file (driven
+ * 2026-09-21). `settable-gate-fields.test.ts` bounds the mapping's key set against
+ * {@link ALL_GATE_DATA_KEYS} in both directions, so a future schema field cannot join
+ * `GateCreationData` without joining this.
+ *
+ * `!== undefined`, never truthiness: `blockResponseOnFail: false` is a caller CLEARING the key,
+ * and `enabled_only`-style falsy values are values.
+ */
+export function callerSuppliedGateKeys(args: GateManagerInput): ReadonlySet<string> {
+  const byGateDataKey: Readonly<Record<string, unknown>> = {
+    name: args.name,
+    type: args.type,
+    description: args.description,
+    guidance: args.guidance,
+    pass_criteria: args.pass_criteria,
+    activation: args.activation,
+    retry_config: args.retry_config,
+    severity: args.severity,
+    enforcementMode: args.enforcementMode,
+    gate_type: args.gate_type,
+    subject: args.subject,
+    blockResponseOnFail: args.blockResponseOnFail,
+  };
+
+  return new Set(
+    Object.entries(byGateDataKey)
+      .filter(([, value]) => value !== undefined)
+      .map(([key]) => key)
+  );
+}
 
 /**
  * Decide what each preserved key should carry into the rewritten YAML: an explicitly supplied

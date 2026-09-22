@@ -13,17 +13,17 @@
  * `PromptData[]`, so no type widening is needed and the predicate is provably identical: strict
  * `===` on `category`, no normalization either side.
  *
- * The `ApiRouter` duplicate is NOT wired here — see `category-manager.ts`'s row in
- * `~/.cache/rsc-tail/handoff-rt-dead-b.md` for why: it filters `ConvertedPrompt[]`, a type that
- * lacks PromptData's required `file` field, so passing it to a `PromptData[]`-typed method needs
- * a signature change, and its `categoryId` route param is `string | undefined` while the method
- * requires `string` — two extra decisions beyond "reachable in one call," which the ruling says
- * not to plumb through.
+ * Both duplicates are now wired. The `ApiRouter` one was left in place at the time because it
+ * filters `ConvertedPrompt[]` (no `file` field) and holds a `string | undefined` route parameter,
+ * which the `PromptData[]`/`string` signature could not accept; P4.91 made the method generic
+ * over `{ category: string }` and tolerant of an undefined id, which is behaviour-preserving on
+ * every case below, and swapped the route's copy for a call.
  */
 import { describe, expect, it } from '@jest/globals';
 
 import { CategoryManager } from '../../../src/modules/prompts/category-manager.js';
 
+import type { ConvertedPrompt } from '../../../src/engine/execution/types.js';
 import type { PromptData } from '../../../src/shared/types/index.js';
 import type { Logger } from '../../../src/shared/types/index.js';
 
@@ -112,5 +112,37 @@ describe('CategoryManager.getPromptsByCategory equivalence with the inline dupli
       inlineFilter(fixture, undefined)
     );
     expect(manager.getPromptsByCategory(fixture, missing)).toEqual([]);
+  });
+
+  // The second duplicate, wired in P4.91. `ConvertedPrompt` has no `file` field, which is the
+  // reason the route kept its own copy; the method is now generic over anything carrying a
+  // `category`, so the route reaches it without widening `ConvertedPrompt` or narrowing the
+  // route parameter. Same predicate, same results, and the returned element type is the input's
+  // — a compile error here if the generic ever collapses back to `PromptData`.
+  it('filters a ConvertedPrompt-shaped list, which is what the catalog route holds', () => {
+    const manager = new CategoryManager(silentLogger);
+    const converted: ConvertedPrompt[] = [
+      {
+        id: 'c1',
+        name: 'c1',
+        description: '',
+        category: 'analysis',
+        userMessageTemplate: 'x',
+        arguments: [],
+      },
+      {
+        id: 'c2',
+        name: 'c2',
+        description: '',
+        category: 'development',
+        userMessageTemplate: 'y',
+        arguments: [],
+      },
+    ];
+
+    const matched = manager.getPromptsByCategory(converted, 'development');
+
+    expect(matched).toEqual(converted.filter((p) => p.category === 'development'));
+    expect(matched.map((p) => p.userMessageTemplate)).toEqual(['y']);
   });
 });

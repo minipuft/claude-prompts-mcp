@@ -353,7 +353,7 @@ export function writeConfigBytesAtomic(configPath: string, bytes: Uint8Array | s
       if (existsSync(tempPath)) {
         unlinkSync(tempPath);
       }
-    } catch {
+    } catch (_error) {
       // Ignore cleanup errors
     }
     throw error;

@@ -224,20 +224,26 @@ export class ScriptExecutor implements ScriptExecutorPort {
       maxTimeout: this.maxTimeout,
       processGroup: false,
       truncateOutput: this.maxOutputChars,
-      parseJson: true,
+      // Deliberately NOT `parseJson`. The shared helper never throws — it wraps unparseable
+      // text as `{ output: '<text>' }` — so this caller could not tell a script that returned
+      // that object from one that printed prose, and reported both as success. Parsing here
+      // keeps the failure distinguishable and nameable.
       debug: this.debug,
     });
 
-    // Truncation is a failure, not a degraded success. `tryParseJson` never
-    // throws — it wraps unparseable text as `{ output: '<text>' }` — so a capped
-    // JSON payload arrives looking like a valid object whose every expected
-    // field is now missing, and `{{script:id.field}}` renders empty with nothing
-    // anywhere reporting that the value was cut.
+    // Truncation is a failure, not a degraded success: a capped JSON payload arrives looking
+    // like a valid object whose every expected field is now missing, and `{{script:id.field}}`
+    // renders empty with nothing anywhere reporting that the value was cut.
     const overflowed = result.stdoutTruncated === true;
-    const success = result.exitCode === 0 && !overflowed;
+    const exited = result.exitCode === 0 && !overflowed;
+    const parsed: { value?: unknown; error?: string } = exited
+      ? this.parseScriptOutput(tool, result.stdout)
+      : {};
+    const success = exited && parsed.error === undefined;
+
     const scriptResult: ScriptExecutionResult = {
       success,
-      output: success ? (result.parsed ?? result.stdout) : null,
+      output: success ? (parsed.value ?? null) : null,
       stdout: result.stdout,
       stderr: result.stderr,
       exitCode: result.exitCode,
@@ -252,10 +258,75 @@ export class ScriptExecutor implements ScriptExecutorPort {
           `the script return less.`
         : result.timedOut
           ? `Script timed out after ${timeout}ms`
-          : result.stderr || `Process exited with code ${result.exitCode}`;
+          : (parsed.error ??
+            (result.stderr === '' ? `Process exited with code ${result.exitCode}` : result.stderr));
     }
 
     return scriptResult;
+  }
+
+  /**
+   * Read a script's stdout as the JSON object its tool promises, or name what is wrong with it.
+   *
+   * A script tool's contract is a JSON object on stdout — that is how `{{script:id.field}}` and
+   * `auto_execute` read it, and the guide says so ("Return structured JSON"). Text that is not
+   * JSON used to arrive as `{ output: '<the text>' }` and be reported as success, so a script
+   * that crashed into a traceback on stdout, or printed a debug line before its payload, looked
+   * like a tool that had returned a value; every field access then rendered empty with nothing
+   * anywhere saying why. Both cases are now refused, naming the tool.
+   *
+   * When the tool declares an `outputSchema`, the parsed object is checked against it with the
+   * same predicate an input is checked with, and a mismatch is refused the same way: a declared
+   * shape that is never enforced is a comment.
+   */
+  private parseScriptOutput(
+    tool: LoadedScriptTool,
+    stdout: string
+  ): { value?: unknown; error?: string } {
+    const trimmed = stdout.trim();
+    if (trimmed === '') {
+      return {
+        error:
+          `Script tool '${tool.id}' exited 0 but wrote nothing to stdout. A script tool ` +
+          `returns a JSON object on stdout; there is no result to read.`,
+      };
+    }
+
+    let value: unknown;
+    try {
+      value = JSON.parse(trimmed);
+    } catch {
+      return {
+        error:
+          `Script tool '${tool.id}' wrote output that is not JSON. A script tool returns a ` +
+          `JSON object on stdout — print diagnostics to stderr instead. First 200 characters: ` +
+          `${trimmed.slice(0, 200)}`,
+      };
+    }
+
+    const schema = tool.outputSchema;
+    if (schema === undefined) {
+      return { value };
+    }
+
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      return {
+        error:
+          `Script tool '${tool.id}' declares an outputSchema, so its stdout must be a JSON ` +
+          `object; it returned ${Array.isArray(value) ? 'an array' : typeof value}.`,
+      };
+    }
+
+    const errors = this.collectSchemaErrors(value as Record<string, unknown>, schema);
+    if (errors.length > 0) {
+      return {
+        error:
+          `Script tool '${tool.id}' returned output that does not match its declared ` +
+          `outputSchema: ${errors.join('; ')}`,
+      };
+    }
+
+    return { value };
   }
 
   /**
@@ -265,34 +336,8 @@ export class ScriptExecutor implements ScriptExecutorPort {
     inputs: Record<string, unknown>,
     schema: JSONSchemaDefinition
   ): ScriptInputValidationResult {
-    const errors: string[] = [];
     const normalizedInputs = this.normalizeJsonStringInputs(inputs, schema);
-
-    if (!schema.properties || Object.keys(schema.properties).length === 0) {
-      return { valid: true, errors: [], normalizedInputs };
-    }
-
-    const required = schema.required ?? [];
-    for (const field of required) {
-      if (!(field in normalizedInputs) || normalizedInputs[field] === undefined) {
-        errors.push(`Missing required field: ${field}`);
-      }
-    }
-
-    for (const [key, value] of Object.entries(normalizedInputs)) {
-      const propSchema = schema.properties[key];
-      if (!propSchema) continue;
-
-      const expectedType = propSchema.type;
-      if (!expectedType) continue;
-
-      const actualType = this.getJsonType(value);
-      const expectedTypes = Array.isArray(expectedType) ? expectedType : [expectedType];
-
-      if (!expectedTypes.includes(actualType) && actualType !== 'null') {
-        errors.push(`Field '${key}': expected ${expectedTypes.join(' | ')}, got ${actualType}`);
-      }
-    }
+    const errors = this.collectSchemaErrors(normalizedInputs, schema);
 
     const result: ScriptInputValidationResult = {
       valid: errors.length === 0,
@@ -302,6 +347,47 @@ export class ScriptExecutor implements ScriptExecutorPort {
       result.normalizedInputs = normalizedInputs;
     }
     return result;
+  }
+
+  /**
+   * The one shape predicate this class applies, to an input object or an output object.
+   *
+   * Kept single so a declared `outputSchema` is enforced exactly as strictly as an
+   * `inputSchema` — required fields present, declared types matched, `null` tolerated, undeclared
+   * properties ignored. Two predicates would have let the two drift into disagreeing about what
+   * "matches the schema" means.
+   */
+  private collectSchemaErrors(
+    value: Record<string, unknown>,
+    schema: JSONSchemaDefinition
+  ): string[] {
+    if (!schema.properties || Object.keys(schema.properties).length === 0) {
+      return [];
+    }
+
+    const errors: string[] = [];
+    for (const field of schema.required ?? []) {
+      if (!(field in value) || value[field] === undefined) {
+        errors.push(`Missing required field: ${field}`);
+      }
+    }
+
+    for (const [key, fieldValue] of Object.entries(value)) {
+      const propSchema = schema.properties[key];
+      if (!propSchema) continue;
+
+      const expectedType = propSchema.type;
+      if (!expectedType) continue;
+
+      const actualType = this.getJsonType(fieldValue);
+      const expectedTypes = Array.isArray(expectedType) ? expectedType : [expectedType];
+
+      if (!expectedTypes.includes(actualType) && actualType !== 'null') {
+        errors.push(`Field '${key}': expected ${expectedTypes.join(' | ')}, got ${actualType}`);
+      }
+    }
+
+    return errors;
   }
 
   private getJsonType(value: unknown): string {

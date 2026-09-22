@@ -699,7 +699,7 @@ function writeReceipt(results, receiptPath) {
       receiptPath,
       `${JSON.stringify({ ts: now, steps: results.length, failing }, null, 2)}\n`
     );
-  } catch {
+  } catch (_error) {
     // Recording is a convenience; validating is the job.
   }
   return { failing, now };
