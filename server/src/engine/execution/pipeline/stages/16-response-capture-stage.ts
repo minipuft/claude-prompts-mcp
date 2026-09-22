@@ -196,7 +196,15 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     // Align pipeline session context with manager state
     this.alignSessionContext(context, sessionContext, session, currentStepAtStart);
 
+    // The call that CREATES the run renders its first step and carries no resume: it is a brief,
+    // not a reply, so admission has nothing to admit. Admitting it anyway refused every chain
+    // whose first step is delegated with "the resume carries no worker reply" (row 4.9).
+    const lifecycleDecision = context.state.session.lifecycleDecision;
+    const opensRun =
+      lifecycleDecision === 'create-new' || lifecycleDecision === 'create-force-restart';
+
     if (
+      !opensRun &&
       !(await this.runResumeAdmission(
         context,
         sessionContext,
@@ -219,8 +227,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       scopeOptions
     );
 
-    const lifecycleDecision = context.state.session.lifecycleDecision;
-    if (lifecycleDecision === 'create-new' || lifecycleDecision === 'create-force-restart') {
+    if (opensRun) {
       this.logExit({ skipped: 'New session, nothing to capture' });
       return;
     }
