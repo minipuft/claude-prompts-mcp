@@ -143,6 +143,39 @@ export function buildPhaseGuardPassSummary(result: PhaseGuardEvaluationResult): 
 }
 
 /**
+ * The retry hints a failed evaluation contributes to the pending review, one per failing CHECK.
+ *
+ * Derived from what failed, never from the bare fact that a phase failed. The single line this
+ * replaces — "Ensure your response includes the required <header> section" — was emitted for
+ * every failed phase, so a section that was present and merely too short was told to add a
+ * header it had already written, while the retry feedback three lines above it named the
+ * measured length. A model reading both cannot tell which one to act on.
+ *
+ * A section that is genuinely ABSENT keeps that imperative line: it is the one case where the
+ * statement is true, and the hint block is where a retry looks for what to DO. Every other
+ * failure speaks in its criterion's own words, which `criteria.ts` already measures (length
+ * against threshold, missing terms, the pattern) — so a criterion added there needs no second
+ * sentence written here, which is what keeps this honest as the registry grows.
+ *
+ * A failing check with no feedback contributes nothing rather than a filler line; the phase's
+ * other checks, and `retryFeedback`, still carry the failure.
+ */
+export function buildRetryHints(result: PhaseGuardEvaluationResult): string[] {
+  return result.results.filter((phase) => !phase.passed).flatMap(describePhaseFailure);
+}
+
+/** The hint lines one failed phase contributes — see {@link buildRetryHints}. */
+function describePhaseFailure(phase: PhaseGuardResult): string[] {
+  if (!phase.found) {
+    return [`Ensure your response includes the required "${phase.section_header}" section`];
+  }
+  return phase.checks
+    .filter((check) => !check.passed)
+    .map((check) => check.feedback)
+    .filter((feedback) => feedback.length > 0);
+}
+
+/**
  * Build concatenated retry feedback from failed phase results.
  */
 function buildRetryFeedback(results: PhaseGuardResult[]): string {
