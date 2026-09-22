@@ -240,7 +240,7 @@ export class WorkspaceScriptLoader implements ScriptLoader {
         scriptPath: yaml.script,
         runtime: yaml.runtime ?? 'auto',
         inputSchema: referencedFiles.inputSchema ?? { type: 'object', properties: {} },
-        outputSchema: undefined, // Not part of the YAML schema
+        outputSchema: referencedFiles.outputSchema,
         timeout: yaml.timeout,
         env: yaml.env,
         workingDir: yaml.workingDir,
@@ -281,8 +281,16 @@ export class WorkspaceScriptLoader implements ScriptLoader {
   private loadReferencedFiles(
     scriptDir: string,
     yaml: ScriptToolYaml
-  ): { description?: string; inputSchema?: JSONSchemaDefinition } {
-    const result: { description?: string; inputSchema?: JSONSchemaDefinition } = {};
+  ): {
+    description?: string;
+    inputSchema?: JSONSchemaDefinition;
+    outputSchema?: JSONSchemaDefinition;
+  } {
+    const result: {
+      description?: string;
+      inputSchema?: JSONSchemaDefinition;
+      outputSchema?: JSONSchemaDefinition;
+    } = {};
 
     // Load description from file if specified or default to description.md
     const descriptionFile = yaml.descriptionFile ?? 'description.md';
@@ -304,6 +312,20 @@ export class WorkspaceScriptLoader implements ScriptLoader {
         result.inputSchema = JSON.parse(schemaContent) as JSONSchemaDefinition;
       } catch {
         // Schema file read failure - continue with default
+      }
+    }
+
+    // Load the declared output shape, on the same convention as the prompt-local loader. It
+    // was hardcoded `undefined` here with the comment "Not part of the YAML schema", which was
+    // true and was the reason no workspace tool's output could ever be checked.
+    const outputSchemaPath = join(scriptDir, yaml.outputSchemaFile ?? 'output-schema.json');
+    if (existsSync(outputSchemaPath)) {
+      try {
+        result.outputSchema = JSON.parse(
+          readFileSync(outputSchemaPath, 'utf-8')
+        ) as JSONSchemaDefinition;
+      } catch {
+        // Schema file read failure - continue without an output contract
       }
     }
 
