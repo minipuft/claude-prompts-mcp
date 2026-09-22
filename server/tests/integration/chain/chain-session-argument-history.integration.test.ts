@@ -29,7 +29,6 @@ class StubTextReferenceStore {
     return { step_results };
   });
   clearChainStepResults = jest.fn();
-  getChainStepMetadata = jest.fn().mockReturnValue({});
 }
 
 const createLogger = (): Logger =>
