@@ -64,7 +64,6 @@ function buildSystemControlShape(resolve: DescriptionResolver = identity) {
     reason: z.string().optional().describe(describe('reason')),
     persist: z.boolean().optional().describe(describe('persist')),
     show_details: z.boolean().optional().describe(describe('show_details')),
-    include_history: z.boolean().optional().describe(describe('include_history')),
     include_metrics: z.boolean().optional().describe(describe('include_metrics')),
     topic: z.string().optional().describe(describe('topic')),
     include_planned: z.boolean().optional().describe(describe('include_planned')),

@@ -19,6 +19,7 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
 import { AnalyticsActionHandler } from '../../../../src/mcp/tools/system-control/handlers/analytics-action-handler.js';
+import { describeUndeclaredParameterRefusal } from '../../../../src/mcp/tools/shared/undeclared-parameters.js';
 
 import type { SystemControlContext } from '../../../../src/mcp/tools/system-control/core/types.js';
 import type { ExecutionRecord } from '../../../../src/shared/types/chain-execution.js';
@@ -36,11 +37,7 @@ const record = (overrides: Partial<ExecutionRecord>): ExecutionRecord =>
 function render(records: ExecutionRecord[]): Promise<string> {
   const context = {
     executionRecordStore: { queryRecent: jest.fn(() => records) },
-    systemAnalytics: {
-      gateValidationCount: 0,
-      uptime: 1000,
-      performanceTrends: [],
-    },
+    startTime: Date.now() - 1000,
     createMinimalSystemResponse: (text: string) => ({ content: [{ type: 'text', text }] }),
   } as unknown as SystemControlContext;
 
@@ -99,11 +96,7 @@ describe('analytics reports gate outcomes from the ledger', () => {
 
   test('no record store at all degrades to the previous output rather than throwing', async () => {
     const context = {
-      systemAnalytics: {
-        gateValidationCount: 0,
-        uptime: 0,
-        performanceTrends: [],
-      },
+      startTime: Date.now(),
       createMinimalSystemResponse: (text: string) => ({ content: [{ type: 'text', text }] }),
     } as unknown as SystemControlContext;
 
@@ -145,7 +138,7 @@ describe('one analytics reply describes one workspace', () => {
     const context = {
       executionRecordStore: { queryRecent },
       requestScope: { workspaceId },
-      systemAnalytics: { gateValidationCount: 0, uptime: 1000, performanceTrends: [] },
+      startTime: Date.now() - 1000,
       createMinimalSystemResponse: (text: string) => ({ content: [{ type: 'text', text }] }),
     } as unknown as SystemControlContext;
 
@@ -198,5 +191,45 @@ describe('one analytics reply describes one workspace', () => {
     expect(a.indexOf('(this workspace)')).toBeLessThan(
       a.indexOf('## 🖥️ This Server Process (all workspaces)')
     );
+  });
+});
+
+/**
+ * P4.128 (R93) — `include_history` is gone, and the process facts are read, not cached.
+ *
+ * The flag rendered `performanceTrends`, which only a tool-description hot reload ever wrote, so
+ * it showed one startup memory delta or nothing. The same cached object held `uptime` and
+ * `memoryUsage`, which is why a server that never hot-reloaded reported `Uptime: 0s` forever.
+ */
+describe('analytics reads process facts when it answers, and has no history flag', () => {
+  test('uptime is measured from startTime at request time, not from a cached copy', async () => {
+    const context = {
+      startTime: Date.now() - 2 * 60 * 60 * 1000,
+      createMinimalSystemResponse: (text: string) => ({ content: [{ type: 'text', text }] }),
+    } as unknown as SystemControlContext;
+
+    const response = await new AnalyticsActionHandler(context).execute({ operation: 'view' });
+    const text = response.content[0]?.text ?? '';
+
+    expect(text).toContain('**Uptime**: 2h 0m');
+    expect(text).toContain('**Heap Used**:');
+    expect(text).not.toContain('Performance Trends');
+  });
+
+  test('a sent include_history is refused by name; its declared twin is not', () => {
+    // The twin differs in ONE key: `include_metrics` is still a parameter of system_control, so a
+    // refusal that fired for any boolean flag would fail the second assertion.
+    expect(
+      describeUndeclaredParameterRefusal('system_control', {
+        action: 'analytics',
+        include_history: true,
+      })
+    ).toContain("'include_history' is not a parameter of system_control");
+    expect(
+      describeUndeclaredParameterRefusal('system_control', {
+        action: 'status',
+        include_metrics: true,
+      })
+    ).toBeNull();
   });
 });

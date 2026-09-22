@@ -207,10 +207,6 @@ export class McpToolRouter {
    */
   private servingUnitScope?: StateStoreOptions;
 
-  // Pending analytics queue for initialization race condition
-  private pendingAnalytics: any[] = [];
-  private toolsInitialized = false;
-
   constructor(
     logger: Logger,
     mcpServer: McpServer,
@@ -330,10 +326,6 @@ export class McpToolRouter {
     // Note: frameworkManager is not yet available at this point, will be set in setFrameworkManager
 
     // chainScaffolder removed - functionality consolidated into promptEngine
-
-    // Flush any pending analytics data that was queued during initialization
-    this.toolsInitialized = true;
-    this.flushPendingAnalytics();
 
     this.logger.info(
       'McpToolRouter initialized with 5 intelligent tools (chain management in prompt_engine)'
@@ -630,16 +622,6 @@ export class McpToolRouter {
   private async handleToolDescriptionChange(stats: any): Promise<void> {
     try {
       this.logger.info('🔄 Processing tool description changes...');
-
-      // Emit analytics update
-      this.updateAnalytics({
-        toolDescriptions: {
-          lastReload: new Date().toISOString(),
-          totalDescriptions: stats.totalDescriptions,
-          loadedFromFile: stats.loadedFromFile,
-          usingDefaults: stats.usingDefaults,
-        },
-      });
 
       // Note: MCP SDK doesn't support dynamic tool updates
       // The new descriptions will be loaded on next tool registration or server restart
@@ -1376,34 +1358,6 @@ export class McpToolRouter {
   }
 
   /**
-   * Update system analytics (from consolidated tools)
-   */
-  updateAnalytics(analytics: any): void {
-    if (this.toolsInitialized) {
-      this.systemControl.updateAnalytics(analytics);
-    } else {
-      // Queue analytics data until systemControl is initialized
-      this.pendingAnalytics.push(analytics);
-      this.logger.debug(
-        `SystemControl not yet initialized, queued analytics data (${this.pendingAnalytics.length} pending)`
-      );
-    }
-  }
-
-  /**
-   * Flush pending analytics data to systemControl after initialization
-   */
-  private flushPendingAnalytics(): void {
-    if (this.toolsInitialized && this.pendingAnalytics.length > 0) {
-      this.logger.debug(`Flushing ${this.pendingAnalytics.length} pending analytics updates`);
-      this.pendingAnalytics.forEach((analytics) => {
-        this.systemControl.updateAnalytics(analytics);
-      });
-      this.pendingAnalytics = [];
-    }
-  }
-
-  /**
    * Shutdown all components and cleanup resources
    */
   shutdown(): void {
@@ -1422,9 +1376,6 @@ export class McpToolRouter {
       });
       this.logger.info('✅ Gate system manager cleanup initiated');
     }
-
-    // Clear pending analytics
-    this.pendingAnalytics = [];
 
     this.logger.info('✅ MCP tools manager shutdown completed');
   }

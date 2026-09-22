@@ -30,7 +30,6 @@ export type system_controlParamName =
   | 'reason'
   | 'persist'
   | 'show_details'
-  | 'include_history'
   | 'include_metrics'
   | 'topic'
   | 'include_planned'
@@ -120,13 +119,6 @@ export const system_controlParameters: ToolParameter[] = [
     name: 'show_details',
     type: 'boolean',
     description: 'Include detailed output (status/analytics/framework/gate reports).',
-    status: 'working',
-    compatibility: 'canonical',
-  },
-  {
-    name: 'include_history',
-    type: 'boolean',
-    description: 'Include recorded history where supported.',
     status: 'working',
     compatibility: 'canonical',
   },
@@ -320,7 +312,7 @@ export const system_controlCommands: ToolCommand[] = [
   {
     id: 'status',
     summary: 'Runtime status overview (framework, gates, health).',
-    parameters: ['action', 'show_details', 'include_history', 'include_metrics'],
+    parameters: ['action', 'show_details', 'include_metrics'],
     status: 'working',
   },
   {
@@ -387,8 +379,8 @@ export const system_controlCommands: ToolCommand[] = [
   {
     id: 'analytics',
     summary:
-      'Retrieve analytics summary with optional detail/history; history lists framework switches, reset clears metrics.',
-    parameters: ['action', 'operation', 'show_details', 'include_history', 'limit', 'confirm'],
+      'Retrieve the analytics summary; operation history lists framework switches, reset clears metrics.',
+    parameters: ['action', 'operation', 'show_details', 'limit', 'confirm'],
     status: 'working',
   },
   {

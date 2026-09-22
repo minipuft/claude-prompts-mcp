@@ -30,7 +30,7 @@ import type { ExecutionRecordStore } from '#modules/chains/execution-record-stor
 import type { SkillsSyncPaths } from '#modules/skills-sync/service.js';
 import type { SystemControlInput } from '../schemas/system-control.schema.js';
 import type { ActionHandler } from './core/action-handler-base.js';
-import type { SystemAnalytics, SystemControlContext } from './core/types.js';
+import type { SystemControlContext } from './core/types.js';
 
 import { type ConfigKey } from '#cli-shared/config-input-validator.js';
 import { FrameworkManager } from '#engine/frameworks/framework-manager.js';
@@ -89,15 +89,7 @@ export class ConsolidatedSystemControl implements SystemControlContext {
   promptGuidanceService?: PromptGuidanceService;
 
   // ── Mutable runtime state ───────────────────────────────────────────
-  systemAnalytics: SystemAnalytics = {
-    gateValidationCount: 0,
-    uptime: 0,
-    performanceTrends: [],
-  };
   requestScope?: StateStoreOptions;
-
-  // ── Private tracking ────────────────────────────────────────────────
-  private lastMemoryUsage: number = 0;
 
   constructor(logger: Logger, onRestart?: (reason: string) => Promise<void>) {
     this.logger = logger;
@@ -288,44 +280,6 @@ export class ConsolidatedSystemControl implements SystemControlContext {
       this.logger.warn('Failed to persist framework toggles', error);
       return `⚠️ Failed to persist framework toggles: ${error instanceof Error ? error.message : String(error)}`;
     }
-  }
-
-  // ── Analytics (called from McpToolRouter) ───────────────────────────
-
-  /**
-   * Refresh the process-wide facts and record a memory delta if one is worth keeping.
-   *
-   * It also pushed `executionTime` and `successRate` trends until P4.87. Both were unreachable:
-   * the first needed a `currentExecution` payload, the second the `totalExecutions` counter, and
-   * the one caller — `McpToolRouter.handleToolDescriptionChange` — passes neither. They went with
-   * the counters, and with the `Execution Mode Distribution` section that read `executionMode`
-   * off the trends they would have written.
-   */
-  updateAnalytics(analytics: Partial<SystemAnalytics>): void {
-    Object.assign(this.systemAnalytics, analytics);
-    this.systemAnalytics.uptime = Date.now() - this.startTime;
-    this.systemAnalytics.memoryUsage = process.memoryUsage();
-
-    const memoryDelta = this.calculateMemoryDelta();
-    if (Math.abs(memoryDelta) > 1024 * 1024) {
-      this.systemAnalytics.performanceTrends.push({
-        timestamp: Date.now(),
-        metric: 'memoryDelta',
-        value: memoryDelta,
-      });
-    }
-
-    if (this.systemAnalytics.performanceTrends.length > 100) {
-      this.systemAnalytics.performanceTrends.shift();
-    }
-  }
-
-  private calculateMemoryDelta(): number {
-    if (!this.systemAnalytics.memoryUsage) return 0;
-    const currentMemory = this.systemAnalytics.memoryUsage.heapUsed;
-    const delta = currentMemory - this.lastMemoryUsage;
-    this.lastMemoryUsage = currentMemory;
-    return delta;
   }
 
   // ── Action dispatch ─────────────────────────────────────────────────
