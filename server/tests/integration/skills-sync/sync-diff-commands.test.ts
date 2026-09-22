@@ -17,7 +17,7 @@ import {
   type SkillsSyncOptions,
   type SkillsSyncOutput,
 } from '../../../src/modules/skills-sync/service.js';
-import { saveVersion } from '../../../src/cli-shared/version-history.js';
+import { saveVersion } from '../../helpers/version-history-writer.js';
 import { resolveSkillsSyncPaths } from '../../../src/runtime/skills-sync-paths.js';
 import { seedStateDbSchema } from '../../helpers/test-database.js';
 

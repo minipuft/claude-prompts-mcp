@@ -9,7 +9,6 @@
  */
 
 import type { VersionEntry, HistoryFile } from '#modules/versioning/types.js';
-import type { LoadedTree } from './object-store.js';
 
 import { DEFAULT_VERSIONING_CONFIG } from '#shared/types/core-config.js';
 
@@ -59,13 +58,7 @@ export interface HistoryRowRequest {
 }
 
 export interface HistoryRequest extends HistoryRowRequest {
-  action:
-    | 'load_history'
-    | 'get_version'
-    | 'save_version'
-    | 'compare_versions'
-    | 'delete_history'
-    | 'rename_history';
+  action: 'load_history' | 'get_version' | 'compare_versions' | 'delete_history' | 'rename_history';
   db_path: string;
   /**
    * The tenant this request acts under, already resolved by the caller.
@@ -80,15 +73,6 @@ export interface HistoryRequest extends HistoryRowRequest {
   version?: number;
   from_version?: number;
   to_version?: number;
-  snapshot?: Record<string, unknown>;
-  /**
-   * The resource's bytes, already read, for the row the disk currently describes.
-   *
-   * Absent means projection-only. See `recordTree` for why the answer is per ROW rather than per
-   * row kind, and `recordCheckpointedWrite` for the ordering that lets BOTH rows of one operation
-   * carry one.
-   */
-  produced_tree?: LoadedTree | null;
   description?: string;
   diff_summary?: string;
   new_resource_id?: string;
@@ -102,14 +86,6 @@ export interface HistoryResponse {
   from?: VersionEntry;
   to?: VersionEntry;
   version?: number;
-  /**
-   * Set by `save_version` — whether a row was inserted.
-   *
-   * False means the snapshot was identical to the newest recorded one, so `version` is the number
-   * that already existed. A caller printing `version` without reading this announces a save that
-   * did not happen.
-   */
-  recorded?: boolean;
   /**
    * Set alongside `success: false` by `load_history` when `resolveEffectiveTenantId` found the
    * guessed tenant empty AND more than one other tenant holding rows for this resource — refused
