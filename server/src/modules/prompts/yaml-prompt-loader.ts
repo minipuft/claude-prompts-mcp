@@ -87,6 +87,8 @@ export interface LoadedPromptFile {
     inlineGateCriteria?: string[];
     /** Declared context isolation — mirrors `ChainStepSchema.delegated` (A.2). */
     delegated?: boolean;
+    /** Detached delegation — mirrors `ChainStepSchema.await` (Tier 4). */
+    await?: 'node' | 'run';
     /**
      * Per-step visibility policy (P5 Tier 1) — mirrors `ChainStepSchema.visibility`. Threaded and
      * consumed at the render chokepoints (P5 Tiers 2-3); carried here since P5 Tier 1, ahead of
@@ -443,6 +445,9 @@ function normalizeChainSteps(
     // `markDelegatedStepPrompts` reads the declaration at stage 06.
     if (step.inlineGateCriteria != null) normalized.inlineGateCriteria = step.inlineGateCriteria;
     if (step.delegated != null) normalized.delegated = step.delegated;
+    // `await` (Tier 4) is carried at all three strippers in one change, for the same reason.
+    // Reader: `markDelegatedStepPrompts` (stage 06) and the detached node lifecycle.
+    if (step.await != null) normalized.await = step.await;
     // `visibility` declares which context items a step's render may see. It was carried ahead of
     // `inlineGateIds` because a preserved-but-unread declaration carried no risk of newly
     // changing what a chain does (P5 Tier 1: additive/threading only); both are live now.

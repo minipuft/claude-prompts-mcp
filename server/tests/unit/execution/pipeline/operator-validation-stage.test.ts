@@ -52,7 +52,11 @@ describe('OperatorValidationStage', () => {
 
   describe('subagentModel → delegated normalization', () => {
     const buildChainContext = (
-      stepOverrides: Array<{ subagentModel?: 'heavy' | 'standard' | 'fast'; delegated?: boolean }>,
+      stepOverrides: Array<{
+        subagentModel?: 'heavy' | 'standard' | 'fast';
+        delegated?: boolean;
+        await?: 'node' | 'run';
+      }>,
       promptDelegation = false
     ) => {
       const stage = new OperatorValidationStage(null, createLogger());
@@ -103,6 +107,16 @@ describe('OperatorValidationStage', () => {
 
       await stage.execute(context);
 
+      expect(context.parsedCommand!.steps![0].delegated).not.toBe(true);
+      expect(context.parsedCommand!.steps![1].delegated).toBe(true);
+      expect(context.parsedCommand!.steps![2].delegated).not.toBe(true);
+    });
+
+    test('await: run (a detached step) is delegated; await: node is not', async () => {
+      // Tier 4: a step the run does not wait on only makes sense when a worker runs it, so the
+      // single producer of the runtime flag reads `await: run` as a third source.
+      const { stage, context } = buildChainContext([{ await: 'node' }, { await: 'run' }, {}]);
+      await stage.execute(context);
       expect(context.parsedCommand!.steps![0].delegated).not.toBe(true);
       expect(context.parsedCommand!.steps![1].delegated).toBe(true);
       expect(context.parsedCommand!.steps![2].delegated).not.toBe(true);

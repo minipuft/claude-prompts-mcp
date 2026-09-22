@@ -62,7 +62,7 @@ import type {
   ScriptExecutionResult,
   ToolDetectionMatch,
 } from './automation.js';
-import type { VisibilityItem } from './chain-execution.js';
+import type { StepAwaitMode, VisibilityItem } from './chain-execution.js';
 import type { ContentAnalysisResult } from './core-config.js';
 import type { StateStoreOptions } from './persistence.js';
 
@@ -787,6 +787,13 @@ export interface ChainStep {
    * runtime flag and reads this alongside `subagentModel`.
    */
   delegated?: boolean;
+  /**
+   * Whether the run waits for this step's worker (`node`, the default) or continues past it
+   * (`run`, detached delegation — Tier 4). A DECLARATION: `markDelegatedStepPrompts` (stage 06)
+   * marks an `await: run` step delegated, and the run's node lifecycle (spawned at render,
+   * reported when the worker's result lands) is what the run-completion guard reads.
+   */
+  await?: StepAwaitMode;
   /**
    * Per-step visibility policy (P5 Tier 1): which chain-run context items to withhold from or
    * expose to this step's render. Mirrors `ChainStepSchema.visibility`. Additive only — threaded

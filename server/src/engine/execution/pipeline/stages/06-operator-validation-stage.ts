@@ -163,13 +163,16 @@ export class OperatorValidationStage extends BasePipelineStage {
    * the second's producers writing the flag themselves, which is how one flag ends up with three
    * producers and two of them drift.
    *
+   * A third source since Tier 4: `await: run` (a detached step) implies delegation, because a
+   * step the run does not wait on only makes sense when a worker runs it.
+   *
    * Idempotent by construction: an already-declared `true` is re-asserted, never cleared. This
    * does not turn a declared `false` into `true`, and never demotes.
    */
   private markDelegatedStepPrompts(parsedCommand: ExecutionContext['parsedCommand']): void {
     if (parsedCommand?.steps == null) return;
     for (const step of parsedCommand.steps) {
-      if (step.delegated === true || step.subagentModel != null) {
+      if (step.delegated === true || step.subagentModel != null || step.await === 'run') {
         step.delegated = true;
       }
     }

@@ -288,7 +288,7 @@ export const resource_managerParameters: ToolParameter[] = [
     name: 'chain_steps',
     type: 'array<object>',
     description:
-      '[Prompt] Chain steps definition for multi-step prompts. Each entry: promptId and stepName required; optional id (kebab-case, minted from stepName when omitted), args, inputMapping, outputMapping, visibility, subagentModel, agentType, framework, retries, inlineGateIds, inlineGateCriteria, delegated. Extra keys pass through uninterpreted.',
+      '[Prompt] Chain steps definition for multi-step prompts. Each entry: promptId and stepName required; optional id (kebab-case, minted from stepName when omitted), args, inputMapping, outputMapping, visibility, subagentModel, agentType, framework, retries, inlineGateIds, inlineGateCriteria, delegated, await (node|run — run makes the step detached). Extra keys pass through uninterpreted.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,

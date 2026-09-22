@@ -39,6 +39,14 @@ export type StepMilestone = 'pending' | 'rendered' | 'responded' | 'completed' |
  */
 export type VisibilityItem = 'previous_step_output' | 'chain_history' | 'unknowns_ledger';
 
+/**
+ * Whether a chain run waits for a delegated step's worker before moving on (`node`, the default:
+ * a blocking step) or continues past it and takes the worker's result later (`run`: a detached
+ * step, delegation handoff contract Tier 4). Declared per step as `await:` in YAML and in a
+ * Workflow IR node.
+ */
+export type StepAwaitMode = 'node' | 'run';
+
 // `enum StepState` (PENDING | RENDERED | RESPONSE_CAPTURED | COMPLETED) was removed here.
 // Its two transient members had no counterpart in the sticky-terminal model: RENDERED and
 // RESPONSE_CAPTURED are not states, they are progress *within* `working`, and are now carried

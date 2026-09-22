@@ -16,7 +16,7 @@
  * so `validateWorkflowIR` stays a pure function of its arguments.
  */
 
-import type { VisibilityItem } from '#shared/types/chain-execution.js';
+import type { StepAwaitMode, VisibilityItem } from '#shared/types/chain-execution.js';
 import type { GateSpecification } from '#shared/types/execution.js';
 import type { WorkflowEdge, WorkflowRejection } from './node-schema.js';
 
@@ -76,6 +76,8 @@ export interface WorkflowNode {
    * `markDelegatedStepPrompts` (stage 06) stays the single producer of the runtime flag.
    */
   readonly delegated?: boolean;
+  /** Whether the run waits for this node's worker (`node`) or continues past it (`run`). */
+  readonly await?: StepAwaitMode;
 }
 
 /**
