@@ -401,12 +401,7 @@ export class GateEnhancementService {
       })
     );
 
-    const gateIds = this.stepApplicableGateIds(
-      step,
-      input,
-      activeFrameworkId,
-      resolution.acceptsUnrankedGate
-    );
+    const gateIds = this.stepApplicableGateIds(step, input, activeFrameworkId, resolution);
 
     // P4-F3 / OQ-P5-4. The per-step list is what REVIEW must be scoped to, and it exists only
     // here, transiently. Published before the empty-list return on purpose: "this step has no
@@ -424,25 +419,39 @@ export class GateEnhancementService {
   }
 
   /**
-   * Which of the accumulated gates apply to THIS step — the framework default, the operator-level
-   * framework switch, then step targeting, in that order.
+   * Which of the accumulated gates apply to THIS step — this step's veto set, the framework
+   * default, the operator-level framework switch, then step targeting, in that order.
    */
   private stepApplicableGateIds(
     step: ChainStepPrompt,
     input: ChainStepEnhancementInput,
     activeFrameworkId: string | undefined,
-    acceptsUnrankedGate: (gateId: string) => boolean
+    resolution: GateResolutionResult
   ): string[] {
     const { context, gatesConfig, frameworkGateIds } = input;
 
-    // The accumulator is intentionally NOT reset between steps: step N inherits the gates
-    // accumulated by steps 1..N-1, which is the pre-existing chain contract.
+    // P4.110. The accumulator is intentionally NOT reset between steps: step N inherits the gates
+    // accumulated by steps 1..N-1, and `enhanceChainSteps` seeds the caller's gates into it before
+    // the walk. Both are ids this step's own resolution never saw, so reading the accumulator raw
+    // routed them AROUND this step's vetoes — a step's `exclude` could not remove a gate the run
+    // had already put there, though the identical declaration on a single prompt removes it.
+    //
+    // Every id is therefore re-asked at the rank the accumulator recorded for it, which is the
+    // same rank `GateSetResolver` would have given it: `exclude` (binds to rank 60) removes a
+    // seeded canonical gate at rank 40 and leaves a caller's gate at rank 80 alone, exactly as on
+    // the single-prompt path. Asking `acceptsUnrankedGate` here instead would let a prompt author
+    // overrule the person invoking the prompt.
+    const applicable = context.gates
+      .getEntries()
+      .filter((entry) => resolution.acceptsGateFrom(entry.id, entry.source))
+      .map((entry) => entry.id);
+
     let gateIds = this.ensureDefaultFrameworkGate(
-      [...context.gates.getAll()],
+      applicable,
       gatesConfig,
       activeFrameworkId,
       frameworkGateIds,
-      acceptsUnrankedGate
+      resolution.acceptsUnrankedGate
     );
 
     if (gatesConfig !== undefined && !gatesConfig.enableFrameworkGates) {

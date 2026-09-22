@@ -126,6 +126,19 @@ export interface GateResolutionResult extends StageTwoResult {
    * actually accumulated, and a fallback id is by definition one no ranked source supplied.
    */
   readonly acceptsUnrankedGate: (gateId: string) => boolean;
+  /**
+   * Whether a gate that arrived from `source` may be in this resolution's set — the same
+   * existential test `applyVetoes` runs, asked about an id this resolution did not accumulate.
+   *
+   * Chain enhancement needs it because a chain step's set is not built from that step's
+   * accumulation alone: the run pre-seeds the caller's gates into a cumulative accumulator and
+   * every earlier step leaves its own accepted gates there, so a later step reads ids no ranked
+   * source of ITS resolution supplied. Filtering that set with this predicate is what makes a
+   * step's `exclude` bind a gate it did not itself contribute (P4.110), and asking it by SOURCE
+   * rather than unranked is what keeps `exclude` (rank 60) from removing a gate the caller
+   * supplied at rank 80 — the ranked-veto contract, unchanged.
+   */
+  readonly acceptsGateFrom: (gateId: string, source: GateSource) => boolean;
 }
 
 /**
@@ -254,6 +267,8 @@ export class GateSetResolver {
       unregistered,
       acceptsUnrankedGate: (gateId: string): boolean =>
         !withholdsUnidentifiedFrameworkGates && !vetoes.some((veto) => veto.rejects(gateId)),
+      acceptsGateFrom: (gateId: string, source: GateSource): boolean =>
+        rejectingVeto(vetoes, gateId, RANK[source]) === undefined,
     };
   }
 
@@ -533,9 +548,7 @@ export class GateSetResolver {
     const vetoed = new Map<string, string>();
 
     for (const gate of accumulated.values()) {
-      const blocking = vetoes.find(
-        (veto) => veto.bindsUpToRank >= gate.rank && veto.rejects(gate.id)
-      );
+      const blocking = rejectingVeto(vetoes, gate.id, gate.rank);
       if (blocking === undefined) {
         accepted.push(gate);
       } else {
@@ -554,6 +567,23 @@ export class GateSetResolver {
 // ============================================================================
 // Pure helpers
 // ============================================================================
+
+/**
+ * The veto that removes `gateId` at `rank`, or `undefined` when none does — an existential test
+ * over an unordered set, so the outcome is permutation-invariant.
+ *
+ * One function rather than two copies: `applyVetoes` runs it over the ids this resolution
+ * accumulated, and `acceptsGateFrom` runs it over an id supplied by a caller that holds a set of
+ * its own. A second spelling of the same test is what made `exclude` bind at one site and not the
+ * other (#228, P4.110).
+ */
+function rejectingVeto(
+  vetoes: readonly GateVeto[],
+  gateId: string,
+  rank: number
+): GateVeto | undefined {
+  return vetoes.find((veto) => veto.bindsUpToRank >= rank && veto.rejects(gateId));
+}
 
 /**
  * `%clean` and `%framework` drop every gate; `%lean` and `%judge` drop none. `%lean` keeping
