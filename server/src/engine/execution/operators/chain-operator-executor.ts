@@ -15,6 +15,7 @@ import type { StateStoreOptions } from '#shared/types/persistence.js';
 import type { RequestClientProfile } from '#shared/types/request-identity.js';
 import type { ScriptReferenceResolverPort } from '#shared/utils/jsonUtils.js';
 import type {
+  StepFrameworkContext,
   ChainStepExecutionInput,
   ChainStepPrompt,
   ChainStepRenderResult,
@@ -72,11 +73,7 @@ export class ChainOperatorExecutor {
     private readonly getFrameworkContext?: (
       promptId: string,
       scope: StateStoreOptions | undefined
-    ) => Promise<{
-      selectedFramework?: { type: string; name: string };
-      category?: string;
-      systemPrompt?: string;
-    } | null>,
+    ) => Promise<StepFrameworkContext | null>,
     private readonly collaborators?: ChainOperatorCollaborators
   ) {}
 
@@ -825,11 +822,7 @@ export class ChainOperatorExecutor {
   private async resolveFrameworkContext(
     step: ChainStepPrompt | undefined,
     scope: StateStoreOptions | undefined
-  ): Promise<{
-    selectedFramework?: { type: string; name: string };
-    category?: string;
-    systemPrompt?: string;
-  } | null> {
+  ): Promise<StepFrameworkContext | null> {
     if (!step) {
       return null;
     }

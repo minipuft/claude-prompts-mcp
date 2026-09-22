@@ -533,9 +533,9 @@ export class McpToolRouter {
    * switch, when the values the caller once held are stale.
    */
   // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-  private buildPromptEngineSurface() {
-    const frameworkEnabled = this.frameworkStateStore?.isFrameworkSystemEnabled() ?? false;
-    const activeFramework = this.frameworkStateStore?.getActiveFramework();
+  private buildPromptEngineSurface(scope: StateStoreOptions | undefined) {
+    const frameworkEnabled = this.frameworkStateStore?.isFrameworkSystemEnabled(scope) ?? false;
+    const activeFramework = this.frameworkStateStore?.getActiveFramework(scope);
     const activeFrameworkType = activeFramework?.type ?? activeFramework?.id;
 
     const describe: DescriptionResolver = (paramName, fallback) =>
@@ -875,9 +875,9 @@ export class McpToolRouter {
     this.servingUnitScope = scope;
     this.logger.info('Registering consolidated MCP tools with server (centralized)...');
 
-    // Get current framework state for dynamic descriptions
-    const frameworkEnabled = this.frameworkStateStore?.isFrameworkSystemEnabled() ?? false;
-    const activeFramework = this.frameworkStateStore?.getActiveFramework();
+    // The serving unit's own framework state: a workspace header's selection, not the launch one.
+    const frameworkEnabled = this.frameworkStateStore?.isFrameworkSystemEnabled(scope) ?? false;
+    const activeFramework = this.frameworkStateStore?.getActiveFramework(scope);
     const activeFrameworkType = activeFramework?.type ?? activeFramework?.id;
 
     this.logger.info(`🔧 Registering tools with framework-aware descriptions:`);
@@ -913,7 +913,7 @@ export class McpToolRouter {
         );
       }
 
-      const promptEngineSchema = this.buildPromptEngineSurface();
+      const promptEngineSchema = this.buildPromptEngineSurface(scope);
 
       this.promptEngineTool = target.registerTool(
         'prompt_engine',
@@ -1335,7 +1335,9 @@ export class McpToolRouter {
       // it picks up both the new descriptions and any change to which
       // parameters are reachable.
       if (this.promptEngineTool != null) {
-        this.promptEngineTool.update({ paramsSchema: this.buildPromptEngineSurface() });
+        this.promptEngineTool.update({
+          paramsSchema: this.buildPromptEngineSurface(this.servingUnitScope),
+        });
         this.logger.info('✅ prompt_engine input schema rebuilt for current state');
       }
 

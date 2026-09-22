@@ -70,6 +70,13 @@ export interface ChainStepPrompt {
   visibility?: { withhold?: VisibilityItem[]; expose?: VisibilityItem[] };
 }
 
+/** The framework a chain step renders under, as the executor's fallback resolver reports it. */
+export interface StepFrameworkContext {
+  selectedFramework?: { type: string; name: string };
+  category?: string;
+  systemPrompt?: string;
+}
+
 /**
  * Base interface for all chain step execution inputs.
  *
