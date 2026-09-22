@@ -293,6 +293,66 @@ describe('resource_manager parameter ownership', () => {
       );
     });
 
+    /**
+     * Anchored OUTSIDE the map. The matrix below is built from `PARAMETER_ACTIONS` itself, so a
+     * builder that dropped a whole class of commands would shrink both halves of it and stay
+     * green (measured: ignoring every `common:` command passed all of them). This reads the
+     * contract JSON from disk and drives every pair it declares.
+     */
+    describe('every pair the contract JSON declares dispatches', () => {
+      const commands = (
+        JSON.parse(
+          readFileSync(
+            path.join(
+              path.dirname(fileURLToPath(import.meta.url)),
+              '..',
+              '..',
+              '..',
+              '..',
+              'tooling',
+              'contracts',
+              'resource-manager.json'
+            ),
+            'utf8'
+          )
+        ) as { commands: Array<{ id: string; parameters: string[] }> }
+      ).commands;
+      const declaredPairs = commands.flatMap((command) => {
+        const [scope, action] = command.id.split(':') as [string, string];
+        return command.parameters.flatMap((parameter) =>
+          (PARAMETER_OWNERS[parameter] ?? [])
+            .filter((owner) => scope === 'common' || owner === scope)
+            .map((owner) => [parameter, owner, action] as const)
+        );
+      });
+
+      test('the contract declares a non-trivial set, common commands included', () => {
+        expect(declaredPairs).toEqual(
+          expect.arrayContaining([
+            ['detail', 'prompt', 'inspect'],
+            ['full_restart', 'prompt', 'reload'],
+            ['severity', 'gate', 'update'],
+          ])
+        );
+      });
+
+      test.each(declaredPairs)('%s on %s %s', async (parameter, owner, action) => {
+        const result = await router.handleAction(
+          {
+            resource_type: owner,
+            action,
+            id: 'target',
+            confirm: true,
+            [parameter]: probeFor(parameter),
+          } as unknown as ResourceManagerInput,
+          {}
+        );
+
+        expect(result.isError).toBe(false);
+        expect(handlers[owner].handleAction).toHaveBeenCalled();
+      });
+    });
+
     test('a preview reads what its target reads', async () => {
       const result = await router.handleAction(
         {
