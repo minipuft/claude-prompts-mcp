@@ -34,10 +34,7 @@ export const frameworkSnapshotContract: SnapshotContract<
   projectedFields: FRAMEWORK_SNAPSHOT_PROJECTED_KEYS,
 
   project(id, live) {
-    return projectFrameworkSnapshot(id, {
-      framework: live.framework,
-      systemPrompt: live.systemPrompt,
-    });
+    return projectFrameworkSnapshot(id, { framework: live.framework });
   },
 
   restore(id, snapshot): RestoreResult<FrameworkWriteModel> {

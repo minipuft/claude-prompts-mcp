@@ -375,7 +375,6 @@ interface FrameworkYaml {
   enabled?: boolean;
   version?: string;
   phasesFile?: string;
-  systemPromptFile?: string;
   systemPromptGuidance?: string;
   gates?: unknown;
   frameworkGates?: unknown;
@@ -1378,16 +1377,13 @@ async function loadFrameworkIR(methDir: string): Promise<SkillIR> {
   const phasesRaw = await readOptionalFile(path.join(methDir, phasesFile));
   const phases = phasesRaw ? (yaml.load(phasesRaw) as unknown[]) : [];
 
-  const sysPromptFile = data.systemPromptFile;
-  const sysPromptContent = sysPromptFile
-    ? await readOptionalFile(path.join(methDir, sysPromptFile))
-    : null;
-
-  const guidance = data.systemPromptGuidance ?? sysPromptContent ?? '';
+  // One source for the system prompt (R91): the inline `systemPromptGuidance`, which is the text
+  // the runtime serves. A second, file-named key was read here while no writer emitted it and the
+  // server's schema never declared it, so an export could carry text the server never serves.
+  const guidance = data.systemPromptGuidance ?? '';
 
   const sourceContentsMap: Record<string, string> = { 'framework.yaml': raw };
   if (phasesRaw) sourceContentsMap[phasesFile] = phasesRaw;
-  if (sysPromptFile && sysPromptContent) sourceContentsMap[sysPromptFile] = sysPromptContent;
 
   return {
     id: data.id,

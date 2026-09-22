@@ -1,5 +1,13 @@
 import { describe, expect, it, beforeEach, afterEach } from '@jest/globals';
-import { existsSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readdirSync,
+  writeFileSync,
+  readFileSync,
+  rmSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -159,7 +167,7 @@ describe('resource-scaffold', () => {
       expect(existsSync(join(result.path!, 'guidance.md'))).toBe(true);
     });
 
-    it('creates framework directory with YAML and system-prompt', () => {
+    it('creates framework directory with YAML and no system-prompt.md', () => {
       const result = createResourceDir(tempDir, 'frameworks', 'my-method', {
         name: 'My Method',
         description: 'A custom method',
@@ -173,8 +181,10 @@ describe('resource-scaffold', () => {
       expect(content).toContain('type: MY_METHOD');
       expect(content).toContain('version: 1.0.0');
       expect(content).toContain('enabled: false');
+      expect(content).toContain('systemPromptGuidance: |');
 
-      expect(existsSync(join(result.path!, 'system-prompt.md'))).toBe(true);
+      // R91: the inline `systemPromptGuidance` is the system prompt's one source.
+      expect(readdirSync(result.path!)).toEqual(['framework.yaml']);
     });
 
     it('creates style directory with YAML and guidance', () => {
@@ -207,8 +217,9 @@ describe('resource-scaffold', () => {
       const gateContent = readFileSync(join(gate.path!, 'guidance.md'), 'utf8');
       expect(gateContent).toContain('Validation Criteria');
 
-      const methodContent = readFileSync(join(method.path!, 'system-prompt.md'), 'utf8');
-      expect(methodContent.length).toBeGreaterThan(0);
+      // A framework's starter guidance is inline — it has no companion file.
+      const methodContent = readFileSync(join(method.path!, 'framework.yaml'), 'utf8');
+      expect(methodContent).toContain('Define your framework phases and guidance here.');
 
       const styleContent = readFileSync(join(style.path!, 'guidance.md'), 'utf8');
       expect(styleContent).toContain('Style Guidance');

@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { FrameworkFileWriter } from '../../../../src/mcp/tools/framework-manager/services/index.js';
+import { parseYamlOrThrow } from '../../../../src/shared/utils/yaml/yaml-parser.js';
 
 import type { ConfigManager, Logger } from '../../../../src/shared/types/index.js';
 
@@ -82,9 +83,36 @@ describe('FrameworkFileWriter canonical writes', () => {
     expect(result.success).toBe(true);
     const frameworkDir = service.getFrameworkDir('e2e-test');
     expect(existsSync(join(frameworkDir, 'framework.yaml'))).toBe(true);
-    expect(existsSync(join(frameworkDir, 'system-prompt.md'))).toBe(true);
     expect(existsSync(join(frameworkDir, 'judge-prompt.md'))).toBe(true);
     expect(existsSync(join(frameworkDir, 'phases.yaml'))).toBe(true);
+    // R91: the system prompt has one source, `framework.yaml`'s inline `systemPromptGuidance`.
+    expect(existsSync(join(frameworkDir, 'system-prompt.md'))).toBe(false);
+    expect(readFrameworkYaml(frameworkDir)['systemPromptGuidance']).toBe('Apply E2E principles.');
+  });
+
+  it('reads the system prompt back from framework.yaml, never from a system-prompt.md beside it', async () => {
+    const service = new FrameworkFileWriter({ logger, configManager });
+    await service.writeFrameworkFiles({
+      id: 'inline-source',
+      name: 'Inline Source',
+      type: 'INLINE_SOURCE',
+      system_prompt_guidance: 'Inline guidance.',
+    });
+    // A legacy file a workspace framework may still carry, holding text the runtime never served.
+    writeFileSync(
+      join(service.getFrameworkDir('inline-source'), 'system-prompt.md'),
+      'Stale file text.\n'
+    );
+
+    const existing = await service.loadExistingFramework('inline-source');
+    expect(existing).not.toBeNull();
+    const creationData = service.toFrameworkCreationData('inline-source', existing!);
+
+    // Non-null is the half `inspect` depends on: until R91 this read the payload spelling
+    // `system_prompt_guidance`, which no framework.yaml carries, so a framework with no
+    // `system-prompt.md` read back as incomplete and got no quality score.
+    expect(creationData).not.toBeNull();
+    expect(creationData!.system_prompt_guidance).toBe('Inline guidance.');
   });
 
   it('merges updates onto existing framework data instead of overwriting', async () => {
@@ -110,21 +138,19 @@ describe('FrameworkFileWriter canonical writes', () => {
 
     const frameworkDir = service.getFrameworkDir('merge-test');
     const yamlContent = readFileSync(join(frameworkDir, 'framework.yaml'), 'utf8');
-    const promptContent = readFileSync(join(frameworkDir, 'system-prompt.md'), 'utf8');
     expect(yamlContent).toContain('name: Merge Test Updated');
     expect(yamlContent).toContain('type: MERGE_BASE');
-    expect(promptContent).toBe('Original guidance.');
+    expect(readFrameworkYaml(frameworkDir)['systemPromptGuidance']).toBe('Original guidance.');
   });
 
   /**
    * Sibling coverage for tutorial-rework B.18: the gate side of this class
    * (`guidance.md`) lost a trailing newline on an omitted-field update because its loader
-   * `.trim()`ed the file on read. `loadExistingFramework` never trims `system-prompt.md` /
-   * `judge-prompt.md` (plain `readFile`, no `.trim()`), so falling back to it here
-   * (`data.system_prompt_guidance ?? existingData?.systemPrompt ?? ''`) writes back the exact
-   * bytes read — this locks that in for both companion files, trailing newline included.
+   * `.trim()`ed the file on read. `loadExistingFramework` never trims `judge-prompt.md` (plain
+   * `readFile`, no `.trim()`), and the inline system prompt survives the merge untouched — this
+   * locks both in, trailing newline included.
    */
-  it('update omitting system_prompt_guidance and judge_prompt leaves both companion files byte-identical', async () => {
+  it('update omitting system_prompt_guidance and judge_prompt leaves both byte-identical', async () => {
     const service = new FrameworkFileWriter({ logger, configManager });
     const systemPromptGuidance = 'Original guidance.\n';
     const judgePrompt = 'Original judgement.\n';
@@ -147,10 +173,16 @@ describe('FrameworkFileWriter canonical writes', () => {
     expect(result.success).toBe(true);
 
     const frameworkDir = service.getFrameworkDir('newline-test');
-    // MUTATION KILLED: appending `.trim()` to either `readFile` call in
-    // `loadExistingFramework` (system-prompt.md / judge-prompt.md) makes this fail — the
-    // rewritten file loses its trailing `\n` and no longer matches the seeded content.
-    expect(readFileSync(join(frameworkDir, 'system-prompt.md'), 'utf8')).toBe(systemPromptGuidance);
+    // MUTATION KILLED: appending `.trim()` to the `judge-prompt.md` `readFile` call in
+    // `loadExistingFramework` makes this fail — the rewritten file loses its trailing `\n` and
+    // no longer matches the seeded content.
+    expect(readFrameworkYaml(frameworkDir)['systemPromptGuidance']).toBe(systemPromptGuidance);
     expect(readFileSync(join(frameworkDir, 'judge-prompt.md'), 'utf8')).toBe(judgePrompt);
   });
 });
+
+function readFrameworkYaml(frameworkDir: string): Record<string, unknown> {
+  return parseYamlOrThrow<Record<string, unknown>>(
+    readFileSync(join(frameworkDir, 'framework.yaml'), 'utf8')
+  );
+}

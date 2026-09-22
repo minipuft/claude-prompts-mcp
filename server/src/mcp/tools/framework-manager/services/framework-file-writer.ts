@@ -42,11 +42,9 @@ export interface FrameworkFileWriterDependencies {
 export interface ExistingFrameworkData {
   framework: Record<string, unknown>;
   phases: Record<string, unknown> | null;
-  systemPrompt: string | null;
   judgePrompt: string | null;
   frameworkPath: string;
   phasesPath: string | null;
-  systemPromptPath: string;
   judgePromptPath: string | null;
 }
 
@@ -67,7 +65,7 @@ interface PlannedFrameworkFile {
  *
  * `writeFrameworkFiles` applies it and `projectFrameworkWrite` reports it. A diff built any other
  * way — the framework's recorded fields rendered as one `framework.yaml`, say — misses
- * `system-prompt.md`, `phases.yaml` and `judge-prompt.md`, and shows `framework.yaml` lines the
+ * `phases.yaml` and `judge-prompt.md`, and shows `framework.yaml` lines the
  * merged file never holds (tutorial-rework B.20).
  */
 interface FrameworkWritePlan {
@@ -326,12 +324,9 @@ export class FrameworkFileWriter {
         }
       }
 
-      // Load system-prompt.md
-      const systemPromptPath = join(frameworkDir, 'system-prompt.md');
-      let systemPrompt: string | null = null;
-      if (existsSync(systemPromptPath)) {
-        systemPrompt = await readFile(systemPromptPath, 'utf8');
-      }
+      // No `system-prompt.md` read (R91): a framework's system prompt has one source, the inline
+      // `systemPromptGuidance` in `framework.yaml`, which is the only text the runtime serves. A
+      // workspace framework still carrying the file is left alone and never read.
 
       // Load judge-prompt.md if referenced
       let judgePrompt: string | null = null;
@@ -347,11 +342,9 @@ export class FrameworkFileWriter {
       return {
         framework,
         phases,
-        systemPrompt,
         judgePrompt,
         frameworkPath,
         phasesPath,
-        systemPromptPath,
         judgePromptPath,
       };
     } catch (error) {
@@ -383,14 +376,17 @@ export class FrameworkFileWriter {
     id: string,
     existing: ExistingFrameworkData
   ): FrameworkCreationData | null {
-    const { framework, phases, systemPrompt } = existing;
+    const { framework, phases } = existing;
 
-    // Extract required fields from raw YAML (use bracket notation for Record<string, unknown>)
+    // Extract required fields from raw YAML (use bracket notation for Record<string, unknown>).
+    // `systemPromptGuidance` is the YAML spelling `buildFrameworkYamlData` emits and the runtime
+    // loader reads. This read used the payload spelling `system_prompt_guidance`, which no
+    // framework.yaml carries, so every framework without a `system-prompt.md` beside it read back
+    // as incomplete and `inspect` reported no quality score for it.
     const rawName = framework['name'];
-    const rawSystemGuidance = framework['system_prompt_guidance'];
+    const rawSystemGuidance = framework['systemPromptGuidance'];
     const name = typeof rawName === 'string' ? rawName : undefined;
-    const systemGuidance =
-      systemPrompt ?? (typeof rawSystemGuidance === 'string' ? rawSystemGuidance : undefined);
+    const systemGuidance = typeof rawSystemGuidance === 'string' ? rawSystemGuidance : undefined;
 
     if (name === undefined || systemGuidance === undefined) {
       this.logger.debug(`Framework '${id}' missing required fields for completeness check`);
@@ -631,10 +627,6 @@ export class FrameworkFileWriter {
           readYamlSourceSync(join(priorFrameworkDir ?? frameworkDir, companionFiles.phasesFile))
         ).content,
       });
-    }
-
-    if (this.changesText(data.system_prompt_guidance, existingData?.systemPrompt ?? null)) {
-      files.push({ relativePath: 'system-prompt.md', content: data.system_prompt_guidance });
     }
 
     if (this.changesText(data.judge_prompt, existingData?.judgePrompt ?? null)) {
