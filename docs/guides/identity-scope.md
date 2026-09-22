@@ -110,11 +110,22 @@ and a request with no identity header uses the server's launch workspace. A
 `system_control framework switch` sent under A is reported by `system_control status` under A and
 by nothing else. Header names are case-insensitive.
 
-Two limits apply. First, `prompt_engine` renders with the **launch workspace's** framework
-selection, not the requesting workspace's, so a per-workspace switch changes what `status` reports
-for that workspace but not which framework guidance its prompts receive. Second, prompt, gate and
-framework version history is recorded under the launch workspace whatever header a request
-carries.
+A header workspace is a full tenant. Under A, a request reads and writes A's:
+
+- **framework selection** — which framework `prompt_engine` renders with, and the framework the
+  advertised `prompt_engine` description names;
+- **framework system flag** — a workspace the server has never seen starts from the configured
+  enabled flag and `frameworks.defaultFramework`, exactly as the launch workspace does, and keeps
+  its own value once toggled;
+- **framework switch history** — `system_control analytics history` lists A's switches only;
+- **version history** — a prompt, gate, framework or category changed under A records its
+  versions under A, and `resource_manager … history` under B does not list them (`source_workspace`
+  reads another workspace's history on purpose);
+- **chain sessions** — `system_control session list` and `inspect` show A's runs only.
+
+A request with no identity header, and every STDIO request, keeps the launch workspace's behaviour.
+The resource files themselves are one shared tree per server: a prompt created under A exists for
+every workspace; only its version history is A's.
 
 Before this was corrected, from 4.0.0 on, no header or token claim reached any per-request state
 over HTTP: every request used the launch workspace, so a switch sent under one workspace changed
@@ -270,14 +281,15 @@ In practice:
 
 ## What Gets Isolated
 
-| State              | Isolated Per Scope | Notes                                                                                                                                       |
-| ------------------ | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| Chain sessions     | Yes                | Same `chain_id` runs independently across workspaces                                                                                        |
-| Framework switches | Partly             | `system_control` state is per workspace; `prompt_engine` renders with the launch workspace's framework (see "What a Header Does Over HTTP") |
-| Gate system state  | Yes                | Enable/disable, health metrics, validation history                                                                                          |
-| Argument history   | Yes                | Per-workspace argument tracking                                                                                                             |
-| Resource index     | No                 | Shared file-based resources (prompts, gates, styles)                                                                                        |
-| Config history     | By FILE, not scope | See "Config Version History Is Scoped By the File"                                                                                          |
+| State              | Isolated Per Scope | Notes                                                                                          |
+| ------------------ | ------------------ | ---------------------------------------------------------------------------------------------- |
+| Chain sessions     | Yes                | Same `chain_id` runs independently across workspaces                                           |
+| Framework switches | Yes                | Active framework, enabled flag and switch history, including what `prompt_engine` renders with |
+| Gate system state  | Yes                | Enable/disable, health metrics, validation history                                             |
+| Argument history   | Yes                | Per-workspace argument tracking                                                                |
+| Version history    | Yes                | Prompt, gate, framework and category versions (`source_workspace` reads across)                |
+| Resource index     | No                 | Shared file-based resources (prompts, gates, styles)                                           |
+| Config history     | By FILE, not scope | See "Config Version History Is Scoped By the File"                                             |
 
 ## Troubleshooting
 
