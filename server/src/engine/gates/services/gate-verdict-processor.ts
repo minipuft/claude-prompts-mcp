@@ -70,6 +70,11 @@ export interface VerdictProcessingResult {
   readonly userResponse: string | undefined;
   /** The advance this call decided, for the stage to apply after the capture — see {@link DeferredAdvance}. */
   readonly deferredAdvance?: DeferredAdvance;
+  /**
+   * True when this call's `gate_verdict` was recorded against a review. The submission is then
+   * spent: recording it again would charge a second retry attempt for one submission (P4.116).
+   */
+  readonly verdictRecorded?: boolean;
 }
 
 /**
@@ -343,11 +348,13 @@ export class GateVerdictProcessor {
 
     const hasResponse = typeof userResponse === 'string' && userResponse.length > 0;
     const advance = deferredAdvance !== undefined ? { deferredAdvance } : {};
-    if (!hasResponse) {
-      return { passClearedThisCall, earlyExit: true, userResponse, ...advance };
-    }
-
-    return { passClearedThisCall, earlyExit: false, userResponse, ...advance };
+    return {
+      passClearedThisCall,
+      earlyExit: !hasResponse,
+      userResponse,
+      verdictRecorded: true,
+      ...advance,
+    };
   }
 
   /**

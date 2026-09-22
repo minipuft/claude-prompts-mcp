@@ -272,17 +272,19 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       return;
     }
 
-    // Re-fetch session in case deferred verdict changed state
-    const sessionAfterDeferred =
-      this.chainSessionStore.getSession(sessionId, scopeOptions) ?? session;
-    const pendingResult = await this.verdictProcessor.processPendingReviewVerdict(
-      context,
-      sessionAfterDeferred,
-      sessionId,
-      currentStepAtStart,
-      deferredResult.userResponse,
-      sessionContext
-    );
+    // One submission, one recorded attempt (P4.116). A deferred FAIL opens a review and records
+    // the verdict against it; handing the same `gate_verdict` to the pending path recorded it a
+    // second time and spent two retry attempts on one call.
+    const pendingResult = deferredResult.verdictRecorded
+      ? deferredResult
+      : await this.verdictProcessor.processPendingReviewVerdict(
+          context,
+          this.chainSessionStore.getSession(sessionId, scopeOptions) ?? session,
+          sessionId,
+          currentStepAtStart,
+          deferredResult.userResponse,
+          sessionContext
+        );
     if (pendingResult.earlyExit) {
       await this.settleVerdict(
         context,
@@ -338,10 +340,10 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    *    — and until that moved here, the announcement reached the client ahead of the
    *    `step_complete` for the step being answered (P4.89).
    *
-   * Both results are applied rather than one being picked: a deferred FAIL can create the review
-   * the pending path then answers in the same call, so both can carry an advance. A second
-   * advance is harmless — `advanceStep` no-ops on a node the run has already passed, which is
-   * also what makes this safe after `StepCaptureService` advanced the run itself.
+   * Every distinct result is applied rather than one being picked. When the deferred path recorded
+   * the verdict the pending path never ran and both arguments are the same result, applied once.
+   * A second advance would still be harmless — `advanceStep` no-ops on a node the run has already
+   * passed, which is also what makes this safe after `StepCaptureService` advanced the run itself.
    */
   private async settleVerdict(
     context: ExecutionContext,
@@ -352,7 +354,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
   ): Promise<void> {
     this.stepCaptureService.ledgerSubmittedVerdict(context, sessionId, session, currentStepAtStart);
 
-    for (const result of results) {
+    for (const result of new Set(results)) {
       if (result.deferredAdvance !== undefined) {
         await this.verdictProcessor.applyDeferredAdvance(context, result.deferredAdvance);
       }

@@ -223,6 +223,8 @@ const buildPipeline = (options: {
   recordStore: ExecutionRecordStore;
   logger: Logger;
   steps: () => ReturnType<typeof parsedChainSteps>;
+  /** Whether gate enhancement selects a blocking gate; absent means it does. */
+  blockingGates?: () => boolean;
 }): PromptExecutionPipeline => {
   const { sessionStore, recordStore, logger } = options;
   const chainExecutor = new ChainOperatorExecutor(logger as never, PROMPTS);
@@ -299,7 +301,7 @@ const buildPipeline = (options: {
       return {
         name,
         execute: async (context: ExecutionContext) => {
-          context.state.gates.hasBlockingGates = true;
+          context.state.gates.hasBlockingGates = options.blockingGates?.() ?? true;
           context.state.gates.accumulatedGateIds = [GATE_ID];
           context.state.gates.enforcementMode = 'blocking';
           context.gateInstructions = 'Check the step output against the gate.';
@@ -334,9 +336,15 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
    * with a node BETWEEN the first and the last can fail the old behaviour.
    */
   let parsedSteps: () => ReturnType<typeof parsedChainSteps>;
+  /**
+   * Whether the run opens a review before each step. Off, no review exists when a verdict
+   * arrives, so the verdict takes the deferred path — the only way to reach it here.
+   */
+  let blockingGates: boolean;
 
   beforeEach(() => {
     parsedSteps = parsedChainSteps;
+    blockingGates = true;
     const created = createInMemoryDb();
     db = created.db;
     const logger = createLogger();
@@ -365,6 +373,7 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
       recordStore,
       logger,
       steps: () => parsedSteps(),
+      blockingGates: () => blockingGates,
     });
   });
 
@@ -817,6 +826,53 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
     // No review means no attempt counter, and no re-rendered step.
     expect(text).not.toContain('attempt 1/');
     expect(text).not.toContain('Review Required');
+  });
+
+  /**
+   * P4.116: a deferred FAIL that arrives WITH a `user_response` was processed twice in one call.
+   * `processDeferredVerdict` opened a review and recorded the verdict against it, then the same
+   * call handed the same `gate_verdict` to `processPendingReviewVerdict`, which recorded it again
+   * — two retry attempts spent on one submission.
+   */
+  describe('a deferred FAIL is one recorded attempt per submission', () => {
+    const failVerdict = 'GATE_REVIEW: FAIL - the step misses a constraint';
+
+    const attemptCount = (): number | undefined =>
+      (onlySession().pendingGateReview as { attemptCount?: number } | undefined)?.attemptCount;
+
+    beforeEach(() => {
+      blockingGates = false;
+    });
+
+    test('one call carrying the answer and a FAIL records one attempt', async () => {
+      await pipeline.execute({ command: `>>draft --> >>review` });
+      const chainId = onlySession().chainId;
+      // Nothing is pending, so this verdict takes the deferred path.
+      expect(onlySession().pendingGateReview).toBeUndefined();
+
+      await pipeline.execute({
+        chain_id: chainId,
+        user_response: 'step 1 output',
+        gate_verdict: failVerdict,
+      } as any);
+
+      expect(attemptCount()).toBe(1);
+    });
+
+    test('CONTROL: the same FAIL submitted on two calls records two attempts', async () => {
+      await pipeline.execute({ command: `>>draft --> >>review` });
+      const chainId = onlySession().chainId;
+
+      await pipeline.execute({ chain_id: chainId, gate_verdict: failVerdict } as any);
+      expect(attemptCount()).toBe(1);
+
+      await pipeline.execute({
+        chain_id: chainId,
+        user_response: 'step 1 output',
+        gate_verdict: failVerdict,
+      } as any);
+      expect(attemptCount()).toBe(2);
+    });
   });
 });
 
