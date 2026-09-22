@@ -137,4 +137,10 @@ export interface ChainStepRenderResult {
    * `phases.yaml`.
    */
   declaredSections?: string[];
+  /**
+   * The node `declaredSections` belongs to, when the render is not the run's current step: a gate
+   * review declares the REVIEWED node's headers. Absent on a normal render, whose node the caller
+   * already holds.
+   */
+  declaredNodeId?: string;
 }

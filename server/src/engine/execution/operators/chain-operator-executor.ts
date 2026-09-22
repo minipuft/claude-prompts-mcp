@@ -396,6 +396,15 @@ export class ChainOperatorExecutor {
       promptName: 'Quality Gate Validation',
       content: reviewContent,
       callToAction,
+      // What this review told the model, for the node it reviewed (P4.115). A gated step's review
+      // IS that step's render — stage 18 skips it — so without these the reviewed node recorded no
+      // declaration and stage 19 graded it against the run's union instead of its own headers.
+      ...(targetStep?.nodeId !== undefined
+        ? {
+            declaredNodeId: targetStep.nodeId,
+            declaredSections: declaredSections.map((section) => section.header),
+          }
+        : {}),
     };
   }
 

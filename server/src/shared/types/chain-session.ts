@@ -483,6 +483,15 @@ export interface ChainSessionService {
     isPlaceholder?: boolean,
     declaredSections?: readonly string[]
   ): boolean;
+  /**
+   * Record what a render declared to the model for `nodeId`, leaving the node's lifecycle where it
+   * stands. A node with no record yet is marked `rendered`, since a render is what is recorded.
+   */
+  recordStepDeclaration(
+    sessionId: string,
+    nodeId: string,
+    declaredSections: readonly string[]
+  ): boolean;
   getStepState(sessionId: string, nodeId: string): StepMetadata | undefined;
   transitionStepState(
     sessionId: string,

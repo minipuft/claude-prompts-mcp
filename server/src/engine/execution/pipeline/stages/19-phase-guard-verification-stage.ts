@@ -285,9 +285,10 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
     //
     // The per-node answer is used only when that node has a declaration ON RECORD, empty
     // included: an empty array is a render saying "I declared nothing", which grades against
-    // nothing, while an ABSENT array is a node no render wrote for — a gated chain step, whose
-    // only render is the gate review and which nothing records — and that still falls back to
-    // the run, exactly as before. Reading absent as empty would quietly stop enforcing there.
+    // nothing, while an ABSENT array is a node no render wrote for, which still falls back to the
+    // run. A gated chain step's only render is its gate review, and stage 20 records that review's
+    // declaration against the reviewed node (P4.115), so such a step is graded on its own headers.
+    // Reading absent as empty would quietly stop enforcing wherever no render recorded.
     const gradedNodeId = context.state.session.capturedStep?.nodeId;
     const graded = gradedNodeId === undefined ? undefined : stepStates.get(gradedNodeId);
     if (graded?.declaredSections !== undefined) {

@@ -796,6 +796,32 @@ describe('ChainOperatorExecutor', () => {
 
         expect(result.content).not.toContain('Required Sections');
       });
+
+      /**
+       * P4.115. The review is the reviewed step's only render, so what it declared has to reach
+       * that node's record — reported for the REVIEWED node, which is not the node the run stands
+       * on once the run has moved past it.
+       */
+      test('a gate review reports the headers it declared, for the node it reviewed', async () => {
+        const executor = buildExecutor(cageerfSections);
+
+        const result = await executor.renderStep({
+          executionType: 'gate_review',
+          pendingGateReview: {
+            ...buildPendingReview(0),
+            metadata: { stepNumber: 1, nodeId: 'n1' },
+          } as any,
+          stepPrompts: [
+            { ...stepWithFramework('cageerf'), nodeId: 'n1' },
+            { ...stepWithFramework('cageerf'), stepNumber: 2, promptId: 'summarize', nodeId: 'n2' },
+          ],
+          chainContext: { current_step: 2 },
+          additionalGateIds: [],
+        });
+
+        expect(result.declaredNodeId).toBe('n1');
+        expect(result.declaredSections).toEqual(cageerfSections.map((section) => section.header));
+      });
     });
   });
 });

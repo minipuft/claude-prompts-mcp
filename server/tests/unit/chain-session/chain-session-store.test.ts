@@ -396,6 +396,31 @@ describe('ChainSessionStore — run-status lifecycle (Tier 2)', () => {
     expect(metadata?.state).toBe('completed');
   });
 
+  /**
+   * P4.115. A gate review can re-render after the reviewed step's answer was captured; recording
+   * what that render declared must not walk the node back to `rendered`.
+   */
+  test('recordStepDeclaration keeps a captured node where it is', async () => {
+    manager = newManager('declaration-keeps-state');
+    await manager.createSession('s1', 'chain-a', 2);
+    manager.setStepState('s1', 'n1', 'completed', false);
+
+    expect(manager.recordStepDeclaration('s1', 'n1', ['## Context'])).toBe(true);
+
+    expect(manager.getStepState('s1', 'n1')?.state).toBe('completed');
+    expect(manager.getStepState('s1', 'n1')?.declaredSections).toEqual(['## Context']);
+  });
+
+  test('CONTROL: recordStepDeclaration marks a node nothing recorded as rendered', async () => {
+    manager = newManager('declaration-first-render');
+    await manager.createSession('s1', 'chain-a', 2);
+
+    expect(manager.recordStepDeclaration('s1', 'n1', [])).toBe(true);
+
+    expect(manager.getStepState('s1', 'n1')?.state).toBe('working');
+    expect(manager.getStepState('s1', 'n1')?.declaredSections).toEqual([]);
+  });
+
   test('transitionStepState allows re-asserting the same terminal state (idempotent no-op)', async () => {
     manager = newManager('step-idempotent');
     await manager.createSession('s1', 'chain-a', 2);

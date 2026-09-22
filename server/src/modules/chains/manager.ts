@@ -864,6 +864,29 @@ export class ChainSessionStore implements ChainSessionService {
   }
 
   /**
+   * Record a render's declaration for `nodeId` without moving its lifecycle (P4.115).
+   *
+   * The gate-review render is the only render a blocking-gate step gets, and it can repeat — a
+   * retry re-renders the review after the step's answer was captured. `setStepState(…,
+   * 'rendered')` there would walk a captured node back to `rendered`, so an existing record keeps
+   * its state and gains the declaration; only a node nothing has recorded yet is marked rendered.
+   */
+  recordStepDeclaration(
+    sessionId: string,
+    nodeId: string,
+    declaredSections: readonly string[]
+  ): boolean {
+    const existing = this.activeSessions.get(sessionId)?.state.stepStates?.get(nodeId);
+    if (existing === undefined) {
+      return this.setStepState(sessionId, nodeId, 'rendered', false, declaredSections);
+    }
+    this.activeSessions
+      .get(sessionId)
+      ?.state.stepStates?.set(nodeId, { ...existing, declaredSections: [...declaredSections] });
+    return true;
+  }
+
+  /**
    * Get step state for a specific step
    */
   getStepState(sessionId: string, nodeId: string): StepMetadata | undefined {

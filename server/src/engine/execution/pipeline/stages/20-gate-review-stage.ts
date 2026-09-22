@@ -432,6 +432,20 @@ export class GateReviewStage extends BasePipelineStage {
         additionalGateIds: reviewForRender.gateIds,
       });
 
+      // The reviewed node's declaration, as stage 18 records a normal render's (P4.115). Stage 18
+      // never renders a step held by a review, so this is the only record that step can have —
+      // and stage 19 grades its answer against exactly this, not against the run's union.
+      if (
+        renderResult.declaredSections !== undefined &&
+        renderResult.declaredNodeId !== undefined
+      ) {
+        this.chainSessionStore.recordStepDeclaration(
+          sessionId,
+          renderResult.declaredNodeId,
+          renderResult.declaredSections
+        );
+      }
+
       // Resolve judge gates and compose context-isolated prompt if any gates use judge mode
       let judgeMetadata: Record<string, unknown> | undefined;
       if (this.gateDefinitionProvider && pendingReview.gateIds.length > 0) {

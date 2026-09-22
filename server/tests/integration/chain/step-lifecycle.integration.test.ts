@@ -128,6 +128,20 @@ const parsedThreeStepChain = () => [
   { stepNumber: 3, nodeId: 'review', promptId: 'review', args: {}, convertedPrompt: PROMPTS[1] },
 ];
 
+/** Headers a framework declares, and the two-step chain whose steps run under it (P4.115). */
+const FRAMEWORK_SECTIONS = [
+  { header: '## Context', required: true, phaseId: 'context', criteria: [] },
+  { header: '## Analysis', required: true, phaseId: 'analysis', criteria: [] },
+];
+const parsedFrameworkChain = () =>
+  parsedChainSteps().map((step) => ({
+    ...step,
+    frameworkContext: {
+      selectedFramework: { id: 'cageerf', name: 'CAGEERF' },
+      systemPrompt: 'Apply CAGEERF.',
+    } as never,
+  }));
+
 const createInMemoryDb = (): { db: DatabaseSync; port: DatabasePort } => {
   const db = new DatabaseSync(':memory:');
   db.exec(`
@@ -227,7 +241,11 @@ const buildPipeline = (options: {
   blockingGates?: () => boolean;
 }): PromptExecutionPipeline => {
   const { sessionStore, recordStore, logger } = options;
-  const chainExecutor = new ChainOperatorExecutor(logger as never, PROMPTS);
+  // A framework's section headers, declared only for a step that names a framework — every
+  // parsed chain here but `parsedFrameworkChain` names none, so their renders are unchanged.
+  const chainExecutor = new ChainOperatorExecutor(logger as never, PROMPTS, undefined, undefined, {
+    declaredSectionsProvider: () => FRAMEWORK_SECTIONS,
+  });
 
   const realStages: Record<string, PipelineStage> = {
     SessionManagement: new SessionManagementStage(sessionStore, logger),
@@ -826,6 +844,33 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
     // No review means no attempt counter, and no re-rendered step.
     expect(text).not.toContain('attempt 1/');
     expect(text).not.toContain('Review Required');
+  });
+
+  /**
+   * P4.115: a step held by a blocking gate is never rendered by stage 18, so its gate review is
+   * the only render it gets — and nothing recorded what that review declared. Stage 19 then
+   * graded the step's answer against the run's union instead of against its own headers.
+   */
+  test("a reviewed step's record carries the headers its review declared", async () => {
+    parsedSteps = parsedFrameworkChain;
+
+    const opened = textOf(await pipeline.execute({ command: `>>draft --> >>review` }));
+    const session = onlySession() as unknown as {
+      sessionId: string;
+      pendingGateReview?: unknown;
+      state: { stepStates?: Map<string, { declaredSections?: string[] }> };
+    };
+
+    // The run opened on a review of step 1, and the review told the model these headers.
+    expect(session.pendingGateReview).toBeDefined();
+    expect(opened).toContain('`## Context`');
+    expect(session.state.stepStates?.get('draft')?.declaredSections).toEqual([
+      '## Context',
+      '## Analysis',
+    ]);
+    // CONTROL: a node no render has reached records nothing, so stage 19 still falls back to the
+    // run's union for it — the record above is the review's, not a blanket write.
+    expect(session.state.stepStates?.get('review')?.declaredSections).toBeUndefined();
   });
 
   /**
