@@ -407,6 +407,13 @@ export const SUITE = [
       'CHECKED — falsified 2026-08-27 by restoring the truncating expression at both surviving producers (serving-unit-scope.ts, prompt-executor.ts); the gate reported both. Its one accepted exception audits as load-bearing, so a green run is not a run that reached nothing',
   },
   {
+    script: 'validate:cli-shared-store-guards',
+    io: 'read',
+    reads: ['walk'],
+    converse:
+      'CHECKED — falsified 2026-09-21 by deleting the object-store guard from each of the five guarded sites in turn (recordTree, sweepUnreferencedObjects, loadVersionTree, resolveCliByteRestore, readRecordedConfigFile), which are the four #345-#347 defects plus one sibling; the gate reported each. The unmutated tree is the twin and passes. It also fails closed below four guarded statements, falsified by narrowing V29_TOKENS to a token nothing matches. Blind spots stated in the header with an as-of date: composed SQL, a guard held by the caller, anything outside src/cli-shared',
+  },
+  {
     script: 'validate:telemetry-attribute-emitters',
     io: 'read',
     reads: ['file', 'walk'],

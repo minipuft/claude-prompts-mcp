@@ -16,6 +16,7 @@
  */
 
 import { describe, test, expect } from '@jest/globals';
+import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -261,5 +262,94 @@ describe('resource writes preserve the source they did not edit', () => {
     const written = serializeYamlPreservingSource({ id: 'fresh', name: 'Fresh' }, undefined);
     expect(written.fidelity).toBe('created');
     expect(written.content).toContain('id: fresh');
+  });
+
+  /**
+   * The blank lines around the rewritten key survive — asserted as a DIGEST, not as a diff.
+   *
+   * P4.107 recorded that this writer "drops one blank line after the key it rewrites", measured
+   * 2026-09-21 on the line after a framework's `enabled:`. Re-measured 2026-09-21 on this tree,
+   * across every scalar shape a `cpm toggle` can land on, it does not reproduce: the CST path
+   * replaces the scalar token and leaves every surrounding token, blank lines included, byte for
+   * byte. The claim is therefore pinned rather than fixed, and pinned where it is cheapest to
+   * falsify — one hash of the whole file, so a lost blank line anywhere fails, not only after the
+   * edited key.
+   *
+   * The fixture is hand-authored and carries what a serializer does not reproduce: a leading
+   * comment, keys out of alphabetical order, a flow-style sequence, a trailing comment, and blank
+   * lines BEFORE and AFTER `enabled`. The CRLF twin is here because a line ending is exactly the
+   * kind of byte a token-level writer normalizes silently.
+   *
+   * `expectedDigest` is computed from a string built independently of the writer — the fixture
+   * text with one substring replaced — so the assertion cannot be satisfied by a writer that
+   * returned its own output.
+   */
+  describe('a toggled scalar leaves every blank line around it', () => {
+    const FIXTURE = [
+      '# hand-authored: the ordering below is meaningful to a reader',
+      'id: round_trip',
+      'name: Round Trip',
+      '',
+      'enabled: false # flip me',
+      '',
+      'tags: [alpha, beta]',
+      'description: >-',
+      '  A framework whose description is folded wider than the serializer would wrap it, so a',
+      '  re-render would be visible.',
+      '',
+    ].join('\n');
+
+    const digest = (text: string): string =>
+      createHash('sha256').update(Buffer.from(text, 'utf8')).digest('hex');
+
+    test.each([
+      ['LF', FIXTURE],
+      ['CRLF', FIXTURE.split('\n').join('\r\n')],
+    ])('%s: flipping enabled changes that value and nothing else', (_name, source) => {
+      const parsed = parseYaml<Record<string, unknown>>(source);
+      expect(parsed.success).toBe(true);
+
+      const written = serializeYamlPreservingSource({ ...parsed.data!, enabled: true }, source);
+
+      // Built from the fixture, not from the writer: the only difference this write may make.
+      const expected = source.replace('enabled: false', 'enabled: true');
+      expect(digest(written.content)).toBe(digest(expected));
+      expect(written.fidelity).toBe('source-preserved');
+      // Named explicitly as well, because a digest match reports nothing about WHICH bytes moved
+      // when it fails.
+      expect(written.content).toContain('# flip me');
+      expect(written.content).toContain('tags: [alpha, beta]');
+    });
+
+    test('POSITIVE CONTROL — the digest assertion sees a dropped blank line', () => {
+      // The probe has to be shown to fire. Same comparison, against a string differing from the
+      // expected output in exactly one blank line, and it must FAIL.
+      const expected = FIXTURE.replace('enabled: false', 'enabled: true');
+      const oneBlankLineShort = expected.replace(
+        'enabled: true # flip me\n\n',
+        'enabled: true # flip me\n'
+      );
+
+      expect(oneBlankLineShort).not.toBe(expected);
+      expect(oneBlankLineShort.length).toBe(expected.length - 1);
+      expect(digest(oneBlankLineShort)).not.toBe(digest(expected));
+    });
+
+    test('POSITIVE CONTROL — the previous serializer loses the layout this asserts', () => {
+      // And the other half: the fixture must have something at stake. `serializeYaml` rewrites it
+      // wholesale, so the digest of its output differs and the comments are gone.
+      const parsed = parseYaml<Record<string, unknown>>(FIXTURE);
+      const reserialized = serializeYaml({ ...parsed.data!, enabled: true }, { sortKeys: false });
+
+      expect(digest(reserialized)).not.toBe(
+        digest(FIXTURE.replace('enabled: false', 'enabled: true'))
+      );
+      // `commentCount` counts whole-line comments, so the fixture's leading one; the trailing
+      // `# flip me` is checked by name because it is the harder of the two to preserve.
+      expect(commentCount(FIXTURE)).toBe(1);
+      expect(commentCount(reserialized)).toBe(0);
+      expect(FIXTURE).toContain('# flip me');
+      expect(reserialized).not.toContain('# flip me');
+    });
   });
 });

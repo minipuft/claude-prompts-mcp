@@ -155,8 +155,10 @@ describe('cpm create records what it wrote (Streamable HTTP)', () => {
 
     const rows = historyRows(type, id);
     expect(rows).toHaveLength(1);
-    // The same sentence `resource_manager create` writes — one owner, `CREATE_ROW_DESCRIPTION`.
-    expect(rows[0]!.description).toBe('Created via resource_manager');
+    // One owner for the sentence, parameterised by SURFACE: a row `cpm` wrote names `cpm`, and
+    // `resource_manager`'s own rows are unchanged. Naming the other surface is a plain untruth in
+    // the only prose `cpm history` shows about what produced a row.
+    expect(rows[0]!.description).toBe('Created via cpm');
     expect(rows[0]!.tree_hash).toMatch(/^sha256:/);
 
     // The row's VALUE, not just its existence: the snapshot must be the state the create wrote,
@@ -191,33 +193,112 @@ describe('cpm create records what it wrote (Streamable HTTP)', () => {
     expect((await readFile(path.join(root, entryFile), 'utf8')).length).toBeGreaterThan(50);
   });
 
-  it('says in --json and in the text that a created prompt recorded nothing, and why', () => {
-    const reply = createJson('create', 'prompt', 'created_prompt', '--name', 'P');
-    expect(reply['recorded']).toBe(false);
-    // The VALUE, not just the presence of a key: the reason must name the measured blocker, or a
-    // future non-record could inherit a stale sentence and still pass.
-    expect(String(reply['not_recorded_reason'])).toContain('+59.0 KB');
-    expect(historyRows('prompt', 'created_prompt')).toEqual([]);
-
-    // The same fact on the human path — an operator not passing `--json` must not be the one
-    // person who cannot tell.
-    const text = spawnSync(
-      'node',
-      [CPM_ENTRY, 'create', 'prompt', 'text_prompt', '-w', workspace],
-      {
-        env: buildServerEnv({
-          HOME: workspace,
-          MCP_WORKSPACE: workspace,
-          MCP_RUNTIME_ROOT: workspace,
-          CLAUDE_PROJECT_DIR: SERVER_ROOT,
-        }),
-        cwd: workspace,
-        encoding: 'utf8',
-      }
+  it('records a created prompt as version 1, with the RESOLVED template in the snapshot', () => {
+    const reply = createJson(
+      'create',
+      'prompt',
+      'created_prompt',
+      '--name',
+      'P',
+      '--description',
+      'D prompt'
     );
-    expect(text.stdout).toContain('No version was recorded');
-    expect(text.stdout).toContain('+59.0 KB');
+    expect(reply['recorded']).toBe(true);
+    expect(reply['version']).toBe(1);
+    expect(reply['not_recorded_reason']).toBeUndefined();
+    // The negative half of the degraded path, stated as a value: a prompt the loader served has
+    // nothing to warn about, so the key must be absent rather than present-and-empty.
+    expect(reply['snapshot_degraded_reason']).toBeUndefined();
+
+    const rows = historyRows('prompt', 'created_prompt');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.description).toBe('Created via cpm');
+    expect(rows[0]!.tree_hash).toMatch(/^sha256:/);
+
+    // The VALUE a raw-YAML projection could not have produced. `cpm`'s scaffold writes the body
+    // to a companion file and `prompt.yaml` carries only `userMessageTemplateFile`, so a snapshot
+    // holding the resolved template is the observable that the loader-backed projection ran.
+    const snapshot = JSON.parse(rows[0]!.snapshot) as Record<string, unknown>;
+    expect(snapshot['userMessageTemplateFile']).toBeUndefined();
+    expect(typeof snapshot['userMessageTemplate']).toBe('string');
+    expect(String(snapshot['userMessageTemplate']).length).toBeGreaterThan(0);
+    expect(snapshot['description']).toBe('D prompt');
   });
+
+  it('records a cpm link-gate and a cpm unlink-gate, and refuses a no-op without a row', () => {
+    createJson('create', 'prompt', 'linked_prompt', '--name', 'L', '--description', 'D');
+    createJson('create', 'gate', 'link_target', '--name', 'LT', '--description', 'D');
+
+    const linked = createJson('link-gate', 'linked_prompt', 'link_target');
+    expect(linked['recorded']).toBe(true);
+    expect(linked['version']).toBe(2);
+    expect(linked['action']).toBe('added');
+
+    const unlinked = createJson('link-gate', 'linked_prompt', 'link_target', '--remove');
+    expect(unlinked['recorded']).toBe(true);
+    expect(unlinked['version']).toBe(3);
+
+    const rows = historyRows('prompt', 'linked_prompt');
+    expect(rows.map((row) => row.description)).toEqual([
+      'Created via cpm',
+      'Update via cpm',
+      'Update via cpm',
+    ]);
+    // The row's VALUE: v2 must carry the link and v3 must not. A pair of rows recording the same
+    // state would satisfy the count above.
+    const gatesAt = (version: number): unknown =>
+      (JSON.parse(rows[version - 1]!.snapshot) as Record<string, unknown>)['gateConfiguration'];
+    expect(JSON.stringify(gatesAt(2))).toContain('link_target');
+    expect(gatesAt(3)).toBeUndefined();
+
+    // A no-op is refused before the table is reached, so it writes neither a file nor a row.
+    const noop = cpm('link-gate', 'linked_prompt', 'link_target', '--remove');
+    expect(noop.status).toBe(1);
+    expect(`${noop.stdout}${noop.stderr}`).toContain('not linked');
+    expect(historyRows('prompt', 'linked_prompt')).toHaveLength(3);
+  });
+
+  it('lets the server edit a cpm-created PROMPT without a bridge row, and bridges when the file moved', async () => {
+    // The prompt half of the parity assertion below. The observable is the same: a bridge row
+    // appears exactly when the server's live projection does not hash-equal the newest recorded
+    // snapshot, so its absence says `cpm`'s loader-backed projection and the server's are one
+    // value — measured through both real writers.
+    createJson('create', 'prompt', 'parity_prompt', '--name', 'Parity', '--description', 'D1');
+    createJson('create', 'prompt', 'control_prompt', '--name', 'Control', '--description', 'D1');
+
+    // The control differs in ONE thing: a PROJECTED field of its prompt.yaml, changed out of band.
+    const controlYaml = path.join(
+      workspace,
+      'resources',
+      'prompts',
+      'general',
+      'control_prompt',
+      'prompt.yaml'
+    );
+    const before = await readFile(controlYaml, 'utf8');
+    expect(before).toContain('name: Control');
+    await writeFile(controlYaml, before.replace('name: Control', 'name: Control OOB'), 'utf8');
+
+    await new Promise((resolve) => setTimeout(resolve, WATCHER_RELOAD_MS));
+
+    for (const id of ['parity_prompt', 'control_prompt']) {
+      const updated = await callTool('resource_manager', {
+        resource_type: 'prompt',
+        action: 'update',
+        id,
+        description: 'D2',
+      });
+      expect(updated.isError).toBe(false);
+    }
+
+    expect(historyRows('prompt', 'parity_prompt').map((row) => row.description)).toEqual([
+      'Created via cpm',
+      'Update via resource_manager',
+    ]);
+    const control = historyRows('prompt', 'control_prompt').map((row) => row.description);
+    expect(control[1]).toContain('Bridge:');
+    expect(control).toHaveLength(3);
+  }, 120000);
 
   it('says a created style records nothing because styles carry no history', () => {
     const reply = createJson('create', 'style', 'created_style', '--name', 'S');
@@ -258,8 +339,98 @@ describe('cpm create records what it wrote (Streamable HTTP)', () => {
     const parity = historyRows('gate', 'parity_gate').map((row) => row.description);
     const control = historyRows('gate', 'control_gate').map((row) => row.description);
 
-    expect(parity).toEqual(['Created via resource_manager', 'Update via resource_manager']);
+    expect(parity).toEqual(['Created via cpm', 'Update via resource_manager']);
     expect(control[1]).toContain('Bridge:');
     expect(control).toHaveLength(3);
+  }, 120000);
+
+  it('rolls a SERVER-written prompt back from cpm with no bridge row, and bridges when the file moved', async () => {
+    /**
+     * The other direction of parity, and the one an operator actually hits: the SERVER wrote the
+     * rows and `cpm` is the one reading them. `cpm rollback` records the state it is replacing,
+     * and bridges it when the newest recorded snapshot does not hash-equal what `cpm` projects
+     * from disk — so no bridge row here says `cpm`'s projection of a server-written prompt IS the
+     * server's own. Before the shared prompt projection landed, every one of these bridged.
+     *
+     * The control differs in ONE thing: a PROJECTED field of its prompt.yaml is edited out of
+     * band between the server's two writes, so the state `cpm` projects genuinely is unrecorded
+     * and the bridge row must appear.
+     */
+    for (const id of ['server_prompt', 'server_control']) {
+      const created = await callTool('resource_manager', {
+        resource_type: 'prompt',
+        action: 'create',
+        id,
+        name: `N ${id}`,
+        description: 'S1',
+        user_message_template: 'Handle {{input}}.',
+      });
+      expect(created.isError).toBe(false);
+      const updated = await callTool('resource_manager', {
+        resource_type: 'prompt',
+        action: 'update',
+        id,
+        description: 'S2',
+      });
+      expect(updated.isError).toBe(false);
+    }
+
+    expect(historyRows('prompt', 'server_prompt').map((row) => row.description)).toEqual([
+      'Created via resource_manager',
+      'Update via resource_manager',
+    ]);
+
+    // `cpm history` must SEE those rows — the read half, through the built binary.
+    const history = createJson('history', 'prompt', 'server_prompt') as {
+      versions?: Array<{ version: number }>;
+    };
+    expect([...(history.versions ?? [])].map((row) => row.version).sort()).toEqual([1, 2]);
+
+    // A preview writes nothing: no file changes and no row appears.
+    const promptYaml = path.join(
+      workspace,
+      'resources',
+      'prompts',
+      'general',
+      'server_prompt',
+      'prompt.yaml'
+    );
+    const beforePreview = await readFile(promptYaml, 'utf8');
+    const preview = createJson('rollback', 'prompt', 'server_prompt', '1', '--preview');
+    expect(preview['preview']).toBe(true);
+    expect(await readFile(promptYaml, 'utf8')).toBe(beforePreview);
+    expect(historyRows('prompt', 'server_prompt')).toHaveLength(2);
+
+    // The control's file moves out of band, on a PROJECTED field.
+    const controlYaml = path.join(
+      workspace,
+      'resources',
+      'prompts',
+      'general',
+      'server_control',
+      'prompt.yaml'
+    );
+    const controlBefore = await readFile(controlYaml, 'utf8');
+    expect(controlBefore).toContain('description: S2');
+    await writeFile(
+      controlYaml,
+      controlBefore.replace('description: S2', 'description: OOB'),
+      'utf8'
+    );
+
+    createJson('rollback', 'prompt', 'server_prompt', '1');
+    createJson('rollback', 'prompt', 'server_control', '1');
+
+    // Exactly one row added, and it is the restored state — not a bridge.
+    const rolled = historyRows('prompt', 'server_prompt').map((row) => row.description);
+    expect(rolled).toHaveLength(3);
+    expect(rolled[2]).toContain('Rollback to v1');
+    expect(rolled.some((description) => description.includes('Bridge:'))).toBe(false);
+
+    // The control: exactly one bridge row, and it sits before the rollback row.
+    const control = historyRows('prompt', 'server_control').map((row) => row.description);
+    expect(control).toHaveLength(4);
+    expect(control.filter((description) => description.includes('Bridge:'))).toHaveLength(1);
+    expect(control[2]).toContain('Bridge:');
   }, 120000);
 });

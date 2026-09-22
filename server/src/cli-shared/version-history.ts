@@ -30,6 +30,12 @@
  * when the guess finds no rows and exactly one other tenant does — the server's resolution is
  * the source of truth, and an existing row already records what it was. See
  * `resolveEffectiveTenantId` for the exact rule and why it stays conservative under ambiguity.
+ *
+ * **Config is the exception, and it needs neither half.** A config file's history belongs to the
+ * FILE, so its tenant comes from `configTenantId` — exact on both surfaces, derived from a
+ * path both processes name rather than from a cwd neither shares. A config request therefore
+ * arrives with its tenant already resolved, is never corrected, and is refused outright if it
+ * arrives without one (`runSqlite`).
  */
 
 import { existsSync } from 'node:fs';
@@ -94,6 +100,16 @@ import { STATE_DB_WRITER_PRAGMAS } from '#shared/utils/runtime-state-location.js
 export interface HistoryResourceRef {
   resourceType: ResourceType;
   resourceId: string;
+  /**
+   * The tenant this resource's rows live under, when the caller can resolve it exactly.
+   *
+   * It rides with the ref rather than as a parameter on each of the five read/delete entry points
+   * because it is a property OF the resource, not of the call: every action about a config file
+   * needs the same one, and a per-function parameter is five places for a new caller to omit it.
+   * Absent keeps the existing behaviour — derive a workspace guess, correct it against the db.
+   * Config must always supply it (`configTenantId`); `runSqlite` refuses a config request without.
+   */
+  tenantId?: string;
 }
 
 /**
@@ -113,13 +129,35 @@ export interface HistoryResourceRef {
  * single owner of this DDL; the CLI reports a missing table instead of inventing one.
  */
 function runSqlite(request: HistoryRequest): HistoryResponse {
+  // A config request whose caller did not resolve its own tenant is refused rather than guessed
+  // (P4.109). `resolveTenantId` answers "which WORKSPACE is this process in", and a config file's
+  // history belongs to the file, not to whichever cwd a writer happened to have — see
+  // `configTenantId`. This is the one choke point every dispatched read passes through, so a new
+  // config reader that skipped the derivation fails here by name instead of reading a history that
+  // is not its own.
+  //
+  // It THROWS rather than returning `success: false`, because every read entry point here maps a
+  // failed response onto `null` — the same value a genuinely empty history produces. A new config
+  // reader that omitted the tenant would then print "no config versions recorded yet" against a
+  // history that exists, which is the exact symptom this whole scope correction arc exists to
+  // remove. A caller cannot handle this; it is a wiring mistake, so it fails where it is made.
+  if (request.resource_type === 'config' && request.tenant_id === undefined) {
+    throw new Error(
+      'a config history request must carry the tenant resolved by configTenantId(<the config ' +
+        "file's path>) " +
+        "(#shared/utils/config-scope.js); a config file's history belongs to the FILE, and this " +
+        'process cannot derive it from its working directory'
+    );
+  }
   const opened = openStateDb(request.db_path);
   if ('error' in opened) {
     return { success: false, error: opened.error };
   }
 
   try {
-    return dispatch(opened.db, request, resolveTenantId(request.db_path));
+    return request.tenant_id === undefined
+      ? dispatch(opened.db, request, { id: resolveTenantId(request.db_path), exact: false })
+      : dispatch(opened.db, request, { id: request.tenant_id, exact: true });
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : String(error) };
   } finally {
@@ -180,16 +218,27 @@ function versionHistoryExists(db: DatabaseSync): boolean {
 /**
  * Route one request to its SQL. Mirrors the action set the Python helper dispatched.
  *
- * `tenantId` is `resolveTenantId`'s derivation, unverified against this db. The five actions
- * that only ever act on EXISTING rows resolve their own `effectiveTenantId` via
- * `resolveEffectiveTenantId` before using it; `save_version` uses `tenantId`
- * as given (a legitimate new write must not be redirected), and `rename_history` does too for a
- * narrower reason — see `resolveEffectiveTenantId`'s doc comment for both.
+ * `tenant.id` is `resolveTenantId`'s derivation, unverified against this db, UNLESS `tenant.exact`
+ * says the caller resolved it itself — which is what a config caller does, from the config file's
+ * own path (`configTenantId`). The five actions that only ever act on EXISTING rows resolve their
+ * own `effectiveTenantId` via `resolveEffectiveTenantId` before using a guess; `save_version` uses
+ * it as given (a legitimate new write must not be redirected), and `rename_history` does too for a
+ * narrower reason — see `resolveEffectiveTenantId`'s doc comment for both. An exact tenant is
+ * never corrected: there is nothing to correct, and the correction's own premise does not hold for
+ * the one resource type that supplies one.
  */
-function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): HistoryResponse {
+function dispatch(
+  db: DatabaseSync,
+  request: HistoryRequest,
+  tenant: { id: string; exact: boolean }
+): HistoryResponse {
+  const tenantId = tenant.id;
+  const effectiveTenant = (): { tenantId: string; ambiguousCandidateCount?: number } =>
+    tenant.exact ? { tenantId } : resolveEffectiveTenantId(db, tenantId, request);
+
   switch (request.action) {
     case 'load_history': {
-      const resolved = resolveEffectiveTenantId(db, tenantId, request);
+      const resolved = effectiveTenant();
       // An ambiguous resolution must not collapse into the same shape a genuinely empty history
       // produces below (`success: true, history: null`) — that is the exact symptom this fix
       // exists to remove, just moved one level down. Refuse by name instead, through the
@@ -209,7 +258,7 @@ function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): 
     }
 
     case 'get_version': {
-      const effectiveTenantId = resolveEffectiveTenantId(db, tenantId, request).tenantId;
+      const effectiveTenantId = effectiveTenant().tenantId;
       const row = selectVersion(db, effectiveTenantId, request, Number(request.version));
       return { success: true, entry: row !== undefined ? toEntry(row) : null };
     }
@@ -224,7 +273,7 @@ function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): 
     }
 
     case 'compare_versions': {
-      const effectiveTenantId = resolveEffectiveTenantId(db, tenantId, request).tenantId;
+      const effectiveTenantId = effectiveTenant().tenantId;
       const fromVersion = Number(request.from_version);
       const toVersion = Number(request.to_version);
       const fromRow = selectVersion(db, effectiveTenantId, request, fromVersion);
@@ -250,7 +299,7 @@ function dispatch(db: DatabaseSync, request: HistoryRequest, tenantId: string): 
       // itself keys on the resource's OWN exact id, not the subtree the DELETE below removes: for
       // a chain that has ever been edited as a whole, its own row exists and names the tenant
       // correctly; a chain versioned only step-by-step is outside what this check can see.
-      const effectiveTenantId = resolveEffectiveTenantId(db, tenantId, request).tenantId;
+      const effectiveTenantId = effectiveTenant().tenantId;
       return deleteSubtree(db, effectiveTenantId, request);
     }
 
@@ -286,6 +335,7 @@ function createRequest(
     resource_id: ref.resourceId,
     db_path: dbPath,
     action,
+    ...(ref.tenantId !== undefined ? { tenant_id: ref.tenantId } : {}),
   };
 }
 

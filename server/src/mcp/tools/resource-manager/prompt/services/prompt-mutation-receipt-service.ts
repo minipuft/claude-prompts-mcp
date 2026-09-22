@@ -2,11 +2,10 @@
 
 import { isDeepStrictEqual } from 'node:util';
 
-import { canonicalPromptSnapshot } from '../utils/validation.js';
-
 import type { PromptResourceContext } from '../core/context.js';
 import type { OperationResult } from '../core/types.js';
 
+import { canonicalPromptSnapshot } from '#modules/versioning/index.js';
 import { slugifyCategoryDirectory } from '#shared/utils/resource-ids.js';
 
 export interface PromptMutationReceipt {

@@ -13,7 +13,7 @@ import { PromptAnalyzer } from '../analysis/prompt-analyzer.js';
 import { PromptResourceContext } from '../core/context.js';
 import { FilterParser } from '../search/filter-parser.js';
 import { PromptMatcher } from '../search/prompt-matcher.js';
-import { canonicalPromptSnapshot, validateRequiredFields } from '../utils/validation.js';
+import { validateRequiredFields } from '../utils/validation.js';
 
 import type { PromptResourceActionId } from '../../../../metadata/definitions/prompt-resource.js';
 
@@ -21,6 +21,7 @@ import {
   describeUnresolvedChainStep,
   resolveChainSteps,
 } from '#modules/prompts/chain-step-resolution.js';
+import { canonicalPromptSnapshot } from '#modules/versioning/index.js';
 import { ToolResponse } from '#shared/types/index.js';
 
 const PROMPT_RESOURCE_ACTIONS = promptResourceMetadata.data.actions;

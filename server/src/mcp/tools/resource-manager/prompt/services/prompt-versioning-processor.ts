@@ -4,12 +4,13 @@ import { isPreviewRequest } from '../../../shared/preview-action.js';
 import { ObjectDiffGenerator } from '../analysis/object-diff-generator.js';
 import { PromptResourceContext } from '../core/context.js';
 import { ALL_PROMPT_DATA_KEYS, FileOperations } from '../operations/file-operations.js';
-import { canonicalPromptSnapshot, validateRequiredFields } from '../utils/validation.js';
+import { validateRequiredFields } from '../utils/validation.js';
 
 import type { PromptResourceInput } from '../../core/types.js';
 
 import {
   applyByteRestore,
+  canonicalPromptSnapshot,
   describeRestorePlan,
   describeRollbackPreview,
   describeRollbackRecord,
