@@ -208,7 +208,14 @@ const ENTRY_FILES: Record<ResourceType, string> = {
   styles: 'style.yaml',
 };
 
-const COMPANION_FILES: Record<ResourceType, { name: string; content: string }> = {
+/**
+ * The companion file each type is created with, or null for none.
+ *
+ * A framework has none (R91): its system prompt has one source, the inline `systemPromptGuidance`
+ * above, which is the only text the runtime serves. The scaffold used to write a
+ * `system-prompt.md` beside it holding DIFFERENT starter text that nothing read.
+ */
+const COMPANION_FILES: Record<ResourceType, { name: string; content: string } | null> = {
   prompts: {
     name: 'user-message.md',
     content: '<!-- Template. Use {{arg_name}} for argument substitution. -->\n\n',
@@ -218,10 +225,7 @@ const COMPANION_FILES: Record<ResourceType, { name: string; content: string }> =
     content:
       '## Validation Criteria\n\n- Criterion one\n- Criterion two\n\n## Common Failures\n\n- Failure pattern\n',
   },
-  frameworks: {
-    name: 'system-prompt.md',
-    content: 'Apply the framework systematically, ensuring thorough coverage of each phase.\n',
-  },
+  frameworks: null,
   styles: {
     name: 'guidance.md',
     content:
@@ -333,7 +337,9 @@ function writeResourceFiles(
   const yamlContent = YAML_GENERATORS[type](id, opts);
   writeFileSync(join(resourceDir, ENTRY_FILES[type]), yamlContent, 'utf8');
   const companion = COMPANION_FILES[type];
-  writeFileSync(join(resourceDir, companion.name), companion.content, 'utf8');
+  if (companion !== null) {
+    writeFileSync(join(resourceDir, companion.name), companion.content, 'utf8');
+  }
 }
 
 function validateAndFinalize(

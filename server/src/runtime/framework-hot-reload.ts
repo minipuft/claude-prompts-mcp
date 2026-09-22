@@ -44,7 +44,7 @@ export function buildFrameworkAuxiliaryReloadConfig(
         // Resolve the framework id from the path, the way the gate and style registrations do.
         //
         // The observer tags an event with a framework id only when it classifies the file as a
-        // framework file, which requires a `.yaml` extension — so a framework's `system-prompt.md`
+        // framework file, which requires a `.yaml` extension — so a framework's `judge-prompt.md`
         // or any other non-YAML file it carries arrived here with no id and was refused with
         // "missing frameworkId, skipping". Deriving it here means a registration never depends on
         // upstream classification for the one field its handler cannot proceed without.
@@ -78,7 +78,7 @@ export function buildFrameworkAuxiliaryReloadConfig(
  * Extract a framework ID from a file path.
  *
  * Expected path pattern: `.../frameworks/{frameworkId}/framework.yaml`, and likewise for any
- * other file a framework directory carries (`phases.yaml`, `system-prompt.md`).
+ * other file a framework directory carries (`phases.yaml`, `judge-prompt.md`).
  */
 function extractFrameworkIdFromPath(filePath: string): string | undefined {
   const normalizedPath = filePath.replace(/\\/g, '/');

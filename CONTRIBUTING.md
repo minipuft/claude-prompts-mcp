@@ -156,7 +156,7 @@ All prompt/chain changes flow through MCP tools -- never edit files under `serve
 ### Framework Contributions
 
 - Add framework definitions under `server/resources/frameworks/{id}/`
-- Follow the structure: `framework.yaml` + `phases.yaml` + optional `system-prompt.md` and `judge-prompt.md`
+- Follow the structure: `framework.yaml` (its system prompt goes inline as `systemPromptGuidance`) + `phases.yaml` + optional `judge-prompt.md`
 - See [Frameworks Guide](docs/guides/frameworks.md) for configuration
 
 ### Documentation

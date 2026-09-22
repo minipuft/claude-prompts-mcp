@@ -189,7 +189,7 @@ async function toggleAndRecord(
           roots: { primary: resolveResourceDir(workspace, type) },
         }),
       // `toggleEnabled` rewrites the entry file and nothing else, so that file alone is what a
-      // failed record has to put back. The resource DIRECTORY would also restore `system-prompt.md`
+      // failed record has to put back. The resource DIRECTORY would also restore `phases.yaml`
       // — a file this write never touched.
       targets: [{ path: match.file, kind: 'file' }],
       priorSnapshot: prior.snapshot,
