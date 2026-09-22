@@ -61,6 +61,13 @@ export const StepVisibilitySchema = z
 export type StepVisibilityYaml = z.infer<typeof StepVisibilitySchema>;
 
 /**
+ * The two answers to "does the run wait for this step?" — see `workflowNodeSchema.await`.
+ * Mirrors `StepAwaitMode` in `shared/types/chain-execution.ts` (SSOT for the type), kept as a
+ * literal Zod enum because Zod needs runtime values.
+ */
+const StepAwaitSchema = z.enum(['node', 'run']);
+
+/**
  * Structural caps the server enforces. A submission's `budget` may narrow these, never widen —
  * widening is rejected at the Zod schema boundary (`workflow-ir.schema.ts`), not here.
  */
@@ -194,6 +201,18 @@ export const workflowNodeSchema = z
      * which is an exporter marker with no runtime reader at all.
      */
     delegated: z.boolean().optional(),
+    /**
+     * Whether the run waits for this step's worker (`node`, the default) or continues past it
+     * (`run`) — detached delegation (delegation handoff contract, Tier 4, owner ruling R4).
+     *
+     * `run` is opt-in per step and implies delegation: `markDelegatedStepPrompts` (stage 06)
+     * marks an `await: run` step delegated, because a step the run does not wait on only makes
+     * sense when a worker runs it. The run renders the step's brief, marks the node spawned, and
+     * moves on; the worker's result reports later, routed back to this node by the node token in
+     * its `HANDOFF RESULT` trailer. The run cannot COMPLETE while a spawned detached node has not
+     * reported. `node` is the explicit spelling of the default and changes nothing.
+     */
+    await: StepAwaitSchema.optional(),
   })
   .strict();
 

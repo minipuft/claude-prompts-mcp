@@ -87,7 +87,7 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
   });
 
   test('the v22 schema declares both run tables and no longer declares the retired blob', () => {
-    expect(engine.getSchemaVersion()).toBe(30);
+    expect(engine.getSchemaVersion()).toBe(31);
 
     const tables = engine
       .query<{ name: string }>(`SELECT name FROM sqlite_master WHERE type = 'table'`)
@@ -142,6 +142,54 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
     expect(after.state.stepStates?.get('n2')).toEqual(before.state.stepStates?.get('n2'));
     expect(after.state.stepStates?.get('n2')?.isPlaceholder).toBe(true);
 
+    await reader.cleanup();
+  });
+
+  test('a spawned detached node survives a cold load and still holds the run open (v31)', async () => {
+    // Tier 4: the worker's result can arrive after the process that rendered the brief is gone,
+    // so the obligation must be on the row, not only in memory.
+    const writer = newStore();
+    await writer.createSession('sess-detached', 'chain-detached#1', 2, {}, {
+      nodes: nodes(['n1', 'prompt-a', 'Gather'], ['rev', 'prompt-b', 'Review']),
+    } as never);
+    await writer.completeStep('sess-detached', 'n1');
+    await writer.advanceStep('sess-detached', 'n1');
+    expect(await writer.markNodeSpawned('sess-detached', 'rev')).toBe(true);
+    await (writer as unknown as { persistSessions: () => Promise<void> }).persistSessions();
+
+    const raw = engine.queryOne<{ spawned_at: number | null }>(
+      'SELECT spawned_at FROM chain_run_nodes WHERE session_id = ? AND node_id = ?',
+      ['sess-detached', 'rev']
+    );
+    expect(raw?.spawned_at).toEqual(expect.any(Number));
+    // Control: a node never spawned binds NULL, not a default.
+    const blocking = engine.queryOne<{ spawned_at: number | null }>(
+      'SELECT spawned_at FROM chain_run_nodes WHERE session_id = ? AND node_id = ?',
+      ['sess-detached', 'n1']
+    );
+    expect(blocking?.spawned_at).toBeNull();
+    await writer.cleanup();
+
+    const reader = newStore();
+    await (reader as unknown as { initPromise: Promise<void> }).initPromise;
+    expect(reader.getStepState('sess-detached', 'rev')?.spawnedAt).toBe(raw?.spawned_at);
+
+    // Passing the last node on the RELOADED run does not complete it — the guard read the row.
+    // What passing a detached node writes (`StepCaptureService.passDetachedNode`): a placeholder.
+    await reader.updateSessionState('sess-detached', 'rev', 'placeholder', { isPlaceholder: true });
+    await reader.completeStep('sess-detached', 'rev', { preservePlaceholder: true });
+    await reader.advanceStep('sess-detached', 'rev');
+    const held = reader.getSession('sess-detached') as ChainSession;
+    expect(held.state.currentNodeId).toBeNull();
+    expect(held.runStatus ?? 'working').toBe('working');
+
+    // The report lands (a real output) and the held run completes.
+    await reader.updateSessionState('sess-detached', 'rev', 'late result', {
+      isPlaceholder: false,
+    });
+    await reader.completeStep('sess-detached', 'rev');
+    expect(await reader.completeHeldRun('sess-detached')).toBe(true);
+    expect((reader.getSession('sess-detached') as ChainSession).runStatus).toBe('completed');
     await reader.cleanup();
   });
 

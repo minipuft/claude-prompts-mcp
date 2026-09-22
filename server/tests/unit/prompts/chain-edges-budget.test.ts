@@ -139,6 +139,25 @@ describe('YAML chain step args (row A.1)', () => {
   });
 });
 
+describe('YAML chain step `await` (delegation Tier 4)', () => {
+  // The same stripper shape as A.2 below: `await` validates through the derived schema, so the
+  // loader hop is what can silently drop it. A detached step dropped here would BLOCK instead.
+  it('carries `await: run` through the loader, and leaves an undeclared step without the key', () => {
+    const validation = validatePromptYaml(
+      chain({
+        chainSteps: [
+          { promptId: 'a', stepName: 'Alpha', await: 'run' },
+          { promptId: 'b', stepName: 'Beta' },
+        ],
+      })
+    );
+    expect(validation.errors).toEqual([]);
+    const data = yamlToPromptData(validation.data!, 'edge_chain/prompt.yaml');
+    expect(data.chainSteps?.[0]?.await).toBe('run');
+    expect(data.chainSteps?.[1]).not.toHaveProperty('await');
+  });
+});
+
 describe('YAML chain step `inlineGateCriteria` / `delegated` (row A.2)', () => {
   // Both fields reach YAML for free through A.1's derivation of `ChainStepSchema` from
   // `workflowNodeSchema` — which is exactly why they need this. A field that VALIDATES but is

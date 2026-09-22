@@ -15,6 +15,13 @@ spawn call's tool_input carries the exact value that pins it to the
 foreground. It never loosens the server floor — a client hook may only
 tighten, never substitute for the server's own refusal.
 
+A DETACHED node (a chain step declared `await: run`) is pinned the other
+way: the run does not wait for its worker, so the spawn must run in the
+background and the server renders `run_in_background: true` for it. The
+pin value is therefore per delegation mode, and the mode is read off the
+server's own rendered handoff (`post-prompt-engine.py` records it), never
+guessed by the hook.
+
 The per-client pin table is the single place a new client (or a new
 Claude Code parameter) gets added. Codex and Gemini ports of this hook
 symlink this file from `hooks/lib` and add one row each once their own
@@ -24,14 +31,20 @@ spawn tool exposes a foreground flag; until then they fall through to the
 
 import json
 
-# client name -> (tool_input parameter name, value that pins the call to the foreground)
-_SPAWN_PIN_TABLE: dict[str, tuple[str, object]] = {
-    "claude-code": ("run_in_background", False),
+# client name -> (tool_input parameter name, {delegation mode: value that pins the call})
+_SPAWN_PIN_TABLE: dict[str, tuple[str, dict[str, object]]] = {
+    "claude-code": ("run_in_background", {"blocking": False, "detached": True}),
 }
 
+_PIN_WORDS = {"blocking": "to the foreground", "detached": "to the background (a detached step)"}
 
-def spawn_call_is_pinned(client: str, tool_input: dict) -> tuple[bool, str]:
-    """Check whether a spawn-tool call is pinned to the foreground for `client`.
+
+def spawn_call_is_pinned(client: str, tool_input: dict, mode: str = "blocking") -> tuple[bool, str]:
+    """Check whether a spawn-tool call is pinned the way `mode` requires for `client`.
+
+    `mode` is the server's delegation mode for the pending step: `blocking`
+    (the default, and the answer for any value this table does not know)
+    pins to the foreground; `detached` pins to the background.
 
     Looks up `client` in the pin table. A client with no known pin (not yet
     in the table) has nothing to tighten, so it reports pinned with an empty
@@ -51,11 +64,13 @@ def spawn_call_is_pinned(client: str, tool_input: dict) -> tuple[bool, str]:
     if pin is None:
         return True, ""
 
-    param, required_value = pin
+    param, values = pin
+    resolved_mode = mode if mode in values else "blocking"
+    required_value = values[resolved_mode]
     if tool_input.get(param) is required_value:
         return True, ""
 
     return (
         False,
-        f'set "{param}": {json.dumps(required_value)} on the spawn call to pin it to the foreground',
+        f'set "{param}": {json.dumps(required_value)} on the spawn call to pin it {_PIN_WORDS[resolved_mode]}',
     )

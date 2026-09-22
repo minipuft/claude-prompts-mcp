@@ -68,6 +68,19 @@ describe('Delegation field in prompt schemas', () => {
       }
     });
 
+    test('declares await as node|run and refuses any other value by name', () => {
+      // Tier 4: `await` is the detached-delegation declaration. A misspelled value must fail the
+      // load rather than quietly block — a step the author meant to detach would otherwise hold
+      // the run open on a worker nobody knew it was waiting for.
+      for (const mode of ['node', 'run'] as const) {
+        const result = ChainStepSchema.safeParse({ ...baseStep, await: mode });
+        expect(result.success).toBe(true);
+        if (result.success) expect(result.data.await).toBe(mode);
+      }
+      const refused = ChainStepSchema.safeParse({ ...baseStep, await: 'later' });
+      expect(refused.success).toBe(false);
+    });
+
     test('accepts missing agentType (optional)', () => {
       const result = ChainStepSchema.safeParse(baseStep);
       expect(result.success).toBe(true);

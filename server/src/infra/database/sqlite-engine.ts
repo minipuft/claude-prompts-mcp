@@ -56,6 +56,33 @@ import { STATE_DB_WRITER_PRAGMAS } from '#shared/utils/runtime-state-location.js
 /**
  * Bump this when changing the embedded schema. Triggers drop-and-recreate.
  *
+ * v31: adds `spawned_at` to `chain_run_nodes` (delegation handoff contract, Tier 4 — detached
+ * delegation).
+ *
+ * A step declared `await: run` is DETACHED: the run renders its brief and moves on without the
+ * worker's result, and the result reports later, routed by the node token in its `HANDOFF RESULT`
+ * trailer. That gives the run an obligation it did not have before — it may not COMPLETE while a
+ * spawned detached node has not reported — and the obligation has to survive a cold load, because
+ * the result can arrive after the process that rendered the brief is gone. `spawned_at` is the
+ * one new fact: when the brief was rendered, which is the only way a node enters the detached
+ * lifecycle. A detached step the run never reached has NULL here and is owed nothing, so it can
+ * never hold a run open.
+ *
+ * One column, not three. "Reported" is not a new column: a detached node has reported exactly
+ * when it holds a real captured output (`milestone = 'completed'` with `is_placeholder = 0`),
+ * which this table already records — a `reported_at` beside it would be a second writer for one
+ * fact. And the `await` declaration itself stays on the step, where every other step declaration
+ * lives (the run's blueprint re-derives it on every call); only nodes that were actually spawned
+ * carry a lifecycle, so the completion guard reads `spawned_at` and nothing else
+ * (`unreportedDetachedNodeIds` in `shared/types/chain-execution.ts`).
+ *
+ * Nullable with NO DDL DEFAULT, for the reason `origin` has none: a default hides a dropped
+ * writer from `validate:no-phantom-columns`. NULL is a real value — every blocking node and every
+ * detached node not yet rendered — so this is partial population BY ROW TYPE, the v21/v23
+ * pattern. `chain_run_nodes` is `ephemeral`: the bump drops its rows, no migration is written or
+ * wanted, and a run in flight across the upgrade is lost exactly as every ephemeral bump before
+ * this one loses it. `DROPPED_ON_THIS_BUMP` stays empty and `DROPPED_AT_VERSION` does not move.
+ *
  * v30: replaces the v24 delegation-acknowledgment boolean on `execution_records` with
  * `handoff_evidence TEXT` (delegation handoff contract, Tier 2 / R1).
  *
@@ -351,7 +378,7 @@ import { STATE_DB_WRITER_PRAGMAS } from '#shared/utils/runtime-state-location.js
  * `respondedAt`, which changes the `substate_json` shape in `execution_records`. Rows written by
  * v15 would decode to a lifecycle value outside `StepLifecycle`, so they must not survive.
  */
-const SCHEMA_VERSION = 30;
+const SCHEMA_VERSION = 31;
 
 /**
  * Tables whose rows exist nowhere else and therefore survive a SCHEMA_VERSION bump.
@@ -1159,6 +1186,11 @@ export class SqliteEngine implements DatabasePort {
         delegated INTEGER,
         -- Resolved argument bag, JSON object. NULL when the node declared no arguments.
         args_json TEXT,
+        -- v31 (Tier 4): when a detached (await: run) step's brief was rendered. NULL on every
+        -- blocking node and on a detached node the run has not reached. A spawned node whose
+        -- milestone is not a real completed output is one the run may not complete without.
+        -- Nullable with NO DDL DEFAULT, for the reason origin has none.
+        spawned_at INTEGER,
         updated_at INTEGER,
         PRIMARY KEY (session_id, node_id)
       );

@@ -107,6 +107,16 @@ describe('compileWorkflowIR — field mapping (acceptance clause d)', () => {
     expect(compiled.steps[0]?.delegated).toBeUndefined();
   });
 
+  it('carries a detached declaration (`await: run`) onto the step, and an undeclared one not at all', () => {
+    // Tier 4: `await` is the one declaration that tells the run which nodes it does not wait on.
+    // Dropped here, a detached IR node would silently block — the P6-F7 stripper shape.
+    const compiled = compileValidated(
+      ir({ nodes: [node('gather', { await: 'run' }), node('synthesize')] })
+    );
+    expect(compiled.steps[0]?.await).toBe('run');
+    expect(Object.hasOwn(compiled.steps[1] as object, 'await')).toBe(false);
+  });
+
   it('maps input and output mappings', () => {
     const compiled = compileValidated(
       ir({

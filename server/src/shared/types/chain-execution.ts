@@ -39,6 +39,14 @@ export type StepMilestone = 'pending' | 'rendered' | 'responded' | 'completed' |
  */
 export type VisibilityItem = 'previous_step_output' | 'chain_history' | 'unknowns_ledger';
 
+/**
+ * Whether a chain run waits for a delegated step's worker before moving on (`node`, the default:
+ * a blocking step) or continues past it and takes the worker's result later (`run`: a detached
+ * step, delegation handoff contract Tier 4). Declared per step as `await:` in YAML and in a
+ * Workflow IR node.
+ */
+export type StepAwaitMode = 'node' | 'run';
+
 // `enum StepState` (PENDING | RENDERED | RESPONSE_CAPTURED | COMPLETED) was removed here.
 // Its two transient members had no counterpart in the sticky-terminal model: RENDERED and
 // RESPONSE_CAPTURED are not states, they are progress *within* `working`, and are now carried
@@ -315,6 +323,41 @@ export interface StepMetadata {
    * only make blocking rarer, never more frequent.
    */
   declaredSections?: string[];
+  /**
+   * When a DETACHED step (`await: run`) was spawned — the render that handed its brief to the
+   * client, which is the one way a node enters the detached lifecycle (Tier 4). Set once and
+   * carried forward across every later milestone, like `renderedAt`.
+   *
+   * There is no matching `reportedAt`: a detached node has reported exactly when it holds a real
+   * captured output (`state: 'completed'` and not a placeholder), which the lifecycle already
+   * records. A second field for the same fact is a second writer that could disagree with it.
+   * {@link unreportedDetachedNodeIds} is the one reader of the pair.
+   */
+  spawnedAt?: number;
+}
+
+/**
+ * The node ids of a run's spawned detached steps whose worker has not reported yet — the one
+ * derivation every reader of "is this run still owed a detached result?" uses: the completion
+ * guard in `ChainSessionStore.transitionRunStatus`, `isRunComplete`, the held-run render, and the
+ * late-result router. PURE.
+ *
+ * A node counts only when it was SPAWNED (its brief was rendered) and has neither reported (a
+ * real, non-placeholder `completed` output) nor been retired (`skipped`). A detached step the
+ * run never reached is not owed anything, so it can never hold a run open.
+ */
+export function unreportedDetachedNodeIds(
+  nodes: readonly Pick<ChainNode, 'id'>[],
+  stepStates: ReadonlyMap<string, StepMetadata> | undefined
+): string[] {
+  return nodes
+    .filter((node) => {
+      const metadata = stepStates?.get(node.id);
+      if (metadata?.spawnedAt === undefined) return false;
+      if (metadata.state === 'skipped') return false;
+      return !(metadata.state === 'completed' && !metadata.isPlaceholder);
+    })
+    .map((node) => node.id);
 }
 
 /**

@@ -228,6 +228,7 @@ Read the relevant doc before editing. Update docs when behavior changes.
 | Injection decisions     | InjectionDecisionService (`execution/pipeline/decisions/injection/`) | Call `service.decide()`                                                                                                                       |
 | Style resolution        | StyleManager (`modules/formatting/style-manager.ts`)                 | Call `styleManager.getStyle()`                                                                                                                |
 | Delegation handoff evidence | `resolveHandoffEvidence` (`execution/delegation/handoff-contract.ts`) | Call `resolveHandoffEvidence(input)` -- a pure import, never re-parse the `HANDOFF RESULT` trailer inline                                    |
+| Detached report routing | `resolveDetachedReport` (`execution/delegation/detached.ts`) | Call `resolveDetachedReport(input)` -- a pure import; a late result lands on the node its trailer names, never on the current step |
 
 ## MCP Tool Layer Structure
 

@@ -404,6 +404,13 @@
                   },
                   "type": "object"
                 },
+                "await": {
+                  "enum": [
+                    "node",
+                    "run"
+                  ],
+                  "type": "string"
+                },
                 "delegated": {
                   "type": "boolean"
                 },
@@ -712,6 +719,13 @@
                     "type": "string"
                   },
                   "type": "object"
+                },
+                "await": {
+                  "enum": [
+                    "node",
+                    "run"
+                  ],
+                  "type": "string"
                 },
                 "delegated": {
                   "type": "boolean"
@@ -1117,6 +1131,13 @@
             },
             "type": "object"
           },
+          "await": {
+            "enum": [
+              "node",
+              "run"
+            ],
+            "type": "string"
+          },
           "delegated": {
             "type": "boolean"
           },
@@ -1253,6 +1274,13 @@
                 "type": "string"
               },
               "type": "object"
+            },
+            "await": {
+              "enum": [
+                "node",
+                "run"
+              ],
+              "type": "string"
             },
             "delegated": {
               "type": "boolean"

@@ -178,3 +178,64 @@ class TestSpawnCallIsPinned:
         pinned, reason = spawn_call_is_pinned("claude-code", {})
         assert pinned is False
         assert "run_in_background" in reason
+
+
+# ── Detached steps (await: run, Tier 4) are pinned the other way ────────────
+
+
+def _arm_detached(session_id: str) -> None:
+    save_session_state(
+        session_id,
+        {
+            "chain_id": "chain-demo#1",
+            "current_step": 2,
+            "total_steps": 3,
+            "pending_gate": None,
+            "pending_delegation": True,
+            "delegation_agent_type": "general-purpose",
+            "delegation_mode": "detached",
+        },
+    )
+
+
+class TestDetachedSpawnPin:
+    def test_detached_step_backgrounded_spawn_allows_and_clears(self, patch_workspace, monkeypatch, capsys):
+        session_id = "spawnpin-detached-true"
+        _arm_detached(session_id)
+
+        code, out = run_delegation_enforce(
+            monkeypatch, capsys, session_id=session_id, tool_name="Agent", tool_input={"run_in_background": True}
+        )
+        assert code == 0
+        assert out.get("hookSpecificOutput", {}).get("permissionDecision") != "deny"
+        state = load_session_state(session_id)
+        assert state.get("pending_delegation") is False
+        assert "delegation_mode" not in state
+
+    @pytest.mark.parametrize("tool_input", [{"run_in_background": False}, {}])
+    def test_detached_step_foreground_or_unpinned_spawn_denies_naming_detached(
+        self, patch_workspace, monkeypatch, capsys, tool_input
+    ):
+        session_id = "spawnpin-detached-fg"
+        _arm_detached(session_id)
+
+        code, out = run_delegation_enforce(
+            monkeypatch, capsys, session_id=session_id, tool_name="Task", tool_input=tool_input
+        )
+        assert code == 0
+        assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+        reason = out["hookSpecificOutput"]["permissionDecisionReason"]
+        assert "detached" in reason
+        assert '"run_in_background": true' in reason
+        assert load_session_state(session_id).get("pending_delegation") is True
+
+    def test_predicate_detached_mode_requires_true(self):
+        assert spawn_call_is_pinned("claude-code", {"run_in_background": True}, "detached") == (True, "")
+        pinned, reason = spawn_call_is_pinned("claude-code", {"run_in_background": False}, "detached")
+        assert pinned is False
+        assert "background" in reason
+
+    def test_predicate_unknown_mode_falls_back_to_blocking(self):
+        # Control: a mode the table does not know tightens to the blocking pin, never loosens.
+        assert spawn_call_is_pinned("claude-code", {"run_in_background": False}, "mystery") == (True, "")
+        assert spawn_call_is_pinned("claude-code", {"run_in_background": True}, "mystery")[0] is False

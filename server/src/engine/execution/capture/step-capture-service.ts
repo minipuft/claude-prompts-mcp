@@ -24,7 +24,7 @@ const PLACEHOLDER_SOURCE = 'StepResponseCaptureStage';
  * Both are needed and neither derives the other cheaply here: the store is addressed by
  * `nodeId`, while placeholder text, output mappings and diagnostics are all positional.
  */
-interface StepTarget {
+export interface StepTarget {
   readonly ordinal: number;
   readonly nodeId: string;
 }
@@ -136,6 +136,59 @@ export class StepCaptureService {
       }
       throw error;
     }
+  }
+
+  /**
+   * Move a run past a DETACHED node the parent resumed without waiting for (Tier 4).
+   *
+   * The node's output does not exist yet, so it is recorded the way a response-less call has
+   * always recorded one — a placeholder, completed — and the run advances past it. The placeholder
+   * is what keeps the node OWED: `unreportedDetachedNodeIds` counts a spawned node until it holds
+   * a real output, which {@link recordDetachedReport} writes over this placeholder when the
+   * worker's result lands. Advancing past the run's last node this way leaves the run held open
+   * rather than completed — the store's completion guard decides that, not this method.
+   */
+  async passDetachedNode(
+    context: ExecutionContext,
+    sessionId: string,
+    session: ChainSession,
+    sessionContext: SessionContext,
+    target: StepTarget
+  ): Promise<void> {
+    await this.capturePlaceholder(sessionId, session.chainId, target, totalOf(session.state.nodes));
+    await this.chainSessionStore.advanceStep(sessionId, target.nodeId);
+    this.syncSessionContext(context, sessionId, sessionContext);
+  }
+
+  /**
+   * Record a detached node's LATE result on that node — not on the step the run stands on.
+   *
+   * The same writes an ordinary capture makes for a real output (store, completed lifecycle,
+   * capture-time execution record with its `handoff_evidence`, the step-complete announcement),
+   * with two deliberate omissions. It does not advance: the run passed this node when the parent
+   * moved on, and advancing again would move the CURRENT step. And it does not publish
+   * `capturedStep`, which tells the phase-guard stage which output this call graded — a late
+   * report is not the current step's answer, and grading it there would raise a review on a step
+   * that has not been answered.
+   */
+  async recordDetachedReport(
+    context: ExecutionContext,
+    sessionId: string,
+    session: ChainSession,
+    target: StepTarget,
+    reply: string
+  ): Promise<void> {
+    await this.chainSessionStore.updateSessionState(sessionId, target.nodeId, reply, {
+      isPlaceholder: false,
+      source: 'detached_report',
+      capturedAt: Date.now(),
+      outputMapping: this.getStepOutputMapping(context, target.ordinal),
+    });
+    await this.chainSessionStore.completeStep(sessionId, target.nodeId, {
+      preservePlaceholder: false,
+    });
+    this.ledgerCapturedStep(context, sessionId, session.chainId, target, reply);
+    await this.announceStepComplete(context, session.chainId, target, reply);
   }
 
   /**

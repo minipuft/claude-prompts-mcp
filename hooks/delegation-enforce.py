@@ -7,6 +7,9 @@ Fires on Edit|Write|Bash|Task|Agent tool calls.
 Behavior:
 - Task/Agent while delegation pending, pinned to the foreground → clear state
   and allow (agent delegating correctly)
+- Task/Agent while a DETACHED step (`await: run`) is pending, pinned to the
+  background (`run_in_background: true`, what the server rendered) → clear
+  and allow; not backgrounded → DENY naming the detached step
 - Task/Agent while delegation pending, NOT pinned to the foreground → DENY
   (a backgrounded spawn cannot report the `HANDOFF RESULT` trailer before the
   delegating agent continues); state is left pending, unchanged
@@ -93,7 +96,22 @@ def main():
     # covers other clients/older builds.
     if tool_name in {"Task", "Agent"}:
         tool_input = hook_input.get("tool_input", {}) or {}
-        pinned, pin_reason = spawn_call_is_pinned("claude-code", tool_input)
+        mode = state.get("delegation_mode", "blocking")
+        pinned, pin_reason = spawn_call_is_pinned("claude-code", tool_input, mode)
+        if not pinned and mode == "detached":
+            log(f"{tool_name} tool invoked for a detached step but not backgrounded, BLOCKING ({pin_reason})")
+            response = {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": (
+                        f"This step is detached (await: run): {pin_reason} — the chain does not "
+                        "wait for this worker; resume it now and report the worker's result later."
+                    ),
+                }
+            }
+            print(json.dumps(response))
+            sys.exit(0)
         if not pinned:
             log(f"{tool_name} tool invoked but not pinned to foreground, BLOCKING ({pin_reason})")
             response = {

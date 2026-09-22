@@ -60,6 +60,7 @@ below, which is what lets an IR-declared knob apply to a template chain.
 | `inlineGateIds`      | `array`   | No       | Gate ids applied to this node, at the `inline-operator` rank.                               |
 | `inlineGateCriteria` | `array`   | No       | RAW `::` gate tokens for this node, ids and free text mixed, resolved per step at stage 11. |
 | `delegated`          | `boolean` | No       | Declared context isolation — this node runs in a sub-agent. The `==>` operator's field.     |
+| `await`              | `string`  | No       | `node` (default, the run waits) or `run` (detached — the run moves on; implies delegated).  |
 
 `inlineGateCriteria` and `inlineGateIds` are **siblings, not spellings of one another**.
 `inlineGateIds` carries already-resolved gate ids; `inlineGateCriteria` carries the unresolved
@@ -249,7 +250,8 @@ no edges, and refuses a raw `::` token (see below).
 no parse-time step for the rest of the vocabulary to live on — the renderer builds its step from
 the node — so every other node field is **refused by name** rather than accepted and dropped:
 `inputMapping`, `outputMapping`, `visibility`, `subagentModel`, `agentType`, `framework`,
-`retries`, `inlineGateIds`, `inlineGateCriteria`. Ask for isolation with `delegated: true`, and
+`retries`, `inlineGateIds`, `inlineGateCriteria`, `await`. A contributed node always blocks: which
+nodes a run does not wait on is decided when the run starts. Ask for isolation with `delegated: true`, and
 bind a gate with the `gates` parameter and its `target_step_id`.
 
 Caps carry over: one accepted remainder per unknown id, a per-run ceiling in the shape of

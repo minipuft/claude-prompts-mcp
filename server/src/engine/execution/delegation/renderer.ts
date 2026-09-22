@@ -2,7 +2,7 @@
 import { resolveDelegationStrategy } from './strategy.js';
 
 import type { DelegationStrategy } from './strategy.js';
-import type { DelegationPayload, RenderingHints } from './types.js';
+import type { DelegationMode, DelegationPayload, RenderingHints } from './types.js';
 import type { RequestClientProfile } from '#shared/types/request-identity.js';
 
 const SECTION_DELIMITER = '\u2550'.repeat(65);
@@ -51,6 +51,21 @@ export class DelegationRenderer {
         ? ' along with your ratified gate_verdict'
         : '';
 
+    // A detached node (Tier 4) is not waited on: the parent moves on at once and reports the
+    // worker's result whenever it arrives. Its node token is what routes that late result back
+    // here, so the handoff says so in the one line that differs.
+    const resultLines =
+      payload.mode === 'detached'
+        ? [
+            `\u2192 Continue: Do NOT wait for the sub-agent — resume now with chain_id and no user_response (if this response asks for a gate_verdict, send it on that same call)`,
+            `\u2192 Report later: When it finishes, resume with its result as user_response; the result's "node: ${payload.nodeToken}" line routes it back to this step, whatever step the run is on by then`,
+            `\u2192 The run cannot complete until this step has reported`,
+          ]
+        : [
+            `\u2192 Result: Include the sub-agent's result in user_response${gateHint} to continue the chain`,
+            ...(verdictHint !== undefined ? [verdictHint] : []),
+          ];
+
     const parts: string[] = [
       this.buildHeader(payload),
       '',
@@ -60,8 +75,7 @@ export class DelegationRenderer {
       '',
       toolCall,
       `\u2192 Prompt: Pass the EXECUTION BRIEF above (everything between the BRIEF delimiters) as the agent's prompt`,
-      `\u2192 Result: Include the sub-agent's result in user_response${gateHint} to continue the chain`,
-      ...(verdictHint !== undefined ? [verdictHint] : []),
+      ...resultLines,
       '',
       constraints,
     ];
@@ -100,6 +114,8 @@ export interface DelegatedStepHandoffInputs {
   readonly gateGuidanceEnabled: boolean;
   /** The handoff contract token this step's brief carries (`handoffNodeToken(step)`). */
   readonly nodeToken: string;
+  /** Whether the run waits for this worker (`blocking`) or moves on without it (`detached`). */
+  readonly mode: DelegationMode;
 }
 
 /**
@@ -118,7 +134,7 @@ export function renderDelegatedStepHandoff(inputs: DelegatedStepHandoffInputs): 
     gateCount: inputs.inlineGateCount ?? (inputs.hasGates ? 1 : 0),
     hasGates: inputs.hasGates,
     nodeToken: inputs.nodeToken,
-    mode: 'blocking',
+    mode: inputs.mode,
   };
   return new DelegationRenderer().renderCurrentStepHandoff(payload, {
     gateGuidanceEnabled: inputs.gateGuidanceEnabled,

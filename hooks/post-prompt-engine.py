@@ -106,6 +106,9 @@ def main():
         # strategy.ts). The Claude strategy always emits subagent_type, so this only fires for a
         # CTA shape the regex above does not know.
         state["delegation_agent_type"] = subagent_match.group(1) if subagent_match else "general-purpose"
+        # The server pins a detached step (`await: run`) to the background and a blocking one to
+        # the foreground; delegation-enforce reads which, off the handoff the server rendered.
+        state["delegation_mode"] = "detached" if "run_in_background: true" in content else "blocking"
         save_session_state(session_id, state)
 
     if pending_gate:
