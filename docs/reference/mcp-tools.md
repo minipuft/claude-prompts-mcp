@@ -1409,6 +1409,21 @@ passed/failed per gate id. Reminder attestations are counted separately, as **Re
 Attestations**, and never inside a gate's pass rate. Both sections are omitted when no record
 carries what they report.
 
+Every figure the report labels **(this workspace)** — recorded steps, completed, failed, average
+step duration, and the gate section above — comes from that one scoped ledger read, so one reply
+describes one workspace and **Gate Review Coverage** divides two counts from the same population.
+Uptime, memory and performance trends sit under **This Server Process (all workspaces)** because
+they belong to the process, which may serve several workspaces; nothing in the report presents a
+process fact as a workspace one.
+
+The ledger records **chain steps**. A single-prompt run opens no session and writes no row, so it
+is counted nowhere in this report, and the report says so when a workspace has no rows. The counts
+cover the most recent ledger page (50 rows by default, 500 at most), not all time.
+
+`operation:"reset"` clears the framework switch metrics for the calling workspace and the process
+performance trends. It does not touch the execution ledger, which is append-only — the report says
+that too.
+
 ### Session Operations
 
 ```bash

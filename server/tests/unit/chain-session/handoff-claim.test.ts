@@ -31,7 +31,6 @@ class StubTextReferenceStore {
   storeChainStepResult = jest.fn();
   buildChainVariables = jest.fn().mockReturnValue({});
   clearChainStepResults = jest.fn();
-  getChainStepMetadata = jest.fn().mockReturnValue({});
 }
 
 const DONOR: StateStoreOptions = { continuityScopeId: 'pid-donor', workspaceId: 'ws-a' };

@@ -171,7 +171,6 @@ describe('Tenant Isolation', () => {
     const textReferenceManagerStub = {
       storeChainStepResult: jest.fn(),
       buildChainVariables: jest.fn().mockReturnValue({}),
-      getChainStepMetadata: jest.fn().mockReturnValue(null),
       clearChainStepResults: jest.fn(),
     };
 
@@ -180,7 +179,6 @@ describe('Tenant Isolation', () => {
     beforeEach(() => {
       textReferenceManagerStub.storeChainStepResult.mockClear();
       textReferenceManagerStub.buildChainVariables.mockClear();
-      textReferenceManagerStub.getChainStepMetadata.mockClear();
       textReferenceManagerStub.clearChainStepResults.mockClear();
 
       chainSessionStore = new ChainSessionStore(

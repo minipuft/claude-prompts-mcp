@@ -29,10 +29,6 @@ export class AnalyticsActionHandler extends ActionHandler {
 
   private resetAnalyticsData(): void {
     this.context.systemAnalytics = {
-      totalExecutions: 0,
-      successfulExecutions: 0,
-      failedExecutions: 0,
-      averageExecutionTime: 0,
       gateValidationCount: 0,
       uptime: Date.now() - this.startTime,
       performanceTrends: [],
@@ -47,7 +43,7 @@ export class AnalyticsActionHandler extends ActionHandler {
       );
     }
 
-    const beforeMetrics = { ...this.context.systemAnalytics };
+    const trendsBefore = this.context.systemAnalytics.performanceTrends.length;
 
     this.resetAnalyticsData();
 
@@ -60,24 +56,20 @@ export class AnalyticsActionHandler extends ActionHandler {
     let response = `# 🔄 Metrics Reset Completed\n\n`;
     response += `**Reset Timestamp**: ${new Date().toISOString()}\n\n`;
 
-    response += '## Metrics Before Reset\n\n';
-    response += `**Total Executions**: ${beforeMetrics.totalExecutions}\n`;
-    response += `**Successful**: ${beforeMetrics.successfulExecutions}\n`;
-    response += `**Failed**: ${beforeMetrics.failedExecutions}\n`;
-    response += `**Average Time**: ${this.formatExecutionTime(
-      beforeMetrics.averageExecutionTime
-    )}\n\n`;
+    // Only what this action actually clears is reported. It used to print four execution
+    // counters before and after, all of them constant zero because nothing wrote them (P4.87);
+    // printing `0 → 0` made a reset look like it had done something to figures it never touched.
+    response += '## What Was Reset\n\n';
+    response += `**Framework switch metrics** (this workspace): cleared\n`;
+    response += `**Process performance trends**: ${trendsBefore} discarded\n\n`;
 
-    response += '## Metrics After Reset\n\n';
-    response += `**Total Executions**: ${this.context.systemAnalytics.totalExecutions}\n`;
-    response += `**Successful**: ${this.context.systemAnalytics.successfulExecutions}\n`;
-    response += `**Failed**: ${this.context.systemAnalytics.failedExecutions}\n`;
-    response += `**Average Time**: ${this.formatExecutionTime(
-      this.context.systemAnalytics.averageExecutionTime
-    )}\n\n`;
-
+    response += '## What Was Not Reset\n\n';
     response +=
-      '✅ All switching performance metrics have been reset. Framework switching monitoring will start fresh.';
+      '**Execution ledger**: untouched. It is an append-only record, and every per-workspace ' +
+      'figure in the analytics report is read from it — clearing it here would delete history ' +
+      'rather than reset a counter.\n\n';
+
+    response += '✅ Framework switching monitoring will start fresh.';
 
     return this.createMinimalSystemResponse(response, 'reset_metrics');
   }
@@ -114,108 +106,63 @@ export class AnalyticsActionHandler extends ActionHandler {
     return this.createMinimalSystemResponse(response, 'switch_history');
   }
 
-  /**
-   * A gate's pass/fail tally across the ledger page, plus the number of reviewed records.
-   *
-   * `gateValidationCount` had no writer anywhere — it was initialized to `0` here and in the
-   * router and read only by the report, so "Gate Validations: 0" and "Gate Adoption Rate: 0%"
-   * were printed on a server that had run hundreds of gated steps (P4.77). It is now refreshed
-   * from `execution_records`, which since P4.76 carries the reviewer's per-gate verdicts.
-   *
-   * Refreshed on read rather than incremented on write: the ledger already holds every verdict
-   * with its own scope filter, and a second running counter would be a fact with two sources
-   * that drift apart on restart, since the counter is in memory and the ledger is not.
-   */
-  private tallyGateVerdicts(): {
-    reviewedRecords: number;
-    attestations: number;
-    byGate: Map<string, { passed: number; failed: number }>;
-  } {
-    const byGate = new Map<string, { passed: number; failed: number }>();
-    let reviewedRecords = 0;
-    let attestations = 0;
-
-    for (const record of this.context.executionRecordStore?.queryRecent(
-      undefined,
-      this.requestScope
-    ) ?? []) {
-      const verdicts = record.gateVerdicts;
-      if (verdicts.length === 0) continue;
-      reviewedRecords += 1;
-      for (const verdict of verdicts) {
-        // A reminder has no evaluator — the reviewer attests to it. Counting one beside an
-        // evaluated check would average a self-declaration into a pass rate, so it is listed
-        // as an attestation and never as a pass.
-        if (verdict.tier === 'reminder') {
-          attestations += 1;
-          continue;
-        }
-        const tally = byGate.get(verdict.gateId) ?? { passed: 0, failed: 0 };
-        if (verdict.verdict === 'PASS') tally.passed += 1;
-        else tally.failed += 1;
-        byGate.set(verdict.gateId, tally);
-      }
-    }
-
-    return { reviewedRecords, attestations, byGate };
-  }
-
   private async getAnalytics(args: { include_history?: boolean }): Promise<ToolResponse> {
     const { include_history = false } = args;
 
-    const gateTally = this.tallyGateVerdicts();
-    this.context.systemAnalytics.gateValidationCount = gateTally.reviewedRecords;
+    // One scope, one query: every figure under the two workspace headings below comes from this
+    // tally, which filters `execution_records` on the calling workspace (P4.87).
+    const ledger = this.tallyLedger();
+    this.context.systemAnalytics.gateValidationCount = ledger.reviewedRecords;
 
     const analytics = this.context.systemAnalytics;
-    const successRate = this.getSuccessRate();
-    const avgTime = this.formatExecutionTime(analytics.averageExecutionTime);
 
     let response = '# 📊 System Analytics Report\n\n';
 
-    response += '## 📈 Overall Performance\n\n';
-    response += `**Total Executions**: ${analytics.totalExecutions}\n`;
-    response += `**Success Rate**: ${successRate}%\n`;
-    response += `**Failed Executions**: ${analytics.failedExecutions}\n`;
-    response += `**Average Execution Time**: ${avgTime}\n`;
-    response += `**System Uptime**: ${this.formatUptime(analytics.uptime)}\n\n`;
+    response += '## 📈 Recorded Steps (this workspace)\n\n';
+    if (ledger.records === 0) {
+      response +=
+        'No steps recorded for this workspace yet. The execution ledger records chain steps; ' +
+        'a single-prompt run writes no row, so it is counted nowhere here.\n\n';
+    } else {
+      response += `**Steps Recorded**: ${ledger.records} (most recent page)\n`;
+      response += `**Completed**: ${ledger.completed}\n`;
+      response += `**Failed**: ${ledger.failed}\n`;
+      response += `**Average Step Duration**: ${this.formatExecutionTime(
+        ledger.averageDurationMs
+      )}\n\n`;
+    }
 
-    response += '## 🎯 Execution Mode Distribution\n\n';
-    const executionsByMode = this.getExecutionsByMode();
-    const totalModeExecutions = Object.values(executionsByMode).reduce((a, b) => a + b, 0);
-    Object.entries(executionsByMode).forEach(([mode, count]) => {
-      const percentage =
-        totalModeExecutions > 0 ? Math.round((count / totalModeExecutions) * 100) : 0;
-      response += `- **${
-        mode.charAt(0).toUpperCase() + mode.slice(1)
-      } Mode**: ${count} executions (${percentage}%)\n`;
-    });
-    response += '\n';
-
-    response += '## 🛡️ Quality Gate Analytics\n\n';
+    response += '## 🛡️ Quality Gate Analytics (this workspace)\n\n';
     response += `**Gate Validations**: ${analytics.gateValidationCount}\n`;
-    response += `**Gate Adoption Rate**: ${
-      analytics.totalExecutions > 0
-        ? Math.round((analytics.gateValidationCount / analytics.totalExecutions) * 100)
-        : 0
-    }%\n`;
+    // Numerator and denominator now come from the same scoped page. It used to divide this
+    // workspace's reviewed steps by a process-wide execution counter nothing wrote, which made
+    // the rate 0% on every server (P4.87).
+    response += `**Gate Review Coverage**: ${
+      ledger.records > 0 ? Math.round((ledger.reviewedRecords / ledger.records) * 100) : 0
+    }% of recorded steps\n`;
 
     // Per gate, not just a total: a 90% adoption rate over one gate that always passes and one
     // that always fails is two different systems, and the total cannot tell them apart. Omitted
     // entirely when no record carries a verdict, so the section appears only once there is
     // something in it.
-    if (gateTally.byGate.size > 0) {
+    if (ledger.byGate.size > 0) {
       response += '\n**Per-Gate Outcomes** (reviewed steps in the ledger)\n\n';
-      for (const [gateId, tally] of gateTally.byGate) {
+      for (const [gateId, tally] of ledger.byGate) {
         response += `- \`${gateId}\`: ${tally.passed} passed / ${tally.failed} failed\n`;
       }
     }
-    if (gateTally.attestations > 0) {
-      response += `\n**Reminder Attestations**: ${gateTally.attestations} (self-declared, not graded)\n`;
+    if (ledger.attestations > 0) {
+      response += `\n**Reminder Attestations**: ${ledger.attestations} (self-declared, not graded)\n`;
     }
     response += '\n';
 
+    // Everything below belongs to the server PROCESS, which may serve several workspaces. The
+    // heading says so rather than letting a reader carry the workspace scope down the page.
+    response += '## 🖥️ This Server Process (all workspaces)\n\n';
+    response += `**Uptime**: ${this.formatUptime(analytics.uptime)}\n\n`;
+
     if (analytics.memoryUsage) {
-      response += '## 💾 System Resources\n\n';
+      response += '### 💾 Resources\n\n';
       const mem = analytics.memoryUsage;
       response += `**Heap Used**: ${this.formatBytes(mem.heapUsed)}\n`;
       response += `**Heap Total**: ${this.formatBytes(mem.heapTotal)}\n`;
@@ -224,7 +171,7 @@ export class AnalyticsActionHandler extends ActionHandler {
     }
 
     if (include_history && analytics.performanceTrends.length > 0) {
-      response += '## 📈 Performance Trends\n\n';
+      response += '### 📈 Performance Trends\n\n';
 
       const trendsByMetric = analytics.performanceTrends.reduce<
         Record<string, Array<SystemAnalytics['performanceTrends'][number]>>
@@ -237,7 +184,7 @@ export class AnalyticsActionHandler extends ActionHandler {
 
       Object.entries(trendsByMetric).forEach(([metric, trends]) => {
         const recentTrends = (trends ?? []).slice(-10);
-        response += `### ${metric.charAt(0).toUpperCase() + metric.slice(1)} Trends\n`;
+        response += `#### ${metric.charAt(0).toUpperCase() + metric.slice(1)} Trends\n`;
         recentTrends.forEach((trend, index) => {
           const isoTime = new Date(trend.timestamp).toISOString();
           const time = isoTime.split('T')[1]?.split('.')[0] ?? isoTime;
