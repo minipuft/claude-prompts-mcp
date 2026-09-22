@@ -49,7 +49,7 @@ export class GateAnalyzer {
   constructor(dependencies: PromptResourceDependencies, promptAnalyzer?: PromptAnalyzer) {
     this.logger = dependencies.logger;
     this.dependencies = dependencies;
-    this.promptAnalyzer = promptAnalyzer ?? new PromptAnalyzer(dependencies);
+    this.promptAnalyzer = promptAnalyzer ?? new PromptAnalyzer();
   }
 
   /**

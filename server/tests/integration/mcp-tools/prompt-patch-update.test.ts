@@ -17,7 +17,6 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSy
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { ContentAnalyzer } from '../../../src/modules/semantic/content-analyzer.js';
 import { ComparisonEngine } from '../../../src/mcp/tools/resource-manager/prompt/analysis/comparison-engine.js';
 import { GateAnalyzer } from '../../../src/mcp/tools/resource-manager/prompt/analysis/gate-analyzer.js';
 import { ObjectDiffGenerator } from '../../../src/mcp/tools/resource-manager/prompt/analysis/object-diff-generator.js';
@@ -95,7 +94,6 @@ function createHarness(workspaceDir: string): Harness {
   const dependencies = {
     logger,
     configManager,
-    semanticAnalyzer: new ContentAnalyzer(createLogger()),
     onRefresh: jest.fn(async () => {
       const promptLoader = new PromptLoader(logger);
       const { promptsData } = await promptLoader.loadFromDirectories(promptsDir);
@@ -149,7 +147,7 @@ function createHarness(workspaceDir: string): Harness {
 
   const context = {
     dependencies,
-    promptAnalyzer: new PromptAnalyzer(dependencies),
+    promptAnalyzer: new PromptAnalyzer(),
     gateAnalyzer: new GateAnalyzer(dependencies as never),
     fileOperations,
     getData: () => ({ convertedPrompts }),

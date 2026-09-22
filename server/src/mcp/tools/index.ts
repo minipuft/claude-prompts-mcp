@@ -84,7 +84,6 @@ import {
 import { GateStateStore, createGateStateStore } from '#engine/gates/gate-state-store.js';
 import { PromptAssetManager } from '#modules/prompts/index.js';
 // Gate evaluator removed - now using Framework validation
-import { createContentAnalyzer } from '#modules/semantic/content-analyzer.js';
 import { TextReferenceStore } from '#modules/text-refs/index.js';
 import { withRequestNotifications } from '#shared/utils/request-notification-scope.js';
 // Schemas now hand-written in ./schemas/ (replaced generated mcp-schemas.ts)
@@ -169,7 +168,6 @@ export class McpToolRouter {
   // Core tools: prompt engine, prompt resources, system control, gate manager, framework manager, resource manager
 
   // Shared components
-  private semanticAnalyzer!: ReturnType<typeof createContentAnalyzer>;
   private frameworkStateStore?: FrameworkStateStore;
   private frameworkManager?: FrameworkManager;
   // ChainSessionStore is owned by PromptExecutor, accessed via getter
@@ -242,7 +240,6 @@ export class McpToolRouter {
     this.onRestart = onRestart;
     this.resourceFileLocator = resourceFileLocator;
 
-    this.semanticAnalyzer = createContentAnalyzer(this.logger);
     this.analyticsService = metricsCollector;
 
     // Initialize gate system manager for runtime gate control
@@ -255,15 +252,12 @@ export class McpToolRouter {
     });
     await this.gateStateStore.initialize();
 
-    this.logger.info('Content analyzer initialized');
-
     // Initialize consolidated tools
     // Note: ChainSessionStore is created inside PromptExecutor and exposed via getter
     this.promptExecutor = createPromptExecutor(
       this.logger,
       this.promptManager,
       this.configManager,
-      this.semanticAnalyzer,
       this.textReferenceStore,
       this.gateManager,
       this, // Pass manager reference for analytics data flow
@@ -279,7 +273,6 @@ export class McpToolRouter {
     this.promptResourceHandler = createPromptResourceHandler(
       this.logger,
       this.configManager,
-      this.semanticAnalyzer,
       this.frameworkStateStore,
       this.frameworkManager,
       onRefresh,

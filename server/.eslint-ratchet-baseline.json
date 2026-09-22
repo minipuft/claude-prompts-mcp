@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-22T22:47:30.009Z",
+  "generatedAt": "2026-09-22T22:56:44.046Z",
   "eslintTarget": "src,scripts,eslint-rules",
   "totals": {
-    "errors": 2663,
+    "errors": 2639,
     "warnings": 744
   },
   "byRule": {
     "@typescript-eslint/strict-boolean-expressions": {
-      "errors": 1790,
+      "errors": 1776,
       "warnings": 0
     },
     "sonarjs/cognitive-complexity": {
@@ -20,7 +20,7 @@
       "warnings": 78
     },
     "@typescript-eslint/no-unnecessary-condition": {
-      "errors": 378,
+      "errors": 372,
       "warnings": 0
     },
     "max-params": {
@@ -28,7 +28,7 @@
       "warnings": 7
     },
     "@typescript-eslint/prefer-nullish-coalescing": {
-      "errors": 148,
+      "errors": 146,
       "warnings": 0
     },
     "import-x/order": {
@@ -52,11 +52,11 @@
       "warnings": 348
     },
     "@typescript-eslint/explicit-function-return-type": {
-      "errors": 22,
+      "errors": 21,
       "warnings": 0
     },
     "@typescript-eslint/no-explicit-any": {
-      "errors": 244,
+      "errors": 243,
       "warnings": 0
     },
     "max-depth": {
