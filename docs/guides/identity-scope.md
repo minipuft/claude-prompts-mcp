@@ -13,11 +13,11 @@ This guide shows you how to isolate state per workspace or organization when dep
 The server extracts identity from MCP SDK transport metadata and uses it to isolate all persisted state (chain sessions, framework switches, gate system state) per workspace.
 
 ```
-MCP SDK extra ──► RequestIdentityResolver ──► continuityScopeId ──► SQLite scoped queries
-   │                                              │
-   ├─ authInfo.extra (OAuth claims)               ├─ workspaceId (highest priority)
-   ├─ requestInfo.headers (gateway headers)       ├─ organizationId (fallback)
-   └─ launch defaults (CLI flags)                 └─ "default" (single-tenant fallback)
+MCP SDK handler ctx ──► RequestIdentityResolver ──► continuityScopeId ──► SQLite scoped queries
+   │                                                    │
+   ├─ http.authInfo.extra (OAuth claims)                ├─ workspaceId (highest priority)
+   ├─ http.req headers (gateway headers)                ├─ organizationId (fallback)
+   └─ launch defaults (CLI flags)                       └─ "default" (single-tenant fallback)
 
 MCP request options ──► RequestIdentityResolver ──► clientProfile ──► handoff strategy
    │                                                │
@@ -99,6 +99,26 @@ The server reads these headers automatically:
 | `mcp-session-id`                 | `transportSessionId` | Audit only |
 
 OAuth token claims (via `authInfo.extra`) take priority over headers when both are present.
+
+### What a Header Does Over HTTP
+
+Streamable HTTP builds a fresh server for every request, and the identity headers are read on
+every request, so one server can serve several workspaces at once. With the default
+`mode: permissive` and `allowPerRequestOverride: true`, a request carrying `x-workspace-id: A`
+reads and writes workspace A's state, a request carrying `x-workspace-id: B` reads and writes B's,
+and a request with no identity header uses the server's launch workspace. A
+`system_control framework switch` sent under A is reported by `system_control status` under A and
+by nothing else. Header names are case-insensitive.
+
+Two limits apply. First, `prompt_engine` renders with the **launch workspace's** framework
+selection, not the requesting workspace's, so a per-workspace switch changes what `status` reports
+for that workspace but not which framework guidance its prompts receive. Second, prompt, gate and
+framework version history is recorded under the launch workspace whatever header a request
+carries.
+
+Before this was corrected, from 4.0.0 on, no header or token claim reached any per-request state
+over HTTP: every request used the launch workspace, so a switch sent under one workspace changed
+it for every client.
 
 ## Configure via config.jsonc
 
@@ -250,14 +270,14 @@ In practice:
 
 ## What Gets Isolated
 
-| State              | Isolated Per Scope | Notes                                                |
-| ------------------ | ------------------ | ---------------------------------------------------- |
-| Chain sessions     | Yes                | Same `chain_id` runs independently across workspaces |
-| Framework switches | Yes                | Workspace A on CAGEERF, workspace B on ReACT         |
-| Gate system state  | Yes                | Enable/disable, health metrics, validation history   |
-| Argument history   | Yes                | Per-workspace argument tracking                      |
-| Resource index     | No                 | Shared file-based resources (prompts, gates, styles) |
-| Config history     | By FILE, not scope | See "Config Version History Is Scoped By the File"   |
+| State              | Isolated Per Scope | Notes                                                                                                                                       |
+| ------------------ | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Chain sessions     | Yes                | Same `chain_id` runs independently across workspaces                                                                                        |
+| Framework switches | Partly             | `system_control` state is per workspace; `prompt_engine` renders with the launch workspace's framework (see "What a Header Does Over HTTP") |
+| Gate system state  | Yes                | Enable/disable, health metrics, validation history                                                                                          |
+| Argument history   | Yes                | Per-workspace argument tracking                                                                                                             |
+| Resource index     | No                 | Shared file-based resources (prompts, gates, styles)                                                                                        |
+| Config history     | By FILE, not scope | See "Config Version History Is Scoped By the File"                                                                                          |
 
 ## Troubleshooting
 
@@ -265,7 +285,7 @@ In practice:
 **Fix:** Verify the flag format. Both `--workspace-id=value` and `--workspace-id value` are accepted. Check `system_control(action: "whoami")` to see what the server resolved.
 
 **Issue:** HTTP gateway headers are not picked up
-**Fix:** Headers must be lowercase (`x-workspace-id`, not `X-Workspace-ID`). The server normalizes case, but ensure your gateway passes them on the HTTP request to the MCP endpoint.
+**Fix:** Header names are case-insensitive, so `X-Workspace-ID` works. Check that the gateway forwards the header on the HTTP request to the `/mcp` endpoint itself, that `identity.mode` is not `locked`, and that `identity.allowPerRequestOverride` is not `false`. Either setting makes the launch workspace win.
 
 **Issue:** Locked mode rejects requests
 **Fix:** In `locked` mode, `launchDefaults` must be set. If no launch defaults are configured, the server falls back to `default` scope and logs a warning.

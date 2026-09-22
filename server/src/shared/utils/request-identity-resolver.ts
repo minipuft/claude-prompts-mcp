@@ -97,27 +97,28 @@ export interface LockedIdentityValidationResult {
 }
 
 /**
- * Minimal shape of MCP SDK RequestHandlerExtra relevant to identity resolution.
- * Avoids tight coupling to the full SDK type.
+ * The part of the SDK v2 handler context (`ServerContext`) identity resolution reads.
+ *
+ * Over Streamable HTTP the SDK puts everything that identifies a request under `http`:
+ * the originating `Request` at `http.req` — whose `headers` is a web `Headers` object —
+ * and validated auth at `http.authInfo`. STDIO sets no `http` at all.
+ *
+ * This interface once described the v1 `RequestHandlerExtra` instead (`requestInfo.headers`,
+ * top-level `authInfo`), and carried an index signature, so the SDK v2 upgrade moved every
+ * field it read without a single type error: from 4.0.0 until this was corrected, no header
+ * or token claim reached any per-call scope over HTTP. There is deliberately no index
+ * signature now — a fixture built on a shape the SDK does not produce fails to typecheck.
  */
 export interface McpRequestExtra {
-  authInfo?: {
-    extra?: Record<string, unknown>;
-    sub?: string;
-    [key: string]: unknown;
-  };
-  clientInfo?: {
-    name?: string;
-    version?: string;
-    [key: string]: unknown;
-  };
-  sessionId?: string;
-  headers?: Record<string, unknown>;
-  requestInfo?: {
-    headers?: Record<string, unknown>;
-    [key: string]: unknown;
-  };
-  [key: string]: unknown;
+  http?:
+    | {
+        authInfo?: { extra?: Record<string, unknown> | undefined; sub?: string } | undefined;
+        req?: { headers?: unknown } | undefined;
+      }
+    | undefined;
+  /** Injected by the tool layer from the client's declared identity; not an SDK field. */
+  clientInfo?: { name?: string; version?: string } | undefined;
+  sessionId?: string | undefined;
 }
 
 export interface RequestIdentityResolverOptions {
@@ -241,23 +242,30 @@ function normalizeHeaderValue(value: unknown): string | undefined {
   return undefined;
 }
 
+/**
+ * Every header a request carried, keyed lower-case.
+ *
+ * `Request.headers` is a web `Headers` object: iterable, but with no enumerable own
+ * properties, so reading it as a plain record sees nothing. A plain object is accepted too,
+ * for a caller holding Node's `IncomingHttpHeaders`.
+ */
 function getHeaderMap(extra?: McpRequestExtra | null): Record<string, string> {
   const headerMap: Record<string, string> = {};
+  const headers = extra?.http?.req?.headers;
+  if (headers == null || typeof headers !== 'object') {
+    return headerMap;
+  }
 
-  const topLevelHeaders = asRecord(extra?.headers);
-  const requestInfoHeaders = asRecord(extra?.requestInfo?.headers);
-  const sources = [topLevelHeaders, requestInfoHeaders];
+  const entries: Array<[string, unknown]> = [];
+  if (typeof (headers as Headers).forEach === 'function' && !Array.isArray(headers)) {
+    (headers as Headers).forEach((value, key) => entries.push([key, value]));
+  } else {
+    entries.push(...Object.entries(headers as Record<string, unknown>));
+  }
 
-  for (const source of sources) {
-    if (source == null) {
-      continue;
-    }
-
-    for (const [key, value] of Object.entries(source)) {
-      const normalizedValue = normalizeHeaderValue(value);
-      if (normalizedValue == null) {
-        continue;
-      }
+  for (const [key, value] of entries) {
+    const normalizedValue = normalizeHeaderValue(value);
+    if (normalizedValue != null) {
       headerMap[key.toLowerCase()] = normalizedValue;
     }
   }
@@ -491,7 +499,7 @@ function resolveTrustedClientProfile(
   extra: McpRequestExtra | undefined,
   headers: Record<string, string>
 ): { profile?: RawClientProfile; source?: ClientProfileClaimSource } {
-  const claims = asRecord(extra?.authInfo?.extra);
+  const claims = asRecord(extra?.http?.authInfo?.extra);
 
   const tokenProfile: RawClientProfile = {
     clientFamily: readFirstStringFromRecord(claims, CLIENT_FAMILY_CLAIM_KEYS),
@@ -664,7 +672,7 @@ function chooseScopedValue(input: {
 }
 
 function resolveRequestClaimsIdentity(extra?: McpRequestExtra | null): RequestClaimsIdentity {
-  const claims = asRecord(extra?.authInfo?.extra);
+  const claims = asRecord(extra?.http?.authInfo?.extra);
   const headers = getHeaderMap(extra);
 
   const organizationSelection = selectIdentityClaim(
@@ -687,7 +695,7 @@ function resolveRequestClaimsIdentity(extra?: McpRequestExtra | null): RequestCl
 
   const actorMatchBase = matchIdentityClaim(claims, ACTOR_CLAIM_KEYS, headers, ACTOR_HEADER_KEYS);
   const actorMatch: IdentityClaimMatch = {
-    token: selectOptionalValue(actorMatchBase.token, normalizeString(extra?.authInfo?.sub)),
+    token: selectOptionalValue(actorMatchBase.token, normalizeString(extra?.http?.authInfo?.sub)),
     header: actorMatchBase.header,
   };
 
