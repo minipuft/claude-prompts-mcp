@@ -63,12 +63,14 @@ checker states outright that it "does not read the title beyond its type", so fo
 instructions exactly still shipped an unchecked title (#283, `subject-case`, 2026-09-14). A
 hand-written body cost a second run three missing sections and a 488-word fold (#312, 2026-09-16).
 
-**This section is deliberately absent from `PROJECTED_HANDBOOK_SECTIONS`** in
-`scripts/sync-project-guidance.js`. The AGENTS.md projection measured 32,709 of its 32,768-byte
-ceiling before this section existed -- 59 bytes of headroom -- so projecting it would fail
-`guidance:check`. Codex and OpenCode reach the same contract through `CONTRIBUTING.md` §Pull
-Request Process and the usage text `pr-check.mjs` prints when invoked without arguments. Deciding
-what the projection should evict to make room is an owner call, not a silent one.
+**This section IS projected into `AGENTS.md`** (`PROJECTED_HANDBOOK_SECTIONS` in
+`scripts/sync-project-guidance.js`). It previously was not: the projection measured 32,709 of its
+32,768-byte ceiling with this section absent -- 59 bytes of headroom, not enough to add it. Evicting
+`## Validation Gates (one contract, impact-aware subsets)` (below) freed the room: that section is
+CI-routing detail a Codex or OpenCode reader does not need to act on, while this one is a command
+they run before every PR. Codex and OpenCode also still reach this contract through
+`CONTRIBUTING.md` §Pull Request Process and the usage text `pr-check.mjs` prints when invoked
+without arguments.
 
 ## Documentation Map
 
