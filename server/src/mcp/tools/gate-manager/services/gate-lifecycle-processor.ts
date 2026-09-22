@@ -248,7 +248,7 @@ export class GateLifecycleProcessor {
     // narrowing).
     //
     // Built by `callerSuppliedGateKeys`, which is bounded against `ALL_GATE_DATA_KEYS` by
-    // `gate-supplied-keys.test.ts`, because the hand-written literal that used to stand here had
+    // `settable-gate-fields.test.ts`, because the hand-written literal that used to stand here had
     // already drifted: it omitted `gate_type`, so an update supplying only that key computed
     // `writesYaml === false` and answered `✅ Gate 'x' updated successfully / 📁 Files updated`
     // over a byte-identical `gate.yaml` (driven 2026-09-21, before P4.100). A settable key that

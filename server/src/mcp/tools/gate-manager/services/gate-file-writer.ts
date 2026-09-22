@@ -75,19 +75,6 @@ export const ALL_GATE_DATA_KEYS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * The `GateCreationData` keys THIS call supplied, under the names the writer narrows by.
- *
- * One mapping from tool input to gate-data key, rather than a literal repeated at each call site:
- * the literal it replaces had silently dropped `gate_type`, so a `gate_type`-only update planned
- * no `gate.yaml` write and still answered "updated successfully" over an unchanged file (driven
- * 2026-09-21). `gate-supplied-keys.test.ts` bounds the mapping's key set against
- * {@link ALL_GATE_DATA_KEYS} in both directions, so a future schema field cannot join
- * `GateCreationData` without joining this.
- *
- * `!== undefined`, never truthiness: `blockResponseOnFail: false` is a caller CLEARING the key,
- * and `enabled_only`-style falsy values are values.
- */
-/**
  * Gate-data keys with no tool parameter, and why — the stamped half of the bound above.
  *
  * `evaluation` (judge routing: mode, model hint, rubric) is preserved on write and authorable
@@ -98,6 +85,19 @@ export const ALL_GATE_DATA_KEYS: ReadonlySet<string> = new Set([
  */
 export const UNSETTABLE_GATE_DATA_KEYS: readonly string[] = ['evaluation'];
 
+/**
+ * The `GateCreationData` keys THIS call supplied, under the names the writer narrows by.
+ *
+ * One mapping from tool input to gate-data key, rather than a literal repeated at each call site:
+ * the literal it replaces had silently dropped `gate_type`, so a `gate_type`-only update planned
+ * no `gate.yaml` write and still answered "updated successfully" over an unchanged file (driven
+ * 2026-09-21). `settable-gate-fields.test.ts` bounds the mapping's key set against
+ * {@link ALL_GATE_DATA_KEYS} in both directions, so a future schema field cannot join
+ * `GateCreationData` without joining this.
+ *
+ * `!== undefined`, never truthiness: `blockResponseOnFail: false` is a caller CLEARING the key,
+ * and `enabled_only`-style falsy values are values.
+ */
 export function callerSuppliedGateKeys(args: GateManagerInput): ReadonlySet<string> {
   const byGateDataKey: Readonly<Record<string, unknown>> = {
     name: args.name,
