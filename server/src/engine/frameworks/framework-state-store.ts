@@ -42,7 +42,7 @@ export interface PersistedFrameworkState {
 }
 
 /** One framework switch, as a `kv_state` row stores it (the timestamp is ISO-8601). */
-export interface PersistedSwitchRecord {
+interface PersistedSwitchRecord {
   from: string;
   to: string;
   timestamp: string;
