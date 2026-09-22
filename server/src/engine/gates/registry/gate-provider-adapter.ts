@@ -179,6 +179,11 @@ export class GateManagerProvider implements GateDefinitionProvider {
     if (definition.guidanceFile) {
       lightweight.guidanceFile = definition.guidanceFile;
     }
+    // Judge routing reads this and nothing else: dropped here, every `mode: judge` gate the live
+    // server loads was reviewed as `self` (P4.133). `GateLoader.toLightweightGate` carried it.
+    if (definition.evaluation !== undefined) {
+      lightweight.evaluation = definition.evaluation;
+    }
 
     return lightweight;
   }

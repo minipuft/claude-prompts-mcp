@@ -176,6 +176,27 @@ Evaluate the following output against the criteria below.
 Respond with: `GATE_REVIEW: PASS|FAIL - reason`
 ```
 
+## Where the Prompt Appears
+
+The judge prompt is part of the gate review reply, inside the **Gate Review Required** section and
+above the `gate_verdict` template, whenever at least one gate under review resolves to `judge`. A
+blocked reply (`blockResponseOnFail`) carries it too, so a retry has it. It comes with a line naming
+the judge-routed gates and, when set, the model hint:
+
+```markdown
+**Independent judge required** for `code-quality` — do not grade this gate yourself.
+Give a separate sub-agent (suggested model: claude-haiku) ONLY the prompt below, with your step
+output in place of `<the complete output you produced for this step>`, and use the verdict it
+returns for that gate.
+```
+
+The output slot is a placeholder because the review is rendered before the output exists: the
+client writes its step output, hands the prompt plus that output to the sub-agent, and submits the
+output and the verdict on the same call. A review whose gates are all `self` has no judge section.
+
+Judge routing applies to chain step reviews. A single prompt run with `gates` renders its review
+through a different path, which does not route to a judge.
+
 ## Composition with Assertions
 
 Judge mode and assertions are complementary:

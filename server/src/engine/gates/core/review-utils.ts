@@ -221,6 +221,24 @@ export async function resolveJudgeGates(
   return { judgeGates, selfGates };
 }
 
+/**
+ * What stands in the judge prompt's "Output Under Review" slot when the review is rendered.
+ *
+ * The review is rendered BEFORE the output it judges exists: the client reads the review, writes
+ * its step output, and submits output and verdict on the same call. So the server cannot put the
+ * output into the prompt; the client puts it there when it hands the prompt to the judge. The
+ * review render itself is instruction text, and quoting it under "Output Under Review" told the
+ * judge the step's own task was the thing to grade (P4.133).
+ */
+export const JUDGE_OUTPUT_PLACEHOLDER = '<the complete output you produced for this step>';
+
+/** The judge half of a review, as the review stage publishes it on `metadata.judge`. */
+export interface JudgeReviewMetadata {
+  judgePrompt: string;
+  judgeGateIds: string[];
+  modelHint?: string;
+}
+
 export interface ComposedJudgeReviewPrompt {
   hasJudgeGates: boolean;
   judgePrompt: string;
