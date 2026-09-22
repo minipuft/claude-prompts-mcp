@@ -71,6 +71,7 @@ export type resource_managerParamName =
   | 'severity'
   | 'enforcement_mode'
   | 'block_response_on_fail'
+  | 'evaluation'
   | 'guidance'
   | 'pass_criteria'
   | 'activation'
@@ -511,6 +512,15 @@ export const resource_managerParameters: ToolParameter[] = [
     type: 'boolean',
     description:
       "[Gate] Withhold the step output when this gate is marked FAIL, returning the gate review in its place. Writes the gate.yaml key 'blockResponseOnFail'. Omitted on update, an existing gate keeps its current value; send `false` to clear it.",
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'evaluation',
+    type: 'object<{mode:enum[self|judge],model?:string,strict?:boolean}>',
+    description:
+      '[Gate] Who reviews this gate: `mode: "self"` (the model that wrote the output) or `mode: "judge"` (a context-isolated reviewer that sees only the output and the criteria). `model` is a hint for which model the judge runs on; `strict` asks for failures first, and defaults to true under `judge`. Writes the gate.yaml key \'evaluation\' whole, so a supplied block replaces the existing one. Omitted on update, an existing gate keeps its current block; send `{"mode": "self"}` to return the gate to self-review. An unrecognized key inside the block is refused by path.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,

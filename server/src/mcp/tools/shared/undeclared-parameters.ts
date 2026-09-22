@@ -334,6 +334,37 @@ export function describeNestedSchemaRefusal(
   );
 }
 
+/**
+ * The `error` option that makes a strict nested object refuse an undeclared key the way
+ * {@link describeNestedSchemaRefusal} does — by full path, with the nearest declared key.
+ *
+ * For a plain `z.strictObject` (no union in the way), zod hands the object's own `error` callback
+ * the `unrecognized_keys` issue with `path` already absolute, so the message comes from the one
+ * parse zod made and the published JSON Schema is untouched. Measured on zod 4.4.3 (P4.121):
+ * `z.strictObject(shape, { error })` receives `{code: 'unrecognized_keys', path: ['evaluation'],
+ * keys: ['modle']}` and its returned string replaces the default `Unrecognized key: "modle"`.
+ * Every other issue code returns `undefined`, which keeps zod's own message — a wrong type or a
+ * wrong enum member is already reported by path.
+ *
+ * `schema` is a thunk because the object passes this callback while it is still being defined.
+ */
+export function refuseUndeclaredNestedKeys(
+  schema: () => unknown
+): (issue: {
+  readonly code?: string;
+  readonly path?: readonly PropertyKey[];
+  readonly keys?: readonly string[];
+}) => string | undefined {
+  return (issue) => {
+    if (issue.code !== 'unrecognized_keys') return undefined;
+    return describeNestedSchemaRefusal(
+      addressableSegments(issue.path ?? []),
+      [{ code: issue.code, path: [], keys: issue.keys ?? [], message: '' }],
+      schema()
+    );
+  };
+}
+
 /** `'a'`, `'a' and 'b'`, `'a', 'b' and 'c'` — names in the order they were sent. */
 function quoteList(names: readonly string[]): string {
   const quoted = names.map((name) => `'${name}'`);

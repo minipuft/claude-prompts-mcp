@@ -332,6 +332,8 @@ export interface ResourceManagerInput {
   enforcement_mode?: 'blocking' | 'advisory' | 'informational';
   /** Writes the gate.yaml key `blockResponseOnFail` — withhold the step output on a FAIL. */
   block_response_on_fail?: boolean;
+  /** Writes the gate.yaml key `evaluation` whole — the per-gate half of judge routing. */
+  evaluation?: GateManagerInput['evaluation'];
   guidance?: string;
   pass_criteria?: Array<string | GatePassCriteria>;
   activation?: {

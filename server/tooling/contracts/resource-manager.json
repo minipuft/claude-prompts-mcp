@@ -339,6 +339,13 @@
       "includeInDescription": false
     },
     {
+      "name": "evaluation",
+      "type": "object<{mode:enum[self|judge],model?:string,strict?:boolean}>",
+      "description": "[Gate] Who reviews this gate: `mode: \"self\"` (the model that wrote the output) or `mode: \"judge\"` (a context-isolated reviewer that sees only the output and the criteria). `model` is a hint for which model the judge runs on; `strict` asks for failures first, and defaults to true under `judge`. Writes the gate.yaml key 'evaluation' whole, so a supplied block replaces the existing one. Omitted on update, an existing gate keeps its current block; send `{\"mode\": \"self\"}` to return the gate to self-review. An unrecognized key inside the block is refused by path.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
       "name": "guidance",
       "type": "string",
       "description": "[Gate] Gate guidance content - the criteria or instructions.",

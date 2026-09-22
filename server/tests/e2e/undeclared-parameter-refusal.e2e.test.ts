@@ -281,6 +281,33 @@ describe.each([
     expect(refused.text).not.toContain('gate_verdict: Invalid input');
   }, 30000);
 
+  it('a misspelled key INSIDE resource_manager evaluation names its path and nearest key (P4.121)', async () => {
+    // The same answer for a strict object with no union around it. Positive control first: the
+    // well-formed twin, differing in the ONE identifier, passes the schema. `inspect` of a bundled
+    // gate, not `create`: this session's workspace is the repository, and the refusal is decided
+    // by the schema before any action runs, so a read-only action observes it without a write.
+    const accepted = await session.call('resource_manager', {
+      resource_type: 'gate',
+      action: 'inspect',
+      id: 'code-quality',
+      evaluation: { mode: 'judge', strict: true },
+    });
+    expect(accepted.isError).toBe(false);
+
+    const refused = await session.call('resource_manager', {
+      resource_type: 'gate',
+      action: 'inspect',
+      id: 'code-quality',
+      evaluation: { mode: 'judge', stirct: true },
+    });
+
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toContain("'evaluation.stirct' is not a declared key");
+    expect(refused.text).toContain("did you mean 'strict'?");
+    // Names WHICH answer this is: zod's default for the same issue is what it replaced.
+    expect(refused.text).not.toContain('Unrecognized key');
+  }, 30000);
+
   it('CONTROL: `_meta` rides on params, never on arguments, and is not refused', async () => {
     // Scope pin. The refusal walks `arguments`; a client-protocol field sitting beside it must
     // stay reachable, or every modern client's identity envelope becomes an error. `_meta` is
