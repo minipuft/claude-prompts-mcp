@@ -257,4 +257,71 @@ describe('ScriptToolDefinitionLoader', () => {
       expect(instance1).not.toBe(instance2);
     });
   });
+
+  /**
+   * P4.99 — the declared output shape reaches the loaded tool.
+   *
+   * `outputSchema` sat on `LoadedScriptTool` with no writer in either loader (the workspace one
+   * assigned `undefined` outright), so the executor's enforcement had nothing to enforce. These
+   * cases sit at the LOADER, not the executor: an executor test can set `outputSchema` on a
+   * hand-built tool and stay green while the file on disk is never read.
+   */
+  describe('output schema loading', () => {
+    let promptDir: string;
+
+    function writeTool(id: string, extraYaml = '', files: Record<string, string> = {}): void {
+      const dir = join(promptDir, 'tools', id);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(
+        join(dir, 'tool.yaml'),
+        `id: ${id}\nname: ${id}\nscript: script.py\nruntime: python\n${extraYaml}`
+      );
+      writeFileSync(join(dir, 'script.py'), 'print("ok")');
+      for (const [name, body] of Object.entries(files)) {
+        writeFileSync(join(dir, name), body);
+      }
+    }
+
+    const SHAPE = JSON.stringify({
+      type: 'object',
+      properties: { words: { type: 'number' } },
+      required: ['words'],
+    });
+
+    beforeEach(() => {
+      promptDir = mkdtempSync(join(tmpdir(), 'tool-outschema-'));
+      loader = createScriptToolDefinitionLoader({ debug: false, enableCache: false });
+    });
+
+    afterEach(() => {
+      rmSync(promptDir, { recursive: true, force: true });
+    });
+
+    it('reads output-schema.json beside schema.json', () => {
+      writeTool('shaped', '', { 'output-schema.json': SHAPE });
+
+      const tool = loader.loadTool(promptDir, 'shaped', 'owner_prompt');
+
+      expect(tool?.outputSchema).toEqual(JSON.parse(SHAPE));
+    });
+
+    it('reads the path outputSchemaFile names instead of the default', () => {
+      writeTool('renamed', 'outputSchemaFile: result.json\n', { 'result.json': SHAPE });
+
+      const tool = loader.loadTool(promptDir, 'renamed', 'owner_prompt');
+
+      expect(tool?.outputSchema).toEqual(JSON.parse(SHAPE));
+    });
+
+    it('positive control: a tool with no output schema file loads with none', () => {
+      // Without this, the two cases above could be satisfied by a loader that attached some
+      // constant schema to every tool, and "declared" would mean nothing.
+      writeTool('unshaped');
+
+      const tool = loader.loadTool(promptDir, 'unshaped', 'owner_prompt');
+
+      expect(tool).toBeDefined();
+      expect(tool?.outputSchema).toBeUndefined();
+    });
+  });
 });

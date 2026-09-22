@@ -301,7 +301,10 @@ export class ScriptToolDefinitionLoader {
       }
 
       // Inline referenced files
-      const { inputSchema, descriptionContent } = this.loadReferencedFiles(toolDir, yamlDefinition);
+      const { inputSchema, outputSchema, descriptionContent } = this.loadReferencedFiles(
+        toolDir,
+        yamlDefinition
+      );
 
       // Validate if enabled
       if (this.validateOnLoad) {
@@ -347,6 +350,7 @@ export class ScriptToolDefinitionLoader {
         ...(yamlDefinition.enabled !== undefined && { enabled: yamlDefinition.enabled }),
         ...(yamlDefinition.env !== undefined && { env: yamlDefinition.env }),
         ...(yamlDefinition.workingDir !== undefined && { workingDir: yamlDefinition.workingDir }),
+        ...(outputSchema !== undefined && { outputSchema }),
       };
 
       if (this.debug) {
