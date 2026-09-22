@@ -33,6 +33,7 @@ import {
   waitForHealth,
   PROJECT_ROOT,
 } from './helpers/http-mcp-client.js';
+import { cageerfAnswer } from './helpers/cageerf-answer.js';
 
 import type { ChildProcess } from 'child_process';
 
@@ -120,7 +121,7 @@ describe('Streamable HTTP notification delivery', () => {
 
     const failed = await callTool('prompt_engine', {
       chain_id: chainId,
-      user_response: 'Options: one, two, three.',
+      user_response: cageerfAnswer('Options: one, two, three.'),
       gate_verdict: 'GATE_REVIEW: FAIL - the rejected options are not named',
     });
 
@@ -141,14 +142,14 @@ describe('Streamable HTTP notification delivery', () => {
 
     const first = await callTool('prompt_engine', {
       chain_id: chainId,
-      user_response: 'Options: one, two, three.',
+      user_response: cageerfAnswer('Options: one, two, three.'),
       gate_verdict: 'GATE_REVIEW: FAIL - first attempt',
     });
     expect(methodsOf(first)).not.toContain('notifications/gate/retry_exhausted');
 
     const second = await callTool('prompt_engine', {
       chain_id: chainId,
-      user_response: 'Options: one, two, three (again).',
+      user_response: cageerfAnswer('Options: one, two, three (again).'),
       gate_verdict: 'GATE_REVIEW: FAIL - second attempt',
     });
     expect(methodsOf(second)).toContain('notifications/gate/retry_exhausted');
@@ -164,7 +165,7 @@ describe('Streamable HTTP notification delivery', () => {
     for (let attempt = 0; attempt < 5; attempt++) {
       const outcome = await callTool('prompt_engine', {
         chain_id: chainId,
-        user_response: `Step ${attempt + 1}: PostgreSQL, SQLite, DuckDB.`,
+        user_response: cageerfAnswer(`Step ${attempt + 1}: PostgreSQL, SQLite, DuckDB.`),
         gate_verdict: 'GATE_REVIEW: PASS - three options with tradeoffs',
       });
       perCall.push(methodsOf(outcome));
@@ -262,7 +263,7 @@ describe('Streamable HTTP notification delivery', () => {
     const [stepCall, frameworkCall] = await Promise.all([
       callTool('prompt_engine', {
         chain_id: chainId,
-        user_response: 'Options: one, two, three.',
+        user_response: cageerfAnswer('Options: one, two, three.'),
         gate_verdict: 'GATE_REVIEW: PASS - three options listed',
       }),
       callTool('system_control', {
