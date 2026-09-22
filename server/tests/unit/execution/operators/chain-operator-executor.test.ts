@@ -648,6 +648,92 @@ describe('ChainOperatorExecutor', () => {
       expect(result.content).not.toContain('Required Sections');
     });
 
+    /**
+     * P4.111 / R85. A step that declines the framework must not be handed its section
+     * vocabulary: it is not shown the framework's system prompt, so a contract quoting that
+     * framework's headers is one it was never given — and stage 19 reads this render's record
+     * back, so declaring here is what makes an opted-out step gradeable against headers it
+     * never saw.
+     *
+     * The three opt-out spellings are the ones `isFrameworkInjected` already recognises for the
+     * same step's framework GATES, which is why this asks that predicate rather than adding a
+     * second reading of the same declaration.
+     */
+    describe('a step that declines the framework declares nothing (P4.111)', () => {
+      const declineCases: Array<[string, Record<string, unknown>]> = [
+        [
+          '`injection.system-prompt.enabled: false`',
+          { convertedPrompt: { injection: { 'system-prompt': { enabled: false } } } },
+        ],
+        ['the `%clean` modifier', { executionPlan: { modifiers: { clean: true } } }],
+        ['the `%lean` modifier', { executionPlan: { modifiers: { lean: true } } }],
+      ];
+
+      test.each(declineCases)('%s withholds the Required Sections block', async (_label, extra) => {
+        const executor = buildExecutor(cageerfSections);
+
+        const result = await executor.renderStep({
+          executionType: 'normal',
+          stepPrompts: [{ ...stepWithFramework('cageerf'), ...extra } as never],
+          currentStepIndex: 0,
+        });
+
+        expect(result.content).not.toContain('Required Sections');
+      });
+
+      /**
+       * The control for all three: the byte-identical fixture WITHOUT the declining key still
+       * gets the block, so "not contained" is a property of the declaration and not of the
+       * fixture or the provider.
+       */
+      test('CONTROL: the same step without the opt-out still declares', async () => {
+        const executor = buildExecutor(cageerfSections);
+
+        const result = await executor.renderStep({
+          executionType: 'normal',
+          stepPrompts: [stepWithFramework('cageerf')],
+          currentStepIndex: 0,
+        });
+
+        expect(result.content).toContain('Required Sections');
+      });
+
+      /**
+       * The RECORD, not just the render. Stage 18 writes `declaredSections` straight through to
+       * the store and stage 19 grades on it, so an omitted key there is read as "no render wrote
+       * for this node" and falls back to the run's headers — exactly the sibling-vocabulary
+       * grading this row removes. An explicit empty array is the marked form.
+       */
+      test('the opted-out render reports an EMPTY declaration, not an absent one', async () => {
+        const executor = buildExecutor(cageerfSections);
+
+        const result = await executor.renderStep({
+          executionType: 'normal',
+          stepPrompts: [
+            {
+              ...stepWithFramework('cageerf'),
+              convertedPrompt: { injection: { 'system-prompt': { enabled: false } } },
+            } as never,
+          ],
+          currentStepIndex: 0,
+        });
+
+        expect(result.declaredSections).toEqual([]);
+      });
+
+      test('CONTROL: the declaring render reports the headers it emitted', async () => {
+        const executor = buildExecutor(cageerfSections);
+
+        const result = await executor.renderStep({
+          executionType: 'normal',
+          stepPrompts: [stepWithFramework('cageerf')],
+          currentStepIndex: 0,
+        });
+
+        expect(result.declaredSections).toEqual(cageerfSections.map((s) => s.header));
+      });
+    });
+
     describe('gate review render (F5 — 13-session-stage opens the review upfront, renderNormalStep never runs)', () => {
       function buildPendingReview(attemptCount: number) {
         return {

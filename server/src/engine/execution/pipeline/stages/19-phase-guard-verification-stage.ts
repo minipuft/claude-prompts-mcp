@@ -257,10 +257,17 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
   }
 
   /**
-   * Headers this run recorded as actually declared to the model, across every node of the run.
-   * Run-wide rather than per-node on purpose: a chain's later step is graded against the phases
-   * the framework declares for the whole run, and a header declared on step 2 was still put in
-   * front of the model. An empty set means nothing was recorded, which blocks nothing.
+   * Headers the model was actually shown for the node being graded.
+   *
+   * Per node, not run-wide (R85 / P4.111). Each node's declaration is written by its own render
+   * and follows that node's own injection decision, so a step that opted out of the framework
+   * recorded nothing and is graded against nothing. The run-wide union this replaced blocked such
+   * a step on its SIBLINGS' vocabulary: headers a different prompt was shown, which this one was
+   * told nothing about — the unsatisfiable guard the declaration contract exists to prevent.
+   *
+   * The union survives as the fallback for a call that captured no step identity, where there is
+   * no node to ask. It is a union over nodes that DID declare, so an opted-out node still
+   * contributes nothing to it. An empty set means nothing was recorded, which blocks nothing.
    */
   private resolveDeclaredHeaders(context: ExecutionContext): Set<string> {
     const headers = new Set<string>();
@@ -272,6 +279,23 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
     const session = this.chainSessionStore.getSession(sessionId, context.getScopeOptions());
     const stepStates = session?.state?.stepStates;
     if (stepStates === undefined) return headers;
+
+    // The node this stage is grading — the same identity the review is stamped with, read from
+    // what the capture RECORDED rather than from the run's position, which has already advanced.
+    //
+    // The per-node answer is used only when that node has a declaration ON RECORD, empty
+    // included: an empty array is a render saying "I declared nothing", which grades against
+    // nothing, while an ABSENT array is a node no render wrote for — a gated chain step, whose
+    // only render is the gate review and which nothing records — and that still falls back to
+    // the run, exactly as before. Reading absent as empty would quietly stop enforcing there.
+    const gradedNodeId = context.state.session.capturedStep?.nodeId;
+    const graded = gradedNodeId === undefined ? undefined : stepStates.get(gradedNodeId);
+    if (graded?.declaredSections !== undefined) {
+      for (const header of graded.declaredSections) {
+        headers.add(header);
+      }
+      return headers;
+    }
 
     for (const metadata of stepStates.values()) {
       for (const header of metadata.declaredSections ?? []) {
