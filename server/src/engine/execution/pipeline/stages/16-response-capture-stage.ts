@@ -375,6 +375,9 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    *   this stage and the render then run for the step the run moved to. The evidence phase is
    *   skipped: an empty reply at a detached node is the documented way to move on, not a
    *   missing worker reply.
+   * - `review-pending` — a gate review holds the run: nothing detached happens here, and the
+   *   review's verdict path below decides the advance as it does for any step. The evidence phase
+   *   is skipped for the same reason as `continue-past`.
    * - `refuse` — a refusal that names the node, before any mutation.
    * - `not-detached` — the handoff-evidence phase, unchanged.
    *
@@ -393,6 +396,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     const decision = resolveDetachedReport({
       reply,
       mode: this.resolveEvidenceMode(),
+      reviewPending: this.chainSessionStore.getPendingGateReview(sessionId) !== undefined,
       current:
         currentNodeIdAtStart === null || current === undefined
           ? null
@@ -422,6 +426,8 @@ export class StepResponseCaptureStage extends BasePipelineStage {
             ordinal: decision.node.stepNumber,
           }
         );
+        return true;
+      case 'review-pending':
         return true;
       case 'not-detached':
         return this.runHandoffEvidencePhase(

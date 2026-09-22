@@ -57,7 +57,7 @@ export class DelegationRenderer {
     const resultLines =
       payload.mode === 'detached'
         ? [
-            `\u2192 Continue: Do NOT wait for the sub-agent — resume now with chain_id and no user_response`,
+            `\u2192 Continue: Do NOT wait for the sub-agent — resume now with chain_id and no user_response (if this response asks for a gate_verdict, send it on that same call)`,
             `\u2192 Report later: When it finishes, resume with its result as user_response; the result's "node: ${payload.nodeToken}" line routes it back to this step, whatever step the run is on by then`,
             `\u2192 The run cannot complete until this step has reported`,
           ]

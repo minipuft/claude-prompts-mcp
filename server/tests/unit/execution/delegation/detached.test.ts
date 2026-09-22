@@ -192,6 +192,11 @@ describe('resolveDetachedReport', () => {
       kind: 'continue-past',
       node: owed,
     });
+    // A gate review holding the run owns the advance: nothing detached happens on this call.
+    expect(resolveDetachedReport({ ...base, reply: '', current, reviewPending: true })).toEqual({
+      kind: 'review-pending',
+      node: owed,
+    });
     const refused = resolveDetachedReport({ ...base, reply: 'spawned it', current });
     expect(refused.kind === 'refuse' && refused.message).toContain('is detached');
     expect(

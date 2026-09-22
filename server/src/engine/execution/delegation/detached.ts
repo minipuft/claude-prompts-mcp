@@ -93,6 +93,12 @@ export type DetachedReportDecision =
   | { readonly kind: 'not-detached' }
   /** The run stands on a spawned detached node and the parent resumed without its result. */
   | { readonly kind: 'continue-past'; readonly node: DetachedNodeFacts }
+  /**
+   * The same resume, but a gate review is holding the run: the review's own verdict path decides
+   * whether the run advances, exactly as it does for any step. The detached node is neither
+   * passed here nor checked for a worker reply it is not waiting for.
+   */
+  | { readonly kind: 'review-pending'; readonly node: DetachedNodeFacts }
   /** The reply's trailer names a spawned, unreported detached node other than the current one. */
   | { readonly kind: 'report'; readonly node: DetachedNodeFacts }
   /** Refused, naming the node the reply named (or the nodes the run is owed) and the fix. */
@@ -113,13 +119,16 @@ export type DetachedReportDecision =
  *   check, whose `node-mismatch` refusal already names both tokens.
  * - No trailer at all, on a run past its last node → refused, naming every node still owed.
  * - No trailer, standing on a spawned, unreported detached node: an EMPTY reply is the documented
- *   way to move on (`continue-past`); a non-empty one under `required` is refused with both
+ *   way to move on (`continue-past`) — or, while a gate review holds the run, the review's verdict
+ *   path decides the advance (`review-pending`); a non-empty one under `required` is refused with both
  *   options, because it is either a worker result missing its trailer or a note the run would
  *   otherwise capture as the step's output. Under `advisory` it is the ordinary capture.
  */
 export function resolveDetachedReport(input: {
   readonly reply: string;
   readonly mode: HandoffEvidenceMode;
+  /** A gate review is holding the run (`pendingGateReview`). */
+  readonly reviewPending?: boolean;
   readonly current: CurrentNodeFacts | null;
   readonly detachedNodes: readonly DetachedNodeFacts[];
 }): DetachedReportDecision {
@@ -144,7 +153,9 @@ export function resolveDetachedReport(input: {
     return { kind: 'not-detached' };
   }
   if (reply.length === 0) {
-    return { kind: 'continue-past', node: standing };
+    return input.reviewPending === true
+      ? { kind: 'review-pending', node: standing }
+      : { kind: 'continue-past', node: standing };
   }
   return input.mode === 'required'
     ? { kind: 'refuse', message: describeUntaggedDetachedReply(standing) }
