@@ -96,7 +96,7 @@ function resourceEntryRoot(root: string, id: string, entryFileName: string): str
       if (!group.isDirectory()) continue;
       if (existsSync(join(root, group.name, id, entryFileName))) return join(root, group.name);
     }
-  } catch {
+  } catch (_error) {
     // Unreadable root — skip, exactly as an absent one.
   }
   return undefined;

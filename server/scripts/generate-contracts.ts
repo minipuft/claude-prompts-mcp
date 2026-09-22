@@ -148,7 +148,7 @@ async function writeFileIfChanged(
   let current: string | null = null;
   try {
     current = await readFile(filePath, 'utf-8');
-  } catch {
+  } catch (_error) {
     // file may not exist
   }
 

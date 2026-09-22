@@ -290,7 +290,7 @@ export class WorkspaceScriptLoader implements ScriptLoader {
     if (existsSync(descriptionPath)) {
       try {
         result.description = readFileSync(descriptionPath, 'utf-8');
-      } catch {
+      } catch (_error) {
         // Description file read failure - continue without it
       }
     }
@@ -302,7 +302,7 @@ export class WorkspaceScriptLoader implements ScriptLoader {
       try {
         const schemaContent = readFileSync(schemaPath, 'utf-8');
         result.inputSchema = JSON.parse(schemaContent) as JSONSchemaDefinition;
-      } catch {
+      } catch (_error) {
         // Schema file read failure - continue with default
       }
     }

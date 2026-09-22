@@ -694,7 +694,7 @@ export class GateLifecycleProcessor {
         resourceId: id,
         filePath,
       });
-    } catch {
+    } catch (_error) {
       // Gates directory may not be configured
     }
   }
