@@ -956,11 +956,18 @@ turns the whole class into a loud error at the boundary.
   - the three tools' top-level parameters, so the refusal above can name the key and suggest a fix;
   - `chain_steps[]` and `chain_step_data`, because a chain step is an opaque object by decision
     (contrast the sibling `arguments`, which is a typed contract).
-- **`gate_verdict` is refused but its path is not printed.** It is a union of the structured object
-  and the legacy string, and a union failure is reported as one issue whose sub-issues are nested,
-  so a client sees `gate_verdict: Invalid input`. The safety property holds regardless — a
-  misspelled `passed` is rejected outright, where it used to be dropped and leave the field absent,
-  which reads as FAIL. The legacy string form is unchanged.
+- **`gate_verdict` names the full path and the nearest declared key.** It is a union of the
+  structured object and the legacy string, and a union failure is reported as ONE issue whose
+  sub-issues are nested, which the SDK does not render — so this parameter alone used to answer
+  `gate_verdict: Invalid input`, naming neither the key nor its position. It now answers
+  `'gate_verdict.per_gate[0].pased' is not a declared key — did you mean 'passed'?`, built from
+  the sub-issues that one validation pass already produced. Which branch reports is decided by the
+  value's own type: an object gets the structured branch's errors, a string gets the verdict-format
+  message, anything else is told what the parameter takes. The legacy string form is unchanged, and
+  the published `anyOf` is byte-identical to what it was.
+- **A criterion has no `description`.** `pass_criteria[]` declares the fields each `type` reads and
+  nothing else; a `description` on a criterion is refused. Nothing reads one — the reviewer-facing
+  prose is the gate's own `guidance`, which is what the criteria summary renders.
 - **Published schemas stay open at the top level.** `additionalProperties` is not set to `false` on
   a tool's own parameters, deliberately: the key has to ARRIVE for the server to name it and suggest
   a correction. Nested objects DO publish `additionalProperties: false`, which is what lets a client

@@ -181,6 +181,159 @@ export function describeUndeclaredParameterRefusal(
   );
 }
 
+/**
+ * A key path as a caller would write it: `gate_verdict.per_gate[0].pased`.
+ *
+ * Dotted for object keys, bracketed for array indices. The SDK renders an issue path by joining
+ * every segment with `.` (`formatIssue`, `@modelcontextprotocol/server` 2.0.0), which turns an
+ * index into `per_gate.0` — readable, but not a path anyone can paste back into their own JSON.
+ */
+export function formatKeyPath(segments: readonly (string | number)[]): string {
+  return segments.reduce<string>((rendered, segment) => {
+    if (typeof segment === 'number') return `${rendered}[${segment}]`;
+    return rendered === '' ? segment : `${rendered}.${segment}`;
+  }, '');
+}
+
+/**
+ * The keys the schema at `path` declares, or `undefined` when that position is not an object.
+ *
+ * Reads zod's own internals (`_zod.def`), the same seam
+ * `tests/unit/mcp-tools/nested-object-strictness.test.ts` walks to classify every reachable
+ * object's unknown-key posture. Needed because an `unrecognized_keys` issue carries the offending
+ * keys and the path, and NOT the declared key space it measured them against — so a suggestion
+ * has to re-derive it by walking to the same position.
+ *
+ * Wrappers (`optional`, `default`, `nullable`, …) are transparent; an array step consumes one
+ * numeric segment. Anything else answers `undefined`, which yields a refusal with no suggestion
+ * rather than a wrong one.
+ */
+/** Zod wrapper types a caller never sees: transparent when resolving a path. */
+const TRANSPARENT_WRAPPERS: ReadonlySet<string> = new Set([
+  'optional',
+  'nullable',
+  'default',
+  'prefault',
+  'readonly',
+  'nonoptional',
+  'catch',
+]);
+
+/** A zod schema's internal definition, or `undefined` when the value is not one. */
+function zodDef(schema: unknown): Record<string, unknown> | undefined {
+  return (schema as { _zod?: { def?: Record<string, unknown> } } | null)?._zod?.def;
+}
+
+/** The same schema with every transparent wrapper peeled off. */
+function unwrap(schema: unknown): unknown {
+  let current = schema;
+  for (;;) {
+    const def = zodDef(current);
+    if (def === undefined || !TRANSPARENT_WRAPPERS.has(def['type'] as string)) return current;
+    current = def['innerType'];
+  }
+}
+
+export function declaredKeysAt(
+  schema: unknown,
+  path: readonly (string | number)[]
+): readonly string[] | undefined {
+  let current: unknown = unwrap(schema);
+
+  for (const segment of path) {
+    const def = zodDef(current);
+    const type = def?.['type'] as string | undefined;
+
+    if (type === 'array' && typeof segment === 'number') {
+      current = unwrap(def?.['element']);
+      continue;
+    }
+    if (type === 'object' && typeof segment === 'string') {
+      current = unwrap((def?.['shape'] as Record<string, unknown>)[segment]);
+      continue;
+    }
+    return undefined;
+  }
+
+  const def = zodDef(current);
+  if (def?.['type'] !== 'object') return undefined;
+  return Object.keys(def['shape'] as Record<string, unknown>);
+}
+
+/** One zod issue, reduced to what a nested refusal message reads. */
+export interface NestedSchemaIssue {
+  readonly code: string;
+  /** `PropertyKey[]`, because that is what zod hands back; symbol segments are skipped. */
+  readonly path: readonly PropertyKey[];
+  readonly keys?: readonly string[];
+  readonly message: string;
+}
+
+/** Zod's path minus anything a caller could not have written — symbols are never JSON keys. */
+function addressableSegments(path: readonly PropertyKey[]): (string | number)[] {
+  return path.filter(
+    (segment): segment is string | number =>
+      typeof segment === 'string' || typeof segment === 'number'
+  );
+}
+
+/**
+ * Why a value nested inside a parameter was refused, naming the FULL path of each offending key.
+ *
+ * Written for `prompt_engine`'s `gate_verdict`, which is a union: zod reports a union failure as
+ * ONE `invalid_union` issue with its sub-issues nested under `errors`, and the SDK renders
+ * top-level issues only — so a client sent `{per_gate: [{pased: true}]}` saw exactly
+ * `gate_verdict: Invalid input`, with neither the key nor its position. The sub-issues carry both;
+ * this turns them into the message the union reports, so the path reaches the client through the
+ * ONE validation pass zod already made rather than a second one.
+ *
+ * `unrecognized_keys` gets the nearest declared name at its own position, which is the correction
+ * the sender needs and the reason this lives beside the top-level suggestion rather than in the
+ * schema: a definition-site `error` override is ignored for that issue code (measured, P4.97).
+ */
+export function describeNestedSchemaRefusal(
+  parameterPath: readonly (string | number)[],
+  issues: readonly NestedSchemaIssue[],
+  branchSchema: unknown
+): string {
+  const lines: string[] = [];
+  let droppedKey = false;
+
+  for (const issue of issues) {
+    const relative = addressableSegments(issue.path);
+    const absolute = [...parameterPath, ...relative];
+    if (issue.code === 'unrecognized_keys') {
+      const declared = declaredKeysAt(branchSchema, relative) ?? [];
+      droppedKey = droppedKey || (issue.keys ?? []).length > 0;
+      for (const key of issue.keys ?? []) {
+        const nearest = nearestDeclaredParameter(key, declared);
+        lines.push(
+          `'${formatKeyPath([...absolute, key])}' is not a declared key` +
+            (nearest !== undefined ? ` — did you mean '${nearest}'?` : '.')
+        );
+      }
+      continue;
+    }
+    lines.push(`'${formatKeyPath(absolute)}': ${issue.message}`);
+  }
+
+  if (lines.length === 0) {
+    return `${formatKeyPath(parameterPath)} does not match its declared shape.`;
+  }
+
+  // The closing sentence is true of a DROPPED KEY and of nothing else: a wrong enum member or a
+  // missing required field was always reported. Appending it to every failure would say
+  // "this used to be ignored" about a case that never was.
+  if (!droppedKey) {
+    return lines.join('\n');
+  }
+
+  return (
+    `${lines.join('\n')}\n\n` +
+    `It was dropped and ignored before, which let a misspelled key read as an absent one.`
+  );
+}
+
 /** `'a'`, `'a' and 'b'`, `'a', 'b' and 'c'` — names in the order they were sent. */
 function quoteList(names: readonly string[]): string {
   const quoted = names.map((name) => `'${name}'`);
