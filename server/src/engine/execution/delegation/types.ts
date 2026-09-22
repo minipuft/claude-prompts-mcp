@@ -10,8 +10,8 @@ import type { RequestClientProfile } from '#shared/types/request-identity.js';
 
 /**
  * Whether the run pauses at a delegated node until its result is resumed (`blocking`), or the
- * node is spawned and the run continues without waiting (`detached`, reserved — a later tier
- * gives it a lifecycle; Tier 1 never constructs it).
+ * node is spawned and the run continues without waiting (`detached` — a step declared
+ * `await: run`, Tier 4; see `delegation/detached.ts`).
  */
 export type DelegationMode = 'blocking' | 'detached';
 

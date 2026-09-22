@@ -115,6 +115,20 @@ class TestDefect1DelegationArming:
         assert state.get("pending_delegation") is True
         assert state.get("delegation_agent_type") == "Explore"
 
+    @pytest.mark.parametrize(("pin", "mode"), [("true", "detached"), ("false", "blocking")])
+    def test_delegation_cta_records_the_mode_the_server_pinned(self, patch_workspace, monkeypatch, capsys, pin, mode):
+        """Tier 4: the server pins a detached step's spawn to the background and a blocking
+        one to the foreground; the hook records which, so delegation-enforce holds the spawn to
+        the pin the server actually printed."""
+        session_id = f"detached-mode-{mode}"
+        content = (
+            'Step 2 of 3\n\n→ Tool: Task\n→ Parameters:\n  • subagent_type: "general-purpose"\n'
+            f"  • run_in_background: {pin}\nHandoff via Task tool\n"
+        )
+        code, _ = run_post_prompt_engine(monkeypatch, capsys, session_id=session_id, content=content)
+        assert code == 0
+        assert load_session_state(session_id).get("delegation_mode") == mode
+
     def test_delegation_cta_without_subagent_type_falls_back_to_general_purpose(
         self, patch_workspace, monkeypatch, capsys
     ):

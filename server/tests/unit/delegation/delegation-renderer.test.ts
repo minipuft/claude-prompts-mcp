@@ -48,6 +48,20 @@ describe('DelegationRenderer', () => {
     expect(result).toContain('BLOCKED');
   });
 
+  test('a detached handoff tells the parent not to wait and to report later by its token', () => {
+    const renderer = new DelegationRenderer();
+    const detached = renderer.renderCurrentStepHandoff({ ...basePayload, mode: 'detached' });
+    expect(detached).toContain('Do NOT wait for the sub-agent');
+    expect(detached).toContain('"node: n2" line routes it back to this step');
+    expect(detached).toContain('The run cannot complete until this step has reported');
+    expect(detached).not.toContain('to continue the chain');
+
+    // Control: the blocking handoff keeps its one result line and none of the detached ones.
+    const blocking = renderer.renderCurrentStepHandoff(basePayload);
+    expect(blocking).toContain("Include the sub-agent's result in user_response");
+    expect(blocking).not.toContain('Do NOT wait');
+  });
+
   test('includes model from strategy in tool call', () => {
     const renderer = new DelegationRenderer();
     const result = renderer.renderCurrentStepHandoff({ ...basePayload, subagentModel: 'heavy' });
@@ -246,9 +260,12 @@ describe('ClaudeCodeStrategy', () => {
     expect(result).toContain('run_in_background: false');
   });
 
-  test('formatToolCall omits run_in_background for a detached node', () => {
+  test('formatToolCall pins run_in_background: true for a detached node (Tier 4)', () => {
+    // Explicit both ways: the client's delegation hook tells a detached spawn from a blocking one
+    // by this rendered value, so leaving it to the host default would make the two unreadable.
     const result = strategy.formatToolCall('worker', 'sonnet', 'detached');
-    expect(result).not.toContain('run_in_background');
+    expect(result).toContain('run_in_background: true');
+    expect(result).not.toContain('run_in_background: false');
   });
 
   test('accepts custom strategy via constructor', () => {
