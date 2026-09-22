@@ -209,7 +209,11 @@ describe.each([
   it('P4.131: session list shows only the header workspace’s own runs', async () => {
     const list = (headers: Record<string, string>) =>
       callAs('system_control', { action: 'session', operation: 'list' }, headers);
-    // Renders above opened sessions under A, B and no header; ws-c has run nothing.
+    // Each render opens a session in the workspace that sent it (shipped defaults attach a gate
+    // review). Rendered here rather than relied on from the tests above, so this row stands alone.
+    await renderedFramework(A);
+    await renderedFramework(B);
+    // ws-c has run nothing.
     const sessionIds = (text: string) => [...text.matchAll(/Session: `([^`]+)`/g)].map((m) => m[1]);
     const underA = sessionIds(await list(A));
     expect(underA.length).toBeGreaterThan(0);
