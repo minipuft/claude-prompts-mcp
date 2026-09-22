@@ -25,9 +25,8 @@
  *       the same joins the loaders perform (`guidanceFile`, `phasesFile`, `judgePromptFile`,
  *       `systemMessageFile`, `userMessageTemplateFile`, a script tool's `script`/`schemaFile`/
  *       `descriptionFile`), or
- *   (c) named by a LAYOUT rule a writer or loader enforces by literal name — a framework's
- *       `system-prompt.md`, a script tool's `schema.json`/`description.md` defaults, and the
- *       `tools/<id>/` directory.
+ *   (c) named by a LAYOUT rule a writer or loader enforces by literal name — a script tool's
+ *       `schema.json`/`description.md` defaults, and the `tools/<id>/` directory.
  * Anything else in the directory is NOT enumerated. That bound is load-bearing: it is what keeps a
  * later restore off an operator's stray note sitting beside a gate, and it is why this function
  * reports its answer rather than "everything under the root".
@@ -446,9 +445,9 @@ export async function resourceFileSet(options: ResourceFileSetOptions): Promise<
     // (`framework-file-writer.ts` `resolveDeclaredFileName`), so both halves are needed.
     await builder.addReference(resourceRoot, definition?.['phasesFile'] ?? 'phases.yaml');
     await builder.addReference(resourceRoot, definition?.['judgePromptFile'] ?? 'judge-prompt.md');
-    // Layout-named, with no reference key at all: `framework-file-writer.ts` reads and writes
-    // `system-prompt.md` by literal name on every framework write.
-    await builder.addReference(resourceRoot, 'system-prompt.md');
+    // No `system-prompt.md` (R91): the system prompt's one source is `framework.yaml`'s inline
+    // `systemPromptGuidance`, and no loader or writer names the file any more. A workspace
+    // framework still carrying one is outside the set, so no restore writes over it.
   } else {
     // A category's resource is `category.yaml` and nothing else — never the prompts around it.
     // Its own writer targets the file, and its `delete` leaves every prompt in place.

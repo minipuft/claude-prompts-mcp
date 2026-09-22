@@ -66,6 +66,8 @@ const HAND_AUTHORED: Readonly<Record<string, string>> = {
   ].join('\n'),
   // No trailing newline, on purpose: a rewrite that normalizes it shows up as a changed byte.
   'judge-prompt.md': 'Judge the response.\n\n    An indented line, and no trailing newline',
+  // A legacy file a workspace framework may still carry. Nothing reads or writes it since R91 —
+  // the inline `systemPromptGuidance` is the one source — so every edit must leave it as it is.
   'system-prompt.md': 'Fixture system prompt.\n',
 };
 
@@ -88,7 +90,7 @@ const FIELD_WRITE_SCOPE: ReadonlyArray<{
   {
     field: 'system_prompt_guidance',
     value: 'A new system prompt.\n',
-    changes: ['framework.yaml', 'system-prompt.md'],
+    changes: ['framework.yaml'],
   },
   { field: 'gates', value: { exclude: ['framework-compliance'] }, changes: ['framework.yaml'] },
   {

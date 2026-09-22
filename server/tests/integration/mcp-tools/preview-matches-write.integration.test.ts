@@ -1153,10 +1153,11 @@ describe('a gate, framework or category diff names the files and lines its write
 
     expect(
       expectDiffReproducesWrite(fencedDiffOf(preview), before, readTree(frameworksDir))
-    ).toEqual([`${FRAMEWORK_ID}/framework.yaml`, `${FRAMEWORK_ID}/system-prompt.md`]);
+    ).toEqual([`${FRAMEWORK_ID}/framework.yaml`]);
   });
 
-  test('framework update: a system prompt edit is reported in framework.yaml and system-prompt.md', async () => {
+  // R91: the system prompt's one source is `framework.yaml`'s inline `systemPromptGuidance`.
+  test('framework update: a system prompt edit is reported in framework.yaml alone', async () => {
     const frameworksDir = tempRoot();
     await seedFramework(frameworksDir);
     const harness = createFrameworkHarness(frameworksDir);
@@ -1172,7 +1173,6 @@ describe('a gate, framework or category diff names the files and lines its write
     const diff = fencedDiffOf(update);
     expect(expectDiffReproducesWrite(diff, before, readTree(frameworksDir))).toEqual([
       `${FRAMEWORK_ID}/framework.yaml`,
-      `${FRAMEWORK_ID}/system-prompt.md`,
     ]);
     expect(harness.recordEditResult.mock.calls[0]?.[4]).toMatchObject({
       diff_summary: countsOf(diff),

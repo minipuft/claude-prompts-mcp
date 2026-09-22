@@ -295,7 +295,7 @@ describe('resourceFileSet — gate', () => {
 });
 
 describe('resourceFileSet — framework', () => {
-  it('enumerates the entry, its referenced companions, and the layout-named system prompt', async () => {
+  it('enumerates the entry and its referenced companions, and never a system-prompt.md', async () => {
     const entry = await write(
       'frameworks/focus/framework.yaml',
       'id: focus\nphasesFile: phases.yaml\njudgePromptFile: judge-prompt.md\n'
@@ -307,12 +307,9 @@ describe('resourceFileSet — framework', () => {
 
     const result = await resourceFileSet({ resourceType: 'framework', entryPath: entry });
 
-    expect(paths(result.files)).toEqual([
-      'framework.yaml',
-      'phases.yaml',
-      'judge-prompt.md',
-      'system-prompt.md',
-    ]);
+    // `system-prompt.md` is a stray here like `scratch.md` (R91): nothing reads it, so a restore
+    // that wrote it would write over a file no version recorded as the framework.
+    expect(paths(result.files)).toEqual(['framework.yaml', 'phases.yaml', 'judge-prompt.md']);
     expect(paths(result.files)).not.toContain('scratch.md');
   });
 

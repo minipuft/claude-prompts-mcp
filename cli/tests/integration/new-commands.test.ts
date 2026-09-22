@@ -485,6 +485,48 @@ describe('cpm rollback', () => {
     }
   });
 
+  /**
+   * R91 — a framework's system prompt has one source, `framework.yaml`'s `systemPromptGuidance`.
+   * While it was also written to `system-prompt.md`, this command excluded the snapshot's
+   * `system_prompt_guidance` from the merge, so a CLI rollback never restored the system prompt.
+   * It is now renamed to the YAML spelling, as `tool_descriptions` is.
+   */
+  it('restores a framework system prompt into framework.yaml under its YAML spelling', () => {
+    const fwWs = copyWorkspace(VERSIONED_WS);
+    try {
+      seedVersionHistory(fwWs, 'framework', 'test-method', [
+        {
+          version: 1,
+          snapshot: {
+            id: 'test-method',
+            name: 'Test Method',
+            type: 'TEST_METHOD',
+            enabled: false,
+            description: 'Original framework description',
+            system_prompt_guidance: 'Restored system prompt.',
+          },
+          description: 'Version 1',
+        },
+      ]);
+
+      const { exitCode } = run(['rollback', 'framework', 'test-method', '1', '--workspace', fwWs]);
+      expect(exitCode).toBe(0);
+
+      const content = readFileSync(
+        join(fwWs, 'resources/frameworks/test-method/framework.yaml'),
+        'utf8',
+      );
+      // The control: the restore ran at all.
+      expect(content).toContain('Original framework description');
+      // Source-preserving: the stored block scalar stays a block scalar.
+      expect(content).toMatch(/^systemPromptGuidance: \|-\n {2}Restored system prompt\.$/m);
+      expect(content).not.toMatch(/^system_prompt_guidance:/m);
+      expect(existsSync(join(fwWs, 'resources/frameworks/test-method/system-prompt.md'))).toBe(false);
+    } finally {
+      if (existsSync(fwWs)) rmSync(fwWs, { recursive: true, force: true });
+    }
+  });
+
   it('refuses to roll back an unversioned resource type', () => {
     const { stderr, exitCode } = run([
       'rollback', 'style', 'test-style', '1',
