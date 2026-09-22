@@ -18,6 +18,10 @@ import {
   workflowIRSchema,
   workflowNodeSchema,
 } from './workflow-ir.schema.js';
+import {
+  describeNestedSchemaRefusal,
+  type NestedSchemaIssue,
+} from '../shared/undeclared-parameters.js';
 
 import type { GateVerdictSubmission } from '#engine/gates/core/gate-verdict-renderer.js';
 import type { RemainderSubmission } from '#modules/workflow-ir/types.js';
@@ -404,6 +408,45 @@ function buildCoreFields(resolve: DescriptionResolver) {
 }
 
 /**
+ * The message a failed `gate_verdict` reports, built from the branch the sender clearly meant.
+ *
+ * Branch selection is by the value's own JS type, not by "whichever branch produced fewer
+ * issues": an object sent to this parameter is a structured submission, and reporting the string
+ * branch's `expected string, received object` beside the real defect buries it. A value that is
+ * neither says so plainly, because there the type IS the defect.
+ */
+function describeGateVerdictFailure(issue: {
+  readonly input?: unknown;
+  readonly path?: readonly PropertyKey[];
+  readonly errors?: readonly (readonly NestedSchemaIssue[])[];
+}): string {
+  const value = issue.input;
+  const parameterPath = (issue.path ?? []).filter(
+    (segment): segment is string | number =>
+      typeof segment === 'string' || typeof segment === 'number'
+  );
+
+  if (typeof value === 'string') {
+    const stringIssues = issue.errors?.[1] ?? [];
+    return stringIssues[0]?.message ?? 'gate_verdict is not a recognised verdict string.';
+  }
+
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return (
+      'gate_verdict takes either the structured object ' +
+      '({"overall": "PASS"|"FAIL", "rationale": "...", "per_gate": [...]}) ' +
+      'or the legacy string form `GATE_REVIEW: PASS - <assessment>`.'
+    );
+  }
+
+  return describeNestedSchemaRefusal(
+    parameterPath,
+    issue.errors?.[0] ?? [],
+    gateVerdictSubmissionSchema
+  );
+}
+
+/**
  * Parameters that exist only while the gate system is enabled.
  *
  * These three are the whole of the tool's gate surface a client can drive:
@@ -422,14 +465,27 @@ function buildGateFields(
     // Structured branch first: a client sending an object gets its own
     // validation errors rather than "expected string", which is what it would
     // see if the legacy branch were tried first and reported the union failure.
+    //
+    // The `error` override is what carries a NESTED key's path to the client (P4.103). Zod
+    // reports a union failure as ONE `invalid_union` issue whose sub-issues sit under `errors`,
+    // and the SDK's `formatIssue` renders top-level issues only — so `{per_gate: [{pased: true}]}`
+    // reached a client as exactly `gate_verdict: Invalid input`, on the SAFETY REVIEW submission,
+    // where a lost key also leaves `passed` absent and an absent boolean reads as FAIL.
+    //
+    // Reported from the sub-issues zod has ALREADY produced, rather than re-parsing the value in
+    // a refusal layer: one validation pass, and the published `anyOf` is untouched, which is what
+    // the alternatives (a `z.custom` root, or a second pass at the handler) each cost.
     gate_verdict: z
-      .union([
-        gateVerdictSubmissionSchema,
-        z
-          .string()
-          .trim()
-          .refine((v) => verdictValidator(v), verdictMessage),
-      ])
+      .union(
+        [
+          gateVerdictSubmissionSchema,
+          z
+            .string()
+            .trim()
+            .refine((v) => verdictValidator(v), verdictMessage),
+        ],
+        { error: (issue) => describeGateVerdictFailure(issue) }
+      )
       .optional()
       .describe(resolve('gate_verdict', PARAM_DEFAULTS.gate_verdict)),
 
