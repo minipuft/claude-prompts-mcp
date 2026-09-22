@@ -462,9 +462,11 @@ export const TABLE_CONTRACTS: readonly TableContract[] = [
       "'ok' | 'trailer' | 'node-line' | 'node-mismatch', the enumeration " +
       'HANDOFF_EVIDENCE_REASONS owns and the column CHECK repeats ' +
       '(resolveHandoffEvidenceReason in delegation/handoff-contract.ts; the vocabulary in ' +
-      'shared/types/handoff-evidence.ts). NULL means exactly one ' +
-      'thing: the step was not delegated (plus every render/terminal row, which describes no ' +
-      'capture). That is the difference from the boolean it replaces, which could only be bound ' +
+      'shared/types/handoff-evidence.ts). NULL means the row describes no capture — the step ' +
+      'was not delegated, or the row is a render, a terminal, or the verdict-time row P4.86 ' +
+      'added (StepCaptureService.ledgerSubmittedVerdict), which records a verdict submitted on ' +
+      'a call that carried no reply and therefore has no resume to judge. That is the ' +
+      'difference from the boolean it replaces, which could only be bound ' +
       'for a delegated step that ALSO carried gate text, so "no gates" and "not delegated" ' +
       'shared the NULL spelling. Same partial-population-BY-ROW-TYPE reading as the v21/v23 ' +
       'groups; read back by the execution_history action, and by stage 16 never — the refusal ' +

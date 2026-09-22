@@ -34,6 +34,31 @@ export type InterruptResolution =
   { readonly kind: 'resolved' } | { readonly kind: 'refused'; readonly message: string };
 
 /**
+ * A step advance this call DECIDED but has not performed (P4.89).
+ *
+ * Every advance this processor reaches — a PASS clearing a review, and an advisory or
+ * informational FAIL walking past one — used to run inside the verdict method, which is BEFORE
+ * `StepCaptureService` captures the step that verdict answered. On a run's final step that
+ * ordering is observable on the wire: advancing past the last node latches the run `completed`
+ * and announces `chain/complete`, so a client that tears its handler down on the terminal event
+ * never saw the `chain/step_complete` for the step it had just answered. Measured on a driven
+ * two-step chain for both a gated PASS and an advisory FAIL.
+ *
+ * So the decision is returned instead of executed, and the stage applies it after the capture.
+ * The node id is resolved at DECISION time, not at application time: by then the capture may
+ * have advanced the run itself (the advisory path), and `advanceStep` no-ops on a node the run
+ * has already passed — which is what makes applying this twice, or after the capture already
+ * did it, safe rather than a double advance.
+ */
+export interface DeferredAdvance {
+  readonly sessionId: string;
+  /** The node the run advances PAST — the step this call graded, not the one it moves to. */
+  readonly nodeId: string;
+  /** Why the run advances, for the diagnostic line the application emits. */
+  readonly reason: 'gate-pass' | 'advisory-fail' | 'informational-fail';
+}
+
+/**
  * Result of processing gate verdicts for a request.
  */
 export interface VerdictProcessingResult {
@@ -43,6 +68,8 @@ export interface VerdictProcessingResult {
   readonly earlyExit: boolean;
   /** User response (may be unchanged or set to undefined if consumed by verdict) */
   readonly userResponse: string | undefined;
+  /** The advance this call decided, for the stage to apply after the capture — see {@link DeferredAdvance}. */
+  readonly deferredAdvance?: DeferredAdvance;
 }
 
 /**
@@ -291,23 +318,18 @@ export class GateVerdictProcessor {
     );
 
     let passClearedThisCall = false;
+    let deferredAdvance: DeferredAdvance | undefined;
     if (outcome.status === 'cleared') {
-      const advanced = await this.chainSessionStore.advanceStep(
+      deferredAdvance = {
         sessionId,
-        this.resolveNodeId(session, currentStepAtStart)
-      );
-      if (advanced !== false) {
-        sessionContext.currentStep = advanced.ordinal;
-        sessionContext.currentNodeId = advanced.nodeId;
-      }
+        nodeId: this.resolveNodeId(session, currentStepAtStart),
+        reason: 'gate-pass',
+      };
       context.sessionContext = { ...sessionContext };
       context.diagnostics.info(
         'GateVerdictProcessor',
-        'Gate PASS (no prior review) - advanced step',
-        {
-          stepToAdvance: currentStepAtStart,
-          advancedTo: advanced === false ? false : advanced.ordinal,
-        }
+        'Gate PASS (no prior review) - advance deferred until the step is captured',
+        { stepToAdvance: currentStepAtStart }
       );
       passClearedThisCall = true;
     }
@@ -320,11 +342,12 @@ export class GateVerdictProcessor {
     }
 
     const hasResponse = typeof userResponse === 'string' && userResponse.length > 0;
+    const advance = deferredAdvance !== undefined ? { deferredAdvance } : {};
     if (!hasResponse) {
-      return { passClearedThisCall, earlyExit: true, userResponse };
+      return { passClearedThisCall, earlyExit: true, userResponse, ...advance };
     }
 
-    return { passClearedThisCall, earlyExit: false, userResponse };
+    return { passClearedThisCall, earlyExit: false, userResponse, ...advance };
   }
 
   /**
@@ -391,20 +414,19 @@ export class GateVerdictProcessor {
     this.recordVerdictDetection(context, verdictPayload, outcome);
 
     let passClearedThisCall = false;
+    let deferredAdvance: DeferredAdvance | undefined;
 
     if (outcome === 'cleared') {
-      const advanced = await this.chainSessionStore.advanceStep(
+      deferredAdvance = {
         sessionId,
-        this.resolveNodeId(session, currentStepAtStart)
+        nodeId: this.resolveNodeId(session, currentStepAtStart),
+        reason: 'gate-pass',
+      };
+      context.diagnostics.info(
+        'GateVerdictProcessor',
+        'Gate PASS - advance deferred until the step is captured',
+        { stepToAdvance: currentStepAtStart }
       );
-      if (advanced !== false) {
-        sessionContext.currentStep = advanced.ordinal;
-        sessionContext.currentNodeId = advanced.nodeId;
-      }
-      context.diagnostics.info('GateVerdictProcessor', 'Gate PASS - advanced step', {
-        stepToAdvance: currentStepAtStart,
-        advancedTo: advanced === false ? false : advanced.ordinal,
-      });
       delete sessionContext.pendingReview;
       passClearedThisCall = true;
 
@@ -418,7 +440,7 @@ export class GateVerdictProcessor {
       // informational handlers cleared the pending review and advanced the step AFTER the
       // snapshot two lines below had already been taken, so the response reported the step
       // the run had not moved off — and any failure in either was dropped entirely.
-      await this.handleFailedVerdict(
+      deferredAdvance = await this.handleFailedVerdict(
         context,
         session,
         sessionId,
@@ -431,11 +453,43 @@ export class GateVerdictProcessor {
     context.sessionContext = { ...sessionContext };
 
     const hasResponse = typeof userResponse === 'string' && userResponse.length > 0;
+    const advance = deferredAdvance !== undefined ? { deferredAdvance } : {};
     if (!hasResponse) {
-      return { passClearedThisCall, earlyExit: true, userResponse };
+      return { passClearedThisCall, earlyExit: true, userResponse, ...advance };
     }
 
-    return { passClearedThisCall, earlyExit: false, userResponse };
+    return { passClearedThisCall, earlyExit: false, userResponse, ...advance };
+  }
+
+  /**
+   * Perform an advance this processor decided earlier in the same request (P4.89).
+   *
+   * Called by `StepResponseCaptureStage` after `StepCaptureService` has captured and announced
+   * the step the verdict graded, and before the post-advance review check — so the run's terminal
+   * announcement can no longer arrive in front of the step event that produced it.
+   *
+   * The context snapshot is updated here rather than at decision time, because this is where the
+   * new position exists. It is still written before the response is assembled, which is the
+   * guarantee row B.54 pinned: a caller is never told the run sits on a step it has moved off.
+   * A store failure propagates, as it did when this ran inline.
+   */
+  async applyDeferredAdvance(context: ExecutionContext, advance: DeferredAdvance): Promise<void> {
+    const advanced = await this.chainSessionStore.advanceStep(advance.sessionId, advance.nodeId);
+
+    const sessionContext = context.sessionContext;
+    if (advanced !== false && sessionContext !== undefined) {
+      context.sessionContext = {
+        ...sessionContext,
+        currentStep: advanced.ordinal,
+        currentNodeId: advanced.nodeId,
+      };
+    }
+
+    context.diagnostics.info('GateVerdictProcessor', 'Advanced step after capture', {
+      reason: advance.reason,
+      pastNodeId: advance.nodeId,
+      advancedTo: advanced === false ? false : advanced.ordinal,
+    });
   }
 
   /**
@@ -478,6 +532,9 @@ export class GateVerdictProcessor {
 
   /**
    * Handle a FAIL verdict based on enforcement mode.
+   *
+   * @returns the advance the advisory and informational modes decide, for the stage to apply
+   *   after the capture; `undefined` in blocking mode, where the run holds where it is.
    */
   private async handleFailedVerdict(
     context: ExecutionContext,
@@ -486,7 +543,7 @@ export class GateVerdictProcessor {
     sessionContext: SessionContext,
     capturedGateIds: string[],
     verdictPayload: ParsedGateVerdict
-  ): Promise<void> {
+  ): Promise<DeferredAdvance | undefined> {
     const pending = this.chainSessionStore.getPendingGateReview(sessionId);
     if (pending !== undefined) {
       sessionContext.pendingReview = pending;
@@ -496,15 +553,15 @@ export class GateVerdictProcessor {
 
     const enforcementMode = resolveEnforcementMode(context.state.gates.enforcementMode);
 
-    if (verdictPayload.verdict !== 'FAIL') return;
+    if (verdictPayload.verdict !== 'FAIL') return undefined;
 
     switch (enforcementMode) {
       case 'blocking':
         this.handleBlockingFail(context, session, sessionId, capturedGateIds, verdictPayload);
-        break;
+        return undefined;
 
       case 'advisory':
-        await this.handleAdvisoryFail(
+        return await this.handleAdvisoryFail(
           context,
           session,
           sessionId,
@@ -512,10 +569,9 @@ export class GateVerdictProcessor {
           capturedGateIds,
           verdictPayload
         );
-        break;
 
       case 'informational':
-        await this.handleInformationalFail(
+        return await this.handleInformationalFail(
           context,
           session,
           sessionId,
@@ -523,7 +579,6 @@ export class GateVerdictProcessor {
           capturedGateIds,
           verdictPayload
         );
-        break;
     }
   }
 
@@ -577,7 +632,7 @@ export class GateVerdictProcessor {
     sessionContext: SessionContext,
     capturedGateIds: string[],
     verdictPayload: { rationale: string }
-  ): Promise<void> {
+  ): Promise<DeferredAdvance> {
     context.state.gates.advisoryWarnings.push(
       `Gate ${capturedGateIds.join(', ')} failed: ${verdictPayload.rationale}`
     );
@@ -587,17 +642,12 @@ export class GateVerdictProcessor {
 
     await this.emitGateEvents(context, 'failed', capturedGateIds, verdictPayload.rationale);
     await this.chainSessionStore.clearPendingGateReview(sessionId);
-    // `currentNodeId` when the context already carries it; otherwise translate the position.
-    // A context with neither yields '' and the store no-ops, exactly as `?? 0` did before.
-    const currentStep = context.sessionContext?.currentStep ?? 0;
-    const nodeId =
-      context.sessionContext?.currentNodeId ?? this.resolveNodeId(session, currentStep);
-    const advanced = await this.chainSessionStore.advanceStep(sessionId, nodeId ?? '');
-    if (advanced !== false) {
-      sessionContext.currentStep = advanced.ordinal;
-      sessionContext.currentNodeId = advanced.nodeId;
-    }
     delete sessionContext.pendingReview;
+    return {
+      sessionId,
+      nodeId: this.resolveAdvanceTarget(context, session),
+      reason: 'advisory-fail',
+    };
   }
 
   private async handleInformationalFail(
@@ -607,7 +657,7 @@ export class GateVerdictProcessor {
     sessionContext: SessionContext,
     _capturedGateIds: string[],
     verdictPayload: { rationale: string }
-  ): Promise<void> {
+  ): Promise<DeferredAdvance> {
     const infoGateIds = [...(session.pendingGateReview?.gateIds ?? [])];
     context.diagnostics.info(
       'GateVerdictProcessor',
@@ -617,17 +667,24 @@ export class GateVerdictProcessor {
 
     await this.emitGateEvents(context, 'failed', infoGateIds, verdictPayload.rationale);
     await this.chainSessionStore.clearPendingGateReview(sessionId);
-    // `currentNodeId` when the context already carries it; otherwise translate the position.
-    // A context with neither yields '' and the store no-ops, exactly as `?? 0` did before.
-    const currentStep = context.sessionContext?.currentStep ?? 0;
-    const nodeId =
-      context.sessionContext?.currentNodeId ?? this.resolveNodeId(session, currentStep);
-    const advanced = await this.chainSessionStore.advanceStep(sessionId, nodeId ?? '');
-    if (advanced !== false) {
-      sessionContext.currentStep = advanced.ordinal;
-      sessionContext.currentNodeId = advanced.nodeId;
-    }
     delete sessionContext.pendingReview;
+    return {
+      sessionId,
+      nodeId: this.resolveAdvanceTarget(context, session),
+      reason: 'informational-fail',
+    };
+  }
+
+  /**
+   * The node a FAIL-mode advance walks past: `currentNodeId` when the context already carries
+   * it, otherwise the position translated through the node list.
+   *
+   * A context with neither yields `''`, and the store no-ops on an unresolvable id — the same
+   * outcome the `?? 0` arithmetic produced before node ids existed.
+   */
+  private resolveAdvanceTarget(context: ExecutionContext, session: ChainSession): string {
+    const currentStep = context.sessionContext?.currentStep ?? 0;
+    return context.sessionContext?.currentNodeId ?? this.resolveNodeId(session, currentStep);
   }
 
   /**
