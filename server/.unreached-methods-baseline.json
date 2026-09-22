@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-21T01:07:21.778Z",
-  "total": 22,
+  "generatedAt": "2026-09-22T05:50:20.664Z",
+  "total": 20,
   "methods": [
     "ArgumentHistoryTracker.getLatestArguments",
     "ChainSessionStore.updateStepResult",
@@ -21,8 +21,6 @@
     "PerformanceMonitor.getPerformanceSummary",
     "PerformanceMonitor.onAlert",
     "PerformanceMonitor.startMonitoring",
-    "PromptAnalyzer.detectExecutionType",
-    "PromptAnalyzer.requiresFramework",
     "ServerLifecycle.restart",
     "SqliteEngine.getSchemaVersion"
   ],
