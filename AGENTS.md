@@ -33,88 +33,44 @@
 
 The server floor is where `node:sqlite` is available without an experimental flag. The standalone CLI remains a separate, self-contained compatibility surface.
 
-## Validation Gates (one contract, impact-aware subsets)
+## Pull Request Boundary
 
-**CI is the contract; every other gate is a documented strict subset of it.**
+**`npm run pr:check` is the whole local gate, and it is a subset of CI by construction.**
 
-The three gates once ran three different suites with no subset relation, so a green
-`pre-push` did not predict CI, and neither did the local full-validation wrapper that
-existed at the time -- that is how a pyrefly failure reached `main` from a clean local
-push. That wrapper was deleted once the subset relation made it redundant.
+`PR Conventions` is a required context whose gating steps on a non-bot PR are: two positive
+controls, the body against `.github/pull_request_template.md`, and `commitlint` on the title. Run
+every one of them before `gh pr create`, from the repo root:
 
-`scripts/classify-validation-scope.js` is the changed-path SSOT for local push and CI.
-It recognizes two narrow safe scopes and sends every empty, mixed, executable,
-configuration, dependency, deleted-unknown, or unrecognized change to `full`.
+```bash
+TITLE="feat(scope): outcome"
+npm run pr:body -- --out /tmp/pr-body.md     # seed it; never author a body from scratch
+$EDITOR /tmp/pr-body.md
+npm run pr:check -- --body-file /tmp/pr-body.md --title "$TITLE"
+```
 
-| Scope   | Trigger                                                                                 | CI                                                                                                |
-| ------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `docs`  | documented root handbooks, `docs/**/*.md`, `plans/**/*.md`, and server/CLI READMEs only | classifier hygiene · CONTRIBUTING commands · plan row tracking · README charter · guidance projection; four protected jobs report intentional lightweight passes |
-| `hooks` | only `hooks/**` plus optional docs                                                      | pinned Ruff/Pyrefly/Pytest/PyYAML · the same four documentation checks as `docs`; other protected jobs report intentional lightweight passes |
-| `full`  | everything else; empty/unknown input                                                    | typecheck · `validate:all` · CLI · build/smoke/schema · Node 22/24 unit/coverage/integration/E2E   |
+The template requires `## Demonstration` (consumer-observable before/after, or `n/a: <reason>`), a
+`## How it was verified` TABLE (claim · probe · baseline -> measured · the mutation that fails it --
+a count with no baseline is noise), and `## Notes for Reviewers`, under a 400-word above-the-fold
+budget that fenced blocks, tables and `<details>` do not count against. The `Plan:` footer is the
+ONLY sanctioned plan mention and the gate FAILS while that plan's `status:` is non-final, so a PR
+executing one step of a multi-step plan omits the footer entirely.
 
-`.husky/pre-push` does not branch by scope: every push runs `typecheck` and `lint:ratchet`
-only -- a deletion-only push (`git push --delete`) skips even that. CI stays scope-routed and
-owns the rest -- format, lockfile-sync, architecture, versions, Python hooks, unit/integration/
-E2E, build, and post-build schema gates -- once, at the PR boundary.
+Parity is enforced rather than documented: `scripts/pr-check.mjs` names each workflow step it
+mirrors and `server/tests/unit/scripts/pr-check-ci-parity.test.ts` reads `pr-conventions.yml` and
+fails when the two sets diverge. That test exists because the relation had already broken in the
+direction that costs a CI cycle -- `CONTRIBUTING.md` documented only the body check, and the body
+checker states outright that it "does not read the title beyond its type", so following the
+instructions exactly still shipped an unchecked title (#283, `subject-case`, 2026-09-14). A
+hand-written body cost a second run three missing sections and a 488-word fold (#312, 2026-09-16).
 
-The CI workflow remains unconditional. Do not add workflow-level `paths` or
-`paths-ignore`: a required workflow skipped before jobs exist leaves its context
-pending. Routing happens inside the workflow while the literal `Lint & Validate`,
-`CLI`, `Build`, and `Test Suite` job names remain stable.
-
-`.husky/pre-commit` remains the fast contract-regeneration, staged-lint, conditional
-Python, and typecheck gate. Every local route remains a subset of CI.
-
-**A local gate is only as trustworthy as the toolchain it ran against**, which is a
-different axis from which steps run where. CI installs with `npm ci` and pinned pip
-versions; a developer box installs whenever it last installed. Measured 2026-08-19: a local
-tree sat 18 packages off the lockfile with knip at 6.32.1 against the lockfile's 6.32.2, and
-the knip ratchet baseline was regenerated with the wrong binary. Two commands close it, both
-reading the same file CI reads -- `validate:lockfile-sync` (inside `validate:all`) and
-`setup:python` (`requirements-dev.txt`). Node no longer forks either: every job reads
-`.node-version`, and the test matrix is the only place 22.13.0 appears.
-
-**`lint:ratchet` does NOT run at pre-commit** (since `a5d8cb51`). It is a whole-project
-DIRECTION measure, and direction is a push concern; per-commit conformance is `lint:staged`,
-which lints exactly what is staged. Running it per-commit also meant an unrelated violation
-anywhere in `src` blocked every commit -- in a shared worktree, blocking on work that is not
-yours. Coverage is unchanged: `pre-push` runs it and CI runs it. Pre-commit floor measured
-4.4s against the `ci-release.md` <10s budget.
-
-**Adding a step to a hook that CI does not run breaks the contract** -- add it to
-`validate:all` first, which CI runs whole. Removing a step CI depends on breaks it too.
-
-Formatting is covered by `validate:format` in the full CI route and by `pre-commit`'s
-staged-file check; `pre-push` does not check formatting. `validate:format` checks every tracked
-`*.json`/`*.md`/`*.yml`/`*.yaml` in the repo, in two passes: repo-level files outside `server/**`
-against the root Prettier config, and every tracked file under `server/**` (including
-`resources/**` and `tests/**`) against `server/.prettierrc.json` and `server/.prettierignore`.
-Anything a generator owns belongs in `.prettierignore` with a reason -- otherwise the generator
-and Prettier disagree.
-
-**Every formatting gate CHECKS; none of them writes** (since 2026-08-25). `pre-commit` and
-`lint-staged` used to `prettier --write` the staged paths and re-`git add` them, so the bytes
-committed were not the bytes any gate had validated -- each check ran against one version of
-the file and the commit captured another. Formatting-only, so the blast radius was small, but
-it is the same shape as a step that silently changes an artifact after the check that blessed
-it. It also broke anchored editing: a rewrite between a read and the next fixed-string edit
-makes that edit miss **silently**, which cost real work here on 2026-08-25. `--check` is also
-a strict subset of CI, which only ever checks -- the old `--write` was a local step CI does
-not run, which this section otherwise forbids. Fix with `npm --prefix server run format`
-(same combined file set `validate:format` reads) or `format:server` (server TS/JS sources plus
-the top-level `server/` config files -- narrower than `format`, since it does not recurse into
-`resources/**` or `tests/**`).
-
-**Format at authoring time; the gate is a backstop, not the boundary.** A gate you routinely
-fail is a gate in the wrong place -- so format on save (editors) or as part of the edit itself
-(agents: run `format` on what you touched BEFORE you validate, not after a hook rejects it).
-This only works if your editor and the gate agree, which needs one contract per file: prettier
-resolves the NEAREST config, so `server/**` takes `server/.prettierrc.json` (printWidth 100)
-and everything else takes the root `.prettierrc.json` (printWidth 80). The root file was added
-2026-08-25 and pins what was already happening -- root paths previously resolved NO config and
-ran on prettier's built-in defaults, so the contract was whatever the installed major version
-happened to do, and an editor plugin resolving its own settings would silently disagree with
-the gate. Verified at the time: adding it reformatted zero files on either side.
+**This section IS projected into `AGENTS.md`** (`PROJECTED_HANDBOOK_SECTIONS` in
+`scripts/sync-project-guidance.js`). It previously was not: the projection measured 32,709 of its
+32,768-byte ceiling with this section absent -- 59 bytes of headroom, not enough to add it. Evicting
+`## Validation Gates (one contract, impact-aware subsets)` (below) freed the room: that section is
+CI-routing detail a Codex or OpenCode reader does not need to act on, while this one is a command
+they run before every PR. Codex and OpenCode also still reach this contract through
+`CONTRIBUTING.md` §Pull Request Process and the usage text `pr-check.mjs` prints when invoked
+without arguments.
 
 ## Documentation Map
 
@@ -181,6 +137,7 @@ Read the relevant doc before editing. Update docs when behavior changes.
 | Framework validity      | FrameworkManager                                                     | Call `frameworkManager.getFramework(id)` -- never hardcode                                                                                    |
 | Injection decisions     | InjectionDecisionService (`execution/pipeline/decisions/injection/`) | Call `service.decide()`                                                                                                                       |
 | Style resolution        | StyleManager (`modules/formatting/style-manager.ts`)                 | Call `styleManager.getStyle()`                                                                                                                |
+| Delegation handoff evidence | `resolveHandoffEvidence` (`execution/delegation/handoff-contract.ts`) | Call `resolveHandoffEvidence(input)` -- a pure import, never re-parse the `HANDOFF RESULT` trailer inline                                    |
 
 ## Key Constraints
 
