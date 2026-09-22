@@ -704,7 +704,7 @@ export class SqliteEngine implements DatabasePort {
    * nothing to do in the second case, and `false` said both.
    */
   private ensureSchema(): 'current' | 'created' | 'recreated' {
-    const currentVersion = this.getCurrentSchemaVersion();
+    const currentVersion = this.getSchemaVersion();
 
     if (currentVersion === SCHEMA_VERSION) {
       // Tables are current, but views must still refresh: a stale view survives every
@@ -894,17 +894,6 @@ export class SqliteEngine implements DatabasePort {
       }
 
       this.logger.info(`Preserved ${rows.length} row(s) in durable table ${table}`);
-    }
-  }
-
-  private getCurrentSchemaVersion(): number {
-    try {
-      const result = this.queryOne<{ version: number }>(
-        'SELECT MAX(version) as version FROM schema_version'
-      );
-      return result?.version ?? 0;
-    } catch {
-      return 0;
     }
   }
 
@@ -1485,7 +1474,10 @@ export class SqliteEngine implements DatabasePort {
   }
 
   /**
-   * Get current schema version
+   * Get current schema version.
+   *
+   * The single reader of `schema_version`: `ensureSchema` calls it rather than keeping a private
+   * byte-identical twin, which is what it did until P4.91.
    */
   getSchemaVersion(): number {
     try {

@@ -29,7 +29,6 @@ class StubTextReferenceStore {
     return { step_results };
   });
   clearChainStepResults = jest.fn();
-  getChainStepMetadata = jest.fn().mockReturnValue({});
 }
 
 const createLogger = (): Logger =>
@@ -148,7 +147,9 @@ describe('ChainSessionStore + ArgumentHistoryTracker (integration)', () => {
 
     // Simulate placeholder then real response for step 1
     await manager.updateSessionState('sess-1', 'n1', 'placeholder', { isPlaceholder: true });
-    await manager.updateStepResult('sess-1', 'n1', 'REAL-OUTPUT-1');
+    // Second write through the same method the live capture path uses (P4.91 removed the
+    // duplicate `updateStepResult`): a placeholder write followed by the real response.
+    await manager.updateSessionState('sess-1', 'n1', 'REAL-OUTPUT-1');
     await manager.completeStep('sess-1', 'n1', { preservePlaceholder: false });
     await manager.advanceStep('sess-1', 'n1');
 

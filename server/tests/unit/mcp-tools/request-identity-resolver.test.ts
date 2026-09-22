@@ -10,6 +10,29 @@ import {
 
 import type { McpRequestExtra } from '../../../src/shared/utils/request-identity-resolver.js';
 
+/**
+ * The handler context the SDK v2 builds for one Streamable HTTP request: the request itself at
+ * `http.req` and validated auth at `http.authInfo`. The headers go through a real `Request`, so
+ * the resolver reads a web `Headers` object exactly as it does in production — a plain-object
+ * fixture passes against a shape the SDK never produces, which is how header scoping broke
+ * unnoticed when the SDK moved these fields.
+ */
+function httpExtra(parts: {
+  headers?: Record<string, string>;
+  authInfo?: { extra?: Record<string, unknown>; sub?: string };
+  sessionId?: string;
+}): McpRequestExtra {
+  return {
+    http: {
+      ...(parts.authInfo != null ? { authInfo: parts.authInfo } : {}),
+      ...(parts.headers != null
+        ? { req: new Request('http://localhost/mcp', { method: 'POST', headers: parts.headers }) }
+        : {}),
+    },
+    ...(parts.sessionId != null ? { sessionId: parts.sessionId } : {}),
+  };
+}
+
 const UNKNOWN_CLIENT_PROFILE = {
   clientFamily: 'unknown',
   clientId: 'unknown',
@@ -28,7 +51,7 @@ describe('resolveRequestIdentity', () => {
   });
 
   test('extracts organization/workspace/actor from token claims', () => {
-    const extra: McpRequestExtra = {
+    const extra = httpExtra({
       authInfo: {
         extra: {
           organizationId: 'org-acme',
@@ -37,7 +60,7 @@ describe('resolveRequestIdentity', () => {
         },
       },
       sessionId: 'transport-sess-1',
-    };
+    });
 
     expect(resolveRequestIdentity(extra)).toEqual({
       organizationId: 'org-acme',
@@ -50,13 +73,13 @@ describe('resolveRequestIdentity', () => {
   });
 
   test('derives workspace from organization claim when workspace claim is absent', () => {
-    const extra: McpRequestExtra = {
+    const extra = httpExtra({
       authInfo: {
         extra: {
           organizationId: 'org-shared',
         },
       },
-    };
+    });
 
     expect(resolveRequestIdentity(extra)).toEqual({
       organizationId: 'org-shared',
@@ -67,16 +90,14 @@ describe('resolveRequestIdentity', () => {
   });
 
   test('falls back to header claims when token claims are missing', () => {
-    const extra: McpRequestExtra = {
-      requestInfo: {
-        headers: {
-          'x-organization-id': 'org-header',
-          'x-workspace-id': 'workspace-header',
-          'x-user-id': 'actor-header',
-          'mcp-session-id': 'sess-header',
-        },
+    const extra = httpExtra({
+      headers: {
+        'x-organization-id': 'org-header',
+        'x-workspace-id': 'workspace-header',
+        'x-user-id': 'actor-header',
+        'mcp-session-id': 'sess-header',
       },
-    };
+    });
 
     expect(resolveRequestIdentity(extra)).toEqual({
       organizationId: 'org-header',
@@ -89,20 +110,18 @@ describe('resolveRequestIdentity', () => {
   });
 
   test('uses token claims over conflicting header claims', () => {
-    const extra: McpRequestExtra = {
+    const extra = httpExtra({
       authInfo: {
         extra: {
           organizationId: 'org-token',
           workspaceId: 'workspace-token',
         },
       },
-      requestInfo: {
-        headers: {
-          'x-organization-id': 'org-header',
-          'x-workspace-id': 'workspace-header',
-        },
+      headers: {
+        'x-organization-id': 'org-header',
+        'x-workspace-id': 'workspace-header',
       },
-    };
+    });
 
     expect(resolveRequestIdentity(extra)).toEqual({
       organizationId: 'org-token',
@@ -113,14 +132,14 @@ describe('resolveRequestIdentity', () => {
   });
 
   test('uses authInfo.sub as actor fallback', () => {
-    const extra: McpRequestExtra = {
+    const extra = httpExtra({
       authInfo: {
         sub: 'subject-99',
         extra: {
           organizationId: 'org-subject',
         },
       },
-    };
+    });
 
     expect(resolveRequestIdentity(extra)).toEqual({
       organizationId: 'org-subject',
@@ -182,14 +201,14 @@ describe('toIdentityContext', () => {
 describe('resolveRequestIdentityContext', () => {
   test('stdio prefers launch defaults over per-request claims', () => {
     const context = resolveRequestIdentityContext(
-      {
+      httpExtra({
         authInfo: {
           extra: {
             organizationId: 'org-request',
             workspaceId: 'workspace-request',
           },
         },
-      },
+      }),
       {
         mode: 'permissive',
         allowPerRequestOverride: true,
@@ -209,14 +228,14 @@ describe('resolveRequestIdentityContext', () => {
 
   test('stdio can use request claims when launch defaults are absent', () => {
     const context = resolveRequestIdentityContext(
-      {
+      httpExtra({
         authInfo: {
           extra: {
             organizationId: 'org-request',
             workspaceId: 'workspace-request',
           },
         },
-      },
+      }),
       {
         mode: 'permissive',
         allowPerRequestOverride: true,
@@ -231,14 +250,12 @@ describe('resolveRequestIdentityContext', () => {
 
   test('http prefers request claims over launch defaults', () => {
     const context = resolveRequestIdentityContext(
-      {
-        requestInfo: {
-          headers: {
-            'x-organization-id': 'org-header',
-            'x-workspace-id': 'workspace-header',
-          },
+      httpExtra({
+        headers: {
+          'x-organization-id': 'org-header',
+          'x-workspace-id': 'workspace-header',
         },
-      },
+      }),
       {
         mode: 'permissive',
         allowPerRequestOverride: true,
@@ -258,14 +275,12 @@ describe('resolveRequestIdentityContext', () => {
 
   test('http uses launch defaults when per-request overrides are disabled', () => {
     const context = resolveRequestIdentityContext(
-      {
-        requestInfo: {
-          headers: {
-            'x-organization-id': 'org-header',
-            'x-workspace-id': 'workspace-header',
-          },
+      httpExtra({
+        headers: {
+          'x-organization-id': 'org-header',
+          'x-workspace-id': 'workspace-header',
         },
-      },
+      }),
       {
         mode: 'permissive',
         allowPerRequestOverride: false,
@@ -285,14 +300,14 @@ describe('resolveRequestIdentityContext', () => {
 
   test('transport=both resolves stdio precedence when no headers are present', () => {
     const context = resolveRequestIdentityContext(
-      {
+      httpExtra({
         authInfo: {
           extra: {
             organizationId: 'org-request',
             workspaceId: 'workspace-request',
           },
         },
-      },
+      }),
       {
         mode: 'permissive',
         allowPerRequestOverride: true,
@@ -312,14 +327,12 @@ describe('resolveRequestIdentityContext', () => {
 
   test('transport=both resolves http precedence when request headers are present', () => {
     const context = resolveRequestIdentityContext(
-      {
-        requestInfo: {
-          headers: {
-            'x-organization-id': 'org-header',
-            'x-workspace-id': 'workspace-header',
-          },
+      httpExtra({
+        headers: {
+          'x-organization-id': 'org-header',
+          'x-workspace-id': 'workspace-header',
         },
-      },
+      }),
       {
         mode: 'permissive',
         allowPerRequestOverride: true,
@@ -339,14 +352,14 @@ describe('resolveRequestIdentityContext', () => {
 
   test('locked mode binds to launch defaults and flags override attempts', () => {
     const context = resolveRequestIdentityContext(
-      {
+      httpExtra({
         authInfo: {
           extra: {
             organizationId: 'org-request',
             workspaceId: 'workspace-request',
           },
         },
-      },
+      }),
       {
         mode: 'locked',
         allowPerRequestOverride: false,
@@ -366,7 +379,7 @@ describe('resolveRequestIdentityContext', () => {
 
   test('client profile prefers launch defaults over trusted metadata and request hint', () => {
     const context = resolveRequestIdentityContext(
-      {
+      httpExtra({
         authInfo: {
           extra: {
             clientFamily: 'codex',
@@ -374,13 +387,11 @@ describe('resolveRequestIdentityContext', () => {
             delegationProfile: 'spawn_agent_v1',
           },
         },
-        requestInfo: {
-          headers: {
-            'x-client-family': 'codex',
-            'x-client-id': 'codex-from-header',
-          },
+        headers: {
+          'x-client-family': 'codex',
+          'x-client-id': 'codex-from-header',
         },
-      },
+      }),
       {
         mode: 'permissive',
         allowPerRequestOverride: true,
@@ -406,7 +417,7 @@ describe('resolveRequestIdentityContext', () => {
 
   test('client profile uses trusted request metadata when launch defaults are absent', () => {
     const context = resolveRequestIdentityContext(
-      {
+      httpExtra({
         authInfo: {
           extra: {
             clientFamily: 'codex',
@@ -414,7 +425,7 @@ describe('resolveRequestIdentityContext', () => {
             clientVersion: '1.2.3',
           },
         },
-      },
+      }),
       {
         mode: 'permissive',
         allowPerRequestOverride: true,

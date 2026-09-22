@@ -636,7 +636,7 @@ export class FrameworkStateStore extends EventEmitter {
 
     // Emit events
     this.emit('framework-switched', previousFramework, request.targetFramework, switchReason);
-    this.emit('health-changed', this.getSystemHealth());
+    this.emit('health-changed', this.getSystemHealth(scope));
     this.announceFrameworkChanged(previousFramework, request.targetFramework, switchReason);
 
     return true;
