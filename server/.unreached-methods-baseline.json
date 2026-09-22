@@ -1,13 +1,12 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-22T06:01:27.719Z",
-  "total": 10,
+  "generatedAt": "2026-09-22T19:24:34.778Z",
+  "total": 9,
   "methods": [
     "EnhancedLogger.initLogFile",
     "ExecutionRecordStore.queryByChain",
     "ExecutionRecordStore.queryBySession",
     "GateAccumulator.getBySource",
-    "GateAccumulator.getEntries",
     "GateAccumulator.getEntry",
     "GateAccumulator.has",
     "GateStateStore.recordValidation",
@@ -17,7 +16,6 @@
   "reasons": {
     "GateStateStore.recordValidation": "kept per its own doc comment (gate-state-store.ts): the only caller, LightweightGateSystem.validateContent, was deleted with GateValidator when every criteria type moved to a pipeline stage, leaving getSystemHealth's totalValidations/successRate/lastValidationTime fields with no producer. Deleting the writer without the health fields would leave a reader describing a number nothing computes; revives when 20-gate-review-stage.ts wires in ground-truth results, or gets killed together with the health fields in a follow-up row (R36, P4.52, 2026-09-17).",
     "GateAccumulator.getBySource": "sole test-observation window for add()'s live dedup/priority-override contract at entry-source granularity; getAll() (live, id-only) can't express it (P4.52/R36)",
-    "GateAccumulator.getEntries": "sole test-observation window for add()'s live dedup/priority-override contract at entry-priority/metadata granularity; getAll() (live, id-only) can't express it (P4.52/R36)",
     "GateAccumulator.getEntry": "sole test-observation window for a single entry's live retryLimit metadata written by add(); getAll() (live, id-only) can't express it (P4.52/R36)",
     "GateAccumulator.has": "sole test-observation window for add()'s live existence-after-dedup contract; kept alongside getEntries/getEntry/getBySource for the same reason (P4.52/R36)",
     "EnhancedLogger.initLogFile": "reached only through a duck-typed cast the static walker can't resolve: runtime/context.ts calls `(logger as any).initLogFile()` behind a `typeof ... === 'function'` guard, for every logger `createLogger()` returns (P4.52, 2026-09-20).",
