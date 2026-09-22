@@ -91,11 +91,28 @@ bound for a delegated step that also carried gate text, so an ungated delegated 
 which is the same spelling as "not delegated". The text column records the REASON a delegated
 step's resume was or was not acceptable — `'ok' | 'trailer' | 'node-line' | 'node-mismatch'`, the
 enumeration `HANDOFF_EVIDENCE_REASONS` (`shared/types/handoff-evidence.ts`) owns and the column's
-`CHECK` repeats — for EVERY delegated step and in both evidence modes. NULL now means one thing:
-the step was not delegated. Its writer is a THIRD row type, distinct from the per-step and
+`CHECK` repeats — for EVERY delegated step and in both evidence modes. NULL means the row
+describes no capture: the step was not delegated, or the row is a render, a terminal, or a
+verdict-time row (below). Its writer is a THIRD row type, distinct from the per-step and
 terminal writers above: the capture-time `completed` row `StepCaptureService` appends when a chain
 resume captures real step output. Nullable with **no DDL DEFAULT**, for the reason
 `chain_run_nodes.origin` has none.
+
+**A verdict submitted on its own call is a FOURTH row type** (P4.86), also written by
+`StepCaptureService` — `ledgerSubmittedVerdict`. The server's retry prompt asks a client to answer
+a step and submit its verdict on a later call, and in that shape the step's `completed` row is
+already written, so `captureStep` returns early and no append fired at all: the verdict and its
+per-gate entries reached no record. The verdict now gets its own row for the same step, APPENDED —
+the earlier row is left byte for byte as it was, because this table is append-only per step and
+that row is the true record of what the step produced and when. A reader that wants the current
+picture resolves the LATEST record for the step, which is what `v_execution_history` already does
+per session through `MAX(execution_id)` over monotonic ULIDs. The row's `status` is the step's
+lifecycle as the call leaves it — `completed` when the verdict cleared the review,
+`input_required` (with an `input_required_json` naming the gate and the attempt) when it did not —
+and `gate_verdicts_json` carries the per-gate entries the submission resolved against the gates
+the review advertised. A verdict submitted with NO pending review (the deferred path) carries no
+per-gate entries: the numbered gate list a `[n] PASS` refers to is rendered from
+`pendingReview.gateIds`, so without a review the server never advertised one to index into.
 
 No migration was owed and none was written: `execution_records` is `ephemeral`, so the bump drops
 and recreates it, and no row written under the old name can reach v30 to be read under the new one.

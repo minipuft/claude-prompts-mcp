@@ -523,6 +523,88 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
     expect(typeof parsed[0]?.['timestamp']).toBe('number');
   });
 
+  /**
+   * P4.86: the SPLIT shape — the step is answered on one call and its verdict submitted on the
+   * next, which is what the retry prompt asks for after a failed review. The step's `completed`
+   * row was already written by the first call, so `captureStep` takes its early return and no
+   * append fired at all on the verdict call: the verdict, and its per-gate entries, reached no
+   * record. The verdict now gets its OWN row for the same step, appended rather than merged
+   * into the first, since the ledger is append-only per step.
+   */
+  const stepRows = (
+    sessionId: string
+  ): Array<{ step_number: number | null; status: string; gate_verdicts_json: string }> =>
+    db
+      .prepare(
+        `SELECT step_number, status, gate_verdicts_json FROM execution_records
+         WHERE session_id = ? AND status != 'working' ORDER BY execution_id ASC`
+      )
+      .all(sessionId) as Array<{
+      step_number: number | null;
+      status: string;
+      gate_verdicts_json: string;
+    }>;
+
+  const driveAnswerThenVerdict = async (verdict: string): Promise<string> => {
+    await pipeline.execute({ command: `>>draft --> >>review` });
+    const chainId = onlySession().chainId;
+    // Answer only. The review stays open, so the run does not advance.
+    await pipeline.execute({ chain_id: chainId, user_response: 'step 1 output' } as any);
+    // Verdict only, on its own call — the shape this row is about.
+    await pipeline.execute({ chain_id: chainId, gate_verdict: verdict } as any);
+    return onlySession().sessionId;
+  };
+
+  test('a verdict sent on its own call leaves its per-gate entries on a record', async () => {
+    const sessionId = await driveAnswerThenVerdict(passVerdict);
+
+    const rows = stepRows(sessionId);
+    // Two rows for step 1, in order: what it produced, then what was submitted about it. The
+    // first is left exactly as it was written — the ledger appends, it does not rewrite.
+    expect(rows.map((row) => [row.step_number, row.status])).toEqual([
+      [1, 'completed'],
+      [1, 'completed'],
+    ]);
+    expect(rows[0]?.gate_verdicts_json).toBe('[]');
+
+    const parsed = JSON.parse(rows[1]?.gate_verdicts_json ?? '[]') as Array<
+      Record<string, unknown>
+    >;
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0]).toMatchObject({ gateId: GATE_ID, verdict: 'PASS' });
+  });
+
+  test('a FAIL sent on its own call records the step as still owing its submitter', async () => {
+    const failVerdict = renderGateVerdict({
+      overall: 'FAIL',
+      rationale: 'the gate is not met',
+      per_gate: [{ index: 1, passed: false, rationale: 'no evidence of review' }],
+    });
+
+    const sessionId = await driveAnswerThenVerdict(failVerdict);
+
+    const rows = stepRows(sessionId);
+    expect(rows.map((row) => [row.step_number, row.status])).toEqual([
+      [1, 'completed'],
+      [1, 'input_required'],
+    ]);
+    const parsed = JSON.parse(rows[1]?.gate_verdicts_json ?? '[]') as Array<
+      Record<string, unknown>
+    >;
+    expect(parsed[0]).toMatchObject({ gateId: GATE_ID, verdict: 'FAIL' });
+  });
+
+  test('positive control: a second call carrying no verdict appends no verdict row', async () => {
+    // Same drive, same two calls, the `gate_verdict` argument removed — so the row asserted
+    // above is evidence about the verdict rather than about making a second call at all.
+    await pipeline.execute({ command: `>>draft --> >>review` });
+    const chainId = onlySession().chainId;
+    await pipeline.execute({ chain_id: chainId, user_response: 'step 1 output' } as any);
+    await pipeline.execute({ chain_id: chainId } as any);
+
+    expect(stepRows(onlySession().sessionId).map((row) => row.status)).toEqual(['completed']);
+  });
+
   test("positive control: a step answered with no verdict leaves its row's column at '[]'", async () => {
     // The absence asserted here is evidence only because the drive above — same chain, same
     // step, same row — does write entries. The single difference is the `gate_verdict` argument.

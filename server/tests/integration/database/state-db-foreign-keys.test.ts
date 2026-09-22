@@ -41,7 +41,8 @@ import * as path from 'node:path';
 import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 
 import { SqliteEngine } from '../../../src/infra/database/sqlite-engine.js';
-import { deleteVersionRows, saveVersion } from '../../../src/cli-shared/version-history.js';
+import { deleteVersionRows } from '../../../src/cli-shared/version-history.js';
+import { saveVersion } from '../../helpers/version-history-writer.js';
 import { STATE_DB_WRITER_PRAGMAS } from '../../../src/shared/utils/runtime-state-location.js';
 import { testScratchPath } from '../../helpers/scratch-path.js';
 

@@ -24,7 +24,10 @@ import type {
 } from '#shared/types/chain-session.js';
 import type { ChainSessionService, ToolResponse } from '#shared/types/index.js';
 import type { GateEnhancementService } from '../../../gates/services/gate-enhancement-service.js';
-import type { GateVerdictProcessor } from '../../../gates/services/gate-verdict-processor.js';
+import type {
+  GateVerdictProcessor,
+  VerdictProcessingResult,
+} from '../../../gates/services/gate-verdict-processor.js';
 import type {
   RemainderApplication,
   RemainderProcessor,
@@ -248,6 +251,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       sessionContext
     );
     if (deferredResult.earlyExit) {
+      await this.settleVerdict(context, sessionId, session, currentStepAtStart, deferredResult);
       await this.ensurePostAdvanceReview(context);
       this.logExit({ gateVerdict: 'deferred', handled: true });
       return;
@@ -265,6 +269,14 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       sessionContext
     );
     if (pendingResult.earlyExit) {
+      await this.settleVerdict(
+        context,
+        sessionId,
+        session,
+        currentStepAtStart,
+        deferredResult,
+        pendingResult
+      );
       await this.ensurePostAdvanceReview(context);
       this.logExit({ gateVerdict: 'pending-review', handled: true });
       return;
@@ -285,9 +297,51 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       }
     );
 
+    await this.settleVerdict(
+      context,
+      sessionId,
+      session,
+      currentStepAtStart,
+      deferredResult,
+      pendingResult
+    );
+
     await this.ensurePostAdvanceReview(context);
 
     this.logExit({ captured: true });
+  }
+
+  /**
+   * Close out this call's verdict handling, in the one order the two halves require.
+   *
+   * 1. **Ledger** the submitted verdict — a no-op unless this call carried one and captured
+   *    nothing, which is the two-call pattern the retry prompt asks for (P4.86). Before the
+   *    advance, so the record describes the step the verdict graded rather than the one the run
+   *    moves to.
+   * 2. **Advance**, for every result that decided one. Verdict processing decides an advance and
+   *    does not perform it, because advancing past a run's final node announces the run terminal
+   *    — and until that moved here, the announcement reached the client ahead of the
+   *    `step_complete` for the step being answered (P4.89).
+   *
+   * Both results are applied rather than one being picked: a deferred FAIL can create the review
+   * the pending path then answers in the same call, so both can carry an advance. A second
+   * advance is harmless — `advanceStep` no-ops on a node the run has already passed, which is
+   * also what makes this safe after `StepCaptureService` advanced the run itself.
+   */
+  private async settleVerdict(
+    context: ExecutionContext,
+    sessionId: string,
+    session: NonNullable<ReturnType<ChainSessionService['getSession']>>,
+    currentStepAtStart: number,
+    ...results: readonly VerdictProcessingResult[]
+  ): Promise<void> {
+    this.stepCaptureService.ledgerSubmittedVerdict(context, sessionId, session, currentStepAtStart);
+
+    for (const result of results) {
+      if (result.deferredAdvance !== undefined) {
+        await this.verdictProcessor.applyDeferredAdvance(context, result.deferredAdvance);
+      }
+    }
   }
 
   /**

@@ -14,7 +14,8 @@ import {
   resourceRoot,
   type ResourceLocation,
 } from '../../../src/cli-shared/resource-operations.js';
-import { loadHistory, saveVersion } from '../../../src/cli-shared/version-history.js';
+import { loadHistory } from '../../../src/cli-shared/version-history.js';
+import { saveVersion } from '../../helpers/version-history-writer.js';
 import type { ResourceValidationResult } from '../../../src/cli-shared/resource-validation.js';
 import { seedStateDbSchema } from '../../helpers/test-database.js';
 

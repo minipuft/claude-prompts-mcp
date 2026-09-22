@@ -50,6 +50,7 @@ import { StepExecutionStage } from '../../../src/engine/execution/pipeline/stage
 import { GateReviewStage } from '../../../src/engine/execution/pipeline/stages/20-gate-review-stage.js';
 import { ResponseFormattingStage } from '../../../src/engine/execution/pipeline/stages/21-formatting-stage.js';
 import { createFrameworkStateStore } from '../../../src/engine/frameworks/framework-state-store.js';
+import { renderGateVerdict } from '../../../src/engine/gates/core/gate-verdict-renderer.js';
 import { GateVerdictProcessor } from '../../../src/engine/gates/services/gate-verdict-processor.js';
 import { HookRegistry } from '../../../src/infra/hooks/index.js';
 import {
@@ -444,6 +445,55 @@ describe('chain lifecycle events reach their registered consumers', () => {
   test('an ungated run driven to terminal announces the whole sequence, complete last', async () => {
     await driveWholeChain();
 
+    expect(notificationSequence(mockServer)).toEqual([
+      'notifications/chain/step_complete',
+      'notifications/chain/step_complete',
+      'notifications/chain/complete',
+    ]);
+  });
+
+  /**
+   * P4.89. The final step of a GATED run: the client answers it and submits the verdict in one
+   * call, which is the shape the server's own footer advertises. The PASS clears the review and
+   * advances the run past its last node — and that advance is what announces `chain/complete`,
+   * while the step this call answered is not captured until afterwards.
+   *
+   * The review is set through the store's public API rather than produced by a gate stage: what
+   * is under test is the ORDER of two announcements, and a run standing on its final node with a
+   * review outstanding is exactly the state a rendered gated step leaves behind.
+   */
+  const passVerdict = renderGateVerdict({
+    overall: 'PASS',
+    rationale: 'step two meets the gate',
+    per_gate: [{ index: 1, passed: true, rationale: 'step-quality: satisfied' }],
+  });
+
+  const driveGatedFinalStep = async (): Promise<{ chainId: string }> => {
+    await pipeline.execute({ command: `>>draft ==> >>review` });
+    const { chainId, sessionId } = onlySession();
+    await pipeline.execute({ chain_id: chainId, user_response: 'step one output' } as never);
+    await sessionStore.setPendingGateReview(sessionId, {
+      combinedPrompt: 'Review step two for quality.',
+      gateIds: ['step-quality'],
+      prompts: [],
+      createdAt: Date.now(),
+      attemptCount: 0,
+      maxAttempts: 3,
+    });
+    await pipeline.execute({
+      chain_id: chainId,
+      user_response: 'step two output',
+      gate_verdict: passVerdict,
+    } as never);
+    return { chainId };
+  };
+
+  test('a gated final step announces its step_complete BEFORE chain/complete', async () => {
+    await driveGatedFinalStep();
+
+    // One value, not three counts: the defect was entirely positional, and every per-method
+    // assertion in this file stayed green while `chain/complete` sat in the middle of the run it
+    // reports the end of.
     expect(notificationSequence(mockServer)).toEqual([
       'notifications/chain/step_complete',
       'notifications/chain/step_complete',

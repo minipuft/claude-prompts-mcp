@@ -252,7 +252,7 @@ export class CategoryLifecycleProcessor {
         await fs.rmdir(located.categoryDir);
         directoryRemoved = true;
       }
-    } catch {
+    } catch (_error) {
       // Non-empty, already gone, or not removable. The declaration IS removed either way, and
       // the response below reports which of the two happened rather than asserting both.
     }

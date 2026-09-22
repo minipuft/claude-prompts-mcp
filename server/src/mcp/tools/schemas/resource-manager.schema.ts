@@ -132,6 +132,17 @@ const executionStepSchema = z.strictObject({
  * offers them either. A bare string is no longer accepted here: it only ever existed to
  * populate `required_patterns`. Author a reminder sentence into `guidance` instead, or use
  * `shell_verify`/`script_tool` for a real check.
+ *
+ * `description` is NOT declared, and that is a ruling rather than an omission (P4.103). Two
+ * fixtures sent one and believed they had written it; the strip default meant neither the write
+ * nor the read said otherwise. Searched before deciding, with a positive control — `shell_command`
+ * has 18 reader sites under `engine/gates/`, a per-criterion `description` has zero, no bundled
+ * `gate.yaml` declares one, and the per-gate `description` in the skills-sync manifest is a
+ * different field. Nothing consumes it, so declaring it would publish a key that goes nowhere.
+ * A criterion's prose belongs in the gate's `guidance`, which IS rendered to the reviewer.
+ * *(as of 2026-09-21 · flips when something READS a per-criterion description — the engine's
+ * criteria summary, a manifest, or a renderer — at which point declare it here and in
+ * `gate-schema.ts` together.)*
  */
 export const gatePassCriteriaSchema = z.strictObject({
   type: z
@@ -502,6 +513,12 @@ export const resourceManagerInputSchema = z
      * so setting `severity` alone stays sufficient for the common case.
      */
     enforcement_mode: z.enum(['blocking', 'advisory', 'informational']).optional(),
+    /**
+     * [Gate] Withhold the step output when this gate is marked FAIL, returning the gate review
+     * in its place. Same preservation class as `severity`/`enforcement_mode`: omitted on update
+     * the existing value is carried forward, and an explicit `false` clears it.
+     */
+    block_response_on_fail: z.boolean().optional(),
     /** [Gate] Gate guidance content. */
     guidance: z.string().optional(),
     /** [Gate] Structured pass criteria definitions — see `gatePassCriteriaSchema` above. */
