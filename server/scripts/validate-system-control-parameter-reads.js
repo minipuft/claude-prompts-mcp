@@ -391,6 +391,7 @@ export class DemoHandler extends Base {
     const operation = args.operation;
     switch (operation) {
       case 'enable':
+        this.note("'persist' is named here, in the enable case, and read nowhere");
         return this.enable({ reason: args.reason${persistOnEnable ? ', persist: args.persist' : ''} });
       case 'disable':
         return this.disable({ reason: args.reason, persist: (args as { persist?: boolean }).persist });
