@@ -33,6 +33,8 @@ import type { PhaseGuardsConfig } from '#shared/types/core-config.js';
 import type { FrameworkGuideProvider } from '../../../frameworks/declared-sections.js';
 import type { ExecutionContext } from '../../context/index.js';
 
+import { isRunComplete } from '#shared/types/chain-session.js';
+
 /** Sentinel gate ID used for phase-guard-created pending reviews. */
 export const PHASE_GUARD_GATE_ID = '__phase_guard__';
 
@@ -229,6 +231,15 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
         ...context.sessionContext,
         pendingReview: review,
       };
+    }
+
+    // Stage 18 latched completion before this review existed: on the final step the capture has
+    // already walked the run past its last node. The latch is `isRunComplete`, which an
+    // outstanding review holds open, so it is read again here, where its input just changed —
+    // otherwise this one reply says both "complete" and "awaiting your verdict" (P4.119 / R96).
+    if (context.state.session.chainComplete === true) {
+      const run = this.chainSessionStore.getSession(sessionId, context.getScopeOptions());
+      context.state.session.chainComplete = run !== undefined && isRunComplete(run);
     }
 
     this.logExit({

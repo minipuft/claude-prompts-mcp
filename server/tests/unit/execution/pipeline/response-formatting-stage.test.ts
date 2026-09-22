@@ -89,7 +89,9 @@ describe('ResponseFormattingStage', () => {
 
     const text = context.response?.content[0].text ?? '';
     expect(text).toContain('✓ Chain complete (2/2)');
-    expect(text).toContain('Next: Chain complete. No user_response needed.');
+    // R96: one payload states one state — a finished run carries no `Next:` line.
+    expect(text).not.toContain('Next:');
+    expect(text).toContain('Chain execution complete');
   });
 
   test('passes simple prompt content through response formatter when no session data is present', async () => {

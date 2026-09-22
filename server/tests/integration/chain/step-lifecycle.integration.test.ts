@@ -485,7 +485,9 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
     expect(session.runStatus).toBe('completed');
     expect(session.state.currentNodeId).toBeNull();
     expect(texts[3]).toContain('✓ Chain complete (2/2)');
-    expect(texts[3]).toContain('No user_response needed');
+    expect(texts[3]).toContain('Chain execution complete');
+    // R96: the reply that says complete offers no next step.
+    expect(texts[3]).not.toContain('Next:');
   });
 
   test('the footer does not claim completion while the final step still owes a verdict', async () => {
@@ -498,6 +500,10 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
     expect(atFinalStep).not.toContain('Chain complete');
     expect(atFinalStep).not.toContain('No user_response needed');
     expect(atFinalStep).toContain('Final step 2/2');
+    // R96 (P4.119): the final step's review is the whole call to action — no `Next:` line
+    // inviting another step. CONTROL: the mid-run reply before it keeps its `Next:`.
+    expect(atFinalStep).not.toContain('Next:');
+    expect(texts[1]).toContain('Next: chain_id=');
     expect(atFinalStep).toContain('awaiting gate verdict');
     expect(atFinalStep).toContain('gate_verdict');
 

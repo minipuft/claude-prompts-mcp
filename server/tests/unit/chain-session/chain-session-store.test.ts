@@ -370,6 +370,32 @@ describe('ChainSessionStore — run-status lifecycle (Tier 2)', () => {
     expect(isRunComplete(session)).toBe(true);
   });
 
+  /**
+   * P4.119 / R96. The phase guard can open a review on the final step after the capture already
+   * latched the run `completed`. A run with a review outstanding is not finished: a resume must
+   * reach it so the verdict can land, and the reply must not call it complete.
+   */
+  test('a completed run with a review outstanding does not read as complete', async () => {
+    manager = newManager('complete-review-outstanding');
+    await manager.createSession('s1', 'chain-a', 1);
+    await manager.advanceStep('s1', 'n1');
+    const session = (manager as any).activeSessions.get('s1');
+    expect(session.runStatus).toBe('completed');
+    // CONTROL: with nothing outstanding the same run is complete.
+    expect(isRunComplete(session)).toBe(true);
+
+    await manager.setPendingGateReview('s1', {
+      combinedPrompt: 'Sections are too short.',
+      gateIds: ['__phase_guard__'],
+      prompts: [],
+      createdAt: Date.now(),
+      attemptCount: 0,
+      maxAttempts: 2,
+    });
+
+    expect(isRunComplete(session)).toBe(false);
+  });
+
   test('cancelChain refuses sessions in completed or failed terminal states', async () => {
     manager = newManager('cancel-refuse');
     for (const terminal of ['completed', 'failed'] as const) {

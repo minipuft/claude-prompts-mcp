@@ -450,14 +450,16 @@ export class ResponseAssembler {
     // printed "✓ Chain complete (N/N) · No user_response needed" while the run was still
     // `working`, so a client that obeyed the banner never sent the call that finished it.
     const isComplete = this.isRunLatchedComplete(context);
+    let awaitingFinalVerdict = false;
 
     if (sessionContext.currentStep && sessionContext.totalSteps) {
       const normalizedStep = Math.min(sessionContext.currentStep, sessionContext.totalSteps);
       const progress = `${normalizedStep}/${sessionContext.totalSteps}`;
       const onFinalStep = normalizedStep === sessionContext.totalSteps;
+      awaitingFinalVerdict = !isComplete && onFinalStep && hasPendingReview;
       if (isComplete) {
         lines.push(`✓ Chain complete (${progress})`);
-      } else if (onFinalStep && hasPendingReview) {
+      } else if (awaitingFinalVerdict) {
         // The one state whose text changes: still the final step, still owing a verdict.
         // "step N/N" keeps the downstream step-indicator regexes matching (hooks/lib
         // /session_state.py and the opencode mirror both key on step|progress + N/N).
@@ -484,17 +486,17 @@ export class ResponseAssembler {
       lines.push(
         `Next: chain_id="${chainIdentifier}", gate_action="resume" | gate_action="accept_alternative" (with remainder) | gate_action="abort"`
       );
+    } else if (isComplete || awaitingFinalVerdict) {
+      // One payload states one state (R96). A finished run has no next step, and a run holding
+      // its FINAL step for a verdict has none either: the review above says how to answer it,
+      // and a `Next:` asking for more step output would invite a step the run does not have.
     } else if (hasPendingReview) {
       // Gate review (only when not delegating)
       lines.push(
         `Next: chain_id="${chainIdentifier}", user_response="<your step output>", gate_verdict="GATE_REVIEW: PASS|FAIL - <why>"`
       );
     } else if (sessionContext.currentStep && sessionContext.totalSteps) {
-      if (isComplete) {
-        lines.push('Next: Chain complete. No user_response needed.');
-      } else {
-        lines.push(`Next: chain_id="${chainIdentifier}", user_response="<your step output>"`);
-      }
+      lines.push(`Next: chain_id="${chainIdentifier}", user_response="<your step output>"`);
     }
 
     return lines.join('\n');
