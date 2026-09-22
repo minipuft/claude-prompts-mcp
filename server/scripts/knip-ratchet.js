@@ -376,7 +376,7 @@ async function handleUpdateBaseline(argv) {
   let previousBaseline = null;
   try {
     previousBaseline = await loadBaselineOrThrow();
-  } catch {
+  } catch (_error) {
     // Keep the pre-initialized null.
   }
 

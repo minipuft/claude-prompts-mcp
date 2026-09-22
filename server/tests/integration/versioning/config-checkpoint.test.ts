@@ -133,6 +133,35 @@ describe('a config write is recorded as a version', () => {
     expect(rows()).toHaveLength(3);
   });
 
+  // P4.114 — the row number has to leave the writer, or a `system_control` toggle cannot name it.
+  // Driven through `SafeConfigWriter`, the object the MCP persist paths hold, rather than through
+  // `setConfigValueRecorded`, because the plumbing under test is the writer's own result shape.
+  it('SafeConfigWriter reports the version its write recorded, and why when it records none', async () => {
+    const { createSafeConfigWriter } = await import('../../../src/mcp/tools/config-utils.js');
+    const writer = createSafeConfigWriter(
+      {
+        info: () => undefined,
+        warn: () => undefined,
+        error: () => undefined,
+        debug: () => undefined,
+      } as never,
+      { loadConfig: () => Promise.resolve() } as never,
+      configPath
+    );
+
+    const changed = await writer.updateConfigValue('gates.enabled', 'false');
+    expect(changed.success).toBe(true);
+    expect(changed.recordedVersion).toBe(2);
+    expect(changed.recordedReason).toBeUndefined();
+
+    // The other half: a write that changes nothing records no row and says so by reason. Without
+    // it, a writer that always reported `recordedVersion: 2` would satisfy the assertion above.
+    const repeat = await writer.updateConfigValue('gates.enabled', 'false');
+    expect(repeat.success).toBe(true);
+    expect(repeat.recordedVersion).toBeUndefined();
+    expect(repeat.recordedReason).toContain('already matches version 2');
+  });
+
   it('writes no .backup.<ts> file beside the config', async () => {
     await setConfigValueRecorded(workspace, 'gates.enabled', 'false');
     await setConfigValueRecorded(workspace, 'gates.enabled', 'true');

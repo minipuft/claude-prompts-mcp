@@ -488,6 +488,31 @@ Standard JSON Schema. Required params trigger `schema_match`:
 }
 ```
 
+### output-schema.json (optional)
+
+The shape the script writes to stdout, in the same JSON Schema dialect, read from
+`output-schema.json` beside `schema.json` unless `outputSchemaFile:` names another path. It is
+**enforced, not documentation**: output missing a required field, or carrying one of the wrong
+declared type, fails the run with a message naming the tool and the fields.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "word_count": { "type": "number" },
+    "status": { "type": "string" }
+  },
+  "required": ["word_count"]
+}
+```
+
+Declaring one is optional. Returning JSON is not: **a script tool must write a JSON value to
+stdout**, whether or not it declares a shape. Empty stdout, or text that does not parse as JSON,
+fails the run and names the tool — print diagnostics to stderr instead. Until this was enforced,
+unparseable stdout arrived as `{ "output": "<the text>" }` and was reported as success, so a
+script that printed a traceback, or a debug line before its payload, looked like a tool that had
+returned a value while every `{{script:id.field}}` rendered empty.
+
 ---
 
 ## Best Practices
@@ -508,17 +533,18 @@ Scripts run like npm/pip packages: you trust the author. Version-control and cod
 
 ### Protections
 
-| Protection             | What It Does                                              |
-| ---------------------- | --------------------------------------------------------- |
-| Process isolation      | Separate subprocess per script                            |
-| Timeout                | Default 30s, max 5min — kills runaway scripts             |
-| Working directory      | Locked to tool folder                                     |
-| Env filtering          | Only safe vars inherited (no leaked API keys)             |
-| Input validation       | JSON Schema checked before execution                      |
-| Auto-execute whitelist | Only approved MCP tools can trigger                       |
-| Auto-execute params    | Refused by name if the tool does not declare them         |
-| Auto-execute schema    | Validated against the same schema an MCP client's call is |
-| Auto-execute result    | A refusal fails the run; it is never reported as success  |
+| Protection             | What It Does                                                         |
+| ---------------------- | -------------------------------------------------------------------- |
+| Process isolation      | Separate subprocess per script                                       |
+| Timeout                | Default 30s, max 5min — kills runaway scripts                        |
+| Working directory      | Locked to tool folder                                                |
+| Env filtering          | Only safe vars inherited (no leaked API keys)                        |
+| Input validation       | JSON Schema checked before execution                                 |
+| Auto-execute whitelist | Only approved MCP tools can trigger                                  |
+| Auto-execute params    | Refused by name if the tool does not declare them                    |
+| Auto-execute schema    | Validated against the same schema an MCP client's call is            |
+| Auto-execute result    | A refusal fails the run; it is never reported as success             |
+| Script output          | Must be JSON, and must match `output-schema.json` if one is declared |
 
 ### Auto-execute parameters are checked, not forwarded
 
@@ -661,7 +687,9 @@ Scripts are searched in priority order:
 1. **Prompt-local**: `resources/prompts/{category}/{prompt}/tools/{script_id}/`
 2. **Workspace**: `resources/scripts/{script_id}/`
 
-First match wins. Prompt-local scripts take priority.
+First match wins. Prompt-local scripts take priority. This two-tier search is the inline route's
+alone — the auto-execute route reads only tier 1, for the reason given under
+[Auto-Execute vs Inline References](#comparison-auto-execute-vs-inline-references).
 
 `tools/` is **reserved**: no prompt is served from below it. A `prompt.yaml` placed there is
 ignored by the prompt loader, by the resource index, and by the startup change report alike,
@@ -716,7 +744,18 @@ Analysis for {{name}}: {{script:analyzer user='{{name}}'}}
 | MCP chaining   | Yes (`auto_execute`) | No                             |
 | `confirm`      | Held for approval    | Refuses; raises until approved |
 | Error behavior | Validation result    | Blocking exception             |
+| Script source  | Prompt-local only    | Prompt-local, then workspace   |
 | Use case       | Wizard workflows     | Data injection                 |
+
+**A workspace script (`resources/scripts/{id}/`) is reachable only by inline reference.** The
+auto-execute route reads the tools a prompt loaded from its own `tools/` directory, so a workspace
+script never schema-matches, never appears as `{{tool_<id>}}`, and can never emit an
+`auto_execute` block that runs. This is a real limit, not an oversight of the loader: auto-execute
+lets a script's stdout choose a resource mutation's parameters, and the prompt-local rule is what
+ties that authority to the prompt the operator invoked. A workspace script is shared by every
+prompt on the server, so there is no one prompt whose invocation authorizes it. To give a script
+auto-execute, install it under the owning prompt's `tools/` directory and declare it in that
+prompt's `tools:` list.
 
 Both routes honor `execution.confirm`, but they express it differently: the declarative
 route holds the tool as pending and lets the rest of the prompt render, while an inline

@@ -10,7 +10,8 @@ import {
   resourceExists,
   resolveResourceDir,
 } from '../../../src/cli-shared/resource-scaffold.js';
-import { loadHistory, saveVersion } from '../../../src/cli-shared/version-history.js';
+import { loadHistory } from '../../../src/cli-shared/version-history.js';
+import { saveVersion } from '../../helpers/version-history-writer.js';
 import { seedStateDbSchema } from '../../helpers/test-database.js';
 
 describe('resource-scaffold', () => {

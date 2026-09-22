@@ -310,7 +310,7 @@ function collectGroupedIds(groupDir: string, entryPointName: string, ids: Set<st
         ids.add(child.name);
       }
     }
-  } catch {
+  } catch (_error) {
     // Group directory unreadable — skip
   }
 }

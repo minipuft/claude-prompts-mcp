@@ -47,7 +47,6 @@ class StubTextReferenceStore {
   storeChainStepResult = jest.fn();
   buildChainVariables = jest.fn().mockReturnValue({});
   clearChainStepResults = jest.fn();
-  getChainStepMetadata = jest.fn().mockReturnValue({});
 }
 
 /** The first word of a SQL statement, upper-cased — `SELECT`, `DELETE`, `INSERT`, `BEGIN`. */

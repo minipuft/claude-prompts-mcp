@@ -118,6 +118,13 @@ export class GateDiscoveryProcessor {
     // property cannot distinguish an authored 'custom' from no declaration at all.
     const gateTypeLine =
       definition.gate_type !== undefined ? `\n  - Classification: ${definition.gate_type}` : '';
+    // P4.100 — same class again, and the one with the largest consequence to read back: this key
+    // decides whether a FAIL withholds the step output. Rendered from the raw definition, and
+    // only when declared, so an authored `false` is distinguishable from silence.
+    const blockResponseLine =
+      definition.blockResponseOnFail !== undefined
+        ? `\n  - Blocks Response On Fail: ${String(definition.blockResponseOnFail)}`
+        : '';
 
     // Announce the fallback. The served definition is correct and the operator asked about it —
     // but if a file for the same id failed to load, their edit to that file is inert, and nothing
@@ -135,7 +142,7 @@ export class GateDiscoveryProcessor {
         `  - ID: ${gate.gateId}\n` +
         `  - Type: ${typeIcon} ${gate.type}\n` +
         `  - Description: ${gate.description}` +
-        `${severityLine}${enforcementModeLine}${gateTypeLine}\n\n` +
+        `${severityLine}${enforcementModeLine}${gateTypeLine}${blockResponseLine}\n\n` +
         `📝 Guidance:\n${guidancePreview}` +
         shadowedNote
     );

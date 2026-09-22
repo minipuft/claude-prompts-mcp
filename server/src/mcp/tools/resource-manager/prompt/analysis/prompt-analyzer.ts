@@ -131,25 +131,18 @@ export class PromptAnalyzer {
   }
 
   /**
-   * Detect execution type from prompt structure
+   * Detect execution type from prompt structure.
+   *
+   * The single owner of this question: `GateAnalyzer` reads it rather than deriving its own.
    */
   detectExecutionType(prompt: ConvertedPrompt): 'single' | 'chain' {
-    if (prompt.chainSteps && prompt.chainSteps.length > 0) {
-      return 'chain';
-    }
-
-    const hasTemplateVars = /\{\{.*?\}\}/g.test(prompt.userMessageTemplate || '');
-    const hasComplexArgs = (prompt.arguments?.length || 0) > 2;
-
-    if (hasTemplateVars || hasComplexArgs) {
-      return 'single';
-    }
-
-    return 'single';
+    return prompt.chainSteps && prompt.chainSteps.length > 0 ? 'chain' : 'single';
   }
 
   /**
-   * Analyze prompt complexity
+   * Analyze prompt complexity.
+   *
+   * The single owner of this question: `GateAnalyzer` reads `level` rather than deriving its own.
    */
   analyzeComplexity(prompt: ConvertedPrompt): {
     level: 'low' | 'medium' | 'high';
@@ -192,29 +185,5 @@ export class PromptAnalyzer {
     }
 
     return { level, factors, score };
-  }
-
-  /**
-   * Check if prompt requires framework support
-   */
-  requiresFramework(prompt: ConvertedPrompt): boolean {
-    const complexity = this.analyzeComplexity(prompt);
-
-    // Chain prompts typically benefit from framework guidance
-    if (prompt.chainSteps && prompt.chainSteps.length > 0) {
-      return true;
-    }
-
-    // Complex templates with many arguments
-    if (complexity.level === 'high') {
-      return true;
-    }
-
-    // Complex system messages suggest structured analysis
-    if (prompt.systemMessage && prompt.systemMessage.length > 200) {
-      return true;
-    }
-
-    return false;
   }
 }

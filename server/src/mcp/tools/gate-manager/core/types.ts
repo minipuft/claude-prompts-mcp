@@ -45,6 +45,12 @@ export interface GateManagerInput {
   severity?: 'critical' | 'high' | 'medium' | 'low';
   /** Enforcement mode override; absent, the loader derives it from `severity`. */
   enforcementMode?: 'blocking' | 'advisory' | 'informational';
+  /**
+   * Withhold the step output when this gate is marked FAIL, returning the gate review in its
+   * place. Same `PRESERVED_GATE_YAML_KEYS` route as `severity`/`enforcementMode`: supplied it is
+   * written, omitted it is carried forward. An explicit `false` is a value, not an omission.
+   */
+  blockResponseOnFail?: boolean;
   description?: string;
   /**
    * Free kebab-case tag naming what this gate reminds about (e.g. `code-quality`). An
@@ -137,4 +143,6 @@ export interface GateCreationData {
   gate_type?: GateManagerInput['gate_type'];
   /** Same class as `severity`/`enforcementMode` above — settable half of `PRESERVED_GATE_YAML_KEYS`. */
   subject?: GateManagerInput['subject'];
+  /** Same class again (P4.100): the key that makes a gate withhold the step output on a FAIL. */
+  blockResponseOnFail?: GateManagerInput['blockResponseOnFail'];
 }

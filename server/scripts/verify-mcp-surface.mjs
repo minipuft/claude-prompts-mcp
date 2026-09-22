@@ -311,7 +311,7 @@ async function waitForHealth(baseUrl) {
     try {
       const response = await fetch(`${baseUrl}/health`);
       if (response.ok) return Date.now() - started;
-    } catch {
+    } catch (_error) {
       // Server still binding.
     }
     await new Promise((resolve) => setTimeout(resolve, 150));
@@ -326,7 +326,7 @@ function parseRpcBody(body) {
     if (trimmed.startsWith('data:')) {
       try {
         return JSON.parse(trimmed.slice(5).trim());
-      } catch {
+      } catch (_error) {
         // Not the payload frame.
       }
     }

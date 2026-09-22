@@ -43,7 +43,6 @@ class StubTextReferenceStore {
   storeChainStepResult = jest.fn();
   buildChainVariables = jest.fn().mockReturnValue({});
   clearChainStepResults = jest.fn();
-  getChainStepMetadata = jest.fn().mockReturnValue({});
 }
 
 const nodes = (...specs: Array<[string, string, string]>): ChainNode[] =>

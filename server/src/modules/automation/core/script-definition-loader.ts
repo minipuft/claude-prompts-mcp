@@ -301,7 +301,10 @@ export class ScriptToolDefinitionLoader {
       }
 
       // Inline referenced files
-      const { inputSchema, descriptionContent } = this.loadReferencedFiles(toolDir, yamlDefinition);
+      const { inputSchema, outputSchema, descriptionContent } = this.loadReferencedFiles(
+        toolDir,
+        yamlDefinition
+      );
 
       // Validate if enabled
       if (this.validateOnLoad) {
@@ -347,6 +350,7 @@ export class ScriptToolDefinitionLoader {
         ...(yamlDefinition.enabled !== undefined && { enabled: yamlDefinition.enabled }),
         ...(yamlDefinition.env !== undefined && { env: yamlDefinition.env }),
         ...(yamlDefinition.workingDir !== undefined && { workingDir: yamlDefinition.workingDir }),
+        ...(outputSchema !== undefined && { outputSchema }),
       };
 
       if (this.debug) {
@@ -373,8 +377,13 @@ export class ScriptToolDefinitionLoader {
   private loadReferencedFiles(
     toolDir: string,
     definition: ScriptToolYaml
-  ): { inputSchema: JSONSchemaDefinition; descriptionContent: string | undefined } {
+  ): {
+    inputSchema: JSONSchemaDefinition;
+    outputSchema: JSONSchemaDefinition | undefined;
+    descriptionContent: string | undefined;
+  } {
     let inputSchema: JSONSchemaDefinition = { type: 'object', properties: {} };
+    let outputSchema: JSONSchemaDefinition | undefined = undefined;
     let descriptionContent: string | undefined = undefined;
 
     // Load schema.json
@@ -395,6 +404,19 @@ export class ScriptToolDefinitionLoader {
       process.stderr.write(`[ScriptToolDefinitionLoader] No schema.json found at ${schemaPath}\n`);
     }
 
+    // Load output-schema.json. Absent by default: a tool that declares no output shape is
+    // still required to return JSON, just not a particular JSON.
+    const outputSchemaPath = join(toolDir, definition.outputSchemaFile ?? 'output-schema.json');
+    if (existsSync(outputSchemaPath)) {
+      try {
+        outputSchema = JSON.parse(readFileSync(outputSchemaPath, 'utf-8')) as JSONSchemaDefinition;
+      } catch (error) {
+        process.stderr.write(
+          `[ScriptToolDefinitionLoader] Failed to parse ${outputSchemaPath}: ${String(error)}\n`
+        );
+      }
+    }
+
     // Load description.md
     const descPath = join(toolDir, definition.descriptionFile ?? 'description.md');
     if (existsSync(descPath)) {
@@ -412,7 +434,7 @@ export class ScriptToolDefinitionLoader {
       }
     }
 
-    return { inputSchema, descriptionContent };
+    return { inputSchema, outputSchema, descriptionContent };
   }
 
   /**

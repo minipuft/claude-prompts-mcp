@@ -4,6 +4,7 @@ import { handoffNodeToken } from '../delegation/handoff-contract.js';
 import { DelegationRenderer } from '../delegation/renderer.js';
 import { getHandoffFooterInstruction } from '../delegation/strategy.js';
 import { isUnknownInterruptPending } from '../pipeline/decisions/index.js';
+import { isFrameworkInjected } from '../pipeline/decisions/injection/index.js';
 import { PHASE_GUARD_GATE_ID } from '../pipeline/stages/19-phase-guard-verification-stage.js';
 
 import type { DeclaredSection } from '#engine/frameworks/declared-sections.js';
@@ -280,15 +281,85 @@ export class ResponseAssembler {
     sections.push('');
     sections.push('**To proceed**: Address the gate criteria and resubmit with `gate_verdict`.');
 
-    const chainId = context.sessionContext?.chainId;
-    if (chainId !== undefined && chainId !== '') {
+    // The retry budget, from the counter the ordinary review footer reads (P4.101). A blocked
+    // reply is the one place a caller cannot see it any other way: the block returns before
+    // `buildGateReviewCTA`, so a loop bounded at five attempts showed no remaining count at all
+    // and a client had nothing to stop on but the exhaustion notification.
+    const attempt = this.resolveAttemptCounter(context);
+    if (attempt !== undefined) {
+      const remaining = Math.max(attempt.max - attempt.current, 0);
       sections.push('');
       sections.push(
-        `Resume: \`chain_id="${chainId}", gate_verdict="GATE_REVIEW: PASS|FAIL - <reason>"\``
+        `**Attempt ${attempt.current} of ${attempt.max}** — ${remaining} ${
+          remaining === 1 ? 'attempt remains' : 'attempts remain'
+        } after this one.`
       );
     }
 
+    const chainId = context.sessionContext?.chainId;
+    if (chainId !== undefined && chainId !== '') {
+      sections.push('');
+      sections.push(this.buildBlockedResubmitBlock(context, chainId));
+    }
+
     return sections.join('\n');
+  }
+
+  /**
+   * Where this call stands in the gate's retry budget, or `undefined` when no review is pending.
+   *
+   * ONE reader of `pendingReview.attemptCount`/`maxAttempts` for both the review footer and the
+   * blocked reply, so the two cannot disagree about which attempt a caller is on. The `+1` and
+   * the clamp are the footer's own arithmetic: `attemptCount` is how many attempts have been
+   * CONSUMED, so the attempt now in the caller's hands is the next one, and it never reads past
+   * the ceiling on the call that exhausts it.
+   *
+   * `maxAttempts <= 1` answers `undefined`: "attempt 1 of 1" is not a budget, and the footer
+   * omits the counter in that state for the same reason.
+   */
+  private resolveAttemptCounter(
+    context: ExecutionContext
+  ): { current: number; max: number } | undefined {
+    const pendingReview = context.sessionContext?.pendingReview;
+    if (pendingReview === undefined || pendingReview.maxAttempts <= 1) {
+      return undefined;
+    }
+    return {
+      current: Math.min(pendingReview.attemptCount + 1, pendingReview.maxAttempts),
+      max: pendingReview.maxAttempts,
+    };
+  }
+
+  /**
+   * The resubmit instruction a blocked reply ends on — structured form first, legacy string after.
+   *
+   * Until P4.101 this was one line offering the legacy string and nothing else, while the
+   * ordinary review footer had been offering the schema-validated object form since the object
+   * form existed. A caller blocked on a gate was therefore steered into the one submission shape
+   * that can fail to parse, on the reply where getting it wrong costs an attempt.
+   *
+   * Falls back to the bare resume line when no review is pending — there is no gate list to key
+   * a template to, and inventing an empty one would advertise a shape the caller cannot fill.
+   */
+  private buildBlockedResubmitBlock(context: ExecutionContext, chainId: string): string {
+    const pendingReview = context.sessionContext?.pendingReview;
+    if (pendingReview === undefined) {
+      return `Resume: \`chain_id="${chainId}", gate_verdict="GATE_REVIEW: PASS|FAIL - <reason>"\``;
+    }
+
+    const structuredTemplate = this.buildStructuredVerdictTemplate(
+      pendingReview.gateIds,
+      pendingReview.prompts,
+      this.resolveGateTiers(context),
+      this.resolveCheckResults(context)
+    );
+
+    return (
+      `Resume:\n\n\`\`\`\nchain_id="${chainId}"\ngate_verdict=${structuredTemplate}\n\`\`\`\n\n` +
+      'Set `"overall": "FAIL"` and say what needs improvement if the gates are still not met. ' +
+      'Rationales are single-line.\n\n' +
+      'A legacy string form is still accepted: `gate_verdict="GATE_REVIEW: PASS - [assessment]"`.'
+    );
   }
 
   /**
@@ -745,10 +816,12 @@ export class ResponseAssembler {
     }
 
     const chainId = context.sessionContext?.chainId ?? '';
-    const attemptInfo =
-      pendingReview.maxAttempts > 1
-        ? ` (attempt ${Math.min(pendingReview.attemptCount + 1, pendingReview.maxAttempts)}/${pendingReview.maxAttempts})`
-        : '';
+    // Same counter the blocked reply reads (`resolveAttemptCounter`), rendered in this footer's
+    // own long-standing `N/M` shorthand. One source of the numbers, two renderings — a second
+    // computation here is how the two surfaces would come to disagree about which attempt a
+    // caller is on.
+    const attempt = this.resolveAttemptCounter(context);
+    const attemptInfo = attempt !== undefined ? ` (attempt ${attempt.current}/${attempt.max})` : '';
 
     const isPhaseGuardReview = pendingReview.gateIds?.includes(PHASE_GUARD_GATE_ID) === true;
     const hasOtherGates = pendingReview.gateIds?.some((id) => id !== PHASE_GUARD_GATE_ID) ?? false;
@@ -1111,14 +1184,20 @@ export class ResponseAssembler {
    *    will never be graded against them would spend tokens for nothing.
    * 3. No framework resolves, or the resolved framework declares no guarded phases — `provider()`
    *    itself returns `[]` for both, so no separate check is needed.
-   * 4. The framework's system prompt was NOT injected for this execution — the prompt author
-   *    wrote `injection.system-prompt.enabled: false`, or a modifier suppressed it. Telling a
-   *    prompt that opted out of a framework to emit that framework's headers "verbatim; they
-   *    are graded structurally" states two things that are not true of it: it was not given the
-   *    framework, and on this path nothing grades it. Read from `state.injection`, the decision
-   *    `InjectionDecisionService` wrote at stage 14 — the same decision that withheld the
-   *    framework preamble from the very response this block would be appended to, never a
-   *    second derivation of it.
+   * 4. The prompt DECLINED the framework — the author wrote
+   *    `injection.system-prompt.enabled: false`, or a modifier suppressed it. Telling a prompt
+   *    that opted out of a framework to emit that framework's headers "verbatim; they are graded
+   *    structurally" states two things that are not true of it: it was not given the framework,
+   *    and on this path nothing grades it.
+   *
+   *    Judged by `isFrameworkInjected`, the SAME predicate the step's framework gates are
+   *    resolved with (`gate-enhancement-service.ts`), not by `state.injection.systemPrompt.inject`
+   *    as it was until now. Those answer different questions: the state field says whether the
+   *    system prompt was EMITTED THIS TURN, which frequency rules ("once per session") make false
+   *    for a prompt that never declined anything — and then the block is withheld from a prompt
+   *    stage 19 still grades, which is the "blocked on a contract it was never shown" shape this
+   *    condition exists to prevent, pointed the other way. One decision, both halves: the chain
+   *    surface reads the same predicate for its own opt-out.
    *
    * Condition 4 is deliberately NOT mirrored onto the chain surface
    * (`chain-operator-executor.resolveDeclaredSections`), which documents the opposite ruling for
@@ -1142,7 +1221,12 @@ export class ResponseAssembler {
       return [];
     }
 
-    if (context.state.injection.systemPrompt?.inject === false) {
+    if (
+      !isFrameworkInjected({
+        modifiers: context.getExecutionModifiers(),
+        promptInjection: context.parsedCommand?.convertedPrompt?.injection,
+      })
+    ) {
       return [];
     }
 

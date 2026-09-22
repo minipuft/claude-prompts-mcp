@@ -1083,6 +1083,9 @@
         },
         "type": "object"
       },
+      "block_response_on_fail": {
+        "type": "boolean"
+      },
       "budget": {
         "additionalProperties": false,
         "properties": {

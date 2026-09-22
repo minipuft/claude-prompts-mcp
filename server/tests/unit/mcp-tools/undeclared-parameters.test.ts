@@ -24,10 +24,18 @@ import { describe, expect, it } from '@jest/globals';
 import {
   DECLARED_PARAMETERS_BY_TOOL,
   GATE_PARAMETERS_UNAVAILABLE,
+  declaredKeysAt,
+  describeNestedSchemaRefusal,
   describeUndeclaredParameterRefusal,
+  formatKeyPath,
   nearestDeclaredParameter,
   type ContractToolName,
 } from '../../../src/mcp/tools/shared/undeclared-parameters.js';
+import {
+  gateVerdictSubmissionSchema,
+  buildPromptEngineSchema,
+} from '../../../src/mcp/tools/schemas/prompt-engine.schema.js';
+import { gatePassCriteriaSchema } from '../../../src/mcp/tools/schemas/resource-manager.schema.js';
 
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const CONTRACT_FILE: Readonly<Record<ContractToolName, string>> = {
@@ -153,6 +161,179 @@ describe('undeclared parameter refusal', () => {
       for (const name of GATE_PARAMETERS_UNAVAILABLE.keys()) {
         expect(DECLARED_PARAMETERS_BY_TOOL.prompt_engine.has(name)).toBe(true);
       }
+    });
+  });
+});
+
+/**
+ * The same class one level down: a key a NESTED object does not declare (P4.103).
+ *
+ * The top-level refusal names a key because the key ARRIVES. Inside a parameter, zod does the
+ * refusing — and for a UNION it reports one `invalid_union` issue whose sub-issues are nested,
+ * while the SDK renders top-level issues only. `gate_verdict` is the union that matters: it is
+ * the safety-review submission, and `{pased: true}` also leaves `passed` absent, which reads as
+ * FAIL. The client saw exactly `gate_verdict: Invalid input`.
+ */
+describe('nested key refusal (P4.103)', () => {
+  const parse = (value: unknown): { ok: boolean; message: string } => {
+    const schema = buildPromptEngineSchema(
+      (v) => /^GATE_REVIEW:/.test(v),
+      'Gate verdict must follow format: "GATE_REVIEW: PASS/FAIL - reason"'
+    );
+    const result = schema.safeParse({ command: '>>demo', gate_verdict: value });
+    return {
+      ok: result.success,
+      message: result.success ? '' : (result.error.issues[0]?.message ?? ''),
+    };
+  };
+
+  describe('formatKeyPath', () => {
+    it('writes a path the way a caller would write it', () => {
+      expect(formatKeyPath(['gate_verdict', 'per_gate', 0, 'pased'])).toBe(
+        'gate_verdict.per_gate[0].pased'
+      );
+    });
+
+    it('differs from the SDK rendering it replaces', () => {
+      // `formatIssue` joins every segment with '.', which turns an index into `per_gate.0` — a
+      // readable string that is not a path anyone can paste back into their JSON. Pinning the
+      // difference is what stops someone "simplifying" this back to a join.
+      expect(formatKeyPath(['per_gate', 0])).not.toBe(['per_gate', 0].join('.'));
+    });
+  });
+
+  describe('declaredKeysAt', () => {
+    it('resolves the key space of an object nested under an array', () => {
+      expect(declaredKeysAt(gateVerdictSubmissionSchema, ['per_gate', 0])).toEqual([
+        'index',
+        'passed',
+        'rationale',
+      ]);
+    });
+
+    it('sees through optional wrappers', () => {
+      expect(declaredKeysAt(gateVerdictSubmissionSchema, ['reminders'])).toEqual([
+        'satisfied',
+        'not_applicable',
+      ]);
+    });
+
+    it('answers undefined where the position is not an object', () => {
+      // A suggestion needs a declared key space. Where there is none, a refusal with no
+      // suggestion is the correct answer — a guessed one sends the caller to a name they never
+      // wanted.
+      expect(declaredKeysAt(gateVerdictSubmissionSchema, ['rationale'])).toBeUndefined();
+      expect(declaredKeysAt(gateVerdictSubmissionSchema, ['per_gate', 0, 'index'])).toBeUndefined();
+    });
+
+    it('CONTROL: the root itself resolves, so the walker is not answering undefined always', () => {
+      expect(declaredKeysAt(gateVerdictSubmissionSchema, [])).toEqual([
+        'overall',
+        'rationale',
+        'per_gate',
+        'reminders',
+      ]);
+    });
+  });
+
+  describe('describeNestedSchemaRefusal', () => {
+    it('names the full path and the nearest declared key', () => {
+      const message = describeNestedSchemaRefusal(
+        ['gate_verdict'],
+        [
+          {
+            code: 'unrecognized_keys',
+            path: ['per_gate', 0],
+            keys: ['pased'],
+            message: 'Unrecognized key: "pased"',
+          },
+        ],
+        gateVerdictSubmissionSchema
+      );
+
+      expect(message).toContain("'gate_verdict.per_gate[0].pased' is not a declared key");
+      expect(message).toContain("did you mean 'passed'?");
+    });
+
+    it('says only what is true of a non-key failure', () => {
+      // "It was dropped and ignored before" is true of a stripped key and of nothing else. A
+      // wrong enum member was always reported.
+      const message = describeNestedSchemaRefusal(
+        ['gate_verdict'],
+        [{ code: 'invalid_value', path: ['overall'], message: 'Invalid option' }],
+        gateVerdictSubmissionSchema
+      );
+
+      expect(message).toContain("'gate_verdict.overall': Invalid option");
+      expect(message).not.toContain('dropped and ignored');
+    });
+  });
+
+  describe('through the registered schema', () => {
+    it('CONTROL: a well-formed structured verdict is accepted', () => {
+      // Without this every rejection below could be a schema that rejects everything.
+      expect(parse({ overall: 'PASS', rationale: 'all good' }).ok).toBe(true);
+    });
+
+    it('CONTROL: the legacy string form is still accepted', () => {
+      expect(parse('GATE_REVIEW: PASS - fine').ok).toBe(true);
+    });
+
+    it('a misspelled nested key reaches the client with its path and a suggestion', () => {
+      const { ok, message } = parse({
+        overall: 'FAIL',
+        rationale: 'not good',
+        per_gate: [{ index: 1, pased: false, rationale: 'nope' }],
+      });
+
+      expect(ok).toBe(false);
+      // The whole point: before this, the message was the string 'Invalid input'.
+      expect(message).toContain("'gate_verdict.per_gate[0].pased' is not a declared key");
+      expect(message).toContain("did you mean 'passed'?");
+      expect(message).not.toBe('Invalid input');
+    });
+
+    it('a misspelled key two levels down resolves its own key space', () => {
+      const { ok, message } = parse({
+        overall: 'PASS',
+        rationale: 'ok',
+        reminders: { satisfeid: ['g'] },
+      });
+
+      expect(ok).toBe(false);
+      expect(message).toContain("'gate_verdict.reminders.satisfeid' is not a declared key");
+      expect(message).toContain("did you mean 'satisfied'?");
+    });
+
+    it('a bad string is answered by the STRING branch, not the object branch', () => {
+      // Branch selection is by the value's JS type. Reporting "expected object" at a string, or
+      // an object's field errors at a string, would name a shape the sender never sent.
+      const { ok, message } = parse('nonsense');
+
+      expect(ok).toBe(false);
+      expect(message).toContain('GATE_REVIEW');
+      expect(message).not.toContain('is not a declared key');
+    });
+
+    it('a value that is neither is told what the parameter takes', () => {
+      const { ok, message } = parse(42);
+
+      expect(ok).toBe(false);
+      expect(message).toContain('structured object');
+      expect(message).toContain('legacy string form');
+    });
+
+    it('pass_criteria carries no `description` — the fork is SURPLUS, not a missing declaration', () => {
+      // P4.103's three-fork question. Two fixtures sent it and believed they had written a
+      // criterion description. Nothing reads one: zero reader sites under `engine/gates/` against
+      // 18 for `shell_command`, no bundled gate.yaml declares it, and the skills-sync manifest's
+      // `description` is the per-GATE field. Declaring it would publish a key that goes nowhere.
+      const declared = declaredKeysAt(gatePassCriteriaSchema, []);
+      // Positive control on the same schema: it DOES declare the keys a criterion is made of, so
+      // the absence below is a statement about `description` rather than about the probe.
+      expect(declared).toContain('type');
+      expect(declared).toContain('shell_command');
+      expect(declared).not.toContain('description');
     });
   });
 });

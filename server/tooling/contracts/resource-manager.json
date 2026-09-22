@@ -332,6 +332,13 @@
       "includeInDescription": false
     },
     {
+      "name": "block_response_on_fail",
+      "type": "boolean",
+      "description": "[Gate] Withhold the step output when this gate is marked FAIL, returning the gate review in its place. Writes the gate.yaml key 'blockResponseOnFail'. Omitted on update, an existing gate keeps its current value; send `false` to clear it.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
       "name": "guidance",
       "type": "string",
       "description": "[Gate] Gate guidance content - the criteria or instructions.",

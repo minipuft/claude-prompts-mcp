@@ -70,6 +70,7 @@ export type resource_managerParamName =
   | 'subject'
   | 'severity'
   | 'enforcement_mode'
+  | 'block_response_on_fail'
   | 'guidance'
   | 'pass_criteria'
   | 'activation'
@@ -501,6 +502,15 @@ export const resource_managerParameters: ToolParameter[] = [
     type: 'enum[blocking|advisory|informational]',
     description:
       '[Gate] Enforcement mode override. Absent, it is derived from severity, so setting severity alone is usually enough.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'block_response_on_fail',
+    type: 'boolean',
+    description:
+      "[Gate] Withhold the step output when this gate is marked FAIL, returning the gate review in its place. Writes the gate.yaml key 'blockResponseOnFail'. Omitted on update, an existing gate keeps its current value; send `false` to clear it.",
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,

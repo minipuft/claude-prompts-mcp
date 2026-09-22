@@ -158,13 +158,72 @@ describe('script tools — real subprocess', () => {
     }, 20000);
   });
 
-  // 1.6 — output shapes
-  test('wraps non-JSON stdout rather than failing', async () => {
+  // 1.6 — output shapes (P4.99)
+  //
+  // These four cases are the class: a script tool that exits 0 having produced nothing a caller
+  // can read is a failure, and the message names the tool so an operator knows which one. The
+  // first used to pass, wrapped as `{ output: 'this is not json' }` and reported as success, so
+  // `{{script:id.field}}` rendered empty with nothing anywhere saying why.
+  test('refuses non-JSON stdout by name instead of wrapping it as success', async () => {
     const result = await executor.execute(requestFor(), toolFor('print-non-json.cjs'));
 
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
+    expect(result.output).toBeNull();
+    // Names WHICH check answered, not merely that something failed.
+    expect(result.error).toContain(
+      "Script tool 'subprocess_fixture' wrote output that is not JSON"
+    );
+    // The raw text is still reported, so the author can see what the script printed.
     expect(result.stdout).toBe('this is not json');
-    expect(result.output).toEqual({ output: 'this is not json' });
+    expect(result.error).toContain('this is not json');
+  }, 20000);
+
+  test('refuses empty stdout by name', async () => {
+    const result = await executor.execute(requestFor(), toolFor('print-nothing.cjs'));
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain(
+      "Script tool 'subprocess_fixture' exited 0 but wrote nothing to stdout"
+    );
+  }, 20000);
+
+  test("refuses output that does not match the tool's declared outputSchema", async () => {
+    // `echo-inputs.cjs` returns `{ received, ok }`. The declared shape requires a `count` number
+    // it never produces, and types `ok` as a string it produces as a boolean.
+    const result = await executor.execute(
+      requestFor(),
+      toolFor('echo-inputs.cjs', {
+        outputSchema: {
+          type: 'object',
+          properties: { count: { type: 'number' }, ok: { type: 'string' } },
+          required: ['count'],
+        },
+      })
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('does not match its declared outputSchema');
+    expect(result.error).toContain('Missing required field: count');
+    expect(result.error).toContain("Field 'ok': expected string, got boolean");
+  }, 20000);
+
+  test('positive control: the same script passes when its output matches the declared schema', async () => {
+    // Without this, every assertion above could be satisfied by an executor that refused every
+    // script with an outputSchema, and the refusals would prove nothing about the schema.
+    const result = await executor.execute(
+      requestFor(),
+      toolFor('echo-inputs.cjs', {
+        outputSchema: {
+          type: 'object',
+          properties: { ok: { type: 'boolean' } },
+          required: ['ok'],
+        },
+      })
+    );
+
+    expect(result.error).toBeUndefined();
+    expect(result.success).toBe(true);
+    expect(result.output).toEqual({ received: {}, ok: true });
   }, 20000);
 
   test('reports a non-zero exit as failure and keeps stderr', async () => {
