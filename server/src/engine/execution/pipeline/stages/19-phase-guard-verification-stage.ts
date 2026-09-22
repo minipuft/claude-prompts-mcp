@@ -23,6 +23,7 @@ import { resolveGuardedProcessingSteps } from '../../../frameworks/declared-sect
 import {
   evaluatePhaseGuards,
   buildPhaseGuardPassSummary,
+  buildRetryHints,
 } from '../../../frameworks/phase-guards/index.js';
 import { BasePipelineStage } from '../stage.js';
 
@@ -201,12 +202,13 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
       createdAt: Date.now(),
       attemptCount: 0,
       maxAttempts,
-      // Hint with the phase's actual section_header (e.g. "## Dissolve"), NOT the phase id
-      // (e.g. "dissolve_processing"). Prefixing "## " onto the id produced a header the
-      // section-splitter could never match → the model kept adding the wrong header → loop.
-      retryHints: result.results
-        .filter((r) => !r.passed)
-        .map((r) => `Ensure your response includes the required "${r.section_header}" section`),
+      // Hints name what each check measured, and the add-the-section line is emitted only for a
+      // section that is actually absent (`buildRetryHints` owns both halves — a hint is phase-
+      // guard vocabulary, not stage orchestration). A hint for an absent section names the
+      // phase's actual section_header (e.g. "## Dissolve"), NOT the phase id (e.g.
+      // "dissolve_processing"): prefixing "## " onto the id produced a header the section-
+      // splitter could never match → the model kept adding the wrong header → loop.
+      retryHints: buildRetryHints(result),
       previousResponse: outputText,
       metadata: {
         source: 'phase-guard-verification',
