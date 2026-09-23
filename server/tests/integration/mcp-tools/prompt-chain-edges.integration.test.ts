@@ -39,7 +39,6 @@ import { FileOperations } from '../../../src/mcp/tools/resource-manager/prompt/o
 import { PromptLifecycleProcessor } from '../../../src/mcp/tools/resource-manager/prompt/services/prompt-lifecycle-processor.js';
 import { PromptConverter } from '../../../src/modules/prompts/converter.js';
 import { PromptLoader } from '../../../src/modules/prompts/loader.js';
-import { ContentAnalyzer } from '../../../src/modules/semantic/content-analyzer.js';
 import { parseYamlOrThrow } from '../../../src/shared/utils/yaml/yaml-parser.js';
 
 import type { PromptResourceContext } from '../../../src/mcp/tools/resource-manager/prompt/core/context.js';
@@ -104,7 +103,6 @@ function createHarness(workspaceDir: string): Harness {
   const dependencies = {
     logger,
     configManager,
-    semanticAnalyzer: new ContentAnalyzer(createLogger()),
     onRefresh: jest.fn(reload),
     onRestart: jest.fn(async () => {}),
   };
@@ -112,7 +110,7 @@ function createHarness(workspaceDir: string): Harness {
 
   const context = {
     dependencies,
-    promptAnalyzer: new PromptAnalyzer(dependencies),
+    promptAnalyzer: new PromptAnalyzer(),
     gateAnalyzer: new GateAnalyzer(dependencies as never),
     fileOperations,
     getData: () => ({ convertedPrompts }),

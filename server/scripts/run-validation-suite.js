@@ -414,6 +414,13 @@ export const SUITE = [
       'CHECKED — falsified 2026-09-21 by deleting the object-store guard from each of the five guarded sites in turn (recordTree, sweepUnreferencedObjects, loadVersionTree, resolveCliByteRestore, readRecordedConfigFile), which are the four #345-#347 defects plus one sibling; the gate reported each. The unmutated tree is the twin and passes. It also fails closed below four guarded statements, falsified by narrowing V29_TOKENS to a token nothing matches. Blind spots stated in the header with an as-of date: composed SQL, a guard held by the caller, anything outside src/cli-shared',
   },
   {
+    script: 'validate:system-control-parameter-reads',
+    io: 'read',
+    reads: ['file'],
+    converse:
+      'CHECKED — the self-test plants the two shapes that shipped (a declared parameter the operation never copies, the #357 persist instance; and one copied into an object its callee ignores, how status held include_history) beside a twin that reads both, and a string literal naming the parameter that must not count. Positive control 2026-09-22 on the live tree: dropping `persist` from the framework handler enable case fails naming `framework:enable`. Its first run found three (show_details on status and analytics, reason on config). UNCHECKED and known, stated in the header: the reverse direction (a read key the command does not declare), and anything past the handler boundary',
+  },
+  {
     script: 'validate:telemetry-attribute-emitters',
     io: 'read',
     reads: ['file', 'walk'],

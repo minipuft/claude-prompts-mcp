@@ -251,8 +251,6 @@ export class PromptGuidanceStage extends BasePipelineStage {
       const includeSystemPrompt =
         (injectionDecision?.inject ?? true) && context.state.framework.systemPromptApplied !== true;
 
-      // Get semantic analysis from execution plan (set by Planning Stage)
-      const semanticAnalysis = context.executionPlan?.semanticAnalysis;
       const guidanceOptions: Parameters<PromptGuidanceService['applyGuidance']>[1] = {
         includeSystemPromptInjection: includeSystemPrompt,
         includeTemplateEnhancement: true,
@@ -261,10 +259,6 @@ export class PromptGuidanceStage extends BasePipelineStage {
       const frameworkOverride = this.getFrameworkOverride(context);
       if (frameworkOverride) {
         guidanceOptions.frameworkOverride = frameworkOverride;
-      }
-
-      if (semanticAnalysis) {
-        guidanceOptions.semanticAnalysis = semanticAnalysis;
       }
 
       const guidance = await this.promptGuidanceService!.applyGuidance(prompt, guidanceOptions);

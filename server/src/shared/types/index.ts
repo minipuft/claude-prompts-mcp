@@ -63,7 +63,6 @@ import type {
   ToolDetectionMatch,
 } from './automation.js';
 import type { StepAwaitMode, VisibilityItem } from './chain-execution.js';
-import type { ContentAnalysisResult } from './core-config.js';
 import type { StateStoreOptions } from './persistence.js';
 
 export type {
@@ -403,14 +402,6 @@ export interface GateDefinition {
 // ===== Cross-Layer Service Interfaces =====
 // Minimal interfaces for engine/ pipeline stages to depend on without importing
 // concrete classes from modules/ or mcp/. Concrete implementations `implements` these.
-
-/**
- * Semantic content analyzer interface (engine/ contract).
- * Concrete: modules/semantic/content-analyzer.ts ContentAnalyzer
- */
-export interface ContentAnalyzerPort {
-  analyzePrompt(prompt: unknown): Promise<ContentAnalysisResult>;
-}
 
 /**
  * Style manager interface (engine/ contract).

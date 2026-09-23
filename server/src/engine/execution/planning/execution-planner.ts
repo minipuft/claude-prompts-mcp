@@ -5,7 +5,6 @@ import { resolveDeclaredArtifacts } from '../../gates/utils/artifact-kinds.js';
 import { isFrameworkInjected } from '../pipeline/decisions/injection/index.js';
 
 import type { Logger } from '#infra/logging/index.js';
-import type { ContentAnalysisResult, ContentAnalyzerPort } from '#shared/types/index.js';
 import type { GateDefinitionProvider } from '../../gates/core/gate-loader.js';
 import type { GateManager } from '../../gates/gate-manager.js';
 import type { ParsedCommand } from '../context/index.js';
@@ -41,8 +40,6 @@ export interface ChainExecutionPlanResult {
   stepPlans: ExecutionPlan[];
 }
 
-type SemanticAnalyzerLike = ContentAnalyzerPort;
-
 type StrategyResolution = {
   strategy: ExecutionStrategyType;
 };
@@ -56,10 +53,7 @@ export class ExecutionPlanner {
   private gateManager: GateManager | undefined;
   private readonly categoryExtractor: CategoryExtractor;
 
-  constructor(
-    private readonly semanticAnalyzer: SemanticAnalyzerLike | null,
-    private readonly logger: Logger
-  ) {
+  constructor(private readonly logger: Logger) {
     this.categoryExtractor = new CategoryExtractor(logger);
   }
 
@@ -87,23 +81,8 @@ export class ExecutionPlanner {
   async createPlan(options: ExecutionPlannerOptions): Promise<ExecutionPlan> {
     const { parsedCommand, convertedPrompt, frameworkEnabled = false, gateOverrides } = options;
 
-    let analysis: ContentAnalysisResult | null = null;
-    if (this.semanticAnalyzer) {
-      try {
-        analysis = await this.semanticAnalyzer.analyzePrompt(convertedPrompt);
-      } catch (error) {
-        this.logger.warn('[ExecutionPlanner] Semantic analysis failed', {
-          promptId: convertedPrompt.id,
-          error,
-        });
-      }
-    }
-
     const categoryInfo = this.categoryExtractor.extractCategory(convertedPrompt);
-    const strategyInput: Parameters<typeof this.resolveStrategy>[0] = {
-      convertedPrompt,
-      analysis,
-    };
+    const strategyInput: Parameters<typeof this.resolveStrategy>[0] = { convertedPrompt };
     if (parsedCommand !== undefined) {
       strategyInput.parsedCommand = parsedCommand;
     }
@@ -173,10 +152,6 @@ export class ExecutionPlanner {
     if (modifierResolution.modifiers !== undefined) {
       plan.modifiers = modifierResolution.modifiers;
     }
-    if (analysis !== null) {
-      plan.semanticAnalysis = analysis;
-    }
-
     return plan;
   }
 
@@ -241,30 +216,14 @@ export class ExecutionPlanner {
   private resolveStrategy(params: {
     convertedPrompt: ConvertedPrompt;
     parsedCommand?: ParsedCommand;
-    analysis: ContentAnalysisResult | null;
   }): StrategyResolution {
-    const { convertedPrompt, parsedCommand, analysis } = params;
-
-    if (this.hasChainIndicators(parsedCommand, convertedPrompt, analysis)) {
-      return { strategy: 'chain' };
-    }
-
-    if (analysis?.executionType === 'chain') {
-      return { strategy: 'chain' };
-    }
-
-    if (analysis?.executionType === 'single') {
-      return { strategy: 'single' };
-    }
-
-    return this.heuristicResolution(convertedPrompt);
+    const { convertedPrompt, parsedCommand } = params;
+    return {
+      strategy: this.hasChainIndicators(parsedCommand, convertedPrompt) ? 'chain' : 'single',
+    };
   }
 
-  private hasChainIndicators(
-    parsedCommand?: ParsedCommand,
-    prompt?: ConvertedPrompt,
-    analysis?: ContentAnalysisResult | null
-  ): boolean {
+  private hasChainIndicators(parsedCommand?: ParsedCommand, prompt?: ConvertedPrompt): boolean {
     if (prompt?.chainSteps?.length) {
       return true;
     }
@@ -274,28 +233,7 @@ export class ExecutionPlanner {
     }
 
     const hasChainOperator = parsedCommand?.operators?.operators?.some((op) => op.type === 'chain');
-    if (hasChainOperator) {
-      return true;
-    }
-
-    if (analysis?.executionType === 'chain') {
-      return true;
-    }
-
-    if (analysis?.executionCharacteristics?.hasChainSteps) {
-      return true;
-    }
-
-    return false;
-  }
-
-  private heuristicResolution(prompt: ConvertedPrompt): StrategyResolution {
-    if (prompt.chainSteps?.length) {
-      return { strategy: 'chain' };
-    }
-
-    // All single prompts resolve to 'single' strategy (formerly 'prompt' or 'template')
-    return { strategy: 'single' };
+    return hasChainOperator === true;
   }
 
   private normalizeModifiers(modifiers?: ExecutionModifiers): { modifiers?: ExecutionModifiers } {

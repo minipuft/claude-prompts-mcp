@@ -23,7 +23,6 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { ContentAnalyzer } from '../../../src/modules/semantic/content-analyzer.js';
 import { ComparisonEngine } from '../../../src/mcp/tools/resource-manager/prompt/analysis/comparison-engine.js';
 import { GateAnalyzer } from '../../../src/mcp/tools/resource-manager/prompt/analysis/gate-analyzer.js';
 import { ObjectDiffGenerator } from '../../../src/mcp/tools/resource-manager/prompt/analysis/object-diff-generator.js';
@@ -84,7 +83,6 @@ async function createHarness(workspaceDir: string): Promise<Harness> {
   const dependencies = {
     logger,
     configManager,
-    semanticAnalyzer: new ContentAnalyzer(createLogger()),
     onRefresh: jest.fn(async () => {
       const promptLoader = new PromptLoader(logger);
       const { promptsData } = await promptLoader.loadFromDirectories(promptsDir);
@@ -144,7 +142,7 @@ async function createHarness(workspaceDir: string): Promise<Harness> {
 
   const context = {
     dependencies,
-    promptAnalyzer: new PromptAnalyzer(dependencies),
+    promptAnalyzer: new PromptAnalyzer(),
     gateAnalyzer: new GateAnalyzer(dependencies as never),
     fileOperations,
     getData: () => ({ convertedPrompts: [livePrompt] }),
@@ -423,7 +421,6 @@ describe('P7 acceptance — create records version 1', () => {
     const dependencies = {
       logger,
       configManager,
-      semanticAnalyzer: new ContentAnalyzer(createLogger()),
       onRefresh: jest.fn(async () => {
         const promptLoader = new PromptLoader(logger);
         const { promptsData } = await promptLoader.loadFromDirectories(promptsDir);
@@ -451,7 +448,7 @@ describe('P7 acceptance — create records version 1', () => {
 
     const context = {
       dependencies,
-      promptAnalyzer: new PromptAnalyzer(dependencies),
+      promptAnalyzer: new PromptAnalyzer(),
       gateAnalyzer: new GateAnalyzer(dependencies as never),
       fileOperations,
       getData: () => ({ convertedPrompts }),

@@ -29,18 +29,6 @@ describe('Consolidated MCP tool factories', () => {
       loadAndConvertPrompts: () => Promise.resolve([testPrompts.simple]),
     };
 
-    const mockSemanticAnalyzer = {
-      analyzePrompt: () =>
-        Promise.resolve({
-          executionType: 'template',
-          requiresExecution: true,
-          confidence: 0.8,
-        }),
-      getConfig: () => ({
-        llmIntegration: { enabled: false },
-      }),
-    };
-
     const mockFrameworkManager = {
       getCurrentFramework: () => ({ frameworkId: 'CAGEERF', frameworkName: 'CAGEERF' }),
       generateExecutionContext: () => ({
@@ -110,7 +98,6 @@ describe('Consolidated MCP tool factories', () => {
       logger as any,
       mockPromptAssetComponent as any,
       mockConfigManager as any,
-      mockSemanticAnalyzer as any,
       mockTextReferenceStore as any,
       stubGateManager,
       mockMcpToolsManager
@@ -119,7 +106,6 @@ describe('Consolidated MCP tool factories', () => {
     promptResourceHandler = createPromptResourceHandler(
       logger as any,
       mockConfigManager as any,
-      mockSemanticAnalyzer as any,
       undefined,
       mockFrameworkManager as any,
       () => Promise.resolve(),

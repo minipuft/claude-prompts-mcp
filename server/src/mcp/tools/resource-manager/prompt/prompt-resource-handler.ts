@@ -26,7 +26,6 @@ import type { PromptResourceHandlerPort } from '../core/types.js';
 
 import { FrameworkManager } from '#engine/frameworks/framework-manager.js';
 import { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';
-import { ContentAnalyzer } from '#modules/semantic/content-analyzer.js';
 import { VersionHistoryService } from '#modules/versioning/index.js';
 import { logMcpToolChange } from '#shared/core/resource-change-log.js';
 import { type Logger, ToolResponse, ConfigManager } from '#shared/types/index.js';
@@ -62,7 +61,7 @@ export class PromptResourceHandler implements PromptResourceHandlerPort {
   constructor(dependencies: PromptResourceDependencies) {
     this.dependencies = dependencies;
     this.logger = dependencies.logger;
-    this.promptAnalyzer = new PromptAnalyzer(dependencies);
+    this.promptAnalyzer = new PromptAnalyzer();
     this.comparisonEngine = new ComparisonEngine(this.logger);
     this.gateAnalyzer = new GateAnalyzer(dependencies, this.promptAnalyzer);
     this.textDiffService = new ObjectDiffGenerator();
@@ -341,7 +340,6 @@ export class PromptResourceHandler implements PromptResourceHandlerPort {
 export function createPromptResourceHandler(
   logger: Logger,
   configManager: ConfigManager,
-  semanticAnalyzer: ContentAnalyzer,
   frameworkStateStore: FrameworkStateStore | undefined,
   frameworkManager: FrameworkManager | undefined,
   onRefresh: () => Promise<void>,
@@ -351,7 +349,6 @@ export function createPromptResourceHandler(
   const dependencies: PromptResourceDependencies = {
     logger,
     configManager,
-    semanticAnalyzer,
     onRefresh,
     onRestart,
     ...(frameworkStateStore ? { frameworkStateStore } : {}),

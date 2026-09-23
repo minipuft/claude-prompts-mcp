@@ -7,7 +7,6 @@
 // already nominally there.
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { ContentAnalyzer } from '../../../../../src/modules/semantic/content-analyzer.js';
 import { ComparisonEngine } from '../../../../../src/mcp/tools/resource-manager/prompt/analysis/comparison-engine.js';
 import { GateAnalyzer } from '../../../../../src/mcp/tools/resource-manager/prompt/analysis/gate-analyzer.js';
 import { ObjectDiffGenerator } from '../../../../../src/mcp/tools/resource-manager/prompt/analysis/object-diff-generator.js';
@@ -56,7 +55,6 @@ function createProcessor(seeded: Array<Record<string, unknown>> = [REGISTERED_PR
       getServerRoot: () => '/test',
       getResolvedPromptsDirectory: () => '/test/prompts',
     } as unknown as ConfigManager,
-    semanticAnalyzer: new ContentAnalyzer(createLogger()),
     onRefresh,
     onRestart: jest.fn(async () => {}),
   };
@@ -70,7 +68,7 @@ function createProcessor(seeded: Array<Record<string, unknown>> = [REGISTERED_PR
 
   const context = {
     dependencies,
-    promptAnalyzer: new PromptAnalyzer(dependencies),
+    promptAnalyzer: new PromptAnalyzer(),
     gateAnalyzer: new GateAnalyzer(dependencies as never),
     // `projectPromptWrite` reports the files an update WOULD land in; the update path calls it
     // ahead of the write to build its diff. Stubbed empty because this file asserts the chain-step
