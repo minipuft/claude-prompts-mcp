@@ -20,6 +20,7 @@ import type {
   StepMilestone,
   ChainNode,
   ChainRunStatus,
+  GateReview,
   GateReviewHistoryEntry,
   PendingGateReview,
   PendingShellVerificationSnapshot,
@@ -56,7 +57,14 @@ import type { DatabasePort, StateStoreOptions } from '#shared/types/persistence.
 // Single owner of unknowns-ledger transition rules. Imported rather than restated here so
 // the rules cannot drift between the capture seam that validates and the store that persists.
 import { computeUnknownLedger } from '#engine/execution/capture/unknown-observation-processor.js';
-import { detachedNodesHoldingRun, isTerminalRunStatus } from '#shared/types/chain-session.js';
+import {
+  attachReviewProjections,
+  currentStepReview,
+  deriveReviewPhase,
+  detachedNodesHoldingRun,
+  isTerminalRunStatus,
+  stampLegacyReview,
+} from '#shared/types/chain-session.js';
 import { parseRunNumber, stripRunNumber } from '#shared/utils/chain-id-codec.js';
 // Node identity is what the store addresses by; every integer position it emits is derived
 // here and nowhere else, so the projection arithmetic has exactly one definition.
@@ -693,7 +701,7 @@ export class ChainSessionStore implements ChainSessionService {
     await this.initPromise;
     const resolvedScope = options?.continuityScopeId ?? resolveContinuityScopeId(options);
     const nodes = this.resolveCreationNodes(chainId, totalSteps, options?.nodes);
-    const session: ChainSession = {
+    const session: ChainSession = attachReviewProjections({
       sessionId,
       chainId,
       state: {
@@ -713,7 +721,7 @@ export class ChainSessionStore implements ChainSessionService {
       }),
       lifecycle: 'canonical',
       runStatus: 'working',
-    };
+    });
 
     this.activeSessions.set(sessionId, session);
 
@@ -1969,26 +1977,32 @@ export class ChainSessionStore implements ChainSessionService {
     return inlineIds.length > 0 ? inlineIds : undefined;
   }
 
+  async setReview(sessionId: string, review: GateReview): Promise<void> {
+    const session = this.activeSessions.get(sessionId);
+    if (!session) {
+      this.logger.warn(`Attempted to set a gate review for non-existent session: ${sessionId}`);
+      return;
+    }
+
+    writeReview(session, cloneReview(review));
+    await this.saveSessions();
+  }
+
+  /** @deprecated stamped: (as of 2026-09-23 · flips when row 3.6's exception list is empty) */
   async setPendingGateReview(
     sessionId: string,
     review: PendingGateReview,
     slot?: ReviewSlot
   ): Promise<void> {
     const session = this.activeSessions.get(sessionId);
-    if (!session) {
-      if (this.logger) {
-        this.logger.warn(
-          `Attempted to set pending gate review for non-existent session: ${sessionId}`
-        );
-      }
+    if (session === undefined) {
+      this.logger.warn(`Attempted to set a gate review for non-existent session: ${sessionId}`);
       return;
     }
-
-    writeReview(session, cloneReview(review), slot);
-    await this.saveSessions();
+    await this.setReview(sessionId, stampLegacyReview(review, session, slot));
   }
 
-  getPendingGateReview(sessionId: string, slot?: ReviewSlot): PendingGateReview | undefined {
+  getPendingGateReview(sessionId: string, slot?: ReviewSlot): GateReview | undefined {
     const session = this.activeSessions.get(sessionId);
     const review = session === undefined ? undefined : readReview(session, slot);
     return review === undefined ? undefined : cloneReview(review);
@@ -2026,6 +2040,7 @@ export class ChainSessionStore implements ChainSessionService {
 
     // Reset attempt count and log in history
     review.attemptCount = 0;
+    review.phase = deriveReviewPhase(review);
     review.history = review.history ?? [];
     review.history.push({
       timestamp: Date.now(),
@@ -2044,7 +2059,7 @@ export class ChainSessionStore implements ChainSessionService {
       return;
     }
 
-    writeReview(session, undefined, slot);
+    deleteReview(session, slot);
     await this.saveSessions();
   }
 
@@ -2105,6 +2120,7 @@ export class ChainSessionStore implements ChainSessionService {
     review.history.push(historyEntry);
     review.previousResponse = outcome.rawVerdict;
     review.attemptCount = (review.attemptCount ?? 0) + 1;
+    review.phase = deriveReviewPhase(review);
 
     // Run-cumulative counterparts to attemptCount, which is destroyed with the pending review
     // when a PASS clears it and so cannot answer "how many across the whole run". Record-only
@@ -2116,7 +2132,7 @@ export class ChainSessionStore implements ChainSessionService {
 
     let result: 'cleared' | 'pending';
     if (outcome.verdict === 'PASS') {
-      writeReview(session, undefined, slot);
+      deleteReview(session, slot);
       this.logger?.info('[GateReview] Cleared pending review', {
         sessionId,
         gateIds: review.gateIds,
@@ -2883,33 +2899,57 @@ export function createChainSessionStore(
   return new ChainSessionStore(logger, textReferenceStore, options, argumentHistoryTracker);
 }
 
-/** The review `slot` selects on `session`: a detached node's, or the current-step slot. PURE. */
-function readReview(session: ChainSession, slot?: ReviewSlot): PendingGateReview | undefined {
-  return slot === undefined
-    ? session.pendingGateReview
-    : session.detachedGateReviews?.[slot.nodeId];
+/**
+ * The review `slot` selects on `session`: the detached review of that node, or — with no slot —
+ * the current-step review (`currentStepReview`). A slot naming a node whose review is not
+ * detached selects nothing: a slot addresses detached reviews only. PURE.
+ */
+function readReview(session: ChainSession, slot?: ReviewSlot): GateReview | undefined {
+  if (slot === undefined) {
+    return currentStepReview(session.reviews, session.state.currentNodeId);
+  }
+  const review = session.reviews?.[slot.nodeId];
+  return review?.kind === 'detached' ? review : undefined;
 }
 
-/** Put `review` in (or, undefined, remove it from) the place `slot` selects on `session`. */
-function writeReview(
-  session: ChainSession,
-  review: PendingGateReview | undefined,
-  slot?: ReviewSlot
-): void {
-  if (slot === undefined) {
-    if (review === undefined) delete session.pendingGateReview;
-    else session.pendingGateReview = review;
-    return;
+/**
+ * Store `review` at `reviews[review.nodeId]`. A non-detached review first evicts every other
+ * non-detached one: the run keeps ONE current-step slot, as the field this store replaced did,
+ * until row 3.3 lets reviews of two positions coexist.
+ *
+ * @throws when `review` would overwrite a review of the other side of that split at its node —
+ *   a current-step review keyed onto a detached node's open review, or the reverse. Both are
+ *   unreachable today; a silent overwrite would lose an open review.
+ */
+function writeReview(session: ChainSession, review: GateReview): void {
+  const reviews = { ...session.reviews };
+  const detached = review.kind === 'detached';
+  const occupant = reviews[review.nodeId];
+  if (occupant !== undefined && (occupant.kind === 'detached') !== detached) {
+    throw new Error(
+      `Gate review of node '${review.nodeId}' (${review.kind}) would overwrite its open ${occupant.kind} review`
+    );
   }
-  const reviews = { ...session.detachedGateReviews };
-  if (review === undefined) delete reviews[slot.nodeId];
-  else reviews[slot.nodeId] = review;
-  if (Object.keys(reviews).length > 0) session.detachedGateReviews = reviews;
-  else delete session.detachedGateReviews;
+  if (!detached) {
+    for (const [nodeId, open] of Object.entries(reviews)) {
+      if (open.kind !== 'detached') delete reviews[nodeId];
+    }
+  }
+  reviews[review.nodeId] = review;
+  session.reviews = reviews;
+}
+
+/** Remove the review `slot` selects (see {@link readReview}); `reviews` goes when it empties. */
+function deleteReview(session: ChainSession, slot?: ReviewSlot): void {
+  const target = readReview(session, slot);
+  if (target === undefined || session.reviews === undefined) return;
+  const { [target.nodeId]: _removed, ...rest } = session.reviews;
+  if (Object.keys(rest).length > 0) session.reviews = rest;
+  else delete session.reviews;
 }
 
 /** A copy that shares no array or object with `review`, so neither side can mutate the other. */
-function cloneReview(review: PendingGateReview): PendingGateReview {
+function cloneReview(review: GateReview): GateReview {
   return {
     ...review,
     gateIds: [...review.gateIds],

@@ -138,6 +138,9 @@ describe('ResponseCaptureStage Hook Emission', () => {
     } as any);
     mockChainSessionStore.recordGateReviewOutcome.mockResolvedValue('pending');
     mockChainSessionStore.getPendingGateReview.mockReturnValue({
+      nodeId: 'n1',
+      kind: 'gate',
+      phase: 'awaiting-verdict',
       combinedPrompt: 'Review against code-quality.',
       gateIds: ['code-quality'],
       prompts: [],
@@ -188,6 +191,9 @@ describe('ResponseCaptureStage Hook Emission', () => {
     } as any);
     mockChainSessionStore.recordGateReviewOutcome.mockResolvedValue('pending');
     mockChainSessionStore.getPendingGateReview.mockReturnValue({
+      nodeId: 'n1',
+      kind: 'gate',
+      phase: 'awaiting-verdict',
       combinedPrompt: 'Review against code-quality.',
       gateIds: ['code-quality'],
       prompts: [],
