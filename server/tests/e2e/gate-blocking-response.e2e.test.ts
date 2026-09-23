@@ -284,6 +284,44 @@ describe.each([
     expect(blocked.text).toContain('A legacy string form is still accepted');
   }, 120000);
 
+  /**
+   * R103 / P4.156: a ONE-LINE answer on this gated step also fails the CAGEERF section check.
+   * Before the merge, the phase guard's review REPLACED this gate's: the reply named
+   * `__phase_guard__` alone, the gate's criteria were gone, and the budget read the phase guard's
+   * 3 instead of the gate's 5. The cases above answer in sections so they test the gate alone;
+   * this one answers in one line and asserts ONE review carrying both.
+   */
+  test('a one-line answer yields one review naming the gate, the missing sections and the gate budget', async () => {
+    const session = await sessionWithGate(BLOCK_GATE, true);
+
+    const start = await session.callTool('prompt_engine', {
+      command: '>>quick_decision topic:"a one-line answer"',
+    });
+    const chainId = chainIdOf(start.text);
+
+    const reviewed = await session.callTool('prompt_engine', {
+      chain_id: chainId,
+      user_response: `${OUTPUT_MARKER}: one line.`,
+    });
+
+    expect(reviewed.text).toContain('Structural + Gate Review Required');
+    expect(reviewed.text).toContain(BLOCK_GATE);
+    expect(reviewed.text).toContain(GUIDANCE_MARKER);
+    expect(reviewed.text).toContain('the required "## Context" section');
+    // The gate's retry_config, not the phase guard's maxRetries + 1.
+    expect(reviewed.text).toContain('(attempt 1/5)');
+
+    const blocked = await session.callTool('prompt_engine', {
+      chain_id: chainId,
+      user_response: `${OUTPUT_MARKER}: still one line.`,
+      gate_verdict: 'GATE_REVIEW: FAIL - the sections are missing',
+    });
+
+    expect(blocked.text).toContain('Response Blocked');
+    expect(blocked.text).toContain(BLOCK_GATE);
+    expect(blocked.text).toContain('**Attempt 2 of 5** — 3 attempts remain after this one.');
+  }, 120000);
+
   test("max_attempts comes from the gate's retry_config, not the built-in default", async () => {
     const session = await sessionWithGate(BLOCK_GATE, true);
 

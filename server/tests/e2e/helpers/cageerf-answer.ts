@@ -2,9 +2,10 @@
  * A step answer that clears the CAGEERF phase guards the bundled framework declares.
  *
  * A gated chain step is graded on the section headers its gate review showed it (P4.115), so an
- * e2e that drives a gate with a one-line answer also trips the phase guard, whose review then
- * replaces the gate's. A suite testing the GATE answers with this, so the only thing its verdict
- * is judged on is the gate. `body` is carried verbatim into the first section, for markers.
+ * e2e that drives a gate with a one-line answer also trips the phase guard, whose findings then
+ * join the gate's review (R103). A suite testing the GATE alone answers with this, so the only
+ * thing its verdict is judged on is the gate. `body` is carried verbatim into the first section,
+ * for markers.
  */
 export function cageerfAnswer(body: string): string {
   const pad = (text: string): string =>
