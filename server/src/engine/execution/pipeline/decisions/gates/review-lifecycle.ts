@@ -23,7 +23,11 @@
  * Pure: never mutates the review it is given; the caller persists what it returns.
  */
 
-import type { GateReview, GateReviewPhase } from '#shared/types/chain-execution.js';
+import type {
+  GateReview,
+  GateReviewHistoryEntry,
+  GateReviewPhase,
+} from '#shared/types/chain-execution.js';
 import type { EnforcementMode, GateAction, ParsedVerdict } from './gate-enforcement-types.js';
 
 /** What can happen to a review. `at` stamps the history entry the event leaves. */
@@ -118,7 +122,7 @@ function applyVerdict(
         status: 'fail',
         reasoning: verdict.rationale,
         reviewer: verdict.source,
-      },
+      } satisfies GateReviewHistoryEntry,
     ],
   };
   if (attempt >= review.maxAttempts) {
@@ -142,7 +146,11 @@ function applyAction(review: GateReview, action: GateAction, at: number): Review
     attemptCount: 0,
     history: [
       ...(review.history ?? []),
-      { timestamp: at, status: 'reset', reasoning: 'User requested retry after exhaustion' },
+      {
+        timestamp: at,
+        status: 'reset',
+        reasoning: 'User requested retry after exhaustion',
+      } satisfies GateReviewHistoryEntry,
     ],
   };
   return { outcome: 'reopened', review: withPhase(reset, awaitingAnswer(review)), attempt: 0 };
