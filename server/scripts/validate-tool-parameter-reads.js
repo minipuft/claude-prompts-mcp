@@ -1,47 +1,62 @@
 #!/usr/bin/env node
 
 /**
- * Fails when a `system_control` command declares a parameter its action handler never reads.
+ * Fails when an MCP tool command declares a parameter the code it dispatches to never reads.
  *
  * THE CLASS. The undeclared-key refusal stops a key the contract does not name. It cannot see the
- * opposite gap: a key the contract DOES name for a command, which the handler then ignores. Each
- * action handler copies the arguments it forwards by hand (`this.enable({ reason: args.reason })`),
- * so a declared parameter left out of that copy is accepted, validated, and read by nobody — the
- * call answers success for something that never happened. `persist` on `framework enable` was the
- * instance that was found (P4.114, #357); this check is the enumeration that closes the class
- * (P4.124). `include_history` on `status` and `show_details` on `status`/`analytics` were three
- * more, found by the first run.
+ * opposite gap: a key the contract DOES name for a command, which nothing then reads. Every tool
+ * copies its arguments by hand at least once on the way in (`this.enable({ reason: args.reason })`,
+ * the `resource_manager` router's `gateArgs.severity = args.severity`, `prompt_engine`'s
+ * `normalizedArgs` allowlist), so a declared parameter left out of a copy is accepted, validated,
+ * and read by nobody — the call answers success for something that never happened. `persist` on
+ * `system_control framework enable` was the first instance found (P4.114, #357); P4.124 closed
+ * the class for `system_control`, and this check now covers all three tools (P4.153).
  *
- * WHAT COUNTS AS A READ — a property read off the handler's argument object, not a name:
+ * ONE READ MODEL, THREE ADAPTERS. What counts as a read is the same for every tool; an adapter only
+ * says where each command's code starts and where its boundary is:
  *
- *   - `args.x`, `args['x']`, `(args as T).x`, and `const { x } = args`;
- *   - inside the `case` clause that dispatches the command's operation (with its fall-through
- *     group, or `default` when no label names it), plus the code of `execute` outside the switch;
- *   - `this.method(args)` follows `args` into that method's parameter, in the handler class or its
- *     base class;
- *   - `this.method({ key: args.x })` counts `x` only if `method` reads `key` from that parameter.
- *     A value copied into an object the callee then ignores is dropped, which is exactly how
- *     `status` accepted `include_history` for as long as it did;
- *   - an argument handed to anything that is not a method of the handler (another service's
- *     `handleAction({...})`) counts as read: that is the handler's boundary, and past it the
- *     parameter belongs to the service.
+ *   - system_control: the action's handler class `execute(args)`, restricted to the `case` that
+ *     dispatches the command's operation. Boundary: an argument handed to anything that is not a
+ *     method of the handler.
+ *   - resource_manager: the router's per-type copy (`routeToGateManager` → `gateArgs`, through any
+ *     rename), then the per-type handler's `case` for the action, then the processor it hands the
+ *     arguments to. `common:<action>` applies to every type whose handler has that `case`, and
+ *     declares a type-owned parameter only for its owners (`PARAMETER_OWNERS`). The router's own
+ *     guards (`confirm` on a destructive action) are reads.
+ *   - prompt_engine: the registration's allowlist copy, then `PromptExecutor.executePromptCommand`,
+ *     which either consumes a parameter itself or copies it into the pipeline request; a copied
+ *     field must be read as `mcpRequest.<field>` somewhere under `engine/execution`.
+ *
+ * WHAT COUNTS AS A READ — a property read off the argument object, not a name:
+ *
+ *   - `args.x`, `args['x']`, `(args as T).x`, `const { x } = args`, and the same through an alias
+ *     (`const supplied = args as Record<…>`);
+ *   - `args[key]` inside `for (const key of LIST)` or `Object.entries(MAP)`, where LIST/MAP is a
+ *     constant in the file or imported from a scanned one: every listed key (a field registry);
+ *   - `this.method(args)` and `this.field.method(args)` follow `args` into that method, when the
+ *     field holds a class the scan loaded; a method of a base class counts;
+ *   - `this.method({ key: args.x })` counts `x` only if `method` reads `key` from that parameter;
+ *   - an argument handed to anything else counts as read: that is the boundary.
  *
  * A string literal, a comment, or an error message naming the parameter is NOT a read.
  *
- * WHAT THIS DELIBERATELY DOES NOT CATCH, as of 2026-09-22:
+ * WHAT THIS DELIBERATELY DOES NOT CATCH, as of 2026-09-23:
  *
- *   - The reverse: a handler reading a key the command does not declare (`status` dispatches
- *     `health` and `diagnostics`, which its command declares no `operation` for). A different
- *     defect with a different fix.
- *   - Whether a value that crossed the handler's boundary is honoured by the service beyond it.
- *   - A read through an alias (`const a = args; a.x`) or computed access (`args[name]`). None
- *     exists in these handlers; either would report a false finding, never a false pass.
- *   - Whether the tool refuses a declared parameter sent to the WRONG action. It does not: the
- *     undeclared-key refusal is tool-wide, so `analytics` still accepts `session_id` and ignores
- *     it. This check keeps each command's declared list honest; it does not make it enforced.
+ *   - The reverse: code reading a key the command does not declare (P4.146).
+ *   - Whether a value that crossed the boundary is honoured beyond it.
+ *   - A read through computed access other than a field registry, or through a module function
+ *     handed `args` whole. Either reports a false finding, never a false pass.
+ *   - A parameter that only DECIDES another copied key (`if (args.x) out.y = …`) counts as copied
+ *     under that key — a false pass if `y` is read and `x` meant something else.
+ *   - Whether the tool refuses a declared parameter sent to the WRONG action. `resource_manager`
+ *     does (P4.134); `system_control` does not.
  *
- * Fails closed below `MINIMUM_VERIFIED_READS`: a green run must have proved that many declared
- * parameters are read, or it is not reaching the handlers it claims to govern.
+ * Exceptions: `AWAITING_RULING` names findings whose only fix removes a parameter from the tool
+ * entirely, which needs an owner ruling (R4). Each is stamped; an entry that no longer reports is
+ * itself a finding.
+ *
+ * Fails closed below each adapter's `minimumReads`: a green run must have proved that many declared
+ * parameters are read, or it is not reaching the code it claims to govern.
  *
  * Run: `npm run validate:tool-parameter-reads` · self-test: `--self-test`
  */
@@ -525,7 +540,7 @@ function forwardedKeys(body, sourceName, targetName) {
     }
   };
   for (const declaration of body.getDescendantsOfKind(SyntaxKind.VariableDeclaration)) {
-    const initializer = declaration.getInitializer();
+    const initializer = unwrap(declaration.getInitializer() ?? declaration);
     if (declaration.getName() === targetName && Node.isObjectLiteralExpression(initializer)) {
       walkLiteral(initializer);
     }
@@ -765,7 +780,107 @@ const resourceManagerAdapter = {
   },
 };
 
-const ADAPTERS = [systemControlAdapter, resourceManagerAdapter];
+/** Every request field the pipeline reads: `….mcpRequest.<field>` and `const { f } = ….mcpRequest`. */
+function pipelineRequestReads(project, directory) {
+  const reads = new Set();
+  const isRequest = (node) =>
+    (Node.isIdentifier(node) || Node.isPropertyAccessExpression(node)) &&
+    /(^|\.)mcpRequest$/.test(unwrap(node).getText());
+  for (const file of project.getSourceFiles()) {
+    if (!file.getFilePath().startsWith(directory)) continue;
+    for (const access of file.getDescendantsOfKind(SyntaxKind.PropertyAccessExpression)) {
+      if (isRequest(unwrap(access.getExpression()))) reads.add(access.getName());
+    }
+    for (const declaration of file.getDescendantsOfKind(SyntaxKind.VariableDeclaration)) {
+      const bound = declaration.getNameNode();
+      const initializer = declaration.getInitializer();
+      if (!Node.isObjectBindingPattern(bound) || initializer === undefined) continue;
+      if (!isRequest(unwrap(initializer))) continue;
+      for (const element of bound.getElements()) {
+        reads.add((element.getPropertyNameNode() ?? element.getNameNode()).getText());
+      }
+    }
+  }
+  return reads;
+}
+
+/**
+ * `prompt_engine`: three hops, each a hand-written copy. The tool registration copies the
+ * validated arguments into an allowlist (`normalizedArgs`) — the hop where `remainder`,
+ * `handoff`, `claim_token`, `version_description` and `dry_run` were each dropped before; the
+ * executor either consumes a parameter itself (`cancel`, `handoff`, `claim_token`) or copies it
+ * into the `request` it hands the pipeline; and past that, a copied field must have a reader in
+ * `engine/execution` — its context or any stage. OQ2 measured 2026-09-23: stage 01 alone reads
+ * none of `gate_verdict`, `gate_action`, `observations`, `remainder` (execution-context.ts,
+ * stages 16 and 17 do), so a boundary drawn at stage 01 would report four false findings.
+ */
+const promptEngineAdapter = {
+  tool: 'prompt_engine',
+  contract: 'prompt-engine.json',
+  sources: ['index.ts', 'prompt-engine/**/*.ts', '../../engine/execution/**/*.ts'],
+  router: 'index.ts',
+  pipeline: '../../engine/execution',
+  exempt: new Set(),
+  minimumReads: 20,
+  boundary:
+    'the request the executor hands the pipeline — a field copied into it must be read by the ' +
+    'execution context or some stage',
+
+  bind({ project, routerPath, commands, contract, pipelinePath }) {
+    const context = { cache: new Map(), project };
+    const handoff = project
+      .getSourceFileOrThrow(routerPath)
+      .getDescendantsOfKind(SyntaxKind.CallExpression)
+      .find((call) => fieldCall(call)?.method === 'executePromptCommand');
+    if (handoff === undefined) throw new Error(`no executePromptCommand call in ${routerPath}`);
+    const registration = handoff.getFirstAncestorByKind(SyntaxKind.ArrowFunction);
+    const host = handoff.getFirstAncestorByKind(SyntaxKind.ClassDeclaration);
+    const allowlist = unwrap(handoff.getArguments()[0]);
+    const forwarded = forwardedKeys(
+      registration.getBody(),
+      registration.getParameters()[0].getName(),
+      allowlist.getText()
+    );
+
+    const executor = fieldClass(project, host, fieldCall(handoff).field);
+    const method = findMethod(executor, 'executePromptCommand');
+    const argsName = method.getParameters()[0].getName();
+    const consumed = readsIn(context, executor, [method.getBody()], argsName);
+    const request = forwardedKeys(method.getBody(), argsName, 'request');
+    const pipeline = pipelineRequestReads(project, pipelinePath);
+
+    const readsOf = (key) => {
+      const fields = request.get(key);
+      if (fields === undefined) return consumed.has(key);
+      return [...fields].some((field) => pipeline.has(field));
+    };
+    const reads = new Set();
+    const dropped = new Set();
+    const all = contract.parameters.map((parameter) => parameter.name);
+    for (const parameter of all) {
+      const keys = forwarded.get(parameter);
+      if (keys === undefined) dropped.add(parameter);
+      else if ([...keys].some(readsOf)) reads.add(parameter);
+    }
+    const binding = {
+      entry: entryOf(executor, 'executePromptCommand'),
+      qualifier: ' or, once copied into its pipeline request, by engine/execution',
+      reads,
+      dropped: { symbol: `${host.getName()} (prompt_engine registration)`, parameters: dropped },
+    };
+    return [
+      { ...binding, command: 'call', declaredBy: 'the contract', parameters: all },
+      ...commands.map((command) => ({
+        ...binding,
+        command: command.id,
+        declaredBy: command.id,
+        parameters: command.parameters.filter((name) => !this.exempt.has(name)),
+      })),
+    ];
+  },
+};
+
+const ADAPTERS = [systemControlAdapter, resourceManagerAdapter, promptEngineAdapter];
 
 /**
  * Every (command, parameter) a binding declares and its entry does not read.
@@ -836,6 +951,9 @@ function checkTool(adapter) {
       project,
       routerPath: path.join(TOOLS_DIR, adapter.router),
       commands: contract.commands,
+      contract,
+      pipelinePath:
+        adapter.pipeline === undefined ? undefined : path.resolve(TOOLS_DIR, adapter.pipeline),
     })
   );
   report(adapter, findings, verified);
@@ -1087,8 +1205,101 @@ function selfTestResourceManager() {
   return failures.map((failure) => `resource_manager: ${failure}`);
 }
 
+/** `planted`: registration drops `inputs`, and no stage reads the `gates` request field. */
+function promptEngineFixture({ planted }) {
+  const project = new Project({ useInMemoryFileSystem: true });
+  project.createSourceFile(
+    '/index.ts',
+    `
+export class Tools {
+  private promptExecutor!: Executor;
+  register(target: any) {
+    target.registerTool('prompt_engine', {}, async (args: any, extra: unknown) => {
+      const trimmedCommand = args.command?.trim();
+      const normalizedArgs: any = {
+        ...(trimmedCommand ? { command: trimmedCommand } : {}),
+        ...(args.cancel !== undefined ? { cancel: args.cancel } : {}),
+        ...(args.options != null ? { options: args.options } : {}),
+        ${planted ? '' : '...(args.inputs != null ? { inputs: args.inputs } : {}),'}
+      };
+      if (args.gates != null) {
+        normalizedArgs.gates = args.gates.map((gate: unknown) => gate);
+      }
+      this.note("'inputs' is named here and copied nowhere");
+      return this.promptExecutor.executePromptCommand(normalizedArgs, extra);
+    });
+  }
+  private note(message: string) { return message; }
+}
+`
+  );
+  project.createSourceFile(
+    '/executor.ts',
+    `
+export class Executor {
+  async executePromptCommand(args: any, extra: any) {
+    if (args.cancel === true) return this.handleCancel();
+    const request = {
+      ...(args.command && { command: args.command }),
+      ...(args.options && { options: args.options }),
+      ...(args.inputs && { inputs: args.inputs }),
+      ...(args.gates !== undefined && { gates: args.gates }),
+    } as any;
+    return this.pipeline.execute(request, extra);
+  }
+  private handleCancel() { return 'cancelled'; }
+}
+`
+  );
+  project.createSourceFile(
+    '/engine/stage.ts',
+    `
+export class Stage {
+  execute(context: any) {
+    const { options } = context.mcpRequest;
+    return [context.mcpRequest.command, options, context.mcpRequest.inputs${
+      planted ? ', "\'gates\' is named here"' : ', context.mcpRequest.gates'
+    }];
+  }
+}
+`
+  );
+  return checkBindings(
+    promptEngineAdapter.bind({
+      project,
+      routerPath: '/index.ts',
+      commands: [],
+      contract: {
+        parameters: ['command', 'cancel', 'options', 'inputs', 'gates'].map((name) => ({ name })),
+      },
+      pipelinePath: '/engine',
+    })
+  );
+}
+
+function selfTestPromptEngine() {
+  const failures = [];
+  // Planted: the registration allowlist never copies `inputs` (the hop `remainder`, `handoff` and
+  // `claim_token` were each lost at), and `gates` reaches the pipeline request but no stage reads
+  // it. Both are named in string literals only. `cancel` is consumed by the executor itself.
+  const planted = promptEngineFixture({ planted: true });
+  const expected = ['call/gates', 'call/inputs'];
+  if (JSON.stringify(keys(planted)) !== JSON.stringify(expected)) {
+    failures.push(`planted: expected ${expected.join(', ')}, got ${keys(planted).join(', ')}`);
+  }
+  const fixed = promptEngineFixture({ planted: false });
+  if (fixed.findings.length !== 0) failures.push(`fixed twin: got ${keys(fixed).join(', ')}`);
+  if (fixed.verified !== 5)
+    failures.push(`fixed twin: expected 5 proven reads, got ${fixed.verified}`);
+  return failures.map((failure) => `prompt_engine: ${failure}`);
+}
+
 function selfTest() {
-  const failures = [...selfTestSystemControl(), ...selfTestResourceManager()];
+  const failures = [
+    ...selfTestSystemControl(),
+    ...selfTestResourceManager(),
+    ...selfTestPromptEngine(),
+  ];
   for (const failure of failures) console.error(`❌ self-test: ${failure}`);
   if (failures.length === 0) console.log('[validate-tool-parameter-reads] self-test OK');
   return failures.length > 0 ? 1 : 0;
