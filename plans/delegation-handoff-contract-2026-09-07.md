@@ -1,13 +1,15 @@
 ---
 title: "Delegation handoff contract"
 date: 2026-09-07
-status: active
+status: reference
 tags: [chains, delegation, gates, workflow-ir, hooks, tests]
 ledger: plans/delegation-handoff-2026-09-07.md
-publish: push+merge (2026-09-22 · owner ruling R5 · the Tier 4 PR)
+publish: push+merge (2026-09-22 · owner ruling R5 · the Tier 4 PR) — retired 2026-09-23, every row terminal
 ---
 
 # Delegation Handoff Contract
+
+> **Retired 2026-09-23 (`status: reference`).** Every row is terminal: Tiers 1–3 (#271 `02852fd7`, #272 `6a1ee229`), Tier 4 (#362 `3ff285d6`), 4.7 the owner's live drive (#374 `1161853f`), 4.8 the detached review at report (#377 `2d079b46`), 4.9 the delegated first step (#365 `5f122f39`); OQ1–OQ5 ruled. Follow-ups live in `plans/technical-debt/primitive-rework-2026-09-23.md` (row 3.8: enforcement mode and structural grading for detached reviews; Tier 3: the review as a node-keyed record).
 
 The server renders an EXECUTION BRIEF for a `==>` step and accepts a resume for it with nothing
 verifying the two belong together. This plan makes the server the owner of that handoff: the
