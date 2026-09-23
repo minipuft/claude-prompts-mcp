@@ -279,20 +279,13 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       return;
     }
 
-    // One submission, one recorded attempt (P4.116). A deferred FAIL opens a review and records
-    // the verdict against it; handing the same `gate_verdict` to the pending path recorded it a
-    // second time and spent two retry attempts on one call.
-    const pendingResult =
-      deferredResult.verdictRecorded === true
-        ? deferredResult
-        : await this.verdictProcessor.processPendingReviewVerdict(
-            context,
-            this.chainSessionStore.getSession(sessionId, scopeOptions) ?? session,
-            sessionId,
-            currentStepAtStart,
-            deferredResult.userResponse,
-            sessionContext
-          );
+    const pendingResult = await this.processPendingUnlessSpent(
+      context,
+      session,
+      currentStepAtStart,
+      deferredResult,
+      sessionContext
+    );
     if (pendingResult.earlyExit) {
       await this.settleVerdict(
         context,
@@ -334,6 +327,34 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     await this.ensurePostAdvanceReview(context);
 
     this.logExit({ captured: true });
+  }
+
+  /**
+   * Answer the pending review with this call's verdict — unless the deferred path already spent it.
+   *
+   * One submission, one recorded attempt (P4.116). A deferred FAIL opens a review and records the
+   * verdict against it; handing the same `gate_verdict` to the pending path recorded it a second
+   * time and spent two retry attempts on one call. The spent result stands in for the pending one.
+   */
+  private async processPendingUnlessSpent(
+    context: ExecutionContext,
+    session: NonNullable<ReturnType<ChainSessionService['getSession']>>,
+    currentStepAtStart: number,
+    deferredResult: VerdictProcessingResult,
+    sessionContext: SessionContext
+  ): Promise<VerdictProcessingResult> {
+    if (deferredResult.verdictRecorded === true) {
+      return deferredResult;
+    }
+    const sessionId = sessionContext.sessionId;
+    return this.verdictProcessor.processPendingReviewVerdict(
+      context,
+      this.chainSessionStore.getSession(sessionId, context.getScopeOptions()) ?? session,
+      sessionId,
+      currentStepAtStart,
+      deferredResult.userResponse,
+      sessionContext
+    );
   }
 
   /**

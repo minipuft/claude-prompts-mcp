@@ -32,6 +32,7 @@ import type { ShellVerifyExecutor } from '../../../gates/shell/shell-verify-exec
 import type { GateShellVerifyResult } from '../../../gates/shell/shell-verify-message-formatter.js';
 import type { ExecutionContext } from '../../context/index.js';
 import type { ChainOperatorExecutor } from '../../operators/chain-operator-executor.js';
+import type { ChainStepRenderResult } from '../../operators/types.js';
 
 type GatesConfigProvider = () => GatesConfig | undefined;
 
@@ -437,19 +438,7 @@ export class GateReviewStage extends BasePipelineStage {
         additionalGateIds: reviewForRender.gateIds,
       });
 
-      // The reviewed node's declaration, as stage 18 records a normal render's (P4.115). Stage 18
-      // never renders a step held by a review, so this is the only record that step can have —
-      // and stage 19 grades its answer against exactly this, not against the run's union.
-      if (
-        renderResult.declaredSections !== undefined &&
-        renderResult.declaredNodeId !== undefined
-      ) {
-        this.chainSessionStore.recordStepDeclaration(
-          sessionId,
-          renderResult.declaredNodeId,
-          renderResult.declaredSections
-        );
-      }
+      this.recordReviewedDeclaration(sessionId, renderResult);
 
       // Resolve judge gates and compose context-isolated prompt if any gates use judge mode.
       // ResponseAssembler renders it into the review reply (P4.133).
@@ -510,5 +499,21 @@ export class GateReviewStage extends BasePipelineStage {
     } catch (error) {
       this.handleError(error, 'Failed to render gate review step');
     }
+  }
+
+  /**
+   * Record the reviewed node's declaration, as stage 18 records a normal render's (P4.115).
+   * Stage 18 never renders a step held by a review, so this is the only record that step can
+   * have — and stage 19 grades its answer against exactly this, not against the run's union.
+   */
+  private recordReviewedDeclaration(sessionId: string, renderResult: ChainStepRenderResult): void {
+    if (renderResult.declaredSections === undefined || renderResult.declaredNodeId === undefined) {
+      return;
+    }
+    this.chainSessionStore.recordStepDeclaration(
+      sessionId,
+      renderResult.declaredNodeId,
+      renderResult.declaredSections
+    );
   }
 }
