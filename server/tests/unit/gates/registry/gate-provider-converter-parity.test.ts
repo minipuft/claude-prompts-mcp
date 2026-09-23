@@ -1,20 +1,22 @@
 /**
- * P4.133 — the provider the live server reviews through carries what the gate file says.
+ * P4.133 / P4.140 — the provider the live server reviews through carries what the gate file says.
  *
- * Two classes turn a parsed `gate.yaml` into the `LightweightGateDefinition` the pipeline reads:
- * `GateLoader` (what the P4.121 wiring test drives) and `GateManagerProvider` (what
- * `PromptExecutor` wires into every stage). The provider dropped `evaluation`, so every
- * `mode: judge` gate the running server loaded was reviewed as `self`, while the test that
- * proved judge routing went through the other class and stayed green.
- *
- * The parity case below is the check that fails when a new key lands in one converter and not
- * the other: both are fed the SAME parsed definition, with every optional key populated.
+ * Two classes hand the pipeline a `LightweightGateDefinition`: `GateLoader` (what the P4.121
+ * wiring test drives) and `GateManagerProvider` (what `PromptExecutor` wires into every stage).
+ * Each used to hold its own conversion map, and the provider's drifted twice: it dropped
+ * `evaluation` (every `mode: judge` gate reviewed as `self`) and then `sourceRoot` (a script
+ * shipped beside `gate.yaml` resolved against the server's working directory). Both now call
+ * `toGateDefinition`, so this file is a single-implementation guard: fed the SAME parsed
+ * definitions, the two classes must produce byte-identical output — for every bundled gate and
+ * for a fixture with every optional key populated plus an undeclared one. A provider that grows
+ * its own map again fails here on the first key it spells differently.
  *
  * Classification: Unit. Real loader + real converters; the gate manager is a one-method stub.
  */
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 
@@ -25,15 +27,6 @@ import { GateManagerProvider } from '../../../../src/engine/gates/registry/gate-
 import type { IGateManager } from '../../../../src/engine/gates/types.js';
 
 const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() };
-
-/**
- * Keys `GateLoader` carries and the provider does not, each a known open divergence.
- * `sourceRoot` (as of 2026-09-22 · flips when `GateManagerProvider.toLightweight` carries it):
- * without it a `shell_verify` script shipped beside `gate.yaml` cannot be resolved on the live
- * path. Reported, not fixed, by the P4.133 worker. The assertion is exact, so fixing it fails
- * this test until the entry is deleted.
- */
-const KNOWN_PROVIDER_GAPS = ['sourceRoot'];
 
 const FULL_GATE_YAML = [
   'id: full-gate',
@@ -55,6 +48,8 @@ const FULL_GATE_YAML = [
   '  mode: judge',
   '  model: haiku-full',
   '  strict: false',
+  'blockResponseOnFail: true',
+  'planted_extra: PLANTED',
   '',
 ].join('\n');
 
@@ -89,18 +84,43 @@ describe('GateManagerProvider carries the gate file (P4.133)', () => {
     expect(gate?.evaluation).toEqual({ mode: 'judge', model: 'haiku-full', strict: false });
   });
 
-  test('both converters carry the same keys from one parsed definition', async () => {
+  test('both classes produce byte-identical definitions from one parsed gate', async () => {
     const fromLoader = await new GateLoader(logger as never, gatesDir).loadGate('full-gate');
     const fromProvider = await providerOver(new GateDefinitionLoader({ gatesDir })).loadGate(
       'full-gate'
     );
 
-    // Positive control: the loader side is populated, so a missing key is a real gap.
+    // Positive control: the loader side is populated, so a key missing on either side is a
+    // real gap and not an empty fixture.
     expect(fromLoader?.evaluation?.mode).toBe('judge');
+    expect(fromLoader?.sourceRoot).toBe(gatesDir);
+    expect(fromLoader?.blockResponseOnFail).toBe(true);
 
-    const loaderKeys = Object.keys(fromLoader ?? {}).sort();
-    const providerKeys = Object.keys(fromProvider ?? {}).sort();
-    expect(loaderKeys.filter((key) => !providerKeys.includes(key))).toEqual(KNOWN_PROVIDER_GAPS);
-    expect(providerKeys.filter((key) => !loaderKeys.includes(key))).toEqual([]);
+    expect(JSON.stringify(fromProvider)).toBe(JSON.stringify(fromLoader));
+  });
+
+  test('every bundled gate converts identically through both classes', async () => {
+    // Named explicitly: the default resolution honours MCP_RESOURCES_PATH, which a developer
+    // shell may export, and this case is about what the package ships.
+    const bundledDir = path.resolve(
+      fileURLToPath(import.meta.url),
+      '../../../../../resources/gates'
+    );
+    const definitions = new GateDefinitionLoader({ gatesDir: bundledDir });
+    const ids = [...definitions.loadAllGates().keys()].sort();
+    // Positive control: the bundle was found, so an empty comparison cannot pass vacuously.
+    expect(ids.length).toBeGreaterThan(5);
+
+    const loader = new GateLoader(logger as never, bundledDir);
+    const provider = providerOver(definitions);
+    for (const id of ids) {
+      const fromLoader = await loader.loadGate(id);
+      const fromProvider = await provider.loadGate(id);
+      expect(fromLoader?.id).toBe(id);
+      expect({ id, json: JSON.stringify(fromProvider) }).toEqual({
+        id,
+        json: JSON.stringify(fromLoader),
+      });
+    }
   });
 });
