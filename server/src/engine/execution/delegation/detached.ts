@@ -46,10 +46,10 @@ export interface DetachedNodeFacts {
  * The phase of a detached node's open gate review, recorded as `metadata.phase` on the review
  * (`session.detachedGateReviews[nodeId]`). A PASS deletes the review, so "passed" is no phase.
  */
-export type DetachedReviewPhase = 'awaiting-verdict' | 'awaiting-replacement' | 'exhausted';
+type DetachedReviewPhase = 'awaiting-verdict' | 'awaiting-replacement' | 'exhausted';
 
 /** Read a detached review's phase off its metadata; an unrecognised value reads as awaiting. */
-export function detachedReviewPhase(review: {
+function detachedReviewPhase(review: {
   readonly metadata?: Readonly<Record<string, unknown>>;
 }): DetachedReviewPhase {
   const phase = review.metadata?.['phase'];
