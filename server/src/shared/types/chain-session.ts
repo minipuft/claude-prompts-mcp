@@ -572,8 +572,8 @@ export interface ChainSessionService {
   /**
    * `slot` selects a detached node's review (row 4.8); absent, the current-step slot.
    *
-   * @deprecated stamped: (as of 2026-09-23 · flips when row 3.6's exception list is empty) —
-   * stamps the review's identity (`stampLegacyReview`) and delegates to {@link setReview}.
+   * @deprecated stamped: (as of 2026-09-23 · flips when `setPendingGateReview` has no `src`
+   * caller; stages 16, 19 and 20 still write through it) — stamps the review's identity (`stampLegacyReview`) and delegates to {@link setReview}.
    */
   setPendingGateReview(
     sessionId: string,

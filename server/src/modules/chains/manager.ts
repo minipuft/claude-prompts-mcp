@@ -1987,7 +1987,8 @@ export class ChainSessionStore implements ChainSessionService {
    * its own `nodeId`, else the graded step its metadata records (a structural review's). The node
    * is never derived from where the run stands.
    *
-   * @deprecated stamped: (as of 2026-09-23 · flips when row 3.6's exception list is empty)
+   * @deprecated stamped: (as of 2026-09-23 · flips when `setPendingGateReview` has no `src`
+   * caller; stages 16, 19 and 20 still write through it)
    * @throws when the review names no node.
    */
   async setPendingGateReview(
