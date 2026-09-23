@@ -43,7 +43,7 @@
  * Fails closed below `MINIMUM_VERIFIED_READS`: a green run must have proved that many declared
  * parameters are read, or it is not reaching the handlers it claims to govern.
  *
- * Run: `npm run validate:system-control-parameter-reads` · self-test: `--self-test`
+ * Run: `npm run validate:tool-parameter-reads` · self-test: `--self-test`
  */
 
 import { readFileSync } from 'node:fs';
@@ -54,15 +54,8 @@ import { fileURLToPath } from 'node:url';
 import { Node, Project, SyntaxKind } from 'ts-morph';
 
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const CONTRACT_PATH = path.join(SERVER_ROOT, 'tooling', 'contracts', 'system-control.json');
-const SYSTEM_CONTROL_DIR = path.join(SERVER_ROOT, 'src', 'mcp', 'tools', 'system-control');
-const ROUTER_PATH = path.join(SYSTEM_CONTROL_DIR, 'system-control-router.ts');
-
-/** Read by the router to choose the handler, never by a handler. */
-const EXEMPT_PARAMETERS = new Set(['action']);
-
-/** Below this many proven reads, the scan is not reaching the handlers. */
-const MINIMUM_VERIFIED_READS = 40;
+const CONTRACTS_DIR = path.join(SERVER_ROOT, 'tooling', 'contracts');
+const TOOLS_DIR = path.join(SERVER_ROOT, 'src', 'mcp', 'tools');
 
 /** `(args as T)`, `args!`, `<T>args` → `args`. */
 function unwrap(node) {
@@ -237,134 +230,184 @@ function handlerClassesByAction(project, routerPath) {
     const action = stringLabel(clause);
     const created = clause.getFirstDescendantByKind(SyntaxKind.NewExpression);
     if (action === undefined || created === undefined) continue;
-    const className = created.getExpression().getText();
-    const declaration = project
-      .getSourceFiles()
-      .flatMap((file) => file.getClasses())
-      .find((candidate) => candidate.getName() === className);
+    const declaration = findClass(project, created.getExpression().getText());
     if (declaration !== undefined) classes.set(action, declaration);
   }
   return classes;
 }
 
+function findClass(project, name) {
+  return project
+    .getSourceFiles()
+    .flatMap((file) => file.getClasses())
+    .find((candidate) => candidate.getName() === name);
+}
+
+function entryOf(classDeclaration, methodName) {
+  return {
+    file: path.relative(SERVER_ROOT, classDeclaration.getSourceFile().getFilePath()),
+    symbol: `${classDeclaration.getName()}.${methodName}`,
+  };
+}
+
 /**
- * Every (command, parameter) the contract declares and the handler does not read.
- *
- * `commands` is the contract's `commands` array: `{ id: "action[:operation]", parameters }`.
+ * `system_control`: one handler class per action (the router's `getActionHandler` switch), whose
+ * `execute(args)` dispatches the operation in a `switch`. Commands are `action[:operation]`.
  */
-export function findUnreadParameters({ project, routerPath, commands }) {
-  const context = { cache: new Map() };
-  const classes = handlerClassesByAction(project, routerPath);
+const systemControlAdapter = {
+  tool: 'system_control',
+  contract: 'system-control.json',
+  sources: ['system-control/**/*.ts'],
+  router: 'system-control/system-control-router.ts',
+  /** Read by the router to choose the handler, never by a handler. */
+  exempt: new Set(['action']),
+  minimumReads: 40,
+  boundary:
+    'an argument handed to anything that is not a method of the handler class — past it the ' +
+    'parameter belongs to that service',
+
+  bind({ project, routerPath, commands }) {
+    const context = { cache: new Map() };
+    const classes = handlerClassesByAction(project, routerPath);
+    return commands.map((command) => {
+      const [action, operation] = command.id.split(':');
+      const binding = {
+        command: command.id,
+        declaredBy: 'the contract',
+        parameters: command.parameters.filter((name) => !this.exempt.has(name)),
+      };
+      const handler = classes.get(action);
+      if (handler === undefined) {
+        return {
+          ...binding,
+          problem: { parameter: '*', reason: 'no handler dispatches this action' },
+        };
+      }
+      const execute = findMethod(handler, 'execute');
+      const parameterName = execute?.getParameters()[0]?.getName();
+      const body = execute?.getBody();
+      if (parameterName === undefined || body === undefined) {
+        return {
+          ...binding,
+          problem: { parameter: '*', reason: `${handler.getName()} has no execute(args)` },
+        };
+      }
+
+      let roots = [body];
+      const excluded = new Set();
+      const dispatch = body
+        .getDescendantsOfKind(SyntaxKind.SwitchStatement)
+        .find((candidate) =>
+          candidate.getClauses().some((clause) => stringLabel(clause) !== undefined)
+        );
+      if (operation !== undefined && dispatch !== undefined) {
+        const selected = clausesFor(dispatch, operation);
+        if (selected === undefined) {
+          return {
+            ...binding,
+            problem: { parameter: 'operation', reason: `no case '${operation}' and no default` },
+          };
+        }
+        excluded.add(dispatch.getCaseBlock());
+        roots = [body, ...selected];
+      }
+
+      return {
+        ...binding,
+        entry: entryOf(handler, 'execute'),
+        qualifier: operation === undefined ? '' : ` for operation '${operation}'`,
+        reads: readsIn(context, handler, roots, parameterName, excluded),
+      };
+    });
+  },
+};
+
+const ADAPTERS = [systemControlAdapter];
+
+/**
+ * Every (command, parameter) a binding declares and its entry does not read.
+ *
+ * A binding is one contract command resolved to the code that must read its parameters:
+ * `{ command, declaredBy, parameters, entry: {file, symbol}, qualifier, reads }`, or
+ * `{ command, problem }` when the command resolves to no code at all — a finding, not a skip.
+ */
+export function checkBindings(bindings) {
   const findings = [];
   let verified = 0;
-
-  for (const command of commands) {
-    const [action, operation] = command.id.split(':');
-    const declared = command.parameters.filter((name) => !EXEMPT_PARAMETERS.has(name));
-    const handler = classes.get(action);
-    if (handler === undefined) {
-      findings.push({
-        command: command.id,
-        parameter: '*',
-        reason: 'no handler dispatches this action',
-      });
+  for (const binding of bindings) {
+    if (binding.problem !== undefined) {
+      findings.push({ command: binding.command, ...binding.problem });
       continue;
     }
-    const execute = findMethod(handler, 'execute');
-    const parameterName = execute?.getParameters()[0]?.getName();
-    const body = execute?.getBody();
-    if (parameterName === undefined || body === undefined) {
-      findings.push({
-        command: command.id,
-        parameter: '*',
-        reason: `${handler.getName()} has no execute(args)`,
-      });
-      continue;
-    }
-
-    let roots = [body];
-    const excluded = new Set();
-    const dispatch = body
-      .getDescendantsOfKind(SyntaxKind.SwitchStatement)
-      .find((candidate) =>
-        candidate.getClauses().some((clause) => stringLabel(clause) !== undefined)
-      );
-    if (operation !== undefined && dispatch !== undefined) {
-      const selected = clausesFor(dispatch, operation);
-      if (selected === undefined) {
-        findings.push({
-          command: command.id,
-          parameter: 'operation',
-          reason: `no case '${operation}' and no default`,
-        });
+    for (const parameter of binding.parameters) {
+      if (binding.reads.has(parameter)) {
+        verified += 1;
         continue;
       }
-      excluded.add(dispatch.getCaseBlock());
-      roots = [body, ...selected];
-    }
-
-    const reads = readsIn(context, handler, roots, parameterName, excluded);
-
-    for (const parameter of declared) {
-      if (reads.has(parameter)) {
-        verified += 1;
-      } else {
-        findings.push({
-          command: command.id,
-          parameter,
-          reason: `declared by the contract and never read by ${handler.getName()}.execute${
-            operation === undefined ? '' : ` for operation '${operation}'`
-          }`,
-        });
-      }
+      findings.push({
+        command: binding.command,
+        parameter,
+        reason: `declared by ${binding.declaredBy} and never read by ${binding.entry.symbol}${
+          binding.qualifier ?? ''
+        }`,
+      });
     }
   }
-
   return { findings, verified };
 }
 
-function report(findings, verified, label) {
+function report(adapter, findings, verified) {
   for (const finding of findings) {
     console.error(
-      `❌ system_control ${finding.command}: '${finding.parameter}' — ${finding.reason}`
+      `❌ ${adapter.tool} ${finding.command}: '${finding.parameter}' — ${finding.reason}`
     );
   }
   if (findings.length > 0) {
     console.error(
       `   A declared parameter the handler ignores is accepted and answers success for something ` +
         `that never ran. Read it where the operation dispatches, or drop it from the command's ` +
-        `\`parameters\` in tooling/contracts/system-control.json.`
+        `\`parameters\` in tooling/contracts/${adapter.contract}.`
     );
   }
   console.log(
-    `[${label}] ${findings.length} unread declared parameter(s), ${verified} proven read(s)`
+    `[validate-tool-parameter-reads] ${adapter.tool}: ${findings.length} unread declared ` +
+      `parameter(s), ${verified} proven read(s)`
   );
 }
 
-function runLive() {
-  const contract = JSON.parse(readFileSync(CONTRACT_PATH, 'utf8'));
+function checkTool(adapter) {
+  const contract = JSON.parse(readFileSync(path.join(CONTRACTS_DIR, adapter.contract), 'utf8'));
   const project = new Project({
     skipAddingFilesFromTsConfig: true,
     skipFileDependencyResolution: true,
   });
-  project.addSourceFilesAtPaths(path.join(SYSTEM_CONTROL_DIR, '**', '*.ts'));
+  for (const glob of adapter.sources) {
+    project.addSourceFilesAtPaths(path.resolve(TOOLS_DIR, glob));
+  }
 
-  const { findings, verified } = findUnreadParameters({
-    project,
-    routerPath: ROUTER_PATH,
-    commands: contract.commands,
-  });
-  report(findings, verified, 'validate-system-control-parameter-reads');
+  const { findings, verified } = checkBindings(
+    adapter.bind({
+      project,
+      routerPath: path.join(TOOLS_DIR, adapter.router),
+      commands: contract.commands,
+    })
+  );
+  report(adapter, findings, verified);
 
-  if (verified < MINIMUM_VERIFIED_READS) {
+  if (verified < adapter.minimumReads) {
     console.error(
-      `❌ only ${verified} declared parameter(s) proven read; expected at least ` +
-        `${MINIMUM_VERIFIED_READS}. The scan is not reaching the handlers — check ROUTER_PATH and ` +
-        `the getActionHandler switch.`
+      `❌ ${adapter.tool}: only ${verified} declared parameter(s) proven read; expected at least ` +
+        `${adapter.minimumReads}. The scan is not reaching the handlers — check the adapter's ` +
+        `router and entry resolution.`
     );
     return 1;
   }
   return findings.length > 0 ? 1 : 0;
+}
+
+function runLive() {
+  // Every tool runs even after one fails, so one run reports the whole surface.
+  return ADAPTERS.map(checkTool).some((status) => status !== 0) ? 1 : 0;
 }
 
 const FIXTURE_ROUTER = `
@@ -422,16 +465,21 @@ const FIXTURE_COMMANDS = [
   { id: 'demo:list', parameters: ['action', 'operation', 'show_details'] },
 ];
 
+function runSystemControl(project, commands) {
+  return checkBindings(systemControlAdapter.bind({ project, routerPath: '/router.ts', commands }));
+}
+
 function runFixture(options) {
   const project = new Project({ useInMemoryFileSystem: true });
   project.createSourceFile('/router.ts', FIXTURE_ROUTER);
   project.createSourceFile('/handler.ts', fixtureHandler(options));
-  return findUnreadParameters({ project, routerPath: '/router.ts', commands: FIXTURE_COMMANDS });
+  return runSystemControl(project, FIXTURE_COMMANDS);
 }
 
-function selfTest() {
+const keys = (result) => result.findings.map((f) => `${f.command}/${f.parameter}`).sort();
+
+function selfTestSystemControl() {
   const failures = [];
-  const keys = (result) => result.findings.map((f) => `${f.command}/${f.parameter}`).sort();
 
   // Planted: `enable` never copies `persist` (the #357 shape) and `disable` copies it into an
   // object its callee ignores (the `status` include_history shape). The error message and the
@@ -453,8 +501,8 @@ function selfTest() {
     failures.push(`fixed twin: expected 8 proven reads, got ${fixed.verified}`);
 
   // A command whose operation has no case and no default is a finding, not a skip.
-  const orphan = findUnreadParameters({
-    project: (() => {
+  const orphan = runSystemControl(
+    (() => {
       const project = new Project({ useInMemoryFileSystem: true });
       project.createSourceFile('/router.ts', FIXTURE_ROUTER);
       project.createSourceFile(
@@ -466,17 +514,21 @@ function selfTest() {
       );
       return project;
     })(),
-    routerPath: '/router.ts',
-    commands: [{ id: 'demo:missing', parameters: ['action', 'operation'] }],
-  });
+    [{ id: 'demo:missing', parameters: ['action', 'operation'] }]
+  );
   if (orphan.findings.length !== 1 || orphan.findings[0].parameter !== 'operation') {
     failures.push(
       `orphan operation: expected one 'operation' finding, got ${keys(orphan).join(', ') || 'none'}`
     );
   }
 
+  return failures.map((failure) => `system_control: ${failure}`);
+}
+
+function selfTest() {
+  const failures = [...selfTestSystemControl()];
   for (const failure of failures) console.error(`❌ self-test: ${failure}`);
-  if (failures.length === 0) console.log('[validate-system-control-parameter-reads] self-test OK');
+  if (failures.length === 0) console.log('[validate-tool-parameter-reads] self-test OK');
   return failures.length > 0 ? 1 : 0;
 }
 
