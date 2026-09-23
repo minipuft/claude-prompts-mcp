@@ -10,6 +10,8 @@ import { describe, expect, test } from '@jest/globals';
 
 import {
   collectDetachedNodeFacts,
+  describeDetachedReview,
+  describeDetachedReviewOutcome,
   describeHeldRun,
   resolveDetachedReport,
 } from '../../../../src/engine/execution/delegation/detached.js';
@@ -386,5 +388,48 @@ describe('describeHeldRun: reviews still open', () => {
     expect(text).toContain('until its detached review(s) are answered');
     expect(text).toContain('Gate review still open on reported detached node(s): a (step 2)');
     expect(text).not.toMatch(/[Cc]hain complete|Execution complete/);
+  });
+});
+
+describe('the words a detached review says (row 3.8)', () => {
+  const node: DetachedNodeFacts = {
+    token: 'rev',
+    nodeId: 'rev',
+    stepNumber: 2,
+    spawned: true,
+    reported: true,
+  };
+  const outcome = (result: 'cleared' | 'passed') =>
+    describeDetachedReviewOutcome(node, {
+      result,
+      attempt: 1,
+      maxAttempts: 2,
+      runCompleted: false,
+      held: false,
+      detachedNodes: [node],
+    });
+
+  test('an advisory FAIL is cleared: it says the gate failed, is not blocking, and the result stands', () => {
+    const text = outcome('cleared');
+    expect(text.split('\n\n')[0]).toBe(
+      '⚠ Gate review of detached node rev (step 2) failed (attempt 1/2), but its gates are not ' +
+        'blocking: its recorded result stands.'
+    );
+    expect(text).not.toContain('passed');
+    // Twin: a PASS keeps its own head.
+    expect(outcome('passed')).toContain('✓ Gate review of detached node rev (step 2) passed');
+  });
+
+  test('a review opened on a result missing sections names each one; a sectioned one names none', () => {
+    const review = { chainId: 'c', attempt: 1, maxAttempts: 2, verdictTemplate: '{}' };
+    const missing = describeDetachedReview(node, {
+      ...review,
+      structuralHints: ['Ensure your response includes the required "## Context" section'],
+    });
+    expect(missing).toContain('The reported result is missing required structure:');
+    expect(missing).toContain('- Ensure your response includes the required "## Context" section');
+    expect(describeDetachedReview(node, { ...review, structuralHints: [] })).not.toContain(
+      'missing required structure'
+    );
   });
 });

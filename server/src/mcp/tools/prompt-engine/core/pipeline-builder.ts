@@ -354,6 +354,17 @@ export class PipelineBuilder {
       deps.logger
     );
 
+    // Phase guard verification stage — built before stage 16, which hands it a detached node's
+    // late report to grade (row 3.8): stage 16 answers that call, so stage 19 never runs on it.
+    const phaseGuardVerificationStage = createPhaseGuardVerificationStage(
+      () => deps.frameworkManager,
+      // Resolved by the config loader, not here: the literal that used to sit on this line was
+      // one of three statements of the same pair (row 6.2 / R57).
+      () => deps.configManager.getConfig().phaseGuards,
+      deps.chainSessionStore,
+      deps.logger
+    );
+
     const responseCaptureStage = new StepResponseCaptureStage(
       gateVerdictProcessor,
       stepCaptureService,
@@ -371,6 +382,14 @@ export class PipelineBuilder {
         // pin the mode to whatever was on disk when this pipeline was built.
         handoffEvidenceMode: () =>
           resolveHandoffEvidenceMode(deps.configManager.getConfig().execution.delegation?.evidence),
+        gradeLateReport: (context, sessionId, node, review, recordedOutput) =>
+          phaseGuardVerificationStage.gradeLateReport(
+            context,
+            sessionId,
+            node,
+            review,
+            recordedOutput
+          ),
       }
     );
 
@@ -400,16 +419,6 @@ export class PipelineBuilder {
       deps.referenceResolver,
       deps.scriptReferenceResolver,
       deps.executionRecordStore
-    );
-
-    // Phase guard verification stage
-    const phaseGuardVerificationStage = createPhaseGuardVerificationStage(
-      () => deps.frameworkManager,
-      // Resolved by the config loader, not here: the literal that used to sit on this line was
-      // one of three statements of the same pair (row 6.2 / R57).
-      () => deps.configManager.getConfig().phaseGuards,
-      deps.chainSessionStore,
-      deps.logger
     );
 
     const gateReviewStage = new GateReviewStage(

@@ -1037,3 +1037,72 @@ describe('the declared-header set is per node (P4.111)', () => {
     warn.mockRestore();
   });
 });
+
+describe('gradeLateReport (row 3.8)', () => {
+  const SECTIONED = '## Context\nThe claim.\n\n## Analysis\nThe evidence.';
+  const guide = createMockGuide([
+    { id: 'context', name: 'Context', section_header: '## Context', guards: { required: true } },
+    { id: 'analysis', name: 'Analysis', section_header: '## Analysis', guards: { required: true } },
+  ]);
+  const node = { nodeId: 'rev', stepNumber: 2 };
+
+  /** The detached node `rev` declared both headers; the captured step `n1` declared none. */
+  const storeFor = (): ChainSessionService =>
+    ({
+      getSession: jest.fn().mockReturnValue({
+        state: {
+          stepStates: new Map([
+            ['n1', { state: 'completed', isPlaceholder: false, declaredSections: [] }],
+            [
+              'rev',
+              {
+                state: 'completed',
+                isPlaceholder: false,
+                declaredSections: ['## Context', '## Analysis'],
+              },
+            ],
+          ]),
+        },
+      }),
+      setReview: jest.fn<ChainSessionService['setReview']>().mockResolvedValue(undefined),
+      clearPendingGateReview: jest
+        .fn<ChainSessionService['clearPendingGateReview']>()
+        .mockResolvedValue(undefined),
+    }) as unknown as ChainSessionService;
+
+  const grade = async (callText: string, recordedOutput: string) => {
+    const store = storeFor();
+    const stage = new PhaseGuardVerificationStage(
+      () => createRegistry(guide),
+      () => defaultConfig,
+      store,
+      createLogger()
+    );
+    const ctx = withSession(createContext(createMcpRequest('>>test', callText)));
+    ctx.frameworkContext = { selectedFramework: { id: 'cageerf', name: 'CAGEERF' } } as any;
+    // The captured step graded nothing declared: only the detached node's record can block.
+    ctx.state.session.capturedStep = { nodeId: 'n1', ordinal: 1 } as any;
+    return {
+      review: await stage.gradeLateReport(ctx, 'session-1', node, null, recordedOutput),
+      store,
+    };
+  };
+
+  test("grades the recorded output against the node's own declaration, never the call's text", async () => {
+    const { review, store } = await grade(SECTIONED, 'one line');
+    expect(review).toMatchObject({
+      nodeId: 'rev',
+      kind: 'detached',
+      phase: 'awaiting-verdict',
+      gateIds: [PHASE_GUARD_GATE_ID],
+      reviewedOutput: 'one line',
+    });
+    expect(store.setReview).toHaveBeenCalledWith('session-1', review!);
+  });
+
+  test('twin: a sectioned recorded output opens nothing, whatever the call carried', async () => {
+    const { review, store } = await grade('one line', SECTIONED);
+    expect(review).toBeNull();
+    expect(store.setReview).not.toHaveBeenCalled();
+  });
+});

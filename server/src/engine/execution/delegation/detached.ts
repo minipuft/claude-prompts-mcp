@@ -387,13 +387,26 @@ export function describeDetachedReview(
     readonly attempt: number;
     readonly maxAttempts: number;
     readonly verdictTemplate: string;
+    /**
+     * What the recorded result's structural grade found missing (row 3.8): the hints the phase
+     * guard merged into this review. Empty or absent when the result has every required section.
+     */
+    readonly structuralHints?: readonly string[];
   }
 ): string {
+  const hints = review.structuralHints ?? [];
   return [
     '---',
     `**Gate Review Required — detached node ${node.token} (step ${node.stepNumber})** ` +
       `(attempt ${review.attempt}/${review.maxAttempts})`,
     '',
+    ...(hints.length > 0
+      ? [
+          'The reported result is missing required structure:',
+          ...hints.map((hint) => `- ${hint}`),
+          '',
+        ]
+      : []),
     'Review the result the worker reported above against the gates, then submit — the ' +
       "user_response is only the trailer, which routes the verdict to that node's review:",
     '',
@@ -412,7 +425,8 @@ export function describeDetachedReview(
 export function describeDetachedReviewOutcome(
   node: DetachedNodeFacts,
   outcome: {
-    readonly result: 'passed' | 'failed' | 'exhausted' | 'retry' | 'skipped';
+    /** `cleared`: a FAIL on gates that are not blocking (R10) — the recorded result stands. */
+    readonly result: 'passed' | 'failed' | 'exhausted' | 'retry' | 'skipped' | 'cleared';
     readonly attempt: number;
     readonly maxAttempts: number;
     readonly runCompleted: boolean;
@@ -428,6 +442,9 @@ export function describeDetachedReviewOutcome(
   const heads: Record<typeof outcome.result, string> = {
     passed: `✓ Gate review of ${label} passed; its recorded result stands.`,
     skipped: `✓ Gate review of ${label} skipped by gate_action; its recorded result stands.`,
+    cleared:
+      `⚠ Gate review of ${label} failed ${counter}, but its gates are not blocking: its ` +
+      'recorded result stands.',
     failed: `✗ Gate review of ${label} failed ${counter}. ${replace}`,
     retry: `↻ Retry count of ${label}'s gate review reset. ${replace}`,
     exhausted:
