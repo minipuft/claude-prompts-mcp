@@ -14,6 +14,19 @@ export type {
 export type EnforcementMode = 'blocking' | 'advisory' | 'informational';
 
 /**
+ * The gates that apply to the step being reviewed, as their files declare them (P4.137).
+ *
+ * `declared` maps each applying gate id to its `enforcementMode`, or to `undefined` when the file
+ * names none. `undeclared` is what such a gate counts as — the posture the caller already had for
+ * the context (a chain step holds, a single prompt advises). Published by stage 11, read only by
+ * `resolveEnforcementMode`.
+ */
+export interface GateSetEnforcement {
+  readonly declared: ReadonlyMap<string, EnforcementMode | undefined>;
+  readonly undeclared: EnforcementMode;
+}
+
+/**
  * User action choices when retry limit is exceeded.
  */
 export type GateAction = 'retry' | 'skip' | 'abort';

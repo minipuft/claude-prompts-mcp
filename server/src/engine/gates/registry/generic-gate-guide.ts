@@ -19,15 +19,7 @@ import type {
   GateActivationContext,
   GateRetryConfig,
 } from '../types/index.js';
-import type { GatePassCriteria, GateSeverity, GateEnforcementMode } from '../types.js';
-
-// Default severity to enforcement mapping (matches types.ts)
-const DEFAULT_SEVERITY_TO_ENFORCEMENT: Record<GateSeverity, GateEnforcementMode> = {
-  critical: 'blocking',
-  high: 'advisory',
-  medium: 'advisory',
-  low: 'informational',
-};
+import type { GatePassCriteria, GateSeverity } from '../types.js';
 
 /**
  * Generic Gate Guide
@@ -55,7 +47,6 @@ export class GenericGateGuide implements GateGuide {
   readonly name: string;
   readonly type: 'validation' | 'guidance';
   readonly severity: GateSeverity;
-  readonly enforcementMode: GateEnforcementMode;
   readonly gateType: 'framework' | 'category' | 'custom';
   readonly description: string;
 
@@ -82,9 +73,9 @@ export class GenericGateGuide implements GateGuide {
     // through GateDefinitionSchema, which supplies both defaults.
     this.severity = definition.severity;
 
-    // Resolve enforcement mode (from definition or severity mapping)
-    this.enforcementMode =
-      definition.enforcementMode ?? DEFAULT_SEVERITY_TO_ENFORCEMENT[this.severity];
+    // No enforcement mode is resolved here. The declared value stays on `getDefinition()`, and
+    // `resolveEnforcementMode` is the one place that decides what an undeclared gate means
+    // (P4.137); a severity-derived default here disagreed with it and had no reader.
 
     this.gateType = definition.gate_type;
   }

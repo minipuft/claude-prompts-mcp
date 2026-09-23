@@ -502,7 +502,7 @@ export const resource_managerParameters: ToolParameter[] = [
     name: 'enforcement_mode',
     type: 'enum[blocking|advisory|informational]',
     description:
-      '[Gate] Enforcement mode override. Absent, it is derived from severity, so setting severity alone is usually enough.',
+      '[Gate] What a FAIL does: blocking holds the chain step, advisory advances and names the failure in the reply, informational advances silently. Absent, the gate holds a chain step. When a FAIL verdict names gates in per_gate, only those gates decide; otherwise the strictest gate on the step does.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,

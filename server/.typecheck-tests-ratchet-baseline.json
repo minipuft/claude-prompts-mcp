@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-22T22:53:08.371Z",
+  "generatedAt": "2026-09-23T03:03:57.488Z",
   "project": "tsconfig.test.json",
   "scope": "tests/",
   "totals": {
-    "errors": 345
+    "errors": 344
   },
   "byCode": {
     "TS18046": 3,
@@ -13,7 +13,7 @@
     "TS2307": 3,
     "TS2322": 48,
     "TS2339": 34,
-    "TS2345": 85,
+    "TS2345": 84,
     "TS2353": 41,
     "TS2367": 1,
     "TS2416": 1,
@@ -65,7 +65,7 @@
     "tests/unit/execution/pipeline/gate-review-stage.test.ts": 2,
     "tests/unit/execution/pipeline/judge-selection-stage.test.ts": 2,
     "tests/unit/execution/pipeline/parsing-stage-commandtype.test.ts": 2,
-    "tests/unit/execution/pipeline/phase-guard-verification-stage.test.ts": 4,
+    "tests/unit/execution/pipeline/phase-guard-verification-stage.test.ts": 3,
     "tests/unit/execution/pipeline/pipeline-orchestrator.test.ts": 2,
     "tests/unit/execution/pipeline/planning-stage.test.ts": 7,
     "tests/unit/execution/pipeline/prompt-guidance-stage.test.ts": 6,

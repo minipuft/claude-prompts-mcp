@@ -12,7 +12,7 @@
  * - Simpler interface focused on guidance and validation
  */
 
-import type { GateEnforcementMode, GatePassCriteria, GateSeverity } from './gate-primitives.js';
+import type { GatePassCriteria, GateSeverity } from './gate-primitives.js';
 import type { GateDefinitionYaml, LoadedGateDefinition } from '../core/gate-schema.js';
 import type { ArtifactKind } from '../utils/artifact-kinds.js';
 
@@ -134,9 +134,6 @@ export interface GateGuide {
 
   /** Severity level (critical, high, medium, low) */
   readonly severity: GateSeverity;
-
-  /** Enforcement mode (blocking, advisory, informational) */
-  readonly enforcementMode: GateEnforcementMode;
 
   /** Gate classification (framework, category, custom) */
   readonly gateType: 'framework' | 'category' | 'custom';
