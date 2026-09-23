@@ -462,6 +462,12 @@ export interface PendingGateReview {
    * which is the pre-B4 shape.
    */
   gateTiers?: Readonly<Record<string, PendingGateTier>>;
+  /**
+   * The captured output a DETACHED node's review grades (row 4.8, R10.3): the late report, or
+   * the replacement that superseded it. Its ground-truth checks read this, never the text of the
+   * call that answers the review. Absent on a current-step review, whose output is the call's.
+   */
+  reviewedOutput?: string;
 }
 
 /**

@@ -510,20 +510,23 @@ with its node token in the `HANDOFF RESULT` block. The handoff instructions diff
    by then. The reply's `node: <token>` line routes it to the detached step, not to the step the
    run is standing on; the response acknowledges it, and the run is where it was.
 
-A worker that finishes before the parent has moved on reports the ordinary way — its trailer names
-the step the run is standing on, so it is captured and the run advances.
+A worker that finishes before the parent has moved on reports the same way. Its result lands on the
+detached step, and the run stays where it is. The parent's empty resume then moves past the step
+and keeps the recorded result.
 
 **What the server refuses.** Each refusal names the node and changes nothing:
 
 - a trailer naming a node that is not a detached step of this run;
-- a trailer naming a detached step that has already reported (its first result stands);
+- a trailer naming a detached step that has already reported. Its first result stands, unless its
+  gate review failed (below);
 - a trailer naming a detached step the run has not rendered yet;
 - at a detached step, a non-empty reply with no trailer — it is either a worker result missing its
   trailer or a note that would otherwise be captured as the step's output. The refusal offers both
   fixes. Under `execution.delegation.evidence: advisory` the reply is captured as the result
   instead.
 
-**A run cannot complete while a detached step it spawned has not reported.** If the parent moves
+**A run cannot complete while a detached step it spawned has not reported, or while its gate
+review is open.** If the parent moves
 past the last step while a result is outstanding, the run stays open: the response names each
 outstanding step and its token, and until one reports, a resume that reports nothing is refused
 with the same list. The result that closes the last gap completes the run. A step the run never
@@ -535,10 +538,34 @@ The obligation survives a restart. The run records when each detached step was s
 has reported exactly when it holds a real captured output, so a result can land after the server
 that rendered the brief has gone.
 
-Bind no blocking gate to a detached step. The run moves past the step before its output exists,
-so a review that holds the run for a verdict on that output has nothing to grade when it fires;
-combining the two is not a supported shape in this release. The worker's Proposed Gate Review
-still arrives inside its result for the parent to read.
+**Gates on a detached step review its reported result, not its spawn.** A detached step opens no
+gate review when its brief renders, because nothing it produced exists yet. The run moves past it,
+and a review of the step the run moves to is unaffected. When the worker's result lands, and gates
+apply to the step, the acknowledgement opens that step's own review. The acknowledgement carries:
+
+- the verdict template;
+- the exact call that answers it: `chain_id`, `gate_verdict`, and `user_response` set to just the
+  `HANDOFF RESULT` / `node: <token>` trailer.
+
+The trailer routes the verdict to that step's review. It is never applied to the review of the
+step the run stands on, and each review is answered separately. A `gate_verdict` without a
+trailer is the current step's verdict, as before.
+
+- **PASS:** the review closes, and the recorded result stands.
+- **FAIL:** asks for a replacement. Re-run the worker and resume with its new result, ending with
+  the same trailer. It replaces the first result, and the review opens again for another verdict.
+  Each FAIL counts one attempt against the step's retry limit. Once the limit is reached, resume
+  with the trailer and `gate_action: "retry"` (another replacement) or `"skip"` (accept the
+  recorded result), or stop the run with `cancel: true`.
+- **Shell and script checks** (`shell_verify`, `script_tool`) run when the verdict arrives, against
+  the step's recorded result, never against the text of the call that carries the verdict. A PASS
+  over a failing check is refused, exactly as on any review.
+
+A call that does not match what the review is waiting for is refused by name, and the refusal names
+the call it is waiting for. That covers a second report while a verdict is due, a verdict while a
+replacement is due, and a verdict for a detached step with no open review.
+
+The worker's Proposed Gate Review still arrives inside its result for the parent to read.
 
 ### Model Selection
 

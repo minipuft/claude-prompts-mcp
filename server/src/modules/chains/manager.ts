@@ -39,6 +39,7 @@ import type {
   RemainderNodeSpec,
   RemainderOutcome,
   RemainderRejectionReason,
+  ReviewSlot,
   SessionBlueprint,
   UnknownLedgerEntry,
   UnknownObservation,
@@ -55,8 +56,7 @@ import type { DatabasePort, StateStoreOptions } from '#shared/types/persistence.
 // Single owner of unknowns-ledger transition rules. Imported rather than restated here so
 // the rules cannot drift between the capture seam that validates and the store that persists.
 import { computeUnknownLedger } from '#engine/execution/capture/unknown-observation-processor.js';
-import { unreportedDetachedNodeIds } from '#shared/types/chain-execution.js';
-import { isTerminalRunStatus } from '#shared/types/chain-session.js';
+import { detachedNodesHoldingRun, isTerminalRunStatus } from '#shared/types/chain-session.js';
 import { parseRunNumber, stripRunNumber } from '#shared/utils/chain-id-codec.js';
 // Node identity is what the store addresses by; every integer position it emits is derived
 // here and nowhere else, so the projection arithmetic has exactly one definition.
@@ -986,10 +986,11 @@ export class ChainSessionStore implements ChainSessionService {
     // them too would leave a lost worker with no exit. A node the run never spawned is not owed
     // anything and is not counted (`unreportedDetachedNodeIds`).
     if (target === 'completed') {
-      const owed = unreportedDetachedNodeIds(session.state.nodes, session.state.stepStates);
+      // Row 4.8: a detached node whose late result is under an open gate review holds too.
+      const owed = detachedNodesHoldingRun(session);
       if (owed.length > 0) {
         this.logger.info(
-          `[ChainRunStatus] Holding session ${sessionId} open: detached node(s) ${owed.join(', ')} spawned and not yet reported`
+          `[ChainRunStatus] Holding session ${sessionId} open: detached node(s) ${owed.join(', ')} not yet reported or under review`
         );
         return false;
       }
@@ -1968,7 +1969,11 @@ export class ChainSessionStore implements ChainSessionService {
     return inlineIds.length > 0 ? inlineIds : undefined;
   }
 
-  async setPendingGateReview(sessionId: string, review: PendingGateReview): Promise<void> {
+  async setPendingGateReview(
+    sessionId: string,
+    review: PendingGateReview,
+    slot?: ReviewSlot
+  ): Promise<void> {
     const session = this.activeSessions.get(sessionId);
     if (!session) {
       if (this.logger) {
@@ -1979,59 +1984,14 @@ export class ChainSessionStore implements ChainSessionService {
       return;
     }
 
-    session.pendingGateReview = {
-      ...review,
-      gateIds: [...review.gateIds],
-      prompts: review.prompts.map((prompt) => {
-        const mappedPrompt: GateReviewPrompt = {
-          ...prompt,
-        };
-        if (prompt.explicitInstructions !== undefined) {
-          mappedPrompt.explicitInstructions = [...prompt.explicitInstructions];
-        }
-        if (prompt.metadata !== undefined) {
-          mappedPrompt.metadata = { ...prompt.metadata };
-        }
-        return mappedPrompt;
-      }),
-      ...(review.retryHints !== undefined && { retryHints: [...review.retryHints] }),
-      ...(review.history !== undefined && {
-        history: review.history.map((entry) => ({ ...entry })),
-      }),
-      ...(review.metadata !== undefined && { metadata: { ...review.metadata } }),
-    };
-
+    writeReview(session, cloneReview(review), slot);
     await this.saveSessions();
   }
 
-  getPendingGateReview(sessionId: string): PendingGateReview | undefined {
+  getPendingGateReview(sessionId: string, slot?: ReviewSlot): PendingGateReview | undefined {
     const session = this.activeSessions.get(sessionId);
-    if (!session?.pendingGateReview) {
-      return undefined;
-    }
-
-    const review = session.pendingGateReview;
-    return {
-      ...review,
-      gateIds: [...review.gateIds],
-      prompts: review.prompts.map((prompt) => {
-        const mappedPrompt: GateReviewPrompt = {
-          ...prompt,
-        };
-        if (prompt.explicitInstructions !== undefined) {
-          mappedPrompt.explicitInstructions = [...prompt.explicitInstructions];
-        }
-        if (prompt.metadata !== undefined) {
-          mappedPrompt.metadata = { ...prompt.metadata };
-        }
-        return mappedPrompt;
-      }),
-      ...(review.retryHints !== undefined && { retryHints: [...review.retryHints] }),
-      ...(review.history !== undefined && {
-        history: review.history.map((entry) => ({ ...entry })),
-      }),
-      ...(review.metadata !== undefined && { metadata: { ...review.metadata } }),
-    };
+    const review = session === undefined ? undefined : readReview(session, slot);
+    return review === undefined ? undefined : cloneReview(review);
   }
 
   /**
@@ -2039,8 +1999,8 @@ export class ChainSessionStore implements ChainSessionService {
    * Returns true if attemptCount >= maxAttempts.
    * @remarks Uses DEFAULT_RETRY_LIMIT (2) when maxAttempts not specified.
    */
-  isRetryLimitExceeded(sessionId: string): boolean {
-    const review = this.getPendingGateReview(sessionId);
+  isRetryLimitExceeded(sessionId: string, slot?: ReviewSlot): boolean {
+    const review = this.getPendingGateReview(sessionId, slot);
     if (!review) {
       return false;
     }
@@ -2054,9 +2014,10 @@ export class ChainSessionStore implements ChainSessionService {
    * Reset the retry count for a pending gate review.
    * Used when user chooses to retry after retry exhaustion.
    */
-  async resetRetryCount(sessionId: string): Promise<void> {
+  async resetRetryCount(sessionId: string, slot?: ReviewSlot): Promise<void> {
     const session = this.activeSessions.get(sessionId);
-    if (!session?.pendingGateReview) {
+    const review = session === undefined ? undefined : readReview(session, slot);
+    if (review === undefined) {
       this.logger?.debug?.(
         `[ChainSessionStore] No pending gate review to reset for session: ${sessionId}`
       );
@@ -2064,9 +2025,9 @@ export class ChainSessionStore implements ChainSessionService {
     }
 
     // Reset attempt count and log in history
-    session.pendingGateReview.attemptCount = 0;
-    session.pendingGateReview.history = session.pendingGateReview.history ?? [];
-    session.pendingGateReview.history.push({
+    review.attemptCount = 0;
+    review.history = review.history ?? [];
+    review.history.push({
       timestamp: Date.now(),
       status: 'reset',
       reasoning: 'User requested retry after exhaustion',
@@ -2077,13 +2038,13 @@ export class ChainSessionStore implements ChainSessionService {
     this.logger?.info?.(`[ChainSessionStore] Reset retry count for session: ${sessionId}`);
   }
 
-  async clearPendingGateReview(sessionId: string): Promise<void> {
+  async clearPendingGateReview(sessionId: string, slot?: ReviewSlot): Promise<void> {
     const session = this.activeSessions.get(sessionId);
-    if (!session?.pendingGateReview) {
+    if (session === undefined || readReview(session, slot) === undefined) {
       return;
     }
 
-    delete session.pendingGateReview;
+    writeReview(session, undefined, slot);
     await this.saveSessions();
   }
 
@@ -2120,17 +2081,18 @@ export class ChainSessionStore implements ChainSessionService {
 
   async recordGateReviewOutcome(
     sessionId: string,
-    outcome: GateReviewOutcomeUpdate
+    outcome: GateReviewOutcomeUpdate,
+    slot?: ReviewSlot
   ): Promise<'cleared' | 'pending'> {
     const session = this.activeSessions.get(sessionId);
-    if (!session?.pendingGateReview) {
+    const review = session === undefined ? undefined : readReview(session, slot);
+    if (session === undefined || review === undefined) {
       this.logger?.warn(
         `[GateReview] Attempted to record verdict for non-existent session: ${sessionId}`
       );
       return 'pending';
     }
 
-    const review = session.pendingGateReview;
     const timestamp = Date.now();
 
     review.history ??= [];
@@ -2154,7 +2116,7 @@ export class ChainSessionStore implements ChainSessionService {
 
     let result: 'cleared' | 'pending';
     if (outcome.verdict === 'PASS') {
-      delete session.pendingGateReview;
+      writeReview(session, undefined, slot);
       this.logger?.info('[GateReview] Cleared pending review', {
         sessionId,
         gateIds: review.gateIds,
@@ -2919,4 +2881,52 @@ export function createChainSessionStore(
   argumentHistoryTracker?: ArgumentHistoryTracker
 ): ChainSessionStore {
   return new ChainSessionStore(logger, textReferenceStore, options, argumentHistoryTracker);
+}
+
+/** The review `slot` selects on `session`: a detached node's, or the current-step slot. PURE. */
+function readReview(session: ChainSession, slot?: ReviewSlot): PendingGateReview | undefined {
+  return slot === undefined
+    ? session.pendingGateReview
+    : session.detachedGateReviews?.[slot.nodeId];
+}
+
+/** Put `review` in (or, undefined, remove it from) the place `slot` selects on `session`. */
+function writeReview(
+  session: ChainSession,
+  review: PendingGateReview | undefined,
+  slot?: ReviewSlot
+): void {
+  if (slot === undefined) {
+    if (review === undefined) delete session.pendingGateReview;
+    else session.pendingGateReview = review;
+    return;
+  }
+  const reviews = { ...session.detachedGateReviews };
+  if (review === undefined) delete reviews[slot.nodeId];
+  else reviews[slot.nodeId] = review;
+  if (Object.keys(reviews).length > 0) session.detachedGateReviews = reviews;
+  else delete session.detachedGateReviews;
+}
+
+/** A copy that shares no array or object with `review`, so neither side can mutate the other. */
+function cloneReview(review: PendingGateReview): PendingGateReview {
+  return {
+    ...review,
+    gateIds: [...review.gateIds],
+    prompts: review.prompts.map((prompt) => {
+      const mappedPrompt: GateReviewPrompt = { ...prompt };
+      if (prompt.explicitInstructions !== undefined) {
+        mappedPrompt.explicitInstructions = [...prompt.explicitInstructions];
+      }
+      if (prompt.metadata !== undefined) {
+        mappedPrompt.metadata = { ...prompt.metadata };
+      }
+      return mappedPrompt;
+    }),
+    ...(review.retryHints !== undefined && { retryHints: [...review.retryHints] }),
+    ...(review.history !== undefined && {
+      history: review.history.map((entry) => ({ ...entry })),
+    }),
+    ...(review.metadata !== undefined && { metadata: { ...review.metadata } }),
+  };
 }

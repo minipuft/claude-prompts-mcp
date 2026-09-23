@@ -215,6 +215,14 @@ export interface PipelineInternalState {
      * guidance INJECTION and run-wide inheritance, and narrowing it would scope those too.
      */
     reviewGateIds?: string[];
+    /**
+     * Gate IDs each DETACHED (`await: run`) step is reviewed against, keyed by its parse-time
+     * step number — the key `collectDetachedNodeFacts` resolves a step's node by (row 4.8).
+     * Written by `GateEnhancementService.enhanceChainSteps` for every detached step, and never
+     * into `reviewGateIds`: a detached step's review opens against its late report
+     * (`GateEnforcementAuthority.openDetachedReview`), not when its brief renders.
+     */
+    detachedReviewGateIds?: Record<number, string[]>;
     /** Whether blocking gates are present that require review */
     hasBlockingGates?: boolean;
     /**
