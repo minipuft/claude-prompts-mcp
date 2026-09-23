@@ -269,13 +269,6 @@
       "includeInDescription": false
     },
     {
-      "name": "execution_hint",
-      "type": "enum[single|chain]",
-      "description": "[Prompt] Hint for execution type on creation.",
-      "status": "working",
-      "includeInDescription": false
-    },
-    {
       "name": "filter",
       "type": "string",
       "description": "[Prompt] List filter query.",
@@ -412,13 +405,6 @@
       "name": "enabled",
       "type": "boolean",
       "description": "[Framework] Whether the framework is enabled.",
-      "status": "working",
-      "includeInDescription": false
-    },
-    {
-      "name": "persist",
-      "type": "boolean",
-      "description": "[Framework] For switch: persist the change to config. Default: false.",
       "status": "working",
       "includeInDescription": false
     },
@@ -565,7 +551,6 @@
         "mcp_prompt_mode",
         "subagent_model",
         "agent_type",
-        "execution_hint",
         "edges",
         "budget",
         "artifacts"
@@ -593,7 +578,6 @@
         "mcp_prompt_mode",
         "subagent_model",
         "agent_type",
-        "execution_hint",
         "edges",
         "budget",
         "artifacts",
@@ -635,7 +619,8 @@
         "edges",
         "budget",
         "artifacts",
-        "full_restart"
+        "full_restart",
+        "skip_version"
       ]
     },
     {
@@ -705,7 +690,8 @@
         "severity",
         "enforcement_mode",
         "block_response_on_fail",
-        "evaluation"
+        "evaluation",
+        "skip_version"
       ]
     },
     {
@@ -798,7 +784,8 @@
         "execution_type_enhancements",
         "template_enhancements",
         "execution_flow",
-        "quality_indicators"
+        "quality_indicators",
+        "skip_version"
       ]
     },
     {
@@ -809,7 +796,7 @@
     {
       "id": "framework:switch",
       "summary": "Switch the active framework.",
-      "parameters": ["resource_type", "action", "id", "persist", "reason"]
+      "parameters": ["resource_type", "action", "id", "reason"]
     },
     {
       "id": "common:inspect",
@@ -817,21 +804,29 @@
       "parameters": ["resource_type", "action", "id", "detail"]
     },
     {
-      "id": "common:reload",
-      "summary": "Hot-reload a specific resource from disk.",
+      "id": "prompt:reload",
+      "summary": "Reload prompts from disk, or restart the server with full_restart.",
       "parameters": ["resource_type", "action", "id", "reason", "full_restart"]
+    },
+    {
+      "id": "gate:reload",
+      "summary": "Hot-reload a specific gate from disk.",
+      "parameters": ["resource_type", "action", "id", "reason"]
+    },
+    {
+      "id": "framework:reload",
+      "summary": "Hot-reload a specific framework from disk.",
+      "parameters": ["resource_type", "action", "id", "reason"]
+    },
+    {
+      "id": "category:reload",
+      "summary": "Rebuild every category from disk; takes no id, since one walk rebuilds them all.",
+      "parameters": ["resource_type", "action", "reason"]
     },
     {
       "id": "common:delete",
       "summary": "Delete a resource (with confirmation).",
-      "parameters": [
-        "resource_type",
-        "action",
-        "id",
-        "confirm",
-        "reason",
-        "full_restart"
-      ]
+      "parameters": ["resource_type", "action", "id", "confirm", "full_restart"]
     },
     {
       "id": "common:history",
@@ -841,7 +836,7 @@
     {
       "id": "common:rollback",
       "summary": "Rollback a resource to a previous version.",
-      "parameters": ["resource_type", "action", "id", "version", "reason"]
+      "parameters": ["resource_type", "action", "id", "version"]
     },
     {
       "id": "common:compare",

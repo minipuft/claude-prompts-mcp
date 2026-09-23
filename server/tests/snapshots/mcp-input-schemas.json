@@ -1493,13 +1493,6 @@
         },
         "type": "object"
       },
-      "execution_hint": {
-        "enum": [
-          "single",
-          "chain"
-        ],
-        "type": "string"
-      },
       "execution_steps": {
         "items": {
           "additionalProperties": false,
@@ -1979,9 +1972,6 @@
           "type": "object"
         },
         "type": "array"
-      },
-      "persist": {
-        "type": "boolean"
       },
       "phases": {
         "items": {},

@@ -421,11 +421,11 @@ export const SUITE = [
       'CHECKED — falsified 2026-09-22 by removing the scope from the prompt-guidance selectFramework call and the gate-enhancement provider in pipeline-builder; the gate reported both. Run against the pre-fix tree (acaf76c6) it reports 19 unscoped reads across 10 files, the P4.129 class. It fails closed below 15 scoped calls. Blind spots stated in the header: presence not value, options built across statements',
   },
   {
-    script: 'validate:system-control-parameter-reads',
+    script: 'validate:tool-parameter-reads',
     io: 'read',
     reads: ['file'],
     converse:
-      'CHECKED — the self-test plants the two shapes that shipped (a declared parameter the operation never copies, the #357 persist instance; and one copied into an object its callee ignores, how status held include_history) beside a twin that reads both, and a string literal naming the parameter that must not count. Positive control 2026-09-22 on the live tree: dropping `persist` from the framework handler enable case fails naming `framework:enable`. Its first run found three (show_details on status and analytics, reason on config). UNCHECKED and known, stated in the header: the reverse direction (a read key the command does not declare), and anything past the handler boundary',
+      'CHECKED per adapter — the self-test plants, for each of the three tools, a declared parameter dropped at a hand-copy and one reaching code that never reads it, each named only in a string literal, beside a twin that reads both; a stale AWAITING_RULING entry must report. Positive controls 2026-09-23 on the live tree: dropping `persist` from the system_control framework enable case names `framework:enable`; dropping the router copy of `severity` names `gate:create` and `gate:update`, and dropping it inside GateLifecycleProcessor names `gate:update`; dropping `remainder` from the prompt_engine allowlist, `observations` from the executor request, or the stage-16 `mcpRequest.observations` reader each names the parameter. Its first three-tool run found twelve. UNCHECKED and known, stated in the header: the reverse direction (P4.146), anything past each adapter boundary, and a parameter that only decides another copied key',
   },
   {
     script: 'validate:telemetry-attribute-emitters',

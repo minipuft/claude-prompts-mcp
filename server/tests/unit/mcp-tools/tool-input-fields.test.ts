@@ -362,6 +362,14 @@ const SYSTEM_CONTROL_DISPATCH = 'actionHandler.execute(…)';
 const RESOURCE_MANAGER_OWNERSHIP_TABLE_READ = 'sent[parameter]';
 
 /**
+ * The same computed read in `describeCommonParameterRefusal` (R7), keyed by the contract's common
+ * parameters rather than `PARAMETER_OWNERS`. Bounded the same way: every key of that table is a
+ * member of `COMMON_PARAMETERS`, which `DECLARED_PARAMETERS` includes and the next case pins to
+ * the schema.
+ */
+const RESOURCE_MANAGER_COMMON_ACTION_READ = 'sent[parameter]';
+
+/**
  * The second use the walker cannot follow in `resource_manager`, and what bounds it instead.
  *
  * `describeParameterRefusal` enumerates the input's own keys (R46) to refuse one the contract
@@ -660,9 +668,10 @@ describe('tool handlers read only fields their registered schema declares', () =
       expect(undeclared(reads, declared)).toEqual([]);
     });
 
-    it('follows every use of the input except the two enumerations in the refusal', () => {
+    it('follows every use of the input except the enumerations in the refusal', () => {
       expect(reads.unfollowed.map((use) => use.replace(/^[^ ]+ /, ''))).toEqual([
         RESOURCE_MANAGER_OWNERSHIP_TABLE_READ,
+        RESOURCE_MANAGER_COMMON_ACTION_READ,
         RESOURCE_MANAGER_UNDECLARED_KEY_SCAN,
         SHARED_REFUSAL_SENT_KEY_READ,
       ]);

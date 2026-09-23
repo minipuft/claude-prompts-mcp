@@ -172,7 +172,6 @@ export interface FrameworkManagerInput {
   >;
   enabled?: boolean;
   enabled_only?: boolean;
-  persist?: boolean;
   confirm?: boolean;
   /**
    * What `action: 'preview'` would do.
