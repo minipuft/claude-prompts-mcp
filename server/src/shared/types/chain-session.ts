@@ -19,7 +19,6 @@ import type {
   ChainRunStatus,
   ChainState,
   GateReview,
-  GateReviewKind,
   GateReviewPhase,
   PendingGateReview,
   PendingShellVerificationSnapshot,
@@ -307,25 +306,6 @@ export interface ChainSession {
    * review holds the run open (`nodesHoldingRunOpen`).
    */
   reviews?: Record<string, GateReview>;
-  /**
-   * The current-step review: `reviews[currentNodeId]` when that is not a detached review, else
-   * the run's one non-detached review (a phase-guard or final-step review grades a node the run
-   * has already left). A read-only projection installed by {@link attachReviewProjections};
-   * assigning to it throws.
-   *
-   * @deprecated stamped: (as of 2026-09-23 · flips when row 3.6's exception list is empty) — read
-   * `reviews` by node.
-   */
-  readonly pendingGateReview?: PendingGateReview;
-  /**
-   * The detached reviews in `reviews`, keyed by node; absent when there are none. A read-only
-   * projection installed by {@link attachReviewProjections}; no `src` code reads it since row 3.5
-   * moved `collectDetachedNodeFacts` onto `reviews` (only tests do).
-   *
-   * @deprecated stamped: (as of 2026-09-23 · flips when row 3.6 deletes both projections) — read
-   * `reviews` filtered by `kind: 'detached'`.
-   */
-  readonly detachedGateReviews?: Readonly<Record<string, PendingGateReview>>;
   /** Pending shell verification state for bounce-back resume across MCP requests. */
   pendingShellVerification?: PendingShellVerificationSnapshot;
   blueprint?: SessionBlueprint;
@@ -400,7 +380,7 @@ export interface RunHoldFacts {
     readonly nodes?: readonly Pick<ChainNode, 'id'>[];
     readonly stepStates?: ReadonlyMap<string, StepMetadata>;
   };
-  readonly reviews?: Readonly<Record<string, { readonly kind?: GateReviewKind }>>;
+  readonly reviews?: Readonly<Record<string, unknown>>;
 }
 
 /**
@@ -423,8 +403,9 @@ export interface ReviewSlot {
 }
 
 /**
- * The current-step review of `reviews` (see `ChainSession.pendingGateReview`): the review at
- * `currentNodeId` unless that one is detached, else the one non-detached review. PURE.
+ * The current-step review of `reviews`: the review at `currentNodeId` unless that one is
+ * detached, else the run's one non-detached review (a phase-guard or final-step review grades a
+ * node the run has already left). PURE.
  */
 export function currentStepReview(
   reviews: Readonly<Record<string, GateReview>> | undefined,
@@ -436,59 +417,14 @@ export function currentStepReview(
   return Object.values(reviews).find((review) => review.kind !== 'detached');
 }
 
-/** The detached reviews of `reviews`, keyed by node. PURE. */
-function detachedReviewsOf(
-  reviews: Readonly<Record<string, GateReview>> | undefined
-): Record<string, GateReview> {
-  return Object.fromEntries(
-    Object.entries(reviews ?? {}).filter(([, review]) => review.kind === 'detached')
-  );
-}
-
 /**
- * Install the two read-only review projections on a session object: `pendingGateReview` and
- * `detachedGateReviews`, both derived from `reviews` on every read. Non-enumerable, so neither is
- * serialized or compared, and getter-only, so a write to either throws rather than forking a
- * second store. Every session object the store holds passes through here (creation and load).
- *
- * @throws when the object already carries either name as a data field: a review written there
- *   would be dropped by the projection, so the caller is holding a pre-3.1 session shape.
- */
-export function attachReviewProjections<T extends ChainSession>(session: T): T {
-  for (const name of ['pendingGateReview', 'detachedGateReviews'] as const) {
-    const own = Object.getOwnPropertyDescriptor(session, name);
-    if (own !== undefined && 'value' in own && own.value !== undefined) {
-      throw new Error(
-        `Session ${session.sessionId} carries a '${name}' data field; reviews live in 'reviews'`
-      );
-    }
-  }
-  Object.defineProperties(session, {
-    pendingGateReview: {
-      get(this: ChainSession) {
-        return currentStepReview(this.reviews, this.state.currentNodeId);
-      },
-      enumerable: false,
-      configurable: true,
-    },
-    detachedGateReviews: {
-      get(this: ChainSession) {
-        const detached = detachedReviewsOf(this.reviews);
-        return Object.keys(detached).length > 0 ? detached : undefined;
-      },
-      enumerable: false,
-      configurable: true,
-    },
-  });
-  return session;
-}
-
-/**
- * The phase a review written in the pre-3.1 shape stands in: the `metadata.phase` a detached
- * review records (row 4.8), else `exhausted` once its attempts are spent, else awaiting a verdict.
- * PURE.
+ * The phase a review written in the pre-3.1 shape stands in: its own `phase` when it carries one,
+ * else the `metadata.phase` a detached review persisted before `phase` existed (row 4.8, reached
+ * only by `run-registry`'s legacy load — no writer sets that key any more), else `exhausted` once
+ * its attempts are spent, else awaiting a verdict. PURE.
  */
 function deriveReviewPhase(review: PendingGateReview): GateReviewPhase {
+  if (review.phase !== undefined) return review.phase;
   const recorded = review.metadata?.['phase'];
   if (
     recorded === 'awaiting-verdict' ||

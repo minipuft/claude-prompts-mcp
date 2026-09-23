@@ -62,7 +62,15 @@ import { ExecutionHistoryActionHandler } from '../../../src/mcp/tools/system-con
 import type { PipelineStage } from '../../../src/engine/execution/pipeline/stage.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
 import type { ConvertedPrompt } from '../../../src/engine/execution/types.js';
+import { currentStepReview } from '../../../src/shared/types/chain-session.js';
+import type { GateReview } from '../../../src/shared/types/chain-execution.js';
 import type { ChainSession } from '../../../src/shared/types/chain-session.js';
+
+/** The run's current-step review, read by node out of `reviews` (row 3.6). */
+const stepReviewOf = (session: {
+  reviews?: Record<string, GateReview>;
+  state: { currentNodeId: string | null };
+}): GateReview | undefined => currentStepReview(session.reviews, session.state.currentNodeId);
 import type { DatabasePort } from '../../../src/shared/types/persistence.js';
 import type { SystemControlContext } from '../../../src/mcp/tools/system-control/core/types.js';
 
@@ -456,7 +464,7 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
       sessionId: string;
       chainId: string;
       runStatus?: string;
-      pendingGateReview?: unknown;
+      reviews?: Record<string, GateReview>;
       state: { currentNodeId: string | null };
     };
   };
@@ -940,7 +948,7 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
     expect(text).toContain('completed');
 
     const session = onlySession();
-    expect(session.pendingGateReview).toBeUndefined();
+    expect(stepReviewOf(session)).toBeUndefined();
     expect(session.runStatus).toBe('completed');
     // No review means no attempt counter, and no re-rendered step.
     expect(text).not.toContain('attempt 1/');
@@ -958,12 +966,15 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
     const opened = textOf(await pipeline.execute({ command: `>>draft --> >>review` }));
     const session = onlySession() as unknown as {
       sessionId: string;
-      pendingGateReview?: unknown;
-      state: { stepStates?: Map<string, { declaredSections?: string[] }> };
+      reviews?: Record<string, GateReview>;
+      state: {
+        currentNodeId: string | null;
+        stepStates?: Map<string, { declaredSections?: string[] }>;
+      };
     };
 
     // The run opened on a review of step 1, and the review told the model these headers.
-    expect(session.pendingGateReview).toBeDefined();
+    expect(stepReviewOf(session)).toBeDefined();
     expect(opened).toContain('`## Context`');
     expect(session.state.stepStates?.get('draft')?.declaredSections).toEqual([
       '## Context',
@@ -984,8 +995,8 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
       parsedSteps = parsedFrameworkChain;
       activeFramework = 'cageerf';
       await pipeline.execute({ command: `>>draft --> >>review` });
-      const opened = onlySession() as unknown as { chainId: string; pendingGateReview: any };
-      return { chainId: opened.chainId, gateReview: { ...opened.pendingGateReview } };
+      const opened = onlySession();
+      return { chainId: opened.chainId, gateReview: { ...stepReviewOf(opened) } as any };
     };
 
     test('a one-line answer yields ONE review naming the gate, the missing sections and the counter', async () => {
@@ -994,7 +1005,7 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
 
       const text = textOf(await pipeline.execute({ chain_id: chainId, user_response: 'one line' }));
 
-      const review = onlySession().pendingGateReview as any;
+      const review = stepReviewOf(onlySession()) as any;
       expect(review.gateIds).toEqual([GATE_ID, '__phase_guard__']);
       expect(review.maxAttempts).toBe(gateReview.maxAttempts);
       expect(review.attemptCount).toBe(gateReview.attemptCount);
@@ -1016,7 +1027,7 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
         })
       );
 
-      const review = onlySession().pendingGateReview as any;
+      const review = stepReviewOf(onlySession()) as any;
       expect(review.gateIds).toEqual([GATE_ID]);
       expect(review.maxAttempts).toBe(gateReview.maxAttempts);
       // Positive control: the phase guard DID grade this answer, and passed it.
@@ -1035,8 +1046,7 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
   describe('a deferred FAIL is one recorded attempt per submission', () => {
     const failVerdict = 'GATE_REVIEW: FAIL - the step misses a constraint';
 
-    const attemptCount = (): number | undefined =>
-      (onlySession().pendingGateReview as { attemptCount?: number } | undefined)?.attemptCount;
+    const attemptCount = (): number | undefined => stepReviewOf(onlySession())?.attemptCount;
 
     beforeEach(() => {
       blockingGates = false;
@@ -1046,7 +1056,7 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
       await pipeline.execute({ command: `>>draft --> >>review` });
       const chainId = onlySession().chainId;
       // Nothing is pending, so this verdict takes the deferred path.
-      expect(onlySession().pendingGateReview).toBeUndefined();
+      expect(stepReviewOf(onlySession())).toBeUndefined();
 
       await pipeline.execute({
         chain_id: chainId,

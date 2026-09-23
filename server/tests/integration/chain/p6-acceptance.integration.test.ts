@@ -131,6 +131,7 @@ import { validateWorkflowIR } from '../../../src/modules/workflow-ir/validator.j
 import type { PipelineStage } from '../../../src/engine/execution/pipeline/stage.js';
 import type { ConvertedPrompt } from '../../../src/engine/execution/types.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
+import { currentStepReview } from '../../../src/shared/types/chain-session.js';
 import type { ChainSession } from '../../../src/shared/types/chain-session.js';
 import type { WorkflowIR } from '../../../src/modules/workflow-ir/types.js';
 
@@ -397,6 +398,8 @@ describe('P6 acceptance: gate binding, visibility and delegation take real effec
   const textOf = (response: { content: Array<{ text?: string }> }): string =>
     response.content.map((part) => part.text ?? '').join('\n');
 
+  const stepReviewOf = (session: ChainSession) =>
+    currentStepReview(session.reviews, session.state.currentNodeId);
   const onlySession = (): ChainSession => {
     const sessions = Array.from(
       (store as unknown as { activeSessions: Map<string, ChainSession> }).activeSessions.values()
@@ -406,7 +409,7 @@ describe('P6 acceptance: gate binding, visibility and delegation take real effec
   };
 
   /** The gate list the OPEN review is scoped to — exactly what a client's next call would see. */
-  const openReviewGateIds = (): readonly string[] => onlySession().pendingGateReview?.gateIds ?? [];
+  const openReviewGateIds = (): readonly string[] => stepReviewOf(onlySession())?.gateIds ?? [];
 
   /** The delegated step's own EXECUTION BRIEF — everything between the R-1 delimiters. */
   const briefSectionOf = (text: string): string => {

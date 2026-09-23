@@ -27,6 +27,7 @@ import { DirectChainRunRegistry } from '../../../src/modules/chains/run-registry
 
 import type { Logger } from '../../../src/infra/logging/index.js';
 import type { ChainNode } from '../../../src/shared/types/chain-execution.js';
+import { currentStepReview } from '../../../src/shared/types/chain-session.js';
 import type { ChainSession } from '../../../src/shared/types/chain-session.js';
 import type { RemainderSubmission } from '../../../src/modules/workflow-ir/types.js';
 import type { DatabasePort } from '../../../src/shared/types/persistence.js';
@@ -301,9 +302,10 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
         phase: 'awaiting-verdict',
         gateIds: ['node-gate'],
       });
-      // The projections read the one store.
-      expect(written.pendingGateReview).toBe(written.reviews?.['n1']);
-      expect(Object.keys(written.detachedGateReviews ?? {})).toEqual(['rev']);
+      // The current-step review is read out of the one store, by node.
+      expect(currentStepReview(written.reviews, written.state.currentNodeId)).toBe(
+        written.reviews?.['n1']
+      );
 
       await persist(writer);
       // The residual document carries only `reviews`.
@@ -316,10 +318,10 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
       const reader = await coldLoad();
       const loaded = reader.getSession('sess-rv') as ChainSession;
       expect(loaded.reviews).toEqual(written.reviews);
-      // A loaded run carries the projections too: every `session.pendingGateReview` reader
-      // resumes a persisted run through them.
-      expect(loaded.pendingGateReview?.gateIds).toEqual(['slot-gate']);
-      expect(Object.keys(loaded.detachedGateReviews ?? {})).toEqual(['rev']);
+      // A loaded run resumes through the same store.
+      expect(currentStepReview(loaded.reviews, loaded.state.currentNodeId)?.gateIds).toEqual([
+        'slot-gate',
+      ]);
       expect(reader.getPendingGateReview('sess-rv')?.gateIds).toEqual(['slot-gate']);
       expect(reader.getPendingGateReview('sess-rv', { nodeId: 'rev' })?.gateIds).toEqual([
         'node-gate',
@@ -344,7 +346,9 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
       const structural = store.getSession('sess-rs') as ChainSession;
       expect(Object.keys(structural.reviews ?? {})).toEqual(['n1']);
       expect(structural.reviews?.['n1']?.kind).toBe('structural');
-      expect(structural.pendingGateReview?.gateIds).toEqual(['phase-guard']);
+      expect(
+        currentStepReview(structural.reviews, structural.state.currentNodeId)?.gateIds
+      ).toEqual(['phase-guard']);
 
       // A gate review of the node the run stands on takes the one current-step slot.
       await store.setPendingGateReview('sess-rs', review('step-gate', { nodeId: 'rev' }));
@@ -403,7 +407,7 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
       const session = store.getSession('sess-rn') as ChainSession;
       expect(Object.keys(session.reviews ?? {})).toEqual(['n3']);
       // Not the node the run stands on, and still the run's current-step review.
-      expect(session.pendingGateReview?.nodeId).toBe('n3');
+      expect(currentStepReview(session.reviews, session.state.currentNodeId)?.nodeId).toBe('n3');
       await store.cleanup();
     });
 
@@ -422,18 +426,16 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
       await store.cleanup();
     });
 
-    test('the projections are read-only and never serialized', async () => {
+    test('a session holds its reviews in `reviews` alone: no per-run review slot exists', async () => {
       const store = newStore();
       const session = await store.createSession('sess-ro', 'chain-ro#1', 3, {}, threeNodes());
       await store.setPendingGateReview('sess-ro', review('g', { nodeId: 'n1' }));
-      expect(() => {
-        (session as { pendingGateReview?: unknown }).pendingGateReview = undefined;
-      }).toThrow(TypeError);
-      expect(() => {
-        (session as { detachedGateReviews?: unknown }).detachedGateReviews = {};
-      }).toThrow(TypeError);
-      expect(Object.keys(session)).not.toContain('pendingGateReview');
-      expect(Object.keys(session)).toContain('reviews');
+      // Row 3.6 deleted the two read-only projections; `validate:review-by-node` refuses a src
+      // reader or writer of either name.
+      expect('pendingGateReview' in session).toBe(false);
+      expect('detachedGateReviews' in session).toBe(false);
+      // CONTROL: the review the call wrote is there, keyed by its node.
+      expect(Object.keys(session.reviews ?? {})).toEqual(['n1']);
       await store.cleanup();
     });
 

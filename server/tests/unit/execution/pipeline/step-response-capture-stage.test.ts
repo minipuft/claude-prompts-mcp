@@ -268,13 +268,18 @@ describe('StepResponseCaptureStage', () => {
       sessionId: 'sess-1',
       chainId: 'chain-1',
       state: { currentNodeId: 'n2', nodes: [{ id: 'n1' }, { id: 'n2' }, { id: 'n3' }] },
-      pendingGateReview: {
-        gateIds: ['accuracy'],
-        attemptCount: 1,
-        prompts: [],
-        createdAt: Date.now(),
-        maxAttempts: 3,
-        combinedPrompt: 'test prompt',
+      reviews: {
+        n2: {
+          nodeId: 'n2',
+          kind: 'gate',
+          phase: 'awaiting-verdict',
+          gateIds: ['accuracy'],
+          attemptCount: 1,
+          prompts: [],
+          createdAt: Date.now(),
+          maxAttempts: 3,
+          combinedPrompt: 'test prompt',
+        },
       },
     });
 

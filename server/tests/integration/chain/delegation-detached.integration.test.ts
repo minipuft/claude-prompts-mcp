@@ -748,7 +748,7 @@ describe('detached delegation (await: run) through the pipeline', () => {
       expect(failed.isError).not.toBe(true);
       expect(text(failed)).toContain('failed (attempt 1/2)');
       expect(text(failed)).toContain('it replaces the first');
-      expect(detachedReview(sessionId)?.metadata?.['phase']).toBe('awaiting-replacement');
+      expect(detachedReview(sessionId)?.phase).toBe('awaiting-replacement');
       expect(run().runStatus ?? 'working').toBe('working');
 
       const replaced = await pipeline.execute({

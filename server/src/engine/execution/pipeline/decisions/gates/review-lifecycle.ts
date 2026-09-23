@@ -87,7 +87,11 @@ export function advanceReview(
       return applyVerdict(review, event.verdict, event.at, enforcement);
     case 'replacement-report': {
       const { checkResults: _stale, ...kept } = review;
-      const reopened = withPhase({ ...kept, reviewedOutput: event.output }, 'awaiting-verdict');
+      const reopened: GateReview = {
+        ...kept,
+        reviewedOutput: event.output,
+        phase: 'awaiting-verdict',
+      };
       return { outcome: 'reopened', review: reopened, attempt: reopened.attemptCount };
     }
     case 'gate_action':
@@ -126,9 +130,9 @@ function applyVerdict(
     ],
   };
   if (attempt >= review.maxAttempts) {
-    return { outcome: 'exhausted', review: withPhase(charged, 'exhausted'), attempt };
+    return { outcome: 'exhausted', review: { ...charged, phase: 'exhausted' }, attempt };
   }
-  return { outcome: 'failed', review: withPhase(charged, awaitingAnswer(review)), attempt };
+  return { outcome: 'failed', review: { ...charged, phase: awaitingAnswer(review) }, attempt };
 }
 
 function applyAction(review: GateReview, action: GateAction, at: number): ReviewAdvance {
@@ -153,7 +157,7 @@ function applyAction(review: GateReview, action: GateAction, at: number): Review
       } satisfies GateReviewHistoryEntry,
     ],
   };
-  return { outcome: 'reopened', review: withPhase(reset, awaitingAnswer(review)), attempt: 0 };
+  return { outcome: 'reopened', review: { ...reset, phase: awaitingAnswer(review) }, attempt: 0 };
 }
 
 /** Where a review waits for its next answer: a detached node's comes as a separate report. */
@@ -163,19 +167,4 @@ function awaitingAnswer(review: GateReview): GateReviewPhase {
 
 function refuse(review: GateReview, reason: ReviewRefusal): ReviewAdvance {
   return { outcome: 'refused', reason, review, attempt: review.attemptCount };
-}
-
-/**
- * Set `phase`, and keep a `metadata.phase` the review already carries in step with it.
- *
- * stamped: (as of 2026-09-23 · flips when row 3.5 moves `detached.ts` off `metadata.phase`) —
- * `detachedReviewPhase` still routes a detached review by that metadata key, and the store's
- * `deriveReviewPhase` prefers it over the record, so a stale copy would override this transition.
- */
-function withPhase(review: GateReview, phase: GateReviewPhase): GateReview {
-  const metadata =
-    review.metadata !== undefined && 'phase' in review.metadata
-      ? { ...review.metadata, phase }
-      : review.metadata;
-  return metadata === undefined ? { ...review, phase } : { ...review, phase, metadata };
 }

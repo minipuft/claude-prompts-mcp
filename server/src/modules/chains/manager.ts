@@ -57,7 +57,6 @@ import type { DatabasePort, StateStoreOptions } from '#shared/types/persistence.
 // the rules cannot drift between the capture seam that validates and the store that persists.
 import { computeUnknownLedger } from '#engine/execution/capture/unknown-observation-processor.js';
 import {
-  attachReviewProjections,
   currentStepReview,
   nodesHoldingRunOpen,
   isTerminalRunStatus,
@@ -702,7 +701,7 @@ export class ChainSessionStore implements ChainSessionService {
     await this.initPromise;
     const resolvedScope = options?.continuityScopeId ?? resolveContinuityScopeId(options);
     const nodes = this.resolveCreationNodes(chainId, totalSteps, options?.nodes);
-    const session: ChainSession = attachReviewProjections({
+    const session: ChainSession = {
       sessionId,
       chainId,
       state: {
@@ -722,7 +721,7 @@ export class ChainSessionStore implements ChainSessionService {
       }),
       lifecycle: 'canonical',
       runStatus: 'working',
-    });
+    };
 
     this.activeSessions.set(sessionId, session);
 

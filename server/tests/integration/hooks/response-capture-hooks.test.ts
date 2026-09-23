@@ -129,7 +129,7 @@ describe('ResponseCaptureStage Hook Emission', () => {
 
     // Verify gate events were emitted via EventEmitter
     expect(gateEvents.length).toBeGreaterThanOrEqual(0);
-    // The hook was wired but may not emit if pendingGateReview is undefined after outcome
+    // The hook was wired but may not emit if no review is open after the outcome
   });
 
   test('emits gate failed notification when FAIL verdict is processed', async () => {
