@@ -3,7 +3,6 @@
 import { ActionHandler } from '../core/action-handler-base.js';
 
 import type { ToolResponse } from '#shared/types/index.js';
-import type { SystemAnalytics } from '../core/types.js';
 
 export class AnalyticsActionHandler extends ActionHandler {
   async execute(args: any): Promise<ToolResponse> {
@@ -21,18 +20,8 @@ export class AnalyticsActionHandler extends ActionHandler {
       case 'view':
       case 'default':
       default:
-        return await this.getAnalytics({
-          include_history: args.include_history,
-        });
+        return await this.getAnalytics();
     }
-  }
-
-  private resetAnalyticsData(): void {
-    this.context.systemAnalytics = {
-      gateValidationCount: 0,
-      uptime: Date.now() - this.startTime,
-      performanceTrends: [],
-    };
   }
 
   private async resetMetrics(args: { confirm?: boolean }): Promise<ToolResponse> {
@@ -42,10 +31,6 @@ export class AnalyticsActionHandler extends ActionHandler {
         'reset_metrics'
       );
     }
-
-    const trendsBefore = this.context.systemAnalytics.performanceTrends.length;
-
-    this.resetAnalyticsData();
 
     if (this.frameworkStateStore) {
       // The caller's workspace, as this handler's status read is scoped. Unscoped, a reset
@@ -60,8 +45,7 @@ export class AnalyticsActionHandler extends ActionHandler {
     // counters before and after, all of them constant zero because nothing wrote them (P4.87);
     // printing `0 → 0` made a reset look like it had done something to figures it never touched.
     response += '## What Was Reset\n\n';
-    response += `**Framework switch metrics** (this workspace): cleared\n`;
-    response += `**Process performance trends**: ${trendsBefore} discarded\n\n`;
+    response += `**Framework switch metrics** (this workspace): cleared\n\n`;
 
     response += '## What Was Not Reset\n\n';
     response +=
@@ -81,7 +65,7 @@ export class AnalyticsActionHandler extends ActionHandler {
 
     const { limit = 20 } = args;
 
-    const history = this.frameworkStateStore.getSwitchHistory(limit);
+    const history = this.frameworkStateStore.getSwitchHistory(limit, this.requestScope);
     const currentState = this.frameworkStateStore.getCurrentState(this.requestScope);
 
     let response = `# 📈 Framework Switch History\n\n`;
@@ -106,15 +90,10 @@ export class AnalyticsActionHandler extends ActionHandler {
     return this.createMinimalSystemResponse(response, 'switch_history');
   }
 
-  private async getAnalytics(args: { include_history?: boolean }): Promise<ToolResponse> {
-    const { include_history = false } = args;
-
+  private async getAnalytics(): Promise<ToolResponse> {
     // One scope, one query: every figure under the two workspace headings below comes from this
     // tally, which filters `execution_records` on the calling workspace (P4.87).
     const ledger = this.tallyLedger();
-    this.context.systemAnalytics.gateValidationCount = ledger.reviewedRecords;
-
-    const analytics = this.context.systemAnalytics;
 
     let response = '# 📊 System Analytics Report\n\n';
 
@@ -133,7 +112,7 @@ export class AnalyticsActionHandler extends ActionHandler {
     }
 
     response += '## 🛡️ Quality Gate Analytics (this workspace)\n\n';
-    response += `**Gate Validations**: ${analytics.gateValidationCount}\n`;
+    response += `**Gate Validations**: ${ledger.reviewedRecords}\n`;
     // Numerator and denominator now come from the same scoped page. It used to divide this
     // workspace's reviewed steps by a process-wide execution counter nothing wrote, which made
     // the rate 0% on every server (P4.87).
@@ -159,44 +138,17 @@ export class AnalyticsActionHandler extends ActionHandler {
     // Everything below belongs to the server PROCESS, which may serve several workspaces. The
     // heading says so rather than letting a reader carry the workspace scope down the page.
     response += '## 🖥️ This Server Process (all workspaces)\n\n';
-    response += `**Uptime**: ${this.formatUptime(analytics.uptime)}\n\n`;
+    // Read now, not from a cached copy. Both used to come from an in-memory object refreshed only
+    // when tool descriptions hot-reloaded, so a server that never reloaded reported `Uptime: 0s`
+    // and its startup heap for as long as it ran.
+    response += `**Uptime**: ${this.formatUptime(Date.now() - this.startTime)}\n\n`;
 
-    if (analytics.memoryUsage) {
-      response += '### 💾 Resources\n\n';
-      const mem = analytics.memoryUsage;
-      response += `**Heap Used**: ${this.formatBytes(mem.heapUsed)}\n`;
-      response += `**Heap Total**: ${this.formatBytes(mem.heapTotal)}\n`;
-      response += `**RSS**: ${this.formatBytes(mem.rss)}\n`;
-      response += `**External**: ${this.formatBytes(mem.external)}\n\n`;
-    }
-
-    if (include_history && analytics.performanceTrends.length > 0) {
-      response += '### 📈 Performance Trends\n\n';
-
-      const trendsByMetric = analytics.performanceTrends.reduce<
-        Record<string, Array<SystemAnalytics['performanceTrends'][number]>>
-      >((acc, trend) => {
-        const bucket = acc[trend.metric] ?? [];
-        bucket.push(trend);
-        acc[trend.metric] = bucket;
-        return acc;
-      }, {});
-
-      Object.entries(trendsByMetric).forEach(([metric, trends]) => {
-        const recentTrends = (trends ?? []).slice(-10);
-        response += `#### ${metric.charAt(0).toUpperCase() + metric.slice(1)} Trends\n`;
-        recentTrends.forEach((trend, index) => {
-          const isoTime = new Date(trend.timestamp).toISOString();
-          const time = isoTime.split('T')[1]?.split('.')[0] ?? isoTime;
-          const contextInfo = this.formatTrendContext(trend);
-          response += `${index + 1}. ${time}: ${this.formatTrendValue(
-            trend.metric,
-            trend.value
-          )}${contextInfo}\n`;
-        });
-        response += '\n';
-      });
-    }
+    const mem = process.memoryUsage();
+    response += '### 💾 Resources\n\n';
+    response += `**Heap Used**: ${this.formatBytes(mem.heapUsed)}\n`;
+    response += `**Heap Total**: ${this.formatBytes(mem.heapTotal)}\n`;
+    response += `**RSS**: ${this.formatBytes(mem.rss)}\n`;
+    response += `**External**: ${this.formatBytes(mem.external)}\n\n`;
 
     response += `\n---\n*Generated at: ${new Date().toISOString()}*`;
 

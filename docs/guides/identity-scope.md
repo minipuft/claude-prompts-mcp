@@ -110,11 +110,22 @@ and a request with no identity header uses the server's launch workspace. A
 `system_control framework switch` sent under A is reported by `system_control status` under A and
 by nothing else. Header names are case-insensitive.
 
-Two limits apply. First, `prompt_engine` renders with the **launch workspace's** framework
-selection, not the requesting workspace's, so a per-workspace switch changes what `status` reports
-for that workspace but not which framework guidance its prompts receive. Second, prompt, gate and
-framework version history is recorded under the launch workspace whatever header a request
-carries.
+A header workspace is a full tenant. Under A, a request reads and writes A's:
+
+- **framework selection** — which framework `prompt_engine` renders with, and the framework the
+  advertised `prompt_engine` description names;
+- **framework system flag** — a workspace the server has never seen starts from the configured
+  enabled flag and `frameworks.defaultFramework`, exactly as the launch workspace does, and keeps
+  its own value once toggled;
+- **framework switch history** — `system_control analytics history` lists A's switches only;
+- **version history** — a prompt, gate, framework or category changed under A records its
+  versions under A, and `resource_manager … history` under B does not list them (`source_workspace`
+  reads another workspace's history on purpose);
+- **chain sessions** — `system_control session list` and `inspect` show A's runs only.
+
+A request with no identity header, and every STDIO request, keeps the launch workspace's behaviour.
+The resource files themselves are one shared tree per server: a prompt created under A exists for
+every workspace; only its version history is A's.
 
 Before this was corrected, from 4.0.0 on, no header or token claim reached any per-request state
 over HTTP: every request used the launch workspace, so a switch sent under one workspace changed
@@ -239,13 +250,18 @@ In practice:
 
 ## Verify Scope Isolation
 
-1. **Check resolved identity** via system_control:
+1. **Check which scope a request resolved to** by its effect. No `system_control` action prints
+   the resolved identity, so switch the framework under one workspace and read `status` under
+   another:
 
    ```
-   system_control(action: "whoami")
+   system_control(action: "framework", operation: "switch", framework: "react")   # under workspace A
+   system_control(action: "status")                                               # under A, then under B
    ```
 
-   Returns the resolved identity context including `continuityScopeId`, source provenance, and policy mode.
+   `status` names the active framework in its `Framework System` line. Under A it reads the
+   switched framework; under B, and under any request that resolved to a different scope, it does
+   not. If both read the switch, both requests resolved to the same scope.
 
 2. **Test isolation** by running the same chain from two different workspaces:
 
@@ -263,26 +279,28 @@ In practice:
 
    ```bash
    cd server
-   npm run test:integration -- --testPathPattern=tenant
+   NODE_OPTIONS=--experimental-vm-modules npx jest --runInBand tests/integration/tenant
    ```
 
-   Expected: 16 tests passing (workspace continuity + tenant isolation).
+   Expected: 15 tests passing across two suites, `workspace-continuity.test.ts` and
+   `tenant-isolation.test.ts`.
 
 ## What Gets Isolated
 
-| State              | Isolated Per Scope | Notes                                                                                                                                       |
-| ------------------ | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| Chain sessions     | Yes                | Same `chain_id` runs independently across workspaces                                                                                        |
-| Framework switches | Partly             | `system_control` state is per workspace; `prompt_engine` renders with the launch workspace's framework (see "What a Header Does Over HTTP") |
-| Gate system state  | Yes                | Enable/disable, health metrics, validation history                                                                                          |
-| Argument history   | Yes                | Per-workspace argument tracking                                                                                                             |
-| Resource index     | No                 | Shared file-based resources (prompts, gates, styles)                                                                                        |
-| Config history     | By FILE, not scope | See "Config Version History Is Scoped By the File"                                                                                          |
+| State              | Isolated Per Scope | Notes                                                                                          |
+| ------------------ | ------------------ | ---------------------------------------------------------------------------------------------- |
+| Chain sessions     | Yes                | Same `chain_id` runs independently across workspaces                                           |
+| Framework switches | Yes                | Active framework, enabled flag and switch history, including what `prompt_engine` renders with |
+| Gate system state  | Yes                | Enable/disable, health metrics, validation history                                             |
+| Argument history   | Yes                | Per-workspace argument tracking                                                                |
+| Version history    | Yes                | Prompt, gate, framework and category versions (`source_workspace` reads across)                |
+| Resource index     | No                 | Shared file-based resources (prompts, gates, styles)                                           |
+| Config history     | By FILE, not scope | See "Config Version History Is Scoped By the File"                                             |
 
 ## Troubleshooting
 
 **Issue:** All state lands in `default` scope despite passing `--workspace-id`
-**Fix:** Verify the flag format. Both `--workspace-id=value` and `--workspace-id value` are accepted. Check `system_control(action: "whoami")` to see what the server resolved.
+**Fix:** Verify the flag format. Both `--workspace-id=value` and `--workspace-id value` are accepted. Then switch the framework under that workspace and read `system_control(action: "status")` under it and under another, as in "Verify Scope Isolation", to see which scope the server resolved.
 
 **Issue:** HTTP gateway headers are not picked up
 **Fix:** Header names are case-insensitive, so `X-Workspace-ID` works. Check that the gateway forwards the header on the HTTP request to the `/mcp` endpoint itself, that `identity.mode` is not `locked`, and that `identity.allowPerRequestOverride` is not `false`. Either setting makes the launch workspace win.

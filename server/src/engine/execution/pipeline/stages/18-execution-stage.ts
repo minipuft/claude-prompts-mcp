@@ -223,6 +223,7 @@ export class StepExecutionStage extends BasePipelineStage {
         injectionState: context.state.injection, // Also pass full injection state
       },
       additionalGateIds: executionPlan.gates,
+      scope: scopeOptions,
     });
 
     context.executionResults = this.createExecutionResults(renderResult);

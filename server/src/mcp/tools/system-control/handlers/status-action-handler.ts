@@ -19,16 +19,12 @@ export class StatusActionHandler extends ActionHandler {
       case 'default':
       default:
         return await this.getSystemStatus({
-          include_history: args.include_history,
           include_metrics: args.include_metrics,
         });
     }
   }
 
-  private async getSystemStatus(args: {
-    include_history?: boolean;
-    include_metrics?: boolean;
-  }): Promise<ToolResponse> {
+  private async getSystemStatus(args: { include_metrics?: boolean }): Promise<ToolResponse> {
     const { include_metrics = true } = args;
 
     if (!this.frameworkStateStore) {

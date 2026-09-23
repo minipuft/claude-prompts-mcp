@@ -923,6 +923,13 @@ belongs to another `resource_type` is refused naming the types that read it (see
 refusal above). That one names only the first offender, because the owner list is the same
 correction for all of them.
 
+The same refusal also checks the **action**: a parameter its resource type owns is still refused on
+an action that does not read it, naming the actions that do —
+`'severity' is not read by resource_type:"gate" action:"inspect" — only by action:"create" and
+"update".` Which actions read a parameter is the contract's own `commands[].parameters`
+(`<type>:<action>`, and `common:<action>` for every type), so the declaration a reader consults and
+the rule the router enforces are one list. `action:"preview"` reads what its `preview_action` reads.
+
 #### A declared parameter the current state does not advertise
 
 `prompt_engine` publishes a **union**: `gates`, `gate_verdict` and `gate_action` appear in
@@ -955,12 +962,18 @@ turns the whole class into a loud error at the boundary.
 - **Top-level `arguments` keys only.** `_meta` is a client-protocol field carried on `params`,
   beside `arguments`, never inside it, so it is out of reach and needs no exemption.
 - **Nested object keys are covered too, by a different mechanism.** Every object schema reachable
-  from a tool's parameters refuses an unknown key, naming the path it sits at
-  (`arguments.0: Unrecognized key: "requred"`). That is zod's own refusal rather than the
-  suggestion-carrying one above: a nested key is rejected during validation, so the call never
-  reaches the handler that would name a correction. `tests/unit/mcp-tools/nested-object-strictness.test.ts`
+  from a tool's parameters refuses an unknown key by its full path, with the nearest declared key:
+  `'arguments[0].requred' is not a declared key — did you mean 'required'?`. The key is rejected
+  during validation, so the message comes from each object's own zod `error` option
+  (`shared/utils/nested-key-refusal.ts`) rather than from a handler, and the published JSON Schema
+  is unchanged. A union reports the same way from the member the value's type selects, so a
+  misspelled key inside an inline gate reads `'gates[0].descripton' is not a declared key — did
+you mean 'description'?` rather than `gates.0: Invalid input`. The loader shares several of these
+  objects (`injection`, `composer`, `artifacts`, argument `validation`, a step's `visibility`), so a
+  YAML load error names the key the same way. `tests/unit/mcp-tools/nested-object-strictness.test.ts`
   walks the whole reachable graph and fails on any object that is neither closed nor listed below,
-  so a new nested object cannot join the class unclassified.
+  on any closed object or union without that adapter, and plants a misspelling in every closed
+  object to check the message a client reads.
 - **Deliberately open, with reasons** — the only objects where an unknown key still survives:
   - the three tools' top-level parameters, so the refusal above can name the key and suggest a fix;
   - `chain_steps[]` and `chain_step_data`, because a chain step is an opaque object by decision
@@ -1281,7 +1294,7 @@ system_control(action:"framework", operation:"list")
 system_control(action:"framework", operation:"switch", framework:"ReACT")
 
 # View execution analytics
-system_control(action:"analytics", show_details:true)
+system_control(action:"analytics")
 
 # List available gates
 system_control(action:"gates", operation:"list")
@@ -1291,17 +1304,17 @@ system_control(action:"gates", operation:"list")
 
 | Action              | Operations                                          | Parameters                                                                                                            | Purpose                                                                                                                                  |
 | ------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `status`            | —                                                   | `show_details`, `include_history`, `include_metrics`                                                                  | Runtime overview                                                                                                                         |
+| `status`            | —                                                   | `include_metrics`                                                                                                     | Runtime overview                                                                                                                         |
 | `framework`         | `list`, `switch`, `enable`, `disable`               | `framework`, `reason`, `persist`, `show_details`                                                                      | Framework management                                                                                                                     |
 | `gates`             | `list`, `enable`, `disable`, `status`, `health`     | `search_query`, `reason`, `persist`                                                                                   | Gate management                                                                                                                          |
-| `analytics`         | `view`, `history`, `reset`                          | `include_history`; `limit` for history; `confirm: true` for reset                                                     | Execution metrics                                                                                                                        |
+| `analytics`         | `view`, `history`, `reset`                          | `limit` for history; `confirm: true` for reset                                                                        | Execution metrics                                                                                                                        |
 | `config`            | `list`, `keys`, `get`, `validate`                   | `config: { key, value?, operation }` for `get` (one key's value + source) or `validate` (a per-key candidate check)   | Read-only: whole configuration, declared schema keys, one key's value, or a validity check — see [Config Operations](#config-operations) |
 | `maintenance`       | `restart`                                           | `confirm: true`, `reason`                                                                                             | Server restart                                                                                                                           |
 | `guide`             | —                                                   | `topic`, `include_planned`                                                                                            | Operation overview                                                                                                                       |
 | `injection`         | `status`, `override`, `reset`                       | `type`, `enabled`, `scope`, `scope_id`, `expires_in_ms` for override                                                  | Session injection overrides                                                                                                              |
 | `changes`           | `list`                                              | `source`, `resource_type`, `since`, `limit`                                                                           | Resource change audit log                                                                                                                |
 | `session`           | `list`, `inspect`, `clear`                          | `session_id`, `show_details`                                                                                          | Chain session lifecycle                                                                                                                  |
-| `execution_history` | `list`                                              | `limit`                                                                                                               | Chain execution ledger                                                                                                                   |
+| `execution_history` | `list`, `steps`                                     | `limit` for list; `session_id` for steps                                                                              | Chain execution ledger                                                                                                                   |
 | `skills_sync`       | `status`, `export`, `sync`, `diff`, `pull`, `clone` | `client`, `scope`, `resource_type`, `id`, `preview`, `preview_detail`, `prune`, `output`, `file`, `category`, `force` | Export canonical resources as client skills — [Skills Sync](../guides/skills-sync.md)                                                    |
 
 Every parameter is declared in the tool's input schema, which drops any field it does not declare
@@ -1364,7 +1377,15 @@ system_control(action:"execution_history", operation:"list")
 
 # Narrow the page (clamped to 500)
 system_control(action:"execution_history", operation:"list", limit:10)
+
+# One run, one line per step: each step at its LATEST record (session id or chain id)
+system_control(action:"execution_history", operation:"steps", session_id:"chain-quick_decision#1")
 ```
+
+A step's records are appended, never rewritten: `working` when it renders, `completed` when its
+answer is captured, and one more row when a gate verdict arrives on a call of its own. `list`
+shows that whole series; `steps` resolves it, so a step answered and then failed by its reviewer
+reads as `input_required` with the failing gate, not as `completed`.
 
 Distinct from `session`, which reports runs that are **currently live**: chain sessions are
 deleted per server PID at cleanup, so a finished run disappears from `session` but stays in
@@ -1432,17 +1453,16 @@ carries what they report.
 Every figure the report labels **(this workspace)** — recorded steps, completed, failed, average
 step duration, and the gate section above — comes from that one scoped ledger read, so one reply
 describes one workspace and **Gate Review Coverage** divides two counts from the same population.
-Uptime, memory and performance trends sit under **This Server Process (all workspaces)** because
-they belong to the process, which may serve several workspaces; nothing in the report presents a
-process fact as a workspace one.
+Uptime and memory sit under **This Server Process (all workspaces)** because they belong to the
+process, which may serve several workspaces; nothing in the report presents a process fact as a
+workspace one. Both are read when the report is built.
 
 The ledger records **chain steps**. A single-prompt run opens no session and writes no row, so it
 is counted nowhere in this report, and the report says so when a workspace has no rows. The counts
 cover the most recent ledger page (50 rows by default, 500 at most), not all time.
 
-`operation:"reset"` clears the framework switch metrics for the calling workspace and the process
-performance trends. It does not touch the execution ledger, which is append-only — the report says
-that too.
+`operation:"reset"` clears the framework switch metrics for the calling workspace. It does not
+touch the execution ledger, which is append-only — the report says that too.
 
 ### Session Operations
 

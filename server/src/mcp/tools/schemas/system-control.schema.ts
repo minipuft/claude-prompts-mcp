@@ -30,6 +30,7 @@ import type { DescriptionResolver } from './prompt-engine.schema.js';
 
 import { INJECTION_TYPES } from '#shared/types/injection.js';
 import { SYSTEM_CONTROL_ACTION_IDS } from '#shared/types/system-control.js';
+import { refuseUndeclaredKey } from '#shared/utils/nested-key-refusal.js';
 
 const identity: DescriptionResolver = (_name, fallback) => fallback;
 
@@ -64,7 +65,6 @@ function buildSystemControlShape(resolve: DescriptionResolver = identity) {
     reason: z.string().optional().describe(describe('reason')),
     persist: z.boolean().optional().describe(describe('persist')),
     show_details: z.boolean().optional().describe(describe('show_details')),
-    include_history: z.boolean().optional().describe(describe('include_history')),
     include_metrics: z.boolean().optional().describe(describe('include_metrics')),
     topic: z.string().optional().describe(describe('topic')),
     include_planned: z.boolean().optional().describe(describe('include_planned')),
@@ -89,11 +89,14 @@ function buildSystemControlShape(resolve: DescriptionResolver = identity) {
     // alone (see config-action-handler.ts); `set` was removed from this surface (R27) and never
     // populated this object with that value.
     config: z
-      .strictObject({
-        key: z.string(),
-        value: z.string().optional(),
-        operation: z.enum(['validate', 'get']),
-      })
+      .strictObject(
+        {
+          key: z.string(),
+          value: z.string().optional(),
+          operation: z.enum(['validate', 'get']),
+        },
+        { error: refuseUndeclaredKey }
+      )
       .optional()
       .describe(describe('config')),
 

@@ -26,6 +26,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { checkDistFreshness } from './lib/dist-freshness.js';
 import { buildServerEnv, createHermeticRoots } from './lib/hermetic-server-env.js';
 
 const DIST = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'index.js');
@@ -132,6 +133,13 @@ const failures = [];
 function check(label, ok, detail = '') {
   console.log(`${ok ? '✓' : '✗'} ${label}${detail ? ` — ${detail}` : ''}`);
   if (!ok) failures.push(label);
+}
+
+// A drive of a build older than `src/` passes or fails code that is not the code under review.
+const freshness = checkDistFreshness(DIST, path.resolve(path.dirname(DIST), '..', 'src'));
+if (!freshness.fresh) {
+  console.error(`verify-handoff: refusing a ${freshness.kind} build — ${freshness.reason}`);
+  process.exit(1);
 }
 
 const serverA = spawnServer(PORT_A);

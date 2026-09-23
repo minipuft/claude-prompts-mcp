@@ -12,6 +12,8 @@ import type { ConvertedPrompt, TemporaryGateDefinition } from '#engine/execution
 import type { Logger } from '#shared/types/index.js';
 import type { PromptResourceDependencies } from '../core/types.js';
 
+import { currentRequestStateScope } from '#shared/utils/request-state-scope.js';
+
 /**
  * Gate analysis result
  */
@@ -49,7 +51,7 @@ export class GateAnalyzer {
   constructor(dependencies: PromptResourceDependencies, promptAnalyzer?: PromptAnalyzer) {
     this.logger = dependencies.logger;
     this.dependencies = dependencies;
-    this.promptAnalyzer = promptAnalyzer ?? new PromptAnalyzer(dependencies);
+    this.promptAnalyzer = promptAnalyzer ?? new PromptAnalyzer();
   }
 
   /**
@@ -147,7 +149,9 @@ export class GateAnalyzer {
       complexity: 'high' | 'medium' | 'low';
     };
 
-    const activeFramework = this.dependencies.frameworkStateStore?.getActiveFramework()?.type;
+    const activeFramework = this.dependencies.frameworkStateStore?.getActiveFramework(
+      currentRequestStateScope()
+    )?.type;
     if (activeFramework) {
       result.framework = activeFramework;
     }

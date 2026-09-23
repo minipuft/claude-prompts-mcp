@@ -32,6 +32,7 @@ import type { Category, PromptData } from '#modules/prompts/types.js';
 import type { TextReferenceStore } from '#modules/text-refs/index.js';
 import type { PersistedArgumentHistory } from '#modules/text-refs/types.js';
 import type {
+  GateSystemSettings,
   ResolvedFrameworkConfig,
   HookRegistryPort,
   McpNotificationEmitterPort,
@@ -278,6 +279,23 @@ function loaderDirsConfig<PrimaryKey extends string, LookupKey extends string>(
   };
 }
 
+/**
+ * Whether configuration turns the framework system on: system prompt injection, framework gates,
+ * or dynamic tool descriptions each need it.
+ *
+ * The one answer. The launch workspace is re-synced from it at startup and on every config change;
+ * a workspace a request names for the first time starts from it (`FrameworkStateStore`'s
+ * `initialSystemEnabled`), rather than from a hardcoded "disabled" that left a fresh header
+ * workspace reporting Disabled while the launch workspace was enabled (P4.130).
+ */
+export function isFrameworkSystemEnabledByConfig(
+  frameworks: ResolvedFrameworkConfig,
+  gates: Pick<GateSystemSettings, 'enableFrameworkGates'>
+): boolean {
+  const systemPromptEnabled = frameworks.injection?.systemPrompt?.enabled ?? true;
+  return systemPromptEnabled || gates.enableFrameworkGates || frameworks.dynamicToolDescriptions;
+}
+
 export async function initializeModules(params: ModuleInitParams): Promise<ModuleInitResult> {
   const {
     logger,
@@ -359,6 +377,11 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
     // the file changes, so the fallback follows an edited `frameworks.defaultFramework` exactly as
     // the delete refusal in `resource_manager` does, without a restart.
     defaultFramework: () => configManager.getFrameworksConfig().defaultFramework,
+    initialSystemEnabled: () =>
+      isFrameworkSystemEnabledByConfig(
+        configManager.getFrameworksConfig(),
+        configManager.getGatesConfig()
+      ),
     // Every unscoped read and write in this process now resolves to this project.
     ...(workspaceId != null ? { defaultScope: { workspaceId } } : {}),
   });

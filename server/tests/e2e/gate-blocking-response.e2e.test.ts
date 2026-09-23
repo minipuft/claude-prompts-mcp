@@ -26,6 +26,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { buildServerEnv, createHermeticRoots } from './helpers/child-env.js';
+import { cageerfAnswer } from './helpers/cageerf-answer.js';
 import {
   getAvailablePort,
   killServer,
@@ -247,7 +248,7 @@ describe.each([
 
     const blocked = await session.callTool('prompt_engine', {
       chain_id: chainId,
-      user_response: `${OUTPUT_MARKER}: one, two, three.`,
+      user_response: cageerfAnswer(`${OUTPUT_MARKER}: one, two, three.`),
       gate_verdict: 'GATE_REVIEW: FAIL - the rejected options are not named',
     });
 
@@ -296,7 +297,7 @@ describe.each([
     for (let attempt = 1; attempt <= MAX_ATTEMPTS + 1; attempt++) {
       const outcome = await session.callTool('prompt_engine', {
         chain_id: chainId,
-        user_response: `${OUTPUT_MARKER}: attempt ${attempt}.`,
+        user_response: cageerfAnswer(`${OUTPUT_MARKER}: attempt ${attempt}.`),
         gate_verdict: `GATE_REVIEW: FAIL - attempt ${attempt} is not good enough`,
       });
       counters.push(/\*\*Attempt \d+ of \d+\*\*/.exec(outcome.text)?.[0] ?? '(no counter)');
@@ -371,7 +372,7 @@ describe.each([
 
     const blocked = await session.callTool('prompt_engine', {
       chain_id: chainId,
-      user_response: `${OUTPUT_MARKER}: one, two, three.`,
+      user_response: cageerfAnswer(`${OUTPUT_MARKER}: one, two, three.`),
       gate_verdict: 'GATE_REVIEW: FAIL - the rejected options are not named',
     });
 
@@ -393,7 +394,7 @@ describe.each([
 
     const failed = await session.callTool('prompt_engine', {
       chain_id: chainId,
-      user_response: `${OUTPUT_MARKER}: one, two, three.`,
+      user_response: cageerfAnswer(`${OUTPUT_MARKER}: one, two, three.`),
       gate_verdict: 'GATE_REVIEW: FAIL - the rejected options are not named',
     });
 

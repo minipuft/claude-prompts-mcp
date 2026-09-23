@@ -219,6 +219,22 @@ describe.each([
     expect(refused.text).toContain("Did you mean 'confirm'?");
   }, 30000);
 
+  it('the removed analytics include_history flag is refused by name (R93)', async () => {
+    // It rendered a list only a tool-description hot reload ever filled. Removed rather than
+    // left accepted-and-ignored; the control is the same action without it.
+    const clean = await session.call('system_control', { action: 'analytics' });
+    expect(clean.isError).toBe(false);
+    expect(clean.text).toContain('System Analytics Report');
+
+    const refused = await session.call('system_control', {
+      action: 'analytics',
+      include_history: true,
+    });
+
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toContain("'include_history' is not a parameter of system_control");
+  }, 30000);
+
   it('a DECLARED gate parameter sent while gates are off says so, not "not a parameter"', async () => {
     const disabled = await session.call('system_control', {
       action: 'gates',
@@ -286,13 +302,19 @@ describe.each([
     // well-formed twin, differing in the ONE identifier, passes the schema. `inspect` of a bundled
     // gate, not `create`: this session's workspace is the repository, and the refusal is decided
     // by the schema before any action runs, so a read-only action observes it without a write.
+    //
+    // Since P4.134 `inspect` does not READ `evaluation`, so the twin is refused too — by the
+    // router's per-action refusal, which runs only on a value the schema ACCEPTED. Naming that
+    // guard is what makes it a control: the schema passed the twin and refused the misspelling.
     const accepted = await session.call('resource_manager', {
       resource_type: 'gate',
       action: 'inspect',
       id: 'code-quality',
       evaluation: { mode: 'judge', strict: true },
     });
-    expect(accepted.isError).toBe(false);
+    expect(accepted.text).toContain(
+      `'evaluation' is not read by resource_type:"gate" action:"inspect"`
+    );
 
     const refused = await session.call('resource_manager', {
       resource_type: 'gate',

@@ -133,7 +133,7 @@ const WATCHED = [
       'it backs looks implemented — the same failure this gate catches in memory, one layer down.',
   },
   {
-    file: 'src/engine/execution/operators/chain-operator-executor.ts',
+    file: 'src/engine/execution/operators/types.ts',
     interfaces: ['ChainOperatorCollaborators'],
     reason:
       'Optional dependency seams that default to no-op. This is the third member of the ' +

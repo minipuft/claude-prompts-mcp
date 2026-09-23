@@ -196,7 +196,15 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     // Align pipeline session context with manager state
     this.alignSessionContext(context, sessionContext, session, currentStepAtStart);
 
+    // The call that CREATES the run renders its first step and carries no resume: it is a brief,
+    // not a reply, so admission has nothing to admit. Admitting it anyway refused every chain
+    // whose first step is delegated with "the resume carries no worker reply" (row 4.9).
+    const lifecycleDecision = context.state.session.lifecycleDecision;
+    const opensRun =
+      lifecycleDecision === 'create-new' || lifecycleDecision === 'create-force-restart';
+
     if (
+      !opensRun &&
       !(await this.runResumeAdmission(
         context,
         sessionContext,
@@ -219,8 +227,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       scopeOptions
     );
 
-    const lifecycleDecision = context.state.session.lifecycleDecision;
-    if (lifecycleDecision === 'create-new' || lifecycleDecision === 'create-force-restart') {
+    if (opensRun) {
       this.logExit({ skipped: 'New session, nothing to capture' });
       return;
     }
@@ -272,15 +279,11 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       return;
     }
 
-    // Re-fetch session in case deferred verdict changed state
-    const sessionAfterDeferred =
-      this.chainSessionStore.getSession(sessionId, scopeOptions) ?? session;
-    const pendingResult = await this.verdictProcessor.processPendingReviewVerdict(
+    const pendingResult = await this.processPendingUnlessSpent(
       context,
-      sessionAfterDeferred,
-      sessionId,
+      session,
       currentStepAtStart,
-      deferredResult.userResponse,
+      deferredResult,
       sessionContext
     );
     if (pendingResult.earlyExit) {
@@ -327,6 +330,34 @@ export class StepResponseCaptureStage extends BasePipelineStage {
   }
 
   /**
+   * Answer the pending review with this call's verdict — unless the deferred path already spent it.
+   *
+   * One submission, one recorded attempt (P4.116). A deferred FAIL opens a review and records the
+   * verdict against it; handing the same `gate_verdict` to the pending path recorded it a second
+   * time and spent two retry attempts on one call. The spent result stands in for the pending one.
+   */
+  private async processPendingUnlessSpent(
+    context: ExecutionContext,
+    session: NonNullable<ReturnType<ChainSessionService['getSession']>>,
+    currentStepAtStart: number,
+    deferredResult: VerdictProcessingResult,
+    sessionContext: SessionContext
+  ): Promise<VerdictProcessingResult> {
+    if (deferredResult.verdictRecorded === true) {
+      return deferredResult;
+    }
+    const sessionId = sessionContext.sessionId;
+    return this.verdictProcessor.processPendingReviewVerdict(
+      context,
+      this.chainSessionStore.getSession(sessionId, context.getScopeOptions()) ?? session,
+      sessionId,
+      currentStepAtStart,
+      deferredResult.userResponse,
+      sessionContext
+    );
+  }
+
+  /**
    * Close out this call's verdict handling, in the one order the two halves require.
    *
    * 1. **Ledger** the submitted verdict — a no-op unless this call carried one and captured
@@ -338,10 +369,10 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    *    — and until that moved here, the announcement reached the client ahead of the
    *    `step_complete` for the step being answered (P4.89).
    *
-   * Both results are applied rather than one being picked: a deferred FAIL can create the review
-   * the pending path then answers in the same call, so both can carry an advance. A second
-   * advance is harmless — `advanceStep` no-ops on a node the run has already passed, which is
-   * also what makes this safe after `StepCaptureService` advanced the run itself.
+   * Every distinct result is applied rather than one being picked. When the deferred path recorded
+   * the verdict the pending path never ran and both arguments are the same result, applied once.
+   * A second advance would still be harmless — `advanceStep` no-ops on a node the run has already
+   * passed, which is also what makes this safe after `StepCaptureService` advanced the run itself.
    */
   private async settleVerdict(
     context: ExecutionContext,
@@ -352,7 +383,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
   ): Promise<void> {
     this.stepCaptureService.ledgerSubmittedVerdict(context, sessionId, session, currentStepAtStart);
 
-    for (const result of results) {
+    for (const result of new Set(results)) {
       if (result.deferredAdvance !== undefined) {
         await this.verdictProcessor.applyDeferredAdvance(context, result.deferredAdvance);
       }

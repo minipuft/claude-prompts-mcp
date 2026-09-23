@@ -84,7 +84,6 @@ import {
 import { GateStateStore, createGateStateStore } from '#engine/gates/gate-state-store.js';
 import { PromptAssetManager } from '#modules/prompts/index.js';
 // Gate evaluator removed - now using Framework validation
-import { createContentAnalyzer } from '#modules/semantic/content-analyzer.js';
 import { TextReferenceStore } from '#modules/text-refs/index.js';
 import { withRequestNotifications } from '#shared/utils/request-notification-scope.js';
 // Schemas now hand-written in ./schemas/ (replaced generated mcp-schemas.ts)
@@ -169,7 +168,6 @@ export class McpToolRouter {
   // Core tools: prompt engine, prompt resources, system control, gate manager, framework manager, resource manager
 
   // Shared components
-  private semanticAnalyzer!: ReturnType<typeof createContentAnalyzer>;
   private frameworkStateStore?: FrameworkStateStore;
   private frameworkManager?: FrameworkManager;
   // ChainSessionStore is owned by PromptExecutor, accessed via getter
@@ -207,10 +205,6 @@ export class McpToolRouter {
    */
   private servingUnitScope?: StateStoreOptions;
 
-  // Pending analytics queue for initialization race condition
-  private pendingAnalytics: any[] = [];
-  private toolsInitialized = false;
-
   constructor(
     logger: Logger,
     mcpServer: McpServer,
@@ -246,7 +240,6 @@ export class McpToolRouter {
     this.onRestart = onRestart;
     this.resourceFileLocator = resourceFileLocator;
 
-    this.semanticAnalyzer = createContentAnalyzer(this.logger);
     this.analyticsService = metricsCollector;
 
     // Initialize gate system manager for runtime gate control
@@ -259,15 +252,12 @@ export class McpToolRouter {
     });
     await this.gateStateStore.initialize();
 
-    this.logger.info('Content analyzer initialized');
-
     // Initialize consolidated tools
     // Note: ChainSessionStore is created inside PromptExecutor and exposed via getter
     this.promptExecutor = createPromptExecutor(
       this.logger,
       this.promptManager,
       this.configManager,
-      this.semanticAnalyzer,
       this.textReferenceStore,
       this.gateManager,
       this, // Pass manager reference for analytics data flow
@@ -283,7 +273,6 @@ export class McpToolRouter {
     this.promptResourceHandler = createPromptResourceHandler(
       this.logger,
       this.configManager,
-      this.semanticAnalyzer,
       this.frameworkStateStore,
       this.frameworkManager,
       onRefresh,
@@ -330,10 +319,6 @@ export class McpToolRouter {
     // Note: frameworkManager is not yet available at this point, will be set in setFrameworkManager
 
     // chainScaffolder removed - functionality consolidated into promptEngine
-
-    // Flush any pending analytics data that was queued during initialization
-    this.toolsInitialized = true;
-    this.flushPendingAnalytics();
 
     this.logger.info(
       'McpToolRouter initialized with 5 intelligent tools (chain management in prompt_engine)'
@@ -533,9 +518,9 @@ export class McpToolRouter {
    * switch, when the values the caller once held are stale.
    */
   // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-  private buildPromptEngineSurface() {
-    const frameworkEnabled = this.frameworkStateStore?.isFrameworkSystemEnabled() ?? false;
-    const activeFramework = this.frameworkStateStore?.getActiveFramework();
+  private buildPromptEngineSurface(scope: StateStoreOptions | undefined) {
+    const frameworkEnabled = this.frameworkStateStore?.isFrameworkSystemEnabled(scope) ?? false;
+    const activeFramework = this.frameworkStateStore?.getActiveFramework(scope);
     const activeFrameworkType = activeFramework?.type ?? activeFramework?.id;
 
     const describe: DescriptionResolver = (paramName, fallback) =>
@@ -630,16 +615,6 @@ export class McpToolRouter {
   private async handleToolDescriptionChange(stats: any): Promise<void> {
     try {
       this.logger.info('🔄 Processing tool description changes...');
-
-      // Emit analytics update
-      this.updateAnalytics({
-        toolDescriptions: {
-          lastReload: new Date().toISOString(),
-          totalDescriptions: stats.totalDescriptions,
-          loadedFromFile: stats.loadedFromFile,
-          usingDefaults: stats.usingDefaults,
-        },
-      });
 
       // Note: MCP SDK doesn't support dynamic tool updates
       // The new descriptions will be loaded on next tool registration or server restart
@@ -875,9 +850,9 @@ export class McpToolRouter {
     this.servingUnitScope = scope;
     this.logger.info('Registering consolidated MCP tools with server (centralized)...');
 
-    // Get current framework state for dynamic descriptions
-    const frameworkEnabled = this.frameworkStateStore?.isFrameworkSystemEnabled() ?? false;
-    const activeFramework = this.frameworkStateStore?.getActiveFramework();
+    // The serving unit's own framework state: a workspace header's selection, not the launch one.
+    const frameworkEnabled = this.frameworkStateStore?.isFrameworkSystemEnabled(scope) ?? false;
+    const activeFramework = this.frameworkStateStore?.getActiveFramework(scope);
     const activeFrameworkType = activeFramework?.type ?? activeFramework?.id;
 
     this.logger.info(`🔧 Registering tools with framework-aware descriptions:`);
@@ -913,7 +888,7 @@ export class McpToolRouter {
         );
       }
 
-      const promptEngineSchema = this.buildPromptEngineSurface();
+      const promptEngineSchema = this.buildPromptEngineSurface(scope);
 
       this.promptEngineTool = target.registerTool(
         'prompt_engine',
@@ -1335,7 +1310,9 @@ export class McpToolRouter {
       // it picks up both the new descriptions and any change to which
       // parameters are reachable.
       if (this.promptEngineTool != null) {
-        this.promptEngineTool.update({ paramsSchema: this.buildPromptEngineSurface() });
+        this.promptEngineTool.update({
+          paramsSchema: this.buildPromptEngineSurface(this.servingUnitScope),
+        });
         this.logger.info('✅ prompt_engine input schema rebuilt for current state');
       }
 
@@ -1376,34 +1353,6 @@ export class McpToolRouter {
   }
 
   /**
-   * Update system analytics (from consolidated tools)
-   */
-  updateAnalytics(analytics: any): void {
-    if (this.toolsInitialized) {
-      this.systemControl.updateAnalytics(analytics);
-    } else {
-      // Queue analytics data until systemControl is initialized
-      this.pendingAnalytics.push(analytics);
-      this.logger.debug(
-        `SystemControl not yet initialized, queued analytics data (${this.pendingAnalytics.length} pending)`
-      );
-    }
-  }
-
-  /**
-   * Flush pending analytics data to systemControl after initialization
-   */
-  private flushPendingAnalytics(): void {
-    if (this.toolsInitialized && this.pendingAnalytics.length > 0) {
-      this.logger.debug(`Flushing ${this.pendingAnalytics.length} pending analytics updates`);
-      this.pendingAnalytics.forEach((analytics) => {
-        this.systemControl.updateAnalytics(analytics);
-      });
-      this.pendingAnalytics = [];
-    }
-  }
-
-  /**
    * Shutdown all components and cleanup resources
    */
   shutdown(): void {
@@ -1422,9 +1371,6 @@ export class McpToolRouter {
       });
       this.logger.info('✅ Gate system manager cleanup initiated');
     }
-
-    // Clear pending analytics
-    this.pendingAnalytics = [];
 
     this.logger.info('✅ MCP tools manager shutdown completed');
   }

@@ -56,12 +56,14 @@ import { GateVerdictProcessor } from '../../../src/engine/gates/services/gate-ve
 import { ResponseFormatter } from '../../../src/mcp/tools/prompt-engine/processors/response-formatter.js';
 import { ExecutionRecordStore } from '../../../src/modules/chains/execution-record-store.js';
 import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
+import { ExecutionHistoryActionHandler } from '../../../src/mcp/tools/system-control/handlers/execution-history-action-handler.js';
 
 import type { PipelineStage } from '../../../src/engine/execution/pipeline/stage.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
 import type { ConvertedPrompt } from '../../../src/engine/execution/types.js';
 import type { ChainSession } from '../../../src/shared/types/chain-session.js';
 import type { DatabasePort } from '../../../src/shared/types/persistence.js';
+import type { SystemControlContext } from '../../../src/mcp/tools/system-control/core/types.js';
 
 const CHAIN_BASE = 'chain-lifecycle-demo';
 const GATE_ID = 'step-quality';
@@ -127,6 +129,20 @@ const parsedThreeStepChain = () => [
   { stepNumber: 2, nodeId: 'analyze', promptId: 'analyze', args: {}, convertedPrompt: PROMPTS[2] },
   { stepNumber: 3, nodeId: 'review', promptId: 'review', args: {}, convertedPrompt: PROMPTS[1] },
 ];
+
+/** Headers a framework declares, and the two-step chain whose steps run under it (P4.115). */
+const FRAMEWORK_SECTIONS = [
+  { header: '## Context', required: true, phaseId: 'context', criteria: [] },
+  { header: '## Analysis', required: true, phaseId: 'analysis', criteria: [] },
+];
+const parsedFrameworkChain = () =>
+  parsedChainSteps().map((step) => ({
+    ...step,
+    frameworkContext: {
+      selectedFramework: { id: 'cageerf', name: 'CAGEERF' },
+      systemPrompt: 'Apply CAGEERF.',
+    } as never,
+  }));
 
 const createInMemoryDb = (): { db: DatabaseSync; port: DatabasePort } => {
   const db = new DatabaseSync(':memory:');
@@ -223,9 +239,15 @@ const buildPipeline = (options: {
   recordStore: ExecutionRecordStore;
   logger: Logger;
   steps: () => ReturnType<typeof parsedChainSteps>;
+  /** Whether gate enhancement selects a blocking gate; absent means it does. */
+  blockingGates?: () => boolean;
 }): PromptExecutionPipeline => {
   const { sessionStore, recordStore, logger } = options;
-  const chainExecutor = new ChainOperatorExecutor(logger as never, PROMPTS);
+  // A framework's section headers, declared only for a step that names a framework — every
+  // parsed chain here but `parsedFrameworkChain` names none, so their renders are unchanged.
+  const chainExecutor = new ChainOperatorExecutor(logger as never, PROMPTS, undefined, undefined, {
+    declaredSectionsProvider: () => FRAMEWORK_SECTIONS,
+  });
 
   const realStages: Record<string, PipelineStage> = {
     SessionManagement: new SessionManagementStage(sessionStore, logger),
@@ -299,7 +321,7 @@ const buildPipeline = (options: {
       return {
         name,
         execute: async (context: ExecutionContext) => {
-          context.state.gates.hasBlockingGates = true;
+          context.state.gates.hasBlockingGates = options.blockingGates?.() ?? true;
           context.state.gates.accumulatedGateIds = [GATE_ID];
           context.state.gates.enforcementMode = 'blocking';
           context.gateInstructions = 'Check the step output against the gate.';
@@ -334,9 +356,15 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
    * with a node BETWEEN the first and the last can fail the old behaviour.
    */
   let parsedSteps: () => ReturnType<typeof parsedChainSteps>;
+  /**
+   * Whether the run opens a review before each step. Off, no review exists when a verdict
+   * arrives, so the verdict takes the deferred path — the only way to reach it here.
+   */
+  let blockingGates: boolean;
 
   beforeEach(() => {
     parsedSteps = parsedChainSteps;
+    blockingGates = true;
     const created = createInMemoryDb();
     db = created.db;
     const logger = createLogger();
@@ -365,6 +393,7 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
       recordStore,
       logger,
       steps: () => parsedSteps(),
+      blockingGates: () => blockingGates,
     });
   });
 
@@ -456,7 +485,9 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
     expect(session.runStatus).toBe('completed');
     expect(session.state.currentNodeId).toBeNull();
     expect(texts[3]).toContain('✓ Chain complete (2/2)');
-    expect(texts[3]).toContain('No user_response needed');
+    expect(texts[3]).toContain('Chain execution complete');
+    // R96: the reply that says complete offers no next step.
+    expect(texts[3]).not.toContain('Next:');
   });
 
   test('the footer does not claim completion while the final step still owes a verdict', async () => {
@@ -469,6 +500,10 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
     expect(atFinalStep).not.toContain('Chain complete');
     expect(atFinalStep).not.toContain('No user_response needed');
     expect(atFinalStep).toContain('Final step 2/2');
+    // R96 (P4.119): the final step's review is the whole call to action — no `Next:` line
+    // inviting another step. CONTROL: the mid-run reply before it keeps its `Next:`.
+    expect(atFinalStep).not.toContain('Next:');
+    expect(texts[1]).toContain('Next: chain_id=');
     expect(atFinalStep).toContain('awaiting gate verdict');
     expect(atFinalStep).toContain('gate_verdict');
 
@@ -592,6 +627,59 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
       Record<string, unknown>
     >;
     expect(parsed[0]).toMatchObject({ gateId: GATE_ID, verdict: 'FAIL' });
+  });
+
+  /**
+   * P4.118: the verdict row above was written and never read back by step — `list` renders the
+   * whole series and `v_execution_history` resolves the latest row per SESSION. `steps` resolves
+   * it per step, so the step reads as what its verdict left it, not as what its answer did.
+   */
+  describe('execution_history steps reads each step at its latest record', () => {
+    const readHistory = async (args: Record<string, unknown>): Promise<string> => {
+      const handler = new ExecutionHistoryActionHandler({
+        executionRecordStore: recordStore,
+        createMinimalSystemResponse: (text: string) => ({ content: [{ type: 'text', text }] }),
+      } as unknown as SystemControlContext);
+      const response = await handler.execute({ action: 'execution_history', ...args });
+      return response.content[0]?.text ?? '';
+    };
+
+    const failVerdict = renderGateVerdict({
+      overall: 'FAIL',
+      rationale: 'the gate is not met',
+      per_gate: [{ index: 1, passed: false, rationale: 'no evidence of review' }],
+    });
+
+    test('a step whose FAIL arrived on its own call reads as its verdict row', async () => {
+      const sessionId = await driveAnswerThenVerdict(failVerdict);
+
+      const text = await readHistory({ operation: 'steps', session_id: sessionId });
+
+      expect(text).toContain('`input_required` step 1');
+      expect(text).not.toContain('`completed` step 1');
+      expect(text).toContain(`✗ \`${GATE_ID}\` FAIL`);
+      // One line per step: step 1's earlier `completed` and `working` rows are not repeated.
+      expect(text.match(/ step 1\b/g)).toHaveLength(1);
+    });
+
+    test('CONTROL: the series still holds the completed row the verdict superseded', async () => {
+      await driveAnswerThenVerdict(failVerdict);
+
+      const text = await readHistory({ operation: 'list' });
+
+      expect(text).toContain('`completed` step 1');
+      expect(text).toContain('`input_required` step 1');
+    });
+
+    test('the run is found by its chain id too', async () => {
+      const sessionId = await driveAnswerThenVerdict(failVerdict);
+      const chainId = onlySession().chainId;
+      expect(chainId).not.toBe(sessionId);
+
+      const text = await readHistory({ operation: 'steps', session_id: chainId });
+
+      expect(text).toContain('`input_required` step 1');
+    });
   });
 
   test('positive control: a second call carrying no verdict appends no verdict row', async () => {
@@ -817,6 +905,80 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
     // No review means no attempt counter, and no re-rendered step.
     expect(text).not.toContain('attempt 1/');
     expect(text).not.toContain('Review Required');
+  });
+
+  /**
+   * P4.115: a step held by a blocking gate is never rendered by stage 18, so its gate review is
+   * the only render it gets — and nothing recorded what that review declared. Stage 19 then
+   * graded the step's answer against the run's union instead of against its own headers.
+   */
+  test("a reviewed step's record carries the headers its review declared", async () => {
+    parsedSteps = parsedFrameworkChain;
+
+    const opened = textOf(await pipeline.execute({ command: `>>draft --> >>review` }));
+    const session = onlySession() as unknown as {
+      sessionId: string;
+      pendingGateReview?: unknown;
+      state: { stepStates?: Map<string, { declaredSections?: string[] }> };
+    };
+
+    // The run opened on a review of step 1, and the review told the model these headers.
+    expect(session.pendingGateReview).toBeDefined();
+    expect(opened).toContain('`## Context`');
+    expect(session.state.stepStates?.get('draft')?.declaredSections).toEqual([
+      '## Context',
+      '## Analysis',
+    ]);
+    // CONTROL: a node no render has reached records nothing, so stage 19 still falls back to the
+    // run's union for it — the record above is the review's, not a blanket write.
+    expect(session.state.stepStates?.get('review')?.declaredSections).toBeUndefined();
+  });
+
+  /**
+   * P4.116: a deferred FAIL that arrives WITH a `user_response` was processed twice in one call.
+   * `processDeferredVerdict` opened a review and recorded the verdict against it, then the same
+   * call handed the same `gate_verdict` to `processPendingReviewVerdict`, which recorded it again
+   * — two retry attempts spent on one submission.
+   */
+  describe('a deferred FAIL is one recorded attempt per submission', () => {
+    const failVerdict = 'GATE_REVIEW: FAIL - the step misses a constraint';
+
+    const attemptCount = (): number | undefined =>
+      (onlySession().pendingGateReview as { attemptCount?: number } | undefined)?.attemptCount;
+
+    beforeEach(() => {
+      blockingGates = false;
+    });
+
+    test('one call carrying the answer and a FAIL records one attempt', async () => {
+      await pipeline.execute({ command: `>>draft --> >>review` });
+      const chainId = onlySession().chainId;
+      // Nothing is pending, so this verdict takes the deferred path.
+      expect(onlySession().pendingGateReview).toBeUndefined();
+
+      await pipeline.execute({
+        chain_id: chainId,
+        user_response: 'step 1 output',
+        gate_verdict: failVerdict,
+      } as any);
+
+      expect(attemptCount()).toBe(1);
+    });
+
+    test('CONTROL: the same FAIL submitted on two calls records two attempts', async () => {
+      await pipeline.execute({ command: `>>draft --> >>review` });
+      const chainId = onlySession().chainId;
+
+      await pipeline.execute({ chain_id: chainId, gate_verdict: failVerdict } as any);
+      expect(attemptCount()).toBe(1);
+
+      await pipeline.execute({
+        chain_id: chainId,
+        user_response: 'step 1 output',
+        gate_verdict: failVerdict,
+      } as any);
+      expect(attemptCount()).toBe(2);
+    });
   });
 });
 

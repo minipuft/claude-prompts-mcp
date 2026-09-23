@@ -209,6 +209,35 @@ export class ExecutionRecordStore {
   }
 
   /**
+   * The latest record of every step of one run, in step order (P4.118).
+   *
+   * A step's series is append-only — `working` at render, `completed` at capture, and a further
+   * row when a verdict arrives on its own call — so the step's current state is its NEWEST row,
+   * and the newest is `MAX(execution_id)` because ULIDs sort by creation. `v_execution_history`
+   * answers the same question per SESSION; this answers it per step, which is the grain a
+   * verdict row is written at. A step is its node when the row names one, its ordinal otherwise;
+   * the run-level terminal row names neither and is not a step.
+   *
+   * `runId` matches either the session id or the run's chain id, the two names a client holds.
+   */
+  queryLatestPerStep(runId: string, scope?: StateStoreOptions): ExecutionRecord[] {
+    const tenantId = this.resolveTenantId(scope);
+    const rows = this.db.query<ExecutionRecordRow>(
+      `SELECT r.* FROM execution_records r
+       JOIN (
+         SELECT MAX(execution_id) AS latest_execution_id
+         FROM execution_records
+         WHERE tenant_id = ? AND (session_id = ? OR chain_id = ?)
+           AND (node_id IS NOT NULL OR step_number IS NOT NULL)
+         GROUP BY session_id, COALESCE(node_id, 'ordinal:' || step_number)
+       ) latest ON r.execution_id = latest.latest_execution_id
+       ORDER BY r.step_number ASC, r.execution_id ASC`,
+      [tenantId, runId, runId]
+    );
+    return rows.map((row) => this.fromRow(row));
+  }
+
+  /**
    * Return all records for a chain ordered by creation (ULID order).
    */
   queryByChain(chainId: string, scope?: StateStoreOptions): ExecutionRecord[] {

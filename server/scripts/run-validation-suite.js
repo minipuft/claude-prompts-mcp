@@ -414,6 +414,20 @@ export const SUITE = [
       'CHECKED — falsified 2026-09-21 by deleting the object-store guard from each of the five guarded sites in turn (recordTree, sweepUnreferencedObjects, loadVersionTree, resolveCliByteRestore, readRecordedConfigFile), which are the four #345-#347 defects plus one sibling; the gate reported each. The unmutated tree is the twin and passes. It also fails closed below four guarded statements, falsified by narrowing V29_TOKENS to a token nothing matches. Blind spots stated in the header with an as-of date: composed SQL, a guard held by the caller, anything outside src/cli-shared',
   },
   {
+    script: 'validate:scoped-framework-reads',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse:
+      'CHECKED — falsified 2026-09-22 by removing the scope from the prompt-guidance selectFramework call and the gate-enhancement provider in pipeline-builder; the gate reported both. Run against the pre-fix tree (acaf76c6) it reports 19 unscoped reads across 10 files, the P4.129 class. It fails closed below 15 scoped calls. Blind spots stated in the header: presence not value, options built across statements',
+  },
+  {
+    script: 'validate:system-control-parameter-reads',
+    io: 'read',
+    reads: ['file'],
+    converse:
+      'CHECKED — the self-test plants the two shapes that shipped (a declared parameter the operation never copies, the #357 persist instance; and one copied into an object its callee ignores, how status held include_history) beside a twin that reads both, and a string literal naming the parameter that must not count. Positive control 2026-09-22 on the live tree: dropping `persist` from the framework handler enable case fails naming `framework:enable`. Its first run found three (show_details on status and analytics, reason on config). UNCHECKED and known, stated in the header: the reverse direction (a read key the command does not declare), and anything past the handler boundary',
+  },
+  {
     script: 'validate:telemetry-attribute-emitters',
     io: 'read',
     reads: ['file', 'walk'],
@@ -543,7 +557,7 @@ export const SUITE = [
     io: 'read',
     reads: ['file', 'spawn', 'walk'],
     converse:
-      'CHECKED both ways — the self-test drives the predicate over the real pre-fix `verify-unknown-interrupt.mjs` text (direct-chain `statSync(DIST).mtimeMs`, must report), its fixed replacement (must not, since it has no local stat/mtime call), a twin that keeps the pre-fix shape but adds the import (must be exempted, and the suppressed finding is asserted so the exemption is proven to fire on the shape and not on an absence of one), `dist-freshness.js`’s own shape exempted by path only, and a false-positive control drawn from `validate-preview-vocabulary.js` (mentions `dist` as a skip-list entry, stats an unrelated `full`, must not report); the live tree is the sixth case. A control also ran the CLI end-to-end against the pre-fix file swapped into place (exit 1, naming the line) and restored (exit 0). NOT resolved: a generic `newestMtime`-shaped walker called elsewhere with a dist-flavored argument, where the function body itself never mentions `dist` — stated as a blind spot in the file header rather than silently claimed closed',
+      'CHECKED both ways — the self-test drives the predicate over the real pre-fix `verify-unknown-interrupt.mjs` text (direct-chain `statSync(DIST).mtimeMs`, must report), its fixed replacement (must not, since it has no local stat/mtime call), a twin that keeps the pre-fix shape but adds the import (must be exempted, and the suppressed finding is asserted so the exemption is proven to fire on the shape and not on an absence of one), `dist-freshness.js`’s own shape exempted by path only, and a false-positive control drawn from `validate-preview-vocabulary.js` (mentions `dist` as a skip-list entry, stats an unrelated `full`, must not report); the live tree is the sixth case. A control also ran the CLI end-to-end against the pre-fix file swapped into place (exit 1, naming the line) and restored (exit 0). NOT resolved: a generic `newestMtime`-shaped walker called elsewhere with a dist-flavored argument, where the function body itself never mentions `dist` — stated as a blind spot in the file header rather than silently claimed closed. Form 3 (P4.136, an unchecked spawn of a dist entry) is checked the same way: the pre-fix `capture-tool-schemas.mjs` spawn must report, its twin spawning `SERVER_PATH` (one identifier changed) must not, and an importer, an e2e child-env funnel importer, a template-literal fixture and a `tar` spawn naming a `.map` file must all clear',
   },
   {
     script: 'validate:prompts',

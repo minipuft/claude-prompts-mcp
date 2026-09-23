@@ -1,12 +1,17 @@
 // @lifecycle canonical - Creates execution plans and resolves dependencies.
 import { BasePipelineStage } from '../stage.js';
 
+import type { StateStoreOptions } from '#infra/database/stores/interface.js';
 import type { Logger } from '#infra/logging/index.js';
 import type { ExecutionContext } from '../../context/index.js';
 import type { ExecutionPlanner } from '../../planning/execution-planner.js';
 import type { ExecutionPlan } from '../../types.js';
 
-type FrameworkEnabledProvider = () => boolean;
+/**
+ * Whether the framework system is enabled for the request's scope. The scope is a required
+ * parameter so a call site cannot silently read the launch workspace instead.
+ */
+type FrameworkEnabledProvider = (scope: StateStoreOptions | undefined) => boolean;
 
 /**
  * Pipeline Stage 07: Execution Planning
@@ -61,14 +66,11 @@ export class ExecutionPlanningStage extends BasePipelineStage {
     const plan = await this.executionPlanner.createPlan({
       parsedCommand,
       convertedPrompt,
-      frameworkEnabled: this.frameworkEnabled?.() ?? false,
+      frameworkEnabled: this.frameworkEnabled?.(context.getScopeOptions()) ?? false,
       gateOverrides: this.buildGateOverrides(context),
     });
 
     context.executionPlan = plan;
-
-    // Note: semanticAnalysis is stored in context.executionPlan.semanticAnalysis
-    // No need to duplicate in metadata - downstream stages read from executionPlan directly
 
     // Record diagnostic for execution plan creation
     context.diagnostics.info(this.name, 'Execution plan created for single prompt', {
@@ -92,7 +94,7 @@ export class ExecutionPlanningStage extends BasePipelineStage {
     const { chainPlan, stepPlans } = await this.executionPlanner.createChainPlan({
       parsedCommand,
       steps,
-      frameworkEnabled: this.frameworkEnabled?.() ?? false,
+      frameworkEnabled: this.frameworkEnabled?.(context.getScopeOptions()) ?? false,
       gateOverrides,
     });
 

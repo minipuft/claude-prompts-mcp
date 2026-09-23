@@ -2356,10 +2356,6 @@
         "description": "<present>",
         "type": "string"
       },
-      "include_history": {
-        "description": "<present>",
-        "type": "boolean"
-      },
       "include_metrics": {
         "description": "<present>",
         "type": "boolean"

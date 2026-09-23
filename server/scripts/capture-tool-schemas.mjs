@@ -37,6 +37,7 @@ import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { checkDistFreshness } from './lib/dist-freshness.js';
 import { buildServerEnv, createHermeticRoots } from './lib/hermetic-server-env.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -286,8 +287,13 @@ function diffSchemas(baseline, current) {
 }
 
 async function main() {
-  if (!existsSync(DIST_ENTRY)) {
-    console.error(`${DIST_ENTRY} missing — run \`npm run build\` first`);
+  // The snapshot is taken from `dist/`, so a build older than `src/` captures — or passes — a
+  // surface that is not the one the source declares. Measured 2026-09-22 (P4.136): a source
+  // change without a rebuild answered `OK: published inputSchema identical`. Refused in both
+  // modes: writing a snapshot from a stale build is the same lie, committed.
+  const freshness = checkDistFreshness(DIST_ENTRY, path.join(SERVER_ROOT, 'src'));
+  if (!freshness.fresh) {
+    console.error(`capture-tool-schemas: refusing a ${freshness.kind} build — ${freshness.reason}`);
     process.exit(1);
   }
 

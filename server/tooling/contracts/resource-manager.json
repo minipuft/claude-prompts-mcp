@@ -565,7 +565,10 @@
         "mcp_prompt_mode",
         "subagent_model",
         "agent_type",
-        "execution_hint"
+        "execution_hint",
+        "edges",
+        "budget",
+        "artifacts"
       ]
     },
     {
@@ -590,7 +593,11 @@
         "mcp_prompt_mode",
         "subagent_model",
         "agent_type",
-        "execution_hint"
+        "execution_hint",
+        "edges",
+        "budget",
+        "artifacts",
+        "full_restart"
       ]
     },
     {
@@ -615,7 +622,20 @@
         "mcp_prompt_mode",
         "subagent_model",
         "agent_type",
-        "expected_version"
+        "expected_version",
+        "argument_updates",
+        "patch",
+        "unset",
+        "tool_operation",
+        "tool_ids",
+        "chain_step_operation",
+        "chain_step_index",
+        "chain_step_data",
+        "chain_step_order",
+        "edges",
+        "budget",
+        "artifacts",
+        "full_restart"
       ]
     },
     {
@@ -658,7 +678,12 @@
         "guidance",
         "pass_criteria",
         "activation",
-        "retry_config"
+        "retry_config",
+        "subject",
+        "severity",
+        "enforcement_mode",
+        "block_response_on_fail",
+        "evaluation"
       ]
     },
     {
@@ -675,7 +700,12 @@
         "guidance",
         "pass_criteria",
         "activation",
-        "retry_config"
+        "retry_config",
+        "subject",
+        "severity",
+        "enforcement_mode",
+        "block_response_on_fail",
+        "evaluation"
       ]
     },
     {
@@ -728,7 +758,19 @@
         "system_prompt_guidance",
         "phases",
         "gates",
-        "tool_descriptions"
+        "tool_descriptions",
+        "enabled",
+        "framework_gates",
+        "template_suggestions",
+        "framework_elements",
+        "argument_suggestions",
+        "judge_prompt",
+        "processing_steps",
+        "execution_steps",
+        "execution_type_enhancements",
+        "template_enhancements",
+        "execution_flow",
+        "quality_indicators"
       ]
     },
     {
@@ -745,7 +787,18 @@
         "phases",
         "gates",
         "tool_descriptions",
-        "enabled"
+        "enabled",
+        "framework_gates",
+        "template_suggestions",
+        "framework_elements",
+        "argument_suggestions",
+        "judge_prompt",
+        "processing_steps",
+        "execution_steps",
+        "execution_type_enhancements",
+        "template_enhancements",
+        "execution_flow",
+        "quality_indicators"
       ]
     },
     {
@@ -766,12 +819,19 @@
     {
       "id": "common:reload",
       "summary": "Hot-reload a specific resource from disk.",
-      "parameters": ["resource_type", "action", "id", "reason"]
+      "parameters": ["resource_type", "action", "id", "reason", "full_restart"]
     },
     {
       "id": "common:delete",
       "summary": "Delete a resource (with confirmation).",
-      "parameters": ["resource_type", "action", "id", "confirm", "reason"]
+      "parameters": [
+        "resource_type",
+        "action",
+        "id",
+        "confirm",
+        "reason",
+        "full_restart"
+      ]
     },
     {
       "id": "common:history",

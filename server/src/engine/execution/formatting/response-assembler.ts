@@ -1,4 +1,5 @@
 // @lifecycle canonical - Assembles response content for pipeline formatting stage.
+import { JUDGE_OUTPUT_PLACEHOLDER } from '../../gates/core/review-utils.js';
 import { SHELL_VERIFY_DEFAULT_MAX_ITERATIONS } from '../../gates/shell/types.js';
 import { handoffNodeToken } from '../delegation/handoff-contract.js';
 import { DelegationRenderer } from '../delegation/renderer.js';
@@ -9,6 +10,7 @@ import { PHASE_GUARD_GATE_ID } from '../pipeline/stages/19-phase-guard-verificat
 
 import type { DeclaredSection } from '#engine/frameworks/declared-sections.js';
 import type { GateTier } from '#engine/gates/core/gate-tier.js';
+import type { JudgeReviewMetadata } from '#engine/gates/core/review-utils.js';
 import type { RunStepView, RunStepViewProvider } from '#engine/gates/services/run-step-view.js';
 import type { GateCheckResult, GateReviewPrompt } from '#shared/types/chain-execution.js';
 import type { RequestClientProfile } from '#shared/types/request-identity.js';
@@ -276,6 +278,13 @@ export class ResponseAssembler {
       );
     }
 
+    // A retry of a judge-routed gate needs the judge prompt as much as the first attempt did.
+    const judgeSection = this.buildJudgeReviewSection(context);
+    if (judgeSection !== '') {
+      sections.push('');
+      sections.push(judgeSection);
+    }
+
     sections.push('');
     sections.push('---');
     sections.push('');
@@ -450,14 +459,16 @@ export class ResponseAssembler {
     // printed "✓ Chain complete (N/N) · No user_response needed" while the run was still
     // `working`, so a client that obeyed the banner never sent the call that finished it.
     const isComplete = this.isRunLatchedComplete(context);
+    let awaitingFinalVerdict = false;
 
     if (sessionContext.currentStep && sessionContext.totalSteps) {
       const normalizedStep = Math.min(sessionContext.currentStep, sessionContext.totalSteps);
       const progress = `${normalizedStep}/${sessionContext.totalSteps}`;
       const onFinalStep = normalizedStep === sessionContext.totalSteps;
+      awaitingFinalVerdict = !isComplete && onFinalStep && hasPendingReview;
       if (isComplete) {
         lines.push(`✓ Chain complete (${progress})`);
-      } else if (onFinalStep && hasPendingReview) {
+      } else if (awaitingFinalVerdict) {
         // The one state whose text changes: still the final step, still owing a verdict.
         // "step N/N" keeps the downstream step-indicator regexes matching (hooks/lib
         // /session_state.py and the opencode mirror both key on step|progress + N/N).
@@ -484,17 +495,17 @@ export class ResponseAssembler {
       lines.push(
         `Next: chain_id="${chainIdentifier}", gate_action="resume" | gate_action="accept_alternative" (with remainder) | gate_action="abort"`
       );
+    } else if (isComplete || awaitingFinalVerdict) {
+      // One payload states one state (R96). A finished run has no next step, and a run holding
+      // its FINAL step for a verdict has none either: the review above says how to answer it,
+      // and a `Next:` asking for more step output would invite a step the run does not have.
     } else if (hasPendingReview) {
       // Gate review (only when not delegating)
       lines.push(
         `Next: chain_id="${chainIdentifier}", user_response="<your step output>", gate_verdict="GATE_REVIEW: PASS|FAIL - <why>"`
       );
     } else if (sessionContext.currentStep && sessionContext.totalSteps) {
-      if (isComplete) {
-        lines.push('Next: Chain complete. No user_response needed.');
-      } else {
-        lines.push(`Next: chain_id="${chainIdentifier}", user_response="<your step output>"`);
-      }
+      lines.push(`Next: chain_id="${chainIdentifier}", user_response="<your step output>"`);
     }
 
     return lines.join('\n');
@@ -847,7 +858,59 @@ export class ResponseAssembler {
       this.resolveCheckResults(context)
     );
 
-    return `\n---\n\n**${header}**${attemptInfo}\n\n${gatesLine}${this.buildFailedGateSummary(context)}\n\nReview your output above against the gates, then submit:\n\n\`\`\`\nchain_id="${chainId}"\ngate_verdict=${structuredTemplate}\n\`\`\`\n\nSet \`"overall": "FAIL"\` and say what needs improvement if the gates are not met. Rationales are single-line.\n\nA legacy string form is still accepted: \`gate_verdict="GATE_REVIEW: PASS - [assessment]"\`.`;
+    const judgeSection = this.buildJudgeReviewSection(context);
+    const judgeBlock = judgeSection !== '' ? `\n\n${judgeSection}` : '';
+
+    return `\n---\n\n**${header}**${attemptInfo}\n\n${gatesLine}${this.buildFailedGateSummary(context)}${judgeBlock}\n\nReview your output above against the gates, then submit:\n\n\`\`\`\nchain_id="${chainId}"\ngate_verdict=${structuredTemplate}\n\`\`\`\n\nSet \`"overall": "FAIL"\` and say what needs improvement if the gates are not met. Rationales are single-line.\n\nA legacy string form is still accepted: \`gate_verdict="GATE_REVIEW: PASS - [assessment]"\`.`;
+  }
+
+  /**
+   * The judge prompt `GateReviewStage` built for this review's `mode: judge` gates (P4.133).
+   *
+   * The ONE renderer of `metadata.judge`: the review footer and the blocked reply both call it,
+   * and each reply is built by exactly one of them, so a reply carries the prompt at most once.
+   * Fenced with four backticks because the prompt fences the output slot with three.
+   *
+   * Empty string when no gate in the review is judge-routed, so a self-reviewed reply renders
+   * byte-identical to what it did before this section existed.
+   */
+  private buildJudgeReviewSection(context: ExecutionContext): string {
+    const judge = this.resolveJudgeReview(context);
+    if (judge === undefined) {
+      return '';
+    }
+
+    const gates = judge.judgeGateIds.map((id) => `\`${id}\``).join(', ');
+    const model = judge.modelHint !== undefined ? ` (suggested model: ${judge.modelHint})` : '';
+    return [
+      `**Independent judge required** for ${gates} — do not grade ${judge.judgeGateIds.length === 1 ? 'this gate' : 'these gates'} yourself.`,
+      `Give a separate sub-agent${model} ONLY the prompt below, with your step output in place of \`${JUDGE_OUTPUT_PLACEHOLDER}\`, and use the verdict it returns for ${judge.judgeGateIds.length === 1 ? 'that gate' : 'those gates'}.`,
+      '',
+      '````markdown',
+      judge.judgePrompt,
+      '````',
+    ].join('\n');
+  }
+
+  /**
+   * `metadata.judge`, when the review render carried one — only the review stage stamps it.
+   * Present but malformed throws: skipping it would send a judge-routed gate back to self-review
+   * with nothing in the reply to say so.
+   */
+  private resolveJudgeReview(context: ExecutionContext): JudgeReviewMetadata | undefined {
+    const judge = context.executionResults?.metadata?.['judge'] as
+      Partial<JudgeReviewMetadata> | undefined;
+    if (judge === undefined) {
+      return undefined;
+    }
+    if (typeof judge.judgePrompt !== 'string' || !Array.isArray(judge.judgeGateIds)) {
+      throw new Error('metadata.judge is missing judgePrompt or judgeGateIds');
+    }
+    return {
+      judgePrompt: judge.judgePrompt,
+      judgeGateIds: judge.judgeGateIds,
+      ...(typeof judge.modelHint === 'string' ? { modelHint: judge.modelHint } : {}),
+    };
   }
 
   /**

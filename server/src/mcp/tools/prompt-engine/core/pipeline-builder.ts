@@ -278,7 +278,7 @@ export class PipelineBuilder {
     const gateEnhancementService = new GateEnhancementService(
       gateService,
       temporaryGateRegistry,
-      () => deps.frameworkManager?.selectFramework({})?.id,
+      (scope) => deps.frameworkManager?.selectFramework({ scope })?.id,
       () => deps.gateManager,
       deps.lightweightGateSystem.gateLoader,
       new GateMetricsRecorder(deps.getAnalyticsService),

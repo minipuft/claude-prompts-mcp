@@ -1,6 +1,10 @@
 // @lifecycle canonical - Runs post-execution gate review workflows.
 import { deriveGateTier } from '../../../gates/core/gate-tier.js';
-import { resolveJudgeGates, composeJudgeReviewPrompt } from '../../../gates/core/review-utils.js';
+import {
+  JUDGE_OUTPUT_PLACEHOLDER,
+  resolveJudgeGates,
+  composeJudgeReviewPrompt,
+} from '../../../gates/core/review-utils.js';
 import {
   formatGateScriptToolSection,
   runGateScriptToolVerifications,
@@ -21,12 +25,14 @@ import type {
 import type { GatesConfig } from '#shared/types/core-config.js';
 import type { ChainSessionService } from '#shared/types/index.js';
 import type { GateDefinitionProvider } from '../../../gates/core/gate-loader.js';
+import type { JudgeReviewMetadata } from '../../../gates/core/review-utils.js';
 import type { GateScriptToolResult } from '../../../gates/services/gate-script-tool-runner.js';
 import type { ScriptToolRuntimeProvider } from '../../../gates/services/script-tool-criterion-runner.js';
 import type { ShellVerifyExecutor } from '../../../gates/shell/shell-verify-executor.js';
 import type { GateShellVerifyResult } from '../../../gates/shell/shell-verify-message-formatter.js';
 import type { ExecutionContext } from '../../context/index.js';
 import type { ChainOperatorExecutor } from '../../operators/chain-operator-executor.js';
+import type { ChainStepRenderResult } from '../../operators/types.js';
 
 type GatesConfigProvider = () => GatesConfig | undefined;
 
@@ -430,10 +436,14 @@ export class GateReviewStage extends BasePipelineStage {
         chainContext,
         pendingGateReview: reviewForRender,
         additionalGateIds: reviewForRender.gateIds,
+        scope: context.getScopeOptions(),
       });
 
-      // Resolve judge gates and compose context-isolated prompt if any gates use judge mode
-      let judgeMetadata: Record<string, unknown> | undefined;
+      this.recordReviewedDeclaration(sessionId, renderResult);
+
+      // Resolve judge gates and compose context-isolated prompt if any gates use judge mode.
+      // ResponseAssembler renders it into the review reply (P4.133).
+      let judgeMetadata: JudgeReviewMetadata | undefined;
       if (this.gateDefinitionProvider && pendingReview.gateIds.length > 0) {
         const gatesConfig = this.gatesConfigProvider?.();
         const { judgeGates } = await resolveJudgeGates(
@@ -442,12 +452,11 @@ export class GateReviewStage extends BasePipelineStage {
           gatesConfig?.evaluation
         );
         if (judgeGates.length > 0) {
-          const output = renderResult.content;
-          const judgeResult = composeJudgeReviewPrompt(judgeGates, output);
+          const judgeResult = composeJudgeReviewPrompt(judgeGates, JUDGE_OUTPUT_PLACEHOLDER);
           judgeMetadata = {
             judgePrompt: judgeResult.judgePrompt,
             judgeGateIds: judgeResult.judgeGateIds,
-            modelHint: judgeResult.modelHint,
+            ...(judgeResult.modelHint !== undefined ? { modelHint: judgeResult.modelHint } : {}),
           };
         }
       }
@@ -491,5 +500,21 @@ export class GateReviewStage extends BasePipelineStage {
     } catch (error) {
       this.handleError(error, 'Failed to render gate review step');
     }
+  }
+
+  /**
+   * Record the reviewed node's declaration, as stage 18 records a normal render's (P4.115).
+   * Stage 18 never renders a step held by a review, so this is the only record that step can
+   * have — and stage 19 grades its answer against exactly this, not against the run's union.
+   */
+  private recordReviewedDeclaration(sessionId: string, renderResult: ChainStepRenderResult): void {
+    if (renderResult.declaredSections === undefined || renderResult.declaredNodeId === undefined) {
+      return;
+    }
+    this.chainSessionStore.recordStepDeclaration(
+      sessionId,
+      renderResult.declaredNodeId,
+      renderResult.declaredSections
+    );
   }
 }

@@ -42,7 +42,9 @@ export class SessionActionHandler extends ActionHandler {
 
   private async listSessions(args: any): Promise<ToolResponse> {
     const manager = this.context.chainSessionStore!;
-    const sessions = manager.listActiveSessions();
+    // The caller's workspace only: a run started under one workspace header is not listed under
+    // another (P4.131). `clear` below already reads through this scope.
+    const sessions = manager.listActiveSessions(undefined, this.requestScope);
 
     if (sessions.length === 0) {
       return this.createMinimalSystemResponse(
@@ -142,7 +144,7 @@ export class SessionActionHandler extends ActionHandler {
       throw new Error('session_id parameter is required for inspect operation');
     }
 
-    const session = manager.getSession(sessionId);
+    const session = manager.getSession(sessionId, this.requestScope);
     if (!session) {
       throw new Error(`Session not found: ${sessionId}`);
     }

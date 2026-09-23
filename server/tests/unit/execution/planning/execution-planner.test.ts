@@ -4,8 +4,6 @@ import { ExecutionPlanner } from '../../../../src/engine/execution/planning/exec
 
 import type { ParsedCommand } from '../../../../src/engine/execution/context/execution-context.js';
 import type { Logger } from '../../../../src/infra/logging/index.js';
-import type { ContentAnalyzer } from '../../../../src/modules/semantic/content-analyzer.js';
-import type { ContentAnalysisResult } from '../../../../src/modules/semantic/types.js';
 import type { ConvertedPrompt } from '../../../../src/shared/types/index.js';
 
 const createLogger = (): Logger => ({
@@ -24,73 +22,6 @@ const basePrompt: ConvertedPrompt = {
   arguments: [],
 };
 
-const baseAnalysis: ContentAnalysisResult = {
-  executionType: 'single',
-  requiresExecution: true,
-  requiresFramework: false,
-  confidence: 0.85,
-  reasoning: [],
-  capabilities: {
-    canDetectStructure: true,
-    canAnalyzeComplexity: true,
-    canRecommendFramework: true,
-    hasSemanticUnderstanding: true,
-  },
-  limitations: [],
-  warnings: [],
-  executionCharacteristics: {
-    hasConditionals: false,
-    hasLoops: false,
-    hasChainSteps: false,
-    argumentCount: 1,
-    templateComplexity: 1,
-    hasSystemMessage: false,
-    hasUserTemplate: true,
-    hasStructuredReasoning: false,
-    hasFrameworkKeywords: false,
-    hasComplexAnalysis: false,
-  },
-  complexity: 'medium',
-  suggestedGates: [],
-  frameworkRecommendation: {
-    shouldUseFramework: false,
-    reasoning: [],
-    confidence: 0.4,
-  },
-  analysisMetadata: {
-    version: 'test',
-    mode: 'minimal',
-    analysisTime: 5,
-    analyzer: 'content',
-    cacheHit: false,
-  },
-};
-
-const createAnalyzer = (
-  overrides: Partial<ContentAnalysisResult> = {}
-): Pick<ContentAnalyzer, 'analyzePrompt'> => {
-  const merged: ContentAnalysisResult = {
-    ...baseAnalysis,
-    ...overrides,
-    capabilities: { ...baseAnalysis.capabilities, ...overrides.capabilities },
-    executionCharacteristics: {
-      ...baseAnalysis.executionCharacteristics,
-      ...overrides.executionCharacteristics,
-    },
-    frameworkRecommendation: {
-      ...baseAnalysis.frameworkRecommendation,
-      ...overrides.frameworkRecommendation,
-    },
-    analysisMetadata: {
-      ...baseAnalysis.analysisMetadata,
-      ...overrides.analysisMetadata,
-    },
-  };
-
-  const analyzePrompt = jest.fn().mockResolvedValue(merged);
-  return { analyzePrompt };
-};
-
 describe('ExecutionPlanner', () => {
   let logger: Logger;
 
@@ -99,8 +30,7 @@ describe('ExecutionPlanner', () => {
   });
 
   test('detects chain strategy when parsed command contains chain operator', async () => {
-    const analyzer = createAnalyzer();
-    const planner = new ExecutionPlanner(analyzer, logger);
+    const planner = new ExecutionPlanner(logger);
 
     const parsedCommand: ParsedCommand = {
       promptId: 'multi',
@@ -134,8 +64,7 @@ describe('ExecutionPlanner', () => {
 
   test('returns empty auto-assigned gates when GateManager is not set', async () => {
     // Without GateManager, autoAssignGates returns empty (gates come from explicit config only)
-    const analyzer = createAnalyzer({ executionType: 'single' });
-    const planner = new ExecutionPlanner(analyzer, logger);
+    const planner = new ExecutionPlanner(logger);
 
     const plan = await planner.createPlan({
       convertedPrompt: { ...basePrompt, category: 'documentation' },
@@ -148,8 +77,7 @@ describe('ExecutionPlanner', () => {
   });
 
   test('includes gates from gateOverrides.gates parameter', async () => {
-    const analyzer = createAnalyzer();
-    const planner = new ExecutionPlanner(analyzer, logger);
+    const planner = new ExecutionPlanner(logger);
 
     const plan = await planner.createPlan({
       convertedPrompt: basePrompt,
@@ -162,8 +90,7 @@ describe('ExecutionPlanner', () => {
   });
 
   test('requires framework when symbolic plan contains framework override even if disabled', async () => {
-    const analyzer = createAnalyzer();
-    const planner = new ExecutionPlanner(analyzer, logger);
+    const planner = new ExecutionPlanner(logger);
 
     const parsedCommand: ParsedCommand = {
       promptId: 'demo',
@@ -189,8 +116,7 @@ describe('ExecutionPlanner', () => {
   });
 
   test('createChainPlan returns per-step plans and inherits chain strategy', async () => {
-    const analyzer = createAnalyzer();
-    const planner = new ExecutionPlanner(analyzer, logger);
+    const planner = new ExecutionPlanner(logger);
 
     const steps = [
       {
@@ -233,8 +159,7 @@ describe('ExecutionPlanner', () => {
 
   describe('applyScriptToolDefaults', () => {
     test('applies clean modifier by default for prompts with script tools', async () => {
-      const analyzer = createAnalyzer();
-      const planner = new ExecutionPlanner(analyzer, logger);
+      const planner = new ExecutionPlanner(logger);
 
       const promptWithScriptTools: ConvertedPrompt = {
         ...basePrompt,
@@ -265,8 +190,7 @@ describe('ExecutionPlanner', () => {
     });
 
     test('does not apply clean default when user provides explicit modifier', async () => {
-      const analyzer = createAnalyzer();
-      const planner = new ExecutionPlanner(analyzer, logger);
+      const planner = new ExecutionPlanner(logger);
 
       const promptWithScriptTools: ConvertedPrompt = {
         ...basePrompt,
@@ -311,8 +235,7 @@ describe('ExecutionPlanner', () => {
     });
 
     test('does not apply clean default when user provides custom gates', async () => {
-      const analyzer = createAnalyzer();
-      const planner = new ExecutionPlanner(analyzer, logger);
+      const planner = new ExecutionPlanner(logger);
 
       const promptWithScriptTools: ConvertedPrompt = {
         ...basePrompt,
@@ -345,8 +268,7 @@ describe('ExecutionPlanner', () => {
     });
 
     test('does not apply clean default for prompts without script tools', async () => {
-      const analyzer = createAnalyzer();
-      const planner = new ExecutionPlanner(analyzer, logger);
+      const planner = new ExecutionPlanner(logger);
 
       const plan = await planner.createPlan({
         convertedPrompt: basePrompt, // No scriptTools
@@ -360,8 +282,7 @@ describe('ExecutionPlanner', () => {
 
   describe('requiresSession', () => {
     test('requires session when gateOverrides.gates are provided (MCP gates parameter)', async () => {
-      const analyzer = createAnalyzer();
-      const planner = new ExecutionPlanner(analyzer, logger);
+      const planner = new ExecutionPlanner(logger);
 
       const plan = await planner.createPlan({
         convertedPrompt: basePrompt,
@@ -375,8 +296,7 @@ describe('ExecutionPlanner', () => {
     });
 
     test('requires session when symbolic gate operator is present', async () => {
-      const analyzer = createAnalyzer();
-      const planner = new ExecutionPlanner(analyzer, logger);
+      const planner = new ExecutionPlanner(logger);
 
       const parsedCommand: ParsedCommand = {
         promptId: 'demo',
@@ -413,8 +333,7 @@ describe('ExecutionPlanner', () => {
     });
 
     test('does not require session for plain single prompt without gates', async () => {
-      const analyzer = createAnalyzer();
-      const planner = new ExecutionPlanner(analyzer, logger);
+      const planner = new ExecutionPlanner(logger);
 
       const plan = await planner.createPlan({
         convertedPrompt: basePrompt,
@@ -424,8 +343,7 @@ describe('ExecutionPlanner', () => {
     });
 
     test('requires session when prompt has built-in chain steps', async () => {
-      const analyzer = createAnalyzer();
-      const planner = new ExecutionPlanner(analyzer, logger);
+      const planner = new ExecutionPlanner(logger);
 
       const promptWithChain: ConvertedPrompt = {
         ...basePrompt,
@@ -490,7 +408,7 @@ describe('ExecutionPlanner — B13 declaredArtifacts', () => {
 
   test('fromArgument classifies the named argument value into kinds, in table order', async () => {
     const { manager, calls } = createCapturingGateManager();
-    const planner = new ExecutionPlanner(createAnalyzer(), logger);
+    const planner = new ExecutionPlanner(logger);
     planner.setGateManager(manager as never);
 
     await planner.createPlan({
@@ -508,7 +426,7 @@ describe('ExecutionPlanner — B13 declaredArtifacts', () => {
 
   test('produces unions with the classified paths, deduped', async () => {
     const { manager, calls } = createCapturingGateManager();
-    const planner = new ExecutionPlanner(createAnalyzer(), logger);
+    const planner = new ExecutionPlanner(logger);
     planner.setGateManager(manager as never);
 
     await planner.createPlan({
@@ -525,7 +443,7 @@ describe('ExecutionPlanner — B13 declaredArtifacts', () => {
 
   test('a prompt with no artifacts block leaves the selection context clean', async () => {
     const { manager, calls } = createCapturingGateManager();
-    const planner = new ExecutionPlanner(createAnalyzer(), logger);
+    const planner = new ExecutionPlanner(logger);
     planner.setGateManager(manager as never);
 
     await planner.createPlan({

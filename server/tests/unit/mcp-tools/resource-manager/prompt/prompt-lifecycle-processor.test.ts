@@ -4,7 +4,6 @@ import { tmpdir } from 'node:os';
 import path, { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { ContentAnalyzer } from '../../../../../src/modules/semantic/content-analyzer.js';
 import { GateAnalyzer } from '../../../../../src/mcp/tools/resource-manager/prompt/analysis/gate-analyzer.js';
 import { PromptAnalyzer } from '../../../../../src/mcp/tools/resource-manager/prompt/analysis/prompt-analyzer.js';
 import { ComparisonEngine } from '../../../../../src/mcp/tools/resource-manager/prompt/analysis/comparison-engine.js';
@@ -23,8 +22,6 @@ const createLogger = () =>
     warn: jest.fn(),
     error: jest.fn(),
   }) as unknown as Logger;
-
-const createSemanticAnalyzer = () => new ContentAnalyzer(createLogger());
 
 const createTestConfigManager = (promptsDir = '/test/prompts') =>
   ({
@@ -45,8 +42,8 @@ const createTestVersionHistory = (autoVersion = false) => ({
  * `getData` — five of `PromptResourceContext`'s nine fields, plus `dependencies.onRefresh` via
  * `handleSystemRefresh`. The rest are never read on this path and are omitted rather than faked.
  * The single stub is
- * `fileOperations.updatePromptImplementation` — the only disk write. `PromptAnalyzer`,
- * `ContentAnalyzer` and `GateAnalyzer` are all real, deliberately: the branch under test renders
+ * `fileOperations.updatePromptImplementation` — the only disk write. `PromptAnalyzer` and
+ * `GateAnalyzer` are both real, deliberately: the branch under test renders
  * `GateAnalyzer`'s output, so stubbing it would assert nothing but the stub's own return value.
  */
 function createProcessor() {
@@ -62,7 +59,6 @@ function createProcessor() {
   const dependencies = {
     logger,
     configManager: createTestConfigManager(),
-    semanticAnalyzer: createSemanticAnalyzer(),
     onRefresh,
     onRestart: jest.fn(async () => {}),
   };
@@ -96,7 +92,7 @@ function createProcessor() {
 
   const context = {
     dependencies,
-    promptAnalyzer: new PromptAnalyzer(dependencies),
+    promptAnalyzer: new PromptAnalyzer(),
     gateAnalyzer: new GateAnalyzer(dependencies as never),
     fileOperations: { updatePromptImplementation, projectPromptWrite: jest.fn(async () => []) },
     getData: () => ({ convertedPrompts }),
@@ -217,7 +213,6 @@ describe('PromptLifecycleProcessor.updatePrompt gate_configuration handling', ()
     const dependencies = {
       logger,
       configManager: createTestConfigManager(),
-      semanticAnalyzer: createSemanticAnalyzer(),
       onRefresh: jest.fn(async () => {}),
       onRestart: jest.fn(async () => {}),
     };
@@ -246,7 +241,7 @@ describe('PromptLifecycleProcessor.updatePrompt gate_configuration handling', ()
 
     const context = {
       dependencies,
-      promptAnalyzer: new PromptAnalyzer(dependencies),
+      promptAnalyzer: new PromptAnalyzer(),
       gateAnalyzer: new GateAnalyzer(dependencies as never),
       fileOperations: { updatePromptImplementation, projectPromptWrite: jest.fn(async () => []) },
       getData: () => ({ convertedPrompts: [currentPrompt] }),
@@ -326,7 +321,6 @@ describe('PromptLifecycleProcessor preserved-field parameters (OQ-P7-8)', () => 
     const dependencies = {
       logger,
       configManager: createTestConfigManager(),
-      semanticAnalyzer: createSemanticAnalyzer(),
       onRefresh: jest.fn(async () => {}),
       onRestart: jest.fn(async () => {}),
     };
@@ -355,7 +349,7 @@ describe('PromptLifecycleProcessor preserved-field parameters (OQ-P7-8)', () => 
 
     const context = {
       dependencies,
-      promptAnalyzer: new PromptAnalyzer(dependencies),
+      promptAnalyzer: new PromptAnalyzer(),
       gateAnalyzer: new GateAnalyzer(dependencies as never),
       fileOperations: { updatePromptImplementation, projectPromptWrite: jest.fn(async () => []) },
       getData: () => ({ convertedPrompts: [currentPrompt] }),
@@ -523,7 +517,6 @@ describe('PromptLifecycleProcessor.updatePrompt version-save failure', () => {
     const dependencies = {
       logger,
       configManager: createTestConfigManager(),
-      semanticAnalyzer: createSemanticAnalyzer(),
       onRefresh: jest.fn(async () => {}),
       onRestart: jest.fn(async () => {}),
     };
@@ -557,7 +550,7 @@ describe('PromptLifecycleProcessor.updatePrompt version-save failure', () => {
 
     const context = {
       dependencies,
-      promptAnalyzer: new PromptAnalyzer(dependencies),
+      promptAnalyzer: new PromptAnalyzer(),
       gateAnalyzer: new GateAnalyzer(dependencies as never),
       fileOperations: { updatePromptImplementation, projectPromptWrite: jest.fn(async () => []) },
       getData: () => ({ convertedPrompts: [currentPrompt] }),
@@ -604,7 +597,6 @@ describe('PromptLifecycleProcessor.updatePrompt version-save failure', () => {
     const dependencies = {
       logger,
       configManager: createTestConfigManager(),
-      semanticAnalyzer: createSemanticAnalyzer(),
       onRefresh: jest.fn(async () => {}),
       onRestart: jest.fn(async () => {}),
     };
@@ -634,7 +626,7 @@ describe('PromptLifecycleProcessor.updatePrompt version-save failure', () => {
     const recordEditResult = jest.fn(async () => ({ success: true, version: 7, bridged: false }));
     const context = {
       dependencies,
-      promptAnalyzer: new PromptAnalyzer(dependencies),
+      promptAnalyzer: new PromptAnalyzer(),
       gateAnalyzer: new GateAnalyzer(dependencies as never),
       fileOperations: { updatePromptImplementation, projectPromptWrite: jest.fn(async () => []) },
       getData: () => ({ convertedPrompts: [currentPrompt] }),
@@ -760,7 +752,6 @@ describe('deletePrompt confirmation (HANDLER_OWNED_CONFIRMATION)', () => {
     const context = {
       dependencies: {
         logger,
-        semanticAnalyzer: createSemanticAnalyzer(),
         onRefresh: jest.fn(async () => {}),
         onRestart: jest.fn(async () => {}),
       },
@@ -898,14 +889,13 @@ describe('PromptLifecycleProcessor.updatePrompt repair outcome (P4.39)', () => {
     const dependencies = {
       logger,
       configManager: createTestConfigManager(PRIMARY),
-      semanticAnalyzer: createSemanticAnalyzer(),
       quarantine,
       onRefresh,
       onRestart: jest.fn(async () => {}),
     };
     const context = {
       dependencies,
-      promptAnalyzer: new PromptAnalyzer(dependencies),
+      promptAnalyzer: new PromptAnalyzer(),
       gateAnalyzer: new GateAnalyzer(dependencies as never),
       fileOperations: {
         updatePromptImplementation: jest.fn(async () => ({

@@ -24,8 +24,6 @@ import { ExecutionPlanner } from '../../../src/engine/execution/planning/executi
 import type { LoadedScriptTool } from '../../../src/modules/automation/types.js';
 import type { ConvertedPrompt } from '../../../src/shared/types/index.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
-import type { ContentAnalyzer } from '../../../src/modules/semantic/content-analyzer.js';
-import type { ContentAnalysisResult } from '../../../src/modules/semantic/types.js';
 
 // Mock filesystem for controlled fixtures
 jest.mock('fs', () => ({
@@ -45,69 +43,19 @@ const createLogger = (): Logger => ({
   debug: jest.fn(),
 });
 
-const createMockAnalyzer = (): Pick<ContentAnalyzer, 'analyzePrompt'> => {
-  const baseAnalysis: ContentAnalysisResult = {
-    executionType: 'single',
-    requiresExecution: true,
-    requiresFramework: false,
-    confidence: 0.85,
-    reasoning: [],
-    capabilities: {
-      canDetectStructure: true,
-      canAnalyzeComplexity: true,
-      canRecommendFramework: true,
-      hasSemanticUnderstanding: true,
-    },
-    limitations: [],
-    warnings: [],
-    executionCharacteristics: {
-      hasConditionals: false,
-      hasLoops: false,
-      hasChainSteps: false,
-      argumentCount: 1,
-      templateComplexity: 1,
-      hasSystemMessage: false,
-      hasUserTemplate: true,
-      hasStructuredReasoning: false,
-      hasFrameworkKeywords: false,
-      hasComplexAnalysis: false,
-    },
-    complexity: 'medium',
-    suggestedGates: [],
-    frameworkRecommendation: {
-      shouldUseFramework: false,
-      reasoning: [],
-      confidence: 0.4,
-    },
-    analysisMetadata: {
-      version: 'test',
-      mode: 'minimal',
-      analysisTime: 5,
-      analyzer: 'content',
-      cacheHit: false,
-    },
-  };
-
-  return {
-    analyzePrompt: jest.fn().mockResolvedValue(baseAnalysis),
-  };
-};
-
 describe('Script Tools Workflow Integration', () => {
   let logger: Logger;
-  let analyzer: Pick<ContentAnalyzer, 'analyzePrompt'>;
 
   beforeEach(() => {
     jest.clearAllMocks();
     logger = createLogger();
-    analyzer = createMockAnalyzer();
   });
 
   describe('Tool Detection → Execution Planning Flow', () => {
     test('detects tools from user args and plans clean mode execution', async () => {
       // Arrange: Real services working together
       const detectionService = new ToolDetectionService();
-      const planner = new ExecutionPlanner(analyzer, logger);
+      const planner = new ExecutionPlanner(logger);
 
       // Fixture: Loaded script tool (simulating what ScriptToolDefinitionLoader produces)
       const loadedTool: LoadedScriptTool = {
@@ -166,7 +114,7 @@ describe('Script Tools Workflow Integration', () => {
 
     test('respects explicit modifier override in integrated flow', async () => {
       // Arrange
-      const planner = new ExecutionPlanner(analyzer, logger);
+      const planner = new ExecutionPlanner(logger);
 
       const loadedTool: LoadedScriptTool = {
         id: 'analyzer',
@@ -217,7 +165,7 @@ describe('Script Tools Workflow Integration', () => {
 
     test('custom gates override clean default in integrated flow', async () => {
       // Arrange
-      const planner = new ExecutionPlanner(analyzer, logger);
+      const planner = new ExecutionPlanner(logger);
 
       const loadedTool: LoadedScriptTool = {
         id: 'validator',

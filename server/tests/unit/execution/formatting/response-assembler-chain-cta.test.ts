@@ -283,7 +283,8 @@ describe('ResponseAssembler – chain-path CTA methods', () => {
       const footer = assembler.buildChainFooter(context);
 
       expect(footer).toContain('Chain complete (3/3)');
-      expect(footer).toContain('No user_response needed');
+      // R96: a finished run offers no next step, not even one saying there is none.
+      expect(footer).not.toContain('Next:');
     });
 
     test('final step with a verdict outstanding does not claim completion', () => {
@@ -302,6 +303,21 @@ describe('ResponseAssembler – chain-path CTA methods', () => {
       expect(footer).not.toContain('No user_response needed');
       expect(footer).toContain('Final step 3/3');
       expect(footer).toContain('awaiting gate verdict');
+      // R96 (P4.119): the review says how to answer it; a `Next:` asking for more step output
+      // would invite a step the run does not have.
+      expect(footer).not.toContain('Next:');
+    });
+
+    test('CONTROL: a mid-run step with a verdict outstanding keeps its Next line', () => {
+      const context = createChainContext({
+        currentStep: 2,
+        totalSteps: 3,
+        pendingReview: makePendingReview(),
+      });
+
+      const footer = assembler.buildChainFooter(context);
+
+      expect(footer).toContain('Next: chain_id=');
       expect(footer).toContain('gate_verdict');
     });
 

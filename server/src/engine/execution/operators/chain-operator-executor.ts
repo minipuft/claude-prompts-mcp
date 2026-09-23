@@ -11,9 +11,11 @@ import { decideVisibility } from '../pipeline/decisions/visibility/index.js';
 import type { BriefHistoryEntry } from '../delegation/brief.js';
 import type { PendingGateReview, VisibilityItem } from '#shared/types/chain-execution.js';
 import type { UnknownLedgerEntry } from '#shared/types/chain-session.js';
+import type { StateStoreOptions } from '#shared/types/persistence.js';
 import type { RequestClientProfile } from '#shared/types/request-identity.js';
-import type { ScriptReferenceResolverPort } from '#shared/utils/jsonUtils.js';
 import type {
+  ChainOperatorCollaborators,
+  StepFrameworkContext,
   ChainStepExecutionInput,
   ChainStepPrompt,
   ChainStepRenderResult,
@@ -24,7 +26,6 @@ import type { DeclaredSection } from '../../frameworks/declared-sections.js';
 import type { DelegationPayload } from '../delegation/types.js';
 import type { InjectionState } from '../pipeline/decisions/injection/types.js';
 import type { VisibilityDecision } from '../pipeline/decisions/visibility/index.js';
-import type { PromptReferenceResolver } from '../reference/index.js';
 import type { ConvertedPrompt } from '../types.js';
 
 import { Logger } from '#infra/logging/index.js';
@@ -39,40 +40,16 @@ function isGateReviewInput(input: ChainStepExecutionInput): input is GateReviewI
   return input.executionType === 'gate_review';
 }
 
-/**
- * Optional collaborators for {@link ChainOperatorExecutor}. Grouped rather than positional:
- * `declaredSectionsProvider` would otherwise be a seventh constructor parameter, breaching the
- * max-params limit. No test constructs the executor with more than four positional arguments, so
- * grouping the two pre-existing resolvers here costs one production call site and nothing else.
- *
- * NAMED rather than an inline type literal so `validate:state-field-writers` can watch it: every
- * field here is an optional dependency seam that defaults to no-op, which means a seam declared
- * and never wired compiles, passes every test, and silently keeps the old behavior. That class is
- * only visible to a gate if the type has a name to resolve.
- */
-export interface ChainOperatorCollaborators {
-  referenceResolver?: PromptReferenceResolver;
-  scriptReferenceResolver?: ScriptReferenceResolverPort;
-  /**
-   * Phase-guard section headers a framework declares, from `declared-sections.ts` — the same
-   * source `19-phase-guard-verification-stage` grades the response against. A function type, not
-   * a registry: this executor needs one derived fact, not framework-manager access. Absent means
-   * "declare nothing", which is the pre-Tier-2 behavior.
-   */
-  declaredSectionsProvider?: (frameworkId: string) => DeclaredSection[];
-}
-
 export class ChainOperatorExecutor {
   constructor(
     private readonly logger: Logger,
     private readonly convertedPrompts: ConvertedPrompt[],
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private readonly gateGuidanceRenderer?: any,
-    private readonly getFrameworkContext?: (promptId: string) => Promise<{
-      selectedFramework?: { type: string; name: string };
-      category?: string;
-      systemPrompt?: string;
-    } | null>,
+    private readonly getFrameworkContext?: (
+      promptId: string,
+      scope: StateStoreOptions | undefined
+    ) => Promise<StepFrameworkContext | null>,
     private readonly collaborators?: ChainOperatorCollaborators
   ) {}
 
@@ -225,7 +202,10 @@ export class ChainOperatorExecutor {
       let frameworkType: string = DEFAULT_FRAMEWORK_ID;
       let category = 'general';
 
-      const reviewStepContext = await this.resolveFrameworkContext(targetStep ?? undefined);
+      const reviewStepContext = await this.resolveFrameworkContext(
+        targetStep ?? undefined,
+        input.scope
+      );
       if (reviewStepContext) {
         frameworkType = reviewStepContext.selectedFramework?.type || DEFAULT_FRAMEWORK_ID;
         category = reviewStepContext.category || 'general';
@@ -311,7 +291,7 @@ export class ChainOperatorExecutor {
     // Build framework guidance for gate reviews if enabled (skip on retry — already seen)
     let frameworkGuidance = '';
     if (!isRetry && frameworkInjectionEnabled && targetStep) {
-      const guidance = await this.buildFrameworkGuidance(targetStep);
+      const guidance = await this.buildFrameworkGuidance(targetStep, input.scope);
       if (guidance) {
         frameworkGuidance = guidance;
         this.logger.debug('[SymbolicChain] Added framework guidance to gate review step');
@@ -396,6 +376,15 @@ export class ChainOperatorExecutor {
       promptName: 'Quality Gate Validation',
       content: reviewContent,
       callToAction,
+      // What this review told the model, for the node it reviewed (P4.115). A gated step's review
+      // IS that step's render — stage 18 skips it — so without these the reviewed node recorded no
+      // declaration and stage 19 graded it against the run's union instead of its own headers.
+      ...(targetStep?.nodeId !== undefined
+        ? {
+            declaredNodeId: targetStep.nodeId,
+            declaredSections: declaredSections.map((section) => section.header),
+          }
+        : {}),
     };
   }
 
@@ -543,7 +532,7 @@ export class ChainOperatorExecutor {
     const gateGuidanceEnabled = this.isGateGuidanceEnabled(chainContext);
 
     if (!suppressFrameworkInjection && !hasFrameworkGuidance(convertedPrompt?.systemMessage)) {
-      const frameworkGuidance = await this.buildFrameworkGuidance(step);
+      const frameworkGuidance = await this.buildFrameworkGuidance(step, input.scope);
       if (frameworkGuidance) {
         lines.push(frameworkGuidance);
       }
@@ -742,8 +731,11 @@ export class ChainOperatorExecutor {
     return target === 'gates';
   }
 
-  private async buildFrameworkGuidance(step: ChainStepPrompt): Promise<string | null> {
-    const context = await this.resolveFrameworkContext(step);
+  private async buildFrameworkGuidance(
+    step: ChainStepPrompt,
+    scope: StateStoreOptions | undefined
+  ): Promise<string | null> {
+    const context = await this.resolveFrameworkContext(step, scope);
     const systemPrompt = context?.systemPrompt?.trim();
     const frameworkName = context?.selectedFramework?.name?.trim();
 
@@ -812,11 +804,10 @@ export class ChainOperatorExecutor {
     return provider(frameworkId);
   }
 
-  private async resolveFrameworkContext(step?: ChainStepPrompt): Promise<{
-    selectedFramework?: { type: string; name: string };
-    category?: string;
-    systemPrompt?: string;
-  } | null> {
+  private async resolveFrameworkContext(
+    step: ChainStepPrompt | undefined,
+    scope: StateStoreOptions | undefined
+  ): Promise<StepFrameworkContext | null> {
     if (!step) {
       return null;
     }
@@ -835,7 +826,7 @@ export class ChainOperatorExecutor {
     }
 
     try {
-      return await this.getFrameworkContext(step.promptId);
+      return await this.getFrameworkContext(step.promptId, scope);
     } catch (error) {
       this.logger.debug('[ChainOperatorExecutor] Failed to resolve framework context', {
         promptId: step.promptId,

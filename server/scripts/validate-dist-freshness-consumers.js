@@ -25,6 +25,11 @@
  *   2. Assign-then-read: `const before = await fs.stat(x); … before.mtimeMs` — present in this
  *      repo today (`tests/e2e/mcp-server-smoke.test.ts`) but never on a dist-flavored `x`; kept as
  *      a recognised form so a future dist-flavored instance of it is not invisible to this gate.
+ *   3. Spawn without a check (P4.136): `spawn('node', [DIST_ENTRY, …])` — a process started from a
+ *      dist-flavored path by a file that never asks whether that build is current. The half of
+ *      the class forms 1–2 cannot see: they catch a comparison done by hand, this catches the
+ *      comparison not done at all. `capture-tool-schemas.mjs` and `verify-handoff.mjs` both spawned
+ *      `dist/index.js` bare, and `validate:tool-schemas` answered `identical` for a stale build.
  *
  * NOT RESOLVED: a locally-defined generic mtime-walker (`newestMtime`-shaped: recurses with
  * `readdirSync`, stats each entry) called ELSEWHERE with a dist-flavored argument, where the
@@ -107,6 +112,43 @@ const STAT_MTIME_CHAIN =
 const STAT_ASSIGN =
   /\b(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:await\s+)?(?:[\w.]+\.)?stat(?:Sync)?\s*\(\s*([^()]*(?:\([^()]*\)[^()]*)*)\)/g;
 
+/** Form 3 — the opening of a process-spawn call; its argument list is read by `callArguments`. */
+const SPAWN_CALL = /\b(?:spawn|spawnSync|fork|execFile|execFileSync)\s*\(/g;
+
+/**
+ * The script a spawn RUNS: the first argv element after a `node`/`process.execPath` command, or
+ * `fork`'s own first argument. Anything else — `tar -czf … dist/index.js.map` in
+ * `prepare-release-artifacts.js` — only names a dist path as data and is not a server start.
+ */
+const NODE_ARGV_HEAD =
+  /^\s*(?:['"]node['"]|process\.execPath)\s*,\s*\[\s*([^,\]]*(?:\([^()]*\)[^,\]]*)?)/;
+
+/** An import of the e2e spawn funnel, whose `buildServerEnv` refuses a stale build itself. */
+const IMPORTS_E2E_FUNNEL = /from\s+['"][^'"]*\/helpers\/child-env\.js['"]/;
+
+/**
+ * Whether `index` sits inside a template literal: an odd count of backticks before it. Code held
+ * as DATA — a validator's self-test fixture such as `validate-hermetic-child-env.js`'s
+ * `siteCount(\`spawn('node', …)\`)` — is not a server start.
+ */
+function insideTemplateLiteral(text, index) {
+  return (text.slice(0, index).match(/(?<!\\)`/g) ?? []).length % 2 === 1;
+}
+
+/** The text between a call's opening paren (at `open`) and its matching close, brackets balanced. */
+function callArguments(text, open) {
+  let depth = 0;
+  for (let i = open; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '(' || ch === '[' || ch === '{') depth++;
+    else if (ch === ')' || ch === ']' || ch === '}') {
+      depth--;
+      if (depth === 0) return text.slice(open + 1, i);
+    }
+  }
+  return text.slice(open + 1);
+}
+
 function escapeRegExp(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -164,6 +206,22 @@ export function findDistMtimeReads(text) {
     }
   }
 
+  for (const match of text.matchAll(SPAWN_CALL)) {
+    if (insideTemplateLiteral(text, match.index)) continue;
+    const args = callArguments(text, match.index + match[0].length - 1);
+    const script = match[0].startsWith('fork')
+      ? args.split(',')[0]
+      : (NODE_ARGV_HEAD.exec(args)?.[1] ?? '');
+    if (DIST_TOKEN.test(script)) {
+      findings.push({
+        kind: 'unchecked-spawn',
+        line: lineOf(match.index),
+        arg: args.trim(),
+        text: match[0] + args.split('\n')[0],
+      });
+    }
+  }
+
   return findings;
 }
 
@@ -181,11 +239,18 @@ export function evaluateFile(relativePath, rawText, { isExemptFile = false } = {
     return { findings: [], exempt: true, reason: 'named exemption (dist-freshness.js itself)' };
   const findings = findDistMtimeReads(stripComments(rawText));
   if (findings.length === 0) return { findings: [], exempt: false };
-  if (importsDistFreshness(rawText)) {
+  // A spawn is cleared by the e2e funnel too; a hand-rolled mtime comparison is not.
+  if (importsDistFreshness(rawText) || IMPORTS_E2E_FUNNEL.test(rawText)) {
+    const remaining = importsDistFreshness(rawText)
+      ? []
+      : findings.filter((finding) => finding.kind !== 'unchecked-spawn');
+    if (remaining.length > 0) return { findings: remaining, exempt: false };
     return {
       findings: [],
       exempt: true,
-      reason: 'imports dist-freshness.js',
+      reason: importsDistFreshness(rawText)
+        ? 'imports dist-freshness.js'
+        : 'imports the e2e child-env funnel',
       suppressed: findings,
     };
   }
@@ -233,7 +298,7 @@ function run() {
   if (allFindings.length > 0) {
     console.error(
       `[dist-freshness-consumers] FAIL: ${allFindings.length} site(s) read a dist-flavored mtime ` +
-        `without importing \`scripts/lib/dist-freshness.js\`:\n`
+        `or spawn a dist entry without importing \`scripts/lib/dist-freshness.js\`:\n`
     );
     for (const f of allFindings) {
       console.error(`  ${f.file}:${f.line} (${f.kind}) — ${f.text}`);
@@ -248,7 +313,7 @@ function run() {
 
   console.log(
     `[dist-freshness-consumers] OK: ${files.length} file(s) scanned across ${SCANNED.length} ` +
-      `trees; no dist-flavored mtime read outside \`scripts/lib/dist-freshness.js\` or its importers.`
+      `trees; no dist-flavored mtime read or dist spawn outside \`scripts/lib/dist-freshness.js\` or its importers.`
   );
 }
 
@@ -410,6 +475,50 @@ if (before.mtimeMs < srcMtime) process.exit(1);
   expect('DIST_TOKEN matches "distEntry"', DIST_TOKEN.test('distEntry'));
   expect('DIST_TOKEN matches "DIST_ENTRY"', DIST_TOKEN.test('DIST_ENTRY'));
   expect("DIST_TOKEN matches a quoted 'dist' literal", DIST_TOKEN.test("'dist'"));
+
+  // ---- form 3: the pre-fix capture-tool-schemas.mjs spawn, and its one-identifier twin --------
+  const bareSpawn = `
+const DIST_ENTRY = path.join(SERVER_ROOT, 'dist', 'index.js');
+return spawn('node', [DIST_ENTRY, '--transport=streamable-http', '--quiet'], { cwd: SERVER_ROOT });
+`;
+  expect(
+    'pre-fix capture-tool-schemas.mjs spawn of DIST_ENTRY with no freshness check reports',
+    evaluateFile('scripts/capture-tool-schemas.mjs', bareSpawn).findings.some(
+      (f) => f.kind === 'unchecked-spawn'
+    )
+  );
+  expect(
+    'the same spawn in a file importing dist-freshness.js is exempted',
+    evaluateFile(
+      'scripts/capture-tool-schemas.mjs',
+      `import { checkDistFreshness } from './lib/dist-freshness.js';\n${bareSpawn}`
+    ).exempt === true
+  );
+  expect(
+    'the same spawn in an e2e file importing the child-env funnel is exempted',
+    evaluateFile(
+      'tests/e2e/x.test.ts',
+      `import { buildServerEnv } from './helpers/child-env.js';\n${bareSpawn}`
+    ).exempt === true
+  );
+  expect(
+    'the same spawn held as a template-literal fixture does not report',
+    evaluateFile('scripts/validate-x.js', `siteCount(\`${bareSpawn}\`, 1);`).findings.length === 0
+  );
+  expect(
+    'a tar spawn naming dist/index.js.map as data (prepare-release-artifacts.js) does not report',
+    evaluateFile(
+      'scripts/prepare-release-artifacts.js',
+      "spawnSync('tar', ['-czf', out, '-C', SERVER_DIR, 'dist/index.js.map'], {});"
+    ).findings.length === 0
+  );
+  expect(
+    'the same spawn of SERVER_PATH (one identifier changed) does not report',
+    evaluateFile(
+      'tests/e2e/x.test.ts',
+      bareSpawn.replace(/DIST_ENTRY/g, 'SERVER_PATH')
+    ).findings.every((f) => f.kind !== 'unchecked-spawn')
+  );
 
   // ---- fail-closed: the exemption file missing must be a hard error, not a silent pass -------
   const missingExemptFile = path.join(SERVER_ROOT, 'scripts', 'lib', '__does_not_exist__.js');
