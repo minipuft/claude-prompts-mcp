@@ -140,6 +140,7 @@ If routing to a specific manager:
 
 ```bash
 npm run generate:contracts
+npm run validate:tool-parameter-reads
 npm run typecheck && npm run build && npm test
 ```
 
@@ -160,6 +161,7 @@ Before committing parameter changes:
 - [ ] Updated types.ts if parameter is new
 - [ ] Updated router.ts to pass through parameter
 - [ ] Ran `npm run generate:contracts`
+- [ ] Ran `npm run validate:tool-parameter-reads` — every parameter a command declares is read
 - [ ] Ran `npm run typecheck && npm run build`
 - [ ] Tested MCP tool with new parameter
 - [ ] Updated `docs/reference/mcp-tools.md`
@@ -217,6 +219,35 @@ git diff --name-only | grep "_generated"
 # Verify all layers use consistent names
 grep -rn "version" src/mcp/tools/ --include="*.ts" | grep -v test
 ```
+
+## Declared Parameters Must Be Read
+
+A command's `parameters` list in `tooling/contracts/*.json` is a promise that the code the command
+dispatches to reads each one. The undeclared-key refusal cannot check that promise: it stops a key
+the contract does not name, and a declared key that nothing reads is accepted, validated, and
+ignored, so the call answers success for something that never happened. Every tool copies its
+arguments by hand at least once on the way in, and a parameter left out of a copy is the usual cause.
+
+`npm run validate:tool-parameter-reads` (part of `validate:all`) follows each command to its code
+and fails naming the command and parameter that nothing reads:
+
+| Tool               | Where a command's code starts                                                                 | Where its boundary is                                                                              |
+| ------------------ | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `system_control`   | The action's handler `execute(args)`, in the `case` for the command's operation               | An argument handed to anything that is not a method of the handler                                 |
+| `resource_manager` | The router's per-type copy (`gateArgs`, through renames), the handler's `case`, the processor | An argument the processor hands on whole to anything outside the tool's classes                    |
+| `prompt_engine`    | The registration allowlist (`normalizedArgs`), then `PromptExecutor.executePromptCommand`     | The pipeline request: a copied field needs an `mcpRequest.<field>` reader under `engine/execution` |
+
+A **read** is a property read off the argument object: `args.x`, `args['x']`, `const { x } = args`,
+the same through an alias, or `args[key]` in a loop over a constant list or map of field names.
+`this.method(args)` and `this.field.method(args)` follow the arguments into that method.
+A value copied into an object counts only if the method it is handed to reads it back. A name in a
+string, a comment, or an error message is not a read.
+
+`common:<action>` commands apply to every resource type whose handler has that action, and declare
+a type-owned parameter only for its owners (`PARAMETER_OWNERS`). When the check fails, read the
+parameter where the command dispatches, or drop it from that command's list. Dropping it from the
+last command that declares it takes the name off the tool, which needs an owner ruling; such
+findings wait, stamped, in the script's `AWAITING_RULING` list until the owner rules.
 
 ## Description Semantics
 
