@@ -443,8 +443,18 @@ export class GateEnhancementService {
     // here, transiently. Published before the empty-list return on purpose: "this step has no
     // applicable gates" is the finding, and leaving the field unwritten would hand its readers
     // the run-wide list through their fallback — the exact defect being closed.
+    //
+    // A detached step (`await: run`) is the exception (row 4.8, R8): the run moves past it before
+    // its output exists, so it has no current-step review to open. Its gates are published for
+    // the review its late report opens instead, and the current-step list stays empty.
+    if (step.await === 'run') {
+      context.state.gates.detachedReviewGateIds = {
+        ...context.state.gates.detachedReviewGateIds,
+        [step.stepNumber]: gateIds,
+      };
+    }
     if (this.isCurrentStep(step, input.currentStepKey)) {
-      context.state.gates.reviewGateIds = gateIds;
+      context.state.gates.reviewGateIds = step.await === 'run' ? [] : gateIds;
     }
 
     if (gateIds.length === 0) {
@@ -614,6 +624,15 @@ export class GateEnhancementService {
 
     const accumulatedGateIds = context.state.gates.accumulatedGateIds ?? [];
     if (accumulatedGateIds.length === 0) {
+      return;
+    }
+
+    // A detached target opens no review when its brief renders (row 4.8, R8): its review opens
+    // against its late report.
+    const target = context.parsedCommand?.steps?.find(
+      (step) => step.nodeId !== undefined && step.nodeId === sessionContext.currentNodeId
+    );
+    if (target?.await === 'run') {
       return;
     }
 

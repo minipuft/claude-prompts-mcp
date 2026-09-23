@@ -7,6 +7,7 @@ import { buildPipelineHookContext } from '../../execution/pipeline/hook-context.
 import { parseGateVerdict } from '../core/gate-verdict-contract.js';
 
 import type { Logger } from '#infra/logging/index.js';
+import type { GateCheckResult } from '#shared/types/chain-execution.js';
 import type {
   ChainSession,
   ChainSessionService,
@@ -77,6 +78,16 @@ export interface VerdictProcessingResult {
   readonly verdictRecorded?: boolean;
 }
 
+/** What a verdict or `gate_action` on a detached node's review did (row 4.8). */
+export type DetachedReviewVerdictResult =
+  | { readonly kind: 'refused'; readonly message: string }
+  | {
+      readonly kind: 'recorded';
+      readonly result: 'passed' | 'failed' | 'exhausted' | 'retry' | 'skipped';
+      readonly attempt: number;
+      readonly maxAttempts: number;
+    };
+
 /**
  * Processes gate verdicts, handles gate actions (retry/skip/abort),
  * and emits gate lifecycle events via hooks and notifications.
@@ -99,8 +110,130 @@ export class GateVerdictProcessor {
     private readonly chainSessionStore: ChainSessionService,
     private readonly logger: Logger,
     private readonly hookRegistry?: HookRegistryPort,
-    private readonly notificationEmitter?: McpNotificationEmitterPort
+    private readonly notificationEmitter?: McpNotificationEmitterPort,
+    /**
+     * Runs a review's ground-truth checks (`runGateReviewEvidence`, bound to the gate loader and
+     * the executors at the composition root) for a DETACHED node's review, whose checks run when
+     * its verdict arrives (row 4.8). Absent, a detached review records no check results — the
+     * same outcome as a review of reminder-tier gates.
+     */
+    private readonly runReviewChecks?: (
+      gateIds: string[],
+      agentResponse: string
+    ) => Promise<GateCheckResult[]>
   ) {}
+
+  /**
+   * Answer a detached node's gate review with this call's `gate_verdict` (row 4.8, R8/R10).
+   *
+   * The review is found by node (`{ nodeId }`), never in the current-step slot, and nothing here
+   * reads or moves the step the run stands on. Before anything is recorded, the gates' shell and
+   * script checks run against the node's RECORDED output (`reviewedOutput`, R10.3) and land on
+   * the review; a PASS over a failing one is refused exactly as on a current-step review, and
+   * spends no attempt. A FAIL asks for a replacement report (`awaiting-replacement`), or — once
+   * the attempts are spent — a `gate_action` (`exhausted`). A PASS deletes the review.
+   *
+   * @returns the refusal sentence when nothing was recorded; otherwise the outcome and counter.
+   */
+  async processDetachedReviewVerdict(
+    context: ExecutionContext,
+    sessionId: string,
+    nodeId: string
+  ): Promise<DetachedReviewVerdictResult> {
+    const slot = { nodeId };
+    const review = this.chainSessionStore.getPendingGateReview(sessionId, slot);
+    const payload = this.parseVerdict(context, context.getGateVerdict(), 'gate_verdict');
+    if (review === undefined || payload === null) {
+      return {
+        kind: 'refused',
+        message: '❌ The gate_verdict could not be read. Nothing was recorded.',
+      };
+    }
+    const checkResults =
+      this.runReviewChecks === undefined
+        ? []
+        : await this.runReviewChecks([...review.gateIds], review.reviewedOutput ?? '');
+    const graded = checkResults.length > 0 ? { ...review, checkResults } : review;
+    if (graded !== review) {
+      await this.chainSessionStore.setPendingGateReview(sessionId, graded, slot);
+    }
+    const refusal = this.refuseVerdictAgainstRecordedFailure(graded, payload.verdict);
+    if (refusal !== null) {
+      return { kind: 'refused', message: `❌ ${refusal}` };
+    }
+    const outcome = await this.chainSessionStore.recordGateReviewOutcome(
+      sessionId,
+      {
+        verdict: payload.verdict,
+        rationale: payload.rationale,
+        rawVerdict: payload.raw,
+        reviewer: payload.source,
+      },
+      slot
+    );
+    this.recordVerdictDetection(context, payload, outcome);
+    const attempt = review.attemptCount + 1;
+    await this.emitGateEvents(
+      context,
+      outcome === 'cleared' ? 'passed' : 'failed',
+      [...review.gateIds],
+      payload.rationale
+    );
+    if (outcome === 'cleared') {
+      return { kind: 'recorded', result: 'passed', attempt, maxAttempts: review.maxAttempts };
+    }
+    const exhausted = this.chainSessionStore.isRetryLimitExceeded(sessionId, slot);
+    const phase = exhausted ? 'exhausted' : 'awaiting-replacement';
+    const failed = this.chainSessionStore.getPendingGateReview(sessionId, slot) ?? graded;
+    await this.chainSessionStore.setPendingGateReview(
+      sessionId,
+      { ...failed, metadata: { ...failed.metadata, phase } },
+      slot
+    );
+    return {
+      kind: 'recorded',
+      result: exhausted ? 'exhausted' : 'failed',
+      attempt,
+      maxAttempts: review.maxAttempts,
+    };
+  }
+
+  /**
+   * Resolve an exhausted detached review with `gate_action` (row 4.8): `retry` resets the counter
+   * and asks for another replacement; `skip` accepts the recorded result and deletes the review.
+   * `abort` is refused here — `cancel: true` is how a run is stopped, and it needs no node.
+   */
+  async processDetachedReviewAction(
+    sessionId: string,
+    nodeId: string,
+    action: GateAction | InterruptResolutionAction
+  ): Promise<DetachedReviewVerdictResult> {
+    const slot = { nodeId };
+    const review = this.chainSessionStore.getPendingGateReview(sessionId, slot);
+    if (review === undefined || (action !== 'retry' && action !== 'skip')) {
+      return {
+        kind: 'refused',
+        message: `❌ gate_action "${action}" does not resolve a detached review: use "retry" or "skip", or cancel: true. Nothing was recorded.`,
+      };
+    }
+    if (action === 'skip') {
+      await this.chainSessionStore.clearPendingGateReview(sessionId, slot);
+      return {
+        kind: 'recorded',
+        result: 'skipped',
+        attempt: review.attemptCount,
+        maxAttempts: review.maxAttempts,
+      };
+    }
+    await this.chainSessionStore.resetRetryCount(sessionId, slot);
+    const reset = this.chainSessionStore.getPendingGateReview(sessionId, slot) ?? review;
+    await this.chainSessionStore.setPendingGateReview(
+      sessionId,
+      { ...reset, metadata: { ...reset.metadata, phase: 'awaiting-replacement' } },
+      slot
+    );
+    return { kind: 'recorded', result: 'retry', attempt: 0, maxAttempts: review.maxAttempts };
+  }
 
   /**
    * Resolve a mid-chain blocking-unknown interrupt with `resume` or `accept_alternative`

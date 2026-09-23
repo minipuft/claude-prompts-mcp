@@ -69,6 +69,7 @@ import {
 import { JudgeResourceCollector } from '#engine/gates/judge/judge-resource-collector.js';
 import { GateEnhancementService } from '#engine/gates/services/gate-enhancement-service.js';
 import { GateMetricsRecorder } from '#engine/gates/services/gate-metrics-recorder.js';
+import { runGateReviewEvidence } from '#engine/gates/services/gate-review-evidence.js';
 import { GateServiceFactory } from '#engine/gates/services/gate-service-factory.js';
 import { GateVerdictProcessor } from '#engine/gates/services/gate-verdict-processor.js';
 import { InlineGateProcessor } from '#engine/gates/services/inline-gate-processor.js';
@@ -306,11 +307,30 @@ export class PipelineBuilder {
 
     // ── Stages 16-22: Capture, Execution, Review, Formatting ──
 
+    // One executor for BOTH shell paths — the inline `:: verify:` stage below and the
+    // gate-YAML `shell_verify` criteria (stage 20, and a detached node's review in stage 16).
+    // They used to hold different instances (this one, and a module singleton), which is how
+    // row 1.5's control could have covered one and silently missed the other.
+    const shellVerifyExecutor = createShellVerifyExecutor({
+      debug: false,
+      gateSystemEnabled: () => deps.lightweightGateSystem.isGateSystemEnabled(),
+    });
     const gateVerdictProcessor = new GateVerdictProcessor(
       deps.chainSessionStore,
       deps.logger,
       deps.hookRegistry,
-      deps.notificationEmitter
+      deps.notificationEmitter,
+      // A detached node's review runs its gates' checks against the node's recorded output
+      // (row 4.8, R10.3) through the same runners and executor stage 20 uses.
+      async (gateIds, agentResponse) =>
+        (
+          await runGateReviewEvidence(
+            gateIds,
+            deps.lightweightGateSystem.gateLoader,
+            agentResponse,
+            { shellVerifyExecutor, scriptToolRuntime: deps.scriptToolRuntime }
+          )
+        ).checkResults
     );
     const stepCaptureService = new StepCaptureService(
       deps.chainSessionStore,
@@ -354,15 +374,6 @@ export class PipelineBuilder {
       }
     );
 
-    // Shell verification stage
-    // One executor for BOTH shell paths — the inline `:: verify:` stage below and the
-    // gate-YAML `shell_verify` criteria in stage 20. They used to hold different
-    // instances (this one, and a module singleton), which is how row 1.5's control
-    // could have covered one and silently missed the other.
-    const shellVerifyExecutor = createShellVerifyExecutor({
-      debug: false,
-      gateSystemEnabled: () => deps.lightweightGateSystem.isGateSystemEnabled(),
-    });
     // The runtime root, not the package: the Python Stop hook finds this file beside `state.db`,
     // and a package-relative one ignored MCP_RUNTIME_ROOT and was wiped by every plugin update.
     const verifyActiveStateStore = createVerifyActiveStateStore(deps.logger, {

@@ -153,9 +153,20 @@ export class StepCaptureService {
     sessionId: string,
     session: ChainSession,
     sessionContext: SessionContext,
-    target: StepTarget
+    target: StepTarget,
+    options: {
+      /** The node already holds its reported result (row 4.8): pass it without a placeholder. */
+      readonly keepRecordedOutput?: boolean;
+    } = {}
   ): Promise<void> {
-    await this.capturePlaceholder(sessionId, session.chainId, target, totalOf(session.state.nodes));
+    if (options.keepRecordedOutput !== true) {
+      await this.capturePlaceholder(
+        sessionId,
+        session.chainId,
+        target,
+        totalOf(session.state.nodes)
+      );
+    }
     await this.chainSessionStore.advanceStep(sessionId, target.nodeId);
     this.syncSessionContext(context, sessionId, sessionContext);
   }

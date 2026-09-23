@@ -38,6 +38,22 @@ export interface DetachedNodeFacts {
   readonly spawned: boolean;
   /** It holds a real captured output. Only meaningful once `spawned`. */
   readonly reported: boolean;
+  /** Where its late result's gate review stands (row 4.8); absent when no review is open. */
+  readonly review?: DetachedReviewPhase;
+}
+
+/**
+ * The phase of a detached node's open gate review, recorded as `metadata.phase` on the review
+ * (`session.detachedGateReviews[nodeId]`). A PASS deletes the review, so "passed" is no phase.
+ */
+export type DetachedReviewPhase = 'awaiting-verdict' | 'awaiting-replacement' | 'exhausted';
+
+/** Read a detached review's phase off its metadata; an unrecognised value reads as awaiting. */
+export function detachedReviewPhase(review: {
+  readonly metadata?: Readonly<Record<string, unknown>>;
+}): DetachedReviewPhase {
+  const phase = review.metadata?.['phase'];
+  return phase === 'awaiting-replacement' || phase === 'exhausted' ? phase : 'awaiting-verdict';
 }
 
 /** The step fields {@link collectDetachedNodeFacts} reads, structurally. */
@@ -56,11 +72,17 @@ interface DetachedStepFacts {
  */
 export function collectDetachedNodeFacts(
   steps: readonly DetachedStepFacts[] | undefined,
-  run: {
-    readonly nodes: readonly { readonly id: string }[];
-    readonly stepStates?: ReadonlyMap<string, StepMetadata>;
+  session: {
+    readonly state: {
+      readonly nodes: readonly { readonly id: string }[];
+      readonly stepStates?: ReadonlyMap<string, StepMetadata>;
+    };
+    readonly detachedGateReviews?: Readonly<
+      Record<string, { readonly metadata?: Readonly<Record<string, unknown>> }>
+    >;
   }
 ): DetachedNodeFacts[] {
+  const run = session.state;
   const owed = new Set(unreportedDetachedNodeIds(run.nodes, run.stepStates));
   return (steps ?? [])
     .filter((step) => step.await === 'run')
@@ -68,6 +90,7 @@ export function collectDetachedNodeFacts(
       const nodeId = step.nodeId ?? run.nodes[step.stepNumber - 1]?.id;
       if (nodeId === undefined) return [];
       const spawned = run.stepStates?.get(nodeId)?.spawnedAt !== undefined;
+      const review = session.detachedGateReviews?.[nodeId];
       return [
         {
           token: handoffNodeToken(step),
@@ -75,6 +98,7 @@ export function collectDetachedNodeFacts(
           stepNumber: step.stepNumber,
           spawned,
           reported: spawned && !owed.has(nodeId),
+          ...(review !== undefined ? { review: detachedReviewPhase(review) } : {}),
         },
       ];
     });
@@ -99,8 +123,15 @@ export type DetachedReportDecision =
    * passed here nor checked for a worker reply it is not waiting for.
    */
   | { readonly kind: 'review-pending'; readonly node: DetachedNodeFacts }
-  /** The reply's trailer names a spawned, unreported detached node other than the current one. */
-  | { readonly kind: 'report'; readonly node: DetachedNodeFacts }
+  /**
+   * The reply's trailer names a spawned detached node that is owed its result — or whose review
+   * FAILed and asked for a replacement (`replaces`, R10.2), which records over the first result.
+   */
+  | { readonly kind: 'report'; readonly node: DetachedNodeFacts; readonly replaces?: boolean }
+  /** A `gate_verdict` whose trailer names a detached node whose review awaits one (R8). */
+  | { readonly kind: 'review-verdict'; readonly node: DetachedNodeFacts }
+  /** A `gate_action` whose trailer names a detached node whose review exhausted its retries. */
+  | { readonly kind: 'review-action'; readonly node: DetachedNodeFacts }
   /** Refused, naming the node the reply named (or the nodes the run is owed) and the fix. */
   | { readonly kind: 'refuse'; readonly message: string };
 
@@ -129,6 +160,8 @@ export function resolveDetachedReport(input: {
   readonly mode: HandoffEvidenceMode;
   /** A gate review is holding the run (`pendingGateReview`). */
   readonly reviewPending?: boolean;
+  /** This call carries a `gate_verdict` / a `gate_action` (row 4.8 routes them by trailer). */
+  readonly submits?: { readonly verdict: boolean; readonly action: boolean };
   readonly current: CurrentNodeFacts | null;
   readonly detachedNodes: readonly DetachedNodeFacts[];
 }): DetachedReportDecision {
@@ -139,7 +172,7 @@ export function resolveDetachedReport(input: {
 
   const named = parseHandoffTrailer(reply).node;
   if (named !== null) {
-    return routeNamedToken(named, current, detachedNodes);
+    return routeNamedToken(named, current, detachedNodes, input.submits);
   }
 
   if (current === null) {
@@ -149,13 +182,18 @@ export function resolveDetachedReport(input: {
   const standing = current.detached
     ? detachedNodes.find((node) => node.token === current.token)
     : undefined;
-  if (standing === undefined || !standing.spawned || standing.reported) {
+  if (standing?.spawned !== true) {
     return { kind: 'not-detached' };
   }
   if (reply.length === 0) {
+    // A standing node that already reported (its result arrived before the parent moved on) is
+    // passed the same way; the stage keeps its recorded output rather than a placeholder.
     return input.reviewPending === true
       ? { kind: 'review-pending', node: standing }
       : { kind: 'continue-past', node: standing };
+  }
+  if (standing.reported) {
+    return { kind: 'not-detached' };
   }
   return input.mode === 'required'
     ? { kind: 'refuse', message: describeUntaggedDetachedReply(standing) }
@@ -165,12 +203,15 @@ export function resolveDetachedReport(input: {
 function routeNamedToken(
   named: string,
   current: CurrentNodeFacts | null,
-  detachedNodes: readonly DetachedNodeFacts[]
+  detachedNodes: readonly DetachedNodeFacts[],
+  submits: { readonly verdict: boolean; readonly action: boolean } | undefined
 ): DetachedReportDecision {
-  if (current !== null && named === current.token) {
+  const node = detachedNodes.find((candidate) => candidate.token === named);
+  // The current node's own token is the ordinary capture — unless that node is detached: then
+  // its result (arriving before the parent moved on) is a report like any late one (row 4.8).
+  if (current !== null && named === current.token && (node === undefined || !current.detached)) {
     return { kind: 'not-detached' };
   }
-  const node = detachedNodes.find((candidate) => candidate.token === named);
   if (node === undefined) {
     return current?.delegated === true
       ? { kind: 'not-detached' }
@@ -185,16 +226,55 @@ function routeNamedToken(
         `Nothing was recorded.`,
     };
   }
-  if (node.reported) {
+  if (!node.reported) {
+    return { kind: 'report', node };
+  }
+  return routeReportedNode(node, submits ?? { verdict: false, action: false });
+}
+
+/**
+ * A trailer naming a detached node that already reported: its gate review decides (row 4.8).
+ * The review's phase is the state machine — a verdict answers `awaiting-verdict`, a replacement
+ * answers `awaiting-replacement`, a `gate_action` answers `exhausted`; anything else is refused
+ * by name, naming the call that phase is waiting for. No review at all is the Tier 4 refusal.
+ */
+function routeReportedNode(
+  node: DetachedNodeFacts,
+  submits: { readonly verdict: boolean; readonly action: boolean }
+): DetachedReportDecision {
+  const label = `Detached node ${node.token} (step ${node.stepNumber})`;
+  if (node.review === undefined) {
     return {
       kind: 'refuse',
-      message:
-        `❌ Detached node ${node.token} (step ${node.stepNumber}) already reported; its result ` +
-        `is recorded and is not replaced. Nothing was recorded, and this reply was not applied ` +
-        `to the step the run stands on.`,
+      message: submits.verdict
+        ? `❌ No gate review is open for ${label}: its result is recorded and was not reviewed, ` +
+          `so there is no verdict to give. Nothing was recorded.`
+        : `❌ ${label} already reported; its result ` +
+          `is recorded and is not replaced. Nothing was recorded, and this reply was not applied ` +
+          `to the step the run stands on.`,
     };
   }
-  return { kind: 'report', node };
+  if (node.review === 'awaiting-verdict' && submits.verdict) {
+    return { kind: 'review-verdict', node };
+  }
+  if (node.review === 'exhausted' && submits.action) {
+    return { kind: 'review-action', node };
+  }
+  if (node.review === 'awaiting-replacement' && !submits.verdict && !submits.action) {
+    return { kind: 'report', node, replaces: true };
+  }
+  const waitingFor: Record<DetachedReviewPhase, string> = {
+    'awaiting-verdict': 'a gate_verdict, with user_response ending in this trailer',
+    'awaiting-replacement':
+      "the worker's replacement result as user_response (no gate_verdict), ending in this trailer",
+    exhausted: 'gate_action "retry" or "skip" with this trailer, or cancel: true',
+  };
+  return {
+    kind: 'refuse',
+    message:
+      `❌ The gate review of ${label} is waiting for ${waitingFor[node.review]}:\n` +
+      `${trailerBlock(node.token)}\nNothing was recorded.`,
+  };
 }
 
 /** The copyable trailer a worker's reply must end with to report for `token`. */
@@ -234,12 +314,21 @@ function describeUntaggedDetachedReply(node: DetachedNodeFacts): string {
  */
 export function describeHeldRun(detachedNodes: readonly DetachedNodeFacts[]): string {
   const owed = describeOwed(detachedNodes);
+  const underReview = detachedNodes.filter((node) => node.reported && node.review !== undefined);
   const first = owed[0];
+  const named = (nodes: readonly DetachedNodeFacts[]): string =>
+    nodes.map((node) => `${node.token} (step ${node.stepNumber})`).join(', ');
   const lines = [
-    `⏸ Every step has run, but the run stays open until its detached node(s) report: ` +
-      owed.map((node) => `${node.token} (step ${node.stepNumber})`).join(', ') +
-      '.',
+    owed.length > 0
+      ? `⏸ Every step has run, but the run stays open until its detached node(s) report: ${named(owed)}.`
+      : '⏸ Every step has run, but the run stays open until its detached review(s) are answered.',
   ];
+  if (underReview.length > 0) {
+    lines.push(
+      `Gate review still open on reported detached node(s): ${named(underReview)} — ` +
+        'answer each with gate_verdict and user_response ending in its HANDOFF RESULT trailer.'
+    );
+  }
   if (first !== undefined) {
     lines.push(
       'When a worker finishes, resume with chain_id and its result as user_response, ending with:',
@@ -263,14 +352,95 @@ export function describeLandedReport(
     readonly held: boolean;
     /** The run's detached nodes as they stand AFTER this report landed. */
     readonly detachedNodes: readonly DetachedNodeFacts[];
+    /** The gate review this report opened (row 4.8), rendered by {@link describeDetachedReview}. */
+    readonly review?: string;
+    /** This report replaced a result whose review FAILed (R10.2). */
+    readonly replaced?: boolean;
   }
 ): string {
-  const head = `✓ Detached node ${node.token} (step ${node.stepNumber}) reported; its result is recorded on that step.`;
+  const recorded = after.replaced === true ? 'replaces its first result' : 'is recorded';
+  const reported = `✓ Detached node ${node.token} (step ${node.stepNumber}) reported; its result ${recorded} on that step.`;
+  const head = after.review !== undefined ? `${reported}\n\n${after.review}` : reported;
+  return `${head}\n\n${describeRunPosition(after)}`;
+}
+
+/**
+ * Where the run stands after a detached node's report or review resolved: completed, held past
+ * its end, or unmoved. Shared by every reply a detached node's result gets.
+ */
+function describeRunPosition(after: {
+  readonly runCompleted: boolean;
+  readonly held: boolean;
+  readonly detachedNodes: readonly DetachedNodeFacts[];
+}): string {
   if (after.runCompleted) {
-    return `${head}\n\n✅ Chain complete — every step, including the detached ones, has reported.`;
+    return '✅ Chain complete — every step, including the detached ones, has reported.';
   }
   if (after.held) {
-    return `${head}\n\n${describeHeldRun(after.detachedNodes)}`;
+    return describeHeldRun(after.detachedNodes);
   }
-  return `${head}\n\nThe run is where it was: resume with chain_id and the output of the step it stands on.`;
+  return 'The run is where it was: resume with chain_id and the output of the step it stands on.';
+}
+
+/**
+ * The gate review a detached node's late result opened (row 4.8): which node, which attempt, the
+ * verdict template, and the exact call that answers it. The template is the one the current-step
+ * review renders (`buildStructuredVerdictTemplate`), handed in so this module stays pure.
+ */
+export function describeDetachedReview(
+  node: DetachedNodeFacts,
+  review: {
+    readonly chainId: string;
+    readonly attempt: number;
+    readonly maxAttempts: number;
+    readonly verdictTemplate: string;
+  }
+): string {
+  return [
+    '---',
+    `**Gate Review Required — detached node ${node.token} (step ${node.stepNumber})** ` +
+      `(attempt ${review.attempt}/${review.maxAttempts})`,
+    '',
+    'Review the result the worker reported above against the gates, then submit — the ' +
+      "user_response is only the trailer, which routes the verdict to that node's review:",
+    '',
+    '```',
+    `chain_id="${review.chainId}"`,
+    `gate_verdict=${review.verdictTemplate}`,
+    `user_response="${HANDOFF_RESULT_HEADING}\nnode: ${node.token}"`,
+    '```',
+    '',
+    'Shell and script checks of these gates run against that recorded result when the verdict ' +
+      'arrives. Set `"overall": "FAIL"` to ask the worker for a replacement result.',
+  ].join('\n');
+}
+
+/** What a verdict (or `gate_action`) on a detached node's review answers. */
+export function describeDetachedReviewOutcome(
+  node: DetachedNodeFacts,
+  outcome: {
+    readonly result: 'passed' | 'failed' | 'exhausted' | 'retry' | 'skipped';
+    readonly attempt: number;
+    readonly maxAttempts: number;
+    readonly runCompleted: boolean;
+    readonly held: boolean;
+    readonly detachedNodes: readonly DetachedNodeFacts[];
+  }
+): string {
+  const label = `detached node ${node.token} (step ${node.stepNumber})`;
+  const counter = `(attempt ${outcome.attempt}/${outcome.maxAttempts})`;
+  const replace =
+    'Re-run the worker; resume with its new result as user_response, ending with the same ' +
+    `trailer — it replaces the first:\n${trailerBlock(node.token)}`;
+  const heads: Record<typeof outcome.result, string> = {
+    passed: `✓ Gate review of ${label} passed; its recorded result stands.`,
+    skipped: `✓ Gate review of ${label} skipped by gate_action; its recorded result stands.`,
+    failed: `✗ Gate review of ${label} failed ${counter}. ${replace}`,
+    retry: `↻ Retry count of ${label}'s gate review reset. ${replace}`,
+    exhausted:
+      `✗ Gate review of ${label} failed ${counter} — the retry limit is reached. Resume with ` +
+      `gate_action "retry" (another replacement) or "skip" (accept the recorded result), with ` +
+      `user_response ending in:\n${trailerBlock(node.token)}\nor stop the run with cancel: true.`,
+  };
+  return `${heads[outcome.result]}\n\n${describeRunPosition(outcome)}`;
 }

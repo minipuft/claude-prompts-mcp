@@ -60,6 +60,7 @@ interface ResidualRunState {
   originalArgs?: Record<string, unknown>;
   continuityScopeId?: string;
   pendingGateReview?: unknown;
+  detachedGateReviews?: unknown;
   pendingShellVerification?: unknown;
   blueprint?: SessionBlueprint;
   lifecycle?: ChainSessionLifecycle;
@@ -367,6 +368,8 @@ function toResidual(session: ChainSession): ResidualRunState {
     residual.continuityScopeId = session.continuityScopeId;
   if (session.pendingGateReview !== undefined)
     residual.pendingGateReview = session.pendingGateReview;
+  if (session.detachedGateReviews !== undefined)
+    residual.detachedGateReviews = session.detachedGateReviews;
   if (session.pendingShellVerification !== undefined) {
     residual.pendingShellVerification = session.pendingShellVerification;
   }
@@ -503,6 +506,7 @@ function applyResidual(session: ChainSession, residual: ResidualRunState): void 
   const optional: Array<[keyof ResidualRunState, keyof ChainSession]> = [
     ['continuityScopeId', 'continuityScopeId'],
     ['pendingGateReview', 'pendingGateReview'],
+    ['detachedGateReviews', 'detachedGateReviews'],
     ['pendingShellVerification', 'pendingShellVerification'],
     ['blueprint', 'blueprint'],
     ['lifecycle', 'lifecycle'],
