@@ -1175,6 +1175,7 @@ export class Router {
   }
   private routeToDemo(args: any) {
     const demoArgs: any = { action: args.action, id: args.id };
+    demoArgs.note = "'reason' is spelled here, in a copied value, and copied nowhere";
     if (args.enforcement_mode) demoArgs.enforcementMode = args.enforcement_mode;
     if (args.severity) demoArgs.severity = args.severity;
     ${routerCopies ? 'if (args.reason) demoArgs.reason = args.reason;' : ''}
