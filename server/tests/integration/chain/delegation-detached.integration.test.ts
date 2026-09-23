@@ -35,13 +35,17 @@ import { StepResponseCaptureStage } from '../../../src/engine/execution/pipeline
 import { StepExecutionStage } from '../../../src/engine/execution/pipeline/stages/18-execution-stage.js';
 import { GateReviewStage } from '../../../src/engine/execution/pipeline/stages/20-gate-review-stage.js';
 import { ResponseFormattingStage } from '../../../src/engine/execution/pipeline/stages/21-formatting-stage.js';
+import { runGateReviewEvidence } from '../../../src/engine/gates/services/gate-review-evidence.js';
 import { GateVerdictProcessor } from '../../../src/engine/gates/services/gate-verdict-processor.js';
+import { createShellVerifyExecutor } from '../../../src/engine/gates/shell/shell-verify-executor.js';
 import { ResponseFormatter } from '../../../src/mcp/tools/prompt-engine/processors/response-formatter.js';
 import { ExecutionRecordStore } from '../../../src/modules/chains/execution-record-store.js';
 import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
 import { runFakeWorker } from '../../helpers/delegation/fake-worker.js';
 
 import type { PipelineStage } from '../../../src/engine/execution/pipeline/stage.js';
+import type { GateDefinitionProvider } from '../../../src/engine/gates/core/gate-loader.js';
+import type { LightweightGateDefinition } from '../../../src/engine/gates/types.js';
 import type { ConvertedPrompt } from '../../../src/engine/execution/types.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
 import type { ChainSession } from '../../../src/shared/types/chain-session.js';
@@ -198,20 +202,51 @@ const STAGE_ORDER = [
   'PostFormattingCleanup',
 ] as const;
 
+/**
+ * A gate provider over fixed definitions — only `loadGates`/`loadGate` are read by the review
+ * paths under test.
+ */
+const gateProvider = (gates: LightweightGateDefinition[]): GateDefinitionProvider =>
+  ({
+    loadGate: async (id: string) => gates.find((gate) => gate.id === id) ?? null,
+    loadGates: async (ids: string[]) => gates.filter((gate) => ids.includes(gate.id)),
+  }) as unknown as GateDefinitionProvider;
+
+/**
+ * Row 4.8: the gates a detached step (step 2) is reviewed against, and the definitions behind
+ * them. Stage 11 publishes the ids in production (`detachedReviewGateIds`); this harness stubs
+ * that stage, so it publishes them itself.
+ */
+interface DetachedReviewFixture {
+  readonly gates: LightweightGateDefinition[];
+}
+
 const buildPipeline = (options: {
   sessionStore: ChainSessionStore;
   recordStore: ExecutionRecordStore;
   logger: Logger;
   steps: ReturnType<typeof parsedSteps>;
+  review?: DetachedReviewFixture;
 }): PromptExecutionPipeline => {
-  const { sessionStore, recordStore, logger, steps } = options;
+  const { sessionStore, recordStore, logger, steps, review } = options;
   const chainExecutor = new ChainOperatorExecutor(logger as never, PROMPTS);
+  const provider = review !== undefined ? gateProvider(review.gates) : undefined;
+  // The same composition `pipeline-builder.ts` wires: real runners, a real executor.
+  const runReviewChecks =
+    provider === undefined
+      ? undefined
+      : async (gateIds: string[], agentResponse: string) =>
+          (
+            await runGateReviewEvidence(gateIds, provider, agentResponse, {
+              shellVerifyExecutor: createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] }),
+            })
+          ).checkResults;
 
   const realStages: Record<string, PipelineStage> = {
     OperatorValidation: new OperatorValidationStage(null, logger),
     SessionManagement: new SessionManagementStage(sessionStore, logger),
     StepResponseCapture: new StepResponseCaptureStage(
-      new GateVerdictProcessor(sessionStore, logger),
+      new GateVerdictProcessor(sessionStore, logger, undefined, undefined, runReviewChecks),
       new StepCaptureService(sessionStore, logger, recordStore),
       sessionStore,
       new UnknownObservationProcessor(sessionStore, logger),
@@ -259,6 +294,19 @@ const buildPipeline = (options: {
         },
       };
     }
+    if (name === 'GateEnhancement' && review !== undefined) {
+      return {
+        name,
+        execute: async (context: ExecutionContext) => {
+          const detached = context.parsedCommand?.steps?.find((step) => step.await === 'run');
+          if (detached !== undefined) {
+            context.state.gates.detachedReviewGateIds = {
+              [detached.stepNumber]: review.gates.map((gate) => gate.id),
+            };
+          }
+        },
+      };
+    }
     if (name === 'ExecutionPlanning') {
       return {
         name,
@@ -280,7 +328,7 @@ const buildPipeline = (options: {
   return new PromptExecutionPipeline(stages, {
     logger,
     metricsProvider: () => undefined,
-    gateEnforcement: new GateEnforcementAuthority(sessionStore, logger),
+    gateEnforcement: new GateEnforcementAuthority(sessionStore, logger, provider),
     executionRecordStore: recordStore,
     chainSessionStore: sessionStore,
   });
@@ -548,6 +596,285 @@ describe('detached delegation (await: run) through the pipeline', () => {
 
       expect(await sessionStore.cancelChain(sessionId)).toBe(true);
       expect(run().runStatus).toBe('cancelled');
+    });
+  });
+
+  describe("row 4.8: a detached step's late report opens its gate review", () => {
+    const TRAILER = `HANDOFF RESULT\nnode: ${DETACHED}`;
+    // The string form: the MCP layer renders a structured object to this before the pipeline.
+    const PASS = 'GATE_REVIEW: PASS - the result meets the gate';
+    const FAIL = 'GATE_REVIEW: FAIL - the result misses the gate';
+    const reminderGate = (id: string): LightweightGateDefinition =>
+      ({
+        id,
+        name: id,
+        type: 'validation',
+        description: `gate ${id}`,
+        guidance: `Guidance for ${id}.`,
+      }) as LightweightGateDefinition;
+    /** A shell check reading the reviewed text on stdin: passes iff it holds (or lacks) MARK. */
+    const stdinGate = (id: string, script: string): LightweightGateDefinition =>
+      ({
+        ...reminderGate(id),
+        pass_criteria: [
+          {
+            type: 'shell_verify',
+            shell_command: ['sh', '-c', script],
+            shell_timeout: 5000,
+            shell_stdin_source: 'agent_response',
+          },
+        ],
+      }) as LightweightGateDefinition;
+
+    /** `draft → review (await: run)`, walked past its end: the run is held for the report. */
+    const heldAtEnd = async (review: DetachedReviewFixture) => {
+      const pipeline = buildPipeline({
+        sessionStore,
+        recordStore,
+        logger,
+        steps: parsedSteps({ detached: true, detachedLast: true }),
+        review,
+      });
+      await pipeline.execute({ command: '>>draft --> >>review' } as any);
+      const { chainId, sessionId } = run();
+      const brief = text(
+        await pipeline.execute({ chain_id: chainId, user_response: 'step 1 output' } as any)
+      );
+      await pipeline.execute({ chain_id: chainId } as any);
+      return { pipeline, chainId, sessionId, brief };
+    };
+    const detachedReview = (sessionId: string) =>
+      sessionStore.getPendingGateReview(sessionId, { nodeId: DETACHED });
+
+    test('no review opens at spawn; the report opens it; PASS closes the run', async () => {
+      const { pipeline, chainId, sessionId, brief } = await heldAtEnd({
+        gates: [reminderGate('dr-gate')],
+      });
+      // Spawn and move-past opened nothing, in either slot.
+      expect(sessionStore.getPendingGateReview(sessionId)).toBeUndefined();
+      expect(detachedReview(sessionId)).toBeUndefined();
+
+      const landed = await pipeline.execute({
+        chain_id: chainId,
+        user_response: runFakeWorker(brief, { body: 'the detached review' }),
+      } as any);
+      expect(landed.isError).not.toBe(true);
+      expect(text(landed)).toContain(`Gate Review Required — detached node ${DETACHED} (step 2)`);
+      expect(text(landed)).toContain('(attempt 1/2)');
+      expect(text(landed)).not.toContain('Chain complete');
+      expect(detachedReview(sessionId)?.gateIds).toEqual(['dr-gate']);
+      // Reported and nothing owed — held by the open review alone (the extended close guard).
+      expect(stepOf(DETACHED)).toMatchObject({ state: 'completed', isPlaceholder: false });
+      expect(run().runStatus ?? 'working').toBe('working');
+
+      const passed = await pipeline.execute({
+        chain_id: chainId,
+        gate_verdict: PASS,
+        user_response: TRAILER,
+      } as any);
+      expect(passed.isError).not.toBe(true);
+      expect(text(passed)).toContain(`✓ Gate review of detached node ${DETACHED} (step 2) passed`);
+      expect(text(passed)).toContain('✅ Chain complete');
+      expect(detachedReview(sessionId)).toBeUndefined();
+      expect(run().runStatus).toBe('completed');
+    });
+
+    test('FAIL asks for a replacement report, which replaces the first result; PASS then closes', async () => {
+      const { pipeline, chainId, sessionId, brief } = await heldAtEnd({
+        gates: [reminderGate('dr-gate')],
+      });
+      await pipeline.execute({
+        chain_id: chainId,
+        user_response: runFakeWorker(brief, { body: 'first attempt' }),
+      } as any);
+
+      // Awaiting a verdict: a second report is refused, naming the call the review waits for.
+      const early = await pipeline.execute({
+        chain_id: chainId,
+        user_response: runFakeWorker(brief, { body: 'too early' }),
+      } as any);
+      expect(early.isError).toBe(true);
+      expect(text(early)).toContain('waiting for a gate_verdict');
+
+      const failed = await pipeline.execute({
+        chain_id: chainId,
+        gate_verdict: FAIL,
+        user_response: TRAILER,
+      } as any);
+      expect(failed.isError).not.toBe(true);
+      expect(text(failed)).toContain('failed (attempt 1/2)');
+      expect(text(failed)).toContain('it replaces the first');
+      expect(detachedReview(sessionId)?.metadata?.['phase']).toBe('awaiting-replacement');
+      expect(run().runStatus ?? 'working').toBe('working');
+
+      const replaced = await pipeline.execute({
+        chain_id: chainId,
+        user_response: runFakeWorker(brief, { body: 'second attempt' }),
+      } as any);
+      expect(replaced.isError).not.toBe(true);
+      expect(text(replaced)).toContain('its result replaces its first result');
+      expect(text(replaced)).toContain('(attempt 2/2)');
+      expect(detachedReview(sessionId)?.reviewedOutput).toContain('second attempt');
+      expect(detachedReview(sessionId)?.attemptCount).toBe(1);
+
+      const passed = await pipeline.execute({
+        chain_id: chainId,
+        gate_verdict: PASS,
+        user_response: TRAILER,
+      } as any);
+      expect(text(passed)).toContain('✅ Chain complete');
+      expect(run().runStatus).toBe('completed');
+    });
+
+    test('a current-step review and a detached review coexist; each verdict lands on its own node', async () => {
+      const pipeline = buildPipeline({
+        sessionStore,
+        recordStore,
+        logger,
+        steps: parsedSteps({ detached: true }),
+        review: { gates: [reminderGate('dr-gate')] },
+      });
+      const { chainId, sessionId, brief } = await renderDetached(pipeline);
+      await pipeline.execute({ chain_id: chainId } as any);
+      expect(run().state.currentNodeId).toBe('n3');
+      await sessionStore.setPendingGateReview(sessionId, {
+        combinedPrompt: 'Review step 3.',
+        gateIds: ['current-gate'],
+        prompts: [],
+        createdAt: Date.now(),
+        attemptCount: 0,
+        maxAttempts: 2,
+        metadata: { nodeId: 'n3' },
+      } as never);
+
+      await pipeline.execute({ chain_id: chainId, user_response: runFakeWorker(brief) } as any);
+      expect(detachedReview(sessionId)?.gateIds).toEqual(['dr-gate']);
+      expect(sessionStore.getPendingGateReview(sessionId)?.gateIds).toEqual(['current-gate']);
+
+      // The detached verdict: its review clears; the current step's review and position do not move.
+      const detachedPass = await pipeline.execute({
+        chain_id: chainId,
+        gate_verdict: PASS,
+        user_response: TRAILER,
+      } as any);
+      expect(text(detachedPass)).toContain(
+        `Gate review of detached node ${DETACHED} (step 2) passed`
+      );
+      expect(detachedReview(sessionId)).toBeUndefined();
+      expect(sessionStore.getPendingGateReview(sessionId)?.gateIds).toEqual(['current-gate']);
+      expect(run().state.currentNodeId).toBe('n3');
+
+      // The current step's verdict (no trailer): its review clears and the run moves on.
+      await pipeline.execute({ chain_id: chainId, gate_verdict: PASS } as any);
+      expect(sessionStore.getPendingGateReview(sessionId)).toBeUndefined();
+      expect(run().state.currentNodeId).toBeNull();
+      expect(run().runStatus).toBe('completed');
+    });
+
+    test('ground truth reads the recorded output, never the text of the call that answers', async () => {
+      // The check passes only on text carrying MARK. The recorded output carries it; the verdict
+      // call's own text (the trailer) does not — so the PASS is accepted only if the check read
+      // the recorded output. Its twin below fails on the recorded output and is refused.
+      const { pipeline, chainId, brief } = await heldAtEnd({
+        gates: [stdinGate('dr-check', 'grep -q RECORDED-MARK')],
+      });
+      await pipeline.execute({
+        chain_id: chainId,
+        user_response: runFakeWorker(brief, { body: 'RECORDED-MARK the worker output' }),
+      } as any);
+      const answer = await pipeline.execute({
+        chain_id: chainId,
+        gate_verdict: PASS,
+        user_response: TRAILER,
+      } as any);
+      expect(answer.isError).not.toBe(true);
+      expect(text(answer)).toContain('✅ Chain complete');
+      expect(run().runStatus).toBe('completed');
+    });
+
+    test('ground truth twin: a check failing on the recorded output refuses the PASS, spending no attempt', async () => {
+      const { pipeline, chainId, sessionId, brief } = await heldAtEnd({
+        gates: [stdinGate('dr-check', '! grep -q RECORDED-MARK')],
+      });
+      await pipeline.execute({
+        chain_id: chainId,
+        user_response: runFakeWorker(brief, { body: 'RECORDED-MARK the worker output' }),
+      } as any);
+      const refused = await pipeline.execute({
+        chain_id: chainId,
+        gate_verdict: PASS,
+        user_response: TRAILER,
+      } as any);
+      expect(refused.isError).toBe(true);
+      expect(text(refused)).toContain('dr-check recorded a failing check');
+      expect(detachedReview(sessionId)?.attemptCount).toBe(0);
+      expect(run().runStatus ?? 'working').toBe('working');
+    });
+
+    test('an early result (before the parent moved on) reports the same way, and the move-on keeps it', async () => {
+      const pipeline = buildPipeline({
+        sessionStore,
+        recordStore,
+        logger,
+        steps: parsedSteps({ detached: true }),
+        review: { gates: [reminderGate('dr-gate')] },
+      });
+      const { chainId, sessionId, brief } = await renderDetached(pipeline);
+      expect(run().state.currentNodeId).toBe(DETACHED);
+
+      const early = await pipeline.execute({
+        chain_id: chainId,
+        user_response: runFakeWorker(brief, { body: 'early result' }),
+      } as any);
+      expect(text(early)).toContain(`Gate Review Required — detached node ${DETACHED} (step 2)`);
+      expect(detachedReview(sessionId)?.reviewedOutput).toContain('early result');
+      expect(run().state.currentNodeId).toBe(DETACHED);
+
+      // Moving on passes the node WITHOUT writing a placeholder over its recorded result.
+      const moved = await pipeline.execute({ chain_id: chainId } as any);
+      expect(text(moved)).toContain('Do Summarize.');
+      expect(run().state.currentNodeId).toBe('n3');
+      expect(stepOf(DETACHED)).toMatchObject({ state: 'completed', isPlaceholder: false });
+    });
+
+    test('a verdict for a detached node with no review, and for an unknown node, is refused by name', async () => {
+      const pipeline = buildPipeline({
+        sessionStore,
+        recordStore,
+        logger,
+        steps: parsedSteps({ detached: true }),
+        review: { gates: [] },
+      });
+      const { chainId, sessionId, brief } = await renderDetached(pipeline);
+      await pipeline.execute({ chain_id: chainId } as any);
+      // No gate applies to the detached step: the report lands and opens no review.
+      const landed = await pipeline.execute({
+        chain_id: chainId,
+        user_response: runFakeWorker(brief),
+      } as any);
+      expect(text(landed)).not.toContain('Gate Review Required');
+      expect(detachedReview(sessionId)).toBeUndefined();
+
+      const reviewless = await pipeline.execute({
+        chain_id: chainId,
+        gate_verdict: PASS,
+        user_response: TRAILER,
+      } as any);
+      expect(reviewless.isError).toBe(true);
+      expect(text(reviewless)).toContain(`No gate review is open for Detached node ${DETACHED}`);
+
+      const unknown = await pipeline.execute({
+        chain_id: chainId,
+        gate_verdict: PASS,
+        user_response: 'HANDOFF RESULT\nnode: not-a-node',
+      } as any);
+      expect(unknown.isError).toBe(true);
+      expect(text(unknown)).toContain(
+        'names node not-a-node, which is no detached node of this run'
+      );
+      // Neither verdict touched the step the run stands on.
+      expect(run().state.currentNodeId).toBe('n3');
+      expect(stepOf('n3')?.state).not.toBe('completed');
     });
   });
 

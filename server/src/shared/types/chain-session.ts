@@ -300,6 +300,13 @@ export interface ChainSession {
    * Planned for future semantic layer gate enforcement.
    */
   pendingGateReview?: PendingGateReview;
+  /**
+   * Gate reviews of detached (`await: run`) nodes, keyed by node id (row 4.8, R10). A detached
+   * node's review opens against its LATE report, when the run already stands elsewhere, so it
+   * never enters the current-step slot above; the store's review methods reach it through a
+   * {@link ReviewSlot}. An open entry holds the run open (`detachedNodesHoldingRun`).
+   */
+  detachedGateReviews?: Record<string, PendingGateReview>;
   /** Pending shell verification state for bounce-back resume across MCP requests. */
   pendingShellVerification?: PendingShellVerificationSnapshot;
   blueprint?: SessionBlueprint;
@@ -352,15 +359,9 @@ export const isTerminalRunStatus = (status: ChainRunStatus | undefined): boolean
  * `currentNodeId === null` is the same fact read off the state document, and covers a session
  * loaded from a pre-latch blob.
  */
-export const isRunComplete = (session: {
-  runStatus?: ChainRunStatus;
-  pendingGateReview?: unknown;
-  state: {
-    currentNodeId: string | null;
-    nodes?: readonly Pick<ChainNode, 'id'>[];
-    stepStates?: ReadonlyMap<string, StepMetadata>;
-  };
-}): boolean =>
+export const isRunComplete = (
+  session: DetachedHoldFacts & { runStatus?: ChainRunStatus; pendingGateReview?: unknown }
+): boolean =>
   // An outstanding review holds the run open whatever its status says (P4.119 / R96). The phase
   // guard grades the final step's answer AFTER the capture has walked the run past its last node,
   // so the store has already latched `completed` when that review opens; reading the run as
@@ -368,7 +369,7 @@ export const isRunComplete = (session: {
   // refused the verdict as a resume of a finished run.
   session.pendingGateReview === undefined &&
   (isTerminalRunStatus(session.runStatus) ||
-    (session.state.currentNodeId === null && !isRunHeldOpen(session.state)));
+    (session.state.currentNodeId === null && !isRunHeldOpen(session)));
 
 /**
  * True when a run has walked past its last node but may not complete yet: a detached
@@ -376,13 +377,36 @@ export const isRunComplete = (session: {
  * status stays non-terminal, a resume reaches it, and the only thing it will accept is the owed
  * result (or a cancel). PURE; `unreportedDetachedNodeIds` is the one derivation.
  */
-export const isRunHeldOpen = (state: {
-  currentNodeId: string | null;
-  nodes?: readonly Pick<ChainNode, 'id'>[];
-  stepStates?: ReadonlyMap<string, StepMetadata>;
-}): boolean =>
-  state.currentNodeId === null &&
-  unreportedDetachedNodeIds(state.nodes ?? [], state.stepStates).length > 0;
+export const isRunHeldOpen = (run: DetachedHoldFacts): boolean =>
+  run.state.currentNodeId === null && detachedNodesHoldingRun(run).length > 0;
+
+/** What {@link detachedNodesHoldingRun} reads off a run. */
+export interface DetachedHoldFacts {
+  readonly state: {
+    readonly currentNodeId: string | null;
+    readonly nodes?: readonly Pick<ChainNode, 'id'>[];
+    readonly stepStates?: ReadonlyMap<string, StepMetadata>;
+  };
+  readonly detachedGateReviews?: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * The detached nodes a run may not complete without: every spawned node still owed its result
+ * (`unreportedDetachedNodeIds`), and every node whose late result is under an open gate review
+ * (row 4.8). The one derivation the completion guard and the held-run render both read. PURE.
+ */
+export function detachedNodesHoldingRun(run: DetachedHoldFacts): string[] {
+  const owed = unreportedDetachedNodeIds(run.state.nodes ?? [], run.state.stepStates);
+  const underReview = Object.keys(run.detachedGateReviews ?? {}).filter(
+    (nodeId) => !owed.includes(nodeId)
+  );
+  return [...owed, ...underReview];
+}
+
+/** Selects a detached node's review; absent, a review method addresses the current-step slot. */
+export interface ReviewSlot {
+  readonly nodeId: string;
+}
 
 export interface GateReviewOutcomeUpdate {
   verdict: 'PASS' | 'FAIL';
@@ -459,20 +483,26 @@ export interface ChainSessionService {
   getSessionBlueprint(sessionId: string, scope?: StateStoreOptions): SessionBlueprint | undefined;
   updateSessionBlueprint(sessionId: string, blueprint: SessionBlueprint): Promise<void>;
   getInlineGateIds(sessionId: string, scope?: StateStoreOptions): string[] | undefined;
-  setPendingGateReview(sessionId: string, review: PendingGateReview): Promise<void>;
-  getPendingGateReview(sessionId: string): PendingGateReview | undefined;
-  clearPendingGateReview(sessionId: string): Promise<void>;
+  /** `slot` selects a detached node's review (row 4.8); absent, the current-step slot. */
+  setPendingGateReview(
+    sessionId: string,
+    review: PendingGateReview,
+    slot?: ReviewSlot
+  ): Promise<void>;
+  getPendingGateReview(sessionId: string, slot?: ReviewSlot): PendingGateReview | undefined;
+  clearPendingGateReview(sessionId: string, slot?: ReviewSlot): Promise<void>;
   setPendingShellVerification(
     sessionId: string,
     state: PendingShellVerificationSnapshot
   ): Promise<void>;
   getPendingShellVerification(sessionId: string): PendingShellVerificationSnapshot | undefined;
   clearPendingShellVerification(sessionId: string): Promise<void>;
-  isRetryLimitExceeded(sessionId: string): boolean;
-  resetRetryCount(sessionId: string): Promise<void>;
+  isRetryLimitExceeded(sessionId: string, slot?: ReviewSlot): boolean;
+  resetRetryCount(sessionId: string, slot?: ReviewSlot): Promise<void>;
   recordGateReviewOutcome(
     sessionId: string,
-    outcome: GateReviewOutcomeUpdate
+    outcome: GateReviewOutcomeUpdate,
+    slot?: ReviewSlot
   ): Promise<'cleared' | 'pending'>;
   clearSession(sessionId: string, scope?: StateStoreOptions): Promise<boolean>;
   clearSessionsForChain(chainId: string, scope?: StateStoreOptions): Promise<void>;

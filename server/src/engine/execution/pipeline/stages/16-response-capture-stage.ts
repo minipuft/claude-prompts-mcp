@@ -2,6 +2,8 @@
 import { UnknownObservationValidationError } from '../../capture/unknown-observation-processor.js';
 import {
   collectDetachedNodeFacts,
+  describeDetachedReview,
+  describeDetachedReviewOutcome,
   describeLandedReport,
   resolveDetachedReport,
 } from '../../delegation/detached.js';
@@ -11,6 +13,7 @@ import {
   resolveHandoffEvidence,
   resolveHandoffEvidenceMode,
 } from '../../delegation/handoff-contract.js';
+import { buildStructuredVerdictTemplate } from '../../formatting/response-assembler.js';
 import {
   decideInterrupt,
   decideMutation,
@@ -31,6 +34,7 @@ import type {
 import type { ChainSessionService, ToolResponse } from '#shared/types/index.js';
 import type { GateEnhancementService } from '../../../gates/services/gate-enhancement-service.js';
 import type {
+  DetachedReviewVerdictResult,
   GateVerdictProcessor,
   VerdictProcessingResult,
 } from '../../../gates/services/gate-verdict-processor.js';
@@ -428,6 +432,10 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       reply,
       mode: this.resolveEvidenceMode(),
       reviewPending: this.chainSessionStore.getPendingGateReview(sessionId) !== undefined,
+      submits: {
+        verdict: (context.getGateVerdict() ?? '').length > 0,
+        action: context.mcpRequest.gate_action !== undefined,
+      },
       current:
         currentNodeIdAtStart === null || current === undefined
           ? null
@@ -436,7 +444,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
               delegated: current.delegated === true,
               detached: current.await === 'run',
             },
-      detachedNodes: collectDetachedNodeFacts(context.parsedCommand?.steps, session.state),
+      detachedNodes: collectDetachedNodeFacts(context.parsedCommand?.steps, session),
     });
 
     switch (decision.kind) {
@@ -444,7 +452,11 @@ export class StepResponseCaptureStage extends BasePipelineStage {
         context.setResponse(this.buildErrorResponse(decision.message));
         return false;
       case 'report':
-        await this.landDetachedReport(context, session, decision.node, reply);
+        await this.landDetachedReport(context, session, decision.node, reply, decision.replaces);
+        return false;
+      case 'review-verdict':
+      case 'review-action':
+        await this.answerDetachedReview(context, session, decision.node, decision.kind);
         return false;
       case 'continue-past':
         await this.stepCaptureService.passDetachedNode(
@@ -455,7 +467,8 @@ export class StepResponseCaptureStage extends BasePipelineStage {
           {
             nodeId: decision.node.nodeId,
             ordinal: decision.node.stepNumber,
-          }
+          },
+          { keepRecordedOutput: decision.node.reported }
         );
         return true;
       case 'review-pending':
@@ -471,16 +484,19 @@ export class StepResponseCaptureStage extends BasePipelineStage {
   }
 
   /**
-   * Record a late detached result on its own node, let the store complete a run that was only
-   * waiting on it, and answer the caller. Orchestration only: the writes are
-   * `StepCaptureService.recordDetachedReport`, the completion decision is the store's guard, and
-   * the words are `describeLandedReport`.
+   * Record a late detached result on its own node, open its gate review when gates apply to it
+   * (row 4.8), let the store complete a run that was only waiting on it, and answer the caller.
+   * Orchestration only: the writes are `StepCaptureService.recordDetachedReport` and
+   * `GateEnforcementAuthority.openDetachedReview`, the completion decision is the store's guard,
+   * and the words are `describeLandedReport` / `describeDetachedReview`. A `replaces` report
+   * (the review FAILed, R10.2) records over the first result and re-opens the same review.
    */
   private async landDetachedReport(
     context: ExecutionContext,
     session: ChainSession,
     node: DetachedNodeFacts,
-    reply: string
+    reply: string,
+    replaces = false
   ): Promise<void> {
     const sessionId = session.sessionId;
     await this.stepCaptureService.recordDetachedReport(
@@ -490,13 +506,74 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       { nodeId: node.nodeId, ordinal: node.stepNumber },
       reply
     );
+    const gateIds = context.state.gates.detachedReviewGateIds?.[node.stepNumber] ?? [];
+    const review =
+      (await context.gateEnforcement?.openDetachedReview(
+        context,
+        sessionId,
+        node,
+        gateIds,
+        reply
+      )) ?? null;
     const runCompleted = await this.chainSessionStore.completeHeldRun(sessionId);
     const after =
       this.chainSessionStore.getSession(sessionId, context.getScopeOptions()) ?? session;
     const text = describeLandedReport(node, {
       runCompleted,
-      held: isRunHeldOpen(after.state),
-      detachedNodes: collectDetachedNodeFacts(context.parsedCommand?.steps, after.state),
+      held: isRunHeldOpen(after),
+      detachedNodes: collectDetachedNodeFacts(context.parsedCommand?.steps, after),
+      replaced: replaces,
+      ...(review !== null
+        ? {
+            review: describeDetachedReview(node, {
+              chainId: after.chainId,
+              attempt: review.attemptCount + 1,
+              maxAttempts: review.maxAttempts,
+              verdictTemplate: buildStructuredVerdictTemplate(
+                review.gateIds,
+                review.prompts,
+                new Map(Object.entries(review.gateTiers ?? {})),
+                new Map()
+              ),
+            }),
+          }
+        : {}),
+    });
+    context.setResponse({
+      content: [{ type: 'text', text: `${text}\n\nChain: ${after.chainId}` }],
+      isError: false,
+    });
+  }
+
+  /**
+   * Answer a detached node's gate review — a `gate_verdict`, or a `gate_action` on an exhausted
+   * one (row 4.8) — then let the store complete a run that was only waiting on it. The verdict
+   * processor owns what the answer means; nothing here reads or moves the current step.
+   */
+  private async answerDetachedReview(
+    context: ExecutionContext,
+    session: ChainSession,
+    node: DetachedNodeFacts,
+    kind: 'review-verdict' | 'review-action'
+  ): Promise<void> {
+    const sessionId = session.sessionId;
+    const action = context.mcpRequest.gate_action;
+    const result: DetachedReviewVerdictResult =
+      kind === 'review-verdict' || action === undefined
+        ? await this.verdictProcessor.processDetachedReviewVerdict(context, sessionId, node.nodeId)
+        : await this.verdictProcessor.processDetachedReviewAction(sessionId, node.nodeId, action);
+    if (result.kind === 'refused') {
+      context.setResponse(this.buildErrorResponse(result.message));
+      return;
+    }
+    const runCompleted = await this.chainSessionStore.completeHeldRun(sessionId);
+    const after =
+      this.chainSessionStore.getSession(sessionId, context.getScopeOptions()) ?? session;
+    const text = describeDetachedReviewOutcome(node, {
+      ...result,
+      runCompleted,
+      held: isRunHeldOpen(after),
+      detachedNodes: collectDetachedNodeFacts(context.parsedCommand?.steps, after),
     });
     context.setResponse({
       content: [{ type: 'text', text: `${text}\n\nChain: ${after.chainId}` }],

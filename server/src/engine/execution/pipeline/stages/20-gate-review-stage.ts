@@ -5,12 +5,7 @@ import {
   resolveJudgeGates,
   composeJudgeReviewPrompt,
 } from '../../../gates/core/review-utils.js';
-import {
-  formatGateScriptToolSection,
-  runGateScriptToolVerifications,
-} from '../../../gates/services/gate-script-tool-runner.js';
-import { runGateShellVerifications } from '../../../gates/services/gate-shell-verify-runner.js';
-import { formatGateShellVerifySection } from '../../../gates/shell/shell-verify-message-formatter.js';
+import { runGateReviewEvidence } from '../../../gates/services/gate-review-evidence.js';
 import { planNodeDrivenRender } from '../../operators/node-step-projection.js';
 import { resolveGroundTruthCoverage } from '../decisions/gates/ground-truth-coverage.js';
 import { BasePipelineStage } from '../stage.js';
@@ -26,52 +21,13 @@ import type { GatesConfig } from '#shared/types/core-config.js';
 import type { ChainSessionService } from '#shared/types/index.js';
 import type { GateDefinitionProvider } from '../../../gates/core/gate-loader.js';
 import type { JudgeReviewMetadata } from '../../../gates/core/review-utils.js';
-import type { GateScriptToolResult } from '../../../gates/services/gate-script-tool-runner.js';
 import type { ScriptToolRuntimeProvider } from '../../../gates/services/script-tool-criterion-runner.js';
 import type { ShellVerifyExecutor } from '../../../gates/shell/shell-verify-executor.js';
-import type { GateShellVerifyResult } from '../../../gates/shell/shell-verify-message-formatter.js';
 import type { ExecutionContext } from '../../context/index.js';
 import type { ChainOperatorExecutor } from '../../operators/chain-operator-executor.js';
 import type { ChainStepRenderResult } from '../../operators/types.js';
 
 type GatesConfigProvider = () => GatesConfig | undefined;
-
-/** One line, capped, so a recorded result stays readable in a refusal sentence. */
-const CHECK_SUMMARY_MAX_CHARS = 200;
-
-/** Collapse to a single line and cap — a summary is quoted back to the submitter verbatim. */
-function toSummaryLine(text: string): string {
-  const oneLine = text.replace(/\s+/g, ' ').trim();
-  return oneLine.length > CHECK_SUMMARY_MAX_CHARS
-    ? `${oneLine.slice(0, CHECK_SUMMARY_MAX_CHARS - 1)}…`
-    : oneLine;
-}
-
-/**
- * Flatten both runner result shapes into the one thing the verdict processor needs: which gate,
- * did it pass, and one line naming what ran.
- *
- * Mechanism-agnostic on purpose, exactly as `resolveGroundTruthCoverage` beside it is: the
- * processor's refusal does not care whether an exit code or a script verdict produced the
- * failure, only that the engine recorded one.
- */
-function toCheckResults(
-  shellResults: readonly GateShellVerifyResult[],
-  scriptResults: readonly GateScriptToolResult[]
-): GateCheckResult[] {
-  return [
-    ...shellResults.map((result) => ({
-      gateId: result.gateId,
-      passed: result.passed,
-      summary: toSummaryLine(`${result.command} exit ${result.exitCode}`),
-    })),
-    ...scriptResults.map((result) => ({
-      gateId: result.gateId,
-      passed: result.passed,
-      summary: toSummaryLine(`${result.toolId ?? 'script_tool'}: ${result.reason}`),
-    })),
-  ];
-}
 
 /** Optional collaborators for {@link GateReviewStage}. */
 export interface GateReviewCollaborators {
@@ -319,35 +275,21 @@ export class GateReviewStage extends BasePipelineStage {
     let reviewForRender: PendingGateReview = pendingReview;
 
     try {
-      // Run shell_verify criteria from gates to enrich review with real command output.
-      // The agent's response is forwarded so gates that opt in via
-      // `shell_stdin_source: 'agent_response'` can verify response-content claims
-      // (file paths, line numbers, symbols) against ground truth.
+      // Run the gates' ground-truth criteria (`gate-review-evidence.ts`, shared with a detached
+      // node's review). The agent's response is forwarded so gates that opt in via
+      // `shell_stdin_source: 'agent_response'` can verify response-content claims (file paths,
+      // line numbers, symbols) against ground truth. A failing check of either kind blocks, and
+      // coverage requires every required gate to have been verified by SOMETHING.
       let shellSection = '';
       if (this.gateDefinitionProvider && pendingReview.gateIds.length > 0) {
-        const agentResponse = context.mcpRequest?.user_response;
-        const shellResults = await runGateShellVerifications(
+        const evidence = await runGateReviewEvidence(
           pendingReview.gateIds,
           this.gateDefinitionProvider,
-          agentResponse !== undefined ? { agentResponse } : undefined,
-          this.collaborators.shellVerifyExecutor
+          context.mcpRequest?.user_response,
+          this.collaborators
         );
-        // `script_tool` criteria run beside `shell_verify` rather than instead of it: a gate
-        // may declare both, and the two answer different questions — an exit code versus a
-        // structured verdict the script can explain. Neither substitutes for the other, so a
-        // failing check of either kind blocks, and coverage requires every required gate to
-        // have been verified by SOMETHING.
-        const scriptResults = await runGateScriptToolVerifications(
-          pendingReview.gateIds,
-          this.gateDefinitionProvider,
-          this.collaborators.scriptToolRuntime?.()
-        );
-        shellSection = [
-          formatGateShellVerifySection(shellResults),
-          formatGateScriptToolSection(scriptResults),
-        ]
-          .filter((section) => section !== '')
-          .join('\n\n');
+        const { shellResults, scriptResults } = evidence;
+        shellSection = evidence.section;
 
         // Whether ground truth clears the review is a gate-enforcement decision, so the
         // authority makes it. The stage keeps what only it can do: running the commands
@@ -402,7 +344,7 @@ export class GateReviewStage extends BasePipelineStage {
         reviewForRender = await this.recordReviewEvidence(
           sessionId,
           pendingReview,
-          toCheckResults(shellResults, scriptResults)
+          evidence.checkResults
         );
         if (context.sessionContext !== undefined) {
           context.sessionContext = { ...context.sessionContext, pendingReview: reviewForRender };
