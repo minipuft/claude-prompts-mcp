@@ -9,6 +9,7 @@
  * Temporary gates can be merged via TemporaryGateRegistry when provided.
  */
 
+import { toGateDefinition } from '../core/gate-definition-converter.js';
 import { isGateActiveForContext } from '../utils/gate-activation.js';
 
 import type { GateDefinitionProvider } from '../core/gate-loader.js';
@@ -17,7 +18,6 @@ import type {
   IGateManager,
   GateActivationContext,
   GateActivationResult,
-  LoadedGateDefinition,
   LightweightGateDefinition,
 } from '../types.js';
 
@@ -44,7 +44,7 @@ export class GateManagerProvider implements GateDefinitionProvider {
       return null;
     }
 
-    return this.toLightweight(guide.getDefinition());
+    return toGateDefinition(guide.getDefinition());
   }
 
   async loadGates(gateIds: string[]): Promise<LightweightGateDefinition[]> {
@@ -78,7 +78,7 @@ export class GateManagerProvider implements GateDefinitionProvider {
     const validationGates: LightweightGateDefinition[] = [];
 
     for (const guide of activeGuides) {
-      const lightweight = this.toLightweight(guide.getDefinition());
+      const lightweight = toGateDefinition(guide.getDefinition());
       activeGates.push(lightweight);
 
       if (lightweight.guidance) {
@@ -99,7 +99,7 @@ export class GateManagerProvider implements GateDefinitionProvider {
 
   async listAvailableGateDefinitions(): Promise<LightweightGateDefinition[]> {
     return this.gateManager.list(true).reduce<LightweightGateDefinition[]>((acc, guide) => {
-      acc.push(this.toLightweight(guide.getDefinition()));
+      acc.push(toGateDefinition(guide.getDefinition()));
       return acc;
     }, []);
   }
@@ -145,60 +145,5 @@ export class GateManagerProvider implements GateDefinitionProvider {
   async getFrameworkGateIds(): Promise<string[]> {
     const gates = await this.listAvailableGateDefinitions();
     return gates.filter((g) => g.gate_type === 'framework').map((g) => g.id);
-  }
-
-  private toLightweight(definition: LoadedGateDefinition): LightweightGateDefinition {
-    const retryConfig = this.normalizeRetryConfig(definition.retry_config);
-    const lightweight: LightweightGateDefinition = {
-      id: definition.id,
-      name: definition.name,
-      type: definition.type,
-      description: definition.description,
-    };
-
-    if (definition.subject) {
-      lightweight.subject = definition.subject;
-    }
-    lightweight.severity = definition.severity;
-    if (definition.enforcementMode) {
-      lightweight.enforcementMode = definition.enforcementMode;
-    }
-    if (definition.guidance) {
-      lightweight.guidance = definition.guidance;
-    }
-    if (definition.pass_criteria) {
-      lightweight.pass_criteria = definition.pass_criteria;
-    }
-    if (retryConfig) {
-      lightweight.retry_config = retryConfig;
-    }
-    if (definition.activation) {
-      lightweight.activation = definition.activation;
-    }
-    lightweight.gate_type = definition.gate_type;
-    if (definition.guidanceFile) {
-      lightweight.guidanceFile = definition.guidanceFile;
-    }
-    // Judge routing reads this and nothing else: dropped here, every `mode: judge` gate the live
-    // server loads was reviewed as `self` (P4.133). `GateLoader.toLightweightGate` carried it.
-    if (definition.evaluation !== undefined) {
-      lightweight.evaluation = definition.evaluation;
-    }
-
-    return lightweight;
-  }
-
-  private normalizeRetryConfig(
-    retry?: LoadedGateDefinition['retry_config']
-  ): LightweightGateDefinition['retry_config'] {
-    if (!retry) return undefined;
-    // The `??` fallbacks stay: `GateRetryConfigSchema` is `.partial()`, which re-wraps each
-    // already-defaulted field as optional, so the OUTPUT type still admits `undefined` here
-    // even though a parsed `retry_config` carries the values at runtime.
-    return {
-      max_attempts: retry.max_attempts ?? 2,
-      improvement_hints: retry.improvement_hints ?? true,
-      preserve_context: retry.preserve_context ?? true,
-    };
   }
 }

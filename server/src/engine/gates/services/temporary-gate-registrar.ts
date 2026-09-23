@@ -857,6 +857,14 @@ function applyOptionalInlineFields(
   if (typeof body['target_step_id'] === 'string') {
     definition.target_step_id = body['target_step_id'];
   }
+  const enforcementMode = body['enforcement_mode'];
+  if (
+    enforcementMode === 'blocking' ||
+    enforcementMode === 'advisory' ||
+    enforcementMode === 'informational'
+  ) {
+    definition.enforcement_mode = enforcementMode;
+  }
 
   return definition;
 }
