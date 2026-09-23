@@ -49,11 +49,10 @@ const pendingReview = () => ({
 function createStore(): ChainSessionService {
   const review = pendingReview();
   return {
-    recordGateReviewOutcome: jest.fn(async () => 'pending'),
+    recordGateReviewOutcome: jest.fn(async () => undefined),
     clearPendingGateReview: jest.fn(async () => undefined),
     advanceStep: jest.fn(async () => false),
     getPendingGateReview: jest.fn(() => review),
-    isRetryLimitExceeded: jest.fn(() => false),
     setPendingGateReview: jest.fn(async () => undefined),
     setReview: jest.fn(async () => undefined),
   } as unknown as ChainSessionService;

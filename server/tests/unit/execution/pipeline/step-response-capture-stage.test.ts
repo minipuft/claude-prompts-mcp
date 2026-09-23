@@ -34,10 +34,8 @@ const createSessionManager = () => {
   const updateSessionState = jest.fn().mockResolvedValue(true);
   const completeStep = jest.fn().mockResolvedValue(true);
   const advanceStep = jest.fn().mockResolvedValue({ nodeId: 'n3', ordinal: 3 });
-  const isRetryLimitExceeded = jest.fn().mockReturnValue(false);
-  const resetRetryCount = jest.fn().mockResolvedValue(true);
   const clearPendingGateReview = jest.fn().mockResolvedValue(true);
-  const recordGateReviewOutcome = jest.fn().mockResolvedValue('cleared');
+  const recordGateReviewOutcome = jest.fn().mockResolvedValue(undefined);
   const getPendingGateReview = jest.fn();
   const applyUnknownObservations =
     jest.fn<
@@ -76,8 +74,6 @@ const createSessionManager = () => {
       updateSessionState,
       completeStep,
       advanceStep,
-      isRetryLimitExceeded,
-      resetRetryCount,
       clearPendingGateReview,
       recordGateReviewOutcome,
       getPendingGateReview,
@@ -93,8 +89,6 @@ const createSessionManager = () => {
     updateSessionState,
     completeStep,
     advanceStep,
-    isRetryLimitExceeded,
-    resetRetryCount,
     clearPendingGateReview,
     recordGateReviewOutcome,
     getPendingGateReview,
@@ -249,9 +243,7 @@ describe('StepResponseCaptureStage', () => {
       'sess-1',
       expect.objectContaining({
         verdict: 'PASS',
-        rawVerdict: 'GATE_REVIEW: PASS - confirmed upstream',
-      }),
-      undefined
+      })
     );
     expect(context.sessionContext?.pendingReview).toBeUndefined();
     // A PASS advances past the node its review GRADES (row 3.3) — here the node the run stands
@@ -268,7 +260,7 @@ describe('StepResponseCaptureStage', () => {
     // However, user_response content IS still captured as step output
     const { manager, getSession, recordGateReviewOutcome, updateSessionState, getStepState } =
       createSessionManager();
-    recordGateReviewOutcome.mockResolvedValue('pending');
+    recordGateReviewOutcome.mockResolvedValue(undefined);
     getStepState.mockReturnValue({ state: 'completed', isPlaceholder: true });
     const stage = createStage(manager);
 

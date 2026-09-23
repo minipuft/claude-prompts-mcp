@@ -21,7 +21,6 @@ import type {
   ChainNode,
   ChainRunStatus,
   GateReview,
-  GateReviewHistoryEntry,
   PendingGateReview,
   PendingShellVerificationSnapshot,
   RunTelemetry,
@@ -60,7 +59,6 @@ import { computeUnknownLedger } from '#engine/execution/capture/unknown-observat
 import {
   attachReviewProjections,
   currentStepReview,
-  deriveReviewPhase,
   detachedNodesHoldingRun,
   isTerminalRunStatus,
   stampLegacyReview,
@@ -588,7 +586,9 @@ export class ChainSessionStore implements ChainSessionService {
           currentStep: currentOrdinal(session.state.nodes, session.state.currentNodeId),
           totalSteps: totalOf(session.state.nodes),
           lastActivity: session.lastActivity,
-          pendingGateReview: session.pendingGateReview ?? null,
+          // The key is the hooks' contract (`hooks/lib/db_reader.py`); the value is read by node.
+          pendingGateReview:
+            currentStepReview(session.reviews, session.state.currentNodeId) ?? null,
           pendingShellVerification: session.pendingShellVerification ?? null,
           runStatus,
           runCompletedAt: session.runCompletedAt ?? null,
@@ -607,7 +607,8 @@ export class ChainSessionStore implements ChainSessionService {
     return (
       currentStep > 0 &&
       currentStep === totalSteps &&
-      (session.pendingGateReview != null || session.pendingShellVerification != null)
+      (currentStepReview(session.reviews, session.state.currentNodeId) !== undefined ||
+        session.pendingShellVerification != null)
     );
   }
 
@@ -2023,51 +2024,6 @@ export class ChainSessionStore implements ChainSessionService {
     return review === undefined ? undefined : cloneReview(review);
   }
 
-  /**
-   * Check if the retry limit has been exceeded for a pending gate review.
-   * Returns true if attemptCount >= maxAttempts.
-   * @remarks Uses DEFAULT_RETRY_LIMIT (2) when maxAttempts not specified.
-   */
-  isRetryLimitExceeded(sessionId: string, slot?: ReviewSlot): boolean {
-    const review = this.getPendingGateReview(sessionId, slot);
-    if (!review) {
-      return false;
-    }
-    // Import would create circular dependency, so we inline the default (2)
-    // This matches DEFAULT_RETRY_LIMIT from gates/constants.ts
-    const maxAttempts = review.maxAttempts ?? 2;
-    return (review.attemptCount ?? 0) >= maxAttempts;
-  }
-
-  /**
-   * Reset the retry count for a pending gate review.
-   * Used when user chooses to retry after retry exhaustion.
-   */
-  async resetRetryCount(sessionId: string, slot?: ReviewSlot): Promise<void> {
-    const session = this.activeSessions.get(sessionId);
-    const review = session === undefined ? undefined : readReview(session, slot);
-    if (review === undefined) {
-      this.logger?.debug?.(
-        `[ChainSessionStore] No pending gate review to reset for session: ${sessionId}`
-      );
-      return;
-    }
-
-    // Reset attempt count and log in history
-    review.attemptCount = 0;
-    review.phase = deriveReviewPhase(review);
-    review.history = review.history ?? [];
-    review.history.push({
-      timestamp: Date.now(),
-      status: 'reset',
-      reasoning: 'User requested retry after exhaustion',
-    });
-
-    await this.saveSessions();
-
-    this.logger?.info?.(`[ChainSessionStore] Reset retry count for session: ${sessionId}`);
-  }
-
   async clearPendingGateReview(sessionId: string, slot?: ReviewSlot): Promise<void> {
     const session = this.activeSessions.get(sessionId);
     if (session === undefined || readReview(session, slot) === undefined) {
@@ -2109,60 +2065,27 @@ export class ChainSessionStore implements ChainSessionService {
     await this.saveSessions();
   }
 
+  /**
+   * Count one verdict in the run's cumulative gate counters. The review it answered is not
+   * touched: the verdict path (`GateVerdictProcessor.answerReview`) persists the review its
+   * transition returns. Record-only (D4): nothing branches on these values.
+   */
   async recordGateReviewOutcome(
     sessionId: string,
-    outcome: GateReviewOutcomeUpdate,
-    slot?: ReviewSlot
-  ): Promise<'cleared' | 'pending'> {
+    outcome: GateReviewOutcomeUpdate
+  ): Promise<void> {
     const session = this.activeSessions.get(sessionId);
-    const review = session === undefined ? undefined : readReview(session, slot);
-    if (session === undefined || review === undefined) {
+    if (session === undefined) {
       this.logger?.warn(
         `[GateReview] Attempted to record verdict for non-existent session: ${sessionId}`
       );
-      return 'pending';
+      return;
     }
-
-    const timestamp = Date.now();
-
-    review.history ??= [];
-    const historyEntry: GateReviewHistoryEntry = {
-      timestamp,
-      status: outcome.verdict.toLowerCase(),
-      ...(outcome.rationale !== undefined && { reasoning: outcome.rationale }),
-      ...(outcome.reviewer !== undefined && { reviewer: outcome.reviewer }),
-    };
-    review.history.push(historyEntry);
-    review.previousResponse = outcome.rawVerdict;
-    review.attemptCount = (review.attemptCount ?? 0) + 1;
-    review.phase = deriveReviewPhase(review);
-
-    // Run-cumulative counterparts to attemptCount, which is destroyed with the pending review
-    // when a PASS clears it and so cannot answer "how many across the whole run". Record-only
-    // (D4): nothing branches on these values.
     session.gatesFiredCount = (session.gatesFiredCount ?? 0) + 1;
     if (outcome.verdict === 'FAIL') {
       session.gateRetriesCount = (session.gateRetriesCount ?? 0) + 1;
     }
-
-    let result: 'cleared' | 'pending';
-    if (outcome.verdict === 'PASS') {
-      deleteReview(session, slot);
-      this.logger?.info('[GateReview] Cleared pending review', {
-        sessionId,
-        gateIds: review.gateIds,
-      });
-      result = 'cleared';
-    } else {
-      this.logger?.info('[GateReview] Review failed, awaiting remediation', {
-        sessionId,
-        gateIds: review.gateIds,
-      });
-      result = 'pending';
-    }
-
     await this.saveSessions();
-    return result;
   }
 
   /**
@@ -2322,7 +2245,7 @@ export class ChainSessionStore implements ChainSessionService {
         // Summaries are a display projection: ints computed here, never stored.
         currentStep: currentOrdinal(session.state.nodes, session.state.currentNodeId),
         totalSteps: totalOf(session.state.nodes),
-        pendingReview: Boolean(session.pendingGateReview),
+        pendingReview: Object.keys(session.reviews ?? {}).length > 0,
         lastActivity: session.lastActivity,
         startTime: session.startTime,
         ...(promptName !== undefined && { promptName }),

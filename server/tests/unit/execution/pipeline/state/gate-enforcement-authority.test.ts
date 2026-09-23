@@ -21,9 +21,7 @@ const createMockChainSessionStore = () => ({
   setPendingGateReview: jest.fn(),
   setReview: jest.fn(),
   clearPendingGateReview: jest.fn(),
-  isRetryLimitExceeded: jest.fn().mockReturnValue(false),
-  resetRetryCount: jest.fn(),
-  recordGateReviewOutcome: jest.fn().mockReturnValue('cleared'),
+  recordGateReviewOutcome: jest.fn(),
   cancelChain: jest.fn<(sessionId: string) => Promise<boolean>>().mockResolvedValue(true),
 });
 

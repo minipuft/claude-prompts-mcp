@@ -96,6 +96,16 @@ export interface SessionResourceMetadata extends ResourceListItem {
  * Dependencies required by resource handlers.
  * Passed by reference to ensure hot-reload compatibility.
  */
+/** What a session resource reports of one open gate review, keyed in `reviews` by its node. */
+export interface SessionReviewFacts {
+  nodeId: string;
+  kind: string;
+  phase: string;
+  gateIds: readonly string[];
+  attemptCount: number;
+  maxAttempts: number;
+}
+
 export interface ResourceDependencies {
   logger: Logger;
   // Prompt-related dependencies - uses ConvertedPrompt interface from execution/types
@@ -189,7 +199,7 @@ export interface ResourceDependencies {
           startTime: number;
           lastActivity: number;
           originalArgs: Record<string, unknown>;
-          pendingGateReview?: unknown;
+          reviews?: Readonly<Record<string, SessionReviewFacts>>;
         }
       | undefined;
     /** Lookup by user-facing chainId (e.g., chain-quick_decision#1) */
@@ -205,7 +215,7 @@ export interface ResourceDependencies {
           startTime: number;
           lastActivity: number;
           originalArgs: Record<string, unknown>;
-          pendingGateReview?: unknown;
+          reviews?: Readonly<Record<string, SessionReviewFacts>>;
         }
       | undefined;
     getSessionStats(): {

@@ -48,7 +48,7 @@ const createLogger = (): Logger & { warn: jest.Mock } =>
 
 function createStore() {
   return {
-    recordGateReviewOutcome: jest.fn(async () => 'pending'),
+    recordGateReviewOutcome: jest.fn(async () => undefined),
     setReview: jest.fn(async () => undefined),
     clearPendingGateReview: jest.fn(async () => undefined),
     advanceStep: jest.fn(async () => false),

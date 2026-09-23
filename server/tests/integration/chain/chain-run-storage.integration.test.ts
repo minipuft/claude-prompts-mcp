@@ -241,12 +241,7 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
     );
 
     // A PASS on the node's review deletes only that review, and the held run then completes.
-    const outcome = await reader.recordGateReviewOutcome(
-      'sess-dreview',
-      { verdict: 'PASS', rawVerdict: 'PASS' },
-      { nodeId: 'rev' }
-    );
-    expect(outcome).toBe('cleared');
+    await reader.clearPendingGateReview('sess-dreview', { nodeId: 'rev' });
     expect(reader.getPendingGateReview('sess-dreview', { nodeId: 'rev' })).toBeUndefined();
     expect(await reader.completeHeldRun('sess-dreview')).toBe(true);
     expect((reader.getSession('sess-dreview') as ChainSession).runStatus).toBe('completed');
@@ -362,17 +357,22 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
       await store.cleanup();
     });
 
-    test("the store keeps a review's phase in step with its attempts", async () => {
+    test('a counted verdict leaves the review it answered to the verdict path (row 3.4)', async () => {
       const store = newStore();
       await store.createSession('sess-rp', 'chain-rp#1', 3, {}, threeNodes());
       await store.setPendingGateReview('sess-rp', review('g', { nodeId: 'n1' }));
-      const fail = { verdict: 'FAIL' as const, rawVerdict: 'FAIL' };
-      await store.recordGateReviewOutcome('sess-rp', fail);
-      expect(store.getPendingGateReview('sess-rp')?.phase).toBe('awaiting-verdict');
-      await store.recordGateReviewOutcome('sess-rp', fail);
-      expect(store.getPendingGateReview('sess-rp')?.phase).toBe('exhausted');
-      await store.resetRetryCount('sess-rp');
-      expect(store.getPendingGateReview('sess-rp')?.phase).toBe('awaiting-verdict');
+      await store.recordGateReviewOutcome('sess-rp', { verdict: 'FAIL' });
+      await store.recordGateReviewOutcome('sess-rp', { verdict: 'PASS' });
+      const session = store.getSession('sess-rp') as ChainSession;
+      // Counted: two fired, one of them a FAIL.
+      expect([session.gatesFiredCount, session.gateRetriesCount]).toEqual([2, 1]);
+      // Untouched: no attempt spent, no history, still open — `advanceReview` owns all three.
+      const open = session.reviews?.['n1'];
+      expect([open?.attemptCount, open?.history, open?.phase]).toEqual([
+        0,
+        undefined,
+        'awaiting-verdict',
+      ]);
       await store.cleanup();
     });
 

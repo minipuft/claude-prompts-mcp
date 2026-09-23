@@ -44,7 +44,7 @@ const createLogger = (): Logger =>
 function createStore() {
   return {
     advanceStep: jest.fn(async () => ({ ordinal: 2, nodeId: 'node-2' })),
-    recordGateReviewOutcome: jest.fn(async () => 'cleared'),
+    recordGateReviewOutcome: jest.fn(async () => undefined),
     clearPendingGateReview: jest.fn(async () => undefined),
   } as unknown as ChainSessionService & Record<string, jest.Mock>;
 }

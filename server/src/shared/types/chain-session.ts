@@ -347,8 +347,8 @@ export interface ChainSession {
   unknownsLedger?: UnknownLedgerEntry[];
   /**
    * Cumulative count of gate verdict submissions this run, incremented in
-   * recordGateReviewOutcome. Distinct from `pendingGateReview.attemptCount`, which is
-   * destroyed whenever the pending review clears on PASS and so cannot answer
+   * recordGateReviewOutcome. Distinct from a review's `attemptCount`, which is
+   * destroyed whenever the review clears on PASS and so cannot answer
    * "how many across the whole run".
    */
   gatesFiredCount?: number;
@@ -489,10 +489,10 @@ export function attachReviewProjections<T extends ChainSession>(session: T): T {
 
 /**
  * The phase a review written in the pre-3.1 shape stands in: the `metadata.phase` a detached
- * review records (row 4.8), else `exhausted` once its attempts are spent (the comparison
- * `isRetryLimitExceeded` makes), else awaiting a verdict. PURE.
+ * review records (row 4.8), else `exhausted` once its attempts are spent, else awaiting a verdict.
+ * PURE.
  */
-export function deriveReviewPhase(review: PendingGateReview): GateReviewPhase {
+function deriveReviewPhase(review: PendingGateReview): GateReviewPhase {
   const recorded = review.metadata?.['phase'];
   if (
     recorded === 'awaiting-verdict' ||
@@ -558,11 +558,9 @@ export function stampLegacyReview(
   return { ...review, nodeId, kind, phase: deriveReviewPhase(review) };
 }
 
+/** What the run's gate counters read off a verdict. */
 export interface GateReviewOutcomeUpdate {
   verdict: 'PASS' | 'FAIL';
-  rationale?: string;
-  rawVerdict: string;
-  reviewer?: string;
 }
 
 export interface ChainSessionSummary {
@@ -658,13 +656,8 @@ export interface ChainSessionService {
   ): Promise<void>;
   getPendingShellVerification(sessionId: string): PendingShellVerificationSnapshot | undefined;
   clearPendingShellVerification(sessionId: string): Promise<void>;
-  isRetryLimitExceeded(sessionId: string, slot?: ReviewSlot): boolean;
-  resetRetryCount(sessionId: string, slot?: ReviewSlot): Promise<void>;
-  recordGateReviewOutcome(
-    sessionId: string,
-    outcome: GateReviewOutcomeUpdate,
-    slot?: ReviewSlot
-  ): Promise<'cleared' | 'pending'>;
+  /** Count one verdict in the run's gate counters; the review it answered is not touched. */
+  recordGateReviewOutcome(sessionId: string, outcome: GateReviewOutcomeUpdate): Promise<void>;
   clearSession(sessionId: string, scope?: StateStoreOptions): Promise<boolean>;
   clearSessionsForChain(chainId: string, scope?: StateStoreOptions): Promise<void>;
   listActiveSessions(limit?: number, scope?: StateStoreOptions): ChainSessionSummary[];
