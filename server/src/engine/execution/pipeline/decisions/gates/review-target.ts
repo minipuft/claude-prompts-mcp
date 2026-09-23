@@ -14,11 +14,11 @@
 import type { GateReview } from '#shared/types/chain-execution.js';
 
 /** The review a call addresses, or the named reason there is none. */
-export type ReviewTarget =
+type ReviewTarget =
   | { readonly kind: 'review'; readonly nodeId: string }
   | { readonly kind: 'refuse'; readonly reason: 'unknown-node' | 'no-review' };
 
-export interface ReviewTargetInput {
+interface ReviewTargetInput {
   /** The run's review store, `ChainSession.reviews`. */
   readonly reviews: Readonly<Record<string, GateReview>>;
   /** The node the run stands on; `null` once it walked past its last node. */

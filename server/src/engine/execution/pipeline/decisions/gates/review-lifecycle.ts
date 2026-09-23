@@ -33,14 +33,14 @@ export type ReviewEvent =
   | { readonly type: 'gate_action'; readonly action: GateAction; readonly at: number };
 
 /** Why an event was not applied. Nothing is charged or changed. */
-export type ReviewRefusal = 'phase' | 'failing-check';
+type ReviewRefusal = 'phase' | 'failing-check';
 
 /**
  * The review after an event, and what the event did. `review: null` means the review is over and
  * the caller deletes it; `attempt` is the counter after the event (for a verdict, the attempt it
  * charged — which a PASS spends too, though the review it charged is gone).
  */
-export type ReviewAdvance =
+type ReviewAdvance =
   | {
       readonly outcome: 'passed' | 'cleared' | 'aborted';
       readonly review: null;
