@@ -1,10 +1,10 @@
 // @lifecycle canonical - Processes gate verdicts, actions, and hook events for chain sessions.
+import { advanceReview } from '../../execution/pipeline/decisions/gates/review-lifecycle.js';
+import { resolveReviewTarget } from '../../execution/pipeline/decisions/gates/review-target.js';
 import {
   isUnknownInterruptPending,
   resolveEnforcementMode,
 } from '../../execution/pipeline/decisions/index.js';
-import { advanceReview } from '../../execution/pipeline/decisions/gates/review-lifecycle.js';
-import { resolveReviewTarget } from '../../execution/pipeline/decisions/gates/review-target.js';
 import { buildPipelineHookContext } from '../../execution/pipeline/hook-context.js';
 import { parseGateVerdict } from '../core/gate-verdict-contract.js';
 
@@ -18,12 +18,12 @@ import type {
   PipelineHookContext,
 } from '#shared/types/index.js';
 import type { ExecutionContext, SessionContext } from '../../execution/context/index.js';
+import type { ReviewEvent } from '../../execution/pipeline/decisions/gates/review-lifecycle.js';
 import type {
   EnforcementMode,
   GateAction,
   InterruptResolutionAction,
 } from '../../execution/pipeline/decisions/index.js';
-import type { ReviewEvent } from '../../execution/pipeline/decisions/gates/review-lifecycle.js';
 import type { ParsedGateVerdict } from '../core/gate-verdict-contract.js';
 
 /**

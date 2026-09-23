@@ -1,5 +1,6 @@
 // @lifecycle canonical - Single source of truth for gate enforcement decisions.
 
+import { resolveEnforcementMode } from './enforcement-mode.js';
 import {
   loadVerdictPatterns,
   isPatternRestrictedToSource,
@@ -8,7 +9,6 @@ import {
 import { DEFAULT_RETRY_LIMIT } from '../../../../gates/constants.js';
 import { deriveGateTier } from '../../../../gates/core/gate-tier.js';
 import { parseGateVerdictReminders } from '../../../../gates/core/gate-verdict-renderer.js';
-import { resolveEnforcementMode } from './enforcement-mode.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { GateReview, GateReviewKind } from '#shared/types/chain-execution.js';

@@ -1,4 +1,5 @@
 // @lifecycle canonical - Captures model responses and lifecycle decisions.
+import { addressedReview } from '../../../gates/services/gate-verdict-processor.js';
 import { UnknownObservationValidationError } from '../../capture/unknown-observation-processor.js';
 import {
   collectDetachedNodeFacts,
@@ -14,7 +15,6 @@ import {
   resolveHandoffEvidence,
   resolveHandoffEvidenceMode,
 } from '../../delegation/handoff-contract.js';
-import { addressedReview } from '../../../gates/services/gate-verdict-processor.js';
 import { buildStructuredVerdictTemplate } from '../../formatting/response-assembler.js';
 import {
   decideInterrupt,

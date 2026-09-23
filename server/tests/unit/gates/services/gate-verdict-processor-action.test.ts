@@ -23,11 +23,11 @@ const createStore = () =>
   ({
     setReview: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
     clearPendingGateReview: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    cancelChain: jest.fn<() => Promise<boolean>>().mockResolvedValue(true),
+    cancelChain: jest.fn<(sessionId: string) => Promise<boolean>>().mockResolvedValue(true),
   }) as unknown as ChainSessionService & {
     setReview: jest.Mock;
     clearPendingGateReview: jest.Mock;
-    cancelChain: jest.Mock;
+    cancelChain: jest.Mock<(sessionId: string) => Promise<boolean>>;
   };
 
 /** A run standing on `n1`, whose review of `n1` stands in `phase`. */
