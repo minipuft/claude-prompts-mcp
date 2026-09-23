@@ -4,7 +4,7 @@ date: 2026-09-23
 status: active
 tags: [gates, chains, execution, mcp-tools, scripts, tests, docs]
 ledger: plans/technical-debt/primitive-rework-2026-09-23-implementation-notes.md
-publish: pending (as of 2026-09-23 · flips when the owner rules on push+PR+merge for this plan's slices)
+publish: push+merge (2026-09-23 · owner ruling R2 · every slice of this plan, one PR per slice, on a green full suite and a clean merge state; breaking changes and force pushes still stop for the owner)
 ---
 
 # Primitive rework: review entity, one gate converter, contract binding
@@ -22,8 +22,8 @@ output live in the ledger.
 _Written 2026-09-23._ Plan authored from the `>>implementation_plan` chain (Steps 1–5 below).
 Nothing dispatched. Row 4.8 of the delegation plan (`feat/delegation-detached-mode` successor
 `feat/detached-review-at-report`, worker `dr`) is in flight and is the seed of Tier 3: Tier 3 does
-not start until it merges. Tiers 1 and 2 can start now, in parallel. Owner calls before the first
-dispatch: the `publish:` field, OQ1, OQ3, OQ4.
+not start until it merges. Tiers 1 and 2 can start now, in parallel. Owner rulings R2–R4 (2026-09-23)
+settled the `publish:` field, OQ1, OQ3 and OQ4; Tiers 1, 2 and row 4.1 are dispatched.
 
 ## Scope
 
