@@ -321,6 +321,10 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
       const reader = await coldLoad();
       const loaded = reader.getSession('sess-rv') as ChainSession;
       expect(loaded.reviews).toEqual(written.reviews);
+      // A loaded run carries the projections too: every `session.pendingGateReview` reader
+      // resumes a persisted run through them.
+      expect(loaded.pendingGateReview?.gateIds).toEqual(['slot-gate']);
+      expect(Object.keys(loaded.detachedGateReviews ?? {})).toEqual(['rev']);
       expect(reader.getPendingGateReview('sess-rv')?.gateIds).toEqual(['slot-gate']);
       expect(reader.getPendingGateReview('sess-rv', { nodeId: 'rev' })?.gateIds).toEqual([
         'node-gate',
