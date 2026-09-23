@@ -956,6 +956,34 @@ describe('detached delegation (await: run) through the pipeline', () => {
         expect(detachedReview(sessionId)?.retryHints).toEqual([]);
       });
 
+      test('a replacement still missing its sections is graded afresh and keeps the spent attempt', async () => {
+        const { pipeline, chainId, sessionId, brief } = await heldGraded([reminderGate('dr-gate')]);
+        await pipeline.execute({
+          chain_id: chainId,
+          user_response: runFakeWorker(brief, { body: ONE_LINE }),
+        } as any);
+        await pipeline.execute({
+          chain_id: chainId,
+          gate_verdict: FAIL,
+          user_response: TRAILER,
+        } as any);
+        const replaced = await pipeline.execute({
+          chain_id: chainId,
+          user_response: runFakeWorker(brief, { body: 'Still one line.' }),
+        } as any);
+        expect(text(replaced)).toContain('(attempt 2/2)');
+        expect(text(replaced)).toContain('missing required structure');
+        const review = detachedReview(sessionId);
+        expect(review).toMatchObject({
+          gateIds: ['dr-gate', PHASE_GUARD_GATE_ID],
+          attemptCount: 1,
+          phase: 'awaiting-verdict',
+        });
+        // One finding, the new one — the first grade's hints are not stacked under it.
+        expect(review?.retryHints).toHaveLength(2);
+        expect(review?.reviewedOutput).toContain('Still one line.');
+      });
+
       test('with no gate on the node, a one-line report opens a structural review that holds the run', async () => {
         const { pipeline, chainId, sessionId, brief } = await heldGraded([]);
         const landed = await pipeline.execute({
