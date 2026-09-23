@@ -447,7 +447,7 @@ Assertions (structural, deterministic) and LLM quality gates (subjective) check 
 
 **Composition contract**: When Stage 19 assertions pass and a pending LLM gate review exists, the assertion results are **merged into** the gate review prompt as pre-validated structural context. The LLM reviewer sees "Structure: PASS (N/N phases)" and focuses on content quality. The gate review is retained — not cleared.
 
-**Assertion failures**: When assertions fail, they create their own `PendingGateReview` with feedback. No merge occurs — the review IS the assertion feedback.
+**Assertion failures**: When assertions fail and a gate review is open for the graded step, the structural findings are **merged into** that review (R103): its `gateIds` gain `__phase_guard__`, the missing-section hints lead its `retryHints`, and everything the gate brought — its criteria (`prompts`), its `retry_config` (`maxAttempts`), the attempts already spent and its history — survives. It stays ONE review with ONE attempt counter, rendered as "Structural + Gate Review Required", and one `gate_verdict` answers both. Only when no gate review of that step is open do assertions create their own `PendingGateReview`, on the phase guard's own budget. `composeStructuralReview` (`execution/pipeline/decisions/gates/structural-review-composition.ts`) decides which: an unknown-interrupt hold, or a review opened for a different step, is never merged into.
 
 **Double-injection guard**: `metadata.assertionContext` is checked before injecting. If already present (e.g., retry cycle), the summary is not prepended again.
 
