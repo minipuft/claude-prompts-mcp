@@ -372,7 +372,18 @@ prompt_engine(
 Notes:
 
 - Verdicts are only read from `gate_verdict`; they are not parsed from `user_response`.
-- On PASS without an existing review, the chain continues; on FAIL, a review screen is created with context. Use `gate_action:"retry|skip|abort"` when retries are exhausted.
+- A verdict answers the review of one node. When `user_response` ends with a `HANDOFF RESULT`
+  trailer, the verdict goes to the review of the node its `node: <token>` line names, and is
+  refused by name when that node does not exist or has no open review. Without a trailer it
+  answers the review of the step the run stands on, or else the run's open review of a step it
+  already left (a structural review opened after the capture moved on). That review closes, and
+  the run stays on the step it moved to.
+- On PASS without an existing review, the chain continues; on FAIL, a review screen is created
+  with context.
+- The FAIL that spends a review's last attempt answers with a "Retry Limit Reached" block
+  offering `gate_action`. The review is then exhausted: a further `gate_verdict` is refused and
+  records nothing. `gate_action:"retry"` resets the counter and reopens the review;
+  `gate_action:"skip"` closes it without a verdict; `gate_action:"abort"` stops the run.
 
 ````
 

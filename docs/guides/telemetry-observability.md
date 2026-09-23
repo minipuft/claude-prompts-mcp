@@ -106,6 +106,7 @@ fails the build if any registerable event loses its producer again.
 > answered was still uncaptured), so a client that tore its handler down on `chain/complete`
 > missed the final step event. The same holds for an advisory or informational FAIL, which also
 > walks the run forward.
+> It is the last notification of a run and follows the final verdict: completion is decided once per call, after grading, so a call that sends an answer back for review never carries it.
 
 ### Attributes
 

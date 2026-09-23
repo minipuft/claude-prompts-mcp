@@ -188,7 +188,7 @@ try {
 
   // ---- D-9: handoff × the blocking-unknown PAUSE -------------------------------------------
   // The claimer of a run that is HOLDING must receive the hold, not the next step. Expected free
-  // (the synthetic review is an ordinary `pendingGateReview`, and stage 13 surfaces one on
+  // (the synthetic review is an ordinary review in `ChainSession.reviews`, and stage 13 surfaces one on
   // resume) — which is exactly why the plan says "proven by a test, not assumed": "expected free"
   // is a prediction about a code path nobody has driven.
   const paused = await a.call({

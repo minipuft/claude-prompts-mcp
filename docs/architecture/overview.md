@@ -445,13 +445,66 @@ Assertions (structural, deterministic) and LLM quality gates (subjective) check 
 | Shell verification (`:: verify:`)            | 08b   | Command output — does shell command pass?                      | Deterministic |
 | LLM quality gates                            | 08    | Content quality — depth of analysis, actionability?            | Subjective    |
 
-**Composition contract**: When Stage 19 assertions pass and a pending LLM gate review exists, the assertion results are **merged into** the gate review prompt as pre-validated structural context. The LLM reviewer sees "Structure: PASS (N/N phases)" and focuses on content quality. The gate review is retained — not cleared.
+**The review entity**: a gate review is a record of one node's output. `GateReview`
+(`shared/types/chain-execution.ts`) carries `nodeId` (the node whose answer it grades), `kind`
+(`gate` for a step's gates, `structural` for a failed phase guard, `detached` for a detached
+node's late report) and `phase` (`awaiting-verdict`, `awaiting-replacement` or `exhausted`), plus
+its gates, prompts, attempt counter and history. Every open review of a run lives in
+`ChainSession.reviews`, keyed by that node id; there is no second slot. The graded node is not
+always the one the run stands on: a structural review grades the step a capture just walked
+past, a detached node's review opens on its late report, and a final-step review outlives the
+walk past the last node. The store keeps at most one non-detached review per run, beside any
+number of detached ones.
 
-**Assertion failures**: When assertions fail and a gate review is open for the graded step, the structural findings are **merged into** that review (R103): its `gateIds` gain `__phase_guard__`, the missing-section hints lead its `retryHints`, and everything the gate brought — its criteria (`prompts`), its `retry_config` (`maxAttempts`), the attempts already spent and its history — survives. It stays ONE review with ONE attempt counter, rendered as "Structural + Gate Review Required", and one `gate_verdict` answers both. Only when no gate review of that step is open do assertions create their own `PendingGateReview`, on the phase guard's own budget. `composeStructuralReview` (`execution/pipeline/decisions/gates/structural-review-composition.ts`) decides which: an unknown-interrupt hold, or a review opened for a different step, is never merged into.
+- **One creation path**: `GateEnforcementAuthority.createReview(sessionId, kind, nodeId, …)`
+  (`execution/pipeline/decisions/gates/`). The step review at render, a detached node's review
+  at its report, and the review a verdict opens when none was open all go through it, and the key
+  is always the node, never the run's position.
+- **One answering path**: `GateVerdictProcessor.answerReview` handles every verdict, replacement
+  report and `gate_action`. It asks `resolveReviewTarget` which review the call addresses (the
+  node a `HANDOFF RESULT` trailer names, else the current node's review, else the run's one
+  non-detached review), applies the event with `advanceReview`, and persists what it returns.
+- **One transition table**: `advanceReview` (`decisions/gates/review-lifecycle.ts`) is pure and
+  owns the attempt counter. `awaiting-verdict` accepts a verdict; `awaiting-replacement` (detached
+  only) accepts a replacement report; `exhausted` accepts only `gate_action` retry, skip or abort
+  (a detached review refuses abort). A blocking FAIL charges one attempt and lands on `exhausted`
+  when the budget is spent; an advisory or informational FAIL charges it and clears the review. A
+  PASS over a failing `shell_verify` / `script_tool` result is refused, and a refusal charges
+  nothing.
+- **One completion point**: stage 20 asks `completeHeldRun` on every chain call that reaches it,
+  after every review the call can open exists. A run past its last node completes only when no
+  node holds it open (`nodesHoldingRunOpen`: an unreported detached node, or any open review), so
+  `chain/complete` follows the final verdict. A late-report call ends at stage 16, which asks the
+  same method.
 
-**Double-injection guard**: `metadata.assertionContext` is checked before injecting. If already present (e.g., retry cycle), the summary is not prepended again.
+**Composition contract**: When Stage 19 assertions pass and a pending LLM gate review exists, the
+assertion results are **merged into** the gate review prompt as pre-validated structural context.
+The LLM reviewer sees "Structure: PASS (N/N phases)" and focuses on content quality. The gate
+review is retained, not cleared.
 
-**Authority model**: `sessionContext.pendingReview` is a fast-path signal (present = render review screen). Stage 10 always re-fetches from `chainSessionStore.getPendingGateReview()` before rendering, making the manager the authoritative source.
+**Assertion failures**: When assertions fail and the graded node has an open gate review, the
+structural findings are **merged into** that review (R103): its `gateIds` gain
+`__phase_guard__`, the missing-section hints lead its `retryHints`, and everything the gate
+brought (its criteria, its `retry_config` budget, the attempts already spent and its history)
+survives. It stays ONE review with ONE attempt counter, rendered as "Structural + Gate Review
+Required", and one `gate_verdict` answers both. When the graded node has no gate review open, the
+assertions open a `structural` review of their own, on the phase guard's budget.
+`composeStructuralReview` (`execution/pipeline/decisions/gates/structural-review-composition.ts`)
+decides which: an unknown-interrupt hold, or a review of a different node, is never merged into.
+
+**A detached node's late report** is graded the same way, against the recorded output rather
+than the text of the call. Stage 16 lands the report and calls stage 19's `gradeLateReport`,
+which checks the headers the detached node declared. A failing grade is composed onto that
+node's review (one review naming the gates and the missing sections), or opens a detached
+structural review when no gate applies. A replacement report is graded afresh and keeps the
+attempts already spent.
+
+**Double-injection guard**: `metadata.assertionContext` is checked before injecting. If already
+present (e.g., retry cycle), the summary is not prepended again.
+
+**Authority model**: `sessionContext.pendingReview` is a fast-path signal (present = render the
+review screen). Stage 20 re-reads the review from the chain session store before rendering, so
+the record in `ChainSession.reviews` is the authoritative source.
 
 **Escalation source tracking**: When retry limits are exceeded, `context.state.gates.escalationSource` indicates whether the escalation originated from `'gate-review'` (Stage 08) or `'shell-verify'` (Stage 08b). Both stages write to the shared `retryLimitExceeded` / `awaitingUserChoice` flags sequentially.
 
