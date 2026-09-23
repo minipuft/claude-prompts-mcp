@@ -878,8 +878,8 @@ scenarios:
   # ── P4.11 read-back: severity/enforcement_mode (gate), 11 framework advanced fields ────────
   #
   # Closes the two `validate-conformance-coverage.js` exceptions that named this row. Each value
-  # set below is NON-DEFAULT (`GenericGateGuide`'s loader default is `severity: 'medium'`,
-  # `enforcementMode` derived from severity when absent) so a create that silently wrote loader
+  # set below is NON-DEFAULT (the loader default is `severity: 'medium'`, and an absent
+  # `enforcementMode` stays absent) so a create that silently wrote loader
   # defaults instead of the caller's value would not satisfy the assertion — the exception's own
   # "equally true of a create that wrote loader defaults" gap this closes.
   - id: gate-create-then-inspect-reads-back-severity

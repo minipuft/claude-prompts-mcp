@@ -1,14 +1,37 @@
-// @lifecycle canonical - Sole owner of the gate enforcement-mode default.
+// @lifecycle canonical - Sole owner of the gate enforcement-mode decision.
 
-import type { EnforcementMode } from './gate-enforcement-types.js';
+import type { EnforcementMode, GateSetEnforcement } from './gate-enforcement-types.js';
+
+const STRICTNESS: Readonly<Record<EnforcementMode, number>> = {
+  informational: 0,
+  advisory: 1,
+  blocking: 2,
+};
+
+/** The strictest of `modes`; `blocking` for an empty list — nothing relaxed it. */
+function strictest(modes: readonly EnforcementMode[]): EnforcementMode {
+  return (
+    modes.reduce<EnforcementMode | undefined>(
+      (acc, mode) => (acc === undefined || STRICTNESS[mode] > STRICTNESS[acc] ? mode : acc),
+      undefined
+    ) ?? 'blocking'
+  );
+}
 
 /**
- * Resolve the enforcement mode for a set of gates.
+ * Resolve the enforcement mode that decides what a FAIL does.
  *
- * A gate configuration may leave the mode unset — either because the prompt did not
- * declare one or because no enhancement stage reached the point of assigning one. In
- * that case gates enforce rather than advise: an unstated mode means "not yet relaxed",
- * not "relax". Callers that want advisory behaviour must say so.
+ * In order (P4.137, owner rulings R102 and R107):
+ *
+ * 1. **The gates that FAILED**, when the verdict named them per gate and the step's gate set is
+ *    known. Only those gates decide: all advisory or informational → the run advances; any
+ *    blocking → it holds. A failed gate that declares nothing, or that is not in the step's set,
+ *    counts as `gateSet.undeclared` — never as advisory.
+ * 2. **The configured mode** — what stage 11 published for the step from the same gate set.
+ * 3. **The strictest gate on the step**, when only the gate set is known. This is also what a
+ *    verdict with no per-gate results (an overall-only object, the legacy string) gets, since
+ *    it has no failing-gate set.
+ * 4. **`blocking`**: an unstated mode means "not yet relaxed", not "relax".
  *
  * This is a pure function rather than a method on `GateEnforcementAuthority` because the
  * authority is optional on `ExecutionContext`. Reaching it through `context.gateEnforcement?.`
@@ -16,8 +39,22 @@ import type { EnforcementMode } from './gate-enforcement-types.js';
  * dependency into a changed enforcement decision.
  *
  * @param configuredMode - Mode from pipeline gate state, or undefined when unset
- * @returns The configured mode, or 'blocking' when none was configured
+ * @param gateSet - The step's applying gates and their declared modes, when known
+ * @param failedGateIds - Gates the verdict failed by name; empty when it named none
  */
-export function resolveEnforcementMode(configuredMode?: EnforcementMode): EnforcementMode {
-  return configuredMode ?? 'blocking';
+export function resolveEnforcementMode(
+  configuredMode?: EnforcementMode,
+  gateSet?: GateSetEnforcement,
+  failedGateIds: readonly string[] = []
+): EnforcementMode {
+  if (gateSet === undefined) {
+    return configuredMode ?? 'blocking';
+  }
+  const modeOf = (gateId: string): EnforcementMode =>
+    gateSet.declared.get(gateId) ?? gateSet.undeclared;
+
+  if (failedGateIds.length > 0) {
+    return strictest(failedGateIds.map(modeOf));
+  }
+  return configuredMode ?? strictest([...gateSet.declared.keys()].map(modeOf));
 }

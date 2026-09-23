@@ -353,7 +353,7 @@ export const GateDefinitionSchema = z
     // Optional severity and enforcement
     /** Severity level for prioritization */
     severity: z.enum(['critical', 'high', 'medium', 'low']).default('medium'),
-    /** Enforcement mode override (defaults to severity-based mapping) */
+    /** What a FAIL does. Absent means undeclared — `resolveEnforcementMode` decides (P4.137). */
     enforcementMode: z.enum(['blocking', 'advisory', 'informational']).optional(),
     /**
      * Gate type classification for dynamic identification.

@@ -8,6 +8,7 @@ import type {
 } from '#shared/types/index.js';
 import type { PendingShellVerification, ShellVerifyResult } from '../../gates/shell/index.js';
 import type { GateEnforcementMode } from '../../gates/types.js';
+import type { GateSetEnforcement } from '../pipeline/decisions/gates/index.js';
 import type { InjectionState } from '../pipeline/decisions/injection/index.js';
 import type { ChainInterrupt } from '../pipeline/decisions/mutation/index.js';
 
@@ -182,6 +183,12 @@ export interface PipelineInternalState {
     advisoryWarnings: string[];
     /** Resolved enforcement mode for the current gate set (most restrictive wins) */
     enforcementMode?: GateEnforcementMode;
+    /**
+     * The step's applying gates and the mode each declares (P4.137). Writer: stage 11
+     * (`GateEnhancementService`). Reader: `resolveEnforcementMode` only, via the verdict
+     * processor, which adds the gates a verdict failed by name (R107).
+     */
+    stepEnforcement?: GateSetEnforcement;
     /** Whether user choice is being awaited after retry exhaustion */
     awaitingUserChoice?: boolean;
     /** Which subsystem triggered the escalation (retry exhaustion). */

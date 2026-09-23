@@ -161,9 +161,14 @@ const JSONC_PARSER_ESM_ENTRY = resolveEsmEntry("jsonc-parser", SERVER_ROOT);
  * by a margin that the next merge consumed. 1,000,000 leaves 97,037 B.
  *
  * BUNDLE_BUDGET_BYTES (shipped, minified) is untouched for the fifth time.
+ *
+ * Raised to 1,100,000 on 2026-09-22 (row P4.162, owner ruling R105). Measured at `c3c49eab`
+ * before the change: 998,494 B, leaving 1,506 B — less than one gate-schema edit, and the next
+ * slices all touch schemas this bundle reaches. The step is 100,000 for the same reason as the
+ * last one. BUNDLE_BUDGET_BYTES (shipped, minified) is untouched for the sixth time.
  */
 export const BUNDLE_BUDGET_BYTES = 512_000; // 500KB — shipped (minified)
-export const DEV_BUNDLE_BUDGET_BYTES = 1_000_000; // 977KB — unminified dev build
+export const DEV_BUNDLE_BUDGET_BYTES = 1_100_000; // ~1074KB — unminified dev build
 
 /** Absolute path to the server source tree the CLI shares code with. */
 const SERVER_SRC = join(SERVER_ROOT, "src");

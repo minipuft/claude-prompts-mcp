@@ -558,9 +558,19 @@ export class GateVerdictProcessor {
       delete sessionContext.pendingReview;
     }
 
-    const enforcementMode = resolveEnforcementMode(context.state.gates.enforcementMode);
-
     if (verdictPayload.verdict !== 'FAIL') return undefined;
+
+    // R107: when the verdict failed gates BY NAME, only those gates decide. Read from the
+    // per-gate entries `recordPerGateVerdicts` wrote for this submission; an overall-only or
+    // legacy-string verdict wrote none, and the owner falls back to the step's strictest gate.
+    const failedGateIds = (context.state.gates.perGateVerdicts ?? [])
+      .filter((entry) => entry.verdict === 'FAIL')
+      .map((entry) => entry.gateId);
+    const enforcementMode = resolveEnforcementMode(
+      context.state.gates.enforcementMode,
+      context.state.gates.stepEnforcement,
+      failedGateIds
+    );
 
     switch (enforcementMode) {
       case 'blocking':
@@ -573,7 +583,7 @@ export class GateVerdictProcessor {
           session,
           sessionId,
           sessionContext,
-          capturedGateIds,
+          failedGateIds.length > 0 ? failedGateIds : capturedGateIds,
           verdictPayload
         );
 

@@ -1174,7 +1174,7 @@ re-send them with `edges:` on an `update`.
 | `type`                   | `validation` (pass/fail) or `guidance` (advisory)                              |
 | `gate_type`              | `framework` \| `category` \| `custom`. Default `custom`                        |
 | `severity`               | `critical` \| `high` \| `medium` \| `low`. Default `medium`                    |
-| `enforcement_mode`       | `blocking` \| `advisory` \| `informational`. Absent, derived from `severity`   |
+| `enforcement_mode`       | `blocking` \| `advisory` \| `informational`: what a FAIL does. Absent: holds   |
 | `block_response_on_fail` | `true` withholds the step output on a FAIL and returns the gate review instead |
 | `evaluation`             | `{mode, model?, strict?}`: who reviews the gate, `self` or `judge`             |
 | `guidance`               | Gate criteria content                                                          |

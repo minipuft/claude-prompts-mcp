@@ -7,6 +7,7 @@ export type {
   ActionResult,
   CreateReviewOptions,
   EnforcementMode,
+  GateSetEnforcement,
   GateAction,
   ParsedVerdict,
   PendingGateReview,
