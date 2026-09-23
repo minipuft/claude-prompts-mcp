@@ -193,6 +193,61 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
     await reader.cleanup();
   });
 
+  test("a detached node's gate review is keyed by node beside the current-step slot, survives a cold load, and holds the run (row 4.8)", async () => {
+    const review = (gateId: string) =>
+      ({
+        combinedPrompt: '',
+        gateIds: [gateId],
+        prompts: [],
+        createdAt: 1,
+        attemptCount: 0,
+        maxAttempts: 2,
+      }) as never;
+    const writer = newStore();
+    await writer.createSession('sess-dreview', 'chain-dreview#1', 2, {}, {
+      nodes: nodes(['n1', 'prompt-a', 'Gather'], ['rev', 'prompt-b', 'Review']),
+    } as never);
+    await writer.completeStep('sess-dreview', 'n1');
+    await writer.advanceStep('sess-dreview', 'n1');
+    await writer.markNodeSpawned('sess-dreview', 'rev');
+    // The parent moves past the detached node (placeholder), then its late result lands.
+    await writer.updateSessionState('sess-dreview', 'rev', 'placeholder', { isPlaceholder: true });
+    await writer.completeStep('sess-dreview', 'rev', { preservePlaceholder: true });
+    await writer.advanceStep('sess-dreview', 'rev');
+    await writer.updateSessionState('sess-dreview', 'rev', 'late result', { isPlaceholder: false });
+    await writer.completeStep('sess-dreview', 'rev');
+    // Two reviews at once: the current-step slot and the detached node's, each found by its key.
+    await writer.setPendingGateReview('sess-dreview', review('slot-gate'));
+    await writer.setPendingGateReview('sess-dreview', review('node-gate'), { nodeId: 'rev' });
+    await writer.clearPendingGateReview('sess-dreview');
+    await (writer as unknown as { persistSessions: () => Promise<void> }).persistSessions();
+    await writer.cleanup();
+
+    const reader = newStore();
+    await (reader as unknown as { initPromise: Promise<void> }).initPromise;
+    expect(reader.getPendingGateReview('sess-dreview')).toBeUndefined();
+    expect(reader.getPendingGateReview('sess-dreview', { nodeId: 'rev' })?.gateIds).toEqual([
+      'node-gate',
+    ]);
+    // Reported, nothing owed — and still held: the open review is what holds it.
+    expect(await reader.completeHeldRun('sess-dreview')).toBe(false);
+    expect((reader.getSession('sess-dreview') as ChainSession).runStatus ?? 'working').toBe(
+      'working'
+    );
+
+    // A PASS on the node's review deletes only that review, and the held run then completes.
+    const outcome = await reader.recordGateReviewOutcome(
+      'sess-dreview',
+      { verdict: 'PASS', rawVerdict: 'PASS' },
+      { nodeId: 'rev' }
+    );
+    expect(outcome).toBe('cleared');
+    expect(reader.getPendingGateReview('sess-dreview', { nodeId: 'rev' })).toBeUndefined();
+    expect(await reader.completeHeldRun('sess-dreview')).toBe(true);
+    expect((reader.getSession('sess-dreview') as ChainSession).runStatus).toBe('completed');
+    await reader.cleanup();
+  });
+
   test('node rows carry position, prompt and milestone per node, in run order', async () => {
     const store = newStore();
     await store.createSession('sess-rows', 'chain-rows#1', 2, {}, {
