@@ -22,22 +22,31 @@ lifecycle it can actually reach.
 
 ## Now
 
-_Rewritten 2026-09-22 (evening)._ The 2026-09-21 dispatch is fully landed: #354 `deb51bb4`, #355
-`e18346dc`, #356 `a6efc8f3`, #357 `f579625f`, #358 `378dcba4`, #359 `2aa26993` (identity headers
-never reached HTTP state since 4.0.0), #360 `d20280c1` (framework system prompt has one source),
-#361 `1ff3d9e0` (`evaluation` parameter, R90). Tier 4 of the delegation plan landed as #362
-`3ff285d6` under that plan's own ruling; its owner drive is that plan's row 4.7. Every row of that
-dispatch carries its receipt below. No slice is dispatched.
+_Rewritten 2026-09-22 (night)._ Two dispatches landed today. The 2026-09-21 batch (#354–#361) and
+Tier 4 (#362) in the afternoon; the evening batch, ruled "dispatch now" under R71, in six slices:
+#364 `0753f1c3` (a judge-routed review hands the client its judge prompt — true cause: the live
+gate provider dropped `evaluation`), #365 `5f122f39` (a chain whose first step is delegated
+starts), #366 `a018958f` (BREAKING: `include_history` removed; every `system_control` parameter is
+one its handler reads; `ContentAnalyzer` deleted), #367 `6f6c6288` (every strict nested object
+replies by path and nearest key; per-action ownership from the contract; stale-`dist` check on
+schema capture), #368 `eb0f4600` (a workspace header is served as its own tenant, R94), #369
+(a gate review's record and reply say what happened, R96 — at the PR boundary). Rulings R93–R101
+below. No slice is dispatched.
 
-- **Open, not started:** P4.115–P4.120, P4.124, P4.126–P4.136. P4.133 is ruled (R92: render the
-  judge prompt); P4.134–P4.136 are the class rows the `evaluation` slice found.
-  **Owner's, outside the repo:** the `~/.claude` rename (P5.12 second half), P5.16, then P5.13.
-- **Owner calls open:** P4.128 (remove `include_history` from the tool surface, or leave an
-  empty list); P4.129–P4.131 are the next layer of header scoping and change what a header
-  client sees — one ruling on whether a header workspace is a full tenant decides all three.
-  The delegation plan's OQ5 (refuse `await: run` on a step with a blocking gate at load) is the
-  same interview.
-- **Dev `cpm` bundle:** about 11 KB of the 1,000,000 budget is left.
+- **Open, not started:** P4.137–P4.161, all opened from this batch's handoff findings, each
+  stamped with the observation that flips it. P4.115–P4.119 close with #369's receipt.
+  **Owner's, outside the repo:** the `~/.claude` rename (P5.12 second half), P5.16, then P5.13;
+  the delegation plan's row 4.7 (a live Claude Code drive of one detached chain).
+- **Owner calls open (next interview):** P4.137 — a gate's `enforcement_mode` is written and
+  never read: wire it or delete the parameter (breaking); P4.156 — a phase-guard failure on a
+  gated step replaces the gate's review; the delegation plan's row 4.8 under R8 — the session
+  holds one pending-review slot, so reviewing a late report needs a slot policy (four questions in
+  that plan's deviation 34); the dev `cpm` bundle stands at 998,494 of 1,000,000 bytes — the next
+  growth needs a budget ruling.
+- **Measured this batch:** a ruling whose predicate names a field must first show the runtime
+  reads it (R7 → R8); a branch goes DIRTY on CHANGELOG after every sibling merge; a merge that
+  lowers a ratchet baseline exposes slack the branch had been living on (two lint findings after
+  merges, both fixed by decomposition).
 
 ## What already landed (do not redo)
 
