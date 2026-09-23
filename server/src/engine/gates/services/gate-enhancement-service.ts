@@ -1,5 +1,6 @@
 // @lifecycle canonical - Core gate enhancement logic for prompt enrichment.
 import { DEFAULT_FRAMEWORK_GATE_ID, GateSetResolver } from './gate-set-resolver.js';
+import { resolveEnforcementMode } from '../../execution/pipeline/decisions/index.js';
 import { isFrameworkInjected } from '../../execution/pipeline/decisions/injection/index.js';
 import { resolveDeclaredArtifacts } from '../utils/artifact-kinds.js';
 
@@ -297,9 +298,7 @@ export class GateEnhancementService {
       const isSinglePrompt = !context.parsedCommand?.steps?.length;
       context.state.gates.hasBlockingGates = !isSinglePrompt && gateIds.length > 0;
 
-      if (!context.state.gates.enforcementMode && gateIds.length > 0) {
-        context.state.gates.enforcementMode = isSinglePrompt ? 'advisory' : 'blocking';
-      }
+      await this.publishEnforcementMode(context, gateIds, isSinglePrompt ? 'advisory' : 'blocking');
     } catch (error) {
       this.logger.warn('[GateEnhancementService] Gate enhancement failed', { error });
     }
@@ -346,6 +345,38 @@ export class GateEnhancementService {
     }
 
     this.publishChainGateState(context, runStepView, totalGatesApplied);
+    // The mode is the STEP's, not the run's: `reviewGateIds` is what this step is reviewed
+    // against, while the accumulator also holds every gate an earlier step picked up.
+    await this.publishEnforcementMode(
+      context,
+      context.state.gates.reviewGateIds ?? context.state.gates.accumulatedGateIds ?? [],
+      'blocking'
+    );
+  }
+
+  /**
+   * Publish the enforcement mode the applying gates declare (P4.137).
+   *
+   * Each gate's `enforcementMode` is read from its definition and handed to the owner,
+   * `resolveEnforcementMode`, which picks the strictest; a gate declaring none counts as
+   * `undeclared`. Before this, the declared value was loaded and never read, so an advisory
+   * gate's FAIL held the run exactly as a blocking one did. Unset when no gate applies.
+   */
+  private async publishEnforcementMode(
+    context: ExecutionContext,
+    gateIds: readonly string[],
+    undeclared: 'advisory' | 'blocking'
+  ): Promise<void> {
+    if (context.state.gates.enforcementMode !== undefined || gateIds.length === 0) {
+      return;
+    }
+    const loader = this.gateLoader;
+    const gates =
+      loader === undefined ? [] : await Promise.all(gateIds.map((id) => loader.loadGate(id)));
+    context.state.gates.enforcementMode = resolveEnforcementMode(undefined, {
+      declared: gateIds.map((_, index) => gates[index]?.enforcementMode),
+      undeclared,
+    });
   }
 
   /**
@@ -527,10 +558,6 @@ export class GateEnhancementService {
     }
 
     context.state.gates.hasBlockingGates = totalGatesApplied > 0;
-
-    if (!context.state.gates.enforcementMode && allGateIds.length > 0) {
-      context.state.gates.enforcementMode = 'blocking';
-    }
   }
 
   /**

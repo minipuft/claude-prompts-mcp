@@ -13,12 +13,6 @@ import { createGenericGateGuide } from '../registry/generic-gate-guide.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { GateRegistry } from '../registry/gate-registry.js';
-import type {
-  GateActivationRules,
-  LoadedGateDefinition,
-  GatePassCriteria,
-  GateRetryConfig,
-} from '../types.js';
 
 /**
  * File change operation types for hot reload events
@@ -235,85 +229,12 @@ export class GateHotReloadCoordinator {
         this.logger.debug(`Reloaded definition for gate: ${definition.name}`);
       }
 
-      // Step 3: Create new guide from definition
-      const normalizedDefinition: LoadedGateDefinition = {
-        id: definition.id,
-        name: definition.name,
-        type: definition.type,
-        description: definition.description,
-        severity: definition.severity,
-        enforcementMode: definition.enforcementMode ?? 'informational',
-        gate_type: definition.gate_type,
-      };
-
-      if (definition.guidanceFile) {
-        normalizedDefinition.guidanceFile = definition.guidanceFile;
-      }
-      if (definition.guidance) {
-        normalizedDefinition.guidance = definition.guidance;
-      }
-      if (definition.subject) {
-        normalizedDefinition.subject = definition.subject;
-      }
-      if (definition.pass_criteria) {
-        normalizedDefinition.pass_criteria = definition.pass_criteria.map((criteria) => {
-          const normalizedCriteria: GatePassCriteria = {
-            type: criteria.type,
-          };
-
-          // min_length/max_length/required_patterns/forbidden_patterns/regex_patterns/
-          // keyword_count are deliberately not copied — they were never evaluated (B9) and
-          // are rejected at load, so GatePassCriteria no longer declares them.
-          if (criteria.framework) {
-            normalizedCriteria.framework = criteria.framework;
-          }
-          if (criteria.min_compliance_score !== undefined) {
-            normalizedCriteria.min_compliance_score = criteria.min_compliance_score;
-          }
-          if (criteria.severity) {
-            normalizedCriteria.severity = criteria.severity;
-          }
-          if (criteria.quality_indicators) {
-            const qualityIndicators: Record<string, { keywords?: string[]; patterns?: string[] }> =
-              {};
-            for (const [indicator, value] of Object.entries(criteria.quality_indicators)) {
-              const normalizedIndicator: { keywords?: string[]; patterns?: string[] } = {};
-              if (value.keywords) {
-                normalizedIndicator.keywords = value.keywords;
-              }
-              if (value.patterns) {
-                normalizedIndicator.patterns = value.patterns;
-              }
-              qualityIndicators[indicator] = normalizedIndicator;
-            }
-            normalizedCriteria.quality_indicators = qualityIndicators;
-          }
-
-          return normalizedCriteria;
-        });
-      }
-      if (definition.retry_config) {
-        const retryConfig: GateRetryConfig = {
-          max_attempts: definition.retry_config.max_attempts ?? 2,
-          improvement_hints: definition.retry_config.improvement_hints ?? true,
-          preserve_context: definition.retry_config.preserve_context ?? true,
-        };
-        normalizedDefinition.retry_config = retryConfig;
-      }
-      if (definition.activation) {
-        const activation: GateActivationRules = {};
-        if (definition.activation.prompt_categories) {
-          activation.prompt_categories = definition.activation.prompt_categories;
-        }
-        if (definition.activation.explicit_request !== undefined) {
-          activation.explicit_request = definition.activation.explicit_request;
-        }
-        if (definition.activation.framework_context) {
-          activation.framework_context = definition.activation.framework_context;
-        }
-        normalizedDefinition.activation = activation;
-      }
-      const guide = createGenericGateGuide(normalizedDefinition);
+      // Step 3: Create new guide from the definition AS LOADED — the same call the registry's
+      // startup load and `reloadGuide` make. This used to rebuild the definition field by field,
+      // and every key it did not copy (`evaluation`, `blockResponseOnFail`, `sourceRoot`, ...)
+      // vanished the first time the file changed on disk, while an undeclared `enforcementMode`
+      // was invented as 'informational' (P4.137).
+      const guide = createGenericGateGuide(definition);
 
       // Step 4: Re-register with registry (replace existing)
       const success = await this.registry.registerGuide(guide, true, 'yaml-runtime');
