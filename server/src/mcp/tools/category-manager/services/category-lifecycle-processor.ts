@@ -286,18 +286,11 @@ export class CategoryLifecycleProcessor {
   }
 
   async handleReload(args: CategoryManagerInput): Promise<ToolResponse> {
-    const { id, reason } = args;
+    const { reason } = args;
 
-    // Refused rather than ignored. There is no per-category registry entry to reload — the whole
-    // `Category[]` is rebuilt by one walk of the prompt roots — so an id here changes nothing, and
-    // accepting it answered a targeted reload that never happened. `common:reload` declares `id`
-    // for every type because the other three read it; this is the one that cannot.
-    if (id !== undefined && id !== '') {
-      return this.error(
-        `Category reload takes no 'id': categories are rebuilt by the same walk that loads ` +
-          `prompts, so a reload always covers every category. Re-send without 'id'.`
-      );
-    }
+    // Deliberately NOT gated on an id. There is no per-category registry entry to reload — the
+    // whole `Category[]` is rebuilt by one walk of the prompt roots — so an id here would be a
+    // parameter that changes nothing, which reads as a targeted reload that happened.
     if (this.ctx.onRefresh === undefined) {
       return this.error(
         'Category reload is unavailable: this handler was constructed without a refresh callback.'
@@ -310,7 +303,7 @@ export class CategoryLifecycleProcessor {
     return this.success(
       `🔄 Prompt data reloaded${reasonText}\n\n` +
         `Categories are rebuilt by the same walk that loads prompts, so this reloads every ` +
-        `category rather than one.`
+        `category rather than one. An \`id\` is not read here.`
     );
   }
 
