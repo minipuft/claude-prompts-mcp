@@ -441,7 +441,7 @@ export function currentStepReview(
 }
 
 /** The detached reviews of `reviews`, keyed by node. PURE. */
-export function detachedReviewsOf(
+function detachedReviewsOf(
   reviews: Readonly<Record<string, GateReview>> | undefined
 ): Record<string, GateReview> {
   return Object.fromEntries(
@@ -509,7 +509,7 @@ export function deriveReviewPhase(review: PendingGateReview): GateReviewPhase {
  * metadata records (the phase guard's graded step), else the node the run stands on, else the
  * node it last left (a final-step review, after the walk past the last node). PURE.
  */
-export function resolveReviewedNodeId(
+function resolveReviewedNodeId(
   review: PendingGateReview,
   run: {
     readonly state: { readonly currentNodeId: string | null };
