@@ -119,7 +119,7 @@ describe('a gate declared enforcementMode reaches the resolver unchanged (P4.137
         expect(provided?.enforcementMode).toBe(mode);
         expect(
           resolveEnforcementMode(undefined, {
-            declared: [provided?.enforcementMode],
+            declared: new Map([[id, provided?.enforcementMode]]),
             undeclared: 'blocking',
           })
         ).toBe(mode ?? 'blocking');

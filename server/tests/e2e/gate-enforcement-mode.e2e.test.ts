@@ -7,11 +7,15 @@
  * MEASURED on `c3c49eab` (2026-09-22) with this fixture: all three held on the FAIL. The declared
  * mode was written to `gate.yaml` and read back by `inspect`, and the pipeline never read it.
  *
- * The step prompts opt out of the default reminder and framework gates (`gate_configuration`).
- * That is the prompt author's own switch, not a config change, and it is what the twins need:
- * those default gates declare no mode, a gate declaring none counts as blocking on a chain step,
- * and the strictest applying gate decides — so an advisory gate sharing a step with them holds.
- * The last case pins that composition rather than hiding it.
+ * The first case's step prompts opt out of the default reminder and framework gates
+ * (`gate_configuration`), so step A carries exactly one gate, and its FAIL is overall-only: with
+ * no per-gate results, the step's strictest gate decides.
+ *
+ * The second case keeps the defaults. Step A then also carries `content-structure`, which
+ * declares no mode and so counts as blocking. Owner ruling R107: a verdict that fails gates BY
+ * NAME is decided by those gates only, so failing the advisory gate alone advances, failing
+ * `content-structure` holds, and a legacy string verdict — no per-gate set — falls back to the
+ * strictest gate on the step and holds.
  *
  * Gates are authored through `resource_manager`, so the file watcher's hot reload is on the path.
  */
@@ -135,7 +139,8 @@ describe('Streamable HTTP: a FAIL follows the gate declared enforcement_mode', (
   async function failStepA(
     session: Session,
     twin: string,
-    stepA: Record<string, unknown>
+    stepA: Record<string, unknown>,
+    verdict: unknown = { overall: 'FAIL', rationale: RATIONALE, per_gate: [] }
   ): Promise<ToolOutcome> {
     const id = `em_chain_${twin}`;
     const created = await session.callTool('resource_manager', {
@@ -154,7 +159,7 @@ describe('Streamable HTTP: a FAIL follows the gate declared enforcement_mode', (
     return session.callTool('prompt_engine', {
       chain_id: chainIdOf(start.text),
       user_response: cageerfAnswer('step A output'),
-      gate_verdict: { overall: 'FAIL', rationale: RATIONALE, per_gate: [] },
+      gate_verdict: verdict,
     });
   }
 
@@ -190,17 +195,39 @@ describe('Streamable HTTP: a FAIL follows the gate declared enforcement_mode', (
     expect(none.text).not.toContain('Advisory Gate Warnings');
   }, 180000);
 
-  test('an advisory gate sharing its step with the undeclared default gates holds', async () => {
+  test('beside the default gates, only the gates a verdict fails by name decide (R107)', async () => {
     const session = await authoredSession();
-    const held = await failStepA(session, 'advisory_defaults', {
-      promptId: 'em_a_defaults',
-      stepName: 'A',
-      inlineGateIds: [ADVISE_GATE],
+    const stepA = { promptId: 'em_a_defaults', stepName: 'A', inlineGateIds: [ADVISE_GATE] };
+    // The review advertises the inline gate first, then the default `content-structure`.
+    const failIndex = (index: number) => ({
+      overall: 'FAIL',
+      rationale: RATIONALE,
+      per_gate: [{ index, passed: false, rationale: `index ${index} failed` }],
     });
 
-    // Positive control: the default gate IS on the step, so the hold is about it.
-    expect(held.text).toContain('Content Structure Guidelines');
-    expect(held.text).not.toContain(STEP_B_MARKER);
-    expect(held.text).toContain('Gate Review Required');
-  }, 180000);
+    const adviseFailed = await failStepA(session, 'r107_advise', stepA, failIndex(1));
+    const contentFailed = await failStepA(session, 'r107_content', stepA, failIndex(2));
+    const legacy = await failStepA(
+      session,
+      'r107_legacy',
+      stepA,
+      `GATE_REVIEW: FAIL - ${RATIONALE}`
+    );
+
+    // The advisory gate alone failed: the run is on B, and the warning names that gate only.
+    expect(adviseFailed.text).toContain(STEP_B_MARKER);
+    expect(adviseFailed.text).toContain(`Gate ${ADVISE_GATE} failed: ${RATIONALE}`);
+    expect(adviseFailed.text).not.toContain('content-structure failed');
+
+    // The undeclared default gate failed: the run holds, and the reply names that gate — the
+    // positive control that index 2 IS `content-structure` on this step.
+    expect(contentFailed.text).not.toContain(STEP_B_MARKER);
+    expect(contentFailed.text).toContain('`content-structure` — index 2 failed');
+    expect(contentFailed.text).toContain('Gate Review Required');
+
+    // A string verdict names no gate, so the step's strictest gate decides: it holds.
+    expect(legacy.text).not.toContain(STEP_B_MARKER);
+    expect(legacy.text).toContain('Content Structure Guidelines');
+    expect(legacy.text).toContain('Gate Review Required');
+  }, 240000);
 });

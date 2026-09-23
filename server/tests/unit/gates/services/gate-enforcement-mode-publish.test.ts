@@ -115,11 +115,16 @@ const convertedPrompt = (id: string) => ({
 });
 
 /** The mode stage 11 publishes for a two-step chain standing on `first`. */
-async function chainMode(options: {
+async function chainMode(options: Parameters<typeof chainState>[0]): Promise<Mode | undefined> {
+  return (await chainState(options)).enforcementMode;
+}
+
+/** Stage 11's whole gate state for a two-step chain standing on `first`. */
+async function chainState(options: {
   firstStepGates: string[];
   /** Gates bound to the step the run is NOT standing on, as temporary gate specs. */
   otherStepGateSpecs?: Array<Record<string, unknown>>;
-}): Promise<Mode | undefined> {
+}) {
   const gateSpecs = options.otherStepGateSpecs ?? [];
   const context = new ExecutionContext({ chain_id: 'chain-em#1', gates: gateSpecs } as never);
   context.state.gates.requestedOverrides = { gates: gateSpecs };
@@ -146,7 +151,7 @@ async function chainMode(options: {
   await buildStage({ nodeIds: NODE_IDS, skippedNodeIds: [], currentNodeId: 'first' }).execute(
     context
   );
-  return context.state.gates.enforcementMode;
+  return context.state.gates;
 }
 
 /** The mode stage 11 publishes for a single prompt carrying `gates`. */
@@ -207,6 +212,18 @@ describe('stage 11 publishes the enforcement mode the gates declare (P4.137)', (
       ],
     });
     expect(mode).toBe('advisory');
+  });
+
+  test('the per-gate map the verdict path resolves against carries each declared mode (R107)', async () => {
+    const state = await chainState({
+      firstStepGates: ['gate-advisory', 'gate-blocking', 'gate-undeclared'],
+    });
+    expect(state.stepEnforcement?.undeclared).toBe('blocking');
+    expect([...(state.stepEnforcement?.declared ?? new Map())]).toEqual([
+      ['gate-advisory', 'advisory'],
+      ['gate-blocking', 'blocking'],
+      ['gate-undeclared', undefined],
+    ]);
   });
 
   describe('single prompt', () => {

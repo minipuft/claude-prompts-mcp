@@ -358,8 +358,7 @@ export class GateEnhancementService {
    * Publish the enforcement mode the applying gates declare (P4.137).
    *
    * Each gate's `enforcementMode` is read from its definition and handed to the owner,
-   * `resolveEnforcementMode`, which picks the strictest; a gate declaring none counts as
-   * `undeclared`. Before this, the declared value was loaded and never read, so an advisory
+   * `resolveEnforcementMode`; a gate declaring none counts as `undeclared`. Before this, the declared value was loaded and never read, so an advisory
    * gate's FAIL held the run exactly as a blocking one did. Unset when no gate applies.
    */
   private async publishEnforcementMode(
@@ -373,10 +372,15 @@ export class GateEnhancementService {
     const loader = this.gateLoader;
     const gates =
       loader === undefined ? [] : await Promise.all(gateIds.map((id) => loader.loadGate(id)));
-    context.state.gates.enforcementMode = resolveEnforcementMode(undefined, {
-      declared: gateIds.map((_, index) => gates[index]?.enforcementMode),
+    const stepEnforcement = {
+      declared: new Map(gateIds.map((id, index) => [id, gates[index]?.enforcementMode] as const)),
       undeclared,
-    });
+    };
+    // Both halves are published: the step's strictest mode for every reader that has no
+    // verdict, and the per-gate map `resolveEnforcementMode` needs to let only the gates a
+    // verdict FAILED decide (R107).
+    context.state.gates.stepEnforcement = stepEnforcement;
+    context.state.gates.enforcementMode = resolveEnforcementMode(undefined, stepEnforcement);
   }
 
   /**
