@@ -142,3 +142,66 @@ describe.each(['advisory', 'informational'] as const)(
     });
   }
 );
+
+/**
+ * R10: a detached node's review grades another node than the current step, so its OWN gates
+ * decide what a FAIL does — resolved by the authority, never a `blocking` constant.
+ */
+describe('GateVerdictProcessor detached review FAIL (R10)', () => {
+  const detachedSession = {
+    sessionId: 'session-1',
+    reviews: {
+      late: {
+        nodeId: 'late',
+        kind: 'detached',
+        phase: 'awaiting-verdict',
+        combinedPrompt: '',
+        gateIds: ['soft-gate'],
+        prompts: [],
+        createdAt: 1,
+        attemptCount: 0,
+        maxAttempts: 3,
+        metadata: { phase: 'awaiting-verdict' },
+      },
+    },
+    state: { currentNodeId: 'node-2', nodes: [{ id: 'late' }, { id: 'node-2' }] },
+  } as unknown as ChainSession;
+
+  const contextWith = (mode: 'advisory' | 'blocking') =>
+    ({
+      getGateVerdict: () => 'GATE_REVIEW: FAIL - it did not hold',
+      gateEnforcement: {
+        parseVerdict: () => null,
+        parseGateVerdicts: () => [],
+        resolveReviewEnforcement: async () => mode,
+      },
+      state: { gates: { enforcementMode: 'blocking', advisoryWarnings: [] }, session: {} },
+      diagnostics: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
+    }) as never;
+
+  test("a FAIL on a review whose gates are advisory clears it; the node's result stands", async () => {
+    const store = createStore({ ordinal: 1, nodeId: 'node-2' });
+    const result = await new GateVerdictProcessor(
+      store,
+      createLogger()
+    ).processDetachedReviewVerdict(contextWith('advisory'), detachedSession, 'late');
+
+    expect(result).toMatchObject({ kind: 'recorded', result: 'cleared', attempt: 1 });
+    expect(store.clearPendingGateReview).toHaveBeenCalledWith('session-1', { nodeId: 'late' });
+    expect(store.setReview).not.toHaveBeenCalled();
+  });
+
+  test('TWIN: the same FAIL on blocking gates asks for a replacement report', async () => {
+    const store = createStore({ ordinal: 1, nodeId: 'node-2' });
+    const result = await new GateVerdictProcessor(
+      store,
+      createLogger()
+    ).processDetachedReviewVerdict(contextWith('blocking'), detachedSession, 'late');
+
+    expect(result).toMatchObject({ kind: 'recorded', result: 'failed', attempt: 1 });
+    expect(store.setReview).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({ nodeId: 'late', phase: 'awaiting-replacement' })
+    );
+  });
+});
