@@ -17,7 +17,7 @@ import {
 } from '../../../../src/engine/execution/delegation/detached.js';
 import { unreportedDetachedNodeIds } from '../../../../src/shared/types/chain-execution.js';
 import {
-  detachedNodesHoldingRun,
+  nodesHoldingRunOpen,
   isRunComplete,
   isRunHeldOpen,
 } from '../../../../src/shared/types/chain-session.js';
@@ -91,16 +91,18 @@ describe('isRunComplete / isRunHeldOpen', () => {
     // Same run as the control above — reported, nothing owed — plus an open detached review.
     const state = pastEnd(states([['rev', spawned({ state: 'completed' })]]));
     const reviews = { rev: { kind: 'detached' as const } };
-    expect(detachedNodesHoldingRun({ state, reviews })).toEqual(['rev']);
+    expect(nodesHoldingRunOpen({ state, reviews })).toEqual(['rev']);
     expect(isRunHeldOpen({ state, reviews })).toBe(true);
     expect(isRunComplete({ state, reviews })).toBe(false);
     // A node both owed and under review is named once.
     const owedToo = pastEnd(states([['rev', spawned()]]));
-    expect(detachedNodesHoldingRun({ state: owedToo, reviews })).toEqual(['rev']);
-    // Only a DETACHED review holds the run: the store's current-step review is not a hold.
-    expect(detachedNodesHoldingRun({ state, reviews: { rev: { kind: 'gate' as const } } })).toEqual(
-      []
-    );
+    expect(nodesHoldingRunOpen({ state: owedToo, reviews })).toEqual(['rev']);
+    // Any open review holds the run, not only a detached one (P4.157 / R12): the phase guard's
+    // structural review of the final answer opens after the run already walked past its end.
+    expect(nodesHoldingRunOpen({ state, reviews: { last: { kind: 'gate' as const } } })).toEqual([
+      'last',
+    ]);
+    expect(isRunComplete({ state, reviews: { last: { kind: 'gate' as const } } })).toBe(false);
   });
 
   test('a terminal status is complete regardless of what is owed', () => {

@@ -59,7 +59,7 @@ import { computeUnknownLedger } from '#engine/execution/capture/unknown-observat
 import {
   attachReviewProjections,
   currentStepReview,
-  detachedNodesHoldingRun,
+  nodesHoldingRunOpen,
   isTerminalRunStatus,
   stampLegacyReview,
 } from '#shared/types/chain-session.js';
@@ -987,19 +987,18 @@ export class ChainSessionStore implements ChainSessionService {
       return false;
     }
 
-    // The detached-delegation close guard (Tier 4). A run may not COMPLETE while a detached node
-    // it spawned has not reported: completing would announce a finished run to every hook and
-    // client while a worker's result for it is still on its way, and that result would then have
-    // no live run to land on. Only `completed` is held. `cancelled` and `failed` stay open on
-    // purpose — they are how an operator ends a run whose worker will never report, so holding
-    // them too would leave a lost worker with no exit. A node the run never spawned is not owed
-    // anything and is not counted (`unreportedDetachedNodeIds`).
+    // The close guard. A run may not COMPLETE while a detached node it spawned has not reported
+    // (Tier 4), or while any review of one of its nodes is open (row 4.8, P4.157): completing
+    // would announce a finished run to every hook and client while a result or a verdict it still
+    // needs is on its way, and that answer would then have no live run to land on. Only
+    // `completed` is held. `cancelled` and `failed` stay open on purpose — they are how an
+    // operator ends a run whose worker will never report, so holding them too would leave a lost
+    // worker with no exit. A node the run never spawned is not owed anything and is not counted.
     if (target === 'completed') {
-      // Row 4.8: a detached node whose late result is under an open gate review holds too.
-      const owed = detachedNodesHoldingRun(session);
+      const owed = nodesHoldingRunOpen(session);
       if (owed.length > 0) {
         this.logger.info(
-          `[ChainRunStatus] Holding session ${sessionId} open: detached node(s) ${owed.join(', ')} not yet reported or under review`
+          `[ChainRunStatus] Holding session ${sessionId} open: node(s) ${owed.join(', ')} not yet reported or under review`
         );
         return false;
       }
@@ -1054,12 +1053,14 @@ export class ChainSessionStore implements ChainSessionService {
   }
 
   /**
-   * Complete a run the detached close guard was holding, once nothing is owed any more.
+   * Complete a run standing past its last node, once nothing holds it (P4.157 / R12).
    *
-   * A run that walked past its last node while a detached node was unreported stands on no node
-   * with a non-terminal status. When that node's late result lands, nothing re-advances — so this
-   * is the other place `completed` is asked for, and {@link transitionRunStatus} still decides.
-   * A no-op (false) for a run still standing on a node, and for one still owed a report.
+   * The ONE place a run is completed normally. {@link advanceStep} only moves the run; completing
+   * there latched `completed` before the phase guard (stage 19) graded the very answer that
+   * walked the run off its last node, so one reply announced `chain/complete` and opened a
+   * structural review. The pipeline asks here after grading on every chain request (stage 20),
+   * and stage 16 asks on the late-report calls it answers itself; {@link transitionRunStatus}
+   * still decides. A no-op (false) for a run still standing on a node, and for one still held.
    */
   async completeHeldRun(sessionId: string): Promise<boolean> {
     // Undefined (no session) and a node id (still standing somewhere) both answer "not held".
@@ -1410,9 +1411,9 @@ export class ChainSessionStore implements ChainSessionService {
     // `null` when `nodeId` is terminal: the run has moved past its last node.
     //
     // P4: skipped nodes are passed over here, INSIDE the single traversal owner, so the
-    // completion latch below still sees the real end of the run — a run whose trailing nodes were
-    // all skipped completes on this advance rather than parking on a node nothing will ever
-    // render. Skipped nodes are deliberately NOT appended to `executionOrder`: that list is the
+    // run reaches its real end — a run whose trailing nodes were all skipped stands past its last
+    // node after this advance (and `completeHeldRun` completes it) rather than parking on a node
+    // nothing will ever render. Skipped nodes are deliberately NOT appended to `executionOrder`: that list is the
     // record of what the run actually executed, and it is read to reconstruct step results, so a
     // node with no result in it would read as an executed step with a missing response.
     let next = nextAfter(nodes, nodeId);
@@ -1440,17 +1441,10 @@ export class ChainSessionStore implements ChainSessionService {
       `[StepLifecycle] Advanced past node ${nodeId} to ${next ?? 'run-complete'} (ordinal ${ordinal})`
     );
 
+    // No completion here: advancing past the terminal node leaves the run standing on no node
+    // with a non-terminal status, and `completeHeldRun` — asked after the call is graded — decides
+    // whether it is finished (P4.157 / R12).
     await this.saveSessions();
-
-    // The single decision point for run completion. Advancing past the terminal node is the
-    // only event that ends a run normally, so the latch lives here rather than in whichever
-    // pipeline stage happens to notice the ordinal went out of range — that inference ran in
-    // three places and disagreed with the rendered footer, which is what let a client abandon
-    // a run that still owed its final gate verdict. `transitionRunStatus` owns terminal
-    // stickiness and idempotency, so re-advancing past the same node is a no-op here too.
-    if (next === null) {
-      await this.transitionRunStatus(sessionId, 'completed');
-    }
 
     return { nodeId: next, ordinal };
   }

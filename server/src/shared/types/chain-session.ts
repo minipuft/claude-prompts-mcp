@@ -302,9 +302,9 @@ export interface ChainSession {
    * the only review field the residual document persists. Absent when no review is open.
    *
    * A detached (`await: run`) node's review (`kind: 'detached'`, row 4.8) opens against its LATE
-   * report, when the run already stands elsewhere; an open one holds the run open
-   * (`detachedNodesHoldingRun`). Every other review occupies the current-step slot, and the store
-   * keeps at most one of those (`ChainSessionService.setReview`).
+   * report, when the run already stands elsewhere. Every other review occupies the current-step
+   * slot, and the store keeps at most one of those (`ChainSessionService.setReview`). Any open
+   * review holds the run open (`nodesHoldingRunOpen`).
    */
   reviews?: Record<string, GateReview>;
   /**
@@ -369,38 +369,32 @@ export const isTerminalRunStatus = (status: ChainRunStatus | undefined): boolean
 
 /**
  * True when a run has finished: its status is terminal, or it has advanced past its last node
- * (`currentNodeId === null`).
+ * (`currentNodeId === null`) and nothing holds it open ({@link isRunHeldOpen}).
  *
  * Identity-based on purpose. The ordinal comparison this replaces (`currentStep >= totalSteps`)
  * reports a run *standing on* its final step as finished — the completion lie that made a
- * banner-obeying client abandon a run that still owed one gate verdict. `runStatus` is the
- * primary signal because the store latches it at the moment the run passes its terminal node;
- * `currentNodeId === null` is the same fact read off the state document, and covers a session
- * loaded from a pre-latch blob.
+ * banner-obeying client abandon a run that still owed one gate verdict. `runStatus` is latched by
+ * the pipeline's one completion point (stage 20, after the phase guard has graded the call), so
+ * `currentNodeId === null` with no hold is the same fact read earlier in that call, and covers a
+ * session loaded from a pre-latch blob. An open review holds the run through
+ * {@link nodesHoldingRunOpen}, the one derivation — no second review clause here.
  */
-export const isRunComplete = (
-  session: DetachedHoldFacts & { runStatus?: ChainRunStatus; pendingGateReview?: unknown }
-): boolean =>
-  // An outstanding review holds the run open whatever its status says (P4.119 / R96). The phase
-  // guard grades the final step's answer AFTER the capture has walked the run past its last node,
-  // so the store has already latched `completed` when that review opens; reading the run as
-  // finished there told the client "complete" and "submit a verdict" in one reply, and then
-  // refused the verdict as a resume of a finished run.
-  session.pendingGateReview === undefined &&
-  (isTerminalRunStatus(session.runStatus) ||
-    (session.state.currentNodeId === null && !isRunHeldOpen(session)));
+export const isRunComplete = (session: RunHoldFacts & { runStatus?: ChainRunStatus }): boolean =>
+  isTerminalRunStatus(session.runStatus) ||
+  (session.state.currentNodeId === null && !isRunHeldOpen(session));
 
 /**
  * True when a run has walked past its last node but may not complete yet: a detached
- * (`await: run`) node it spawned has not reported (Tier 4). Such a run is NOT complete — its
- * status stays non-terminal, a resume reaches it, and the only thing it will accept is the owed
- * result (or a cancel). PURE; `unreportedDetachedNodeIds` is the one derivation.
+ * (`await: run`) node it spawned has not reported (Tier 4), or a review of one of its nodes is
+ * still open. Such a run is NOT complete — its status stays non-terminal, and a resume reaches it
+ * to deliver the owed result or verdict (or a cancel). PURE; {@link nodesHoldingRunOpen} is the
+ * one derivation.
  */
-export const isRunHeldOpen = (run: DetachedHoldFacts): boolean =>
-  run.state.currentNodeId === null && detachedNodesHoldingRun(run).length > 0;
+export const isRunHeldOpen = (run: RunHoldFacts): boolean =>
+  run.state.currentNodeId === null && nodesHoldingRunOpen(run).length > 0;
 
-/** What {@link detachedNodesHoldingRun} reads off a run. */
-export interface DetachedHoldFacts {
+/** What {@link nodesHoldingRunOpen} reads off a run. */
+export interface RunHoldFacts {
   readonly state: {
     readonly currentNodeId: string | null;
     readonly nodes?: readonly Pick<ChainNode, 'id'>[];
@@ -410,15 +404,16 @@ export interface DetachedHoldFacts {
 }
 
 /**
- * The detached nodes a run may not complete without: every spawned node still owed its result
- * (`unreportedDetachedNodeIds`), and every node whose late result is under an open gate review
- * (row 4.8). The one derivation the completion guard and the held-run render both read. PURE.
+ * The nodes a run may not complete without: every detached node still owed its result
+ * (`unreportedDetachedNodeIds`), and every node with an open review of any kind — a detached
+ * node's late-report review (row 4.8), a step's gate review, or the phase guard's structural
+ * review of the final answer (P4.157, which opens AFTER the capture walked the run past its last
+ * node). The one derivation the completion guard, `isRunComplete` and the held-run render read.
+ * PURE.
  */
-export function detachedNodesHoldingRun(run: DetachedHoldFacts): string[] {
+export function nodesHoldingRunOpen(run: RunHoldFacts): string[] {
   const owed = unreportedDetachedNodeIds(run.state.nodes ?? [], run.state.stepStates);
-  const underReview = Object.entries(run.reviews ?? {})
-    .filter(([nodeId, review]) => review.kind === 'detached' && !owed.includes(nodeId))
-    .map(([nodeId]) => nodeId);
+  const underReview = Object.keys(run.reviews ?? {}).filter((nodeId) => !owed.includes(nodeId));
   return [...owed, ...underReview];
 }
 
@@ -698,8 +693,9 @@ export interface ChainSessionService {
    */
   markNodeSpawned(sessionId: string, nodeId: string): Promise<boolean>;
   /**
-   * Ask again for `completed` on a run standing past its last node — the call a late detached
-   * report makes once it lands. `transitionRunStatus` still decides; false while anything is owed.
+   * Ask for `completed` on a run standing past its last node — the pipeline's one completion
+   * point (stage 20, after grading; stage 16 on a call it answers itself). `advanceStep` never
+   * completes a run. `transitionRunStatus` still decides; false while anything holds the run.
    */
   completeHeldRun(sessionId: string): Promise<boolean>;
   /**

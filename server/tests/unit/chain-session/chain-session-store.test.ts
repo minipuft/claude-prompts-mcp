@@ -371,17 +371,19 @@ describe('ChainSessionStore — run-status lifecycle (Tier 2)', () => {
   });
 
   /**
-   * P4.119 / R96. The phase guard can open a review on the final step after the capture already
-   * latched the run `completed`. A run with a review outstanding is not finished: a resume must
-   * reach it so the verdict can land, and the reply must not call it complete.
+   * P4.119 / R96, P4.157 / R12. The phase guard opens its review of the final answer AFTER the
+   * capture walked the run past its last node, so the advance must not complete the run: a run with
+   * a review outstanding is not finished, a resume must reach it so the verdict can land, and the
+   * store completes it only when asked once nothing holds it.
    */
-  test('a completed run with a review outstanding does not read as complete', async () => {
+  test('a run past its end with a review outstanding is neither complete nor completable', async () => {
     manager = newManager('complete-review-outstanding');
     await manager.createSession('s1', 'chain-a', 1);
     await manager.advanceStep('s1', 'n1');
     const session = (manager as any).activeSessions.get('s1');
-    expect(session.runStatus).toBe('completed');
-    // CONTROL: with nothing outstanding the same run is complete.
+    // advanceStep no longer completes a run (R12): completion is asked for after grading.
+    expect(session.runStatus).toBe('working');
+    // CONTROL: with nothing outstanding the same run already reads as complete.
     expect(isRunComplete(session)).toBe(true);
 
     await manager.setPendingGateReview('s1', {
@@ -395,6 +397,13 @@ describe('ChainSessionStore — run-status lifecycle (Tier 2)', () => {
     });
 
     expect(isRunComplete(session)).toBe(false);
+    expect(await manager.completeHeldRun('s1')).toBe(false);
+    expect(session.runStatus).toBe('working');
+
+    // Positive control: once the review closes the same ask completes the run.
+    await manager.clearPendingGateReview('s1');
+    expect(await manager.completeHeldRun('s1')).toBe(true);
+    expect(session.runStatus).toBe('completed');
   });
 
   test('cancelChain refuses sessions in completed or failed terminal states', async () => {
@@ -834,8 +843,11 @@ describe('ChainSessionStore — adaptive mutation (P4 Tier 2)', () => {
     const advanced = await manager.advanceStep('s1', 'n1');
 
     // Without the skip-loop the run would park on n2 forever: nothing renders a skipped node,
-    // so nothing would ever advance past it and the latch would never be reached.
+    // so nothing would ever advance past it and the latch would never be reached. The advance
+    // itself no longer completes (R12); the pipeline's completion point asks afterwards.
     expect(advanced).toEqual({ nodeId: null, ordinal: 4 });
+    expect((manager as any).activeSessions.get('s1').runStatus).toBe('working');
+    expect(await manager.completeHeldRun('s1')).toBe(true);
     expect((manager as any).activeSessions.get('s1').runStatus).toBe('completed');
   });
 

@@ -609,10 +609,11 @@ export class StepCaptureService {
  * grades. PURE.
  *
  * A review of a node the run already left holds the capture too. That is not the review deciding
- * this step's advance; it keeps the run from walking out from under a review nothing else would
- * hold. The store keeps one step-review slot, so the next step review would replace it, and run
- * completion counts only detached reviews (stamped: as of 2026-09-23 · flips when row 3.9 lands —
- * the store keeps one review per node and completion counts every open review).
+ * this step's advance; it keeps the run from walking out from under a review the store would
+ * otherwise drop: it keeps one step-review slot (`writeReview` in `modules/chains/manager.ts`
+ * evicts every other non-detached review), so the next step's review would replace it. Completion
+ * already counts every open review (`nodesHoldingRunOpen`, row 3.9). (stamped: as of 2026-09-23 ·
+ * flips when `writeReview` keeps one review per node — then this reads `reviews[target.nodeId]`)
  */
 function reviewHolding(session: ChainSession): GateReview | undefined {
   return currentStepReview(session.reviews, session.state.currentNodeId);

@@ -97,11 +97,12 @@ export class StepExecutionStage extends BasePipelineStage {
   /**
    * Has this run finished?
    *
-   * The store is authoritative — it latches `runStatus` the moment `advanceStep` moves past the
-   * terminal node. Where the session cannot be read (single prompts with no run, formatter-only
-   * harnesses), the pipeline's own `currentNodeId === null` carries the same fact, set by the
-   * session stage and by the verdict processor from `advanceStep`'s return. An *undefined*
-   * `currentNodeId` means "unknown", not "complete", so it deliberately reads as unfinished.
+   * The store is authoritative — `isRunComplete` reads a run standing past its terminal node
+   * with nothing holding it as finished, before stage 20 latches `runStatus` (R12). Where the
+   * session cannot be read (single prompts with no run, formatter-only harnesses), the
+   * pipeline's own `currentNodeId === null` carries the same fact, set by the session stage and
+   * by the verdict processor from `advanceStep`'s return. An *undefined* `currentNodeId` means
+   * "unknown", not "complete", so it deliberately reads as unfinished.
    */
   private isRunFinished(context: ExecutionContext): boolean {
     const sessionContext = context.sessionContext;

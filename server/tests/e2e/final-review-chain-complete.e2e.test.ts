@@ -96,29 +96,22 @@ describe('Streamable HTTP: chain/complete waits for the final review (P4.157)', 
   }, 120000);
 
   /**
-   * MEASURED on this tree (2026-09-23, rework/review-entity-3 on d2083622): the one-line final
-   * answer's call carried `chain/complete` AND opened the structural review, and the verdict call
-   * that closed it carried nothing. The store latches `completed` at the capture's advance past
-   * the last node (stage 16), before the phase guard (stage 19) grades that answer.
-   *
-   * `test.failing` pins the defect: it passes while the defect stands, and fails the day
-   * `chain/complete` moves to the call that closes the final review — delete `.failing` then.
-   * (as of 2026-09-23 · flips when completion is decided after stage 19, not at the advance)
+   * The defect this pins (measured 2026-09-23 on d2083622): the one-line final answer's call
+   * carried `chain/complete` AND opened the structural review, and the verdict call that closed it
+   * carried nothing — the store latched `completed` at the capture's advance past the last node
+   * (stage 16), before the phase guard (stage 19) graded that answer. Completion is now decided
+   * once, after grading (stage 20 → `completeHeldRun`, R12).
    */
-  test.failing(
-    "chain/complete waits for the final step's structural review to close",
-    async () => {
-      const call = await atFinalStep();
-      const opened = await call({ user_response: 'one line', gate_verdict: PASS });
-      expect(opened.text).toContain('Structural Review Required');
-      expect(opened.methods).not.toContain(CHAIN_COMPLETE);
+  test("chain/complete waits for the final step's structural review to close", async () => {
+    const call = await atFinalStep();
+    const opened = await call({ user_response: 'one line', gate_verdict: PASS });
+    expect(opened.text).toContain('Structural Review Required');
+    expect(opened.methods).not.toContain(CHAIN_COMPLETE);
 
-      const closed = await call({
-        user_response: cageerfAnswer('Step 3 again'),
-        gate_verdict: PASS,
-      });
-      expect(closed.methods).toContain(CHAIN_COMPLETE);
-    },
-    120000
-  );
+    const closed = await call({
+      user_response: cageerfAnswer('Step 3 again'),
+      gate_verdict: PASS,
+    });
+    expect(closed.methods).toContain(CHAIN_COMPLETE);
+  }, 120000);
 });
