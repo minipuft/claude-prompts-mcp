@@ -414,6 +414,13 @@ export const SUITE = [
       'CHECKED — falsified 2026-09-21 by deleting the object-store guard from each of the five guarded sites in turn (recordTree, sweepUnreferencedObjects, loadVersionTree, resolveCliByteRestore, readRecordedConfigFile), which are the four #345-#347 defects plus one sibling; the gate reported each. The unmutated tree is the twin and passes. It also fails closed below four guarded statements, falsified by narrowing V29_TOKENS to a token nothing matches. Blind spots stated in the header with an as-of date: composed SQL, a guard held by the caller, anything outside src/cli-shared',
   },
   {
+    script: 'validate:scoped-framework-reads',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse:
+      'CHECKED — falsified 2026-09-22 by removing the scope from the prompt-guidance selectFramework call and the gate-enhancement provider in pipeline-builder; the gate reported both. Run against the pre-fix tree (acaf76c6) it reports 19 unscoped reads across 10 files, the P4.129 class. It fails closed below 15 scoped calls. Blind spots stated in the header: presence not value, options built across statements',
+  },
+  {
     script: 'validate:system-control-parameter-reads',
     io: 'read',
     reads: ['file'],

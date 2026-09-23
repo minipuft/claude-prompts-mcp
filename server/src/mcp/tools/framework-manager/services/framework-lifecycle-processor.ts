@@ -24,6 +24,7 @@ import {
   projectWriteModel,
 } from '#modules/versioning/index.js';
 import { resolveContainedPath } from '#shared/utils/path-containment.js';
+import { currentRequestStateScope } from '#shared/utils/request-state-scope.js';
 import { preferredRepairTarget } from '#shared/utils/resource-quarantine.js';
 
 /**
@@ -712,8 +713,10 @@ export class FrameworkLifecycleProcessor {
       return this.error(`Framework '${id}' not found.\n\nAvailable: ${availableFrameworks}`);
     }
 
-    // Check if already active
-    if (this.ctx.frameworkStateStore?.getActiveFramework()?.id === targetFramework.id) {
+    // The request's own workspace, read and written alike: a switch under one workspace header
+    // does not move another's selection.
+    const scope = currentRequestStateScope();
+    if (this.ctx.frameworkStateStore?.getActiveFramework(scope)?.id === targetFramework.id) {
       return this.success(`ℹ️ Framework '${id}' is already active`);
     }
 
@@ -724,10 +727,13 @@ export class FrameworkLifecycleProcessor {
     // No initializer: the try assigns it and the catch returns early.
     let switchSuccess: boolean;
     try {
-      switchSuccess = await this.ctx.frameworkStateStore.switchFramework({
-        targetFramework: targetFramework.id,
-        reason: reason ?? `Switched via resource_manager`,
-      });
+      switchSuccess = await this.ctx.frameworkStateStore.switchFramework(
+        {
+          targetFramework: targetFramework.id,
+          reason: reason ?? `Switched via resource_manager`,
+        },
+        scope
+      );
     } catch (error) {
       return this.error(
         `Failed to switch framework: ${error instanceof Error ? error.message : String(error)}`

@@ -8,6 +8,7 @@
  */
 
 import type { ContentAnalysisResult, ToolParameter } from '#shared/types/index.js';
+import type { StateStoreOptions } from '#shared/types/persistence.js';
 import type { ConvertedPrompt, ExecutionType } from '../../execution/types.js';
 
 /**
@@ -94,6 +95,11 @@ export interface FrameworkSelectionCriteria {
   domain?: string;
   userPreference?: FrameworkSelection;
   executionType?: 'single' | 'chain';
+  /**
+   * The request's scope, which decides whose active framework and enabled flag apply when no
+   * `userPreference` wins. Omitted means this process's own workspace.
+   */
+  scope?: StateStoreOptions;
 }
 
 /**

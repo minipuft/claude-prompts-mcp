@@ -11,9 +11,11 @@ import { decideVisibility } from '../pipeline/decisions/visibility/index.js';
 import type { BriefHistoryEntry } from '../delegation/brief.js';
 import type { PendingGateReview, VisibilityItem } from '#shared/types/chain-execution.js';
 import type { UnknownLedgerEntry } from '#shared/types/chain-session.js';
+import type { StateStoreOptions } from '#shared/types/persistence.js';
 import type { RequestClientProfile } from '#shared/types/request-identity.js';
 import type { ScriptReferenceResolverPort } from '#shared/utils/jsonUtils.js';
 import type {
+  StepFrameworkContext,
   ChainStepExecutionInput,
   ChainStepPrompt,
   ChainStepRenderResult,
@@ -68,11 +70,10 @@ export class ChainOperatorExecutor {
     private readonly convertedPrompts: ConvertedPrompt[],
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private readonly gateGuidanceRenderer?: any,
-    private readonly getFrameworkContext?: (promptId: string) => Promise<{
-      selectedFramework?: { type: string; name: string };
-      category?: string;
-      systemPrompt?: string;
-    } | null>,
+    private readonly getFrameworkContext?: (
+      promptId: string,
+      scope: StateStoreOptions | undefined
+    ) => Promise<StepFrameworkContext | null>,
     private readonly collaborators?: ChainOperatorCollaborators
   ) {}
 
@@ -225,7 +226,10 @@ export class ChainOperatorExecutor {
       let frameworkType: string = DEFAULT_FRAMEWORK_ID;
       let category = 'general';
 
-      const reviewStepContext = await this.resolveFrameworkContext(targetStep ?? undefined);
+      const reviewStepContext = await this.resolveFrameworkContext(
+        targetStep ?? undefined,
+        input.scope
+      );
       if (reviewStepContext) {
         frameworkType = reviewStepContext.selectedFramework?.type || DEFAULT_FRAMEWORK_ID;
         category = reviewStepContext.category || 'general';
@@ -311,7 +315,7 @@ export class ChainOperatorExecutor {
     // Build framework guidance for gate reviews if enabled (skip on retry — already seen)
     let frameworkGuidance = '';
     if (!isRetry && frameworkInjectionEnabled && targetStep) {
-      const guidance = await this.buildFrameworkGuidance(targetStep);
+      const guidance = await this.buildFrameworkGuidance(targetStep, input.scope);
       if (guidance) {
         frameworkGuidance = guidance;
         this.logger.debug('[SymbolicChain] Added framework guidance to gate review step');
@@ -552,7 +556,7 @@ export class ChainOperatorExecutor {
     const gateGuidanceEnabled = this.isGateGuidanceEnabled(chainContext);
 
     if (!suppressFrameworkInjection && !hasFrameworkGuidance(convertedPrompt?.systemMessage)) {
-      const frameworkGuidance = await this.buildFrameworkGuidance(step);
+      const frameworkGuidance = await this.buildFrameworkGuidance(step, input.scope);
       if (frameworkGuidance) {
         lines.push(frameworkGuidance);
       }
@@ -751,8 +755,11 @@ export class ChainOperatorExecutor {
     return target === 'gates';
   }
 
-  private async buildFrameworkGuidance(step: ChainStepPrompt): Promise<string | null> {
-    const context = await this.resolveFrameworkContext(step);
+  private async buildFrameworkGuidance(
+    step: ChainStepPrompt,
+    scope: StateStoreOptions | undefined
+  ): Promise<string | null> {
+    const context = await this.resolveFrameworkContext(step, scope);
     const systemPrompt = context?.systemPrompt?.trim();
     const frameworkName = context?.selectedFramework?.name?.trim();
 
@@ -821,11 +828,10 @@ export class ChainOperatorExecutor {
     return provider(frameworkId);
   }
 
-  private async resolveFrameworkContext(step?: ChainStepPrompt): Promise<{
-    selectedFramework?: { type: string; name: string };
-    category?: string;
-    systemPrompt?: string;
-  } | null> {
+  private async resolveFrameworkContext(
+    step: ChainStepPrompt | undefined,
+    scope: StateStoreOptions | undefined
+  ): Promise<StepFrameworkContext | null> {
     if (!step) {
       return null;
     }
@@ -844,7 +850,7 @@ export class ChainOperatorExecutor {
     }
 
     try {
-      return await this.getFrameworkContext(step.promptId);
+      return await this.getFrameworkContext(step.promptId, scope);
     } catch (error) {
       this.logger.debug('[ChainOperatorExecutor] Failed to resolve framework context', {
         promptId: step.promptId,

@@ -4,6 +4,7 @@ import type {
   StepAwaitMode,
   VisibilityItem,
 } from '#shared/types/chain-execution.js';
+import type { StateStoreOptions } from '#shared/types/persistence.js';
 import type { FrameworkExecutionContext } from '../../frameworks/types/index.js';
 import type { ConvertedPrompt, ExecutionPlan } from '../types.js';
 
@@ -69,6 +70,13 @@ export interface ChainStepPrompt {
   visibility?: { withhold?: VisibilityItem[]; expose?: VisibilityItem[] };
 }
 
+/** The framework a chain step renders under, as the executor's fallback resolver reports it. */
+export interface StepFrameworkContext {
+  selectedFramework?: { type: string; name: string };
+  category?: string;
+  systemPrompt?: string;
+}
+
 /**
  * Base interface for all chain step execution inputs.
  *
@@ -79,6 +87,11 @@ interface BaseChainStepExecutionInput {
   readonly chainContext?: Record<string, unknown>;
   readonly additionalGateIds?: readonly string[];
   readonly inlineGuidanceText?: string;
+  /**
+   * The request's scope. A step with no resolved framework context falls back to the active
+   * framework, and this decides whose — omitted, the launch workspace's.
+   */
+  readonly scope?: StateStoreOptions;
 }
 
 /**

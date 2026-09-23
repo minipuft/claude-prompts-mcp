@@ -436,6 +436,7 @@ export class GateReviewStage extends BasePipelineStage {
         chainContext,
         pendingGateReview: reviewForRender,
         additionalGateIds: reviewForRender.gateIds,
+        scope: context.getScopeOptions(),
       });
 
       this.recordReviewedDeclaration(sessionId, renderResult);

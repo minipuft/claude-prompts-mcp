@@ -20,7 +20,7 @@ import {
   publishResourcesChanged,
   publishToolsChanged,
 } from './list-change-notifier.js';
-import { initializeModules } from './module-initializer.js';
+import { initializeModules, isFrameworkSystemEnabledByConfig } from './module-initializer.js';
 import { resolveRuntimeLaunchOptions, RuntimeLaunchOptions } from './options.js';
 import { syncResourceIndex } from './resource-index-resync.js';
 import { registerMcpResources as registerMcpResourcesOn } from './resource-registration.js';
@@ -1119,10 +1119,10 @@ export class Application {
     config: ResolvedFrameworkConfig,
     reason?: string
   ): Promise<void> {
-    const gatesConfig = this.configManager.getGatesConfig();
-    const systemPromptEnabled = config.injection?.systemPrompt?.enabled ?? true;
-    const shouldEnable =
-      systemPromptEnabled || gatesConfig.enableFrameworkGates || config.dynamicToolDescriptions;
+    const shouldEnable = isFrameworkSystemEnabledByConfig(
+      config,
+      this.configManager.getGatesConfig()
+    );
 
     if (!this.frameworkStateStore) {
       return;
