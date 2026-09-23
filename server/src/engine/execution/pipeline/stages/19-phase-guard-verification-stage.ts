@@ -16,7 +16,7 @@
  * 2. If no guards → pass through (no-op)
  * 3. Evaluate user_response against phase markers/guards
  * 4. If all pass → merge guard summary into pending gate review (if any)
- * 5. If any fail → create PendingGateReview (gate system handles lifecycle)
+ * 5. If any fail → merge into the open gate review, else create PendingGateReview (R103)
  */
 
 import { resolveGuardedProcessingSteps } from '../../../frameworks/declared-sections.js';
@@ -25,6 +25,7 @@ import {
   buildPhaseGuardPassSummary,
   buildRetryHints,
 } from '../../../frameworks/phase-guards/index.js';
+import { composeStructuralReview } from '../decisions/gates/structural-review-composition.js';
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
@@ -195,15 +196,14 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
       return;
     }
 
-    // Enforce: create a pending gate review so GateReviewStage renders feedback
-    // and StepResponseCaptureStage blocks advancement on the next request.
-    const review = {
-      combinedPrompt: result.retryFeedback,
-      gateIds: [PHASE_GUARD_GATE_ID],
-      prompts: [],
-      createdAt: Date.now(),
-      attemptCount: 0,
-      maxAttempts,
+    // Enforce: persist ONE pending review so GateReviewStage renders feedback and
+    // StepResponseCaptureStage blocks advancement on the next request. A gate review already
+    // open on the graded step absorbs the finding (R103): its gate, criteria, retry budget and
+    // spent attempts survive, and the structural findings join it. With no such review, the
+    // finding opens its own. `composeStructuralReview` owns which of the two happens.
+    const review = composeStructuralReview(this.chainSessionStore.getPendingGateReview(sessionId), {
+      gateId: PHASE_GUARD_GATE_ID,
+      feedback: result.retryFeedback,
       // Hints name what each check measured, and the add-the-section line is emitted only for a
       // section that is actually absent (`buildRetryHints` owns both halves — a hint is phase-
       // guard vocabulary, not stage orchestration). A hint for an absent section names the
@@ -211,17 +211,16 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
       // "dissolve_processing"): prefixing "## " onto the id produced a header the section-
       // splitter could never match → the model kept adding the wrong header → loop.
       retryHints: buildRetryHints(result),
+      failedPhases: result.failedPhases,
+      mode: config.mode,
       previousResponse: outputText,
-      metadata: {
-        source: 'phase-guard-verification',
-        failedPhases: result.failedPhases,
-        mode: config.mode,
-        // WHICH step this review graded (row 2.11). Without it the renderer falls through to
-        // `current_step`, which by this point in the pipeline names the step the run ADVANCED
-        // to — so the review quoted step N+1's task above step N's missing sections.
-        ...this.resolveReviewedStepIdentity(context),
-      },
-    };
+      // WHICH step this review graded (row 2.11). Without it the renderer falls through to
+      // `current_step`, which by this point in the pipeline names the step the run ADVANCED
+      // to — so the review quoted step N+1's task above step N's missing sections.
+      reviewedStep: this.resolveReviewedStepIdentity(context),
+      maxAttempts,
+      createdAt: Date.now(),
+    });
 
     await this.chainSessionStore.setPendingGateReview(sessionId, review);
 
@@ -238,8 +237,9 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
     this.logExit({
       passed: false,
       createdPendingReview: true,
+      mergedIntoGateReview: review.gateIds.length > 1,
       failedPhases: result.failedPhases,
-      maxAttempts,
+      maxAttempts: review.maxAttempts,
     });
   }
 
