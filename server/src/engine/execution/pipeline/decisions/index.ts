@@ -37,14 +37,11 @@ export type { FrameworkDecisionInput } from './framework/index.js';
 // Gate enforcement decisions
 export { GateEnforcementAuthority, resolveEnforcementMode } from './gates/index.js';
 export type {
-  ActionResult,
   CreateReviewOptions,
   EnforcementMode,
   GateAction,
   ParsedVerdict,
   PendingGateReview,
-  RetryConfig,
-  ReviewOutcome,
   VerdictSource,
 } from './gates/index.js';
 
