@@ -6,7 +6,9 @@
  * Provides automatic cleanup, scope management, and integration with existing gate systems.
  */
 
-import type { GatePassCriteria, LightweightGateDefinition } from '../types.js';
+import { toGateDefinition, type GateDefinitionSource } from './gate-definition-converter.js';
+
+import type { GateEnforcementMode, GatePassCriteria, LightweightGateDefinition } from '../types.js';
 
 import { Logger } from '#infra/logging/index.js';
 
@@ -53,6 +55,8 @@ export interface TemporaryGateDefinition {
   target_step_id?: string;
   /** Target multiple specific steps in a chain (1-based) */
   apply_to_steps?: number[];
+  /** What a FAIL does; absent means undeclared, and `resolveEnforcementMode` decides. */
+  enforcement_mode?: GateEnforcementMode;
 }
 
 /**
@@ -131,6 +135,7 @@ export class TemporaryGateRegistry {
       target_step_number,
       target_step_id,
       apply_to_steps,
+      enforcement_mode,
       ...defWithoutId
     } = definition;
 
@@ -150,6 +155,7 @@ export class TemporaryGateRegistry {
       ...(target_step_number !== undefined ? { target_step_number } : {}),
       ...(target_step_id !== undefined ? { target_step_id } : {}),
       ...(apply_to_steps !== undefined ? { apply_to_steps } : {}),
+      ...(enforcement_mode !== undefined ? { enforcement_mode } : {}),
     };
 
     // Store the gate
@@ -211,27 +217,7 @@ export class TemporaryGateRegistry {
   }
 
   convertToLightweightGate(tempGate: TemporaryGateDefinition): LightweightGateDefinition {
-    const lightweight: LightweightGateDefinition = {
-      id: tempGate.id,
-      name: tempGate.name,
-      type: tempGate.type === 'guidance' ? 'guidance' : 'validation',
-      description: tempGate.description,
-      guidance: tempGate.guidance,
-      retry_config: {
-        max_attempts: 3,
-        improvement_hints: true,
-        preserve_context: true,
-      },
-      activation: {
-        explicit_request: true,
-      },
-    };
-
-    if (tempGate.pass_criteria !== undefined) {
-      lightweight.pass_criteria = tempGate.pass_criteria as GatePassCriteria[];
-    }
-
-    return lightweight;
+    return toGateDefinition(liftTemporaryGate(tempGate));
   }
 
   /**
@@ -431,4 +417,32 @@ export function createTemporaryGateRegistry(
   }
 ): TemporaryGateRegistry {
   return new TemporaryGateRegistry(logger, options);
+}
+
+/**
+ * Lift a temporary gate into the converter's input, the way `GateDefinitionLoader` hands over a
+ * parsed gate.yaml.
+ *
+ * Temporary-only keys (`scope`, `scope_id`, `created_at`, `expires_at`, `source`, `context`, the
+ * step targets) stay behind: they drive this registry's lifecycle and selection, not what a
+ * pipeline stage reads. `severity` and `gate_type` stay ABSENT rather than taking the schema
+ * defaults — a temporary gate never declared them. The retry and activation values are the ones
+ * every temporary gate has always carried: explicitly requested, three attempts.
+ */
+function liftTemporaryGate(tempGate: TemporaryGateDefinition): GateDefinitionSource {
+  return {
+    id: tempGate.id,
+    name: tempGate.name,
+    type: tempGate.type === 'guidance' ? 'guidance' : 'validation',
+    description: tempGate.description,
+    guidance: tempGate.guidance,
+    ...(tempGate.pass_criteria !== undefined
+      ? { pass_criteria: tempGate.pass_criteria as GatePassCriteria[] }
+      : {}),
+    ...(tempGate.enforcement_mode !== undefined
+      ? { enforcementMode: tempGate.enforcement_mode }
+      : {}),
+    retry_config: { max_attempts: 3, improvement_hints: true, preserve_context: true },
+    activation: { explicit_request: true },
+  };
 }
