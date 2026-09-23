@@ -521,7 +521,7 @@ function resolveReviewedNodeId(
     review.nodeId ??
     (typeof recorded === 'string' && recorded.length > 0 ? recorded : undefined) ??
     run.state.currentNodeId ??
-    run.executionOrder.at(-1)
+    run.executionOrder[run.executionOrder.length - 1]
   );
 }
 
