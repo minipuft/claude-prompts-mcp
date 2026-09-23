@@ -173,7 +173,7 @@ In `config.jsonc` (`config.json` is also still read):
 
 ```
 Phase guards fail
-  → PendingGateReview created with retry feedback
+  → merged into the step's open gate review, or a PendingGateReview created with retry feedback
   → Stage 20 renders feedback to the LLM
   → LLM revises response addressing structural issues
   → Stage 19 re-evaluates on next turn
@@ -234,7 +234,9 @@ This tells the gate reviewer: "Structure is solid — focus on substance."
 
 ### When Phase Guards Fail
 
-Phase guard failures take priority. A pending gate review is created with structural feedback, and the LLM must fix the structural issues first before content quality is evaluated.
+When a gate review is already open for the graded step, the structural findings join it: one review names the gate, its criteria, the missing sections and one attempt counter on the gate's own `retry_config`, headed **Structural + Gate Review Required**. One `gate_verdict` answers it. Replacing the gate's review instead would drop the gate from the reply and restart its retry budget at the phase guard's.
+
+With no gate review open, the phase guard opens its own review with the structural feedback (`maxRetries + 1` attempts).
 
 ### Composition Matrix
 
@@ -242,7 +244,8 @@ Phase guard failures take priority. A pending gate review is created with struct
 | ------------ | --------- | ------------------------------------- |
 | Pass         | Pass      | Clean pass — highest quality          |
 | Pass         | Fail      | Structure OK, content needs revision  |
-| Fail         | (skipped) | Structure must be fixed first         |
+| Fail         | Open      | One merged review: structure + gate   |
+| Fail         | None      | Structural review only                |
 | Off          | Pass/Fail | Gates only — no structural validation |
 
 ## JSON Schema
