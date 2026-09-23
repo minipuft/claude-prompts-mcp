@@ -917,6 +917,52 @@ export function checkBindings(bindings) {
   return { findings, verified };
 }
 
+/**
+ * Findings whose only fix removes the parameter from the tool entirely: no other command of its
+ * type declares it, so dropping it from this command's list leaves a declared name nothing may
+ * send. Owner ruling R4 (2026-09-23) makes that a ruling of its own, so each waits here, stamped.
+ * An entry that no longer reports is itself a finding — delete it in the commit that fixed it.
+ */
+const AWAITING_RULING = [
+  {
+    tool: 'resource_manager',
+    command: 'prompt:create',
+    parameter: 'execution_hint',
+    asOf: '2026-09-23',
+    flipsWhen:
+      'the owner rules on P4.153: `PromptAnalyzer` derives the execution type from the shape ' +
+      '(#358), so the hint is superseded and removing it removes a name from the tool',
+  },
+  {
+    tool: 'resource_manager',
+    command: 'prompt:validate',
+    parameter: 'execution_hint',
+    asOf: '2026-09-23',
+    flipsWhen: 'the same P4.153 ruling as prompt:create',
+  },
+  {
+    tool: 'resource_manager',
+    command: 'framework:switch',
+    parameter: 'persist',
+    asOf: '2026-09-23',
+    flipsWhen:
+      'the owner rules on P4.154: a switch already persists through `FrameworkStateStore` ' +
+      '(`saveStateToFile`), so the flag is superseded and `switch` is its only command',
+  },
+];
+
+/** Splits `findings` into real ones and those an entry excuses; an unmatched entry is stale. */
+export function applyExceptions(tool, findings, entries) {
+  const own = entries.filter((entry) => entry.tool === tool);
+  const matches = (entry, finding) =>
+    entry.command === finding.command && entry.parameter === finding.parameter;
+  return {
+    findings: findings.filter((finding) => !own.some((entry) => matches(entry, finding))),
+    excused: findings.filter((finding) => own.some((entry) => matches(entry, finding))),
+    stale: own.filter((entry) => !findings.some((finding) => matches(entry, finding))),
+  };
+}
+
 function report(adapter, findings, verified) {
   for (const finding of findings) {
     console.error(
@@ -946,7 +992,7 @@ function checkTool(adapter) {
     project.addSourceFilesAtPaths(path.resolve(TOOLS_DIR, glob));
   }
 
-  const { findings, verified } = checkBindings(
+  const { findings: all, verified } = checkBindings(
     adapter.bind({
       project,
       routerPath: path.join(TOOLS_DIR, adapter.router),
@@ -956,7 +1002,20 @@ function checkTool(adapter) {
         adapter.pipeline === undefined ? undefined : path.resolve(TOOLS_DIR, adapter.pipeline),
     })
   );
+  const { findings, excused, stale } = applyExceptions(adapter.tool, all, AWAITING_RULING);
   report(adapter, findings, verified);
+  for (const finding of excused) {
+    console.log(
+      `⏸ ${adapter.tool} ${finding.command}: '${finding.parameter}' — awaiting an owner ruling ` +
+        `(AWAITING_RULING)`
+    );
+  }
+  for (const entry of stale) {
+    console.error(
+      `❌ ${adapter.tool} ${entry.command}: '${entry.parameter}' — AWAITING_RULING entry no longer ` +
+        `reports (as of ${entry.asOf}); delete it in the commit that fixed it`
+    );
+  }
 
   if (verified < adapter.minimumReads) {
     console.error(
@@ -966,7 +1025,7 @@ function checkTool(adapter) {
     );
     return 1;
   }
-  return findings.length > 0 ? 1 : 0;
+  return findings.length > 0 || stale.length > 0 ? 1 : 0;
 }
 
 function runLive() {
@@ -1294,8 +1353,30 @@ function selfTestPromptEngine() {
   return failures.map((failure) => `prompt_engine: ${failure}`);
 }
 
+function selfTestExceptions() {
+  const entries = [
+    { tool: 'demo', command: 'a:b', parameter: 'x' },
+    { tool: 'demo', command: 'a:b', parameter: 'gone' },
+    { tool: 'other', command: 'a:b', parameter: 'y' },
+  ];
+  const findings = [
+    { command: 'a:b', parameter: 'x' },
+    { command: 'a:b', parameter: 'y' },
+  ];
+  const result = applyExceptions('demo', findings, entries);
+  const shape = JSON.stringify([
+    result.findings.map((f) => f.parameter),
+    result.excused.map((f) => f.parameter),
+    result.stale.map((e) => e.parameter),
+  ]);
+  return shape === JSON.stringify([['y'], ['x'], ['gone']])
+    ? []
+    : [`exceptions: an entry must excuse only its own tool's finding and go stale alone: ${shape}`];
+}
+
 function selfTest() {
   const failures = [
+    ...selfTestExceptions(),
     ...selfTestSystemControl(),
     ...selfTestResourceManager(),
     ...selfTestPromptEngine(),

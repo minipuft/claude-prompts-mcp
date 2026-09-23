@@ -1063,7 +1063,7 @@ export const resource_managerCommands: ToolCommand[] = [
   {
     id: 'common:delete',
     summary: 'Delete a resource (with confirmation).',
-    parameters: ['resource_type', 'action', 'id', 'confirm', 'reason', 'full_restart'],
+    parameters: ['resource_type', 'action', 'id', 'confirm', 'full_restart'],
     status: 'working',
   },
   {
@@ -1075,7 +1075,7 @@ export const resource_managerCommands: ToolCommand[] = [
   {
     id: 'common:rollback',
     summary: 'Rollback a resource to a previous version.',
-    parameters: ['resource_type', 'action', 'id', 'version', 'reason'],
+    parameters: ['resource_type', 'action', 'id', 'version'],
     status: 'working',
   },
   {
