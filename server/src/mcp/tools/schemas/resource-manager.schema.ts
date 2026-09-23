@@ -564,8 +564,9 @@ export const resourceManagerInputSchema = z
      */
     severity: z.enum(['critical', 'high', 'medium', 'low']).optional(),
     /**
-     * [Gate] Enforcement mode override. Defaults to the severity-based mapping when absent,
-     * so setting `severity` alone stays sufficient for the common case.
+     * [Gate] What a FAIL does: `blocking` holds the chain step, `advisory` advances and names the
+     * failure, `informational` advances silently. Absent, the gate holds; the strictest gate on a
+     * step decides (`resolveEnforcementMode`).
      */
     enforcement_mode: z.enum(['blocking', 'advisory', 'informational']).optional(),
     /**

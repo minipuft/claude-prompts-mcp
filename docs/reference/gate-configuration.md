@@ -30,7 +30,7 @@ Full schema for defining reusable quality gates in `resources/gates/{id}/gate.ya
 | `subject`         | `string` | No       | Kebab-case tag naming what this gate reminds about. See [§ `subject`](#subject). |
 | `guidanceFile`    | `string` | No       | Path to markdown file with instructions.                                         |
 | `severity`        | `string` | No       | `critical`, `high`, `medium`, `low`. Default: `medium`.                          |
-| `enforcementMode` | `string` | No       | `blocking` (must pass), `advisory` (warn only).                                  |
+| `enforcementMode` | `string` | No       | `blocking` (must pass, the default), `advisory` (warn, then advance).            |
 
 ---
 

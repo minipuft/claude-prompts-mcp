@@ -209,7 +209,7 @@ export interface LightweightGateDefinition {
   subject?: string;
   /** Severity level for prioritization (defaults to 'medium') */
   severity?: 'critical' | 'high' | 'medium' | 'low';
-  /** Enforcement mode override (defaults to severity-based mapping) */
+  /** What a FAIL does. Absent means undeclared — `resolveEnforcementMode` decides (P4.137). */
   enforcementMode?: 'blocking' | 'advisory' | 'informational';
   /** Path to external guidance file (relative to gate directory, e.g., 'guidance.md') */
   guidanceFile?: string;
