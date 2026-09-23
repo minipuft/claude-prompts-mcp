@@ -1072,6 +1072,113 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
       expect(attemptCount()).toBe(2);
     });
   });
+
+  /**
+   * Row 3.3: a verdict answers the review of the node that review GRADES, found through
+   * `resolveReviewTarget` — never a node derived from where the run stands. A structural review
+   * of step 1 opens after the capture already walked the run onto step 2; its PASS must close
+   * step 1's review and leave the run on step 2, still owing step 2's answer. Answered by
+   * position, the PASS walked the run past step 2 and completed it unanswered.
+   */
+  describe('a verdict answers the review of the node it grades (row 3.3)', () => {
+    const passOnly = 'GATE_REVIEW: PASS - the sections are there now';
+    const reviews = () => (onlySession() as unknown as ChainSession).reviews ?? {};
+
+    test('a review opened on step 1 while the run stands on step 2 is answered on step 1', async () => {
+      parsedSteps = parsedFrameworkChain;
+      activeFramework = 'cageerf';
+      blockingGates = false;
+      await pipeline.execute({ command: `>>draft --> >>review` });
+      const chainId = onlySession().chainId;
+
+      await pipeline.execute({ chain_id: chainId, user_response: 'one line' });
+      expect(onlySession().state.currentNodeId).toBe('review');
+      expect(Object.keys(reviews())).toEqual(['draft']);
+
+      await pipeline.execute({ chain_id: chainId, gate_verdict: passOnly } as any);
+
+      expect(reviews()).toEqual({});
+      expect(onlySession().state.currentNodeId).toBe('review');
+      expect(onlySession().runStatus).not.toBe('completed');
+    });
+
+    test("the same PASS carrying step 2's answer closes step 1's review and still captures step 2", async () => {
+      parsedSteps = parsedFrameworkChain;
+      activeFramework = 'cageerf';
+      blockingGates = false;
+      await pipeline.execute({ command: `>>draft --> >>review` });
+      const chainId = onlySession().chainId;
+      await pipeline.execute({ chain_id: chainId, user_response: 'one line' });
+      expect(Object.keys(reviews())).toEqual(['draft']);
+
+      await pipeline.execute({
+        chain_id: chainId,
+        user_response: '## Context\nThe situation, stated.\n\n## Analysis\nThe options, weighed.',
+        gate_verdict: passOnly,
+      } as any);
+
+      // Step 1's PASS decided no advance of step 2: the capture advanced it, completing the run.
+      expect(reviews()).toEqual({});
+      expect(onlySession().state.currentNodeId).toBeNull();
+      expect(onlySession().runStatus).toBe('completed');
+    });
+
+    test('TWIN: the same PASS on a review of the node the run stands on moves the run past it', async () => {
+      await pipeline.execute({ command: `>>draft --> >>review` });
+      const chainId = onlySession().chainId;
+      expect(Object.keys(reviews())).toEqual(['draft']);
+
+      await pipeline.execute({ chain_id: chainId, gate_verdict: passOnly } as any);
+
+      expect(reviews()).toEqual({});
+      expect(onlySession().state.currentNodeId).toBe('review');
+    });
+
+    test('a verdict whose trailer names a node the run lacks is refused by that name', async () => {
+      await pipeline.execute({ command: `>>draft --> >>review` });
+      const chainId = onlySession().chainId;
+
+      const reply = await pipeline.execute({
+        chain_id: chainId,
+        user_response: 'step 1 output\n\nHANDOFF RESULT\nnode: ghost',
+        gate_verdict: passOnly,
+      } as any);
+
+      expect(reply.isError).toBe(true);
+      expect(textOf(reply)).toContain("names node 'ghost'");
+      expect(reviews()['draft']?.attemptCount).toBe(0);
+      expect(onlySession().state.currentNodeId).toBe('draft');
+    });
+
+    test('CONTROL: the same verdict whose trailer names the step it answers is accepted', async () => {
+      await pipeline.execute({ command: `>>draft --> >>review` });
+      const chainId = onlySession().chainId;
+
+      await pipeline.execute({
+        chain_id: chainId,
+        user_response: 'step 1 output\n\nHANDOFF RESULT\nnode: draft',
+        gate_verdict: passOnly,
+      } as any);
+
+      expect(reviews()['draft']).toBeUndefined();
+      expect(onlySession().state.currentNodeId).toBe('review');
+    });
+
+    test('an exhausted review refuses a further verdict and spends nothing (R9)', async () => {
+      const fail = 'GATE_REVIEW: FAIL - still missing a constraint';
+      await pipeline.execute({ command: `>>draft --> >>review` });
+      const chainId = onlySession().chainId;
+      await pipeline.execute({ chain_id: chainId, gate_verdict: fail } as any);
+      await pipeline.execute({ chain_id: chainId, gate_verdict: fail } as any);
+      expect(reviews()['draft']).toMatchObject({ attemptCount: 2, phase: 'exhausted' });
+
+      const reply = await pipeline.execute({ chain_id: chainId, gate_verdict: fail } as any);
+
+      expect(reply.isError).toBe(true);
+      expect(textOf(reply)).toContain('gate_action "retry", "skip" or "abort"');
+      expect(reviews()['draft']?.attemptCount).toBe(2);
+    });
+  });
 });
 
 /**

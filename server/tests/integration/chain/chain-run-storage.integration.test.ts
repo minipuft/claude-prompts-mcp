@@ -217,7 +217,12 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
     await writer.updateSessionState('sess-dreview', 'rev', 'late result', { isPlaceholder: false });
     await writer.completeStep('sess-dreview', 'rev');
     // Two reviews at once: the current-step slot and the detached node's, each found by its key.
-    await writer.setPendingGateReview('sess-dreview', review('slot-gate'));
+    // The run stands past its end, so the slot review names the node it grades: keyed by the
+    // node the run last left, it would land on `rev`'s own review, which the store refuses.
+    await writer.setPendingGateReview('sess-dreview', {
+      ...(review('slot-gate') as object),
+      nodeId: 'n1',
+    } as never);
     await writer.setPendingGateReview('sess-dreview', review('node-gate'), { nodeId: 'rev' });
     await writer.clearPendingGateReview('sess-dreview');
     await (writer as unknown as { persistSessions: () => Promise<void> }).persistSessions();
@@ -246,6 +251,215 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
     expect(await reader.completeHeldRun('sess-dreview')).toBe(true);
     expect((reader.getSession('sess-dreview') as ChainSession).runStatus).toBe('completed');
     await reader.cleanup();
+  });
+
+  describe('gate reviews: one store keyed by the node each grades (primitive-rework row 3.1)', () => {
+    const review = (gateId: string, extra: Record<string, unknown> = {}) =>
+      ({
+        combinedPrompt: '',
+        gateIds: [gateId],
+        prompts: [],
+        createdAt: 1,
+        attemptCount: 0,
+        maxAttempts: 2,
+        ...extra,
+      }) as never;
+    const residualOf = (sessionId: string): Record<string, unknown> =>
+      JSON.parse(
+        engine.query<{ state: string }>('SELECT state FROM chain_runs WHERE session_id = ?', [
+          sessionId,
+        ])[0]!.state
+      ) as Record<string, unknown>;
+    const persist = (store: ChainSessionStore) =>
+      (store as unknown as { persistSessions: () => Promise<void> }).persistSessions();
+    const coldLoad = async (): Promise<ChainSessionStore> => {
+      const reader = newStore();
+      await (reader as unknown as { initPromise: Promise<void> }).initPromise;
+      return reader;
+    };
+    const threeNodes = () =>
+      ({
+        nodes: nodes(
+          ['n1', 'prompt-a', 'One'],
+          ['rev', 'prompt-b', 'Two'],
+          ['n3', 'prompt-c', 'Three']
+        ),
+      }) as never;
+
+    test('a current-step and a detached review are written, read by node, and round-trip a cold load', async () => {
+      const writer = newStore();
+      await writer.createSession('sess-rv', 'chain-rv#1', 3, {}, threeNodes());
+      await writer.setPendingGateReview('sess-rv', review('slot-gate', { nodeId: 'n1' }));
+      await writer.setPendingGateReview('sess-rv', review('node-gate'), { nodeId: 'rev' });
+
+      const written = writer.getSession('sess-rv') as ChainSession;
+      expect(Object.keys(written.reviews ?? {}).sort()).toEqual(['n1', 'rev']);
+      expect(written.reviews?.['n1']).toMatchObject({
+        nodeId: 'n1',
+        kind: 'gate',
+        phase: 'awaiting-verdict',
+        gateIds: ['slot-gate'],
+      });
+      expect(written.reviews?.['rev']).toMatchObject({
+        nodeId: 'rev',
+        kind: 'detached',
+        phase: 'awaiting-verdict',
+        gateIds: ['node-gate'],
+      });
+      // The projections read the one store.
+      expect(written.pendingGateReview).toBe(written.reviews?.['n1']);
+      expect(Object.keys(written.detachedGateReviews ?? {})).toEqual(['rev']);
+
+      await persist(writer);
+      // The residual document carries only `reviews`.
+      const residual = residualOf('sess-rv');
+      expect(Object.keys(residual.reviews as object).sort()).toEqual(['n1', 'rev']);
+      expect(residual).not.toHaveProperty('pendingGateReview');
+      expect(residual).not.toHaveProperty('detachedGateReviews');
+      await writer.cleanup();
+
+      const reader = await coldLoad();
+      const loaded = reader.getSession('sess-rv') as ChainSession;
+      expect(loaded.reviews).toEqual(written.reviews);
+      // A loaded run carries the projections too: every `session.pendingGateReview` reader
+      // resumes a persisted run through them.
+      expect(loaded.pendingGateReview?.gateIds).toEqual(['slot-gate']);
+      expect(Object.keys(loaded.detachedGateReviews ?? {})).toEqual(['rev']);
+      expect(reader.getPendingGateReview('sess-rv')?.gateIds).toEqual(['slot-gate']);
+      expect(reader.getPendingGateReview('sess-rv', { nodeId: 'rev' })?.gateIds).toEqual([
+        'node-gate',
+      ]);
+      // A slot addresses detached reviews only: the current step's is not reachable through one.
+      expect(reader.getPendingGateReview('sess-rv', { nodeId: 'n1' })).toBeUndefined();
+      await reader.cleanup();
+    });
+
+    test('a structural review is keyed by the node it grades, and one current-step review replaces another', async () => {
+      const store = newStore();
+      await store.createSession('sess-rs', 'chain-rs#1', 3, {}, threeNodes());
+      await store.completeStep('sess-rs', 'n1');
+      await store.advanceStep('sess-rs', 'n1');
+      // Standing on `rev`, the phase guard grades `n1` — the node its metadata names.
+      await store.setPendingGateReview(
+        'sess-rs',
+        review('phase-guard', {
+          metadata: { source: 'phase-guard-verification', nodeId: 'n1', stepNumber: 1 },
+        })
+      );
+      const structural = store.getSession('sess-rs') as ChainSession;
+      expect(Object.keys(structural.reviews ?? {})).toEqual(['n1']);
+      expect(structural.reviews?.['n1']?.kind).toBe('structural');
+      expect(structural.pendingGateReview?.gateIds).toEqual(['phase-guard']);
+
+      // A gate review of the node the run stands on takes the one current-step slot.
+      await store.setPendingGateReview('sess-rs', review('step-gate', { nodeId: 'rev' }));
+      const replaced = store.getSession('sess-rs') as ChainSession;
+      expect(Object.keys(replaced.reviews ?? {})).toEqual(['rev']);
+      expect(replaced.reviews?.['rev']?.kind).toBe('gate');
+
+      await store.clearPendingGateReview('sess-rs');
+      expect((store.getSession('sess-rs') as ChainSession).reviews).toBeUndefined();
+      await store.cleanup();
+    });
+
+    test("the store keeps a review's phase in step with its attempts", async () => {
+      const store = newStore();
+      await store.createSession('sess-rp', 'chain-rp#1', 3, {}, threeNodes());
+      await store.setPendingGateReview('sess-rp', review('g', { nodeId: 'n1' }));
+      const fail = { verdict: 'FAIL' as const, rawVerdict: 'FAIL' };
+      await store.recordGateReviewOutcome('sess-rp', fail);
+      expect(store.getPendingGateReview('sess-rp')?.phase).toBe('awaiting-verdict');
+      await store.recordGateReviewOutcome('sess-rp', fail);
+      expect(store.getPendingGateReview('sess-rp')?.phase).toBe('exhausted');
+      await store.resetRetryCount('sess-rp');
+      expect(store.getPendingGateReview('sess-rp')?.phase).toBe('awaiting-verdict');
+      await store.cleanup();
+    });
+
+    test('setReview writes a GateReview at its own node', async () => {
+      const store = newStore();
+      await store.createSession('sess-rn', 'chain-rn#1', 3, {}, threeNodes());
+      await store.setReview('sess-rn', {
+        ...(review('g') as object),
+        nodeId: 'n3',
+        kind: 'gate',
+        phase: 'awaiting-verdict',
+      } as never);
+      const session = store.getSession('sess-rn') as ChainSession;
+      expect(Object.keys(session.reviews ?? {})).toEqual(['n3']);
+      // Not the node the run stands on, and still the run's current-step review.
+      expect(session.pendingGateReview?.nodeId).toBe('n3');
+      await store.cleanup();
+    });
+
+    test('a review written without its node is refused, never keyed by where the run stands (R8)', async () => {
+      const store = newStore();
+      await store.createSession('sess-r8', 'chain-r8#1', 3, {}, threeNodes());
+      await expect(store.setPendingGateReview('sess-r8', review('g'))).rejects.toThrow(
+        'written without the node it grades'
+      );
+      expect((store.getSession('sess-r8') as ChainSession).reviews).toBeUndefined();
+      // CONTROL: the same review naming its node is stored there.
+      await store.setPendingGateReview('sess-r8', review('g', { nodeId: 'rev' }));
+      expect(Object.keys((store.getSession('sess-r8') as ChainSession).reviews ?? {})).toEqual([
+        'rev',
+      ]);
+      await store.cleanup();
+    });
+
+    test('the projections are read-only and never serialized', async () => {
+      const store = newStore();
+      const session = await store.createSession('sess-ro', 'chain-ro#1', 3, {}, threeNodes());
+      await store.setPendingGateReview('sess-ro', review('g', { nodeId: 'n1' }));
+      expect(() => {
+        (session as { pendingGateReview?: unknown }).pendingGateReview = undefined;
+      }).toThrow(TypeError);
+      expect(() => {
+        (session as { detachedGateReviews?: unknown }).detachedGateReviews = {};
+      }).toThrow(TypeError);
+      expect(Object.keys(session)).not.toContain('pendingGateReview');
+      expect(Object.keys(session)).toContain('reviews');
+      await store.cleanup();
+    });
+
+    test('a run persisted before `reviews` existed loads its reviews into the store (legacy residual)', async () => {
+      const writer = newStore();
+      await writer.createSession('sess-lg', 'chain-lg#1', 3, {}, threeNodes());
+      await persist(writer);
+      await writer.cleanup();
+      // Rewrite the residual into the pre-3.1 shape: the current-step slot and 4.8's detached map.
+      const legacy = { ...residualOf('sess-lg') };
+      legacy.pendingGateReview = review('slot-gate');
+      legacy.detachedGateReviews = {
+        rev: review('node-gate', { metadata: { phase: 'awaiting-replacement' }, attemptCount: 1 }),
+      };
+      engine.run('UPDATE chain_runs SET state = ? WHERE session_id = ?', [
+        JSON.stringify(legacy),
+        'sess-lg',
+      ]);
+
+      const reader = await coldLoad();
+      const loaded = reader.getSession('sess-lg') as ChainSession;
+      expect(loaded.reviews?.['n1']).toMatchObject({
+        nodeId: 'n1',
+        kind: 'gate',
+        phase: 'awaiting-verdict',
+        gateIds: ['slot-gate'],
+      });
+      expect(loaded.reviews?.['rev']).toMatchObject({
+        nodeId: 'rev',
+        kind: 'detached',
+        phase: 'awaiting-replacement',
+        attemptCount: 1,
+      });
+      // One-way: the next write persists only the new shape.
+      await persist(reader);
+      const rewritten = residualOf('sess-lg');
+      expect(Object.keys(rewritten.reviews as object).sort()).toEqual(['n1', 'rev']);
+      expect(rewritten).not.toHaveProperty('pendingGateReview');
+      expect(rewritten).not.toHaveProperty('detachedGateReviews');
+      await reader.cleanup();
+    });
   });
 
   test('node rows carry position, prompt and milestone per node, in run order', async () => {

@@ -19,6 +19,7 @@ const createMockChainSessionStore = () => ({
   hasActiveSession: jest.fn(),
   getPendingGateReview: jest.fn(),
   setPendingGateReview: jest.fn(),
+  setReview: jest.fn(),
   clearPendingGateReview: jest.fn(),
   isRetryLimitExceeded: jest.fn().mockReturnValue(false),
   resetRetryCount: jest.fn(),
@@ -378,53 +379,6 @@ GATE_REVIEW: FAIL - Tests missing`;
     });
   });
 
-  describe('getRetryConfig', () => {
-    test('returns default values when no pending review', () => {
-      mockSessionManager.getPendingGateReview.mockReturnValue(undefined);
-
-      const config = authority.getRetryConfig('session-1');
-
-      expect(config.currentAttempt).toBe(0);
-      expect(config.maxAttempts).toBe(2); // DEFAULT_RETRY_LIMIT
-      expect(config.isExhausted).toBe(false);
-    });
-
-    test('returns values from pending review', () => {
-      mockSessionManager.getPendingGateReview.mockReturnValue({
-        attemptCount: 2,
-        maxAttempts: 5,
-      });
-
-      const config = authority.getRetryConfig('session-1');
-
-      expect(config.currentAttempt).toBe(2);
-      expect(config.maxAttempts).toBe(5);
-      expect(config.isExhausted).toBe(false);
-    });
-
-    test('marks exhausted when attempts meet max', () => {
-      mockSessionManager.getPendingGateReview.mockReturnValue({
-        attemptCount: 3,
-        maxAttempts: 3,
-      });
-
-      const config = authority.getRetryConfig('session-1');
-
-      expect(config.isExhausted).toBe(true);
-    });
-  });
-
-  describe('isRetryLimitExceeded', () => {
-    test('delegates to session manager', () => {
-      mockSessionManager.isRetryLimitExceeded.mockReturnValue(true);
-
-      const result = authority.isRetryLimitExceeded('session-1');
-
-      expect(result).toBe(true);
-      expect(mockSessionManager.isRetryLimitExceeded).toHaveBeenCalledWith('session-1');
-    });
-  });
-
   // getPendingReview() was deleted at P4.52 — every real caller (step-capture-service.ts,
   // gate-verdict-processor.ts, 13-session-stage.ts, 20-gate-review-stage.ts, and this
   // class's own internals) calls chainSessionStore.getPendingGateReview() directly; the
@@ -571,199 +525,80 @@ GATE_REVIEW: FAIL - Tests missing`;
     });
   });
 
-  describe('recordOutcome', () => {
-    describe('PASS verdict', () => {
-      test('returns cleared status when session manager clears', async () => {
-        mockSessionManager.recordGateReviewOutcome.mockReturnValue('cleared');
-
-        const verdict = {
-          verdict: 'PASS' as const,
-          rationale: 'Good work',
-          raw: 'GATE_REVIEW: PASS - Good work',
-          source: 'gate_verdict' as VerdictSource,
-        };
-
-        const outcome = await authority.recordOutcome('session-1', verdict);
-
-        expect(outcome.status).toBe('cleared');
-        expect(outcome.nextAction).toBe('continue');
-      });
-    });
-
-    describe('FAIL verdict in blocking mode', () => {
-      test('returns exhausted when retry limit exceeded', async () => {
-        mockSessionManager.recordGateReviewOutcome.mockReturnValue('pending');
-        mockSessionManager.getPendingGateReview.mockReturnValue({
-          attemptCount: 3,
-          maxAttempts: 3,
-        });
-
-        const verdict = {
-          verdict: 'FAIL' as const,
-          rationale: 'Not good',
-          raw: 'GATE_REVIEW: FAIL - Not good',
-          source: 'gate_verdict' as VerdictSource,
-        };
-
-        const outcome = await authority.recordOutcome('session-1', verdict, 'blocking');
-
-        expect(outcome.status).toBe('exhausted');
-        expect(outcome.nextAction).toBe('await_user_choice');
-        expect(outcome.attemptCount).toBe(3);
-        expect(outcome.maxAttempts).toBe(3);
-      });
-
-      test('returns pending when retries remaining', async () => {
-        mockSessionManager.recordGateReviewOutcome.mockReturnValue('pending');
-        mockSessionManager.getPendingGateReview.mockReturnValue({
-          attemptCount: 1,
-          maxAttempts: 3,
-        });
-
-        const verdict = {
-          verdict: 'FAIL' as const,
-          rationale: 'Try again',
-          raw: 'GATE_REVIEW: FAIL - Try again',
-          source: 'gate_verdict' as VerdictSource,
-        };
-
-        const outcome = await authority.recordOutcome('session-1', verdict, 'blocking');
-
-        expect(outcome.status).toBe('pending');
-        expect(outcome.nextAction).toBe('await_verdict');
-      });
-    });
-
-    describe('FAIL verdict in advisory mode', () => {
-      test('logs warning and continues', async () => {
-        mockSessionManager.recordGateReviewOutcome.mockReturnValue('pending');
-        mockSessionManager.getPendingGateReview.mockReturnValue({
-          attemptCount: 0,
-          maxAttempts: 3,
-        });
-
-        const verdict = {
-          verdict: 'FAIL' as const,
-          rationale: 'Minor issue',
-          raw: 'GATE_REVIEW: FAIL - Minor issue',
-          source: 'gate_verdict' as VerdictSource,
-        };
-
-        const outcome = await authority.recordOutcome('session-1', verdict, 'advisory');
-
-        expect(outcome.status).toBe('cleared');
-        expect(outcome.nextAction).toBe('continue');
-        expect(mockLogger.warn).toHaveBeenCalled();
-        expect(mockSessionManager.clearPendingGateReview).toHaveBeenCalledWith('session-1');
-      });
-    });
-
-    describe('FAIL verdict in informational mode', () => {
-      test('logs debug and continues silently', async () => {
-        mockSessionManager.recordGateReviewOutcome.mockReturnValue('pending');
-        mockSessionManager.getPendingGateReview.mockReturnValue({
-          attemptCount: 0,
-          maxAttempts: 3,
-        });
-
-        const verdict = {
-          verdict: 'FAIL' as const,
-          rationale: 'Info only',
-          raw: 'GATE_REVIEW: FAIL - Info only',
-          source: 'gate_verdict' as VerdictSource,
-        };
-
-        const outcome = await authority.recordOutcome('session-1', verdict, 'informational');
-
-        expect(outcome.status).toBe('cleared');
-        expect(outcome.nextAction).toBe('continue');
-        expect(mockLogger.debug).toHaveBeenCalled();
-        expect(mockSessionManager.clearPendingGateReview).toHaveBeenCalledWith('session-1');
-      });
-    });
-  });
-
-  describe('resolveAction', () => {
-    test('handles retry action', async () => {
-      const result = await authority.resolveAction('session-1', 'retry');
-
-      expect(result.handled).toBe(true);
-      expect(result.retryReset).toBe(true);
-      expect(mockSessionManager.resetRetryCount).toHaveBeenCalledWith('session-1');
-    });
-
-    test('handles skip action', async () => {
-      const result = await authority.resolveAction('session-1', 'skip');
-
-      expect(result.handled).toBe(true);
-      expect(result.reviewCleared).toBe(true);
-      expect(mockSessionManager.clearPendingGateReview).toHaveBeenCalledWith('session-1');
-      expect(mockLogger.warn).toHaveBeenCalled();
-    });
-
-    test('handles abort action', async () => {
-      const result = await authority.resolveAction('session-1', 'abort');
-
-      expect(result.handled).toBe(true);
-      expect(result.sessionAborted).toBe(true);
-    });
-
-    // Regression: abort used to set only the in-memory `state.session.aborted` flag, which
-    // stage 21 reads to write a `cancelled` execution record. Nothing transitioned the RUN,
-    // so `runStatus` stayed 'working' and the next call resumed the chain the user aborted —
-    // the ledger said cancelled while the run kept going.
-    test('abort cancels the chain run, not just the in-memory flag', async () => {
-      await authority.resolveAction('session-1', 'abort');
-
-      expect(mockSessionManager.cancelChain).toHaveBeenCalledWith('session-1');
-    });
-
-    test('abort still reports sessionAborted when the run is already terminal', async () => {
-      // cancelChain refuses completed/failed runs. That is not an error here: the run is
-      // already over, so the caller must still take the abort exit rather than re-render.
-      mockSessionManager.cancelChain.mockResolvedValue(false);
-
-      const result = await authority.resolveAction('session-1', 'abort');
-
-      expect(result.handled).toBe(true);
-      expect(result.sessionAborted).toBe(true);
-    });
-
-    test('retry and skip leave the run alive', async () => {
-      await authority.resolveAction('session-1', 'retry');
-      await authority.resolveAction('session-1', 'skip');
-
-      expect(mockSessionManager.cancelChain).not.toHaveBeenCalled();
-    });
-
-    test('handles unknown action', async () => {
-      const result = await authority.resolveAction('session-1', 'unknown' as any);
-
-      expect(result.handled).toBe(false);
-      expect(mockLogger.warn).toHaveBeenCalled();
-    });
-  });
-
-  describe('setPendingReview', () => {
-    test('delegates to session manager', async () => {
-      const review = {
-        combinedPrompt: 'test',
+  describe('createReview', () => {
+    test('stores the review keyed by the node it grades, awaiting a verdict', async () => {
+      const review = await authority.createReview('session-1', 'gate', 'n2', {
         gateIds: ['g1'],
-        prompts: [],
-        createdAt: Date.now(),
+        instructions: 'Review',
+        maxAttempts: 4,
+      });
+
+      expect(review).toMatchObject({
+        nodeId: 'n2',
+        kind: 'gate',
+        phase: 'awaiting-verdict',
+        gateIds: ['g1'],
         attemptCount: 0,
-        maxAttempts: 3,
-        retryHints: [],
-        history: [],
-      };
+        maxAttempts: 4,
+      });
+      expect(mockSessionManager.setReview).toHaveBeenCalledWith('session-1', review);
+      // The legacy writer, which stamps a node from the run, is not the path.
+      expect(mockSessionManager.setPendingGateReview).not.toHaveBeenCalled();
+    });
 
-      await authority.setPendingReview('session-1', review);
+    test('a step review is keyed by the step, and a step with no node is refused (R8)', async () => {
+      const gates = { getMaxRetryLimit: () => undefined };
+      const context = {
+        parsedCommand: { steps: [{ stepNumber: 2, nodeId: 'draft' }] },
+        gates,
+      } as never;
 
-      expect(mockSessionManager.setPendingGateReview).toHaveBeenCalledWith('session-1', review);
+      const created = await authority.createReviewForStep(
+        context,
+        { sessionId: 'session-1', currentStep: 2 } as never,
+        ['g1']
+      );
+      expect(created?.nodeId).toBe('draft');
+
+      await expect(
+        authority.createReviewForStep(
+          { parsedCommand: { steps: [] }, gates } as never,
+          { sessionId: 'session-1', currentStep: 2 } as never,
+          ['g1']
+        )
+      ).rejects.toThrow('names no node');
     });
   });
 
-  // clearPendingReview() was deleted at P4.52 — every real caller, including this class's
-  // own recordOutcome()/resolveAction() internals, calls
-  // chainSessionStore.clearPendingGateReview() directly; the wrapper had zero adopters.
+  describe('resolveReviewEnforcement (R10)', () => {
+    const withGates = (modes: Record<string, EnforcementMode | undefined>) =>
+      new GateEnforcementAuthority(
+        mockSessionManager as any,
+        mockLogger as any,
+        {
+          loadGates: async (ids: string[]) => ids.map((id) => ({ id, enforcementMode: modes[id] })),
+        } as never
+      );
+
+    test("a review's own advisory gates decide, not a constant", async () => {
+      const mode = await withGates({ soft: 'advisory' }).resolveReviewEnforcement(
+        { gateIds: ['soft'] },
+        []
+      );
+      expect(mode).toBe('advisory');
+    });
+
+    test('CONTROL: an undeclared gate counts as blocking, and a named failed gate decides', async () => {
+      const authorityWithGates = withGates({ soft: 'advisory' });
+      expect(
+        await authorityWithGates.resolveReviewEnforcement({ gateIds: ['soft', 'plain'] }, [])
+      ).toBe('blocking');
+      expect(
+        await authorityWithGates.resolveReviewEnforcement({ gateIds: ['soft', 'plain'] }, ['soft'])
+      ).toBe('advisory');
+    });
+  });
+
+  // clearPendingReview() was deleted at P4.52; recordOutcome()/resolveAction() at row 3.3, when
+  // every review transition moved onto `advanceReview` in the verdict processor's one path.
 });

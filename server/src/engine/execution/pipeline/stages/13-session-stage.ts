@@ -214,6 +214,12 @@ export class SessionManagementStage extends BasePipelineStage {
     if (!context.state.gates.hasBlockingGates || sessionContext.pendingReview) {
       return;
     }
+    // A run that walked past its last node (held open on a detached node) stands on no step, so
+    // there is no step to review. A review is keyed by the node it grades (R8); keying one here
+    // used to stamp the last node the run left with a review of a step already answered.
+    if (sessionContext.currentNodeId === null) {
+      return;
+    }
 
     // Scoped to the step this review is being opened FOR (P4-F3, DEV-T4-2). This is the review
     // feed that actually blocks a chain: `formatChainResponse` renders `buildGateReviewCTA` from

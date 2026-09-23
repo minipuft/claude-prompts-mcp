@@ -1,4 +1,5 @@
 // @lifecycle canonical - Captures model responses and lifecycle decisions.
+import { addressedReview } from '../../../gates/services/gate-verdict-processor.js';
 import { UnknownObservationValidationError } from '../../capture/unknown-observation-processor.js';
 import {
   collectDetachedNodeFacts,
@@ -10,6 +11,7 @@ import {
 import {
   HANDOFF_RESULT_HEADING,
   handoffNodeToken,
+  parseHandoffTrailer,
   resolveHandoffEvidence,
   resolveHandoffEvidenceMode,
 } from '../../delegation/handoff-contract.js';
@@ -24,7 +26,7 @@ import {
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
-import type { ChainNode, PendingGateReview } from '#shared/types/chain-execution.js';
+import type { ChainNode, GateReview, PendingGateReview } from '#shared/types/chain-execution.js';
 import type {
   ChainSession,
   SessionBlueprint,
@@ -236,71 +238,32 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       return;
     }
 
-    // Handle gate_action parameter (retry/skip/abort) when retry limit exceeded
-    const gateAction = context.mcpRequest.gate_action;
-    const authority = context.gateEnforcement;
-    const isRetryLimitExceeded =
-      authority !== undefined
-        ? authority.isRetryLimitExceeded(sessionId)
-        : this.chainSessionStore.isRetryLimitExceeded(sessionId);
-
     // `gate_action` carries two disjoint vocabularies (see `McpToolRequest.gate_action`). The
-    // interrupt half was consumed above; only the retry-exhaustion half reaches the authority,
-    // which has no branch for the other two and would answer `handled: true` to a verb it never
-    // acted on.
+    // interrupt half was consumed above; only the retry-exhaustion half answers the step review,
+    // and only while that review is exhausted — it is the one phase that accepts the action.
+    const gateAction = context.mcpRequest.gate_action;
     if (
       gateAction !== undefined &&
       !isInterruptResolutionAction(gateAction) &&
-      isRetryLimitExceeded
+      this.stepReviewOf(session)?.phase === 'exhausted'
     ) {
-      const earlyExit = await this.verdictProcessor.handleGateAction(
-        context,
-        sessionId,
-        gateAction,
-        sessionContext
-      );
-      if (earlyExit) {
-        this.logExit({ gateAction, handled: true });
-        return;
-      }
-    }
-
-    // Process gate verdicts
-    const userResponse = context.mcpRequest.user_response?.trim();
-
-    const deferredResult = await this.verdictProcessor.processDeferredVerdict(
-      context,
-      session,
-      sessionId,
-      currentStepAtStart,
-      userResponse,
-      sessionContext
-    );
-    if (deferredResult.earlyExit) {
-      await this.settleVerdict(context, sessionId, session, currentStepAtStart, deferredResult);
-      await this.ensurePostAdvanceReview(context);
-      this.logExit({ gateVerdict: 'deferred', handled: true });
+      await this.verdictProcessor.handleGateAction(context, session, gateAction, sessionContext);
+      this.logExit({ gateAction, handled: true });
       return;
     }
 
-    const pendingResult = await this.processPendingUnlessSpent(
+    // Answer the review this call's verdict addresses — one path, one recorded attempt (P4.116).
+    const verdictResult = await this.verdictProcessor.processReviewVerdict(
       context,
       session,
-      currentStepAtStart,
-      deferredResult,
-      sessionContext
+      sessionContext,
+      context.mcpRequest.user_response?.trim(),
+      this.resolveVerdictTrailer(context, currentNodeIdAtStart, currentStepAtStart)
     );
-    if (pendingResult.earlyExit) {
-      await this.settleVerdict(
-        context,
-        sessionId,
-        session,
-        currentStepAtStart,
-        deferredResult,
-        pendingResult
-      );
+    if (verdictResult.earlyExit) {
+      await this.settleVerdict(context, sessionId, session, currentStepAtStart, verdictResult);
       await this.ensurePostAdvanceReview(context);
-      this.logExit({ gateVerdict: 'pending-review', handled: true });
+      this.logExit({ gateVerdict: 'answered', handled: true });
       return;
     }
 
@@ -313,52 +276,49 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       sessionContext,
       currentStepAtStart,
       {
-        userResponse: pendingResult.userResponse,
+        userResponse: verdictResult.userResponse,
+        // The PASS decided THIS step's advance only when its review graded this step. A PASS on
+        // an earlier node's review (opened after the run walked on) leaves the capture to
+        // advance the step it captures, as it would with no verdict at all.
         passClearedThisCall:
-          pendingResult.passClearedThisCall || deferredResult.passClearedThisCall,
+          verdictResult.passClearedThisCall &&
+          verdictResult.deferredAdvance?.nodeId === currentNodeIdAtStart,
       }
     );
 
-    await this.settleVerdict(
-      context,
-      sessionId,
-      session,
-      currentStepAtStart,
-      deferredResult,
-      pendingResult
-    );
+    await this.settleVerdict(context, sessionId, session, currentStepAtStart, verdictResult);
 
     await this.ensurePostAdvanceReview(context);
 
     this.logExit({ captured: true });
   }
 
+  /** The run's step review — the one a call without a trailer addresses (`resolveReviewTarget`). */
+  private stepReviewOf(session: ChainSession): GateReview | undefined {
+    const target = addressedReview(session);
+    return target.kind === 'review' ? session.reviews?.[target.nodeId] : undefined;
+  }
+
   /**
-   * Answer the pending review with this call's verdict — unless the deferred path already spent it.
-   *
-   * One submission, one recorded attempt (P4.116). A deferred FAIL opens a review and records the
-   * verdict against it; handing the same `gate_verdict` to the pending path recorded it a second
-   * time and spent two retry attempts on one call. The spent result stands in for the pending one.
+   * The node a verdict's `HANDOFF RESULT` trailer addresses, when it names one other than the
+   * step the run stands on — that one is the step's own handoff evidence, not an address. A
+   * token resolves to its step's node id; a token naming no step is passed through as named, so
+   * the verdict path refuses it by name rather than answering some other review.
    */
-  private async processPendingUnlessSpent(
+  private resolveVerdictTrailer(
     context: ExecutionContext,
-    session: NonNullable<ReturnType<ChainSessionService['getSession']>>,
-    currentStepAtStart: number,
-    deferredResult: VerdictProcessingResult,
-    sessionContext: SessionContext
-  ): Promise<VerdictProcessingResult> {
-    if (deferredResult.verdictRecorded === true) {
-      return deferredResult;
+    currentNodeIdAtStart: string | null,
+    currentStepAtStart: number
+  ): string | undefined {
+    const named = parseHandoffTrailer(context.mcpRequest.user_response ?? '').node;
+    const current = this.resolveResumeStep(context, currentNodeIdAtStart, currentStepAtStart);
+    if (named === null || (current !== undefined && handoffNodeToken(current) === named)) {
+      return undefined;
     }
-    const sessionId = sessionContext.sessionId;
-    return this.verdictProcessor.processPendingReviewVerdict(
-      context,
-      this.chainSessionStore.getSession(sessionId, context.getScopeOptions()) ?? session,
-      sessionId,
-      currentStepAtStart,
-      deferredResult.userResponse,
-      sessionContext
+    const step = context.parsedCommand?.steps?.find(
+      (candidate) => handoffNodeToken(candidate) === named
     );
+    return step?.nodeId ?? named;
   }
 
   /**
@@ -373,24 +333,20 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    *    — and until that moved here, the announcement reached the client ahead of the
    *    `step_complete` for the step being answered (P4.89).
    *
-   * Every distinct result is applied rather than one being picked. When the deferred path recorded
-   * the verdict the pending path never ran and both arguments are the same result, applied once.
-   * A second advance would still be harmless — `advanceStep` no-ops on a node the run has already
-   * passed, which is also what makes this safe after `StepCaptureService` advanced the run itself.
+   * The advance passes the node the answered review graded. Applying it after
+   * `StepCaptureService` advanced the run itself is harmless — `advanceStep` no-ops on a node the
+   * run has already passed.
    */
   private async settleVerdict(
     context: ExecutionContext,
     sessionId: string,
     session: NonNullable<ReturnType<ChainSessionService['getSession']>>,
     currentStepAtStart: number,
-    ...results: readonly VerdictProcessingResult[]
+    result: VerdictProcessingResult
   ): Promise<void> {
     this.stepCaptureService.ledgerSubmittedVerdict(context, sessionId, session, currentStepAtStart);
-
-    for (const result of new Set(results)) {
-      if (result.deferredAdvance !== undefined) {
-        await this.verdictProcessor.applyDeferredAdvance(context, result.deferredAdvance);
-      }
+    if (result.deferredAdvance !== undefined) {
+      await this.verdictProcessor.applyDeferredAdvance(context, result.deferredAdvance);
     }
   }
 
@@ -431,7 +387,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     const decision = resolveDetachedReport({
       reply,
       mode: this.resolveEvidenceMode(),
-      reviewPending: this.chainSessionStore.getPendingGateReview(sessionId) !== undefined,
+      reviewPending: this.stepReviewOf(session) !== undefined,
       submits: {
         verdict: (context.getGateVerdict() ?? '').length > 0,
         action: context.mcpRequest.gate_action !== undefined,
@@ -507,14 +463,15 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       reply
     );
     const gateIds = context.state.gates.detachedReviewGateIds?.[node.stepNumber] ?? [];
-    const review =
-      (await context.gateEnforcement?.openDetachedReview(
-        context,
-        sessionId,
-        node,
-        gateIds,
-        reply
-      )) ?? null;
+    const review = replaces
+      ? await this.verdictProcessor.applyReplacementReport(context, session, node.nodeId, reply)
+      : ((await context.gateEnforcement?.openDetachedReview(
+          context,
+          sessionId,
+          node,
+          gateIds,
+          reply
+        )) ?? null);
     const runCompleted = await this.chainSessionStore.completeHeldRun(sessionId);
     const after =
       this.chainSessionStore.getSession(sessionId, context.getScopeOptions()) ?? session;
@@ -560,8 +517,13 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     const action = context.mcpRequest.gate_action;
     const result: DetachedReviewVerdictResult =
       kind === 'review-verdict' || action === undefined
-        ? await this.verdictProcessor.processDetachedReviewVerdict(context, sessionId, node.nodeId)
-        : await this.verdictProcessor.processDetachedReviewAction(sessionId, node.nodeId, action);
+        ? await this.verdictProcessor.processDetachedReviewVerdict(context, session, node.nodeId)
+        : await this.verdictProcessor.processDetachedReviewAction(
+            context,
+            session,
+            node.nodeId,
+            action
+          );
     if (result.kind === 'refused') {
       context.setResponse(this.buildErrorResponse(result.message));
       return;
@@ -569,12 +531,20 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     const runCompleted = await this.chainSessionStore.completeHeldRun(sessionId);
     const after =
       this.chainSessionStore.getSession(sessionId, context.getScopeOptions()) ?? session;
-    const text = describeDetachedReviewOutcome(node, {
+    const cleared = result.result === 'cleared';
+    const described = describeDetachedReviewOutcome(node, {
       ...result,
+      result: cleared ? 'passed' : result.result,
       runCompleted,
       held: isRunHeldOpen(after),
       detachedNodes: collectDetachedNodeFacts(context.parsedCommand?.steps, after),
     });
+    // A FAIL on gates that are not blocking clears the review (R10). The renderer has no head for
+    // that outcome yet, so its PASS head — the first paragraph — is replaced by one that says so.
+    const text = cleared
+      ? `⚠ Gate review of detached node ${node.token} (step ${node.stepNumber}) failed, but its ` +
+        `gates are not blocking: its recorded result stands.${described.slice(described.indexOf('\n\n'))}`
+      : described;
     context.setResponse({
       content: [{ type: 'text', text: `${text}\n\nChain: ${after.chainId}` }],
       isError: false,
@@ -943,7 +913,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       return;
     }
 
-    const alreadyHolding = isUnknownInterruptPending(session.pendingGateReview);
+    const alreadyHolding = isUnknownInterruptPending(this.stepReviewOf(session));
     const interrupt = decideInterrupt({
       ledger: session.unknownsLedger ?? [],
       nodes: session.state.nodes,
@@ -962,7 +932,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     context.state.session.chainInterrupt = interrupt;
 
     if (interrupt.paused && !alreadyHolding) {
-      const review = buildUnknownInterruptReview(interrupt);
+      const review = buildUnknownInterruptReview(interrupt, session.state.currentNodeId);
       await this.chainSessionStore.setPendingGateReview(sessionId, review);
       // Stage 18 skips step execution on a pending review, so the response is the interrupt
       // alone (D-2). It reads `sessionContext`, not the store, and `alignSessionContext` above
@@ -1101,7 +1071,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     updatedSessionContext.currentStep = currentStepAtStart;
     updatedSessionContext.currentNodeId = session.state.currentNodeId;
     updatedSessionContext.totalSteps = totalOf(session.state.nodes);
-    const pendingReview = session.pendingGateReview ?? sessionContext.pendingReview;
+    const pendingReview = this.stepReviewOf(session) ?? sessionContext.pendingReview;
     if (pendingReview !== undefined) {
       updatedSessionContext.pendingReview = pendingReview;
     }
@@ -1173,9 +1143,16 @@ export function resolveDeclaredPauseOnBlocking(blueprint: SessionBlueprint | und
  * second attempt. `prompts: []` for the same reason: there is no gate criterion to display, and
  * the resolution vocabulary is rendered by `ResponseAssembler` from the interrupt itself, which
  * is the one place it can name the affected steps and the remaining plan.
+ *
+ * Keyed by the node the run holds on (R8): a run standing past its last node names none, and the
+ * store refuses a review with no node rather than guessing one.
  */
-function buildUnknownInterruptReview(interrupt: ChainInterrupt): PendingGateReview {
+function buildUnknownInterruptReview(
+  interrupt: ChainInterrupt,
+  nodeId: string | null
+): PendingGateReview {
   return {
+    ...(nodeId !== null ? { nodeId } : {}),
     combinedPrompt: `A blocking unknown stopped this run: ${interrupt.statement}`,
     gateIds: [UNKNOWN_INTERRUPT_GATE_ID],
     prompts: [],

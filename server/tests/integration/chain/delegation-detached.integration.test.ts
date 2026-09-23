@@ -468,6 +468,7 @@ describe('detached delegation (await: run) through the pipeline', () => {
       });
       const { chainId, sessionId } = await renderDetached(pipeline);
       await sessionStore.setPendingGateReview(sessionId, {
+        nodeId: sessionStore.getSession(sessionId)!.state.currentNodeId!,
         combinedPrompt: 'Review the step.',
         gateIds: ['held-review'],
         prompts: [],
@@ -738,6 +739,7 @@ describe('detached delegation (await: run) through the pipeline', () => {
       await pipeline.execute({ chain_id: chainId } as any);
       expect(run().state.currentNodeId).toBe('n3');
       await sessionStore.setPendingGateReview(sessionId, {
+        nodeId: sessionStore.getSession(sessionId)!.state.currentNodeId!,
         combinedPrompt: 'Review step 3.',
         gateIds: ['current-gate'],
         prompts: [],

@@ -115,19 +115,25 @@ describe('DirectChainRunRegistry handoff transfer', () => {
 
   test('a run HOLDING on the unknown interrupt hands the hold to the claimer (D-9, row 4.2)', async () => {
     // The claimer must receive the INTERRUPT, not the next step. The mechanism the ruling bets on
-    // is that `__unknown_interrupt__` is an ordinary `pendingGateReview` riding the run's residual
-    // document, so ownership transfer carries it like any other pending state — "expected free".
-    // Free is a prediction about a path nobody drove, which is why D-9 asks for a test.
+    // is that `__unknown_interrupt__` is an ordinary gate review riding the run's residual
+    // document (`reviews`), so ownership transfer carries it like any other pending state —
+    // "expected free". Free is a prediction about a path nobody drove, which is why D-9 asks for
+    // a test.
     const held = makeSession('s-held', 'hnd_token-held');
-    held.pendingGateReview = {
-      combinedPrompt: 'A blocking unknown stopped this plan.',
-      gateIds: [UNKNOWN_INTERRUPT_GATE_ID],
-      prompts: [],
-      createdAt: 1,
-      attemptCount: 0,
-      maxAttempts: 1,
-      metadata: { unknownId: 'plan-shape' },
-    } as unknown as ChainSession['pendingGateReview'];
+    held.reviews = {
+      n1: {
+        nodeId: 'n1',
+        kind: 'gate',
+        phase: 'awaiting-verdict',
+        combinedPrompt: 'A blocking unknown stopped this plan.',
+        gateIds: [UNKNOWN_INTERRUPT_GATE_ID],
+        prompts: [],
+        createdAt: 1,
+        attemptCount: 0,
+        maxAttempts: 1,
+        metadata: { unknownId: 'plan-shape' },
+      },
+    };
     held.unknownsLedger = [
       {
         id: 'plan-shape',

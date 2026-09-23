@@ -1,4 +1,6 @@
 // @lifecycle canonical - Processes gate verdicts, actions, and hook events for chain sessions.
+import { advanceReview } from '../../execution/pipeline/decisions/gates/review-lifecycle.js';
+import { resolveReviewTarget } from '../../execution/pipeline/decisions/gates/review-target.js';
 import {
   isUnknownInterruptPending,
   resolveEnforcementMode,
@@ -7,7 +9,7 @@ import { buildPipelineHookContext } from '../../execution/pipeline/hook-context.
 import { parseGateVerdict } from '../core/gate-verdict-contract.js';
 
 import type { Logger } from '#infra/logging/index.js';
-import type { GateCheckResult } from '#shared/types/chain-execution.js';
+import type { GateCheckResult, GateReview } from '#shared/types/chain-execution.js';
 import type {
   ChainSession,
   ChainSessionService,
@@ -16,13 +18,13 @@ import type {
   PipelineHookContext,
 } from '#shared/types/index.js';
 import type { ExecutionContext, SessionContext } from '../../execution/context/index.js';
+import type { ReviewEvent } from '../../execution/pipeline/decisions/gates/review-lifecycle.js';
 import type {
+  EnforcementMode,
   GateAction,
   InterruptResolutionAction,
 } from '../../execution/pipeline/decisions/index.js';
 import type { ParsedGateVerdict } from '../core/gate-verdict-contract.js';
-
-import { nodeIdAt } from '#shared/utils/node-order.js';
 
 /**
  * Outcome of a mid-chain interrupt resolution attempt (row 2.2).
@@ -46,14 +48,14 @@ export type InterruptResolution =
  * two-step chain for both a gated PASS and an advisory FAIL.
  *
  * So the decision is returned instead of executed, and the stage applies it after the capture.
- * The node id is resolved at DECISION time, not at application time: by then the capture may
- * have advanced the run itself (the advisory path), and `advanceStep` no-ops on a node the run
- * has already passed — which is what makes applying this twice, or after the capture already
- * did it, safe rather than a double advance.
+ * The node is the one the answered review GRADES (row 3.3), never the run's position: a review
+ * opened on N while the run stands on N+1 advances past N, which the run already left — and
+ * `advanceStep` no-ops on a node the run has passed, which is also what makes applying this
+ * twice, or after the capture already did it, safe rather than a double advance.
  */
 export interface DeferredAdvance {
   readonly sessionId: string;
-  /** The node the run advances PAST — the step this call graded, not the one it moves to. */
+  /** The node the run advances PAST — the node the answered review graded. */
   readonly nodeId: string;
   /** Why the run advances, for the diagnostic line the application emits. */
   readonly reason: 'gate-pass' | 'advisory-fail' | 'informational-fail';
@@ -71,11 +73,6 @@ export interface VerdictProcessingResult {
   readonly userResponse: string | undefined;
   /** The advance this call decided, for the stage to apply after the capture — see {@link DeferredAdvance}. */
   readonly deferredAdvance?: DeferredAdvance;
-  /**
-   * True when this call's `gate_verdict` was recorded against a review. The submission is then
-   * spent: recording it again would charge a second retry attempt for one submission (P4.116).
-   */
-  readonly verdictRecorded?: boolean;
 }
 
 /** What a verdict or `gate_action` on a detached node's review did (row 4.8). */
@@ -83,10 +80,56 @@ export type DetachedReviewVerdictResult =
   | { readonly kind: 'refused'; readonly message: string }
   | {
       readonly kind: 'recorded';
-      readonly result: 'passed' | 'failed' | 'exhausted' | 'retry' | 'skipped';
+      /** `cleared`: a FAIL on a review whose gates are not blocking (R10) — the result stands. */
+      readonly result: 'passed' | 'failed' | 'exhausted' | 'retry' | 'skipped' | 'cleared';
       readonly attempt: number;
       readonly maxAttempts: number;
     };
+
+/** A transition {@link advanceReview} applied — every outcome but a refusal. */
+type AppliedAdvance = Exclude<ReturnType<typeof advanceReview>, { outcome: 'refused' }>;
+
+/**
+ * What answering a review did: the review as it stood when the event landed, the transition,
+ * and the enforcement mode that decided a FAIL. A refusal carries the sentence the caller reads.
+ */
+type ReviewAnswer =
+  | { readonly kind: 'refused'; readonly message: string }
+  | {
+      readonly kind: 'answered';
+      readonly review: GateReview;
+      readonly advance: AppliedAdvance;
+      readonly enforcement: EnforcementMode;
+      /** The gates the verdict failed BY NAME (R107); empty for any other event. */
+      readonly failedGateIds: readonly string[];
+    };
+
+/** One event reaching the one review path, and how to find — or open — the review it answers. */
+interface ReviewEntry {
+  readonly event: ReviewEvent;
+  /** The node a `HANDOFF RESULT` trailer names, when the call addressed one. */
+  readonly trailerNodeId?: string;
+  /** Opens the review a verdict answers when none is open (the deferred entry). */
+  readonly open?: (nodeId: string) => Promise<GateReview>;
+  /** Grades the review before the event lands — a detached review's checks (R10.3). */
+  readonly grade?: (review: GateReview) => Promise<GateReview>;
+}
+
+/**
+ * The review a call addresses, through the one owner of that question (`resolveReviewTarget`).
+ * Without a trailer it is the run's step review; a detached node's review answers only by name.
+ */
+export function addressedReview(
+  session: ChainSession,
+  trailerNodeId?: string
+): ReturnType<typeof resolveReviewTarget> {
+  return resolveReviewTarget({
+    reviews: session.reviews ?? {},
+    currentNodeId: session.state.currentNodeId,
+    nodeIds: session.state.nodes.map((node) => node.id),
+    ...(trailerNodeId !== undefined ? { trailerNodeId } : {}),
+  });
+}
 
 /**
  * Processes gate verdicts, handles gate actions (retry/skip/abort),
@@ -95,17 +138,6 @@ export type DetachedReviewVerdictResult =
  * Extracted from StepResponseCaptureStage.
  */
 export class GateVerdictProcessor {
-  /**
-   * Translate the position this stage was handed into the node id the store addresses by.
-   *
-   * Returns `''` when no node sits at that position — the store treats an unresolvable id as
-   * already-passed and leaves the run untouched, which is what the previous `currentStep ?? 0`
-   * guard achieved by arithmetic. Never invents a node.
-   */
-  private resolveNodeId(session: ChainSession, ordinal: number): string {
-    return nodeIdAt(session.state.nodes, ordinal) ?? '';
-  }
-
   constructor(
     private readonly chainSessionStore: ChainSessionService,
     private readonly logger: Logger,
@@ -126,74 +158,55 @@ export class GateVerdictProcessor {
   /**
    * Answer a detached node's gate review with this call's `gate_verdict` (row 4.8, R8/R10).
    *
-   * The review is found by node (`{ nodeId }`), never in the current-step slot, and nothing here
-   * reads or moves the step the run stands on. Before anything is recorded, the gates' shell and
-   * script checks run against the node's RECORDED output (`reviewedOutput`, R10.3) and land on
-   * the review; a PASS over a failing one is refused exactly as on a current-step review, and
-   * spends no attempt. A FAIL asks for a replacement report (`awaiting-replacement`), or — once
-   * the attempts are spent — a `gate_action` (`exhausted`). A PASS deletes the review.
+   * The review is the one the trailer names (`nodeId`), and nothing here reads or moves the step
+   * the run stands on. Before the verdict lands, the gates' shell and script checks run against
+   * the node's RECORDED output (`reviewedOutput`, R10.3) and are recorded on the review; a PASS
+   * over a failing one is refused and spends no attempt. A blocking FAIL asks for a replacement
+   * report, or — once the attempts are spent — a `gate_action`; a FAIL on gates that are not
+   * blocking clears the review (R10). A PASS deletes the review.
    *
    * @returns the refusal sentence when nothing was recorded; otherwise the outcome and counter.
    */
   async processDetachedReviewVerdict(
     context: ExecutionContext,
-    sessionId: string,
+    session: ChainSession,
     nodeId: string
   ): Promise<DetachedReviewVerdictResult> {
-    const slot = { nodeId };
-    const review = this.chainSessionStore.getPendingGateReview(sessionId, slot);
     const payload = this.parseVerdict(context, context.getGateVerdict(), 'gate_verdict');
-    if (review === undefined || payload === null) {
+    if (payload === null) {
       return {
         kind: 'refused',
         message: '❌ The gate_verdict could not be read. Nothing was recorded.',
       };
     }
-    const checkResults =
-      this.runReviewChecks === undefined
-        ? []
-        : await this.runReviewChecks([...review.gateIds], review.reviewedOutput ?? '');
-    const graded = checkResults.length > 0 ? { ...review, checkResults } : review;
-    if (graded !== review) {
-      await this.chainSessionStore.setPendingGateReview(sessionId, graded, slot);
-    }
-    const refusal = this.refuseVerdictAgainstRecordedFailure(graded, payload.verdict);
-    if (refusal !== null) {
-      return { kind: 'refused', message: `❌ ${refusal}` };
-    }
-    const outcome = await this.chainSessionStore.recordGateReviewOutcome(
-      sessionId,
-      {
-        verdict: payload.verdict,
-        rationale: payload.rationale,
-        rawVerdict: payload.raw,
-        reviewer: payload.source,
+    const answer = await this.answerReview(context, session, {
+      event: { type: 'verdict', verdict: payload, at: Date.now() },
+      trailerNodeId: nodeId,
+      grade: async (review) => {
+        const checkResults =
+          this.runReviewChecks === undefined
+            ? []
+            : await this.runReviewChecks([...review.gateIds], review.reviewedOutput ?? '');
+        return checkResults.length > 0 ? { ...review, checkResults } : review;
       },
-      slot
-    );
-    this.recordVerdictDetection(context, payload, outcome);
-    const attempt = review.attemptCount + 1;
+    });
+    if (answer.kind === 'refused') {
+      return answer;
+    }
+    const { review, advance } = answer;
+    this.recordVerdictDetection(context, payload, advance.outcome);
+    const passed = advance.outcome === 'passed';
     await this.emitGateEvents(
       context,
-      outcome === 'cleared' ? 'passed' : 'failed',
+      passed ? 'passed' : 'failed',
       [...review.gateIds],
       payload.rationale
     );
-    if (outcome === 'cleared') {
-      return { kind: 'recorded', result: 'passed', attempt, maxAttempts: review.maxAttempts };
-    }
-    const exhausted = this.chainSessionStore.isRetryLimitExceeded(sessionId, slot);
-    const phase = exhausted ? 'exhausted' : 'awaiting-replacement';
-    const failed = this.chainSessionStore.getPendingGateReview(sessionId, slot) ?? graded;
-    await this.chainSessionStore.setPendingGateReview(
-      sessionId,
-      { ...failed, metadata: { ...failed.metadata, phase } },
-      slot
-    );
     return {
       kind: 'recorded',
-      result: exhausted ? 'exhausted' : 'failed',
-      attempt,
+      // A verdict lands on one of these four; `reopened` and `aborted` answer other events.
+      result: advance.outcome as 'passed' | 'failed' | 'exhausted' | 'cleared',
+      attempt: advance.attempt,
       maxAttempts: review.maxAttempts,
     };
   }
@@ -204,35 +217,50 @@ export class GateVerdictProcessor {
    * `abort` is refused here — `cancel: true` is how a run is stopped, and it needs no node.
    */
   async processDetachedReviewAction(
-    sessionId: string,
+    context: ExecutionContext,
+    session: ChainSession,
     nodeId: string,
     action: GateAction | InterruptResolutionAction
   ): Promise<DetachedReviewVerdictResult> {
-    const slot = { nodeId };
-    const review = this.chainSessionStore.getPendingGateReview(sessionId, slot);
-    if (review === undefined || (action !== 'retry' && action !== 'skip')) {
+    const answer =
+      action === 'retry' || action === 'skip'
+        ? await this.answerReview(context, session, {
+            event: { type: 'gate_action', action, at: Date.now() },
+            trailerNodeId: nodeId,
+          })
+        : undefined;
+    if (answer?.kind !== 'answered') {
       return {
         kind: 'refused',
         message: `❌ gate_action "${action}" does not resolve a detached review: use "retry" or "skip", or cancel: true. Nothing was recorded.`,
       };
     }
-    if (action === 'skip') {
-      await this.chainSessionStore.clearPendingGateReview(sessionId, slot);
-      return {
-        kind: 'recorded',
-        result: 'skipped',
-        attempt: review.attemptCount,
-        maxAttempts: review.maxAttempts,
-      };
-    }
-    await this.chainSessionStore.resetRetryCount(sessionId, slot);
-    const reset = this.chainSessionStore.getPendingGateReview(sessionId, slot) ?? review;
-    await this.chainSessionStore.setPendingGateReview(
-      sessionId,
-      { ...reset, metadata: { ...reset.metadata, phase: 'awaiting-replacement' } },
-      slot
-    );
-    return { kind: 'recorded', result: 'retry', attempt: 0, maxAttempts: review.maxAttempts };
+    return {
+      kind: 'recorded',
+      result: answer.advance.outcome === 'reopened' ? 'retry' : 'skipped',
+      attempt: answer.advance.attempt,
+      maxAttempts: answer.review.maxAttempts,
+    };
+  }
+
+  /**
+   * Apply a detached node's replacement report to its review (R10.2): the counter and history
+   * its FAIL charged stay, the new output replaces the graded one, and the review awaits a
+   * verdict again. The detached router sends only a report whose review awaits a replacement.
+   *
+   * @returns the reopened review, or `null` when the review did not accept a replacement.
+   */
+  async applyReplacementReport(
+    context: ExecutionContext,
+    session: ChainSession,
+    nodeId: string,
+    output: string
+  ): Promise<GateReview | null> {
+    const answer = await this.answerReview(context, session, {
+      event: { type: 'replacement-report', output },
+      trailerNodeId: nodeId,
+    });
+    return answer.kind === 'answered' ? answer.advance.review : null;
   }
 
   /**
@@ -273,7 +301,9 @@ export class GateVerdictProcessor {
     sessionContext: SessionContext,
     remainderAccepted: boolean
   ): Promise<InterruptResolution> {
-    const pending = this.chainSessionStore.getPendingGateReview(sessionId);
+    const session = this.chainSessionStore.getSession(sessionId, context.getScopeOptions());
+    const target = session === undefined ? undefined : addressedReview(session);
+    const pending = target?.kind === 'review' ? session?.reviews?.[target.nodeId] : undefined;
 
     if (pending === undefined) {
       return {
@@ -324,281 +354,246 @@ export class GateVerdictProcessor {
   }
 
   /**
-   * Handle gate_action parameter (retry/skip/abort) when retry limit exceeded.
-   * Delegates to GateEnforcementAuthority when available, falls back to direct session ops.
+   * Resolve the step review's exhaustion with `gate_action` (retry/skip/abort).
    *
-   * @returns true if the pipeline should exit early (abort or action completed)
+   * `retry` and `skip` are events on the review (`advanceReview`): retry reopens it with the
+   * counter reset, skip clears it. `abort` cancels the RUN, not just the request:
+   * `context.state.session.aborted` is per-request state that stage 21 reads to write a
+   * `cancelled` execution record — it says the run ended without ending it, and until the cancel
+   * landed the next call resumed the chain the user had just aborted. `cancelChain` returns false
+   * for an already-terminal run; the run is over either way, so the abort exit still stands.
+   *
+   * @returns true: the pipeline exits early after an action.
    */
   async handleGateAction(
     context: ExecutionContext,
-    sessionId: string,
+    session: ChainSession,
     gateAction: GateAction,
     sessionContext: SessionContext
   ): Promise<boolean> {
-    const authority = context.gateEnforcement;
+    const sessionId = session.sessionId;
+    context.state.gates.retryLimitExceeded = false;
+    context.state.gates.awaitingUserChoice = false;
 
-    if (authority !== undefined) {
-      const result = await authority.resolveAction(sessionId, gateAction);
-
-      if (result.handled) {
-        context.state.gates.retryLimitExceeded = false;
-        context.state.gates.awaitingUserChoice = false;
-
-        if (result.retryReset === true) {
-          context.diagnostics.info('GateVerdictProcessor', 'User chose to retry after exhaustion', {
-            sessionId,
-          });
-        } else if (result.reviewCleared === true) {
-          const clearedContext = { ...sessionContext };
-          delete clearedContext.pendingReview;
-          context.sessionContext = clearedContext;
-          context.diagnostics.warn('GateVerdictProcessor', 'User chose to skip failed gate', {
-            sessionId,
-            skippedGates: context.state.gates.retryExhaustedGateIds,
-          });
-        } else if (result.sessionAborted === true) {
-          context.state.session.aborted = true;
-          context.diagnostics.info(
-            'GateVerdictProcessor',
-            'User chose to abort chain after gate failure',
-            {
-              sessionId,
-              failedGates: context.state.gates.retryExhaustedGateIds,
-            }
-          );
-        }
+    if (gateAction === 'abort') {
+      if (!(await this.chainSessionStore.cancelChain(sessionId))) {
+        this.logger.warn(
+          `[GateVerdictProcessor] Abort requested for session ${sessionId}, but the run could not be cancelled (already terminal or out of scope)`
+        );
       }
+      context.state.session.aborted = true;
+      context.diagnostics.info(
+        'GateVerdictProcessor',
+        'User chose to abort chain after gate failure',
+        {
+          sessionId,
+          failedGates: context.state.gates.retryExhaustedGateIds,
+        }
+      );
       return true;
     }
 
-    // Fallback: Direct session manager interaction (legacy path)
-    switch (gateAction) {
-      case 'retry': {
-        await this.chainSessionStore.resetRetryCount(sessionId);
-        context.state.gates.retryLimitExceeded = false;
-        context.state.gates.awaitingUserChoice = false;
-        context.diagnostics.info('GateVerdictProcessor', 'User chose to retry after exhaustion', {
-          sessionId,
-        });
-        break;
-      }
-
-      case 'skip': {
-        await this.chainSessionStore.clearPendingGateReview(sessionId);
-        context.state.gates.retryLimitExceeded = false;
-        context.state.gates.awaitingUserChoice = false;
-        const clearedContext = { ...sessionContext };
-        delete clearedContext.pendingReview;
-        context.sessionContext = clearedContext;
-        context.diagnostics.warn('GateVerdictProcessor', 'User chose to skip failed gate', {
-          sessionId,
-          skippedGates: context.state.gates.retryExhaustedGateIds,
-        });
-        break;
-      }
-
-      case 'abort': {
-        // Mirrors GateEnforcementAuthority.resolveAction — see the note there. The flag alone
-        // only makes the abort visible in the ledger; cancelling the run is what makes it stick.
-        const cancelled = await this.chainSessionStore.cancelChain(sessionId);
-        if (!cancelled) {
-          this.logger.warn(
-            `[GateVerdictProcessor] Abort requested for session ${sessionId}, but the run could not be cancelled (already terminal or out of scope)`
-          );
-        }
-        context.state.session.aborted = true;
-        context.state.gates.retryLimitExceeded = false;
-        context.state.gates.awaitingUserChoice = false;
-        context.diagnostics.info(
-          'GateVerdictProcessor',
-          'User chose to abort chain after gate failure',
-          {
-            sessionId,
-            failedGates: context.state.gates.retryExhaustedGateIds,
-          }
-        );
-        break;
-      }
+    const answer = await this.answerReview(context, session, {
+      event: { type: 'gate_action', action: gateAction, at: Date.now() },
+    });
+    if (answer.kind === 'refused') {
+      context.setResponse({ content: [{ type: 'text', text: answer.message }], isError: true });
+    } else if (answer.advance.review !== null) {
+      sessionContext.pendingReview = answer.advance.review;
+      context.sessionContext = { ...sessionContext };
+      context.diagnostics.info('GateVerdictProcessor', 'User chose to retry after exhaustion', {
+        sessionId,
+      });
+    } else {
+      const clearedContext = { ...sessionContext };
+      delete clearedContext.pendingReview;
+      context.sessionContext = clearedContext;
+      context.diagnostics.warn('GateVerdictProcessor', 'User chose to skip failed gate', {
+        sessionId,
+        skippedGates: context.state.gates.retryExhaustedGateIds,
+      });
     }
     return true;
   }
 
   /**
-   * Process a deferred verdict (verdict without existing pending review).
-   * Uses GateEnforcementAuthority to create/clear reviews as needed.
+   * Answer the review this call's `gate_verdict` addresses — the one path for every verdict on a
+   * step review (row 3.3). The review is the one the trailer names, else the run's step review,
+   * which may grade a node the run has already left (a phase-guard review, a final step). With
+   * none open, the verdict opens one on the node the run stands on and answers it in the same
+   * call (the deferred entry); that needs the authority, and without it the verdict is ignored
+   * as before.
+   *
+   * One submission is one recorded attempt, whichever entry it took (P4.116). A refusal — an
+   * unknown or review-less node, an exhausted review (R9), a PASS over a failing check — records
+   * nothing and ends the call with the sentence the submitter reads.
    */
-  async processDeferredVerdict(
+  async processReviewVerdict(
     context: ExecutionContext,
     session: ChainSession,
-    sessionId: string,
-    currentStepAtStart: number,
+    sessionContext: SessionContext,
     userResponse: string | undefined,
-    sessionContext: SessionContext
+    trailerNodeId?: string
   ): Promise<VerdictProcessingResult> {
+    const untouched = { passClearedThisCall: false, earlyExit: false, userResponse };
+    const verdictPayload = this.parseVerdict(context, context.getGateVerdict(), 'gate_verdict');
     const authority = context.gateEnforcement;
-    const gateVerdictInput = context.getGateVerdict();
-    if (session.pendingGateReview !== undefined || gateVerdictInput === undefined || !authority) {
-      return { passClearedThisCall: false, earlyExit: false, userResponse };
+    const opensNone = authority === undefined && trailerNodeId === undefined;
+    if (verdictPayload === null || (opensNone && addressedReview(session).kind === 'refuse')) {
+      return untouched;
     }
-
-    const verdictPayload = this.parseVerdict(context, gateVerdictInput, 'gate_verdict');
-    if (verdictPayload === null) {
-      return { passClearedThisCall: false, earlyExit: false, userResponse };
-    }
-
-    const enforcementMode = resolveEnforcementMode(context.state.gates.enforcementMode);
-    const outcome = await authority.recordOutcome(sessionId, verdictPayload, enforcementMode);
-
-    this.recordVerdictDetection(
-      context,
-      verdictPayload,
-      outcome.status === 'cleared' ? 'cleared' : 'pending'
-    );
-
-    let passClearedThisCall = false;
-    let deferredAdvance: DeferredAdvance | undefined;
-    if (outcome.status === 'cleared') {
-      deferredAdvance = {
-        sessionId,
-        nodeId: this.resolveNodeId(session, currentStepAtStart),
-        reason: 'gate-pass',
-      };
-      context.sessionContext = { ...sessionContext };
-      context.diagnostics.info(
-        'GateVerdictProcessor',
-        'Gate PASS (no prior review) - advance deferred until the step is captured',
-        { stepToAdvance: currentStepAtStart }
-      );
-      passClearedThisCall = true;
-    }
-
-    // Sync newly created pending review (on FAIL) into session context
-    const pending = this.chainSessionStore.getPendingGateReview(sessionId);
-    if (pending !== undefined) {
-      sessionContext.pendingReview = pending;
-      context.sessionContext = { ...sessionContext };
-    }
-
-    const hasResponse = typeof userResponse === 'string' && userResponse.length > 0;
-    const advance = deferredAdvance !== undefined ? { deferredAdvance } : {};
-    return {
-      passClearedThisCall,
-      earlyExit: !hasResponse,
-      userResponse,
-      verdictRecorded: true,
-      ...advance,
-    };
-  }
-
-  /**
-   * Process a verdict against an existing pending review.
-   * Handles blocking/advisory/informational enforcement modes.
-   */
-  async processPendingReviewVerdict(
-    context: ExecutionContext,
-    session: ChainSession,
-    sessionId: string,
-    currentStepAtStart: number,
-    userResponse: string | undefined,
-    sessionContext: SessionContext
-  ): Promise<VerdictProcessingResult> {
-    if (session.pendingGateReview === undefined) {
-      return { passClearedThisCall: false, earlyExit: false, userResponse };
-    }
-
-    const gateVerdictInput = context.getGateVerdict();
-    const verdictPayload = this.parseVerdict(context, gateVerdictInput, 'gate_verdict');
-    const capturedGateIds = [...session.pendingGateReview.gateIds];
-
-    if (verdictPayload === null) {
-      return { passClearedThisCall: false, earlyExit: false, userResponse };
-    }
-
-    // Read the per-gate block BEFORE anything branches on the overall verdict: this is the only
-    // call that holds both the submission and the gate list it was advertised against, and the
-    // clear path deletes the pending review a few lines below. Entries land on request state,
-    // where the assembler names the failing gates and the capture service persists them.
-    this.recordPerGateVerdicts(
-      context,
-      verdictPayload.raw,
-      capturedGateIds,
-      session.pendingGateReview.attemptCount
-    );
-
-    // Checked BEFORE the outcome is recorded, not after: recording spends a retry attempt, and a
-    // verdict the engine will not accept must not cost the submitter one.
-    const refusal = this.refuseVerdictAgainstRecordedFailure(
-      session.pendingGateReview,
-      verdictPayload.verdict
-    );
-    if (refusal !== null) {
-      context.setResponse({
-        content: [{ type: 'text', text: `❌ ${refusal}` }],
-        isError: true,
-      });
-      context.diagnostics.warn(
-        'GateVerdictProcessor',
-        'Gate PASS refused — a recorded check failed',
-        { sessionId, gateIds: capturedGateIds }
-      );
-      return { passClearedThisCall: false, earlyExit: true, userResponse };
-    }
-
-    const outcome = await this.chainSessionStore.recordGateReviewOutcome(sessionId, {
-      verdict: verdictPayload.verdict,
-      rationale: verdictPayload.rationale,
-      rawVerdict: verdictPayload.raw,
-      reviewer: verdictPayload.source,
+    const answer = await this.answerReview(context, session, {
+      event: { type: 'verdict', verdict: verdictPayload, at: Date.now() },
+      ...(trailerNodeId !== undefined ? { trailerNodeId } : {}),
+      ...(authority !== undefined
+        ? {
+            open: async (nodeId: string) =>
+              authority.createReview(session.sessionId, 'gate', nodeId, {
+                gateIds: [],
+                instructions: 'Gate validation failed. Review and remediate.',
+              }),
+          }
+        : {}),
     });
+    if (answer.kind === 'refused') {
+      context.setResponse({ content: [{ type: 'text', text: answer.message }], isError: true });
+      context.diagnostics.warn('GateVerdictProcessor', 'Gate verdict refused', {
+        sessionId: session.sessionId,
+        message: answer.message,
+      });
+      return { ...untouched, earlyExit: true };
+    }
 
-    this.recordVerdictDetection(context, verdictPayload, outcome);
-
-    let passClearedThisCall = false;
+    const { review, advance } = answer;
+    this.recordVerdictDetection(context, verdictPayload, advance.outcome);
     let deferredAdvance: DeferredAdvance | undefined;
-
-    if (outcome === 'cleared') {
+    if (advance.outcome === 'passed') {
       deferredAdvance = {
-        sessionId,
-        nodeId: this.resolveNodeId(session, currentStepAtStart),
+        sessionId: session.sessionId,
+        nodeId: review.nodeId,
         reason: 'gate-pass',
       };
       context.diagnostics.info(
         'GateVerdictProcessor',
         'Gate PASS - advance deferred until the step is captured',
-        { stepToAdvance: currentStepAtStart }
+        { reviewedNodeId: review.nodeId }
       );
-      delete sessionContext.pendingReview;
-      passClearedThisCall = true;
-
-      if (capturedGateIds.includes('__phase_guard__')) {
+      if (review.gateIds.includes('__phase_guard__')) {
         context.state.gates.phaseGuardReviewCleared = true;
       }
-
-      await this.emitGateEvents(context, 'passed', capturedGateIds, verdictPayload.rationale);
+      await this.emitGateEvents(context, 'passed', [...review.gateIds], verdictPayload.rationale);
+    } else if (advance.review !== null) {
+      await this.handleBlockingFail(context, advance, verdictPayload);
     } else {
-      // Awaited, as the `cleared` branch above is. Fired and forgotten, the advisory and
-      // informational handlers cleared the pending review and advanced the step AFTER the
-      // snapshot two lines below had already been taken, so the response reported the step
-      // the run had not moved off — and any failure in either was dropped entirely.
-      deferredAdvance = await this.handleFailedVerdict(
+      deferredAdvance = await this.handleNonBlockingFail(
         context,
-        session,
-        sessionId,
-        sessionContext,
-        capturedGateIds,
+        session.sessionId,
+        answer,
         verdictPayload
       );
     }
 
+    if (advance.review === null) {
+      delete sessionContext.pendingReview;
+    } else {
+      sessionContext.pendingReview = advance.review;
+    }
     context.sessionContext = { ...sessionContext };
 
     const hasResponse = typeof userResponse === 'string' && userResponse.length > 0;
-    const advance = deferredAdvance !== undefined ? { deferredAdvance } : {};
-    if (!hasResponse) {
-      return { passClearedThisCall, earlyExit: true, userResponse, ...advance };
+    return {
+      passClearedThisCall: advance.outcome === 'passed',
+      earlyExit: !hasResponse,
+      userResponse,
+      ...(deferredAdvance !== undefined ? { deferredAdvance } : {}),
+    };
+  }
+
+  /**
+   * The one review path: resolve the review the event addresses (`resolveReviewTarget`), apply
+   * the event (`advanceReview`), persist what it returned. Every verdict, replacement report and
+   * `gate_action` reaches a review through here, so no caller derives the reviewed node from the
+   * run's position, and no caller moves a review on its own terms.
+   *
+   * A verdict is also recorded with the store (`recordGateReviewOutcome`), which keeps the run's
+   * cumulative gate counters; the transition's review is written over the store's copy after it.
+   */
+  private async answerReview(
+    context: ExecutionContext,
+    session: ChainSession,
+    entry: ReviewEntry
+  ): Promise<ReviewAnswer> {
+    const { trailerNodeId } = entry;
+    const target = addressedReview(session, trailerNodeId);
+    const currentNodeId = session.state.currentNodeId;
+    const found =
+      target.kind === 'review'
+        ? session.reviews?.[target.nodeId]
+        : target.reason === 'no-review' && trailerNodeId === undefined && currentNodeId !== null
+          ? await entry.open?.(currentNodeId)
+          : undefined;
+    if (found === undefined) {
+      return { kind: 'refused', message: describeMissingReview(target, trailerNodeId) };
+    }
+    const review = entry.grade === undefined ? found : await entry.grade(found);
+    const slot = review.kind === 'detached' ? { nodeId: review.nodeId } : undefined;
+    if (review !== found) {
+      await this.chainSessionStore.setReview(session.sessionId, review);
     }
 
-    return { passClearedThisCall, earlyExit: false, userResponse, ...advance };
+    const { event } = entry;
+    const failedGateIds =
+      event.type === 'verdict'
+        ? this.recordPerGateVerdicts(context, event.verdict.raw, review)
+        : [];
+    const enforcement = await this.resolveFailEnforcement(context, review, failedGateIds);
+    const advance = advanceReview(review, event, enforcement);
+    if (advance.outcome === 'refused') {
+      return { kind: 'refused', message: describeRefusal(advance.reason, review) };
+    }
+    if (event.type === 'verdict') {
+      await this.chainSessionStore.recordGateReviewOutcome(
+        session.sessionId,
+        {
+          verdict: event.verdict.verdict,
+          rationale: event.verdict.rationale,
+          rawVerdict: event.verdict.raw,
+          reviewer: event.verdict.source,
+        },
+        slot
+      );
+    }
+    if (advance.review === null) {
+      await this.chainSessionStore.clearPendingGateReview(session.sessionId, slot);
+    } else {
+      await this.chainSessionStore.setReview(session.sessionId, advance.review);
+    }
+    return { kind: 'answered', review, advance, enforcement, failedGateIds };
+  }
+
+  /**
+   * What a FAIL on `review` does. A step review reads the mode the step's gates published, and
+   * when the verdict failed gates BY NAME only those decide (R107); an overall-only verdict names
+   * none, and the owner falls back to the step's strictest gate. A detached review grades another
+   * node than the current step, so its own gates decide (R10), through the authority that loads
+   * them.
+   */
+  private async resolveFailEnforcement(
+    context: ExecutionContext,
+    review: GateReview,
+    failedGateIds: readonly string[]
+  ): Promise<EnforcementMode> {
+    if (review.kind === 'detached') {
+      return (
+        (await context.gateEnforcement?.resolveReviewEnforcement(review, failedGateIds)) ??
+        resolveEnforcementMode()
+      );
+    }
+    return resolveEnforcementMode(
+      context.state.gates.enforcementMode,
+      context.state.gates.stepEnforcement,
+      failedGateIds
+    );
   }
 
   /**
@@ -633,140 +628,34 @@ export class GateVerdictProcessor {
   }
 
   /**
-   * Refuse, by name, a PASS that walks past a check the engine recorded as failing (ruling B4).
-   *
-   * `GateReviewStage` runs each gate's `shell_verify` / `script_tool` criteria and writes the
-   * outcome to `PendingGateReview.checkResults`. Until this existed, nothing downstream read it:
-   * the stage printed the failing command into the review, the model answered PASS anyway, and
-   * the processor cleared on the verdict alone — a recorded exit code losing to an opinion.
-   *
-   * Scope, deliberately narrow:
-   *
-   * - **PASS only.** A FAIL is the submitter agreeing with the check; it takes the normal
-   *   failure path with its retry budget intact.
-   * - **`gate_action: skip` / `abort` are untouched.** They are the operator's override, by
-   *   design and behind retry exhaustion — a human choosing to ship past a failing check is a
-   *   decision, where a model PASS over the same check is an unnoticed contradiction. They do
-   *   not pass through here at all (`handleGateAction`).
-   * - **No recorded results, no refusal.** A review of reminder-tier gates records nothing, so
-   *   this returns `null` and the verdict is the model's as before.
-   *
-   * @returns the sentence the submitter reads, or `null` when the verdict may proceed.
-   */
-  private refuseVerdictAgainstRecordedFailure(
-    pendingReview: ChainSession['pendingGateReview'],
-    verdict: 'PASS' | 'FAIL'
-  ): string | null {
-    if (verdict !== 'PASS') return null;
-
-    const failed = (pendingReview?.checkResults ?? []).filter((result) => !result.passed);
-    if (failed.length === 0) return null;
-
-    const gateIds = [...new Set(failed.map((result) => result.gateId))].join(', ');
-    const summaries = failed.map((result) => result.summary).join('; ');
-    return (
-      `Gate verdict refused: ${gateIds} recorded a failing check (${summaries}). ` +
-      'Fix the cause and resubmit; the check re-runs on the next review.'
-    );
-  }
-
-  /**
-   * Handle a FAIL verdict based on enforcement mode.
-   *
-   * @returns the advance the advisory and informational modes decide, for the stage to apply
-   *   after the capture; `undefined` in blocking mode, where the run holds where it is.
-   */
-  private async handleFailedVerdict(
-    context: ExecutionContext,
-    session: ChainSession,
-    sessionId: string,
-    sessionContext: SessionContext,
-    capturedGateIds: string[],
-    verdictPayload: ParsedGateVerdict
-  ): Promise<DeferredAdvance | undefined> {
-    const pending = this.chainSessionStore.getPendingGateReview(sessionId);
-    if (pending !== undefined) {
-      sessionContext.pendingReview = pending;
-    } else {
-      delete sessionContext.pendingReview;
-    }
-
-    if (verdictPayload.verdict !== 'FAIL') return undefined;
-
-    // R107: when the verdict failed gates BY NAME, only those gates decide. Read from the
-    // per-gate entries `recordPerGateVerdicts` wrote for this submission; an overall-only or
-    // legacy-string verdict wrote none, and the owner falls back to the step's strictest gate.
-    const failedGateIds = (context.state.gates.perGateVerdicts ?? [])
-      .filter((entry) => entry.verdict === 'FAIL')
-      .map((entry) => entry.gateId);
-    const enforcementMode = resolveEnforcementMode(
-      context.state.gates.enforcementMode,
-      context.state.gates.stepEnforcement,
-      failedGateIds
-    );
-
-    switch (enforcementMode) {
-      case 'blocking':
-        await this.handleBlockingFail(context, sessionId, capturedGateIds, verdictPayload);
-        return undefined;
-
-      case 'advisory':
-        return await this.handleAdvisoryFail(
-          context,
-          session,
-          sessionId,
-          sessionContext,
-          failedGateIds.length > 0 ? failedGateIds : capturedGateIds,
-          verdictPayload
-        );
-
-      case 'informational':
-        return await this.handleInformationalFail(
-          context,
-          session,
-          sessionId,
-          sessionContext,
-          capturedGateIds,
-          verdictPayload
-        );
-    }
-  }
-
-  /**
    * Blocking FAIL: flag the hold and announce it, in ONE order — `retryExhausted`, then
    * `responseBlocked`, then `failed` (P4.117).
    *
-   * Every event is awaited, as the advisory and informational handlers' are (row B.54). Fired and
-   * forgotten, the three interleaved with each other and finished after the response had been
-   * built, and a throw outside `emitGateEvents`' own catch became an unhandled rejection nothing
-   * reported. Awaited, the order is the order written here and any failure reaches the caller's
-   * call.
+   * Every event is awaited, as the non-blocking handler's are (row B.54). Fired and forgotten,
+   * the three interleaved with each other and finished after the response had been built, and a
+   * throw outside `emitGateEvents`' own catch became an unhandled rejection nothing reported.
    */
   private async handleBlockingFail(
     context: ExecutionContext,
-    sessionId: string,
-    capturedGateIds: string[],
+    advance: AppliedAdvance & { readonly review: GateReview },
     verdictPayload: { rationale: string }
   ): Promise<void> {
-    const pendingReview = this.chainSessionStore.getPendingGateReview(sessionId);
-    const isRetryExhausted =
-      pendingReview !== undefined && this.chainSessionStore.isRetryLimitExceeded(sessionId);
-
-    if (isRetryExhausted && pendingReview !== undefined) {
+    const review = advance.review;
+    if (advance.outcome === 'exhausted') {
       context.state.gates.retryLimitExceeded = true;
       context.state.gates.escalationSource = 'gate-review';
-      context.state.gates.retryExhaustedGateIds = [...pendingReview.gateIds];
+      context.state.gates.retryExhaustedGateIds = [...review.gateIds];
       context.diagnostics.warn('GateVerdictProcessor', 'Gate retry limit exceeded', {
-        attemptCount: pendingReview.attemptCount,
-        maxAttempts: pendingReview.maxAttempts,
-        gateIds: pendingReview.gateIds,
+        attemptCount: review.attemptCount,
+        maxAttempts: review.maxAttempts,
+        gateIds: review.gateIds,
       });
-
       await this.emitGateEvents(
         context,
         'retryExhausted',
-        pendingReview.gateIds,
-        verdictPayload.rationale
+        review.gateIds,
+        verdictPayload.rationale,
+        review.maxAttempts
       );
     }
 
@@ -780,78 +669,57 @@ export class GateVerdictProcessor {
       await this.emitGateEvents(context, 'responseBlocked', blockedGateIds);
     }
 
-    await this.emitGateEvents(context, 'failed', capturedGateIds, verdictPayload.rationale);
+    await this.emitGateEvents(context, 'failed', [...review.gateIds], verdictPayload.rationale);
     context.diagnostics.info('GateVerdictProcessor', 'Gate FAIL - blocking mode, awaiting retry');
   }
 
-  private async handleAdvisoryFail(
-    context: ExecutionContext,
-    session: ChainSession,
-    sessionId: string,
-    sessionContext: SessionContext,
-    capturedGateIds: string[],
-    verdictPayload: { rationale: string }
-  ): Promise<DeferredAdvance> {
-    context.state.gates.advisoryWarnings.push(
-      `Gate ${capturedGateIds.join(', ')} failed: ${verdictPayload.rationale}`
-    );
-    context.diagnostics.warn('GateVerdictProcessor', 'Gate FAIL - advisory mode, continuing', {
-      rationale: verdictPayload.rationale,
-    });
-
-    await this.emitGateEvents(context, 'failed', capturedGateIds, verdictPayload.rationale);
-    await this.chainSessionStore.clearPendingGateReview(sessionId);
-    delete sessionContext.pendingReview;
-    return {
-      sessionId,
-      nodeId: this.resolveAdvanceTarget(context, session),
-      reason: 'advisory-fail',
-    };
-  }
-
-  private async handleInformationalFail(
-    context: ExecutionContext,
-    session: ChainSession,
-    sessionId: string,
-    sessionContext: SessionContext,
-    _capturedGateIds: string[],
-    verdictPayload: { rationale: string }
-  ): Promise<DeferredAdvance> {
-    const infoGateIds = [...(session.pendingGateReview?.gateIds ?? [])];
-    context.diagnostics.info(
-      'GateVerdictProcessor',
-      'Gate FAIL - informational mode, logged only',
-      { rationale: verdictPayload.rationale }
-    );
-
-    await this.emitGateEvents(context, 'failed', infoGateIds, verdictPayload.rationale);
-    await this.chainSessionStore.clearPendingGateReview(sessionId);
-    delete sessionContext.pendingReview;
-    return {
-      sessionId,
-      nodeId: this.resolveAdvanceTarget(context, session),
-      reason: 'informational-fail',
-    };
-  }
-
   /**
-   * The node a FAIL-mode advance walks past: `currentNodeId` when the context already carries
-   * it, otherwise the position translated through the node list.
-   *
-   * A context with neither yields `''`, and the store no-ops on an unresolvable id — the same
-   * outcome the `?? 0` arithmetic produced before node ids existed.
+   * Advisory or informational FAIL: the review is already cleared (`advanceReview`); announce it
+   * and decide the advance past the node the review graded, for the stage to apply after the
+   * capture. Advisory also warns, naming the gates the verdict failed when it named any.
    */
-  private resolveAdvanceTarget(context: ExecutionContext, session: ChainSession): string {
-    const currentStep = context.sessionContext?.currentStep ?? 0;
-    return context.sessionContext?.currentNodeId ?? this.resolveNodeId(session, currentStep);
+  private async handleNonBlockingFail(
+    context: ExecutionContext,
+    sessionId: string,
+    answer: Extract<ReviewAnswer, { kind: 'answered' }>,
+    verdictPayload: { rationale: string }
+  ): Promise<DeferredAdvance> {
+    const { review, enforcement, failedGateIds } = answer;
+    const advisory = enforcement === 'advisory';
+    const gateIds = advisory && failedGateIds.length > 0 ? [...failedGateIds] : [...review.gateIds];
+    if (advisory) {
+      context.state.gates.advisoryWarnings.push(
+        `Gate ${gateIds.join(', ')} failed: ${verdictPayload.rationale}`
+      );
+      context.diagnostics.warn('GateVerdictProcessor', 'Gate FAIL - advisory mode, continuing', {
+        rationale: verdictPayload.rationale,
+      });
+    } else {
+      context.diagnostics.info(
+        'GateVerdictProcessor',
+        'Gate FAIL - informational mode, logged only',
+        {
+          rationale: verdictPayload.rationale,
+        }
+      );
+    }
+    await this.emitGateEvents(context, 'failed', gateIds, verdictPayload.rationale);
+    return {
+      sessionId,
+      nodeId: review.nodeId,
+      reason: advisory ? 'advisory-fail' : 'informational-fail',
+    };
   }
 
   /**
-   * Put the submission's per-gate verdicts on request state, keyed by gate id.
+   * Read the submission's per-gate verdicts against the gates `review` advertised, and return the
+   * ones it failed BY NAME (R107).
    *
-   * The authority owns the parse because it owns the `index → gateId` join; this method owns
-   * only WHEN it happens and WHERE the result lands, which is the processor's domain
-   * (verdict processing) under the ownership matrix.
+   * The authority owns the parse because it owns the `index → gateId` join; this method owns only
+   * WHEN it happens and WHERE the result lands, which is the processor's domain (verdict
+   * processing) under the ownership matrix. A step review's entries land on request state, where
+   * the assembler names the failing gates and the capture service persists them; a detached
+   * review's answer is no capture, so its entries decide its enforcement and land nowhere.
    *
    * Nothing is written when the submission carried no per-gate block — an overall-only verdict
    * is valid and leaving the field undefined is what tells the assembler and the capture
@@ -861,24 +729,22 @@ export class GateVerdictProcessor {
   private recordPerGateVerdicts(
     context: ExecutionContext,
     raw: string,
-    gateIds: readonly string[],
-    attempt: number
-  ): void {
+    review: GateReview
+  ): readonly string[] {
     const authority = context.gateEnforcement;
-    if (authority === undefined || gateIds.length === 0) {
-      return;
+    const entries =
+      authority === undefined || review.gateIds.length === 0
+        ? []
+        : authority.parseGateVerdicts(raw, review.gateIds, review.attemptCount);
+    const failed = entries.filter((entry) => entry.verdict === 'FAIL').map((entry) => entry.gateId);
+    if (entries.length > 0 && review.kind !== 'detached') {
+      context.state.gates.perGateVerdicts = entries;
+      context.diagnostics.info('GateVerdictProcessor', 'Per-gate verdicts recorded', {
+        failed,
+        total: entries.length,
+      });
     }
-
-    const entries = authority.parseGateVerdicts(raw, gateIds, attempt);
-    if (entries.length === 0) {
-      return;
-    }
-
-    context.state.gates.perGateVerdicts = entries;
-    context.diagnostics.info('GateVerdictProcessor', 'Per-gate verdicts recorded', {
-      failed: entries.filter((entry) => entry.verdict === 'FAIL').map((entry) => entry.gateId),
-      total: entries.length,
-    });
+    return failed;
   }
 
   /**
@@ -905,7 +771,7 @@ export class GateVerdictProcessor {
     if (verdictPayload.detectedPattern !== undefined) {
       verdictDetection.pattern = verdictPayload.detectedPattern;
     }
-    verdictDetection.outcome = outcome === 'cleared' ? 'cleared' : 'pending';
+    verdictDetection.outcome = outcome === 'passed' ? 'cleared' : 'pending';
     context.state.gates.verdictDetection = verdictDetection;
   }
 
@@ -923,7 +789,8 @@ export class GateVerdictProcessor {
     context: ExecutionContext,
     event: 'passed' | 'failed' | 'retryExhausted' | 'responseBlocked',
     gateIds: string[],
-    reason?: string
+    reason?: string,
+    maxAttempts?: number
   ): Promise<void> {
     const hooks = this.hookRegistry;
     const notifications = this.notificationEmitter;
@@ -956,21 +823,14 @@ export class GateVerdictProcessor {
           }
           break;
 
-        case 'retryExhausted': {
-          const sessionId = context.sessionContext?.sessionId;
-          const pendingReview = sessionId
-            ? this.chainSessionStore.getPendingGateReview(sessionId)
-            : undefined;
-          const maxAttempts = pendingReview?.maxAttempts ?? 2;
-
+        case 'retryExhausted':
           await hooks?.emitRetryExhausted(gateIds, chainId ?? '', hookContext);
           notifications?.emitRetryExhausted({
             gateIds,
             chainId: chainId ?? '',
-            maxAttempts,
+            maxAttempts: maxAttempts ?? 0,
           });
           break;
-        }
 
         case 'responseBlocked':
           await hooks?.emitResponseBlocked(gateIds, hookContext);
@@ -985,4 +845,51 @@ export class GateVerdictProcessor {
       });
     }
   }
+}
+
+/** The sentence a call reads when no review answers it: a name the run lacks, or no open review. */
+function describeMissingReview(
+  target: ReturnType<typeof resolveReviewTarget>,
+  trailerNodeId: string | undefined
+): string {
+  if (target.kind === 'refuse' && target.reason === 'unknown-node') {
+    return `❌ The reply names node '${trailerNodeId}', which this run does not have. Nothing was recorded.`;
+  }
+  return trailerNodeId === undefined
+    ? '❌ No gate review is open on this run, so there is nothing for this call to answer. Nothing was recorded.'
+    : `❌ No gate review is open for node '${trailerNodeId}'. Nothing was recorded.`;
+}
+
+/**
+ * The sentence a refused event reads (`advanceReview` refused it, and nothing was charged).
+ *
+ * - `failing-check` — a PASS over a check the engine recorded as failing (ruling B4): the stage
+ *   that runs a gate's `shell_verify` / `script_tool` criteria writes `checkResults`, and a model
+ *   PASS over a recorded exit code is an unnoticed contradiction. `gate_action: skip` is the
+ *   operator's override, behind exhaustion; a FAIL is the submitter agreeing with the check.
+ * - `phase` — the review is not waiting for this kind of call: an exhausted review answers only
+ *   `gate_action` (R9), and a detached review never `abort`s — `cancel: true` stops a run.
+ */
+function describeRefusal(reason: 'phase' | 'failing-check', review: GateReview): string {
+  if (reason === 'failing-check') {
+    const failed = (review.checkResults ?? []).filter((result) => !result.passed);
+    const gateIds = [...new Set(failed.map((result) => result.gateId))].join(', ');
+    const summaries = failed.map((result) => result.summary).join('; ');
+    return (
+      `❌ Gate verdict refused: ${gateIds} recorded a failing check (${summaries}). ` +
+      'Fix the cause and resubmit; the check re-runs on the next review.'
+    );
+  }
+  const waitingFor: Record<GateReview['phase'], string> = {
+    'awaiting-verdict': 'a gate_verdict',
+    'awaiting-replacement': "the worker's replacement result",
+    exhausted:
+      review.kind === 'detached'
+        ? 'gate_action "retry" or "skip", or cancel: true'
+        : 'gate_action "retry", "skip" or "abort"',
+  };
+  return (
+    `❌ The gate review of node '${review.nodeId}' (${review.attemptCount}/${review.maxAttempts} ` +
+    `attempts) is waiting for ${waitingFor[review.phase]}. Nothing was recorded.`
+  );
 }

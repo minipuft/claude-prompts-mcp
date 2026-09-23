@@ -473,6 +473,7 @@ describe('chain lifecycle events reach their registered consumers', () => {
     const { chainId, sessionId } = onlySession();
     await pipeline.execute({ chain_id: chainId, user_response: 'step one output' } as never);
     await sessionStore.setPendingGateReview(sessionId, {
+      nodeId: sessionStore.getSession(sessionId)!.state.currentNodeId!,
       combinedPrompt: 'Review step two for quality.',
       gateIds: ['step-quality'],
       prompts: [],

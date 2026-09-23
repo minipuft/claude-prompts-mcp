@@ -55,12 +55,16 @@ function createStore(): ChainSessionService {
     getPendingGateReview: jest.fn(() => review),
     isRetryLimitExceeded: jest.fn(() => false),
     setPendingGateReview: jest.fn(async () => undefined),
+    setReview: jest.fn(async () => undefined),
   } as unknown as ChainSessionService;
 }
 
 const session = {
-  pendingGateReview: { gateIds: [...GATE_IDS], attemptCount: 1, maxAttempts: 3 },
-  state: { nodes: [{ id: 'node-1' }] },
+  sessionId: 'sess-verdict',
+  reviews: {
+    'node-1': { ...pendingReview(), nodeId: 'node-1', kind: 'gate', phase: 'awaiting-verdict' },
+  },
+  state: { nodes: [{ id: 'node-1' }], currentNodeId: 'node-1' },
 } as unknown as ChainSession;
 
 /**
@@ -92,13 +96,11 @@ async function submit(rendered: string): Promise<ExecutionContext> {
     generatedAt: Date.now(),
   };
 
-  await new GateVerdictProcessor(store, createLogger()).processPendingReviewVerdict(
+  await new GateVerdictProcessor(store, createLogger()).processReviewVerdict(
     context,
     session,
-    'sess-verdict',
-    0,
-    undefined,
-    { currentStep: 0, currentNodeId: 'node-1' } as never
+    { sessionId: 'sess-verdict', currentStep: 0, currentNodeId: 'node-1' } as never,
+    undefined
   );
   return context;
 }

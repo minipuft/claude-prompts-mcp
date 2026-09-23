@@ -1,6 +1,6 @@
 /**
- * Row B.54: `processPendingReviewVerdict` fired the advisory and informational FAIL handlers
- * without awaiting them.
+ * Row B.54: the pending-review verdict path fired the advisory and informational FAIL handlers
+ * without awaiting them (the path is `processReviewVerdict` since row 3.3).
  *
  * The `cleared` branch three lines above awaits everything it does. The FAIL branch did not, so
  * `clearPendingGateReview` and `advanceStep` — both state mutations — and the `sessionContext`
@@ -38,9 +38,8 @@ function createStore(advancedTo: { ordinal: number; nodeId: string }) {
   return {
     recordGateReviewOutcome: jest.fn(async () => later('recorded')),
     clearPendingGateReview: jest.fn(async () => later(undefined)),
+    setReview: jest.fn(async () => later(undefined)),
     advanceStep: jest.fn(async () => later(advancedTo)),
-    getPendingGateReview: jest.fn(() => undefined),
-    isRetryLimitExceeded: jest.fn(() => false),
   } as unknown as ChainSessionService & Record<string, jest.Mock>;
 }
 
@@ -62,8 +61,21 @@ function createContext(enforcementMode: 'advisory' | 'informational') {
 }
 
 const session = {
-  pendingGateReview: { gateIds: ['some-gate'], attemptCount: 1, maxAttempts: 3 },
-  state: { nodes: [{ id: 'node-1' }, { id: 'node-2' }] },
+  sessionId: 'session-1',
+  reviews: {
+    'node-1': {
+      nodeId: 'node-1',
+      kind: 'gate',
+      phase: 'awaiting-verdict',
+      combinedPrompt: '',
+      gateIds: ['some-gate'],
+      prompts: [],
+      createdAt: 1,
+      attemptCount: 1,
+      maxAttempts: 3,
+    },
+  },
+  state: { currentNodeId: 'node-1', nodes: [{ id: 'node-1' }, { id: 'node-2' }] },
 } as unknown as ChainSession;
 
 describe.each(['advisory', 'informational'] as const)(
@@ -86,13 +98,11 @@ describe.each(['advisory', 'informational'] as const)(
         pendingReview: { gateIds: ['some-gate'] },
       };
 
-      const result = await processor.processPendingReviewVerdict(
+      const result = await processor.processReviewVerdict(
         context,
         session,
-        'session-1',
-        0,
-        'a response',
-        sessionContext as never
+        sessionContext as never,
+        'a response'
       );
 
       // P4.89 moved WHERE the advance happens, not whether its effect is observable: it is
@@ -119,13 +129,11 @@ describe.each(['advisory', 'informational'] as const)(
         throw new Error('chain session store is unavailable');
       });
 
-      const result = await processor.processPendingReviewVerdict(
+      const result = await processor.processReviewVerdict(
         context,
         session,
-        'session-1',
-        0,
-        'a response',
-        { currentStep: 0, currentNodeId: 'node-1' } as never
+        { currentStep: 0, currentNodeId: 'node-1' } as never,
+        'a response'
       );
 
       await expect(
@@ -134,3 +142,66 @@ describe.each(['advisory', 'informational'] as const)(
     });
   }
 );
+
+/**
+ * R10: a detached node's review grades another node than the current step, so its OWN gates
+ * decide what a FAIL does — resolved by the authority, never a `blocking` constant.
+ */
+describe('GateVerdictProcessor detached review FAIL (R10)', () => {
+  const detachedSession = {
+    sessionId: 'session-1',
+    reviews: {
+      late: {
+        nodeId: 'late',
+        kind: 'detached',
+        phase: 'awaiting-verdict',
+        combinedPrompt: '',
+        gateIds: ['soft-gate'],
+        prompts: [],
+        createdAt: 1,
+        attemptCount: 0,
+        maxAttempts: 3,
+        metadata: { phase: 'awaiting-verdict' },
+      },
+    },
+    state: { currentNodeId: 'node-2', nodes: [{ id: 'late' }, { id: 'node-2' }] },
+  } as unknown as ChainSession;
+
+  const contextWith = (mode: 'advisory' | 'blocking') =>
+    ({
+      getGateVerdict: () => 'GATE_REVIEW: FAIL - it did not hold',
+      gateEnforcement: {
+        parseVerdict: () => null,
+        parseGateVerdicts: () => [],
+        resolveReviewEnforcement: async () => mode,
+      },
+      state: { gates: { enforcementMode: 'blocking', advisoryWarnings: [] }, session: {} },
+      diagnostics: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
+    }) as never;
+
+  test("a FAIL on a review whose gates are advisory clears it; the node's result stands", async () => {
+    const store = createStore({ ordinal: 1, nodeId: 'node-2' });
+    const result = await new GateVerdictProcessor(
+      store,
+      createLogger()
+    ).processDetachedReviewVerdict(contextWith('advisory'), detachedSession, 'late');
+
+    expect(result).toMatchObject({ kind: 'recorded', result: 'cleared', attempt: 1 });
+    expect(store.clearPendingGateReview).toHaveBeenCalledWith('session-1', { nodeId: 'late' });
+    expect(store.setReview).not.toHaveBeenCalled();
+  });
+
+  test('TWIN: the same FAIL on blocking gates asks for a replacement report', async () => {
+    const store = createStore({ ordinal: 1, nodeId: 'node-2' });
+    const result = await new GateVerdictProcessor(
+      store,
+      createLogger()
+    ).processDetachedReviewVerdict(contextWith('blocking'), detachedSession, 'late');
+
+    expect(result).toMatchObject({ kind: 'recorded', result: 'failed', attempt: 1 });
+    expect(store.setReview).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({ nodeId: 'late', phase: 'awaiting-replacement' })
+    );
+  });
+});

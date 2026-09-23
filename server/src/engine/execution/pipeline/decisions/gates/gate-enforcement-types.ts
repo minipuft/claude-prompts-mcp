@@ -32,35 +32,6 @@ export interface GateSetEnforcement {
 export type GateAction = 'retry' | 'skip' | 'abort';
 
 /**
- * Retry configuration for gate reviews.
- */
-export interface RetryConfig {
-  readonly maxAttempts: number;
-  readonly currentAttempt: number;
-  readonly isExhausted: boolean;
-}
-
-/**
- * Outcome of processing a gate verdict.
- */
-export interface ReviewOutcome {
-  readonly status: 'cleared' | 'pending' | 'exhausted';
-  readonly nextAction?: 'continue' | 'await_verdict' | 'await_user_choice';
-  readonly attemptCount?: number;
-  readonly maxAttempts?: number;
-}
-
-/**
- * Result of processing a gate_action parameter.
- */
-export interface ActionResult {
-  readonly handled: boolean;
-  readonly sessionAborted?: boolean;
-  readonly reviewCleared?: boolean;
-  readonly retryReset?: boolean;
-}
-
-/**
  * Input for verdict parsing decisions.
  */
 export interface VerdictParseInput {

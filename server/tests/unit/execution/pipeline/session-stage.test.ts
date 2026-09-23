@@ -73,6 +73,7 @@ const createSessionManager = (): jest.Mocked<ChainSessionService> => {
     createSession: jest.fn(async () => createChainSession()),
     getPendingGateReview: jest.fn().mockReturnValue(undefined),
     setPendingGateReview: jest.fn(),
+    setReview: jest.fn(),
     clearPendingGateReview: jest.fn(),
     getChainContext: jest.fn(),
     getOriginalArgs: jest.fn(),
@@ -286,7 +287,13 @@ describe('SessionManagementStage', () => {
 
     // Session created WITH pending review (upfront blocking)
     expect(manager.createSession).toHaveBeenCalledTimes(1);
-    expect(manager.setPendingGateReview).toHaveBeenCalledTimes(1);
+    expect(manager.setReview).toHaveBeenCalledTimes(1);
+    // Keyed at render by the node the review grades (row 3.3), not stamped from the run later.
+    expect(manager.setReview.mock.calls[0]?.[1]).toMatchObject({
+      nodeId: 'n1',
+      kind: 'gate',
+      phase: 'awaiting-verdict',
+    });
     expect(context.sessionContext?.pendingReview).toBeDefined();
     expect(context.sessionContext?.pendingReview?.gateIds).toEqual(['gate-alpha', 'gate-beta']);
 
@@ -309,7 +316,7 @@ describe('SessionManagementStage', () => {
 
     // Session created WITH pending review (upfront blocking behavior)
     expect(manager.createSession).toHaveBeenCalledTimes(1);
-    expect(manager.setPendingGateReview).toHaveBeenCalledTimes(1);
+    expect(manager.setReview).toHaveBeenCalledTimes(1);
     expect(context.sessionContext?.pendingReview).toBeDefined();
   });
 
@@ -335,7 +342,7 @@ describe('SessionManagementStage', () => {
 
     await stage.execute(context);
 
-    expect(manager.setPendingGateReview).toHaveBeenCalledTimes(1);
+    expect(manager.setReview).toHaveBeenCalledTimes(1);
     expect(context.sessionContext?.pendingReview?.gateIds).toEqual(['gate-beta']);
   });
 
@@ -357,7 +364,7 @@ describe('SessionManagementStage', () => {
     await stage.execute(context);
 
     expect(manager.createSession).toHaveBeenCalledTimes(1);
-    expect(manager.setPendingGateReview).not.toHaveBeenCalled();
+    expect(manager.setReview).not.toHaveBeenCalled();
     expect(context.sessionContext?.pendingReview).toBeUndefined();
   });
 });

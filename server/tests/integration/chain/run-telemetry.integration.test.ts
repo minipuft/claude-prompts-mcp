@@ -215,7 +215,10 @@ describe('run telemetry, session counters through the ledger', () => {
 
   /** One gate FAIL then PASS, one unknown discovered then resolved, N steps rendered. */
   const driveRunActivity = async (sessionId: string, stepsRendered: number): Promise<void> => {
-    await sessionStore.setPendingGateReview(sessionId, pendingReview());
+    await sessionStore.setPendingGateReview(sessionId, {
+      ...pendingReview(),
+      nodeId: sessionStore.getSession(sessionId)!.state.currentNodeId!,
+    });
     await sessionStore.recordGateReviewOutcome(sessionId, {
       verdict: 'FAIL',
       rawVerdict: 'GATE_REVIEW: FAIL - needs work',

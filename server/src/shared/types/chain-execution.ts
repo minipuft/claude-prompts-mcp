@@ -423,11 +423,24 @@ export interface GateCheckResult {
   summary: string;
 }
 
+/** What opened a review: a step's gates, a failed structural check, or a detached node's report. */
+export type GateReviewKind = 'gate' | 'structural' | 'detached';
+
+/** Where a review stands. A PASS, a skip or an abort deletes the review, so none is a phase. */
+export type GateReviewPhase = 'awaiting-verdict' | 'awaiting-replacement' | 'exhausted';
+
 /**
- * Pending gate review payload stored on the session manager so multi-turn
- * reviews can resume after the user responds through the MCP session.
+ * A gate review, keyed by the node it reviews: `ChainSession.reviews[nodeId]` is the one store.
+ *
+ * `nodeId` is the node whose answer is graded, which is not always the node the run stands on: a
+ * phase-guard review grades the step a capture just advanced past, a detached node's review opens
+ * against its late report, and a final-step review outlives the walk past the last node.
  */
-export interface PendingGateReview {
+export interface GateReview {
+  /** The node this review grades; also its key in `ChainSession.reviews`. */
+  nodeId: string;
+  kind: GateReviewKind;
+  phase: GateReviewPhase;
   combinedPrompt: string;
   gateIds: string[];
   prompts: GateReviewPrompt[];
@@ -469,6 +482,17 @@ export interface PendingGateReview {
    */
   reviewedOutput?: string;
 }
+
+/**
+ * The pre-3.1 review shape: a {@link GateReview} whose identity the store resolves on write.
+ *
+ * @deprecated stamped: (as of 2026-09-23 · flips when row 3.6's exception list is empty) — callers
+ * that build a review without `nodeId`/`kind`/`phase` write it through the store's
+ * `setPendingGateReview`, which stamps all three; new writers build a {@link GateReview} and call
+ * `setReview`.
+ */
+export type PendingGateReview = Omit<GateReview, 'nodeId' | 'kind' | 'phase'> &
+  Partial<Pick<GateReview, 'nodeId' | 'kind' | 'phase'>>;
 
 /**
  * Serializable snapshot of pending shell verification state persisted to chain sessions.

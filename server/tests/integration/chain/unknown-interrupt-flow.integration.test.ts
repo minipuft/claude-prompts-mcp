@@ -272,6 +272,7 @@ describe('mid-chain blocking-unknown interrupt (rows 2.1-2.3)', () => {
 
   test('an interrupt verb on an ORDINARY gate review is refused, not silently accepted', async () => {
     await store.setPendingGateReview('sess-1', {
+      nodeId: store.getSession('sess-1')!.state.currentNodeId!,
       combinedPrompt: 'Review against the gates',
       gateIds: ['clarity'],
       prompts: [],

@@ -385,6 +385,7 @@ describe('ChainSessionStore — run-status lifecycle (Tier 2)', () => {
     expect(isRunComplete(session)).toBe(true);
 
     await manager.setPendingGateReview('s1', {
+      nodeId: 'n1',
       combinedPrompt: 'Sections are too short.',
       gateIds: ['__phase_guard__'],
       prompts: [],
