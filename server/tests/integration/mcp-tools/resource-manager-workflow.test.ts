@@ -539,8 +539,11 @@ describe('Resource Manager Workflow Integration', () => {
       );
     });
 
-    test('framework parameters pass through correctly', async () => {
-      await router.handleAction(
+    test('framework create refuses persist, which only switch reads (P4.134)', async () => {
+      // `handleCreate` reads neither `persist` nor `reason`. `persist` is framework-owned and
+      // declared on `framework:switch` alone, so the per-action refusal names it. (`reason` is a
+      // COMMON parameter, which the router does not yet check per action.)
+      const result = await router.handleAction(
         {
           resource_type: 'framework',
           action: 'create',
@@ -553,13 +556,33 @@ describe('Resource Manager Workflow Integration', () => {
         {}
       );
 
+      expect(result.isError).toBe(true);
+      expect(result.content[0]?.text).toContain(
+        `'persist' is not read by resource_type:"framework" action:"create" — only by action:"switch".`
+      );
+      expect(frameworkManager.handleAction).not.toHaveBeenCalled();
+    });
+
+    test('framework parameters pass through correctly', async () => {
+      // The twin: the same call minus `persist` — one identifier — reaches the handler intact.
+      await router.handleAction(
+        {
+          resource_type: 'framework',
+          action: 'create',
+          id: 'new-method',
+          name: 'New Framework',
+          system_prompt_guidance: 'Apply this framework',
+          reason: 'Testing creation',
+        },
+        {}
+      );
+
       expect(frameworkManager.handleAction).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'create',
           id: 'new-method',
           name: 'New Framework',
           system_prompt_guidance: 'Apply this framework',
-          persist: true,
           reason: 'Testing creation',
         }),
         expect.any(Object)

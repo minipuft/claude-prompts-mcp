@@ -923,6 +923,13 @@ belongs to another `resource_type` is refused naming the types that read it (see
 refusal above). That one names only the first offender, because the owner list is the same
 correction for all of them.
 
+The same refusal also checks the **action**: a parameter its resource type owns is still refused on
+an action that does not read it, naming the actions that do —
+`'severity' is not read by resource_type:"gate" action:"inspect" — only by action:"create" and
+"update".` Which actions read a parameter is the contract's own `commands[].parameters`
+(`<type>:<action>`, and `common:<action>` for every type), so the declaration a reader consults and
+the rule the router enforces are one list. `action:"preview"` reads what its `preview_action` reads.
+
 #### A declared parameter the current state does not advertise
 
 `prompt_engine` publishes a **union**: `gates`, `gate_verdict` and `gate_action` appear in
@@ -955,12 +962,18 @@ turns the whole class into a loud error at the boundary.
 - **Top-level `arguments` keys only.** `_meta` is a client-protocol field carried on `params`,
   beside `arguments`, never inside it, so it is out of reach and needs no exemption.
 - **Nested object keys are covered too, by a different mechanism.** Every object schema reachable
-  from a tool's parameters refuses an unknown key, naming the path it sits at
-  (`arguments.0: Unrecognized key: "requred"`). That is zod's own refusal rather than the
-  suggestion-carrying one above: a nested key is rejected during validation, so the call never
-  reaches the handler that would name a correction. `tests/unit/mcp-tools/nested-object-strictness.test.ts`
+  from a tool's parameters refuses an unknown key by its full path, with the nearest declared key:
+  `'arguments[0].requred' is not a declared key — did you mean 'required'?`. The key is rejected
+  during validation, so the message comes from each object's own zod `error` option
+  (`shared/utils/nested-key-refusal.ts`) rather than from a handler, and the published JSON Schema
+  is unchanged. A union reports the same way from the member the value's type selects, so a
+  misspelled key inside an inline gate reads `'gates[0].descripton' is not a declared key — did
+you mean 'description'?` rather than `gates.0: Invalid input`. The loader shares several of these
+  objects (`injection`, `composer`, `artifacts`, argument `validation`, a step's `visibility`), so a
+  YAML load error names the key the same way. `tests/unit/mcp-tools/nested-object-strictness.test.ts`
   walks the whole reachable graph and fails on any object that is neither closed nor listed below,
-  so a new nested object cannot join the class unclassified.
+  on any closed object or union without that adapter, and plants a misspelling in every closed
+  object to check the message a client reads.
 - **Deliberately open, with reasons** — the only objects where an unknown key still survives:
   - the three tools' top-level parameters, so the refusal above can name the key and suggest a fix;
   - `chain_steps[]` and `chain_step_data`, because a chain step is an opaque object by decision

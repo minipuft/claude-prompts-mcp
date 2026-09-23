@@ -18,7 +18,6 @@ import { z } from 'zod/v4';
 import { workflowBudgetSchema, workflowEdgeSchema } from './workflow-ir.schema.js';
 import { PATCH_TARGET_FIELDS } from '../resource-manager/prompt/operations/template-patch.js';
 import { PREVIEWABLE_ACTIONS } from '../shared/preview-action.js';
-import { refuseUndeclaredNestedKeys } from '../shared/undeclared-parameters.js';
 
 import type { JudgeEvaluationConfig } from '#engine/gates/judge/types.js';
 
@@ -29,6 +28,7 @@ import {
   PromptComposerMetadataSchema,
   PromptInjectionConfigSchema,
 } from '#modules/prompts/prompt-schema.js';
+import { refuseUndeclaredKey } from '#shared/utils/nested-key-refusal.js';
 
 // ---------------------------------------------------------------------------
 // Schema
@@ -42,20 +42,23 @@ import {
  * Mirrors `PromptArgumentSchema` (prompt-schema.ts) field for field, deliberately — see the
  * `arguments` parameter comment below for why every field stays optional rather than defaulted.
  */
-const promptArgumentSchema = z.strictObject({
-  name: z.string(),
-  type: z.enum(['string', 'number', 'boolean', 'object', 'array']).optional(),
-  description: z.string().optional(),
-  required: z.boolean().optional(),
-  defaultValue: z.unknown().optional(),
-  /**
-   * Also the switch that arms required-enforcement: `ArgumentParser.enrichResult` runs schema
-   * validation (which is what throws on a missing required argument) only when some argument
-   * declares `minLength`/`maxLength`/`pattern`. Unsettable through the tool until now, so a
-   * tool-authored `required: true` had no reachable enforcement path.
-   */
-  validation: ArgumentValidationSchema.optional(),
-});
+const promptArgumentSchema = z.strictObject(
+  {
+    name: z.string(),
+    type: z.enum(['string', 'number', 'boolean', 'object', 'array']).optional(),
+    description: z.string().optional(),
+    required: z.boolean().optional(),
+    defaultValue: z.unknown().optional(),
+    /**
+     * Also the switch that arms required-enforcement: `ArgumentParser.enrichResult` runs schema
+     * validation (which is what throws on a missing required argument) only when some argument
+     * declares `minLength`/`maxLength`/`pattern`. Unsettable through the tool until now, so a
+     * tool-authored `required: true` had no reachable enforcement path.
+     */
+    validation: ArgumentValidationSchema.optional(),
+  },
+  { error: refuseUndeclaredKey }
+);
 
 // ── Framework advanced-field element shapes (P4.1 / P4.5) ──────────────────
 //
@@ -73,59 +76,74 @@ const promptArgumentSchema = z.strictObject({
 // `generic-framework-guide.ts`), the shape mirrors that engine reader instead.
 
 /** Mirrors `FrameworkGateSchema` (framework-schema.ts:18). Only `id` and `name` are required. */
-const frameworkGateSchema = z.strictObject({
-  id: z.string().min(1),
-  name: z.string().min(1),
-  description: z.string().optional(),
-  frameworkArea: z.string().optional(),
-  priority: z.enum(['critical', 'high', 'medium', 'low']).optional(),
-  validationCriteria: z.array(z.string()).optional(),
-  criteria: z.array(z.string()).optional(),
-  severity: z.enum(['critical', 'high', 'medium', 'low']).optional(),
-});
+const frameworkGateSchema = z.strictObject(
+  {
+    id: z.string().min(1),
+    name: z.string().min(1),
+    description: z.string().optional(),
+    frameworkArea: z.string().optional(),
+    priority: z.enum(['critical', 'high', 'medium', 'low']).optional(),
+    validationCriteria: z.array(z.string()).optional(),
+    criteria: z.array(z.string()).optional(),
+    severity: z.enum(['critical', 'high', 'medium', 'low']).optional(),
+  },
+  { error: refuseUndeclaredKey }
+);
 
 /** Mirrors `TemplateSuggestionSchema` (framework-schema.ts:34). */
-const templateSuggestionSchema = z.strictObject({
-  section: z.enum(['system', 'user']),
-  type: z.enum(['addition', 'structure', 'modification']),
-  description: z.string().optional(),
-  content: z.string().optional(),
-  frameworkJustification: z.string().optional(),
-  impact: z.enum(['high', 'medium', 'low']).optional(),
-});
+const templateSuggestionSchema = z.strictObject(
+  {
+    section: z.enum(['system', 'user']),
+    type: z.enum(['addition', 'structure', 'modification']),
+    description: z.string().optional(),
+    content: z.string().optional(),
+    frameworkJustification: z.string().optional(),
+    impact: z.enum(['high', 'medium', 'low']).optional(),
+  },
+  { error: refuseUndeclaredKey }
+);
 
 /** Mirrors `PhaseGuardSchema` (framework-schema.ts:48) — deterministic per-section checks. */
-const phaseGuardSchema = z.strictObject({
-  required: z.boolean().optional(),
-  min_length: z.number().int().positive().optional(),
-  max_length: z.number().int().positive().optional(),
-  contains_any: z.array(z.string().min(1)).optional(),
-  contains_all: z.array(z.string().min(1)).optional(),
-  matches_pattern: z.string().optional(),
-  forbidden_terms: z.array(z.string().min(1)).optional(),
-});
+const phaseGuardSchema = z.strictObject(
+  {
+    required: z.boolean().optional(),
+    min_length: z.number().int().positive().optional(),
+    max_length: z.number().int().positive().optional(),
+    contains_any: z.array(z.string().min(1)).optional(),
+    contains_all: z.array(z.string().min(1)).optional(),
+    matches_pattern: z.string().optional(),
+    forbidden_terms: z.array(z.string().min(1)).optional(),
+  },
+  { error: refuseUndeclaredKey }
+);
 
 /** Mirrors `ProcessingStepSchema` (framework-schema.ts:63), a `phases.yaml` member. */
-const processingStepSchema = z.strictObject({
-  id: z.string().min(1),
-  name: z.string().min(1),
-  description: z.string().min(1),
-  frameworkBasis: z.string().min(1),
-  order: z.number().int().positive(),
-  required: z.boolean(),
-  section_header: z.string().optional(),
-  guards: phaseGuardSchema.optional(),
-});
+const processingStepSchema = z.strictObject(
+  {
+    id: z.string().min(1),
+    name: z.string().min(1),
+    description: z.string().min(1),
+    frameworkBasis: z.string().min(1),
+    order: z.number().int().positive(),
+    required: z.boolean(),
+    section_header: z.string().optional(),
+    guards: phaseGuardSchema.optional(),
+  },
+  { error: refuseUndeclaredKey }
+);
 
 /** Mirrors `ExecutionStepSchema` (framework-schema.ts:79), a `phases.yaml` member. */
-const executionStepSchema = z.strictObject({
-  id: z.string().min(1),
-  name: z.string().min(1),
-  action: z.string().min(1),
-  frameworkPhase: z.string().min(1),
-  dependencies: z.array(z.string()).optional(),
-  expected_output: z.string().min(1),
-});
+const executionStepSchema = z.strictObject(
+  {
+    id: z.string().min(1),
+    name: z.string().min(1),
+    action: z.string().min(1),
+    frameworkPhase: z.string().min(1),
+    dependencies: z.array(z.string()).optional(),
+    expected_output: z.string().min(1),
+  },
+  { error: refuseUndeclaredKey }
+);
 
 /**
  * Mirrors `GatePassCriteriaSchema` (gate-schema.ts) field for field, minus the six
@@ -169,44 +187,50 @@ const gateEvaluationSchema: z.ZodType<JudgeEvaluationConfig> = z.strictObject(
     model: z.string().optional(),
     strict: z.boolean().optional(),
   },
-  { error: refuseUndeclaredNestedKeys(() => gateEvaluationSchema) }
+  { error: refuseUndeclaredKey }
 );
 
-export const gatePassCriteriaSchema = z.strictObject({
-  type: z
-    .enum(['inline_guidance', 'framework_compliance', 'shell_verify', 'script_tool'])
-    .optional(),
+export const gatePassCriteriaSchema = z.strictObject(
+  {
+    type: z
+      .enum(['inline_guidance', 'framework_compliance', 'shell_verify', 'script_tool'])
+      .optional(),
 
-  // Framework compliance options
-  framework: z.string().optional(),
-  min_compliance_score: z.number().min(0).max(1).optional(),
-  severity: z.enum(['warn', 'fail']).optional(),
-  quality_indicators: z
-    .record(
-      z.string(),
-      z.strictObject({
-        keywords: z.array(z.string()).optional(),
-        patterns: z.array(z.string()).optional(),
-      })
-    )
-    .optional(),
+    // Framework compliance options
+    framework: z.string().optional(),
+    min_compliance_score: z.number().min(0).max(1).optional(),
+    severity: z.enum(['warn', 'fail']).optional(),
+    quality_indicators: z
+      .record(
+        z.string(),
+        z.strictObject(
+          {
+            keywords: z.array(z.string()).optional(),
+            patterns: z.array(z.string()).optional(),
+          },
+          { error: refuseUndeclaredKey }
+        )
+      )
+      .optional(),
 
-  // Shell verification options (ground-truth validation via exit code)
-  shell_command: z.array(z.string()).nonempty().optional(),
-  shell_timeout: z.number().int().positive().optional(),
-  shell_working_dir: z.string().optional(),
-  shell_env: z.record(z.string(), z.string()).optional(),
-  shell_max_attempts: z.number().int().positive().optional(),
-  shell_preset: z.enum(['fast', 'full', 'extended']).optional(),
-  shell_stdin_source: z.enum(['agent_response']).optional(),
-  shell_response_env_var: z.string().optional(),
+    // Shell verification options (ground-truth validation via exit code)
+    shell_command: z.array(z.string()).nonempty().optional(),
+    shell_timeout: z.number().int().positive().optional(),
+    shell_working_dir: z.string().optional(),
+    shell_env: z.record(z.string(), z.string()).optional(),
+    shell_max_attempts: z.number().int().positive().optional(),
+    shell_preset: z.enum(['fast', 'full', 'extended']).optional(),
+    shell_stdin_source: z.enum(['agent_response']).optional(),
+    shell_response_env_var: z.string().optional(),
 
-  // Script tool verification options (structured JSON pass/fail)
-  script_tool_id: z.string().optional(),
-  script_tool_input: z.record(z.string(), z.unknown()).optional(),
-  script_tool_timeout: z.number().int().positive().optional(),
-  script_tool_working_dir: z.string().optional(),
-});
+    // Script tool verification options (structured JSON pass/fail)
+    script_tool_id: z.string().optional(),
+    script_tool_input: z.record(z.string(), z.unknown()).optional(),
+    script_tool_timeout: z.number().int().positive().optional(),
+    script_tool_working_dir: z.string().optional(),
+  },
+  { error: refuseUndeclaredKey }
+);
 
 /**
  * Resource Manager input schema.
@@ -322,12 +346,15 @@ export const resourceManagerInputSchema = z
      */
     patch: z
       .array(
-        z.strictObject({
-          field: z.enum(PATCH_TARGET_FIELDS),
-          old_string: z.string().min(1),
-          new_string: z.string(),
-          replace_all: z.boolean().optional(),
-        })
+        z.strictObject(
+          {
+            field: z.enum(PATCH_TARGET_FIELDS),
+            old_string: z.string().min(1),
+            new_string: z.string(),
+            replace_all: z.boolean().optional(),
+          },
+          { error: refuseUndeclaredKey }
+        )
       )
       .optional(),
     /**
@@ -596,11 +623,14 @@ export const resourceManagerInputSchema = z
      * (as `frameworkElements`). Read by `generic-framework-guide.ts` to build creation guidance.
      */
     framework_elements: z
-      .strictObject({
-        requiredSections: z.array(z.string()),
-        optionalSections: z.array(z.string()).optional(),
-        sectionDescriptions: z.record(z.string(), z.string()),
-      })
+      .strictObject(
+        {
+          requiredSections: z.array(z.string()),
+          optionalSections: z.array(z.string()).optional(),
+          sectionDescriptions: z.record(z.string(), z.string()),
+        },
+        { error: refuseUndeclaredKey }
+      )
       .optional(),
     /**
      * [Framework] Arguments this framework suggests a prompt declare → `framework.yaml`
@@ -608,13 +638,16 @@ export const resourceManagerInputSchema = z
      */
     argument_suggestions: z
       .array(
-        z.strictObject({
-          name: z.string().min(1),
-          type: z.enum(['string', 'array', 'object', 'boolean', 'number']),
-          description: z.string(),
-          frameworkReason: z.string().optional(),
-          examples: z.array(z.string()).optional(),
-        })
+        z.strictObject(
+          {
+            name: z.string().min(1),
+            type: z.enum(['string', 'array', 'object', 'boolean', 'number']),
+            description: z.string(),
+            frameworkReason: z.string().optional(),
+            examples: z.array(z.string()).optional(),
+          },
+          { error: refuseUndeclaredKey }
+        )
       )
       .optional(),
     /** [Framework] Judge-prompt body, written to the file `judgePromptFile` names. */
@@ -627,19 +660,25 @@ export const resourceManagerInputSchema = z
     execution_type_enhancements: z.record(z.string(), z.unknown()).optional(),
     /** [Framework] System/user prompt additions and contextual hints → `phases.yaml`. */
     template_enhancements: z
-      .strictObject({
-        systemPromptAdditions: z.array(z.string()).optional(),
-        userPromptModifications: z.array(z.string()).optional(),
-        contextualHints: z.array(z.string()).optional(),
-      })
+      .strictObject(
+        {
+          systemPromptAdditions: z.array(z.string()).optional(),
+          userPromptModifications: z.array(z.string()).optional(),
+          contextualHints: z.array(z.string()).optional(),
+        },
+        { error: refuseUndeclaredKey }
+      )
       .optional(),
     /** [Framework] Pre/post/validation hooks around execution → `phases.yaml`. */
     execution_flow: z
-      .strictObject({
-        preProcessingSteps: z.array(z.string()).optional(),
-        postProcessingSteps: z.array(z.string()).optional(),
-        validationSteps: z.array(z.string()).optional(),
-      })
+      .strictObject(
+        {
+          preProcessingSteps: z.array(z.string()).optional(),
+          postProcessingSteps: z.array(z.string()).optional(),
+          validationSteps: z.array(z.string()).optional(),
+        },
+        { error: refuseUndeclaredKey }
+      )
       .optional(),
     /** [Framework] Per-phase keywords and patterns for compliance scoring → `phases.yaml`. */
     quality_indicators: z.record(z.string(), z.unknown()).optional(),

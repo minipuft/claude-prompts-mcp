@@ -152,8 +152,10 @@ describe('resource_manager argument contract', () => {
     // could not reach persisted YAML. It was STRIPPED, which served that intent and nothing else:
     // the author who typed `requred` was told their argument was written, and it was — without
     // the field they meant. P4.97 refuses instead, which serves the same intent AND says so.
+    // P4.135: and names it the way a caller can act on — the full path and the nearest key,
+    // where zod's bare `Unrecognized key: "requred"` offered neither.
     expect(() => parseArguments([{ name: 'feature', requred: true }])).toThrow(
-      /Unrecognized key: \\"requred\\"/
+      /'arguments\[0\]\.requred' is not a declared key — did you mean 'required'\?/
     );
 
     try {

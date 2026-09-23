@@ -24,6 +24,7 @@ import { z } from 'zod/v4';
 import { buildPromptEngineSchema } from '../../../src/mcp/tools/schemas/prompt-engine.schema.js';
 import { resourceManagerInputSchema } from '../../../src/mcp/tools/schemas/resource-manager.schema.js';
 import { buildSystemControlSchema } from '../../../src/mcp/tools/schemas/system-control.schema.js';
+import { formatKeyPath } from '../../../src/shared/utils/nested-key-refusal.js';
 
 /**
  * Objects that stay OPEN on purpose, each with the reason.
@@ -53,6 +54,20 @@ const DELIBERATELY_OPEN: Readonly<Record<string, string>> = {
 interface ReachableObject {
   path: string;
   open: boolean;
+  /** Carries an `error` option — the adapter that names the path and the nearest key. */
+  adapted: boolean;
+  /** The first declared key, which the planted misspelling below is derived from. */
+  firstKey: string | undefined;
+  /** Keys pinned to a literal — a discriminator a planted value must carry to reach the object. */
+  literals: Record<string, unknown>;
+}
+
+/** One reachable union: where it is, and how a failure inside a member reaches the client. */
+interface ReachableUnion {
+  path: string;
+  adapted: boolean;
+  /** A discriminated union reports the matched member's own issues, by path, unaided. */
+  discriminated: boolean;
 }
 
 /**
@@ -62,7 +77,13 @@ interface ReachableObject {
  * `.strict()`, `unknown` is `.passthrough()`/loose, and an absent catchall is the STRIP default —
  * the silent one this row exists to remove. Verified against all three spellings before use.
  */
-function walk(root: unknown, path: string, seen: Set<unknown>, out: ReachableObject[]): void {
+function walk(
+  root: unknown,
+  path: string,
+  seen: Set<unknown>,
+  out: ReachableObject[],
+  unions: ReachableUnion[] = []
+): void {
   if (root == null || typeof root !== 'object') return;
   if (seen.has(root)) return;
   seen.add(root);
@@ -75,18 +96,38 @@ function walk(root: unknown, path: string, seen: Set<unknown>, out: ReachableObj
     case 'object': {
       const catchall = (def['catchall'] as { _zod?: { def?: { type?: string } } } | undefined)?._zod
         ?.def?.type;
-      out.push({ path, open: catchall !== 'never' });
-      for (const [key, child] of Object.entries(def['shape'] as Record<string, unknown>)) {
-        walk(child, `${path}.${key}`, seen, out);
+      const shape = def['shape'] as Record<string, unknown>;
+      out.push({
+        path,
+        open: catchall !== 'never',
+        adapted: def['error'] !== undefined,
+        firstKey: Object.keys(shape)[0],
+        literals: Object.fromEntries(
+          Object.entries(shape)
+            .map(
+              ([key, child]) =>
+                [key, (child as { _zod?: { def?: Record<string, unknown> } })._zod?.def] as const
+            )
+            .filter(([, childDef]) => childDef?.['type'] === 'literal')
+            .map(([key, childDef]) => [key, (childDef?.['values'] as unknown[])[0]])
+        ),
+      });
+      for (const [key, child] of Object.entries(shape)) {
+        walk(child, `${path}.${key}`, seen, out, unions);
       }
       return;
     }
     case 'array':
-      walk(def['element'], `${path}[]`, seen, out);
+      walk(def['element'], `${path}[]`, seen, out, unions);
       return;
     case 'union':
+      unions.push({
+        path,
+        adapted: def['error'] !== undefined,
+        discriminated: def['discriminator'] !== undefined,
+      });
       (def['options'] as unknown[]).forEach((option, index) =>
-        walk(option, `${path}|${index}`, seen, out)
+        walk(option, `${path}|${index}`, seen, out, unions)
       );
       return;
     case 'optional':
@@ -96,11 +137,11 @@ function walk(root: unknown, path: string, seen: Set<unknown>, out: ReachableObj
     case 'readonly':
     case 'nonoptional':
     case 'catch':
-      walk(def['innerType'], path, seen, out);
+      walk(def['innerType'], path, seen, out, unions);
       return;
     case 'pipe':
-      walk(def['in'], path, seen, out);
-      walk(def['out'], path, seen, out);
+      walk(def['in'], path, seen, out, unions);
+      walk(def['out'], path, seen, out, unions);
       return;
     case 'lazy':
       // A recursive schema: resolving it would not terminate, and none exists in this graph today.
@@ -108,27 +149,32 @@ function walk(root: unknown, path: string, seen: Set<unknown>, out: ReachableObj
     case 'record':
     case 'map':
       // A free-form key space by construction — there is no declared key to be unknown of.
-      walk(def['valueType'], `${path}{}`, seen, out);
+      walk(def['valueType'], `${path}{}`, seen, out, unions);
       return;
     default:
       return;
   }
 }
 
-function reachableObjects(): ReachableObject[] {
-  const out: ReachableObject[] = [];
-  const seen = new Set<unknown>();
+/** The three registered tool schemas, by the name each path starts with. */
+const TOOL_ROOTS: Readonly<Record<string, z.ZodType>> = {
   // The WIDEST prompt_engine shape: the narrowed one omits the gate parameters, so walking it
   // instead would silently drop `gate_verdict` — the very schema this row cares most about.
-  walk(
-    buildPromptEngineSchema(() => true, 'unused'),
-    'prompt_engine',
-    seen,
-    out
-  );
-  walk(buildSystemControlSchema(), 'system_control', seen, out);
-  walk(resourceManagerInputSchema, 'resource_manager', seen, out);
-  return out;
+  prompt_engine: buildPromptEngineSchema(() => true, 'unused'),
+  system_control: buildSystemControlSchema(),
+  resource_manager: resourceManagerInputSchema,
+};
+
+function reachable(): { objects: ReachableObject[]; unions: ReachableUnion[] } {
+  const objects: ReachableObject[] = [];
+  const unions: ReachableUnion[] = [];
+  const seen = new Set<unknown>();
+  for (const [name, root] of Object.entries(TOOL_ROOTS)) walk(root, name, seen, objects, unions);
+  return { objects, unions };
+}
+
+function reachableObjects(): ReachableObject[] {
+  return reachable().objects;
 }
 
 describe('nested object schemas refuse an unknown key', () => {
@@ -270,5 +316,162 @@ describe('posture detection', () => {
     expect(probe(z.object({ a: z.string() }))).toBe(true); // strip — the silent default
     expect(probe(z.object({ a: z.string() }).passthrough())).toBe(true);
     expect(probe(z.object({ a: z.string() }).strict())).toBe(false);
+  });
+});
+
+/**
+ * The same walk, asked what a CLIENT reads when it gets a nested key wrong (P4.120, P4.135).
+ *
+ * Strict is not enough. A strict object refuses a misspelled key with zod's bare
+ * `Unrecognized key: "tpye"` — no path to paste back, no suggestion — and a union hides a
+ * member's failure behind `gates.0: Invalid input`, because the SDK renders top-level issues only.
+ * #356 and #361 repaired two sites; these assertions enumerate the rest by walking the published
+ * schemas, so a new object or union is a failure until it carries the adapter.
+ */
+
+/** A value that reaches `path` (as the walker spells it) and holds `leaf` there. */
+function reach(path: string, leaf: unknown): { segments: (string | number)[]; value: unknown } {
+  const tokens = [...path.matchAll(/\.([^.[|{]+)|\[\]|\|\d+|\{\}/g)].map((match) => match[0]);
+  let value = leaf;
+  const segments: (string | number)[] = [];
+  for (const token of [...tokens].reverse()) {
+    if (token === '[]') value = [value];
+    else if (token === '{}') value = { k: value };
+    else if (token.startsWith('.')) value = { [token.slice(1)]: value };
+  }
+  for (const token of tokens) {
+    if (token === '[]') segments.push(0);
+    else if (token === '{}') segments.push('k');
+    else if (token.startsWith('.')) segments.push(token.slice(1));
+  }
+  return { segments, value };
+}
+
+/** Required keys the three roots need before a nested value is examined at all. */
+const ROOT_BASE: Readonly<Record<string, Record<string, unknown>>> = {
+  prompt_engine: { command: '>>demo' },
+  system_control: { action: 'config' },
+  resource_manager: { resource_type: 'prompt', action: 'update', id: 'demo' },
+};
+
+/** Every message a client would read for `input` against the named tool root. */
+function clientMessages(tool: string, input: unknown): string[] {
+  const result = (TOOL_ROOTS[tool] as z.ZodType).safeParse({
+    ...ROOT_BASE[tool],
+    ...(input as Record<string, unknown>),
+  });
+  return result.success ? [] : result.error.issues.map((issue) => issue.message);
+}
+
+describe('every nested refusal names its path and the nearest key', () => {
+  const { objects, unions } = reachable();
+  const strictObjects = objects.filter((entry) => !entry.open);
+
+  it('reaches every strict object the rows named (anti-vacuity)', () => {
+    expect(strictObjects.map((entry) => entry.path)).toEqual(
+      expect.arrayContaining([
+        'resource_manager.pass_criteria[]',
+        'resource_manager.arguments[]',
+        'resource_manager.evaluation',
+        // `budget` and `edges` are ONE schema each, shared with prompt_engine's workflow and
+        // remainder; the walk reports a schema at the first path that reaches it.
+        'prompt_engine.workflow.budget',
+        'prompt_engine.remainder.edges[]',
+      ])
+    );
+    expect(unions.map((entry) => entry.path)).toEqual(
+      expect.arrayContaining(['prompt_engine.gate_verdict', 'prompt_engine.workflow.gates[]'])
+    );
+  });
+
+  it('every strict object carries the adapter', () => {
+    const bare = strictObjects.filter((entry) => !entry.adapted).map((entry) => entry.path);
+    expect(bare).toEqual([]);
+  });
+
+  it('every union carries an override, unless a discriminator already routes it', () => {
+    const bare = unions
+      .filter((entry) => !entry.adapted && !entry.discriminated)
+      .map((entry) => entry.path);
+    expect(bare).toEqual([]);
+  });
+
+  it.each(strictObjects.map((entry) => [entry.path, entry] as const))(
+    '%s: a planted misspelling is refused by full path with the nearest key',
+    (path, entry) => {
+      const key = entry.firstKey as string;
+      const planted = key.toUpperCase() === key ? `${key}_` : key.toUpperCase();
+      const [tool] = path.split(/[.[|{]/);
+      const { segments, value } = reach(path, { ...entry.literals, [planted]: 1 });
+      const expected =
+        `'${formatKeyPath([...segments, planted])}' is not a declared key` + ` — did you mean '`;
+
+      const messages = clientMessages(tool as string, value);
+
+      expect(messages.find((message) => message.includes(expected)) ?? messages).toEqual(
+        expect.stringContaining(`${expected}${key}'?`)
+      );
+    }
+  );
+
+  it('a union member with a misspelled key names the member path, not `Invalid input`', () => {
+    const messages = clientMessages('prompt_engine', {
+      gates: [{ name: 'check', descripton: 'must cite sources' }],
+    });
+
+    expect(messages).toEqual([
+      expect.stringContaining(
+        "'gates[0].descripton' is not a declared key — did you mean 'description'?"
+      ),
+    ]);
+  });
+
+  it('a union value of no member kind names the kinds it takes', () => {
+    const messages = clientMessages('prompt_engine', { gates: [42] });
+
+    expect(messages).toEqual(["'gates[0]' takes string or object, not number."]);
+  });
+
+  it('CONTROL: a discriminated union routes a member failure by path unaided', () => {
+    // The exemption above is earned, not assumed: a matched discriminator reports the member's
+    // own issue at its own path, so the SDK already renders where the defect is.
+    const messages = clientMessages('prompt_engine', {
+      observations: [{ type: 'unknown_resolved', id: 'u1', resolution: 'r', stray: true }],
+    });
+
+    expect(messages.some((message) => message.includes('stray'))).toBe(true);
+    expect(messages.some((message) => message === 'Invalid input')).toBe(false);
+  });
+
+  it('POSITIVE CONTROL: a union without the override is caught by the walk', () => {
+    const planted = z.object({
+      pick: z.union([z.string(), z.strictObject({ a: z.string() }, { error: () => 'x' })]),
+    });
+    const twin = z.object({
+      pick: z.union([z.string(), z.strictObject({ a: z.string() }, { error: () => 'x' })], {
+        error: () => 'adapted',
+      }),
+    });
+    const bareUnions = (schema: z.ZodType): string[] => {
+      const found: ReachableUnion[] = [];
+      walk(schema, 'x', new Set(), [], found);
+      return found.filter((entry) => !entry.adapted).map((entry) => entry.path);
+    };
+
+    expect(bareUnions(planted)).toEqual(['x.pick']);
+    expect(bareUnions(twin)).toEqual([]);
+  });
+
+  it('POSITIVE CONTROL: a strict object without the adapter is caught by the walk', () => {
+    const bareObjects = (schema: z.ZodType): string[] => {
+      const found: ReachableObject[] = [];
+      walk(schema, 'x', new Set(), found);
+      return found.filter((entry) => !entry.open && !entry.adapted).map((entry) => entry.path);
+    };
+
+    expect(bareObjects(z.object({ b: z.strictObject({ a: z.string() }) }))).toEqual(['x.b']);
+    expect(
+      bareObjects(z.object({ b: z.strictObject({ a: z.string() }, { error: () => 'x' }) }))
+    ).toEqual([]);
   });
 });

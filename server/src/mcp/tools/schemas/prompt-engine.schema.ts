@@ -18,16 +18,17 @@ import {
   workflowIRSchema,
   workflowNodeSchema,
 } from './workflow-ir.schema.js';
-import {
-  describeNestedSchemaRefusal,
-  type NestedSchemaIssue,
-} from '../shared/undeclared-parameters.js';
 
 import type { GateVerdictSubmission } from '#engine/gates/core/gate-verdict-renderer.js';
 import type { RemainderSubmission } from '#modules/workflow-ir/types.js';
 
 import { isAppendCommand } from '#engine/execution/parsers/append-command-parser.js';
 import { CHAIN_ID_FORMAT_MESSAGE, CHAIN_ID_PATTERN } from '#shared/utils/chain-id-codec.js';
+import {
+  describeNestedSchemaRefusal,
+  refuseUndeclaredKey,
+  type NestedSchemaIssue,
+} from '#shared/utils/nested-key-refusal.js';
 
 // ---------------------------------------------------------------------------
 // Gate sub-schemas (defined in gate-spec.schema.ts; shared with resource_manager
@@ -52,34 +53,40 @@ const unknownIdSchema = z
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Unknown id must be kebab-case (e.g. "cache-ttl-unknown")');
 
 /** Opens a ledger entry for a newly-surfaced unknown. */
-export const unknownDiscoveredSchema = z.strictObject({
-  type: z.literal('unknown_discovered'),
-  id: unknownIdSchema,
-  statement: z.string().min(1, 'Unknown statement cannot be empty'),
-  blocking: z.boolean().optional(),
-  /**
-   * Address a downstream step by its stable node id — the mutation policy's skip target when
-   * this unknown later resolves `irrelevant`. Union ADDITION: existing callers that omit it are
-   * unaffected. Accepts the kebab-case ids minted from a YAML chain's `stepName`/`id:` and the
-   * frozen `nK` ids a symbolic chain mints at parse time — same vocabulary and regex as
-   * {@link temporaryGateObjectSchema}'s `target_step_id`, since both address one node id space.
-   */
-  target_step_id: z
-    .string()
-    .regex(
-      /^[a-z0-9]+(?:-[a-z0-9]+)*$|^n\d+$/,
-      'target_step_id must be a kebab-case node id or an nK symbolic id'
-    )
-    .optional(),
-});
+export const unknownDiscoveredSchema = z.strictObject(
+  {
+    type: z.literal('unknown_discovered'),
+    id: unknownIdSchema,
+    statement: z.string().min(1, 'Unknown statement cannot be empty'),
+    blocking: z.boolean().optional(),
+    /**
+     * Address a downstream step by its stable node id — the mutation policy's skip target when
+     * this unknown later resolves `irrelevant`. Union ADDITION: existing callers that omit it are
+     * unaffected. Accepts the kebab-case ids minted from a YAML chain's `stepName`/`id:` and the
+     * frozen `nK` ids a symbolic chain mints at parse time — same vocabulary and regex as
+     * {@link temporaryGateObjectSchema}'s `target_step_id`, since both address one node id space.
+     */
+    target_step_id: z
+      .string()
+      .regex(
+        /^[a-z0-9]+(?:-[a-z0-9]+)*$|^n\d+$/,
+        'target_step_id must be a kebab-case node id or an nK symbolic id'
+      )
+      .optional(),
+  },
+  { error: refuseUndeclaredKey }
+);
 
 /** Closes an existing ledger entry. `statement` carries the resolution statement. */
-export const unknownResolvedSchema = z.strictObject({
-  type: z.literal('unknown_resolved'),
-  id: unknownIdSchema,
-  statement: z.string().min(1, 'Unknown statement cannot be empty'),
-  resolution: z.enum(['answered', 'irrelevant']),
-});
+export const unknownResolvedSchema = z.strictObject(
+  {
+    type: z.literal('unknown_resolved'),
+    id: unknownIdSchema,
+    statement: z.string().min(1, 'Unknown statement cannot be empty'),
+    resolution: z.enum(['answered', 'irrelevant']),
+  },
+  { error: refuseUndeclaredKey }
+);
 
 /** One typed observation about a run-scoped unknown. */
 export const unknownObservationSchema = z.discriminatedUnion('type', [
@@ -111,14 +118,17 @@ export const unknownObservationSchema = z.discriminatedUnion('type', [
  * where the run is legible (Tier 1/2) and refused by name.
  */
 export const remainderSubmissionSchema = z
-  .object({
-    mode: z.enum(['replace', 'append']),
-    nodes: z
-      .array(workflowNodeSchema)
-      .min(1, 'A remainder must declare at least one node')
-      .max(DEFAULT_WORKFLOW_CAPS.maxNodes),
-    edges: z.array(workflowEdgeSchema).optional(),
-  })
+  .object(
+    {
+      mode: z.enum(['replace', 'append']),
+      nodes: z
+        .array(workflowNodeSchema)
+        .min(1, 'A remainder must declare at least one node')
+        .max(DEFAULT_WORKFLOW_CAPS.maxNodes),
+      edges: z.array(workflowEdgeSchema).optional(),
+    },
+    { error: refuseUndeclaredKey }
+  )
   .strict();
 
 /** The validated payload shape. Local: consumers name the module type {@link RemainderSubmission}. */
@@ -153,11 +163,14 @@ const singleLineRationale = z
   .regex(/^[^\r\n]+$/, 'Rationale must be a single line — no line breaks');
 
 /** One gate's result. `index` is 1-based, matching the advertised gate list. */
-export const gateVerdictEntrySchema = z.strictObject({
-  index: z.number().int().positive('Gate index is 1-based'),
-  passed: z.boolean(),
-  rationale: singleLineRationale,
-});
+export const gateVerdictEntrySchema = z.strictObject(
+  {
+    index: z.number().int().positive('Gate index is 1-based'),
+    passed: z.boolean(),
+    rationale: singleLineRationale,
+  },
+  { error: refuseUndeclaredKey }
+);
 
 /**
  * A gate id as it appears in the rendered `REMINDERS:` line.
@@ -185,10 +198,13 @@ const reminderReason = z
   .regex(/^[^;)]+$/, 'Reason may not contain ";" or ")" — both delimit the rendered line');
 
 /** One reminder declared inapplicable. A bare id is not accepted; the reason is the point. */
-export const gateVerdictReminderExemptionSchema = z.strictObject({
-  id: reminderGateId,
-  reason: reminderReason,
-});
+export const gateVerdictReminderExemptionSchema = z.strictObject(
+  {
+    id: reminderGateId,
+    reason: reminderReason,
+  },
+  { error: refuseUndeclaredKey }
+);
 
 /**
  * The reminder attestation: one field for every reminder-tier gate the review advertised
@@ -198,10 +214,13 @@ export const gateVerdictReminderExemptionSchema = z.strictObject({
  * — present-and-empty renders as `REMINDERS: none`, which is a different statement from the
  * field being absent, and the renderer keeps them distinguishable.
  */
-export const gateVerdictRemindersSchema = z.strictObject({
-  satisfied: z.array(reminderGateId).default([]),
-  not_applicable: z.array(gateVerdictReminderExemptionSchema).default([]),
-});
+export const gateVerdictRemindersSchema = z.strictObject(
+  {
+    satisfied: z.array(reminderGateId).default([]),
+    not_applicable: z.array(gateVerdictReminderExemptionSchema).default([]),
+  },
+  { error: refuseUndeclaredKey }
+);
 
 /**
  * A structured gate review.
@@ -210,12 +229,15 @@ export const gateVerdictRemindersSchema = z.strictObject({
  * cannot submit an unparseable verdict: there is no format to get wrong, so
  * the five fallback patterns never come into play.
  */
-export const gateVerdictSubmissionSchema = z.strictObject({
-  overall: z.enum(['PASS', 'FAIL']),
-  rationale: singleLineRationale,
-  per_gate: z.array(gateVerdictEntrySchema).optional(),
-  reminders: gateVerdictRemindersSchema.optional(),
-});
+export const gateVerdictSubmissionSchema = z.strictObject(
+  {
+    overall: z.enum(['PASS', 'FAIL']),
+    rationale: singleLineRationale,
+    per_gate: z.array(gateVerdictEntrySchema).optional(),
+    reminders: gateVerdictRemindersSchema.optional(),
+  },
+  { error: refuseUndeclaredKey }
+);
 
 /**
  * The schema and the renderer's input type must stay in step: the renderer is

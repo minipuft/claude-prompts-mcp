@@ -18,43 +18,51 @@
 
 import { z } from 'zod/v4';
 
+import { refuseUndeclaredKey, refuseUnionMismatch } from '#shared/utils/nested-key-refusal.js';
+
 /** Quick inline gate: {name, description} */
-export const customCheckSchema = z.strictObject({
-  name: z.string().min(1, 'Custom check name cannot be empty'),
-  description: z.string().min(1, 'Custom check description cannot be empty'),
-});
+export const customCheckSchema = z.strictObject(
+  {
+    name: z.string().min(1, 'Custom check name cannot be empty'),
+    description: z.string().min(1, 'Custom check description cannot be empty'),
+  },
+  { error: refuseUndeclaredKey }
+);
 
 /** Full gate definition with optional fields */
 export const temporaryGateObjectSchema = z
-  .strictObject({
-    id: z.string().min(1, 'Gate ID cannot be empty').optional(),
-    template: z.string().min(1, 'Template reference cannot be empty').optional(),
-    name: z.string().optional(),
-    type: z.enum(['validation', 'guidance']).optional(),
-    scope: z.enum(['execution', 'session', 'chain', 'step']).optional(),
-    description: z.string().optional(),
-    guidance: z.string().optional(),
-    criteria: z.array(z.string().min(1)).optional(),
-    pass_criteria: z.array(z.string().min(1)).optional(),
-    severity: z.enum(['critical', 'high', 'medium', 'low']).optional(),
-    source: z.enum(['manual', 'automatic', 'analysis']).optional(),
-    context: z.record(z.string(), z.any()).optional(),
-    target_step_number: z.number().int().positive().optional(),
-    /**
-     * Address the target step by its stable node id instead of its position. Union ADDITION —
-     * `target_step_number` keeps working unchanged, and a gate may carry either. Accepts the
-     * kebab-case ids minted from a YAML chain's `stepName`/`id:`, the ids a submitted Workflow IR
-     * declares, and the frozen `nK` ids a symbolic chain mints at parse time.
-     */
-    target_step_id: z
-      .string()
-      .regex(
-        /^[a-z0-9]+(?:-[a-z0-9]+)*$|^n\d+$/,
-        'target_step_id must be a kebab-case node id or an nK symbolic id'
-      )
-      .optional(),
-    apply_to_steps: z.array(z.number().int().positive()).optional(),
-  })
+  .strictObject(
+    {
+      id: z.string().min(1, 'Gate ID cannot be empty').optional(),
+      template: z.string().min(1, 'Template reference cannot be empty').optional(),
+      name: z.string().optional(),
+      type: z.enum(['validation', 'guidance']).optional(),
+      scope: z.enum(['execution', 'session', 'chain', 'step']).optional(),
+      description: z.string().optional(),
+      guidance: z.string().optional(),
+      criteria: z.array(z.string().min(1)).optional(),
+      pass_criteria: z.array(z.string().min(1)).optional(),
+      severity: z.enum(['critical', 'high', 'medium', 'low']).optional(),
+      source: z.enum(['manual', 'automatic', 'analysis']).optional(),
+      context: z.record(z.string(), z.any()).optional(),
+      target_step_number: z.number().int().positive().optional(),
+      /**
+       * Address the target step by its stable node id instead of its position. Union ADDITION —
+       * `target_step_number` keeps working unchanged, and a gate may carry either. Accepts the
+       * kebab-case ids minted from a YAML chain's `stepName`/`id:`, the ids a submitted Workflow IR
+       * declares, and the frozen `nK` ids a symbolic chain mints at parse time.
+       */
+      target_step_id: z
+        .string()
+        .regex(
+          /^[a-z0-9]+(?:-[a-z0-9]+)*$|^n\d+$/,
+          'target_step_id must be a kebab-case node id or an nK symbolic id'
+        )
+        .optional(),
+      apply_to_steps: z.array(z.number().int().positive()).optional(),
+    },
+    { error: refuseUndeclaredKey }
+  )
   .refine(
     (value) => {
       if (value.id != null) return true;
@@ -68,8 +76,13 @@ export const temporaryGateObjectSchema = z
   );
 
 /** Union of all accepted gate formats */
-export const gateSpecUnionSchema = z.union([
-  z.string().min(1, 'Gate reference cannot be empty'),
-  customCheckSchema,
-  temporaryGateObjectSchema,
-]);
+export const gateSpecUnionSchema = z.union(
+  [
+    z.string().min(1, 'Gate reference cannot be empty'),
+    customCheckSchema,
+    temporaryGateObjectSchema,
+  ],
+  // Without it a misspelled key in an inline gate reached the client as `gates.0: Invalid input`
+  // (P4.120): the SDK renders a union's top-level issue only.
+  { error: refuseUnionMismatch }
+);
