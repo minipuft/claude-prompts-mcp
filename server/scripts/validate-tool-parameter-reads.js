@@ -150,6 +150,73 @@ function survives(context, classDeclaration, readNode) {
   return readsOfMethod(context, classDeclaration, methodName, index).has(assignment.getName());
 }
 
+/**
+ * `args[key]` inside `for (const key of LIST)`, `for (const [key] of Object.entries(MAP))` or
+ * `Object.keys(MAP)`, where LIST is a module-level array of string literals and MAP an object
+ * literal (in this file or imported from one the scan loaded): every listed key is read. How a
+ * processor copies a registry of optional fields rather than naming each one.
+ */
+function iteratedKeys(argument) {
+  if (!Node.isIdentifier(argument)) return [];
+  const loop = argument.getAncestors().find((ancestor) => {
+    if (!Node.isForOfStatement(ancestor)) return false;
+    const declaration = ancestor.getInitializer().getDeclarations?.()[0];
+    const bound = declaration?.getNameNode();
+    if (Node.isIdentifier(bound)) return bound.getText() === argument.getText();
+    return (
+      Node.isArrayBindingPattern(bound) && bound.getElements()[0]?.getText() === argument.getText()
+    );
+  });
+  if (loop === undefined) return [];
+  let source = unwrap(loop.getExpression());
+  if (
+    Node.isCallExpression(source) &&
+    /^Object\.(entries|keys)$/.test(source.getExpression().getText())
+  ) {
+    source = unwrap(source.getArguments()[0]);
+  }
+  const literal = Node.isIdentifier(source) ? constantInitializer(source) : undefined;
+  if (Node.isArrayLiteralExpression(literal)) {
+    return literal
+      .getElements()
+      .filter((element) => Node.isStringLiteral(element))
+      .map((element) => element.getLiteralValue());
+  }
+  if (Node.isObjectLiteralExpression(literal)) {
+    return literal
+      .getProperties()
+      .filter((property) => Node.isPropertyAssignment(property))
+      .map((property) => property.getName().replace(/^['"]|['"]$/g, ''));
+  }
+  return [];
+}
+
+/** A module-level constant's initializer, following one named import into a loaded file. */
+function constantInitializer(identifier) {
+  const name = identifier.getText();
+  const file = identifier.getSourceFile();
+  let declaration = file.getVariableDeclaration(name);
+  if (declaration === undefined) {
+    const imported = file
+      .getImportDeclarations()
+      .find((candidate) => candidate.getNamedImports().some((named) => named.getName() === name));
+    declaration = imported?.getModuleSpecifierSourceFile()?.getVariableDeclaration(name);
+  }
+  return declaration === undefined ? undefined : unwrap(declaration.getInitializer());
+}
+
+/**
+ * `this.<field>.<method>(…)` where the field holds another class of the tool being scanned: the
+ * call continues into that class. `undefined` when the call is not that shape, or no class the
+ * scan loaded answers for the field — the boundary.
+ */
+function fieldTarget(context, classDeclaration, call) {
+  const target = fieldCall(call);
+  if (target === undefined || context.project === undefined) return undefined;
+  const owner = fieldClass(context.project, classDeclaration, target.field);
+  return owner === undefined ? undefined : { owner, method: target.method };
+}
+
 /** Every key read off `parameterName` within `roots`, skipping any node in `excluded`. */
 function readsIn(context, classDeclaration, roots, parameterName, excluded = new Set()) {
   const reads = new Set();
@@ -169,6 +236,7 @@ function readsIn(context, classDeclaration, roots, parameterName, excluded = new
       if (Node.isStringLiteral(argument) && survives(context, classDeclaration, node)) {
         reads.add(argument.getLiteralValue());
       }
+      for (const key of iteratedKeys(argument)) reads.add(key);
     } else if (
       Node.isVariableDeclaration(node) &&
       Node.isObjectBindingPattern(node.getNameNode()) &&
@@ -180,9 +248,16 @@ function readsIn(context, classDeclaration, roots, parameterName, excluded = new
       }
     } else if (Node.isCallExpression(node)) {
       const methodName = thisMethodName(node);
+      const field =
+        methodName === undefined ? fieldTarget(context, classDeclaration, node) : undefined;
       node.getArguments().forEach((argument, index) => {
         if (!isParameterRef(argument, parameterName)) return;
-        // Handed whole to something outside the handler: its boundary, counted by the caller.
+        // Handed whole to something outside the handler's classes: its boundary.
+        if (field !== undefined) {
+          for (const key of readsOfMethod(context, field.owner, field.method, index))
+            reads.add(key);
+          return;
+        }
         if (methodName === undefined) return;
         for (const key of readsOfMethod(context, classDeclaration, methodName, index)) {
           reads.add(key);
@@ -193,6 +268,18 @@ function readsIn(context, classDeclaration, roots, parameterName, excluded = new
     node.forEachChild(visit);
   };
   for (const root of roots) visit(root);
+  // `const supplied = args as Record<string, unknown>` reads through `supplied` too.
+  for (const root of roots) {
+    for (const alias of root.getDescendantsOfKind(SyntaxKind.VariableDeclaration)) {
+      const initializer = alias.getInitializer();
+      if (!Node.isIdentifier(alias.getNameNode()) || initializer === undefined) continue;
+      if (!isParameterRef(initializer, parameterName) || alias.getName() === parameterName)
+        continue;
+      for (const key of readsIn(context, classDeclaration, [root], alias.getName(), excluded)) {
+        reads.add(key);
+      }
+    }
+  }
   return reads;
 }
 
@@ -267,7 +354,7 @@ const systemControlAdapter = {
     'parameter belongs to that service',
 
   bind({ project, routerPath, commands }) {
-    const context = { cache: new Map() };
+    const context = { cache: new Map(), project };
     const classes = handlerClassesByAction(project, routerPath);
     return commands.map((command) => {
       const [action, operation] = command.id.split(':');
@@ -322,7 +409,363 @@ const systemControlAdapter = {
   },
 };
 
-const ADAPTERS = [systemControlAdapter];
+/**
+ * The expressions that decide a value: the conditions of every `if`, `?:` and `&&` between
+ * `node` and `root`. `if (args.x) out.y = …` forwards `x` as much as `out.y = args.x` does.
+ */
+function guardsOf(node, root) {
+  const guards = [];
+  let child = node;
+  for (let current = node.getParent(); current !== undefined; current = current.getParent()) {
+    if (Node.isIfStatement(current) && current.getThenStatement() === child) {
+      guards.push(current.getExpression());
+    } else if (Node.isConditionalExpression(current) && current.getCondition() !== child) {
+      guards.push(current.getCondition());
+    } else if (
+      Node.isBinaryExpression(current) &&
+      current.getOperatorToken().getKind() === SyntaxKind.AmpersandAmpersandToken &&
+      current.getRight() === child
+    ) {
+      guards.push(current.getLeft());
+    }
+    if (current === root) break;
+    child = current;
+  }
+  return guards;
+}
+
+/** The top-level parameters of `sourceName` read anywhere in `nodes`, through local variables. */
+function sourcesIn(body, sourceName, nodes, visited = new Set()) {
+  const sources = new Set();
+  const visit = (node) => {
+    if (
+      (Node.isPropertyAccessExpression(node) || Node.isElementAccessExpression(node)) &&
+      isParameterRef(node.getExpression(), sourceName)
+    ) {
+      const argument = Node.isElementAccessExpression(node)
+        ? node.getArgumentExpression()
+        : undefined;
+      if (Node.isPropertyAccessExpression(node)) sources.add(node.getName());
+      else if (Node.isStringLiteral(argument)) sources.add(argument.getLiteralValue());
+    } else if (Node.isIdentifier(node) && !visited.has(node.getText())) {
+      // A local computed from the source (`const trimmed = args.x?.trim()`) carries its sources.
+      const name = node.getText();
+      visited.add(name);
+      for (const key of sourcesIn(body, sourceName, writesOf(body, name), visited)) {
+        sources.add(key);
+      }
+    }
+    node.forEachChild(visit);
+  };
+  for (const node of nodes) visit(node);
+  return sources;
+}
+
+/** What gives local `name` its value: its initializer (or for-of iterable) and `name.k = …`. */
+function writesOf(body, name) {
+  const writes = [];
+  for (const declaration of body.getDescendantsOfKind(SyntaxKind.VariableDeclaration)) {
+    const bound = declaration.getNameNode();
+    const names = Node.isIdentifier(bound)
+      ? [bound.getText()]
+      : bound.getDescendantsOfKind(SyntaxKind.Identifier).map((id) => id.getText());
+    if (!names.includes(name)) continue;
+    const loop = declaration.getFirstAncestorByKind(SyntaxKind.ForOfStatement);
+    if (declaration.getInitializer() !== undefined) writes.push(declaration.getInitializer());
+    else if (loop !== undefined) writes.push(loop.getExpression());
+  }
+  for (const assignment of assignmentsTo(body, name)) {
+    writes.push(assignment.getRight(), ...guardsOf(assignment, body));
+  }
+  return writes;
+}
+
+/** `name.k = …` and `name[k] = …` within `body`. */
+function assignmentsTo(body, name) {
+  return body.getDescendantsOfKind(SyntaxKind.BinaryExpression).filter((binary) => {
+    if (binary.getOperatorToken().getKind() !== SyntaxKind.EqualsToken) return false;
+    const left = binary.getLeft();
+    return (
+      (Node.isPropertyAccessExpression(left) || Node.isElementAccessExpression(left)) &&
+      isParameterRef(left.getExpression(), name)
+    );
+  });
+}
+
+/**
+ * A forwarding hop: which key of the object `targetName` each parameter of `sourceName` lands
+ * under, when a function copies arguments by hand into a new object and hands THAT on. Reads the
+ * target's object-literal initializer (through spreads and conditionals) and every
+ * `target.key = …` in `body`; a key's sources are the parameters its value and guards read.
+ *
+ * Returns `Map<parameter, Set<key>>`. A parameter with no entry is dropped at this hop.
+ */
+function forwardedKeys(body, sourceName, targetName) {
+  const forwarded = new Map();
+  const record = (key, nodes) => {
+    for (const parameter of sourcesIn(body, sourceName, nodes)) {
+      forwarded.set(parameter, (forwarded.get(parameter) ?? new Set()).add(key));
+    }
+  };
+  const walkLiteral = (literal) => {
+    for (const property of literal.getProperties()) {
+      if (Node.isPropertyAssignment(property)) {
+        record(property.getName(), [property.getInitializer(), ...guardsOf(property, literal)]);
+      } else if (Node.isShorthandPropertyAssignment(property)) {
+        record(property.getName(), [property.getNameNode(), ...guardsOf(property, literal)]);
+      } else if (Node.isSpreadAssignment(property)) {
+        for (const inner of property.getDescendantsOfKind(SyntaxKind.ObjectLiteralExpression)) {
+          if (inner.getParentWhile((parent) => parent !== property) !== undefined) {
+            if (inner.getFirstAncestorByKind(SyntaxKind.ObjectLiteralExpression) === literal) {
+              walkLiteral(inner);
+            }
+          }
+        }
+      }
+    }
+  };
+  for (const declaration of body.getDescendantsOfKind(SyntaxKind.VariableDeclaration)) {
+    const initializer = declaration.getInitializer();
+    if (declaration.getName() === targetName && Node.isObjectLiteralExpression(initializer)) {
+      walkLiteral(initializer);
+    }
+  }
+  for (const assignment of assignmentsTo(body, targetName)) {
+    const left = assignment.getLeft();
+    if (!Node.isPropertyAccessExpression(left)) continue;
+    record(left.getName(), [assignment.getRight(), ...guardsOf(assignment, body)]);
+  }
+  return forwarded;
+}
+
+/** The class a `this.<field>` holds: its declared type, or the class implementing that port. */
+function fieldClass(project, classDeclaration, fieldName) {
+  const property = classDeclaration.getProperty(fieldName);
+  const typeName = property?.getTypeNode()?.getText();
+  if (typeName === undefined) return undefined;
+  return (
+    findClass(project, typeName) ??
+    project
+      .getSourceFiles()
+      .flatMap((file) => file.getClasses())
+      .find((candidate) =>
+        candidate.getImplements().some((clause) => clause.getText() === typeName)
+      )
+  );
+}
+
+/** `this.<field>.<method>(…)` → `{ field, method }`; anything else → `undefined`. */
+function fieldCall(call) {
+  const callee = call.getExpression();
+  if (!Node.isPropertyAccessExpression(callee)) return undefined;
+  const owner = callee.getExpression();
+  if (!Node.isPropertyAccessExpression(owner)) return undefined;
+  if (owner.getExpression().getKind() !== SyntaxKind.ThisKeyword) return undefined;
+  return { field: owner.getName(), method: callee.getName() };
+}
+
+/**
+ * The keys read on dispatch of `action` by a per-type handler whose `handleAction(args)` switches
+ * on the action: reads in the handler itself, plus those of each processor it hands `args` to
+ * (`this.lifecycle.handleUpdate(args)`). The processor is where the parameter is owned, so the
+ * read model continues into it; past the processor, `args` handed on whole is not followed.
+ */
+function dispatchReads(context, project, handler, action) {
+  const handle = findMethod(handler, 'handleAction');
+  const parameterName = handle?.getParameters()[0]?.getName();
+  const body = handle?.getBody();
+  if (parameterName === undefined || body === undefined) {
+    return { problem: `${handler.getName()} has no handleAction(args)` };
+  }
+  const dispatch = body
+    .getDescendantsOfKind(SyntaxKind.SwitchStatement)
+    .find((candidate) =>
+      candidate.getClauses().some((clause) => stringLabel(clause) !== undefined)
+    );
+  const selected = dispatch?.getClauses().some((clause) => stringLabel(clause) === action)
+    ? clausesFor(dispatch, action)
+    : undefined;
+  if (selected === undefined) return { problem: `${handler.getName()} has no case '${action}'` };
+
+  const reads = readsIn(
+    context,
+    handler,
+    [body, ...selected],
+    parameterName,
+    new Set([dispatch.getCaseBlock()])
+  );
+  const entries = [];
+  for (const call of selected.flatMap((clause) =>
+    clause.getDescendantsOfKind(SyntaxKind.CallExpression)
+  )) {
+    const target = fieldCall(call);
+    const index = call
+      .getArguments()
+      .findIndex((argument) => isParameterRef(argument, parameterName));
+    if (target === undefined || index === -1) continue;
+    const processor = fieldClass(project, handler, target.field);
+    if (processor === undefined) return { problem: `this.${target.field} resolves to no class` };
+    entries.push(entryOf(processor, target.method));
+    for (const key of readsOfMethod(context, processor, target.method, index)) reads.add(key);
+  }
+  return {
+    reads,
+    entry: entries.length === 1 ? entries[0] : entryOf(handler, 'handleAction'),
+  };
+}
+
+/**
+ * `resource_manager`: one flat schema, four resource types. The router copies each type's
+ * arguments by hand into a new object (`routeToGateManager` → `gateArgs`), sometimes under another
+ * key (`enforcement_mode` → `enforcementMode`); the per-type handler's `handleAction` switches on
+ * the action and hands the object to a processor. Commands are `<type>:<action>`, and
+ * `common:<action>` for every type whose handler has a `case` for that action.
+ */
+const resourceManagerAdapter = {
+  tool: 'resource_manager',
+  contract: 'resource-manager.json',
+  sources: [
+    'resource-manager/**/*.ts',
+    'gate-manager/**/*.ts',
+    'framework-manager/**/*.ts',
+    'category-manager/**/*.ts',
+    'shared/**/*.ts',
+  ],
+  router: 'resource-manager/core/router.ts',
+  /** Read by the router to choose the handler and the action, never forwarded as data. */
+  exempt: new Set(['resource_type', 'action']),
+  minimumReads: 150,
+  boundary:
+    'the processor a handler hands the arguments to — inside it the read model continues; an ' +
+    'argument it hands on whole to anything else is not followed',
+
+  bind({ project, routerPath, commands }) {
+    const context = { cache: new Map(), project };
+    const router = project
+      .getSourceFileOrThrow(routerPath)
+      .getClasses()
+      .find((candidate) => candidate.getMethod('routeToResource') !== undefined);
+    if (router === undefined) throw new Error(`no routeToResource in ${routerPath}`);
+    const routes = this.routes(project, router);
+    const owners = this.owners(project);
+    // Reads the router itself decides on — the destructive-action `confirm` guard, the
+    // `source_workspace` refusal — ahead of any route. A read in a message or a log is not one.
+    const routerBody = router.getMethodOrThrow('handleAction').getBody();
+    const decided = sourcesIn(
+      routerBody,
+      router.getMethodOrThrow('handleAction').getParameters()[0].getName(),
+      routerBody.getDescendantsOfKind(SyntaxKind.IfStatement).map((guard) => guard.getExpression())
+    );
+
+    const bindings = [];
+    for (const command of commands) {
+      const [scope, action] = command.id.split(':');
+      const parameters = command.parameters.filter((name) => !this.exempt.has(name));
+      const types =
+        scope === 'common'
+          ? [...routes.keys()].filter(
+              (type) =>
+                routes.get(type).handler !== undefined &&
+                dispatchReads(context, project, routes.get(type).handler, action).problem ===
+                  undefined
+            )
+          : [scope];
+      for (const type of types) {
+        // A `common:` command declares a type-owned parameter only for its owners, exactly as
+        // `PARAMETER_ACTIONS` reads it: `full_restart` on `common:reload` is prompt's alone.
+        const declared = parameters.filter(
+          (name) => scope !== 'common' || owners.get(name)?.includes(type) !== false
+        );
+        const binding = {
+          command: `${type}:${action}`,
+          declaredBy: command.id,
+          parameters: declared,
+        };
+        const route = routes.get(type);
+        if (route === undefined || route.handler === undefined) {
+          bindings.push({
+            ...binding,
+            problem: { parameter: '*', reason: `no route forwards resource_type '${type}'` },
+          });
+          continue;
+        }
+        const dispatched = dispatchReads(context, project, route.handler, action);
+        if (dispatched.problem !== undefined) {
+          bindings.push({
+            ...binding,
+            problem: { parameter: 'action', reason: dispatched.problem },
+          });
+          continue;
+        }
+        const reads = new Set();
+        const dropped = new Set();
+        for (const parameter of declared) {
+          const keys = route.forwarded.get(parameter);
+          if (decided.has(parameter)) reads.add(parameter);
+          else if (keys === undefined) dropped.add(parameter);
+          else if ([...keys].some((key) => dispatched.reads.has(key))) reads.add(parameter);
+        }
+        bindings.push({
+          ...binding,
+          entry: dispatched.entry,
+          reads,
+          dropped: { symbol: route.symbol, parameters: dropped },
+        });
+      }
+    }
+    return bindings;
+  },
+
+  /** `PARAMETER_OWNERS` (parameter-ownership.ts) — parameter → the types that own it. */
+  owners(project) {
+    const file = project
+      .getSourceFiles()
+      .find((candidate) => candidate.getVariableDeclaration('PARAMETER_OWNERS') !== undefined);
+    const table = unwrap(file?.getVariableDeclaration('PARAMETER_OWNERS').getInitializer());
+    if (!Node.isObjectLiteralExpression(table)) throw new Error('PARAMETER_OWNERS not found');
+    const owners = new Map();
+    for (const property of table.getProperties()) {
+      const list = Node.isPropertyAssignment(property)
+        ? unwrap(property.getInitializer())
+        : undefined;
+      if (!Node.isArrayLiteralExpression(list)) continue;
+      owners.set(
+        property.getName(),
+        list.getElements().map((element) => element.getText().slice(1, -1))
+      );
+    }
+    return owners;
+  },
+
+  /** resource_type → { handler class, the router method's forwarding map }. */
+  routes(project, router) {
+    const routes = new Map();
+    const method = router.getMethodOrThrow('routeToResource');
+    for (const clause of method.getDescendantsOfKind(SyntaxKind.CaseClause)) {
+      const type = stringLabel(clause);
+      const call = clause.getFirstDescendantByKind(SyntaxKind.CallExpression);
+      const routeName = call === undefined ? undefined : thisMethodName(call);
+      if (type === undefined || routeName === undefined) continue;
+      const route = router.getMethodOrThrow(routeName);
+      const sourceName = route.getParameters()[0].getName();
+      const handoff = route
+        .getDescendantsOfKind(SyntaxKind.CallExpression)
+        .find((candidate) => fieldCall(candidate)?.method === 'handleAction');
+      const target = handoff === undefined ? undefined : unwrap(handoff.getArguments()[0]);
+      routes.set(type, {
+        symbol: `${router.getName()}.${routeName}`,
+        handler:
+          handoff === undefined ? undefined : fieldClass(project, router, fieldCall(handoff).field),
+        forwarded: Node.isIdentifier(target)
+          ? forwardedKeys(route.getBody(), sourceName, target.getText())
+          : new Map(),
+      });
+    }
+    return routes;
+  },
+};
+
+const ADAPTERS = [systemControlAdapter, resourceManagerAdapter];
 
 /**
  * Every (command, parameter) a binding declares and its entry does not read.
@@ -347,9 +790,12 @@ export function checkBindings(bindings) {
       findings.push({
         command: binding.command,
         parameter,
-        reason: `declared by ${binding.declaredBy} and never read by ${binding.entry.symbol}${
-          binding.qualifier ?? ''
-        }`,
+        reason: binding.dropped?.parameters.has(parameter)
+          ? `declared by ${binding.declaredBy} and dropped by ${binding.dropped.symbol} before ` +
+            `${binding.entry.symbol} is reached`
+          : `declared by ${binding.declaredBy} and never read by ${binding.entry.symbol}${
+              binding.qualifier ?? ''
+            }`,
       });
     }
   }
@@ -525,8 +971,124 @@ function selfTestSystemControl() {
   return failures.map((failure) => `system_control: ${failure}`);
 }
 
+/** `helperReads`: whether the helper reads `severity`. `routerCopies`: whether `reason` is copied. */
+function resourceManagerFixture({ helperReads, routerCopies }) {
+  const project = new Project({ useInMemoryFileSystem: true });
+  project.createSourceFile(
+    '/ownership.ts',
+    `export const PARAMETER_OWNERS = { severity: ['demo'], detail: ['other'] };`
+  );
+  project.createSourceFile(
+    '/router.ts',
+    `
+export class Router {
+  private readonly demoHandler: DemoHandler;
+  async handleAction(args: any) {
+    if (args.confirm !== true) throw new Error('confirm');
+    this.log({ id: args.id, note: "'reason' is logged by name here" });
+    return this.routeToResource(args.resource_type, args);
+  }
+  private routeToResource(type: string, args: any) {
+    switch (type) {
+      case 'demo':
+        return this.routeToDemo(args);
+      default:
+        throw new Error('unknown');
+    }
+  }
+  private routeToDemo(args: any) {
+    const demoArgs: any = { action: args.action, id: args.id };
+    if (args.enforcement_mode) demoArgs.enforcementMode = args.enforcement_mode;
+    if (args.severity) demoArgs.severity = args.severity;
+    ${routerCopies ? 'if (args.reason) demoArgs.reason = args.reason;' : ''}
+    return this.demoHandler.handleAction(demoArgs, {});
+  }
+  private log(entry: unknown) { return entry; }
+}
+`
+  );
+  project.createSourceFile(
+    '/handler.ts',
+    `
+export class DemoHandler {
+  private readonly lifecycle: DemoProcessor;
+  async handleAction(args: any, _context: unknown) {
+    const action = args.action;
+    switch (action) {
+      case 'update':
+        return this.lifecycle.handleUpdate(args);
+      case 'inspect':
+        return this.lifecycle.handleInspect(args);
+      default:
+        throw new Error("Unknown action. 'severity' is spelled like this.");
+    }
+  }
+}
+export class DemoProcessor {
+  private readonly helper: DemoHelper;
+  handleUpdate(args: any) {
+    const { id } = args;
+    this.note("'severity' is named here, on update, and read nowhere");
+    return this.helper.apply(id, args);
+  }
+  handleInspect(args: any) {
+    return args.id;
+  }
+  private note(message: string) { return message; }
+}
+export class DemoHelper {
+  apply(id: string, input: any) {
+    return [id, input.enforcementMode${helperReads ? ', input.severity, input.reason' : ''}];
+  }
+}
+`
+  );
+  return checkBindings(
+    resourceManagerAdapter.bind({
+      project,
+      routerPath: '/router.ts',
+      commands: [
+        {
+          id: 'demo:update',
+          parameters: ['resource_type', 'action', 'id', 'severity', 'enforcement_mode', 'reason'],
+        },
+        {
+          id: 'common:inspect',
+          parameters: ['resource_type', 'action', 'id', 'detail', 'confirm'],
+        },
+      ],
+    })
+  );
+}
+
+function selfTestResourceManager() {
+  const failures = [];
+  // Planted: the helper the processor hands `args` to never reads `severity` (named only in a
+  // string, twice), and the router never copies `reason` (named only in a log line). `detail` is
+  // owned by another type, so `common:inspect` does not declare it for `demo`; `confirm` is the
+  // router's own guard; `enforcement_mode` reaches the helper renamed as `enforcementMode`.
+  const planted = resourceManagerFixture({ helperReads: false, routerCopies: false });
+  const expected = ['demo:update/reason', 'demo:update/severity'];
+  if (JSON.stringify(keys(planted)) !== JSON.stringify(expected)) {
+    failures.push(`planted: expected ${expected.join(', ')}, got ${keys(planted).join(', ')}`);
+  }
+  const dropped = planted.findings.find((finding) => finding.parameter === 'reason');
+  if (dropped !== undefined && !dropped.reason.includes('dropped by Router.routeToDemo')) {
+    failures.push(
+      `planted: 'reason' should be reported as dropped by the router: ${dropped.reason}`
+    );
+  }
+  // Twin, differing only in those two reads: clean, with every read proven — id, severity,
+  // enforcement_mode, reason on update; id and confirm on inspect.
+  const fixed = resourceManagerFixture({ helperReads: true, routerCopies: true });
+  if (fixed.findings.length !== 0) failures.push(`fixed twin: got ${keys(fixed).join(', ')}`);
+  if (fixed.verified !== 6)
+    failures.push(`fixed twin: expected 6 proven reads, got ${fixed.verified}`);
+  return failures.map((failure) => `resource_manager: ${failure}`);
+}
+
 function selfTest() {
-  const failures = [...selfTestSystemControl()];
+  const failures = [...selfTestSystemControl(), ...selfTestResourceManager()];
   for (const failure of failures) console.error(`❌ self-test: ${failure}`);
   if (failures.length === 0) console.log('[validate-tool-parameter-reads] self-test OK');
   return failures.length > 0 ? 1 : 0;
