@@ -256,6 +256,37 @@ describe('mid-chain blocking-unknown interrupt (rows 2.1-2.3)', () => {
     expect(replaced?.every((node) => node.originUnknownId === 'cache-ttl')).toBe(true);
   });
 
+  /**
+   * Row 3.5: the hold's unknown is read off the review keyed by the node the run stopped on — the
+   * one entitlement left once the caller's own call cleared the ledger. The session handed to
+   * `apply` carries an empty ledger, so only the review can answer; the control is the same call
+   * after the hold is gone.
+   */
+  test('a remainder is entitled by the hold keyed on the stopped node when the ledger is clear', async () => {
+    await declarePauseOnBlocking();
+    await declareBlockingUnknown();
+    const processor = new RemainderProcessor(
+      store,
+      { validate: validateWorkflowIR, defaultCaps: DEFAULT_WORKFLOW_CAPS },
+      () => PROMPTS,
+      createLogger()
+    );
+    const submission = {
+      mode: 'replace' as const,
+      nodes: [{ id: 'confirm-ttl', promptId: 'investigate_unknown', stepName: 'Confirm the TTL' }],
+    };
+    const clearLedger = () => ({ ...store.getSession('sess-1')!, unknownsLedger: [] });
+    expect(Object.keys(clearLedger().reviews ?? {})).toEqual(['draft-outline']);
+
+    const applied = await processor.apply('sess-1', clearLedger(), submission as never);
+    expect(applied).toMatchObject({ kind: 'applied', unknownId: 'cache-ttl' });
+
+    // Control: the same call with no hold is refused — the review was the only entitlement.
+    await store.clearPendingGateReview('sess-1');
+    const refused = await processor.apply('sess-1', clearLedger(), submission as never);
+    expect(refused.kind).toBe('refused');
+  });
+
   test('gate_action:"accept_alternative" WITHOUT a remainder is refused by name', async () => {
     await declarePauseOnBlocking();
     await declareBlockingUnknown();
