@@ -13,9 +13,12 @@ Deviations, rulings on open questions, and probe output for
 
 ## Rulings
 
-| id  | date       | ruling                                                                                                                                                                                                                                                               |
-| --- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| R1  | 2026-09-23 | Planner: the review map persists in the run's residual document (`run-registry.ts` 368–369, field map 505), not in a new column — no schema bump. Measured: neither `run-registry.ts` nor `sqlite-engine.ts` contains `pending_review_json`; `SCHEMA_VERSION` is 31. |
+| id  | date       | ruling                                                                                                                                                                                                                                                                                                                                          |
+| --- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R1  | 2026-09-23 | Planner: the review map persists in the run's residual document (`run-registry.ts` 368–369, field map 505), not in a new column — no schema bump. Measured: neither `run-registry.ts` nor `sqlite-engine.ts` contains `pending_review_json`; `SCHEMA_VERSION` is 31.                                                                            |
+| R2  | 2026-09-23 | Owner: every slice of this plan is push, PR and merge, one PR per slice, on a green full suite and a clean merge state; breaking changes and force pushes still stop for the owner.                                                                                                                                                             |
+| R3  | 2026-09-23 | Owner (OQ1, OQ3): the `pendingGateReview` projection is deleted inside this initiative once the reader count is zero (row 3.6's validator refuses new writers and unlisted readers until then); the record type is renamed `GateReview`, with `PendingGateReview` kept as a type alias in the stamped exception list until the readers migrate. |
+| R4  | 2026-09-23 | Owner (OQ4): removing a declared-but-unread parameter from one command's declared list while the name stays declared on the tool is not breaking (the #366 precedent); removing a name from the tool entirely still needs an owner ruling.                                                                                                      |
 
 ## Pre-flight (Step 2)
 
