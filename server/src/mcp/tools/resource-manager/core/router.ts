@@ -39,7 +39,11 @@ import type { GateManagerActionId, GateManagerInput } from '../../gate-manager/c
 import type { GateToolHandler } from '../../gate-manager/index.js';
 
 import { resolveRequestIdentity } from '#shared/utils/request-identity-resolver.js';
-import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
+import {
+  buildIdentityScope,
+  resolveContinuityScopeId,
+} from '#shared/utils/request-identity-scope.js';
+import { runWithRequestStateScope } from '#shared/utils/request-state-scope.js';
 
 /**
  * ResourceManagerRouter routes requests to the appropriate handler
@@ -143,25 +147,19 @@ export class ResourceManagerRouter {
       id: args.id,
     });
 
-    // Extract tenant scope from MCP SDK extra and enrich context for sub-managers
+    // The request's own workspace, when it names one: version history records under it and reads
+    // back only it (P4.131). A request naming none leaves the launch workspace in force.
     const identity = resolveRequestIdentity(context);
-    const scopeId = resolveContinuityScopeId(identity);
-    const enrichedContext = scopeId !== 'default' ? { ...context, _scopeId: scopeId } : context;
+    const requestScope = buildIdentityScope({
+      continuityScopeId: resolveContinuityScopeId(identity),
+      workspaceId: identity.workspaceId,
+      organizationId: identity.organizationId,
+    });
 
-    // Route to appropriate handler
     try {
-      switch (resource_type) {
-        case 'prompt':
-          return await this.routeToPromptResource(args, enrichedContext);
-        case 'gate':
-          return await this.routeToGateManager(args, enrichedContext);
-        case 'framework':
-          return await this.routeToFrameworkManager(args, enrichedContext);
-        case 'category':
-          return await this.routeToCategoryManager(args, enrichedContext);
-        default:
-          return this.createErrorResponse(`Unknown resource_type: ${resource_type}`);
-      }
+      return await runWithRequestStateScope(requestScope, () =>
+        this.routeToResource(resource_type, args, context)
+      );
     } catch (error) {
       this.logger.error('[ResourceManager] Error routing request', {
         resource_type,
@@ -171,6 +169,25 @@ export class ResourceManagerRouter {
       return this.createErrorResponse(
         `Error processing ${resource_type} ${action}: ${error instanceof Error ? error.message : String(error)}`
       );
+    }
+  }
+
+  private async routeToResource(
+    resourceType: ResourceManagerInput['resource_type'],
+    args: ResourceManagerInput,
+    context: Record<string, unknown>
+  ): Promise<ToolResponse> {
+    switch (resourceType) {
+      case 'prompt':
+        return this.routeToPromptResource(args, context);
+      case 'gate':
+        return this.routeToGateManager(args, context);
+      case 'framework':
+        return this.routeToFrameworkManager(args, context);
+      case 'category':
+        return this.routeToCategoryManager(args, context);
+      default:
+        return this.createErrorResponse(`Unknown resource_type: ${String(resourceType)}`);
     }
   }
 

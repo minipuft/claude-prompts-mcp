@@ -3,6 +3,7 @@ import { DEFAULT_FRAMEWORK_GATE_ID, GateSetResolver } from './gate-set-resolver.
 import { isFrameworkInjected } from '../../execution/pipeline/decisions/injection/index.js';
 import { resolveDeclaredArtifacts } from '../utils/artifact-kinds.js';
 
+import type { StateStoreOptions } from '#infra/database/stores/interface.js';
 import type { Logger } from '#infra/logging/index.js';
 import type { GateSystemSettings } from '#shared/types/index.js';
 import type { GateMetricsRecorder } from './gate-metrics-recorder.js';
@@ -16,7 +17,7 @@ import type { FrameworkDecisionInput } from '../../execution/pipeline/decisions/
 import type { GateSource } from '../../execution/pipeline/state/types.js';
 import type { ConvertedPrompt, ExecutionModifiers } from '../../execution/types.js';
 /** Narrow provider: returns active framework ID without importing FrameworkManager. */
-type ActiveFrameworkIdProvider = () => string | undefined;
+type ActiveFrameworkIdProvider = (scope: StateStoreOptions | undefined) => string | undefined;
 import type { GateContext } from '../core/gate-definitions.js';
 import type { GateDefinitionProvider } from '../core/gate-loader.js';
 import type { TemporaryGateRegistry } from '../core/temporary-gate-registry.js';
@@ -914,7 +915,7 @@ export class GateEnhancementService {
     let globalActiveFramework = context.frameworkContext?.selectedFramework?.id;
 
     if (!globalActiveFramework) {
-      globalActiveFramework = this.activeFrameworkIdProvider();
+      globalActiveFramework = this.activeFrameworkIdProvider(context.getScopeOptions());
     }
 
     const result: FrameworkDecisionInput = {};

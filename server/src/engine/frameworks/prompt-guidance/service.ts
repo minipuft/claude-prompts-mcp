@@ -19,6 +19,7 @@ import {
 } from '../types/index.js';
 
 import type { ContentAnalysisResult } from '#shared/types/index.js';
+import type { StateStoreOptions } from '#shared/types/persistence.js';
 import type { ConvertedPrompt } from '../../execution/types.js';
 
 import { Logger } from '#infra/logging/index.js';
@@ -119,6 +120,8 @@ export class PromptGuidanceService {
       includeTemplateEnhancement?: boolean;
       frameworkOverride?: string;
       semanticAnalysis?: ContentAnalysisResult;
+      /** The request's scope: whose active framework applies when no override is given. */
+      scope?: StateStoreOptions;
     } = {}
   ): Promise<PromptGuidanceResult> {
     const startTime = Date.now();
@@ -130,7 +133,10 @@ export class PromptGuidanceService {
     this.logger.debug(`Applying prompt guidance for prompt: ${prompt.name}`);
 
     try {
-      const activeFramework = await this.getActiveFramework(options.frameworkOverride);
+      const activeFramework = await this.getActiveFramework(
+        options.frameworkOverride,
+        options.scope
+      );
       const frameworkGuide = await this.getFrameworkGuide(activeFramework.type);
 
       // Surface framework guidance (read-only hints)
@@ -332,12 +338,16 @@ export class PromptGuidanceService {
   /**
    * Get active framework definition
    */
-  private async getActiveFramework(frameworkOverride?: string): Promise<FrameworkDefinition> {
+  private async getActiveFramework(
+    frameworkOverride: string | undefined,
+    scope: StateStoreOptions | undefined
+  ): Promise<FrameworkDefinition> {
     if (!this.frameworkManager) {
       throw new Error('FrameworkManager not set');
     }
 
-    const targetFramework = frameworkOverride || this.frameworkManager.selectFramework().type;
+    const targetFramework =
+      frameworkOverride || this.frameworkManager.selectFramework({ scope }).type;
 
     const framework = this.frameworkManager.getFramework(targetFramework);
     if (!framework) {

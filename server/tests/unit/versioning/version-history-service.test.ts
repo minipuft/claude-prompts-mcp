@@ -20,6 +20,7 @@ import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import { createTestDatabaseManager } from '../../helpers/test-database.js';
 import { ConfigLoader } from '../../../src/infra/config/index.js';
 import { VersionHistoryService } from '../../../src/modules/versioning/version-history-service.js';
+import { runWithRequestStateScope } from '../../../src/shared/utils/request-state-scope.js';
 
 import type { TestDatabaseContext } from '../../helpers/test-database.js';
 import type { DatabasePort } from '../../../src/shared/types/persistence.js';
@@ -316,6 +317,37 @@ describe('VersionHistoryService', () => {
   // ==========================================================================
   // loadHistory Tests
   // ==========================================================================
+
+  // P4.131 — a resource_manager request's workspace header scopes version history: its writes
+  // record under the request's tenant and reads filter on it. Outside a request, the service keeps
+  // the scope it was built with.
+  describe('request state scope', () => {
+    const headerScope = { continuityScopeId: 'ws-a', workspaceId: 'ws-a' };
+
+    it('writes under the request scope and reads back only under it', async () => {
+      await runWithRequestStateScope(headerScope, () =>
+        service.saveVersion('prompt', 'scoped', { a: 1 })
+      );
+
+      const underHeader = await runWithRequestStateScope(headerScope, () =>
+        service.loadHistory('prompt', 'scoped')
+      );
+      expect(underHeader?.versions).toHaveLength(1);
+      expect(await service.loadHistory('prompt', 'scoped')).toBeNull();
+
+      const row = dbCtx.dbManager.queryOne<{ tenant_id: string; workspace_id: string | null }>(
+        `SELECT tenant_id, workspace_id FROM version_history WHERE resource_id = 'scoped'`
+      );
+      expect(row).toEqual({ tenant_id: 'ws-a', workspace_id: 'ws-a' });
+    });
+
+    it('an undefined request scope leaves the construction scope in force', async () => {
+      await runWithRequestStateScope(undefined, () =>
+        service.saveVersion('prompt', 'unscoped', { a: 1 })
+      );
+      expect(await service.loadHistory('prompt', 'unscoped')).not.toBeNull();
+    });
+  });
 
   describe('loadHistory', () => {
     it('should return null for non-existent history', async () => {

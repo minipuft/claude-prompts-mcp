@@ -42,8 +42,8 @@ interface FrameworkSwitchRequest {
  * Framework state accessor interface
  */
 interface FrameworkStateAccessor {
-  isFrameworkSystemEnabled(): boolean;
-  getActiveFramework(): { id: string; type: string } | null | undefined;
+  isFrameworkSystemEnabled(scope?: StateStoreOptions): boolean;
+  getActiveFramework(scope?: StateStoreOptions): { id: string; type: string } | null | undefined;
   switchFramework(request: FrameworkSwitchRequest, scope?: StateStoreOptions): Promise<boolean>;
   selectDefaultForRemovedFrameworks(): Promise<void>;
 }
@@ -373,9 +373,10 @@ export class FrameworkManager extends BaseResourceHandler<
       }
     }
 
-    // Check state manager for active framework
-    if (this.frameworkStateStore?.isFrameworkSystemEnabled()) {
-      const activeFramework = this.frameworkStateStore.getActiveFramework();
+    // The requesting scope's selection: under Streamable HTTP each workspace header is its own
+    // tenant, so the launch workspace's selection is only the answer when no scope is given.
+    if (this.frameworkStateStore?.isFrameworkSystemEnabled(criteria.scope)) {
+      const activeFramework = this.frameworkStateStore.getActiveFramework(criteria.scope);
       if (activeFramework) {
         const framework = this.getFramework(activeFramework.type);
         if (framework?.enabled) {

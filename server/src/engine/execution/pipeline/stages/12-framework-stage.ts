@@ -7,6 +7,7 @@ import {
 } from '../decisions/framework/framework-requirement.js';
 import { BasePipelineStage } from '../stage.js';
 
+import type { StateStoreOptions } from '#infra/database/stores/interface.js';
 import type { Logger } from '#infra/logging/index.js';
 import type { FrameworkManager } from '../../../frameworks/framework-manager.js';
 import type { FrameworkExecutionContext } from '../../../frameworks/types/index.js';
@@ -14,7 +15,11 @@ import type { GateDefinitionProvider } from '../../../gates/core/gate-loader.js'
 import type { ExecutionContext } from '../../context/index.js';
 import type { FrameworkDecision, FrameworkDecisionInput } from '../decisions/index.js';
 
-type FrameworkEnabledProvider = () => boolean;
+/**
+ * Whether the framework system is enabled for the request's scope. The scope is a required
+ * parameter so a call site cannot silently read the launch workspace instead.
+ */
+type FrameworkEnabledProvider = (scope: StateStoreOptions | undefined) => boolean;
 
 /**
  * Pipeline Stage 12: Framework Resolution
@@ -93,7 +98,7 @@ export class FrameworkResolutionStage extends BasePipelineStage {
       // Allow @ operator override even when framework system is globally disabled
       const hasFrameworkOverride = Boolean(context.parsedCommand?.executionPlan?.frameworkOverride);
 
-      if (!this.frameworkEnabled?.() && !hasFrameworkOverride) {
+      if (!this.frameworkEnabled?.(context.getScopeOptions()) && !hasFrameworkOverride) {
         this.logExit({
           skipped: 'Framework system disabled and no override specified',
           decision: { source: decision.source, reason: decision.reason },
@@ -200,10 +205,10 @@ export class FrameworkResolutionStage extends BasePipelineStage {
     const frameworkOverride = authorityFrameworkId;
 
     const frameworkContext: FrameworkExecutionContext =
-      this.frameworkManager.generateExecutionContext(
-        prompt,
-        frameworkOverride ? { userPreference: frameworkOverride } : {}
-      );
+      this.frameworkManager.generateExecutionContext(prompt, {
+        scope: context.getScopeOptions(),
+        ...(frameworkOverride ? { userPreference: frameworkOverride } : {}),
+      });
 
     context.frameworkContext = frameworkContext;
     // Coordination flag: system prompt already applied via framework context for single prompts
@@ -324,7 +329,10 @@ export class FrameworkResolutionStage extends BasePipelineStage {
 
       const frameworkContext = this.frameworkManager.generateExecutionContext(
         step.convertedPrompt,
-        preference ? { userPreference: preference } : {}
+        {
+          scope: context.getScopeOptions(),
+          ...(preference ? { userPreference: preference } : {}),
+        }
       );
 
       step.frameworkContext = frameworkContext;

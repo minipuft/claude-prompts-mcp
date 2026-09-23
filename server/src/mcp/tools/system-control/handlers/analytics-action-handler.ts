@@ -65,7 +65,7 @@ export class AnalyticsActionHandler extends ActionHandler {
 
     const { limit = 20 } = args;
 
-    const history = this.frameworkStateStore.getSwitchHistory(limit);
+    const history = this.frameworkStateStore.getSwitchHistory(limit, this.requestScope);
     const currentState = this.frameworkStateStore.getCurrentState(this.requestScope);
 
     let response = `# 📈 Framework Switch History\n\n`;

@@ -14,6 +14,8 @@ import type { FrameworkDraftValidator } from './framework-draft-validator.js';
 import type { FrameworkResourceContext } from '../core/context.js';
 import type { FrameworkManagerInput } from '../core/types.js';
 
+import { currentRequestStateScope } from '#shared/utils/request-state-scope.js';
+
 export class FrameworkDiscoveryProcessor {
   constructor(
     private readonly ctx: FrameworkResourceContext,
@@ -53,7 +55,9 @@ export class FrameworkDiscoveryProcessor {
     const { enabled_only = true } = args;
 
     const frameworks = this.ctx.frameworkManager.listFrameworks(enabled_only);
-    const activeFramework = this.ctx.frameworkStateStore?.getActiveFramework();
+    const activeFramework = this.ctx.frameworkStateStore?.getActiveFramework(
+      currentRequestStateScope()
+    );
 
     if (frameworks.length === 0) {
       // The quarantine section belongs on THIS branch above all others: a root whose frameworks all
@@ -107,7 +111,9 @@ export class FrameworkDiscoveryProcessor {
       return this.error(`Framework '${id}' not found`);
     }
 
-    const isActive = this.ctx.frameworkStateStore?.getActiveFramework()?.id === framework.id;
+    const isActive =
+      this.ctx.frameworkStateStore?.getActiveFramework(currentRequestStateScope())?.id ===
+      framework.id;
     const activeStatus = isActive ? 'Active' : 'Inactive';
 
     // Load framework data from disk to calculate validation score, and — P4.11 — to read back the

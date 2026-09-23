@@ -33,6 +33,7 @@ import type {
   ConfigManager,
   ChainSessionService,
 } from '#shared/types/index.js';
+import type { StateStoreOptions } from '#shared/types/persistence.js';
 import type { ChainSessionRouter } from './chain-session-router.js';
 import type { ResponseFormatter } from '../processors/response-formatter.js';
 
@@ -88,7 +89,8 @@ export interface PipelineDependencies {
   mcpToolsManager: PipelineMcpToolsAccess | undefined;
 
   // ── Suppliers for mutable state accessed during pipeline execution ──
-  getFrameworkStateEnabled: () => boolean;
+  /** Whether the framework system is enabled for a request's scope (the launch workspace when omitted). */
+  getFrameworkStateEnabled: (scope: StateStoreOptions | undefined) => boolean;
   getAnalyticsService: () => MetricsCollector | undefined;
   getConvertedPrompts: () => ConvertedPrompt[];
 

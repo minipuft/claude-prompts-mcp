@@ -68,6 +68,7 @@ const NOT_OUR_OPTIONS = new Set([
   '--strict', // npm run validate:identity-backfill -- --strict
   '--mode', // npm run validate:readme --mode=block
   '--test', // truncation of jest's --testPathPattern
+  '--run', // truncation of jest's --runInBand (the token stops at the capital I)
   '--experimental-vm-modules', // node runtime flag; jest needs it for ESM test files
   '--prefix', // npm --prefix server run build
   // Generic placeholder in "All flags accept both `--flag=value` and `--flag value`".
