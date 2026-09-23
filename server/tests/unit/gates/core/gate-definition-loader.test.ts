@@ -154,8 +154,8 @@ describe('GateDefinitionSchema `subject` and removed `llm_self_check` type', () 
 });
 
 // `subject` on disk must reach BOTH the raw definition GateDefinitionLoader hands back and the
-// LightweightGateDefinition GateLoader normalizes into (`toLightweightGate` builds that shape
-// field by field — a field with no copy line there is silently dropped).
+// LightweightGateDefinition GateLoader normalizes into (`toGateDefinition` builds that shape
+// from an exhaustive key table — a key the table does not name is not carried).
 describe('subject propagates from gate.yaml to the loaded definition', () => {
   let workspaceDir: string;
   let gatesDir: string;

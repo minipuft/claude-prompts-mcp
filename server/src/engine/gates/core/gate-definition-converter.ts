@@ -14,8 +14,7 @@
  * and nothing downstream could read it.
  */
 
-import type { LightweightGateDefinition } from '../types.js';
-import type { LoadedGateDefinition } from './gate-schema.js';
+import type { LightweightGateDefinition, LoadedGateDefinition } from '../types.js';
 
 /** `retry_config` is the one key rebuilt rather than copied — see `normalizeRetryConfig`. */
 type CopiedKey = Exclude<keyof LightweightGateDefinition, 'retry_config'>;

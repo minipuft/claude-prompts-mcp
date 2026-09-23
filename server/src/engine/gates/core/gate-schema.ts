@@ -275,7 +275,7 @@ export type GateRetryConfigYaml = z.infer<typeof GateRetryConfigSchema>;
 /**
  * Schema for a gate's `evaluation` key — the per-gate half of judge routing.
  *
- * Declared here rather than left to `.passthrough()`: `gate-loader.ts` copies this key onto
+ * Declared here rather than left to `.passthrough()`: `toGateDefinition` copies this key onto
  * `LightweightGateDefinition` and `review-utils.ts` resolves it against the global defaults, so
  * it is load-bearing at runtime. A passthrough-only key is typed `unknown` and validated by
  * nothing, which is how a gate.yaml with `evaluation: { mode: judgee }` used to load clean and
