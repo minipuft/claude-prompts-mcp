@@ -23,6 +23,7 @@ import {
   workflowNodeIdSchema,
   workflowNodeSchema,
 } from '#modules/workflow-ir/node-schema.js';
+import { refuseUndeclaredKey, refuseUnionMismatch } from '#shared/utils/nested-key-refusal.js';
 import { mintNodeIds } from '#shared/utils/node-order.js';
 
 // ============================================
@@ -33,21 +34,26 @@ import { mintNodeIds } from '#shared/utils/node-order.js';
  * Schema for argument validation rules.
  */
 export const ArgumentValidationSchema = z
-  .object({
-    /** Regex pattern for string validation */
-    pattern: z.string().optional(),
-    /** Minimum length for strings */
-    minLength: z.number().int().nonnegative().optional(),
-    /** Maximum length for strings */
-    maxLength: z.number().int().positive().optional(),
-    /**
-     * @deprecated Enforcement was dropped in v3.0.0 — the LLM handles semantic variation
-     * (e.g. "urgent" vs "high") better than a strict enum. The field itself was not removed:
-     * it is still accepted here and carried through yaml-prompt-loader.ts, but
-     * argument-schema.ts deliberately never applies it.
-     */
-    allowedValues: z.array(z.union([z.string(), z.number(), z.boolean()])).optional(),
-  })
+  .object(
+    {
+      /** Regex pattern for string validation */
+      pattern: z.string().optional(),
+      /** Minimum length for strings */
+      minLength: z.number().int().nonnegative().optional(),
+      /** Maximum length for strings */
+      maxLength: z.number().int().positive().optional(),
+      /**
+       * @deprecated Enforcement was dropped in v3.0.0 — the LLM handles semantic variation
+       * (e.g. "urgent" vs "high") better than a strict enum. The field itself was not removed:
+       * it is still accepted here and carried through yaml-prompt-loader.ts, but
+       * argument-schema.ts deliberately never applies it.
+       */
+      allowedValues: z
+        .array(z.union([z.string(), z.number(), z.boolean()], { error: refuseUnionMismatch }))
+        .optional(),
+    },
+    { error: refuseUndeclaredKey }
+  )
   .partial()
   .strict();
 
@@ -79,10 +85,13 @@ export type PromptArgumentYaml = z.infer<typeof PromptArgumentSchema>;
 
 /** Composer-specific presentation metadata consumed by interactive clients. */
 export const PromptComposerMetadataSchema = z
-  .object({
-    /** Declared text argument that receives the current composer draft. */
-    inputArgument: z.string().min(1, 'Composer input argument is required'),
-  })
+  .object(
+    {
+      /** Declared text argument that receives the current composer draft. */
+      inputArgument: z.string().min(1, 'Composer input argument is required'),
+    },
+    { error: refuseUndeclaredKey }
+  )
   .strict();
 
 export type PromptComposerMetadataYaml = z.infer<typeof PromptComposerMetadataSchema>;
@@ -132,12 +141,15 @@ function validateComposerInputArgument(
  * was aiming at simply never attaches, and nothing says so.
  */
 export const PromptArtifactsSchema = z
-  .object({
-    /** Artifact kinds this prompt always produces. */
-    produces: z.array(z.enum(ARTIFACT_KINDS)).min(1).optional(),
-    /** Name of a declared argument carrying the paths this run touches. */
-    fromArgument: z.string().min(1).optional(),
-  })
+  .object(
+    {
+      /** Artifact kinds this prompt always produces. */
+      produces: z.array(z.enum(ARTIFACT_KINDS)).min(1).optional(),
+      /** Name of a declared argument carrying the paths this run touches. */
+      fromArgument: z.string().min(1).optional(),
+    },
+    { error: refuseUndeclaredKey }
+  )
   .strict();
 
 export type PromptArtifactsYaml = z.infer<typeof PromptArtifactsSchema>;
@@ -299,19 +311,25 @@ export type PromptGateConfigurationYaml = z.infer<typeof PromptGateConfiguration
  * cannot take effect.
  */
 export const PromptInjectionRuleSchema = z
-  .object({
-    /** Whether this injection type is enabled for this prompt */
-    enabled: z.boolean().optional(),
-    /** How often to inject during chain execution */
-    frequency: z
-      .strictObject({
-        mode: z.enum(['every', 'first-only', 'never']),
-        interval: z.number().int().positive().optional(),
-      })
-      .optional(),
-    /** Which execution contexts receive the injection */
-    target: z.enum(['steps', 'gates', 'both']).optional(),
-  })
+  .object(
+    {
+      /** Whether this injection type is enabled for this prompt */
+      enabled: z.boolean().optional(),
+      /** How often to inject during chain execution */
+      frequency: z
+        .strictObject(
+          {
+            mode: z.enum(['every', 'first-only', 'never']),
+            interval: z.number().int().positive().optional(),
+          },
+          { error: refuseUndeclaredKey }
+        )
+        .optional(),
+      /** Which execution contexts receive the injection */
+      target: z.enum(['steps', 'gates', 'both']).optional(),
+    },
+    { error: refuseUndeclaredKey }
+  )
   .strict();
 
 /**
@@ -323,14 +341,17 @@ export const PromptInjectionRuleSchema = z
  * is incoherent (ADR 0001).
  */
 export const PromptInjectionConfigSchema = z
-  .object({
-    /** Framework system prompt injection */
-    'system-prompt': PromptInjectionRuleSchema.optional(),
-    /** Quality gate guidance injection */
-    'gate-guidance': PromptInjectionRuleSchema.optional(),
-    /** Response style guidance injection */
-    'style-guidance': PromptInjectionRuleSchema.optional(),
-  })
+  .object(
+    {
+      /** Framework system prompt injection */
+      'system-prompt': PromptInjectionRuleSchema.optional(),
+      /** Quality gate guidance injection */
+      'gate-guidance': PromptInjectionRuleSchema.optional(),
+      /** Response style guidance injection */
+      'style-guidance': PromptInjectionRuleSchema.optional(),
+    },
+    { error: refuseUndeclaredKey }
+  )
   .strict();
 
 export type PromptInjectionConfigYaml = z.infer<typeof PromptInjectionConfigSchema>;

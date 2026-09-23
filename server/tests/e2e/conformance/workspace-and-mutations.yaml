@@ -762,7 +762,7 @@ scenarios:
           budget:
             maxInsertion: 1
     expect:
-      error_contains: 'Invalid arguments for tool resource_manager: budget: Unrecognized key: "maxInsertion"'
+      error_contains: "Invalid arguments for tool resource_manager: budget: 'budget.maxInsertion' is not a declared key — did you mean 'maxInsertions'?"
 
   - id: prompt-artifacts-fromargument-must-name-a-declared-argument
     claim_source: >-

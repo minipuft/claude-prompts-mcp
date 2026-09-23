@@ -108,7 +108,10 @@ export class FrameworkLifecycleProcessor {
       name,
       type: derivedType,
       system_prompt_guidance: system_prompt_guidance ?? '',
-      enabled: true,
+      // Read, not hardcoded (P4.134): `enabled` was forwarded on create and dropped here, so
+      // `enabled:false` created an ENABLED framework and answered success. The repair path below
+      // already honoured it; the bundled `framework_builder` tool sends it on create.
+      enabled: args.enabled ?? true,
     };
 
     // Assign all optional fields (basic + advanced)

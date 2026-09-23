@@ -19,6 +19,8 @@
  * router before dispatch, ahead of any write or version snapshot.
  */
 
+import { resource_managerCommands } from '../../../contracts/schemas/_generated/resource_manager.generated.js';
+import { resolveDispatchAction } from '../../shared/preview-action.js';
 import { describeUndeclaredParameterRefusal } from '../../shared/undeclared-parameters.js';
 
 import type { ResourceType } from './types.js';
@@ -144,6 +146,40 @@ export const DECLARED_PARAMETERS: ReadonlySet<string> = new Set<string>([
 ]);
 
 /**
+ * Every type-specific parameter → resource type → the actions that read it (P4.134).
+ *
+ * Ownership by type alone let a gate's `severity` ride along on `inspect` or `list`, where no
+ * handler reads it, and the call answered success. The action dimension is read from the
+ * contract's own per-command declarations (`tooling/contracts/resource-manager.json`
+ * `commands[].parameters`) rather than a second hand-kept table: a `<type>:<action>` command
+ * declares what that pair reads, and a `common:<action>` command declares it for every type.
+ * `parameter-ownership.test.ts` fails when an owned parameter is declared on no command of an
+ * owning type, so a new parameter cannot slip past this map by being absent from it.
+ */
+export const PARAMETER_ACTIONS: ReadonlyMap<
+  string,
+  ReadonlyMap<ResourceType, ReadonlySet<string>>
+> = buildParameterActions();
+
+function buildParameterActions(): Map<string, Map<ResourceType, Set<string>>> {
+  const map = new Map<string, Map<ResourceType, Set<string>>>();
+  for (const command of resource_managerCommands) {
+    const [scope, action] = command.id.split(':') as [string, string];
+    for (const parameter of command.parameters ?? []) {
+      const owners = PARAMETER_OWNERS[parameter];
+      if (owners === undefined) continue;
+      const types = scope === 'common' ? owners : owners.filter((owner) => owner === scope);
+      for (const type of types) {
+        const byType = map.get(parameter) ?? new Map<ResourceType, Set<string>>();
+        byType.set(type, (byType.get(type) ?? new Set<string>()).add(action));
+        map.set(parameter, byType);
+      }
+    }
+  }
+  return map;
+}
+
+/**
  * Why this request sends a parameter this tool will not read, or `null` when it does not.
  *
  * TWO halves of one class, in one function because they are one question — "will anything read
@@ -177,9 +213,23 @@ export function describeParameterRefusal(resourceType: ResourceType, args: objec
   // did not declare.
   const sent = args as Record<string, unknown>;
 
+  // `preview` runs its target's code path, so it reads what the target reads. A preview with no
+  // target is `describePreviewRefusal`'s to answer, not an action this table can judge.
+  const action = resolveDispatchAction(sent as { action: string; preview_action?: string });
+
   for (const [parameter, owners] of Object.entries(PARAMETER_OWNERS)) {
     if (sent[parameter] === undefined) continue;
-    if (owners.includes(resourceType)) continue;
+    if (owners.includes(resourceType)) {
+      const readers = PARAMETER_ACTIONS.get(parameter)?.get(resourceType) ?? new Set<string>();
+      if (action === 'preview' || readers.has(action)) continue;
+      const readerList = [...readers].map((reader) => `"${reader}"`).join(' and ');
+      return (
+        `'${parameter}' is not read by resource_type:"${resourceType}" action:"${action}" — ` +
+        `only by action:${readerList}.\n\n` +
+        `It was accepted and ignored before, which reported a success for a parameter nothing ` +
+        `read. Drop it from this call, or send it with action:${readerList}.`
+      );
+    }
 
     const ownerList = owners.map((owner) => `"${owner}"`).join(' and ');
     return (
