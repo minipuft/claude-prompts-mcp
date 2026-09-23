@@ -4,7 +4,7 @@ import { ActionHandler } from '../core/action-handler-base.js';
 
 import type { ToolResponse } from '#shared/types/index.js';
 
-import { currentOrdinal, totalOf } from '#shared/utils/node-order.js';
+import { currentOrdinal, ordinalOf, totalOf } from '#shared/utils/node-order.js';
 
 export class SessionActionHandler extends ActionHandler {
   async execute(args: any): Promise<ToolResponse> {
@@ -159,10 +159,18 @@ export class SessionActionHandler extends ActionHandler {
     response += `**Last Activity**: ${new Date(session.lastActivity).toLocaleString()}\n`;
     response += `**Lifecycle**: \`${session.lifecycle}\`\n\n`;
 
-    if (session.pendingGateReview) {
-      response += `### ⚠️ Pending Review\n`;
-      response += `**Gates**: ${session.pendingGateReview.gateIds.join(', ')}\n`;
-      response += `**Attempts**: ${session.pendingGateReview.attemptCount}/${session.pendingGateReview.maxAttempts}\n\n`;
+    // Every open review, by the node it grades: a run can hold one on the step it stands on, one
+    // on a step it already left, and one per reported detached node, all at once.
+    const reviews = Object.values(session.reviews ?? {});
+    if (reviews.length > 0) {
+      response += `### ⚠️ Open Reviews\n`;
+      for (const review of reviews) {
+        const step = ordinalOf(session.state.nodes, review.nodeId);
+        response +=
+          `- \`${review.nodeId}\` (step ${step}, ${review.kind}, ${review.phase}): ` +
+          `gates ${review.gateIds.join(', ') || 'none'} · attempts ${review.attemptCount}/${review.maxAttempts}\n`;
+      }
+      response += '\n';
     }
 
     response += `### 📄 Context Variables\n`;

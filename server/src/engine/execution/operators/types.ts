@@ -1,9 +1,5 @@
 // @lifecycle canonical - Type definitions for chain operator execution
-import type {
-  PendingGateReview,
-  StepAwaitMode,
-  VisibilityItem,
-} from '#shared/types/chain-execution.js';
+import type { GateReview, StepAwaitMode, VisibilityItem } from '#shared/types/chain-execution.js';
 import type { StateStoreOptions } from '#shared/types/persistence.js';
 import type { ScriptReferenceResolverPort } from '#shared/utils/jsonUtils.js';
 import type { DeclaredSection } from '../../frameworks/declared-sections.js';
@@ -114,7 +110,8 @@ export interface NormalStepInput extends BaseChainStepExecutionInput {
  */
 export interface GateReviewInput extends BaseChainStepExecutionInput {
   readonly executionType: 'gate_review';
-  readonly pendingGateReview: PendingGateReview;
+  /** The review rendered, as `ChainSession.reviews` stores it under the node it grades. */
+  readonly review: GateReview;
 }
 
 /**

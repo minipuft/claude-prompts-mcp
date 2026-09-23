@@ -15,7 +15,7 @@ export const DEFAULT_RETRY_LIMIT = 2;
 /**
  * Default retry configuration for gates that don't specify their own
  */
-export const DEFAULT_GATE_RETRY_CONFIG = {
+const DEFAULT_GATE_RETRY_CONFIG = {
   max_attempts: DEFAULT_RETRY_LIMIT,
   improvement_hints: true,
   preserve_context: true,

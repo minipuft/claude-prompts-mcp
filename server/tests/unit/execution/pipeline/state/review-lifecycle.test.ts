@@ -257,15 +257,12 @@ describe('advanceReview', () => {
     ]);
   });
 
-  test('a metadata.phase the review carries follows the transition; none is invented', () => {
-    const detached = review({
-      kind: 'detached',
-      metadata: { phase: 'awaiting-verdict', nodeId: 'n2' },
-    });
-    expect(advanceReview(detached, FAIL, 'blocking').review?.metadata).toEqual({
-      phase: 'awaiting-replacement',
-      nodeId: 'n2',
-    });
+  test("a transition sets the record's `phase` and leaves its metadata as it was", () => {
+    // Row 3.6: `phase` is the one phase channel; no `metadata.phase` copy is kept in step.
+    const detached = review({ kind: 'detached', metadata: { nodeId: 'n2' } });
+    const next = advanceReview(detached, FAIL, 'blocking').review;
+    expect(next?.phase).toBe('awaiting-replacement');
+    expect(next?.metadata).toEqual({ nodeId: 'n2' });
 
     const plain = review({ metadata: { source: 'gate-enforcement' } });
     expect(advanceReview(plain, FAIL, 'blocking').review?.metadata).toEqual({

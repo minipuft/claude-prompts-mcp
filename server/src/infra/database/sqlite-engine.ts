@@ -1122,7 +1122,7 @@ export class SqliteEngine implements DatabasePort {
       -- One row per chain run. Replaces the chain_run_registry blob at v22.
       -- Run-level facts that anything queries are columns; the state column carries only the
       -- genuinely document-shaped remainder (blueprint, originalArgs, unknownsLedger,
-      -- pendingGateReview, pendingShellVerification, telemetry counters, executionOrder).
+      -- reviews, pendingShellVerification, telemetry counters, executionOrder).
       -- current_node_id is NOT duplicated into that document — the column is the single
       -- source, and NULL means the run advanced past its terminal node.
       CREATE TABLE IF NOT EXISTS chain_runs (

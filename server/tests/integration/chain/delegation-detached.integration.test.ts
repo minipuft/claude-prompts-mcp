@@ -33,6 +33,10 @@ import { SessionManagementStage } from '../../../src/engine/execution/pipeline/s
 import { OperatorValidationStage } from '../../../src/engine/execution/pipeline/stages/06-operator-validation-stage.js';
 import { StepResponseCaptureStage } from '../../../src/engine/execution/pipeline/stages/16-response-capture-stage.js';
 import { StepExecutionStage } from '../../../src/engine/execution/pipeline/stages/18-execution-stage.js';
+import {
+  PHASE_GUARD_GATE_ID,
+  PhaseGuardVerificationStage,
+} from '../../../src/engine/execution/pipeline/stages/19-phase-guard-verification-stage.js';
 import { GateReviewStage } from '../../../src/engine/execution/pipeline/stages/20-gate-review-stage.js';
 import { ResponseFormattingStage } from '../../../src/engine/execution/pipeline/stages/21-formatting-stage.js';
 import { runGateReviewEvidence } from '../../../src/engine/gates/services/gate-review-evidence.js';
@@ -219,7 +223,35 @@ const gateProvider = (gates: LightweightGateDefinition[]): GateDefinitionProvide
  */
 interface DetachedReviewFixture {
   readonly gates: LightweightGateDefinition[];
+  /**
+   * Row 3.8: grade a late report's structure through the real stage 19 — a framework whose two
+   * phases require `## Context` and `## Analysis`, in enforce mode with one retry.
+   */
+  readonly structure?: boolean;
 }
+
+/** The two required sections the row 3.8 framework guards. */
+const GUARDED_HEADERS = ['## Context', '## Analysis'];
+
+const structureGrader = (sessionStore: ChainSessionStore, logger: Logger) => {
+  const guide = {
+    enhanceWithFramework: () => ({
+      processingEnhancements: GUARDED_HEADERS.map((header) => ({
+        id: header.slice(3).toLowerCase(),
+        name: header.slice(3),
+        section_header: header,
+        guards: { required: true },
+      })),
+    }),
+  };
+  const stage = new PhaseGuardVerificationStage(
+    () => ({ getFrameworkGuide: () => guide }) as never,
+    () => ({ mode: 'enforce', maxRetries: 1 }),
+    sessionStore,
+    logger
+  );
+  return stage.gradeLateReport.bind(stage);
+};
 
 const buildPipeline = (options: {
   sessionStore: ChainSessionStore;
@@ -250,7 +282,10 @@ const buildPipeline = (options: {
       new StepCaptureService(sessionStore, logger, recordStore),
       sessionStore,
       new UnknownObservationProcessor(sessionStore, logger),
-      logger
+      logger,
+      review?.structure === true
+        ? { gradeLateReport: structureGrader(sessionStore, logger) }
+        : undefined
     ),
     StepExecution: new StepExecutionStage(
       chainExecutor,
@@ -304,6 +339,14 @@ const buildPipeline = (options: {
               [detached.stepNumber]: review.gates.map((gate) => gate.id),
             };
           }
+        },
+      };
+    }
+    if (name === 'FrameworkResolution' && review?.structure === true) {
+      return {
+        name,
+        execute: async (context: ExecutionContext) => {
+          context.frameworkContext = { selectedFramework: { id: 'cageerf' } } as never;
         },
       };
     }
@@ -705,7 +748,7 @@ describe('detached delegation (await: run) through the pipeline', () => {
       expect(failed.isError).not.toBe(true);
       expect(text(failed)).toContain('failed (attempt 1/2)');
       expect(text(failed)).toContain('it replaces the first');
-      expect(detachedReview(sessionId)?.metadata?.['phase']).toBe('awaiting-replacement');
+      expect(detachedReview(sessionId)?.phase).toBe('awaiting-replacement');
       expect(run().runStatus ?? 'working').toBe('working');
 
       const replaced = await pipeline.execute({
@@ -837,6 +880,163 @@ describe('detached delegation (await: run) through the pipeline', () => {
       expect(text(moved)).toContain('Do Summarize.');
       expect(run().state.currentNodeId).toBe('n3');
       expect(stepOf(DETACHED)).toMatchObject({ state: 'completed', isPlaceholder: false });
+    });
+
+    describe('row 3.8: the late report is graded for structure against its recorded output', () => {
+      const SECTIONED =
+        '## Context\nThe draft argues one claim.\n\n## Analysis\nThe evidence holds.';
+      const ONE_LINE = 'Looks fine to me.';
+      /**
+       * Held at the end with the detached node's declaration on record. The harness executor has
+       * no framework provider, so its render declares nothing; this writes what a framework-
+       * injected render of the brief records (stage 18 / `recordStepDeclaration`).
+       */
+      const heldGraded = async (gates: LightweightGateDefinition[]) => {
+        const held = await heldAtEnd({ gates, structure: true });
+        sessionStore.recordStepDeclaration(held.sessionId, DETACHED, GUARDED_HEADERS);
+        return held;
+      };
+
+      test('twin: a sectioned late report opens the gate review only', async () => {
+        const { pipeline, chainId, sessionId, brief } = await heldGraded([reminderGate('dr-gate')]);
+        const landed = await pipeline.execute({
+          chain_id: chainId,
+          user_response: runFakeWorker(brief, { body: SECTIONED }),
+        } as any);
+        expect(text(landed)).toContain(`Gate Review Required — detached node ${DETACHED}`);
+        expect(text(landed)).not.toContain('missing required structure');
+        expect(detachedReview(sessionId)?.gateIds).toEqual(['dr-gate']);
+
+        // The verdict call's own text is only the trailer, which has no sections: it is not graded.
+        const passed = await pipeline.execute({
+          chain_id: chainId,
+          gate_verdict: PASS,
+          user_response: TRAILER,
+        } as any);
+        expect(text(passed)).toContain('✅ Chain complete');
+        expect(detachedReview(sessionId)).toBeUndefined();
+      });
+
+      test('a one-line late report opens ONE review naming the gate and the missing sections', async () => {
+        const { pipeline, chainId, sessionId, brief } = await heldGraded([reminderGate('dr-gate')]);
+        const landed = await pipeline.execute({
+          chain_id: chainId,
+          user_response: runFakeWorker(brief, { body: ONE_LINE }),
+        } as any);
+        expect(landed.isError).not.toBe(true);
+        expect(text(landed)).toContain(`Gate Review Required — detached node ${DETACHED} (step 2)`);
+        expect(text(landed)).toContain('(attempt 1/2)');
+        expect(text(landed)).toContain('The reported result is missing required structure:');
+        expect(text(landed)).toContain('"## Context"');
+        expect(text(landed)).toContain('"## Analysis"');
+        const review = detachedReview(sessionId);
+        expect(review).toMatchObject({
+          nodeId: DETACHED,
+          kind: 'detached',
+          phase: 'awaiting-verdict',
+          gateIds: ['dr-gate', PHASE_GUARD_GATE_ID],
+          maxAttempts: 2,
+        });
+        expect(review?.reviewedOutput).toContain(ONE_LINE);
+        expect(run().runStatus ?? 'working').toBe('working');
+
+        // FAIL, then a sectioned replacement: the grade is superseded, the spent attempt is kept.
+        await pipeline.execute({
+          chain_id: chainId,
+          gate_verdict: FAIL,
+          user_response: TRAILER,
+        } as any);
+        const replaced = await pipeline.execute({
+          chain_id: chainId,
+          user_response: runFakeWorker(brief, { body: SECTIONED }),
+        } as any);
+        expect(text(replaced)).toContain('its result replaces its first result');
+        expect(text(replaced)).not.toContain('missing required structure');
+        expect(detachedReview(sessionId)).toMatchObject({ gateIds: ['dr-gate'], attemptCount: 1 });
+        expect(detachedReview(sessionId)?.retryHints).toEqual([]);
+      });
+
+      test('a replacement still missing its sections is graded afresh and keeps the spent attempt', async () => {
+        const { pipeline, chainId, sessionId, brief } = await heldGraded([reminderGate('dr-gate')]);
+        await pipeline.execute({
+          chain_id: chainId,
+          user_response: runFakeWorker(brief, { body: ONE_LINE }),
+        } as any);
+        await pipeline.execute({
+          chain_id: chainId,
+          gate_verdict: FAIL,
+          user_response: TRAILER,
+        } as any);
+        const replaced = await pipeline.execute({
+          chain_id: chainId,
+          user_response: runFakeWorker(brief, { body: 'Still one line.' }),
+        } as any);
+        expect(text(replaced)).toContain('(attempt 2/2)');
+        expect(text(replaced)).toContain('missing required structure');
+        const review = detachedReview(sessionId);
+        expect(review).toMatchObject({
+          gateIds: ['dr-gate', PHASE_GUARD_GATE_ID],
+          attemptCount: 1,
+          phase: 'awaiting-verdict',
+        });
+        // One finding, the new one — the first grade's hints are not stacked under it.
+        expect(review?.retryHints).toHaveLength(2);
+        expect(review?.reviewedOutput).toContain('Still one line.');
+      });
+
+      test('with no gate on the node, a one-line report opens a structural review that holds the run', async () => {
+        const { pipeline, chainId, sessionId, brief } = await heldGraded([]);
+        const landed = await pipeline.execute({
+          chain_id: chainId,
+          user_response: runFakeWorker(brief, { body: ONE_LINE }),
+        } as any);
+        expect(text(landed)).toContain('missing required structure');
+        expect(text(landed)).not.toContain('Chain complete');
+        expect(detachedReview(sessionId)).toMatchObject({
+          kind: 'detached',
+          gateIds: [PHASE_GUARD_GATE_ID],
+          attemptCount: 0,
+        });
+        expect(run().runStatus ?? 'working').toBe('working');
+
+        await pipeline.execute({
+          chain_id: chainId,
+          gate_verdict: FAIL,
+          user_response: TRAILER,
+        } as any);
+        const replaced = await pipeline.execute({
+          chain_id: chainId,
+          user_response: runFakeWorker(brief, { body: SECTIONED }),
+        } as any);
+        // Nothing is left to review once the replacement has its sections: the review closes.
+        expect(detachedReview(sessionId)).toBeUndefined();
+        expect(text(replaced)).toContain('✅ Chain complete');
+        expect(run().runStatus).toBe('completed');
+      });
+
+      test('an advisory gate: a FAIL on the detached review is cleared, with its own wording', async () => {
+        const advisory = {
+          ...reminderGate('dr-advisory'),
+          enforcementMode: 'advisory',
+        } as LightweightGateDefinition;
+        const { pipeline, chainId, sessionId, brief } = await heldGraded([advisory]);
+        await pipeline.execute({
+          chain_id: chainId,
+          user_response: runFakeWorker(brief, { body: SECTIONED }),
+        } as any);
+        const failed = await pipeline.execute({
+          chain_id: chainId,
+          gate_verdict: FAIL,
+          user_response: TRAILER,
+        } as any);
+        expect(failed.isError).not.toBe(true);
+        expect(text(failed)).toContain(
+          `⚠ Gate review of detached node ${DETACHED} (step 2) failed (attempt 1/2), but its gates are not blocking`
+        );
+        expect(text(failed)).not.toContain('passed');
+        expect(text(failed)).toContain('✅ Chain complete');
+        expect(detachedReview(sessionId)).toBeUndefined();
+      });
     });
 
     test('a verdict for a detached node with no review, and for an unknown node, is refused by name', async () => {

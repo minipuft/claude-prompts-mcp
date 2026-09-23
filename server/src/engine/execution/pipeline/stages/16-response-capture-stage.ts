@@ -157,11 +157,21 @@ export class StepResponseCaptureStage extends BasePipelineStage {
      *   wired this way). Absent, the stage resolves the default mode itself
      *   (`resolveHandoffEvidenceMode(undefined)` — `required`), so a lightweight harness that
      *   omits the bag gets the shipped behavior rather than a quieter one.
+     * - `gradeLateReport` — the phase guard's structural grade of a detached node's late report
+     *   (`PhaseGuardVerificationStage.gradeLateReport`, row 3.8): this stage answers that call, so
+     *   stage 19 never runs on it. Absent, a late report is reviewed by its gates alone.
      */
     private readonly collaborators: {
       readonly gateEnhancementService?: GateEnhancementService;
       readonly remainderProcessor?: RemainderProcessor;
       readonly handoffEvidenceMode?: () => HandoffEvidenceMode;
+      readonly gradeLateReport?: (
+        context: ExecutionContext,
+        sessionId: string,
+        node: DetachedNodeFacts,
+        review: GateReview | null,
+        recordedOutput: string
+      ) => Promise<GateReview | null>;
     } = {}
   ) {
     super(logger);
@@ -463,7 +473,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       reply
     );
     const gateIds = context.state.gates.detachedReviewGateIds?.[node.stepNumber] ?? [];
-    const review = replaces
+    const opened = replaces
       ? await this.verdictProcessor.applyReplacementReport(context, session, node.nodeId, reply)
       : ((await context.gateEnforcement?.openDetachedReview(
           context,
@@ -472,6 +482,10 @@ export class StepResponseCaptureStage extends BasePipelineStage {
           gateIds,
           reply
         )) ?? null);
+    // The structural grade of the recorded result joins that review (row 3.8).
+    const grade = this.collaborators.gradeLateReport;
+    const review =
+      grade === undefined ? opened : await grade(context, sessionId, node, opened, reply);
     const runCompleted = await this.chainSessionStore.completeHeldRun(sessionId);
     const after =
       this.chainSessionStore.getSession(sessionId, context.getScopeOptions()) ?? session;
@@ -492,6 +506,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
                 new Map(Object.entries(review.gateTiers ?? {})),
                 new Map()
               ),
+              structuralHints: review.retryHints ?? [],
             }),
           }
         : {}),
@@ -531,20 +546,12 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     const runCompleted = await this.chainSessionStore.completeHeldRun(sessionId);
     const after =
       this.chainSessionStore.getSession(sessionId, context.getScopeOptions()) ?? session;
-    const cleared = result.result === 'cleared';
-    const described = describeDetachedReviewOutcome(node, {
+    const text = describeDetachedReviewOutcome(node, {
       ...result,
-      result: cleared ? 'passed' : result.result,
       runCompleted,
       held: isRunHeldOpen(after),
       detachedNodes: collectDetachedNodeFacts(context.parsedCommand?.steps, after),
     });
-    // A FAIL on gates that are not blocking clears the review (R10). The renderer has no head for
-    // that outcome yet, so its PASS head — the first paragraph — is replaced by one that says so.
-    const text = cleared
-      ? `⚠ Gate review of detached node ${node.token} (step ${node.stepNumber}) failed, but its ` +
-        `gates are not blocking: its recorded result stands.${described.slice(described.indexOf('\n\n'))}`
-      : described;
     context.setResponse({
       content: [{ type: 'text', text: `${text}\n\nChain: ${after.chainId}` }],
       isError: false,

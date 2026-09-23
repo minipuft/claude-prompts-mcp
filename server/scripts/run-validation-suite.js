@@ -421,6 +421,20 @@ export const SUITE = [
       'CHECKED — falsified 2026-09-22 by removing the scope from the prompt-guidance selectFramework call and the gate-enhancement provider in pipeline-builder; the gate reported both. Run against the pre-fix tree (acaf76c6) it reports 19 unscoped reads across 10 files, the P4.129 class. It fails closed below 15 scoped calls. Blind spots stated in the header: presence not value, options built across statements',
   },
   {
+    script: 'validate:review-by-node',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse:
+      'CHECKED — falsified 2026-09-23 by planting `session.pendingGateReview = undefined` in a pipeline stage (reported by path:line as a write) and by disabling the write classification in the scanner (the planted write then passed, and the self-test failed). Every accepted entry must still match a live occurrence (satisfied-exception check), and the scan fails closed below 200 src files. Blind spots stated in the header: a name assembled at runtime, and tests/scripts/hooks',
+  },
+  {
+    script: 'validate:review-by-node:self-test',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse:
+      'CHECKED — plants every write, declaration and read form (assignment, delete, ??= through a literal key, object-literal key, destructuring, a const-typed element key, a SQL path) beside three decoys (a comment, a longer name, a method containing the word) and asserts the exact line:kind set',
+  },
+  {
     script: 'validate:tool-parameter-reads',
     io: 'read',
     reads: ['file'],

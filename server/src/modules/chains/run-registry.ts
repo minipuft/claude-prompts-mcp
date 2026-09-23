@@ -33,7 +33,7 @@ import type {
 } from '#shared/types/chain-session.js';
 import type { DatabasePort, StateStoreOptions } from '#shared/types/persistence.js';
 
-import { attachReviewProjections, stampLegacyReview } from '#shared/types/chain-session.js';
+import { stampLegacyReview } from '#shared/types/chain-session.js';
 import { stripRunNumber } from '#shared/utils/chain-id-codec.js';
 
 export interface ChainRunRegistry {
@@ -578,7 +578,6 @@ function reconstructSession(row: ChainRunRow, nodeRows: readonly ChainRunNodeRow
   };
 
   applyResidual(session, residual);
-  attachReviewProjections(session);
   if (row.run_completed_at !== null) session.runCompletedAt = row.run_completed_at;
   if (row.handoff_token !== null && row.handoff_token !== '') {
     session.handoffToken = row.handoff_token;

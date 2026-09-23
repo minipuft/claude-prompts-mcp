@@ -3,9 +3,9 @@
  * Counter mutation and read projection for record-only run telemetry.
  *
  * Two things are asserted separately because they fail separately:
- *   1. `recordGateReviewOutcome` increments the RUN-cumulative counters, not just
- *      `pendingGateReview.attemptCount` — which a PASS destroys along with the review.
- *      That destruction is why the counters exist, so the PASS case is the load-bearing one.
+ *   1. `recordGateReviewOutcome` increments the RUN-cumulative counters and nothing else. A
+ *      review's `attemptCount` is destroyed with the review on a PASS, which is why the
+ *      counters exist; the review itself is the verdict path's to persist (row 3.4).
  *   2. `getRunTelemetry` derives unknowns from the ledger rather than from counters of
  *      its own, so a resolve must move a number from "open only" to "opened AND closed"
  *      without changing the total.
@@ -78,58 +78,47 @@ describe('run telemetry counters', () => {
 
   test('a single PASS counts as one gate fired and zero retries', async () => {
     await manager.setPendingGateReview('sess-tel', pendingReview());
-    await manager.recordGateReviewOutcome('sess-tel', {
-      verdict: 'PASS',
-      rawVerdict: 'GATE_REVIEW: PASS',
-    });
+    await manager.recordGateReviewOutcome('sess-tel', { verdict: 'PASS' });
 
-    // The PASS cleared pendingGateReview — attemptCount went with it, which is precisely
-    // why the session-level counters are read here instead.
-    expect(manager.getPendingGateReview('sess-tel')).toBeUndefined();
     expect(manager.getRunTelemetry('sess-tel')).toMatchObject({ gatesFired: 1, gateRetries: 0 });
   });
 
   test('FAIL, FAIL, PASS counts three fired and two retries', async () => {
     await manager.setPendingGateReview('sess-tel', pendingReview());
-    await manager.recordGateReviewOutcome('sess-tel', {
-      verdict: 'FAIL',
-      rawVerdict: 'GATE_REVIEW: FAIL - first',
-    });
-    await manager.recordGateReviewOutcome('sess-tel', {
-      verdict: 'FAIL',
-      rawVerdict: 'GATE_REVIEW: FAIL - second',
-    });
-    await manager.recordGateReviewOutcome('sess-tel', {
-      verdict: 'PASS',
-      rawVerdict: 'GATE_REVIEW: PASS',
-    });
+    await manager.recordGateReviewOutcome('sess-tel', { verdict: 'FAIL' });
+    await manager.recordGateReviewOutcome('sess-tel', { verdict: 'FAIL' });
+    await manager.recordGateReviewOutcome('sess-tel', { verdict: 'PASS' });
 
     expect(manager.getRunTelemetry('sess-tel')).toMatchObject({ gatesFired: 3, gateRetries: 2 });
   });
 
   test('counters survive the review being cleared and re-opened', async () => {
     await manager.setPendingGateReview('sess-tel', pendingReview());
-    await manager.recordGateReviewOutcome('sess-tel', {
-      verdict: 'PASS',
-      rawVerdict: 'GATE_REVIEW: PASS',
-    });
-    // A second gate later in the same run opens a fresh review whose attemptCount restarts
-    // at 0. The run totals must not restart with it.
+    await manager.recordGateReviewOutcome('sess-tel', { verdict: 'PASS' });
+    // The verdict path deletes a PASSed review; a second gate later in the same run opens a
+    // fresh one whose attemptCount restarts at 0. The run totals must not restart with it.
+    await manager.clearPendingGateReview('sess-tel');
     await manager.setPendingGateReview('sess-tel', pendingReview());
-    await manager.recordGateReviewOutcome('sess-tel', {
-      verdict: 'FAIL',
-      rawVerdict: 'GATE_REVIEW: FAIL - later gate',
-    });
+    await manager.recordGateReviewOutcome('sess-tel', { verdict: 'FAIL' });
 
-    expect(manager.getPendingGateReview('sess-tel')?.attemptCount).toBe(1);
     expect(manager.getRunTelemetry('sess-tel')).toMatchObject({ gatesFired: 2, gateRetries: 1 });
   });
 
-  test('a verdict for a session with no pending review changes nothing', async () => {
-    await manager.recordGateReviewOutcome('sess-tel', {
-      verdict: 'FAIL',
-      rawVerdict: 'GATE_REVIEW: FAIL - orphan',
-    });
+  test('counting a verdict leaves the review it answered untouched (row 3.4)', async () => {
+    await manager.setPendingGateReview('sess-tel', pendingReview());
+    await manager.recordGateReviewOutcome('sess-tel', { verdict: 'FAIL' });
+
+    // The verdict path persists the review `advanceReview` returns; the store only counts.
+    const review = manager.getPendingGateReview('sess-tel');
+    expect([review?.attemptCount, review?.history, review?.phase]).toEqual([
+      0,
+      undefined,
+      'awaiting-verdict',
+    ]);
+  });
+
+  test('a verdict for an unknown session changes nothing', async () => {
+    await manager.recordGateReviewOutcome('sess-missing', { verdict: 'FAIL' });
 
     expect(manager.getRunTelemetry('sess-tel')).toMatchObject({ gatesFired: 0, gateRetries: 0 });
   });

@@ -258,7 +258,10 @@ describe('ChainOperatorExecutor delegation rendering (R-1)', () => {
       executionType: 'gate_review',
       stepPrompts,
       chainContext: { current_step: 1, step_results: { '1': 'step one result' } },
-      pendingGateReview: {
+      review: {
+        nodeId: 'n1',
+        kind: 'gate',
+        phase: 'awaiting-verdict',
         combinedPrompt: 'Review the output',
         gateIds: ['code-quality'],
         prompts: [],
@@ -300,7 +303,10 @@ describe('ChainOperatorExecutor delegation rendering (R-1)', () => {
       executionType: 'gate_review',
       stepPrompts,
       chainContext: { current_step: 2, step_results: { '1': 'step one result' } },
-      pendingGateReview: {
+      review: {
+        nodeId: 'n2',
+        kind: 'structural',
+        phase: 'awaiting-verdict',
         combinedPrompt: 'Review the output',
         gateIds: ['__phase_guard__'],
         prompts: [],
@@ -336,7 +342,10 @@ describe('ChainOperatorExecutor delegation rendering (R-1)', () => {
       executionType: 'gate_review',
       stepPrompts,
       chainContext: { current_step: 2, step_results: { '1': 'step one result' } },
-      pendingGateReview: {
+      review: {
+        nodeId: 'n2',
+        kind: 'structural',
+        phase: 'awaiting-verdict',
         combinedPrompt: 'Review the output',
         gateIds: ['__phase_guard__'],
         prompts: [],

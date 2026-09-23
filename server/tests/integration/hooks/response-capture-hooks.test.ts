@@ -60,12 +60,10 @@ describe('ResponseCaptureStage Hook Emission', () => {
     mockChainSessionStore = {
       getSession: jest.fn(),
       getPendingGateReview: jest.fn(),
-      isRetryLimitExceeded: jest.fn(),
       recordGateReviewOutcome: jest.fn(),
       advanceStep: jest.fn().mockResolvedValue({ nodeId: 'n3', ordinal: 3 }),
       clearPendingGateReview: jest.fn(),
       setReview: jest.fn(),
-      resetRetryCount: jest.fn(),
       updateSessionState: jest.fn(),
       completeStep: jest.fn(),
       getStepState: jest.fn(),
@@ -111,7 +109,7 @@ describe('ResponseCaptureStage Hook Emission', () => {
       state: { currentNodeId: 'n1', nodes: [{ id: 'n1' }, { id: 'n2' }] },
       reviews: { n1: stepReview(1) },
     } as any);
-    mockChainSessionStore.recordGateReviewOutcome.mockResolvedValue('cleared');
+    mockChainSessionStore.recordGateReviewOutcome.mockResolvedValue(undefined);
     mockChainSessionStore.getPendingGateReview.mockReturnValue(undefined);
 
     // Create context with gate verdict (command can be undefined for chain resume)
@@ -131,7 +129,7 @@ describe('ResponseCaptureStage Hook Emission', () => {
 
     // Verify gate events were emitted via EventEmitter
     expect(gateEvents.length).toBeGreaterThanOrEqual(0);
-    // The hook was wired but may not emit if pendingGateReview is undefined after outcome
+    // The hook was wired but may not emit if no review is open after the outcome
   });
 
   test('emits gate failed notification when FAIL verdict is processed', async () => {
@@ -142,7 +140,7 @@ describe('ResponseCaptureStage Hook Emission', () => {
       state: { currentNodeId: 'n1', nodes: [{ id: 'n1' }, { id: 'n2' }] },
       reviews: { n1: stepReview(1) },
     } as any);
-    mockChainSessionStore.recordGateReviewOutcome.mockResolvedValue('pending');
+    mockChainSessionStore.recordGateReviewOutcome.mockResolvedValue(undefined);
     mockChainSessionStore.getPendingGateReview.mockReturnValue({
       nodeId: 'n1',
       kind: 'gate',
@@ -154,7 +152,6 @@ describe('ResponseCaptureStage Hook Emission', () => {
       attemptCount: 2,
       maxAttempts: 2,
     });
-    mockChainSessionStore.isRetryLimitExceeded.mockReturnValue(false);
 
     const request: McpToolRequest = {
       chain_id: sessionId,
@@ -191,7 +188,7 @@ describe('ResponseCaptureStage Hook Emission', () => {
       state: { currentNodeId: 'n1', nodes: [{ id: 'n1' }, { id: 'n2' }] },
       reviews: { n1: stepReview(1) },
     } as any);
-    mockChainSessionStore.recordGateReviewOutcome.mockResolvedValue('pending');
+    mockChainSessionStore.recordGateReviewOutcome.mockResolvedValue(undefined);
     mockChainSessionStore.getPendingGateReview.mockReturnValue({
       nodeId: 'n1',
       kind: 'gate',
@@ -203,7 +200,6 @@ describe('ResponseCaptureStage Hook Emission', () => {
       attemptCount: 2,
       maxAttempts: 2,
     });
-    mockChainSessionStore.isRetryLimitExceeded.mockReturnValue(true);
 
     const request: McpToolRequest = {
       chain_id: sessionId,
@@ -296,14 +292,12 @@ describe('gate events reach a port-only collaborator', () => {
         attemptCount: 2,
         maxAttempts: 2,
       }),
-      isRetryLimitExceeded: jest.fn().mockReturnValue(false),
       // `jest.fn(impl)` infers its signature; the bare `jest.fn().mockResolvedValue(x)`
       // form used above resolves to `never` under the tests tsconfig.
-      recordGateReviewOutcome: jest.fn(async () => 'pending'),
+      recordGateReviewOutcome: jest.fn(async () => undefined),
       advanceStep: jest.fn(async () => ({ nodeId: 'n3', ordinal: 3 })),
       clearPendingGateReview: jest.fn(),
       setReview: jest.fn(),
-      resetRetryCount: jest.fn(),
       updateSessionState: jest.fn(),
       completeStep: jest.fn(),
       getStepState: jest.fn(),

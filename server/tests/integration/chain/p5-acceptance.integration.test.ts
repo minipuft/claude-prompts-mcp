@@ -75,6 +75,7 @@ import type { PipelineStage } from '../../../src/engine/execution/pipeline/stage
 import type { ChainStepPrompt } from '../../../src/engine/execution/operators/types.js';
 import type { ConvertedPrompt } from '../../../src/engine/execution/types.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
+import { currentStepReview } from '../../../src/shared/types/chain-session.js';
 import type { ChainSession } from '../../../src/shared/types/chain-session.js';
 
 // --- fixtures -------------------------------------------------------------------------------
@@ -469,6 +470,8 @@ describe('P5 acceptance: withhold/expose, delegated non-receipt and targeted-gat
   const textOf = (response: { content: Array<{ text?: string }> }): string =>
     response.content.map((part) => part.text ?? '').join('\n');
 
+  const stepReviewOf = (session: ChainSession) =>
+    currentStepReview(session.reviews, session.state.currentNodeId);
   const onlySession = (): ChainSession => {
     const sessions = Array.from(
       (store as unknown as { activeSessions: Map<string, ChainSession> }).activeSessions.values()
@@ -478,7 +481,7 @@ describe('P5 acceptance: withhold/expose, delegated non-receipt and targeted-gat
   };
 
   /** The gate list the OPEN review is scoped to — exactly what `buildGateReviewCTA` renders. */
-  const openReviewGateIds = (): readonly string[] => onlySession().pendingGateReview?.gateIds ?? [];
+  const openReviewGateIds = (): readonly string[] => stepReviewOf(onlySession())?.gateIds ?? [];
 
   const passVerdict = renderGateVerdict({
     overall: 'PASS',
@@ -524,12 +527,12 @@ describe('P5 acceptance: withhold/expose, delegated non-receipt and targeted-gat
     // request shape the defect made structurally incapable of creating a review for: the only
     // review-creation call that used to exist ran pre-advance, one stage before this render.
     const reviewAtNode2Immediate = [...openReviewGateIds()];
-    const pendingReviewImmediate = onlySession().pendingGateReview;
+    const pendingReviewImmediate = stepReviewOf(onlySession());
 
     // Step 2 answers; its review is open while the run stands at node 2.
     await pipeline.execute({ chain_id: chainId, user_response: S2, gates: GATE_SPECS } as never);
     const reviewAtNode2 = [...openReviewGateIds()];
-    const pendingReviewAfterRerender = onlySession().pendingGateReview;
+    const pendingReviewAfterRerender = stepReviewOf(onlySession());
     const atNode3 = textOf(
       await pipeline.execute({
         chain_id: chainId,

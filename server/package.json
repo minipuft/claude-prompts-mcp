@@ -215,6 +215,8 @@
     "validate:scope-producers": "node scripts/validate-scope-producers.js",
     "validate:cli-shared-store-guards": "node scripts/validate-cli-shared-store-guards.js",
     "validate:scoped-framework-reads": "node scripts/validate-scoped-framework-reads.js",
+    "validate:review-by-node": "node scripts/validate-review-by-node.js",
+    "validate:review-by-node:self-test": "node scripts/validate-review-by-node.js --self-test",
     "validate:tool-parameter-reads": "node scripts/validate-tool-parameter-reads.js",
     "validate:tool-parameter-reads:self-test": "node scripts/validate-tool-parameter-reads.js --self-test",
     "validate:telemetry-attribute-emitters": "node scripts/validate-telemetry-attribute-emitters.js",

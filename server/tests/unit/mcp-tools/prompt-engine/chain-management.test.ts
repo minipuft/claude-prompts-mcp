@@ -177,6 +177,33 @@ describe('ChainSessionRouter tenant scoping', () => {
     expect(getText(response)).toContain('Chain-Scoped Temporary Gates: temp-security');
   });
 
+  test('gates chain lists each open review by the node it grades (row 3.4)', async () => {
+    const manager = createSessionManager();
+    const review = (nodeId: string, kind: 'gate' | 'detached', gateIds: string[]) => ({
+      nodeId,
+      kind,
+      phase: 'awaiting-verdict' as const,
+      gateIds,
+      combinedPrompt: '',
+      prompts: [],
+      createdAt: 1,
+      attemptCount: 0,
+      maxAttempts: 2,
+    });
+    manager.getSessionByChainIdentifier.mockReturnValue(
+      createChainSession({
+        chainId: 'chain-tenant#3',
+        reviews: { n1: review('n1', 'detached', ['dr-block']), n2: review('n2', 'gate', []) },
+      })
+    );
+    const { service } = createService([], manager.service);
+
+    const text = getText(await service.tryHandleCommand('gates chain chain-tenant#3', {}));
+
+    expect(text).toContain('- Open Gate Review on `n1` (detached): dr-block');
+    expect(text).toContain('- Open Gate Review on `n2` (gate): unspecified');
+  });
+
   test('does not leak sessions across scopes with shared chain identifiers', async () => {
     const manager = createSessionManager();
     manager.getSessionByChainIdentifier.mockImplementation((_chainId, options) =>

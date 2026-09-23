@@ -230,4 +230,34 @@ describe('Streamable HTTP: a detached step is reviewed at its late report (row 4
     expect(done.text).toContain('Chain complete');
     expect(done.methods).toContain(CHAIN_COMPLETE);
   }, 240000);
+
+  test('under the shipped defaults a one-line late report is graded for structure (row 3.8)', async () => {
+    const { session, chain } = await authored(true);
+    const start = await session.callTool('prompt_engine', { command: `>>${chain}` });
+    const chainId = chainIdOf(start.text);
+    const call = (args: Record<string, unknown>) =>
+      session.callTool('prompt_engine', { chain_id: chainId, ...args });
+
+    const brief = await call({ user_response: cageerfAnswer('first output'), gate_verdict: PASS });
+    const token = tokenOf(brief.text);
+    await call({});
+
+    // The report's text has none of CAGEERF's sections: the ONE review names the gates AND them.
+    const report = await call({ user_response: `A late result.\n\n${trailer(token)}` });
+    expect(report.isError).toBe(false);
+    expect(report.methods).toContain(STEP_COMPLETE);
+    expect(report.text).toContain(`Gate Review Required — detached node ${token} (step 2)`);
+    expect(report.text).toContain(GATE);
+    expect(report.text).toContain('The reported result is missing required structure:');
+    expect(report.text).toMatch(/required "## [A-Za-z]+" section/);
+
+    // Twin: the sectioned report of the case above names none (asserted here on the replacement).
+    const failed = await call({ gate_verdict: FAIL, user_response: trailer(token) });
+    expect(failed.isError).toBe(false);
+    const replaced = await call({
+      user_response: `${cageerfAnswer('A replacement result')}\n\n${trailer(token)}`,
+    });
+    expect(replaced.text).toContain('its result replaces its first result');
+    expect(replaced.text).not.toContain('missing required structure');
+  }, 240000);
 });

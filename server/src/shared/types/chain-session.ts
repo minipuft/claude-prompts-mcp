@@ -19,7 +19,6 @@ import type {
   ChainRunStatus,
   ChainState,
   GateReview,
-  GateReviewKind,
   GateReviewPhase,
   PendingGateReview,
   PendingShellVerificationSnapshot,
@@ -302,29 +301,11 @@ export interface ChainSession {
    * the only review field the residual document persists. Absent when no review is open.
    *
    * A detached (`await: run`) node's review (`kind: 'detached'`, row 4.8) opens against its LATE
-   * report, when the run already stands elsewhere; an open one holds the run open
-   * (`detachedNodesHoldingRun`). Every other review occupies the current-step slot, and the store
-   * keeps at most one of those (`ChainSessionService.setReview`).
+   * report, when the run already stands elsewhere. Every other review occupies the current-step
+   * slot, and the store keeps at most one of those (`ChainSessionService.setReview`). Any open
+   * review holds the run open (`nodesHoldingRunOpen`).
    */
   reviews?: Record<string, GateReview>;
-  /**
-   * The current-step review: `reviews[currentNodeId]` when that is not a detached review, else
-   * the run's one non-detached review (a phase-guard or final-step review grades a node the run
-   * has already left). A read-only projection installed by {@link attachReviewProjections};
-   * assigning to it throws.
-   *
-   * @deprecated stamped: (as of 2026-09-23 · flips when row 3.6's exception list is empty) — read
-   * `reviews` by node.
-   */
-  readonly pendingGateReview?: PendingGateReview;
-  /**
-   * The detached reviews in `reviews`, keyed by node; absent when there are none. A read-only
-   * projection for `collectDetachedNodeFacts`, installed by {@link attachReviewProjections}.
-   *
-   * @deprecated stamped: (as of 2026-09-23 · flips when row 3.5 moves `detached.ts` onto
-   * `reviews`) — read `reviews` filtered by `kind: 'detached'`.
-   */
-  readonly detachedGateReviews?: Readonly<Record<string, PendingGateReview>>;
   /** Pending shell verification state for bounce-back resume across MCP requests. */
   pendingShellVerification?: PendingShellVerificationSnapshot;
   blueprint?: SessionBlueprint;
@@ -347,8 +328,8 @@ export interface ChainSession {
   unknownsLedger?: UnknownLedgerEntry[];
   /**
    * Cumulative count of gate verdict submissions this run, incremented in
-   * recordGateReviewOutcome. Distinct from `pendingGateReview.attemptCount`, which is
-   * destroyed whenever the pending review clears on PASS and so cannot answer
+   * recordGateReviewOutcome. Distinct from a review's `attemptCount`, which is
+   * destroyed whenever the review clears on PASS and so cannot answer
    * "how many across the whole run".
    */
   gatesFiredCount?: number;
@@ -368,56 +349,51 @@ export const isTerminalRunStatus = (status: ChainRunStatus | undefined): boolean
 
 /**
  * True when a run has finished: its status is terminal, or it has advanced past its last node
- * (`currentNodeId === null`).
+ * (`currentNodeId === null`) and nothing holds it open ({@link isRunHeldOpen}).
  *
  * Identity-based on purpose. The ordinal comparison this replaces (`currentStep >= totalSteps`)
  * reports a run *standing on* its final step as finished — the completion lie that made a
- * banner-obeying client abandon a run that still owed one gate verdict. `runStatus` is the
- * primary signal because the store latches it at the moment the run passes its terminal node;
- * `currentNodeId === null` is the same fact read off the state document, and covers a session
- * loaded from a pre-latch blob.
+ * banner-obeying client abandon a run that still owed one gate verdict. `runStatus` is latched by
+ * the pipeline's one completion point (stage 20, after the phase guard has graded the call), so
+ * `currentNodeId === null` with no hold is the same fact read earlier in that call, and covers a
+ * session loaded from a pre-latch blob. An open review holds the run through
+ * {@link nodesHoldingRunOpen}, the one derivation — no second review clause here.
  */
-export const isRunComplete = (
-  session: DetachedHoldFacts & { runStatus?: ChainRunStatus; pendingGateReview?: unknown }
-): boolean =>
-  // An outstanding review holds the run open whatever its status says (P4.119 / R96). The phase
-  // guard grades the final step's answer AFTER the capture has walked the run past its last node,
-  // so the store has already latched `completed` when that review opens; reading the run as
-  // finished there told the client "complete" and "submit a verdict" in one reply, and then
-  // refused the verdict as a resume of a finished run.
-  session.pendingGateReview === undefined &&
-  (isTerminalRunStatus(session.runStatus) ||
-    (session.state.currentNodeId === null && !isRunHeldOpen(session)));
+export const isRunComplete = (session: RunHoldFacts & { runStatus?: ChainRunStatus }): boolean =>
+  isTerminalRunStatus(session.runStatus) ||
+  (session.state.currentNodeId === null && !isRunHeldOpen(session));
 
 /**
  * True when a run has walked past its last node but may not complete yet: a detached
- * (`await: run`) node it spawned has not reported (Tier 4). Such a run is NOT complete — its
- * status stays non-terminal, a resume reaches it, and the only thing it will accept is the owed
- * result (or a cancel). PURE; `unreportedDetachedNodeIds` is the one derivation.
+ * (`await: run`) node it spawned has not reported (Tier 4), or a review of one of its nodes is
+ * still open. Such a run is NOT complete — its status stays non-terminal, and a resume reaches it
+ * to deliver the owed result or verdict (or a cancel). PURE; {@link nodesHoldingRunOpen} is the
+ * one derivation.
  */
-export const isRunHeldOpen = (run: DetachedHoldFacts): boolean =>
-  run.state.currentNodeId === null && detachedNodesHoldingRun(run).length > 0;
+export const isRunHeldOpen = (run: RunHoldFacts): boolean =>
+  run.state.currentNodeId === null && nodesHoldingRunOpen(run).length > 0;
 
-/** What {@link detachedNodesHoldingRun} reads off a run. */
-export interface DetachedHoldFacts {
+/** What {@link nodesHoldingRunOpen} reads off a run. */
+export interface RunHoldFacts {
   readonly state: {
     readonly currentNodeId: string | null;
     readonly nodes?: readonly Pick<ChainNode, 'id'>[];
     readonly stepStates?: ReadonlyMap<string, StepMetadata>;
   };
-  readonly reviews?: Readonly<Record<string, { readonly kind?: GateReviewKind }>>;
+  readonly reviews?: Readonly<Record<string, unknown>>;
 }
 
 /**
- * The detached nodes a run may not complete without: every spawned node still owed its result
- * (`unreportedDetachedNodeIds`), and every node whose late result is under an open gate review
- * (row 4.8). The one derivation the completion guard and the held-run render both read. PURE.
+ * The nodes a run may not complete without: every detached node still owed its result
+ * (`unreportedDetachedNodeIds`), and every node with an open review of any kind — a detached
+ * node's late-report review (row 4.8), a step's gate review, or the phase guard's structural
+ * review of the final answer (P4.157, which opens AFTER the capture walked the run past its last
+ * node). The one derivation the completion guard, `isRunComplete` and the held-run render read.
+ * PURE.
  */
-export function detachedNodesHoldingRun(run: DetachedHoldFacts): string[] {
+export function nodesHoldingRunOpen(run: RunHoldFacts): string[] {
   const owed = unreportedDetachedNodeIds(run.state.nodes ?? [], run.state.stepStates);
-  const underReview = Object.entries(run.reviews ?? {})
-    .filter(([nodeId, review]) => review.kind === 'detached' && !owed.includes(nodeId))
-    .map(([nodeId]) => nodeId);
+  const underReview = Object.keys(run.reviews ?? {}).filter((nodeId) => !owed.includes(nodeId));
   return [...owed, ...underReview];
 }
 
@@ -427,8 +403,9 @@ export interface ReviewSlot {
 }
 
 /**
- * The current-step review of `reviews` (see `ChainSession.pendingGateReview`): the review at
- * `currentNodeId` unless that one is detached, else the one non-detached review. PURE.
+ * The current-step review of `reviews`: the review at `currentNodeId` unless that one is
+ * detached, else the run's one non-detached review (a phase-guard or final-step review grades a
+ * node the run has already left). PURE.
  */
 export function currentStepReview(
   reviews: Readonly<Record<string, GateReview>> | undefined,
@@ -440,59 +417,14 @@ export function currentStepReview(
   return Object.values(reviews).find((review) => review.kind !== 'detached');
 }
 
-/** The detached reviews of `reviews`, keyed by node. PURE. */
-function detachedReviewsOf(
-  reviews: Readonly<Record<string, GateReview>> | undefined
-): Record<string, GateReview> {
-  return Object.fromEntries(
-    Object.entries(reviews ?? {}).filter(([, review]) => review.kind === 'detached')
-  );
-}
-
 /**
- * Install the two read-only review projections on a session object: `pendingGateReview` and
- * `detachedGateReviews`, both derived from `reviews` on every read. Non-enumerable, so neither is
- * serialized or compared, and getter-only, so a write to either throws rather than forking a
- * second store. Every session object the store holds passes through here (creation and load).
- *
- * @throws when the object already carries either name as a data field: a review written there
- *   would be dropped by the projection, so the caller is holding a pre-3.1 session shape.
+ * The phase a review written in the pre-3.1 shape stands in: its own `phase` when it carries one,
+ * else the `metadata.phase` a detached review persisted before `phase` existed (row 4.8, reached
+ * only by `run-registry`'s legacy load — no writer sets that key any more), else `exhausted` once
+ * its attempts are spent, else awaiting a verdict. PURE.
  */
-export function attachReviewProjections<T extends ChainSession>(session: T): T {
-  for (const name of ['pendingGateReview', 'detachedGateReviews'] as const) {
-    const own = Object.getOwnPropertyDescriptor(session, name);
-    if (own !== undefined && 'value' in own && own.value !== undefined) {
-      throw new Error(
-        `Session ${session.sessionId} carries a '${name}' data field; reviews live in 'reviews'`
-      );
-    }
-  }
-  Object.defineProperties(session, {
-    pendingGateReview: {
-      get(this: ChainSession) {
-        return currentStepReview(this.reviews, this.state.currentNodeId);
-      },
-      enumerable: false,
-      configurable: true,
-    },
-    detachedGateReviews: {
-      get(this: ChainSession) {
-        const detached = detachedReviewsOf(this.reviews);
-        return Object.keys(detached).length > 0 ? detached : undefined;
-      },
-      enumerable: false,
-      configurable: true,
-    },
-  });
-  return session;
-}
-
-/**
- * The phase a review written in the pre-3.1 shape stands in: the `metadata.phase` a detached
- * review records (row 4.8), else `exhausted` once its attempts are spent (the comparison
- * `isRetryLimitExceeded` makes), else awaiting a verdict. PURE.
- */
-export function deriveReviewPhase(review: PendingGateReview): GateReviewPhase {
+function deriveReviewPhase(review: PendingGateReview): GateReviewPhase {
+  if (review.phase !== undefined) return review.phase;
   const recorded = review.metadata?.['phase'];
   if (
     recorded === 'awaiting-verdict' ||
@@ -558,11 +490,9 @@ export function stampLegacyReview(
   return { ...review, nodeId, kind, phase: deriveReviewPhase(review) };
 }
 
+/** What the run's gate counters read off a verdict. */
 export interface GateReviewOutcomeUpdate {
   verdict: 'PASS' | 'FAIL';
-  rationale?: string;
-  rawVerdict: string;
-  reviewer?: string;
 }
 
 export interface ChainSessionSummary {
@@ -642,8 +572,8 @@ export interface ChainSessionService {
   /**
    * `slot` selects a detached node's review (row 4.8); absent, the current-step slot.
    *
-   * @deprecated stamped: (as of 2026-09-23 · flips when row 3.6's exception list is empty) —
-   * stamps the review's identity (`stampLegacyReview`) and delegates to {@link setReview}.
+   * @deprecated stamped: (as of 2026-09-23 · flips when `setPendingGateReview` has no `src`
+   * caller; stages 16, 19 and 20 still write through it) — stamps the review's identity (`stampLegacyReview`) and delegates to {@link setReview}.
    */
   setPendingGateReview(
     sessionId: string,
@@ -658,13 +588,8 @@ export interface ChainSessionService {
   ): Promise<void>;
   getPendingShellVerification(sessionId: string): PendingShellVerificationSnapshot | undefined;
   clearPendingShellVerification(sessionId: string): Promise<void>;
-  isRetryLimitExceeded(sessionId: string, slot?: ReviewSlot): boolean;
-  resetRetryCount(sessionId: string, slot?: ReviewSlot): Promise<void>;
-  recordGateReviewOutcome(
-    sessionId: string,
-    outcome: GateReviewOutcomeUpdate,
-    slot?: ReviewSlot
-  ): Promise<'cleared' | 'pending'>;
+  /** Count one verdict in the run's gate counters; the review it answered is not touched. */
+  recordGateReviewOutcome(sessionId: string, outcome: GateReviewOutcomeUpdate): Promise<void>;
   clearSession(sessionId: string, scope?: StateStoreOptions): Promise<boolean>;
   clearSessionsForChain(chainId: string, scope?: StateStoreOptions): Promise<void>;
   listActiveSessions(limit?: number, scope?: StateStoreOptions): ChainSessionSummary[];
@@ -704,8 +629,9 @@ export interface ChainSessionService {
    */
   markNodeSpawned(sessionId: string, nodeId: string): Promise<boolean>;
   /**
-   * Ask again for `completed` on a run standing past its last node — the call a late detached
-   * report makes once it lands. `transitionRunStatus` still decides; false while anything is owed.
+   * Ask for `completed` on a run standing past its last node — the pipeline's one completion
+   * point (stage 20, after grading; stage 16 on a call it answers itself). `advanceStep` never
+   * completes a run. `transitionRunStatus` still decides; false while anything holds the run.
    */
   completeHeldRun(sessionId: string): Promise<boolean>;
   /**

@@ -23,7 +23,11 @@ import {
   parseHandoffTrailer,
 } from './handoff-contract.js';
 
-import type { StepMetadata } from '#shared/types/chain-execution.js';
+import type {
+  GateReviewKind,
+  GateReviewPhase,
+  StepMetadata,
+} from '#shared/types/chain-execution.js';
 import type { HandoffEvidenceMode } from './handoff-contract.js';
 
 import { unreportedDetachedNodeIds } from '#shared/types/chain-execution.js';
@@ -38,22 +42,11 @@ export interface DetachedNodeFacts {
   readonly spawned: boolean;
   /** It holds a real captured output. Only meaningful once `spawned`. */
   readonly reported: boolean;
-  /** Where its late result's gate review stands (row 4.8); absent when no review is open. */
-  readonly review?: DetachedReviewPhase;
-}
-
-/**
- * The phase of a detached node's open gate review, recorded as `metadata.phase` on the review
- * (`session.detachedGateReviews[nodeId]`). A PASS deletes the review, so "passed" is no phase.
- */
-type DetachedReviewPhase = 'awaiting-verdict' | 'awaiting-replacement' | 'exhausted';
-
-/** Read a detached review's phase off its metadata; an unrecognised value reads as awaiting. */
-function detachedReviewPhase(review: {
-  readonly metadata?: Readonly<Record<string, unknown>>;
-}): DetachedReviewPhase {
-  const phase = review.metadata?.['phase'];
-  return phase === 'awaiting-replacement' || phase === 'exhausted' ? phase : 'awaiting-verdict';
+  /**
+   * Where its late result's gate review stands (row 4.8): the `phase` of the detached review
+   * `reviews[nodeId]` holds. Absent when none is open — a PASS deletes the review.
+   */
+  readonly review?: GateReviewPhase;
 }
 
 /** The step fields {@link collectDetachedNodeFacts} reads, structurally. */
@@ -77,8 +70,8 @@ export function collectDetachedNodeFacts(
       readonly nodes: readonly { readonly id: string }[];
       readonly stepStates?: ReadonlyMap<string, StepMetadata>;
     };
-    readonly detachedGateReviews?: Readonly<
-      Record<string, { readonly metadata?: Readonly<Record<string, unknown>> }>
+    readonly reviews?: Readonly<
+      Record<string, { readonly kind: GateReviewKind; readonly phase: GateReviewPhase }>
     >;
   }
 ): DetachedNodeFacts[] {
@@ -90,7 +83,7 @@ export function collectDetachedNodeFacts(
       const nodeId = step.nodeId ?? run.nodes[step.stepNumber - 1]?.id;
       if (nodeId === undefined) return [];
       const spawned = run.stepStates?.get(nodeId)?.spawnedAt !== undefined;
-      const review = session.detachedGateReviews?.[nodeId];
+      const review = session.reviews?.[nodeId];
       return [
         {
           token: handoffNodeToken(step),
@@ -98,7 +91,7 @@ export function collectDetachedNodeFacts(
           stepNumber: step.stepNumber,
           spawned,
           reported: spawned && !owed.has(nodeId),
-          ...(review !== undefined ? { review: detachedReviewPhase(review) } : {}),
+          ...(review?.kind === 'detached' ? { review: review.phase } : {}),
         },
       ];
     });
@@ -158,7 +151,7 @@ export type DetachedReportDecision =
 export function resolveDetachedReport(input: {
   readonly reply: string;
   readonly mode: HandoffEvidenceMode;
-  /** A gate review is holding the run (`pendingGateReview`). */
+  /** A step gate review is holding the run (a non-detached entry of `ChainSession.reviews`). */
   readonly reviewPending?: boolean;
   /** This call carries a `gate_verdict` / a `gate_action` (row 4.8 routes them by trailer). */
   readonly submits?: { readonly verdict: boolean; readonly action: boolean };
@@ -263,7 +256,7 @@ function routeReportedNode(
   if (node.review === 'awaiting-replacement' && !submits.verdict && !submits.action) {
     return { kind: 'report', node, replaces: true };
   }
-  const waitingFor: Record<DetachedReviewPhase, string> = {
+  const waitingFor: Record<GateReviewPhase, string> = {
     'awaiting-verdict': 'a gate_verdict, with user_response ending in this trailer',
     'awaiting-replacement':
       "the worker's replacement result as user_response (no gate_verdict), ending in this trailer",
@@ -394,13 +387,26 @@ export function describeDetachedReview(
     readonly attempt: number;
     readonly maxAttempts: number;
     readonly verdictTemplate: string;
+    /**
+     * What the recorded result's structural grade found missing (row 3.8): the hints the phase
+     * guard merged into this review. Empty or absent when the result has every required section.
+     */
+    readonly structuralHints?: readonly string[];
   }
 ): string {
+  const hints = review.structuralHints ?? [];
   return [
     '---',
     `**Gate Review Required — detached node ${node.token} (step ${node.stepNumber})** ` +
       `(attempt ${review.attempt}/${review.maxAttempts})`,
     '',
+    ...(hints.length > 0
+      ? [
+          'The reported result is missing required structure:',
+          ...hints.map((hint) => `- ${hint}`),
+          '',
+        ]
+      : []),
     'Review the result the worker reported above against the gates, then submit — the ' +
       "user_response is only the trailer, which routes the verdict to that node's review:",
     '',
@@ -419,7 +425,8 @@ export function describeDetachedReview(
 export function describeDetachedReviewOutcome(
   node: DetachedNodeFacts,
   outcome: {
-    readonly result: 'passed' | 'failed' | 'exhausted' | 'retry' | 'skipped';
+    /** `cleared`: a FAIL on gates that are not blocking (R10) — the recorded result stands. */
+    readonly result: 'passed' | 'failed' | 'exhausted' | 'retry' | 'skipped' | 'cleared';
     readonly attempt: number;
     readonly maxAttempts: number;
     readonly runCompleted: boolean;
@@ -435,6 +442,9 @@ export function describeDetachedReviewOutcome(
   const heads: Record<typeof outcome.result, string> = {
     passed: `✓ Gate review of ${label} passed; its recorded result stands.`,
     skipped: `✓ Gate review of ${label} skipped by gate_action; its recorded result stands.`,
+    cleared:
+      `⚠ Gate review of ${label} failed ${counter}, but its gates are not blocking: its ` +
+      'recorded result stands.',
     failed: `✗ Gate review of ${label} failed ${counter}. ${replace}`,
     retry: `↻ Retry count of ${label}'s gate review reset. ${replace}`,
     exhausted:

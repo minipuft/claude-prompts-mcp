@@ -313,9 +313,9 @@ export class ChainSessionRouter implements ChainSessionRouterPort {
       }`,
     ];
 
-    if (session.pendingGateReview) {
+    for (const review of Object.values(session.reviews ?? {})) {
       lines.push(
-        `- Pending Gate Review: ${session.pendingGateReview.gateIds?.join(', ') || 'unspecified'}`
+        `- Open Gate Review on \`${review.nodeId}\` (${review.kind}): ${review.gateIds.join(', ') || 'unspecified'}`
       );
     }
 

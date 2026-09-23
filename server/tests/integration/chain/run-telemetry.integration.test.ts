@@ -219,14 +219,8 @@ describe('run telemetry, session counters through the ledger', () => {
       ...pendingReview(),
       nodeId: sessionStore.getSession(sessionId)!.state.currentNodeId!,
     });
-    await sessionStore.recordGateReviewOutcome(sessionId, {
-      verdict: 'FAIL',
-      rawVerdict: 'GATE_REVIEW: FAIL - needs work',
-    });
-    await sessionStore.recordGateReviewOutcome(sessionId, {
-      verdict: 'PASS',
-      rawVerdict: 'GATE_REVIEW: PASS',
-    });
+    await sessionStore.recordGateReviewOutcome(sessionId, { verdict: 'FAIL' });
+    await sessionStore.recordGateReviewOutcome(sessionId, { verdict: 'PASS' });
     await sessionStore.applyUnknownObservations(sessionId, 'n1', [
       { type: 'unknown_discovered', id: 'cache-ttl', statement: 'TTL undecided' },
     ]);

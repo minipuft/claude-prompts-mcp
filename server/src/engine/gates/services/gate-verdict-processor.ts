@@ -270,8 +270,8 @@ export class GateVerdictProcessor {
    * Separate entry point from {@link handleGateAction}, not a fifth case inside it: that method
    * answers "the retry budget is spent, what now", and every branch of it addresses a gate the
    * run failed. This one addresses a hold NO gate produced — the run's steps all passed, and what
-   * stopped it is a caller-declared unknown. Sharing an entry point would put a `resetRetryCount`
-   * and a `cancelChain` in reach of a verb that means neither.
+   * stopped it is a caller-declared unknown. Sharing an entry point would put a retry's counter
+   * reset and a `cancelChain` in reach of a verb that means neither.
    *
    * BOTH verbs are refused, by name, in the two states where they could otherwise acquire an
    * unintended meaning:
@@ -515,8 +515,8 @@ export class GateVerdictProcessor {
    * `gate_action` reaches a review through here, so no caller derives the reviewed node from the
    * run's position, and no caller moves a review on its own terms.
    *
-   * A verdict is also recorded with the store (`recordGateReviewOutcome`), which keeps the run's
-   * cumulative gate counters; the transition's review is written over the store's copy after it.
+   * A verdict is also counted in the run's cumulative gate counters (`recordGateReviewOutcome`);
+   * the review itself is persisted here, from what the transition returned.
    */
   private async answerReview(
     context: ExecutionContext,
@@ -552,16 +552,9 @@ export class GateVerdictProcessor {
       return { kind: 'refused', message: describeRefusal(advance.reason, review) };
     }
     if (event.type === 'verdict') {
-      await this.chainSessionStore.recordGateReviewOutcome(
-        session.sessionId,
-        {
-          verdict: event.verdict.verdict,
-          rationale: event.verdict.rationale,
-          rawVerdict: event.verdict.raw,
-          reviewer: event.verdict.source,
-        },
-        slot
-      );
+      await this.chainSessionStore.recordGateReviewOutcome(session.sessionId, {
+        verdict: event.verdict.verdict,
+      });
     }
     if (advance.review === null) {
       await this.chainSessionStore.clearPendingGateReview(session.sessionId, slot);

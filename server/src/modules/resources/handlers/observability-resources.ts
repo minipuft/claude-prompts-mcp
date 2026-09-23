@@ -15,7 +15,11 @@ import { ResourceTemplate } from '@modelcontextprotocol/server';
 
 import { ResourceNotFoundError, RESOURCE_URI_PATTERNS } from '../types.js';
 
-import type { SessionResourceMetadata, ResourceDependencies } from '../types.js';
+import type {
+  SessionResourceMetadata,
+  ResourceDependencies,
+  SessionReviewFacts,
+} from '../types.js';
 import type { McpServer, ReadResourceResult } from '@modelcontextprotocol/server';
 
 import { currentOrdinal, totalOf } from '#shared/utils/node-order.js';
@@ -256,7 +260,7 @@ function buildSessionContent(session: {
   startTime: number;
   lastActivity: number;
   originalArgs: Record<string, unknown>;
-  pendingGateReview?: unknown;
+  reviews?: Readonly<Record<string, SessionReviewFacts>>;
 }): string {
   const currentStep = currentOrdinal(session.state.nodes, session.state.currentNodeId);
   const totalSteps = totalOf(session.state.nodes);
@@ -287,7 +291,16 @@ function buildSessionContent(session: {
     },
     originalArgs: session.originalArgs,
     stepStates: Object.keys(stepStates).length > 0 ? stepStates : undefined,
-    hasPendingReview: session.pendingGateReview !== undefined,
+    hasPendingReview: Object.keys(session.reviews ?? {}).length > 0,
+    // Each open review by the node it grades, never the one "pending" review a run once had.
+    reviews: Object.values(session.reviews ?? {}).map((review) => ({
+      nodeId: review.nodeId,
+      kind: review.kind,
+      phase: review.phase,
+      gateIds: review.gateIds,
+      attemptCount: review.attemptCount,
+      maxAttempts: review.maxAttempts,
+    })),
   };
 
   return JSON.stringify(content, null, 2);

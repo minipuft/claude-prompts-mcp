@@ -402,7 +402,7 @@ export class GateEnforcementAuthority {
       gateIds,
       instructions: '',
       ...(maxAttempts !== undefined ? { maxAttempts } : {}),
-      metadata: { ...node, sessionId, phase: 'awaiting-verdict' },
+      metadata: { ...node, sessionId },
       reviewedOutput,
       gateTiers: await this.deriveGateTiers(gateIds),
     });

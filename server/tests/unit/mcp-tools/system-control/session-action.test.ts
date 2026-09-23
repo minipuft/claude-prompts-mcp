@@ -210,6 +210,77 @@ describe('System Control session action scope propagation', () => {
     expect(getText(response)).toContain('Session Inspection');
   });
 
+  test('inspect lists every open review by the node it grades (row 3.4)', async () => {
+    const sessions = createSessionStore();
+    const review = (nodeId: string, kind: string, phase: string, gateIds: string[]) => ({
+      nodeId,
+      kind,
+      phase,
+      gateIds,
+      combinedPrompt: '',
+      prompts: [],
+      createdAt: 1,
+      attemptCount: 1,
+      maxAttempts: 2,
+    });
+    sessions.getSession.mockReturnValue({
+      sessionId: 'sess-1',
+      chainId: 'chain-research#1',
+      // The run stands on n3; neither review grades the node it stands on.
+      state: { currentNodeId: 'n3', nodes: [{ id: 'n1' }, { id: 'n2' }, { id: 'n3' }] },
+      startTime: Date.now(),
+      lastActivity: Date.now(),
+      lifecycle: 'canonical',
+      executionOrder: ['n1', 'n2'],
+      originalArgs: {},
+      reviews: {
+        n1: review('n1', 'detached', 'awaiting-replacement', ['dr-block']),
+        n2: review('n2', 'structural', 'awaiting-verdict', ['__phase_guard__']),
+      },
+    });
+    const systemControl = createSystemControl(sessions.store);
+
+    const text = getText(
+      await systemControl.handleAction(
+        { action: 'session', operation: 'inspect', session_id: 'sess-1' },
+        {}
+      )
+    );
+
+    expect(text).toContain('### ⚠️ Open Reviews');
+    expect(text).toContain(
+      '- `n1` (step 1, detached, awaiting-replacement): gates dr-block · attempts 1/2'
+    );
+    expect(text).toContain(
+      '- `n2` (step 2, structural, awaiting-verdict): gates __phase_guard__ · attempts 1/2'
+    );
+  });
+
+  test('inspect of a run with no open review lists none', async () => {
+    const sessions = createSessionStore();
+    sessions.getSession.mockReturnValue({
+      sessionId: 'sess-1',
+      chainId: 'chain-research#1',
+      state: { currentNodeId: 'n1', nodes: [{ id: 'n1' }] },
+      startTime: Date.now(),
+      lastActivity: Date.now(),
+      lifecycle: 'canonical',
+      executionOrder: [],
+      originalArgs: {},
+    });
+    const systemControl = createSystemControl(sessions.store);
+
+    const text = getText(
+      await systemControl.handleAction(
+        { action: 'session', operation: 'inspect', session_id: 'sess-1' },
+        {}
+      )
+    );
+
+    expect(text).toContain('Session Inspection');
+    expect(text).not.toContain('Open Reviews');
+  });
+
   /**
    * `cancel` was relocated to `prompt_engine(chain_id, cancel: true)`.
    *

@@ -151,14 +151,54 @@ Gates may target a step by `target_step_id` in addition to `target_step_number` 
 
 ---
 
+## Gate Reviews
+
+A gate review is a record of one node's output. It is keyed by the node whose answer it grades,
+and that node is not always the one the run stands on. Each open review of a run is kept per
+node, so a detached step's review and the current step's review never share a slot.
+
+- **A step's review** opens when the step renders with gates, and grades the answer that comes
+  back for that step. Send the answer and its `gate_verdict` on one call, or the answer first and
+  the verdict on the next.
+- **A structural review** opens when an answer is missing its framework's required sections. The
+  capture may already have moved the run onto the next step. The review still grades the step
+  that produced the answer. A `gate_verdict` on the next call answers that review, and the run
+  stays on the step it moved to, still owing that step's answer.
+- **A detached step's review** opens when its late report lands, not when its brief renders. It
+  is answered by a verdict whose `user_response` is the report's `HANDOFF RESULT` trailer (see
+  [Detached steps](#detached-steps-await-run)).
+- **The final step's review** holds the run open past its last node. The run completes on the
+  call that closes it.
+
+**Retry budget.** Each FAIL on a blocking review spends one attempt of the review's budget, shown
+as `attempt n/m` (a gate's `retry_config.max_attempts`, 2 for the default gates; a structural
+review has the phase guard's own). The FAIL that spends the last attempt answers with a "Retry
+Limit Reached" block. From then on the review is exhausted: a further `gate_verdict` is refused,
+and nothing is recorded. Resolve it with `gate_action`:
+
+| `gate_action` | Effect                                                                                                       |
+| ------------- | ------------------------------------------------------------------------------------------------------------ |
+| `"retry"`     | Resets the attempt counter and reopens the review for another verdict.                                       |
+| `"skip"`      | Closes the review without a verdict. The step renders again with no review; a detached step's result stands. |
+| `"abort"`     | Stops the run. A detached step's review refuses it; use `cancel: true`.                                      |
+
+An advisory or informational gate's FAIL spends the attempt and closes the review, and the run
+moves on.
+
+---
+
 ## Completion Semantics
 
 A chain **completes on its final step's PASS gate verdict**, not one call earlier. Concretely:
 
 - The footer on the final step, before its verdict is submitted, states the run is awaiting that
   verdict — it does not claim completion early.
-- The run's status transitions to `completed` only once the final step's PASS verdict is
-  processed.
+- The run's status transitions to `completed` only once no review is open on any of its nodes
+  and every detached step it rendered has reported. Completion is decided once per call, after
+  the call's answer is graded, so an answer that opens a review cannot complete the run.
+- `notifications/chain/complete` is sent on the call that closes the run's last open review. It
+  is the run's last notification: it follows that call's final verdict, and it is never sent on
+  the call that returns the final answer for review.
 - The first step is ledgered in `execution_records` on the chain-start call, so
   `system_control(action: "execution_history")` reports the step as planned and executed from the
   first response onward rather than undercounting by one.
@@ -311,7 +351,7 @@ adaptive mutation policy inserted and skipped over the run's life (`nodes_insert
 
 They are written at the moment they are true because the state they come from does not survive:
 `chain_sessions`, `chain_runs`, and `chain_run_nodes` are PID-scoped and deleted when the owning
-server exits, and `pendingGateReview.attemptCount` is destroyed the moment a PASS clears the
+server exits, and a review's `attemptCount` is destroyed the moment a PASS clears the
 review. The ledger row is the only place these numbers persist.
 
 **Recorded, never modeled.** No coefficient, score, threshold, or routing decision is derived from

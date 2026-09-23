@@ -1,15 +1,18 @@
 // @lifecycle canonical - Executes chain operator steps within the pipeline.
 import { hasFrameworkGuidance } from '../../frameworks/utils/framework-detection.js';
-import { DEFAULT_GATE_RETRY_CONFIG } from '../../gates/constants.js';
 import { GATE_ATTESTATION_LINE } from '../../gates/guidance/GateGuidanceRenderer.js';
 import { buildDelegatedStepCallToAction, buildDelegatedStepLines } from '../delegation/brief.js';
 import { handoffNodeToken } from '../delegation/handoff-contract.js';
 import { DelegationRenderer } from '../delegation/renderer.js';
+import {
+  describeReviewForRender,
+  renderReviewSupplements,
+} from '../pipeline/decisions/gates/describe-review-for-render.js';
 import { isFrameworkInjected } from '../pipeline/decisions/injection/index.js';
 import { decideVisibility } from '../pipeline/decisions/visibility/index.js';
 
 import type { BriefHistoryEntry } from '../delegation/brief.js';
-import type { PendingGateReview, VisibilityItem } from '#shared/types/chain-execution.js';
+import type { VisibilityItem } from '#shared/types/chain-execution.js';
 import type { UnknownLedgerEntry } from '#shared/types/chain-session.js';
 import type { StateStoreOptions } from '#shared/types/persistence.js';
 import type { RequestClientProfile } from '#shared/types/request-identity.js';
@@ -24,6 +27,7 @@ import type {
 } from './types.js';
 import type { DeclaredSection } from '../../frameworks/declared-sections.js';
 import type { DelegationPayload } from '../delegation/types.js';
+import type { ReviewRenderFacts } from '../pipeline/decisions/gates/describe-review-for-render.js';
 import type { InjectionState } from '../pipeline/decisions/injection/types.js';
 import type { VisibilityDecision } from '../pipeline/decisions/visibility/index.js';
 import type { ConvertedPrompt } from '../types.js';
@@ -92,8 +96,8 @@ export class ChainOperatorExecutor {
     additionalGateIds: readonly string[],
     inlineGuidanceText?: string
   ): Promise<ChainStepRenderResult> {
-    const { pendingGateReview } = input;
-    const isRetry = pendingGateReview.attemptCount > 0;
+    const review = describeReviewForRender(input.review);
+    const { isRetry } = review;
     const gateGuidanceEnabled = this.isGateGuidanceEnabled(chainContext);
     const frameworkInjectionEnabled = this.isFrameworkInjectionEnabledForGates(chainContext);
 
@@ -103,9 +107,9 @@ export class ChainOperatorExecutor {
     });
     const totalSteps = stepPrompts.length + 1;
     const stepNumber = totalSteps;
-    const reviewStep = this.resolveReviewStep(stepPrompts, chainContext, pendingGateReview);
+    const reviewStep = this.resolveReviewStep(stepPrompts, chainContext, review);
     const { gateIds: gateIdsToRender, explicitGateIds } = this.collectReviewGateIds(
-      pendingGateReview,
+      review,
       additionalGateIds,
       reviewStep
     );
@@ -236,57 +240,9 @@ export class ChainOperatorExecutor {
       this.logger.debug('[SymbolicChain] Gate guidance injection suppressed by decision');
     }
 
-    // Build streamlined retry hints and metadata
+    // Retry hints, the last review and the retry-limit prompt, read off the review record.
     // Attempt display is handled by ResponseAssembler.buildGateReviewCTA()
-    const attemptCount = pendingGateReview?.attemptCount ?? 0;
-    const maxAttempts = pendingGateReview?.maxAttempts ?? DEFAULT_GATE_RETRY_CONFIG.max_attempts;
-    const supplementalSections: string[] = [];
-
-    if (hasInlineGateFocus) {
-      supplementalSections.push(
-        '**Inline Gate Priority:** These inline gates triggered the review. Fix them before checking framework standards.'
-      );
-    }
-
-    // Add concise retry hints (limit to top 3 most important)
-    if (pendingGateReview?.retryHints && pendingGateReview.retryHints.length > 0) {
-      const hintHeading = hasInlineGateFocus
-        ? '**Inline Fix Guidance:**'
-        : '**Improvements Needed:**';
-      supplementalSections.push(
-        `${hintHeading}\n` +
-          pendingGateReview.retryHints
-            .slice(0, 3) // Limit to top 3 hints
-            .map((hint) => `- ${hint}`)
-            .join('\n')
-      );
-    }
-
-    // Add latest feedback only if concise
-    const latestHistory = pendingGateReview?.history?.length
-      ? pendingGateReview.history[pendingGateReview.history.length - 1]
-      : undefined;
-
-    if (latestHistory?.reasoning && latestHistory.reasoning.length < 200) {
-      supplementalSections.push(`**Last Review:** ${latestHistory.reasoning}`);
-    }
-
-    // Check if retry limit is exceeded and add user choice prompt
-    const isLimitExceeded = attemptCount >= maxAttempts;
-    if (isLimitExceeded) {
-      const failedGates = pendingGateReview?.gateIds?.join(', ') ?? 'quality gates';
-      supplementalSections.push(
-        `\n## ⚠️ Retry Limit Reached\n\n` +
-          `The following gates failed after ${maxAttempts} attempts: **${failedGates}**\n\n` +
-          `### Choose an action:\n\n` +
-          `| Action | Description |\n` +
-          `|--------|-------------|\n` +
-          `| \`gate_action: "retry"\` | Reset retry count and try again with improvements |\n` +
-          `| \`gate_action: "skip"\` | Skip this gate check and continue the chain |\n` +
-          `| \`gate_action: "abort"\` | Stop chain execution entirely |\n\n` +
-          `**To continue**, include one of the above in your next call.`
-      );
-    }
+    const supplementalSections = renderReviewSupplements(review, hasInlineGateFocus);
 
     // Build framework guidance for gate reviews if enabled (skip on retry — already seen)
     let frameworkGuidance = '';
@@ -1279,34 +1235,21 @@ export class ChainOperatorExecutor {
   private resolveReviewStep(
     stepPrompts: readonly ChainStepPrompt[],
     chainContext: Record<string, unknown>,
-    pendingReview: PendingGateReview
+    review: ReviewRenderFacts
   ): ChainStepPrompt | undefined {
     if (stepPrompts.length === 0) {
       return undefined;
     }
 
-    // Node id first — the same two-key resolution `StepCaptureService.ledgerCapturedStep` and
-    // `GateReviewStage` use, for the same reason: an ordinal stamped before a mid-run node
-    // insertion no longer points at the step it named, while the id does. The `!== undefined`
-    // half is not defensive — without it a chain parsed before node-id minting matches its first
-    // step against a review carrying no id. Falls through rather than clamping when the id names
-    // no step here, so an id this chain does not have resolves by ordinal, not to position 0.
-    const byNodeId = stepPrompts.find(
-      (step) => step.nodeId !== undefined && step.nodeId === pendingReview.metadata?.['nodeId']
-    );
+    // The node the review grades first (`GateReview.nodeId`, the key it is stored under): an
+    // ordinal stamped before a mid-run node insertion no longer points at the step it named, while
+    // the id does. Falls through rather than clamping when the id names no step here (a step list
+    // parsed before node-id minting), so it resolves by ordinal, not to position 0.
+    const byNodeId = stepPrompts.find((step) => step.nodeId === review.nodeId);
     if (byNodeId !== undefined) return byNodeId;
 
-    const metadataIndex = this.extractStepIndexFromMetadata(pendingReview.metadata);
-    if (typeof metadataIndex === 'number') {
-      return stepPrompts[this.clampStepIndex(metadataIndex, stepPrompts.length)];
-    }
-
-    const promptMetadataIndex =
-      pendingReview.prompts
-        ?.map((prompt) => this.extractStepIndexFromMetadata(prompt.metadata))
-        .find((idx) => typeof idx === 'number') ?? undefined;
-    if (typeof promptMetadataIndex === 'number') {
-      return stepPrompts[this.clampStepIndex(promptMetadataIndex, stepPrompts.length)];
+    if (review.stepIndex !== undefined) {
+      return stepPrompts[this.clampStepIndex(review.stepIndex, stepPrompts.length)];
     }
 
     const contextStep = this.extractStepIndexFromContext(chainContext);
@@ -1331,24 +1274,6 @@ export class ChainOperatorExecutor {
     return undefined;
   }
 
-  private extractStepIndexFromMetadata(metadata?: Record<string, unknown>): number | undefined {
-    if (!metadata || typeof metadata !== 'object') {
-      return undefined;
-    }
-
-    const directIndex = metadata['stepIndex'] ?? metadata['step_index'];
-    if (typeof directIndex === 'number' && Number.isFinite(directIndex)) {
-      return directIndex;
-    }
-
-    const stepNumber = metadata['stepNumber'] ?? metadata['step_number'];
-    if (typeof stepNumber === 'number' && Number.isFinite(stepNumber)) {
-      return stepNumber > 0 ? stepNumber - 1 : 0;
-    }
-
-    return undefined;
-  }
-
   private clampStepIndex(index: number, totalSteps: number): number {
     const normalizedIndex = Number.isFinite(index) ? Math.floor(index) : totalSteps - 1;
     if (normalizedIndex < 0) {
@@ -1361,7 +1286,7 @@ export class ChainOperatorExecutor {
   }
 
   private collectReviewGateIds(
-    pendingReview: PendingGateReview,
+    review: ReviewRenderFacts,
     additionalGateIds: readonly string[],
     reviewStep?: ChainStepPrompt
   ): { gateIds: string[]; explicitGateIds: string[] } {
@@ -1377,37 +1302,14 @@ export class ChainOperatorExecutor {
       }
     };
 
-    pendingReview.gateIds?.forEach((gateId) => addGate(gateId));
+    review.gateIds.forEach((gateId) => addGate(gateId));
     additionalGateIds?.forEach((gateId) => addGate(gateId));
     reviewStep?.inlineGateIds?.forEach((gateId) => addGate(gateId, true));
-
-    pendingReview.prompts?.forEach((prompt) => {
-      addGate(prompt.gateId, true);
-      const inlineMetadata = this.extractInlineGateIdsFromMetadata(prompt.metadata);
-      inlineMetadata.forEach((gateId) => addGate(gateId, true));
-    });
-
-    if (pendingReview.metadata) {
-      const inlineMetadata = this.extractInlineGateIdsFromMetadata(pendingReview.metadata);
-      inlineMetadata.forEach((gateId) => addGate(gateId, true));
-    }
+    review.explicitGateIds.forEach((gateId) => addGate(gateId, true));
 
     return {
       gateIds: Array.from(gateSet),
       explicitGateIds: Array.from(explicitSet),
     };
-  }
-
-  private extractInlineGateIdsFromMetadata(metadata?: Record<string, unknown>): string[] {
-    if (!metadata || typeof metadata !== 'object') {
-      return [];
-    }
-    const value = metadata['inlineGateIds'] ?? metadata['inline_gate_ids'];
-    if (!Array.isArray(value)) {
-      return [];
-    }
-    return value.filter(
-      (entry): entry is string => typeof entry === 'string' && entry.trim().length > 0
-    );
   }
 }

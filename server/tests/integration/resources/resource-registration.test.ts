@@ -529,7 +529,26 @@ describe('MCP Resources Registration Integration', () => {
       startTime: Date.now() - 60000,
       lastActivity: Date.now() - 1000,
       originalArgs: { topic: 'testing' },
-      pendingGateReview: undefined,
+      // Two open reviews at once (row 3.4): a structural review of the step the run left, and a
+      // detached node's review of its late report. The resource reports each by its node.
+      reviews: {
+        n1: {
+          nodeId: 'n1',
+          kind: 'structural',
+          phase: 'awaiting-verdict',
+          gateIds: ['__phase_guard__'],
+          attemptCount: 0,
+          maxAttempts: 3,
+        },
+        n4: {
+          nodeId: 'n4',
+          kind: 'detached',
+          phase: 'awaiting-replacement',
+          gateIds: ['dr-block'],
+          attemptCount: 1,
+          maxAttempts: 2,
+        },
+      },
     };
 
     const testMetrics = {
@@ -626,7 +645,25 @@ describe('MCP Resources Registration Integration', () => {
       expect(parsed.progress.totalSteps).toBe(5);
       expect(parsed.progress.percentComplete).toBe(40);
       expect(parsed.originalArgs.topic).toBe('testing');
-      expect(parsed.hasPendingReview).toBe(false);
+      expect(parsed.hasPendingReview).toBe(true);
+      expect(parsed.reviews).toEqual([
+        {
+          nodeId: 'n1',
+          kind: 'structural',
+          phase: 'awaiting-verdict',
+          gateIds: ['__phase_guard__'],
+          attemptCount: 0,
+          maxAttempts: 3,
+        },
+        {
+          nodeId: 'n4',
+          kind: 'detached',
+          phase: 'awaiting-replacement',
+          gateIds: ['dr-block'],
+          attemptCount: 1,
+          maxAttempts: 2,
+        },
+      ]);
     });
 
     test('session handler throws for non-existent session', async () => {

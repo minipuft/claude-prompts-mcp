@@ -21,7 +21,6 @@ import type {
   ChainNode,
   ChainRunStatus,
   GateReview,
-  GateReviewHistoryEntry,
   PendingGateReview,
   PendingShellVerificationSnapshot,
   RunTelemetry,
@@ -58,10 +57,8 @@ import type { DatabasePort, StateStoreOptions } from '#shared/types/persistence.
 // the rules cannot drift between the capture seam that validates and the store that persists.
 import { computeUnknownLedger } from '#engine/execution/capture/unknown-observation-processor.js';
 import {
-  attachReviewProjections,
   currentStepReview,
-  deriveReviewPhase,
-  detachedNodesHoldingRun,
+  nodesHoldingRunOpen,
   isTerminalRunStatus,
   stampLegacyReview,
 } from '#shared/types/chain-session.js';
@@ -588,7 +585,9 @@ export class ChainSessionStore implements ChainSessionService {
           currentStep: currentOrdinal(session.state.nodes, session.state.currentNodeId),
           totalSteps: totalOf(session.state.nodes),
           lastActivity: session.lastActivity,
-          pendingGateReview: session.pendingGateReview ?? null,
+          // The key is the hooks' contract (`hooks/lib/db_reader.py`); the value is read by node.
+          pendingGateReview:
+            currentStepReview(session.reviews, session.state.currentNodeId) ?? null,
           pendingShellVerification: session.pendingShellVerification ?? null,
           runStatus,
           runCompletedAt: session.runCompletedAt ?? null,
@@ -607,7 +606,8 @@ export class ChainSessionStore implements ChainSessionService {
     return (
       currentStep > 0 &&
       currentStep === totalSteps &&
-      (session.pendingGateReview != null || session.pendingShellVerification != null)
+      (currentStepReview(session.reviews, session.state.currentNodeId) !== undefined ||
+        session.pendingShellVerification != null)
     );
   }
 
@@ -701,7 +701,7 @@ export class ChainSessionStore implements ChainSessionService {
     await this.initPromise;
     const resolvedScope = options?.continuityScopeId ?? resolveContinuityScopeId(options);
     const nodes = this.resolveCreationNodes(chainId, totalSteps, options?.nodes);
-    const session: ChainSession = attachReviewProjections({
+    const session: ChainSession = {
       sessionId,
       chainId,
       state: {
@@ -721,7 +721,7 @@ export class ChainSessionStore implements ChainSessionService {
       }),
       lifecycle: 'canonical',
       runStatus: 'working',
-    });
+    };
 
     this.activeSessions.set(sessionId, session);
 
@@ -986,19 +986,18 @@ export class ChainSessionStore implements ChainSessionService {
       return false;
     }
 
-    // The detached-delegation close guard (Tier 4). A run may not COMPLETE while a detached node
-    // it spawned has not reported: completing would announce a finished run to every hook and
-    // client while a worker's result for it is still on its way, and that result would then have
-    // no live run to land on. Only `completed` is held. `cancelled` and `failed` stay open on
-    // purpose — they are how an operator ends a run whose worker will never report, so holding
-    // them too would leave a lost worker with no exit. A node the run never spawned is not owed
-    // anything and is not counted (`unreportedDetachedNodeIds`).
+    // The close guard. A run may not COMPLETE while a detached node it spawned has not reported
+    // (Tier 4), or while any review of one of its nodes is open (row 4.8, P4.157): completing
+    // would announce a finished run to every hook and client while a result or a verdict it still
+    // needs is on its way, and that answer would then have no live run to land on. Only
+    // `completed` is held. `cancelled` and `failed` stay open on purpose — they are how an
+    // operator ends a run whose worker will never report, so holding them too would leave a lost
+    // worker with no exit. A node the run never spawned is not owed anything and is not counted.
     if (target === 'completed') {
-      // Row 4.8: a detached node whose late result is under an open gate review holds too.
-      const owed = detachedNodesHoldingRun(session);
+      const owed = nodesHoldingRunOpen(session);
       if (owed.length > 0) {
         this.logger.info(
-          `[ChainRunStatus] Holding session ${sessionId} open: detached node(s) ${owed.join(', ')} not yet reported or under review`
+          `[ChainRunStatus] Holding session ${sessionId} open: node(s) ${owed.join(', ')} not yet reported or under review`
         );
         return false;
       }
@@ -1053,12 +1052,14 @@ export class ChainSessionStore implements ChainSessionService {
   }
 
   /**
-   * Complete a run the detached close guard was holding, once nothing is owed any more.
+   * Complete a run standing past its last node, once nothing holds it (P4.157 / R12).
    *
-   * A run that walked past its last node while a detached node was unreported stands on no node
-   * with a non-terminal status. When that node's late result lands, nothing re-advances — so this
-   * is the other place `completed` is asked for, and {@link transitionRunStatus} still decides.
-   * A no-op (false) for a run still standing on a node, and for one still owed a report.
+   * The ONE place a run is completed normally. {@link advanceStep} only moves the run; completing
+   * there latched `completed` before the phase guard (stage 19) graded the very answer that
+   * walked the run off its last node, so one reply announced `chain/complete` and opened a
+   * structural review. The pipeline asks here after grading on every chain request (stage 20),
+   * and stage 16 asks on the late-report calls it answers itself; {@link transitionRunStatus}
+   * still decides. A no-op (false) for a run still standing on a node, and for one still held.
    */
   async completeHeldRun(sessionId: string): Promise<boolean> {
     // Undefined (no session) and a node id (still standing somewhere) both answer "not held".
@@ -1409,9 +1410,9 @@ export class ChainSessionStore implements ChainSessionService {
     // `null` when `nodeId` is terminal: the run has moved past its last node.
     //
     // P4: skipped nodes are passed over here, INSIDE the single traversal owner, so the
-    // completion latch below still sees the real end of the run — a run whose trailing nodes were
-    // all skipped completes on this advance rather than parking on a node nothing will ever
-    // render. Skipped nodes are deliberately NOT appended to `executionOrder`: that list is the
+    // run reaches its real end — a run whose trailing nodes were all skipped stands past its last
+    // node after this advance (and `completeHeldRun` completes it) rather than parking on a node
+    // nothing will ever render. Skipped nodes are deliberately NOT appended to `executionOrder`: that list is the
     // record of what the run actually executed, and it is read to reconstruct step results, so a
     // node with no result in it would read as an executed step with a missing response.
     let next = nextAfter(nodes, nodeId);
@@ -1439,17 +1440,10 @@ export class ChainSessionStore implements ChainSessionService {
       `[StepLifecycle] Advanced past node ${nodeId} to ${next ?? 'run-complete'} (ordinal ${ordinal})`
     );
 
+    // No completion here: advancing past the terminal node leaves the run standing on no node
+    // with a non-terminal status, and `completeHeldRun` — asked after the call is graded — decides
+    // whether it is finished (P4.157 / R12).
     await this.saveSessions();
-
-    // The single decision point for run completion. Advancing past the terminal node is the
-    // only event that ends a run normally, so the latch lives here rather than in whichever
-    // pipeline stage happens to notice the ordinal went out of range — that inference ran in
-    // three places and disagreed with the rendered footer, which is what let a client abandon
-    // a run that still owed its final gate verdict. `transitionRunStatus` owns terminal
-    // stickiness and idempotency, so re-advancing past the same node is a no-op here too.
-    if (next === null) {
-      await this.transitionRunStatus(sessionId, 'completed');
-    }
 
     return { nodeId: next, ordinal };
   }
@@ -1993,7 +1987,8 @@ export class ChainSessionStore implements ChainSessionService {
    * its own `nodeId`, else the graded step its metadata records (a structural review's). The node
    * is never derived from where the run stands.
    *
-   * @deprecated stamped: (as of 2026-09-23 · flips when row 3.6's exception list is empty)
+   * @deprecated stamped: (as of 2026-09-23 · flips when `setPendingGateReview` has no `src`
+   * caller; stages 16, 19 and 20 still write through it)
    * @throws when the review names no node.
    */
   async setPendingGateReview(
@@ -2021,51 +2016,6 @@ export class ChainSessionStore implements ChainSessionService {
     const session = this.activeSessions.get(sessionId);
     const review = session === undefined ? undefined : readReview(session, slot);
     return review === undefined ? undefined : cloneReview(review);
-  }
-
-  /**
-   * Check if the retry limit has been exceeded for a pending gate review.
-   * Returns true if attemptCount >= maxAttempts.
-   * @remarks Uses DEFAULT_RETRY_LIMIT (2) when maxAttempts not specified.
-   */
-  isRetryLimitExceeded(sessionId: string, slot?: ReviewSlot): boolean {
-    const review = this.getPendingGateReview(sessionId, slot);
-    if (!review) {
-      return false;
-    }
-    // Import would create circular dependency, so we inline the default (2)
-    // This matches DEFAULT_RETRY_LIMIT from gates/constants.ts
-    const maxAttempts = review.maxAttempts ?? 2;
-    return (review.attemptCount ?? 0) >= maxAttempts;
-  }
-
-  /**
-   * Reset the retry count for a pending gate review.
-   * Used when user chooses to retry after retry exhaustion.
-   */
-  async resetRetryCount(sessionId: string, slot?: ReviewSlot): Promise<void> {
-    const session = this.activeSessions.get(sessionId);
-    const review = session === undefined ? undefined : readReview(session, slot);
-    if (review === undefined) {
-      this.logger?.debug?.(
-        `[ChainSessionStore] No pending gate review to reset for session: ${sessionId}`
-      );
-      return;
-    }
-
-    // Reset attempt count and log in history
-    review.attemptCount = 0;
-    review.phase = deriveReviewPhase(review);
-    review.history = review.history ?? [];
-    review.history.push({
-      timestamp: Date.now(),
-      status: 'reset',
-      reasoning: 'User requested retry after exhaustion',
-    });
-
-    await this.saveSessions();
-
-    this.logger?.info?.(`[ChainSessionStore] Reset retry count for session: ${sessionId}`);
   }
 
   async clearPendingGateReview(sessionId: string, slot?: ReviewSlot): Promise<void> {
@@ -2109,60 +2059,27 @@ export class ChainSessionStore implements ChainSessionService {
     await this.saveSessions();
   }
 
+  /**
+   * Count one verdict in the run's cumulative gate counters. The review it answered is not
+   * touched: the verdict path (`GateVerdictProcessor.answerReview`) persists the review its
+   * transition returns. Record-only (D4): nothing branches on these values.
+   */
   async recordGateReviewOutcome(
     sessionId: string,
-    outcome: GateReviewOutcomeUpdate,
-    slot?: ReviewSlot
-  ): Promise<'cleared' | 'pending'> {
+    outcome: GateReviewOutcomeUpdate
+  ): Promise<void> {
     const session = this.activeSessions.get(sessionId);
-    const review = session === undefined ? undefined : readReview(session, slot);
-    if (session === undefined || review === undefined) {
+    if (session === undefined) {
       this.logger?.warn(
         `[GateReview] Attempted to record verdict for non-existent session: ${sessionId}`
       );
-      return 'pending';
+      return;
     }
-
-    const timestamp = Date.now();
-
-    review.history ??= [];
-    const historyEntry: GateReviewHistoryEntry = {
-      timestamp,
-      status: outcome.verdict.toLowerCase(),
-      ...(outcome.rationale !== undefined && { reasoning: outcome.rationale }),
-      ...(outcome.reviewer !== undefined && { reviewer: outcome.reviewer }),
-    };
-    review.history.push(historyEntry);
-    review.previousResponse = outcome.rawVerdict;
-    review.attemptCount = (review.attemptCount ?? 0) + 1;
-    review.phase = deriveReviewPhase(review);
-
-    // Run-cumulative counterparts to attemptCount, which is destroyed with the pending review
-    // when a PASS clears it and so cannot answer "how many across the whole run". Record-only
-    // (D4): nothing branches on these values.
     session.gatesFiredCount = (session.gatesFiredCount ?? 0) + 1;
     if (outcome.verdict === 'FAIL') {
       session.gateRetriesCount = (session.gateRetriesCount ?? 0) + 1;
     }
-
-    let result: 'cleared' | 'pending';
-    if (outcome.verdict === 'PASS') {
-      deleteReview(session, slot);
-      this.logger?.info('[GateReview] Cleared pending review', {
-        sessionId,
-        gateIds: review.gateIds,
-      });
-      result = 'cleared';
-    } else {
-      this.logger?.info('[GateReview] Review failed, awaiting remediation', {
-        sessionId,
-        gateIds: review.gateIds,
-      });
-      result = 'pending';
-    }
-
     await this.saveSessions();
-    return result;
   }
 
   /**
@@ -2322,7 +2239,7 @@ export class ChainSessionStore implements ChainSessionService {
         // Summaries are a display projection: ints computed here, never stored.
         currentStep: currentOrdinal(session.state.nodes, session.state.currentNodeId),
         totalSteps: totalOf(session.state.nodes),
-        pendingReview: Boolean(session.pendingGateReview),
+        pendingReview: Object.keys(session.reviews ?? {}).length > 0,
         lastActivity: session.lastActivity,
         startTime: session.startTime,
         ...(promptName !== undefined && { promptName }),

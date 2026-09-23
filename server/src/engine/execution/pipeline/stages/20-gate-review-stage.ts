@@ -14,7 +14,7 @@ import type { Logger } from '#infra/logging/index.js';
 import type { ExecutionRecordStore } from '#modules/chains/execution-record-store.js';
 import type {
   GateCheckResult,
-  PendingGateReview,
+  GateReview,
   PendingGateTier,
 } from '#shared/types/chain-execution.js';
 import type { GatesConfig } from '#shared/types/core-config.js';
@@ -164,16 +164,16 @@ export class GateReviewStage extends BasePipelineStage {
    */
   private async recordReviewEvidence(
     sessionId: string,
-    review: PendingGateReview,
+    review: GateReview,
     checkResults: GateCheckResult[]
-  ): Promise<PendingGateReview> {
+  ): Promise<GateReview> {
     const gateTiers = await this.deriveGateTiers(review.gateIds);
 
     if (checkResults.length === 0 && Object.keys(gateTiers).length === 0) {
       return review;
     }
 
-    const enriched: PendingGateReview = {
+    const enriched: GateReview = {
       ...review,
       ...(checkResults.length > 0 ? { checkResults } : {}),
       ...(Object.keys(gateTiers).length > 0 ? { gateTiers } : {}),
@@ -221,19 +221,17 @@ export class GateReviewStage extends BasePipelineStage {
    *
    * Keyed on node identity, not on delegation: what makes the render worth keeping is that it is
    * about a different step than the review, and a client that must act on both needs both.
-   * Returns '' when the review names no node (every review before row 2.11 — the reviewed step is
-   * then the standing one by construction), when the ids agree, or when nothing was rendered
+   * Returns '' when the review's node (`GateReview.nodeId`, the node it grades) is the one the
+   * run stands on, when the run stands on no node, or when nothing was rendered
    * (stage 18 takes its pending-review early exit on a retry, which is also where the brief is
    * deliberately suppressed).
    */
   private resolveCarriedRender(
     context: ExecutionContext,
-    pendingReview: { metadata?: Record<string, unknown> },
+    review: Pick<GateReview, 'nodeId'>,
     run: { state: { currentNodeId: string | null } } | undefined
   ): string {
-    const reviewedNodeId = pendingReview.metadata?.['nodeId'];
-    if (typeof reviewedNodeId !== 'string' || reviewedNodeId.length === 0) return '';
-
+    const reviewedNodeId = review.nodeId;
     const standingNodeId = run?.state.currentNodeId ?? context.sessionContext?.currentNodeId;
     if (standingNodeId == null || standingNodeId === reviewedNodeId) return '';
 
@@ -242,6 +240,25 @@ export class GateReviewStage extends BasePipelineStage {
   }
 
   async execute(context: ExecutionContext): Promise<void> {
+    await this.renderPendingReview(context);
+    await this.completeFinishedRun(context);
+  }
+
+  /**
+   * The pipeline's one run-completion point (P4.157 / R12): ask the store to complete a run that
+   * stands past its last node. Here, not at the advance, because this is the first place every
+   * review this call can open already exists — stage 16's capture walks the run off its last node
+   * BEFORE stage 19 grades the answer that did it — so the store's close guard sees them. Every
+   * chain call that reaches formatting passes through here; the late-report calls stage 16
+   * answers itself ask the same store method there.
+   */
+  private async completeFinishedRun(context: ExecutionContext): Promise<void> {
+    const sessionId = context.sessionContext?.sessionId;
+    if (sessionId === undefined) return;
+    await this.chainSessionStore.completeHeldRun(sessionId);
+  }
+
+  private async renderPendingReview(context: ExecutionContext): Promise<void> {
     this.logEntry(context);
 
     const sessionId = context.sessionContext?.sessionId;
@@ -272,7 +289,7 @@ export class GateReviewStage extends BasePipelineStage {
     // The review handed to the renderer below. Reassigned once, when this stage records check
     // results onto it (ruling B4) — the store copy and the context copy must be the same object
     // or the assembler renders a template built from stale evidence in the very same call.
-    let reviewForRender: PendingGateReview = pendingReview;
+    let reviewForRender: GateReview = pendingReview;
 
     try {
       // Run the gates' ground-truth criteria (`gate-review-evidence.ts`, shared with a detached
@@ -376,7 +393,7 @@ export class GateReviewStage extends BasePipelineStage {
         executionType: 'gate_review',
         stepPrompts: reviewSteps,
         chainContext,
-        pendingGateReview: reviewForRender,
+        review: reviewForRender,
         additionalGateIds: reviewForRender.gateIds,
         scope: context.getScopeOptions(),
       });

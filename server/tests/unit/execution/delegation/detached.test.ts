@@ -10,12 +10,14 @@ import { describe, expect, test } from '@jest/globals';
 
 import {
   collectDetachedNodeFacts,
+  describeDetachedReview,
+  describeDetachedReviewOutcome,
   describeHeldRun,
   resolveDetachedReport,
 } from '../../../../src/engine/execution/delegation/detached.js';
 import { unreportedDetachedNodeIds } from '../../../../src/shared/types/chain-execution.js';
 import {
-  detachedNodesHoldingRun,
+  nodesHoldingRunOpen,
   isRunComplete,
   isRunHeldOpen,
 } from '../../../../src/shared/types/chain-session.js';
@@ -89,16 +91,18 @@ describe('isRunComplete / isRunHeldOpen', () => {
     // Same run as the control above — reported, nothing owed — plus an open detached review.
     const state = pastEnd(states([['rev', spawned({ state: 'completed' })]]));
     const reviews = { rev: { kind: 'detached' as const } };
-    expect(detachedNodesHoldingRun({ state, reviews })).toEqual(['rev']);
+    expect(nodesHoldingRunOpen({ state, reviews })).toEqual(['rev']);
     expect(isRunHeldOpen({ state, reviews })).toBe(true);
     expect(isRunComplete({ state, reviews })).toBe(false);
     // A node both owed and under review is named once.
     const owedToo = pastEnd(states([['rev', spawned()]]));
-    expect(detachedNodesHoldingRun({ state: owedToo, reviews })).toEqual(['rev']);
-    // Only a DETACHED review holds the run: the store's current-step review is not a hold.
-    expect(detachedNodesHoldingRun({ state, reviews: { rev: { kind: 'gate' as const } } })).toEqual(
-      []
-    );
+    expect(nodesHoldingRunOpen({ state: owedToo, reviews })).toEqual(['rev']);
+    // Any open review holds the run, not only a detached one (P4.157 / R12): the phase guard's
+    // structural review of the final answer opens after the run already walked past its end.
+    expect(nodesHoldingRunOpen({ state, reviews: { last: { kind: 'gate' as const } } })).toEqual([
+      'last',
+    ]);
+    expect(isRunComplete({ state, reviews: { last: { kind: 'gate' as const } } })).toBe(false);
   });
 
   test('a terminal status is complete regardless of what is owed', () => {
@@ -124,19 +128,32 @@ describe('collectDetachedNodeFacts', () => {
     ]);
   });
 
-  test("reads an open review's phase off the node's review, by node (row 4.8)", () => {
-    const run = (phase?: string) => ({
+  test("reads an open review's phase off the node's review record, by node (row 4.8, 3.5)", () => {
+    const run = (review?: Record<string, unknown>) => ({
       state: { nodes: NODES, stepStates: states([['rev', spawned({ state: 'completed' })]]) },
-      detachedGateReviews: { rev: { metadata: phase === undefined ? {} : { phase } } },
+      ...(review !== undefined ? { reviews: { rev: review as never } } : {}),
     });
     const steps = [{ stepNumber: 2, nodeId: 'rev', await: 'run' as const }];
-    expect(collectDetachedNodeFacts(steps, run())[0]?.review).toBe('awaiting-verdict');
-    expect(collectDetachedNodeFacts(steps, run('awaiting-replacement'))[0]?.review).toBe(
+    const detached = (phase: string, metadata?: Record<string, unknown>) =>
+      run({ kind: 'detached', phase, ...(metadata !== undefined ? { metadata } : {}) });
+
+    expect(collectDetachedNodeFacts(steps, detached('awaiting-verdict'))[0]?.review).toBe(
+      'awaiting-verdict'
+    );
+    expect(collectDetachedNodeFacts(steps, detached('awaiting-replacement'))[0]?.review).toBe(
       'awaiting-replacement'
     );
-    expect(collectDetachedNodeFacts(steps, run('exhausted'))[0]?.review).toBe('exhausted');
-    // No review: no phase key at all.
-    expect(collectDetachedNodeFacts(steps, { state: run().state })[0]).not.toHaveProperty('review');
+    expect(collectDetachedNodeFacts(steps, detached('exhausted'))[0]?.review).toBe('exhausted');
+    // The record's phase decides; a `metadata.phase` that disagrees with it is never read.
+    expect(
+      collectDetachedNodeFacts(steps, detached('exhausted', { phase: 'awaiting-verdict' }))[0]
+        ?.review
+    ).toBe('exhausted');
+    // No review, or a review that is not the node's detached one: no phase key at all.
+    expect(collectDetachedNodeFacts(steps, run())[0]).not.toHaveProperty('review');
+    expect(
+      collectDetachedNodeFacts(steps, run({ kind: 'gate', phase: 'awaiting-verdict' }))[0]
+    ).not.toHaveProperty('review');
   });
 });
 
@@ -373,5 +390,48 @@ describe('describeHeldRun: reviews still open', () => {
     expect(text).toContain('until its detached review(s) are answered');
     expect(text).toContain('Gate review still open on reported detached node(s): a (step 2)');
     expect(text).not.toMatch(/[Cc]hain complete|Execution complete/);
+  });
+});
+
+describe('the words a detached review says (row 3.8)', () => {
+  const node: DetachedNodeFacts = {
+    token: 'rev',
+    nodeId: 'rev',
+    stepNumber: 2,
+    spawned: true,
+    reported: true,
+  };
+  const outcome = (result: 'cleared' | 'passed') =>
+    describeDetachedReviewOutcome(node, {
+      result,
+      attempt: 1,
+      maxAttempts: 2,
+      runCompleted: false,
+      held: false,
+      detachedNodes: [node],
+    });
+
+  test('an advisory FAIL is cleared: it says the gate failed, is not blocking, and the result stands', () => {
+    const text = outcome('cleared');
+    expect(text.split('\n\n')[0]).toBe(
+      '⚠ Gate review of detached node rev (step 2) failed (attempt 1/2), but its gates are not ' +
+        'blocking: its recorded result stands.'
+    );
+    expect(text).not.toContain('passed');
+    // Twin: a PASS keeps its own head.
+    expect(outcome('passed')).toContain('✓ Gate review of detached node rev (step 2) passed');
+  });
+
+  test('a review opened on a result missing sections names each one; a sectioned one names none', () => {
+    const review = { chainId: 'c', attempt: 1, maxAttempts: 2, verdictTemplate: '{}' };
+    const missing = describeDetachedReview(node, {
+      ...review,
+      structuralHints: ['Ensure your response includes the required "## Context" section'],
+    });
+    expect(missing).toContain('The reported result is missing required structure:');
+    expect(missing).toContain('- Ensure your response includes the required "## Context" section');
+    expect(describeDetachedReview(node, { ...review, structuralHints: [] })).not.toContain(
+      'missing required structure'
+    );
   });
 });

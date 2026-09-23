@@ -565,6 +565,28 @@ describe('gate review scoping (P4-F3)', () => {
       ]);
     });
 
+    test('(1d) a run past its last node opens no review — no node to key it by (R8, row 3.5)', async () => {
+      // The twin of (1): the same step-3-targeted gate, the same ordinal, only the node id gone —
+      // what a run held open past its end looks like. Opening one here would key it by position
+      // onto the last node the run left, a step already answered.
+      const registry = createRegistry();
+      registry.createTemporaryGate({
+        name: 'Last step only',
+        criteria: ['cite sources'],
+        target_step_number: 3,
+      });
+      const service = buildService(registry);
+      const authority = buildAuthority();
+      const context = buildContext({ accumulatedGateIds: [TEMP_ID], gateEnforcement: authority });
+
+      await service.ensurePostAdvanceReview(context, sessionContextAt(3, null) as never);
+      expect(authority.createReviewForStep).not.toHaveBeenCalled();
+
+      // Positive control: standing ON that last node, the same gate opens the review.
+      await service.ensurePostAdvanceReview(context, sessionContextAt(3, 'publish') as never);
+      expect(authority.createReviewForStep).toHaveBeenCalledTimes(1);
+    });
+
     test('(1b) the SAME step-targeted gate does not fire while standing at a different step', async () => {
       const registry = createRegistry();
       registry.createTemporaryGate({
