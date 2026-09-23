@@ -8,10 +8,13 @@ const STRICTNESS: Readonly<Record<EnforcementMode, number>> = {
   blocking: 2,
 };
 
-function strictest(modes: readonly EnforcementMode[]): EnforcementMode | undefined {
-  return modes.reduce<EnforcementMode | undefined>(
-    (acc, mode) => (acc === undefined || STRICTNESS[mode] > STRICTNESS[acc] ? mode : acc),
-    undefined
+/** The strictest of `modes`; `blocking` for an empty list — nothing relaxed it. */
+function strictest(modes: readonly EnforcementMode[]): EnforcementMode {
+  return (
+    modes.reduce<EnforcementMode | undefined>(
+      (acc, mode) => (acc === undefined || STRICTNESS[mode] > STRICTNESS[acc] ? mode : acc),
+      undefined
+    ) ?? 'blocking'
   );
 }
 
@@ -44,14 +47,14 @@ export function resolveEnforcementMode(
   gateSet?: GateSetEnforcement,
   failedGateIds: readonly string[] = []
 ): EnforcementMode {
-  const declaredOrDefault = (gateId: string): EnforcementMode =>
-    gateSet?.declared.get(gateId) ?? gateSet?.undeclared ?? 'blocking';
+  if (gateSet === undefined) {
+    return configuredMode ?? 'blocking';
+  }
+  const modeOf = (gateId: string): EnforcementMode =>
+    gateSet.declared.get(gateId) ?? gateSet.undeclared;
 
-  if (gateSet !== undefined && failedGateIds.length > 0) {
-    return strictest(failedGateIds.map(declaredOrDefault)) ?? 'blocking';
+  if (failedGateIds.length > 0) {
+    return strictest(failedGateIds.map(modeOf));
   }
-  if (configuredMode !== undefined) {
-    return configuredMode;
-  }
-  return strictest([...(gateSet?.declared.keys() ?? [])].map(declaredOrDefault)) ?? 'blocking';
+  return configuredMode ?? strictest([...gateSet.declared.keys()].map(modeOf));
 }
