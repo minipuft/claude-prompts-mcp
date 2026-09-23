@@ -1988,7 +1988,14 @@ export class ChainSessionStore implements ChainSessionService {
     await this.saveSessions();
   }
 
-  /** @deprecated stamped: (as of 2026-09-23 · flips when row 3.6's exception list is empty) */
+  /**
+   * Stamp a pre-3.1 review's kind and phase and store it on the node it names (R8): `slot`, else
+   * its own `nodeId`, else the graded step its metadata records (a structural review's). The node
+   * is never derived from where the run stands.
+   *
+   * @deprecated stamped: (as of 2026-09-23 · flips when row 3.6's exception list is empty)
+   * @throws when the review names no node.
+   */
   async setPendingGateReview(
     sessionId: string,
     review: PendingGateReview,
@@ -1999,7 +2006,15 @@ export class ChainSessionStore implements ChainSessionService {
       this.logger.warn(`Attempted to set a gate review for non-existent session: ${sessionId}`);
       return;
     }
-    await this.setReview(sessionId, stampLegacyReview(review, session, slot));
+    const recorded = review.metadata?.['nodeId'];
+    const nodeId =
+      slot?.nodeId ?? review.nodeId ?? (typeof recorded === 'string' ? recorded : undefined);
+    if (nodeId === undefined || nodeId.length === 0) {
+      throw new Error(
+        `A gate review of session ${sessionId} was written without the node it grades`
+      );
+    }
+    await this.setReview(sessionId, stampLegacyReview({ ...review, nodeId }, session, slot));
   }
 
   getPendingGateReview(sessionId: string, slot?: ReviewSlot): GateReview | undefined {

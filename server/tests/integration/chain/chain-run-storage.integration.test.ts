@@ -289,7 +289,7 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
     test('a current-step and a detached review are written, read by node, and round-trip a cold load', async () => {
       const writer = newStore();
       await writer.createSession('sess-rv', 'chain-rv#1', 3, {}, threeNodes());
-      await writer.setPendingGateReview('sess-rv', review('slot-gate'));
+      await writer.setPendingGateReview('sess-rv', review('slot-gate', { nodeId: 'n1' }));
       await writer.setPendingGateReview('sess-rv', review('node-gate'), { nodeId: 'rev' });
 
       const written = writer.getSession('sess-rv') as ChainSession;
@@ -352,7 +352,7 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
       expect(structural.pendingGateReview?.gateIds).toEqual(['phase-guard']);
 
       // A gate review of the node the run stands on takes the one current-step slot.
-      await store.setPendingGateReview('sess-rs', review('step-gate'));
+      await store.setPendingGateReview('sess-rs', review('step-gate', { nodeId: 'rev' }));
       const replaced = store.getSession('sess-rs') as ChainSession;
       expect(Object.keys(replaced.reviews ?? {})).toEqual(['rev']);
       expect(replaced.reviews?.['rev']?.kind).toBe('gate');
@@ -365,7 +365,7 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
     test("the store keeps a review's phase in step with its attempts", async () => {
       const store = newStore();
       await store.createSession('sess-rp', 'chain-rp#1', 3, {}, threeNodes());
-      await store.setPendingGateReview('sess-rp', review('g'));
+      await store.setPendingGateReview('sess-rp', review('g', { nodeId: 'n1' }));
       const fail = { verdict: 'FAIL' as const, rawVerdict: 'FAIL' };
       await store.recordGateReviewOutcome('sess-rp', fail);
       expect(store.getPendingGateReview('sess-rp')?.phase).toBe('awaiting-verdict');
@@ -392,10 +392,25 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
       await store.cleanup();
     });
 
+    test('a review written without its node is refused, never keyed by where the run stands (R8)', async () => {
+      const store = newStore();
+      await store.createSession('sess-r8', 'chain-r8#1', 3, {}, threeNodes());
+      await expect(store.setPendingGateReview('sess-r8', review('g'))).rejects.toThrow(
+        'written without the node it grades'
+      );
+      expect((store.getSession('sess-r8') as ChainSession).reviews).toBeUndefined();
+      // CONTROL: the same review naming its node is stored there.
+      await store.setPendingGateReview('sess-r8', review('g', { nodeId: 'rev' }));
+      expect(Object.keys((store.getSession('sess-r8') as ChainSession).reviews ?? {})).toEqual([
+        'rev',
+      ]);
+      await store.cleanup();
+    });
+
     test('the projections are read-only and never serialized', async () => {
       const store = newStore();
       const session = await store.createSession('sess-ro', 'chain-ro#1', 3, {}, threeNodes());
-      await store.setPendingGateReview('sess-ro', review('g'));
+      await store.setPendingGateReview('sess-ro', review('g', { nodeId: 'n1' }));
       expect(() => {
         (session as { pendingGateReview?: unknown }).pendingGateReview = undefined;
       }).toThrow(TypeError);
