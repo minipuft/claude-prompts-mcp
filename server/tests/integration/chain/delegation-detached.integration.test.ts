@@ -811,6 +811,32 @@ describe('detached delegation (await: run) through the pipeline', () => {
       expect(run().runStatus ?? 'working').toBe('working');
     });
 
+    test('an early result (before the parent moved on) reports the same way, and the move-on keeps it', async () => {
+      const pipeline = buildPipeline({
+        sessionStore,
+        recordStore,
+        logger,
+        steps: parsedSteps({ detached: true }),
+        review: { gates: [reminderGate('dr-gate')] },
+      });
+      const { chainId, sessionId, brief } = await renderDetached(pipeline);
+      expect(run().state.currentNodeId).toBe(DETACHED);
+
+      const early = await pipeline.execute({
+        chain_id: chainId,
+        user_response: runFakeWorker(brief, { body: 'early result' }),
+      } as any);
+      expect(text(early)).toContain(`Gate Review Required — detached node ${DETACHED} (step 2)`);
+      expect(detachedReview(sessionId)?.reviewedOutput).toContain('early result');
+      expect(run().state.currentNodeId).toBe(DETACHED);
+
+      // Moving on passes the node WITHOUT writing a placeholder over its recorded result.
+      const moved = await pipeline.execute({ chain_id: chainId } as any);
+      expect(text(moved)).toContain('Do Summarize.');
+      expect(run().state.currentNodeId).toBe('n3');
+      expect(stepOf(DETACHED)).toMatchObject({ state: 'completed', isPlaceholder: false });
+    });
+
     test('a verdict for a detached node with no review, and for an unknown node, is refused by name', async () => {
       const pipeline = buildPipeline({
         sessionStore,
