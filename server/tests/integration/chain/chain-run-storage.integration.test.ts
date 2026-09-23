@@ -357,6 +357,21 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
       await store.cleanup();
     });
 
+    test('the session listing counts any open review, a detached one included (row 3.4)', async () => {
+      const store = newStore();
+      await store.createSession('sess-rl', 'chain-rl#1', 3, {}, threeNodes());
+      const listed = () =>
+        store.listActiveSessions().find((summary) => summary.sessionId === 'sess-rl')
+          ?.pendingReview;
+      // Control: nothing open, nothing pending.
+      expect(listed()).toBe(false);
+      // Only a detached node's review is open — no current-step review exists.
+      await store.setPendingGateReview('sess-rl', review('g'), { nodeId: 'n2' });
+      expect(store.getPendingGateReview('sess-rl')).toBeUndefined();
+      expect(listed()).toBe(true);
+      await store.cleanup();
+    });
+
     test('a counted verdict leaves the review it answered to the verdict path (row 3.4)', async () => {
       const store = newStore();
       await store.createSession('sess-rp', 'chain-rp#1', 3, {}, threeNodes());
