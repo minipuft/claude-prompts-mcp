@@ -48,6 +48,7 @@ import { PromptExecutionPipeline } from '../../../src/engine/execution/pipeline/
 import { SessionManagementStage } from '../../../src/engine/execution/pipeline/stages/13-session-stage.js';
 import { StepResponseCaptureStage } from '../../../src/engine/execution/pipeline/stages/16-response-capture-stage.js';
 import { StepExecutionStage } from '../../../src/engine/execution/pipeline/stages/18-execution-stage.js';
+import { PhaseGuardVerificationStage } from '../../../src/engine/execution/pipeline/stages/19-phase-guard-verification-stage.js';
 import { GateReviewStage } from '../../../src/engine/execution/pipeline/stages/20-gate-review-stage.js';
 import { ResponseFormattingStage } from '../../../src/engine/execution/pipeline/stages/21-formatting-stage.js';
 import { StepCaptureService } from '../../../src/engine/execution/capture/step-capture-service.js';
@@ -135,6 +136,22 @@ const FRAMEWORK_SECTIONS = [
   { header: '## Context', required: true, phaseId: 'context', criteria: [] },
   { header: '## Analysis', required: true, phaseId: 'analysis', criteria: [] },
 ];
+/**
+ * The guarded phases behind FRAMEWORK_SECTIONS, as the framework registry reports them, so the
+ * real phase-guard stage grades against the headers the review declared (R103).
+ */
+const GUARDED_FRAMEWORK_REGISTRY = {
+  getFrameworkGuide: () => ({
+    enhanceWithFramework: () => ({
+      processingEnhancements: FRAMEWORK_SECTIONS.map((section) => ({
+        id: section.phaseId,
+        name: section.phaseId,
+        section_header: section.header,
+        guards: { required: true },
+      })),
+    }),
+  }),
+};
 const parsedFrameworkChain = () =>
   parsedChainSteps().map((step) => ({
     ...step,
@@ -241,6 +258,8 @@ const buildPipeline = (options: {
   steps: () => ReturnType<typeof parsedChainSteps>;
   /** Whether gate enhancement selects a blocking gate; absent means it does. */
   blockingGates?: () => boolean;
+  /** The framework this request resolves; absent means none, so the phase guard skips. */
+  activeFramework?: () => string | undefined;
 }): PromptExecutionPipeline => {
   const { sessionStore, recordStore, logger } = options;
   // A framework's section headers, declared only for a step that names a framework — every
@@ -268,6 +287,12 @@ const buildPipeline = (options: {
       undefined,
       undefined,
       recordStore
+    ),
+    PhaseGuardVerification: new PhaseGuardVerificationStage(
+      () => GUARDED_FRAMEWORK_REGISTRY as never,
+      () => ({ mode: 'enforce', maxRetries: 2 }),
+      sessionStore,
+      logger
     ),
     GateReview: new GateReviewStage(chainExecutor, sessionStore, null, logger, undefined, {
       executionRecordStore: recordStore,
@@ -317,6 +342,17 @@ const buildPipeline = (options: {
         },
       };
     }
+    if (name === 'FrameworkResolution') {
+      return {
+        name,
+        execute: async (context: ExecutionContext) => {
+          const frameworkId = options.activeFramework?.();
+          if (frameworkId !== undefined) {
+            context.frameworkAuthority.decide({ globalActiveFramework: frameworkId });
+          }
+        },
+      };
+    }
     if (name === 'GateEnhancement') {
       return {
         name,
@@ -361,10 +397,13 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
    * arrives, so the verdict takes the deferred path — the only way to reach it here.
    */
   let blockingGates: boolean;
+  /** The framework the run resolves. None by default, so the real phase guard stage skips. */
+  let activeFramework: string | undefined;
 
   beforeEach(() => {
     parsedSteps = parsedChainSteps;
     blockingGates = true;
+    activeFramework = undefined;
     const created = createInMemoryDb();
     db = created.db;
     const logger = createLogger();
@@ -394,6 +433,7 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
       logger,
       steps: () => parsedSteps(),
       blockingGates: () => blockingGates,
+      activeFramework: () => activeFramework,
     });
   });
 
@@ -932,6 +972,58 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
     // CONTROL: a node no render has reached records nothing, so stage 19 still falls back to the
     // run's union for it — the record above is the review's, not a blanket write.
     expect(session.state.stepStates?.get('review')?.declaredSections).toBeUndefined();
+  });
+
+  /**
+   * R103 / P4.156: a structural failure on a gated step joins the gate review open for it. Before
+   * the merge, the phase guard's review REPLACED the gate's: the gate id, its criteria and its
+   * retry budget left the reply and the record. The twin differs only in the answer.
+   */
+  describe('a structural failure joins the gate review (R103)', () => {
+    const openGatedFrameworkRun = async () => {
+      parsedSteps = parsedFrameworkChain;
+      activeFramework = 'cageerf';
+      await pipeline.execute({ command: `>>draft --> >>review` });
+      const opened = onlySession() as unknown as { chainId: string; pendingGateReview: any };
+      return { chainId: opened.chainId, gateReview: { ...opened.pendingGateReview } };
+    };
+
+    test('a one-line answer yields ONE review naming the gate, the missing sections and the counter', async () => {
+      const { chainId, gateReview } = await openGatedFrameworkRun();
+      expect(gateReview.gateIds).toEqual([GATE_ID]);
+
+      const text = textOf(await pipeline.execute({ chain_id: chainId, user_response: 'one line' }));
+
+      const review = onlySession().pendingGateReview as any;
+      expect(review.gateIds).toEqual([GATE_ID, '__phase_guard__']);
+      expect(review.maxAttempts).toBe(gateReview.maxAttempts);
+      expect(review.attemptCount).toBe(gateReview.attemptCount);
+      expect(review.prompts).toEqual(gateReview.prompts);
+      expect(review.metadata.failedPhases).toEqual(['context', 'analysis']);
+
+      expect(text).toContain('Structural + Gate Review Required');
+      expect(text).toContain(`(attempt 1/${gateReview.maxAttempts})`);
+      expect(text).toContain('"## Context"');
+    });
+
+    test('TWIN: the same step answered in sections reaches the gate review unchanged', async () => {
+      const { chainId, gateReview } = await openGatedFrameworkRun();
+
+      const text = textOf(
+        await pipeline.execute({
+          chain_id: chainId,
+          user_response: '## Context\nThe situation, stated.\n\n## Analysis\nThe options, weighed.',
+        })
+      );
+
+      const review = onlySession().pendingGateReview as any;
+      expect(review.gateIds).toEqual([GATE_ID]);
+      expect(review.maxAttempts).toBe(gateReview.maxAttempts);
+      // Positive control: the phase guard DID grade this answer, and passed it.
+      expect(review.metadata.phaseGuardContext?.allPassed).toBe(true);
+      expect(text).toContain('Gate Review Required');
+      expect(text).not.toContain('Structural');
+    });
   });
 
   /**

@@ -86,7 +86,7 @@ function createMockSessionStore(declaredSections?: readonly string[]): ChainSess
     setPendingGateReview: jest
       .fn<ChainSessionService['setPendingGateReview']>()
       .mockResolvedValue(undefined),
-    getPendingGateReview: jest.fn().mockResolvedValue(null),
+    getPendingGateReview: jest.fn().mockReturnValue(undefined),
     getSession: jest.fn().mockReturnValue(session),
     createSession: jest.fn().mockResolvedValue(undefined),
     updateSession: jest.fn().mockResolvedValue(undefined),
@@ -433,6 +433,80 @@ describe('PhaseGuardVerificationStage', () => {
     // Should also update context so GateReviewStage sees pending review
     expect(ctx.sessionContext!.pendingReview).toBeDefined();
     expect(ctx.sessionContext!.pendingReview!.gateIds).toEqual([PHASE_GUARD_GATE_ID]);
+  });
+
+  /**
+   * R103 / P4.156: a structural failure on a gated step JOINS the gate review open for that step.
+   * The twin below differs in the answer only: sectioned, it reaches the gate review unchanged.
+   */
+  describe('a structural failure merges into the open gate review (R103)', () => {
+    const openGateReview = () => ({
+      combinedPrompt: '',
+      gateIds: ['e2e-block'],
+      prompts: [{ gateId: 'e2e-block', gateName: 'e2e-block', criteriaSummary: 'GATE-CRITERIA' }],
+      createdAt: 1,
+      attemptCount: 1,
+      maxAttempts: 5,
+      retryHints: ['gate hint'],
+      history: [{ timestamp: 2, status: 'fail', reasoning: 'first try missed it' }],
+      metadata: { sessionId: 'session-1', stepNumber: 1 },
+    });
+
+    const gradeWithOpenReview = async (answer: string) => {
+      const guide = createMockGuide([
+        {
+          id: 'context',
+          name: 'Context',
+          section_header: '## Context',
+          guards: { required: true },
+        },
+      ]);
+      const open = openGateReview();
+      (sessionStore.getPendingGateReview as jest.Mock).mockReturnValue(open);
+      const stage = createPhaseGuardVerificationStage(
+        () => createRegistry(guide),
+        () => defaultConfig,
+        sessionStore,
+        logger
+      );
+      const ctx = withSession(createContext(createMcpRequest('>>test', answer)));
+      ctx.frameworkContext = { selectedFramework: { id: 'cageerf', name: 'CAGEERF' } } as any;
+      ctx.sessionContext!.pendingReview = open as any;
+      ctx.state.session.capturedStep = { nodeId: 'n1', ordinal: 1 };
+      await stage.execute(ctx);
+      return ctx;
+    };
+
+    test('a one-line answer yields ONE review carrying the gate and the missing section', async () => {
+      const ctx = await gradeWithOpenReview('one line answer');
+
+      expect(sessionStore.setPendingGateReview).toHaveBeenCalledTimes(1);
+      const review = (sessionStore.setPendingGateReview as jest.Mock).mock.calls[0][1] as any;
+      expect(review.gateIds).toEqual(['e2e-block', PHASE_GUARD_GATE_ID]);
+      // The gate's own criteria, retry budget, spent attempts and history survive.
+      expect(review.prompts).toEqual(openGateReview().prompts);
+      expect(review.maxAttempts).toBe(5);
+      expect(review.attemptCount).toBe(1);
+      expect(review.history).toEqual(openGateReview().history);
+      // The structural finding joins it.
+      expect(review.retryHints[0]).toContain('## Context');
+      expect(review.retryHints).toContain('gate hint');
+      expect(review.metadata.failedPhases).toEqual(['context']);
+      expect(review.previousResponse).toBe('one line answer');
+      expect(ctx.sessionContext!.pendingReview).toBe(review);
+    });
+
+    test('TWIN: the same step answered in sections reaches the gate review unchanged', async () => {
+      const ctx = await gradeWithOpenReview(
+        '## Context\nThe situation is described here in enough words to count as a section.'
+      );
+
+      const review = ctx.sessionContext!.pendingReview!;
+      expect(review.gateIds).toEqual(['e2e-block']);
+      expect(review.maxAttempts).toBe(5);
+      expect(review.attemptCount).toBe(1);
+      expect(review.retryHints).toEqual(['gate hint']);
+    });
   });
 
   /**
@@ -833,7 +907,7 @@ function createMultiNodeStore(
     setPendingGateReview: jest
       .fn<ChainSessionService['setPendingGateReview']>()
       .mockResolvedValue(undefined),
-    getPendingGateReview: () => null,
+    getPendingGateReview: () => undefined,
     getSession: () => session,
     createSession: async () => undefined,
     updateSession: async () => undefined,
