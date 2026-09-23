@@ -22,28 +22,25 @@ lifecycle it can actually reach.
 
 ## Now
 
-_Rewritten 2026-09-22 (night)._ Two dispatches landed today. The 2026-09-21 batch (#354–#361) and
-Tier 4 (#362) in the afternoon; the evening batch, ruled "dispatch now" under R71, in six slices:
-#364 `0753f1c3` (a judge-routed review hands the client its judge prompt — true cause: the live
-gate provider dropped `evaluation`), #365 `5f122f39` (a chain whose first step is delegated
-starts), #366 `a018958f` (BREAKING: `include_history` removed; every `system_control` parameter is
-one its handler reads; `ContentAnalyzer` deleted), #367 `6f6c6288` (every strict nested object
-replies by path and nearest key; per-action ownership from the contract; stale-`dist` check on
-schema capture), #368 `eb0f4600` (a workspace header is served as its own tenant, R94), #369
-`c3c49eab` (a gate review's record and reply say what happened, R96). Rulings R93–R101
-below. No slice is dispatched.
+_Rewritten 2026-09-22 (late night)._ Three dispatches landed today: the 2026-09-21 batch
+(#354–#361) and Tier 4 (#362); the evening batch (#364–#369, rulings R93–R101); and the night batch
+under the owner's four rulings (R102–R105): #371 `962203fd` (a structural failure joins the gate's
+open review, R103) and #372 (a gate's declared `enforcement_mode` decides what its FAIL does —
+per failing gate, R107; bundled `pr-security`/`pr-performance` modes take effect, R108; dev `cpm`
+budget 1,100,000, R105 — at the PR boundary). No slice is dispatched.
 
-- **Open, not started:** P4.137–P4.161, all opened from this batch's handoff findings, each
-  stamped with the observation that flips it.
+- **Open, not started:** P4.138–P4.155, P4.157–P4.161, P4.163–P4.169, each stamped with the
+  observation that flips it. The two nearest the cause: P4.164/P4.169 (attempt counter and
+  first-call FAIL under the per-gate rule) and P4.168 (no history row for an advisory FAIL).
+  **Held:** the delegation plan's row 4.8 (review of a late detached report) until the owner's row
+  4.7 live drive (R104).
   **Owner's, outside the repo:** the `~/.claude` rename (P5.12 second half), P5.16, then P5.13;
-  the delegation plan's row 4.7 (a live Claude Code drive of one detached chain).
-- **Ruled tonight (R102–R105):** P4.137 wire `enforcement_mode`; P4.156 merge the structural
-  failure into the gate review; delegation row 4.8 held until the owner's live drive; the dev
-  `cpm` budget rises to 1,100,000 (P4.162). P4.137, P4.156 and P4.162 are the next dispatch.
+  delegation row 4.7.
 - **Measured this batch:** a ruling whose predicate names a field must first show the runtime
-  reads it (R7 → R8); a branch goes DIRTY on CHANGELOG after every sibling merge; a merge that
-  lowers a ratchet baseline exposes slack the branch had been living on (two lint findings after
-  merges, both fixed by decomposition).
+  reads it (R7 → R8; R102's `gates.md` premise was a homonym for criterion types); strictest-on-
+  step made advisory unreachable under shipped defaults, which the owner resolved per failing gate;
+  a merge that lowers a ratchet baseline exposes slack a branch had been living on (three lint
+  findings after merges, all fixed by decomposition, none by baseline).
 
 ## What already landed (do not redo)
 
