@@ -44,14 +44,12 @@ const createLogger = (): Logger =>
 function createStore() {
   return {
     advanceStep: jest.fn(async () => ({ ordinal: 2, nodeId: 'node-2' })),
-    getPendingGateReview: jest.fn(() => undefined),
     recordGateReviewOutcome: jest.fn(async () => 'cleared'),
     clearPendingGateReview: jest.fn(async () => undefined),
-    isRetryLimitExceeded: jest.fn(() => false),
   } as unknown as ChainSessionService & Record<string, jest.Mock>;
 }
 
-/** A context whose gate authority clears the verdict, which is the deferred-PASS shape. */
+/** A context whose gate authority opens the review a verdict answers — the deferred shape. */
 function createContext() {
   return {
     getGateVerdict: () => 'GATE_REVIEW: PASS - fine',
@@ -62,7 +60,17 @@ function createContext() {
         raw: 'GATE_REVIEW: PASS - fine',
         source: 'gate_verdict' as const,
       }),
-      recordOutcome: async () => ({ status: 'cleared' as const, nextAction: 'continue' }),
+      createReview: async (_sessionId: string, kind: string, nodeId: string) => ({
+        nodeId,
+        kind,
+        phase: 'awaiting-verdict',
+        combinedPrompt: '',
+        gateIds: [],
+        prompts: [],
+        createdAt: 1,
+        attemptCount: 0,
+        maxAttempts: 2,
+      }),
       parseGateVerdicts: () => [],
     },
     setResponse: jest.fn(),
@@ -73,8 +81,8 @@ function createContext() {
 }
 
 const session = {
-  pendingGateReview: undefined,
-  state: { nodes: [{ id: 'node-1' }, { id: 'node-2' }] },
+  sessionId: 'session-1',
+  state: { currentNodeId: 'node-1', nodes: [{ id: 'node-1' }, { id: 'node-2' }] },
 } as unknown as ChainSession;
 
 describe('GateVerdictProcessor defers every advance it decides', () => {
@@ -90,13 +98,11 @@ describe('GateVerdictProcessor defers every advance it decides', () => {
   test('a deferred PASS decides the advance without performing it', async () => {
     const context = createContext();
 
-    const result = await processor.processDeferredVerdict(
+    const result = await processor.processReviewVerdict(
       context,
       session,
-      'session-1',
-      1,
-      'an answer',
-      { sessionId: 'session-1', currentStep: 1 } as never
+      { sessionId: 'session-1', currentStep: 1 } as never,
+      'an answer'
     );
 
     expect(result.passClearedThisCall).toBe(true);

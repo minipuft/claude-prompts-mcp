@@ -4,15 +4,12 @@ export { GateEnforcementAuthority } from './gate-enforcement-authority.js';
 export { resolveEnforcementMode } from './enforcement-mode.js';
 export { resolveGroundTruthCoverage } from './ground-truth-coverage.js';
 export type {
-  ActionResult,
   CreateReviewOptions,
   EnforcementMode,
   GateSetEnforcement,
   GateAction,
   ParsedVerdict,
   PendingGateReview,
-  RetryConfig,
-  ReviewOutcome,
   GroundTruthCoverage,
   GroundTruthCoverageInput,
   GroundTruthOutcome,

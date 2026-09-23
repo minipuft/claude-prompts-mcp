@@ -1,9 +1,9 @@
 // @lifecycle test - gate_action:"abort" must end the run, not merely annotate it.
 /**
  * End-to-end proof that aborting at a gate is terminal, driven against the REAL
- * `SqliteEngine` + `ChainSessionStore` + `GateEnforcementAuthority` rather than mocks.
+ * `SqliteEngine` + `ChainSessionStore` + `GateVerdictProcessor` rather than mocks.
  *
- * The unit tests beside these assert that `resolveAction('abort')` CALLS `cancelChain`. That is
+ * The unit tests beside these assert that `handleGateAction('abort')` CALLS `cancelChain`. That is
  * a wiring claim. It does not prove the run actually becomes unreachable, because the guard that
  * refuses a resume lives in a different file (`13-session-stage.ts`) and reads a different
  * predicate (`isRunComplete`) than the one abort writes. This test closes that gap by asserting
@@ -22,7 +22,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { GateEnforcementAuthority } from '../../../src/engine/execution/pipeline/decisions/gates/gate-enforcement-authority.js';
+import { GateVerdictProcessor } from '../../../src/engine/gates/services/gate-verdict-processor.js';
 import { SqliteEngine } from '../../../src/infra/database/index.js';
 import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
 import { isRunComplete } from '../../../src/shared/types/chain-session.js';
@@ -44,13 +44,31 @@ class StubTextReferenceStore {
   clearChainStepResults = jest.fn();
 }
 
+/** The request state `handleGateAction` reads and writes; nothing else of a context. */
+const actionContext = () =>
+  ({
+    state: { gates: {}, session: {} },
+    diagnostics: { info: jest.fn(), warn: jest.fn() },
+    setResponse: jest.fn(),
+  }) as never;
+
+/** Answer the run's exhausted review with `action`, the way stage 16 hands it over. */
+const act = (store: ChainSessionStore, sessionId: string, action: 'retry' | 'skip' | 'abort') =>
+  new GateVerdictProcessor(store, logger).handleGateAction(
+    actionContext(),
+    store.getSession(sessionId)!,
+    action,
+    { sessionId } as never
+  );
+
+let logger: Logger;
+
 const nodes = (...specs: Array<[string, string, string]>): ChainNode[] =>
   specs.map(([id, promptId, stepName]) => ({ id, promptId, stepName }));
 
 describe('gate_action:"abort" terminates the run', () => {
   let tmpDir: string;
   let engine: SqliteEngine;
-  let logger: Logger;
 
   const newStore = (): ChainSessionStore =>
     new ChainSessionStore(
@@ -94,14 +112,10 @@ describe('gate_action:"abort" terminates the run', () => {
       ),
     } as never);
 
-    const authority = new GateEnforcementAuthority(store, logger);
-
     // Mid-run: the guard in 13-session-stage would let this resume.
     expect(isRunComplete(store.getSession('sess-abort')!)).toBe(false);
 
-    const result = await authority.resolveAction('sess-abort', 'abort');
-    expect(result.handled).toBe(true);
-    expect(result.sessionAborted).toBe(true);
+    expect(await act(store, 'sess-abort', 'abort')).toBe(true);
 
     // The predicate `13-session-stage.ts` consults before resuming.
     const aborted = store.getSession('sess-abort')!;
@@ -115,7 +129,7 @@ describe('gate_action:"abort" terminates the run', () => {
       nodes: nodes(['n1', 'prompt-a', 'Gather'], ['n2', 'prompt-b', 'Report']),
     } as never);
 
-    await new GateEnforcementAuthority(writer, logger).resolveAction('sess-cold', 'abort');
+    await act(writer, 'sess-cold', 'abort');
     await writer.cleanup();
 
     const reader = newStore();
@@ -133,12 +147,10 @@ describe('gate_action:"abort" terminates the run', () => {
       nodes: nodes(['n1', 'prompt-a', 'Gather'], ['n2', 'prompt-b', 'Report']),
     } as never);
 
-    const authority = new GateEnforcementAuthority(store, logger);
-
-    await authority.resolveAction('sess-live', 'retry');
+    await act(store, 'sess-live', 'retry');
     expect(isRunComplete(store.getSession('sess-live')!)).toBe(false);
 
-    await authority.resolveAction('sess-live', 'skip');
+    await act(store, 'sess-live', 'skip');
     expect(isRunComplete(store.getSession('sess-live')!)).toBe(false);
   });
 });

@@ -709,6 +709,7 @@ export interface PromptGateConfiguration {
     expires_at?: number;
     source?: 'manual' | 'automatic' | 'analysis';
     context?: Record<string, any>;
+    enforcement_mode?: 'blocking' | 'advisory' | 'informational';
   }>;
 }
 

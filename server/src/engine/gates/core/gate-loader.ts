@@ -5,14 +5,11 @@
  * Uses GateDefinitionLoader for path resolution, validation, and guidance inlining.
  */
 
+import { toGateDefinition } from './gate-definition-converter.js';
 import { GateDefinitionLoader, type GateDefinitionLoaderConfig } from './gate-definition-loader.js';
 import { isGateActiveForContext } from '../utils/gate-activation.js';
 
-import type {
-  LoadedGateDefinition,
-  LightweightGateDefinition,
-  GateActivationResult,
-} from '../types.js';
+import type { LightweightGateDefinition, GateActivationResult } from '../types.js';
 import type { TemporaryGateRegistry } from './temporary-gate-registry.js';
 
 import { Logger } from '#infra/logging/index.js';
@@ -97,7 +94,7 @@ export class GateLoader implements GateDefinitionProvider {
       }
 
       // Normalize to lightweight shape used by existing pipeline
-      const gate = this.toLightweightGate(definition);
+      const gate = toGateDefinition(definition);
 
       this.gateCache.set(gateId, gate);
       this.lastModified.set(gateId, Date.now());
@@ -184,7 +181,7 @@ export class GateLoader implements GateDefinitionProvider {
   async listAvailableGateDefinitions(): Promise<LightweightGateDefinition[]> {
     try {
       const loaded = this.definitionLoader.loadAllGates();
-      return Array.from(loaded.values()).map((definition) => this.toLightweightGate(definition));
+      return Array.from(loaded.values()).map((definition) => toGateDefinition(definition));
     } catch (error) {
       this.logger.error('Failed to list available gate definitions:', error);
       return [];
@@ -276,49 +273,6 @@ export class GateLoader implements GateDefinitionProvider {
     return Array.from(allGates.values())
       .filter((gate) => gate.gate_type === 'framework')
       .map((gate) => gate.id);
-  }
-
-  /**
-   * Convert a loaded definition to the LightweightGateDefinition shape legacy consumers expect.
-   */
-  private toLightweightGate(definition: LoadedGateDefinition): LightweightGateDefinition {
-    const retryConfig = this.normalizeRetryConfig(definition.retry_config);
-
-    return {
-      id: definition.id,
-      name: definition.name,
-      type: definition.type,
-      description: definition.description,
-      ...(definition.subject !== undefined ? { subject: definition.subject } : {}),
-      severity: definition.severity,
-      ...(definition.enforcementMode !== undefined
-        ? { enforcementMode: definition.enforcementMode }
-        : {}),
-      ...(definition.guidanceFile !== undefined ? { guidanceFile: definition.guidanceFile } : {}),
-      ...(definition.guidance !== undefined ? { guidance: definition.guidance } : {}),
-      ...(definition.pass_criteria !== undefined
-        ? { pass_criteria: definition.pass_criteria }
-        : {}),
-      ...(retryConfig !== undefined ? { retry_config: retryConfig } : {}),
-      ...(definition.activation !== undefined ? { activation: definition.activation } : {}),
-      gate_type: definition.gate_type,
-      ...(definition.evaluation !== undefined ? { evaluation: definition.evaluation } : {}),
-      // Provenance travels with the definition: a `shell_verify` criterion naming a script that
-      // ships inside the gate directory can only be resolved by something that knows which root
-      // served the gate.
-      ...(definition.sourceRoot !== undefined ? { sourceRoot: definition.sourceRoot } : {}),
-    };
-  }
-
-  private normalizeRetryConfig(
-    retry?: LoadedGateDefinition['retry_config']
-  ): LightweightGateDefinition['retry_config'] {
-    if (!retry) return undefined;
-    return {
-      max_attempts: retry.max_attempts ?? 2,
-      improvement_hints: retry.improvement_hints ?? true,
-      preserve_context: retry.preserve_context ?? true,
-    };
   }
 }
 

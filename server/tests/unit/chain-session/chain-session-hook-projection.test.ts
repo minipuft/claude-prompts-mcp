@@ -325,6 +325,7 @@ describe('chain_sessions hook projection — byte parity', () => {
     await manager.createSession('s1', 'chain-a', 2);
     await manager.advanceStep('s1', 'n1');
     await manager.setPendingGateReview('s1', {
+      nodeId: 'n2',
       gateIds: ['accuracy'],
       prompts: [],
       attemptCount: 0,

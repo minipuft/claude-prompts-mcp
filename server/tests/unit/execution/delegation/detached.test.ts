@@ -88,13 +88,17 @@ describe('isRunComplete / isRunHeldOpen', () => {
   test('a reported node whose gate review is open still holds the run (row 4.8)', () => {
     // Same run as the control above — reported, nothing owed — plus an open detached review.
     const state = pastEnd(states([['rev', spawned({ state: 'completed' })]]));
-    const detachedGateReviews = { rev: {} };
-    expect(detachedNodesHoldingRun({ state, detachedGateReviews })).toEqual(['rev']);
-    expect(isRunHeldOpen({ state, detachedGateReviews })).toBe(true);
-    expect(isRunComplete({ state, detachedGateReviews })).toBe(false);
+    const reviews = { rev: { kind: 'detached' as const } };
+    expect(detachedNodesHoldingRun({ state, reviews })).toEqual(['rev']);
+    expect(isRunHeldOpen({ state, reviews })).toBe(true);
+    expect(isRunComplete({ state, reviews })).toBe(false);
     // A node both owed and under review is named once.
     const owedToo = pastEnd(states([['rev', spawned()]]));
-    expect(detachedNodesHoldingRun({ state: owedToo, detachedGateReviews })).toEqual(['rev']);
+    expect(detachedNodesHoldingRun({ state: owedToo, reviews })).toEqual(['rev']);
+    // Only a DETACHED review holds the run: the store's current-step review is not a hold.
+    expect(detachedNodesHoldingRun({ state, reviews: { rev: { kind: 'gate' as const } } })).toEqual(
+      []
+    );
   });
 
   test('a terminal status is complete regardless of what is owed', () => {

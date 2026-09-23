@@ -37,6 +37,7 @@ const createLogger = (): Logger =>
   }) as unknown as Logger;
 
 const pendingReview = (): PendingGateReview => ({
+  nodeId: 'n1',
   combinedPrompt: 'review this',
   gateIds: ['gate-a'],
   prompts: [],

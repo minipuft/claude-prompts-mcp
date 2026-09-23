@@ -19,6 +19,8 @@
 import type {
   ChainNode,
   ChainRunStatus,
+  GateReview,
+  PendingGateReview,
   StepLifecycle,
   StepMetadata,
 } from '#shared/types/chain-execution.js';
@@ -31,6 +33,7 @@ import type {
 } from '#shared/types/chain-session.js';
 import type { DatabasePort, StateStoreOptions } from '#shared/types/persistence.js';
 
+import { attachReviewProjections, stampLegacyReview } from '#shared/types/chain-session.js';
 import { stripRunNumber } from '#shared/utils/chain-id-codec.js';
 
 export interface ChainRunRegistry {
@@ -59,6 +62,12 @@ interface ResidualRunState {
   executionOrder?: string[];
   originalArgs?: Record<string, unknown>;
   continuityScopeId?: string;
+  /** `ChainSession.reviews`, the one review store. */
+  reviews?: unknown;
+  /**
+   * Legacy load only: the pre-3.1 current-step slot and row 4.8's detached map. Read into
+   * `reviews` by {@link readLegacyReviews}; never written.
+   */
   pendingGateReview?: unknown;
   detachedGateReviews?: unknown;
   pendingShellVerification?: unknown;
@@ -366,10 +375,9 @@ function toResidual(session: ChainSession): ResidualRunState {
   };
   if (session.continuityScopeId !== undefined)
     residual.continuityScopeId = session.continuityScopeId;
-  if (session.pendingGateReview !== undefined)
-    residual.pendingGateReview = session.pendingGateReview;
-  if (session.detachedGateReviews !== undefined)
-    residual.detachedGateReviews = session.detachedGateReviews;
+  if (session.reviews !== undefined && Object.keys(session.reviews).length > 0) {
+    residual.reviews = session.reviews;
+  }
   if (session.pendingShellVerification !== undefined) {
     residual.pendingShellVerification = session.pendingShellVerification;
   }
@@ -505,8 +513,6 @@ function toStepStates(nodeRows: readonly ChainRunNodeRow[]): Map<string, StepMet
 function applyResidual(session: ChainSession, residual: ResidualRunState): void {
   const optional: Array<[keyof ResidualRunState, keyof ChainSession]> = [
     ['continuityScopeId', 'continuityScopeId'],
-    ['pendingGateReview', 'pendingGateReview'],
-    ['detachedGateReviews', 'detachedGateReviews'],
     ['pendingShellVerification', 'pendingShellVerification'],
     ['blueprint', 'blueprint'],
     ['lifecycle', 'lifecycle'],
@@ -519,6 +525,37 @@ function applyResidual(session: ChainSession, residual: ResidualRunState): void 
     const value = residual[from];
     if (value !== undefined) target[to as string] = value;
   }
+  const reviews = { ...readLegacyReviews(residual, session), ...asRecord(residual.reviews) };
+  if (Object.keys(reviews).length > 0) session.reviews = reviews as Record<string, GateReview>;
+}
+
+/** `value` when it is a plain object, else an empty one. */
+function asRecord(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+/**
+ * The reviews a run persisted before `reviews` existed, keyed by node: its current-step review
+ * (`pendingGateReview`) stamped the way the store stamps a pre-3.1 write, and each of row 4.8's
+ * detached reviews (`detachedGateReviews`) under the node it was keyed by. One-way — the writer
+ * persists only `reviews`, so this reads a document no current writer produces.
+ */
+function readLegacyReviews(
+  residual: ResidualRunState,
+  run: Pick<ChainSession, 'state' | 'executionOrder'>
+): Record<string, GateReview> {
+  const reviews: Record<string, GateReview> = {};
+  for (const [nodeId, review] of Object.entries(asRecord(residual.detachedGateReviews))) {
+    reviews[nodeId] = stampLegacyReview(review as PendingGateReview, run, { nodeId });
+  }
+  const current = asRecord(residual.pendingGateReview);
+  if (Object.keys(current).length > 0) {
+    const stamped = stampLegacyReview(current as unknown as PendingGateReview, run);
+    reviews[stamped.nodeId] = stamped;
+  }
+  return reviews;
 }
 
 function reconstructSession(row: ChainRunRow, nodeRows: readonly ChainRunNodeRow[]): ChainSession {
@@ -541,6 +578,7 @@ function reconstructSession(row: ChainRunRow, nodeRows: readonly ChainRunNodeRow
   };
 
   applyResidual(session, residual);
+  attachReviewProjections(session);
   if (row.run_completed_at !== null) session.runCompletedAt = row.run_completed_at;
   if (row.handoff_token !== null && row.handoff_token !== '') {
     session.handoffToken = row.handoff_token;
