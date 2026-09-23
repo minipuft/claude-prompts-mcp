@@ -6,6 +6,8 @@
  * Provides automatic cleanup, scope management, and integration with existing gate systems.
  */
 
+import { toGateDefinition, type GateDefinitionSource } from './gate-definition-converter.js';
+
 import type { GatePassCriteria, LightweightGateDefinition } from '../types.js';
 
 import { Logger } from '#infra/logging/index.js';
@@ -211,27 +213,7 @@ export class TemporaryGateRegistry {
   }
 
   convertToLightweightGate(tempGate: TemporaryGateDefinition): LightweightGateDefinition {
-    const lightweight: LightweightGateDefinition = {
-      id: tempGate.id,
-      name: tempGate.name,
-      type: tempGate.type === 'guidance' ? 'guidance' : 'validation',
-      description: tempGate.description,
-      guidance: tempGate.guidance,
-      retry_config: {
-        max_attempts: 3,
-        improvement_hints: true,
-        preserve_context: true,
-      },
-      activation: {
-        explicit_request: true,
-      },
-    };
-
-    if (tempGate.pass_criteria !== undefined) {
-      lightweight.pass_criteria = tempGate.pass_criteria as GatePassCriteria[];
-    }
-
-    return lightweight;
+    return toGateDefinition(liftTemporaryGate(tempGate));
   }
 
   /**
@@ -431,4 +413,29 @@ export function createTemporaryGateRegistry(
   }
 ): TemporaryGateRegistry {
   return new TemporaryGateRegistry(logger, options);
+}
+
+/**
+ * Lift a temporary gate into the converter's input, the way `GateDefinitionLoader` hands over a
+ * parsed gate.yaml.
+ *
+ * Temporary-only keys (`scope`, `scope_id`, `created_at`, `expires_at`, `source`, `context`, the
+ * step targets) stay behind: they drive this registry's lifecycle and selection, not what a
+ * pipeline stage reads. `severity` and `gate_type` stay ABSENT rather than taking the schema
+ * defaults — a temporary gate never declared them. The retry and activation values are the ones
+ * every temporary gate has always carried: explicitly requested, three attempts.
+ */
+function liftTemporaryGate(tempGate: TemporaryGateDefinition): GateDefinitionSource {
+  return {
+    id: tempGate.id,
+    name: tempGate.name,
+    type: tempGate.type === 'guidance' ? 'guidance' : 'validation',
+    description: tempGate.description,
+    guidance: tempGate.guidance,
+    ...(tempGate.pass_criteria !== undefined
+      ? { pass_criteria: tempGate.pass_criteria as GatePassCriteria[] }
+      : {}),
+    retry_config: { max_attempts: 3, improvement_hints: true, preserve_context: true },
+    activation: { explicit_request: true },
+  };
 }

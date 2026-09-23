@@ -22,6 +22,7 @@ import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globa
 
 import { GateDefinitionLoader } from '../../../../src/engine/gates/core/gate-definition-loader.js';
 import { GateLoader } from '../../../../src/engine/gates/core/gate-loader.js';
+import { TemporaryGateRegistry } from '../../../../src/engine/gates/core/temporary-gate-registry.js';
 import { GateManagerProvider } from '../../../../src/engine/gates/registry/gate-provider-adapter.js';
 
 import type { IGateManager } from '../../../../src/engine/gates/types.js';
@@ -53,15 +54,41 @@ const FULL_GATE_YAML = [
   '',
 ].join('\n');
 
-function providerOver(definitions: GateDefinitionLoader): GateManagerProvider {
+function providerOver(
+  definitions: GateDefinitionLoader,
+  temporaryGates?: TemporaryGateRegistry
+): GateManagerProvider {
   const gateManager = {
     get: (id: string) => {
       const definition = definitions.loadGate(id);
       return definition === undefined ? undefined : { getDefinition: () => definition };
     },
   } as unknown as IGateManager;
-  return new GateManagerProvider(gateManager);
+  return new GateManagerProvider(gateManager, temporaryGates);
 }
+
+/**
+ * A gate.yaml declaring exactly what every temporary gate carries: the fields its author gave plus
+ * the fixed retry and activation values. Converted through the loader, it may differ from the
+ * temporary twin ONLY in the keys a temporary gate has no source for.
+ */
+const TEMP_TWIN_YAML = [
+  'id: temp-twin',
+  'name: Temp Twin',
+  'type: validation',
+  'description: same fields as the temporary gate',
+  'guidance: TWIN-GUIDANCE',
+  'pass_criteria:',
+  '  - type: inline_guidance',
+  'retry_config:',
+  '  max_attempts: 3',
+  'activation:',
+  '  explicit_request: true',
+  '',
+].join('\n');
+
+/** `severity`/`gate_type` are schema defaults a temporary gate leaves undeclared; it has no root. */
+const LOADER_ONLY_KEYS = ['severity', 'gate_type', 'sourceRoot'];
 
 describe('GateManagerProvider carries the gate file (P4.133)', () => {
   let gatesDir: string;
@@ -70,6 +97,8 @@ describe('GateManagerProvider carries the gate file (P4.133)', () => {
     gatesDir = await mkdtemp(path.join(tmpdir(), 'cpm-provider-parity-'));
     await mkdir(path.join(gatesDir, 'full-gate'), { recursive: true });
     await writeFile(path.join(gatesDir, 'full-gate', 'gate.yaml'), FULL_GATE_YAML, 'utf8');
+    await mkdir(path.join(gatesDir, 'temp-twin'), { recursive: true });
+    await writeFile(path.join(gatesDir, 'temp-twin', 'gate.yaml'), TEMP_TWIN_YAML, 'utf8');
   });
 
   afterEach(async () => {
@@ -121,6 +150,40 @@ describe('GateManagerProvider carries the gate file (P4.133)', () => {
         id,
         json: JSON.stringify(fromLoader),
       });
+    }
+  });
+
+  test('a temporary gate converts through the same function as its gate.yaml twin', async () => {
+    const registry = new TemporaryGateRegistry(logger as never);
+    const tempId = registry.createTemporaryGate({
+      name: 'Temp Twin',
+      type: 'validation',
+      scope: 'execution',
+      description: 'same fields as the temporary gate',
+      guidance: 'TWIN-GUIDANCE',
+      pass_criteria: [{ type: 'inline_guidance' }],
+      source: 'manual',
+    });
+    try {
+      const fromTemporary = await providerOver(
+        new GateDefinitionLoader({ gatesDir }),
+        registry
+      ).loadGate(tempId);
+      const fromLoader = await new GateLoader(logger as never, gatesDir).loadGate('temp-twin');
+
+      // Positive control: the loader side carries every loader-only key, so their absence on
+      // the temporary side is the lift's decision and not an empty fixture.
+      for (const key of LOADER_ONLY_KEYS) expect(fromLoader).toHaveProperty(key);
+      for (const key of LOADER_ONLY_KEYS) expect(fromTemporary).not.toHaveProperty(key);
+
+      const loaderRest = Object.fromEntries(
+        Object.entries(fromLoader ?? {}).filter(([key]) => !LOADER_ONLY_KEYS.includes(key))
+      );
+      expect(JSON.stringify({ ...fromTemporary, id: 'temp-twin' })).toBe(
+        JSON.stringify(loaderRest)
+      );
+    } finally {
+      registry.removeTemporaryGate(tempId);
     }
   });
 });

@@ -1,7 +1,8 @@
 // @lifecycle canonical - The one conversion from a loaded gate.yaml to the definition the pipeline reads.
 /**
  * `toGateDefinition` turns a parsed gate (`LoadedGateDefinition`) into the
- * `LightweightGateDefinition` every pipeline stage reads.
+ * `LightweightGateDefinition` every pipeline stage reads. A temporary gate is lifted into the same
+ * input first (`TemporaryGateRegistry.convertToLightweightGate`), so it is the third caller.
  *
  * `GateLoader` and `GateManagerProvider` used to hold one private copy each. They drifted one key
  * at a time: the provider, which is the one the live server reviews through, dropped `evaluation`
@@ -73,8 +74,22 @@ function normalizeRetryConfig(
   };
 }
 
+/**
+ * What the converter reads: a loaded gate, or anything lifted into its declared keys.
+ *
+ * Wider than `LoadedGateDefinition` in one way only: `severity` and `gate_type` may be absent. A
+ * gate.yaml always has them (the schema defaults both), but a temporary gate declares neither, and
+ * absent is how it says "undeclared" so `resolveEnforcementMode`'s default applies.
+ */
+export type GateDefinitionSource = Pick<
+  LoadedGateDefinition,
+  'id' | 'name' | 'type' | 'description'
+> & {
+  [K in CopiedKey]?: LoadedGateDefinition[K];
+} & { retry_config?: LoadedGateDefinition['retry_config'] };
+
 /** Convert a loaded gate definition to the shape the pipeline reads. Pure; never mutates input. */
-export function toGateDefinition(loaded: LoadedGateDefinition): LightweightGateDefinition {
+export function toGateDefinition(loaded: GateDefinitionSource): LightweightGateDefinition {
   const carried: Record<string, unknown> = {};
   for (const key of Object.keys(copiedKeysFit) as CopiedKey[]) {
     const value = loaded[key];
