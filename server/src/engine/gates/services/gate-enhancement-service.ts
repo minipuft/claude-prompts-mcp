@@ -627,6 +627,13 @@ export class GateEnhancementService {
       return;
     }
 
+    // A run that walked past its last node stands on no step, so there is nothing to review
+    // (R8, as `SessionManagementStage` has since #380): keying one here would stamp the last node
+    // the run left, by position, with a review of a step already answered.
+    if (sessionContext.currentNodeId === null) {
+      return;
+    }
+
     // A detached target opens no review when its brief renders (row 4.8, R8): its review opens
     // against its late report.
     const target = context.parsedCommand?.steps?.find(

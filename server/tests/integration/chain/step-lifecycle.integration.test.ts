@@ -1123,6 +1123,34 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
       expect(onlySession().runStatus).toBe('completed');
     });
 
+    /**
+     * Row 3.5: the capture reads reviews by node. Step 1's review still open after a FAIL holds
+     * step 2's capture — not because the FAIL decides step 2's advance, but because walking on
+     * would leave step 1's review where nothing holds it: the store keeps one step-review slot
+     * and completion counts only detached reviews (stamped in `reviewHolding`). The PASS twin
+     * above is the other polarity: once step 1's review closes, step 2's capture advances.
+     */
+    test("a FAIL on step 1's review carrying step 2's answer captures step 2 and leaves the run on it", async () => {
+      parsedSteps = parsedFrameworkChain;
+      activeFramework = 'cageerf';
+      blockingGates = false;
+      await pipeline.execute({ command: `>>draft --> >>review` });
+      const chainId = onlySession().chainId;
+      await pipeline.execute({ chain_id: chainId, user_response: 'one line' });
+      expect(Object.keys(reviews())).toEqual(['draft']);
+
+      await pipeline.execute({
+        chain_id: chainId,
+        user_response: '## Context\nThe situation, stated.\n\n## Analysis\nThe options, weighed.',
+        gate_verdict: 'GATE_REVIEW: FAIL - step 1 still lacks its sections',
+      } as any);
+
+      expect(Object.keys(reviews())).toEqual(['draft']);
+      expect(reviews()['draft']?.attemptCount).toBe(1);
+      expect(onlySession().state.currentNodeId).toBe('review');
+      expect(onlySession().runStatus).not.toBe('completed');
+    });
+
     test('TWIN: the same PASS on a review of the node the run stands on moves the run past it', async () => {
       await pipeline.execute({ command: `>>draft --> >>review` });
       const chainId = onlySession().chainId;

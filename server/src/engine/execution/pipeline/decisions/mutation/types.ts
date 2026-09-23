@@ -106,7 +106,7 @@ export const MAX_INSERTIONS_PER_RUN = 3;
  *
  * Same reservation pattern as `PHASE_GUARD_GATE_ID = '__phase_guard__'`
  * (`stages/19-phase-guard-verification-stage.ts`) and the `__gate_review__` synthetic step:
- * a double-underscore id no authored gate may take, so a `pendingGateReview` carrying it is
+ * a double-underscore id no authored gate may take, so a gate review carrying it is
  * unambiguously server-minted.
  *
  * Declared HERE rather than in the stage that sets the review, because the policy that decides

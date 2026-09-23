@@ -5,7 +5,7 @@ import { buildPipelineHookContext } from '../pipeline/hook-context.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { ExecutionRecordStore } from '#modules/chains/execution-record-store.js';
-import type { InputRequiredReason } from '#shared/types/chain-execution.js';
+import type { GateReview, InputRequiredReason } from '#shared/types/chain-execution.js';
 import type {
   ChainSession,
   ChainSessionService,
@@ -14,6 +14,7 @@ import type {
 } from '#shared/types/index.js';
 import type { ExecutionContext, SessionContext } from '../context/index.js';
 
+import { currentStepReview } from '#shared/types/chain-session.js';
 import { currentOrdinal, nodeIdAt, totalOf } from '#shared/utils/node-order.js';
 
 const PLACEHOLDER_SOURCE = 'StepResponseCaptureStage';
@@ -464,7 +465,7 @@ export class StepCaptureService {
       startedAt: submittedAt,
       ...(detection.outcome === 'cleared'
         ? { completedAt: submittedAt }
-        : { inputRequired: describeOutstandingReview(session) }),
+        : { inputRequired: describeOutstandingReview(session, target.nodeId) }),
       ...(gateVerdicts !== undefined ? { gateVerdicts } : {}),
       scope: context.getScopeOptions(),
     });
@@ -519,24 +520,7 @@ export class StepCaptureService {
       outputMapping
     );
 
-    // Only advance if no pending gate review (gated flows advance on PASS verdict)
-    const pendingReview = this.chainSessionStore.getPendingGateReview(sessionId);
-    const hasPendingReview = pendingReview !== undefined;
-    if (!hasPendingReview && !passClearedThisCall) {
-      await this.chainSessionStore.advanceStep(sessionId, target.nodeId);
-    } else if (hasPendingReview) {
-      context.diagnostics.info(
-        'StepCaptureService',
-        'Response captured but advancement blocked by pending gate review',
-        {
-          capturedStep: target.ordinal,
-          gateIds: pendingReview.gateIds,
-          attemptCount: pendingReview.attemptCount,
-          maxAttempts: pendingReview.maxAttempts,
-        }
-      );
-      context.state.gates.awaitingUserChoice = true;
-    }
+    await this.advanceUnlessHeld(context, sessionId, target, passClearedThisCall);
 
     this.syncSessionContext(context, sessionId, sessionContext);
   }
@@ -562,23 +546,40 @@ export class StepCaptureService {
       outputMapping
     );
 
-    const pendingReview = this.chainSessionStore.getPendingGateReview(sessionId);
-    const hasPendingReview = pendingReview !== undefined;
-    if (!hasPendingReview && !passClearedThisCall) {
-      await this.chainSessionStore.advanceStep(sessionId, target.nodeId);
-    } else if (hasPendingReview) {
-      context.diagnostics.info(
-        'StepCaptureService',
-        'Response captured but advancement blocked by pending gate review',
-        {
-          capturedStep: target.ordinal,
-          gateIds: pendingReview.gateIds,
-          attemptCount: pendingReview.attemptCount,
-          maxAttempts: pendingReview.maxAttempts,
-        }
-      );
-      context.state.gates.awaitingUserChoice = true;
+    await this.advanceUnlessHeld(context, sessionId, target, passClearedThisCall);
+  }
+
+  /**
+   * Advance past the captured node unless an open review holds it ({@link reviewHolding}). A PASS
+   * that already advanced it this call (`passClearedThisCall`, which stage 16 sets only when the
+   * answered review graded the captured node) leaves nothing to do.
+   */
+  private async advanceUnlessHeld(
+    context: ExecutionContext,
+    sessionId: string,
+    target: StepTarget,
+    passClearedThisCall: boolean
+  ): Promise<void> {
+    const session = this.chainSessionStore.getSession(sessionId, context.getScopeOptions());
+    const review = session === undefined ? undefined : reviewHolding(session, target.nodeId);
+    if (review === undefined) {
+      if (!passClearedThisCall) {
+        await this.chainSessionStore.advanceStep(sessionId, target.nodeId);
+      }
+      return;
     }
+    context.diagnostics.info(
+      'StepCaptureService',
+      'Response captured but advancement blocked by pending gate review',
+      {
+        capturedStep: target.ordinal,
+        reviewedNodeId: review.nodeId,
+        gateIds: review.gateIds,
+        attemptCount: review.attemptCount,
+        maxAttempts: review.maxAttempts,
+      }
+    );
+    context.state.gates.awaitingUserChoice = true;
   }
 
   private syncSessionContext(
@@ -604,14 +605,30 @@ export class StepCaptureService {
 }
 
 /**
+ * The open review that holds `nodeId`'s advance: the review of that node (`reviews[nodeId]`),
+ * else the run's step review of a node it already left. PURE.
+ *
+ * The second half is not a review of another node deciding this one — it keeps the run from
+ * walking out from under a review nothing else would hold: the store keeps one step-review slot,
+ * so the next step review would replace it, and run completion counts only detached reviews
+ * (stamped: as of 2026-09-23 · flips when `writeReview` keeps a step review per node and
+ * completion counts every open review — P4.157).
+ */
+function reviewHolding(session: ChainSession, nodeId: string): GateReview | undefined {
+  return (
+    session.reviews?.[nodeId] ?? currentStepReview(session.reviews, session.state.currentNodeId)
+  );
+}
+
+/**
  * Why a verdict-time record says the step is still waiting on its submitter.
  *
  * Read off the review the run is holding on, so the row names the gate and the attempt rather
  * than restating the status in a second vocabulary. A run whose review was cleared between the
  * snapshot and this call answers the generic reason instead of inventing a gate id.
  */
-function describeOutstandingReview(session: ChainSession): InputRequiredReason {
-  const review = session.pendingGateReview;
+function describeOutstandingReview(session: ChainSession, nodeId: string): InputRequiredReason {
+  const review = reviewHolding(session, nodeId);
   const gateId = review?.gateIds[0];
   return gateId === undefined || review === undefined
     ? { kind: 'awaiting_response' }

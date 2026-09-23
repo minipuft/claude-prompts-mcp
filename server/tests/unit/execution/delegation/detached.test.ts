@@ -124,19 +124,32 @@ describe('collectDetachedNodeFacts', () => {
     ]);
   });
 
-  test("reads an open review's phase off the node's review, by node (row 4.8)", () => {
-    const run = (phase?: string) => ({
+  test("reads an open review's phase off the node's review record, by node (row 4.8, 3.5)", () => {
+    const run = (review?: Record<string, unknown>) => ({
       state: { nodes: NODES, stepStates: states([['rev', spawned({ state: 'completed' })]]) },
-      detachedGateReviews: { rev: { metadata: phase === undefined ? {} : { phase } } },
+      ...(review !== undefined ? { reviews: { rev: review as never } } : {}),
     });
     const steps = [{ stepNumber: 2, nodeId: 'rev', await: 'run' as const }];
-    expect(collectDetachedNodeFacts(steps, run())[0]?.review).toBe('awaiting-verdict');
-    expect(collectDetachedNodeFacts(steps, run('awaiting-replacement'))[0]?.review).toBe(
+    const detached = (phase: string, metadata?: Record<string, unknown>) =>
+      run({ kind: 'detached', phase, ...(metadata !== undefined ? { metadata } : {}) });
+
+    expect(collectDetachedNodeFacts(steps, detached('awaiting-verdict'))[0]?.review).toBe(
+      'awaiting-verdict'
+    );
+    expect(collectDetachedNodeFacts(steps, detached('awaiting-replacement'))[0]?.review).toBe(
       'awaiting-replacement'
     );
-    expect(collectDetachedNodeFacts(steps, run('exhausted'))[0]?.review).toBe('exhausted');
-    // No review: no phase key at all.
-    expect(collectDetachedNodeFacts(steps, { state: run().state })[0]).not.toHaveProperty('review');
+    expect(collectDetachedNodeFacts(steps, detached('exhausted'))[0]?.review).toBe('exhausted');
+    // The record's phase decides; a `metadata.phase` that disagrees with it is never read.
+    expect(
+      collectDetachedNodeFacts(steps, detached('exhausted', { phase: 'awaiting-verdict' }))[0]
+        ?.review
+    ).toBe('exhausted');
+    // No review, or a review that is not the node's detached one: no phase key at all.
+    expect(collectDetachedNodeFacts(steps, run())[0]).not.toHaveProperty('review');
+    expect(
+      collectDetachedNodeFacts(steps, run({ kind: 'gate', phase: 'awaiting-verdict' }))[0]
+    ).not.toHaveProperty('review');
   });
 });
 

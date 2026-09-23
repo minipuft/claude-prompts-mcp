@@ -6,6 +6,7 @@ import {
   PHASE_GUARD_GATE_ID,
   createPhaseGuardVerificationStage,
 } from '../../../../src/engine/execution/pipeline/stages/19-phase-guard-verification-stage.js';
+import { DiagnosticAccumulator } from '../../../../src/engine/execution/pipeline/state/accumulators/diagnostic-accumulator.js';
 
 import type { PhaseGuardsConfig } from '../../../../src/shared/types/core-config.js';
 import type { ChainSessionService } from '../../../../src/shared/types/chain-session.js';
@@ -179,6 +180,7 @@ describe('PhaseGuardVerificationStage', () => {
     ctx.frameworkAuthority.decide({
       globalActiveFramework: 'cageerf',
     });
+    ctx.state.session.capturedStep = { nodeId: 'n1', ordinal: 1 };
 
     await stage.execute(ctx);
 
@@ -565,12 +567,38 @@ describe('PhaseGuardVerificationStage', () => {
       expect(metadata['stepNumber']).not.toBe(2);
     });
 
-    test('a call that captured nothing stamps no step, leaving the current_step fallback', async () => {
-      const metadata = await runFailingGuard();
+    test('the review is keyed by the CAPTURED node (R8), not the node the run stands on', async () => {
+      await runFailingGuard({ nodeId: 'n1', ordinal: 1 });
 
-      expect(metadata['stepNumber']).toBeUndefined();
-      expect(metadata['nodeId']).toBeUndefined();
-      expect(metadata['source']).toBe('phase-guard-verification');
+      const [, review] = (sessionStore.setPendingGateReview as jest.Mock).mock.calls[0] as [
+        string,
+        { nodeId?: string },
+      ];
+      expect(review.nodeId).toBe('n1');
+    });
+
+    test('a call that captured nothing opens no review — no node to key it by (R8, row 3.5)', async () => {
+      const stage = createPhaseGuardVerificationStage(
+        () => createRegistry(failingGuide()),
+        () => defaultConfig,
+        sessionStore,
+        logger
+      );
+      const ctx = withSession(createContext(createMcpRequest('>>test', 'No context section.')));
+      ctx.frameworkContext = { selectedFramework: { id: 'cageerf', name: 'CAGEERF' } } as any;
+      ctx.sessionContext = { ...ctx.sessionContext!, currentStep: 2, currentNodeId: 'n2' };
+      const warn = jest.spyOn(ctx.diagnostics, 'warn');
+
+      await stage.execute(ctx);
+
+      expect(sessionStore.setPendingGateReview).not.toHaveBeenCalled();
+      expect(ctx.sessionContext?.pendingReview).toBeUndefined();
+      // The failure was found and said, not skipped before grading.
+      expect(warn).toHaveBeenCalledWith(
+        'PhaseGuardVerification',
+        'Structural failure on a call that captured no step',
+        expect.anything()
+      );
     });
   });
 
@@ -726,6 +754,7 @@ describe('PhaseGuardVerificationStage', () => {
       createContext(createMcpRequest('>>test', 'Output with no phase headers at all.'))
     );
     ctx.frameworkContext = { selectedFramework: { id: 'cageerf', name: 'CAGEERF' } } as any;
+    ctx.state.session.capturedStep = { nodeId: 'n1', ordinal: 1 };
 
     await stage.execute(ctx);
 
@@ -795,6 +824,7 @@ describe('PhaseGuardVerificationStage', () => {
     );
     const ctx = withSession(createContext(createMcpRequest('>>test', 'No context section here.')));
     ctx.frameworkContext = { selectedFramework: { id: 'cageerf', name: 'CAGEERF' } } as any;
+    ctx.state.session.capturedStep = { nodeId: 'n1', ordinal: 1 };
 
     await stage.execute(ctx);
 
@@ -832,6 +862,7 @@ describe('PhaseGuardVerificationStage', () => {
     );
     const ctx = withSession(createContext(createMcpRequest('>>test', output)));
     ctx.frameworkContext = { selectedFramework: { id: 'cageerf', name: 'CAGEERF' } } as any;
+    ctx.state.session.capturedStep = { nodeId: 'n1', ordinal: 1 };
     return { stage, store, ctx };
   }
 
@@ -982,7 +1013,13 @@ describe('the declared-header set is per node (P4.111)', () => {
     expect(store.setPendingGateReview).toHaveBeenCalledTimes(1);
   });
 
+  /**
+   * With no captured step there is no node to key a review by (R8), so the union's only effect
+   * left is that the guard is evaluated and its failure reported, where an empty set would skip
+   * grading altogether.
+   */
   test('a call that captured no step at all falls back to the run-wide union', async () => {
+    const warn = jest.spyOn(DiagnosticAccumulator.prototype, 'warn');
     const store = await gradeMissingContext(
       createMultiNodeStore([
         ['n1', { declaredSections: ['## Context'] }],
@@ -991,6 +1028,12 @@ describe('the declared-header set is per node (P4.111)', () => {
       undefined
     );
 
-    expect(store.setPendingGateReview).toHaveBeenCalledTimes(1);
+    expect(store.setPendingGateReview).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(
+      'PhaseGuardVerification',
+      'Structural failure on a call that captured no step',
+      expect.anything()
+    );
+    warn.mockRestore();
   });
 });

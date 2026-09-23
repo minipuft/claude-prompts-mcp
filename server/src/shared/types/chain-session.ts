@@ -319,10 +319,11 @@ export interface ChainSession {
   readonly pendingGateReview?: PendingGateReview;
   /**
    * The detached reviews in `reviews`, keyed by node; absent when there are none. A read-only
-   * projection for `collectDetachedNodeFacts`, installed by {@link attachReviewProjections}.
+   * projection installed by {@link attachReviewProjections}; no `src` code reads it since row 3.5
+   * moved `collectDetachedNodeFacts` onto `reviews` (only tests do).
    *
-   * @deprecated stamped: (as of 2026-09-23 · flips when row 3.5 moves `detached.ts` onto
-   * `reviews`) — read `reviews` filtered by `kind: 'detached'`.
+   * @deprecated stamped: (as of 2026-09-23 · flips when row 3.6 deletes both projections) — read
+   * `reviews` filtered by `kind: 'detached'`.
    */
   readonly detachedGateReviews?: Readonly<Record<string, PendingGateReview>>;
   /** Pending shell verification state for bounce-back resume across MCP requests. */

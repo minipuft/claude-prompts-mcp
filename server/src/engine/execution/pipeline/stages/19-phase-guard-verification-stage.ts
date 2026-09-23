@@ -29,6 +29,7 @@ import { composeStructuralReview } from '../decisions/gates/structural-review-co
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
+import type { PendingGateReview } from '#shared/types/chain-execution.js';
 import type { ChainSessionService } from '#shared/types/chain-session.js';
 import type { PhaseGuardsConfig } from '#shared/types/core-config.js';
 import type { FrameworkGuideProvider } from '../../../frameworks/declared-sections.js';
@@ -201,6 +202,7 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
     // open on the graded step absorbs the finding (R103): its gate, criteria, retry budget and
     // spent attempts survive, and the structural findings join it. With no such review, the
     // finding opens its own. `composeStructuralReview` owns which of the two happens.
+    const reviewedStep = this.resolveReviewedStepIdentity(context);
     const review = composeStructuralReview(this.chainSessionStore.getPendingGateReview(sessionId), {
       gateId: PHASE_GUARD_GATE_ID,
       feedback: result.retryFeedback,
@@ -217,19 +219,17 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
       // WHICH step this review graded (row 2.11). Without it the renderer falls through to
       // `current_step`, which by this point in the pipeline names the step the run ADVANCED
       // to — so the review quoted step N+1's task above step N's missing sections.
-      reviewedStep: this.resolveReviewedStepIdentity(context),
+      reviewedStep,
       maxAttempts,
       createdAt: Date.now(),
     });
 
-    await this.chainSessionStore.setPendingGateReview(sessionId, review);
-
-    // Update context so GateReviewStage sees the pending review this request
-    if (context.sessionContext) {
-      context.sessionContext = {
-        ...context.sessionContext,
-        pendingReview: review,
-      };
+    if (!(await this.persistStructuralReview(context, sessionId, review, reviewedStep))) {
+      context.diagnostics.warn(this.name, 'Structural failure on a call that captured no step', {
+        failedPhases: result.failedPhases,
+      });
+      this.logExit({ passed: false, skipped: 'No captured step to key a review by' });
+      return;
     }
 
     this.relatchRunCompletion(context, sessionId);
@@ -241,6 +241,29 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
       failedPhases: result.failedPhases,
       maxAttempts: review.maxAttempts,
     });
+  }
+
+  /**
+   * Persist `review` keyed by the node whose answer was graded (R8), and hand it to
+   * GateReviewStage through the context. The gate review it joined already names that node, else
+   * the step this call captured. A call that captured nothing graded no step's answer — a detached
+   * node's late report is graded by its own review, not here — so it opens nothing and returns
+   * `false`.
+   */
+  private async persistStructuralReview(
+    context: ExecutionContext,
+    sessionId: string,
+    review: PendingGateReview,
+    reviewedStep: { nodeId: string } | Record<string, never>
+  ): Promise<boolean> {
+    const nodeId = review.nodeId ?? ('nodeId' in reviewedStep ? reviewedStep.nodeId : undefined);
+    if (nodeId === undefined) return false;
+    const keyed = { ...review, nodeId };
+    await this.chainSessionStore.setPendingGateReview(sessionId, keyed);
+    if (context.sessionContext) {
+      context.sessionContext = { ...context.sessionContext, pendingReview: keyed };
+    }
+    return true;
   }
 
   /**
@@ -332,10 +355,8 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
    * the run, and `currentStep - 1` is wrong exactly on the calls where no advance happened — the
    * final step, and any step whose advance a pending review blocked.
    *
-   * Empty when this call captured nothing, which is not a defect and not a guard: a review with
-   * no step identity is what every phase-guard review was before this row, and
-   * `ChainOperatorExecutor.resolveReviewStep` still resolves it from `current_step`. Stamping a
-   * guess instead would put a wrong number where a missing one is handled.
+   * Empty when this call captured nothing. The caller then opens no review (a review is keyed by
+   * the node it grades, R8); stamping a guess instead would grade a step nobody answered.
    */
   private resolveReviewedStepIdentity(
     context: ExecutionContext

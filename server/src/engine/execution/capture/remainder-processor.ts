@@ -157,10 +157,13 @@ export class RemainderProcessor {
       return interrupt.unknownId;
     }
 
-    if (!isUnknownInterruptPending(session.pendingGateReview)) {
+    // The hold is keyed by the node the run stopped on (stage 16), so it is read there.
+    const { currentNodeId } = session.state;
+    const hold = currentNodeId === null ? undefined : session.reviews?.[currentNodeId];
+    if (!isUnknownInterruptPending(hold)) {
       return undefined;
     }
-    const held = session.pendingGateReview?.metadata?.['unknownId'];
+    const held = hold?.metadata?.['unknownId'];
     return typeof held === 'string' ? held : undefined;
   }
 

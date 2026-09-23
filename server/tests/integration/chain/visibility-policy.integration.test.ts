@@ -125,9 +125,8 @@ const renderStep = async (
 
 /**
  * Gate-review render of step 3 (the step whose template reaches for both a previous output and
- * a history entry). `resolveReviewStep` reads the reviewed step from `metadata.stepNumber` —
- * NOT from any top-level field — so the target is pinned there rather than left to the
- * last-step fallback.
+ * a history entry). These steps carry no node ids, so `resolveReviewStep` reads the reviewed step
+ * from `metadata.stepNumber` — pinned there rather than left to the last-step fallback.
  */
 const renderReview = async (
   steps: ChainStepPrompt[]
@@ -136,7 +135,10 @@ const renderReview = async (
     executionType: 'gate_review',
     stepPrompts: steps,
     chainContext: chainContext(),
-    pendingGateReview: {
+    review: {
+      nodeId: 'n3',
+      kind: 'gate',
+      phase: 'awaiting-verdict',
       combinedPrompt: 'review the step',
       gateIds: ['code-quality'],
       prompts: [],

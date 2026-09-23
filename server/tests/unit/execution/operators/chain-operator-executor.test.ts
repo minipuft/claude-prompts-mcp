@@ -256,6 +256,9 @@ describe('ChainOperatorExecutor', () => {
     );
 
     const pendingReview = {
+      nodeId: 'n1',
+      kind: 'gate',
+      phase: 'awaiting-verdict',
       combinedPrompt: '',
       gateIds: [],
       prompts: [
@@ -278,7 +281,7 @@ describe('ChainOperatorExecutor', () => {
 
     const result = await reviewExecutor.renderStep({
       executionType: 'gate_review',
-      pendingGateReview: pendingReview as any,
+      review: pendingReview as any,
       stepPrompts: [
         {
           stepNumber: 1,
@@ -306,6 +309,9 @@ describe('ChainOperatorExecutor', () => {
     // `executor` (from beforeEach) is constructed with no gateGuidanceRenderer, so the gate
     // review path falls through to the private renderSimpleGateGuidance fallback (row 0.9).
     const pendingReview = {
+      nodeId: 'n1',
+      kind: 'gate',
+      phase: 'awaiting-verdict',
       combinedPrompt: '',
       gateIds: [],
       prompts: [
@@ -322,7 +328,7 @@ describe('ChainOperatorExecutor', () => {
 
     const result = await executor.renderStep({
       executionType: 'gate_review',
-      pendingGateReview: pendingReview as any,
+      review: pendingReview as any,
       stepPrompts: [
         {
           stepNumber: 1,
@@ -422,6 +428,9 @@ describe('ChainOperatorExecutor', () => {
     );
 
     const pendingReview = {
+      nodeId: 'n1',
+      kind: 'gate',
+      phase: 'awaiting-verdict',
       combinedPrompt: '',
       gateIds: [],
       prompts: [
@@ -445,7 +454,7 @@ describe('ChainOperatorExecutor', () => {
 
     await reviewExecutor.renderStep({
       executionType: 'gate_review',
-      pendingGateReview: pendingReview as any,
+      review: pendingReview as any,
       stepPrompts: [
         {
           stepNumber: 1,
@@ -473,13 +482,12 @@ describe('ChainOperatorExecutor', () => {
   });
 
   /**
-   * Row 2.11. `resolveReviewStep` decides which step a review re-renders as "Original Task
-   * Instructions". Its three keys are asserted here in priority order, because the LAST of them
-   * — `chainContext.current_step` — names the step the run has ADVANCED TO, which is not the
-   * step a phase-guard review graded. Both polarities are pinned: with the identity stamped the
-   * review must quote the graded step, and without it the `current_step` fallback must still
-   * work, so a legacy review (one persisted before the stamp existed) renders rather than
-   * throwing.
+   * Row 2.11 / primitive rework 3.5. `resolveReviewStep` decides which step a review re-renders as
+   * "Original Task Instructions". Its three keys are asserted here in priority order: the node the
+   * review grades (`GateReview.nodeId`), the ordinal recorded on it, and last
+   * `chainContext.current_step` — which names the step the run has ADVANCED TO, not the step a
+   * phase-guard review graded. The two later keys are reached only when the node id names no step
+   * in the list (a step list parsed before node-id minting).
    */
   describe('reviewed-step attribution (row 2.11)', () => {
     const twoSteps = [
@@ -487,7 +495,10 @@ describe('ChainOperatorExecutor', () => {
       { stepNumber: 2, nodeId: 'n2', promptId: 'summarize', args: { input: 'beta' } },
     ];
 
-    const reviewOfStep = (metadata?: Record<string, unknown>) => ({
+    const reviewOfStep = (nodeId: string, metadata?: Record<string, unknown>) => ({
+      nodeId,
+      kind: 'structural',
+      phase: 'awaiting-verdict',
       combinedPrompt: 'Your output is missing required sections.',
       gateIds: ['__phase_guard__'],
       prompts: [],
@@ -498,12 +509,14 @@ describe('ChainOperatorExecutor', () => {
       ...(metadata !== undefined ? { metadata } : {}),
     });
 
-    test('metadata.stepNumber wins over current_step: the review quotes the GRADED step', async () => {
+    test('the review node wins over a stale ordinal and current_step: it quotes the GRADED step', async () => {
       const result = await executor.renderStep({
         executionType: 'gate_review',
-        pendingGateReview: reviewOfStep({
+        review: reviewOfStep('n1', {
           source: 'phase-guard-verification',
-          stepNumber: 1,
+          // A stale ordinal — what an insertion mid-run leaves behind. The node id is the
+          // identity and must win.
+          stepNumber: 2,
         }) as any,
         stepPrompts: twoSteps,
         // The run advanced to step 2 before the guard graded step 1's output.
@@ -519,15 +532,12 @@ describe('ChainOperatorExecutor', () => {
       expect(result.content).toContain('"## Context" section');
     });
 
-    test('metadata.nodeId resolves the step by identity, not by position', async () => {
+    test('a node naming no listed step falls back to the recorded ordinal over current_step', async () => {
       const result = await executor.renderStep({
         executionType: 'gate_review',
-        pendingGateReview: reviewOfStep({
+        review: reviewOfStep('unlisted', {
           source: 'phase-guard-verification',
-          nodeId: 'n1',
-          // A stale ordinal — what an insertion mid-run leaves behind. The node id is the
-          // identity and must win, which is the same two-key rule capture and stage 20 use.
-          stepNumber: 2,
+          stepNumber: 1,
         }) as any,
         stepPrompts: twoSteps,
         chainContext: { current_step: 2 },
@@ -538,18 +548,17 @@ describe('ChainOperatorExecutor', () => {
       expect(result.content).not.toContain('Summarize:');
     });
 
-    test('POSITIVE CONTROL: a legacy review with no identity still falls back to current_step', async () => {
+    test('POSITIVE CONTROL: with neither a listed node nor an ordinal, current_step decides', async () => {
       const result = await executor.renderStep({
         executionType: 'gate_review',
-        pendingGateReview: reviewOfStep() as any,
+        review: reviewOfStep('unlisted') as any,
         stepPrompts: twoSteps,
         chainContext: { current_step: 2 },
         additionalGateIds: [],
       });
 
       // Documented path, not an accident: with nothing naming the graded step, the review
-      // renders the step the run stands on. This is the behavior row 2.11 replaces for
-      // phase-guard reviews, kept reachable for reviews that carry no identity at all.
+      // renders the step the run stands on.
       expect(result.content).toContain('Summarize:');
       expect(result.content).not.toContain('Analyze this code: alpha');
     });
@@ -737,6 +746,9 @@ describe('ChainOperatorExecutor', () => {
     describe('gate review render (F5 — 13-session-stage opens the review upfront, renderNormalStep never runs)', () => {
       function buildPendingReview(attemptCount: number) {
         return {
+          nodeId: 'n1',
+          kind: 'gate',
+          phase: 'awaiting-verdict',
           combinedPrompt: '',
           gateIds: [],
           prompts: [],
@@ -751,7 +763,7 @@ describe('ChainOperatorExecutor', () => {
 
         const result = await executor.renderStep({
           executionType: 'gate_review',
-          pendingGateReview: buildPendingReview(0) as any,
+          review: buildPendingReview(0) as any,
           stepPrompts: [stepWithFramework('cageerf')],
           chainContext: {},
           additionalGateIds: [],
@@ -768,7 +780,7 @@ describe('ChainOperatorExecutor', () => {
 
         const result = await executor.renderStep({
           executionType: 'gate_review',
-          pendingGateReview: buildPendingReview(1) as any,
+          review: buildPendingReview(1) as any,
           stepPrompts: [stepWithFramework('cageerf')],
           chainContext: {},
           additionalGateIds: [],
@@ -788,7 +800,7 @@ describe('ChainOperatorExecutor', () => {
 
         const result = await executor.renderStep({
           executionType: 'gate_review',
-          pendingGateReview: buildPendingReview(0) as any,
+          review: buildPendingReview(0) as any,
           stepPrompts: [stepWithFramework('cageerf')],
           chainContext: {},
           additionalGateIds: [],
@@ -807,7 +819,7 @@ describe('ChainOperatorExecutor', () => {
 
         const result = await executor.renderStep({
           executionType: 'gate_review',
-          pendingGateReview: {
+          review: {
             ...buildPendingReview(0),
             metadata: { stepNumber: 1, nodeId: 'n1' },
           } as any,
