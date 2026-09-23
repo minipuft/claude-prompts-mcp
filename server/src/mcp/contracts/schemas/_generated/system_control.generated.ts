@@ -30,7 +30,6 @@ export type system_controlParamName =
   | 'reason'
   | 'persist'
   | 'show_details'
-  | 'include_history'
   | 'include_metrics'
   | 'topic'
   | 'include_planned'
@@ -65,7 +64,7 @@ export const system_controlParameters: ToolParameter[] = [
     status: 'working',
     compatibility: 'canonical',
     examples: [
-      'system_control({"action":"status","show_details":true})',
+      'system_control({"action":"status"})',
       'system_control({"action":"framework","operation":"switch","framework":"CAGEERF","reason":"enable framework"})',
       'system_control({"action":"gates","operation":"disable","reason":"maintenance","persist":true})',
       'system_control({"action":"session","operation":"clear","session_id":"chain-123"})',
@@ -119,14 +118,7 @@ export const system_controlParameters: ToolParameter[] = [
   {
     name: 'show_details',
     type: 'boolean',
-    description: 'Include detailed output (status/analytics/framework/gate reports).',
-    status: 'working',
-    compatibility: 'canonical',
-  },
-  {
-    name: 'include_history',
-    type: 'boolean',
-    description: 'Include recorded history where supported.',
+    description: 'Include detailed output (framework and session lists).',
     status: 'working',
     compatibility: 'canonical',
   },
@@ -320,7 +312,7 @@ export const system_controlCommands: ToolCommand[] = [
   {
     id: 'status',
     summary: 'Runtime status overview (framework, gates, health).',
-    parameters: ['action', 'show_details', 'include_history', 'include_metrics'],
+    parameters: ['action', 'include_metrics'],
     status: 'working',
   },
   {
@@ -387,15 +379,15 @@ export const system_controlCommands: ToolCommand[] = [
   {
     id: 'analytics',
     summary:
-      'Retrieve analytics summary with optional detail/history; history lists framework switches, reset clears metrics.',
-    parameters: ['action', 'operation', 'show_details', 'include_history', 'limit', 'confirm'],
+      'Retrieve the analytics summary; operation history lists framework switches, reset clears metrics.',
+    parameters: ['action', 'operation', 'limit', 'confirm'],
     status: 'working',
   },
   {
     id: 'config',
     summary:
       'Configuration operations, read-only (list/keys/get/validate). Writes go through the `cpm` CLI.',
-    parameters: ['action', 'operation', 'config', 'reason'],
+    parameters: ['action', 'operation', 'config'],
     status: 'working',
   },
   {

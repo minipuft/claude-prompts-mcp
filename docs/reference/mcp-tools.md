@@ -1294,7 +1294,7 @@ system_control(action:"framework", operation:"list")
 system_control(action:"framework", operation:"switch", framework:"ReACT")
 
 # View execution analytics
-system_control(action:"analytics", show_details:true)
+system_control(action:"analytics")
 
 # List available gates
 system_control(action:"gates", operation:"list")
@@ -1304,10 +1304,10 @@ system_control(action:"gates", operation:"list")
 
 | Action              | Operations                                          | Parameters                                                                                                            | Purpose                                                                                                                                  |
 | ------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `status`            | —                                                   | `show_details`, `include_history`, `include_metrics`                                                                  | Runtime overview                                                                                                                         |
+| `status`            | —                                                   | `include_metrics`                                                                                                     | Runtime overview                                                                                                                         |
 | `framework`         | `list`, `switch`, `enable`, `disable`               | `framework`, `reason`, `persist`, `show_details`                                                                      | Framework management                                                                                                                     |
 | `gates`             | `list`, `enable`, `disable`, `status`, `health`     | `search_query`, `reason`, `persist`                                                                                   | Gate management                                                                                                                          |
-| `analytics`         | `view`, `history`, `reset`                          | `include_history`; `limit` for history; `confirm: true` for reset                                                     | Execution metrics                                                                                                                        |
+| `analytics`         | `view`, `history`, `reset`                          | `limit` for history; `confirm: true` for reset                                                                        | Execution metrics                                                                                                                        |
 | `config`            | `list`, `keys`, `get`, `validate`                   | `config: { key, value?, operation }` for `get` (one key's value + source) or `validate` (a per-key candidate check)   | Read-only: whole configuration, declared schema keys, one key's value, or a validity check — see [Config Operations](#config-operations) |
 | `maintenance`       | `restart`                                           | `confirm: true`, `reason`                                                                                             | Server restart                                                                                                                           |
 | `guide`             | —                                                   | `topic`, `include_planned`                                                                                            | Operation overview                                                                                                                       |
@@ -1445,17 +1445,16 @@ carries what they report.
 Every figure the report labels **(this workspace)** — recorded steps, completed, failed, average
 step duration, and the gate section above — comes from that one scoped ledger read, so one reply
 describes one workspace and **Gate Review Coverage** divides two counts from the same population.
-Uptime, memory and performance trends sit under **This Server Process (all workspaces)** because
-they belong to the process, which may serve several workspaces; nothing in the report presents a
-process fact as a workspace one.
+Uptime and memory sit under **This Server Process (all workspaces)** because they belong to the
+process, which may serve several workspaces; nothing in the report presents a process fact as a
+workspace one. Both are read when the report is built.
 
 The ledger records **chain steps**. A single-prompt run opens no session and writes no row, so it
 is counted nowhere in this report, and the report says so when a workspace has no rows. The counts
 cover the most recent ledger page (50 rows by default, 500 at most), not all time.
 
-`operation:"reset"` clears the framework switch metrics for the calling workspace and the process
-performance trends. It does not touch the execution ledger, which is append-only — the report says
-that too.
+`operation:"reset"` clears the framework switch metrics for the calling workspace. It does not
+touch the execution ledger, which is append-only — the report says that too.
 
 ### Session Operations
 

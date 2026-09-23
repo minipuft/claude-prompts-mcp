@@ -23,19 +23,9 @@ function createTestService() {
       autoVersion: true,
     }),
   } as any;
-  const semanticAnalyzer = {
-    analyzePrompt: jest.fn(),
-    analyzePromptIntelligence: jest.fn().mockResolvedValue({
-      feedback: '',
-      suggestions: [],
-      classification: { executionType: 'prompt', requiresFramework: false, confidence: 0.5 },
-    }),
-  } as any;
-
   const service = createPromptResourceHandler(
     logger as any,
     configManager,
-    semanticAnalyzer,
     undefined,
     undefined,
     () => Promise.resolve(),

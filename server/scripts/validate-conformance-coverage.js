@@ -212,11 +212,11 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
   ),
   ...exceptionGroup(
     'system_control',
-    ['show_details', 'include_history'],
-    'Detail/history-inclusion toggles for status, analytics, framework, gate, and session reports; ' +
-      'no scenario asserts a detailed-vs-summary or with/without-history distinction today.',
-    'A conformance scenario asserting text present only in the detailed or history-inclusive ' +
-      'report, distinguishing it from the current default-level assertions.'
+    ['show_details'],
+    'The detail toggle for framework and session reports; no scenario asserts a ' +
+      'detailed-vs-summary distinction today.',
+    'A conformance scenario asserting text present only in the detailed report, distinguishing ' +
+      'it from the current default-level assertions.'
   ),
   ...exceptionGroup(
     'system_control',

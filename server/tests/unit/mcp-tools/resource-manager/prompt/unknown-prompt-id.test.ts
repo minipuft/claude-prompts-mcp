@@ -22,7 +22,6 @@
 
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { ContentAnalyzer } from '../../../../../src/modules/semantic/content-analyzer.js';
 import { GateAnalyzer } from '../../../../../src/mcp/tools/resource-manager/prompt/analysis/gate-analyzer.js';
 import { PromptAnalyzer } from '../../../../../src/mcp/tools/resource-manager/prompt/analysis/prompt-analyzer.js';
 import { PromptLifecycleProcessor } from '../../../../../src/mcp/tools/resource-manager/prompt/services/prompt-lifecycle-processor.js';
@@ -51,13 +50,12 @@ function createProcessor(convertedPrompts: Record<string, unknown>[]) {
   const updatePromptImplementation = jest.fn(async () => ({ message: 'written' }));
   const dependencies = {
     logger,
-    semanticAnalyzer: new ContentAnalyzer(logger),
     onRefresh: jest.fn(async () => {}),
     onRestart: jest.fn(async () => {}),
   };
   const context = {
     dependencies,
-    promptAnalyzer: new PromptAnalyzer(dependencies),
+    promptAnalyzer: new PromptAnalyzer(),
     gateAnalyzer: new GateAnalyzer(dependencies as never),
     fileOperations: {
       updatePromptImplementation,

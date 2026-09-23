@@ -1,6 +1,5 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { ContentAnalyzer } from '../../../../../src/modules/semantic/content-analyzer.js';
 import { ComparisonEngine } from '../../../../../src/mcp/tools/resource-manager/prompt/analysis/comparison-engine.js';
 import { GateAnalyzer } from '../../../../../src/mcp/tools/resource-manager/prompt/analysis/gate-analyzer.js';
 import { ObjectDiffGenerator } from '../../../../../src/mcp/tools/resource-manager/prompt/analysis/object-diff-generator.js';
@@ -78,7 +77,6 @@ function createHarness(
   const dependencies = {
     logger,
     configManager,
-    semanticAnalyzer: new ContentAnalyzer(logger),
     onRefresh,
     onRestart: jest.fn(async () => {}),
   };
@@ -128,7 +126,7 @@ function createHarness(
   });
   const context = {
     dependencies,
-    promptAnalyzer: new PromptAnalyzer(dependencies),
+    promptAnalyzer: new PromptAnalyzer(),
     gateAnalyzer: new GateAnalyzer(dependencies as never),
     comparisonEngine: new ComparisonEngine(logger),
     textDiffService: new ObjectDiffGenerator(),

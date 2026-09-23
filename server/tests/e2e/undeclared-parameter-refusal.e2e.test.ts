@@ -219,6 +219,22 @@ describe.each([
     expect(refused.text).toContain("Did you mean 'confirm'?");
   }, 30000);
 
+  it('the removed analytics include_history flag is refused by name (R93)', async () => {
+    // It rendered a list only a tool-description hot reload ever filled. Removed rather than
+    // left accepted-and-ignored; the control is the same action without it.
+    const clean = await session.call('system_control', { action: 'analytics' });
+    expect(clean.isError).toBe(false);
+    expect(clean.text).toContain('System Analytics Report');
+
+    const refused = await session.call('system_control', {
+      action: 'analytics',
+      include_history: true,
+    });
+
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toContain("'include_history' is not a parameter of system_control");
+  }, 30000);
+
   it('a DECLARED gate parameter sent while gates are off says so, not "not a parameter"', async () => {
     const disabled = await session.call('system_control', {
       action: 'gates',
