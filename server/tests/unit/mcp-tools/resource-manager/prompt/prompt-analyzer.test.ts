@@ -3,7 +3,6 @@ import { describe, expect, jest, test } from '@jest/globals';
 import { GateLoader } from '../../../../../src/engine/gates/core/gate-loader.js';
 import { GateAnalyzer } from '../../../../../src/mcp/tools/resource-manager/prompt/analysis/gate-analyzer.js';
 import { PromptAnalyzer } from '../../../../../src/mcp/tools/resource-manager/prompt/analysis/prompt-analyzer.js';
-import { ContentAnalyzer } from '../../../../../src/modules/semantic/content-analyzer.js';
 
 import type { ConvertedPrompt } from '../../../../../src/engine/execution/types.js';
 import type { PromptResourceDependencies } from '../../../../../src/mcp/tools/resource-manager/prompt/core/types.js';
@@ -17,16 +16,8 @@ const createLogger = () =>
     error: jest.fn(),
   }) as unknown as Logger;
 
-/**
- * Real `ContentAnalyzer`, not a mock. It is pure and dependency-free, so mocking it here would
- * only assert that the mock returns what it was told to — the branch under test reads the
- * analyzer's actual output, which is the thing worth pinning.
- */
-const createAnalyzer = () =>
-  new PromptAnalyzer({
-    logger: createLogger(),
-    semanticAnalyzer: new ContentAnalyzer(createLogger()),
-  });
+/** Real, not a mock: it is pure and dependency-free, and its output is what these pin. */
+const createAnalyzer = () => new PromptAnalyzer();
 
 const promptData = {
   id: 'sample',
@@ -49,7 +40,7 @@ describe('PromptAnalyzer.analyzePromptIntelligence', () => {
     expect(result.feedback).toContain(result.classification.executionType);
   });
 
-  // `ContentAnalyzer` suggests no gates (it has no gate registry to check a name against), so
+  // The classification suggests no gates (it has no gate registry to check a name against), so
   // the feedback line carries no "Suggested gates:" clause. Pinned here rather than asserting a
   // nonzero count: a previous version hardcoded `suggestedGates: ['basic_validation']`, a gate id
   // that never existed in `resources/gates/`, and this test previously required that fabricated
@@ -70,36 +61,39 @@ describe('PromptAnalyzer.analyzePromptIntelligence', () => {
 });
 
 /**
- * Icon selection, pinned per reachable input.
+ * P4.127: a chain is a chain on both surfaces of one reply.
  *
- * `getAnalysisIcon` is private, so these drive it through `analyzePromptIntelligence` — the only
- * caller. Two inputs are reachable: the normal path yields `analysisMode: 'minimal'`, and a
- * throwing analyzer routes through the catch to `analysisMode: 'fallback'`. These assertions are
- * the guard for collapsing the switch: they hold identically before and after, which is what makes
- * the removal of the unreachable arms provably behavior-preserving rather than merely plausible.
+ * The classification came from `ContentAnalyzer`, which answered `single` for every prompt, while
+ * `detectExecutionType` — the owner `GateAnalyzer` reads — answered `chain` for the same prompt.
+ * A create reply therefore said `🧠 single` above gate suggestions reasoned about a chain. The
+ * single-prompt twin differs only in having no chain steps.
  */
-describe('PromptAnalyzer icon selection', () => {
-  test('renders the analysis icon on the normal path', async () => {
-    const result = await createAnalyzer().analyzePromptIntelligence(promptData);
+describe('a prompt analyzes as the same execution type on every surface', () => {
+  const chainData = {
+    ...promptData,
+    id: 'sample_chain',
+    chainSteps: [
+      { promptId: 'a', stepName: 'a' },
+      { promptId: 'b', stepName: 'b' },
+    ],
+  };
 
-    expect(result.classification.analysisMode).toBe('minimal');
-    expect(result.feedback.startsWith('🧠')).toBe(true);
+  test('a chain prompt is `chain` in the feedback line and in detectExecutionType', async () => {
+    const analyzer = createAnalyzer();
+    const result = await analyzer.analyzePromptIntelligence(chainData);
+
+    expect(result.classification.executionType).toBe('chain');
+    expect(result.feedback).toBe('🧠 chain\n');
+    expect(analyzer.detectExecutionType(chainData as unknown as ConvertedPrompt)).toBe('chain');
   });
 
-  test('renders the fallback icon when analysis throws', async () => {
-    const throwingAnalyzer = new PromptAnalyzer({
-      logger: createLogger(),
-      semanticAnalyzer: {
-        analyzePrompt: jest.fn(async () => {
-          throw new Error('analysis exploded');
-        }),
-      } as never,
-    });
+  test('its twin with no chain steps is `single` on both', async () => {
+    const analyzer = createAnalyzer();
+    const result = await analyzer.analyzePromptIntelligence(promptData);
 
-    const result = await throwingAnalyzer.analyzePromptIntelligence(promptData);
-
-    expect(result.classification.analysisMode).toBe('fallback');
-    expect(result.feedback.startsWith('🚨')).toBe(true);
+    expect(result.classification.executionType).toBe('single');
+    expect(result.feedback).toBe('🧠 single\n');
+    expect(analyzer.detectExecutionType(promptData as unknown as ConvertedPrompt)).toBe('single');
   });
 });
 
@@ -136,31 +130,11 @@ describe('gate suggestions resolve through the gate registry', () => {
     expect(availableGates).not.toContain('basic_validation');
   });
 
-  test('ContentAnalyzer and PromptAnalyzer never suggest a gate id the registry cannot resolve', async () => {
+  test('PromptAnalyzer never suggests a gate id the registry cannot resolve', async () => {
     const availableGates = new Set(await gateLoader.listAvailableGates());
-
-    const direct = await new ContentAnalyzer(createLogger()).analyzePrompt(createPrompt());
-    for (const gateId of direct.suggestedGates) {
-      expect(availableGates.has(gateId)).toBe(true);
-    }
 
     const normalPath = await createAnalyzer().analyzePromptIntelligence(promptData);
     for (const gateId of normalPath.classification.suggestedGates) {
-      expect(availableGates.has(gateId)).toBe(true);
-    }
-
-    // The failure fallback is the other reachable source of `suggestedGates` in this reply.
-    const throwingAnalyzer = new PromptAnalyzer({
-      logger: createLogger(),
-      semanticAnalyzer: {
-        analyzePrompt: jest.fn(async () => {
-          throw new Error('analysis exploded');
-        }),
-      } as never,
-    });
-    const fallbackPath = await throwingAnalyzer.analyzePromptIntelligence(promptData);
-    expect(fallbackPath.classification.analysisMode).toBe('fallback');
-    for (const gateId of fallbackPath.classification.suggestedGates) {
       expect(availableGates.has(gateId)).toBe(true);
     }
   });

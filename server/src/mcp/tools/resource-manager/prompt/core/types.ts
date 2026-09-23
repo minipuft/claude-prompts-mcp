@@ -10,7 +10,6 @@ import type { QuarantineView } from '#shared/utils/resource-quarantine.js';
 
 import { FrameworkManager } from '#engine/frameworks/framework-manager.js';
 import { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';
-import { ContentAnalyzer } from '#modules/semantic/content-analyzer.js';
 import { type Logger, ToolResponse, ConfigManager } from '#shared/types/index.js';
 
 export type { CategoryResult } from '#modules/prompts/category-maintenance.js';
@@ -22,16 +21,6 @@ export interface PromptClassification {
   confidence: number;
   reasoning: string[];
   suggestedGates: string[];
-  framework?: string;
-  analysisMode?: string;
-  capabilities?: {
-    canDetectStructure: boolean;
-    canAnalyzeComplexity: boolean;
-    canRecommendFramework: boolean;
-    hasSemanticUnderstanding: boolean;
-  };
-  limitations?: string[];
-  warnings?: string[];
 }
 
 export interface AnalysisResult {
@@ -53,7 +42,6 @@ export interface SmartFilters {
 export interface PromptResourceDependencies {
   logger: Logger;
   configManager: ConfigManager;
-  semanticAnalyzer: ContentAnalyzer;
   frameworkStateStore?: FrameworkStateStore;
   frameworkManager?: FrameworkManager;
   onRefresh: () => Promise<void>;

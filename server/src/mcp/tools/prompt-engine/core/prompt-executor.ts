@@ -73,7 +73,6 @@ import {
   getDefaultStyleDefinitionLoader,
 } from '#modules/formatting/index.js';
 import { PromptAssetManager } from '#modules/prompts/index.js';
-import { ContentAnalyzer } from '#modules/semantic/content-analyzer.js';
 import { TextReferenceStore, ArgumentHistoryTracker } from '#modules/text-refs/index.js';
 import {
   type Logger,
@@ -169,7 +168,6 @@ export class PromptExecutor {
     logger: Logger,
     promptManager: PromptAssetManager,
     configManager: ConfigManager,
-    semanticAnalyzer: ContentAnalyzer,
     textReferenceStore: TextReferenceStore,
     gateManager: GateManager,
     mcpToolsManager?: any,
@@ -181,7 +179,7 @@ export class PromptExecutor {
     this.configManager = configManager;
     this.gateManager = gateManager; // Store for registry-based gate selection
     this.responseFormatter = new ResponseFormatter();
-    this.executionPlanner = new ExecutionPlanner(semanticAnalyzer, logger);
+    this.executionPlanner = new ExecutionPlanner(logger);
     // `@id` detection asks the framework manager on every parse, so a framework created, updated
     // or deleted while the server runs is recognized the same moment the rest of the server sees
     // it. Until the manager arrives, every `@word` is treated as a framework operator.
@@ -1166,7 +1164,6 @@ export function createPromptExecutor(
   logger: Logger,
   promptManager: PromptAssetManager,
   configManager: ConfigManager,
-  semanticAnalyzer: ContentAnalyzer,
   textReferenceStore: TextReferenceStore,
   gateManager: GateManager,
   mcpToolsManager?: any,
@@ -1177,7 +1174,6 @@ export function createPromptExecutor(
     logger,
     promptManager,
     configManager,
-    semanticAnalyzer,
     textReferenceStore,
     gateManager,
     mcpToolsManager,

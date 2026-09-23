@@ -13,7 +13,6 @@
 
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { ContentAnalyzer } from '../../../../../src/modules/semantic/content-analyzer.js';
 import { ComparisonEngine } from '../../../../../src/mcp/tools/resource-manager/prompt/analysis/comparison-engine.js';
 import { GateAnalyzer } from '../../../../../src/mcp/tools/resource-manager/prompt/analysis/gate-analyzer.js';
 import { ObjectDiffGenerator } from '../../../../../src/mcp/tools/resource-manager/prompt/analysis/object-diff-generator.js';
@@ -71,7 +70,6 @@ function createProcessor(
   const dependencies = {
     logger,
     configManager,
-    semanticAnalyzer: new ContentAnalyzer(createLogger()),
     onRefresh: jest.fn(async () => {}),
     onRestart: jest.fn(async () => {}),
   };
@@ -109,7 +107,7 @@ function createProcessor(
 
   const context = {
     dependencies,
-    promptAnalyzer: new PromptAnalyzer(dependencies),
+    promptAnalyzer: new PromptAnalyzer(),
     gateAnalyzer: new GateAnalyzer(dependencies as never),
     // The diff is read off the writer's projection. This double projects the one file these edits
     // land in, from the state the write double last left, so a version row's diff summary counts

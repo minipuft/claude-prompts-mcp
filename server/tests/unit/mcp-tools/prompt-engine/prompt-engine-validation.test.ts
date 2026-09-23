@@ -5,7 +5,6 @@ import { PromptExecutor } from '../../../../src/mcp/tools/prompt-engine/core/pro
 import type { ConfigManager } from '../../../../src/shared/types/config-manager.js';
 import type { Logger } from '../../../../src/infra/logging/index.js';
 import type { PromptAssetManager } from '../../../../src/modules/prompts/index.js';
-import type { ContentAnalyzer as SemanticAnalyzer } from '../../../../src/modules/semantic/content-analyzer.js';
 import type { TextReferenceStore } from '../../../../src/modules/text-refs/index.js';
 
 const mockLogger: Logger = {
@@ -45,17 +44,6 @@ const mockConfigManager: ConfigManager = {
   off: jest.fn(),
 } as any;
 
-const mockSemanticAnalyzer: SemanticAnalyzer = {
-  analyzePrompt: jest.fn().mockResolvedValue({
-    executionType: 'prompt',
-    requiresExecution: true,
-    confidence: 0.8,
-  }),
-  getConfig: jest.fn().mockReturnValue({
-    llmIntegration: { enabled: false },
-  }),
-} as any;
-
 const mockTextReferenceStore: TextReferenceStore = {
   storeChainStepResult: jest.fn(),
   getChainStepResults: jest.fn().mockReturnValue({}),
@@ -91,7 +79,6 @@ describe('PromptEngine Validation', () => {
       mockLogger,
       mockPromptAssetManager,
       mockConfigManager,
-      mockSemanticAnalyzer,
       mockTextReferenceStore,
       undefined // gateManager
     );
