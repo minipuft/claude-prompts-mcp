@@ -76,8 +76,12 @@ describe('Streamable HTTP: a gate review states one state', () => {
         const db = new DatabaseSync(path.join(roots.runtimeRoot, 'runtime-state', 'state.db'));
         try {
           const row = db.prepare('SELECT state FROM chain_runs').get() as { state: string };
-          const state = JSON.parse(row.state) as { pendingGateReview?: { attemptCount?: number } };
-          return state.pendingGateReview?.attemptCount;
+          // The residual persists every review in `reviews`, keyed by node; this run has one.
+          const state = JSON.parse(row.state) as {
+            reviews?: Record<string, { kind?: string; attemptCount?: number }>;
+          };
+          return Object.values(state.reviews ?? {}).find((review) => review.kind !== 'detached')
+            ?.attemptCount;
         } finally {
           db.close();
         }
