@@ -1,7 +1,7 @@
 ---
 title: "Delegation handoff contract — implementation notes"
 date: 2026-09-07
-status: active
+status: reference
 plan: plans/delegation-handoff-contract-2026-09-07.md
 tags: [chains, delegation]
 ---
