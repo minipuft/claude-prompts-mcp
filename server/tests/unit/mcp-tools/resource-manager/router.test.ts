@@ -512,7 +512,6 @@ describe('ResourceManagerRouter', () => {
         resource_type: 'framework',
         action: 'switch',
         id: 'react',
-        persist: true,
         reason: 'Testing switch',
       };
 
@@ -522,7 +521,6 @@ describe('ResourceManagerRouter', () => {
         expect.objectContaining({
           action: 'switch',
           id: 'react',
-          persist: true,
           reason: 'Testing switch',
         }),
         {}

@@ -269,13 +269,6 @@
       "includeInDescription": false
     },
     {
-      "name": "execution_hint",
-      "type": "enum[single|chain]",
-      "description": "[Prompt] Hint for execution type on creation.",
-      "status": "working",
-      "includeInDescription": false
-    },
-    {
       "name": "filter",
       "type": "string",
       "description": "[Prompt] List filter query.",
@@ -412,13 +405,6 @@
       "name": "enabled",
       "type": "boolean",
       "description": "[Framework] Whether the framework is enabled.",
-      "status": "working",
-      "includeInDescription": false
-    },
-    {
-      "name": "persist",
-      "type": "boolean",
-      "description": "[Framework] For switch: persist the change to config. Default: false.",
       "status": "working",
       "includeInDescription": false
     },
@@ -565,7 +551,6 @@
         "mcp_prompt_mode",
         "subagent_model",
         "agent_type",
-        "execution_hint",
         "edges",
         "budget",
         "artifacts"
@@ -593,7 +578,6 @@
         "mcp_prompt_mode",
         "subagent_model",
         "agent_type",
-        "execution_hint",
         "edges",
         "budget",
         "artifacts",
@@ -809,7 +793,7 @@
     {
       "id": "framework:switch",
       "summary": "Switch the active framework.",
-      "parameters": ["resource_type", "action", "id", "persist", "reason"]
+      "parameters": ["resource_type", "action", "id", "reason"]
     },
     {
       "id": "common:inspect",

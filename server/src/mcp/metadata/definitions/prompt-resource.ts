@@ -166,7 +166,6 @@ const PROMPT_RESOURCE_PARAMETER_NAMES: resource_managerParamName[] = [
   'chain_steps',
   'tools',
   'gate_configuration',
-  'execution_hint',
   'filter',
   'detail',
   'search_query',

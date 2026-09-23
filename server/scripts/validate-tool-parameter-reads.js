@@ -923,33 +923,7 @@ export function checkBindings(bindings) {
  * send. Owner ruling R4 (2026-09-23) makes that a ruling of its own, so each waits here, stamped.
  * An entry that no longer reports is itself a finding — delete it in the commit that fixed it.
  */
-const AWAITING_RULING = [
-  {
-    tool: 'resource_manager',
-    command: 'prompt:create',
-    parameter: 'execution_hint',
-    asOf: '2026-09-23',
-    flipsWhen:
-      'the owner rules on P4.153: `PromptAnalyzer` derives the execution type from the shape ' +
-      '(#358), so the hint is superseded and removing it removes a name from the tool',
-  },
-  {
-    tool: 'resource_manager',
-    command: 'prompt:validate',
-    parameter: 'execution_hint',
-    asOf: '2026-09-23',
-    flipsWhen: 'the same P4.153 ruling as prompt:create',
-  },
-  {
-    tool: 'resource_manager',
-    command: 'framework:switch',
-    parameter: 'persist',
-    asOf: '2026-09-23',
-    flipsWhen:
-      'the owner rules on P4.154: a switch already persists through `FrameworkStateStore` ' +
-      '(`saveStateToFile`), so the flag is superseded and `switch` is its only command',
-  },
-];
+const AWAITING_RULING = [];
 
 /** Splits `findings` into real ones and those an entry excuses; an unmatched entry is stale. */
 export function applyExceptions(tool, findings, entries) {

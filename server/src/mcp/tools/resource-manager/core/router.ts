@@ -267,7 +267,6 @@ export class ResourceManagerRouter {
       // Read by `guide`. Forwarded under the caller's names like every field above.
       goal: args.goal,
       include_legacy: args.include_legacy,
-      execution_hint: args.execution_hint,
       filter: args.filter,
       detail: args.detail,
       search_query: args.search_query,
@@ -453,9 +452,6 @@ export class ResourceManagerRouter {
     }
     if (args.enabled_only !== undefined) {
       frameworkArgs.enabled_only = args.enabled_only;
-    }
-    if (args.persist !== undefined) {
-      frameworkArgs.persist = args.persist;
     }
     if (args.confirm !== undefined) {
       frameworkArgs.confirm = args.confirm;

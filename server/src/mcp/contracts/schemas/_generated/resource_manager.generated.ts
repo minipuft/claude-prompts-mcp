@@ -61,7 +61,6 @@ export type resource_managerParamName =
   | 'mcp_prompt_mode'
   | 'subagent_model'
   | 'agent_type'
-  | 'execution_hint'
   | 'filter'
   | 'detail'
   | 'search_query'
@@ -82,7 +81,6 @@ export type resource_managerParamName =
   | 'gates'
   | 'tool_descriptions'
   | 'enabled'
-  | 'persist'
   | 'framework_gates'
   | 'template_suggestions'
   | 'framework_elements'
@@ -430,14 +428,6 @@ export const resource_managerParameters: ToolParameter[] = [
     includeInDescription: false,
   },
   {
-    name: 'execution_hint',
-    type: 'enum[single|chain]',
-    description: '[Prompt] Hint for execution type on creation.',
-    status: 'working',
-    compatibility: 'canonical',
-    includeInDescription: false,
-  },
-  {
     name: 'filter',
     type: 'string',
     description: '[Prompt] List filter query.',
@@ -604,14 +594,6 @@ export const resource_managerParameters: ToolParameter[] = [
     name: 'enabled',
     type: 'boolean',
     description: '[Framework] Whether the framework is enabled.',
-    status: 'working',
-    compatibility: 'canonical',
-    includeInDescription: false,
-  },
-  {
-    name: 'persist',
-    type: 'boolean',
-    description: '[Framework] For switch: persist the change to config. Default: false.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
@@ -788,7 +770,6 @@ export const resource_managerCommands: ToolCommand[] = [
       'mcp_prompt_mode',
       'subagent_model',
       'agent_type',
-      'execution_hint',
       'edges',
       'budget',
       'artifacts',
@@ -817,7 +798,6 @@ export const resource_managerCommands: ToolCommand[] = [
       'mcp_prompt_mode',
       'subagent_model',
       'agent_type',
-      'execution_hint',
       'edges',
       'budget',
       'artifacts',
@@ -1045,7 +1025,7 @@ export const resource_managerCommands: ToolCommand[] = [
   {
     id: 'framework:switch',
     summary: 'Switch the active framework.',
-    parameters: ['resource_type', 'action', 'id', 'persist', 'reason'],
+    parameters: ['resource_type', 'action', 'id', 'reason'],
     status: 'working',
   },
   {
