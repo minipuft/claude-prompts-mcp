@@ -1102,6 +1102,27 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
       expect(onlySession().runStatus).not.toBe('completed');
     });
 
+    test("the same PASS carrying step 2's answer closes step 1's review and still captures step 2", async () => {
+      parsedSteps = parsedFrameworkChain;
+      activeFramework = 'cageerf';
+      blockingGates = false;
+      await pipeline.execute({ command: `>>draft --> >>review` });
+      const chainId = onlySession().chainId;
+      await pipeline.execute({ chain_id: chainId, user_response: 'one line' });
+      expect(Object.keys(reviews())).toEqual(['draft']);
+
+      await pipeline.execute({
+        chain_id: chainId,
+        user_response: '## Context\nThe situation, stated.\n\n## Analysis\nThe options, weighed.',
+        gate_verdict: passOnly,
+      } as any);
+
+      // Step 1's PASS decided no advance of step 2: the capture advanced it, completing the run.
+      expect(reviews()).toEqual({});
+      expect(onlySession().state.currentNodeId).toBeNull();
+      expect(onlySession().runStatus).toBe('completed');
+    });
+
     test('TWIN: the same PASS on a review of the node the run stands on moves the run past it', async () => {
       await pipeline.execute({ command: `>>draft --> >>review` });
       const chainId = onlySession().chainId;

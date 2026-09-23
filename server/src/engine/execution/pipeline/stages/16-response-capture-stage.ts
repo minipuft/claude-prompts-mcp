@@ -277,7 +277,12 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       currentStepAtStart,
       {
         userResponse: verdictResult.userResponse,
-        passClearedThisCall: verdictResult.passClearedThisCall,
+        // The PASS decided THIS step's advance only when its review graded this step. A PASS on
+        // an earlier node's review (opened after the run walked on) leaves the capture to
+        // advance the step it captures, as it would with no verdict at all.
+        passClearedThisCall:
+          verdictResult.passClearedThisCall &&
+          verdictResult.deferredAdvance?.nodeId === currentNodeIdAtStart,
       }
     );
 
