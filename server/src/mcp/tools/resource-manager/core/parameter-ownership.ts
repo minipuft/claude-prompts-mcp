@@ -83,7 +83,6 @@ export const PARAMETER_OWNERS: Readonly<Record<string, readonly ResourceType[]>>
   injection: ['prompt'],
   subagent_model: ['prompt'],
   agent_type: ['prompt'],
-  execution_hint: ['prompt'],
   filter: ['prompt'],
   detail: ['prompt'],
   search_query: ['prompt'],
@@ -114,7 +113,6 @@ export const PARAMETER_OWNERS: Readonly<Record<string, readonly ResourceType[]>>
   gates: ['framework'],
   tool_descriptions: ['framework'],
   enabled: ['framework'],
-  persist: ['framework'],
   framework_gates: ['framework'],
   template_suggestions: ['framework'],
   framework_elements: ['framework'],
@@ -180,6 +178,61 @@ function buildParameterActions(): Map<string, Map<ResourceType, Set<string>>> {
 }
 
 /**
+ * Every common parameter → action → the resource types whose commands declare it there.
+ *
+ * A common parameter is read by every route, but not on every action of every type: `id` on
+ * `reload` is read by prompt, gate and framework, and a category reload has no per-category entry
+ * to reload. The contract says so by declaring `reload` per type (R7, 2026-09-23). When it
+ * declares a common parameter for an action on some types and not this one, that is a ruling,
+ * and the refusal below enforces it. An action whose commands declare the parameter for NO type
+ * stays unchecked: the common lists are not complete enough yet to refuse by absence alone.
+ */
+const COMMON_PARAMETER_ACTIONS: ReadonlyMap<
+  string,
+  ReadonlyMap<string, ReadonlySet<ResourceType>>
+> = buildCommonParameterActions();
+
+function buildCommonParameterActions(): Map<string, Map<string, Set<ResourceType>>> {
+  const allTypes: readonly ResourceType[] = ['prompt', 'gate', 'framework', 'category'];
+  const map = new Map<string, Map<string, Set<ResourceType>>>();
+  for (const command of resource_managerCommands) {
+    const [scope, action] = command.id.split(':') as [string, string];
+    const types = scope === 'common' ? allTypes : allTypes.filter((type) => type === scope);
+    for (const parameter of command.parameters ?? []) {
+      if (!COMMON_PARAMETERS.has(parameter)) continue;
+      const byAction = map.get(parameter) ?? new Map<string, Set<ResourceType>>();
+      const declared = byAction.get(action) ?? new Set<ResourceType>();
+      for (const type of types) declared.add(type);
+      byAction.set(action, declared);
+      map.set(parameter, byAction);
+    }
+  }
+  return map;
+}
+
+/** A common parameter the contract declares for this action on other types, never this one. */
+function describeCommonParameterRefusal(
+  resourceType: ResourceType,
+  action: string,
+  sent: Record<string, unknown>
+): string | null {
+  if (action === 'preview') return null;
+  for (const [parameter, byAction] of COMMON_PARAMETER_ACTIONS) {
+    if (sent[parameter] === undefined) continue;
+    const declared = byAction.get(action);
+    if (declared === undefined || declared.has(resourceType)) continue;
+    const readerList = [...declared].map((type) => `"${type}"`).join(', ');
+    return (
+      `'${parameter}' is not read by resource_type:"${resourceType}" action:"${action}" — ` +
+      `only by resource_type:${readerList}.\n\n` +
+      `It was accepted and ignored before, which reported a success for a parameter nothing ` +
+      `read. Drop it from this call.`
+    );
+  }
+  return null;
+}
+
+/**
  * Why this request sends a parameter this tool will not read, or `null` when it does not.
  *
  * TWO halves of one class, in one function because they are one question — "will anything read
@@ -240,5 +293,8 @@ export function describeParameterRefusal(resourceType: ResourceType, args: objec
     );
   }
 
-  return describeUndeclaredParameterRefusal('resource_manager', sent);
+  return (
+    describeCommonParameterRefusal(resourceType, action, sent) ??
+    describeUndeclaredParameterRefusal('resource_manager', sent)
+  );
 }

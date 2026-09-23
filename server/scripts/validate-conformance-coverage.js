@@ -288,7 +288,6 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
       // satisfied-exception audit is what catches. They are removed rather than reworded.
       'subagent_model',
       'agent_type',
-      'execution_hint',
       'composer',
     ],
     'Prompt create/update payload field. workspace-and-mutations.yaml exercises `create` with ' +
@@ -341,7 +340,7 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
     'resource_manager',
     // `system_prompt_guidance` and `phases` were satisfied 2026-09-09 the same way, by the P4.11
     // framework create-then-read-back scenario (framework create requires both).
-    ['framework', 'gates', 'tool_descriptions', 'enabled', 'persist'],
+    ['framework', 'gates', 'tool_descriptions', 'enabled'],
     'framework resource_type create/update payload field; the corpus exercises ' +
       'resource_type:framework only via read-only `inspect` (`resource-manager-framework-inspect`). ' +
       'Framework `switch` itself is exercised through system_control, a different tool contract.',

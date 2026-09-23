@@ -6,6 +6,7 @@ import {
   type VerdictPattern,
 } from '../../../../gates/config/index.js';
 import { DEFAULT_RETRY_LIMIT } from '../../../../gates/constants.js';
+import { deriveGateTier } from '../../../../gates/core/gate-tier.js';
 import { parseGateVerdictReminders } from '../../../../gates/core/gate-verdict-renderer.js';
 
 import type { Logger } from '#infra/logging/index.js';
@@ -402,6 +403,58 @@ export class GateEnforcementAuthority {
     });
 
     return pendingReview;
+  }
+
+  /**
+   * Open — or, after a FAIL, re-open — the gate review of a detached node's late result (row 4.8).
+   *
+   * Stored in that node's slot (`{ nodeId }`), never the current-step slot, which belongs to the
+   * step the run stands on. A first report creates the review the way {@link createReviewForStep}
+   * does (same prompts, same `maxAttempts` precedence, step retries first) plus the gate tiers
+   * the verdict template needs. A replacement report (R10.2) keeps the attempt counter and history
+   * the FAIL charged, swaps in the new output and clears the previous output's check results.
+   * Either way the review then awaits a verdict, graded against `reviewedOutput`.
+   *
+   * @returns null without side effects when no gate applies to the node.
+   */
+  async openDetachedReview(
+    context: ExecutionContext,
+    sessionId: string,
+    node: { readonly nodeId: string; readonly stepNumber: number },
+    gateIds: string[],
+    reviewedOutput: string
+  ): Promise<PendingGateReview | null> {
+    if (gateIds.length === 0) {
+      return null;
+    }
+    const slot = { nodeId: node.nodeId };
+    const prior = this.chainSessionStore.getPendingGateReview(sessionId, slot);
+    const metadata = { ...prior?.metadata, ...node, sessionId, phase: 'awaiting-verdict' };
+    let review: PendingGateReview;
+    if (prior !== undefined) {
+      const { checkResults: _stale, ...kept } = prior;
+      review = { ...kept, metadata, reviewedOutput };
+    } else {
+      const stepRetries = context.parsedCommand?.steps?.find(
+        (step) => step.nodeId === node.nodeId
+      )?.retries;
+      const maxAttempts = stepRetries ?? context.gates.getMaxRetryLimit();
+      const created = await this.createPendingReview({
+        gateIds,
+        instructions: '',
+        ...(maxAttempts !== undefined ? { maxAttempts } : {}),
+        metadata,
+      });
+      review = { ...created, reviewedOutput, gateTiers: await this.deriveGateTiers(gateIds) };
+    }
+    await this.chainSessionStore.setPendingGateReview(sessionId, review, slot);
+    return review;
+  }
+
+  /** Tier per gate (`deriveGateTier`); a gate the loader cannot load contributes no entry. */
+  private async deriveGateTiers(gateIds: string[]): Promise<Record<string, 'check' | 'reminder'>> {
+    const definitions = this.gateLoader ? await this.gateLoader.loadGates(gateIds) : [];
+    return Object.fromEntries(definitions.map((def) => [def.id, deriveGateTier(def)]));
   }
 
   /**

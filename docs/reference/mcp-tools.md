@@ -1059,7 +1059,7 @@ ReadMcpResourceTool uri="resource://framework/"
 ReadMcpResourceTool uri="resource://framework/cageerf"
 
 # Switch active framework (tools required)
-resource_manager(resource_type:"framework", action:"switch", id:"react", persist:true)
+resource_manager(resource_type:"framework", action:"switch", id:"react")
 
 # Create a custom framework
 resource_manager(
@@ -1234,12 +1234,11 @@ directory is refused rather than silently served under the directory's name.
 
 **Framework Parameters:**
 
-| Parameter                | Purpose                                     |
-| ------------------------ | ------------------------------------------- |
-| `system_prompt_guidance` | Injected guidance content                   |
-| `phases`                 | Array of phase definitions                  |
-| `gates`                  | Gate include/exclude configuration          |
-| `persist`                | Save switch to config (for `switch` action) |
+| Parameter                | Purpose                            |
+| ------------------------ | ---------------------------------- |
+| `system_prompt_guidance` | Injected guidance content          |
+| `phases`                 | Array of phase definitions         |
+| `gates`                  | Gate include/exclude configuration |
 
 **Framework advanced parameters.** All eleven were accepted before they were documented; they are
 now declared in the tool schema, so a client can read each one's shape from the contract. Four land

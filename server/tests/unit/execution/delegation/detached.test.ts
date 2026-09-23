@@ -14,7 +14,11 @@ import {
   resolveDetachedReport,
 } from '../../../../src/engine/execution/delegation/detached.js';
 import { unreportedDetachedNodeIds } from '../../../../src/shared/types/chain-execution.js';
-import { isRunComplete, isRunHeldOpen } from '../../../../src/shared/types/chain-session.js';
+import {
+  detachedNodesHoldingRun,
+  isRunComplete,
+  isRunHeldOpen,
+} from '../../../../src/shared/types/chain-session.js';
 
 import type { DetachedNodeFacts } from '../../../../src/engine/execution/delegation/detached.js';
 import type { StepMetadata } from '../../../../src/shared/types/chain-execution.js';
@@ -71,14 +75,26 @@ describe('isRunComplete / isRunHeldOpen', () => {
 
   test('a run past its end that owes a detached report is held, not complete', () => {
     const state = pastEnd(states([['rev', spawned()]]));
-    expect(isRunHeldOpen(state)).toBe(true);
+    expect(isRunHeldOpen({ state })).toBe(true);
     expect(isRunComplete({ state })).toBe(false);
   });
 
   test('a run past its end that owes nothing is complete (control)', () => {
     const state = pastEnd(states([['rev', spawned({ state: 'completed' })]]));
-    expect(isRunHeldOpen(state)).toBe(false);
+    expect(isRunHeldOpen({ state })).toBe(false);
     expect(isRunComplete({ state })).toBe(true);
+  });
+
+  test('a reported node whose gate review is open still holds the run (row 4.8)', () => {
+    // Same run as the control above — reported, nothing owed — plus an open detached review.
+    const state = pastEnd(states([['rev', spawned({ state: 'completed' })]]));
+    const detachedGateReviews = { rev: {} };
+    expect(detachedNodesHoldingRun({ state, detachedGateReviews })).toEqual(['rev']);
+    expect(isRunHeldOpen({ state, detachedGateReviews })).toBe(true);
+    expect(isRunComplete({ state, detachedGateReviews })).toBe(false);
+    // A node both owed and under review is named once.
+    const owedToo = pastEnd(states([['rev', spawned()]]));
+    expect(detachedNodesHoldingRun({ state: owedToo, detachedGateReviews })).toEqual(['rev']);
   });
 
   test('a terminal status is complete regardless of what is owed', () => {
@@ -95,13 +111,28 @@ describe('collectDetachedNodeFacts', () => {
         { stepNumber: 2, nodeId: 'rev', await: 'run' },
         { stepNumber: 3, await: 'run' },
       ],
-      { nodes: NODES, stepStates: states([['rev', spawned({ state: 'completed' })]]) }
+      { state: { nodes: NODES, stepStates: states([['rev', spawned({ state: 'completed' })]]) } }
     );
     expect(facts).toEqual([
       { token: 'rev', nodeId: 'rev', stepNumber: 2, spawned: true, reported: true },
       // No node id on the step: resolved by position, token by the shared `n<ordinal>` fallback.
       { token: 'n3', nodeId: 'n3', stepNumber: 3, spawned: false, reported: false },
     ]);
+  });
+
+  test("reads an open review's phase off the node's review, by node (row 4.8)", () => {
+    const run = (phase?: string) => ({
+      state: { nodes: NODES, stepStates: states([['rev', spawned({ state: 'completed' })]]) },
+      detachedGateReviews: { rev: { metadata: phase === undefined ? {} : { phase } } },
+    });
+    const steps = [{ stepNumber: 2, nodeId: 'rev', await: 'run' as const }];
+    expect(collectDetachedNodeFacts(steps, run())[0]?.review).toBe('awaiting-verdict');
+    expect(collectDetachedNodeFacts(steps, run('awaiting-replacement'))[0]?.review).toBe(
+      'awaiting-replacement'
+    );
+    expect(collectDetachedNodeFacts(steps, run('exhausted'))[0]?.review).toBe('exhausted');
+    // No review: no phase key at all.
+    expect(collectDetachedNodeFacts(steps, { state: run().state })[0]).not.toHaveProperty('review');
   });
 });
 
@@ -139,11 +170,31 @@ describe('resolveDetachedReport', () => {
     });
   });
 
-  test('a trailer naming the CURRENT node is the ordinary capture', () => {
+  test('a trailer naming the CURRENT node: a detached one reports (row 4.8), any other is the ordinary capture', () => {
+    // Early arrival: the detached node's result before the parent moved on lands like a late one,
+    // so it is reviewed in the same place.
+    const detachedCurrent = { token: 'rev', delegated: true, detached: true };
+    expect(
+      resolveDetachedReport({ ...base, reply: trailer('rev'), current: detachedCurrent })
+    ).toEqual({ kind: 'report', node: owed });
+    // Control: the same token on a delegated, NOT detached current node is its own capture.
+    const blockingCurrent = { token: 'n3', delegated: true, detached: false };
+    expect(
+      resolveDetachedReport({
+        ...base,
+        detachedNodes: [{ ...owed, token: 'n3' }, owed],
+        reply: trailer('n3'),
+        current: blockingCurrent,
+      })
+    ).toEqual({ kind: 'not-detached' });
+  });
+
+  test('standing on a detached node that already reported: an empty resume passes it', () => {
     const current = { token: 'rev', delegated: true, detached: true };
-    expect(resolveDetachedReport({ ...base, reply: trailer('rev'), current })).toEqual({
-      kind: 'not-detached',
-    });
+    const reported = { ...owed, reported: true };
+    expect(
+      resolveDetachedReport({ ...base, detachedNodes: [reported], reply: '', current })
+    ).toEqual({ kind: 'continue-past', node: reported });
   });
 
   test('already-reported and never-spawned nodes are refused by name', () => {
@@ -217,6 +268,106 @@ describe('describeHeldRun', () => {
     expect(text).toContain('a (step 2), b (step 3)');
     expect(text).not.toContain('c (step 4)');
     expect(text).toContain('cancel: true');
+    expect(text).not.toMatch(/[Cc]hain complete|Execution complete/);
+  });
+});
+
+describe('resolveDetachedReport: a reported node under gate review (row 4.8)', () => {
+  const trailer = (token: string) => `HANDOFF RESULT\nnode: ${token}`;
+  const plain = { token: 'n3', delegated: false, detached: false };
+  const underReview = (review?: DetachedNodeFacts['review']): DetachedNodeFacts => ({
+    token: 'rev',
+    nodeId: 'rev',
+    stepNumber: 2,
+    spawned: true,
+    reported: true,
+    ...(review !== undefined ? { review } : {}),
+  });
+  const route = (
+    node: DetachedNodeFacts,
+    submits: { verdict: boolean; action: boolean },
+    reply = trailer('rev')
+  ) =>
+    resolveDetachedReport({
+      reply,
+      mode: 'required',
+      current: plain,
+      detachedNodes: [node],
+      submits,
+    });
+  const none = { verdict: false, action: false };
+  const verdict = { verdict: true, action: false };
+  const action = { verdict: false, action: true };
+  const message = (decision: ReturnType<typeof route>): string =>
+    decision.kind === 'refuse' ? decision.message : `<${decision.kind}>`;
+
+  test('each phase admits exactly the call it waits for', () => {
+    expect(route(underReview('awaiting-verdict'), verdict)).toEqual({
+      kind: 'review-verdict',
+      node: underReview('awaiting-verdict'),
+    });
+    expect(route(underReview('awaiting-replacement'), none)).toEqual({
+      kind: 'report',
+      node: underReview('awaiting-replacement'),
+      replaces: true,
+    });
+    expect(route(underReview('exhausted'), action)).toEqual({
+      kind: 'review-action',
+      node: underReview('exhausted'),
+    });
+  });
+
+  test('anything else is refused by name, naming the call the phase waits for', () => {
+    expect(message(route(underReview('awaiting-verdict'), none))).toContain(
+      'waiting for a gate_verdict'
+    );
+    expect(message(route(underReview('awaiting-replacement'), verdict))).toContain(
+      "worker's replacement result"
+    );
+    expect(message(route(underReview('exhausted'), verdict))).toContain('gate_action "retry"');
+    expect(message(route(underReview('awaiting-verdict'), none))).toContain('node: rev');
+  });
+
+  test('"already reported" stands when no review is open; a verdict there is refused as reviewless', () => {
+    expect(message(route(underReview(), none))).toContain('rev (step 2) already reported');
+    expect(message(route(underReview(), verdict))).toContain('No gate review is open');
+  });
+
+  test('a verdict naming an unknown node gets the unknown-token refusal, never the current step', () => {
+    expect(message(route(underReview('awaiting-verdict'), verdict, trailer('zzz')))).toContain(
+      'names node zzz, which is no detached node of this run'
+    );
+  });
+
+  test('a verdict with no trailer is not routed to a detached review', () => {
+    // The current step's verdict: the detached router leaves it alone entirely.
+    const current = { token: 'n3', delegated: false, detached: false };
+    expect(
+      resolveDetachedReport({
+        reply: '',
+        mode: 'required',
+        current,
+        detachedNodes: [underReview('awaiting-verdict')],
+        submits: verdict,
+      })
+    ).toEqual({ kind: 'not-detached' });
+  });
+});
+
+describe('describeHeldRun: reviews still open', () => {
+  test('a held run with nothing owed but an open review names the review, not a report', () => {
+    const text = describeHeldRun([
+      {
+        token: 'a',
+        nodeId: 'a',
+        stepNumber: 2,
+        spawned: true,
+        reported: true,
+        review: 'awaiting-verdict',
+      },
+    ]);
+    expect(text).toContain('until its detached review(s) are answered');
+    expect(text).toContain('Gate review still open on reported detached node(s): a (step 2)');
     expect(text).not.toMatch(/[Cc]hain complete|Execution complete/);
   });
 });

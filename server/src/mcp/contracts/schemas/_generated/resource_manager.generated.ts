@@ -61,7 +61,6 @@ export type resource_managerParamName =
   | 'mcp_prompt_mode'
   | 'subagent_model'
   | 'agent_type'
-  | 'execution_hint'
   | 'filter'
   | 'detail'
   | 'search_query'
@@ -82,7 +81,6 @@ export type resource_managerParamName =
   | 'gates'
   | 'tool_descriptions'
   | 'enabled'
-  | 'persist'
   | 'framework_gates'
   | 'template_suggestions'
   | 'framework_elements'
@@ -430,14 +428,6 @@ export const resource_managerParameters: ToolParameter[] = [
     includeInDescription: false,
   },
   {
-    name: 'execution_hint',
-    type: 'enum[single|chain]',
-    description: '[Prompt] Hint for execution type on creation.',
-    status: 'working',
-    compatibility: 'canonical',
-    includeInDescription: false,
-  },
-  {
     name: 'filter',
     type: 'string',
     description: '[Prompt] List filter query.',
@@ -604,14 +594,6 @@ export const resource_managerParameters: ToolParameter[] = [
     name: 'enabled',
     type: 'boolean',
     description: '[Framework] Whether the framework is enabled.',
-    status: 'working',
-    compatibility: 'canonical',
-    includeInDescription: false,
-  },
-  {
-    name: 'persist',
-    type: 'boolean',
-    description: '[Framework] For switch: persist the change to config. Default: false.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
@@ -788,7 +770,6 @@ export const resource_managerCommands: ToolCommand[] = [
       'mcp_prompt_mode',
       'subagent_model',
       'agent_type',
-      'execution_hint',
       'edges',
       'budget',
       'artifacts',
@@ -817,7 +798,6 @@ export const resource_managerCommands: ToolCommand[] = [
       'mcp_prompt_mode',
       'subagent_model',
       'agent_type',
-      'execution_hint',
       'edges',
       'budget',
       'artifacts',
@@ -861,6 +841,7 @@ export const resource_managerCommands: ToolCommand[] = [
       'budget',
       'artifacts',
       'full_restart',
+      'skip_version',
     ],
     status: 'working',
   },
@@ -931,6 +912,7 @@ export const resource_managerCommands: ToolCommand[] = [
       'enforcement_mode',
       'block_response_on_fail',
       'evaluation',
+      'skip_version',
     ],
     status: 'working',
   },
@@ -1033,6 +1015,7 @@ export const resource_managerCommands: ToolCommand[] = [
       'template_enhancements',
       'execution_flow',
       'quality_indicators',
+      'skip_version',
     ],
     status: 'working',
   },
@@ -1045,7 +1028,7 @@ export const resource_managerCommands: ToolCommand[] = [
   {
     id: 'framework:switch',
     summary: 'Switch the active framework.',
-    parameters: ['resource_type', 'action', 'id', 'persist', 'reason'],
+    parameters: ['resource_type', 'action', 'id', 'reason'],
     status: 'working',
   },
   {
@@ -1055,15 +1038,33 @@ export const resource_managerCommands: ToolCommand[] = [
     status: 'working',
   },
   {
-    id: 'common:reload',
-    summary: 'Hot-reload a specific resource from disk.',
+    id: 'prompt:reload',
+    summary: 'Reload prompts from disk, or restart the server with full_restart.',
     parameters: ['resource_type', 'action', 'id', 'reason', 'full_restart'],
+    status: 'working',
+  },
+  {
+    id: 'gate:reload',
+    summary: 'Hot-reload a specific gate from disk.',
+    parameters: ['resource_type', 'action', 'id', 'reason'],
+    status: 'working',
+  },
+  {
+    id: 'framework:reload',
+    summary: 'Hot-reload a specific framework from disk.',
+    parameters: ['resource_type', 'action', 'id', 'reason'],
+    status: 'working',
+  },
+  {
+    id: 'category:reload',
+    summary: 'Rebuild every category from disk; takes no id, since one walk rebuilds them all.',
+    parameters: ['resource_type', 'action', 'reason'],
     status: 'working',
   },
   {
     id: 'common:delete',
     summary: 'Delete a resource (with confirmation).',
-    parameters: ['resource_type', 'action', 'id', 'confirm', 'reason', 'full_restart'],
+    parameters: ['resource_type', 'action', 'id', 'confirm', 'full_restart'],
     status: 'working',
   },
   {
@@ -1075,7 +1076,7 @@ export const resource_managerCommands: ToolCommand[] = [
   {
     id: 'common:rollback',
     summary: 'Rollback a resource to a previous version.',
-    parameters: ['resource_type', 'action', 'id', 'version', 'reason'],
+    parameters: ['resource_type', 'action', 'id', 'version'],
     status: 'working',
   },
   {

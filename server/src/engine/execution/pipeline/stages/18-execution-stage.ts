@@ -128,11 +128,9 @@ export class StepExecutionStage extends BasePipelineStage {
       sessionContext.sessionId,
       context.getScopeOptions()
     );
-    if (session === undefined || !isRunHeldOpen(session.state)) return false;
+    if (session === undefined || !isRunHeldOpen(session)) return false;
     context.executionResults = {
-      content: describeHeldRun(
-        collectDetachedNodeFacts(context.parsedCommand?.steps, session.state)
-      ),
+      content: describeHeldRun(collectDetachedNodeFacts(context.parsedCommand?.steps, session)),
       generatedAt: Date.now(),
     };
     return true;
