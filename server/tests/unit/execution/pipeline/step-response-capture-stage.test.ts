@@ -208,12 +208,18 @@ describe('StepResponseCaptureStage', () => {
       sessionId: 'sess-1',
       chainId: 'chain-1',
       state: { currentNodeId: 'n2', nodes: [{ id: 'n1' }, { id: 'n2' }, { id: 'n3' }] },
-      pendingGateReview: {
-        gateIds: ['accuracy'],
-        attemptCount: 1,
-        prompts: [],
-        createdAt: Date.now(),
-        maxAttempts: 3,
+      reviews: {
+        n2: {
+          nodeId: 'n2',
+          kind: 'gate',
+          phase: 'awaiting-verdict',
+          combinedPrompt: '',
+          gateIds: ['accuracy'],
+          attemptCount: 1,
+          prompts: [],
+          createdAt: Date.now(),
+          maxAttempts: 3,
+        },
       },
     });
 
@@ -244,12 +250,12 @@ describe('StepResponseCaptureStage', () => {
       expect.objectContaining({
         verdict: 'PASS',
         rawVerdict: 'GATE_REVIEW: PASS - confirmed upstream',
-      })
+      }),
+      undefined
     );
     expect(context.sessionContext?.pendingReview).toBeUndefined();
-    // A PASS advances past the node the run is STANDING on — not its neighbour. The position
-    // the stage receives (2) is translated against the run's own node list exactly once, so an
-    // off-by-one in that translation skips or repeats a step with nothing else to catch it.
+    // A PASS advances past the node its review GRADES (row 3.3) — here the node the run stands
+    // on — never a neighbour derived from the run's position.
     expect(advanceStep).toHaveBeenCalledWith('sess-1', 'n2');
     expect(context.sessionContext?.currentStep).toBe(3);
     expect(context.sessionContext?.currentNodeId).toBe('n3');

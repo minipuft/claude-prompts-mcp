@@ -27,6 +27,19 @@ import type {
   McpToolRequest,
 } from '../../../src/shared/types/index.js';
 
+/** The run's open review of `n1` (`code-quality`, two attempts), after `attemptCount` FAILs. */
+const stepReview = (attemptCount: number) => ({
+  nodeId: 'n1',
+  kind: 'gate' as const,
+  phase: 'awaiting-verdict' as const,
+  combinedPrompt: 'Review against code-quality.',
+  gateIds: ['code-quality'],
+  prompts: [],
+  createdAt: 1_700_000_000_000,
+  attemptCount,
+  maxAttempts: 2,
+});
+
 describe('ResponseCaptureStage Hook Emission', () => {
   let hookRegistry: HookRegistry;
   let notificationEmitter: McpNotificationEmitter;
@@ -51,6 +64,7 @@ describe('ResponseCaptureStage Hook Emission', () => {
       recordGateReviewOutcome: jest.fn(),
       advanceStep: jest.fn().mockResolvedValue({ nodeId: 'n3', ordinal: 3 }),
       clearPendingGateReview: jest.fn(),
+      setReview: jest.fn(),
       resetRetryCount: jest.fn(),
       updateSessionState: jest.fn(),
       completeStep: jest.fn(),
@@ -95,11 +109,7 @@ describe('ResponseCaptureStage Hook Emission', () => {
       sessionId,
       chainId: 'test-chain',
       state: { currentNodeId: 'n1', nodes: [{ id: 'n1' }, { id: 'n2' }] },
-      pendingGateReview: {
-        gateIds: ['code-quality'],
-        attemptCount: 1,
-        maxAttempts: 2,
-      },
+      reviews: { n1: stepReview(1) },
     } as any);
     mockChainSessionStore.recordGateReviewOutcome.mockResolvedValue('cleared');
     mockChainSessionStore.getPendingGateReview.mockReturnValue(undefined);
@@ -130,11 +140,7 @@ describe('ResponseCaptureStage Hook Emission', () => {
       sessionId,
       chainId: 'test-chain',
       state: { currentNodeId: 'n1', nodes: [{ id: 'n1' }, { id: 'n2' }] },
-      pendingGateReview: {
-        gateIds: ['code-quality'],
-        attemptCount: 1,
-        maxAttempts: 2,
-      },
+      reviews: { n1: stepReview(1) },
     } as any);
     mockChainSessionStore.recordGateReviewOutcome.mockResolvedValue('pending');
     mockChainSessionStore.getPendingGateReview.mockReturnValue({
@@ -183,11 +189,7 @@ describe('ResponseCaptureStage Hook Emission', () => {
       sessionId,
       chainId: 'test-chain',
       state: { currentNodeId: 'n1', nodes: [{ id: 'n1' }, { id: 'n2' }] },
-      pendingGateReview: {
-        gateIds: ['code-quality'],
-        attemptCount: 2,
-        maxAttempts: 2,
-      },
+      reviews: { n1: stepReview(1) },
     } as any);
     mockChainSessionStore.recordGateReviewOutcome.mockResolvedValue('pending');
     mockChainSessionStore.getPendingGateReview.mockReturnValue({
@@ -284,7 +286,7 @@ describe('gate events reach a port-only collaborator', () => {
         sessionId,
         chainId: 'test-chain',
         state: { currentNodeId: 'n1', nodes: [{ id: 'n1' }, { id: 'n2' }] },
-        pendingGateReview: { gateIds: ['code-quality'], attemptCount: 1, maxAttempts: 2 },
+        reviews: { n1: stepReview(1) },
       }),
       getPendingGateReview: jest.fn().mockReturnValue({
         combinedPrompt: 'Review against code-quality.',
@@ -300,6 +302,7 @@ describe('gate events reach a port-only collaborator', () => {
       recordGateReviewOutcome: jest.fn(async () => 'pending'),
       advanceStep: jest.fn(async () => ({ nodeId: 'n3', ordinal: 3 })),
       clearPendingGateReview: jest.fn(),
+      setReview: jest.fn(),
       resetRetryCount: jest.fn(),
       updateSessionState: jest.fn(),
       completeStep: jest.fn(),

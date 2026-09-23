@@ -46,13 +46,10 @@ const createLogger = (): Logger & { warn: jest.Mock } =>
     error: jest.fn(),
   }) as unknown as Logger & { warn: jest.Mock };
 
-const REVIEW = { gateIds: ['gate-a'], attemptCount: 2, maxAttempts: 2 };
-
-function createStore(retryExhausted: boolean) {
+function createStore() {
   return {
     recordGateReviewOutcome: jest.fn(async () => 'pending'),
-    getPendingGateReview: jest.fn(() => REVIEW),
-    isRetryLimitExceeded: jest.fn(() => retryExhausted),
+    setReview: jest.fn(async () => undefined),
     clearPendingGateReview: jest.fn(async () => undefined),
     advanceStep: jest.fn(async () => false),
   } as unknown as ChainSessionService;
@@ -103,19 +100,33 @@ function createContext() {
   } as never;
 }
 
-const session = {
-  pendingGateReview: REVIEW,
-  state: { nodes: [{ id: 'node-1' }, { id: 'node-2' }] },
-} as unknown as ChainSession;
+/** A run on `node-1` whose review of it has spent `attemptCount` of its two attempts. */
+const sessionWith = (attemptCount: number) =>
+  ({
+    sessionId: 'session-1',
+    reviews: {
+      'node-1': {
+        nodeId: 'node-1',
+        kind: 'gate',
+        phase: 'awaiting-verdict',
+        combinedPrompt: '',
+        gateIds: ['gate-a'],
+        prompts: [],
+        createdAt: 1,
+        attemptCount,
+        maxAttempts: 2,
+      },
+    },
+    state: { currentNodeId: 'node-1', nodes: [{ id: 'node-1' }, { id: 'node-2' }] },
+  }) as unknown as ChainSession;
 
-async function submitFail(processor: GateVerdictProcessor): Promise<void> {
-  await processor.processPendingReviewVerdict(
+/** Submit a FAIL; `lastAttempt` makes it the one that exhausts the review. */
+async function submitFail(processor: GateVerdictProcessor, lastAttempt = false): Promise<void> {
+  await processor.processReviewVerdict(
     createContext(),
-    session,
-    'session-1',
-    1,
-    'a response',
-    { sessionId: 'session-1', currentStep: 1, currentNodeId: 'node-1' } as never
+    sessionWith(lastAttempt ? 1 : 0),
+    { sessionId: 'session-1', currentStep: 1, currentNodeId: 'node-1' } as never,
+    'a response'
   );
 }
 
@@ -128,14 +139,9 @@ describe('GateVerdictProcessor blocking FAIL events', () => {
 
   test('every event lands before the verdict call returns, in one order', async () => {
     const { hooks, notifications } = createEmitters(sequence);
-    const processor = new GateVerdictProcessor(
-      createStore(true),
-      createLogger(),
-      hooks,
-      notifications
-    );
+    const processor = new GateVerdictProcessor(createStore(), createLogger(), hooks, notifications);
 
-    await submitFail(processor);
+    await submitFail(processor, true);
 
     // Read at return, with nothing awaited after it: a forgotten emitter has not finished yet.
     expect(sequence).toEqual([
@@ -150,12 +156,7 @@ describe('GateVerdictProcessor blocking FAIL events', () => {
 
   test('CONTROL: with retries left, the sequence drops only the exhaustion pair', async () => {
     const { hooks, notifications } = createEmitters(sequence);
-    const processor = new GateVerdictProcessor(
-      createStore(false),
-      createLogger(),
-      hooks,
-      notifications
-    );
+    const processor = new GateVerdictProcessor(createStore(), createLogger(), hooks, notifications);
 
     await submitFail(processor);
 
@@ -177,7 +178,7 @@ describe('GateVerdictProcessor blocking FAIL events', () => {
       emitRetryExhausted: jest.fn(),
       emitResponseBlocked: jest.fn(),
     } as unknown as McpNotificationEmitterPort;
-    const processor = new GateVerdictProcessor(createStore(false), logger, hooks, notifications);
+    const processor = new GateVerdictProcessor(createStore(), logger, hooks, notifications);
 
     await submitFail(processor);
 
