@@ -1317,7 +1317,7 @@ export class Stage {
   execute(context: any) {
     const { options } = context.mcpRequest;
     return [context.mcpRequest.command, options, context.mcpRequest.inputs${
-      planted ? ', "\'gates\' is named here"' : ', context.mcpRequest.gates'
+      planted ? ', context.state.gates, "\'gates\' is named here"' : ', context.mcpRequest.gates'
     }];
   }
 }
@@ -1340,7 +1340,8 @@ function selfTestPromptEngine() {
   const failures = [];
   // Planted: the registration allowlist never copies `inputs` (the hop `remainder`, `handoff` and
   // `claim_token` were each lost at), and `gates` reaches the pipeline request but no stage reads
-  // it. Both are named in string literals only. `cancel` is consumed by the executor itself.
+  // it — the stage reads a `gates` off another object instead. Both are named in string literals.
+  // `cancel` is consumed by the executor itself.
   const planted = promptEngineFixture({ planted: true });
   const expected = ['call/gates', 'call/inputs'];
   if (JSON.stringify(keys(planted)) !== JSON.stringify(expected)) {
