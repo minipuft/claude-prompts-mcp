@@ -488,6 +488,29 @@ describe('resource_manager parameter ownership', () => {
       });
     }
 
+    // R7 (2026-09-23): both were declared and read by nothing (P4.153, P4.154) and left the tool.
+    // Each twin differs from its refused call only in the removed key.
+    for (const [resource_type, action, removed, value] of [
+      ['prompt', 'create', 'execution_hint', 'chain'],
+      ['framework', 'switch', 'persist', true],
+    ] as const) {
+      test(`refuses the removed '${removed}' on ${resource_type} ${action} by name`, async () => {
+        const call = { resource_type, action, id: 'target' };
+        const refused = await router.handleAction(
+          { ...call, [removed]: value } as unknown as ResourceManagerInput,
+          {}
+        );
+        expect(refused.isError).toBe(true);
+        expect(refused.content[0]?.text).toContain(
+          `'${removed}' is not a parameter of resource_manager`
+        );
+        expect(handlers[resource_type].handleAction).not.toHaveBeenCalled();
+
+        await router.handleAction(call as unknown as ResourceManagerInput, {});
+        expect(handlers[resource_type].handleAction).toHaveBeenCalledTimes(1);
+      });
+    }
+
     test('a near-miss spelling of a real parameter is refused, not silently dropped', () => {
       // The shape the class actually takes in the wild. `chain_step` (no `s`) is one character
       // from a live parameter, so a check keyed on "looks unrelated" would wave it through.

@@ -311,7 +311,6 @@ export interface ResourceManagerInput {
   mcp_prompt_mode?: 'expand' | 'launch';
   subagent_model?: 'heavy' | 'standard' | 'fast';
   agent_type?: string;
-  execution_hint?: 'single' | 'chain';
   full_restart?: boolean;
   /** Read by prompt `guide`: what the caller is trying to do. */
   goal?: string;
@@ -357,7 +356,6 @@ export interface ResourceManagerInput {
   };
   tool_descriptions?: Record<string, string | FrameworkToolDescriptions[string]>;
   enabled?: boolean;
-  persist?: boolean;
 
   // Advanced framework parameters.
   //

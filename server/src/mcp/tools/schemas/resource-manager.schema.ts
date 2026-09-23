@@ -519,7 +519,6 @@ export const resourceManagerInputSchema = z
     agent_type: z.string().min(1).optional(),
 
     /** [Prompt] Hint for execution type on creation. */
-    execution_hint: z.enum(['single', 'chain']).optional(),
     /** [Prompt] List filter query. */
     filter: z.string().optional(),
     /** [Prompt] Detail level for list/inspect. */
@@ -603,8 +602,6 @@ export const resourceManagerInputSchema = z
     tool_descriptions: z.record(z.string(), z.unknown()).optional(),
     /** [Framework] Whether the framework is enabled. */
     enabled: z.boolean().optional(),
-    /** [Framework] For switch: persist the change to config. */
-    persist: z.boolean().optional(),
 
     // ── Framework advanced parameters (P4.1 / P4.5) ──────────────────────
     // Settable before they were declared; see the element-shape block above for why.

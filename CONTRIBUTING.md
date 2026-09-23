@@ -245,16 +245,16 @@ If not, it is not breaking.
 
 Run validations that match what you changed:
 
-| I changed...               | Run this                                                   | Required? |
-| -------------------------- | ---------------------------------------------------------- | --------- |
-| Server source code         | Minimum Validation below (all four)                        | Yes       |
-| Pipeline stages            | `npm test` + smoke test both transports                    | Yes       |
-| MCP tool schemas/contracts | `npm run generate:contracts && npm run validate:contracts` | Yes       |
-| A prompt or chain template | Execute via `prompt_engine`, describe results in PR        | Yes       |
-| A gate definition          | Execute via `resource_manager`, verify gate triggers       | Yes       |
-| Transport/runtime behavior | Smoke test BOTH: `start:stdio` and `start:development`     | Yes       |
-| Documentation only         | Verify references against `server/dist/**`                 | Yes       |
-| Dependencies               | `npm audit` + full test suite                              | Yes       |
+| I changed...               | Run this                                                                                            | Required? |
+| -------------------------- | --------------------------------------------------------------------------------------------------- | --------- |
+| Server source code         | Minimum Validation below (all four)                                                                 | Yes       |
+| Pipeline stages            | `npm test` + smoke test both transports                                                             | Yes       |
+| MCP tool schemas/contracts | `npm run generate:contracts && npm run validate:contracts && npm run validate:tool-parameter-reads` | Yes       |
+| A prompt or chain template | Execute via `prompt_engine`, describe results in PR                                                 | Yes       |
+| A gate definition          | Execute via `resource_manager`, verify gate triggers                                                | Yes       |
+| Transport/runtime behavior | Smoke test BOTH: `start:stdio` and `start:development`                                              | Yes       |
+| Documentation only         | Verify references against `server/dist/**`                                                          | Yes       |
+| Dependencies               | `npm audit` + full test suite                                                                       | Yes       |
 
 Push validation is impact-aware and fail-closed:
 

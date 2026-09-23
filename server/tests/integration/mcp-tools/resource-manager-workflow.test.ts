@@ -539,10 +539,9 @@ describe('Resource Manager Workflow Integration', () => {
       );
     });
 
-    test('framework create refuses persist, which only switch reads (P4.134)', async () => {
-      // `handleCreate` reads neither `persist` nor `reason`. `persist` is framework-owned and
-      // declared on `framework:switch` alone, so the per-action refusal names it. (`reason` is a
-      // COMMON parameter, which the router does not yet check per action.)
+    test('framework create refuses persist, which left the tool (R7)', async () => {
+      // `persist` was declared on `framework:switch` alone and read by nothing there either — a
+      // switch already persists through the framework state store — so it left the contract.
       const result = await router.handleAction(
         {
           resource_type: 'framework',
@@ -552,14 +551,12 @@ describe('Resource Manager Workflow Integration', () => {
           system_prompt_guidance: 'Apply this framework',
           persist: true,
           reason: 'Testing creation',
-        },
+        } as unknown as ResourceManagerInput,
         {}
       );
 
       expect(result.isError).toBe(true);
-      expect(result.content[0]?.text).toContain(
-        `'persist' is not read by resource_type:"framework" action:"create" — only by action:"switch".`
-      );
+      expect(result.content[0]?.text).toContain(`'persist' is not a parameter of resource_manager`);
       expect(frameworkManager.handleAction).not.toHaveBeenCalled();
     });
 
