@@ -247,10 +247,10 @@ Tier 5 gate: `npm run build && npm run verify:mcp` and the live-drive receipt
 
 | id  | status                                                                  | precedes | default                                                                                                                                       | alternative                                    |
 | --- | ----------------------------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| OQ1 | OPEN (as of 2026-09-23 · flips when the owner rules)                    | 3.6      | the projection is deleted in this initiative once the reader count is 0                                                                       | keep it one release as a stamped compat getter |
+| OQ1 | RULED 2026-09-23 (owner, R3) — delete in this initiative                | 3.6      | the projection is deleted in this initiative once the reader count is 0                                                                       | keep it one release as a stamped compat getter |
 | OQ2 | OPEN (as of 2026-09-23 · flips when 2.3's worker measures the boundary) | 2.3      | `prompt_engine`'s boundary is the normalized request `PromptExecutor` hands to the pipeline; stage 01 reads count, later stages do not        | count reads in every stage                     |
-| OQ3 | OPEN (as of 2026-09-23 · flips when the owner rules)                    | 3.1      | rename the type to `GateReview`; `PendingGateReview` stays as a type alias in the stamped exceptions                                          | keep the old name                              |
-| OQ4 | OPEN (as of 2026-09-23 · flips when the owner rules)                    | 2.4      | removing a declared-but-unread parameter from a command's list is not breaking while the name stays declared on the tool (the #366 precedent) | any narrowing is breaking                      |
+| OQ3 | RULED 2026-09-23 (owner, R3) — rename to `GateReview`, alias stamped    | 3.1      | rename the type to `GateReview`; `PendingGateReview` stays as a type alias in the stamped exceptions                                          | keep the old name                              |
+| OQ4 | RULED 2026-09-23 (owner, R4) — not breaking                             | 2.4      | removing a declared-but-unread parameter from a command's list is not breaking while the name stays declared on the tool (the #366 precedent) | any narrowing is breaking                      |
 
 ## Validation (Step 5)
 
