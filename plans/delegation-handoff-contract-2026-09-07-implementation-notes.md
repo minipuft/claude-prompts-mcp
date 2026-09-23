@@ -30,6 +30,59 @@ Deviations, rulings on open questions, and probe output for
 - Row 4.7 (2026-09-22, owner + planner, Claude Code on `main` `153e99d4`): fixtures `drv47_a`, `drv47_b` (`await: run`), `drv47_c` and chain `drv47_detached` authored through `resource_manager` (each step prompt opting out of the default gates), driven with `>>drv47_detached`; the plugin server was pid 548428 started 23:43 from this repo's `server/dist` (rebuilt 22:40 after #372), so no restart was needed. Observed in order: A rendered; A's reply advanced the run, opened A's structural review (two short sections) AND rendered B's detached EXECUTION BRIEF with `run_in_background: true` and "resume now with chain_id and no user_response"; the `delegation-enforce` hook allowed a background `Agent` (sonnet) spawn with the brief; the same-call verdict PASS plus the advance rendered C; C's reply left the run open: "Every step has run, but the run stays open until its detached node(s) report: b-detached (step 2)"; the worker's reply ending `HANDOFF RESULT / node: b-detached` was accepted: "Detached node b-detached (step 2) reported… Chain complete — every step, including the detached ones, has reported"; `execution_history operation:"steps"` listed steps 1–3 `completed`. Fixtures deleted afterwards (version history purged, 1 row each).
 - `aa4c691f` 4.1 · `1fe623d6` 4.2 · `4577e194` 4.3+4.4 · `22ddddaa` 4.5 · `b43515f9` deviation 27 · `e8acd265` 4.6 (tests, docs, changelog). Receipt in the plan; deviations 25–32 below.
 
+### Row 4.8 design (R8 + R10, 2026-09-23)
+
+Re-measured on `feat/detached-review-at-report` (`1161853f`) with the `dg` worker's `slot.mjs`, shipped defaults: the continue call at A opens A's review (stage 13, empty slot) and its PASS grades nothing A produced; the late report lands with C's review in the slot (`stepNumber` 3) and opens no review of A.
+
+**Review keying.** One record shape (`PendingGateReview`), two places. The current-step slot `session.pendingGateReview` and every reader of it are unchanged. A detached node's review lives in `session.detachedGateReviews[nodeId]`, carried in the run's residual document (no `SCHEMA_VERSION` bump). The store's review methods take an optional `{ nodeId }` selector: absent means the current-step slot, present means that node's review. So `getPendingGateReview(sessionId)` still answers the common case, and a detached review is found by node only. A detached record also carries `reviewedOutput` (the captured text it grades), `metadata.nodeId`, `metadata.stepNumber` and `metadata.phase`.
+
+R9's shape, named: the slot holds the review of the step the run stands on or has just left. Row 2.11's `metadata.nodeId` says which, so a review of a non-current step in the slot is already legal and stays as it is. What is new is a review of a node the run passed before its output existed; that review never enters the slot.
+
+**Detached node state machine** (the node row plus `metadata.phase`):
+
+    spawned (placeholder) --report--> reported --no gates--> done
+                                      reported --gates--> review[awaiting-verdict]
+    review[awaiting-verdict] --PASS--> review deleted --> done
+    review[awaiting-verdict] --FAIL--> review[awaiting-replacement], attemptCount+1
+    review[awaiting-replacement] --replacement report--> output replaced --> review[awaiting-verdict]
+    review[awaiting-verdict] --FAIL at attemptCount >= maxAttempts--> review[exhausted]
+    review[exhausted] --gate_action retry--> review[awaiting-replacement], attemptCount 0
+    review[exhausted] --gate_action skip--> review deleted (output accepted) --> done
+    review[exhausted] --cancel--> run cancelled
+
+**Who does what.**
+
+- **11:** `GateEnhancementService` publishes a detached step's applicable gates to `state.gates.detachedReviewGateIds`, never to `reviewGateIds`. The map is keyed by parse-time step number, the key `collectDetachedNodeFacts` resolves a step's node by. `ensurePostAdvanceReview` skips a detached target. So 13 and the post-advance path open nothing at spawn (R8).
+- **13:** unchanged.
+- **16:** admission, through `resolveDetachedReport`, which is extended:
+  - `report` records the output (`StepCaptureService.recordDetachedReport`). When gates apply, it then opens the node's review (`GateEnforcementAuthority.createDetachedReview`), whose phase is `awaiting-verdict`.
+  - `review-verdict` (a `gate_verdict` plus a trailer naming the node) goes to `GateVerdictProcessor.processDetachedReviewVerdict`.
+  - `review-action` (a `gate_action` plus the trailer on an exhausted review) resets or clears that node's review.
+  - All three end the pipeline with their own reply, as a report already does (deviation 31). The current step's slot, its verdict and its advance are never read or moved.
+- **20's runners:** extracted into `gates/services/gate-review-evidence.ts` as one implementation with two callers. Stage 20 keeps calling them. A detached review runs them when its verdict is ANSWERED, with `agentResponse = review.reviewedOutput`, never this call's `user_response` (R10.3). The results land on `checkResults`, and the existing refusal of a PASS over a recorded failing check applies unchanged. There is no auto-clear: a detached review always takes one verdict.
+- **Close guard:** `transitionRunStatus` reads `detachedNodesHoldingRun(session)`, which is unreported ∪ nodes with an open detached review. `isRunHeldOpen` reads the same derivation. That is one guard and one derivation, extended rather than duplicated.
+
+**Refusals that change.**
+
+1. `already reported` is lifted only while the node's review is `awaiting-replacement`: the reply is a replacement and records over the first result. It stays refused otherwise. While a review awaits a verdict, the refusal names the verdict call it waits for.
+2. A verdict whose trailer names an unknown node gets the existing unknown-token refusal. It is never applied to the current step.
+3. A verdict naming a detached node with no open review is refused by name, and nothing is recorded.
+
+A `gate_verdict` with no trailer is the current step's verdict, exactly as before.
+
+**Replies.**
+
+- _Report acknowledgement:_ the existing `✓ Detached node X (step N) reported…` line. When a review opened, it is followed by `**Gate Review Required: detached node X (step N)**` (attempt a/m), then the verdict template `ResponseAssembler` renders (the same builder, exported), then the call to make: `chain_id`, `gate_verdict=…`, and `user_response=` the trailer block. Then the run-position line: completed, held, or "where it was".
+- _PASS:_ `✓ Gate review of detached node X passed` plus the position line.
+- _FAIL:_ `✗ … failed (attempt a/m): re-run the worker; its new result, ending with the same trailer, replaces the first`, or the exhaustion options.
+
+**Early arrival.** A detached current node's own result, before the parent moved on, now takes the report path (it lands on the node and opens its review). The parent's next empty resume passes the node without overwriting the output. This way every real result of a detached node is reviewed in one place.
+
+**Not in this row:**
+
+- Stage 19's structural (phase-guard) grading of a late report. It keys on `capturedStep`, which a late report does not publish (deviation 31).
+- An advisory or informational enforcement mode on a detached review. Its FAIL always asks for a replacement.
+
 ## Tier 1 landing
 
 - `1ba4d7a1` feat(execution) — rows 1.1–1.6; gate receipt in the plan. Deviations 1–6 below.
