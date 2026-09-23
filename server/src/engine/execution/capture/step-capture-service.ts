@@ -465,7 +465,7 @@ export class StepCaptureService {
       startedAt: submittedAt,
       ...(detection.outcome === 'cleared'
         ? { completedAt: submittedAt }
-        : { inputRequired: describeOutstandingReview(session, target.nodeId) }),
+        : { inputRequired: describeOutstandingReview(session) }),
       ...(gateVerdicts !== undefined ? { gateVerdicts } : {}),
       scope: context.getScopeOptions(),
     });
@@ -561,7 +561,7 @@ export class StepCaptureService {
     passClearedThisCall: boolean
   ): Promise<void> {
     const session = this.chainSessionStore.getSession(sessionId, context.getScopeOptions());
-    const review = session === undefined ? undefined : reviewHolding(session, target.nodeId);
+    const review = session === undefined ? undefined : reviewHolding(session);
     if (review === undefined) {
       if (!passClearedThisCall) {
         await this.chainSessionStore.advanceStep(sessionId, target.nodeId);
@@ -605,19 +605,17 @@ export class StepCaptureService {
 }
 
 /**
- * The open review that holds `nodeId`'s advance: the review of that node (`reviews[nodeId]`),
- * else the run's step review of a node it already left. PURE.
+ * The open review that holds a captured step's advance: the run's step review, whichever node it
+ * grades. PURE.
  *
- * The second half is not a review of another node deciding this one — it keeps the run from
- * walking out from under a review nothing else would hold: the store keeps one step-review slot,
- * so the next step review would replace it, and run completion counts only detached reviews
- * (stamped: as of 2026-09-23 · flips when `writeReview` keeps a step review per node and
- * completion counts every open review — P4.157).
+ * A review of a node the run already left holds the capture too. That is not the review deciding
+ * this step's advance; it keeps the run from walking out from under a review nothing else would
+ * hold. The store keeps one step-review slot, so the next step review would replace it, and run
+ * completion counts only detached reviews (stamped: as of 2026-09-23 · flips when row 3.9 lands —
+ * the store keeps one review per node and completion counts every open review).
  */
-function reviewHolding(session: ChainSession, nodeId: string): GateReview | undefined {
-  return (
-    session.reviews?.[nodeId] ?? currentStepReview(session.reviews, session.state.currentNodeId)
-  );
+function reviewHolding(session: ChainSession): GateReview | undefined {
+  return currentStepReview(session.reviews, session.state.currentNodeId);
 }
 
 /**
@@ -627,8 +625,8 @@ function reviewHolding(session: ChainSession, nodeId: string): GateReview | unde
  * than restating the status in a second vocabulary. A run whose review was cleared between the
  * snapshot and this call answers the generic reason instead of inventing a gate id.
  */
-function describeOutstandingReview(session: ChainSession, nodeId: string): InputRequiredReason {
-  const review = reviewHolding(session, nodeId);
+function describeOutstandingReview(session: ChainSession): InputRequiredReason {
+  const review = reviewHolding(session);
   const gateId = review?.gateIds[0];
   return gateId === undefined || review === undefined
     ? { kind: 'awaiting_response' }
