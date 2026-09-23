@@ -5,7 +5,10 @@ import type {
   VisibilityItem,
 } from '#shared/types/chain-execution.js';
 import type { StateStoreOptions } from '#shared/types/persistence.js';
+import type { ScriptReferenceResolverPort } from '#shared/utils/jsonUtils.js';
+import type { DeclaredSection } from '../../frameworks/declared-sections.js';
 import type { FrameworkExecutionContext } from '../../frameworks/types/index.js';
+import type { PromptReferenceResolver } from '../reference/index.js';
 import type { ConvertedPrompt, ExecutionPlan } from '../types.js';
 
 /**
@@ -150,4 +153,33 @@ export interface ChainStepRenderResult {
    * `phases.yaml`.
    */
   declaredSections?: string[];
+  /**
+   * The node `declaredSections` belongs to, when the render is not the run's current step: a gate
+   * review declares the REVIEWED node's headers. Absent on a normal render, whose node the caller
+   * already holds.
+   */
+  declaredNodeId?: string;
+}
+
+/**
+ * Optional collaborators for {@link ChainOperatorExecutor}. Grouped rather than positional:
+ * `declaredSectionsProvider` would otherwise be a seventh constructor parameter, breaching the
+ * max-params limit. No test constructs the executor with more than four positional arguments, so
+ * grouping the two pre-existing resolvers here costs one production call site and nothing else.
+ *
+ * NAMED rather than an inline type literal so `validate:state-field-writers` can watch it: every
+ * field here is an optional dependency seam that defaults to no-op, which means a seam declared
+ * and never wired compiles, passes every test, and silently keeps the old behavior. That class is
+ * only visible to a gate if the type has a name to resolve.
+ */
+export interface ChainOperatorCollaborators {
+  referenceResolver?: PromptReferenceResolver;
+  scriptReferenceResolver?: ScriptReferenceResolverPort;
+  /**
+   * Phase-guard section headers a framework declares, from `declared-sections.ts` — the same
+   * source `19-phase-guard-verification-stage` grades the response against. A function type, not
+   * a registry: this executor needs one derived fact, not framework-manager access. Absent means
+   * "declare nothing", which is the pre-Tier-2 behavior.
+   */
+  declaredSectionsProvider?: (frameworkId: string) => DeclaredSection[];
 }

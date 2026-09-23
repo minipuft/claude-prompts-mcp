@@ -33,6 +33,8 @@ import type { PhaseGuardsConfig } from '#shared/types/core-config.js';
 import type { FrameworkGuideProvider } from '../../../frameworks/declared-sections.js';
 import type { ExecutionContext } from '../../context/index.js';
 
+import { isRunComplete } from '#shared/types/chain-session.js';
+
 /** Sentinel gate ID used for phase-guard-created pending reviews. */
 export const PHASE_GUARD_GATE_ID = '__phase_guard__';
 
@@ -231,12 +233,28 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
       };
     }
 
+    this.relatchRunCompletion(context, sessionId);
+
     this.logExit({
       passed: false,
       createdPendingReview: true,
       failedPhases: result.failedPhases,
       maxAttempts,
     });
+  }
+
+  /**
+   * Read the completion latch again after this stage opened a review (P4.119 / R96).
+   *
+   * Stage 18 latched completion before the review existed: on the final step the capture has
+   * already walked the run past its last node. The latch is `isRunComplete`, which an outstanding
+   * review holds open, so it is re-read where its input just changed — otherwise one reply says
+   * both "complete" and "awaiting your verdict".
+   */
+  private relatchRunCompletion(context: ExecutionContext, sessionId: string): void {
+    if (context.state.session.chainComplete !== true) return;
+    const run = this.chainSessionStore.getSession(sessionId, context.getScopeOptions());
+    context.state.session.chainComplete = run !== undefined && isRunComplete(run);
   }
 
   /**
@@ -285,9 +303,10 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
     //
     // The per-node answer is used only when that node has a declaration ON RECORD, empty
     // included: an empty array is a render saying "I declared nothing", which grades against
-    // nothing, while an ABSENT array is a node no render wrote for — a gated chain step, whose
-    // only render is the gate review and which nothing records — and that still falls back to
-    // the run, exactly as before. Reading absent as empty would quietly stop enforcing there.
+    // nothing, while an ABSENT array is a node no render wrote for, which still falls back to the
+    // run. A gated chain step's only render is its gate review, and stage 20 records that review's
+    // declaration against the reviewed node (P4.115), so such a step is graded on its own headers.
+    // Reading absent as empty would quietly stop enforcing wherever no render recorded.
     const gradedNodeId = context.state.session.capturedStep?.nodeId;
     const graded = gradedNodeId === undefined ? undefined : stepStates.get(gradedNodeId);
     if (graded?.declaredSections !== undefined) {

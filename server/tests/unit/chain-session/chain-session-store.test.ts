@@ -370,6 +370,32 @@ describe('ChainSessionStore — run-status lifecycle (Tier 2)', () => {
     expect(isRunComplete(session)).toBe(true);
   });
 
+  /**
+   * P4.119 / R96. The phase guard can open a review on the final step after the capture already
+   * latched the run `completed`. A run with a review outstanding is not finished: a resume must
+   * reach it so the verdict can land, and the reply must not call it complete.
+   */
+  test('a completed run with a review outstanding does not read as complete', async () => {
+    manager = newManager('complete-review-outstanding');
+    await manager.createSession('s1', 'chain-a', 1);
+    await manager.advanceStep('s1', 'n1');
+    const session = (manager as any).activeSessions.get('s1');
+    expect(session.runStatus).toBe('completed');
+    // CONTROL: with nothing outstanding the same run is complete.
+    expect(isRunComplete(session)).toBe(true);
+
+    await manager.setPendingGateReview('s1', {
+      combinedPrompt: 'Sections are too short.',
+      gateIds: ['__phase_guard__'],
+      prompts: [],
+      createdAt: Date.now(),
+      attemptCount: 0,
+      maxAttempts: 2,
+    });
+
+    expect(isRunComplete(session)).toBe(false);
+  });
+
   test('cancelChain refuses sessions in completed or failed terminal states', async () => {
     manager = newManager('cancel-refuse');
     for (const terminal of ['completed', 'failed'] as const) {
@@ -394,6 +420,31 @@ describe('ChainSessionStore — run-status lifecycle (Tier 2)', () => {
 
     const metadata = manager.getStepState('s1', 'n1');
     expect(metadata?.state).toBe('completed');
+  });
+
+  /**
+   * P4.115. A gate review can re-render after the reviewed step's answer was captured; recording
+   * what that render declared must not walk the node back to `rendered`.
+   */
+  test('recordStepDeclaration keeps a captured node where it is', async () => {
+    manager = newManager('declaration-keeps-state');
+    await manager.createSession('s1', 'chain-a', 2);
+    manager.setStepState('s1', 'n1', 'completed', false);
+
+    expect(manager.recordStepDeclaration('s1', 'n1', ['## Context'])).toBe(true);
+
+    expect(manager.getStepState('s1', 'n1')?.state).toBe('completed');
+    expect(manager.getStepState('s1', 'n1')?.declaredSections).toEqual(['## Context']);
+  });
+
+  test('CONTROL: recordStepDeclaration marks a node nothing recorded as rendered', async () => {
+    manager = newManager('declaration-first-render');
+    await manager.createSession('s1', 'chain-a', 2);
+
+    expect(manager.recordStepDeclaration('s1', 'n1', [])).toBe(true);
+
+    expect(manager.getStepState('s1', 'n1')?.state).toBe('working');
+    expect(manager.getStepState('s1', 'n1')?.declaredSections).toEqual([]);
   });
 
   test('transitionStepState allows re-asserting the same terminal state (idempotent no-op)', async () => {

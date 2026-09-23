@@ -354,14 +354,21 @@ export const isTerminalRunStatus = (status: ChainRunStatus | undefined): boolean
  */
 export const isRunComplete = (session: {
   runStatus?: ChainRunStatus;
+  pendingGateReview?: unknown;
   state: {
     currentNodeId: string | null;
     nodes?: readonly Pick<ChainNode, 'id'>[];
     stepStates?: ReadonlyMap<string, StepMetadata>;
   };
 }): boolean =>
-  isTerminalRunStatus(session.runStatus) ||
-  (session.state.currentNodeId === null && !isRunHeldOpen(session.state));
+  // An outstanding review holds the run open whatever its status says (P4.119 / R96). The phase
+  // guard grades the final step's answer AFTER the capture has walked the run past its last node,
+  // so the store has already latched `completed` when that review opens; reading the run as
+  // finished there told the client "complete" and "submit a verdict" in one reply, and then
+  // refused the verdict as a resume of a finished run.
+  session.pendingGateReview === undefined &&
+  (isTerminalRunStatus(session.runStatus) ||
+    (session.state.currentNodeId === null && !isRunHeldOpen(session.state)));
 
 /**
  * True when a run has walked past its last node but may not complete yet: a detached
@@ -482,6 +489,15 @@ export interface ChainSessionService {
     milestone: StepMilestone,
     isPlaceholder?: boolean,
     declaredSections?: readonly string[]
+  ): boolean;
+  /**
+   * Record what a render declared to the model for `nodeId`, leaving the node's lifecycle where it
+   * stands. A node with no record yet is marked `rendered`, since a render is what is recorded.
+   */
+  recordStepDeclaration(
+    sessionId: string,
+    nodeId: string,
+    declaredSections: readonly string[]
   ): boolean;
   getStepState(sessionId: string, nodeId: string): StepMetadata | undefined;
   transitionStepState(
