@@ -38,21 +38,25 @@ import {
   workflowEdgeSchema,
   workflowNodeSchema,
 } from '#modules/workflow-ir/node-schema.js';
+import { refuseUndeclaredKey } from '#shared/utils/nested-key-refusal.js';
 
 export { DEFAULT_WORKFLOW_CAPS, workflowBudgetSchema, workflowEdgeSchema, workflowNodeSchema };
 
 /** A submitted workflow. */
 export const workflowIRSchema = z
-  .object({
-    version: z.literal(1),
-    nodes: z
-      .array(workflowNodeSchema)
-      .min(1, 'A workflow must declare at least one node')
-      .max(DEFAULT_WORKFLOW_CAPS.maxNodes),
-    edges: z.array(workflowEdgeSchema).optional(),
-    gates: z.array(gateSpecUnionSchema).optional(),
-    budget: workflowBudgetSchema.optional(),
-  })
+  .object(
+    {
+      version: z.literal(1),
+      nodes: z
+        .array(workflowNodeSchema)
+        .min(1, 'A workflow must declare at least one node')
+        .max(DEFAULT_WORKFLOW_CAPS.maxNodes),
+      edges: z.array(workflowEdgeSchema).optional(),
+      gates: z.array(gateSpecUnionSchema).optional(),
+      budget: workflowBudgetSchema.optional(),
+    },
+    { error: refuseUndeclaredKey }
+  )
   .strict();
 
 export type WorkflowIRInput = z.infer<typeof workflowIRSchema>;
