@@ -920,6 +920,17 @@ Ruled before dispatching P4.43–P4.50, on `914b068c`. R23 and R24 stand as writ
   failure on the model's word without re-checking sections, as a structural-only review already
   did; accepted as pre-existing. The `step-lifecycle` harness running the real stage 19 per test is
   the correct harness, not a deviation. Findings opened as P4.163–P4.165.
+- **R107 (P4.137 handoff, owner 2026-09-22).** The enforcement decision is made per FAILING gate:
+  when a verdict carries per-gate results, the run advances only if every failed gate resolves to
+  advisory or informational; a failed blocking (or undeclared) gate holds. A verdict with no
+  per-gate results (overall-only, or the legacy string) falls back to strictest-on-step. Without
+  this, the bundled reminder gates (undeclared → blocking) made advisory unreachable under shipped
+  defaults.
+- **R108 (P4.137 handoff, owner 2026-09-22).** The declared modes of the bundled `pr-security`
+  (blocking: a single prompt carrying it now holds) and `pr-performance` (advisory: its FAIL now
+  advances) take effect; each is named in the CHANGELOG. R102's premise is corrected: the promise
+  lives in `gate-configuration.md` and the tool parameter description, not in `gates.md` (whose
+  "Enforcement Modes" section is about criterion types).
 - **R29 follow-ups (ruled on the P4.45 handoff).** A method called only from tests counts as
   unreached. A stale baseline entry fails the check.
 
