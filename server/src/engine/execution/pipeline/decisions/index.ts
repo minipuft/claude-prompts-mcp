@@ -41,7 +41,6 @@ export type {
   CreateReviewOptions,
   EnforcementMode,
   GateAction,
-  GateSetEnforcement,
   ParsedVerdict,
   PendingGateReview,
   RetryConfig,
