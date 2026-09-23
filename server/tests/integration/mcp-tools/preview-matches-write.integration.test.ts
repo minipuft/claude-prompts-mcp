@@ -55,7 +55,6 @@ import { canonicalPromptSnapshot } from '../../../src/modules/versioning/project
 import { PREVIEWABLE_ACTIONS_BY_TYPE } from '../../../src/mcp/tools/shared/preview-action.js';
 import { PromptConverter } from '../../../src/modules/prompts/converter.js';
 import { PromptLoader } from '../../../src/modules/prompts/loader.js';
-import { ContentAnalyzer } from '../../../src/modules/semantic/content-analyzer.js';
 import { parseYamlOrThrow } from '../../../src/shared/utils/yaml/yaml-parser.js';
 
 import type { CategoryResourceContext } from '../../../src/mcp/tools/category-manager/core/context.js';
@@ -229,7 +228,6 @@ async function createHarness(
   const dependencies = {
     logger,
     configManager,
-    semanticAnalyzer: new ContentAnalyzer(createLogger()),
     onRefresh: jest.fn(async () => reloadFrom(promptsDir)),
     onRestart: jest.fn(async () => {}),
   };
@@ -245,7 +243,7 @@ async function createHarness(
 
   const context = {
     dependencies,
-    promptAnalyzer: new PromptAnalyzer(dependencies),
+    promptAnalyzer: new PromptAnalyzer(),
     gateAnalyzer: new GateAnalyzer(dependencies as never),
     fileOperations: new FileOperations({ logger, configManager }),
     getData: () => ({ convertedPrompts }),

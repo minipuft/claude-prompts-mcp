@@ -134,11 +134,6 @@ export abstract class ActionHandler {
    *
    * `queryRecent` pages (default 50, hard ceiling 500), so these are counts over the most recent
    * page, not over all time. Callers say so when they render them.
-   *
-   * An `Execution Mode Distribution` section used to sit beside these, keyed on
-   * `performanceTrends[].executionMode`. Only `updateAnalytics` can write that field, and only
-   * from a `currentExecution` payload nobody passes, so the section rendered as a heading with
-   * nothing under it on every server. It is gone with the counters.
    */
   protected tallyLedger(): LedgerTally {
     const records = this.context.executionRecordStore?.queryRecent(undefined, this.requestScope);
@@ -184,33 +179,6 @@ export abstract class ActionHandler {
         return '🚨';
       default:
         return '❓';
-    }
-  }
-
-  protected formatTrendContext(trend: {
-    framework?: string;
-    executionMode?: string;
-    success?: boolean;
-  }): string {
-    let ctx = '';
-    if (trend.framework) ctx += ` [${trend.framework}]`;
-    if (trend.executionMode) ctx += ` (${trend.executionMode})`;
-    if (trend.success !== undefined) ctx += trend.success ? ' ✓' : ' ✗';
-    return ctx;
-  }
-
-  protected formatTrendValue(metric: string, value: number): string {
-    switch (metric) {
-      case 'executionTime':
-        return `${Math.round(value)}ms`;
-      case 'memoryDelta':
-        return `${value > 0 ? '+' : ''}${this.formatBytes(value)}`;
-      case 'successRate':
-        return `${Math.round(value * 100)}%`;
-      case 'gateValidationTime':
-        return `${Math.round(value)}ms validation`;
-      default:
-        return String(value);
     }
   }
 }

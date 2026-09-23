@@ -557,8 +557,12 @@ export interface Message {
 // Moved from shared/types/index.ts to break barrel cycles.
 
 /**
- * Semantic analysis result (cross-layer contract type).
- * The concrete ContentAnalyzer in modules/semantic/ produces this.
+ * Semantic analysis result (cross-layer contract type), the input framework guides take in
+ * `guideExecutionSteps`.
+ *
+ * No producer: `ContentAnalyzer`, the only one, answered every prompt with the same constants and
+ * was removed (P4.127). `PromptGuidanceService.applyGuidance` passes an empty object when its
+ * caller supplies none, which is every caller today.
  */
 export interface ContentAnalysisResult {
   executionType: 'single' | 'chain';
@@ -607,12 +611,6 @@ export interface ContentAnalysisResult {
   };
   analysisMetadata: {
     version: string;
-    /**
-     * Analysis mode. `ContentAnalyzer` is the sole producer and emits only `'minimal'`, so the
-     * union has one member. This is narrower than the consumer-facing `analysisMode` string in
-     * `resource-manager/prompt/core/types.ts`, which additionally carries `'fallback'` and
-     * `'disabled'` from paths that never set this field.
-     */
     mode?: 'minimal';
     analysisTime: number;
     analyzer: 'content';
@@ -661,6 +659,4 @@ export interface ExecutionPlan {
   requiresSession: boolean;
   category?: string;
   modifiers?: ExecutionModifiers;
-  /** Semantic analysis result from planning phase (for resource-driven guidance) */
-  semanticAnalysis?: ContentAnalysisResult;
 }
