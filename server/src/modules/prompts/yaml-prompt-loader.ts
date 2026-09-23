@@ -58,6 +58,7 @@ export interface LoadedPromptFile {
       expires_at?: number;
       source?: 'manual' | 'automatic' | 'analysis';
       context?: Record<string, any>;
+      enforcement_mode?: (typeof INLINE_GATE_ENFORCEMENT_MODES)[number];
     }>;
   };
   injection?: PromptInjectionConfig;
@@ -140,6 +141,7 @@ export interface InlineGateSource {
 
 const INLINE_GATE_SCOPES = ['execution', 'session', 'chain', 'step'] as const;
 const INLINE_GATE_TYPES = ['validation', 'guidance'] as const;
+const INLINE_GATE_ENFORCEMENT_MODES = ['blocking', 'advisory', 'informational'] as const;
 
 /**
  * Fields that disqualify a definition, named so a warning can report them.
@@ -167,6 +169,10 @@ function findInlineGateFieldProblems(definition: Record<string, unknown>): strin
   }
   if (typeof definition['guidance'] !== 'string') {
     problems.push('guidance (must be a string)');
+  }
+  const mode = definition['enforcement_mode'];
+  if (mode !== undefined && !INLINE_GATE_ENFORCEMENT_MODES.includes(mode as never)) {
+    problems.push(`enforcement_mode (must be one of: ${INLINE_GATE_ENFORCEMENT_MODES.join(', ')})`);
   }
 
   return problems;
@@ -226,6 +232,12 @@ function buildInlineGateDefinition(definition: Record<string, unknown>): InlineG
   const context = definition['context'];
   if (context !== null && context !== undefined && typeof context === 'object') {
     inlineDefinition.context = context as Record<string, unknown>;
+  }
+
+  // Validated by `findInlineGateFieldProblems`; the temporary gate lifts it to `enforcementMode`.
+  const enforcementMode = definition['enforcement_mode'];
+  if (enforcementMode !== undefined) {
+    inlineDefinition.enforcement_mode = enforcementMode as InlineGateDefinition['enforcement_mode'];
   }
 
   return inlineDefinition;

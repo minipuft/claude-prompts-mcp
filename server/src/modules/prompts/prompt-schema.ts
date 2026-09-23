@@ -289,6 +289,8 @@ export const PromptGateConfigurationSchema = z
             expires_at: z.number().optional(),
             source: z.enum(['manual', 'automatic', 'analysis']).optional(),
             context: z.record(z.string(), z.any()).optional(),
+            /** What a FAIL does — the gate.yaml `enforcementMode`, spelled like its neighbours here. */
+            enforcement_mode: z.enum(['blocking', 'advisory', 'informational']).optional(),
           })
           .passthrough()
       )

@@ -8,7 +8,7 @@
 
 import { toGateDefinition, type GateDefinitionSource } from './gate-definition-converter.js';
 
-import type { GatePassCriteria, LightweightGateDefinition } from '../types.js';
+import type { GateEnforcementMode, GatePassCriteria, LightweightGateDefinition } from '../types.js';
 
 import { Logger } from '#infra/logging/index.js';
 
@@ -55,6 +55,8 @@ export interface TemporaryGateDefinition {
   target_step_id?: string;
   /** Target multiple specific steps in a chain (1-based) */
   apply_to_steps?: number[];
+  /** What a FAIL does; absent means undeclared, and `resolveEnforcementMode` decides. */
+  enforcement_mode?: GateEnforcementMode;
 }
 
 /**
@@ -133,6 +135,7 @@ export class TemporaryGateRegistry {
       target_step_number,
       target_step_id,
       apply_to_steps,
+      enforcement_mode,
       ...defWithoutId
     } = definition;
 
@@ -152,6 +155,7 @@ export class TemporaryGateRegistry {
       ...(target_step_number !== undefined ? { target_step_number } : {}),
       ...(target_step_id !== undefined ? { target_step_id } : {}),
       ...(apply_to_steps !== undefined ? { apply_to_steps } : {}),
+      ...(enforcement_mode !== undefined ? { enforcement_mode } : {}),
     };
 
     // Store the gate
@@ -434,6 +438,9 @@ function liftTemporaryGate(tempGate: TemporaryGateDefinition): GateDefinitionSou
     guidance: tempGate.guidance,
     ...(tempGate.pass_criteria !== undefined
       ? { pass_criteria: tempGate.pass_criteria as GatePassCriteria[] }
+      : {}),
+    ...(tempGate.enforcement_mode !== undefined
+      ? { enforcementMode: tempGate.enforcement_mode }
       : {}),
     retry_config: { max_attempts: 3, improvement_hints: true, preserve_context: true },
     activation: { explicit_request: true },

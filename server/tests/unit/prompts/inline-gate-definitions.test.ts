@@ -55,6 +55,30 @@ describe('normalizeInlineGateDefinitions', () => {
       });
     });
 
+    it('carries a declared enforcement_mode, and leaves it absent when undeclared', () => {
+      const [declared, undeclared] =
+        normalizeInlineGateDefinitions([
+          validDefinition({ enforcement_mode: 'advisory' }),
+          validDefinition(),
+        ]) ?? [];
+
+      expect(declared?.enforcement_mode).toBe('advisory');
+      expect(undeclared).toBeDefined();
+      expect(undeclared).not.toHaveProperty('enforcement_mode');
+    });
+
+    it('drops a definition whose enforcement_mode is not a mode, naming the key', () => {
+      const logger = createLogger();
+
+      const result = normalizeInlineGateDefinitions(
+        [validDefinition({ enforcement_mode: 'advisorry' })],
+        { logger }
+      );
+
+      expect(result).toBeUndefined();
+      expect(warnings(logger)).toContain('enforcement_mode (must be one of');
+    });
+
     it('defaults pass_criteria to an empty array', () => {
       const result = normalizeInlineGateDefinitions([validDefinition()]);
       expect(result?.[0]?.pass_criteria).toEqual([]);
