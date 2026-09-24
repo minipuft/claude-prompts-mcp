@@ -8,6 +8,7 @@ import {
 import { runGateReviewEvidence } from '../../../gates/services/gate-review-evidence.js';
 import { planNodeDrivenRender } from '../../operators/node-step-projection.js';
 import { resolveGroundTruthCoverage } from '../decisions/gates/ground-truth-coverage.js';
+import { resolveShownReview } from '../decisions/gates/review-target.js';
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
@@ -254,7 +255,13 @@ export class GateReviewStage extends BasePipelineStage {
       return;
     }
 
-    const pendingReview = this.chainSessionStore.getPendingGateReview(sessionId);
+    // The review the client is shown (`resolveShownReview`), read by the node it grades.
+    const run = this.chainSessionStore.getSession(sessionId, context.getScopeOptions());
+    const shownNodeId = run === undefined ? undefined : resolveShownReview(run);
+    const pendingReview =
+      shownNodeId === undefined
+        ? undefined
+        : this.chainSessionStore.getReview(sessionId, shownNodeId);
     if (!pendingReview) {
       this.logExit({ skipped: 'Pending gate review missing from session manager' });
       return;
@@ -302,7 +309,7 @@ export class GateReviewStage extends BasePipelineStage {
         });
 
         if (coverage.satisfied) {
-          await this.chainSessionStore.clearPendingGateReview(sessionId);
+          await this.chainSessionStore.clearReview(sessionId, pendingReview.nodeId);
 
           context.executionResults = {
             content: shellSection,
@@ -358,7 +365,6 @@ export class GateReviewStage extends BasePipelineStage {
       // `getChainContext` publishes — which counts the RUN's nodes. Handing it the parse-time
       // array put the two on different scales the moment a node was inserted, so a review opened
       // on a step after an insertion quoted the NEXT step's task back to the client.
-      const run = this.chainSessionStore.getSession(sessionId, context.getScopeOptions());
       // The render this stage is about to REPLACE, kept when the review is not about the node
       // that render targeted (row 2.11). Resolved before the review render so it reads stage
       // 18's output, not this stage's.

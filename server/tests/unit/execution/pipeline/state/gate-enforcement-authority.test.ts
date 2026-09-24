@@ -17,7 +17,7 @@ const createMockLogger = () => ({
 const createMockChainSessionStore = () => ({
   getSession: jest.fn(),
   hasActiveSession: jest.fn(),
-  getPendingGateReview: jest.fn(),
+  getReview: jest.fn(),
   setPendingGateReview: jest.fn(),
   setReview: jest.fn(),
   clearPendingGateReview: jest.fn(),
@@ -377,10 +377,8 @@ GATE_REVIEW: FAIL - Tests missing`;
     });
   });
 
-  // getPendingReview() was deleted at P4.52 — every real caller (step-capture-service.ts,
-  // gate-verdict-processor.ts, 13-session-stage.ts, 20-gate-review-stage.ts, and this
-  // class's own internals) calls chainSessionStore.getPendingGateReview() directly; the
-  // wrapper had zero adopters.
+  // getPendingReview() was deleted at P4.52 — the wrapper had zero adopters. Every caller now
+  // reads a review by the node it names (`chainSessionStore.getReview`, row 3.12).
 
   describe('createPendingReview', () => {
     test('creates review with provided options', async () => {

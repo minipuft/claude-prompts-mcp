@@ -87,7 +87,7 @@ function createMockSessionStore(declaredSections?: readonly string[]): ChainSess
     setPendingGateReview: jest
       .fn<ChainSessionService['setPendingGateReview']>()
       .mockResolvedValue(undefined),
-    getPendingGateReview: jest.fn().mockReturnValue(undefined),
+    getReview: jest.fn().mockReturnValue(undefined),
     getSession: jest.fn().mockReturnValue(session),
     createSession: jest.fn().mockResolvedValue(undefined),
     updateSession: jest.fn().mockResolvedValue(undefined),
@@ -464,7 +464,7 @@ describe('PhaseGuardVerificationStage', () => {
         },
       ]);
       const open = openGateReview();
-      (sessionStore.getPendingGateReview as jest.Mock).mockReturnValue(open);
+      (sessionStore.getReview as jest.Mock).mockReturnValue(open);
       const stage = createPhaseGuardVerificationStage(
         () => createRegistry(guide),
         () => defaultConfig,
@@ -938,7 +938,7 @@ function createMultiNodeStore(
     setPendingGateReview: jest
       .fn<ChainSessionService['setPendingGateReview']>()
       .mockResolvedValue(undefined),
-    getPendingGateReview: () => undefined,
+    getReview: () => undefined,
     getSession: () => session,
     createSession: async () => undefined,
     updateSession: async () => undefined,

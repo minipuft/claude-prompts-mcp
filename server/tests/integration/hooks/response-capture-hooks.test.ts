@@ -59,10 +59,9 @@ describe('ResponseCaptureStage Hook Emission', () => {
     // Create mock chain session manager
     mockChainSessionStore = {
       getSession: jest.fn(),
-      getPendingGateReview: jest.fn(),
+      getReview: jest.fn(),
       recordGateReviewOutcome: jest.fn(),
       advanceStep: jest.fn().mockResolvedValue({ nodeId: 'n3', ordinal: 3 }),
-      clearPendingGateReview: jest.fn(),
       clearReview: jest.fn(),
       setReview: jest.fn(),
       updateSessionState: jest.fn(),
@@ -111,7 +110,7 @@ describe('ResponseCaptureStage Hook Emission', () => {
       reviews: { n1: stepReview(1) },
     } as any);
     mockChainSessionStore.recordGateReviewOutcome.mockResolvedValue(undefined);
-    mockChainSessionStore.getPendingGateReview.mockReturnValue(undefined);
+    mockChainSessionStore.getReview.mockReturnValue(undefined);
 
     // Create context with gate verdict (command can be undefined for chain resume)
     const request: McpToolRequest = {
@@ -142,7 +141,7 @@ describe('ResponseCaptureStage Hook Emission', () => {
       reviews: { n1: stepReview(1) },
     } as any);
     mockChainSessionStore.recordGateReviewOutcome.mockResolvedValue(undefined);
-    mockChainSessionStore.getPendingGateReview.mockReturnValue({
+    mockChainSessionStore.getReview.mockReturnValue({
       nodeId: 'n1',
       kind: 'gate',
       phase: 'awaiting-verdict',
@@ -190,7 +189,7 @@ describe('ResponseCaptureStage Hook Emission', () => {
       reviews: { n1: stepReview(1) },
     } as any);
     mockChainSessionStore.recordGateReviewOutcome.mockResolvedValue(undefined);
-    mockChainSessionStore.getPendingGateReview.mockReturnValue({
+    mockChainSessionStore.getReview.mockReturnValue({
       nodeId: 'n1',
       kind: 'gate',
       phase: 'awaiting-verdict',
@@ -285,7 +284,7 @@ describe('gate events reach a port-only collaborator', () => {
         state: { currentNodeId: 'n1', nodes: [{ id: 'n1' }, { id: 'n2' }] },
         reviews: { n1: stepReview(1) },
       }),
-      getPendingGateReview: jest.fn().mockReturnValue({
+      getReview: jest.fn().mockReturnValue({
         combinedPrompt: 'Review against code-quality.',
         gateIds: ['code-quality'],
         prompts: [],
@@ -297,7 +296,6 @@ describe('gate events reach a port-only collaborator', () => {
       // form used above resolves to `never` under the tests tsconfig.
       recordGateReviewOutcome: jest.fn(async () => undefined),
       advanceStep: jest.fn(async () => ({ nodeId: 'n3', ordinal: 3 })),
-      clearPendingGateReview: jest.fn(),
       clearReview: jest.fn(),
       setReview: jest.fn(),
       updateSessionState: jest.fn(),

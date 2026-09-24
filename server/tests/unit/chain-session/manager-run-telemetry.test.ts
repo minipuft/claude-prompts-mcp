@@ -97,7 +97,7 @@ describe('run telemetry counters', () => {
     await manager.recordGateReviewOutcome('sess-tel', { verdict: 'PASS' });
     // The verdict path deletes a PASSed review; a second gate later in the same run opens a
     // fresh one whose attemptCount restarts at 0. The run totals must not restart with it.
-    await manager.clearPendingGateReview('sess-tel');
+    await manager.clearReview('sess-tel', 'n1');
     await manager.setPendingGateReview('sess-tel', pendingReview());
     await manager.recordGateReviewOutcome('sess-tel', { verdict: 'FAIL' });
 
@@ -109,7 +109,7 @@ describe('run telemetry counters', () => {
     await manager.recordGateReviewOutcome('sess-tel', { verdict: 'FAIL' });
 
     // The verdict path persists the review `advanceReview` returns; the store only counts.
-    const review = manager.getPendingGateReview('sess-tel');
+    const review = manager.getReview('sess-tel', 'n1');
     expect([review?.attemptCount, review?.history, review?.phase]).toEqual([
       0,
       undefined,

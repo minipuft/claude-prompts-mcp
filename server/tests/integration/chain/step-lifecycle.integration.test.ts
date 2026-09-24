@@ -62,15 +62,22 @@ import { ExecutionHistoryActionHandler } from '../../../src/mcp/tools/system-con
 import type { PipelineStage } from '../../../src/engine/execution/pipeline/stage.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
 import type { ConvertedPrompt } from '../../../src/engine/execution/types.js';
-import { currentStepReview } from '../../../src/shared/types/chain-session.js';
+import { resolveReviewTarget } from '../../../src/engine/execution/pipeline/decisions/gates/review-target.js';
 import type { GateReview } from '../../../src/shared/types/chain-execution.js';
 import type { ChainSession } from '../../../src/shared/types/chain-session.js';
 
-/** The run's current-step review, read by node out of `reviews` (row 3.6). */
+/** The review a bare verdict answers (`resolveReviewTarget`), read by the node it names. */
 const stepReviewOf = (session: {
   reviews?: Record<string, GateReview>;
   state: { currentNodeId: string | null };
-}): GateReview | undefined => currentStepReview(session.reviews, session.state.currentNodeId);
+}): GateReview | undefined => {
+  const target = resolveReviewTarget({
+    reviews: session.reviews ?? {},
+    currentNodeId: session.state.currentNodeId,
+    nodeIds: [],
+  });
+  return target.kind === 'review' ? session.reviews?.[target.nodeId] : undefined;
+};
 import type { DatabasePort } from '../../../src/shared/types/persistence.js';
 import type { SystemControlContext } from '../../../src/mcp/tools/system-control/core/types.js';
 
@@ -1211,6 +1218,35 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
       // Step 1's review still open holds step 3's capture.
       expect(onlySession().state.currentNodeId).toBe('review');
       expect(onlySession().runStatus).not.toBe('completed');
+    });
+
+    /**
+     * Row 3.12: a structural finding lands on the review of the step it GRADED. Step 1's gate
+     * review is open while step 2 is answered without its sections; the finding belongs to step
+     * 2. Merged into "the" open review, it joined step 1's gate review and step 2 went ungraded.
+     */
+    test("a structural finding on step 2 opens step 2's review, not step 1's", async () => {
+      parsedSteps = parsedFrameworkChain;
+      activeFramework = 'cageerf';
+      blockingGates = false;
+      await pipeline.execute({ command: `>>draft --> >>review` });
+      const { chainId, sessionId } = onlySession();
+      await pipeline.execute({
+        chain_id: chainId,
+        user_response: '## Context\nThe situation, stated.\n\n## Analysis\nThe options, weighed.',
+      });
+      expect(onlySession().state.currentNodeId).toBe('review');
+      await new GateEnforcementAuthority(sessionStore, createLogger()).createReview(
+        sessionId,
+        'gate',
+        'draft',
+        { gateIds: [GATE_ID], instructions: 'Check step 1.' }
+      );
+
+      await pipeline.execute({ chain_id: chainId, user_response: 'one line' });
+
+      expect(reviews()['draft']?.gateIds).toEqual([GATE_ID]);
+      expect(reviews()['review']?.gateIds).toEqual(['__phase_guard__']);
     });
 
     test('TWIN: the same PASS on a review of the node the run stands on moves the run past it', async () => {

@@ -1,6 +1,7 @@
 // @lifecycle canonical - Manages chain session lifecycle actions in the pipeline.
 import { randomUUID } from 'crypto';
 
+import { resolveShownReview } from '../decisions/gates/review-target.js';
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
@@ -119,7 +120,12 @@ export class SessionManagementStage extends BasePipelineStage {
           currentNodeId: existingSession.state.currentNodeId,
           totalSteps: totalOf(existingSession.state.nodes),
         };
-        const pendingReview = this.chainSessionStore.getPendingGateReview(resolvedSessionId);
+        // The review the client is shown, read by the node it grades (`resolveShownReview`).
+        const shownNodeId = resolveShownReview(existingSession);
+        const pendingReview =
+          shownNodeId === undefined
+            ? undefined
+            : this.chainSessionStore.getReview(resolvedSessionId, shownNodeId);
         if (pendingReview) {
           sessionContext.pendingReview = pendingReview;
         }

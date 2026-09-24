@@ -52,7 +52,7 @@ function createStore(): ChainSessionService {
     recordGateReviewOutcome: jest.fn(async () => undefined),
     clearReview: jest.fn(async () => undefined),
     advanceStep: jest.fn(async () => false),
-    getPendingGateReview: jest.fn(() => review),
+    getReview: jest.fn(() => review),
     setPendingGateReview: jest.fn(async () => undefined),
     setReview: jest.fn(async () => undefined),
   } as unknown as ChainSessionService;

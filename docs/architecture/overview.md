@@ -584,7 +584,7 @@ Survives across requests for the same session:
 await chainSessionStore.setPendingGateReview(sessionId, review);
 
 // Next request: Works!
-const review = chainSessionStore.getPendingGateReview(sessionId);
+const review = chainSessionStore.getReview(sessionId, nodeId);
 ```
 
 ### Global-Persistent State
@@ -630,7 +630,7 @@ context.state.gates.retryLimitExceeded = true; // Lost!
 
 // WRONG: Mixing ephemeral and persistent reads
 const fromContext = context.state.gates.enforcementMode; // Ephemeral
-const fromSession = chainSessionStore.getPendingGateReview(sessionId); // Persistent
+const fromSession = chainSessionStore.getReview(sessionId, nodeId); // Persistent
 // These may be out of sync!
 
 // CORRECT: Single source of truth

@@ -56,8 +56,8 @@ import type { DatabasePort, StateStoreOptions } from '#shared/types/persistence.
 // Single owner of unknowns-ledger transition rules. Imported rather than restated here so
 // the rules cannot drift between the capture seam that validates and the store that persists.
 import { computeUnknownLedger } from '#engine/execution/capture/unknown-observation-processor.js';
+import { resolveShownReview } from '#engine/execution/pipeline/decisions/gates/review-target.js';
 import {
-  currentStepReview,
   nodesHoldingRunOpen,
   isTerminalRunStatus,
   stampLegacyReview,
@@ -572,6 +572,7 @@ export class ChainSessionStore implements ChainSessionService {
       if (session.lifecycle !== 'canonical') continue;
       if (!this.isSessionActiveForHooks(session)) continue;
       const runStatus: ChainRunStatus = session.runStatus ?? 'working';
+      const shownNodeId = resolveShownReview(session);
       rows.push({
         chainId: session.chainId,
         runStatus,
@@ -585,9 +586,10 @@ export class ChainSessionStore implements ChainSessionService {
           currentStep: currentOrdinal(session.state.nodes, session.state.currentNodeId),
           totalSteps: totalOf(session.state.nodes),
           lastActivity: session.lastActivity,
-          // The key is the hooks' contract (`hooks/lib/db_reader.py`); the value is read by node.
+          // The key is the hooks' contract (`hooks/lib/db_reader.py`); the value is the review
+          // the client is shown, read by the node `resolveShownReview` names.
           pendingGateReview:
-            currentStepReview(session.reviews, session.state.currentNodeId) ?? null,
+            shownNodeId === undefined ? null : (session.reviews?.[shownNodeId] ?? null),
           pendingShellVerification: session.pendingShellVerification ?? null,
           runStatus,
           runCompletedAt: session.runCompletedAt ?? null,
@@ -603,12 +605,7 @@ export class ChainSessionStore implements ChainSessionService {
     const currentStep = currentOrdinal(session.state.nodes, session.state.currentNodeId);
     const totalSteps = totalOf(session.state.nodes);
     if (currentStep > 0 && currentStep < totalSteps) return true;
-    return (
-      currentStep > 0 &&
-      currentStep === totalSteps &&
-      (currentStepReview(session.reviews, session.state.currentNodeId) !== undefined ||
-        session.pendingShellVerification != null)
-    );
+    return currentStep > 0 && currentStep === totalSteps && nodesHoldingRunOpen(session).length > 0;
   }
 
   /**
@@ -2019,16 +2016,15 @@ export class ChainSessionStore implements ChainSessionService {
     await this.setReview(sessionId, stampLegacyReview({ ...review, nodeId }, session, slot));
   }
 
-  getPendingGateReview(sessionId: string, slot?: ReviewSlot): GateReview | undefined {
-    const session = this.activeSessions.get(sessionId);
-    const review = session === undefined ? undefined : readReview(session, slot);
+  getReview(sessionId: string, nodeId: string): GateReview | undefined {
+    const review = this.activeSessions.get(sessionId)?.reviews?.[nodeId];
     return review === undefined ? undefined : cloneReview(review);
   }
 
-  async clearPendingGateReview(sessionId: string, slot?: ReviewSlot): Promise<void> {
+  async clearPendingGateReview(sessionId: string, slot: ReviewSlot): Promise<void> {
     const session = this.activeSessions.get(sessionId);
-    const target = session === undefined ? undefined : readReview(session, slot);
-    if (session === undefined || target === undefined) {
+    const target = session?.reviews?.[slot.nodeId];
+    if (session === undefined || target?.kind !== 'detached') {
       return;
     }
 
@@ -2837,19 +2833,6 @@ export function createChainSessionStore(
   argumentHistoryTracker?: ArgumentHistoryTracker
 ): ChainSessionStore {
   return new ChainSessionStore(logger, textReferenceStore, options, argumentHistoryTracker);
-}
-
-/**
- * The review `slot` selects on `session`: the detached review of that node, or — with no slot —
- * the current-step review (`currentStepReview`). A slot naming a node whose review is not
- * detached selects nothing: a slot addresses detached reviews only. PURE.
- */
-function readReview(session: ChainSession, slot?: ReviewSlot): GateReview | undefined {
-  if (slot === undefined) {
-    return currentStepReview(session.reviews, session.state.currentNodeId);
-  }
-  const review = session.reviews?.[slot.nodeId];
-  return review?.kind === 'detached' ? review : undefined;
 }
 
 /**

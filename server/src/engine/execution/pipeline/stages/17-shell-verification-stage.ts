@@ -258,6 +258,11 @@ export class ShellVerificationStage extends BasePipelineStage {
       previousResults: pending.previousResults,
       originalGoal: pending.originalGoal,
       sourceGateIds: pending.sourceGateIds,
+      // The node it holds open: the step captured on this call, else the node an earlier save
+      // named — a failing re-run on a call that captured nothing must not release the hold.
+      nodeId:
+        context.state.session.capturedStep?.nodeId ??
+        this.chainSessionService.getPendingShellVerification(sessionId)?.nodeId,
     };
 
     await this.chainSessionService.setPendingShellVerification(sessionId, snapshot);

@@ -92,23 +92,28 @@ function createStageWithGates(
   } as any;
   const chainSessionStore =
     overrides?.chainSessionStore ??
-    ({
-      getPendingGateReview: jest.fn().mockReturnValue({
+    (() => {
+      const review = {
+        nodeId: 'n1',
         combinedPrompt: 'Review prompt',
         gateIds: Object.keys(gates),
         prompts: [],
         createdAt: Date.now(),
         attemptCount: 1,
         maxAttempts: 3,
-      }),
-      getChainContext: jest.fn().mockReturnValue({ step_results: {} }),
-      setPendingGateReview: jest.fn().mockResolvedValue(undefined as never),
-      clearPendingGateReview: jest.fn().mockResolvedValue(undefined),
-      // The review body resolves against the RUN's node list now (P4 row 3.4). `undefined` is a
-      // real answer for a judge-wiring harness that never creates a run, and it exercises the
-      // projection's parse-time fallback.
-      getSession: jest.fn().mockReturnValue(undefined),
-    } as any);
+      };
+      return {
+        getReview: jest.fn().mockReturnValue(review),
+        getChainContext: jest.fn().mockReturnValue({ step_results: {} }),
+        setPendingGateReview: jest.fn().mockResolvedValue(undefined as never),
+        clearReview: jest.fn().mockResolvedValue(undefined as never),
+        // The review is the one the run's reviews name (row 3.12); the body resolves against the
+        // run's node list (P4 row 3.4), and an empty one exercises the parse-time fallback.
+        getSession: jest
+          .fn()
+          .mockReturnValue({ reviews: { n1: review }, state: { currentNodeId: 'n1', nodes: [] } }),
+      } as any;
+    })();
 
   const stage = new GateReviewStage(
     chainOperatorExecutor,
@@ -269,7 +274,7 @@ describe('Shell Verify Auto-Pass', () => {
     // renderStep should NOT be called — no LLM review needed
     expect(chainOperatorExecutor.renderStep).not.toHaveBeenCalled();
     // Pending review should be cleared from session
-    expect(chainSessionStore.clearPendingGateReview).toHaveBeenCalledWith('session-1');
+    expect(chainSessionStore.clearReview).toHaveBeenCalledWith('session-1', 'n1');
   });
 
   test('falls through to normal review when gate has no shell_verify criteria', async () => {
