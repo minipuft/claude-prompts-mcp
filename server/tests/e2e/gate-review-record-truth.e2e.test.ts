@@ -40,6 +40,15 @@ interface Session {
 const shortSections = (step: number): string =>
   `## Context\nstep ${step}\n## Analysis\nx\n## Goals\ny\n## Execution\nz`;
 
+/** Every required CAGEERF section at its minimum length or more: the phase guard passes it. */
+const fullSections = (step: number): string =>
+  ['Context', 'Analysis', 'Goals', 'Execution']
+    .map(
+      (name) =>
+        `## ${name}\nStep ${step} ${name.toLowerCase()}: ${'a complete sentence. '.repeat(6)}`
+    )
+    .join('\n');
+
 function chainIdOf(text: string): string {
   const match = /chain_id="(chain-[A-Za-z0-9_#-]+)"/.exec(text);
   if (match?.[1] === undefined) {
@@ -94,12 +103,15 @@ describe('Streamable HTTP: a gate review states one state', () => {
     const session = await startSession();
     const chainId = chainIdOf(await session.call({ command: '>>quick_decision topic:"latch"' }));
 
+    // Only the final answer is short. Every answer sent with a verdict is graded (row 3.15), so a
+    // short mid-run answer opens its own review, and the mid-run control below would then read a
+    // review instead of the line it pins.
     const replies: string[] = [];
     for (const step of [1, 2, 3]) {
       replies.push(
         await session.call({
           chain_id: chainId,
-          user_response: shortSections(step),
+          user_response: step === 3 ? shortSections(step) : fullSections(step),
           gate_verdict: 'GATE_REVIEW: PASS - reviewed',
         })
       );
@@ -107,6 +119,7 @@ describe('Streamable HTTP: a gate review states one state', () => {
     const [, midRun, finalReply] = replies as [string, string, string];
 
     // CONTROL: a mid-run reply keeps the line inviting the next step.
+    expect(midRun).not.toContain('Improvements Needed');
     expect(midRun).toContain('Next: chain_id=');
 
     // The final step's answer failed its section check: the run waits for the verdict.

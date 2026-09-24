@@ -259,10 +259,12 @@ export interface PipelineInternalState {
       outcome?: string;
     };
     /**
-     * Set by StepResponseCaptureStage when a verdict clears a phase-guard-created review.
-     * PhaseGuardVerificationStage checks this to skip re-evaluation on the same request turn.
+     * The node whose structural (`__phase_guard__`) review this call's PASS closed. Set by
+     * GateVerdictProcessor; PhaseGuardVerificationStage skips grading that node — or a call that
+     * captured no node — so the answer the verdict judged does not reopen its own review. A
+     * different node captured on the same call is still graded.
      */
-    phaseGuardReviewCleared?: boolean;
+    phaseGuardReviewClearedNodeId?: string;
     /**
      * Pending shell verification gate for Ralph Wiggum loop execution.
      * Tracks command, attempt count, and previous results across iterations.

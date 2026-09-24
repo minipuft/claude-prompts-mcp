@@ -479,7 +479,7 @@ export class GateVerdictProcessor {
         { reviewedNodeId: review.nodeId }
       );
       if (review.gateIds.includes('__phase_guard__')) {
-        context.state.gates.phaseGuardReviewCleared = true;
+        context.state.gates.phaseGuardReviewClearedNodeId = review.nodeId;
       }
       await this.emitGateEvents(context, 'passed', [...review.gateIds], verdictPayload.rationale);
     } else if (advance.review !== null) {
