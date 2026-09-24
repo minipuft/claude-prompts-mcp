@@ -26,6 +26,8 @@ import type {
 } from '../../execution/pipeline/decisions/index.js';
 import type { ParsedGateVerdict } from '../core/gate-verdict-contract.js';
 
+import { ordinalOf } from '#shared/utils/node-order.js';
+
 /**
  * Outcome of a mid-chain interrupt resolution attempt (row 2.2).
  *
@@ -109,7 +111,11 @@ interface ReviewEntry {
   readonly event: ReviewEvent;
   /** The node a `HANDOFF RESULT` trailer names, when the call addressed one. */
   readonly trailerNodeId?: string;
-  /** Opens the review a verdict answers when none is open (the deferred entry). */
+  /**
+   * Opens the review a verdict answers when none is open (the deferred entry). A PASS sent with
+   * no answer gets none: it captures nothing, so it may not open a review on a step nobody
+   * answered and advance it (R19).
+   */
   readonly open?: (nodeId: string) => Promise<GateReview>;
   /** Grades the review before the event lands — a detached review's checks (R10.3). */
   readonly grade?: (review: GateReview) => Promise<GateReview>;
@@ -422,7 +428,10 @@ export class GateVerdictProcessor {
    * which may grade a node the run has already left (a phase-guard review, a final step). With
    * none open, the verdict opens one on the node the run stands on and answers it in the same
    * call (the deferred entry); that needs the authority, and without it the verdict is ignored
-   * as before.
+   * as before. A PASS sent with no answer captures nothing, so it advances nothing (R19): it
+   * opens no review, and on a review of a node that holds no captured output (the review stage
+   * 13 opens when a gated step renders) it is refused, naming the step to answer first. A bare
+   * FAIL still spends an attempt (P4.116).
    *
    * One submission is one recorded attempt, whichever entry it took (P4.116). A refusal — an
    * unknown or review-less node, an exhausted review (R9), a PASS over a failing check — records
@@ -438,23 +447,13 @@ export class GateVerdictProcessor {
     const untouched = { passClearedThisCall: false, earlyExit: false, userResponse };
     const verdictPayload = this.parseVerdict(context, context.getGateVerdict(), 'gate_verdict');
     const authority = context.gateEnforcement;
+    const hasResponse = typeof userResponse === 'string' && userResponse.length > 0;
     const opensNone = authority === undefined && trailerNodeId === undefined;
     if (verdictPayload === null || (opensNone && addressedReview(session).kind === 'refuse')) {
       return untouched;
     }
-    const answer = await this.answerReview(context, session, {
-      event: { type: 'verdict', verdict: verdictPayload, at: Date.now() },
-      ...(trailerNodeId !== undefined ? { trailerNodeId } : {}),
-      ...(authority !== undefined
-        ? {
-            open: async (nodeId: string) =>
-              authority.createReview(session.sessionId, 'gate', nodeId, {
-                gateIds: [],
-                instructions: 'Gate validation failed. Review and remediate.',
-              }),
-          }
-        : {}),
-    });
+    const bare = !hasResponse && verdictPayload.verdict === 'PASS';
+    const answer = await this.answerVerdict(context, session, verdictPayload, bare, trailerNodeId);
     if (answer.kind === 'refused') {
       context.setResponse({ content: [{ type: 'text', text: answer.message }], isError: true });
       context.diagnostics.warn('GateVerdictProcessor', 'Gate verdict refused', {
@@ -500,13 +499,55 @@ export class GateVerdictProcessor {
     }
     context.sessionContext = { ...sessionContext };
 
-    const hasResponse = typeof userResponse === 'string' && userResponse.length > 0;
     return {
       passClearedThisCall: advance.outcome === 'passed',
       earlyExit: !hasResponse,
       userResponse,
       ...(deferredAdvance !== undefined ? { deferredAdvance } : {}),
     };
+  }
+
+  /**
+   * Answer a verdict through the one review path. A `bare` PASS (no answer sent with it) opens
+   * no review, and is refused outright when its review grades a node with no captured output.
+   */
+  private async answerVerdict(
+    context: ExecutionContext,
+    session: ChainSession,
+    verdict: ParsedGateVerdict,
+    bare: boolean,
+    trailerNodeId: string | undefined
+  ): Promise<ReviewAnswer> {
+    const unanswered = bare ? this.unansweredReviewNode(session, trailerNodeId) : undefined;
+    if (unanswered !== undefined) {
+      return { kind: 'refused', message: describeUnansweredStep(session, unanswered) };
+    }
+    const authority = context.gateEnforcement;
+    return this.answerReview(context, session, {
+      event: { type: 'verdict', verdict, at: Date.now() },
+      ...(trailerNodeId !== undefined ? { trailerNodeId } : {}),
+      ...(authority !== undefined && !bare
+        ? {
+            open: async (nodeId: string) =>
+              authority.createReview(session.sessionId, 'gate', nodeId, {
+                gateIds: [],
+                instructions: 'Gate validation failed. Review and remediate.',
+              }),
+          }
+        : {}),
+    });
+  }
+
+  /**
+   * The node of the review a response-less PASS would answer, when that node holds no
+   * captured output — a review opened when its step rendered, before anyone answered it.
+   */
+  private unansweredReviewNode(session: ChainSession, trailerNodeId?: string): string | undefined {
+    const target = addressedReview(session, trailerNodeId);
+    return target.kind === 'review' &&
+      !this.chainSessionStore.isStepComplete(session.sessionId, target.nodeId)
+      ? target.nodeId
+      : undefined;
   }
 
   /**
@@ -533,7 +574,9 @@ export class GateVerdictProcessor {
           ? await entry.open?.(currentNodeId)
           : undefined;
     if (found === undefined) {
-      return { kind: 'refused', message: describeMissingReview(target, trailerNodeId) };
+      const ordinal = currentNodeId === null ? -1 : ordinalOf(session.state.nodes, currentNodeId);
+      const message = describeMissingReview(target, trailerNodeId, ordinal);
+      return { kind: 'refused', message };
     }
     const review = entry.grade === undefined ? found : await entry.grade(found);
     if (review !== found) {
@@ -842,7 +885,8 @@ export class GateVerdictProcessor {
 /** The sentence a call reads when no review answers it: a name the run lacks, or no open review. */
 function describeMissingReview(
   target: ReturnType<typeof resolveReviewTarget>,
-  trailerNodeId: string | undefined
+  trailerNodeId: string | undefined,
+  currentOrdinal: number
 ): string {
   if (target.kind === 'refuse' && target.reason === 'unknown-node') {
     return `❌ The reply names node '${trailerNodeId}', which this run does not have. Nothing was recorded.`;
@@ -851,9 +895,19 @@ function describeMissingReview(
     const named = target.nodeIds.map((nodeId) => `'${nodeId}'`).join(', ');
     return `❌ Gate reviews are open on nodes ${named}; name the one this call answers with a HANDOFF RESULT trailer (\`node: <id>\`). Nothing was recorded.`;
   }
+  const answerFirst = currentOrdinal > 0 ? `; answer step ${currentOrdinal} first` : '';
   return trailerNodeId === undefined
-    ? '❌ No gate review is open on this run, so there is nothing for this call to answer. Nothing was recorded.'
+    ? `❌ No gate review is open on this run, so there is nothing for this call to answer${answerFirst}. Nothing was recorded.`
     : `❌ No gate review is open for node '${trailerNodeId}'. Nothing was recorded.`;
+}
+
+/** The sentence a response-less PASS reads when the step its review grades has no answer. */
+function describeUnansweredStep(session: ChainSession, nodeId: string): string {
+  const ordinal = ordinalOf(session.state.nodes, nodeId);
+  return (
+    `❌ Step ${ordinal} has no answer yet, so a gate_verdict alone has nothing to grade; answer ` +
+    `step ${ordinal} first (send its output as user_response with the verdict). Nothing was recorded.`
+  );
 }
 
 /**

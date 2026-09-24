@@ -715,7 +715,7 @@ describe('delegation handoff evidence at resume (Tier 2 row 2.7)', () => {
     ]);
   });
 
-  test('`advisory` accepts the verdict-only resume at the delegated node', async () => {
+  test('`advisory` admits the verdict-only resume at the delegated node, and the verdict is refused', async () => {
     const pipeline = buildPipeline({
       sessionStore,
       recordStore,
@@ -723,31 +723,23 @@ describe('delegation handoff evidence at resume (Tier 2 row 2.7)', () => {
       evidenceMode: 'advisory',
     });
     const { chainId, sessionId } = await advanceToDelegatedStep(pipeline);
+    const standing = onlySession().state.currentNodeId;
 
-    const accepted = await pipeline.execute({
+    const reply = await pipeline.execute({
       chain_id: chainId,
       gate_verdict: passVerdict,
     } as any);
 
-    expect(accepted.isError).not.toBe(true);
-    expect(text(accepted)).not.toContain('❌ Delegated node');
-    // Measured, and recorded here because it is the behaviour `required` exists to stop: the
-    // verdict alone ADVANCES the delegated node — `currentNodeId` is null, the sentinel for a run
-    // standing past its terminal node — while capturing NO output for step 2. A call with
-    // no `user_response` is not a capture: `StepCaptureService.resolveTarget`
-    // (step-capture-service.ts:144) sends it to the PREVIOUS step, which is already completed and
-    // non-placeholder, so `captureStep` returns before writing. The step therefore completes with
-    // no output — which is exactly what the same call is refused for under `required`
-    // (positive control above), and the only difference between the two modes here.
-    //
-    // Step 2 DOES get a row since P4.86 — the verdict-time row, which records that a verdict was
-    // submitted for that step. Its `handoff_evidence` is NULL because the call carried no reply
-    // to judge, which is the same reading the column's contract gives every non-capture row.
-    expect(capturedRows(sessionId)).toEqual([
-      { step_number: 1, handoff_evidence: null },
-      { step_number: 2, handoff_evidence: null },
-    ]);
-    expect(onlySession().state.currentNodeId).toBeNull();
+    // The evidence phase admits it — `advisory` refuses nothing — but the verdict has nothing to
+    // grade: step 2 holds no captured output, and a PASS alone captures nothing, so it advances
+    // nothing (R19, P6.22). Before P6.22 this call ADVANCED the delegated node with no output
+    // (`currentNodeId` null) — the behaviour `required` exists to stop, reached here instead.
+    expect(text(reply)).not.toContain('❌ Delegated node');
+    expect(reply.isError).toBe(true);
+    expect(text(reply)).toContain('Step 2 has no answer yet');
+    expect(capturedRows(sessionId)).toEqual([{ step_number: 1, handoff_evidence: null }]);
+    expect(onlySession().state.currentNodeId).toBe(standing);
+    expect(standing).not.toBeNull();
   });
 
   test('a legacy chain with no node ids uses `n2` in the brief AND in the accepted trailer', async () => {

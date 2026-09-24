@@ -197,8 +197,12 @@ describe('StepResponseCaptureStage', () => {
   });
 
   test('processes gate_verdict without requiring user_response', async () => {
-    const { manager, getSession, recordGateReviewOutcome, advanceStep } = createSessionManager();
+    const { manager, getSession, getStepState, recordGateReviewOutcome, advanceStep } =
+      createSessionManager();
     const stage = createStage(manager);
+    // The two-call pattern: n2's answer was captured on an earlier call, so a verdict alone has
+    // something to grade. With nothing captured the same PASS is refused (R19, P6.22).
+    getStepState.mockReturnValue({ state: 'completed' });
 
     getSession.mockReturnValue({
       sessionId: 'sess-1',

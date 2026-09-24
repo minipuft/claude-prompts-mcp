@@ -55,6 +55,8 @@ function createStore(): ChainSessionService {
     getReview: jest.fn(() => review),
     setPendingGateReview: jest.fn(async () => undefined),
     setReview: jest.fn(async () => undefined),
+    // node-1's answer was captured on an earlier call: a PASS alone grades it (R19, P6.22).
+    isStepComplete: jest.fn(() => true),
   } as unknown as ChainSessionService;
 }
 

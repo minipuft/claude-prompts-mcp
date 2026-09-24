@@ -46,6 +46,8 @@ function createStore() {
     advanceStep: jest.fn(async () => ({ ordinal: 2, nodeId: 'node-2' })),
     recordGateReviewOutcome: jest.fn(async () => undefined),
     clearReview: jest.fn(async () => undefined),
+    setReview: jest.fn(async () => undefined),
+    isStepComplete: jest.fn(() => false),
   } as unknown as ChainSessionService & Record<string, jest.Mock>;
 }
 
@@ -117,6 +119,82 @@ describe('GateVerdictProcessor defers every advance it decides', () => {
     // applied, so "not called" is evidence about timing rather than about a store nobody wired.
     await processor.applyDeferredAdvance(context, result.deferredAdvance!);
     expect(store.advanceStep).toHaveBeenCalledWith('session-1', 'node-1');
+  });
+
+  test('R19: a PASS with no answer and no open review is refused and opens no review', async () => {
+    const context = createContext();
+    const createReview = jest.spyOn(
+      (context as never as { gateEnforcement: { createReview: () => unknown } }).gateEnforcement,
+      'createReview'
+    );
+
+    const result = await processor.processReviewVerdict(
+      context,
+      session,
+      { sessionId: 'session-1', currentStep: 1 } as never,
+      undefined
+    );
+
+    expect(result.earlyExit).toBe(true);
+    expect(result.passClearedThisCall).toBe(false);
+    expect(result.deferredAdvance).toBeUndefined();
+    expect(createReview).not.toHaveBeenCalled();
+    const response = (context as never as { setResponse: jest.Mock }).setResponse.mock
+      .calls[0]?.[0] as { content: Array<{ text: string }>; isError: boolean };
+    expect(response.isError).toBe(true);
+    expect(response.content[0]?.text).toContain('answer step 1 first');
+  });
+
+  describe('R19: a PASS with no answer on an open review of node-1', () => {
+    const reviewed = {
+      ...session,
+      reviews: {
+        'node-1': {
+          nodeId: 'node-1',
+          kind: 'gate',
+          phase: 'awaiting-verdict',
+          combinedPrompt: '',
+          gateIds: [],
+          prompts: [],
+          createdAt: 1,
+          attemptCount: 0,
+          maxAttempts: 2,
+        },
+      },
+    } as unknown as ChainSession;
+
+    test('is refused while node-1 holds no captured output', async () => {
+      const context = createContext();
+      const result = await processor.processReviewVerdict(
+        context,
+        reviewed,
+        { sessionId: 'session-1', currentStep: 1 } as never,
+        undefined
+      );
+
+      expect(result.deferredAdvance).toBeUndefined();
+      expect(store.recordGateReviewOutcome).not.toHaveBeenCalled();
+      const text = (context as never as { setResponse: jest.Mock }).setResponse.mock.calls[0]?.[0];
+      expect(JSON.stringify(text)).toContain('Step 1 has no answer yet');
+    });
+
+    test('CONTROL: answers the review once node-1 holds its captured output', async () => {
+      (store.isStepComplete as jest.Mock<() => boolean>).mockReturnValue(true);
+      const context = createContext();
+      const result = await processor.processReviewVerdict(
+        context,
+        reviewed,
+        { sessionId: 'session-1', currentStep: 1 } as never,
+        undefined
+      );
+
+      expect(result.deferredAdvance).toEqual({
+        sessionId: 'session-1',
+        nodeId: 'node-1',
+        reason: 'gate-pass',
+      });
+      expect(store.recordGateReviewOutcome).toHaveBeenCalledTimes(1);
+    });
   });
 
   test('applying the advance publishes the new position on the context', async () => {

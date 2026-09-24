@@ -807,8 +807,13 @@ describe('detached delegation (await: run) through the pipeline', () => {
       expect(sessionStore.getReview(sessionId, 'n3')?.gateIds).toEqual(['current-gate']);
       expect(run().state.currentNodeId).toBe('n3');
 
-      // The current step's verdict (no trailer): its review clears and the run moves on.
-      await pipeline.execute({ chain_id: chainId, gate_verdict: PASS } as any);
+      // The current step's answer and verdict (no trailer): its review clears and the run moves
+      // on. A PASS alone would be refused — n3 holds no answer yet (R19, P6.22).
+      await pipeline.execute({
+        chain_id: chainId,
+        user_response: 'Step 3 output',
+        gate_verdict: PASS,
+      } as any);
       expect(sessionStore.getReview(sessionId, 'n3')).toBeUndefined();
       expect(run().state.currentNodeId).toBeNull();
       expect(run().runStatus).toBe('completed');

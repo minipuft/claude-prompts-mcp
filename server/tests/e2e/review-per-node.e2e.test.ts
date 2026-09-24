@@ -7,7 +7,8 @@
  * Three flows live here, each beside a twin that differs in one input:
  *
  * - a structural review of step 1 opens after the capture already moved the run onto step 2, and
- *   a verdict on its own call answers step 1's review and leaves step 2 owed;
+ *   a verdict on its own call answers step 1's review and leaves step 2 owed; with no review
+ *   open, the same bare verdict is refused and names the step to answer first;
  * - the final step's verdict closes the run, and `chain/complete` is the run's last notification;
  * - a FAIL past the retry budget offers the retry prompt, a further verdict is refused, and
  *   `gate_action` retry / skip moves the review.
@@ -110,12 +111,13 @@ describe('Streamable HTTP: a gate review is a record of one node (shipped defaul
     }, 180000);
 
     /**
-     * The twin differs in step 1's answer only. With no review of step 1 open, the same verdict
-     * addresses the step the run stands on and moves the run past it — which is what shows the
-     * `Progress 2/3` read above can see a move. Pinned as today's behaviour, not endorsed: that
-     * verdict carries no step 2 output (see the row 3.7 handoff).
+     * The twin differs in step 1's answer only. With no review of step 1 open, the verdict
+     * addresses the review step 2 opened when it rendered — but step 2 holds no answer, and a
+     * verdict sent without one captures nothing, so it advances nothing (R19). Before P6.22 it
+     * moved the run past step 2 (`Progress 3/3`), which is what shows the `Progress 2/3` read
+     * above can see a move.
      */
-    test('TWIN: with no review of step 1 open, the same verdict lands on step 2 and the run moves', async () => {
+    test('TWIN: with no review of step 1 open, a bare verdict is refused and step 2 is still owed', async () => {
       const call = await startRun();
 
       const opened = await call({ user_response: cageerfAnswer('Step 1'), gate_verdict: PASS });
@@ -123,9 +125,31 @@ describe('Streamable HTTP: a gate review is a record of one node (shipped defaul
       expect(opened.text).not.toContain('Structural Review Required');
       expect(opened.text).toContain('→ Progress 2/3');
 
-      const answered = await call({ gate_verdict: PASS });
-      expect(answered.isError).toBe(false);
-      expect(answered.text).toContain('→ Progress 3/3');
+      const refused = await call({ gate_verdict: PASS });
+      console.log('DEBUGREFUSED', JSON.stringify(refused));
+      expect(refused.isError).toBe(true);
+      expect(refused.text).toContain('Step 2 has no answer yet');
+      expect(refused.text).toContain('Nothing was recorded');
+      expect(refused.text).toContain('answer step 2 first');
+      expect(refused.text).not.toContain('→ Progress 3/3');
+      expect(refused.methods).not.toContain(STEP_COMPLETE);
+
+      // The run still stands on step 2: answering it moves the run to 3, not past the end.
+      const step2 = await call({ user_response: cageerfAnswer('Step 2'), gate_verdict: PASS });
+      expect(step2.isError).toBe(false);
+      expect(step2.text).toContain('→ Progress 3/3');
+      expect(step2.methods).toContain(STEP_COMPLETE);
+    }, 180000);
+
+    /** Control for the refusal above: the same verdict WITH step 2's answer advances the run. */
+    test('CONTROL: a verdict sent with step 2 answer advances the run', async () => {
+      const call = await startRun();
+
+      await call({ user_response: cageerfAnswer('Step 1'), gate_verdict: PASS });
+      const step2 = await call({ user_response: cageerfAnswer('Step 2'), gate_verdict: PASS });
+      expect(step2.isError).toBe(false);
+      expect(step2.text).toContain('→ Progress 3/3');
+      expect(step2.methods).toContain(STEP_COMPLETE);
     }, 180000);
   });
 
