@@ -1421,13 +1421,28 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
       });
     });
 
-    test('TWIN: the same PASS on a review of the node the run stands on moves the run past it', async () => {
+    /**
+     * The twin differs in whose review is open: the node the run stands on, opened when it
+     * rendered and never answered. A PASS alone captures nothing, so it advances nothing (R19,
+     * P6.22) — before P6.22 this call moved the run to `review` with `draft` unanswered.
+     */
+    test('TWIN: the same PASS on a review of the unanswered node the run stands on is refused', async () => {
       await pipeline.execute({ command: `>>draft --> >>review` });
       const chainId = onlySession().chainId;
       expect(Object.keys(reviews())).toEqual(['draft']);
 
-      await pipeline.execute({ chain_id: chainId, gate_verdict: passOnly } as any);
+      const reply = await pipeline.execute({ chain_id: chainId, gate_verdict: passOnly } as any);
 
+      expect(reply.isError).toBe(true);
+      expect(textOf(reply)).toContain('Step 1 has no answer yet');
+      expect(reviews()['draft']?.attemptCount).toBe(0);
+      expect(onlySession().state.currentNodeId).toBe('draft');
+
+      // CONTROL, the two-call pattern on one node: once the answer is captured, the same PASS
+      // alone answers the review and moves the run past it.
+      await pipeline.execute({ chain_id: chainId, user_response: 'step 1 output' });
+      expect(onlySession().state.currentNodeId).toBe('draft');
+      await pipeline.execute({ chain_id: chainId, gate_verdict: passOnly } as any);
       expect(reviews()).toEqual({});
       expect(onlySession().state.currentNodeId).toBe('review');
     });

@@ -9,8 +9,8 @@
  * lands (case "lands") is the same probe the refusals are shown not to trip.
  *
  * The blocking control (last describe) runs the SAME chain with `await` absent and asserts the
- * pre-Tier-4 behaviour: an empty resume at the delegated step is refused, and the handoff pins
- * `run_in_background: false`.
+ * blocking behaviour: an empty resume at the delegated step captures nothing and re-renders the
+ * brief (R19), and the handoff pins `run_in_background: false`.
  *
  * Harness cloned from `delegation-handoff-evidence.integration.test.ts` (real stages 13/16/18/20/21,
  * ChainSessionStore, ExecutionRecordStore over in-memory SQLite); the DDL copy is held to the
@@ -807,8 +807,13 @@ describe('detached delegation (await: run) through the pipeline', () => {
       expect(sessionStore.getReview(sessionId, 'n3')?.gateIds).toEqual(['current-gate']);
       expect(run().state.currentNodeId).toBe('n3');
 
-      // The current step's verdict (no trailer): its review clears and the run moves on.
-      await pipeline.execute({ chain_id: chainId, gate_verdict: PASS } as any);
+      // The current step's answer and verdict (no trailer): its review clears and the run moves
+      // on. A PASS alone would be refused — n3 holds no answer yet (R19, P6.22).
+      await pipeline.execute({
+        chain_id: chainId,
+        user_response: 'Step 3 output',
+        gate_verdict: PASS,
+      } as any);
       expect(sessionStore.getReview(sessionId, 'n3')).toBeUndefined();
       expect(run().state.currentNodeId).toBeNull();
       expect(run().runStatus).toBe('completed');
@@ -1131,23 +1136,26 @@ describe('detached delegation (await: run) through the pipeline', () => {
   });
 
   describe('blocking control: the same chain with `await` absent', () => {
-    test('an empty resume at the delegated step is refused and the handoff pins the foreground', async () => {
+    test('an empty resume at the delegated step captures nothing and the handoff pins the foreground', async () => {
       const pipeline = buildPipeline({
         sessionStore,
         recordStore,
         logger,
         steps: parsedSteps({ detached: false }),
       });
-      const { chainId, brief } = await renderDetached(pipeline);
+      const { chainId, sessionId, brief } = await renderDetached(pipeline);
       expect(brief).toContain('run_in_background: false');
       expect(brief).not.toContain('Do NOT wait');
       expect(stepOf(DETACHED)?.spawnedAt).toBeUndefined();
 
-      const refused = await pipeline.execute({ chain_id: chainId } as any);
-      expect(refused.isError).toBe(true);
-      expect(text(refused)).toContain(
-        `❌ Delegated node ${DETACHED}: the resume carries no worker reply`
-      );
+      // R19 (P6.15): a resume with no reply captures nothing, so it needs no trailer. It is
+      // admitted, and the run re-renders the same brief rather than advancing past the node.
+      const again = await pipeline.execute({ chain_id: chainId } as any);
+      expect(again.isError).not.toBe(true);
+      expect(text(again)).not.toContain('❌ Delegated node');
+      expect(text(again)).toContain(`node: ${DETACHED}`);
+      expect(text(again)).toContain('run_in_background: false');
+      expect(sessionStore.isStepComplete(sessionId, DETACHED)).toBe(false);
       expect(run().state.currentNodeId).toBe(DETACHED);
     });
   });

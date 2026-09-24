@@ -25,6 +25,7 @@ import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globa
 
 import { DatabaseSync } from 'node:sqlite';
 
+import { RemainderProcessor } from '../../../src/engine/execution/capture/remainder-processor.js';
 import { StepCaptureService } from '../../../src/engine/execution/capture/step-capture-service.js';
 import { UnknownObservationProcessor } from '../../../src/engine/execution/capture/unknown-observation-processor.js';
 import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
@@ -45,6 +46,8 @@ import { GateVerdictProcessor } from '../../../src/engine/gates/services/gate-ve
 import { ResponseFormatter } from '../../../src/mcp/tools/prompt-engine/processors/response-formatter.js';
 import { ExecutionRecordStore } from '../../../src/modules/chains/execution-record-store.js';
 import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
+import { DEFAULT_WORKFLOW_CAPS } from '../../../src/modules/workflow-ir/node-schema.js';
+import { validateWorkflowIR } from '../../../src/modules/workflow-ir/validator.js';
 import { runFakeWorker } from '../../helpers/delegation/fake-worker.js';
 
 import type { HandoffEvidenceMode } from '../../../src/engine/execution/delegation/handoff-contract.js';
@@ -240,6 +243,8 @@ const buildPipeline = (options: {
    * `declaredSectionsProvider` below, so the guard blocks on a header the model was shown.
    */
   phaseGuards?: boolean;
+  /** The step gate's enforcement mode; omitted = `blocking`, the mode every other case runs. */
+  gateMode?: 'blocking' | 'advisory';
 }): PromptExecutionPipeline => {
   const {
     sessionStore,
@@ -271,7 +276,16 @@ const buildPipeline = (options: {
       sessionStore,
       new UnknownObservationProcessor(sessionStore, logger),
       logger,
-      evidenceMode === undefined ? {} : { handoffEvidenceMode: () => evidenceMode }
+      {
+        // Wired as the composition root wires it, so a `remainder` reaches the real processor.
+        remainderProcessor: new RemainderProcessor(
+          sessionStore,
+          { validate: validateWorkflowIR, defaultCaps: DEFAULT_WORKFLOW_CAPS },
+          () => PROMPTS,
+          logger
+        ),
+        ...(evidenceMode === undefined ? {} : { handoffEvidenceMode: () => evidenceMode }),
+      }
     ),
     StepExecution: new StepExecutionStage(
       chainExecutor,
@@ -358,7 +372,7 @@ const buildPipeline = (options: {
         execute: async (context: ExecutionContext) => {
           context.state.gates.hasBlockingGates = true;
           context.state.gates.accumulatedGateIds = [GATE_ID];
-          context.state.gates.enforcementMode = 'blocking';
+          context.state.gates.enforcementMode = options.gateMode ?? 'blocking';
           context.gateInstructions = 'Check the step output against the gate.';
         },
       };
@@ -519,13 +533,15 @@ describe('delegation handoff evidence at resume (Tier 2 row 2.7)', () => {
       expect(captured?.handoffEvidence).toBe('ok');
     });
 
-    test('POSITIVE CONTROL: a verdict-only resume of the delegated node is refused, and nothing moves', async () => {
+    test('CONTROL: a verdict-only resume with no review open is refused by the verdict owner, and nothing moves', async () => {
       const pipeline = buildPipeline({ sessionStore, recordStore, logger });
       const { chainId, sessionId } = await advanceToDelegatedStep(pipeline);
 
-      // No `user_response` at all — the guarantee-B bypass. The empty reply used to return from
-      // the evidence phase before the check ran, and the verdict then advanced the node with
-      // nothing captured.
+      // No `user_response` at all — the old guarantee-B bypass shape. The evidence phase admits
+      // it (R19: a reply-less call captures nothing, so it owes no trailer), and what refuses it
+      // is the verdict processor: the only review it could answer is the delegated node's own,
+      // which has nothing captured to grade (P6.22). That refusal is what makes the admission
+      // safe, so it is pinned by NAME — the evidence phase's words must not be what answers.
       const refused = await pipeline.execute({
         chain_id: chainId,
         gate_verdict: passVerdict,
@@ -533,14 +549,13 @@ describe('delegation handoff evidence at resume (Tier 2 row 2.7)', () => {
       const message = text(refused);
 
       expect(refused.isError).toBe(true);
-      expect(message).toContain(`❌ Delegated node ${DELEGATED_NODE_ID}`);
-      // The message names THIS mistake, not the prose-only one the same classification produces.
-      expect(message).toContain('carries no worker reply');
-      expect(message).toContain(`node: ${DELEGATED_NODE_ID}`);
+      expect(message).not.toContain('❌ Delegated node');
+      expect(message).toContain('Step 2 has no answer yet');
 
       // Same "nothing moved" probe the prose-only control uses, and the sibling accept case
-      // below shows it seeing a step-2 row when a reply IS carried.
+      // shows it seeing a step-2 row when a reply IS carried.
       expect(onlySession().state.currentNodeId).toBe(DELEGATED_NODE_ID);
+      expect(sessionStore.isStepComplete(sessionId, DELEGATED_NODE_ID)).toBe(false);
       expect(capturedRows(sessionId)).toEqual([{ step_number: 1, handoff_evidence: null }]);
     });
 
@@ -655,15 +670,6 @@ describe('delegation handoff evidence at resume (Tier 2 row 2.7)', () => {
     test('the brief in that response is the one a conforming worker reply clears the run with', async () => {
       const { pipeline, chainId, sessionId, rendered } = await resumeStep1With('step 1 output');
 
-      // The verdict the review asks for, submitted alone, is still refused — a delegated node
-      // does not advance on a verdict, whichever step the review names.
-      const refused = await pipeline.execute({
-        chain_id: chainId,
-        gate_verdict: passVerdict,
-      } as any);
-      expect(refused.isError).toBe(true);
-      expect(text(refused)).toContain(`❌ Delegated node ${DELEGATED_NODE_ID}`);
-
       // The worker's reply reads the token out of the brief this render printed, so the accept
       // path cannot pass against a brief the response never carried.
       const accepted = await pipeline.execute({
@@ -677,6 +683,95 @@ describe('delegation handoff evidence at resume (Tier 2 row 2.7)', () => {
         { step_number: 1, handoff_evidence: null },
         { step_number: 2, handoff_evidence: 'ok' },
       ]);
+    });
+
+    /** The run's open reviews as `[nodeId, phase, attemptCount]`, for the P6.15 twins. */
+    const openReviews = (): Array<[string, string, number]> =>
+      Object.values(
+        (onlySession() as unknown as { reviews?: Record<string, unknown> }).reviews ?? {}
+      ).map((review) => {
+        const r = review as { nodeId: string; phase: string; attemptCount: number };
+        return [r.nodeId, r.phase, r.attemptCount];
+      });
+
+    const failVerdict = renderGateVerdict({
+      overall: 'FAIL',
+      rationale: 'the section is missing',
+      per_gate: [{ index: 1, passed: false, rationale: `${GATE_ID}: not satisfied` }],
+    });
+
+    test("P6.15 (a): a verdict alone answers step 1's review; the delegated node is not captured", async () => {
+      const { pipeline, chainId, sessionId } = await resumeStep1With('step 1 output');
+      expect(openReviews()).toEqual([['n1', 'awaiting-verdict', 0]]);
+
+      // R19: the call carries no reply, so it owes no trailer — the review it answers is the
+      // run's one open step review (`resolveReviewTarget`), which is step 1's.
+      const answered = await pipeline.execute({
+        chain_id: chainId,
+        gate_verdict: passVerdict,
+      } as any);
+      const message = text(answered);
+
+      expect(answered.isError).not.toBe(true);
+      expect(message).not.toContain('❌');
+      expect(message).not.toContain('Structural Review Required');
+      expect(openReviews()).toEqual([]);
+      // The run still waits on its worker: the brief is handed over again, the node holds no
+      // captured output, and the run has not moved.
+      expect(message).toContain('EXECUTION BRIEF');
+      expect(message).toContain(`node: ${DELEGATED_NODE_ID}`);
+      expect(onlySession().state.currentNodeId).toBe(DELEGATED_NODE_ID);
+      expect(sessionStore.isStepComplete(sessionId, DELEGATED_NODE_ID)).toBe(false);
+      expect(capturedRows(sessionId).filter((row) => row.handoff_evidence !== null)).toEqual([]);
+    });
+
+    test('P6.15 (b) CONTROL: a prose reply with no trailer at the delegated node is still refused', async () => {
+      const { pipeline, chainId, sessionId, rendered } = await resumeStep1With('step 1 output');
+
+      const refused = await pipeline.execute({
+        chain_id: chainId,
+        user_response: runFakeWorker(rendered, { omitTrailer: true }),
+        gate_verdict: passVerdict,
+      } as any);
+
+      expect(refused.isError).toBe(true);
+      expect(text(refused)).toContain(`❌ Delegated node ${DELEGATED_NODE_ID}`);
+      expect(text(refused)).toContain('carries no trailer');
+      // Refused before any verdict path: step 1's review is untouched.
+      expect(openReviews()).toEqual([['n1', 'awaiting-verdict', 0]]);
+      expect(sessionStore.isStepComplete(sessionId, DELEGATED_NODE_ID)).toBe(false);
+    });
+
+    test("P6.15 (c): gate_action retry alone reopens step 1's exhausted review; the delegated node is untouched", async () => {
+      const { pipeline, chainId, sessionId } = await resumeStep1With('step 1 output');
+
+      // FAILs sent alone at the delegated node spend step 1's budget — each is itself the (a)
+      // shape with a FAIL. Bounded so a budget that never exhausts fails here, not by hanging.
+      let fails = 0;
+      while (openReviews()[0]?.[1] !== 'exhausted' && fails < 5) {
+        const failed = await pipeline.execute({
+          chain_id: chainId,
+          gate_verdict: failVerdict,
+        } as any);
+        expect(failed.isError).not.toBe(true);
+        fails++;
+      }
+      expect(openReviews()).toEqual([['n1', 'exhausted', fails]]);
+      expect(sessionStore.isStepComplete(sessionId, DELEGATED_NODE_ID)).toBe(false);
+
+      const retried = await pipeline.execute({
+        chain_id: chainId,
+        gate_action: 'retry',
+      } as any);
+
+      expect(retried.isError).not.toBe(true);
+      expect(text(retried)).not.toContain('❌');
+      // The reopened review quotes step 1 back — the step it grades, not the delegated node.
+      expect(text(retried)).toContain('Do Draft.');
+      expect(text(retried)).toContain('User requested retry after exhaustion');
+      expect(openReviews()).toEqual([['n1', 'awaiting-verdict', 0]]);
+      expect(onlySession().state.currentNodeId).toBe(DELEGATED_NODE_ID);
+      expect(sessionStore.isStepComplete(sessionId, DELEGATED_NODE_ID)).toBe(false);
     });
 
     test('POSITIVE CONTROL: a conforming step 1 raises no review, and step 2 renders normally', async () => {
@@ -715,7 +810,7 @@ describe('delegation handoff evidence at resume (Tier 2 row 2.7)', () => {
     ]);
   });
 
-  test('`advisory` accepts the verdict-only resume at the delegated node', async () => {
+  test('`advisory` admits the verdict-only resume at the delegated node, and the verdict is refused', async () => {
     const pipeline = buildPipeline({
       sessionStore,
       recordStore,
@@ -723,31 +818,229 @@ describe('delegation handoff evidence at resume (Tier 2 row 2.7)', () => {
       evidenceMode: 'advisory',
     });
     const { chainId, sessionId } = await advanceToDelegatedStep(pipeline);
+    const standing = onlySession().state.currentNodeId;
 
-    const accepted = await pipeline.execute({
+    const reply = await pipeline.execute({
       chain_id: chainId,
       gate_verdict: passVerdict,
     } as any);
 
-    expect(accepted.isError).not.toBe(true);
-    expect(text(accepted)).not.toContain('❌ Delegated node');
-    // Measured, and recorded here because it is the behaviour `required` exists to stop: the
-    // verdict alone ADVANCES the delegated node — `currentNodeId` is null, the sentinel for a run
-    // standing past its terminal node — while capturing NO output for step 2. A call with
-    // no `user_response` is not a capture: `StepCaptureService.resolveTarget`
-    // (step-capture-service.ts:144) sends it to the PREVIOUS step, which is already completed and
-    // non-placeholder, so `captureStep` returns before writing. The step therefore completes with
-    // no output — which is exactly what the same call is refused for under `required`
-    // (positive control above), and the only difference between the two modes here.
-    //
-    // Step 2 DOES get a row since P4.86 — the verdict-time row, which records that a verdict was
-    // submitted for that step. Its `handoff_evidence` is NULL because the call carried no reply
-    // to judge, which is the same reading the column's contract gives every non-capture row.
-    expect(capturedRows(sessionId)).toEqual([
-      { step_number: 1, handoff_evidence: null },
-      { step_number: 2, handoff_evidence: null },
-    ]);
-    expect(onlySession().state.currentNodeId).toBeNull();
+    // The evidence phase admits it — `advisory` refuses nothing — but the verdict has nothing to
+    // grade: step 2 holds no captured output, and a PASS alone captures nothing, so it advances
+    // nothing (R19, P6.22). Before P6.22 this call ADVANCED the delegated node with no output
+    // (`currentNodeId` null) — the behaviour `required` exists to stop, reached here instead.
+    expect(text(reply)).not.toContain('❌ Delegated node');
+    expect(reply.isError).toBe(true);
+    expect(text(reply)).toContain('Step 2 has no answer yet');
+    expect(capturedRows(sessionId)).toEqual([{ step_number: 1, handoff_evidence: null }]);
+    expect(onlySession().state.currentNodeId).toBe(standing);
+    expect(standing).not.toBeNull();
+  });
+
+  /**
+   * R19 for a non-blocking FAIL (P6.35). An advisory FAIL answers its review and renders its
+   * warning, and with the step's answer it moves the run on; sent alone it captures nothing, so
+   * it advances nothing — before P6.35 it finished the chain past a step nobody answered.
+   */
+  describe('an advisory FAIL sent with no answer advances nothing (R19, P6.35)', () => {
+    const failVerdict = renderGateVerdict({
+      overall: 'FAIL',
+      rationale: 'misses the gate',
+      per_gate: [{ index: 1, passed: false, rationale: `${GATE_ID}: unmet` }],
+    });
+    const plainSteps = () => parsedChainSteps().map((step) => ({ ...step, delegated: false }));
+
+    test('at the delegated step: the FAIL is recorded, and the run stays on the step', async () => {
+      const pipeline = buildPipeline({ sessionStore, recordStore, logger, gateMode: 'advisory' });
+      const { chainId, sessionId } = await advanceToDelegatedStep(pipeline);
+
+      const reply = await pipeline.execute({ chain_id: chainId, gate_verdict: failVerdict } as any);
+
+      expect(text(reply)).not.toContain('Chain complete');
+      expect(onlySession().state.currentNodeId).toBe(DELEGATED_NODE_ID);
+      expect(sessionStore.isStepComplete(sessionId, DELEGATED_NODE_ID)).toBe(false);
+      expect(capturedRows(sessionId)).toEqual([{ step_number: 1, handoff_evidence: null }]);
+    });
+
+    test('CONTROL at the delegated step: the same FAIL sent with the answer finishes the chain', async () => {
+      const pipeline = buildPipeline({ sessionStore, recordStore, logger, gateMode: 'advisory' });
+      const { chainId, brief } = await advanceToDelegatedStep(pipeline);
+
+      const reply = await pipeline.execute({
+        chain_id: chainId,
+        user_response: runFakeWorker(brief),
+        gate_verdict: failVerdict,
+      } as any);
+
+      expect(reply.isError).not.toBe(true);
+      expect(text(reply)).toContain('Chain complete');
+      expect(onlySession().state.currentNodeId).toBeNull();
+    });
+
+    test('at a step that is not delegated: the run stays on step 1', async () => {
+      const pipeline = buildPipeline({
+        sessionStore,
+        recordStore,
+        logger,
+        gateMode: 'advisory',
+        steps: plainSteps(),
+      });
+      await pipeline.execute({ command: `>>draft --> >>review` } as any);
+      const { chainId, sessionId } = onlySession();
+
+      const reply = await pipeline.execute({ chain_id: chainId, gate_verdict: failVerdict } as any);
+
+      expect(text(reply)).toContain(`Gate ${GATE_ID} failed: misses the gate`);
+      expect(onlySession().state.currentNodeId).toBe('n1');
+      expect(sessionStore.isStepComplete(sessionId, 'n1')).toBe(false);
+    });
+
+    test('CONTROL at a step that is not delegated: the FAIL sent with the answer moves to step 2', async () => {
+      const pipeline = buildPipeline({
+        sessionStore,
+        recordStore,
+        logger,
+        gateMode: 'advisory',
+        steps: plainSteps(),
+      });
+      await pipeline.execute({ command: `>>draft --> >>review` } as any);
+      const { chainId } = onlySession();
+
+      const reply = await pipeline.execute({
+        chain_id: chainId,
+        user_response: 'step 1 output',
+        gate_verdict: failVerdict,
+      } as any);
+
+      expect(text(reply)).toContain(`Gate ${GATE_ID} failed: misses the gate`);
+      expect(onlySession().state.currentNodeId).toBe(DELEGATED_NODE_ID);
+    });
+  });
+
+  describe('a remainder sent alone at the delegated node (R19, P6.17)', () => {
+    /** Three steps, so the delegated node has a tail for a remainder to replace. */
+    const threeSteps = () => [
+      ...parsedChainSteps(),
+      {
+        stepNumber: 3,
+        nodeId: 'n3',
+        promptId: 'draft',
+        args: {},
+        convertedPrompt: PROMPTS[0],
+      },
+    ];
+    const nodeIds = (): string[] =>
+      (onlySession() as unknown as { state: { nodes: Array<{ id: string }> } }).state.nodes.map(
+        (node) => node.id
+      );
+    const blockingUnknown = {
+      type: 'unknown_discovered' as const,
+      id: 'cache-ttl',
+      statement: 'TTL for the new cache layer is undecided',
+      blocking: true,
+    };
+    // The ledger write (`observations`) persists through the throwing variant, which the
+    // suite-level spies leave unmocked — the unknown-interrupt suite stubs it the same way.
+    let persistSpy: jest.SpiedFunction<() => Promise<void>>;
+    beforeEach(() => {
+      persistSpy = jest
+        .spyOn(ChainSessionStore.prototype as any, 'persistSessionsOrThrow')
+        .mockResolvedValue(undefined) as unknown as jest.SpiedFunction<() => Promise<void>>;
+    });
+    afterEach(() => persistSpy.mockRestore());
+
+    const confirmTail = {
+      mode: 'replace' as const,
+      nodes: [{ id: 'confirm-ttl', promptId: 'draft', stepName: 'Confirm' }],
+    };
+
+    /** Stand on the delegated node with its brief rendered, and declare one blocking unknown. */
+    const standOnDelegatedWithUnknown = async (): Promise<{
+      pipeline: PromptExecutionPipeline;
+      chainId: string;
+      sessionId: string;
+      brief: string;
+    }> => {
+      const pipeline = buildPipeline({
+        sessionStore,
+        recordStore,
+        logger,
+        steps: threeSteps() as ReturnType<typeof parsedChainSteps>,
+      });
+      const { chainId, sessionId, brief } = await advanceToDelegatedStep(pipeline);
+      // Written straight to the ledger rather than through a reply-less `observations` call, so
+      // the setup does not itself ride the admission the mutation takes away: only (a)'s own
+      // remainder-only call does. No investigation node is inserted this way, so the tail the
+      // remainder replaces is `n3`.
+      await sessionStore.applyUnknownObservations(sessionId, DELEGATED_NODE_ID, [blockingUnknown]);
+      expect(nodeIds()).toEqual(['n1', DELEGATED_NODE_ID, 'n3']);
+      return { pipeline, chainId, sessionId, brief };
+    };
+
+    test('(a) a remainder alone replaces the tail; the delegated node is untouched and still owed', async () => {
+      const { pipeline, chainId, sessionId } = await standOnDelegatedWithUnknown();
+
+      const applied = await pipeline.execute({ chain_id: chainId, remainder: confirmTail } as any);
+      const message = text(applied);
+
+      expect(applied.isError).not.toBe(true);
+      expect(message).not.toContain('❌');
+      // Tail replaced strictly AFTER the delegated node, which keeps its place.
+      expect(nodeIds()).toEqual(['n1', DELEGATED_NODE_ID, 'confirm-ttl']);
+      // The run still waits on its worker: same node, nothing captured, brief handed over again.
+      expect(onlySession().state.currentNodeId).toBe(DELEGATED_NODE_ID);
+      expect(sessionStore.isStepComplete(sessionId, DELEGATED_NODE_ID)).toBe(false);
+      expect(capturedRows(sessionId)).toEqual([{ step_number: 1, handoff_evidence: null }]);
+      expect(message).toContain('EXECUTION BRIEF');
+      expect(message).toContain(`node: ${DELEGATED_NODE_ID}`);
+    });
+
+    test('(b) CONTROL: a remainder whose edge names an unknown node id is refused by name, before any capture', async () => {
+      const { pipeline, chainId, sessionId, brief } = await standOnDelegatedWithUnknown();
+
+      // Carries the worker's conforming reply, so admission cannot be what answers: the refusal
+      // is the remainder validator's, and it lands before the reply is captured.
+      const refused = await pipeline.execute({
+        chain_id: chainId,
+        user_response: runFakeWorker(brief),
+        gate_verdict: passVerdict,
+        remainder: { ...confirmTail, edges: [{ from: 'confirm-ttl', to: 'ghost-node' }] },
+      } as any);
+      const message = text(refused);
+
+      expect(refused.isError).toBe(true);
+      expect(message).toContain('remainder refused');
+      expect(message).toContain('edge-endpoint-missing');
+      expect(message).toContain('"ghost-node"');
+      expect(message).not.toContain('❌ Delegated node');
+      expect(nodeIds()).toEqual(['n1', DELEGATED_NODE_ID, 'n3']);
+      expect(onlySession().state.currentNodeId).toBe(DELEGATED_NODE_ID);
+      expect(sessionStore.isStepComplete(sessionId, DELEGATED_NODE_ID)).toBe(false);
+      expect(capturedRows(sessionId)).toEqual([{ step_number: 1, handoff_evidence: null }]);
+    });
+
+    test('(c) a remainder with the worker reply in one call: the remainder lands first, then the capture', async () => {
+      const { pipeline, chainId, sessionId, brief } = await standOnDelegatedWithUnknown();
+
+      const both = await pipeline.execute({
+        chain_id: chainId,
+        user_response: runFakeWorker(brief),
+        gate_verdict: passVerdict,
+        remainder: confirmTail,
+      } as any);
+
+      expect(both.isError).not.toBe(true);
+      // Had the capture run first, the run would stand on `n3` and the replacement (strictly
+      // after the current node) would have left it in place, with the run on `n3`. The node list
+      // and the current node witness the documented order: remainder, then the capture.
+      expect(nodeIds()).toEqual(['n1', DELEGATED_NODE_ID, 'confirm-ttl']);
+      expect(onlySession().state.currentNodeId).toBe('confirm-ttl');
+      expect(sessionStore.isStepComplete(sessionId, DELEGATED_NODE_ID)).toBe(true);
+      expect(capturedRows(sessionId)).toEqual([
+        { step_number: 1, handoff_evidence: null },
+        { step_number: 2, handoff_evidence: 'ok' },
+      ]);
+    });
   });
 
   test('a legacy chain with no node ids uses `n2` in the brief AND in the accepted trailer', async () => {
