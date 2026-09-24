@@ -130,6 +130,21 @@ export class PromptExecutionPipeline {
   }
 
   /**
+   * The pipeline's one run-completion point (P4.157 / R12): ask the store to complete a run that
+   * stands past its last node. Asked after the stage loop, whichever stage ended the call — a
+   * shell-verification bounce (stage 17) or a session short-circuit (stage 13) sets the response
+   * before any later stage runs, and a run the capture (stage 16) walked off its last node on
+   * that call was left `working` with no `chain/complete`. It must run AFTER every review the
+   * call can open exists — stage 16 advances before stage 19 grades the answer that did it and
+   * stage 20 renders — so the store's close guard sees them; `transitionRunStatus` decides.
+   */
+  private async completeFinishedRun(context: ExecutionContext): Promise<void> {
+    const sessionId = context.sessionContext?.sessionId;
+    if (sessionId === undefined || this.chainSessionStore === undefined) return;
+    await this.chainSessionStore.completeHeldRun(sessionId);
+  }
+
+  /**
    * Execute the configured pipeline for the given MCP request.
    */
   async execute(mcpRequest: McpToolRequest): Promise<ToolResponse> {
@@ -170,6 +185,7 @@ export class PromptExecutionPipeline {
 
     try {
       const earlyExitStage = await this.runStages(context, stageMetrics);
+      await this.completeFinishedRun(context);
 
       if (!context.response) {
         throw new Error('Pipeline completed without producing a response');

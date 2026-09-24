@@ -355,7 +355,7 @@ export const isTerminalRunStatus = (status: ChainRunStatus | undefined): boolean
  * Identity-based on purpose. The ordinal comparison this replaces (`currentStep >= totalSteps`)
  * reports a run *standing on* its final step as finished — the completion lie that made a
  * banner-obeying client abandon a run that still owed one gate verdict. `runStatus` is latched by
- * the pipeline's one completion point (stage 20, after the phase guard has graded the call), so
+ * the pipeline's one completion point (after the stage loop, once the call is graded), so
  * `currentNodeId === null` with no hold is the same fact read earlier in that call, and covers a
  * session loaded from a pre-latch blob. An open review holds the run through
  * {@link nodesHoldingRunOpen}, the one derivation — no second review clause here.
@@ -634,7 +634,8 @@ export interface ChainSessionService {
   markNodeSpawned(sessionId: string, nodeId: string): Promise<boolean>;
   /**
    * Ask for `completed` on a run standing past its last node — the pipeline's one completion
-   * point (stage 20, after grading; stage 16 on a call it answers itself). `advanceStep` never
+   * point (after the stage loop; stage 16 also asks on a late-report call whose reply names the
+   * outcome). `advanceStep` never
    * completes a run. `transitionRunStatus` still decides; false while anything holds the run.
    */
   completeHeldRun(sessionId: string): Promise<boolean>;

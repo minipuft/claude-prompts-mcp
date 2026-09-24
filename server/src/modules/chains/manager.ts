@@ -1057,8 +1057,8 @@ export class ChainSessionStore implements ChainSessionService {
    * The ONE place a run is completed normally. {@link advanceStep} only moves the run; completing
    * there latched `completed` before the phase guard (stage 19) graded the very answer that
    * walked the run off its last node, so one reply announced `chain/complete` and opened a
-   * structural review. The pipeline asks here after grading on every chain request (stage 20),
-   * and stage 16 asks on the late-report calls it answers itself; {@link transitionRunStatus}
+   * structural review. The pipeline asks here after its stage loop on every chain request, and
+   * stage 16 asks on the late-report calls it answers itself; {@link transitionRunStatus}
    * still decides. A no-op (false) for a run still standing on a node, and for one still held.
    */
   async completeHeldRun(sessionId: string): Promise<boolean> {

@@ -108,8 +108,6 @@ function createStageWithGates(
       // real answer for a judge-wiring harness that never creates a run, and it exercises the
       // projection's parse-time fallback.
       getSession: jest.fn().mockReturnValue(undefined),
-      // Stage 20 is the run-completion point (R12); no run exists here, so nothing completes.
-      completeHeldRun: jest.fn<(sessionId: string) => Promise<boolean>>().mockResolvedValue(false),
     } as any);
 
   const stage = new GateReviewStage(

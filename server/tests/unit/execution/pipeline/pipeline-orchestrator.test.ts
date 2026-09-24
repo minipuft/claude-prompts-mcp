@@ -3,8 +3,10 @@ import { describe, expect, jest, test } from '@jest/globals';
 import { PromptExecutionPipeline } from '../../../../src/engine/execution/pipeline/prompt-execution-pipeline.js';
 
 import type { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import type { PipelinePorts } from '../../../../src/engine/execution/pipeline/prompt-execution-pipeline.js';
 import type { PipelineStage } from '../../../../src/engine/execution/pipeline/stage.js';
 import type { Logger } from '../../../../src/infra/logging/index.js';
+import type { ChainSessionService } from '../../../../src/shared/types/chain-session.js';
 import type { ExecutionRecordStore } from '../../../../src/modules/chains/execution-record-store.js';
 
 // Stage order matches the array PipelineBuilder.build() hands the constructor.
@@ -54,10 +56,9 @@ const createStage = (
 
 const createPipeline = (
   overrides: Partial<Record<StageName, PipelineStage>> = {},
-  ports: { executionRecordStore?: ExecutionRecordStore } = {}
+  ports: Pick<PipelinePorts, 'executionRecordStore' | 'chainSessionStore'> = {},
+  tracker: string[] = []
 ): { pipeline: PromptExecutionPipeline; tracker: string[] } => {
-  const tracker: string[] = [];
-
   const wrapStage = (stage: PipelineStage): PipelineStage => ({
     name: stage.name,
     execute: async (context) => {
@@ -348,5 +349,78 @@ describe('PromptExecutionPipeline failure records', () => {
     await pipeline.execute({ command: '>>demo' });
 
     expect(appended).toEqual([]);
+  });
+});
+
+/**
+ * P4.157 / R12: the pipeline's one run-completion point. It asks the store once per call AFTER
+ * the stage loop — whichever stage ended the call — because a stage that sets a response ends the
+ * loop, and a run the capture walked past its last node on that call was left `working` with no
+ * `chain/complete` when the ask lived in stage 20.
+ */
+describe('PromptExecutionPipeline — the run-completion point', () => {
+  const withSession = (name: StageName, respond: boolean): PipelineStage =>
+    createStage(name, (context) => {
+      (context as unknown as { sessionContext: unknown }).sessionContext = {
+        sessionId: 'session-1',
+        chainId: 'chain-1',
+        currentStep: 2,
+        totalSteps: 1,
+      };
+      if (respond) context.setResponse({ content: [{ type: 'text', text: 'ended here' }] });
+    });
+
+  const createStore = (tracker: string[]) => ({
+    completeHeldRun: jest.fn(async (_sessionId: string) => {
+      tracker.push('completeHeldRun');
+      return true;
+    }),
+  });
+
+  test('asks once, after every stage, on a call that reaches formatting', async () => {
+    const tracker: string[] = [];
+    const store = createStore(tracker);
+    const { pipeline } = createPipeline(
+      { SessionManagement: withSession('SessionManagement', false) },
+      { chainSessionStore: store as unknown as ChainSessionService },
+      tracker
+    );
+
+    await pipeline.execute({ command: '>>demo' });
+
+    expect(store.completeHeldRun).toHaveBeenCalledTimes(1);
+    expect(store.completeHeldRun).toHaveBeenCalledWith('session-1');
+    // After GateReview (stage 20) and the formatting stage that ends the loop: every review the
+    // call can open exists by then.
+    expect(tracker.slice(-3)).toEqual(['GateReview', 'ResponseFormatting', 'completeHeldRun']);
+  });
+
+  test('asks on a call an earlier stage ended (a shell-verification bounce ends before stage 20)', async () => {
+    const tracker: string[] = [];
+    const store = createStore(tracker);
+    const { pipeline } = createPipeline(
+      { StepResponseCapture: withSession('StepResponseCapture', true) },
+      { chainSessionStore: store as unknown as ChainSessionService },
+      tracker
+    );
+
+    const response = await pipeline.execute({ command: '>>demo' });
+
+    expect(contentText(response)).toBe('ended here');
+    expect(tracker).not.toContain('GateReview');
+    expect(store.completeHeldRun).toHaveBeenCalledTimes(1);
+    expect(tracker.at(-1)).toBe('completeHeldRun');
+  });
+
+  test('a call with no session asks nothing (control)', async () => {
+    const store = createStore([]);
+    const { pipeline } = createPipeline(
+      {},
+      { chainSessionStore: store as unknown as ChainSessionService }
+    );
+
+    await pipeline.execute({ command: 'noop' });
+
+    expect(store.completeHeldRun).not.toHaveBeenCalled();
   });
 });

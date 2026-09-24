@@ -471,11 +471,12 @@ number of detached ones.
   when the budget is spent; an advisory or informational FAIL charges it and clears the review. A
   PASS over a failing `shell_verify` / `script_tool` result is refused, and a refusal charges
   nothing.
-- **One completion point**: stage 20 asks `completeHeldRun` on every chain call that reaches it,
-  after every review the call can open exists. A run past its last node completes only when no
-  node holds it open (`nodesHoldingRunOpen`: an unreported detached node, or any open review), so
-  `chain/complete` follows the final verdict. A late-report call ends at stage 16, which asks the
-  same method.
+- **One completion point**: the pipeline asks `completeHeldRun` after the stage loop on every
+  chain call, whichever stage ended it, so after every review the call can open exists. A run
+  past its last node completes only when no node holds it open (`nodesHoldingRunOpen`: an
+  unreported detached node, or any open review), so `chain/complete` follows the final verdict.
+  A late-report call that stage 16 answers also asks the same method there, because its reply
+  says whether the run completed.
 
 **Composition contract**: When Stage 19 assertions pass and a pending LLM gate review exists, the
 assertion results are **merged into** the gate review prompt as pre-validated structural context.

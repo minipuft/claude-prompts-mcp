@@ -100,7 +100,7 @@ describe('Streamable HTTP: chain/complete waits for the final review (P4.157)', 
    * carried `chain/complete` AND opened the structural review, and the verdict call that closed it
    * carried nothing — the store latched `completed` at the capture's advance past the last node
    * (stage 16), before the phase guard (stage 19) graded that answer. Completion is now decided
-   * once, after grading (stage 20 → `completeHeldRun`, R12).
+   * once, after grading (the pipeline's post-stage-loop `completeHeldRun`, R12).
    */
   test("chain/complete waits for the final step's structural review to close", async () => {
     const call = await atFinalStep();
