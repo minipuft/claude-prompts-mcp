@@ -968,14 +968,12 @@ describe('delegation handoff evidence at resume (Tier 2 row 2.7)', () => {
         steps: threeSteps() as ReturnType<typeof parsedChainSteps>,
       });
       const { chainId, sessionId, brief } = await advanceToDelegatedStep(pipeline);
-      // Declared by a reply-less call at the delegated node (admitted since P6.15): the
-      // investigation lands right after it, so the tail the remainder replaces is two nodes.
-      const declared = await pipeline.execute({
-        chain_id: chainId,
-        observations: [blockingUnknown],
-      } as any);
-      expect(declared.isError).not.toBe(true);
-      expect(nodeIds()).toEqual(['n1', DELEGATED_NODE_ID, 'inv-cache-ttl', 'n3']);
+      // Written straight to the ledger rather than through a reply-less `observations` call, so
+      // the setup does not itself ride the admission the mutation takes away: only (a)'s own
+      // remainder-only call does. No investigation node is inserted this way, so the tail the
+      // remainder replaces is `n3`.
+      await sessionStore.applyUnknownObservations(sessionId, DELEGATED_NODE_ID, [blockingUnknown]);
+      expect(nodeIds()).toEqual(['n1', DELEGATED_NODE_ID, 'n3']);
       return { pipeline, chainId, sessionId, brief };
     };
 
@@ -1015,7 +1013,7 @@ describe('delegation handoff evidence at resume (Tier 2 row 2.7)', () => {
       expect(message).toContain('edge-endpoint-missing');
       expect(message).toContain('"ghost-node"');
       expect(message).not.toContain('❌ Delegated node');
-      expect(nodeIds()).toEqual(['n1', DELEGATED_NODE_ID, 'inv-cache-ttl', 'n3']);
+      expect(nodeIds()).toEqual(['n1', DELEGATED_NODE_ID, 'n3']);
       expect(onlySession().state.currentNodeId).toBe(DELEGATED_NODE_ID);
       expect(sessionStore.isStepComplete(sessionId, DELEGATED_NODE_ID)).toBe(false);
       expect(capturedRows(sessionId)).toEqual([{ step_number: 1, handoff_evidence: null }]);
@@ -1032,9 +1030,9 @@ describe('delegation handoff evidence at resume (Tier 2 row 2.7)', () => {
       } as any);
 
       expect(both.isError).not.toBe(true);
-      // Had the capture run first, the run would stand on `inv-cache-ttl` and the replacement
-      // (strictly after the current node) would have left it in place. The node list is the
-      // witness of the documented order: remainder, then the capture.
+      // Had the capture run first, the run would stand on `n3` and the replacement (strictly
+      // after the current node) would have left it in place, with the run on `n3`. The node list
+      // and the current node witness the documented order: remainder, then the capture.
       expect(nodeIds()).toEqual(['n1', DELEGATED_NODE_ID, 'confirm-ttl']);
       expect(onlySession().state.currentNodeId).toBe('confirm-ttl');
       expect(sessionStore.isStepComplete(sessionId, DELEGATED_NODE_ID)).toBe(true);
