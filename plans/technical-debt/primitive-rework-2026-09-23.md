@@ -4,7 +4,7 @@ date: 2026-09-23
 status: active
 tags: [gates, chains, execution, mcp-tools, scripts, tests, docs]
 ledger: plans/technical-debt/primitive-rework-2026-09-23-implementation-notes.md
-publish: push+merge (2026-09-23 · owner ruling R2 · every slice of this plan, one PR per slice, on a green full suite and a clean merge state; breaking changes and force pushes still stop for the owner)
+publish: push+merge (2026-09-23 · owner ruling R2 · every slice of this plan, one PR per slice, on a green full suite and a clean merge state; breaking changes and force pushes still stop for the owner · R18 2026-09-24: the slice PR carries its plan writeback, receipts cite the PR number, no docs PR per slice)
 ---
 
 # Primitive rework: review entity, one gate converter, contract binding
@@ -19,15 +19,19 @@ output live in the ledger.
 
 ## Now
 
-_Rewritten 2026-09-23 (after the sixth `>>strategic_implement` slice)._ Tier 3 is CLOSED: rows
-3.1–3.3 merged as #380, 3.4–3.9 as #382 `16ce9b1f`, 3.10–3.11 as #384 `b88a3711`, 3.12–3.13 as
-#386 `6289aae9`, 3.14 as #388 `716a5ebc`, 3.15 as #390 `59d857b2`. Rulings R12–R17 in the notes.
-Every review read names its node, one review per node, one completion point, one hold derivation.
+_Rewritten 2026-09-24 (owner ruling R18: one PR per slice carrying its writeback)._ Tier 3 is
+CLOSED: rows 3.1–3.3 merged as #380, 3.4–3.9 as #382, 3.10–3.11 as #384, 3.12–3.13 as #386, 3.14
+as #388, 3.15 as #390; the six docs PRs #381–#391 that carried their writebacks are the shape R18
+retires. Rulings R12–R18 in the notes. Every review read names its node, one review per node, one
+completion point, one hold derivation.
 
 - **Open, not dispatched:** 1.6, 2.6–2.8, 5.1–5.2, P6.1–P6.12, P6.14–P6.34. Next: P6.15–P6.17
   (the delegated-node deadlock, which blocks the planner prompt itself), then Tier 5 (5.1
   planted-instance controls on `main`, 5.2 the owner's live drive of one chain with a structural
   review, a detached step and a final-step verdict against the merged `dist`).
+- **Constraint in force (R18):** after the last handoff of a slice the planner commits the rows,
+  rulings, deviations and this block onto the slice branch before the boundary suite; a receipt
+  cites `#N`, never a squash SHA; no docs PR follows. This PR is the first under that shape.
 - **Measured across Tier 3:** six slices, twelve workers, every brief's predicted control or
   post-fix observation was wrong somewhere until driven; the class gates (`validate:review-by-node`,
   the type checker after the node-less API was deleted) are what closed each shape, not the fixes.
