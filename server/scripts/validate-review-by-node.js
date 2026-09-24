@@ -389,8 +389,8 @@ for (const finding of unaccepted) {
 if (unaccepted.length > 0) {
   console.error(
     '     Reviews live in `ChainSession.reviews`, keyed by the node each grades. Read ' +
-      '`reviews[nodeId]` (or `currentStepReview(reviews, currentNodeId)`), write through the ' +
-      "store's `setReview` / `clearPendingGateReview`."
+      "`reviews[nodeId]` (or the store's `getReview(sessionId, nodeId)`), write through the " +
+      "store's `setReview` / `clearReview`, each naming its node."
   );
 }
 

@@ -199,6 +199,9 @@ A chain **completes on its final step's PASS gate verdict**, not one call earlie
 - `notifications/chain/complete` is sent on the call that closes the run's last open review. It
   is the run's last notification: it follows that call's final verdict, and it is never sent on
   the call that returns the final answer for review.
+- A pending inline shell verification (`:: verify:`) holds the run like an open review: when it
+  fails on the last step, the run stays `working` and completes on the call whose re-run passes,
+  which carries `chain/complete`.
 - The first step is ledgered in `execution_records` on the chain-start call, so
   `system_control(action: "execution_history")` reports the step as planned and executed from the
   first response onward rather than undercounting by one.
