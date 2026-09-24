@@ -25,6 +25,7 @@ import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globa
 
 import { DatabaseSync } from 'node:sqlite';
 
+import { RemainderProcessor } from '../../../src/engine/execution/capture/remainder-processor.js';
 import { StepCaptureService } from '../../../src/engine/execution/capture/step-capture-service.js';
 import { UnknownObservationProcessor } from '../../../src/engine/execution/capture/unknown-observation-processor.js';
 import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
@@ -45,6 +46,8 @@ import { GateVerdictProcessor } from '../../../src/engine/gates/services/gate-ve
 import { ResponseFormatter } from '../../../src/mcp/tools/prompt-engine/processors/response-formatter.js';
 import { ExecutionRecordStore } from '../../../src/modules/chains/execution-record-store.js';
 import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
+import { DEFAULT_WORKFLOW_CAPS } from '../../../src/modules/workflow-ir/node-schema.js';
+import { validateWorkflowIR } from '../../../src/modules/workflow-ir/validator.js';
 import { runFakeWorker } from '../../helpers/delegation/fake-worker.js';
 
 import type { HandoffEvidenceMode } from '../../../src/engine/execution/delegation/handoff-contract.js';
@@ -273,7 +276,16 @@ const buildPipeline = (options: {
       sessionStore,
       new UnknownObservationProcessor(sessionStore, logger),
       logger,
-      evidenceMode === undefined ? {} : { handoffEvidenceMode: () => evidenceMode }
+      {
+        // Wired as the composition root wires it, so a `remainder` reaches the real processor.
+        remainderProcessor: new RemainderProcessor(
+          sessionStore,
+          { validate: validateWorkflowIR, defaultCaps: DEFAULT_WORKFLOW_CAPS },
+          () => PROMPTS,
+          logger
+        ),
+        ...(evidenceMode === undefined ? {} : { handoffEvidenceMode: () => evidenceMode }),
+      }
     ),
     StepExecution: new StepExecutionStage(
       chainExecutor,
@@ -902,6 +914,134 @@ describe('delegation handoff evidence at resume (Tier 2 row 2.7)', () => {
 
       expect(text(reply)).toContain(`Gate ${GATE_ID} failed: misses the gate`);
       expect(onlySession().state.currentNodeId).toBe(DELEGATED_NODE_ID);
+    });
+  });
+
+  describe('a remainder sent alone at the delegated node (R19, P6.17)', () => {
+    /** Three steps, so the delegated node has a tail for a remainder to replace. */
+    const threeSteps = () => [
+      ...parsedChainSteps(),
+      {
+        stepNumber: 3,
+        nodeId: 'n3',
+        promptId: 'draft',
+        args: {},
+        convertedPrompt: PROMPTS[0],
+      },
+    ];
+    const nodeIds = (): string[] =>
+      (onlySession() as unknown as { state: { nodes: Array<{ id: string }> } }).state.nodes.map(
+        (node) => node.id
+      );
+    const blockingUnknown = {
+      type: 'unknown_discovered' as const,
+      id: 'cache-ttl',
+      statement: 'TTL for the new cache layer is undecided',
+      blocking: true,
+    };
+    // The ledger write (`observations`) persists through the throwing variant, which the
+    // suite-level spies leave unmocked — the unknown-interrupt suite stubs it the same way.
+    let persistSpy: jest.SpiedFunction<() => Promise<void>>;
+    beforeEach(() => {
+      persistSpy = jest
+        .spyOn(ChainSessionStore.prototype as any, 'persistSessionsOrThrow')
+        .mockResolvedValue(undefined) as unknown as jest.SpiedFunction<() => Promise<void>>;
+    });
+    afterEach(() => persistSpy.mockRestore());
+
+    const confirmTail = {
+      mode: 'replace' as const,
+      nodes: [{ id: 'confirm-ttl', promptId: 'draft', stepName: 'Confirm' }],
+    };
+
+    /** Stand on the delegated node with its brief rendered, and declare one blocking unknown. */
+    const standOnDelegatedWithUnknown = async (): Promise<{
+      pipeline: PromptExecutionPipeline;
+      chainId: string;
+      sessionId: string;
+      brief: string;
+    }> => {
+      const pipeline = buildPipeline({
+        sessionStore,
+        recordStore,
+        logger,
+        steps: threeSteps() as ReturnType<typeof parsedChainSteps>,
+      });
+      const { chainId, sessionId, brief } = await advanceToDelegatedStep(pipeline);
+      // Declared by a reply-less call at the delegated node (admitted since P6.15): the
+      // investigation lands right after it, so the tail the remainder replaces is two nodes.
+      const declared = await pipeline.execute({
+        chain_id: chainId,
+        observations: [blockingUnknown],
+      } as any);
+      expect(declared.isError).not.toBe(true);
+      expect(nodeIds()).toEqual(['n1', DELEGATED_NODE_ID, 'inv-cache-ttl', 'n3']);
+      return { pipeline, chainId, sessionId, brief };
+    };
+
+    test('(a) a remainder alone replaces the tail; the delegated node is untouched and still owed', async () => {
+      const { pipeline, chainId, sessionId } = await standOnDelegatedWithUnknown();
+
+      const applied = await pipeline.execute({ chain_id: chainId, remainder: confirmTail } as any);
+      const message = text(applied);
+
+      expect(applied.isError).not.toBe(true);
+      expect(message).not.toContain('❌');
+      // Tail replaced strictly AFTER the delegated node, which keeps its place.
+      expect(nodeIds()).toEqual(['n1', DELEGATED_NODE_ID, 'confirm-ttl']);
+      // The run still waits on its worker: same node, nothing captured, brief handed over again.
+      expect(onlySession().state.currentNodeId).toBe(DELEGATED_NODE_ID);
+      expect(sessionStore.isStepComplete(sessionId, DELEGATED_NODE_ID)).toBe(false);
+      expect(capturedRows(sessionId)).toEqual([{ step_number: 1, handoff_evidence: null }]);
+      expect(message).toContain('EXECUTION BRIEF');
+      expect(message).toContain(`node: ${DELEGATED_NODE_ID}`);
+    });
+
+    test('(b) CONTROL: a remainder whose edge names an unknown node id is refused by name, before any capture', async () => {
+      const { pipeline, chainId, sessionId, brief } = await standOnDelegatedWithUnknown();
+
+      // Carries the worker's conforming reply, so admission cannot be what answers: the refusal
+      // is the remainder validator's, and it lands before the reply is captured.
+      const refused = await pipeline.execute({
+        chain_id: chainId,
+        user_response: runFakeWorker(brief),
+        gate_verdict: passVerdict,
+        remainder: { ...confirmTail, edges: [{ from: 'confirm-ttl', to: 'ghost-node' }] },
+      } as any);
+      const message = text(refused);
+
+      expect(refused.isError).toBe(true);
+      expect(message).toContain('remainder refused');
+      expect(message).toContain('edge-endpoint-missing');
+      expect(message).toContain('"ghost-node"');
+      expect(message).not.toContain('❌ Delegated node');
+      expect(nodeIds()).toEqual(['n1', DELEGATED_NODE_ID, 'inv-cache-ttl', 'n3']);
+      expect(onlySession().state.currentNodeId).toBe(DELEGATED_NODE_ID);
+      expect(sessionStore.isStepComplete(sessionId, DELEGATED_NODE_ID)).toBe(false);
+      expect(capturedRows(sessionId)).toEqual([{ step_number: 1, handoff_evidence: null }]);
+    });
+
+    test('(c) a remainder with the worker reply in one call: the remainder lands first, then the capture', async () => {
+      const { pipeline, chainId, sessionId, brief } = await standOnDelegatedWithUnknown();
+
+      const both = await pipeline.execute({
+        chain_id: chainId,
+        user_response: runFakeWorker(brief),
+        gate_verdict: passVerdict,
+        remainder: confirmTail,
+      } as any);
+
+      expect(both.isError).not.toBe(true);
+      // Had the capture run first, the run would stand on `inv-cache-ttl` and the replacement
+      // (strictly after the current node) would have left it in place. The node list is the
+      // witness of the documented order: remainder, then the capture.
+      expect(nodeIds()).toEqual(['n1', DELEGATED_NODE_ID, 'confirm-ttl']);
+      expect(onlySession().state.currentNodeId).toBe('confirm-ttl');
+      expect(sessionStore.isStepComplete(sessionId, DELEGATED_NODE_ID)).toBe(true);
+      expect(capturedRows(sessionId)).toEqual([
+        { step_number: 1, handoff_evidence: null },
+        { step_number: 2, handoff_evidence: 'ok' },
+      ]);
     });
   });
 
