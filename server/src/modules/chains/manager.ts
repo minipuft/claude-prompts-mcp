@@ -605,11 +605,7 @@ export class ChainSessionStore implements ChainSessionService {
     const currentStep = currentOrdinal(session.state.nodes, session.state.currentNodeId);
     const totalSteps = totalOf(session.state.nodes);
     if (currentStep > 0 && currentStep < totalSteps) return true;
-    return (
-      currentStep > 0 &&
-      currentStep === totalSteps &&
-      (nodesHoldingRunOpen(session).length > 0 || session.pendingShellVerification != null)
-    );
+    return currentStep > 0 && currentStep === totalSteps && nodesHoldingRunOpen(session).length > 0;
   }
 
   /**

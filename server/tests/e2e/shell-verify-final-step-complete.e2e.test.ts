@@ -1,17 +1,20 @@
-// @lifecycle test - P4.157 / R12: a shell-verification bounce on a chain's last step still completes the run, over Streamable HTTP.
+// @lifecycle test - P4.157 / R12 / R15: a failing shell verification on a chain's last step holds the run until a later call passes it, over Streamable HTTP.
 /**
  * Completion is asked once per call, AFTER the pipeline's stage loop.
  *
  * MEASURED 2026-09-23 on `998c5a74` (ask in stage 20): `>>quick_decision … :: verify:"test -f M"`
  * with M absent. Every answer is captured and advances the run (stage 16) before the verification
- * (stage 17) bounces the call, and a stage that sets a response ends the loop — so the final
- * step's bounce left the run past its last node, `working`, with no `chain/complete`. Every later
- * call was answered "✓ Chain run already complete … Status: working" by the session stage
- * (stage 13), which also ends the loop before stage 20: no call could ever complete the run, and
- * the stage-17 verification never ran again, so there is no "call that clears the bounce".
+ * (stage 17) bounces the call, so the final step's bounce left the run past its last node,
+ * `working`, and every later call was answered "already complete" by stage 13 — no call could
+ * complete the run or re-run the verification.
  *
- * Now the run completes on the final step's bounce call. Whether a failed verification should
- * HOLD the run is a separate question: it does not hold the capture's advance either.
+ * MEASURED 2026-09-23 on `cb5866ca` (ask after the stage loop, #384): the run completed ON the
+ * final step's bounce, so `chain/complete` announced a run whose last answer had failed its check,
+ * and the fix could never be verified.
+ *
+ * Now (R15) the pending verification holds its node through `nodesHoldingRunOpen`: the bounce
+ * carries no `chain/complete`, a failing re-run keeps holding, and the call that passes the check
+ * completes the run and announces it exactly once.
  */
 import { afterEach, describe, expect, test } from '@jest/globals';
 
@@ -39,7 +42,7 @@ interface ToolOutcome {
 
 type Call = (args: Record<string, unknown>) => Promise<ToolOutcome>;
 
-describe('Streamable HTTP: a shell verification on the last step does not strand the run', () => {
+describe('Streamable HTTP: a failing shell verification on the last step holds the run', () => {
   let teardown: Array<() => void | Promise<void>> = [];
   afterEach(async () => {
     for (const fn of teardown.reverse()) await fn();
@@ -49,7 +52,7 @@ describe('Streamable HTTP: a shell verification on the last step does not strand
   /** Start `quick_decision` with an inline verification of `marker`, which the caller controls. */
   async function startVerifiedChain(
     markerPresent: boolean
-  ): Promise<{ call: Call; start: ToolOutcome }> {
+  ): Promise<{ call: Call; start: ToolOutcome; marker: string }> {
     const roots = createHermeticRoots('shell-final-e2e');
     teardown.push(roots.cleanup);
     const workspace = path.join(roots.root, 'workspace');
@@ -83,29 +86,64 @@ describe('Streamable HTTP: a shell verification on the last step does not strand
     });
     const chainId = /chain_id[=:] ?"(chain-[A-Za-z0-9_#-]+)"/.exec(start.text)?.[1];
     if (chainId === undefined) throw new Error(`no chain id in: ${start.text.slice(0, 400)}`);
-    return { call: (args) => raw({ chain_id: chainId, ...args }), start };
+    return { call: (args) => raw({ chain_id: chainId, ...args }), start, marker };
   }
 
   const answer = (call: Call, label: string): Promise<ToolOutcome> =>
     call({ user_response: cageerfAnswer(label), gate_verdict: PASS });
 
-  test('a bounce on the final step completes the run on that call, exactly once', async () => {
-    const { call, start } = await startVerifiedChain(false);
-    expect(start.text).toContain('Shell Verification FAILED');
-    for (const step of [1, 2]) {
+  const completions = (outcome: ToolOutcome): number =>
+    outcome.methods.filter((m) => m === CHAIN_COMPLETE).length;
+
+  /** Answer all three steps with the marker absent: every answer bounces, none completes. */
+  async function bounceEveryStep(call: Call): Promise<void> {
+    for (const step of [1, 2, 3]) {
       const bounced = await answer(call, `Step ${step}`);
       expect(bounced.text).toContain('Shell Verification FAILED');
-      expect(bounced.methods).not.toContain(CHAIN_COMPLETE);
+      expect(completions(bounced)).toBe(0);
     }
+  }
 
-    const finalBounce = await answer(call, 'Step 3');
-    expect(finalBounce.text).toContain('Shell Verification FAILED');
-    expect(finalBounce.methods.filter((m) => m === CHAIN_COMPLETE)).toHaveLength(1);
+  test("the final step's bounce holds the run; the call that passes the check completes it once", async () => {
+    const { call, start, marker } = await startVerifiedChain(false);
+    expect(start.text).toContain('Shell Verification FAILED');
+    await bounceEveryStep(call);
 
-    const after = await answer(call, 'fixed');
+    // A failing re-run on a call that captured no step keeps the hold.
+    const stillFailing = await call({ user_response: 'not fixed yet' });
+    expect(stillFailing.text).toContain('Shell Verification FAILED');
+    expect(completions(stillFailing)).toBe(0);
+
+    writeFileSync(marker, 'ok');
+    const fixed = await call({ user_response: 'fixed' });
+    expect(fixed.text).not.toContain('Shell Verification FAILED');
+    expect(fixed.text).toContain('Chain complete');
+    expect(completions(fixed)).toBe(1);
+
+    const after = await call({ user_response: 'after' });
     expect(after.text).toContain('Chain run already complete');
     expect(after.text).toContain('Status: completed');
-    expect(after.methods).not.toContain(CHAIN_COMPLETE);
+    expect(completions(after)).toBe(0);
+  }, 180000);
+
+  // Abort releases the hold by CANCELLING the run: stage 17 clears the snapshot and calls
+  // `cancelChain`, and the completion guard holds only `completed` — `cancelled` stays reachable
+  // so an operator can always end a run. `chain/complete` announces any terminal status.
+  test('abort after escalation releases the hold by cancelling the run, announced once', async () => {
+    const { call } = await startVerifiedChain(false);
+    await bounceEveryStep(call);
+    const escalated = await call({ user_response: 'fifth attempt' });
+    expect(escalated.text).toContain('Maximum Attempts Reached');
+    expect(completions(escalated)).toBe(0);
+
+    const aborted = await call({ gate_action: 'abort' });
+    expect(aborted.text).toContain('Shell Verification — Aborted');
+    expect(completions(aborted)).toBe(1);
+
+    const after = await call({ user_response: 'after' });
+    expect(after.text).toContain('Chain run already complete');
+    expect(after.text).toContain('Status: cancelled');
+    expect(completions(after)).toBe(0);
   }, 180000);
 
   test('positive control: a passing verification announces chain/complete exactly once, on the final answer', async () => {

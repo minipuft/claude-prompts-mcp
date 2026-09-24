@@ -523,6 +523,14 @@ export interface PendingShellVerificationSnapshot {
   }>;
   originalGoal?: string;
   sourceGateIds?: string[];
+  /**
+   * The node whose answer this verification checks: the step captured on the call that last
+   * saved it. It holds the run open (`nodesHoldingRunOpen`), so a failing verification on the
+   * last step keeps the run from completing until a later call passes it. Absent on a snapshot
+   * saved before the field existed, or on a call that captured no step: no node, no hold
+   * (as of 2026-09-23 · flips when no pre-`nodeId` snapshot can be loaded).
+   */
+  nodeId?: string;
 }
 
 /**

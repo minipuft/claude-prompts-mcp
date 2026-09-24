@@ -105,6 +105,19 @@ describe('isRunComplete / isRunHeldOpen', () => {
     expect(isRunComplete({ state, reviews: { last: { kind: 'gate' as const } } })).toBe(false);
   });
 
+  test('a pending shell verification holds its node; a snapshot with no node holds nothing (R15)', () => {
+    const state = pastEnd(states([['rev', spawned({ state: 'completed' })]]));
+    const verifying = { pendingShellVerification: { nodeId: 'n3' } };
+    expect(nodesHoldingRunOpen({ state, ...verifying })).toEqual(['n3']);
+    expect(isRunComplete({ state, ...verifying })).toBe(false);
+    // Named once when the same node also has an open review.
+    expect(
+      nodesHoldingRunOpen({ state, reviews: { n3: { kind: 'gate' as const } }, ...verifying })
+    ).toEqual(['n3']);
+    // Legacy fallback (as of 2026-09-23): a pre-`nodeId` snapshot holds nothing.
+    expect(isRunComplete({ state, pendingShellVerification: {} })).toBe(true);
+  });
+
   test('a terminal status is complete regardless of what is owed', () => {
     const state = pastEnd(states([['rev', spawned()]]));
     expect(isRunComplete({ runStatus: 'cancelled', state })).toBe(true);

@@ -382,6 +382,7 @@ export interface RunHoldFacts {
     readonly stepStates?: ReadonlyMap<string, StepMetadata>;
   };
   readonly reviews?: Readonly<Record<string, unknown>>;
+  readonly pendingShellVerification?: { readonly nodeId?: string };
 }
 
 /**
@@ -389,13 +390,15 @@ export interface RunHoldFacts {
  * (`unreportedDetachedNodeIds`), and every node with an open review of any kind — a detached
  * node's late-report review (row 4.8), a step's gate review, or the phase guard's structural
  * review of the final answer (P4.157, which opens AFTER the capture walked the run past its last
- * node). The one derivation the completion guard, `isRunComplete` and the held-run render read.
- * PURE.
+ * node), and the node of a pending shell verification — a failing `verify` on the last step
+ * holds the run until a later call passes it (R15; a snapshot with no `nodeId` holds nothing).
+ * The one derivation the completion guard, `isRunComplete` and the held-run render read. PURE.
  */
 export function nodesHoldingRunOpen(run: RunHoldFacts): string[] {
   const owed = unreportedDetachedNodeIds(run.state.nodes ?? [], run.state.stepStates);
-  const underReview = Object.keys(run.reviews ?? {}).filter((nodeId) => !owed.includes(nodeId));
-  return [...owed, ...underReview];
+  const held = [...owed, ...Object.keys(run.reviews ?? {}).filter((id) => !owed.includes(id))];
+  const verifying = run.pendingShellVerification?.nodeId;
+  return verifying === undefined || held.includes(verifying) ? held : [...held, verifying];
 }
 
 /** Selects a detached node's review (row 4.8): a slot addresses detached reviews only. */
