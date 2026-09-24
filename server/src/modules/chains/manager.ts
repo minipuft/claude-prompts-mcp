@@ -1057,8 +1057,8 @@ export class ChainSessionStore implements ChainSessionService {
    * The ONE place a run is completed normally. {@link advanceStep} only moves the run; completing
    * there latched `completed` before the phase guard (stage 19) graded the very answer that
    * walked the run off its last node, so one reply announced `chain/complete` and opened a
-   * structural review. The pipeline asks here after grading on every chain request (stage 20),
-   * and stage 16 asks on the late-report calls it answers itself; {@link transitionRunStatus}
+   * structural review. The pipeline asks here after its stage loop on every chain request, and
+   * stage 16 asks on the late-report calls it answers itself; {@link transitionRunStatus}
    * still decides. A no-op (false) for a run still standing on a node, and for one still held.
    */
   async completeHeldRun(sessionId: string): Promise<boolean> {
@@ -1982,6 +1982,13 @@ export class ChainSessionStore implements ChainSessionService {
     await this.saveSessions();
   }
 
+  async clearReview(sessionId: string, nodeId: string): Promise<void> {
+    const session = this.activeSessions.get(sessionId);
+    if (session?.reviews?.[nodeId] === undefined) return;
+    deleteReview(session, nodeId);
+    await this.saveSessions();
+  }
+
   /**
    * Stamp a pre-3.1 review's kind and phase and store it on the node it names (R8): `slot`, else
    * its own `nodeId`, else the graded step its metadata records (a structural review's). The node
@@ -2020,11 +2027,12 @@ export class ChainSessionStore implements ChainSessionService {
 
   async clearPendingGateReview(sessionId: string, slot?: ReviewSlot): Promise<void> {
     const session = this.activeSessions.get(sessionId);
-    if (session === undefined || readReview(session, slot) === undefined) {
+    const target = session === undefined ? undefined : readReview(session, slot);
+    if (session === undefined || target === undefined) {
       return;
     }
 
-    deleteReview(session, slot);
+    deleteReview(session, target.nodeId);
     await this.saveSessions();
   }
 
@@ -2845,9 +2853,8 @@ function readReview(session: ChainSession, slot?: ReviewSlot): GateReview | unde
 }
 
 /**
- * Store `review` at `reviews[review.nodeId]`. A non-detached review first evicts every other
- * non-detached one: the run keeps ONE current-step slot, as the field this store replaced did,
- * until row 3.3 lets reviews of two positions coexist.
+ * Store `review` at `reviews[review.nodeId]`: one review per node, and a review of one node never
+ * displaces another node's (R14).
  *
  * @throws when `review` would overwrite a review of the other side of that split at its node —
  *   a current-step review keyed onto a detached node's open review, or the reverse. Both are
@@ -2862,20 +2869,14 @@ function writeReview(session: ChainSession, review: GateReview): void {
       `Gate review of node '${review.nodeId}' (${review.kind}) would overwrite its open ${occupant.kind} review`
     );
   }
-  if (!detached) {
-    for (const [nodeId, open] of Object.entries(reviews)) {
-      if (open.kind !== 'detached') delete reviews[nodeId];
-    }
-  }
   reviews[review.nodeId] = review;
   session.reviews = reviews;
 }
 
-/** Remove the review `slot` selects (see {@link readReview}); `reviews` goes when it empties. */
-function deleteReview(session: ChainSession, slot?: ReviewSlot): void {
-  const target = readReview(session, slot);
-  if (target === undefined || session.reviews === undefined) return;
-  const { [target.nodeId]: _removed, ...rest } = session.reviews;
+/** Remove the review of `nodeId`; `reviews` goes when it empties. */
+function deleteReview(session: ChainSession, nodeId: string): void {
+  if (session.reviews === undefined) return;
+  const { [nodeId]: _removed, ...rest } = session.reviews;
   if (Object.keys(rest).length > 0) session.reviews = rest;
   else delete session.reviews;
 }

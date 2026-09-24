@@ -240,25 +240,6 @@ export class GateReviewStage extends BasePipelineStage {
   }
 
   async execute(context: ExecutionContext): Promise<void> {
-    await this.renderPendingReview(context);
-    await this.completeFinishedRun(context);
-  }
-
-  /**
-   * The pipeline's one run-completion point (P4.157 / R12): ask the store to complete a run that
-   * stands past its last node. Here, not at the advance, because this is the first place every
-   * review this call can open already exists — stage 16's capture walks the run off its last node
-   * BEFORE stage 19 grades the answer that did it — so the store's close guard sees them. Every
-   * chain call that reaches formatting passes through here; the late-report calls stage 16
-   * answers itself ask the same store method there.
-   */
-  private async completeFinishedRun(context: ExecutionContext): Promise<void> {
-    const sessionId = context.sessionContext?.sessionId;
-    if (sessionId === undefined) return;
-    await this.chainSessionStore.completeHeldRun(sessionId);
-  }
-
-  private async renderPendingReview(context: ExecutionContext): Promise<void> {
     this.logEntry(context);
 
     const sessionId = context.sessionContext?.sessionId;

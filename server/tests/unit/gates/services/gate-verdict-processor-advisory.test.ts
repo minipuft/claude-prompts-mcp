@@ -3,7 +3,7 @@
  * without awaiting them (the path is `processReviewVerdict` since row 3.3).
  *
  * The `cleared` branch three lines above awaits everything it does. The FAIL branch did not, so
- * `clearPendingGateReview` and `advanceStep` — both state mutations — and the `sessionContext`
+ * `clearReview` and `advanceStep` — both state mutations — and the `sessionContext`
  * writes that follow them ran after `context.sessionContext = { ...sessionContext }` had already
  * snapshotted the value the response is built from. The caller reported the run still sitting on
  * the step it had in fact moved off, and any failure in either mutation was dropped with nothing
@@ -37,7 +37,7 @@ const later = <T>(value: T): Promise<T> =>
 function createStore(advancedTo: { ordinal: number; nodeId: string }) {
   return {
     recordGateReviewOutcome: jest.fn(async () => later('recorded')),
-    clearPendingGateReview: jest.fn(async () => later(undefined)),
+    clearReview: jest.fn(async () => later(undefined)),
     setReview: jest.fn(async () => later(undefined)),
     advanceStep: jest.fn(async () => later(advancedTo)),
   } as unknown as ChainSessionService & Record<string, jest.Mock>;
@@ -114,7 +114,7 @@ describe.each(['advisory', 'informational'] as const)(
 
       // Positive control: the mutations this test measures were actually reached.
       expect(store.advanceStep).toHaveBeenCalled();
-      expect(store.clearPendingGateReview).toHaveBeenCalled();
+      expect(store.clearReview).toHaveBeenCalled();
 
       const snapshot = (context as never as { sessionContext: Record<string, unknown> })
         .sessionContext;
@@ -187,7 +187,7 @@ describe('GateVerdictProcessor detached review FAIL (R10)', () => {
     ).processDetachedReviewVerdict(contextWith('advisory'), detachedSession, 'late');
 
     expect(result).toMatchObject({ kind: 'recorded', result: 'cleared', attempt: 1 });
-    expect(store.clearPendingGateReview).toHaveBeenCalledWith('session-1', { nodeId: 'late' });
+    expect(store.clearReview).toHaveBeenCalledWith('session-1', 'late');
     expect(store.setReview).not.toHaveBeenCalled();
   });
 

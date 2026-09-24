@@ -301,9 +301,10 @@ export interface ChainSession {
    * the only review field the residual document persists. Absent when no review is open.
    *
    * A detached (`await: run`) node's review (`kind: 'detached'`, row 4.8) opens against its LATE
-   * report, when the run already stands elsewhere. Every other review occupies the current-step
-   * slot, and the store keeps at most one of those (`ChainSessionService.setReview`). Any open
-   * review holds the run open (`nodesHoldingRunOpen`).
+   * report, when the run already stands elsewhere. The store keeps one review per node and never
+   * lets one node's review displace another's (`ChainSessionService.setReview`), so a review of a
+   * node the run has left can stand beside the current node's. Any open review holds the run open
+   * (`nodesHoldingRunOpen`).
    */
   reviews?: Record<string, GateReview>;
   /** Pending shell verification state for bounce-back resume across MCP requests. */
@@ -354,7 +355,7 @@ export const isTerminalRunStatus = (status: ChainRunStatus | undefined): boolean
  * Identity-based on purpose. The ordinal comparison this replaces (`currentStep >= totalSteps`)
  * reports a run *standing on* its final step as finished — the completion lie that made a
  * banner-obeying client abandon a run that still owed one gate verdict. `runStatus` is latched by
- * the pipeline's one completion point (stage 20, after the phase guard has graded the call), so
+ * the pipeline's one completion point (after the stage loop, once the call is graded), so
  * `currentNodeId === null` with no hold is the same fact read earlier in that call, and covers a
  * session loaded from a pre-latch blob. An open review holds the run through
  * {@link nodesHoldingRunOpen}, the one derivation — no second review clause here.
@@ -404,8 +405,10 @@ export interface ReviewSlot {
 
 /**
  * The current-step review of `reviews`: the review at `currentNodeId` unless that one is
- * detached, else the run's one non-detached review (a phase-guard or final-step review grades a
- * node the run has already left). PURE.
+ * detached, else the first non-detached review in the map (a phase-guard or final-step review
+ * grades a node the run has already left). With several open that fallback picks one without a
+ * node to name — a caller that must address one review resolves it through `resolveReviewTarget`,
+ * which refuses the ambiguity. PURE.
  */
 export function currentStepReview(
   reviews: Readonly<Record<string, GateReview>> | undefined,
@@ -564,11 +567,12 @@ export interface ChainSessionService {
   updateSessionBlueprint(sessionId: string, blueprint: SessionBlueprint): Promise<void>;
   getInlineGateIds(sessionId: string, scope?: StateStoreOptions): string[] | undefined;
   /**
-   * Store `review` at `reviews[review.nodeId]`. A non-detached review replaces any other
-   * non-detached one: the run keeps one current-step slot (stamped: as of 2026-09-23 · flips when
-   * row 3.3 moves the verdict paths onto `resolveReviewTarget`).
+   * Store `review` at `reviews[review.nodeId]`, replacing only that node's review: one review per
+   * node, and every other node's review stays open.
    */
   setReview(sessionId: string, review: GateReview): Promise<void>;
+  /** Remove the review of `nodeId`, whatever its kind; every other node's review stays open. */
+  clearReview(sessionId: string, nodeId: string): Promise<void>;
   /**
    * `slot` selects a detached node's review (row 4.8); absent, the current-step slot.
    *
@@ -630,7 +634,8 @@ export interface ChainSessionService {
   markNodeSpawned(sessionId: string, nodeId: string): Promise<boolean>;
   /**
    * Ask for `completed` on a run standing past its last node — the pipeline's one completion
-   * point (stage 20, after grading; stage 16 on a call it answers itself). `advanceStep` never
+   * point (after the stage loop; stage 16 also asks on a late-report call whose reply names the
+   * outcome). `advanceStep` never
    * completes a run. `transitionRunStatus` still decides; false while anything holds the run.
    */
   completeHeldRun(sessionId: string): Promise<boolean>;

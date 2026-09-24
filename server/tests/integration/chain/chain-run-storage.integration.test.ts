@@ -331,7 +331,7 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
       await reader.cleanup();
     });
 
-    test('a structural review is keyed by the node it grades, and one current-step review replaces another', async () => {
+    test("a structural review is keyed by the node it grades, and another node's review opens beside it (R14)", async () => {
       const store = newStore();
       await store.createSession('sess-rs', 'chain-rs#1', 3, {}, threeNodes());
       await store.completeStep('sess-rs', 'n1');
@@ -350,14 +350,18 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
         currentStepReview(structural.reviews, structural.state.currentNodeId)?.gateIds
       ).toEqual(['phase-guard']);
 
-      // A gate review of the node the run stands on takes the one current-step slot.
+      // A gate review of the node the run stands on opens beside it: one review per node.
       await store.setPendingGateReview('sess-rs', review('step-gate', { nodeId: 'rev' }));
-      const replaced = store.getSession('sess-rs') as ChainSession;
-      expect(Object.keys(replaced.reviews ?? {})).toEqual(['rev']);
-      expect(replaced.reviews?.['rev']?.kind).toBe('gate');
+      const both = store.getSession('sess-rs') as ChainSession;
+      expect(Object.keys(both.reviews ?? {})).toEqual(['n1', 'rev']);
+      expect(both.reviews?.['rev']?.kind).toBe('gate');
+      expect(both.reviews?.['n1']?.kind).toBe('structural');
 
+      // The slot-less clear removes the current node's review only.
       await store.clearPendingGateReview('sess-rs');
-      expect((store.getSession('sess-rs') as ChainSession).reviews).toBeUndefined();
+      expect(Object.keys((store.getSession('sess-rs') as ChainSession).reviews ?? {})).toEqual([
+        'n1',
+      ]);
       await store.cleanup();
     });
 

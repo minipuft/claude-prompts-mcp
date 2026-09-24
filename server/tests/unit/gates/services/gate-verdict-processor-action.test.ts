@@ -22,11 +22,11 @@ const createLogger = (): Logger =>
 const createStore = () =>
   ({
     setReview: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    clearPendingGateReview: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    clearReview: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
     cancelChain: jest.fn<(sessionId: string) => Promise<boolean>>().mockResolvedValue(true),
   }) as unknown as ChainSessionService & {
     setReview: jest.Mock;
-    clearPendingGateReview: jest.Mock;
+    clearReview: jest.Mock;
     cancelChain: jest.Mock<(sessionId: string) => Promise<boolean>>;
   };
 
@@ -118,7 +118,7 @@ describe('GateVerdictProcessor.handleGateAction', () => {
     await processor.handleGateAction(createContext(), sessionWith('exhausted'), 'skip', {
       sessionId: 'session-1',
     } as never);
-    expect(store.clearPendingGateReview).toHaveBeenCalledWith('session-1', undefined);
+    expect(store.clearReview).toHaveBeenCalledWith('session-1', 'n1');
     expect(store.cancelChain).not.toHaveBeenCalled();
   });
 

@@ -1134,11 +1134,11 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
     });
 
     /**
-     * Row 3.5: the capture reads reviews by node. Step 1's review still open after a FAIL holds
-     * step 2's capture — not because the FAIL decides step 2's advance, but because walking on
-     * would leave step 1's review where nothing holds it: the store keeps one step-review slot
-     * and completion counts only detached reviews (stamped in `reviewHolding`). The PASS twin
-     * above is the other polarity: once step 1's review closes, step 2's capture advances.
+     * Rows 3.5 / 3.10 (R14): the store keeps one review per node, and an open review of an
+     * EARLIER node holds a capture (`reviewHolding`). Step 1's review still open after a FAIL
+     * holds step 2's capture: the answer is kept, the run does not walk past step 2, and step 1's
+     * review stays open beside it. Read only by the captured node's own review, the capture would
+     * advance and complete the run with step 1 still under review.
      */
     test("a FAIL on step 1's review carrying step 2's answer captures step 2 and leaves the run on it", async () => {
       parsedSteps = parsedFrameworkChain;
@@ -1157,6 +1157,58 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
 
       expect(Object.keys(reviews())).toEqual(['draft']);
       expect(reviews()['draft']?.attemptCount).toBe(1);
+      expect(onlySession().state.currentNodeId).toBe('review');
+      expect(onlySession().runStatus).not.toBe('completed');
+      expect(sessionStore.getStepState(onlySession().sessionId, 'review')?.isPlaceholder).toBe(
+        false
+      );
+
+      // A later PASS on step 1 closes its review and opens nothing in its place.
+      await pipeline.execute({ chain_id: chainId, gate_verdict: passOnly } as any);
+      expect(reviews()).toEqual({});
+      expect(onlySession().state.currentNodeId).toBe('review');
+    });
+
+    /**
+     * Row 3.10 (R14): two step reviews open at once — a structural review of step 1 and a gate
+     * review of step 2 — while the run stands on step 3. A bare verdict addresses neither, so it
+     * is refused naming both; a trailer naming one lands on it and leaves the other open. No
+     * pipeline path in this harness opens a second node's review while one is open, so the second
+     * is written through the store's own creation path (`GateEnforcementAuthority.createReview`).
+     */
+    test('two open step reviews: a bare verdict is refused naming both, a trailer picks one', async () => {
+      parsedSteps = parsedThreeStepChain;
+      blockingGates = false;
+      await pipeline.execute({ command: `>>draft --> >>analyze --> >>review` });
+      const chainId = onlySession().chainId;
+      const sessionId = onlySession().sessionId;
+      await pipeline.execute({ chain_id: chainId, user_response: 'step 1 output' });
+      await pipeline.execute({ chain_id: chainId, user_response: 'step 2 output' });
+      expect(onlySession().state.currentNodeId).toBe('review');
+      const authority = new GateEnforcementAuthority(sessionStore, createLogger());
+      await authority.createReview(sessionId, 'structural', 'draft', {
+        gateIds: ['phase-guard'],
+        instructions: 'Add the missing sections.',
+      });
+      await authority.createReview(sessionId, 'gate', 'analyze', {
+        gateIds: [GATE_ID],
+        instructions: 'Check step 2.',
+      });
+      expect(Object.keys(reviews())).toEqual(['draft', 'analyze']);
+
+      const bare = await pipeline.execute({ chain_id: chainId, gate_verdict: passOnly } as any);
+      expect(bare.isError).toBe(true);
+      expect(textOf(bare)).toContain("Gate reviews are open on nodes 'draft', 'analyze'");
+      expect(reviews()['draft']?.attemptCount).toBe(0);
+      expect(reviews()['analyze']?.attemptCount).toBe(0);
+
+      await pipeline.execute({
+        chain_id: chainId,
+        user_response: 'step 3 output\n\nHANDOFF RESULT\nnode: analyze',
+        gate_verdict: passOnly,
+      } as any);
+      expect(Object.keys(reviews())).toEqual(['draft']);
+      // Step 1's review still open holds step 3's capture.
       expect(onlySession().state.currentNodeId).toBe('review');
       expect(onlySession().runStatus).not.toBe('completed');
     });

@@ -335,7 +335,7 @@ export class GateVerdictProcessor {
       };
     }
 
-    await this.chainSessionStore.clearPendingGateReview(sessionId);
+    await this.chainSessionStore.clearReview(sessionId, pending.nodeId);
 
     // Stage 18 skips step execution while `sessionContext.pendingReview` is set, and it reads
     // context rather than the store — so clearing one without the other leaves the run resumed
@@ -536,7 +536,6 @@ export class GateVerdictProcessor {
       return { kind: 'refused', message: describeMissingReview(target, trailerNodeId) };
     }
     const review = entry.grade === undefined ? found : await entry.grade(found);
-    const slot = review.kind === 'detached' ? { nodeId: review.nodeId } : undefined;
     if (review !== found) {
       await this.chainSessionStore.setReview(session.sessionId, review);
     }
@@ -557,7 +556,7 @@ export class GateVerdictProcessor {
       });
     }
     if (advance.review === null) {
-      await this.chainSessionStore.clearPendingGateReview(session.sessionId, slot);
+      await this.chainSessionStore.clearReview(session.sessionId, review.nodeId);
     } else {
       await this.chainSessionStore.setReview(session.sessionId, advance.review);
     }
@@ -847,6 +846,10 @@ function describeMissingReview(
 ): string {
   if (target.kind === 'refuse' && target.reason === 'unknown-node') {
     return `❌ The reply names node '${trailerNodeId}', which this run does not have. Nothing was recorded.`;
+  }
+  if (target.kind === 'refuse' && target.reason === 'ambiguous') {
+    const named = target.nodeIds.map((nodeId) => `'${nodeId}'`).join(', ');
+    return `❌ Gate reviews are open on nodes ${named}; name the one this call answers with a HANDOFF RESULT trailer (\`node: <id>\`). Nothing was recorded.`;
   }
   return trailerNodeId === undefined
     ? '❌ No gate review is open on this run, so there is nothing for this call to answer. Nothing was recorded.'

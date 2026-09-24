@@ -32,7 +32,6 @@ describe('GateReviewStage', () => {
       // has to answer for the run. `undefined` is a real answer — a formatter-only harness with
       // no session — and exercises the projection's parse-time fallback.
       getSession: jest.fn().mockReturnValue(undefined),
-      completeHeldRun: jest.fn<(sessionId: string) => Promise<boolean>>().mockResolvedValue(false),
     } as any;
 
     const stage = new GateReviewStage(chainOperatorExecutor, chainSessionStore, null, {
@@ -77,9 +76,6 @@ describe('GateReviewStage', () => {
       {
         getPendingGateReview: jest.fn().mockReturnValue(undefined),
         getChainContext: jest.fn(),
-        completeHeldRun: jest
-          .fn<(sessionId: string) => Promise<boolean>>()
-          .mockResolvedValue(false),
       } as any,
       null,
       { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } as any
@@ -97,75 +93,6 @@ describe('GateReviewStage', () => {
     await stage.execute(context);
 
     expect(context.executionResults).toBeUndefined();
-  });
-});
-
-/**
- * P4.157 / R12: stage 20 is the pipeline's one run-completion point. It asks the store on every
- * chain call — with a review to render or without one — because this is the first place every
- * review the call can open (stage 19's structural review included) already exists.
- */
-describe('GateReviewStage — the run-completion point', () => {
-  const logger = { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } as any;
-  const sessionContext = {
-    sessionId: 'session-1',
-    chainId: 'chain-1',
-    isChainExecution: true,
-    currentStep: 2,
-    totalSteps: 1,
-  };
-
-  test('asks the store to complete the run on a call with no review to render', async () => {
-    const store = {
-      getPendingGateReview: jest.fn().mockReturnValue(undefined),
-      completeHeldRun: jest.fn<(sessionId: string) => Promise<boolean>>().mockResolvedValue(true),
-    };
-    const stage = new GateReviewStage({ renderStep: jest.fn() } as any, store as any, null, logger);
-    const context = new ExecutionContext({ command: 'noop' });
-    context.sessionContext = { ...sessionContext };
-
-    await stage.execute(context);
-
-    expect(store.completeHeldRun).toHaveBeenCalledTimes(1);
-    expect(store.completeHeldRun).toHaveBeenCalledWith('session-1');
-  });
-
-  test('asks after rendering a review too — the store guard, not the stage, holds the run', async () => {
-    const store = {
-      getPendingGateReview: jest.fn().mockReturnValue({
-        nodeId: 'n1',
-        combinedPrompt: 'Review prompt',
-        gateIds: ['inline_gate_focus'],
-        prompts: [],
-        createdAt: Date.now(),
-        attemptCount: 0,
-        maxAttempts: 3,
-      }),
-      getChainContext: jest.fn().mockReturnValue({ step_results: {} }),
-      getSession: jest.fn().mockReturnValue(undefined),
-      completeHeldRun: jest.fn<(sessionId: string) => Promise<boolean>>().mockResolvedValue(false),
-    };
-    const executor = {
-      renderStep: jest.fn().mockResolvedValue(createExecutionResult() as never),
-    } as any;
-    const stage = new GateReviewStage(executor, store as any, null, logger);
-    const context = new ExecutionContext({ command: '>>chain' });
-    context.parsedCommand = { steps: [{ stepNumber: 1, promptId: 'analyze', args: {} }] } as any;
-    context.sessionContext = { ...sessionContext, pendingReview: true } as any;
-
-    await stage.execute(context);
-
-    expect(executor.renderStep).toHaveBeenCalledTimes(1);
-    expect(store.completeHeldRun).toHaveBeenCalledWith('session-1');
-  });
-
-  test('a call with no session asks nothing (control)', async () => {
-    const store = { completeHeldRun: jest.fn() };
-    const stage = new GateReviewStage({ renderStep: jest.fn() } as any, store as any, null, logger);
-
-    await stage.execute(new ExecutionContext({ command: 'noop' }));
-
-    expect(store.completeHeldRun).not.toHaveBeenCalled();
   });
 });
 
@@ -198,7 +125,6 @@ describe('GateReviewStage — recording check evidence on the pending review', (
     clearPendingGateReview: jest.fn().mockResolvedValue(undefined as never),
     getChainContext: jest.fn().mockReturnValue({ step_results: {} }),
     getSession: jest.fn().mockReturnValue(undefined),
-    completeHeldRun: jest.fn<(sessionId: string) => Promise<boolean>>().mockResolvedValue(false),
   });
 
   const createContext = (review: Record<string, unknown>) => {
