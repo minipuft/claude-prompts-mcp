@@ -398,26 +398,9 @@ export function nodesHoldingRunOpen(run: RunHoldFacts): string[] {
   return [...owed, ...underReview];
 }
 
-/** Selects a detached node's review; absent, a review method addresses the current-step slot. */
+/** Selects a detached node's review (row 4.8): a slot addresses detached reviews only. */
 export interface ReviewSlot {
   readonly nodeId: string;
-}
-
-/**
- * The current-step review of `reviews`: the review at `currentNodeId` unless that one is
- * detached, else the first non-detached review in the map (a phase-guard or final-step review
- * grades a node the run has already left). With several open that fallback picks one without a
- * node to name — a caller that must address one review resolves it through `resolveReviewTarget`,
- * which refuses the ambiguity. PURE.
- */
-export function currentStepReview(
-  reviews: Readonly<Record<string, GateReview>> | undefined,
-  currentNodeId: string | null
-): GateReview | undefined {
-  if (reviews === undefined) return undefined;
-  const here = currentNodeId === null ? undefined : reviews[currentNodeId];
-  if (here !== undefined && here.kind !== 'detached') return here;
-  return Object.values(reviews).find((review) => review.kind !== 'detached');
 }
 
 /**
@@ -571,6 +554,8 @@ export interface ChainSessionService {
    * node, and every other node's review stays open.
    */
   setReview(sessionId: string, review: GateReview): Promise<void>;
+  /** The review of `nodeId`, whatever its kind — a copy; there is no review read without a node. */
+  getReview(sessionId: string, nodeId: string): GateReview | undefined;
   /** Remove the review of `nodeId`, whatever its kind; every other node's review stays open. */
   clearReview(sessionId: string, nodeId: string): Promise<void>;
   /**
@@ -584,8 +569,8 @@ export interface ChainSessionService {
     review: PendingGateReview,
     slot?: ReviewSlot
   ): Promise<void>;
-  getPendingGateReview(sessionId: string, slot?: ReviewSlot): GateReview | undefined;
-  clearPendingGateReview(sessionId: string, slot?: ReviewSlot): Promise<void>;
+  /** Remove the detached review `slot` names; a slot naming any other kind removes nothing. */
+  clearPendingGateReview(sessionId: string, slot: ReviewSlot): Promise<void>;
   setPendingShellVerification(
     sessionId: string,
     state: PendingShellVerificationSnapshot

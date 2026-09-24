@@ -192,7 +192,11 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
     // spent attempts survive, and the structural findings join it. With no such review, the
     // finding opens its own. `composeStructuralReview` owns which of the two happens.
     const reviewedStep = this.resolveReviewedStepIdentity(context);
-    const review = composeStructuralReview(this.chainSessionStore.getPendingGateReview(sessionId), {
+    const gradedReview =
+      'nodeId' in reviewedStep
+        ? this.chainSessionStore.getReview(sessionId, reviewedStep.nodeId)
+        : undefined;
+    const review = composeStructuralReview(gradedReview, {
       gateId: PHASE_GUARD_GATE_ID,
       feedback: result.retryFeedback,
       // Hints name what each check measured, and the add-the-section line is emitted only for a

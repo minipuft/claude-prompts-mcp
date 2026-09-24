@@ -75,7 +75,7 @@ import type { PipelineStage } from '../../../src/engine/execution/pipeline/stage
 import type { ChainStepPrompt } from '../../../src/engine/execution/operators/types.js';
 import type { ConvertedPrompt } from '../../../src/engine/execution/types.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
-import { currentStepReview } from '../../../src/shared/types/chain-session.js';
+import { resolveReviewTarget } from '../../../src/engine/execution/pipeline/decisions/gates/review-target.js';
 import type { ChainSession } from '../../../src/shared/types/chain-session.js';
 
 // --- fixtures -------------------------------------------------------------------------------
@@ -470,8 +470,15 @@ describe('P5 acceptance: withhold/expose, delegated non-receipt and targeted-gat
   const textOf = (response: { content: Array<{ text?: string }> }): string =>
     response.content.map((part) => part.text ?? '').join('\n');
 
-  const stepReviewOf = (session: ChainSession) =>
-    currentStepReview(session.reviews, session.state.currentNodeId);
+  /** The review a bare verdict answers (`resolveReviewTarget`), read by the node it names. */
+  const stepReviewOf = (session: ChainSession) => {
+    const target = resolveReviewTarget({
+      reviews: session.reviews ?? {},
+      currentNodeId: session.state.currentNodeId,
+      nodeIds: [],
+    });
+    return target.kind === 'review' ? session.reviews?.[target.nodeId] : undefined;
+  };
   const onlySession = (): ChainSession => {
     const sessions = Array.from(
       (store as unknown as { activeSessions: Map<string, ChainSession> }).activeSessions.values()

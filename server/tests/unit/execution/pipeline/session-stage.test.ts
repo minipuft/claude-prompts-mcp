@@ -71,7 +71,7 @@ const createSessionManager = (): jest.Mocked<ChainSessionService> => {
     getLatestSessionForBaseChain: jest.fn(),
     getRunHistory: jest.fn().mockReturnValue([]),
     createSession: jest.fn(async () => createChainSession()),
-    getPendingGateReview: jest.fn().mockReturnValue(undefined),
+    getReview: jest.fn().mockReturnValue(undefined),
     setPendingGateReview: jest.fn(),
     setReview: jest.fn(),
     clearPendingGateReview: jest.fn(),

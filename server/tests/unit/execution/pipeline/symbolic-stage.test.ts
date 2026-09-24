@@ -199,7 +199,7 @@ const createSessionManager = (): jest.Mocked<ChainSessionStore> =>
     getLatestSessionForBaseChain: jest.fn(),
     getRunHistory: jest.fn().mockReturnValue([]),
     createSession: jest.fn().mockResolvedValue(undefined),
-    getPendingGateReview: jest.fn().mockReturnValue(undefined),
+    getReview: jest.fn().mockReturnValue(undefined),
     clearSession: jest.fn(),
     cleanup: jest.fn(),
   }) as unknown as jest.Mocked<ChainSessionStore>;

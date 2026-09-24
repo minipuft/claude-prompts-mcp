@@ -21,7 +21,6 @@ import {
   type ChainRunRegistry,
   type ClaimRunResult,
 } from '../../../src/modules/chains/run-registry.js';
-import { currentStepReview } from '../../../src/shared/types/chain-session.js';
 import type { ChainSession } from '../../../src/shared/types/chain-session.js';
 import type { StateStoreOptions } from '../../../src/shared/types/persistence.js';
 
@@ -151,9 +150,7 @@ describe('DirectChainRunRegistry handoff transfer', () => {
 
     expect(result.status).toBe('claimed');
     if (result.status !== 'claimed') return;
-    expect(
-      currentStepReview(result.session.reviews, result.session.state.currentNodeId)?.gateIds
-    ).toEqual([UNKNOWN_INTERRUPT_GATE_ID]);
+    expect(result.session.reviews?.['n1']?.gateIds).toEqual([UNKNOWN_INTERRUPT_GATE_ID]);
     // The hold alone is not enough to re-raise the interrupt on the claimer's side — the OPEN
     // blocking entry is what `decideInterrupt` reads, and it has to survive the transfer too.
     expect(result.session.unknownsLedger?.[0]).toMatchObject({

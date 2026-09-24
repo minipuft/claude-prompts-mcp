@@ -1,7 +1,15 @@
-import { describe, expect, jest, test } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 
 import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { GateEnforcementAuthority } from '../../../../src/engine/execution/pipeline/decisions/gates/gate-enforcement-authority.js';
 import { GateReviewStage } from '../../../../src/engine/execution/pipeline/stages/20-gate-review-stage.js';
+import { ChainSessionStore } from '../../../../src/modules/chains/manager.js';
+
+/** A run standing on `n1` whose one review is `review` — what stage 20 reads its target off. */
+const runReviewing = (review: Record<string, unknown>) => ({
+  reviews: { n1: { ...review, nodeId: 'n1' } },
+  state: { currentNodeId: 'n1', nodes: [] },
+});
 
 const createExecutionResult = () => ({
   stepNumber: 2,
@@ -18,20 +26,21 @@ describe('GateReviewStage', () => {
       renderStep: jest.fn().mockResolvedValue(createExecutionResult()),
     } as any;
 
+    const review = {
+      nodeId: 'n1',
+      combinedPrompt: 'Review prompt',
+      gateIds: ['inline_gate_focus'],
+      prompts: [],
+      createdAt: Date.now(),
+      attemptCount: 1,
+      maxAttempts: 3,
+    };
     const chainSessionStore = {
-      getPendingGateReview: jest.fn().mockReturnValue({
-        combinedPrompt: 'Review prompt',
-        gateIds: ['inline_gate_focus'],
-        prompts: [],
-        createdAt: Date.now(),
-        attemptCount: 1,
-        maxAttempts: 3,
-      }),
+      getReview: jest.fn().mockReturnValue(review),
       getChainContext: jest.fn().mockReturnValue({ step_results: {} }),
-      // The review body is resolved against the RUN's node list now (P4 row 3.4), so the double
-      // has to answer for the run. `undefined` is a real answer — a formatter-only harness with
-      // no session — and exercises the projection's parse-time fallback.
-      getSession: jest.fn().mockReturnValue(undefined),
+      // The review is the one the RUN's reviews name (row 3.12), and the body is resolved against
+      // the run's node list (P4 row 3.4). An empty node list exercises the parse-time fallback.
+      getSession: jest.fn().mockReturnValue(runReviewing(review)),
     } as any;
 
     const stage = new GateReviewStage(chainOperatorExecutor, chainSessionStore, null, {
@@ -74,7 +83,7 @@ describe('GateReviewStage', () => {
         renderStep: jest.fn(),
       } as any,
       {
-        getPendingGateReview: jest.fn().mockReturnValue(undefined),
+        getReview: jest.fn().mockReturnValue(undefined),
         getChainContext: jest.fn(),
       } as any,
       null,
@@ -120,11 +129,11 @@ describe('GateReviewStage — recording check evidence on the pending review', (
   };
 
   const createStore = (review: Record<string, unknown>) => ({
-    getPendingGateReview: jest.fn().mockReturnValue(review),
+    getReview: jest.fn().mockReturnValue({ ...review, nodeId: 'n1' }),
     setPendingGateReview: jest.fn().mockResolvedValue(undefined as never),
-    clearPendingGateReview: jest.fn().mockResolvedValue(undefined as never),
+    clearReview: jest.fn().mockResolvedValue(undefined as never),
     getChainContext: jest.fn().mockReturnValue({ step_results: {} }),
-    getSession: jest.fn().mockReturnValue(undefined),
+    getSession: jest.fn().mockReturnValue(runReviewing(review)),
   });
 
   const createContext = (review: Record<string, unknown>) => {
@@ -226,10 +235,121 @@ describe('GateReviewStage — recording check evidence on the pending review', (
     const context = createContext(review);
     await stage.execute(context);
 
-    expect(store.clearPendingGateReview).toHaveBeenCalledWith('session-1');
+    expect(store.clearReview).toHaveBeenCalledWith('session-1', 'n1');
     expect(store.setPendingGateReview).not.toHaveBeenCalled();
     expect(context.executionResults?.metadata?.gateReview).toEqual(
       expect.objectContaining({ autoCleared: true })
     );
+  });
+});
+
+/**
+ * Row 3.12: stage 20 renders the review a bare verdict answers (`resolveReviewTarget`) and, when
+ * ground truth covers it, clears THAT node's review — never "the" review of the run. The store is
+ * real, so two reviews are open at once: step 1's, opened FIRST, and the review of step 2, the
+ * node the run stands on.
+ */
+describe('GateReviewStage — renders and clears the review of the node it names (row 3.12)', () => {
+  const coveredGate = {
+    id: 'test-suite',
+    name: 'Test Suite',
+    description: 'Runs the suite',
+    pass_criteria: [{ type: 'shell_verify', shell_command: ['npm', 'test'] }],
+  };
+  const logger = () =>
+    ({ debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }) as any;
+  const spies: Array<{ mockRestore: () => void }> = [];
+  let store: ChainSessionStore;
+
+  beforeEach(async () => {
+    spies.push(
+      jest.spyOn(ChainSessionStore.prototype as any, 'saveSessions').mockResolvedValue(undefined),
+      jest.spyOn(ChainSessionStore.prototype as any, 'loadSessions').mockResolvedValue(undefined),
+      jest
+        .spyOn(ChainSessionStore.prototype as any, 'startCleanupScheduler')
+        .mockImplementation(() => {})
+    );
+    store = new ChainSessionStore(logger(), { buildChainVariables: () => ({}) } as any, {
+      cleanupIntervalMs: 60_000,
+    });
+    await store.createSession('s1', 'chain-1', 2);
+    (store as any).activeSessions.get('s1').state.currentNodeId = 'n2';
+    const authority = new GateEnforcementAuthority(store, logger());
+    await authority.createReview('s1', 'gate', 'n1', {
+      gateIds: ['step-one-gate'],
+      instructions: 'Check step 1.',
+    });
+    await authority.createReview('s1', 'gate', 'n2', {
+      gateIds: ['test-suite'],
+      instructions: 'Check step 2.',
+    });
+  });
+
+  afterEach(async () => {
+    await store.cleanup();
+    spies.splice(0).forEach((spy) => spy.mockRestore());
+  });
+
+  const contextOnStep2 = () => {
+    const context = new ExecutionContext({ command: '>>chain' });
+    context.parsedCommand = {
+      steps: [
+        { stepNumber: 1, promptId: 'draft', args: {} },
+        { stepNumber: 2, promptId: 'analyze', args: {} },
+      ],
+    } as any;
+    context.sessionContext = {
+      sessionId: 's1',
+      chainId: 'chain-1',
+      isChainExecution: true,
+      currentStep: 2,
+      currentNodeId: 'n2',
+      totalSteps: 2,
+      pendingReview: store.getReview('s1', 'n2')!,
+    };
+    return context;
+  };
+
+  test('two open reviews: it renders the review of the node the run stands on', async () => {
+    const renderStep = jest.fn().mockResolvedValue(createExecutionResult() as never);
+    const stage = new GateReviewStage({ renderStep } as any, store, null, logger());
+
+    const context = contextOnStep2();
+    await stage.execute(context);
+
+    const rendered = (renderStep.mock.calls[0]?.[0] as any)?.review;
+    expect([rendered?.nodeId, rendered?.gateIds]).toEqual(['n2', ['test-suite']]);
+    expect(context.sessionContext?.pendingReview?.nodeId).toBe('n2');
+  });
+
+  test("ground truth covering the rendered review clears only that node's review", async () => {
+    const stage = new GateReviewStage(
+      { renderStep: jest.fn() } as any,
+      store,
+      { loadGates: jest.fn().mockResolvedValue([coveredGate] as never) } as any,
+      logger(),
+      undefined,
+      {
+        shellVerifyExecutor: {
+          execute: jest.fn().mockResolvedValue({
+            passed: true,
+            exitCode: 0,
+            stdout: 'ok',
+            stderr: '',
+            durationMs: 9,
+            command: 'npm test',
+          } as never),
+        } as any,
+      }
+    );
+
+    const context = contextOnStep2();
+    await stage.execute(context);
+
+    // Positive control: the auto-clear path ran.
+    expect(context.executionResults?.metadata?.gateReview).toEqual(
+      expect.objectContaining({ autoCleared: true, gateIds: ['test-suite'] })
+    );
+    expect(Object.keys(store.getSession('s1')?.reviews ?? {})).toEqual(['n1']);
   });
 });

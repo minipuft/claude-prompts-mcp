@@ -37,7 +37,7 @@ const createSessionManager = () => {
   const clearPendingGateReview = jest.fn().mockResolvedValue(true);
   const clearReview = jest.fn<() => Promise<void>>().mockResolvedValue(undefined);
   const recordGateReviewOutcome = jest.fn().mockResolvedValue(undefined);
-  const getPendingGateReview = jest.fn();
+  const getReview = jest.fn();
   const applyUnknownObservations =
     jest.fn<
       (
@@ -78,7 +78,7 @@ const createSessionManager = () => {
       clearPendingGateReview,
       clearReview,
       recordGateReviewOutcome,
-      getPendingGateReview,
+      getReview,
       insertNodeAfter,
       markNodeSkipped,
       getSessionBlueprint,
@@ -93,7 +93,7 @@ const createSessionManager = () => {
     advanceStep,
     clearPendingGateReview,
     recordGateReviewOutcome,
-    getPendingGateReview,
+    getReview,
     insertNodeAfter,
     markNodeSkipped,
     getSessionBlueprint,

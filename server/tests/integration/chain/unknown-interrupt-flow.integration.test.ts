@@ -23,7 +23,10 @@ import { ResponseAssembler } from '../../../src/engine/execution/formatting/resp
 import { UNKNOWN_INTERRUPT_GATE_ID } from '../../../src/engine/execution/pipeline/decisions/index.js';
 import { StepResponseCaptureStage } from '../../../src/engine/execution/pipeline/stages/16-response-capture-stage.js';
 import { ResponseFormattingStage } from '../../../src/engine/execution/pipeline/stages/21-formatting-stage.js';
-import { GateVerdictProcessor } from '../../../src/engine/gates/services/gate-verdict-processor.js';
+import {
+  GateVerdictProcessor,
+  addressedReview,
+} from '../../../src/engine/gates/services/gate-verdict-processor.js';
 import { ResponseFormatter } from '../../../src/mcp/tools/prompt-engine/processors/response-formatter.js';
 import { DEFAULT_WORKFLOW_CAPS } from '../../../src/modules/workflow-ir/node-schema.js';
 import { validateWorkflowIR } from '../../../src/modules/workflow-ir/validator.js';
@@ -33,6 +36,13 @@ import type { ConvertedPrompt } from '../../../src/engine/execution/types.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
 import type { ChainNode } from '../../../src/shared/types/chain-execution.js';
 import type { McpToolRequest } from '../../../src/shared/types/execution.js';
+
+/** The review a bare verdict answers (`resolveReviewTarget`), read by the node it names. */
+const stepReviewIn = (store: ChainSessionStore, sessionId: string) => {
+  const session = store.getSession(sessionId);
+  const target = session === undefined ? undefined : addressedReview(session);
+  return target?.kind === 'review' ? store.getReview(sessionId, target.nodeId) : undefined;
+};
 
 const createLogger = (): Logger =>
   ({
@@ -166,7 +176,7 @@ describe('mid-chain blocking-unknown interrupt (rows 2.1-2.3)', () => {
     expect(
       context.state.session.chainInterrupt?.remainingNodes.map((node) => node.promptId)
     ).toEqual(['investigate_unknown', 'body', 'review']);
-    expect(store.getPendingGateReview('sess-1')).toBeUndefined();
+    expect(stepReviewIn(store, 'sess-1')).toBeUndefined();
   });
 
   test('a NON-blocking discovery raises no interrupt at all', async () => {
@@ -205,7 +215,7 @@ describe('mid-chain blocking-unknown interrupt (rows 2.1-2.3)', () => {
     const context = await declareBlockingUnknown();
 
     expect(context.state.session.chainInterrupt?.paused).toBe(true);
-    expect(store.getPendingGateReview('sess-1')?.gateIds).toEqual([UNKNOWN_INTERRUPT_GATE_ID]);
+    expect(stepReviewIn(store, 'sess-1')?.gateIds).toEqual([UNKNOWN_INTERRUPT_GATE_ID]);
     // Stage 18 reads context, not the store — both must say the run is holding.
     expect(context.sessionContext?.pendingReview?.gateIds).toEqual([UNKNOWN_INTERRUPT_GATE_ID]);
   });
@@ -220,7 +230,7 @@ describe('mid-chain blocking-unknown interrupt (rows 2.1-2.3)', () => {
     await buildStage().execute(resume);
 
     expect(resume.response).toBeUndefined();
-    expect(store.getPendingGateReview('sess-1')).toBeUndefined();
+    expect(stepReviewIn(store, 'sess-1')).toBeUndefined();
     expect(resume.sessionContext?.pendingReview).toBeUndefined();
     // Still blocked in the ledger, and the payload says so — but no longer HOLDING, which is
     // what stops the pause re-arming itself on every later call.
@@ -244,7 +254,7 @@ describe('mid-chain blocking-unknown interrupt (rows 2.1-2.3)', () => {
     await buildStage().execute(accept);
 
     expect(accept.response).toBeUndefined();
-    expect(store.getPendingGateReview('sess-1')).toBeUndefined();
+    expect(stepReviewIn(store, 'sess-1')).toBeUndefined();
     expect(store.getSession('sess-1')?.state.nodes.map((node) => node.id)).toEqual([
       'draft-outline',
       'confirm-ttl',
@@ -282,7 +292,7 @@ describe('mid-chain blocking-unknown interrupt (rows 2.1-2.3)', () => {
     expect(applied).toMatchObject({ kind: 'applied', unknownId: 'cache-ttl' });
 
     // Control: the same call with no hold is refused — the review was the only entitlement.
-    await store.clearPendingGateReview('sess-1');
+    await store.clearReview('sess-1', 'draft-outline');
     const refused = await processor.apply('sess-1', clearLedger(), submission as never);
     expect(refused.kind).toBe('refused');
   });
@@ -298,7 +308,7 @@ describe('mid-chain blocking-unknown interrupt (rows 2.1-2.3)', () => {
     expect(accept.response?.content?.[0]?.text).toContain('accept_alternative');
     expect(accept.response?.content?.[0]?.text).toContain('remainder');
     // Refused means UNCHANGED: the run is still holding.
-    expect(store.getPendingGateReview('sess-1')?.gateIds).toEqual([UNKNOWN_INTERRUPT_GATE_ID]);
+    expect(stepReviewIn(store, 'sess-1')?.gateIds).toEqual([UNKNOWN_INTERRUPT_GATE_ID]);
   });
 
   test('an interrupt verb on an ORDINARY gate review is refused, not silently accepted', async () => {
@@ -318,7 +328,7 @@ describe('mid-chain blocking-unknown interrupt (rows 2.1-2.3)', () => {
     expect(resume.response?.isError).toBe(true);
     expect(resume.response?.content?.[0]?.text).toContain('gate_verdict');
     // The gate review is untouched — `resume` is not a second way to skip a gate.
-    expect(store.getPendingGateReview('sess-1')?.gateIds).toEqual(['clarity']);
+    expect(stepReviewIn(store, 'sess-1')?.gateIds).toEqual(['clarity']);
   });
 
   test('an interrupt verb with nothing pending is refused', async () => {

@@ -27,7 +27,7 @@ import { DirectChainRunRegistry } from '../../../src/modules/chains/run-registry
 
 import type { Logger } from '../../../src/infra/logging/index.js';
 import type { ChainNode } from '../../../src/shared/types/chain-execution.js';
-import { currentStepReview } from '../../../src/shared/types/chain-session.js';
+import { resolveReviewTarget } from '../../../src/engine/execution/pipeline/decisions/gates/review-target.js';
 import type { ChainSession } from '../../../src/shared/types/chain-session.js';
 import type { RemainderSubmission } from '../../../src/modules/workflow-ir/types.js';
 import type { DatabasePort } from '../../../src/shared/types/persistence.js';
@@ -225,16 +225,14 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
       nodeId: 'n1',
     } as never);
     await writer.setPendingGateReview('sess-dreview', review('node-gate'), { nodeId: 'rev' });
-    await writer.clearPendingGateReview('sess-dreview');
+    await writer.clearReview('sess-dreview', 'n1');
     await (writer as unknown as { persistSessions: () => Promise<void> }).persistSessions();
     await writer.cleanup();
 
     const reader = newStore();
     await (reader as unknown as { initPromise: Promise<void> }).initPromise;
-    expect(reader.getPendingGateReview('sess-dreview')).toBeUndefined();
-    expect(reader.getPendingGateReview('sess-dreview', { nodeId: 'rev' })?.gateIds).toEqual([
-      'node-gate',
-    ]);
+    expect(reader.getReview('sess-dreview', 'n1')).toBeUndefined();
+    expect(reader.getReview('sess-dreview', 'rev')?.gateIds).toEqual(['node-gate']);
     // Reported, nothing owed — and still held: the open review is what holds it.
     expect(await reader.completeHeldRun('sess-dreview')).toBe(false);
     expect((reader.getSession('sess-dreview') as ChainSession).runStatus ?? 'working').toBe(
@@ -243,7 +241,7 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
 
     // A PASS on the node's review deletes only that review, and the held run then completes.
     await reader.clearPendingGateReview('sess-dreview', { nodeId: 'rev' });
-    expect(reader.getPendingGateReview('sess-dreview', { nodeId: 'rev' })).toBeUndefined();
+    expect(reader.getReview('sess-dreview', 'rev')).toBeUndefined();
     expect(await reader.completeHeldRun('sess-dreview')).toBe(true);
     expect((reader.getSession('sess-dreview') as ChainSession).runStatus).toBe('completed');
     await reader.cleanup();
@@ -302,10 +300,9 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
         phase: 'awaiting-verdict',
         gateIds: ['node-gate'],
       });
-      // The current-step review is read out of the one store, by node.
-      expect(currentStepReview(written.reviews, written.state.currentNodeId)).toBe(
-        written.reviews?.['n1']
-      );
+      // A review is read out of the one store by the node it grades — a copy.
+      expect(writer.getReview('sess-rv', 'n1')).toEqual(written.reviews?.['n1']);
+      expect(writer.getReview('sess-rv', 'n1')).not.toBe(written.reviews?.['n1']);
 
       await persist(writer);
       // The residual document carries only `reviews`.
@@ -319,15 +316,8 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
       const loaded = reader.getSession('sess-rv') as ChainSession;
       expect(loaded.reviews).toEqual(written.reviews);
       // A loaded run resumes through the same store.
-      expect(currentStepReview(loaded.reviews, loaded.state.currentNodeId)?.gateIds).toEqual([
-        'slot-gate',
-      ]);
-      expect(reader.getPendingGateReview('sess-rv')?.gateIds).toEqual(['slot-gate']);
-      expect(reader.getPendingGateReview('sess-rv', { nodeId: 'rev' })?.gateIds).toEqual([
-        'node-gate',
-      ]);
-      // A slot addresses detached reviews only: the current step's is not reachable through one.
-      expect(reader.getPendingGateReview('sess-rv', { nodeId: 'n1' })).toBeUndefined();
+      expect(reader.getReview('sess-rv', 'n1')?.gateIds).toEqual(['slot-gate']);
+      expect(reader.getReview('sess-rv', 'rev')?.gateIds).toEqual(['node-gate']);
       await reader.cleanup();
     });
 
@@ -346,9 +336,7 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
       const structural = store.getSession('sess-rs') as ChainSession;
       expect(Object.keys(structural.reviews ?? {})).toEqual(['n1']);
       expect(structural.reviews?.['n1']?.kind).toBe('structural');
-      expect(
-        currentStepReview(structural.reviews, structural.state.currentNodeId)?.gateIds
-      ).toEqual(['phase-guard']);
+      expect(structural.reviews?.['n1']?.gateIds).toEqual(['phase-guard']);
 
       // A gate review of the node the run stands on opens beside it: one review per node.
       await store.setPendingGateReview('sess-rs', review('step-gate', { nodeId: 'rev' }));
@@ -357,8 +345,8 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
       expect(both.reviews?.['rev']?.kind).toBe('gate');
       expect(both.reviews?.['n1']?.kind).toBe('structural');
 
-      // The slot-less clear removes the current node's review only.
-      await store.clearPendingGateReview('sess-rs');
+      // Clearing the current node's review leaves the other node's open.
+      await store.clearReview('sess-rs', 'rev');
       expect(Object.keys((store.getSession('sess-rs') as ChainSession).reviews ?? {})).toEqual([
         'n1',
       ]);
@@ -375,7 +363,7 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
       expect(listed()).toBe(false);
       // Only a detached node's review is open — no current-step review exists.
       await store.setPendingGateReview('sess-rl', review('g'), { nodeId: 'n2' });
-      expect(store.getPendingGateReview('sess-rl')).toBeUndefined();
+      expect(store.getReview('sess-rl', 'n1')).toBeUndefined();
       expect(listed()).toBe(true);
       await store.cleanup();
     });
@@ -411,7 +399,13 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
       const session = store.getSession('sess-rn') as ChainSession;
       expect(Object.keys(session.reviews ?? {})).toEqual(['n3']);
       // Not the node the run stands on, and still the run's current-step review.
-      expect(currentStepReview(session.reviews, session.state.currentNodeId)?.nodeId).toBe('n3');
+      expect(
+        resolveReviewTarget({
+          reviews: session.reviews ?? {},
+          currentNodeId: session.state.currentNodeId,
+          nodeIds: [],
+        })
+      ).toEqual({ kind: 'review', nodeId: 'n3' });
       await store.cleanup();
     });
 

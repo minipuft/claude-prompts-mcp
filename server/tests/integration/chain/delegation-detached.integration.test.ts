@@ -687,16 +687,14 @@ describe('detached delegation (await: run) through the pipeline', () => {
       await pipeline.execute({ chain_id: chainId } as any);
       return { pipeline, chainId, sessionId, brief };
     };
-    const detachedReview = (sessionId: string) =>
-      sessionStore.getPendingGateReview(sessionId, { nodeId: DETACHED });
+    const detachedReview = (sessionId: string) => sessionStore.getReview(sessionId, DETACHED);
 
     test('no review opens at spawn; the report opens it; PASS closes the run', async () => {
       const { pipeline, chainId, sessionId, brief } = await heldAtEnd({
         gates: [reminderGate('dr-gate')],
       });
       // Spawn and move-past opened nothing, in either slot.
-      expect(sessionStore.getPendingGateReview(sessionId)).toBeUndefined();
-      expect(detachedReview(sessionId)).toBeUndefined();
+      expect(run().reviews ?? {}).toEqual({});
 
       const landed = await pipeline.execute({
         chain_id: chainId,
@@ -794,7 +792,7 @@ describe('detached delegation (await: run) through the pipeline', () => {
 
       await pipeline.execute({ chain_id: chainId, user_response: runFakeWorker(brief) } as any);
       expect(detachedReview(sessionId)?.gateIds).toEqual(['dr-gate']);
-      expect(sessionStore.getPendingGateReview(sessionId)?.gateIds).toEqual(['current-gate']);
+      expect(sessionStore.getReview(sessionId, 'n3')?.gateIds).toEqual(['current-gate']);
 
       // The detached verdict: its review clears; the current step's review and position do not move.
       const detachedPass = await pipeline.execute({
@@ -806,12 +804,12 @@ describe('detached delegation (await: run) through the pipeline', () => {
         `Gate review of detached node ${DETACHED} (step 2) passed`
       );
       expect(detachedReview(sessionId)).toBeUndefined();
-      expect(sessionStore.getPendingGateReview(sessionId)?.gateIds).toEqual(['current-gate']);
+      expect(sessionStore.getReview(sessionId, 'n3')?.gateIds).toEqual(['current-gate']);
       expect(run().state.currentNodeId).toBe('n3');
 
       // The current step's verdict (no trailer): its review clears and the run moves on.
       await pipeline.execute({ chain_id: chainId, gate_verdict: PASS } as any);
-      expect(sessionStore.getPendingGateReview(sessionId)).toBeUndefined();
+      expect(sessionStore.getReview(sessionId, 'n3')).toBeUndefined();
       expect(run().state.currentNodeId).toBeNull();
       expect(run().runStatus).toBe('completed');
     });

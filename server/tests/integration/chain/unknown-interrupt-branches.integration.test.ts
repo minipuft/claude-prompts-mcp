@@ -39,7 +39,10 @@ import { ResponseAssembler } from '../../../src/engine/execution/formatting/resp
 import { UNKNOWN_INTERRUPT_GATE_ID } from '../../../src/engine/execution/pipeline/decisions/index.js';
 import { StepResponseCaptureStage } from '../../../src/engine/execution/pipeline/stages/16-response-capture-stage.js';
 import { ResponseFormattingStage } from '../../../src/engine/execution/pipeline/stages/21-formatting-stage.js';
-import { GateVerdictProcessor } from '../../../src/engine/gates/services/gate-verdict-processor.js';
+import {
+  GateVerdictProcessor,
+  addressedReview,
+} from '../../../src/engine/gates/services/gate-verdict-processor.js';
 import { ResponseFormatter } from '../../../src/mcp/tools/prompt-engine/processors/response-formatter.js';
 import { ExecutionRecordStore } from '../../../src/modules/chains/execution-record-store.js';
 import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
@@ -51,6 +54,13 @@ import type { Logger } from '../../../src/infra/logging/index.js';
 import type { ChainNode } from '../../../src/shared/types/chain-execution.js';
 import type { McpToolRequest } from '../../../src/shared/types/execution.js';
 import type { DatabasePort } from '../../../src/shared/types/persistence.js';
+
+/** The review a bare verdict answers (`resolveReviewTarget`), read by the node it names. */
+const stepReviewIn = (store: ChainSessionStore, sessionId: string) => {
+  const session = store.getSession(sessionId);
+  const target = session === undefined ? undefined : addressedReview(session);
+  return target?.kind === 'review' ? store.getReview(sessionId, target.nodeId) : undefined;
+};
 
 const createLogger = (): Logger =>
   ({ debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() }) as unknown as Logger;
@@ -253,7 +263,7 @@ describe('row 4.1 — the three branches of a blocking-unknown interrupt', () =>
     });
     // The soft branch's defining property: nothing holds the run, so the caller's next move is
     // an ordinary step answer rather than a verb.
-    expect(store.getPendingGateReview(SESSION)).toBeUndefined();
+    expect(stepReviewIn(store, SESSION)).toBeUndefined();
 
     const answered = context({ user_response: 'The TTL is 30s; carry on.' });
     await captureStage().execute(answered);
@@ -269,13 +279,13 @@ describe('row 4.1 — the three branches of a blocking-unknown interrupt', () =>
     await captureStage().execute(blocked);
 
     expect(blocked.state.session.chainInterrupt?.paused).toBe(true);
-    expect(store.getPendingGateReview(SESSION)?.gateIds).toEqual([UNKNOWN_INTERRUPT_GATE_ID]);
+    expect(stepReviewIn(store, SESSION)?.gateIds).toEqual([UNKNOWN_INTERRUPT_GATE_ID]);
 
     const resumed = context({ gate_action: 'resume' });
     await captureStage().execute(resumed);
 
     expect(resumed.response?.isError).toBeFalsy();
-    expect(store.getPendingGateReview(SESSION)).toBeUndefined();
+    expect(stepReviewIn(store, SESSION)).toBeUndefined();
 
     await finishRun();
     // An interrupt WITHOUT a remainder. The second number is the control on the first: a writer
@@ -297,7 +307,7 @@ describe('row 4.1 — the three branches of a blocking-unknown interrupt', () =>
     await captureStage().execute(accepted);
 
     expect(accepted.response?.isError).toBeFalsy();
-    expect(store.getPendingGateReview(SESSION)).toBeUndefined();
+    expect(stepReviewIn(store, SESSION)).toBeUndefined();
     expect(store.getSession(SESSION)?.state.nodes.map((node) => node.id)).toEqual([
       'draft-outline',
       'confirm-ttl',

@@ -401,7 +401,7 @@ describe('ChainSessionStore — run-status lifecycle (Tier 2)', () => {
     expect(session.runStatus).toBe('working');
 
     // Positive control: once the review closes the same ask completes the run.
-    await manager.clearPendingGateReview('s1');
+    await manager.clearReview('s1', 'n1');
     expect(await manager.completeHeldRun('s1')).toBe(true);
     expect(session.runStatus).toBe('completed');
   });

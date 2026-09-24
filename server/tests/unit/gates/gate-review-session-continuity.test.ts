@@ -69,7 +69,7 @@ class StubChainSessionStore implements ChainSessionStore {
   getLatestSessionForBaseChain(): ChainSession | undefined {
     return undefined;
   }
-  getPendingGateReview(): any {
+  getReview(): any {
     return undefined;
   }
   clearSession(): Promise<void> {
