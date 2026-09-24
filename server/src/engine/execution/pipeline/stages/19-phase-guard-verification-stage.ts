@@ -15,7 +15,7 @@
  * 1. Check if framework active AND framework has phases with guards
  * 2. If no guards → pass through (no-op)
  * 3. Evaluate user_response against phase markers/guards
- * 4. If all pass → merge guard summary into pending gate review (if any)
+ * 4. If all pass → merge guard summary into the graded step's own review (if any)
  * 5. If any fail → merge into the open gate review, else create PendingGateReview (R103)
  */
 
@@ -103,9 +103,16 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
       return;
     }
 
-    // 6. Skip if a phase guard review is already pending (avoid duplicate reviews)
-    const existingReview = context.sessionContext?.pendingReview;
-    if (existingReview?.gateIds?.includes(PHASE_GUARD_GATE_ID)) {
+    // 6. Skip if the graded step's review already carries a structural finding (avoid duplicate
+    // reviews). Read by the node this call CAPTURED, never the shown review (R16): that one may
+    // grade an earlier step, and skipping on it left this step's answer ungraded. A call that
+    // captured nothing has no review to read.
+    const reviewedStep = this.resolveReviewedStepIdentity(context);
+    const gradedReview =
+      'nodeId' in reviewedStep
+        ? this.chainSessionStore.getReview(sessionId, reviewedStep.nodeId)
+        : undefined;
+    if (gradedReview?.gateIds.includes(PHASE_GUARD_GATE_ID)) {
       this.logExit({ skipped: 'Phase guard review already pending' });
       return;
     }
@@ -143,29 +150,9 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
       // Guards check structure (sections present); LLM gates check content quality.
       // Both signals compose into a single review rather than guards replacing gates.
       // See docs/architecture/overview.md "Phase Guard–Gate Review Composition".
-      const pendingReview = context.sessionContext?.pendingReview;
-      if (pendingReview && !pendingReview.metadata?.['phaseGuardContext']) {
-        const summary = buildPhaseGuardPassSummary(result);
-        pendingReview.combinedPrompt = `${summary}\n\n---\n\n${pendingReview.combinedPrompt}`;
-        pendingReview.metadata = {
-          ...pendingReview.metadata,
-          phaseGuardContext: {
-            allPassed: true,
-            phaseCount: result.results.length,
-            evaluatedAt: Date.now(),
-          },
-        };
-        await this.chainSessionStore.setPendingGateReview(sessionId, pendingReview);
-        context.sessionContext = { ...context.sessionContext!, pendingReview };
-        context.diagnostics.info(this.name, 'Merged phase guard results into gate review', {
-          phaseCount: result.results.length,
-        });
-      }
-      this.logExit({
-        passed: true,
-        phases: result.results.length,
-        mergedIntoGateReview: !!pendingReview,
-      });
+      // The summary joins the GRADED step's own review (R16), never the shown one.
+      const merged = await this.mergePassSummary(context, sessionId, gradedReview, result);
+      this.logExit({ passed: true, phases: result.results.length, mergedIntoGateReview: merged });
       return;
     }
 
@@ -191,11 +178,6 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
     // open on the graded step absorbs the finding (R103): its gate, criteria, retry budget and
     // spent attempts survive, and the structural findings join it. With no such review, the
     // finding opens its own. `composeStructuralReview` owns which of the two happens.
-    const reviewedStep = this.resolveReviewedStepIdentity(context);
-    const gradedReview =
-      'nodeId' in reviewedStep
-        ? this.chainSessionStore.getReview(sessionId, reviewedStep.nodeId)
-        : undefined;
     const review = composeStructuralReview(gradedReview, {
       gateId: PHASE_GUARD_GATE_ID,
       feedback: result.retryFeedback,
@@ -234,6 +216,41 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
       failedPhases: result.failedPhases,
       maxAttempts: review.maxAttempts,
     });
+  }
+
+  /**
+   * Prefix the pass summary onto the graded step's review and write it back by its node. The
+   * shown review is refreshed only when it IS that review. No review, or one already carrying a
+   * summary, merges nothing.
+   */
+  private async mergePassSummary(
+    context: ExecutionContext,
+    sessionId: string,
+    review: GateReview | undefined,
+    result: ReturnType<typeof evaluatePhaseGuards>
+  ): Promise<boolean> {
+    if (review === undefined || review.metadata?.['phaseGuardContext'] !== undefined) return false;
+    const merged: GateReview = {
+      ...review,
+      combinedPrompt: `${buildPhaseGuardPassSummary(result)}\n\n---\n\n${review.combinedPrompt}`,
+      metadata: {
+        ...review.metadata,
+        phaseGuardContext: {
+          allPassed: true,
+          phaseCount: result.results.length,
+          evaluatedAt: Date.now(),
+        },
+      },
+    };
+    await this.chainSessionStore.setReview(sessionId, merged);
+    if (context.sessionContext?.pendingReview?.nodeId === merged.nodeId) {
+      context.sessionContext = { ...context.sessionContext, pendingReview: merged };
+    }
+    context.diagnostics.info(this.name, 'Merged phase guard results into gate review', {
+      phaseCount: result.results.length,
+      nodeId: merged.nodeId,
+    });
+    return true;
   }
 
   /**

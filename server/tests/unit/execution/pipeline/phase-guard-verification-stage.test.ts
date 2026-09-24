@@ -88,12 +88,23 @@ function createMockSessionStore(declaredSections?: readonly string[]): ChainSess
       .fn<ChainSessionService['setPendingGateReview']>()
       .mockResolvedValue(undefined),
     getReview: jest.fn().mockReturnValue(undefined),
+    setReview: jest.fn<ChainSessionService['setReview']>().mockResolvedValue(undefined),
     getSession: jest.fn().mockReturnValue(session),
     createSession: jest.fn().mockResolvedValue(undefined),
     updateSession: jest.fn().mockResolvedValue(undefined),
     clearPendingGateReview: jest.fn().mockResolvedValue(undefined),
   } as unknown as ChainSessionService;
 }
+
+/** A structural review, as stage 19 opens one; the caller names its node. */
+const structuralReview = () => ({
+  combinedPrompt: 'fix it',
+  gateIds: [PHASE_GUARD_GATE_ID],
+  prompts: [],
+  createdAt: 1,
+  attemptCount: 1,
+  maxAttempts: 3,
+});
 
 describe('PhaseGuardVerificationStage', () => {
   let logger: Logger;
@@ -239,19 +250,44 @@ describe('PhaseGuardVerificationStage', () => {
     );
     const ctx = withSession(createContext(createMcpRequest('>>test', 'No context section.')));
     ctx.frameworkContext = { selectedFramework: { id: 'cageerf', name: 'CAGEERF' } } as any;
-    // Pre-existing phase guard review
-    ctx.sessionContext!.pendingReview = {
-      combinedPrompt: 'fix it',
-      gateIds: [PHASE_GUARD_GATE_ID],
-      prompts: [],
-      createdAt: Date.now(),
-      attemptCount: 1,
-      maxAttempts: 3,
-    };
+    ctx.state.session.capturedStep = { nodeId: 'n1', ordinal: 1 };
+    // The CAPTURED node's review already carries a structural finding (R16).
+    (sessionStore.getReview as jest.Mock).mockImplementation((_sid, nodeId) =>
+      nodeId === 'n1' ? { ...structuralReview(), nodeId: 'n1' } : undefined
+    );
 
     await stage.execute(ctx);
 
+    expect(sessionStore.getReview).toHaveBeenCalledWith('session-1', 'n1');
     expect(sessionStore.setPendingGateReview).not.toHaveBeenCalled();
+    expect(logger.debug).toHaveBeenLastCalledWith('[PhaseGuardVerification] Complete', {
+      skipped: 'Phase guard review already pending',
+    });
+  });
+
+  test("TWIN: a structural review SHOWN for an earlier step does not skip grading this step's answer", async () => {
+    const guide = createMockGuide([
+      { id: 'context', name: 'Context', section_header: '## Context', guards: { required: true } },
+    ]);
+    const stage = createPhaseGuardVerificationStage(
+      () => createRegistry(guide),
+      () => defaultConfig,
+      sessionStore,
+      logger
+    );
+    const ctx = withSession(createContext(createMcpRequest('>>test', 'No context section.')));
+    ctx.frameworkContext = { selectedFramework: { id: 'cageerf', name: 'CAGEERF' } } as any;
+    ctx.state.session.capturedStep = { nodeId: 'n1', ordinal: 1 };
+    ctx.sessionContext!.pendingReview = { ...structuralReview(), nodeId: 'n0' };
+
+    await stage.execute(ctx);
+
+    const [, review] = (sessionStore.setPendingGateReview as jest.Mock).mock.calls[0] as [
+      string,
+      { nodeId: string; gateIds: string[] },
+    ];
+    expect(review.nodeId).toBe('n1');
+    expect(review.gateIds).toEqual([PHASE_GUARD_GATE_ID]);
   });
 
   test('passes when all phase guards pass', async () => {
@@ -309,27 +345,32 @@ describe('PhaseGuardVerificationStage', () => {
       )
     );
     ctx.frameworkContext = { selectedFramework: { id: 'cageerf', name: 'CAGEERF' } } as any;
-    // Simulate existing gate review from StepResponseCaptureStage (LLM quality gate)
-    ctx.sessionContext!.pendingReview = {
+    // The captured step's own gate review, which is also the one shown
+    const gateReview = {
       combinedPrompt: 'Review against content-structure',
       gateIds: ['content-structure'],
       prompts: [],
       createdAt: Date.now(),
       attemptCount: 0,
       maxAttempts: 2,
+      nodeId: 'n1',
     };
+    ctx.state.session.capturedStep = { nodeId: 'n1', ordinal: 1 };
+    (sessionStore.getReview as jest.Mock).mockReturnValue({ ...gateReview });
+    ctx.sessionContext!.pendingReview = gateReview as any;
 
     await stage.execute(ctx);
 
     // Should NOT clear — should merge phase guard summary into the review
     expect(sessionStore.clearPendingGateReview).not.toHaveBeenCalled();
-    expect(sessionStore.setPendingGateReview).toHaveBeenCalledTimes(1);
+    expect(sessionStore.setReview).toHaveBeenCalledTimes(1);
 
-    const [sessionId, review] = (sessionStore.setPendingGateReview as jest.Mock).mock.calls[0] as [
+    const [sessionId, review] = (sessionStore.setReview as jest.Mock).mock.calls[0] as [
       string,
       any,
     ];
     expect(sessionId).toBe('session-1');
+    expect(review.nodeId).toBe('n1');
 
     // Combined prompt starts with phase guard summary
     expect(review.combinedPrompt).toContain('## Structural Verification: PASS');
@@ -345,6 +386,40 @@ describe('PhaseGuardVerificationStage', () => {
     expect(ctx.sessionContext!.pendingReview!.combinedPrompt).toContain(
       '## Structural Verification: PASS'
     );
+  });
+
+  test("TWIN: the pass summary joins the CAPTURED step's review, never the one shown for an earlier step", async () => {
+    const guide = createMockGuide([
+      { id: 'context', name: 'Context', section_header: '## Context', guards: { required: true } },
+    ]);
+    const stage = createPhaseGuardVerificationStage(
+      () => createRegistry(guide),
+      () => defaultConfig,
+      sessionStore,
+      logger
+    );
+    const ctx = withSession(
+      createContext(createMcpRequest('>>test', '## Context\nThe situation, in enough words.'))
+    );
+    ctx.frameworkContext = { selectedFramework: { id: 'cageerf', name: 'CAGEERF' } } as any;
+    ctx.state.session.capturedStep = { nodeId: 'n1', ordinal: 1 };
+    const shown = { combinedPrompt: 'Check n0.', gateIds: ['g'], prompts: [], createdAt: 1 };
+    ctx.sessionContext!.pendingReview = { ...shown, attemptCount: 0, maxAttempts: 2, nodeId: 'n0' };
+    (sessionStore.getReview as jest.Mock).mockImplementation((_sid, nodeId) =>
+      nodeId === 'n1'
+        ? { ...shown, combinedPrompt: 'Check n1.', attemptCount: 0, maxAttempts: 2, nodeId: 'n1' }
+        : undefined
+    );
+
+    await stage.execute(ctx);
+
+    expect(sessionStore.setPendingGateReview).not.toHaveBeenCalled();
+    const [, review] = (sessionStore.setReview as jest.Mock).mock.calls[0] as [string, any];
+    expect(review.nodeId).toBe('n1');
+    expect(review.combinedPrompt).toMatch(/^## Structural Verification: PASS[\s\S]*Check n1\.$/);
+    // The shown review, another step's, is left alone.
+    expect(ctx.sessionContext!.pendingReview!.nodeId).toBe('n0');
+    expect(ctx.sessionContext!.pendingReview!.combinedPrompt).toBe('Check n0.');
   });
 
   test('does not double-inject phaseGuardContext on retry', async () => {
@@ -371,8 +446,10 @@ describe('PhaseGuardVerificationStage', () => {
       )
     );
     ctx.frameworkContext = { selectedFramework: { id: 'cageerf', name: 'CAGEERF' } } as any;
+    ctx.state.session.capturedStep = { nodeId: 'n1', ordinal: 1 };
     // Simulate gate review that already has phaseGuardContext (from previous cycle)
-    ctx.sessionContext!.pendingReview = {
+    (sessionStore.getReview as jest.Mock).mockReturnValue({
+      nodeId: 'n1',
       combinedPrompt: '## Structural Verification: PASS\n\n---\n\nReview content',
       gateIds: ['content-structure'],
       prompts: [],
@@ -382,11 +459,12 @@ describe('PhaseGuardVerificationStage', () => {
       metadata: {
         phaseGuardContext: { allPassed: true, phaseCount: 1, evaluatedAt: Date.now() - 1000 },
       },
-    };
+    });
 
     await stage.execute(ctx);
 
     // Should NOT inject again — phaseGuardContext already present
+    expect(sessionStore.setReview).not.toHaveBeenCalled();
     expect(sessionStore.setPendingGateReview).not.toHaveBeenCalled();
   });
 
@@ -592,6 +670,8 @@ describe('PhaseGuardVerificationStage', () => {
       await stage.execute(ctx);
 
       expect(sessionStore.setPendingGateReview).not.toHaveBeenCalled();
+      // No captured node, no review read (R16).
+      expect(sessionStore.getReview).not.toHaveBeenCalled();
       expect(ctx.sessionContext?.pendingReview).toBeUndefined();
       // The failure was found and said, not skipped before grading.
       expect(warn).toHaveBeenCalledWith(

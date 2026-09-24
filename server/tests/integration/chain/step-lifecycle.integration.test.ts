@@ -414,6 +414,8 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
   let blockingGates: boolean;
   /** The framework the run resolves. None by default, so the real phase guard stage skips. */
   let activeFramework: string | undefined;
+  /** The logger every stage writes to; a stage's exit reason is its last `debug` metadata. */
+  let logger: Logger;
 
   beforeEach(() => {
     parsedSteps = parsedChainSteps;
@@ -421,7 +423,7 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
     activeFramework = undefined;
     const created = createInMemoryDb();
     db = created.db;
-    const logger = createLogger();
+    logger = createLogger();
     recordStore = new ExecutionRecordStore(created.port, logger);
 
     // `persistSessionsOrThrow`, not `saveSessions`: it is the funnel BOTH persist paths run
@@ -1247,6 +1249,102 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
 
       expect(reviews()['draft']?.gateIds).toEqual([GATE_ID]);
       expect(reviews()['review']?.gateIds).toEqual(['__phase_guard__']);
+    });
+
+    /**
+     * Row 3.14 (R16): stage 19 reads the review of the step this call CAPTURED, never the review
+     * it is shown (an earlier step's, while one is open). Step 2 is answered while step 1's review
+     * is still open; `answerStep2` drives it and returns the run's reviews after the call.
+     */
+    describe("stage 19 grades against the captured step's own review (row 3.14)", () => {
+      const sectioned = '## Context\nThe situation, stated.\n\n## Analysis\nThe options, weighed.';
+      const answerStep2 = async (
+        openReviews: (authority: GateEnforcementAuthority, sessionId: string) => Promise<unknown>,
+        step2: Record<string, unknown>
+      ) => {
+        parsedSteps = parsedFrameworkChain;
+        activeFramework = 'cageerf';
+        blockingGates = false;
+        await pipeline.execute({ command: `>>draft --> >>review` });
+        const { chainId, sessionId } = onlySession();
+        await pipeline.execute({ chain_id: chainId, user_response: sectioned });
+        expect(onlySession().state.currentNodeId).toBe('review');
+        await openReviews(new GateEnforcementAuthority(sessionStore, createLogger()), sessionId);
+        await pipeline.execute({ chain_id: chainId, ...step2 } as any);
+        return reviews();
+      };
+      const stage19Exit = () =>
+        (logger.debug as jest.Mock).mock.calls
+          .filter((call) => call[0] === '[PhaseGuardVerification] Complete')
+          .at(-1)?.[1];
+
+      test("a structural review open on step 1 does not stop step 2's one-line answer being graded", async () => {
+        const after = await answerStep2(
+          (authority, sessionId) =>
+            authority.createReview(sessionId, 'structural', 'draft', {
+              gateIds: ['__phase_guard__'],
+              instructions: 'Add the missing sections.',
+            }),
+          { user_response: 'one line' }
+        );
+
+        expect(after['review']?.gateIds).toEqual(['__phase_guard__']);
+        expect(after['review']?.metadata?.['failedPhases']).toEqual(['context', 'analysis']);
+        expect(after['draft']?.combinedPrompt).toBe('Add the missing sections.');
+      });
+
+      test("the pass summary joins step 2's own gate review; step 1's is untouched", async () => {
+        const after = await answerStep2(
+          async (authority, sessionId) => {
+            await authority.createReview(sessionId, 'gate', 'draft', {
+              gateIds: [GATE_ID],
+              instructions: 'Check step 1.',
+            });
+            await authority.createReview(sessionId, 'gate', 'review', {
+              gateIds: [GATE_ID],
+              instructions: 'Check step 2.',
+            });
+          },
+          { user_response: sectioned }
+        );
+
+        expect(after['review']?.combinedPrompt).toMatch(
+          /^## Structural Verification: PASS[\s\S]*Check step 2\.$/
+        );
+        expect(after['review']?.metadata?.['phaseGuardContext']).toMatchObject({ allPassed: true });
+        expect(after['draft']?.combinedPrompt).toBe('Check step 1.');
+        expect(after['draft']?.metadata?.['phaseGuardContext']).toBeUndefined();
+      });
+
+      test('with no review on step 2, its pass summary is merged nowhere', async () => {
+        const after = await answerStep2(
+          (authority, sessionId) =>
+            authority.createReview(sessionId, 'gate', 'draft', {
+              gateIds: [GATE_ID],
+              instructions: 'Check step 1.',
+            }),
+          { user_response: sectioned }
+        );
+
+        expect(Object.keys(after)).toEqual(['draft']);
+        expect(after['draft']?.combinedPrompt).toBe('Check step 1.');
+        expect(after['draft']?.metadata?.['phaseGuardContext']).toBeUndefined();
+        expect(stage19Exit()).toEqual({ passed: true, phases: 2, mergedIntoGateReview: false });
+      });
+
+      test('a call that captured no step exits stage 19 before any review is read', async () => {
+        const after = await answerStep2(
+          (authority, sessionId) =>
+            authority.createReview(sessionId, 'gate', 'draft', {
+              gateIds: [GATE_ID],
+              instructions: 'Check step 1.',
+            }),
+          { gate_verdict: passOnly }
+        );
+
+        expect(stage19Exit()).toEqual({ skipped: 'No user_response to evaluate' });
+        expect(after).toEqual({});
+      });
     });
 
     test('TWIN: the same PASS on a review of the node the run stands on moves the run past it', async () => {
