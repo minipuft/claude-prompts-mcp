@@ -1347,6 +1347,80 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
       });
     });
 
+    /**
+     * Row 3.15: a PASS closing step N's structural review names THAT node, and stage 19 skips
+     * grading only it. The next step's answer sent on the verdict's own call is captured there
+     * and is graded like any answer; skipped on a per-call boolean, it went ungraded.
+     */
+    describe('a verdict closing a structural review leaves the next step graded (row 3.15)', () => {
+      const sectioned = '## Context\nThe situation, stated.\n\n## Analysis\nThe options, weighed.';
+      const stage19Exit = () =>
+        (logger.debug as jest.Mock).mock.calls
+          .filter((call) => call[0] === '[PhaseGuardVerification] Complete')
+          .at(-1)?.[1];
+      /** Step 1 answered in one line, so stage 19 opens its structural review; then the verdict. */
+      const passStep1With = async (step2Answer: string) => {
+        parsedSteps = () =>
+          parsedThreeStepChain().map((step) => ({
+            ...step,
+            frameworkContext: parsedFrameworkChain()[0]?.frameworkContext,
+          }));
+        activeFramework = 'cageerf';
+        blockingGates = false;
+        await pipeline.execute({ command: `>>draft --> >>analyze --> >>review` });
+        const { chainId } = onlySession();
+        await pipeline.execute({ chain_id: chainId, user_response: 'one line' });
+        expect(onlySession().state.currentNodeId).toBe('analyze');
+        expect(reviews()['draft']?.gateIds).toEqual(['__phase_guard__']);
+
+        await pipeline.execute({
+          chain_id: chainId,
+          user_response: step2Answer,
+          gate_verdict: passOnly,
+        } as any);
+        return reviews();
+      };
+
+      test("step 2's one-line answer sent with step 1's PASS opens step 2's structural review", async () => {
+        const after = await passStep1With('one line');
+
+        expect(Object.keys(after)).toEqual(['analyze']);
+        expect(after['analyze']?.gateIds).toEqual(['__phase_guard__']);
+        expect(after['analyze']?.metadata?.['failedPhases']).toEqual(['context', 'analysis']);
+        expect(stage19Exit()).toMatchObject({ passed: false, createdPendingReview: true });
+      });
+
+      test("TWIN: step 2's sectioned answer sent with step 1's PASS is graded and passes", async () => {
+        const after = await passStep1With(sectioned);
+
+        expect(after).toEqual({});
+        expect(stage19Exit()).toEqual({ passed: true, phases: 2, mergedIntoGateReview: false });
+        expect(onlySession().state.currentNodeId).toBe('review');
+      });
+
+      test("CONTROL: a PASS on step 1's held review with its own re-answer grades nothing", async () => {
+        parsedSteps = parsedFrameworkChain;
+        activeFramework = 'cageerf';
+        await pipeline.execute({ command: `>>draft --> >>review` });
+        const { chainId } = onlySession();
+        await pipeline.execute({ chain_id: chainId, user_response: 'one line' });
+        expect(onlySession().state.currentNodeId).toBe('draft');
+        expect(reviews()['draft']?.gateIds).toEqual([GATE_ID, '__phase_guard__']);
+
+        await pipeline.execute({
+          chain_id: chainId,
+          user_response: 'one line',
+          gate_verdict: passVerdict,
+        } as any);
+
+        expect(reviews()).toEqual({});
+        expect(onlySession().state.currentNodeId).toBe('review');
+        expect(stage19Exit()).toEqual({
+          skipped: 'Phase guard review cleared by verdict this turn',
+        });
+      });
+    });
+
     test('TWIN: the same PASS on a review of the node the run stands on moves the run past it', async () => {
       await pipeline.execute({ command: `>>draft --> >>review` });
       const chainId = onlySession().chainId;

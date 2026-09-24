@@ -117,10 +117,13 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
       return;
     }
 
-    // 6b. Skip if a phase guard review was just cleared by a verdict this turn.
-    // Without this, StepResponseCaptureStage clears the review → this stage re-evaluates the
-    // new user_response (e.g. a gate verdict) → fails → recreates the review → loop.
-    if (context.state.gates.phaseGuardReviewCleared) {
+    // 6b. Skip if this call's verdict closed the structural review of the node it would grade.
+    // Without this, a PASS closes N's review → this stage re-evaluates the same user_response
+    // (N's re-answer, or nothing captured at all) → fails → recreates N's review → loop. A NEXT
+    // step captured on the verdict's call is its own answer and is graded (row 3.15).
+    const clearedNodeId = context.state.gates.phaseGuardReviewClearedNodeId;
+    const capturedNodeId = 'nodeId' in reviewedStep ? reviewedStep.nodeId : undefined;
+    if (clearedNodeId !== undefined && (capturedNodeId ?? clearedNodeId) === clearedNodeId) {
       this.logExit({ skipped: 'Phase guard review cleared by verdict this turn' });
       return;
     }

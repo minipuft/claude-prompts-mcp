@@ -743,7 +743,7 @@ describe('PhaseGuardVerificationStage', () => {
     expect(sessionStore.setPendingGateReview).not.toHaveBeenCalled();
   });
 
-  test('skips when phaseGuardReviewCleared flag is set (verdict cleared review this turn)', async () => {
+  test("skips when this call's verdict cleared a phase guard review and captured no other node", async () => {
     const guide = createMockGuide([
       { id: 'context', name: 'Context', section_header: '## Context', guards: { required: true } },
     ]);
@@ -757,8 +757,8 @@ describe('PhaseGuardVerificationStage', () => {
       createContext(createMcpRequest('>>test', 'GATE_REVIEW: PASS - looks good'))
     );
     ctx.frameworkContext = { selectedFramework: { id: 'cageerf', name: 'CAGEERF' } } as any;
-    // StepResponseCaptureStage set this flag after clearing an phase guard review via verdict
-    ctx.state.gates.phaseGuardReviewCleared = true;
+    // GateVerdictProcessor names the node whose phase guard review the verdict cleared
+    ctx.state.gates.phaseGuardReviewClearedNodeId = 'step-1';
 
     await stage.execute(ctx);
 
