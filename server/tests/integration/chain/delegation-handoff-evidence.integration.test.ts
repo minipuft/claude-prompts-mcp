@@ -240,6 +240,8 @@ const buildPipeline = (options: {
    * `declaredSectionsProvider` below, so the guard blocks on a header the model was shown.
    */
   phaseGuards?: boolean;
+  /** The step gate's enforcement mode; omitted = `blocking`, the mode every other case runs. */
+  gateMode?: 'blocking' | 'advisory';
 }): PromptExecutionPipeline => {
   const {
     sessionStore,
@@ -358,7 +360,7 @@ const buildPipeline = (options: {
         execute: async (context: ExecutionContext) => {
           context.state.gates.hasBlockingGates = true;
           context.state.gates.accumulatedGateIds = [GATE_ID];
-          context.state.gates.enforcementMode = 'blocking';
+          context.state.gates.enforcementMode = options.gateMode ?? 'blocking';
           context.gateInstructions = 'Check the step output against the gate.';
         },
       };
@@ -821,6 +823,86 @@ describe('delegation handoff evidence at resume (Tier 2 row 2.7)', () => {
     expect(capturedRows(sessionId)).toEqual([{ step_number: 1, handoff_evidence: null }]);
     expect(onlySession().state.currentNodeId).toBe(standing);
     expect(standing).not.toBeNull();
+  });
+
+  /**
+   * R19 for a non-blocking FAIL (P6.35). An advisory FAIL answers its review and renders its
+   * warning, and with the step's answer it moves the run on; sent alone it captures nothing, so
+   * it advances nothing — before P6.35 it finished the chain past a step nobody answered.
+   */
+  describe('an advisory FAIL sent with no answer advances nothing (R19, P6.35)', () => {
+    const failVerdict = renderGateVerdict({
+      overall: 'FAIL',
+      rationale: 'misses the gate',
+      per_gate: [{ index: 1, passed: false, rationale: `${GATE_ID}: unmet` }],
+    });
+    const plainSteps = () => parsedChainSteps().map((step) => ({ ...step, delegated: false }));
+
+    test('at the delegated step: the FAIL is recorded, and the run stays on the step', async () => {
+      const pipeline = buildPipeline({ sessionStore, recordStore, logger, gateMode: 'advisory' });
+      const { chainId, sessionId } = await advanceToDelegatedStep(pipeline);
+
+      const reply = await pipeline.execute({ chain_id: chainId, gate_verdict: failVerdict } as any);
+
+      expect(text(reply)).not.toContain('Chain complete');
+      expect(onlySession().state.currentNodeId).toBe(DELEGATED_NODE_ID);
+      expect(sessionStore.isStepComplete(sessionId, DELEGATED_NODE_ID)).toBe(false);
+      expect(capturedRows(sessionId)).toEqual([{ step_number: 1, handoff_evidence: null }]);
+    });
+
+    test('CONTROL at the delegated step: the same FAIL sent with the answer finishes the chain', async () => {
+      const pipeline = buildPipeline({ sessionStore, recordStore, logger, gateMode: 'advisory' });
+      const { chainId, brief } = await advanceToDelegatedStep(pipeline);
+
+      const reply = await pipeline.execute({
+        chain_id: chainId,
+        user_response: runFakeWorker(brief),
+        gate_verdict: failVerdict,
+      } as any);
+
+      expect(reply.isError).not.toBe(true);
+      expect(text(reply)).toContain('Chain complete');
+      expect(onlySession().state.currentNodeId).toBeNull();
+    });
+
+    test('at a step that is not delegated: the run stays on step 1', async () => {
+      const pipeline = buildPipeline({
+        sessionStore,
+        recordStore,
+        logger,
+        gateMode: 'advisory',
+        steps: plainSteps(),
+      });
+      await pipeline.execute({ command: `>>draft --> >>review` } as any);
+      const { chainId, sessionId } = onlySession();
+
+      const reply = await pipeline.execute({ chain_id: chainId, gate_verdict: failVerdict } as any);
+
+      expect(text(reply)).toContain(`Gate ${GATE_ID} failed: misses the gate`);
+      expect(onlySession().state.currentNodeId).toBe('n1');
+      expect(sessionStore.isStepComplete(sessionId, 'n1')).toBe(false);
+    });
+
+    test('CONTROL at a step that is not delegated: the FAIL sent with the answer moves to step 2', async () => {
+      const pipeline = buildPipeline({
+        sessionStore,
+        recordStore,
+        logger,
+        gateMode: 'advisory',
+        steps: plainSteps(),
+      });
+      await pipeline.execute({ command: `>>draft --> >>review` } as any);
+      const { chainId } = onlySession();
+
+      const reply = await pipeline.execute({
+        chain_id: chainId,
+        user_response: 'step 1 output',
+        gate_verdict: failVerdict,
+      } as any);
+
+      expect(text(reply)).toContain(`Gate ${GATE_ID} failed: misses the gate`);
+      expect(onlySession().state.currentNodeId).toBe(DELEGATED_NODE_ID);
+    });
   });
 
   test('a legacy chain with no node ids uses `n2` in the brief AND in the accepted trailer', async () => {

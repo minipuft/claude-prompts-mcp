@@ -486,9 +486,10 @@ export class GateVerdictProcessor {
     } else {
       deferredAdvance = await this.handleNonBlockingFail(
         context,
-        session.sessionId,
+        session,
         answer,
-        verdictPayload
+        verdictPayload,
+        hasResponse
       );
     }
 
@@ -539,13 +540,23 @@ export class GateVerdictProcessor {
   }
 
   /**
+   * Does `nodeId` hold a captured output? A verdict sent with no answer captures nothing, so it
+   * may move the run past a node only when this is true (R19): a non-blocking FAIL on an
+   * unanswered node is recorded and warned about, and the run stays on it (P6.35). Dropping the
+   * advance rather than refusing keeps every FAIL polarity alike — a bare blocking FAIL spends an
+   * attempt (P4.116), and this one records its FAIL the same way.
+   */
+  private holdsAnswer(nodeId: string, session: ChainSession): boolean {
+    return this.chainSessionStore.isStepComplete(session.sessionId, nodeId);
+  }
+
+  /**
    * The node of the review a response-less PASS would answer, when that node holds no
    * captured output — a review opened when its step rendered, before anyone answered it.
    */
   private unansweredReviewNode(session: ChainSession, trailerNodeId?: string): string | undefined {
     const target = addressedReview(session, trailerNodeId);
-    return target.kind === 'review' &&
-      !this.chainSessionStore.isStepComplete(session.sessionId, target.nodeId)
+    return target.kind === 'review' && !this.holdsAnswer(target.nodeId, session)
       ? target.nodeId
       : undefined;
   }
@@ -711,14 +722,16 @@ export class GateVerdictProcessor {
   /**
    * Advisory or informational FAIL: the review is already cleared (`advanceReview`); announce it
    * and decide the advance past the node the review graded, for the stage to apply after the
-   * capture. Advisory also warns, naming the gates the verdict failed when it named any.
+   * capture. Advisory also warns, naming the gates the verdict failed when it named any. A FAIL
+   * sent with no answer on a node that holds none decides no advance (R19, P6.35).
    */
   private async handleNonBlockingFail(
     context: ExecutionContext,
-    sessionId: string,
+    session: ChainSession,
     answer: Extract<ReviewAnswer, { kind: 'answered' }>,
-    verdictPayload: { rationale: string }
-  ): Promise<DeferredAdvance> {
+    verdictPayload: { rationale: string },
+    hasResponse: boolean
+  ): Promise<DeferredAdvance | undefined> {
     const { review, enforcement, failedGateIds } = answer;
     const advisory = enforcement === 'advisory';
     const gateIds = advisory && failedGateIds.length > 0 ? [...failedGateIds] : [...review.gateIds];
@@ -739,8 +752,11 @@ export class GateVerdictProcessor {
       );
     }
     await this.emitGateEvents(context, 'failed', gateIds, verdictPayload.rationale);
+    if (!hasResponse && !this.holdsAnswer(review.nodeId, session)) {
+      return undefined;
+    }
     return {
-      sessionId,
+      sessionId: session.sessionId,
       nodeId: review.nodeId,
       reason: advisory ? 'advisory-fail' : 'informational-fail',
     };
