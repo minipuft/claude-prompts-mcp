@@ -16,7 +16,8 @@ import type { GateReview } from '#shared/types/chain-execution.js';
 /** The review a call addresses, or the named reason there is none. */
 type ReviewTarget =
   | { readonly kind: 'review'; readonly nodeId: string }
-  | { readonly kind: 'refuse'; readonly reason: 'unknown-node' | 'no-review' };
+  | { readonly kind: 'refuse'; readonly reason: 'unknown-node' | 'no-review' }
+  | { readonly kind: 'refuse'; readonly reason: 'ambiguous'; readonly nodeIds: readonly string[] };
 
 interface ReviewTargetInput {
   /** The run's review store, `ChainSession.reviews`. */
@@ -36,11 +37,9 @@ interface ReviewTargetInput {
  *    no such node, else `no-review`.
  * 2. **No trailer**: the review of the node the run stands on, unless that one is a detached
  *    node's (only a trailer answers those); else the run's one non-detached review, which grades
- *    a node the run has already left.
+ *    a node the run has already left. With several open (the store keeps one review per node),
+ *    `ambiguous`, naming them: choosing one would answer a review nobody addressed.
  * 3. Otherwise `no-review`.
- *
- * @throws when the run holds two non-detached reviews: the store keeps at most one, so two means
- *   the store's invariant broke, and choosing either would answer a review nobody addressed.
  */
 export function resolveReviewTarget(input: ReviewTargetInput): ReviewTarget {
   const { reviews, currentNodeId, nodeIds, trailerNodeId } = input;
@@ -62,9 +61,7 @@ export function resolveReviewTarget(input: ReviewTargetInput): ReviewTarget {
     .filter(([, review]) => review.kind !== 'detached')
     .map(([nodeId]) => nodeId);
   if (stepReviewNodes.length > 1) {
-    throw new Error(
-      `A run holds ${stepReviewNodes.length} step reviews (${stepReviewNodes.join(', ')}); the store keeps at most one`
-    );
+    return { kind: 'refuse', reason: 'ambiguous', nodeIds: stepReviewNodes };
   }
   const [only] = stepReviewNodes;
   return only === undefined

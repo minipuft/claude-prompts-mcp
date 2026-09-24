@@ -111,13 +111,24 @@ describe('resolveReviewTarget', () => {
     });
   });
 
-  test('two step reviews on one run break the store invariant and throw, naming both', () => {
-    expect(() =>
+  test('two open step reviews and none on the current node are refused as ambiguous, naming both', () => {
+    expect(
       resolveReviewTarget({
         reviews: { n1: review('n1', 'gate'), n2: review('n2', 'structural') },
         currentNodeId: 'n3',
         nodeIds: NODES,
       })
-    ).toThrow(/2 step reviews \(n1, n2\)/);
+    ).toEqual({ kind: 'refuse', reason: 'ambiguous', nodeIds: ['n1', 'n2'] });
+  });
+
+  test('CONTROL: the same two reviews, addressed by a trailer, resolve to the named node', () => {
+    expect(
+      resolveReviewTarget({
+        reviews: { n1: review('n1', 'gate'), n2: review('n2', 'structural') },
+        currentNodeId: 'n3',
+        nodeIds: NODES,
+        trailerNodeId: 'n2',
+      })
+    ).toEqual({ kind: 'review', nodeId: 'n2' });
   });
 });
