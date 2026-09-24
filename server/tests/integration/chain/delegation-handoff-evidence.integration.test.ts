@@ -519,13 +519,15 @@ describe('delegation handoff evidence at resume (Tier 2 row 2.7)', () => {
       expect(captured?.handoffEvidence).toBe('ok');
     });
 
-    test('POSITIVE CONTROL: a verdict-only resume of the delegated node is refused, and nothing moves', async () => {
+    test('CONTROL: a verdict-only resume with no review open is refused by the verdict owner, and nothing moves', async () => {
       const pipeline = buildPipeline({ sessionStore, recordStore, logger });
       const { chainId, sessionId } = await advanceToDelegatedStep(pipeline);
 
-      // No `user_response` at all — the guarantee-B bypass. The empty reply used to return from
-      // the evidence phase before the check ran, and the verdict then advanced the node with
-      // nothing captured.
+      // No `user_response` at all — the old guarantee-B bypass shape. The evidence phase admits
+      // it (R19: a reply-less call captures nothing, so it owes no trailer), and what refuses it
+      // is the verdict processor: the only review it could answer is the delegated node's own,
+      // which has nothing captured to grade (P6.22). That refusal is what makes the admission
+      // safe, so it is pinned by NAME — the evidence phase's words must not be what answers.
       const refused = await pipeline.execute({
         chain_id: chainId,
         gate_verdict: passVerdict,
@@ -533,14 +535,13 @@ describe('delegation handoff evidence at resume (Tier 2 row 2.7)', () => {
       const message = text(refused);
 
       expect(refused.isError).toBe(true);
-      expect(message).toContain(`❌ Delegated node ${DELEGATED_NODE_ID}`);
-      // The message names THIS mistake, not the prose-only one the same classification produces.
-      expect(message).toContain('carries no worker reply');
-      expect(message).toContain(`node: ${DELEGATED_NODE_ID}`);
+      expect(message).not.toContain('❌ Delegated node');
+      expect(message).toContain('Step 2 has no answer yet');
 
       // Same "nothing moved" probe the prose-only control uses, and the sibling accept case
-      // below shows it seeing a step-2 row when a reply IS carried.
+      // shows it seeing a step-2 row when a reply IS carried.
       expect(onlySession().state.currentNodeId).toBe(DELEGATED_NODE_ID);
+      expect(sessionStore.isStepComplete(sessionId, DELEGATED_NODE_ID)).toBe(false);
       expect(capturedRows(sessionId)).toEqual([{ step_number: 1, handoff_evidence: null }]);
     });
 
@@ -655,15 +656,6 @@ describe('delegation handoff evidence at resume (Tier 2 row 2.7)', () => {
     test('the brief in that response is the one a conforming worker reply clears the run with', async () => {
       const { pipeline, chainId, sessionId, rendered } = await resumeStep1With('step 1 output');
 
-      // The verdict the review asks for, submitted alone, is still refused — a delegated node
-      // does not advance on a verdict, whichever step the review names.
-      const refused = await pipeline.execute({
-        chain_id: chainId,
-        gate_verdict: passVerdict,
-      } as any);
-      expect(refused.isError).toBe(true);
-      expect(text(refused)).toContain(`❌ Delegated node ${DELEGATED_NODE_ID}`);
-
       // The worker's reply reads the token out of the brief this render printed, so the accept
       // path cannot pass against a brief the response never carried.
       const accepted = await pipeline.execute({
@@ -677,6 +669,95 @@ describe('delegation handoff evidence at resume (Tier 2 row 2.7)', () => {
         { step_number: 1, handoff_evidence: null },
         { step_number: 2, handoff_evidence: 'ok' },
       ]);
+    });
+
+    /** The run's open reviews as `[nodeId, phase, attemptCount]`, for the P6.15 twins. */
+    const openReviews = (): Array<[string, string, number]> =>
+      Object.values(
+        (onlySession() as unknown as { reviews?: Record<string, unknown> }).reviews ?? {}
+      ).map((review) => {
+        const r = review as { nodeId: string; phase: string; attemptCount: number };
+        return [r.nodeId, r.phase, r.attemptCount];
+      });
+
+    const failVerdict = renderGateVerdict({
+      overall: 'FAIL',
+      rationale: 'the section is missing',
+      per_gate: [{ index: 1, passed: false, rationale: `${GATE_ID}: not satisfied` }],
+    });
+
+    test("P6.15 (a): a verdict alone answers step 1's review; the delegated node is not captured", async () => {
+      const { pipeline, chainId, sessionId } = await resumeStep1With('step 1 output');
+      expect(openReviews()).toEqual([['n1', 'awaiting-verdict', 0]]);
+
+      // R19: the call carries no reply, so it owes no trailer — the review it answers is the
+      // run's one open step review (`resolveReviewTarget`), which is step 1's.
+      const answered = await pipeline.execute({
+        chain_id: chainId,
+        gate_verdict: passVerdict,
+      } as any);
+      const message = text(answered);
+
+      expect(answered.isError).not.toBe(true);
+      expect(message).not.toContain('❌');
+      expect(message).not.toContain('Structural Review Required');
+      expect(openReviews()).toEqual([]);
+      // The run still waits on its worker: the brief is handed over again, the node holds no
+      // captured output, and the run has not moved.
+      expect(message).toContain('EXECUTION BRIEF');
+      expect(message).toContain(`node: ${DELEGATED_NODE_ID}`);
+      expect(onlySession().state.currentNodeId).toBe(DELEGATED_NODE_ID);
+      expect(sessionStore.isStepComplete(sessionId, DELEGATED_NODE_ID)).toBe(false);
+      expect(capturedRows(sessionId).filter((row) => row.handoff_evidence !== null)).toEqual([]);
+    });
+
+    test('P6.15 (b) CONTROL: a prose reply with no trailer at the delegated node is still refused', async () => {
+      const { pipeline, chainId, sessionId, rendered } = await resumeStep1With('step 1 output');
+
+      const refused = await pipeline.execute({
+        chain_id: chainId,
+        user_response: runFakeWorker(rendered, { omitTrailer: true }),
+        gate_verdict: passVerdict,
+      } as any);
+
+      expect(refused.isError).toBe(true);
+      expect(text(refused)).toContain(`❌ Delegated node ${DELEGATED_NODE_ID}`);
+      expect(text(refused)).toContain('carries no trailer');
+      // Refused before any verdict path: step 1's review is untouched.
+      expect(openReviews()).toEqual([['n1', 'awaiting-verdict', 0]]);
+      expect(sessionStore.isStepComplete(sessionId, DELEGATED_NODE_ID)).toBe(false);
+    });
+
+    test("P6.15 (c): gate_action retry alone reopens step 1's exhausted review; the delegated node is untouched", async () => {
+      const { pipeline, chainId, sessionId } = await resumeStep1With('step 1 output');
+
+      // FAILs sent alone at the delegated node spend step 1's budget — each is itself the (a)
+      // shape with a FAIL. Bounded so a budget that never exhausts fails here, not by hanging.
+      let fails = 0;
+      while (openReviews()[0]?.[1] !== 'exhausted' && fails < 5) {
+        const failed = await pipeline.execute({
+          chain_id: chainId,
+          gate_verdict: failVerdict,
+        } as any);
+        expect(failed.isError).not.toBe(true);
+        fails++;
+      }
+      expect(openReviews()).toEqual([['n1', 'exhausted', fails]]);
+      expect(sessionStore.isStepComplete(sessionId, DELEGATED_NODE_ID)).toBe(false);
+
+      const retried = await pipeline.execute({
+        chain_id: chainId,
+        gate_action: 'retry',
+      } as any);
+
+      expect(retried.isError).not.toBe(true);
+      expect(text(retried)).not.toContain('❌');
+      // The reopened review quotes step 1 back — the step it grades, not the delegated node.
+      expect(text(retried)).toContain('Do Draft.');
+      expect(text(retried)).toContain('User requested retry after exhaustion');
+      expect(openReviews()).toEqual([['n1', 'awaiting-verdict', 0]]);
+      expect(onlySession().state.currentNodeId).toBe(DELEGATED_NODE_ID);
+      expect(sessionStore.isStepComplete(sessionId, DELEGATED_NODE_ID)).toBe(false);
     });
 
     test('POSITIVE CONTROL: a conforming step 1 raises no review, and step 2 renders normally', async () => {

@@ -81,25 +81,16 @@ const HANDOFF_MISSING_PHRASE: Readonly<
 /**
  * The refusal a client reads when a delegated node's resume carries no acceptable trailer.
  *
- * Presentation only — every fact in it comes from the `missing` verdict this receives, plus the
- * one fact the verdict cannot carry: whether there was a reply at all. `missing: 'trailer'` with
- * `found: null` is the classification of BOTH an empty resume and a prose-only one, and telling a
- * client that a call it made with no `user_response` "carries no trailer" describes the symptom of
- * a different mistake. The opening line splits; the copyable block below it does not.
+ * Presentation only — every fact in it comes from the `missing` verdict this receives. Only a
+ * resume that carries a reply reaches it: an empty one is admitted before classification (R19).
  */
 function describeMissingHandoffEvidence(
-  evidence: Extract<HandoffEvidence, { kind: 'missing' }>,
-  replyWasEmpty: boolean
+  evidence: Extract<HandoffEvidence, { kind: 'missing' }>
 ): string {
-  const opening = replyWasEmpty
-    ? `❌ Delegated node ${evidence.expected}: the resume carries no worker reply. ` +
-      `A delegated node advances only on its worker's result — a gate verdict alone does not ` +
-      `stand in for one. End the worker's reply with:`
-    : `❌ Delegated node ${evidence.expected}: the resume carries no ` +
-      `${HANDOFF_MISSING_PHRASE[evidence.missing]} (found: ${evidence.found ?? 'nothing'}). ` +
-      `End the worker's reply with:`;
   return [
-    opening,
+    `❌ Delegated node ${evidence.expected}: the resume carries no ` +
+      `${HANDOFF_MISSING_PHRASE[evidence.missing]} (found: ${evidence.found ?? 'nothing'}). ` +
+      `End the worker's reply with:`,
     '```',
     HANDOFF_RESULT_HEADING,
     `node: ${evidence.expected}`,
@@ -440,12 +431,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       case 'review-pending':
         return true;
       case 'not-detached':
-        return this.runHandoffEvidencePhase(
-          context,
-          sessionId,
-          currentNodeIdAtStart,
-          currentStepAtStart
-        );
+        return this.runHandoffEvidencePhase(context, currentNodeIdAtStart, currentStepAtStart);
     }
   }
 
@@ -589,31 +575,29 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    * entry, no mutation, no captured step, no recorded verdict. A resume the server will not
    * accept must not be half-accepted.
    *
-   * Two applicability conditions, neither a defensive guard on the decision itself: a node that
-   * ALREADY holds a real captured output has nothing left to verify (below); and a step the
-   * two-key lookup cannot resolve has no token to expect. `resolveHandoffEvidence` owns the rest
-   * — whether the step was delegated at all, and whether the mode in force refuses. The stage
-   * classifies nothing.
+   * Two applicability conditions, neither a defensive guard on the decision itself: a resume
+   * with no reply has no evidence to check (below); and a step the two-key lookup cannot resolve
+   * has no token to expect. `resolveHandoffEvidence` owns the rest — whether the step was
+   * delegated at all, and whether the mode in force refuses. The stage classifies nothing.
    *
-   * An empty `user_response` is NOT exempt on its own. It used to be, and that was the guarantee-B
-   * bypass: with the run standing on a delegated node under a pending review, a verdict-only call
-   * carried no reply, returned here early, and the pending-review PASS path then advanced the node
-   * with nothing captured. The narrow exemption is the two-call pattern — reply first, verdict
-   * second — where the FIRST call already passed this check and captured a real (non-placeholder)
-   * output for this node, so the second has nothing to re-verify. Anything else hands the empty
-   * reply to the classifier as-is, which reads it as `missing: 'trailer'` for a delegated node
-   * under `required` and leaves every non-delegated node untouched.
+   * An empty `user_response` is exempt because it captures nothing (R19): the trailer is evidence
+   * FOR A CAPTURE, and a reply-less call may only answer a review, apply a remainder, resolve an
+   * interrupt or cancel. That exemption once was the guarantee-B bypass — a verdict-only call at
+   * a delegated node under a pending review advanced the node with nothing captured. What closes
+   * the bypass now is the capture half, not a refusal here: the verdict processor refuses a bare
+   * PASS on a review whose node has no captured output (`isStepComplete`, P6.22), so the call
+   * that used to advance the node is refused by the owner of verdicts, while the same call
+   * answering an EARLIER node's open review is admitted (P6.15).
    *
    * @returns `false` when a refusal response was set and the pipeline must stop.
    */
   private runHandoffEvidencePhase(
     context: ExecutionContext,
-    sessionId: string,
     currentNodeIdAtStart: string | null,
     currentStepAtStart: number
   ): boolean {
     const reply = context.mcpRequest.user_response?.trim() ?? '';
-    if (reply.length === 0 && this.hasCapturedOutput(sessionId, currentNodeIdAtStart)) {
+    if (reply.length === 0) {
       return true;
     }
 
@@ -632,22 +616,8 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       return true;
     }
 
-    context.setResponse(
-      this.buildErrorResponse(describeMissingHandoffEvidence(evidence, reply.length === 0))
-    );
+    context.setResponse(this.buildErrorResponse(describeMissingHandoffEvidence(evidence)));
     return false;
-  }
-
-  /**
-   * Does the node the run stands on already hold a real captured output?
-   *
-   * `isStepComplete` is `completed` AND not a placeholder — the placeholder is exactly what a
-   * response-less call writes, so a run that has only ever been RENDERED at this node answers
-   * false here and its empty resume is classified rather than waved through. The one call site
-   * is the two-call exemption above; a `null` node id (a run standing nowhere) holds nothing.
-   */
-  private hasCapturedOutput(sessionId: string, nodeId: string | null): boolean {
-    return nodeId !== null && this.chainSessionStore.isStepComplete(sessionId, nodeId);
   }
 
   /**
