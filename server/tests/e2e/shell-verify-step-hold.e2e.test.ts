@@ -37,6 +37,16 @@
  * Now (P6.56) one call acts once: a `gate_action` the step's exhausted review answered is not
  * applied to the check too. The check keeps holding the step and the reply names it; the pass
  * that later releases the step announces it `failed`, the skip the review recorded (P6.54).
+ *
+ * MEASURED 2026-09-25 on `8b78f196` (authored chain): the call on which step 2's FAIL opened its
+ * review while the check passed replied `Error: Execution results missing before formatting`.
+ * `>>sv_chain :: verify:"…"` parses as a single command with no chain steps (the symbolic
+ * builder does not expand a chain prompt's steps), so stage 18 skipped its render for the open
+ * review and stage 20, which renders a review only as a chain step, had none to render.
+ *
+ * Now (P6.69) stage 18 leaves a pending review to stage 20 only when there are chain steps for it
+ * to render, and otherwise renders the command itself, which the formatter closes with the
+ * review's verdict request.
  */
 import { afterEach, describe, expect, test } from '@jest/globals';
 
@@ -492,5 +502,32 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
     expect(skipped.text).toContain('Progress 2/3');
     expect(skipped.stepStatuses).toEqual(['failed']);
     expect(runs()).toBe(1);
+  }, 180000);
+
+  test('P6.69: the FAIL that opens a review beside a passing check replies with the review', async () => {
+    const { call, runs } = await startVerifiedChain(true, '', { authored: true });
+    await call({ user_response: 'A out', gate_verdict: 'GATE_REVIEW: PASS - ok' });
+
+    const opened = await call({ user_response: 'B out', gate_verdict: FAIL });
+    expect(opened.text).not.toContain('Execution results missing');
+    expect(opened.text).toContain('Gate Review Required');
+    expect(opened.text).toContain('gate_verdict=');
+    expect(opened.text).toContain('Progress 2/3');
+    expect(count(opened, STEP_COMPLETE)).toBe(0);
+    expect(runs()).toBe(2);
+  }, 180000);
+
+  test('P6.69 control: the same FAIL with no check already replies with the review', async () => {
+    const { raw } = await startVerifiedChain(true, '', { authored: true });
+    const start = await raw({ command: '>>sv_chain' });
+    const chainId = /chain_id[=:] ?"(chain-[A-Za-z0-9_#-]+)"/.exec(start.text)?.[1];
+    const call: Call = (args) => raw({ chain_id: chainId, ...args });
+    await call({ user_response: 'A out', gate_verdict: 'GATE_REVIEW: PASS - ok' });
+
+    const opened = await call({ user_response: 'B out', gate_verdict: FAIL });
+    expect(opened.text).toContain('Gate Review Required');
+    expect(opened.text).toContain('gate_verdict=');
+    expect(opened.text).toContain('Progress 2/3');
+    expect(count(opened, STEP_COMPLETE)).toBe(0);
   }, 180000);
 });
