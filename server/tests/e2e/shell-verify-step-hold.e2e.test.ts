@@ -47,6 +47,15 @@
  * Now (P6.69) stage 18 leaves a pending review to stage 20 only when there are chain steps for it
  * to render, and otherwise renders the command itself, which the formatter closes with the
  * review's verdict request.
+ *
+ * MEASURED 2026-09-25 on `7b066e58`: the same call's run state held `commandType "single"`, no
+ * `steps`, and a review of `n2` with `gateIds: []`; step 2 rendered `chain` (the chain prompt's
+ * own template), not `BODY-sv_b`, and `>>sv_chain :: "extra criterion"` did the same.
+ *
+ * Now (P6.74) a chain prompt named with an operator runs its declared steps through the one
+ * projection a bare `>>sv_chain` uses: step 2 renders its own template and its FAIL opens a review
+ * of the step's `sv-block` gate. Every `quick_decision` case above now runs quick_decision's three
+ * step prompts rather than its own template three times.
  */
 import { afterEach, describe, expect, test } from '@jest/globals';
 
@@ -164,8 +173,8 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
 
   /**
    * `sv_chain`: three authored steps, each carrying one gate declared `enforcement_mode:
-   * blocking`, so a FAIL opens a review that holds the step. `quick_decision` under `:: verify:`
-   * never opens one: its steps carry no review gates there, and a FAIL only warns.
+   * blocking`, so a FAIL opens a review that holds the step. `quick_decision`'s steps carry only
+   * the defaults (`content-structure`, `framework-compliance`, measured 2026-09-25 under P6.74).
    */
   async function authorBlockingChain(client: ModernMcpClient, id: () => number): Promise<void> {
     const author = async (args: Record<string, unknown>): Promise<void> => {
@@ -214,6 +223,25 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
   const answer = (call: Call, label: string): Promise<ToolOutcome> =>
     call({ user_response: cageerfAnswer(label), gate_verdict: PASS });
 
+  /**
+   * MEASURED 2026-09-25 (P6.74): the steps now run, and each carries its own review gates
+   * (quick_decision's steps inherit the defaults; `sv_chain`'s carry `sv-block`), so an answer the
+   * check releases still needs its verdict, and a skip that releases the check leaves the step's
+   * review open for one. Under the single-prompt shape nothing reviewed a verdict-less answer.
+   */
+  const fixedAnswer = (call: Call, text: string): Promise<ToolOutcome> =>
+    call({ user_response: text, gate_verdict: PASS });
+
+  /** A skip released the check; the step's review takes the verdict that moves it. */
+  async function skipThenPass(call: Call, skipArgs: Record<string, unknown> = {}) {
+    const skipped = await call({ gate_action: 'skip', ...skipArgs });
+    expect(skipped.text).toContain('Gate Review Required');
+    expect(skipped.text).not.toContain('Shell Verification');
+    expect(count(skipped, STEP_COMPLETE)).toBe(0);
+    const passed = await call({ gate_verdict: PASS });
+    return { skipped, passed };
+  }
+
   test('P6.26 (a): a bounced step stays put; the passing call moves it once', async () => {
     const { call, marker } = await startVerifiedChain(false);
 
@@ -226,7 +254,7 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
     expect(count(stillFailing, STEP_COMPLETE)).toBe(0);
 
     writeFileSync(marker, 'ok');
-    const fixed = await call({ user_response: 'fixed' });
+    const fixed = await fixedAnswer(call, 'fixed');
     expect(fixed.text).not.toContain('Shell Verification FAILED');
     expect(fixed.text).toContain('Progress 2/3');
     expect(count(fixed, STEP_COMPLETE)).toBe(1);
@@ -249,7 +277,7 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
     const first = await answer(call, 'Step 1');
     expect(first.text).toContain('Shell Verification FAILED');
     writeFileSync(marker, 'ok');
-    expect(count(await call({ user_response: 'fixed' }), STEP_COMPLETE)).toBe(1);
+    expect(count(await fixedAnswer(call, 'fixed'), STEP_COMPLETE)).toBe(1);
     await answer(call, 'Step 2');
     const last = await answer(call, 'Step 3');
     expect(last.text).toContain('Chain complete');
@@ -264,7 +292,7 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
     expect(runs()).toBe(1);
 
     writeFileSync(marker, 'ok');
-    const released = await call({ user_response: 'fixed' });
+    const released = await fixedAnswer(call, 'fixed');
     expect(released.text).toContain('Progress 2/3');
     expect(count(released, STEP_COMPLETE)).toBe(1);
     expect(runs()).toBe(2);
@@ -277,7 +305,7 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
     expect(runs()).toBe(3);
 
     writeFileSync(marker, 'ok');
-    const passed = await call({ user_response: 'fixed step 2' });
+    const passed = await fixedAnswer(call, 'fixed step 2');
     expect(passed.text).toContain('Progress 3/3');
     expect(count(passed, STEP_COMPLETE)).toBe(1);
     expect(runs()).toBe(4);
@@ -306,7 +334,7 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
     expect((await call({ user_response: 'still missing' })).text).toContain(
       'Maximum Attempts Reached'
     );
-    expect((await call({ gate_action: 'skip' })).text).toContain('Progress 2/3');
+    expect((await skipThenPass(call)).passed.text).toContain('Progress 2/3');
     expect(runs()).toBe(2);
 
     const step2 = await answer(call, 'Step 2');
@@ -323,9 +351,9 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
     expect(escalated.text).toContain('Maximum Attempts Reached');
     expect(count(escalated, STEP_COMPLETE)).toBe(0);
 
-    const skipped = await call({ gate_action: 'skip' });
-    expect(skipped.text).toContain('Progress 2/3');
-    expect(count(skipped, STEP_COMPLETE)).toBe(1);
+    const { passed } = await skipThenPass(call);
+    expect(passed.text).toContain('Progress 2/3');
+    expect(count(passed, STEP_COMPLETE)).toBe(1);
   }, 180000);
 
   test('P6.44 (b) control: retry on an exhausted check resets attempts and keeps the step', async () => {
@@ -433,9 +461,9 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
     await answer(call, 'Step 1');
     expect(runs()).toBe(1);
 
-    const skipped = await call({ user_response: 'my answer', gate_action: 'skip' });
-    expect(skipped.text).toContain('Progress 2/3');
-    expect(count(skipped, STEP_COMPLETE)).toBe(1);
+    const { passed } = await skipThenPass(call, { user_response: 'my answer' });
+    expect(passed.text).toContain('Progress 2/3');
+    expect(count(passed, STEP_COMPLETE)).toBe(1);
     expect(runs()).toBe(1);
   }, 180000);
 
@@ -465,7 +493,7 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
 
     // Control: fixed, the same answer passes and completes the run once
     writeFileSync(marker, 'ok');
-    const last = await call({ user_response: 'C fixed' });
+    const last = await fixedAnswer(call, 'C fixed');
     expect(count(last, CHAIN_COMPLETE)).toBe(1);
     expect(runs()).toBe(4);
   }, 180000);
@@ -485,11 +513,13 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
     expect(count(skipped, STEP_COMPLETE)).toBe(0);
     expect(runs()).toBe(2);
 
-    // The pass moves the step once, as the skip the review recorded (P6.54)
+    // The pass moves the step once. MEASURED 2026-09-25 (P6.74): with the steps running, the
+    // fixed answer is a new capture that step A's `sv-block` review grades afresh, so the step is
+    // announced by that verdict (`passed`), not by the skip the earlier review recorded (P6.54).
     writeFileSync(marker, 'ok');
-    const passed = await call({ user_response: 'A fixed' });
+    const passed = await fixedAnswer(call, 'A fixed');
     expect(passed.text).toContain('Progress 2/3');
-    expect(passed.stepStatuses).toEqual(['failed']);
+    expect(passed.stepStatuses).toEqual(['passed']);
     expect(runs()).toBe(3);
   }, 180000);
 
@@ -498,9 +528,12 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
     const bounced = await call({ user_response: 'A out', gate_verdict: 'GATE_REVIEW: PASS - ok' });
     expect(bounced.text).toContain('Shell Verification FAILED (Attempt 1/5)');
 
-    const skipped = await call({ gate_action: 'skip' });
-    expect(skipped.text).toContain('Progress 2/3');
-    expect(skipped.stepStatuses).toEqual(['failed']);
+    // MEASURED 2026-09-25 (P6.74): the skip releases the check and step A's review then takes
+    // the verdict; the step is announced `passed` by that verdict, and the skipped check leaves no
+    // mark on the status (returned to the planner as a finding, not ruled here).
+    const { passed } = await skipThenPass(call);
+    expect(passed.text).toContain('Progress 2/3');
+    expect(passed.stepStatuses).toEqual(['passed']);
     expect(runs()).toBe(1);
   }, 180000);
 
@@ -529,5 +562,43 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
     expect(opened.text).toContain('gate_verdict=');
     expect(opened.text).toContain('Progress 2/3');
     expect(count(opened, STEP_COMPLETE)).toBe(0);
+  }, 180000);
+
+  /** Answer step 1, then FAIL step 2: the two replies a chain's step 2 is judged by. */
+  async function failStepTwo(call: Call): Promise<{ second: ToolOutcome; failed: ToolOutcome }> {
+    const second = await call({ user_response: 'A out', gate_verdict: 'GATE_REVIEW: PASS - ok' });
+    const failed = await call({ user_response: 'B out', gate_verdict: FAIL });
+    return { second, failed };
+  }
+
+  const expectStepTwoReview = ({ second, failed }: Awaited<ReturnType<typeof failStepTwo>>) => {
+    // Step 2 renders its own prompt, not the chain prompt's template
+    expect(second.text).toContain('BODY-sv_b');
+    expect(second.text).toContain('Progress 2/3');
+    // Its FAIL opens a review of the step's own gate
+    expect(failed.text).toContain('Gate Review Required');
+    expect(failed.text).toContain('### sv-block');
+    expect(failed.text).toContain('GUIDANCE-sv-block');
+    expect(count(failed, STEP_COMPLETE)).toBe(0);
+  };
+
+  test('P6.74 (a): a chain prompt under a check runs its steps and reviews their gates', async () => {
+    const { call, runs } = await startVerifiedChain(true, '', { authored: true });
+    expectStepTwoReview(await failStepTwo(call));
+    expect(runs()).toBe(2);
+  }, 180000);
+
+  test('P6.74 (b) control: the bare chain renders and reviews step 2 the same way', async () => {
+    const { raw } = await startVerifiedChain(true, '', { authored: true });
+    const start = await raw({ command: '>>sv_chain' });
+    const chainId = /chain_id[=:] ?"(chain-[A-Za-z0-9_#-]+)"/.exec(start.text)?.[1];
+    expectStepTwoReview(await failStepTwo((args) => raw({ chain_id: chainId, ...args })));
+  }, 180000);
+
+  test('P6.74 (c): a chain prompt with an anonymous gate criterion runs its steps too', async () => {
+    const { raw } = await startVerifiedChain(true, '', { authored: true });
+    const start = await raw({ command: '>>sv_chain :: "extra criterion"' });
+    const chainId = /chain_id[=:] ?"(chain-[A-Za-z0-9_#-]+)"/.exec(start.text)?.[1];
+    expectStepTwoReview(await failStepTwo((args) => raw({ chain_id: chainId, ...args })));
   }, 180000);
 });

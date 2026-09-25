@@ -120,7 +120,9 @@ describe('Streamable HTTP: a failing shell verification on the last step holds t
     expect(completions(stillFailing)).toBe(0);
 
     writeFileSync(marker, 'ok');
-    const fixed = await call({ user_response: 'fixed' });
+    // MEASURED 2026-09-25 (P6.74): the steps now run and carry their own review gates, so the
+    // answer the check releases also needs its verdict.
+    const fixed = await call({ user_response: 'fixed', gate_verdict: PASS });
     expect(fixed.text).not.toContain('Shell Verification FAILED');
     expect(fixed.text).toContain('Progress 2/3');
     expect(completions(fixed)).toBe(0);

@@ -80,7 +80,8 @@ function createContext() {
       parseGateVerdicts: () => [],
     },
     setResponse: jest.fn(),
-    state: { gates: { enforcementMode: 'blocking' }, session: {} },
+    // The step carries a gate: a verdict on a step with none opens no review (P6.76).
+    state: { gates: { enforcementMode: 'blocking', reviewGateIds: ['g1'] }, session: {} },
     diagnostics: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
     getScopeOptions: () => ({}),
     frameworkAuthority: { getCachedDecision: () => undefined },

@@ -240,26 +240,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       return;
     }
 
-    // `gate_action` carries two disjoint vocabularies (see `McpToolRequest.gate_action`). The
-    // interrupt half was consumed above; only the retry-exhaustion half answers the step review,
-    // and only while that review is exhausted — it is the one phase that accepts the action.
-    const gateAction = context.mcpRequest.gate_action;
-    if (
-      gateAction !== undefined &&
-      !isInterruptResolutionAction(gateAction) &&
-      this.stepReviewOf(session)?.phase === 'exhausted'
-    ) {
-      const skipped = await this.verdictProcessor.handleGateAction(
-        context,
-        session,
-        gateAction,
-        sessionContext
-      );
-      if (skipped !== undefined) {
-        await this.verdictProcessor.applyDeferredAdvance(context, skipped);
-        await this.ensurePostAdvanceReview(context);
-      }
-      this.logExit({ gateAction, handled: true });
+    if (await this.answerReviewAction(context, session, sessionContext)) {
       return;
     }
 
@@ -305,6 +286,47 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     await this.ensurePostAdvanceReview(context);
 
     this.logExit({ captured: true });
+  }
+
+  /**
+   * Answer this call's `gate_action` on the step review. The action carries two disjoint
+   * vocabularies (see `McpToolRequest.gate_action`); the interrupt half was consumed earlier, and
+   * only the retry-exhaustion half answers the step review — and only while that review is
+   * exhausted, the one phase that accepts it. In budget, the processor refuses it by name rather
+   * than let it reach the verdict path, where it came back as the same review, neither applied
+   * nor refused (P6.76). With neither, the action is left to the stages after this one (a pending
+   * shell check takes it at any attempt).
+   *
+   * @returns true when the call was answered and the stage must stop.
+   */
+  private async answerReviewAction(
+    context: ExecutionContext,
+    session: ChainSession,
+    sessionContext: SessionContext
+  ): Promise<boolean> {
+    const gateAction = context.mcpRequest.gate_action;
+    if (gateAction === undefined || isInterruptResolutionAction(gateAction)) {
+      return false;
+    }
+    if (this.stepReviewOf(session)?.phase === 'exhausted') {
+      const skipped = await this.verdictProcessor.handleGateAction(
+        context,
+        session,
+        gateAction,
+        sessionContext
+      );
+      if (skipped !== undefined) {
+        await this.verdictProcessor.applyDeferredAdvance(context, skipped);
+        await this.ensurePostAdvanceReview(context);
+      }
+      this.logExit({ gateAction, handled: true });
+      return true;
+    }
+    if (this.verdictProcessor.refusesInBudgetAction(context, session, gateAction)) {
+      this.logExit({ gateAction, refused: 'review in budget' });
+      return true;
+    }
+    return false;
   }
 
   /** The run's step review — the one a call without a trailer addresses (`resolveReviewTarget`). */

@@ -19,6 +19,11 @@
  *
  * The third case drives `gate_action: "skip"` on an exhausted advisory review (P6.49).
  *
+ * The fourth case is a single prompt's advisory FAIL (P6.75): its warning names the gates.
+ *
+ * The last two are P6.76: a FAIL on a step with no gates, and a `gate_action` on a review that
+ * still has attempts left. Both are refused by name and record nothing.
+ *
  * Gates are authored through `resource_manager`, so the file watcher's hot reload is on the path.
  */
 
@@ -294,4 +299,138 @@ describe('Streamable HTTP: a FAIL follows the gate declared enforcement_mode', (
       skipped.notifications.filter((n) => n.method === 'notifications/chain/step_complete')
     ).toHaveLength(1);
   }, 240000);
+
+  /**
+   * P6.75: a single prompt's FAIL opens its review on the verdict, and that review used to carry
+   * `gateIds: []`. MEASURED 2026-09-25 on `1042b064`: `>>review` + FAIL warned `Gate  failed:
+   * misses`, naming nothing, and announced no `gate/failed`. The review now grades the prompt's
+   * resolved gates, the set a chain step's review is opened with — the control below.
+   */
+  test('a single prompt advisory FAIL names the gates it failed, as a chain step does', async () => {
+    const session = await authoredSession();
+    const start = await session.callTool('prompt_engine', {
+      command: '>>review target:"src/index.ts"',
+    });
+    const single = await session.callTool('prompt_engine', {
+      chain_id: chainIdOf(start.text),
+      user_response: 'review output',
+      gate_verdict: `GATE_REVIEW: FAIL - ${RATIONALE}`,
+    });
+    const failedIds = single.notifications
+      .filter((n) => n.method === 'notifications/gate/failed')
+      .map((n) => String(n.params['gateId']));
+    expect(single.isError).toBe(false);
+    expect(single.text).not.toContain('Gate  failed');
+    expect(failedIds.length).toBeGreaterThan(0);
+    expect(single.text).toContain(`Gate ${failedIds.join(', ')} failed: ${RATIONALE}`);
+
+    // Control: a chain step's advisory FAIL already names its gate.
+    const chainStep = await failStepA(
+      session,
+      'p675_control',
+      { promptId: 'em_a', stepName: 'A', inlineGateIds: [ADVISE_GATE] },
+      `GATE_REVIEW: FAIL - ${RATIONALE}`
+    );
+    expect(chainStep.text).toContain(`Gate ${ADVISE_GATE} failed: ${RATIONALE}`);
+  }, 180000);
+
+  /** Create a two-step twin from `steps`, start it, and return a caller bound to its run. */
+  async function startTwin(session: Session, twin: string, steps: Array<Record<string, unknown>>) {
+    const id = `em_chain_${twin}`;
+    const created = await session.callTool('resource_manager', {
+      resource_type: 'prompt',
+      action: 'create',
+      id,
+      category: 'general',
+      name: id,
+      description: `e2e twin ${twin}`,
+      user_message_template: 'chain',
+      gate_configuration: OPT_OUT,
+      chain_steps: steps,
+    });
+    expect(created.isError).toBe(false);
+    const start = await session.callTool('prompt_engine', { command: `>>${id}` });
+    const chainId = chainIdOf(start.text);
+    return (args: Record<string, unknown>) =>
+      session.callTool('prompt_engine', { chain_id: chainId, ...args });
+  }
+
+  /**
+   * P6.76 (a), R38: a FAIL on a step that carries no gates opened a review of that step with
+   * `gateIds: []`. MEASURED 2026-09-25 on `a99a6ba1`: with no gate publishing a mode the FAIL was
+   * blocking, so it held the step, and a second FAIL exhausted it with "The following gates
+   * failed after 2 attempts: ****". No review opens there now: a FAIL is refused by name, and a
+   * PASS sent with the answer grades nothing and the answer moves the run on, as it would alone.
+   */
+  test('a FAIL on a step with no gates is refused by name and opens no review', async () => {
+    const session = await authoredSession();
+    const call = await startTwin(session, 'p676_gateless', [
+      { promptId: 'em_b', stepName: 'B' },
+      { promptId: 'em_a', stepName: 'A', inlineGateIds: [ADVISE_GATE] },
+    ]);
+    const gateless = 'Step 1 carries no gates, so a FAIL verdict has nothing to grade';
+
+    const bare = await call({ gate_verdict: `GATE_REVIEW: FAIL - ${RATIONALE}` });
+    expect(bare.isError).toBe(true);
+    expect(bare.text).toContain(gateless);
+    expect(bare.notifications).toEqual([]);
+
+    const answered = await call({
+      user_response: 'step B output',
+      gate_verdict: `GATE_REVIEW: FAIL - ${RATIONALE}`,
+    });
+    expect(answered.isError).toBe(true);
+    expect(answered.text).toContain(gateless);
+    expect(answered.notifications).toEqual([]);
+
+    // Control: the same step answered with a PASS moves on, once — nothing was held or charged.
+    const passed = await call({
+      user_response: 'step B output',
+      gate_verdict: 'GATE_REVIEW: PASS - ok',
+    });
+    expect(passed.isError).toBe(false);
+    expect(passed.text).toContain('EM-STEP-A-BODY');
+    expect(passed.text).toContain('Progress 2/2');
+    expect(
+      passed.notifications.filter((n) => n.method === 'notifications/chain/step_complete')
+    ).toHaveLength(1);
+  }, 180000);
+
+  /**
+   * P6.76 (b): `gate_action` on a review with attempts left. MEASURED 2026-09-25 on `a99a6ba1`:
+   * stage 16 routed the action only on an exhausted review, so an in-budget `skip` fell through to
+   * the verdict path and the reply re-rendered the same review with `isError: false` — neither
+   * applied nor refused. The control is P6.49's pin above: `skip` on an exhausted review is
+   * accepted.
+   */
+  test('gate_action on an in-budget review is refused by name and records nothing', async () => {
+    const session = await authoredSession();
+    const call = await startTwin(session, 'p676_in_budget', [
+      { promptId: 'em_a', stepName: 'A', inlineGateIds: [BLOCK_GATE] },
+      { promptId: 'em_b', stepName: 'B' },
+    ]);
+    const failed = await call({
+      user_response: 'step A output',
+      gate_verdict: `GATE_REVIEW: FAIL - ${RATIONALE}`,
+    });
+    expect(failed.text).toContain('Gate Review Required');
+    expect(failed.text).not.toContain(STEP_B_MARKER);
+
+    for (const action of ['skip', 'retry']) {
+      const refused = await call({ gate_action: action });
+      expect(refused.isError).toBe(true);
+      expect(refused.text).toContain(
+        `gate_action "${action}" is accepted only on an exhausted review; the review of step 1 is at 1/2 attempts`
+      );
+      expect(refused.notifications).toEqual([]);
+    }
+
+    // Nothing was recorded: the review still takes its verdict and the run moves on.
+    const passed = await call({
+      user_response: 'step A output',
+      gate_verdict: 'GATE_REVIEW: PASS - ok',
+    });
+    expect(passed.isError).toBe(false);
+    expect(passed.text).toContain(STEP_B_MARKER);
+  }, 180000);
 });
