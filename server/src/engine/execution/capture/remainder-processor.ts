@@ -10,6 +10,7 @@ import type { WorkflowCaps } from '#modules/workflow-ir/node-schema.js';
 import type {
   RemainderSubmission,
   WorkflowIR,
+  WorkflowNode,
   WorkflowRejection,
   WorkflowValidation,
 } from '#modules/workflow-ir/types.js';
@@ -115,9 +116,17 @@ export class RemainderProcessor {
       return { kind: 'refused', message: describeRejections(validation.rejections) };
     }
 
+    // A node naming a chain prompt runs that prompt's steps (R40), expanded by the validator
+    // through the same `expandChainPromptNodes` the compiler calls.
+    const expanded = validation.expanded;
+    const undeliverableSteps = expanded === undefined ? [] : findUndeliverableSteps(expanded.ir);
+    if (undeliverableSteps.length > 0) {
+      return { kind: 'refused', message: describeUndeliverableSteps(undeliverableSteps) };
+    }
+
     const outcome = await this.chainSessionStore.replaceRemainder(
       sessionId,
-      projectNodes(submission, validation.order),
+      projectNodes(expanded?.ir.nodes ?? submission.nodes, expanded?.order ?? validation.order),
       unknownId,
       submission.mode
     );
@@ -181,9 +190,15 @@ export class RemainderProcessor {
    * `workflow` path produces, from the same code.
    */
   private validate(submission: RemainderSubmission, session: ChainSession): WorkflowValidation {
-    const executed = currentOrdinal(session.state.nodes, session.state.currentNodeId);
-    const remaining = Math.max(this.workflowIr.defaultCaps.maxNodes - executed, 1);
-    const prompts = this.getConvertedPrompts();
+    // The run's node total AFTER the write (R41): a replace keeps the nodes up to the current
+    // one, an append keeps every node the run already has. Chain-prompt nodes count as the
+    // steps they expand into, because the validator counts the expanded IR.
+    const kept =
+      submission.mode === 'append'
+        ? session.state.nodes.length
+        : currentOrdinal(session.state.nodes, session.state.currentNodeId);
+    const remaining = Math.max(this.workflowIr.defaultCaps.maxNodes - kept, 0);
+    const lookup = createConvertedPromptLookup(this.getConvertedPrompts());
 
     return this.workflowIr.validate(
       {
@@ -196,7 +211,8 @@ export class RemainderProcessor {
         ...(submission.edges !== undefined ? { edges: submission.edges } : {}),
       },
       {
-        lookupPrompt: workflowPromptInfoLookup(createConvertedPromptLookup(prompts)),
+        lookupPrompt: workflowPromptInfoLookup(lookup),
+        expandWith: lookup,
         caps: { ...this.workflowIr.defaultCaps, maxNodes: remaining },
       }
     );
@@ -214,10 +230,10 @@ export class RemainderProcessor {
  * paths into a run's node list name an unnamed step the same way.
  */
 function projectNodes(
-  submission: RemainderSubmission,
+  nodes: readonly WorkflowNode[],
   order: readonly string[]
 ): RemainderNodeSpec[] {
-  const byId = new Map(submission.nodes.map((node) => [node.id, node]));
+  const byId = new Map(nodes.map((node) => [node.id, node]));
   return order.flatMap((id) => {
     const node = byId.get(id);
     if (node === undefined) {
@@ -292,6 +308,42 @@ function findUndeliverableFields(submission: RemainderSubmission): string[] {
     }
   }
   return [...found];
+}
+
+/**
+ * Fields a chain prompt's STEPS declare that a contributed node cannot carry, per expanded node.
+ *
+ * The same refusal list as a submitted node's, for the same reason: a remainder node's step is
+ * synthesized from the node, so a step gate or mapping the chain prompt declares would be accepted
+ * and never run. `subagentModel` / `agentType` are exempt — on an expanded node they are the step
+ * prompt's own prompt-level hint, which a contributed node naming that prompt directly does not
+ * get either.
+ */
+function findUndeliverableSteps(expanded: WorkflowIR): Array<{ id: string; fields: string[] }> {
+  const exempt = new Set(['subagentModel', 'agentType']);
+  return expanded.nodes.flatMap((node) => {
+    const fields = Object.keys(REMAINDER_REFUSED_NODE_FIELDS).filter(
+      (field) =>
+        !exempt.has(field) && (node as unknown as Record<string, unknown>)[field] !== undefined
+    );
+    return fields.length > 0 ? [{ id: node.id, fields }] : [];
+  });
+}
+
+/** The sentence a caller reads when a chain prompt's steps declare what a remainder cannot carry. */
+function describeUndeliverableSteps(
+  steps: ReadonlyArray<{ id: string; fields: string[] }>
+): string {
+  const lines = steps.map(
+    ({ id, fields }) =>
+      `- step "${id}": ${fields.map((field) => `${field} (${REMAINDER_REFUSED_NODE_FIELDS[field] ?? ''})`).join('; ')}`
+  );
+  return (
+    'remainder refused: a node names a chain prompt whose steps declare fields a contributed node ' +
+    `cannot carry — only {${REMAINDER_CARRIED_NODE_FIELDS.join(', ')}} reach its steps, so the run ` +
+    'would never see these. Append the steps as single prompts instead.\n' +
+    lines.join('\n')
+  );
 }
 
 /** The sentence a caller reads when a submitted node declares something the run cannot see. */

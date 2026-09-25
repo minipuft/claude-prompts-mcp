@@ -12,11 +12,17 @@
  * `inlineGateIds`, byte for byte. Node ids are left aside: the direct and single-symbolic sources
  * keep the projection's ids (`a`, `b`, `c`), while the two IR sources mint `<node>-<step>` (R40).
  *
- * The enumeration is closed by a predicate, not by this list alone: every `: ParsedCommand = {`
- * construction in `src/` must be claimed by a row below, so a fifth source fails by file name.
- * Blind spot (as of 2026-09-25 · flips when a remainder or `chain_id` append can name a chain
- * prompt without passing `compileWorkflowIR`): model-authored remainders write store nodes, not a
- * `ParsedCommand`, so this predicate does not see them.
+ * A fifth source writes store nodes rather than a `ParsedCommand`: a model-authored remainder
+ * (the `remainder` parameter, and the `chain_id` arrow-append the executor rewrites into it). It is
+ * driven through the real `RemainderProcessor.apply` against a session with an open blocking
+ * unknown and a store that records the node specs `replaceRemainder` is handed (P6.93). A
+ * contributed node carries only `{id, promptId, stepName, args, delegated}`, so this row names an
+ * UNGATED chain prompt (`sv_pair`) and its expected rows come from that prompt's projection; a
+ * chain prompt whose steps declare gates is refused by name (asserted below).
+ *
+ * The enumeration is closed by two predicates, not by this list alone: every `: ParsedCommand = {`
+ * construction and every `.replaceRemainder(` call in `src/` must be claimed by a row below, so a
+ * sixth source fails by file name.
  */
 import { describe, expect, test } from '@jest/globals';
 
@@ -31,11 +37,18 @@ import { UnifiedCommandParser } from '../../../../src/engine/execution/parsers/c
 import { SymbolicCommandBuilder } from '../../../../src/engine/execution/parsers/symbolic-command-builder.js';
 import { WorkflowCommandBuilder } from '../../../../src/engine/execution/parsers/workflow-command-builder.js';
 import { CommandParsingStage } from '../../../../src/engine/execution/pipeline/stages/04-parsing-stage.js';
+import { RemainderProcessor } from '../../../../src/engine/execution/capture/remainder-processor.js';
 import { createSimpleLogger } from '../../../../src/infra/logging/index.js';
 import { compileWorkflowIR } from '../../../../src/modules/workflow-ir/compiler.js';
+import { DEFAULT_WORKFLOW_CAPS } from '../../../../src/modules/workflow-ir/node-schema.js';
 import { validateWorkflowIR } from '../../../../src/modules/workflow-ir/validator.js';
 
 import type { ParsedCommand } from '../../../../src/engine/execution/context/index.js';
+import type {
+  ChainSession,
+  ChainSessionService,
+  RemainderNodeSpec,
+} from '../../../../src/shared/types/chain-session.js';
 import type { ChainStepPrompt } from '../../../../src/engine/execution/operators/types.js';
 import type { ConvertedPrompt } from '../../../../src/engine/execution/types.js';
 
@@ -63,7 +76,14 @@ const svChain = prompt('sv_chain', {
     { promptId: 'sv_a', stepName: 'C', inlineGateIds: ['sv-block'] },
   ],
 });
-const prompts = [svA, svB, svChain];
+const svPair = prompt('sv_pair', {
+  userMessageTemplate: 'CHAIN-OWN-TEMPLATE',
+  chainSteps: [
+    { promptId: 'sv_a', stepName: 'A' },
+    { promptId: 'sv_b', stepName: 'B', args: { depth: 'deep' } },
+  ],
+});
+const prompts = [svA, svB, svChain, svPair];
 const lookup = (id: string): ConvertedPrompt | undefined => prompts.find((p) => p.id === id);
 
 const logger = createSimpleLogger();
@@ -91,6 +111,43 @@ async function parse(request: Record<string, unknown>): Promise<ParsedCommand> {
   return context.parsedCommand;
 }
 
+/**
+ * Apply `{mode:'append', nodes:[{id:'r1', promptId, args:{topic:'T'}}]}` to a one-node run holding
+ * an open blocking unknown, and return what the store was asked to write — or the refusal.
+ */
+async function appendRemainder(
+  promptId: string
+): Promise<{ written: readonly RemainderNodeSpec[]; refusal?: string }> {
+  let written: readonly RemainderNodeSpec[] = [];
+  const store = {
+    replaceRemainder: async (_id: string, nodes: readonly RemainderNodeSpec[]) => {
+      written = nodes;
+      return { kind: 'applied', mode: 'append', nodes: [] };
+    },
+  } as unknown as ChainSessionService;
+  const session = {
+    sessionId: 's1',
+    unknownsLedger: [
+      { id: 'u1', statement: 'open', state: 'active', blocking: true, discoveredAtStep: 1 },
+    ],
+    state: {
+      currentNodeId: 'n1',
+      nodes: [{ id: 'n1', promptId: 'sv_a', stepName: 'sv_a' }],
+      lastUpdated: 0,
+    },
+  } as unknown as ChainSession;
+  const outcome = await new RemainderProcessor(
+    store,
+    { validate: validateWorkflowIR, defaultCaps: DEFAULT_WORKFLOW_CAPS },
+    () => prompts,
+    logger
+  ).apply('s1', session, {
+    mode: 'append',
+    nodes: [{ id: 'r1', promptId, args: { topic: 'T' } }],
+  });
+  return outcome.kind === 'refused' ? { written, refusal: outcome.message } : { written };
+}
+
 /** The part of a step every source must agree on. */
 const rows = (steps: readonly ChainStepPrompt[] | undefined): string[] =>
   (steps ?? []).map((step) =>
@@ -101,6 +158,10 @@ interface CommandSource {
   readonly name: string;
   /** The `: ParsedCommand = {` construction sites this source owns, as `<file>`. */
   readonly sites: readonly string[];
+  /** The `.replaceRemainder(` call sites this source owns, as `<file>`. */
+  readonly writes?: readonly string[];
+  /** The chain prompt this source names; `sv_chain` unless the source cannot carry step gates. */
+  readonly chainPrompt?: ConvertedPrompt;
   /** The chain prompt's steps as this source yields them. */
   readonly steps: () => Promise<readonly ChainStepPrompt[] | undefined>;
 }
@@ -136,31 +197,52 @@ const SOURCES: readonly CommandSource[] = [
         })
       ).steps,
   },
+  {
+    name: 'remainder-append',
+    sites: [],
+    writes: ['engine/execution/capture/remainder-processor.ts'],
+    chainPrompt: svPair,
+    // What the store writes, as steps: a contributed node carries no gate ids.
+    steps: async () =>
+      (await appendRemainder('sv_pair')).written.map(
+        (spec, index) =>
+          ({
+            stepNumber: index + 1,
+            nodeId: spec.id,
+            promptId: spec.promptId,
+            args: spec.args,
+            variableName: spec.stepName,
+          }) as ChainStepPrompt
+      ),
+  },
 ];
 
-/** The projection every source must reach. */
-const expected = rows(projectChainPromptSteps(svChain, { topic: 'T' }, lookup)?.steps);
+/** The projection a source must reach. */
+const expectedFor = (source: CommandSource): string[] =>
+  rows(projectChainPromptSteps(source.chainPrompt ?? svChain, { topic: 'T' }, lookup)?.steps);
+const expected = expectedFor(SOURCES[0] as CommandSource);
 
 /** Names of the sources whose steps differ from the projection. */
 async function divergent(sources: readonly CommandSource[]): Promise<string[]> {
   const names: string[] = [];
   for (const source of sources) {
-    if (JSON.stringify(rows(await source.steps())) !== JSON.stringify(expected)) {
+    if (JSON.stringify(rows(await source.steps())) !== JSON.stringify(expectedFor(source))) {
       names.push(source.name);
     }
   }
   return names;
 }
 
-function parsedCommandSites(dir: string): string[] {
+function sitesMatching(dir: string, pattern: RegExp): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) return parsedCommandSites(full);
+    if (entry.isDirectory()) return sitesMatching(full, pattern);
     if (!entry.name.endsWith('.ts')) return [];
-    const count = readFileSync(full, 'utf8').match(/:\s*ParsedCommand\s*=\s*\{/g)?.length ?? 0;
+    const count = readFileSync(full, 'utf8').match(pattern)?.length ?? 0;
     return Array.from({ length: count }, () => path.relative(SRC, full));
   });
 }
+const parsedCommandSites = (dir: string) => sitesMatching(dir, /:\s*ParsedCommand\s*=\s*\{/g);
 
 describe('every command source naming a chain prompt projects the same steps', () => {
   test('the projection itself is three steps carrying the run argument', () => {
@@ -203,5 +285,25 @@ describe('every command source naming a chain prompt projects the same steps', (
     // Positive control: the scan reaches the four constructions the sources name
     expect(found.length).toBeGreaterThanOrEqual(4);
     expect(found).toEqual(claimed);
+  });
+
+  test('every remainder write in src/ belongs to an enumerated source', () => {
+    const claimed = SOURCES.flatMap((source) => source.writes ?? []).sort();
+    // `this.chainSessionStore.replaceRemainder(` — the interface declaration and the store's own
+    // definition carry no receiver, so only callers match.
+    const found = sitesMatching(SRC, /\.replaceRemainder\(/g).sort();
+    expect(found.length).toBeGreaterThanOrEqual(1);
+    expect(found).toEqual(claimed);
+  });
+
+  test('the remainder source refuses a chain prompt whose steps declare gates, by name', async () => {
+    const { written, refusal } = await appendRemainder('sv_chain');
+    expect(written).toEqual([]);
+    expect(refusal).toContain('- step "r1-a": inlineGateIds');
+    // Positive control: the ungated chain prompt reaches the store
+    expect((await appendRemainder('sv_pair')).written.map((spec) => spec.id)).toEqual([
+      'r1-a',
+      'r1-b',
+    ]);
   });
 });
