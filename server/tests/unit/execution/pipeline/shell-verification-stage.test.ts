@@ -7,6 +7,7 @@ import type {
   ShellVerifyExecutor,
   VerifyActiveStateStore,
 } from '../../../../src/engine/gates/shell/index.js';
+import type { GateVerdictProcessor } from '../../../../src/engine/gates/services/gate-verdict-processor.js';
 import type { ChainSessionService } from '../../../../src/shared/types/chain-session.js';
 import type { Logger } from '../../../../src/infra/logging/index.js';
 
@@ -49,7 +50,15 @@ const createMockSessionService = (): ChainSessionService =>
     getPendingShellVerification: jest.fn().mockReturnValue(undefined),
     clearPendingShellVerification: jest.fn().mockResolvedValue(undefined),
     cancelChain: jest.fn<() => Promise<boolean>>().mockResolvedValue(true),
+    getSession: jest.fn().mockReturnValue(undefined),
   }) as unknown as ChainSessionService;
+
+/** The advance owner a released hold moves the run through (`GateVerdictProcessor`). */
+const createAdvanceOwner = () => ({
+  applyDeferredAdvance: jest
+    .fn<GateVerdictProcessor['applyDeferredAdvance']>()
+    .mockResolvedValue(undefined),
+});
 
 describe('ShellVerificationStage', () => {
   test('sets shellVerifyPassedForGates when verification passes with sourceGateIds', async () => {
@@ -59,6 +68,7 @@ describe('ShellVerificationStage', () => {
       executor,
       stateManager,
       createMockSessionService(),
+      createAdvanceOwner(),
       createLogger()
     );
 
@@ -88,6 +98,7 @@ describe('ShellVerificationStage', () => {
       executor,
       stateManager,
       createMockSessionService(),
+      createAdvanceOwner(),
       createLogger()
     );
 
@@ -116,6 +127,7 @@ describe('ShellVerificationStage', () => {
       executor,
       stateManager,
       createMockSessionService(),
+      createAdvanceOwner(),
       createLogger()
     );
 
@@ -145,6 +157,7 @@ describe('ShellVerificationStage', () => {
       executor,
       stateManager,
       createMockSessionService(),
+      createAdvanceOwner(),
       createLogger()
     );
 
@@ -155,6 +168,177 @@ describe('ShellVerificationStage', () => {
 
     expect(executor.execute as jest.Mock).not.toHaveBeenCalled();
     expect(context.state.gates.shellVerifyPassedForGates).toBeUndefined();
+  });
+
+  // P6.27: the command checks an answer, so it never runs on the render call, which carries none.
+  describe('the render call runs nothing (P6.27)', () => {
+    const inlineCheck = () => ({
+      gateId: 'shell-verify-inline',
+      shellVerify: { command: 'npm test' },
+      attemptCount: 0,
+      maxAttempts: 5,
+      previousResults: [],
+    });
+
+    test('the render call runs no command, spends no attempt, and saves the check with no node', async () => {
+      const executor = createMockExecutor(false);
+      const sessionService = createMockSessionService();
+      const stage = new ShellVerificationStage(
+        executor,
+        createMockStateManager(),
+        sessionService,
+        createAdvanceOwner(),
+        createLogger()
+      );
+      const context = new ExecutionContext({ command: '>>chain :: verify:"npm test"' });
+      context.state.session.resumeSessionId = 'test-session';
+      context.state.gates.pendingShellVerification = inlineCheck();
+
+      await stage.execute(context);
+
+      expect(executor.execute).not.toHaveBeenCalled();
+      expect(context.response).toBeUndefined();
+      expect(context.state.gates.pendingShellVerification?.attemptCount).toBe(0);
+      expect(sessionService.setPendingShellVerification).toHaveBeenCalledTimes(1);
+      const [sessionId, saved] = (sessionService.setPendingShellVerification as jest.Mock).mock
+        .calls[0] as [string, { attemptCount: number; nodeId?: string }];
+      expect(sessionId).toBe('test-session');
+      expect(saved.attemptCount).toBe(0);
+      // No answer captured yet: the node is named by the call that captures one (P6.44's refusal)
+      expect(saved.nodeId).toBeUndefined();
+    });
+
+    test('control: the reply call restores the saved check and runs it once', async () => {
+      const executor = createMockExecutor(false);
+      const sessionService = createMockSessionService();
+      (sessionService.getPendingShellVerification as jest.Mock).mockReturnValue(inlineCheck());
+      const stage = new ShellVerificationStage(
+        executor,
+        createMockStateManager(),
+        sessionService,
+        createAdvanceOwner(),
+        createLogger()
+      );
+      const context = new ExecutionContext({ chain_id: 'chain-test#1', user_response: 'done' });
+      context.state.session.resumeSessionId = 'test-session';
+
+      await stage.execute(context);
+
+      expect(executor.execute).toHaveBeenCalledTimes(1);
+      expect(context.state.gates.pendingShellVerification?.attemptCount).toBe(1);
+      expect(JSON.stringify(context.response)).toContain('Attempt 1/5');
+    });
+  });
+
+  // P6.32: only a gate_action moves a spent check, and a gate_action acts at any attempt count.
+  describe('the attempt limit holds without gate_action (P6.32)', () => {
+    const failed = {
+      passed: false,
+      exitCode: 1,
+      stdout: '',
+      stderr: 'FAIL',
+      timedOut: false,
+      durationMs: 50,
+      command: 'npm test',
+    };
+    const replyCall = (args: Record<string, unknown>) => {
+      const context = new ExecutionContext({ chain_id: 'chain-test#1', ...args });
+      context.state.session.resumeSessionId = 'test-session';
+      return context;
+    };
+
+    test('an answer after the attempts are spent re-renders the escalation and runs nothing', async () => {
+      const executor = createMockExecutor(false);
+      const sessionService = createMockSessionService();
+      (sessionService.getPendingShellVerification as jest.Mock).mockReturnValue({
+        gateId: 'shell-verify-inline',
+        shellVerify: { command: 'npm test' },
+        attemptCount: 2,
+        maxAttempts: 2,
+        previousResults: [failed, failed],
+        nodeId: 'node-1',
+      });
+      const stage = new ShellVerificationStage(
+        executor,
+        createMockStateManager(),
+        sessionService,
+        createAdvanceOwner(),
+        createLogger()
+      );
+      const context = replyCall({ user_response: 'one more try' });
+
+      await stage.execute(context);
+
+      expect(executor.execute).not.toHaveBeenCalled();
+      const text = JSON.stringify(context.response);
+      expect(text).toContain('Maximum Attempts Reached');
+      expect(text).toContain('**Attempts:** 2/2');
+      expect(context.state.gates.pendingShellVerification?.attemptCount).toBe(2);
+      expect(context.state.gates.pendingShellVerification?.previousResults).toHaveLength(2);
+    });
+
+    test('control: retry resets to 0/N, and the next answer runs the check', async () => {
+      const executor = createMockExecutor(false);
+      const sessionService = createMockSessionService();
+      (sessionService.getPendingShellVerification as jest.Mock).mockReturnValue({
+        gateId: 'shell-verify-inline',
+        shellVerify: { command: 'npm test' },
+        attemptCount: 2,
+        maxAttempts: 2,
+        previousResults: [failed, failed],
+        nodeId: 'node-1',
+      });
+      const stage = new ShellVerificationStage(
+        executor,
+        createMockStateManager(),
+        sessionService,
+        createAdvanceOwner(),
+        createLogger()
+      );
+
+      const retried = replyCall({ gate_action: 'retry' });
+      await stage.execute(retried);
+      expect(JSON.stringify(retried.response)).toContain('0/2');
+      const [, saved] = (sessionService.setPendingShellVerification as jest.Mock).mock.calls[0];
+      (sessionService.getPendingShellVerification as jest.Mock).mockReturnValue(saved);
+
+      const answered = replyCall({ user_response: 'fixed' });
+      await stage.execute(answered);
+      expect(executor.execute).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(answered.response)).toContain('Attempt 1/2');
+    });
+
+    test('skip sent with an answer before the attempts are spent acts on it and runs nothing', async () => {
+      const executor = createMockExecutor(false);
+      const sessionService = createMockSessionService();
+      (sessionService.getPendingShellVerification as jest.Mock).mockReturnValue({
+        gateId: 'shell-verify-inline',
+        shellVerify: { command: 'npm test' },
+        attemptCount: 1,
+        maxAttempts: 3,
+        previousResults: [failed],
+        nodeId: 'node-1',
+      });
+      const advanceOwner = createAdvanceOwner();
+      const stage = new ShellVerificationStage(
+        executor,
+        createMockStateManager(),
+        sessionService,
+        advanceOwner,
+        createLogger()
+      );
+      const context = replyCall({ user_response: 'my answer', gate_action: 'skip' });
+
+      await stage.execute(context);
+
+      expect(executor.execute).not.toHaveBeenCalled();
+      expect(sessionService.clearPendingShellVerification).toHaveBeenCalled();
+      expect(advanceOwner.applyDeferredAdvance).toHaveBeenCalledWith(context, {
+        sessionId: 'test-session',
+        nodeId: 'node-1',
+        reason: 'gate-skip',
+      });
+    });
   });
 
   describe('gate_action handling', () => {
@@ -196,6 +380,7 @@ describe('ShellVerificationStage', () => {
         executor,
         createMockStateManager(),
         sessionService,
+        createAdvanceOwner(),
         createLogger()
       );
 
@@ -223,6 +408,7 @@ describe('ShellVerificationStage', () => {
         executor,
         createMockStateManager(),
         sessionService,
+        createAdvanceOwner(),
         createLogger()
       );
 
@@ -249,27 +435,57 @@ describe('ShellVerificationStage', () => {
       expect(executor.execute).not.toHaveBeenCalled();
     });
 
-    test('gate_action: skip does NOT set response (pipeline continues)', async () => {
+    test('gate_action: skip releases the held step through the advance owner (R24)', async () => {
       const executor = createMockExecutor(true);
       const sessionService = createMockSessionService();
+      (sessionService.getPendingShellVerification as jest.Mock).mockReturnValue({
+        nodeId: 'node-1',
+      });
+      const advanceOwner = createAdvanceOwner();
       const stage = new ShellVerificationStage(
         executor,
         createMockStateManager(),
         sessionService,
+        advanceOwner,
         createLogger()
       );
 
       const context = createEscalatedContext('skip');
       await stage.execute(context);
 
-      // Should NOT set a response (pipeline continues to next stages)
+      // No response: the pipeline continues and renders the step the run moved to
       expect(context.response).toBeUndefined();
-
-      // Should clear pending state
       expect(context.state.gates.pendingShellVerification).toBeUndefined();
       expect(sessionService.clearPendingShellVerification).toHaveBeenCalled();
+      expect(advanceOwner.applyDeferredAdvance).toHaveBeenCalledWith(context, {
+        sessionId: 'test-session',
+        nodeId: 'node-1',
+        reason: 'gate-skip',
+      });
+      expect(executor.execute).not.toHaveBeenCalled();
+    });
 
-      // Should NOT execute the verification command
+    test('gate_action: skip with no captured answer is refused by name and keeps the check', async () => {
+      const executor = createMockExecutor(true);
+      const sessionService = createMockSessionService();
+      const advanceOwner = createAdvanceOwner();
+      const stage = new ShellVerificationStage(
+        executor,
+        createMockStateManager(),
+        sessionService,
+        advanceOwner,
+        createLogger()
+      );
+
+      const context = createEscalatedContext('skip');
+      await stage.execute(context);
+
+      expect(JSON.stringify(context.response)).toContain(
+        'nothing to skip past on step 1; answer it first'
+      );
+      expect(sessionService.clearPendingShellVerification).not.toHaveBeenCalled();
+      expect(sessionService.setPendingShellVerification).toHaveBeenCalled();
+      expect(advanceOwner.applyDeferredAdvance).not.toHaveBeenCalled();
       expect(executor.execute).not.toHaveBeenCalled();
     });
   });
@@ -292,6 +508,7 @@ describe('ShellVerificationStage', () => {
         executor,
         stateManager,
         createMockSessionService(),
+        createAdvanceOwner(),
         createLogger()
       );
 
@@ -325,6 +542,7 @@ describe('ShellVerificationStage', () => {
         executor,
         stateManager,
         createMockSessionService(),
+        createAdvanceOwner(),
         createLogger()
       );
 
@@ -355,6 +573,7 @@ describe('ShellVerificationStage', () => {
         executor,
         stateManager,
         createMockSessionService(),
+        createAdvanceOwner(),
         createLogger()
       );
 

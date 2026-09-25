@@ -59,6 +59,7 @@ import { computeUnknownLedger } from '#engine/execution/capture/unknown-observat
 import { resolveShownReview } from '#engine/execution/pipeline/decisions/gates/review-target.js';
 import {
   nodesHoldingRunOpen,
+  isRunComplete,
   isTerminalRunStatus,
   stampLegacyReview,
 } from '#shared/types/chain-session.js';
@@ -524,8 +525,8 @@ export class ChainSessionStore implements ChainSessionService {
    * the whole answer from one indexed PID-scoped SELECT rather than joining two tables
    * and re-deriving the ordinals themselves.
    *
-   * Filter rule: a session is "active for hooks" if it has steps remaining or
-   * a pending gate review / shell verification (see `isSessionActiveForHooks`).
+   * Filter rule: a session is "active for hooks" while its run is not complete
+   * (see `isSessionActiveForHooks`).
    * `run_owner_pid` is the server PID for cross-client isolation.
    *
    * Must be called inside an active transaction. The caller (`persistSessions`)
@@ -554,7 +555,7 @@ export class ChainSessionStore implements ChainSessionService {
 
   /**
    * Collect active canonical sessions that need hook visibility.
-   * A session is "active" if it has steps remaining or pending review/verification.
+   * A session is "active" while its run is not complete (`isSessionActiveForHooks`).
    */
   private collectActiveSessionRows(): Array<{
     chainId: string;
@@ -599,13 +600,13 @@ export class ChainSessionStore implements ChainSessionService {
     return rows;
   }
 
-  /** Whether a session should be visible to hooks (in-progress or pending review). */
+  /**
+   * Whether a session should be visible to hooks: exactly while the run is not complete (R30).
+   * `isRunComplete` is the one derivation, so a run standing on its last step, and a run held
+   * open after walking past it (`currentStep = totalSteps + 1`), both stay projected.
+   */
   private isSessionActiveForHooks(session: ChainSession): boolean {
-    if (isTerminalRunStatus(session.runStatus)) return false;
-    const currentStep = currentOrdinal(session.state.nodes, session.state.currentNodeId);
-    const totalSteps = totalOf(session.state.nodes);
-    if (currentStep > 0 && currentStep < totalSteps) return true;
-    return currentStep > 0 && currentStep === totalSteps && nodesHoldingRunOpen(session).length > 0;
+    return !isRunComplete(session);
   }
 
   /**

@@ -291,18 +291,56 @@ describe('chain_sessions hook projection — byte parity', () => {
     expect(manager.getSession('s1')!.executionOrder).toEqual([]);
   });
 
-  test('a run standing on its final step with no pending review is not projected', async () => {
+  test('a run standing on its final step with no pending review stays projected (R30)', async () => {
     manager = newManager('advanced-two');
     await manager.createSession('s1', 'chain-a', 3);
+    await manager.advanceStep('s1', 'n1');
+    await manager.advanceStep('s1', 'n2');
+
+    // The last step is still owed an answer, so the run is not complete and hooks see it.
+    // Before R30 an ordinal rule (`currentStep < totalSteps`) dropped it here.
+    const row = latestHookRow(db)!;
+    expect(row.state['currentStep']).toBe(3);
+    expect(row.state['totalSteps']).toBe(3);
+  });
+
+  test('a run past its last node held by a shell verification stays projected (P6.31)', async () => {
+    manager = newManager('past-end-shell');
+    await manager.createSession('s1', 'chain-a', 2);
+    await manager.advanceStep('s1', 'n1');
+    await manager.advanceStep('s1', 'n2');
+    const rowsBefore = countHookRows(db);
+    await manager.setPendingShellVerification('s1', {
+      nodeId: 'n2',
+      gateId: 'inline-verify',
+      shellVerify: { command: 'test -f M' },
+      attemptCount: 1,
+      maxAttempts: 5,
+      previousResults: [],
+    } as any);
+
+    const row = latestHookRow(db)!;
+    expect(countHookRows(db)).toBe(rowsBefore + 1);
+    expect(row.state['currentStep']).toBe(3);
+    expect(row.state['totalSteps']).toBe(2);
+    expect(row.params[5]).toBe('working');
+  });
+
+  test('a run past its last node owed a detached report stays projected (P6.29)', async () => {
+    manager = newManager('past-end-detached');
+    await manager.createSession('s1', 'chain-a', 2);
+    await manager.markNodeSpawned('s1', 'n2');
     await manager.advanceStep('s1', 'n1');
     const rowsBefore = countHookRows(db);
     await manager.advanceStep('s1', 'n2');
 
-    // `isSessionActiveForHooks` requires `currentStep < totalSteps` unless something is
-    // pending, so a run parked ON its last step drops out of the hook view — preserved
-    // exactly, and asserted here because it is easy to "fix" while re-keying and thereby
-    // start showing hooks runs they never used to see.
-    expect(countHookRows(db)).toBe(rowsBefore);
+    // No review and no shell check: the owed report is the only hold, and nothing in the row's
+    // pending columns shows it — the row's presence at `totalSteps + 1` is the fact.
+    const row = latestHookRow(db)!;
+    expect(countHookRows(db)).toBe(rowsBefore + 1);
+    expect(row.state['currentStep']).toBe(3);
+    expect(row.state['pendingGateReview']).toBeNull();
+    expect(row.state['pendingShellVerification']).toBeNull();
   });
 
   test('a run advanced past its terminal node stops being projected at all', async () => {

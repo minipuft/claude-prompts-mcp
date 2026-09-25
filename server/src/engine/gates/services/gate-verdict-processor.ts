@@ -718,8 +718,23 @@ export class GateVerdictProcessor {
    * new position exists. It is still written before the response is assembled, which is the
    * guarantee row B.54 pinned: a caller is never told the run sits on a step it has moved off.
    * A store failure propagates, as it did when this ran inline.
+   *
+   * A pending `:: verify:` check holds its step as an open review does (R29): every advance —
+   * the capture's, a verdict's, a skip's — moves nothing while one is pending. The shell stage
+   * clears the check first and then applies the held step's advance here, on the call it passes.
    */
   async applyDeferredAdvance(context: ExecutionContext, advance: DeferredAdvance): Promise<void> {
+    if (this.chainSessionStore.getPendingShellVerification(advance.sessionId) !== undefined) {
+      context.diagnostics.info(
+        'GateVerdictProcessor',
+        'Advance held by pending shell verification',
+        {
+          reason: advance.reason,
+          heldNodeId: advance.nodeId,
+        }
+      );
+      return;
+    }
     const session = this.chainSessionStore.getSession(advance.sessionId, context.getScopeOptions());
     const fromNodeId = session?.state.currentNodeId;
     const advanced = await this.chainSessionStore.advanceStep(advance.sessionId, advance.nodeId);

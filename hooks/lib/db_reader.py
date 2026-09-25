@@ -382,12 +382,7 @@ def _view_row_to_hook_state(row: sqlite3.Row) -> dict | None:
     pending_gate_review = _parse_json_field(row["pending_gate_review"])
     pending_shell_verification = _parse_json_field(row["pending_shell_verification"])
 
-    has_pending_review = bool(pending_gate_review)
-    has_pending_verify = bool(pending_shell_verification)
-    in_progress = current > 0 and current < total
-    pending_at_final = current > 0 and current == total and (has_pending_review or has_pending_verify)
-
-    if not in_progress and not pending_at_final:
+    if not _is_projected_run_visible(current, total):
         return None
 
     result: dict[str, object] = {
@@ -469,6 +464,18 @@ def _load_from_session_table(conn: sqlite3.Connection, chain_id: str) -> dict | 
 TERMINAL_RUN_STATUSES = frozenset({"completed", "failed", "cancelled"})
 
 
+def _is_projected_run_visible(current: int, total: int) -> bool:
+    """Whether a non-terminal projected row is a run hooks should see (R30).
+
+    Visibility is decided once, server-side: `isSessionActiveForHooks` projects a row exactly
+    while `!isRunComplete(session)`. So a row standing on a node (`1..total`) is in progress, and
+    a row at `total + 1` is a run held open past its last node — a pending review, shell check,
+    or owed detached report; a completed run is never projected there. Only `current == 0` (no
+    node shape, e.g. a gated single-prompt at 0/0) is left to the caller's snapshot fallback.
+    """
+    return 0 < current <= total + 1
+
+
 def _session_to_hook_state(session: dict) -> dict | None:
     """Convert a chain session dict to the hook ChainState shape.
 
@@ -489,12 +496,7 @@ def _session_to_hook_state(session: dict) -> dict | None:
             current = chain_state.get("currentStep", 0)
             total = chain_state.get("totalSteps", 0)
 
-    has_pending_review = bool(session.get("pendingGateReview"))
-    has_pending_verify = bool(session.get("pendingShellVerification"))
-    in_progress = current > 0 and current < total
-    pending_at_final = current > 0 and current == total and (has_pending_review or has_pending_verify)
-
-    if not in_progress and not pending_at_final:
+    if not _is_projected_run_visible(current, total):
         return None
 
     result: dict[str, object] = {

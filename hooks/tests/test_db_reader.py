@@ -32,6 +32,7 @@ import sqlite3
 import subprocess
 import sys
 from pathlib import Path
+from typing import ClassVar
 
 import db_reader
 import pytest
@@ -343,10 +344,18 @@ class TestActiveChainState:
 
         assert db_reader.load_active_chain_state("chain-demo") is None
 
-    def test_a_finished_chain_with_nothing_pending_is_not_active(self, state_db):
+    def test_a_chain_standing_on_its_last_step_is_active(self, state_db):
+        """3/3 is the last step still owed its answer, not a finished run (R30).
+
+        The server projects a row exactly while `!isRunComplete(session)`; a finished run is
+        terminal or absent, never `currentStep == totalSteps`.
+        """
         _insert_session(state_db, str(LIVE_PID), _chain_session_state(current=3, total=3))
 
-        assert db_reader.load_active_chain_state("chain-demo") is None
+        state = db_reader.load_active_chain_state("chain-demo")
+
+        assert state is not None
+        assert state["current_step"] == 3
 
     def test_a_final_step_awaiting_a_gate_verdict_is_still_active(self, state_db):
         _insert_session(
@@ -407,6 +416,62 @@ class TestActiveChainState:
         state_db.commit()
 
         assert db_reader.load_active_chain_state("chain-demo") is None
+
+
+class TestHeldPastTheLastNode:
+    """P6.29 + P6.31 (R30): a run held open after walking past its last node stays visible.
+
+    The server writes such a row at `currentStep = totalSteps + 1` (`currentOrdinal` of a null
+    node) with a non-terminal status, and only while something holds it. Each converter is pinned
+    on its own: through `load_active_chain_state` a view-path drop would be hidden by the
+    session-table fallback.
+    """
+
+    SHELL: ClassVar[dict] = {"nodeId": "n2", "shellVerify": {"command": "test -f M"}, "attemptCount": 1}
+    DETACHED_REVIEW: ClassVar[dict] = {
+        "nodeId": "n2",
+        "kind": "detached",
+        "gateIds": ["late-report"],
+        "attemptCount": 0,
+    }
+
+    def _via_view(self, state_db) -> dict | None:
+        state_db.row_factory = sqlite3.Row
+        try:
+            row = state_db.execute("SELECT * FROM v_execution_status").fetchone()
+        finally:
+            state_db.row_factory = None
+        return db_reader._view_row_to_hook_state(row)
+
+    @pytest.mark.parametrize(
+        "pending",
+        [{"pending_shell_verification": SHELL}, {"pending_gate_review": DETACHED_REVIEW}],
+        ids=["shell-verification", "detached-review"],
+    )
+    def test_a_held_run_past_its_last_node_is_kept_on_both_paths(self, state_db, pending):
+        blob = _chain_session_state(current=3, total=2, **pending)
+        _insert_session(state_db, str(LIVE_PID), blob)
+
+        via_view = self._via_view(state_db)
+        via_session = db_reader._session_to_hook_state(json.loads(blob))
+
+        for state in (via_view, via_session):
+            assert state is not None
+            assert (state["current_step"], state["total_steps"]) == (3, 2)
+        assert db_reader.load_active_chain_state("chain-demo") is not None
+
+    def test_an_in_progress_row_is_unchanged(self, state_db):
+        blob = _chain_session_state(current=1, total=2)
+        _insert_session(state_db, str(LIVE_PID), blob)
+
+        for state in (self._via_view(state_db), db_reader._session_to_hook_state(json.loads(blob))):
+            assert state is not None
+            assert (state["current_step"], state["pending_shell_verify"]) == (1, None)
+
+    def test_a_terminal_row_past_its_last_node_is_dropped(self):
+        blob = _chain_session_state(current=3, total=2, run_status="completed", pending_shell_verification=self.SHELL)
+
+        assert db_reader._session_to_hook_state(json.loads(blob)) is None
 
 
 # ── D. View repair (schema v20) ───────────────────────────────────────────────

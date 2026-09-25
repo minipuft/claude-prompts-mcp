@@ -83,6 +83,8 @@ const createSessionManager = () => {
       markNodeSkipped,
       getSessionBlueprint,
       isStepComplete,
+      // No `:: verify:` check is pending in these cases, so nothing holds an advance (R29).
+      getPendingShellVerification: jest.fn(() => undefined),
     } as unknown as ChainSessionService,
     applyUnknownObservations,
     getSession,

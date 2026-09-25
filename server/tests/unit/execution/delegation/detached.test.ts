@@ -10,6 +10,7 @@ import { describe, expect, test } from '@jest/globals';
 
 import {
   collectDetachedNodeFacts,
+  collectRunHolds,
   describeDetachedReview,
   describeDetachedReviewOutcome,
   describeHeldRun,
@@ -294,11 +295,14 @@ describe('resolveDetachedReport', () => {
 
 describe('describeHeldRun', () => {
   test('names every owed node and never uses the completion wording hooks key on', () => {
-    const text = describeHeldRun([
-      { token: 'a', nodeId: 'a', stepNumber: 2, spawned: true, reported: false },
-      { token: 'b', nodeId: 'b', stepNumber: 3, spawned: true, reported: false },
-      { token: 'c', nodeId: 'c', stepNumber: 4, spawned: true, reported: true },
-    ]);
+    const text = describeHeldRun(
+      [
+        { token: 'a', nodeId: 'a', stepNumber: 2, spawned: true, reported: false },
+        { token: 'b', nodeId: 'b', stepNumber: 3, spawned: true, reported: false },
+        { token: 'c', nodeId: 'c', stepNumber: 4, spawned: true, reported: true },
+      ],
+      { reviews: [] }
+    );
     expect(text).toContain('a (step 2), b (step 3)');
     expect(text).not.toContain('c (step 4)');
     expect(text).toContain('cancel: true');
@@ -390,19 +394,92 @@ describe('resolveDetachedReport: a reported node under gate review (row 4.8)', (
 
 describe('describeHeldRun: reviews still open', () => {
   test('a held run with nothing owed but an open review names the review, not a report', () => {
-    const text = describeHeldRun([
-      {
-        token: 'a',
-        nodeId: 'a',
-        stepNumber: 2,
-        spawned: true,
-        reported: true,
-        review: 'awaiting-verdict',
-      },
-    ]);
+    const text = describeHeldRun(
+      [
+        {
+          token: 'a',
+          nodeId: 'a',
+          stepNumber: 2,
+          spawned: true,
+          reported: true,
+          review: 'awaiting-verdict',
+        },
+      ],
+      { reviews: [] }
+    );
     expect(text).toContain('until its detached review(s) are answered');
     expect(text).toContain('Gate review still open on reported detached node(s): a (step 2)');
     expect(text).not.toMatch(/[Cc]hain complete|Execution complete/);
+  });
+});
+
+/**
+ * P6.30: the held-run notice names the hold kinds actually open, from the facts
+ * `nodesHoldingRunOpen` reads. Measured (3.13 drive) before this: a run held only by a shell check
+ * said "until its detached review(s) are answered".
+ */
+describe('describeHeldRun: every open hold kind, each with its move (P6.30)', () => {
+  const owedNode: DetachedNodeFacts = {
+    token: 'w',
+    nodeId: 'w',
+    stepNumber: 1,
+    spawned: true,
+    reported: false,
+  };
+
+  test('(a) a shell check alone names the verification, its step and user_response', () => {
+    const text = describeHeldRun([], { reviews: [], shellStep: 2 });
+    expect(text).toContain('until its shell verification of step 2 passes');
+    expect(text).toContain('user_response');
+    expect(text).not.toMatch(/detached/);
+    expect(text).not.toMatch(/[Cc]hain complete|Execution complete/);
+  });
+
+  test('(b) an open step review names the step and gate_verdict, or gate_action once exhausted', () => {
+    const open = describeHeldRun([], {
+      reviews: [{ stepNumber: 2, kind: 'gate', phase: 'awaiting-verdict' }],
+    });
+    expect(open).toContain('until its gate review of step 2 is answered');
+    expect(open).toContain(
+      'The gate review of step 2 is still open: resume with chain_id and gate_verdict'
+    );
+    expect(open).not.toMatch(/detached|shell/);
+    const spent = describeHeldRun([], {
+      reviews: [{ stepNumber: 2, kind: 'structural', phase: 'exhausted' }],
+    });
+    expect(spent).toContain('The structural review of step 2 has spent its retries');
+    expect(spent).toContain('gate_action "retry", "skip" or "abort"');
+  });
+
+  test('(c) an owed report and a step review: both, each with its own move', () => {
+    const text = describeHeldRun([owedNode], {
+      reviews: [{ stepNumber: 2, kind: 'gate', phase: 'awaiting-verdict' }],
+    });
+    expect(text).toContain(
+      'until its detached node(s) report: w (step 1); and until its gate review of step 2 is answered'
+    );
+    expect(text).toContain('node: w');
+    expect(text).toContain('The gate review of step 2 is still open');
+    expect(text).not.toMatch(/shell/);
+  });
+
+  test('collectRunHolds reads step reviews and the shell node, never a detached review', () => {
+    const holds = collectRunHolds({
+      state: { nodes: [{ id: 'n1' }, { id: 'n2' }, { id: 'n3' }] },
+      reviews: {
+        n2: { kind: 'structural', phase: 'awaiting-verdict' },
+        n1: { kind: 'detached', phase: 'awaiting-verdict' },
+      },
+      pendingShellVerification: { nodeId: 'n3' },
+    });
+    expect(holds).toEqual({
+      reviews: [{ stepNumber: 2, kind: 'structural', phase: 'awaiting-verdict' }],
+      shellStep: 3,
+    });
+    // A snapshot with no nodeId holds nothing (the render's save, P6.27), so it names no step.
+    expect(collectRunHolds({ state: { nodes: [] }, pendingShellVerification: {} })).toEqual({
+      reviews: [],
+    });
   });
 });
 

@@ -31,6 +31,7 @@ import type {
 import type { HandoffEvidenceMode } from './handoff-contract.js';
 
 import { unreportedDetachedNodeIds } from '#shared/types/chain-execution.js';
+import { ordinalOf } from '#shared/utils/node-order.js';
 
 /** One detached (`await: run`) node of a run, as the router needs it. */
 export interface DetachedNodeFacts {
@@ -97,6 +98,38 @@ export function collectDetachedNodeFacts(
     });
 }
 
+/**
+ * What else holds a run open besides its detached nodes (P6.30): open step gate and structural
+ * reviews, and a pending shell verification — each by the step it grades.
+ */
+export interface RunHolds {
+  readonly reviews: readonly {
+    readonly stepNumber: number;
+    readonly kind: GateReviewKind;
+    readonly phase: GateReviewPhase;
+  }[];
+  readonly shellStep?: number;
+}
+
+/** A run held by its detached nodes alone. */
+const NO_HOLDS: RunHolds = { reviews: [] };
+
+/** A run's {@link RunHolds}, read off the facts `nodesHoldingRunOpen` reads. PURE. */
+export function collectRunHolds(session: {
+  readonly state: { readonly nodes: readonly { readonly id: string }[] };
+  readonly reviews?: Readonly<
+    Record<string, { readonly kind: GateReviewKind; readonly phase: GateReviewPhase }>
+  >;
+  readonly pendingShellVerification?: { readonly nodeId?: string };
+}): RunHolds {
+  const stepOf = (nodeId: string): number => ordinalOf(session.state.nodes, nodeId);
+  const reviews = Object.entries(session.reviews ?? {})
+    .filter(([, review]) => review.kind !== 'detached')
+    .map(([nodeId, { kind, phase }]) => ({ stepNumber: stepOf(nodeId), kind, phase }));
+  const verifying = session.pendingShellVerification?.nodeId;
+  return { reviews, ...(verifying !== undefined ? { shellStep: stepOf(verifying) } : {}) };
+}
+
 /** The node a resume stands on, as the router needs it; `null` when the run is past its end. */
 export interface CurrentNodeFacts {
   readonly token: string;
@@ -157,6 +190,8 @@ export function resolveDetachedReport(input: {
   readonly submits?: { readonly verdict: boolean; readonly action: boolean };
   readonly current: CurrentNodeFacts | null;
   readonly detachedNodes: readonly DetachedNodeFacts[];
+  /** The run's other holds, for the held-run refusal (P6.30). */
+  readonly holds?: RunHolds;
 }): DetachedReportDecision {
   const { reply, current, detachedNodes } = input;
   if (detachedNodes.length === 0) {
@@ -169,7 +204,7 @@ export function resolveDetachedReport(input: {
   }
 
   if (current === null) {
-    return { kind: 'refuse', message: describeHeldRun(detachedNodes) };
+    return { kind: 'refuse', message: describeHeldRun(detachedNodes, input.holds ?? NO_HOLDS) };
   }
 
   const standing = current.detached
@@ -302,19 +337,26 @@ function describeUntaggedDetachedReply(node: DetachedNodeFacts): string {
 }
 
 /**
- * What a run that has walked past its last node, but is still owed a detached result, says.
- * Deliberately avoids the completion wording hooks key on: the run is NOT finished.
+ * What a run that has walked past its last node, but is still held open, says: every hold kind
+ * actually open (P6.30), each with the move that answers it. Deliberately avoids the completion
+ * wording hooks key on: the run is NOT finished.
  */
-export function describeHeldRun(detachedNodes: readonly DetachedNodeFacts[]): string {
+export function describeHeldRun(
+  detachedNodes: readonly DetachedNodeFacts[],
+  holds: RunHolds
+): string {
   const owed = describeOwed(detachedNodes);
   const underReview = detachedNodes.filter((node) => node.reported && node.review !== undefined);
   const first = owed[0];
   const named = (nodes: readonly DetachedNodeFacts[]): string =>
     nodes.map((node) => `${node.token} (step ${node.stepNumber})`).join(', ');
+  const until = [
+    owed.length > 0 ? `its detached node(s) report: ${named(owed)}` : undefined,
+    owed.length === 0 && underReview.length > 0 ? 'its detached review(s) are answered' : undefined,
+    ...describeOtherHolds(holds).until,
+  ].filter((part): part is string => part !== undefined);
   const lines = [
-    owed.length > 0
-      ? `⏸ Every step has run, but the run stays open until its detached node(s) report: ${named(owed)}.`
-      : '⏸ Every step has run, but the run stays open until its detached review(s) are answered.',
+    `⏸ Every step has run, but the run stays open until ${until.join('; and until ')}.`,
   ];
   if (underReview.length > 0) {
     lines.push(
@@ -322,6 +364,7 @@ export function describeHeldRun(detachedNodes: readonly DetachedNodeFacts[]): st
         'answer each with gate_verdict and user_response ending in its HANDOFF RESULT trailer.'
     );
   }
+  lines.push(...describeOtherHolds(holds).moves);
   if (first !== undefined) {
     lines.push(
       'When a worker finishes, resume with chain_id and its result as user_response, ending with:',
@@ -331,8 +374,35 @@ export function describeHeldRun(detachedNodes: readonly DetachedNodeFacts[]): st
       lines.push('(one resume per node, each naming its own token)');
     }
   }
-  lines.push('A worker that will never report: stop the run with cancel: true.');
+  lines.push(
+    owed.length > 0 || underReview.length > 0
+      ? 'A worker that will never report: stop the run with cancel: true.'
+      : 'To stop the run instead: cancel: true.'
+  );
   return lines.join('\n');
+}
+
+/** The non-detached holds' clauses for the head line, and the move that answers each. PURE. */
+function describeOtherHolds(holds: RunHolds): { until: string[]; moves: string[] } {
+  const until: string[] = [];
+  const moves: string[] = [];
+  for (const { stepNumber, kind, phase } of holds.reviews) {
+    const review = `${kind === 'structural' ? 'structural' : 'gate'} review of step ${stepNumber}`;
+    until.push(`its ${review} is answered`);
+    moves.push(
+      phase === 'exhausted'
+        ? `The ${review} has spent its retries: resume with chain_id and gate_action "retry", "skip" or "abort".`
+        : `The ${review} is still open: resume with chain_id and gate_verdict.`
+    );
+  }
+  if (holds.shellStep !== undefined) {
+    until.push(`its shell verification of step ${holds.shellStep} passes`);
+    moves.push(
+      `The shell verification of step ${holds.shellStep} has not passed: fix what it checks, then ` +
+        'resume with chain_id and user_response — or gate_action "retry", "skip" or "abort".'
+    );
+  }
+  return { until, moves };
 }
 
 /** The acknowledgement a resume carrying a late detached result gets. */
@@ -345,6 +415,7 @@ export function describeLandedReport(
     readonly held: boolean;
     /** The run's detached nodes as they stand AFTER this report landed. */
     readonly detachedNodes: readonly DetachedNodeFacts[];
+    readonly holds?: RunHolds;
     /** The gate review this report opened (row 4.8), rendered by {@link describeDetachedReview}. */
     readonly review?: string;
     /** This report replaced a result whose review FAILed (R10.2). */
@@ -365,12 +436,13 @@ function describeRunPosition(after: {
   readonly runCompleted: boolean;
   readonly held: boolean;
   readonly detachedNodes: readonly DetachedNodeFacts[];
+  readonly holds?: RunHolds;
 }): string {
   if (after.runCompleted) {
     return '✅ Chain complete — every step, including the detached ones, has reported.';
   }
   if (after.held) {
-    return describeHeldRun(after.detachedNodes);
+    return describeHeldRun(after.detachedNodes, after.holds ?? NO_HOLDS);
   }
   return 'The run is where it was: resume with chain_id and the output of the step it stands on.';
 }
@@ -432,6 +504,7 @@ export function describeDetachedReviewOutcome(
     readonly runCompleted: boolean;
     readonly held: boolean;
     readonly detachedNodes: readonly DetachedNodeFacts[];
+    readonly holds?: RunHolds;
   }
 ): string {
   const label = `detached node ${node.token} (step ${node.stepNumber})`;

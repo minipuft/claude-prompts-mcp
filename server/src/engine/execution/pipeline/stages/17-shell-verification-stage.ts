@@ -31,6 +31,7 @@ import { BasePipelineStage } from '../stage.js';
 import type { Logger } from '#infra/logging/index.js';
 import type { PendingShellVerificationSnapshot } from '#shared/types/chain-execution.js';
 import type { ChainSessionService } from '#shared/types/chain-session.js';
+import type { GateVerdictProcessor } from '../../../gates/services/gate-verdict-processor.js';
 import type { ExecutionContext } from '../../context/index.js';
 
 /**
@@ -51,6 +52,8 @@ export class ShellVerificationStage extends BasePipelineStage {
     private readonly shellVerifyExecutor: ShellVerifyExecutor,
     private readonly stateManager: VerifyActiveStateStore,
     private readonly chainSessionService: ChainSessionService,
+    /** The one advance owner (R25): a released hold moves the run and announces it there. */
+    private readonly advanceOwner: Pick<GateVerdictProcessor, 'applyDeferredAdvance'>,
     logger: Logger
   ) {
     super(logger);
@@ -60,6 +63,8 @@ export class ShellVerificationStage extends BasePipelineStage {
     this.logEntry(context);
 
     let pending = context.state.gates.pendingShellVerification;
+    // Armed by InlineGateExtractionStage on this call (the render), rather than restored on a resume
+    const armedThisCall = pending !== undefined;
 
     // Restore from session on response-only resume (InlineGateExtractionStage is skipped, so pending is undefined)
     if (pending === undefined) {
@@ -73,15 +78,30 @@ export class ShellVerificationStage extends BasePipelineStage {
 
     // Handle gate_action response (retry/skip/abort)
     const gateAction = context.mcpRequest.gate_action;
-    if (gateAction !== undefined && pending.attemptCount >= pending.maxAttempts) {
+    if (gateAction === 'skip' && this.refusesSkip(context)) {
+      await this.saveToSession(context, pending);
+      return;
+    }
+    // A gate_action is acted on whenever a check is pending, at any attempt count (P6.32)
+    if (gateAction !== undefined) {
       await this.handleGateAction(context, gateAction, pending);
       return;
     }
 
-    // Require user_response before running verification (after first attempt)
+    // The command checks an answer, so it runs only on a call that carries one (P6.27). The
+    // render call runs nothing and spends no attempt; it saves the check so the resume that
+    // answers it finds it (and the step stays held), and arms the Stop hook's loop state.
     const userResponse = context.mcpRequest.user_response?.trim();
-    if ((userResponse === undefined || userResponse === '') && pending.attemptCount > 0) {
+    if (userResponse === undefined || userResponse === '') {
+      if (armedThisCall) await this.armOnRender(context, pending);
       this.logExit({ skipped: 'Awaiting user response before verification' });
+      return;
+    }
+
+    // Spent: only a gate_action moves an exhausted check; an answer re-renders the escalation.
+    const lastResult = pending.previousResults[pending.previousResults.length - 1];
+    if (pending.attemptCount >= pending.maxAttempts && lastResult !== undefined) {
+      await this.handleVerificationFailed(context, lastResult, pending);
       return;
     }
 
@@ -114,6 +134,20 @@ export class ShellVerificationStage extends BasePipelineStage {
   }
 
   /**
+   * The render call arms the check without running it: saved with `attemptCount 0` and no node
+   * (no answer was captured yet), and the loop's Stop-hook state written.
+   */
+  private async armOnRender(
+    context: ExecutionContext,
+    pending: PendingShellVerification
+  ): Promise<void> {
+    if (pending.shellVerify.loop === true) {
+      await this.stateManager.writeState(this.resolveVerifyStateKey(context), pending);
+    }
+    await this.saveToSession(context, pending);
+  }
+
+  /**
    * Handle verification success - clear state and proceed.
    */
   private async handleVerificationPassed(
@@ -122,8 +156,10 @@ export class ShellVerificationStage extends BasePipelineStage {
   ): Promise<void> {
     const { shellVerify } = pending;
 
+    const heldNodeId = this.heldNodeId(context);
     context.state.gates.pendingShellVerification = undefined;
     await this.clearFromSession(context);
+    await this.releaseHeldStep(context, heldNodeId, 'captured');
 
     // LOOP MODE: Clear verify-state.db
     if (shellVerify.loop === true) {
@@ -260,12 +296,59 @@ export class ShellVerificationStage extends BasePipelineStage {
       sourceGateIds: pending.sourceGateIds,
       // The node it holds open: the step captured on this call, else the node an earlier save
       // named — a failing re-run on a call that captured nothing must not release the hold.
-      nodeId:
-        context.state.session.capturedStep?.nodeId ??
-        this.chainSessionService.getPendingShellVerification(sessionId)?.nodeId,
+      nodeId: this.heldNodeId(context),
     };
 
     await this.chainSessionService.setPendingShellVerification(sessionId, snapshot);
+  }
+
+  /** The step this check holds: the one captured on this call, else the one an earlier save named. */
+  private heldNodeId(context: ExecutionContext): string | undefined {
+    const sessionId = runSessionId(context);
+    return (
+      context.state.session.capturedStep?.nodeId ??
+      (sessionId === undefined
+        ? undefined
+        : this.chainSessionService.getPendingShellVerification(sessionId)?.nodeId)
+    );
+  }
+
+  /**
+   * Release the hold on a step once its check passes or is skipped (R29): advance past it through
+   * the one advance owner, which announces its `step_complete` on this call. A step still under an
+   * open review is left to that review's verdict, which advances it once this check is gone.
+   */
+  private async releaseHeldStep(
+    context: ExecutionContext,
+    nodeId: string | undefined,
+    reason: 'captured' | 'gate-skip'
+  ): Promise<void> {
+    const sessionId = runSessionId(context);
+    if (nodeId === undefined || sessionId === undefined) return;
+    const session = this.chainSessionService.getSession(sessionId, context.getScopeOptions());
+    if (session?.reviews?.[nodeId] !== undefined) return;
+    await this.advanceOwner.applyDeferredAdvance(context, { sessionId, nodeId, reason });
+  }
+
+  /**
+   * `skip` accepts the step's captured answer (R24), so on a run with no captured answer it has
+   * nothing to skip past and is refused by name. A single prompt has no run: skip there only
+   * clears the check, as it always has.
+   */
+  private refusesSkip(context: ExecutionContext): boolean {
+    if (runSessionId(context) === undefined || this.heldNodeId(context) !== undefined) return false;
+    const step = context.sessionContext?.currentStep ?? 1;
+    context.setResponse({
+      content: [
+        {
+          type: 'text',
+          text: `Shell verification skip refused: nothing to skip past on step ${step}; answer it first.`,
+        },
+      ],
+      isError: true,
+    });
+    this.logExit({ gateAction: 'skip', refused: 'no captured answer' });
+    return true;
   }
 
   /**
@@ -334,14 +417,17 @@ export class ShellVerificationStage extends BasePipelineStage {
         break;
       }
 
-      case 'skip':
+      case 'skip': {
+        const heldNodeId = this.heldNodeId(context);
         context.state.gates.pendingShellVerification = undefined;
         await this.clearFromSession(context);
+        await this.releaseHeldStep(context, heldNodeId, 'gate-skip');
         context.diagnostics.warn(this.name, 'User chose to skip shell verification', {
           gateId: pending.gateId,
         });
         this.logExit({ gateAction: 'skip' });
         break;
+      }
 
       case 'abort': {
         context.state.session.aborted = true;
@@ -379,6 +465,12 @@ export class ShellVerificationStage extends BasePipelineStage {
   }
 }
 
+/** The run's session id, or `undefined` for a single prompt, which has no run. */
+function runSessionId(context: ExecutionContext): string | undefined {
+  const sessionId = context.getSessionId();
+  return sessionId === undefined || sessionId.length === 0 ? undefined : sessionId;
+}
+
 /**
  * Factory function for creating the shell verification stage.
  */
@@ -386,7 +478,14 @@ export function createShellVerificationStage(
   shellVerifyExecutor: ShellVerifyExecutor,
   stateManager: VerifyActiveStateStore,
   chainSessionService: ChainSessionService,
+  advanceOwner: Pick<GateVerdictProcessor, 'applyDeferredAdvance'>,
   logger: Logger
 ): ShellVerificationStage {
-  return new ShellVerificationStage(shellVerifyExecutor, stateManager, chainSessionService, logger);
+  return new ShellVerificationStage(
+    shellVerifyExecutor,
+    stateManager,
+    chainSessionService,
+    advanceOwner,
+    logger
+  );
 }

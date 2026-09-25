@@ -201,11 +201,13 @@ scenarios:
       - tool: prompt_engine
         args: { command: '>>minimal_prompt :: verify:"exit 1" :fast' }
         capture:
-          cid: 'chain_id: "(chain-[A-Za-z0-9_#-]+)"'
-      - tool: prompt_engine
-        args: { chain_id: '${cid}', gate_action: 'skip' }
+          cid: 'chain_id="(chain-[A-Za-z0-9_#-]+)"'
+      # Since R24/R29 (P6.44) `skip` accepts the step's captured answer, so the answer comes
+      # first; a skip with none to accept is refused by name.
       - tool: prompt_engine
         args: { chain_id: '${cid}', user_response: 'done' }
+      - tool: prompt_engine
+        args: { chain_id: '${cid}', gate_action: 'skip' }
     # Reaching completion is the proof: the shell gate is configured to fail on EVERY attempt
     # (`exit 1`), so a run that finishes can only have bypassed it. Asserting the intermediate
     # response would measure which gate spoke next, which is the ambiguity that produced the
@@ -225,7 +227,10 @@ scenarios:
       - tool: prompt_engine
         args: { command: '>>minimal_prompt :: verify:"exit 1" :fast' }
         capture:
-          cid: 'chain_id: "(chain-[A-Za-z0-9_#-]+)"'
+          cid: 'chain_id="(chain-[A-Za-z0-9_#-]+)"'
+      # The render runs no check (P6.27); the answer spends the one attempt.
+      - tool: prompt_engine
+        args: { chain_id: '${cid}', user_response: 'done' }
       - tool: prompt_engine
         args: { chain_id: '${cid}', gate_action: 'retry' }
     # `Attempts: 0/1` is the reset itself. The preceding response read `1/1`, so this substring
@@ -240,7 +245,10 @@ scenarios:
       - tool: prompt_engine
         args: { command: '>>minimal_prompt :: verify:"exit 1" :fast' }
         capture:
-          cid: 'chain_id: "(chain-[A-Za-z0-9_#-]+)"'
+          cid: 'chain_id="(chain-[A-Za-z0-9_#-]+)"'
+      # The render runs no check (P6.27); the answer spends the one attempt.
+      - tool: prompt_engine
+        args: { chain_id: '${cid}', user_response: 'done' }
       - tool: prompt_engine
         args: { chain_id: '${cid}', gate_action: 'abort' }
     expect: { text_contains: 'No further verification will run' }
