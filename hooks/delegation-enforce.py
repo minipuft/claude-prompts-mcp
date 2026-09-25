@@ -17,6 +17,8 @@ Behavior:
   Task* tracking calls before delegation are fine)
 - Action tools (Edit/Write/Bash) while delegation pending → DENY (hard block)
 - No delegation pending → no-op
+- Any call from inside a subagent (payload carries `agent_id`) → no-op: it
+  arrives under the parent's session_id but is not the delegating session
 
 The server owns the floor: it renders `run_in_background: false` in the
 handoff instructions and refuses to resume a delegated node whose reply
@@ -31,7 +33,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent / "lib"))
 
-from session_state import clear_delegation_state, load_session_state
+from session_state import clear_delegation_state, is_subagent_payload, load_session_state
 from spawn_pin import spawn_call_is_pinned
 
 # Tools allowed during pending delegation (read-only + delegation itself).
@@ -75,6 +77,12 @@ def main():
 
     session_id = hook_input.get("session_id", "")
     if not session_id:
+        sys.exit(0)
+
+    # A subagent's call carries its parent's session_id but is not the session that
+    # rendered the brief: allow it and leave the parent's state alone — its own
+    # Agent call must not clear the parent's pending delegation either.
+    if is_subagent_payload(hook_input):
         sys.exit(0)
 
     tool_name = hook_input.get("tool_name", "")
