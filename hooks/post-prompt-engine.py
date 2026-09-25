@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent / "lib"))
 
 from session_state import (
     clear_session_state,
+    is_subagent_payload,
     parse_prompt_engine_response,
     save_session_state,
 )
@@ -35,6 +36,12 @@ def parse_hook_input() -> dict:
 
 def main():
     hook_input = parse_hook_input()
+
+    # A subagent's call arrives under its PARENT's session_id: every save or clear
+    # below would land on the parent's chain row, so a worker running its own
+    # chain writes nothing here and prints nothing.
+    if is_subagent_payload(hook_input):
+        sys.exit(0)
 
     tool_name = hook_input.get("tool_name", "")
     session_id = hook_input.get("session_id", "")
