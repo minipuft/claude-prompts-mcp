@@ -221,11 +221,66 @@ describe('ShellVerificationStage', () => {
       );
       const context = new ExecutionContext({ chain_id: 'chain-test#1', user_response: 'done' });
       context.state.session.resumeSessionId = 'test-session';
+      // The run captured this call's answer, so there is a step to grade
+      context.state.session.capturedStep = { nodeId: 'node-1', ordinal: 1 };
 
       await stage.execute(context);
 
       expect(executor.execute).toHaveBeenCalledTimes(1);
       expect(context.state.gates.pendingShellVerification?.attemptCount).toBe(1);
+      expect(JSON.stringify(context.response)).toContain('Attempt 1/5');
+    });
+  });
+
+  // P6.57: a render call spends no attempt even when a `user_response` rides along.
+  describe('a render call carrying an answer runs nothing (P6.57)', () => {
+    const renderWithAnswer = () => {
+      const executor = createMockExecutor(false);
+      const sessionService = createMockSessionService();
+      const stage = new ShellVerificationStage(
+        executor,
+        createMockStateManager(),
+        sessionService,
+        createAdvanceOwner(),
+        createLogger()
+      );
+      const context = new ExecutionContext({
+        command: '>>chain :: verify:"npm test"',
+        user_response: 'an answer sent with the command',
+      });
+      context.state.session.resumeSessionId = 'test-session';
+      context.state.gates.pendingShellVerification = {
+        gateId: 'shell-verify-inline',
+        shellVerify: { command: 'npm test' },
+        attemptCount: 0,
+        maxAttempts: 5,
+        previousResults: [],
+      };
+      return { stage, context, executor, sessionService };
+    };
+
+    test('the run captured nothing: no command runs, the check is saved at attempt 0', async () => {
+      const { stage, context, executor, sessionService } = renderWithAnswer();
+
+      await stage.execute(context);
+
+      expect(executor.execute).not.toHaveBeenCalled();
+      expect(context.response).toBeUndefined();
+      const [, saved] = (sessionService.setPendingShellVerification as jest.Mock).mock.calls[0] as [
+        string,
+        { attemptCount: number; nodeId?: string },
+      ];
+      expect(saved.attemptCount).toBe(0);
+      expect(saved.nodeId).toBeUndefined();
+    });
+
+    test('control: the same call with a captured step runs the check once', async () => {
+      const { stage, context, executor } = renderWithAnswer();
+      context.state.session.capturedStep = { nodeId: 'node-1', ordinal: 1 };
+
+      await stage.execute(context);
+
+      expect(executor.execute).toHaveBeenCalledTimes(1);
       expect(JSON.stringify(context.response)).toContain('Attempt 1/5');
     });
   });

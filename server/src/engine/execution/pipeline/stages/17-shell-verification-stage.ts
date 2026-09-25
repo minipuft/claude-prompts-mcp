@@ -88,11 +88,12 @@ export class ShellVerificationStage extends BasePipelineStage {
       return;
     }
 
-    // The command checks an answer, so it runs only on a call that carries one (P6.27). The
-    // render call runs nothing and spends no attempt; it saves the check so the resume that
+    // The command checks an answer, so it runs only on a call that has one to grade (P6.27,
+    // P6.57). The render call runs nothing and spends no attempt, even when a `user_response`
+    // rides along: the run captured nothing on it. It saves the check so the resume that
     // answers it finds it (and the step stays held), and arms the Stop hook's loop state.
     const userResponse = context.mcpRequest.user_response?.trim();
-    if (userResponse === undefined || userResponse === '') {
+    if (userResponse === undefined || userResponse === '' || !this.hasAnswerToGrade(context)) {
       if (armedThisCall) await this.armOnRender(context, pending);
       this.logExit({ skipped: 'Awaiting user response before verification' });
       return;
@@ -310,6 +311,16 @@ export class ShellVerificationStage extends BasePipelineStage {
     };
 
     await this.chainSessionService.setPendingShellVerification(sessionId, snapshot);
+  }
+
+  /**
+   * On a run, the check grades a step's answer: the one captured on this call, or the held one an
+   * earlier save named (a re-run). A call that captured nothing on a check holding no step — the
+   * render, or a re-armed check before the next step is answered — has nothing to grade. A
+   * single prompt with no run grades the answer the call carries.
+   */
+  private hasAnswerToGrade(context: ExecutionContext): boolean {
+    return runSessionId(context) === undefined || this.heldNodeId(context) !== undefined;
   }
 
   /** The step this check holds: the one captured on this call, else the one an earlier save named. */

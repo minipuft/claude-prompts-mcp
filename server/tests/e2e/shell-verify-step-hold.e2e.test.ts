@@ -59,7 +59,8 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
   /** Start `quick_decision` with an inline verification of `marker`, which the caller controls. */
   async function startVerifiedChain(
     markerPresent: boolean,
-    verifyOptions = ''
+    verifyOptions = '',
+    opening: { prompt?: string; user_response?: string } = {}
   ): Promise<{
     call: Call;
     raw: Call;
@@ -102,8 +103,13 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
         methods: outcome.notifications.map((n: StreamNotification) => n.method),
       };
     };
-    const command = `>>quick_decision topic:"pick a database" :: verify:"sh ${script}"${verifyOptions}`;
-    const start = await raw({ command });
+    const prompt = opening.prompt ?? 'quick_decision topic:"pick a database"';
+    const command = `>>${prompt} :: verify:"sh ${script}"${verifyOptions}`;
+    const start = await raw(
+      opening.user_response === undefined
+        ? { command }
+        : { command, user_response: opening.user_response }
+    );
     const chainId = /chain_id[=:] ?"(chain-[A-Za-z0-9_#-]+)"/.exec(start.text)?.[1];
     if (chainId === undefined) throw new Error(`no chain id in: ${start.text.slice(0, 400)}`);
     return {
@@ -266,6 +272,46 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
     const { call, runs } = await startVerifiedChain(true);
     const answered = await answer(call, 'Step 1');
     expect(answered.text).toContain('Progress 2/3');
+    expect(runs()).toBe(1);
+  }, 180000);
+
+  test('P6.57 (a): a render call carrying an answer runs no command and holds step 1', async () => {
+    const { start, call, runs } = await startVerifiedChain(false, '', {
+      user_response: cageerfAnswer('Step 1'),
+    });
+    expect(start.text).not.toContain('Shell Verification FAILED');
+    expect(start.text).toContain('Progress 1/3');
+    expect(count(start, STEP_COMPLETE)).toBe(0);
+    expect(runs()).toBe(0);
+
+    // Control: the next answering resume runs the check once, at the first attempt
+    const answered = await answer(call, 'Step 1');
+    expect(answered.text).toContain('Shell Verification FAILED (Attempt 1/5)');
+    expect(runs()).toBe(1);
+  }, 180000);
+
+  test('P6.57 (b): a passing check is not spent on the render; the first answer runs it', async () => {
+    const { start, call, runs } = await startVerifiedChain(true, '', {
+      user_response: cageerfAnswer('Step 1'),
+    });
+    expect(start.text).toContain('Progress 1/3');
+    expect(runs()).toBe(0);
+
+    const answered = await answer(call, 'Step 1');
+    expect(answered.text).toContain('Progress 2/3');
+    expect(runs()).toBe(1);
+  }, 180000);
+
+  test('P6.57 (c): a single prompt opens a run too, so its render with an answer runs nothing', async () => {
+    const { start, call, runs } = await startVerifiedChain(false, '', {
+      prompt: 'minimal_prompt',
+      user_response: 'my answer',
+    });
+    expect(start.text).not.toContain('Shell Verification FAILED');
+    expect(runs()).toBe(0);
+
+    const answered = await call({ user_response: 'my answer' });
+    expect(answered.text).toContain('Shell Verification FAILED (Attempt 1/5)');
     expect(runs()).toBe(1);
   }, 180000);
 
