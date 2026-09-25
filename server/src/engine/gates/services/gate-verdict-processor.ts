@@ -364,6 +364,9 @@ export class GateVerdictProcessor {
   /**
    * Resolve the step review's exhaustion with `gate_action` (retry/skip/abort).
    *
+   * Only an exhausted review accepts one (R9); {@link refusesInBudgetAction} answers an action
+   * sent while the review still has attempts left.
+   *
    * `retry` and `skip` are events on the review (`advanceReview`): retry reopens it with the
    * counter reset, skip clears it and accepts the answer the step already holds (R24) — it
    * announces that step and returns the advance past it, for the stage to apply. A skip on a step
@@ -442,6 +445,34 @@ export class GateVerdictProcessor {
   }
 
   /**
+   * Refuse, by name, a `gate_action` sent while the step review still has attempts left, and
+   * record nothing (P6.76). The review is waiting for an answer or a verdict; before this the
+   * action fell through to the verdict path and came back as the same review with `isError:
+   * false`, neither applied nor refused. A pending shell check is the other holder that takes a
+   * `gate_action`, at any attempt (P6.32), so while one is pending the action is left to it.
+   *
+   * @returns true when the call was refused and its response is set.
+   */
+  refusesInBudgetAction(
+    context: ExecutionContext,
+    session: ChainSession,
+    gateAction: GateAction
+  ): boolean {
+    const target = addressedReview(session);
+    const review = target.kind === 'review' ? session.reviews?.[target.nodeId] : undefined;
+    if (
+      review === undefined ||
+      review.phase === 'exhausted' ||
+      this.chainSessionStore.getPendingShellVerification(session.sessionId) !== undefined
+    ) {
+      return false;
+    }
+    const message = describeInBudgetAction(gateAction, review, session);
+    context.setResponse({ content: [{ type: 'text', text: message }], isError: true });
+    return true;
+  }
+
+  /**
    * Announce the step the run just moved past, with the output it was captured with (R25). The
    * one emitter of `step_complete` for a run's own advance; a skipped step is `failed`: its gates
    * failed, and the run moves past it anyway.
@@ -502,7 +533,11 @@ export class GateVerdictProcessor {
     const authority = context.gateEnforcement;
     const hasResponse = typeof userResponse === 'string' && userResponse.length > 0;
     const opensNone = authority === undefined && trailerNodeId === undefined;
-    if (verdictPayload === null || (opensNone && addressedReview(session).kind === 'refuse')) {
+    if (
+      verdictPayload === null ||
+      (opensNone && addressedReview(session).kind === 'refuse') ||
+      this.passGradesNothing(context, session, verdictPayload, hasResponse, trailerNodeId)
+    ) {
       return untouched;
     }
     const answer = await this.answerVerdict(
@@ -571,6 +606,13 @@ export class GateVerdictProcessor {
     hasResponse: boolean,
     trailerNodeId: string | undefined
   ): Promise<ReviewAnswer> {
+    const gateless =
+      verdict.verdict === 'FAIL'
+        ? this.gatelessStepOrdinal(context, session, trailerNodeId)
+        : undefined;
+    if (gateless !== undefined) {
+      return { kind: 'refused', message: describeGatelessStep(gateless) };
+    }
     const bare = !hasResponse && verdict.verdict === 'PASS';
     const unanswered = bare ? this.unansweredReviewNode(session, trailerNodeId) : undefined;
     if (unanswered !== undefined) {
@@ -591,6 +633,45 @@ export class GateVerdictProcessor {
           }
         : {}),
     });
+  }
+
+  /**
+   * The ordinal of the step this call's verdict would open a review on, when that step carries
+   * no gates — no review is open for it and its resolved set is empty. A review opened there
+   * would grade nothing: with no gate publishing a mode, its FAIL held the step as blocking and
+   * exhausted it naming no gate (P6.76, R38).
+   */
+  private gatelessStepOrdinal(
+    context: ExecutionContext,
+    session: ChainSession,
+    trailerNodeId: string | undefined
+  ): number | undefined {
+    const currentNodeId = session.state.currentNodeId;
+    const target = addressedReview(session, trailerNodeId);
+    const opensOne =
+      trailerNodeId === undefined && target.kind === 'refuse' && target.reason === 'no-review';
+    return opensOne && currentNodeId !== null && stepReviewGateIds(context).length === 0
+      ? ordinalOf(session.state.nodes, currentNodeId)
+      : undefined;
+  }
+
+  /**
+   * A PASS sent with an answer on a step that carries no gates grades nothing: the verdict is
+   * set aside and the answer is captured as if sent alone. A FAIL there is refused instead
+   * (`answerVerdict`), and a PASS with no answer keeps its refusal (R19).
+   */
+  private passGradesNothing(
+    context: ExecutionContext,
+    session: ChainSession,
+    verdict: ParsedGateVerdict,
+    hasResponse: boolean,
+    trailerNodeId: string | undefined
+  ): boolean {
+    return (
+      verdict.verdict === 'PASS' &&
+      hasResponse &&
+      this.gatelessStepOrdinal(context, session, trailerNodeId) !== undefined
+    );
   }
 
   /**
@@ -1037,6 +1118,28 @@ function describeMissingReview(
   return trailerNodeId === undefined
     ? `❌ No gate review is open on this run, so there is nothing for this call to answer${answerFirst}. Nothing was recorded.`
     : `❌ No gate review is open for node '${trailerNodeId}'. Nothing was recorded.`;
+}
+
+/** The sentence a FAIL reads on a step with no gates: there is nothing for it to fail. */
+function describeGatelessStep(ordinal: number): string {
+  return (
+    `❌ Step ${ordinal} carries no gates, so a FAIL verdict has nothing to grade; send its ` +
+    'output as user_response without a gate_verdict. Nothing was recorded.'
+  );
+}
+
+/** The sentence a `gate_action` reads on a review that still has attempts left. */
+function describeInBudgetAction(
+  action: GateAction,
+  review: GateReview,
+  session: ChainSession
+): string {
+  const ordinal = ordinalOf(session.state.nodes, review.nodeId);
+  return (
+    `❌ gate_action "${action}" is accepted only on an exhausted review; the review of step ` +
+    `${ordinal} is at ${review.attemptCount}/${review.maxAttempts} attempts — answer it or send ` +
+    'a gate_verdict. Nothing was recorded.'
+  );
 }
 
 /** The sentence a response-less PASS reads when the step its review grades has no answer. */

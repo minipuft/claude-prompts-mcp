@@ -11,9 +11,13 @@
  *
  * P4.116 — a FAIL verdict that arrives with the step's answer while no review is open was
  * recorded twice in one call: MEASURED before the fix, one such call left `attemptCount: 2` of 2
- * and the reply already reported the retry budget spent. Under the bundled gates a review is
- * opened up front at every step, so the no-review path is reached on a run with no gates
- * (`%clean`), which is where it lives.
+ * and the reply already reported the retry budget spent. Under the bundled gates a chain step's
+ * review is opened up front, so the no-review path is reached where no review opens at render: a
+ * single prompt, whose FAIL opens its review on the verdict. These pins lived on a `%clean` run
+ * until P6.76 (R38): a FAIL on a step with no gates now opens no review and is refused by name
+ * (MEASURED 2026-09-25: `%clean >>quick_decision` + answer + FAIL → "Step 1 carries no gates"),
+ * so they moved to `>>review` with the shipped blocking `pr-security` gate, where the same call
+ * shapes measured 1/2 and then 2/2 exhausted.
  */
 
 import { afterEach, describe, expect, test } from '@jest/globals';
@@ -142,24 +146,27 @@ describe('Streamable HTTP: a gate review states one state', () => {
     expect(after).toContain('Chain run already complete');
   }, 180000);
 
+  /** A single prompt with a blocking gate: no review opens at render, the FAIL opens it. */
+  const gatedSinglePrompt = { command: '>>review target:"src/index.ts"', gates: ['pr-security'] };
+
   test('P4.116: one call carrying the answer and a FAIL spends one attempt', async () => {
     const session = await startSession();
-    const chainId = chainIdOf(await session.call({ command: '%clean >>quick_decision topic:"b"' }));
+    const chainId = chainIdOf(await session.call(gatedSinglePrompt));
     expect(session.attemptCount()).toBeUndefined();
 
     const reply = await session.call({
       chain_id: chainId,
-      user_response: 'step one output',
+      user_response: 'review output',
       gate_verdict: 'GATE_REVIEW: FAIL - misses a constraint',
     });
 
     expect(session.attemptCount()).toBe(1);
-    expect(reply).not.toContain('failed after 2 attempts');
+    expect(reply).not.toContain('Retry Limit Reached');
   }, 180000);
 
   test('P4.116 CONTROL: the same FAIL on two calls spends two attempts', async () => {
     const session = await startSession();
-    const chainId = chainIdOf(await session.call({ command: '%clean >>quick_decision topic:"b"' }));
+    const chainId = chainIdOf(await session.call(gatedSinglePrompt));
 
     await session.call({
       chain_id: chainId,
@@ -169,10 +176,10 @@ describe('Streamable HTTP: a gate review states one state', () => {
 
     const reply = await session.call({
       chain_id: chainId,
-      user_response: 'step one output',
+      user_response: 'review output',
       gate_verdict: 'GATE_REVIEW: FAIL - still misses it',
     });
     expect(session.attemptCount()).toBe(2);
-    expect(reply).toContain('failed after 2 attempts');
+    expect(reply).toContain('Retry Limit Reached');
   }, 180000);
 });
