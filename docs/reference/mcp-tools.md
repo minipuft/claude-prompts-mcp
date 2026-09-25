@@ -566,10 +566,12 @@ prompt_engine(command:">>bugfix :: verify:'npm test' :full loop:true")
 
 **How it works:**
 
-1. Command runs after each response
-2. If FAIL + attempts remain → bounce-back (Claude retries automatically)
-3. If FAIL + max reached → escalation (user chooses `retry`/`skip`/`abort` via `gate_action`)
-4. With `loop:true` → Stop hook blocks completion until tests pass
+1. The command runs after each answer — never on the call that renders the prompt, even when that call carries a `user_response`, because nothing has been answered yet. On a chain, every step's answer is checked and each step gets its own attempt budget (`max:N` bounds each step); the chain completes only when the last step's check passes.
+2. A chain step is held while its check is pending: the run stays on that step until the check passes or a `gate_action` moves it.
+3. If FAIL + attempts remain → bounce-back (Claude retries automatically)
+4. If FAIL + max reached → escalation (user chooses `retry`/`skip`/`abort` via `gate_action`). Answering again after the attempts are spent re-shows the escalation without running the command.
+5. When a step has both an exhausted gate review and a pending check, one `gate_action` answers the review only. After a `skip`, the check still holds the step and the reply says so; answer again to re-run it, or send `skip` again to skip the check.
+6. With `loop:true` → Stop hook blocks completion until tests pass
 
 **Presets:**
 
