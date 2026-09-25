@@ -61,6 +61,21 @@ export interface CollectedGateCriteria {
 export type PromptLookup = (idOrName: string) => ConvertedPrompt | undefined;
 
 /**
+ * The prompt-level `subagentModel` / `agentType` an arrow-chain node inherits from its prompt
+ * (OQ-A2b). None for a chain prompt: `compileWorkflowIR` expands its node into the prompt's steps
+ * (R40), and the projection applies each STEP prompt's fallback, as a bare `>>chain` does.
+ */
+function promptLevelDelegationFallback(
+  prompt: ConvertedPrompt
+): Pick<WorkflowNode, 'subagentModel' | 'agentType'> {
+  if ((prompt.chainSteps?.length ?? 0) > 0) return {};
+  return {
+    ...(prompt.subagentModel !== undefined ? { subagentModel: prompt.subagentModel } : {}),
+    ...(prompt.agentType !== undefined ? { agentType: prompt.agentType } : {}),
+  };
+}
+
+/**
  * Builds structured ParsedCommand from symbolic operator parse results.
  *
  * Handles single-prompt and chain-based symbolic commands, resolving
@@ -306,12 +321,7 @@ export class SymbolicCommandBuilder {
         inlineGateCriteria: resolvedArgs.inlineCriteria,
         ...(step.delegated === true ? { delegated: true } : {}),
         // The prompt-level fallback OQ-A2b kept path-local. See the method docblock.
-        ...(convertedPrompt.subagentModel !== undefined
-          ? { subagentModel: convertedPrompt.subagentModel }
-          : {}),
-        ...(convertedPrompt.agentType !== undefined
-          ? { agentType: convertedPrompt.agentType }
-          : {}),
+        ...promptLevelDelegationFallback(convertedPrompt),
       });
     }
 

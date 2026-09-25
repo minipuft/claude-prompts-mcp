@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-25T10:13:27.184Z",
+  "generatedAt": "2026-09-25T11:37:21.091Z",
   "eslintTarget": "src,scripts,eslint-rules",
   "totals": {
     "errors": 2565,
-    "warnings": 739
+    "warnings": 738
   },
   "byRule": {
     "@typescript-eslint/strict-boolean-expressions": {
@@ -13,7 +13,7 @@
     },
     "sonarjs/cognitive-complexity": {
       "errors": 0,
-      "warnings": 79
+      "warnings": 78
     },
     "@typescript-eslint/no-non-null-assertion": {
       "errors": 0,

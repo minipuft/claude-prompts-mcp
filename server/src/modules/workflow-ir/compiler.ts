@@ -27,6 +27,8 @@
  * Pure: no I/O, no logging. The prompt lookup is injected, exactly as the validator's is.
  */
 
+import { expandChainPromptNodes } from './chain-prompt-expansion.js';
+
 import type { ChainStepPrompt } from '#engine/execution/operators/types.js';
 import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { DeclaredRunBudget } from '#shared/types/chain-session.js';
@@ -79,9 +81,13 @@ export function compileWorkflowIR(
   order: readonly string[],
   deps: WorkflowCompilerDeps
 ): WorkflowCompilation {
-  const byId = new Map<string, WorkflowNode>(ir.nodes.map((node) => [node.id, node]));
+  // A node naming a chain prompt runs that prompt's steps (R40): expanded IR → IR first, so each
+  // node below still compiles to exactly one step. Both command sources — an arrow-chain command
+  // and a submitted workflow — reach this line, which is why the expansion is called here.
+  const expanded = expandChainPromptNodes(ir, order, deps.lookupPrompt);
+  const byId = new Map<string, WorkflowNode>(expanded.ir.nodes.map((node) => [node.id, node]));
 
-  const steps: ChainStepPrompt[] = order.map((nodeId, index) => {
+  const steps: ChainStepPrompt[] = expanded.order.map((nodeId, index) => {
     const node = byId.get(nodeId);
     if (node === undefined) {
       throw new WorkflowCompileError(
