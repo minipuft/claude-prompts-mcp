@@ -192,6 +192,23 @@ describe('advanceReview', () => {
     ).toBe('exhausted');
   });
 
+  test('an unanswered non-blocking FAIL is charged and keeps the review open (R26)', () => {
+    const UNANSWERED: ReviewEvent = { ...FAIL, unanswered: true } as ReviewEvent;
+    for (const mode of ['advisory', 'informational'] as const) {
+      expect(advanceReview(review({ attemptCount: 1 }), UNANSWERED, mode)).toMatchObject({
+        outcome: 'failed',
+        attempt: 2,
+        review: { attemptCount: 2, phase: 'awaiting-verdict' },
+      });
+      expect(advanceReview(review({ attemptCount: 2 }), UNANSWERED, mode)).toMatchObject({
+        outcome: 'exhausted',
+        review: { attemptCount: 3, phase: 'exhausted' },
+      });
+    }
+    // CONTROL: the same FAIL grading an answer still clears the review.
+    expect(advanceReview(review(), FAIL, 'advisory').outcome).toBe('cleared');
+  });
+
   test('a PASS over a failing recorded check is refused and charges nothing', () => {
     const failing = review({
       checkResults: [

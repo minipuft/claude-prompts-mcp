@@ -915,6 +915,84 @@ describe('delegation handoff evidence at resume (Tier 2 row 2.7)', () => {
       expect(text(reply)).toContain(`Gate ${GATE_ID} failed: misses the gate`);
       expect(onlySession().state.currentNodeId).toBe(DELEGATED_NODE_ID);
     });
+
+    /**
+     * R26 (P6.38): a review's attempt count belongs to its node. A bare non-blocking FAIL spends
+     * an attempt and leaves the review OPEN at that count; before, it cleared the review and
+     * stage 13 opened a fresh one on the next resume, so the count read 1 on every call.
+     */
+    describe('a bare non-blocking FAIL spends an attempt of an open review (R26, P6.38)', () => {
+      const startPlain = async (
+        gateMode: 'blocking' | 'advisory',
+        retries?: number
+      ): Promise<{ pipeline: PromptExecutionPipeline; chainId: string; sessionId: string }> => {
+        const steps = plainSteps().map((step) =>
+          retries === undefined ? step : { ...step, retries }
+        );
+        const pipeline = buildPipeline({ sessionStore, recordStore, logger, gateMode, steps });
+        await pipeline.execute({ command: `>>draft --> >>review` } as any);
+        const { chainId, sessionId } = onlySession();
+        return { pipeline, chainId, sessionId };
+      };
+
+      test('two bare advisory FAILs read attempt 2 and the review stays open; a third exhausts it', async () => {
+        const { pipeline, chainId, sessionId } = await startPlain('advisory', 3);
+
+        await pipeline.execute({ chain_id: chainId, gate_verdict: failVerdict } as any);
+        const second = await pipeline.execute({
+          chain_id: chainId,
+          gate_verdict: failVerdict,
+        } as any);
+
+        expect(text(second)).toContain(`Gate ${GATE_ID} failed: misses the gate`);
+        // The review is still open, so the reply offers it; the label names the NEXT attempt,
+        // as it does for a blocking review. Before R26 the reply offered no review at all.
+        expect(text(second)).toContain('**Gate Review Required** (attempt 3/3)');
+        expect(sessionStore.getReview(sessionId, 'n1')).toMatchObject({
+          attemptCount: 2,
+          maxAttempts: 3,
+          phase: 'awaiting-verdict',
+        });
+        expect(onlySession().state.currentNodeId).toBe('n1');
+
+        const third = await pipeline.execute({
+          chain_id: chainId,
+          gate_verdict: failVerdict,
+        } as any);
+        expect(text(third)).toContain('gate_action="retry" | gate_action="skip"');
+        expect(sessionStore.getReview(sessionId, 'n1')).toMatchObject({
+          attemptCount: 3,
+          phase: 'exhausted',
+        });
+        expect(onlySession().state.currentNodeId).toBe('n1');
+      });
+
+      test('CONTROL: an advisory FAIL WITH the answer advances with its warning', async () => {
+        const { pipeline, chainId, sessionId } = await startPlain('advisory', 3);
+
+        const reply = await pipeline.execute({
+          chain_id: chainId,
+          user_response: 'step 1 output',
+          gate_verdict: failVerdict,
+        } as any);
+
+        expect(text(reply)).toContain(`Gate ${GATE_ID} failed: misses the gate`);
+        expect(onlySession().state.currentNodeId).toBe(DELEGATED_NODE_ID);
+        expect(sessionStore.getReview(sessionId, 'n1')).toBeUndefined();
+      });
+
+      test('CONTROL: a bare blocking FAIL reads attempt 1 and the review stays open (P4.116)', async () => {
+        const { pipeline, chainId, sessionId } = await startPlain('blocking');
+
+        await pipeline.execute({ chain_id: chainId, gate_verdict: failVerdict } as any);
+
+        expect(sessionStore.getReview(sessionId, 'n1')).toMatchObject({
+          attemptCount: 1,
+          phase: 'awaiting-verdict',
+        });
+        expect(onlySession().state.currentNodeId).toBe('n1');
+      });
+    });
   });
 
   describe('a remainder sent alone at the delegated node (R19, P6.17)', () => {

@@ -17,7 +17,9 @@
  * A blocking FAIL charges one attempt and lands on `exhausted` once `attemptCount` reaches
  * `maxAttempts`; otherwise a detached review awaits a replacement report and any other awaits
  * the next verdict (a current step's answer arrives on the same call as its verdict). An advisory
- * or informational FAIL charges the attempt and clears the review. Any other event is refused,
+ * or informational FAIL charges the attempt and clears the review — unless the verdict grades no
+ * answer (`unanswered`), when it is charged like a blocking one and the review stays open at that
+ * count (R26): the count belongs to the node. Any other event is refused,
  * and so is a PASS over a check the review recorded as failing; a refusal charges nothing.
  *
  * Pure: never mutates the review it is given; the caller persists what it returns.
@@ -32,7 +34,13 @@ import type { EnforcementMode, GateAction, ParsedVerdict } from './gate-enforcem
 
 /** What can happen to a review. `at` stamps the history entry the event leaves. */
 export type ReviewEvent =
-  | { readonly type: 'verdict'; readonly verdict: ParsedVerdict; readonly at: number }
+  | {
+      readonly type: 'verdict';
+      readonly verdict: ParsedVerdict;
+      readonly at: number;
+      /** Neither the call nor the graded node carries an answer (R26). */
+      readonly unanswered?: boolean;
+    }
   | { readonly type: 'replacement-report'; readonly output: string }
   | { readonly type: 'gate_action'; readonly action: GateAction; readonly at: number };
 
@@ -84,7 +92,7 @@ export function advanceReview(
   }
   switch (event.type) {
     case 'verdict':
-      return applyVerdict(review, event.verdict, event.at, enforcement);
+      return applyVerdict(review, event, enforcement);
     case 'replacement-report': {
       const { checkResults: _stale, ...kept } = review;
       const reopened: GateReview = {
@@ -101,8 +109,7 @@ export function advanceReview(
 
 function applyVerdict(
   review: GateReview,
-  verdict: ParsedVerdict,
-  at: number,
+  { verdict, at, unanswered }: Extract<ReviewEvent, { type: 'verdict' }>,
   enforcement: EnforcementMode
 ): ReviewAdvance {
   if (verdict.verdict === 'PASS' && (review.checkResults ?? []).some((result) => !result.passed)) {
@@ -112,7 +119,7 @@ function applyVerdict(
   if (verdict.verdict === 'PASS') {
     return { outcome: 'passed', review: null, attempt };
   }
-  if (enforcement !== 'blocking') {
+  if (enforcement !== 'blocking' && unanswered !== true) {
     return { outcome: 'cleared', review: null, attempt };
   }
   const charged: GateReview = {

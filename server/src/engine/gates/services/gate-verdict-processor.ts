@@ -119,6 +119,8 @@ interface ReviewEntry {
   readonly open?: (nodeId: string) => Promise<GateReview>;
   /** Grades the review before the event lands — a detached review's checks (R10.3). */
   readonly grade?: (review: GateReview) => Promise<GateReview>;
+  /** The call carries no answer; with an unanswered node, the verdict grades nothing (R26). */
+  readonly answerless?: boolean;
 }
 
 /**
@@ -502,8 +504,13 @@ export class GateVerdictProcessor {
     if (verdictPayload === null || (opensNone && addressedReview(session).kind === 'refuse')) {
       return untouched;
     }
-    const bare = !hasResponse && verdictPayload.verdict === 'PASS';
-    const answer = await this.answerVerdict(context, session, verdictPayload, bare, trailerNodeId);
+    const answer = await this.answerVerdict(
+      context,
+      session,
+      verdictPayload,
+      hasResponse,
+      trailerNodeId
+    );
     if (answer.kind === 'refused') {
       context.setResponse({ content: [{ type: 'text', text: answer.message }], isError: true });
       context.diagnostics.warn('GateVerdictProcessor', 'Gate verdict refused', {
@@ -531,16 +538,10 @@ export class GateVerdictProcessor {
         context.state.gates.phaseGuardReviewClearedNodeId = review.nodeId;
       }
       await this.emitGateEvents(context, 'passed', [...review.gateIds], verdictPayload.rationale);
-    } else if (advance.review !== null) {
+    } else if (advance.review !== null && answer.enforcement === 'blocking') {
       await this.handleBlockingFail(context, advance, verdictPayload);
     } else {
-      deferredAdvance = await this.handleNonBlockingFail(
-        context,
-        session,
-        answer,
-        verdictPayload,
-        hasResponse
-      );
+      deferredAdvance = await this.handleNonBlockingFail(context, session, answer, verdictPayload);
     }
 
     if (advance.review === null) {
@@ -566,9 +567,10 @@ export class GateVerdictProcessor {
     context: ExecutionContext,
     session: ChainSession,
     verdict: ParsedGateVerdict,
-    bare: boolean,
+    hasResponse: boolean,
     trailerNodeId: string | undefined
   ): Promise<ReviewAnswer> {
+    const bare = !hasResponse && verdict.verdict === 'PASS';
     const unanswered = bare ? this.unansweredReviewNode(session, trailerNodeId) : undefined;
     if (unanswered !== undefined) {
       return { kind: 'refused', message: describeUnansweredStep(session, unanswered) };
@@ -576,6 +578,7 @@ export class GateVerdictProcessor {
     const authority = context.gateEnforcement;
     return this.answerReview(context, session, {
       event: { type: 'verdict', verdict, at: Date.now() },
+      answerless: !hasResponse,
       ...(trailerNodeId !== undefined ? { trailerNodeId } : {}),
       ...(authority !== undefined && !bare
         ? {
@@ -592,9 +595,9 @@ export class GateVerdictProcessor {
   /**
    * Does `nodeId` hold a captured output? A verdict sent with no answer captures nothing, so it
    * may move the run past a node only when this is true (R19): a non-blocking FAIL on an
-   * unanswered node is recorded and warned about, and the run stays on it (P6.35). Dropping the
-   * advance rather than refusing keeps every FAIL polarity alike — a bare blocking FAIL spends an
-   * attempt (P4.116), and this one records its FAIL the same way.
+   * unanswered node is recorded and warned about, and the run stays on it (P6.35). Holding the
+   * review rather than refusing keeps every FAIL polarity alike — a bare FAIL of either mode
+   * spends an attempt of the node's open review (P4.116, R26).
    */
   private holdsAnswer(nodeId: string, session: ChainSession): boolean {
     return this.chainSessionStore.isStepComplete(session.sessionId, nodeId);
@@ -644,7 +647,7 @@ export class GateVerdictProcessor {
       await this.chainSessionStore.setReview(session.sessionId, review);
     }
 
-    const { event } = entry;
+    const event = this.markUnanswered(entry, review.nodeId, session);
     const failedGateIds =
       event.type === 'verdict'
         ? this.recordPerGateVerdicts(context, event.verdict.raw, review)
@@ -665,6 +668,16 @@ export class GateVerdictProcessor {
       await this.chainSessionStore.setReview(session.sessionId, advance.review);
     }
     return { kind: 'answered', review, advance, enforcement, failedGateIds };
+  }
+
+  /** The entry's event, flagged `unanswered` when neither the call nor the node holds an answer. */
+  private markUnanswered(entry: ReviewEntry, nodeId: string, session: ChainSession): ReviewEvent {
+    const { event } = entry;
+    return event.type === 'verdict' &&
+      entry.answerless === true &&
+      !this.holdsAnswer(nodeId, session)
+      ? { ...event, unanswered: true }
+      : event;
   }
 
   /**
@@ -744,23 +757,7 @@ export class GateVerdictProcessor {
     verdictPayload: { rationale: string }
   ): Promise<void> {
     const review = advance.review;
-    if (advance.outcome === 'exhausted') {
-      context.state.gates.retryLimitExceeded = true;
-      context.state.gates.escalationSource = 'gate-review';
-      context.state.gates.retryExhaustedGateIds = [...review.gateIds];
-      context.diagnostics.warn('GateVerdictProcessor', 'Gate retry limit exceeded', {
-        attemptCount: review.attemptCount,
-        maxAttempts: review.maxAttempts,
-        gateIds: review.gateIds,
-      });
-      await this.emitGateEvents(
-        context,
-        'retryExhausted',
-        review.gateIds,
-        verdictPayload.rationale,
-        review.maxAttempts
-      );
-    }
+    await this.flagExhaustion(context, advance, verdictPayload.rationale);
 
     if (context.gates.hasBlockingGates()) {
       const blockedGateIds = [...context.gates.getBlockingGateIds()];
@@ -776,20 +773,46 @@ export class GateVerdictProcessor {
     context.diagnostics.info('GateVerdictProcessor', 'Gate FAIL - blocking mode, awaiting retry');
   }
 
+  /** An exhausting FAIL flags the retry limit and announces `retryExhausted`, in any mode. */
+  private async flagExhaustion(
+    context: ExecutionContext,
+    advance: AppliedAdvance,
+    rationale: string
+  ): Promise<void> {
+    const review = advance.review;
+    if (advance.outcome !== 'exhausted' || review === null) {
+      return;
+    }
+    context.state.gates.retryLimitExceeded = true;
+    context.state.gates.escalationSource = 'gate-review';
+    context.state.gates.retryExhaustedGateIds = [...review.gateIds];
+    context.diagnostics.warn('GateVerdictProcessor', 'Gate retry limit exceeded', {
+      attemptCount: review.attemptCount,
+      maxAttempts: review.maxAttempts,
+      gateIds: review.gateIds,
+    });
+    await this.emitGateEvents(
+      context,
+      'retryExhausted',
+      review.gateIds,
+      rationale,
+      review.maxAttempts
+    );
+  }
+
   /**
-   * Advisory or informational FAIL: the review is already cleared (`advanceReview`); announce it
-   * and decide the advance past the node the review graded, for the stage to apply after the
-   * capture. Advisory also warns, naming the gates the verdict failed when it named any. A FAIL
-   * sent with no answer on a node that holds none decides no advance (R19, P6.35).
+   * Advisory or informational FAIL: announce it and decide the advance past the node the review
+   * graded, for the stage to apply after the capture. Advisory also warns, naming the gates the
+   * verdict failed when it named any. A FAIL that graded no answer left its review open, charged
+   * (R26): it advances nothing (R19, P6.35), and past the budget it exhausts as a blocking one.
    */
   private async handleNonBlockingFail(
     context: ExecutionContext,
     session: ChainSession,
     answer: Extract<ReviewAnswer, { kind: 'answered' }>,
-    verdictPayload: { rationale: string },
-    hasResponse: boolean
+    verdictPayload: { rationale: string }
   ): Promise<DeferredAdvance | undefined> {
-    const { review, enforcement, failedGateIds } = answer;
+    const { review, enforcement, failedGateIds, advance } = answer;
     const advisory = enforcement === 'advisory';
     const gateIds = advisory && failedGateIds.length > 0 ? [...failedGateIds] : [...review.gateIds];
     if (advisory) {
@@ -808,8 +831,9 @@ export class GateVerdictProcessor {
         }
       );
     }
+    await this.flagExhaustion(context, advance, verdictPayload.rationale);
     await this.emitGateEvents(context, 'failed', gateIds, verdictPayload.rationale);
-    if (!hasResponse && !this.holdsAnswer(review.nodeId, session)) {
+    if (advance.review !== null) {
       return undefined;
     }
     return {
