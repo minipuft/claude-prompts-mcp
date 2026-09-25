@@ -230,6 +230,117 @@ describe('ShellVerificationStage', () => {
     });
   });
 
+  // P6.32: only a gate_action moves a spent check, and a gate_action acts at any attempt count.
+  describe('the attempt limit holds without gate_action (P6.32)', () => {
+    const failed = {
+      passed: false,
+      exitCode: 1,
+      stdout: '',
+      stderr: 'FAIL',
+      timedOut: false,
+      durationMs: 50,
+      command: 'npm test',
+    };
+    const replyCall = (args: Record<string, unknown>) => {
+      const context = new ExecutionContext({ chain_id: 'chain-test#1', ...args });
+      context.state.session.resumeSessionId = 'test-session';
+      return context;
+    };
+
+    test('an answer after the attempts are spent re-renders the escalation and runs nothing', async () => {
+      const executor = createMockExecutor(false);
+      const sessionService = createMockSessionService();
+      (sessionService.getPendingShellVerification as jest.Mock).mockReturnValue({
+        gateId: 'shell-verify-inline',
+        shellVerify: { command: 'npm test' },
+        attemptCount: 2,
+        maxAttempts: 2,
+        previousResults: [failed, failed],
+        nodeId: 'node-1',
+      });
+      const stage = new ShellVerificationStage(
+        executor,
+        createMockStateManager(),
+        sessionService,
+        createAdvanceOwner(),
+        createLogger()
+      );
+      const context = replyCall({ user_response: 'one more try' });
+
+      await stage.execute(context);
+
+      expect(executor.execute).not.toHaveBeenCalled();
+      const text = JSON.stringify(context.response);
+      expect(text).toContain('Maximum Attempts Reached');
+      expect(text).toContain('**Attempts:** 2/2');
+      expect(context.state.gates.pendingShellVerification?.attemptCount).toBe(2);
+      expect(context.state.gates.pendingShellVerification?.previousResults).toHaveLength(2);
+    });
+
+    test('control: retry resets to 0/N, and the next answer runs the check', async () => {
+      const executor = createMockExecutor(false);
+      const sessionService = createMockSessionService();
+      (sessionService.getPendingShellVerification as jest.Mock).mockReturnValue({
+        gateId: 'shell-verify-inline',
+        shellVerify: { command: 'npm test' },
+        attemptCount: 2,
+        maxAttempts: 2,
+        previousResults: [failed, failed],
+        nodeId: 'node-1',
+      });
+      const stage = new ShellVerificationStage(
+        executor,
+        createMockStateManager(),
+        sessionService,
+        createAdvanceOwner(),
+        createLogger()
+      );
+
+      const retried = replyCall({ gate_action: 'retry' });
+      await stage.execute(retried);
+      expect(JSON.stringify(retried.response)).toContain('0/2');
+      const [, saved] = (sessionService.setPendingShellVerification as jest.Mock).mock.calls[0];
+      (sessionService.getPendingShellVerification as jest.Mock).mockReturnValue(saved);
+
+      const answered = replyCall({ user_response: 'fixed' });
+      await stage.execute(answered);
+      expect(executor.execute).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(answered.response)).toContain('Attempt 1/2');
+    });
+
+    test('skip sent with an answer before the attempts are spent acts on it and runs nothing', async () => {
+      const executor = createMockExecutor(false);
+      const sessionService = createMockSessionService();
+      (sessionService.getPendingShellVerification as jest.Mock).mockReturnValue({
+        gateId: 'shell-verify-inline',
+        shellVerify: { command: 'npm test' },
+        attemptCount: 1,
+        maxAttempts: 3,
+        previousResults: [failed],
+        nodeId: 'node-1',
+      });
+      const advanceOwner = createAdvanceOwner();
+      const stage = new ShellVerificationStage(
+        executor,
+        createMockStateManager(),
+        sessionService,
+        advanceOwner,
+        createLogger()
+      );
+      const context = replyCall({ user_response: 'my answer', gate_action: 'skip' });
+
+      await stage.execute(context);
+
+      expect(executor.execute).not.toHaveBeenCalled();
+      expect(sessionService.clearPendingShellVerification).toHaveBeenCalled();
+      expect(advanceOwner.applyDeferredAdvance).toHaveBeenCalledWith(context, {
+        sessionId: 'test-session',
+        nodeId: 'node-1',
+        reason: 'gate-skip',
+      });
+    });
+  });
+
   describe('gate_action handling', () => {
     const createEscalatedContext = (gateAction: 'retry' | 'skip' | 'abort') => {
       const context = new ExecutionContext({

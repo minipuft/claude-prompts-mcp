@@ -203,4 +203,39 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
     expect(answered.text).toContain('Progress 2/3');
     expect(runs()).toBe(1);
   }, 180000);
+
+  test('P6.32 (a): an answer after the attempts are spent re-renders the escalation, runs nothing', async () => {
+    const { call, runs } = await startVerifiedChain(false, ' max:2');
+    await answer(call, 'Step 1');
+    await call({ user_response: 'still missing' });
+    expect(runs()).toBe(2);
+
+    const again = await call({ user_response: 'one more try' });
+    expect(again.text).toContain('Maximum Attempts Reached');
+    expect(again.text).toContain('**Attempts:** 2/2');
+    expect(count(again, STEP_COMPLETE)).toBe(0);
+    expect(runs()).toBe(2);
+  }, 180000);
+
+  test('P6.32 (b) control: retry resets to 0/N and the next answer runs the check', async () => {
+    const { call, runs } = await startVerifiedChain(false, ' max:2');
+    await answer(call, 'Step 1');
+    await call({ user_response: 'still missing' });
+    expect((await call({ gate_action: 'retry' })).text).toContain('Attempts:** 0/2');
+
+    const rerun = await call({ user_response: 'fixed now' });
+    expect(rerun.text).toContain('Shell Verification FAILED (Attempt 1/2)');
+    expect(runs()).toBe(3);
+  }, 180000);
+
+  test('P6.32 (c): skip sent with an answer before the attempts are spent acts, runs nothing', async () => {
+    const { call, runs } = await startVerifiedChain(false, ' max:3');
+    await answer(call, 'Step 1');
+    expect(runs()).toBe(1);
+
+    const skipped = await call({ user_response: 'my answer', gate_action: 'skip' });
+    expect(skipped.text).toContain('Progress 2/3');
+    expect(count(skipped, STEP_COMPLETE)).toBe(1);
+    expect(runs()).toBe(1);
+  }, 180000);
 });

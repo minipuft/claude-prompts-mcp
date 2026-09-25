@@ -82,7 +82,8 @@ export class ShellVerificationStage extends BasePipelineStage {
       await this.saveToSession(context, pending);
       return;
     }
-    if (gateAction !== undefined && pending.attemptCount >= pending.maxAttempts) {
+    // A gate_action is acted on whenever a check is pending, at any attempt count (P6.32)
+    if (gateAction !== undefined) {
       await this.handleGateAction(context, gateAction, pending);
       return;
     }
@@ -94,6 +95,13 @@ export class ShellVerificationStage extends BasePipelineStage {
     if (userResponse === undefined || userResponse === '') {
       if (armedThisCall) await this.armOnRender(context, pending);
       this.logExit({ skipped: 'Awaiting user response before verification' });
+      return;
+    }
+
+    // Spent: only a gate_action moves an exhausted check; an answer re-renders the escalation.
+    const lastResult = pending.previousResults[pending.previousResults.length - 1];
+    if (pending.attemptCount >= pending.maxAttempts && lastResult !== undefined) {
+      await this.handleVerificationFailed(context, lastResult, pending);
       return;
     }
 
