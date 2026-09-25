@@ -131,13 +131,7 @@ export class ResponseAssembler {
       sections.push(context.gateInstructions);
     }
 
-    if (gateActive) {
-      const advisoryWarnings = context.state.gates.advisoryWarnings;
-      if (advisoryWarnings && advisoryWarnings.length > 0) {
-        sections.push('\n---\n**Advisory Gate Warnings:**');
-        advisoryWarnings.forEach((warning) => sections.push(`- ${warning}`));
-      }
-    }
+    sections.push(...this.buildAdvisoryWarnings(context));
 
     // Gate review CTA (only when gate content active) or final completion
     const gateReviewCTA = gateActive ? this.buildGateReviewCTA(context) : null;
@@ -202,13 +196,7 @@ export class ResponseAssembler {
       sections.push(context.gateInstructions);
     }
 
-    if (gateActive) {
-      const advisoryWarnings = context.state.gates.advisoryWarnings;
-      if (advisoryWarnings && advisoryWarnings.length > 0) {
-        sections.push('\n---\n**Advisory Gate Warnings:**');
-        advisoryWarnings.forEach((warning) => sections.push(`- ${warning}`));
-      }
-    }
+    sections.push(...this.buildAdvisoryWarnings(context));
 
     // Declared section headers (Tier 2.5, OQ-1) — same block the chain path renders via
     // buildResponseFormatSection. A gated single prompt (explicit `gates`, a `gate` operator, or
@@ -1245,6 +1233,18 @@ export class ResponseAssembler {
     }
 
     return provider(frameworkId);
+  }
+
+  /**
+   * What this call's non-blocking FAILs warned about (an advisory verdict, a phase guard in warn
+   * mode). It reports the call itself, so it renders even when gate content is suppressed: the
+   * FAIL that completes a chain still happened (P6.37).
+   */
+  private buildAdvisoryWarnings(context: ExecutionContext): string[] {
+    const warnings = context.state.gates.advisoryWarnings;
+    return warnings.length === 0
+      ? []
+      : ['\n---\n**Advisory Gate Warnings:**', ...warnings.map((warning) => `- ${warning}`)];
   }
 
   /**

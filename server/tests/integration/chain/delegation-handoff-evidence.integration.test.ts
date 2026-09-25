@@ -921,6 +921,58 @@ describe('delegation handoff evidence at resume (Tier 2 row 2.7)', () => {
      * an attempt and leaves the review OPEN at that count; before, it cleared the review and
      * stage 13 opened a fresh one on the next resume, so the count read 1 on every call.
      */
+    /**
+     * P6.37: the warning of an advisory FAIL on the LAST step reaches the completion reply.
+     * Before, "Chain complete" rendered and the warning of the FAIL that finished it did not.
+     */
+    describe("an advisory FAIL's warning reaches every reply (P6.37)", () => {
+      const startPlainAdvisory = async (): Promise<{
+        pipeline: PromptExecutionPipeline;
+        chainId: string;
+      }> => {
+        const pipeline = buildPipeline({
+          sessionStore,
+          recordStore,
+          logger,
+          gateMode: 'advisory',
+          steps: plainSteps(),
+        });
+        await pipeline.execute({ command: `>>draft --> >>review` } as any);
+        return { pipeline, chainId: onlySession().chainId };
+      };
+
+      test('an advisory FAIL sent with the last answer: "Chain complete" AND the warning', async () => {
+        const { pipeline, chainId } = await startPlainAdvisory();
+        await pipeline.execute({
+          chain_id: chainId,
+          user_response: 'step 1 output',
+          gate_verdict: passVerdict,
+        } as any);
+
+        const reply = await pipeline.execute({
+          chain_id: chainId,
+          user_response: 'step 2 output',
+          gate_verdict: failVerdict,
+        } as any);
+
+        expect(text(reply)).toContain('Chain complete');
+        expect(text(reply)).toContain(`Gate ${GATE_ID} failed: misses the gate`);
+      });
+
+      test('CONTROL: a mid-chain advisory FAIL renders its warning', async () => {
+        const { pipeline, chainId } = await startPlainAdvisory();
+
+        const reply = await pipeline.execute({
+          chain_id: chainId,
+          user_response: 'step 1 output',
+          gate_verdict: failVerdict,
+        } as any);
+
+        expect(text(reply)).not.toContain('Chain complete');
+        expect(text(reply)).toContain(`Gate ${GATE_ID} failed: misses the gate`);
+      });
+    });
+
     describe('a bare non-blocking FAIL spends an attempt of an open review (R26, P6.38)', () => {
       const startPlain = async (
         gateMode: 'blocking' | 'advisory',

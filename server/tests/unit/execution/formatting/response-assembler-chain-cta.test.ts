@@ -583,6 +583,20 @@ describe('ResponseAssembler – chain-path CTA methods', () => {
       expect(result).toContain('Advisory Gate Warnings');
       expect(result).toContain('Phase guard warning: check structure');
     });
+
+    test('renders advisory warnings in the reply that completes the chain (P6.37)', () => {
+      const context = createChainContext({
+        currentStep: 2,
+        totalSteps: 2,
+        advisoryWarnings: ['Gate step-quality failed: misses the gate'],
+      });
+      context.state.session.chainComplete = true;
+
+      const result = assembler.formatChainResponse(context, { isChainFormatting: true } as any);
+
+      expect(result).toContain('Chain execution complete');
+      expect(result).toContain('Gate step-quality failed: misses the gate');
+    });
   });
 
   describe('node-driven fallback readers (P4 row 5.4)', () => {
