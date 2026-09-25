@@ -1,4 +1,5 @@
 // @lifecycle canonical - Assembles response content for pipeline formatting stage.
+import { declaresFrameworkSections } from '../../frameworks/declared-sections.js';
 import { JUDGE_OUTPUT_PLACEHOLDER } from '../../gates/core/review-utils.js';
 import { SHELL_VERIFY_DEFAULT_MAX_ITERATIONS } from '../../gates/shell/types.js';
 import { handoffNodeToken } from '../delegation/handoff-contract.js';
@@ -1151,8 +1152,8 @@ export class ResponseAssembler {
    * Declared phase-guard headers for the framework active on this single-prompt execution, or
    * `[]` when this execution will not be graded by stage 19 at all.
    *
-   * Four independent skip conditions (Tier 2.6; the fourth added for issue #228), each a
-   * separate reason to declare nothing:
+   * Five independent skip conditions (Tier 2.6; the fourth added for issue #228, the fifth by
+   * R22), each a separate reason to declare nothing:
    *
    * 1. No provider wired — pre-Tier-2 behavior, byte-identical.
    * 2. No session (`context.sessionContext?.sessionId` absent) — an UNGATED single prompt never
@@ -1203,7 +1204,9 @@ export class ResponseAssembler {
       !isFrameworkInjected({
         modifiers: context.getExecutionModifiers(),
         promptInjection: context.parsedCommand?.convertedPrompt?.injection,
-      })
+      }) ||
+      // 5. The prompt turned framework gates off (R22): the sections are graded, so a gate.
+      !declaresFrameworkSections(context.parsedCommand?.convertedPrompt)
     ) {
       return [];
     }

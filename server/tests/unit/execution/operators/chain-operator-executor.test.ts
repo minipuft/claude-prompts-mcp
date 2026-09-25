@@ -676,6 +676,11 @@ describe('ChainOperatorExecutor', () => {
         ],
         ['the `%clean` modifier', { executionPlan: { modifiers: { clean: true } } }],
         ['the `%lean` modifier', { executionPlan: { modifiers: { lean: true } } }],
+        // R22: the sections are graded, so turning the framework's gates off turns them off too.
+        [
+          '`gateConfiguration.framework_gates: false`',
+          { convertedPrompt: { gateConfiguration: { framework_gates: false } } },
+        ],
       ];
 
       test.each(declineCases)('%s withholds the Required Sections block', async (_label, extra) => {

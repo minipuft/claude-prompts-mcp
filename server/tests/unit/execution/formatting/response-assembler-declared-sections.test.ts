@@ -228,6 +228,26 @@ describe('ResponseAssembler – declared section headers (Tier 2.5/2.6)', () => 
       expect(spy).not.toHaveBeenCalled();
     });
 
+    /**
+     * R22. A prompt that turns framework gates off keeps the framework's guidance but declares
+     * none of its sections: the sections are graded, so they are a framework gate.
+     */
+    test('a prompt declaring `gateConfiguration.framework_gates: false` declares nothing', () => {
+      const assembler = new ResponseAssembler(undefined, jest.fn(provider));
+      const context = createContext({ gated: true, frameworkId: 'cageerf' });
+      context.parsedCommand = {
+        ...context.parsedCommand!,
+        convertedPrompt: {
+          ...context.parsedCommand!.convertedPrompt!,
+          gateConfiguration: { framework_gates: false },
+        },
+      };
+
+      expect(assembler.formatSinglePromptResponse(context, {} as any)).not.toContain(
+        'Required Sections'
+      );
+    });
+
     test('a suppressing modifier declares nothing', () => {
       const assembler = new ResponseAssembler(undefined, jest.fn(provider));
       const context = createContext({

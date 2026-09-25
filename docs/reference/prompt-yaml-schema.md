@@ -130,6 +130,10 @@ gateConfiguration:
   framework_gates: false
 ```
 
+`framework_gates: false` also withholds the framework's required sections: the prompt is still
+shown the framework's guidance, but it is never told to emit the section headers and its answer is
+not graded for them.
+
 ### Inline Gate Definitions
 
 A prompt may define a gate inline rather than referencing a registered one. This is narrower than a

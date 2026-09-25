@@ -1,4 +1,5 @@
 // @lifecycle canonical - Executes chain operator steps within the pipeline.
+import { declaresFrameworkSections } from '../../frameworks/declared-sections.js';
 import { hasFrameworkGuidance } from '../../frameworks/utils/framework-detection.js';
 import { GATE_ATTESTATION_LINE } from '../../gates/guidance/GateGuidanceRenderer.js';
 import { buildDelegatedStepCallToAction, buildDelegatedStepLines } from '../delegation/brief.js';
@@ -736,10 +737,13 @@ export class ChainOperatorExecutor {
    */
   private resolveDeclaredSections(step?: ChainStepPrompt): DeclaredSection[] {
     const provider = this.collaborators?.declaredSectionsProvider;
-    const declinesFramework = !isFrameworkInjected({
-      modifiers: step?.executionPlan?.modifiers,
-      promptInjection: step?.convertedPrompt?.injection,
-    });
+    // Two opt-outs, one answer: the step declined the framework itself, or its prompt turned the
+    // framework's gates off (R22) — the sections are graded, so they are a gate.
+    const declinesFramework =
+      !isFrameworkInjected({
+        modifiers: step?.executionPlan?.modifiers,
+        promptInjection: step?.convertedPrompt?.injection,
+      }) || !declaresFrameworkSections(step?.convertedPrompt);
     if (!provider || declinesFramework) {
       return [];
     }

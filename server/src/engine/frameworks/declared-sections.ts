@@ -75,6 +75,21 @@ export function resolveGuardedProcessingSteps(
 }
 
 /**
+ * Whether a prompt's render may declare the framework's section headers at all (ruling R22).
+ *
+ * A prompt that turns framework gates off (`gateConfiguration.framework_gates: false`) declares
+ * none. The declared sections ARE a framework gate — stage 19 grades them, forbidden terms
+ * included — so the author's opt-out from the framework's gates is an opt-out from them too. The
+ * framework's system prompt may still be injected: that is guidance, and grades nothing. Both
+ * declaration surfaces (`chain-operator-executor`, `response-assembler`) ask this one predicate.
+ */
+export function declaresFrameworkSections(prompt?: {
+  gateConfiguration?: { framework_gates?: boolean };
+}): boolean {
+  return prompt?.gateConfiguration?.framework_gates !== false;
+}
+
+/**
  * Resolve the declared header vocabulary for a framework's guarded phases — pure derivation of
  * `resolveGuardedProcessingSteps`. One entry per guarded phase; `required` comes from
  * `guards.required`, the only field that can block (`phase-guard-evaluator.ts:85`).
