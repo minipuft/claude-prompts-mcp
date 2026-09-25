@@ -190,6 +190,49 @@ describe('CommandParsingStage - commandType Integration', () => {
       expect(context.parsedCommand!.commandType).toBe('single');
       expect(context.parsedCommand!.format).toBe('symbolic');
     });
+
+    // P6.74 (R36): a chain prompt named with an operator runs its declared steps, projected by
+    // the same function the direct path calls. Before the fix both commands parsed `single` with
+    // no steps, and every "step" rendered the chain prompt's own template.
+    const parse = async (command: string) => {
+      const context = new ExecutionContext({ command });
+      await stage.execute(context);
+      return context.parsedCommand!;
+    };
+
+    test.each([
+      ['a shell verification', '>>budget_chain :: verify:"true"'],
+      ['an anonymous gate criterion', '>>budget_chain :: "quality check"'],
+    ])(
+      'P6.74: a chain prompt followed by %s projects the same steps as the bare chain',
+      async (_label, command) => {
+        const direct = await parse('>>budget_chain');
+        const symbolic = await parse(command);
+
+        expect(symbolic.format).toBe('symbolic');
+        expect(symbolic.commandType).toBe('chain');
+        // Byte-equal: one projection, two callers
+        expect(JSON.stringify(symbolic.steps)).toBe(JSON.stringify(direct.steps));
+        expect(symbolic.steps?.map((step) => step.nodeId)).toEqual(['first', 'second']);
+        expect(symbolic.budget).toEqual(direct.budget);
+      }
+    );
+
+    test("P6.74: the operator's gates stay at command level beside the projected steps", async () => {
+      const verified = await parse('>>budget_chain :: verify:"true"');
+      expect(verified.namedInlineGates).toHaveLength(1);
+      expect(verified.namedInlineGates?.[0]?.shellVerify?.command).toBe('true');
+      expect(verified.steps?.every((step) => step.inlineGateCriteria === undefined)).toBe(true);
+
+      const criterion = await parse('>>budget_chain :: "quality check"');
+      expect(criterion.inlineGateCriteria).toEqual(['quality check']);
+    });
+
+    test('P6.74 control: a single prompt with an operator still parses with no steps', async () => {
+      const single = await parse('>>single_test input :: verify:"true"');
+      expect(single.commandType).not.toBe('chain');
+      expect(single.steps).toBeUndefined();
+    });
   });
 
   describe('isChainExecution() integration', () => {

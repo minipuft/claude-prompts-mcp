@@ -1,5 +1,7 @@
 // @lifecycle canonical - Builds ParsedCommand structures from symbolic operator parse results.
 
+import { projectChainPromptSteps } from './chain-step-projection.js';
+
 import type { Logger } from '#infra/logging/index.js';
 import type { WorkflowCompilation, WorkflowCompilerDeps } from '#modules/workflow-ir/compiler.js';
 import type { WorkflowEdge, WorkflowIR, WorkflowNode } from '#modules/workflow-ir/types.js';
@@ -189,6 +191,18 @@ export class SymbolicCommandBuilder {
       promptArgs: resolvedArgs.processedArgs,
       inlineGateCriteria: inlineCriteria,
     };
+
+    // A chain prompt named with an operator (`>>chain :: verify:"…"`, `>>chain :: "criterion"`)
+    // runs its declared steps, projected exactly as a bare `>>chain` is (P6.74). The operator's
+    // gates stay at command level, where they sat before and where a bare chain has none.
+    const projection = projectChainPromptSteps(
+      convertedPrompt,
+      resolvedArgs.processedArgs,
+      findPrompt
+    );
+    if (projection !== undefined) {
+      Object.assign(parsedCommand, projection);
+    }
 
     if (namedGates.length > 0) {
       parsedCommand.namedInlineGates = namedGates;
