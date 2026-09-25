@@ -1,6 +1,10 @@
 // @lifecycle canonical - Runs operator executors and orchestrates outputs.
 import { hasFrameworkGuidance } from '../../../frameworks/utils/framework-detection.js';
-import { collectDetachedNodeFacts, describeHeldRun } from '../../delegation/detached.js';
+import {
+  collectDetachedNodeFacts,
+  collectRunHolds,
+  describeHeldRun,
+} from '../../delegation/detached.js';
 import { planNodeDrivenRender } from '../../operators/node-step-projection.js';
 import { BasePipelineStage } from '../stage.js';
 
@@ -76,10 +80,11 @@ export class StepExecutionStage extends BasePipelineStage {
       return;
     }
 
-    // A run past its last node that a detached node still owes a result (Tier 4): there is no
-    // step left to render, and it is not finished. The words are the delegation module's.
+    // A run past its last node that something still holds open — an owed detached result, an
+    // open review, a pending shell verification (`nodesHoldingRunOpen`): there is no step left to
+    // render, and it is not finished. The words are the delegation module's.
     if (this.renderHeldRun(context)) {
-      this.logExit({ skipped: 'Run held open for a detached report' });
+      this.logExit({ skipped: 'Run held open past its last node' });
       return;
     }
 
@@ -119,8 +124,8 @@ export class StepExecutionStage extends BasePipelineStage {
   }
 
   /**
-   * Render the held-run notice when the run has walked past its last node but is still owed a
-   * detached result. @returns true when it rendered (the stage is done).
+   * Render the held-run notice when the run has walked past its last node but something still
+   * holds it open — naming each hold (P6.30). @returns true when it rendered (the stage is done).
    */
   private renderHeldRun(context: ExecutionContext): boolean {
     const sessionContext = context.sessionContext;
@@ -131,7 +136,10 @@ export class StepExecutionStage extends BasePipelineStage {
     );
     if (session === undefined || !isRunHeldOpen(session)) return false;
     context.executionResults = {
-      content: describeHeldRun(collectDetachedNodeFacts(context.parsedCommand?.steps, session)),
+      content: describeHeldRun(
+        collectDetachedNodeFacts(context.parsedCommand?.steps, session),
+        collectRunHolds(session)
+      ),
       generatedAt: Date.now(),
     };
     return true;

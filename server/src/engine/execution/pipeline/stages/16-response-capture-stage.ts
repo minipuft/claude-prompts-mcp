@@ -3,6 +3,7 @@ import { addressedReview } from '../../../gates/services/gate-verdict-processor.
 import { UnknownObservationValidationError } from '../../capture/unknown-observation-processor.js';
 import {
   collectDetachedNodeFacts,
+  collectRunHolds,
   describeDetachedReview,
   describeDetachedReviewOutcome,
   describeLandedReport,
@@ -413,6 +414,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
               detached: current.await === 'run',
             },
       detachedNodes: collectDetachedNodeFacts(context.parsedCommand?.steps, session),
+      holds: collectRunHolds(session),
     });
 
     switch (decision.kind) {
@@ -490,6 +492,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       runCompleted,
       held: isRunHeldOpen(after),
       detachedNodes: collectDetachedNodeFacts(context.parsedCommand?.steps, after),
+      holds: collectRunHolds(after),
       replaced: replaces,
       ...(review !== null
         ? {
@@ -548,6 +551,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       runCompleted,
       held: isRunHeldOpen(after),
       detachedNodes: collectDetachedNodeFacts(context.parsedCommand?.steps, after),
+      holds: collectRunHolds(after),
     });
     context.setResponse({
       content: [{ type: 'text', text: `${text}\n\nChain: ${after.chainId}` }],
