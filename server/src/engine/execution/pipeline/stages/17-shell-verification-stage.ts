@@ -63,6 +63,8 @@ export class ShellVerificationStage extends BasePipelineStage {
     this.logEntry(context);
 
     let pending = context.state.gates.pendingShellVerification;
+    // Armed by InlineGateExtractionStage on this call (the render), rather than restored on a resume
+    const armedThisCall = pending !== undefined;
 
     // Restore from session on response-only resume (InlineGateExtractionStage is skipped, so pending is undefined)
     if (pending === undefined) {
@@ -85,9 +87,12 @@ export class ShellVerificationStage extends BasePipelineStage {
       return;
     }
 
-    // Require user_response before running verification (after first attempt)
+    // The command checks an answer, so it runs only on a call that carries one (P6.27). The
+    // render call runs nothing and spends no attempt; it saves the check so the resume that
+    // answers it finds it (and the step stays held), and arms the Stop hook's loop state.
     const userResponse = context.mcpRequest.user_response?.trim();
-    if ((userResponse === undefined || userResponse === '') && pending.attemptCount > 0) {
+    if (userResponse === undefined || userResponse === '') {
+      if (armedThisCall) await this.armOnRender(context, pending);
       this.logExit({ skipped: 'Awaiting user response before verification' });
       return;
     }
@@ -118,6 +123,20 @@ export class ShellVerificationStage extends BasePipelineStage {
     // Persist updated state to session for cross-request resume
     await this.saveToSession(context, pending);
     await this.handleVerificationFailed(context, result, pending);
+  }
+
+  /**
+   * The render call arms the check without running it: saved with `attemptCount 0` and no node
+   * (no answer was captured yet), and the loop's Stop-hook state written.
+   */
+  private async armOnRender(
+    context: ExecutionContext,
+    pending: PendingShellVerification
+  ): Promise<void> {
+    if (pending.shellVerify.loop === true) {
+      await this.stateManager.writeState(this.resolveVerifyStateKey(context), pending);
+    }
+    await this.saveToSession(context, pending);
   }
 
   /**

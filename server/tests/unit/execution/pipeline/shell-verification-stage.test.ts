@@ -170,6 +170,66 @@ describe('ShellVerificationStage', () => {
     expect(context.state.gates.shellVerifyPassedForGates).toBeUndefined();
   });
 
+  // P6.27: the command checks an answer, so it never runs on the render call, which carries none.
+  describe('the render call runs nothing (P6.27)', () => {
+    const inlineCheck = () => ({
+      gateId: 'shell-verify-inline',
+      shellVerify: { command: 'npm test' },
+      attemptCount: 0,
+      maxAttempts: 5,
+      previousResults: [],
+    });
+
+    test('the render call runs no command, spends no attempt, and saves the check with no node', async () => {
+      const executor = createMockExecutor(false);
+      const sessionService = createMockSessionService();
+      const stage = new ShellVerificationStage(
+        executor,
+        createMockStateManager(),
+        sessionService,
+        createAdvanceOwner(),
+        createLogger()
+      );
+      const context = new ExecutionContext({ command: '>>chain :: verify:"npm test"' });
+      context.state.session.resumeSessionId = 'test-session';
+      context.state.gates.pendingShellVerification = inlineCheck();
+
+      await stage.execute(context);
+
+      expect(executor.execute).not.toHaveBeenCalled();
+      expect(context.response).toBeUndefined();
+      expect(context.state.gates.pendingShellVerification?.attemptCount).toBe(0);
+      expect(sessionService.setPendingShellVerification).toHaveBeenCalledTimes(1);
+      const [sessionId, saved] = (sessionService.setPendingShellVerification as jest.Mock).mock
+        .calls[0] as [string, { attemptCount: number; nodeId?: string }];
+      expect(sessionId).toBe('test-session');
+      expect(saved.attemptCount).toBe(0);
+      // No answer captured yet: the node is named by the call that captures one (P6.44's refusal)
+      expect(saved.nodeId).toBeUndefined();
+    });
+
+    test('control: the reply call restores the saved check and runs it once', async () => {
+      const executor = createMockExecutor(false);
+      const sessionService = createMockSessionService();
+      (sessionService.getPendingShellVerification as jest.Mock).mockReturnValue(inlineCheck());
+      const stage = new ShellVerificationStage(
+        executor,
+        createMockStateManager(),
+        sessionService,
+        createAdvanceOwner(),
+        createLogger()
+      );
+      const context = new ExecutionContext({ chain_id: 'chain-test#1', user_response: 'done' });
+      context.state.session.resumeSessionId = 'test-session';
+
+      await stage.execute(context);
+
+      expect(executor.execute).toHaveBeenCalledTimes(1);
+      expect(context.state.gates.pendingShellVerification?.attemptCount).toBe(1);
+      expect(JSON.stringify(context.response)).toContain('Attempt 1/5');
+    });
+  });
+
   describe('gate_action handling', () => {
     const createEscalatedContext = (gateAction: 'retry' | 'skip' | 'abort') => {
       const context = new ExecutionContext({

@@ -16,7 +16,7 @@
  */
 import { afterEach, describe, expect, test } from '@jest/globals';
 
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { createHermeticRoots } from './helpers/child-env.js';
@@ -55,13 +55,26 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
   async function startVerifiedChain(
     markerPresent: boolean,
     verifyOptions = ''
-  ): Promise<{ call: Call; raw: Call; start: ToolOutcome; marker: string; command: string }> {
+  ): Promise<{
+    call: Call;
+    raw: Call;
+    start: ToolOutcome;
+    marker: string;
+    command: string;
+    runs: () => number;
+  }> {
     const roots = createHermeticRoots('shell-hold-e2e');
     teardown.push(roots.cleanup);
     const workspace = path.join(roots.root, 'workspace');
     mkdirSync(workspace, { recursive: true });
     const marker = path.join(roots.root, 'verified');
     if (markerPresent) writeFileSync(marker, 'ok');
+    // The check logs one line per run, so a test can count how often the command ran
+    const runLog = path.join(roots.root, 'runs.log');
+    const script = path.join(roots.root, 'check.sh');
+    writeFileSync(script, `echo run >> "${runLog}"\ntest -f "${marker}"\n`);
+    const runs = (): number =>
+      existsSync(runLog) ? readFileSync(runLog, 'utf8').split('\n').filter(Boolean).length : 0;
     const port = await getAvailablePort();
     const baseUrl = `http://127.0.0.1:${port}`;
     const proc = startServerWithHttp(port, {
@@ -84,11 +97,18 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
         methods: outcome.notifications.map((n: StreamNotification) => n.method),
       };
     };
-    const command = `>>quick_decision topic:"pick a database" :: verify:"test -f ${marker}"${verifyOptions}`;
+    const command = `>>quick_decision topic:"pick a database" :: verify:"sh ${script}"${verifyOptions}`;
     const start = await raw({ command });
     const chainId = /chain_id[=:] ?"(chain-[A-Za-z0-9_#-]+)"/.exec(start.text)?.[1];
     if (chainId === undefined) throw new Error(`no chain id in: ${start.text.slice(0, 400)}`);
-    return { call: (args) => raw({ chain_id: chainId, ...args }), raw, start, marker, command };
+    return {
+      call: (args) => raw({ chain_id: chainId, ...args }),
+      raw,
+      start,
+      marker,
+      command,
+      runs,
+    };
   }
 
   const answer = (call: Call, label: string): Promise<ToolOutcome> =>
@@ -163,5 +183,24 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
     const refused = await raw({ command, gate_action: 'skip' });
     expect(refused.text).toContain('nothing to skip past on step 1; answer it first');
     expect(count(refused, STEP_COMPLETE)).toBe(0);
+  }, 180000);
+
+  test('P6.27 (a): the render call runs no command and spends no attempt', async () => {
+    const { start, call, runs } = await startVerifiedChain(false);
+    expect(start.text).not.toContain('Shell Verification FAILED');
+    expect(start.text).toContain('Progress 1/3');
+    expect(runs()).toBe(0);
+
+    // The check the render saved survives to the first answer, at attempt 0
+    const bounced = await answer(call, 'Step 1');
+    expect(bounced.text).toContain('Shell Verification FAILED (Attempt 1/5)');
+    expect(count(bounced, STEP_COMPLETE)).toBe(0);
+  }, 180000);
+
+  test('P6.27 (b) control: the reply call runs the check once', async () => {
+    const { call, runs } = await startVerifiedChain(true);
+    const answered = await answer(call, 'Step 1');
+    expect(answered.text).toContain('Progress 2/3');
+    expect(runs()).toBe(1);
   }, 180000);
 });

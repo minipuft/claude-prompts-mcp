@@ -110,7 +110,8 @@ describe('Streamable HTTP: a failing shell verification on the last step holds t
 
   test('a bounce holds the step; the passing call moves on and the last answer completes once', async () => {
     const { call, start, marker } = await startVerifiedChain(false);
-    expect(start.text).toContain('Shell Verification FAILED');
+    // The render call runs no check (P6.27): the first answer spends the first attempt.
+    expect(start.text).not.toContain('Shell Verification FAILED');
     await bounceEveryStep(call);
 
     // A failing re-run on a call that captured no step keeps the hold.
@@ -141,6 +142,7 @@ describe('Streamable HTTP: a failing shell verification on the last step holds t
   test('abort after escalation releases the hold by cancelling the run, announced once', async () => {
     const { call } = await startVerifiedChain(false);
     await bounceEveryStep(call);
+    await call({ user_response: 'fourth attempt' });
     const escalated = await call({ user_response: 'fifth attempt' });
     expect(escalated.text).toContain('Maximum Attempts Reached');
     expect(completions(escalated)).toBe(0);
