@@ -257,7 +257,7 @@ flowchart LR
   module_versioning --> module_resources
   module_versioning --> module_shared_types
   module_versioning --> module_shared_utils
-  module_workflow_ir -. type .-> module_engine_execution
+  module_workflow_ir --> module_engine_execution
   module_workflow_ir -. type .-> module_shared_types
   module_workflow_ir --> module_shared_utils
 ```
