@@ -45,6 +45,7 @@ function createStore() {
   return {
     advanceStep: jest.fn(async () => ({ ordinal: 2, nodeId: 'node-2' })),
     getPendingShellVerification: jest.fn((): unknown => undefined),
+    setPendingShellVerification: jest.fn(async () => undefined),
     recordGateReviewOutcome: jest.fn(async () => undefined),
     clearReview: jest.fn(async () => undefined),
     setReview: jest.fn(async () => undefined),
@@ -323,6 +324,46 @@ describe('GateVerdictProcessor defers every advance it decides', () => {
       });
       expect(store.advanceStep).not.toHaveBeenCalled();
       expect(emitter.emitChainStepComplete).not.toHaveBeenCalled();
+    });
+
+    /**
+     * P6.54: the hold moves nothing, so it keeps WHY the advance was decided on the check for the
+     * call whose pass releases the step. A skipped review's step is then announced `failed`.
+     */
+    test('P6.54: a held skip keeps its reason on the check that holds the step', async () => {
+      const { announcer } = announcing('node-1');
+      (store.getPendingShellVerification as jest.Mock).mockReturnValue({
+        nodeId: 'node-1',
+        attemptCount: 2,
+      });
+      await announcer.applyDeferredAdvance(createContext(), {
+        sessionId: 'session-1',
+        nodeId: 'node-1',
+        reason: 'gate-skip',
+      });
+      expect(store.advanceStep).not.toHaveBeenCalled();
+      expect((store.setPendingShellVerification as jest.Mock).mock.calls).toEqual([
+        [
+          'session-1',
+          {
+            nodeId: 'node-1',
+            attemptCount: 2,
+            heldAdvance: { nodeId: 'node-1', reason: 'gate-skip' },
+          },
+        ],
+      ]);
+    });
+
+    test("P6.54 control: a held capture records nothing: the release's default is its reason", async () => {
+      const { announcer } = announcing('node-1');
+      (store.getPendingShellVerification as jest.Mock).mockReturnValue({ nodeId: 'node-1' });
+      await announcer.applyDeferredAdvance(createContext(), {
+        sessionId: 'session-1',
+        nodeId: 'node-1',
+        reason: 'captured',
+      });
+      expect(store.advanceStep).not.toHaveBeenCalled();
+      expect(store.setPendingShellVerification).not.toHaveBeenCalled();
     });
 
     test('an advance the run already made announces nothing', async () => {

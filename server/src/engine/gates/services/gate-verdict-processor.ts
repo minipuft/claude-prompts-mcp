@@ -731,6 +731,13 @@ export class GateVerdictProcessor {
       check !== undefined &&
       (check.nodeId !== undefined || context.state.session.capturedStep?.nodeId === advance.nodeId)
     ) {
+      // The release applies this advance later; keep why it was decided (P6.54)
+      if (advance.reason !== 'captured') {
+        await this.chainSessionStore.setPendingShellVerification(advance.sessionId, {
+          ...check,
+          heldAdvance: { nodeId: advance.nodeId, reason: advance.reason },
+        });
+      }
       context.diagnostics.info(
         'GateVerdictProcessor',
         'Advance held by pending shell verification',

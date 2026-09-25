@@ -32,7 +32,10 @@ import { BasePipelineStage } from '../stage.js';
 import type { Logger } from '#infra/logging/index.js';
 import type { PendingShellVerificationSnapshot } from '#shared/types/chain-execution.js';
 import type { ChainSessionService } from '#shared/types/chain-session.js';
-import type { GateVerdictProcessor } from '../../../gates/services/gate-verdict-processor.js';
+import type {
+  DeferredAdvance,
+  GateVerdictProcessor,
+} from '../../../gates/services/gate-verdict-processor.js';
 import type { ExecutionContext } from '../../context/index.js';
 
 /**
@@ -162,9 +165,10 @@ export class ShellVerificationStage extends BasePipelineStage {
     const { shellVerify } = pending;
 
     const heldNodeId = this.heldNodeId(context);
+    const heldReason = this.heldAdvanceReason(context, heldNodeId);
     context.state.gates.pendingShellVerification = undefined;
     await this.clearFromSession(context);
-    const release = await this.releaseHeldStep(context, heldNodeId, 'captured');
+    const release = await this.releaseHeldStep(context, heldNodeId, heldReason);
     const rearmed = await this.rearmForNextStep(context, pending, heldNodeId, release);
 
     // LOOP MODE: Clear verify-state.db, unless the check stands again for the next step
@@ -310,6 +314,9 @@ export class ShellVerificationStage extends BasePipelineStage {
     const sessionId = context.getSessionId();
     if (!sessionId) return;
 
+    // An advance held on this node keeps its reason across re-saves of the same hold (P6.54)
+    const heldAdvance =
+      this.chainSessionService.getPendingShellVerification(sessionId)?.heldAdvance;
     const snapshot: PendingShellVerificationSnapshot = {
       gateId: pending.gateId,
       shellVerify: pending.shellVerify,
@@ -319,6 +326,7 @@ export class ShellVerificationStage extends BasePipelineStage {
       originalGoal: pending.originalGoal,
       sourceGateIds: pending.sourceGateIds,
       nodeId,
+      ...(heldAdvance !== undefined && heldAdvance.nodeId === nodeId ? { heldAdvance } : {}),
     };
 
     await this.chainSessionService.setPendingShellVerification(sessionId, snapshot);
@@ -332,6 +340,22 @@ export class ShellVerificationStage extends BasePipelineStage {
    */
   private hasAnswerToGrade(context: ExecutionContext): boolean {
     return runSessionId(context) === undefined || this.heldNodeId(context) !== undefined;
+  }
+
+  /**
+   * Why the held step advances when this check releases it: the reason a verdict or a review's
+   * `gate_action` decided while the check held it (P6.54), else the capture's own.
+   */
+  private heldAdvanceReason(
+    context: ExecutionContext,
+    nodeId: string | undefined
+  ): DeferredAdvance['reason'] {
+    const sessionId = runSessionId(context);
+    const held =
+      sessionId === undefined
+        ? undefined
+        : this.chainSessionService.getPendingShellVerification(sessionId)?.heldAdvance;
+    return held !== undefined && held.nodeId === nodeId ? held.reason : 'captured';
   }
 
   /** The step this check holds: the one captured on this call, else the one an earlier save named. */
@@ -353,7 +377,7 @@ export class ShellVerificationStage extends BasePipelineStage {
   private async releaseHeldStep(
     context: ExecutionContext,
     nodeId: string | undefined,
-    reason: 'captured' | 'gate-skip'
+    reason: DeferredAdvance['reason']
   ): Promise<'released' | 'left-to-review' | 'none'> {
     const sessionId = runSessionId(context);
     if (nodeId === undefined || sessionId === undefined) return 'none';

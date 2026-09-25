@@ -574,6 +574,97 @@ describe('ShellVerificationStage', () => {
     });
   });
 
+  /**
+   * P6.54: a review skipped while the check held its step decided a `gate-skip` advance that the
+   * hold kept on the check (`heldAdvance`). The pass that releases the step applies that reason,
+   * so the step is announced as skipped rather than `captured`/`passed`.
+   */
+  describe('the release applies the reason the hold kept (P6.54)', () => {
+    const passingHeld = (heldAdvance?: { nodeId: string; reason: string }) => {
+      const sessionService = createMockSessionService();
+      (sessionService.getPendingShellVerification as jest.Mock).mockReturnValue({
+        nodeId: 'node-1',
+        ...(heldAdvance !== undefined ? { heldAdvance } : {}),
+      });
+      (sessionService.getSession as jest.Mock).mockReturnValue({
+        state: { currentNodeId: 'node-1', nodes: [{ id: 'node-1' }, { id: 'node-2' }] },
+      });
+      const advanceOwner = createAdvanceOwner();
+      const stage = new ShellVerificationStage(
+        createMockExecutor(true),
+        createMockStateManager(),
+        sessionService,
+        advanceOwner,
+        createLogger()
+      );
+      const context = new ExecutionContext({ chain_id: 'chain-test#1', user_response: 'fixed' });
+      context.state.session.resumeSessionId = 'test-session';
+      context.state.gates.pendingShellVerification = {
+        gateId: 'shell-verify-inline',
+        shellVerify: { command: 'npm test' },
+        attemptCount: 1,
+        maxAttempts: 5,
+        previousResults: [],
+      };
+      return { stage, context, advanceOwner };
+    };
+
+    test('a held gate-skip is released as gate-skip', async () => {
+      const { stage, context, advanceOwner } = passingHeld({
+        nodeId: 'node-1',
+        reason: 'gate-skip',
+      });
+
+      await stage.execute(context);
+
+      expect(advanceOwner.applyDeferredAdvance).toHaveBeenCalledWith(context, {
+        sessionId: 'test-session',
+        nodeId: 'node-1',
+        reason: 'gate-skip',
+      });
+    });
+
+    test('control: with no held reason the release is the capture', async () => {
+      const { stage, context, advanceOwner } = passingHeld();
+
+      await stage.execute(context);
+
+      expect(advanceOwner.applyDeferredAdvance).toHaveBeenCalledWith(context, {
+        sessionId: 'test-session',
+        nodeId: 'node-1',
+        reason: 'captured',
+      });
+    });
+
+    test('a failing re-run keeps the held reason on the re-saved check', async () => {
+      const { context } = passingHeld({ nodeId: 'node-1', reason: 'gate-skip' });
+      const sessionService = createMockSessionService();
+      (sessionService.getPendingShellVerification as jest.Mock).mockReturnValue({
+        nodeId: 'node-1',
+        heldAdvance: { nodeId: 'node-1', reason: 'gate-skip' },
+      });
+      const stage = new ShellVerificationStage(
+        createMockExecutor(false),
+        createMockStateManager(),
+        sessionService,
+        createAdvanceOwner(),
+        createLogger()
+      );
+
+      await stage.execute(context);
+
+      const [, saved] = (sessionService.setPendingShellVerification as jest.Mock).mock.calls[0] as [
+        string,
+        Record<string, unknown>,
+      ];
+      expect(saved).toMatchObject({
+        nodeId: 'node-1',
+        attemptCount: 2,
+        heldAdvance: { nodeId: 'node-1', reason: 'gate-skip' },
+      });
+    });
+  });
+
   describe('gate_action handling', () => {
     const createEscalatedContext = (gateAction: 'retry' | 'skip' | 'abort') => {
       const context = new ExecutionContext({
