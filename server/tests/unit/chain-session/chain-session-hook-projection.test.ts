@@ -326,6 +326,23 @@ describe('chain_sessions hook projection — byte parity', () => {
     expect(row.params[5]).toBe('working');
   });
 
+  test('a run past its last node owed a detached report stays projected (P6.29)', async () => {
+    manager = newManager('past-end-detached');
+    await manager.createSession('s1', 'chain-a', 2);
+    await manager.markNodeSpawned('s1', 'n2');
+    await manager.advanceStep('s1', 'n1');
+    const rowsBefore = countHookRows(db);
+    await manager.advanceStep('s1', 'n2');
+
+    // No review and no shell check: the owed report is the only hold, and nothing in the row's
+    // pending columns shows it — the row's presence at `totalSteps + 1` is the fact.
+    const row = latestHookRow(db)!;
+    expect(countHookRows(db)).toBe(rowsBefore + 1);
+    expect(row.state['currentStep']).toBe(3);
+    expect(row.state['pendingGateReview']).toBeNull();
+    expect(row.state['pendingShellVerification']).toBeNull();
+  });
+
   test('a run advanced past its terminal node stops being projected at all', async () => {
     manager = newManager('complete');
     await manager.createSession('s1', 'chain-a', 3);

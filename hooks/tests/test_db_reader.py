@@ -419,7 +419,7 @@ class TestActiveChainState:
 
 
 class TestHeldPastTheLastNode:
-    """P6.31 (R30): a run held open after walking past its last node stays visible.
+    """P6.29 + P6.31 (R30): a run held open after walking past its last node stays visible.
 
     The server writes such a row at `currentStep = totalSteps + 1` (`currentOrdinal` of a null
     node) with a non-terminal status, and only while something holds it. Each converter is pinned
@@ -428,6 +428,12 @@ class TestHeldPastTheLastNode:
     """
 
     SHELL: ClassVar[dict] = {"nodeId": "n2", "shellVerify": {"command": "test -f M"}, "attemptCount": 1}
+    DETACHED_REVIEW: ClassVar[dict] = {
+        "nodeId": "n2",
+        "kind": "detached",
+        "gateIds": ["late-report"],
+        "attemptCount": 0,
+    }
 
     def _via_view(self, state_db) -> dict | None:
         state_db.row_factory = sqlite3.Row
@@ -439,8 +445,8 @@ class TestHeldPastTheLastNode:
 
     @pytest.mark.parametrize(
         "pending",
-        [{"pending_shell_verification": SHELL}],
-        ids=["shell-verification"],
+        [{"pending_shell_verification": SHELL}, {"pending_gate_review": DETACHED_REVIEW}],
+        ids=["shell-verification", "detached-review"],
     )
     def test_a_held_run_past_its_last_node_is_kept_on_both_paths(self, state_db, pending):
         blob = _chain_session_state(current=3, total=2, **pending)
