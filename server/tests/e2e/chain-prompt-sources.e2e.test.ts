@@ -1,4 +1,4 @@
-// @lifecycle test - P6.79 / P6.80 / R40: an arrow-chain segment or a workflow node naming a chain prompt runs that prompt's steps; P6.78 / R37: a command-level gate on a chain prompt binds each step, over Streamable HTTP.
+// @lifecycle test - P6.79 / P6.80 / R40: an arrow-chain segment or a workflow node naming a chain prompt runs that prompt's steps; P6.78 / R37: a command-level gate on a chain prompt binds each step; P6.97 / R43: a named inline gate belongs to the run that declared it, over Streamable HTTP.
 /**
  * MEASURED 2026-09-25 on `427899fe` (authored `sv_chain` = sv_a/sv_b/sv_a, each step carrying the
  * blocking `sv-block`; run state read from `chain_runs.state`):
@@ -584,6 +584,39 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       ]);
       expect(second).toContain('NAMED-CRIT-78');
       expect(state.reviews).toEqual({ b: ['sv-block', 'gate78e'] });
+    }, 120000);
+  });
+
+  describe('P6.97: a named inline gate belongs to the run that declared it', () => {
+    test('(a) a second run reusing the id grades its own criteria; (b) control: the first, still live, keeps its own', async () => {
+      const first = await start({ command: '>>sv_chain :: g97e:"CRIT-ONE-97"' });
+      const firstStep2 = await first.call({ user_response: 'A out', gate_verdict: PASS });
+      expect(firstStep2).toContain('CRIT-ONE-97');
+
+      const second = await start({ command: '>>sv_chain :: g97e:"CRIT-TWO-97"' });
+      expect(second.text).toContain('CRIT-TWO-97');
+      expect(second.text).not.toContain('CRIT-ONE-97');
+      await second.call({ user_response: 'A out', gate_verdict: PASS });
+      const failed = await second.call({ user_response: 'B out', gate_verdict: FAIL });
+      expect(failed).toContain('Gate Review Required');
+      expect(failed).toContain('CRIT-TWO-97');
+      expect(failed).not.toContain('CRIT-ONE-97');
+      expect(runState(second.chainId).reviews).toEqual({ b: ['sv-block', 'g97e-2'] });
+
+      const firstStep3 = await first.call({ user_response: 'B out', gate_verdict: PASS });
+      expect(firstStep3).toContain('CRIT-ONE-97');
+      expect(firstStep3).not.toContain('CRIT-TWO-97');
+      const firstFailed = await first.call({ user_response: 'C out', gate_verdict: FAIL });
+      expect(firstFailed).toContain('CRIT-ONE-97');
+      expect(runState(first.chainId).reviews).toEqual({ c: ['sv-block', 'g97e'] });
+    }, 120000);
+
+    test("(c) a single prompt's named gate is present and fresh on the second run", async () => {
+      await start({ command: '>>sv_a :: g97s:"SINGLE-ONE-97"' });
+      const again = await start({ command: '>>sv_a :: g97s:"SINGLE-TWO-97"' });
+      expect(again.text).toContain('### g97s');
+      expect(again.text).toContain('SINGLE-TWO-97');
+      expect(again.text).not.toContain('SINGLE-ONE-97');
     }, 120000);
   });
 });
