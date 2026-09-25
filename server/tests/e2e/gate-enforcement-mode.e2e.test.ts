@@ -19,6 +19,8 @@
  *
  * The third case drives `gate_action: "skip"` on an exhausted advisory review (P6.49).
  *
+ * The fourth case is a single prompt's advisory FAIL (P6.75): its warning names the gates.
+ *
  * Gates are authored through `resource_manager`, so the file watcher's hot reload is on the path.
  */
 
@@ -294,4 +296,38 @@ describe('Streamable HTTP: a FAIL follows the gate declared enforcement_mode', (
       skipped.notifications.filter((n) => n.method === 'notifications/chain/step_complete')
     ).toHaveLength(1);
   }, 240000);
+
+  /**
+   * P6.75: a single prompt's FAIL opens its review on the verdict, and that review used to carry
+   * `gateIds: []`. MEASURED 2026-09-25 on `1042b064`: `>>review` + FAIL warned `Gate  failed:
+   * misses`, naming nothing, and announced no `gate/failed`. The review now grades the prompt's
+   * resolved gates, the set a chain step's review is opened with — the control below.
+   */
+  test('a single prompt advisory FAIL names the gates it failed, as a chain step does', async () => {
+    const session = await authoredSession();
+    const start = await session.callTool('prompt_engine', {
+      command: '>>review target:"src/index.ts"',
+    });
+    const single = await session.callTool('prompt_engine', {
+      chain_id: chainIdOf(start.text),
+      user_response: 'review output',
+      gate_verdict: `GATE_REVIEW: FAIL - ${RATIONALE}`,
+    });
+    const failedIds = single.notifications
+      .filter((n) => n.method === 'notifications/gate/failed')
+      .map((n) => String(n.params['gateId']));
+    expect(single.isError).toBe(false);
+    expect(single.text).not.toContain('Gate  failed');
+    expect(failedIds.length).toBeGreaterThan(0);
+    expect(single.text).toContain(`Gate ${failedIds.join(', ')} failed: ${RATIONALE}`);
+
+    // Control: a chain step's advisory FAIL already names its gate.
+    const chainStep = await failStepA(
+      session,
+      'p675_control',
+      { promptId: 'em_a', stepName: 'A', inlineGateIds: [ADVISE_GATE] },
+      `GATE_REVIEW: FAIL - ${RATIONALE}`
+    );
+    expect(chainStep.text).toContain(`Gate ${ADVISE_GATE} failed: ${RATIONALE}`);
+  }, 180000);
 });

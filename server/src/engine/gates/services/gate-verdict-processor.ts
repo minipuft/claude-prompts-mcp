@@ -479,8 +479,8 @@ export class GateVerdictProcessor {
    * Answer the review this call's `gate_verdict` addresses — the one path for every verdict on a
    * step review (row 3.3). The review is the one the trailer names, else the run's step review,
    * which may grade a node the run has already left (a phase-guard review, a final step). With
-   * none open, the verdict opens one on the node the run stands on and answers it in the same
-   * call (the deferred entry); that needs the authority, and without it the verdict is ignored
+   * none open, the verdict opens one on the node the run stands on, grading that step's resolved
+   * gates (`stepReviewGateIds`), and answers it in the same call (the deferred entry); that needs the authority, and without it the verdict is ignored
    * as before. A PASS sent with no answer captures nothing, so it advances nothing (R19): it
    * opens no review, and on a review of a node that holds no captured output (the review stage
    * 13 opens when a gated step renders) it is refused, naming the step to answer first. A bare
@@ -585,8 +585,8 @@ export class GateVerdictProcessor {
         ? {
             open: async (nodeId: string) =>
               authority.createReview(session.sessionId, 'gate', nodeId, {
-                gateIds: [],
-                instructions: 'Gate validation failed. Review and remediate.',
+                gateIds: stepReviewGateIds(context),
+                instructions: context.gateInstructions ?? '',
               }),
           }
         : {}),
@@ -1008,6 +1008,16 @@ export class GateVerdictProcessor {
       });
     }
   }
+}
+
+/**
+ * The gates the review of the step this call stands on grades: the step's own set, which stage 11
+ * publishes as `reviewGateIds`, else the single prompt's resolved set (`accumulatedGateIds`, the
+ * path that writes no step scope) — the set stage 13 opens the step's review with. A review this
+ * call's verdict opens grades the same gates, so its warning and events name them (P6.75).
+ */
+function stepReviewGateIds(context: ExecutionContext): string[] {
+  return [...(context.state.gates.reviewGateIds ?? context.state.gates.accumulatedGateIds ?? [])];
 }
 
 /** The sentence a call reads when no review answers it: a name the run lacks, or no open review. */
