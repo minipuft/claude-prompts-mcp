@@ -23,23 +23,21 @@
  *     statement about the whole segment, as R37 applies a command-level criterion to every step;
  *   - `inputMapping` lands on the first expanded step, `outputMapping` on the last, and edges into
  *     or out of the node re-attach to the first/last expanded step; the expanded steps are linked
- *     in declaration order. `order` is rewritten in place, so a validated order stays valid.
+ *     in declaration order. `order` is rewritten in place, so a validated order stays valid;
+ *   - a run-level gate whose `target_step_id` names the node is retargeted to its LAST expanded
+ *     step (R41): the node's id addresses "when this node is done". `lastStepOf` carries the same
+ *     mapping for the request's `gates` channel, which is where a workflow's gates are read.
  *
  * Pure: the lookup is injected, nothing is logged, the input IR is not mutated.
  */
 
 import type { ChainStepPrompt } from '#engine/execution/operators/types.js';
 import type { ConvertedPrompt } from '#engine/execution/types.js';
-import type { WorkflowEdge, WorkflowIR, WorkflowNode } from './types.js';
+import type { GateSpecification } from '#shared/types/execution.js';
+import type { ExpandedWorkflow, WorkflowEdge, WorkflowIR, WorkflowNode } from './types.js';
 
 import { projectChainPromptSteps } from '#engine/execution/parsers/chain-step-projection.js';
 import { mintInsertionId } from '#shared/utils/node-order.js';
-
-/** An IR and its run order, after every chain-prompt node was expanded. */
-export interface ExpandedWorkflow {
-  readonly ir: WorkflowIR;
-  readonly order: readonly string[];
-}
 
 /**
  * Expand every node naming a chain prompt into the prompt's projected steps. An IR with no such
@@ -71,7 +69,7 @@ export function expandChainPromptNodes(
   }
 
   if (expansions.size === 0) {
-    return { ir, order };
+    return { ir, order, lastStepOf: {}, stepsOf: {} };
   }
 
   const first = (id: string): string => expansions.get(id)?.[0]?.id ?? id;
@@ -84,14 +82,38 @@ export function expandChainPromptNodes(
     ...internalEdges,
   ];
 
+  const lastStepOf = Object.fromEntries([...expansions.keys()].map((id) => [id, last(id)]));
+  const stepsOf = Object.fromEntries(
+    [...expansions].map(([id, nodes]) => [id, nodes.map((node) => node.id)])
+  );
+
   return {
     ir: {
       ...ir,
       nodes: ir.nodes.flatMap((node) => expansions.get(node.id) ?? [node]),
       ...(edges.length > 0 ? { edges } : {}),
+      ...(ir.gates !== undefined ? { gates: retargetGates(ir.gates, lastStepOf) } : {}),
     },
     order: order.flatMap((id) => expansions.get(id)?.map((node) => node.id) ?? [id]),
+    lastStepOf,
+    stepsOf,
   };
+}
+
+/**
+ * Point every gate whose `target_step_id` names an expanded node at that node's last step.
+ * A gate naming any other id, a bare gate id, and a gate with no target are returned as given.
+ */
+function retargetGates(
+  gates: readonly GateSpecification[],
+  lastStepOf: Readonly<Record<string, string>>
+): GateSpecification[] {
+  return gates.map((gate) => {
+    if (typeof gate !== 'object') return gate;
+    const target = (gate as { target_step_id?: unknown }).target_step_id;
+    const retarget = typeof target === 'string' ? lastStepOf[target] : undefined;
+    return retarget === undefined ? gate : { ...gate, target_step_id: retarget };
+  });
 }
 
 /** One projected step as an IR node, carrying the segment node's declarations. */

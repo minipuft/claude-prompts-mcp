@@ -198,6 +198,7 @@ export class CommandParsingStage extends BasePipelineStage {
     }
 
     context.parsedCommand = result.parsedCommand;
+    retargetRequestedGates(context, result.gateTargetRetargets);
     this.logExit({
       promptId: result.parsedCommand.promptId,
       format: result.parsedCommand.format,
@@ -368,4 +369,29 @@ function collectSourceConflicts(context: ExecutionContext): string[] {
     conflicts.push("'chain_id'");
   }
   return conflicts;
+}
+
+/**
+ * Point every requested gate whose `target_step_id` names a node that expanded into a chain
+ * prompt's steps at that node's last step (R41).
+ *
+ * The workflow's `gates` are read from the request channel (`requestedOverrides.gates`, where the
+ * executor concatenates them onto the `gates` parameter), never from the IR, so the retarget the
+ * expansion computed is applied here. New objects: the originals are the client's submission.
+ */
+function retargetRequestedGates(
+  context: ExecutionContext,
+  retargets: Readonly<Record<string, string>>
+): void {
+  const overrides = context.state.gates.requestedOverrides;
+  const gates = overrides?.gates;
+  if (overrides === undefined || !Array.isArray(gates) || Object.keys(retargets).length === 0) {
+    return;
+  }
+  overrides.gates = gates.map((gate: unknown) => {
+    if (typeof gate !== 'object' || gate === null) return gate;
+    const target = (gate as { target_step_id?: unknown }).target_step_id;
+    const retarget = typeof target === 'string' ? retargets[target] : undefined;
+    return retarget === undefined ? gate : { ...gate, target_step_id: retarget };
+  });
 }

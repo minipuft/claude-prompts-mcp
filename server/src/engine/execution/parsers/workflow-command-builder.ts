@@ -55,7 +55,15 @@ export interface WorkflowIrPort {
 
 /** Discriminated build result. Mirrors the module's own `{ok:true}|{ok:false, rejections[]}`. */
 export type WorkflowCommandResult =
-  | { readonly ok: true; readonly parsedCommand: ParsedCommand }
+  | {
+      readonly ok: true;
+      readonly parsedCommand: ParsedCommand;
+      /**
+       * A node naming a chain prompt → its last expanded step (R41). The run's gates are read from
+       * the request's `gates` channel, not from the IR, so the caller applies this there.
+       */
+      readonly gateTargetRetargets: Readonly<Record<string, string>>;
+    }
   | { readonly ok: false; readonly rejections: readonly WorkflowRejection[] };
 
 /**
@@ -81,8 +89,11 @@ export class WorkflowCommandBuilder {
    * which is the path that emits a terminal execution record.
    */
   build(ir: WorkflowIR, findPrompt: PromptLookup): WorkflowCommandResult {
+    // `expandWith` makes the validator check the EXPANDED IR — the node cap counts a chain
+    // prompt's steps, not the one node naming it (R41).
     const validation = this.workflowIr.validate(ir, {
       lookupPrompt: workflowPromptInfoLookup(findPrompt),
+      expandWith: findPrompt,
     });
 
     if (!validation.ok) {
@@ -138,7 +149,11 @@ export class WorkflowCommandBuilder {
       order: validation.order,
     });
 
-    return { ok: true, parsedCommand };
+    return {
+      ok: true,
+      parsedCommand,
+      gateTargetRetargets: validation.expanded?.lastStepOf ?? {},
+    };
   }
 }
 

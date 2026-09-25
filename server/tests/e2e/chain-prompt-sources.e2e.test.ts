@@ -122,6 +122,39 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
         { promptId: 'sv_a', stepName: 'C', inlineGateIds: ['sv-block'] },
       ],
     });
+    // An ungated two-step chain prompt: a run-level gate targeting its node is rendered by the
+    // first resume, which is the horizon the workflow `gates` channel reaches (P6.92 twin b).
+    await author({
+      resource_type: 'prompt',
+      action: 'create',
+      id: 'sv_pair',
+      category: 'general',
+      name: 'sv_pair',
+      description: 'e2e ungated two-step chain',
+      user_message_template: 'CHAIN-OWN-TEMPLATE',
+      arguments: TOPIC,
+      gate_configuration: OPT_OUT,
+      chain_steps: [
+        { promptId: 'sv_a', stepName: 'A' },
+        { promptId: 'sv_b', stepName: 'B' },
+      ],
+    });
+    // 32 steps: one node naming it plus one more is 33 expanded nodes, past the cap of 32.
+    await author({
+      resource_type: 'prompt',
+      action: 'create',
+      id: 'sv_big',
+      category: 'general',
+      name: 'sv_big',
+      description: 'e2e chain as long as the node cap',
+      user_message_template: 'CHAIN-OWN-TEMPLATE',
+      arguments: TOPIC,
+      gate_configuration: OPT_OUT,
+      chain_steps: Array.from({ length: 32 }, (_, index) => ({
+        promptId: 'sv_a',
+        stepName: `S${index + 1}`,
+      })),
+    });
   }, 120000);
 
   afterAll(async () => {
@@ -165,6 +198,15 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
           Object.entries(state.reviews ?? {}).map(([node, review]) => [node, review.gateIds])
         ),
       };
+    } finally {
+      db.close();
+    }
+  }
+
+  function countRuns(): number {
+    const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+    try {
+      return (db.prepare('SELECT COUNT(*) AS n FROM chain_runs').get() as { n: number }).n;
     } finally {
       db.close();
     }
@@ -302,6 +344,55 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       await walkExpanded(run, 'x', 'TOPIC-X');
     }, 120000);
   });
+  describe('P6.92: the validator checks the expanded workflow', () => {
+    const twoNodes = (x: string, y: string, gates?: unknown[]) => ({
+      workflow: {
+        version: 1,
+        nodes: [
+          { id: 'x', promptId: x },
+          { id: 'y', promptId: y },
+        ],
+        edges: [{ from: 'x', to: 'y' }],
+        ...(gates !== undefined ? { gates } : {}),
+      },
+    });
+
+    test('(a) a chain-prompt node expanding past the node cap is refused by name, creating nothing', async () => {
+      const before = countRuns();
+      const result = await tool('prompt_engine', twoNodes('sv_big', 'sv_b'));
+      expect(result.isError).toBe(true);
+      expect(result.text).toContain('Nothing was executed and no run was created.');
+      expect(result.text).toContain(
+        '[cap-exceeded] node "x": Expanding chain prompt "sv_big" yields 32 nodes; the expanded workflow has 33 nodes, exceeding the effective maxNodes cap of 32'
+      );
+      expect(countRuns()).toBe(before);
+    }, 120000);
+
+    test("(b) a gate targeting a chain-prompt node binds that node's last expanded step", async () => {
+      const gate = { name: 'tgt', criteria: ['TGT-NODE-X'], target_step_id: 'x' };
+      const run = await start(twoNodes('sv_pair', 'sv_b', [gate]));
+      expect(runState(run.chainId).steps).toEqual(['x-a:sv_a:[]', 'x-b:sv_b:[]', 'y:sv_b:[]']);
+      expect(run.text).not.toContain('TGT-NODE-X');
+      const second = await run.call({ user_response: 'A out' });
+      expect(templates(second)).toEqual(['BODY-sv_b topic=']);
+      expect(second).toContain('TGT-NODE-X');
+      const third = await run.call({ user_response: 'B out' });
+      expect(templates(third)).toEqual(['BODY-sv_b topic=']);
+      expect(third).toContain('Progress 3/3');
+      expect(third).not.toContain('TGT-NODE-X');
+    }, 120000);
+
+    test('(c) control: a gate targeting a single-prompt node is unchanged', async () => {
+      const gate = { name: 'tgt', criteria: ['TGT-NODE-Y'], target_step_id: 'y' };
+      const run = await start(twoNodes('sv_a', 'sv_b', [gate]));
+      expect(runState(run.chainId).steps).toEqual(['x:sv_a:[]', 'y:sv_b:[]']);
+      expect(run.text).not.toContain('TGT-NODE-Y');
+      const second = await run.call({ user_response: 'A out' });
+      expect(templates(second)).toEqual(['BODY-sv_b topic=']);
+      expect(second).toContain('TGT-NODE-Y');
+    }, 120000);
+  });
+
   describe('P6.78: a command-level gate on a chain prompt', () => {
     /** Run to step 2, FAIL it, and return the replies plus the review the FAIL opened. */
     async function walkToReview(command: string) {
