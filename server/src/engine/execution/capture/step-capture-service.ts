@@ -12,6 +12,7 @@ import type {
   HookRegistryPort,
   McpNotificationEmitterPort,
 } from '#shared/types/index.js';
+import type { DeferredAdvance } from '../../gates/services/gate-verdict-processor.js';
 import type { ExecutionContext, SessionContext } from '../context/index.js';
 
 import { currentOrdinal, nodeIdAt, ordinalOf, totalOf } from '#shared/utils/node-order.js';
@@ -68,8 +69,10 @@ export class StepCaptureService {
   /**
    * Capture a step result and optionally advance the chain.
    *
-   * Determines target step, checks eligibility, writes placeholder or real response,
-   * and advances step unless blocked by a pending gate review.
+   * Determines target step, checks eligibility, writes placeholder or real response, and
+   * returns the advance past it unless a pending gate review holds it. The caller applies that
+   * advance through `GateVerdictProcessor.applyDeferredAdvance`, the one place the run's move
+   * past a step is announced (R25) — so a capture a review holds announces nothing.
    */
   async captureStep(
     context: ExecutionContext,
@@ -78,7 +81,7 @@ export class StepCaptureService {
     sessionContext: SessionContext,
     currentStepAtStart: number,
     input: StepCaptureInput
-  ): Promise<void> {
+  ): Promise<DeferredAdvance | undefined> {
     const captureResponse =
       input.userResponse !== undefined && input.userResponse.length > 0
         ? input.userResponse
@@ -87,17 +90,17 @@ export class StepCaptureService {
 
     const target = this.resolveTarget(session, currentStepAtStart, hasUserResponseForCapture);
     if (target === undefined) {
-      return;
+      return undefined;
     }
 
     const existingState = this.chainSessionStore.getStepState(sessionId, target.nodeId);
     if (existingState?.state === 'completed' && !existingState.isPlaceholder) {
-      return;
+      return undefined;
     }
 
     if (existingState?.state === 'completed' && existingState.isPlaceholder === true) {
       if (captureResponse !== undefined) {
-        await this.replaceplaceholderWithReal(
+        return this.replaceplaceholderWithReal(
           context,
           sessionId,
           session,
@@ -107,12 +110,13 @@ export class StepCaptureService {
           input.passClearedThisCall
         );
       }
-      return;
+      return undefined;
     }
 
     try {
+      let advance: DeferredAdvance | undefined;
       if (captureResponse !== undefined) {
-        await this.captureRealAndAdvance(
+        advance = await this.captureRealAndAdvance(
           context,
           sessionId,
           session,
@@ -130,6 +134,7 @@ export class StepCaptureService {
       }
 
       this.syncSessionContext(context, sessionId, sessionContext);
+      return advance;
     } catch (error) {
       if (error instanceof Error) {
         this.logger.error(`Failed to capture previous step result: ${error.message}`);
@@ -278,20 +283,16 @@ export class StepCaptureService {
     // one's. Reader: `PhaseGuardVerificationStage` (`internal-state.ts` names both ends).
     context.state.session.capturedStep = { nodeId: target.nodeId, ordinal: target.ordinal };
 
-    await this.announceStepComplete(context, chainId, target, responseContent);
-
     this.logger.debug(`Step ${target.ordinal} (${target.nodeId}) completed with real response`);
   }
 
   /**
-   * Announce the step-completed fact to hook consumers and to the connected client.
+   * Announce a detached node's late result to hook consumers and to the connected client.
    *
-   * Placed here and nowhere else because this is the one path that records a REAL step
-   * completion, and `captureStep` returns early for a step already completed non-placeholder —
-   * so a gate retry re-entering capture cannot announce a second time. The placeholder write
-   * deliberately does not announce: it is a STDIO transport artifact standing in for output
-   * that has not arrived, and a client told "step 2 complete" for it would advance past a step
-   * whose result does not exist yet.
+   * The one announcement not made where the run moves (`applyDeferredAdvance`, R25): the run
+   * passed a detached node on a placeholder, silently, because a client told "step 2 complete"
+   * for it would act on a result that does not exist yet — so the node is announced when its
+   * real output lands, here.
    *
    * Isolated the way the gate emissions are (`GateVerdictProcessor.emitGateEvents`): one catch
    * around both channels, because announcing is never a reason to fail a capture that already
@@ -427,6 +428,10 @@ export class StepCaptureService {
    *   Present means {@link ledgerCapturedStep} already bound this call's verdicts (P4.76), so
    *   recording them again would double-count the same submission.
    *
+   * The row names the node whose review the verdict answered (`verdictDetection.nodeId`), which
+   * is not always the step the run stands on: a PASS sent alone for step 1's structural review
+   * while the run waits on a delegated step 2 records step 1, and step 2 gets no row (R27).
+   *
    * `status` is the STEP's lifecycle as this call leaves it, not the verdict's wording: a
    * cleared review means the step is done, an uncleared one means the run is waiting on the
    * submitter, which is what `input_required` says.
@@ -434,16 +439,24 @@ export class StepCaptureService {
   ledgerSubmittedVerdict(
     context: ExecutionContext,
     sessionId: string,
-    session: ChainSession,
-    currentStepAtStart: number
+    session: ChainSession
   ): void {
     if (this.executionRecordStore === null) return;
 
     const detection = context.state.gates.verdictDetection;
     if (detection === undefined || context.state.session.capturedStep !== undefined) return;
 
-    const target = this.resolveTarget(session, currentStepAtStart, true);
-    if (target === undefined) return;
+    // The node whose review the verdict answered, never the step the run stands on (R27): a
+    // verdict sent alone at a later step answers an earlier node's review and completes nothing.
+    const target = {
+      ordinal: ordinalOf(session.state.nodes, detection.nodeId),
+      nodeId: detection.nodeId,
+    };
+    if (target.ordinal === -1) {
+      throw new Error(
+        `Verdict answered a review of node ${target.nodeId}, which is not in the run`
+      );
+    }
 
     const steps = context.parsedCommand?.steps;
     const step =
@@ -504,7 +517,7 @@ export class StepCaptureService {
     target: StepTarget,
     captureResponse: string,
     passClearedThisCall: boolean
-  ): Promise<void> {
+  ): Promise<DeferredAdvance | undefined> {
     this.logger.debug(
       `User response detected for step ${target.ordinal} (${target.nodeId}), replacing placeholder with real content`
     );
@@ -519,9 +532,8 @@ export class StepCaptureService {
       outputMapping
     );
 
-    await this.advanceUnlessHeld(context, sessionId, target, passClearedThisCall);
-
     this.syncSessionContext(context, sessionId, sessionContext);
+    return this.advanceUnlessHeld(context, sessionId, target, passClearedThisCall);
   }
 
   /**
@@ -534,7 +546,7 @@ export class StepCaptureService {
     target: StepTarget,
     captureResponse: string,
     passClearedThisCall: boolean
-  ): Promise<void> {
+  ): Promise<DeferredAdvance | undefined> {
     const outputMapping = this.getStepOutputMapping(context, target.ordinal);
     await this.captureRealResponse(
       context,
@@ -545,27 +557,26 @@ export class StepCaptureService {
       outputMapping
     );
 
-    await this.advanceUnlessHeld(context, sessionId, target, passClearedThisCall);
+    return this.advanceUnlessHeld(context, sessionId, target, passClearedThisCall);
   }
 
   /**
-   * Advance past the captured node unless an open review holds it ({@link reviewHolding}). A PASS
-   * that already advanced it this call (`passClearedThisCall`, which stage 16 sets only when the
-   * answered review graded the captured node) leaves nothing to do.
+   * The advance past the captured node, unless an open review holds it ({@link reviewHolding}). A
+   * PASS that decides this node's advance this call (`passClearedThisCall`, which stage 16 sets
+   * only when the answered review graded the captured node) leaves nothing to return.
    */
-  private async advanceUnlessHeld(
+  private advanceUnlessHeld(
     context: ExecutionContext,
     sessionId: string,
     target: StepTarget,
     passClearedThisCall: boolean
-  ): Promise<void> {
+  ): DeferredAdvance | undefined {
     const session = this.chainSessionStore.getSession(sessionId, context.getScopeOptions());
     const review = session === undefined ? undefined : reviewHolding(session, target);
     if (review === undefined) {
-      if (!passClearedThisCall) {
-        await this.chainSessionStore.advanceStep(sessionId, target.nodeId);
-      }
-      return;
+      return passClearedThisCall
+        ? undefined
+        : { sessionId, nodeId: target.nodeId, reason: 'captured' };
     }
     context.diagnostics.info(
       'StepCaptureService',
@@ -579,6 +590,7 @@ export class StepCaptureService {
       }
     );
     context.state.gates.awaitingUserChoice = true;
+    return undefined;
   }
 
   private syncSessionContext(

@@ -8,7 +8,9 @@ import type { ChainSession, ChainSessionService } from '../../../../src/shared/t
 /**
  * `handleGateAction` answers the step review's exhaustion. `retry` and `skip` are events on the
  * review, applied through the processor's one review path (`advanceReview`, row 3.3), with or
- * without an enforcement authority on the context; `abort` cancels the RUN.
+ * without an enforcement authority on the context; `abort` cancels the RUN. A skip accepts the
+ * answer the step holds and returns the advance past it (R24), and is refused on a step that holds
+ * none.
  */
 
 const createLogger = (): Logger =>
@@ -24,9 +26,12 @@ const createStore = () =>
     setReview: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
     clearReview: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
     cancelChain: jest.fn<(sessionId: string) => Promise<boolean>>().mockResolvedValue(true),
+    isStepComplete: jest.fn<() => boolean>().mockReturnValue(true),
+    getChainContext: jest.fn(() => ({ step_results: { 1: 'step 1 answer' } })),
   }) as unknown as ChainSessionService & {
     setReview: jest.Mock;
     clearReview: jest.Mock;
+    isStepComplete: jest.Mock<() => boolean>;
     cancelChain: jest.Mock<(sessionId: string) => Promise<boolean>>;
   };
 
@@ -64,6 +69,7 @@ const createContext = () =>
     },
     diagnostics: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
     setResponse: jest.fn(),
+    getScopeOptions: () => ({}),
   }) as never;
 
 describe('GateVerdictProcessor.handleGateAction', () => {
@@ -79,14 +85,14 @@ describe('GateVerdictProcessor.handleGateAction', () => {
   test('abort cancels the run, not just the in-memory flag', async () => {
     const context = createContext();
 
-    const earlyExit = await processor.handleGateAction(
+    const advance = await processor.handleGateAction(
       context,
       sessionWith('exhausted'),
       'abort',
       {} as never
     );
 
-    expect(earlyExit).toBe(true);
+    expect(advance).toBeUndefined();
     expect(store.cancelChain).toHaveBeenCalledWith('session-1');
     expect(
       (context as never as { state: { session: { aborted?: boolean } } }).state.session.aborted
@@ -100,26 +106,56 @@ describe('GateVerdictProcessor.handleGateAction', () => {
 
     expect(
       await processor.handleGateAction(context, sessionWith('exhausted'), 'abort', {} as never)
-    ).toBe(true);
+    ).toBeUndefined();
     expect(
       (context as never as { state: { session: { aborted?: boolean } } }).state.session.aborted
     ).toBe(true);
   });
 
-  test('retry reopens the exhausted review with its counter reset; skip clears it', async () => {
-    await processor.handleGateAction(createContext(), sessionWith('exhausted'), 'retry', {
-      sessionId: 'session-1',
-    } as never);
+  test('retry reopens the exhausted review with its counter reset and decides no advance', async () => {
+    const advance = await processor.handleGateAction(
+      createContext(),
+      sessionWith('exhausted'),
+      'retry',
+      { sessionId: 'session-1' } as never
+    );
     expect(store.setReview).toHaveBeenCalledWith(
       'session-1',
       expect.objectContaining({ nodeId: 'n1', attemptCount: 0, phase: 'awaiting-verdict' })
     );
+    expect(advance).toBeUndefined();
+  });
 
-    await processor.handleGateAction(createContext(), sessionWith('exhausted'), 'skip', {
-      sessionId: 'session-1',
-    } as never);
+  test('skip clears the review and returns the advance past the answered step (R24)', async () => {
+    const advance = await processor.handleGateAction(
+      createContext(),
+      sessionWith('exhausted'),
+      'skip',
+      { sessionId: 'session-1' } as never
+    );
     expect(store.clearReview).toHaveBeenCalledWith('session-1', 'n1');
     expect(store.cancelChain).not.toHaveBeenCalled();
+    expect(advance).toEqual({ sessionId: 'session-1', nodeId: 'n1', reason: 'gate-skip' });
+  });
+
+  test('TWIN: skip on a step that holds no answer is refused by name and records nothing', async () => {
+    store.isStepComplete.mockReturnValue(false);
+    const context = createContext();
+
+    const advance = await processor.handleGateAction(context, sessionWith('exhausted'), 'skip', {
+      sessionId: 'session-1',
+    } as never);
+
+    expect(advance).toBeUndefined();
+    expect(store.clearReview).not.toHaveBeenCalled();
+    expect(
+      (context as never as { setResponse: jest.Mock }).setResponse.mock.calls[0]?.[0]
+    ).toMatchObject({
+      isError: true,
+      content: [
+        { text: expect.stringContaining('nothing to skip past on step 1; answer it first') },
+      ],
+    });
   });
 
   test('CONTROL: a review that is not exhausted refuses the action and records nothing', async () => {

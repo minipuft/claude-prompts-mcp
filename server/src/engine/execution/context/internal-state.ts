@@ -257,6 +257,8 @@ export interface PipelineInternalState {
       rationale?: string;
       pattern?: string;
       outcome?: string;
+      /** The node whose review the verdict answered — what a verdict-time record names (R27). */
+      nodeId: string;
     };
     /**
      * The node whose structural (`__phase_guard__`) review this call's PASS closed. Set by

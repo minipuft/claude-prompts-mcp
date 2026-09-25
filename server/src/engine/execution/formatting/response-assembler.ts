@@ -131,13 +131,7 @@ export class ResponseAssembler {
       sections.push(context.gateInstructions);
     }
 
-    if (gateActive) {
-      const advisoryWarnings = context.state.gates.advisoryWarnings;
-      if (advisoryWarnings && advisoryWarnings.length > 0) {
-        sections.push('\n---\n**Advisory Gate Warnings:**');
-        advisoryWarnings.forEach((warning) => sections.push(`- ${warning}`));
-      }
-    }
+    sections.push(...this.buildAdvisoryWarnings(context));
 
     // Gate review CTA (only when gate content active) or final completion
     const gateReviewCTA = gateActive ? this.buildGateReviewCTA(context) : null;
@@ -202,13 +196,7 @@ export class ResponseAssembler {
       sections.push(context.gateInstructions);
     }
 
-    if (gateActive) {
-      const advisoryWarnings = context.state.gates.advisoryWarnings;
-      if (advisoryWarnings && advisoryWarnings.length > 0) {
-        sections.push('\n---\n**Advisory Gate Warnings:**');
-        advisoryWarnings.forEach((warning) => sections.push(`- ${warning}`));
-      }
-    }
+    sections.push(...this.buildAdvisoryWarnings(context));
 
     // Declared section headers (Tier 2.5, OQ-1) — same block the chain path renders via
     // buildResponseFormatSection. A gated single prompt (explicit `gates`, a `gate` operator, or
@@ -289,7 +277,13 @@ export class ResponseAssembler {
     sections.push('');
     sections.push('---');
     sections.push('');
-    sections.push('**To proceed**: Address the gate criteria and resubmit with `gate_verdict`.');
+    // An exhausted review refuses every verdict (R9): the reply names the moves it accepts.
+    const exhausted = context.sessionContext?.pendingReview?.phase === 'exhausted';
+    sections.push(
+      exhausted
+        ? '**To proceed**: The retry budget is spent. Choose a `gate_action`: `retry`, or `skip` to accept the answer already given, or send `cancel: true`.'
+        : '**To proceed**: Address the gate criteria and resubmit with `gate_verdict`.'
+    );
 
     // The retry budget, from the counter the ordinary review footer reads (P4.101). A blocked
     // reply is the one place a caller cannot see it any other way: the block returns before
@@ -309,7 +303,9 @@ export class ResponseAssembler {
     const chainId = context.sessionContext?.chainId;
     if (chainId !== undefined && chainId !== '') {
       sections.push('');
-      sections.push(this.buildBlockedResubmitBlock(context, chainId));
+      sections.push(
+        exhausted ? exhaustedReviewMoves(chainId) : this.buildBlockedResubmitBlock(context, chainId)
+      );
     }
 
     return sections.join('\n');
@@ -453,6 +449,9 @@ export class ResponseAssembler {
     lines.push(`Chain: ${chainIdentifier}`);
 
     const hasPendingReview = context.hasPendingReview();
+    // An exhausted review accepts only a `gate_action` (R9 refuses every verdict), so it owes no
+    // verdict and its `Next:` names the moves it accepts (P6.23).
+    const reviewExhausted = sessionContext.pendingReview?.phase === 'exhausted';
 
     // Completion is the LATCHED run fact (StepExecutionStage sets it from the store's
     // runStatus), not `currentStep >= totalSteps`. Those two differ on exactly one state —
@@ -466,7 +465,7 @@ export class ResponseAssembler {
       const normalizedStep = Math.min(sessionContext.currentStep, sessionContext.totalSteps);
       const progress = `${normalizedStep}/${sessionContext.totalSteps}`;
       const onFinalStep = normalizedStep === sessionContext.totalSteps;
-      awaitingFinalVerdict = !isComplete && onFinalStep && hasPendingReview;
+      awaitingFinalVerdict = !isComplete && onFinalStep && hasPendingReview && !reviewExhausted;
       if (isComplete) {
         lines.push(`✓ Chain complete (${progress})`);
       } else if (awaitingFinalVerdict) {
@@ -496,6 +495,8 @@ export class ResponseAssembler {
       lines.push(
         `Next: chain_id="${chainIdentifier}", gate_action="resume" | gate_action="accept_alternative" (with remainder) | gate_action="abort"`
       );
+    } else if (reviewExhausted) {
+      lines.push(exhaustedReviewMoves(chainIdentifier));
     } else if (isComplete || awaitingFinalVerdict) {
       // One payload states one state (R96). A finished run has no next step, and a run holding
       // its FINAL step for a verdict has none either: the review above says how to answer it,
@@ -824,6 +825,11 @@ export class ResponseAssembler {
     // Checked before the phase-guard branches below because a run cannot hold on both: stage 16
     // raises this one only when nothing is already pending.
     if (isUnknownInterruptPending(pendingReview)) {
+      return null;
+    }
+    // An exhausted review takes no verdict (R9): the "Retry Limit Reached" section the step's
+    // render carries names the `gate_action` moves, and the footer's `Next:` repeats them.
+    if (pendingReview.phase === 'exhausted') {
       return null;
     }
 
@@ -1227,6 +1233,18 @@ export class ResponseAssembler {
     }
 
     return provider(frameworkId);
+  }
+
+  /**
+   * What this call's non-blocking FAILs warned about (an advisory verdict, a phase guard in warn
+   * mode). It reports the call itself, so it renders even when gate content is suppressed: the
+   * FAIL that completes a chain still happened (P6.37).
+   */
+  private buildAdvisoryWarnings(context: ExecutionContext): string[] {
+    const warnings = context.state.gates.advisoryWarnings;
+    return warnings.length === 0
+      ? []
+      : ['\n---\n**Advisory Gate Warnings:**', ...warnings.map((warning) => `- ${warning}`)];
   }
 
   /**
@@ -1689,4 +1707,9 @@ function buildPromptLookup(prompts: readonly GateReviewPrompt[]): Map<string, Ga
     }
   }
   return map;
+}
+
+/** The `Next:` line of a reply holding an exhausted review: the only moves it accepts (P6.23). */
+function exhaustedReviewMoves(chainId: string): string {
+  return `Next: chain_id="${chainId}", gate_action="retry" | gate_action="skip" | cancel: true`;
 }

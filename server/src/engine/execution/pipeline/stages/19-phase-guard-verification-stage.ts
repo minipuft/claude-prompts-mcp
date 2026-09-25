@@ -176,6 +176,17 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
       return;
     }
 
+    // A call that captured no step graded no node's answer: the failure is said, and no review
+    // opens (R28) — with no captured node there is nothing to grade against or to hold. A
+    // detached node's late report is graded by its own review (`gradeLateReport`), not here.
+    if (!('nodeId' in reviewedStep)) {
+      context.diagnostics.warn(this.name, 'Structural failure on a call that captured no step', {
+        failedPhases: result.failedPhases,
+      });
+      this.logExit({ passed: false, skipped: 'No captured step to key a review by' });
+      return;
+    }
+
     // Enforce: persist ONE pending review so GateReviewStage renders feedback and
     // StepResponseCaptureStage blocks advancement on the next request. A gate review already
     // open on the graded step absorbs the finding (R103): its gate, criteria, retry budget and
@@ -202,13 +213,10 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
       createdAt: Date.now(),
     });
 
-    if (!(await this.persistStructuralReview(context, sessionId, review, reviewedStep))) {
-      context.diagnostics.warn(this.name, 'Structural failure on a call that captured no step', {
-        failedPhases: result.failedPhases,
-      });
-      this.logExit({ passed: false, skipped: 'No captured step to key a review by' });
-      return;
-    }
+    await this.persistStructuralReview(context, sessionId, {
+      ...review,
+      nodeId: reviewedStep.nodeId,
+    });
 
     this.relatchRunCompletion(context, sessionId);
 
@@ -257,26 +265,18 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
   }
 
   /**
-   * Persist `review` keyed by the node whose answer was graded (R8), and hand it to
-   * GateReviewStage through the context. The gate review it joined already names that node, else
-   * the step this call captured. A call that captured nothing graded no step's answer — a detached
-   * node's late report is graded by its own review, not here — so it opens nothing and returns
-   * `false`.
+   * Persist `review`, keyed by the node whose answer was graded (R8), and hand it to
+   * GateReviewStage through the context.
    */
   private async persistStructuralReview(
     context: ExecutionContext,
     sessionId: string,
-    review: PendingGateReview,
-    reviewedStep: { nodeId: string } | Record<string, never>
-  ): Promise<boolean> {
-    const nodeId = review.nodeId ?? ('nodeId' in reviewedStep ? reviewedStep.nodeId : undefined);
-    if (nodeId === undefined) return false;
-    const keyed = { ...review, nodeId };
-    await this.chainSessionStore.setPendingGateReview(sessionId, keyed);
+    review: PendingGateReview & { nodeId: string }
+  ): Promise<void> {
+    await this.chainSessionStore.setPendingGateReview(sessionId, review);
     if (context.sessionContext) {
-      context.sessionContext = { ...context.sessionContext, pendingReview: keyed };
+      context.sessionContext = { ...context.sessionContext, pendingReview: review };
     }
-    return true;
   }
 
   /**
@@ -431,7 +431,8 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
    * told nothing about — the unsatisfiable guard the declaration contract exists to prevent.
    *
    * The union survives as the fallback for a call that captured no step identity, where there is
-   * no node to ask. It is a union over nodes that DID declare, so an opted-out node still
+   * no node to ask. Such a call opens no review (R28), so the union decides only whether its
+   * failure is reported. It is a union over nodes that DID declare, so an opted-out node still
    * contributes nothing to it. An empty set means nothing was recorded, which blocks nothing.
    */
   private resolveDeclaredHeaders(

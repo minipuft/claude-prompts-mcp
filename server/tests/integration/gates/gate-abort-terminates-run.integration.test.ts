@@ -115,7 +115,8 @@ describe('gate_action:"abort" terminates the run', () => {
     // Mid-run: the guard in 13-session-stage would let this resume.
     expect(isRunComplete(store.getSession('sess-abort')!)).toBe(false);
 
-    expect(await act(store, 'sess-abort', 'abort')).toBe(true);
+    // Abort decides no advance: only a skip returns one (R24).
+    expect(await act(store, 'sess-abort', 'abort')).toBeUndefined();
 
     // The predicate `13-session-stage.ts` consults before resuming.
     const aborted = store.getSession('sess-abort')!;

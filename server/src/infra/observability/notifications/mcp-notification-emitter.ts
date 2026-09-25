@@ -25,6 +25,11 @@
  * `StepResponseCaptureStage` performs it after the capture; the driven sequence is pinned in
  * `tests/integration/hooks/chain-lifecycle-emission.integration.test.ts`.
  *
+ * `chain/step_complete` announces the run moving PAST a step (R25), emitted by
+ * `GateVerdictProcessor.applyDeferredAdvance` on the call that moves it — never at capture, so
+ * a step an open review holds (an in-budget FAIL) announces nothing until its PASS or skip. The
+ * one other emitter is a detached node's late report, which the run passed on a placeholder.
+ *
  * TRANSPORT. Every one of these six events is caused BY a tool call that is still in flight, so
  * the channel is the causing request's own notification sender, taken from the async context
  * `withRequestNotifications` enters around each tool callback

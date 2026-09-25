@@ -59,8 +59,8 @@ export interface DeferredAdvance {
   readonly sessionId: string;
   /** The node the run advances PAST — the node the answered review graded. */
   readonly nodeId: string;
-  /** Why the run advances, for the diagnostic line the application emits. */
-  readonly reason: 'gate-pass' | 'advisory-fail' | 'informational-fail';
+  /** Why the run advances: the diagnostic line, and the `step_complete` status (skip: `failed`). */
+  readonly reason: 'captured' | 'gate-pass' | 'advisory-fail' | 'informational-fail' | 'gate-skip';
 }
 
 /**
@@ -119,6 +119,8 @@ interface ReviewEntry {
   readonly open?: (nodeId: string) => Promise<GateReview>;
   /** Grades the review before the event lands — a detached review's checks (R10.3). */
   readonly grade?: (review: GateReview) => Promise<GateReview>;
+  /** The call carries no answer; with an unanswered node, the verdict grades nothing (R26). */
+  readonly answerless?: boolean;
 }
 
 /**
@@ -200,7 +202,7 @@ export class GateVerdictProcessor {
       return answer;
     }
     const { review, advance } = answer;
-    this.recordVerdictDetection(context, payload, advance.outcome);
+    this.recordVerdictDetection(context, payload, advance.outcome, review.nodeId);
     const passed = advance.outcome === 'passed';
     await this.emitGateEvents(
       context,
@@ -363,20 +365,23 @@ export class GateVerdictProcessor {
    * Resolve the step review's exhaustion with `gate_action` (retry/skip/abort).
    *
    * `retry` and `skip` are events on the review (`advanceReview`): retry reopens it with the
-   * counter reset, skip clears it. `abort` cancels the RUN, not just the request:
+   * counter reset, skip clears it and accepts the answer the step already holds (R24) — it
+   * announces that step and returns the advance past it, for the stage to apply. A skip on a step
+   * that holds no answer is refused by name and records nothing: a call with no answer advances
+   * nothing (R19). `abort` cancels the RUN, not just the request:
    * `context.state.session.aborted` is per-request state that stage 21 reads to write a
    * `cancelled` execution record — it says the run ended without ending it, and until the cancel
    * landed the next call resumed the chain the user had just aborted. `cancelChain` returns false
    * for an already-terminal run; the run is over either way, so the abort exit still stands.
    *
-   * @returns true: the pipeline exits early after an action.
+   * @returns the advance a skip decided; the pipeline exits early after every action.
    */
   async handleGateAction(
     context: ExecutionContext,
     session: ChainSession,
     gateAction: GateAction,
     sessionContext: SessionContext
-  ): Promise<boolean> {
+  ): Promise<DeferredAdvance | undefined> {
     const sessionId = session.sessionId;
     context.state.gates.retryLimitExceeded = false;
     context.state.gates.awaitingUserChoice = false;
@@ -396,7 +401,19 @@ export class GateVerdictProcessor {
           failedGates: context.state.gates.retryExhaustedGateIds,
         }
       );
-      return true;
+      return undefined;
+    }
+
+    const target = addressedReview(session);
+    if (
+      gateAction === 'skip' &&
+      target.kind === 'review' &&
+      !this.holdsAnswer(target.nodeId, session)
+    ) {
+      const ordinal = ordinalOf(session.state.nodes, target.nodeId);
+      const message = `❌ gate_action "skip" refused: nothing to skip past on step ${ordinal}; answer it first. Nothing was recorded.`;
+      context.setResponse({ content: [{ type: 'text', text: message }], isError: true });
+      return undefined;
     }
 
     const answer = await this.answerReview(context, session, {
@@ -418,8 +435,43 @@ export class GateVerdictProcessor {
         sessionId,
         skippedGates: context.state.gates.retryExhaustedGateIds,
       });
+      return { sessionId, nodeId: answer.review.nodeId, reason: 'gate-skip' };
     }
-    return true;
+    return undefined;
+  }
+
+  /**
+   * Announce the step the run just moved past, with the output it was captured with (R25). The
+   * one emitter of `step_complete` for a run's own advance; a skipped step is `failed`: its gates
+   * failed, and the run moves past it anyway.
+   */
+  private async announceAdvancedStep(
+    context: ExecutionContext,
+    session: ChainSession,
+    advance: DeferredAdvance
+  ): Promise<void> {
+    if (this.hookRegistry === undefined && this.notificationEmitter === undefined) return;
+    const stepIndex = ordinalOf(session.state.nodes, advance.nodeId);
+    try {
+      const results = this.chainSessionStore.getChainContext(
+        session.sessionId,
+        context.getScopeOptions()
+      )['step_results'] as Record<number, string> | undefined;
+      const hookContext = buildPipelineHookContext(context);
+      const output = results?.[stepIndex] ?? '';
+      await this.hookRegistry?.emitStepComplete(session.chainId, stepIndex, output, hookContext);
+      this.notificationEmitter?.emitChainStepComplete({
+        chainId: session.chainId,
+        stepIndex,
+        status: advance.reason === 'gate-skip' ? 'failed' : 'passed',
+      });
+    } catch (error) {
+      this.logger.warn(
+        `[GateVerdictProcessor] Failed to announce step ${stepIndex}: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
   }
 
   /**
@@ -452,8 +504,13 @@ export class GateVerdictProcessor {
     if (verdictPayload === null || (opensNone && addressedReview(session).kind === 'refuse')) {
       return untouched;
     }
-    const bare = !hasResponse && verdictPayload.verdict === 'PASS';
-    const answer = await this.answerVerdict(context, session, verdictPayload, bare, trailerNodeId);
+    const answer = await this.answerVerdict(
+      context,
+      session,
+      verdictPayload,
+      hasResponse,
+      trailerNodeId
+    );
     if (answer.kind === 'refused') {
       context.setResponse({ content: [{ type: 'text', text: answer.message }], isError: true });
       context.diagnostics.warn('GateVerdictProcessor', 'Gate verdict refused', {
@@ -464,7 +521,7 @@ export class GateVerdictProcessor {
     }
 
     const { review, advance } = answer;
-    this.recordVerdictDetection(context, verdictPayload, advance.outcome);
+    this.recordVerdictDetection(context, verdictPayload, advance.outcome, review.nodeId);
     let deferredAdvance: DeferredAdvance | undefined;
     if (advance.outcome === 'passed') {
       deferredAdvance = {
@@ -481,16 +538,10 @@ export class GateVerdictProcessor {
         context.state.gates.phaseGuardReviewClearedNodeId = review.nodeId;
       }
       await this.emitGateEvents(context, 'passed', [...review.gateIds], verdictPayload.rationale);
-    } else if (advance.review !== null) {
+    } else if (advance.review !== null && answer.enforcement === 'blocking') {
       await this.handleBlockingFail(context, advance, verdictPayload);
     } else {
-      deferredAdvance = await this.handleNonBlockingFail(
-        context,
-        session,
-        answer,
-        verdictPayload,
-        hasResponse
-      );
+      deferredAdvance = await this.handleNonBlockingFail(context, session, answer, verdictPayload);
     }
 
     if (advance.review === null) {
@@ -516,9 +567,10 @@ export class GateVerdictProcessor {
     context: ExecutionContext,
     session: ChainSession,
     verdict: ParsedGateVerdict,
-    bare: boolean,
+    hasResponse: boolean,
     trailerNodeId: string | undefined
   ): Promise<ReviewAnswer> {
+    const bare = !hasResponse && verdict.verdict === 'PASS';
     const unanswered = bare ? this.unansweredReviewNode(session, trailerNodeId) : undefined;
     if (unanswered !== undefined) {
       return { kind: 'refused', message: describeUnansweredStep(session, unanswered) };
@@ -526,6 +578,7 @@ export class GateVerdictProcessor {
     const authority = context.gateEnforcement;
     return this.answerReview(context, session, {
       event: { type: 'verdict', verdict, at: Date.now() },
+      answerless: !hasResponse,
       ...(trailerNodeId !== undefined ? { trailerNodeId } : {}),
       ...(authority !== undefined && !bare
         ? {
@@ -542,9 +595,9 @@ export class GateVerdictProcessor {
   /**
    * Does `nodeId` hold a captured output? A verdict sent with no answer captures nothing, so it
    * may move the run past a node only when this is true (R19): a non-blocking FAIL on an
-   * unanswered node is recorded and warned about, and the run stays on it (P6.35). Dropping the
-   * advance rather than refusing keeps every FAIL polarity alike — a bare blocking FAIL spends an
-   * attempt (P4.116), and this one records its FAIL the same way.
+   * unanswered node is recorded and warned about, and the run stays on it (P6.35). Holding the
+   * review rather than refusing keeps every FAIL polarity alike — a bare FAIL of either mode
+   * spends an attempt of the node's open review (P4.116, R26).
    */
   private holdsAnswer(nodeId: string, session: ChainSession): boolean {
     return this.chainSessionStore.isStepComplete(session.sessionId, nodeId);
@@ -594,7 +647,7 @@ export class GateVerdictProcessor {
       await this.chainSessionStore.setReview(session.sessionId, review);
     }
 
-    const { event } = entry;
+    const event = this.markUnanswered(entry, review.nodeId, session);
     const failedGateIds =
       event.type === 'verdict'
         ? this.recordPerGateVerdicts(context, event.verdict.raw, review)
@@ -615,6 +668,16 @@ export class GateVerdictProcessor {
       await this.chainSessionStore.setReview(session.sessionId, advance.review);
     }
     return { kind: 'answered', review, advance, enforcement, failedGateIds };
+  }
+
+  /** The entry's event, flagged `unanswered` when neither the call nor the node holds an answer. */
+  private markUnanswered(entry: ReviewEntry, nodeId: string, session: ChainSession): ReviewEvent {
+    const { event } = entry;
+    return event.type === 'verdict' &&
+      entry.answerless === true &&
+      !this.holdsAnswer(nodeId, session)
+      ? { ...event, unanswered: true }
+      : event;
   }
 
   /**
@@ -645,9 +708,11 @@ export class GateVerdictProcessor {
   /**
    * Perform an advance this processor decided earlier in the same request (P4.89).
    *
-   * Called by `StepResponseCaptureStage` after `StepCaptureService` has captured and announced
-   * the step the verdict graded, and before the post-advance review check — so the run's terminal
-   * announcement can no longer arrive in front of the step event that produced it.
+   * Called by `StepResponseCaptureStage` after `StepCaptureService` has captured the step the
+   * verdict graded, and before the post-advance review check. Every advance past a node holding
+   * a real output runs here — the capture's own (`captured`) included — so this is where the run
+   * announces `step_complete` (R25): once, on the call that moves it, and only when it did move.
+   * A held capture or an in-budget FAIL moves nothing and announces nothing.
    *
    * The context snapshot is updated here rather than at decision time, because this is where the
    * new position exists. It is still written before the response is assembled, which is the
@@ -655,7 +720,12 @@ export class GateVerdictProcessor {
    * A store failure propagates, as it did when this ran inline.
    */
   async applyDeferredAdvance(context: ExecutionContext, advance: DeferredAdvance): Promise<void> {
+    const session = this.chainSessionStore.getSession(advance.sessionId, context.getScopeOptions());
+    const fromNodeId = session?.state.currentNodeId;
     const advanced = await this.chainSessionStore.advanceStep(advance.sessionId, advance.nodeId);
+    if (session !== undefined && advanced !== false && advanced.nodeId !== fromNodeId) {
+      await this.announceAdvancedStep(context, session, advance);
+    }
 
     const sessionContext = context.sessionContext;
     if (advanced !== false && sessionContext !== undefined) {
@@ -687,23 +757,7 @@ export class GateVerdictProcessor {
     verdictPayload: { rationale: string }
   ): Promise<void> {
     const review = advance.review;
-    if (advance.outcome === 'exhausted') {
-      context.state.gates.retryLimitExceeded = true;
-      context.state.gates.escalationSource = 'gate-review';
-      context.state.gates.retryExhaustedGateIds = [...review.gateIds];
-      context.diagnostics.warn('GateVerdictProcessor', 'Gate retry limit exceeded', {
-        attemptCount: review.attemptCount,
-        maxAttempts: review.maxAttempts,
-        gateIds: review.gateIds,
-      });
-      await this.emitGateEvents(
-        context,
-        'retryExhausted',
-        review.gateIds,
-        verdictPayload.rationale,
-        review.maxAttempts
-      );
-    }
+    await this.flagExhaustion(context, advance, verdictPayload.rationale);
 
     if (context.gates.hasBlockingGates()) {
       const blockedGateIds = [...context.gates.getBlockingGateIds()];
@@ -719,20 +773,46 @@ export class GateVerdictProcessor {
     context.diagnostics.info('GateVerdictProcessor', 'Gate FAIL - blocking mode, awaiting retry');
   }
 
+  /** An exhausting FAIL flags the retry limit and announces `retryExhausted`, in any mode. */
+  private async flagExhaustion(
+    context: ExecutionContext,
+    advance: AppliedAdvance,
+    rationale: string
+  ): Promise<void> {
+    const review = advance.review;
+    if (advance.outcome !== 'exhausted' || review === null) {
+      return;
+    }
+    context.state.gates.retryLimitExceeded = true;
+    context.state.gates.escalationSource = 'gate-review';
+    context.state.gates.retryExhaustedGateIds = [...review.gateIds];
+    context.diagnostics.warn('GateVerdictProcessor', 'Gate retry limit exceeded', {
+      attemptCount: review.attemptCount,
+      maxAttempts: review.maxAttempts,
+      gateIds: review.gateIds,
+    });
+    await this.emitGateEvents(
+      context,
+      'retryExhausted',
+      review.gateIds,
+      rationale,
+      review.maxAttempts
+    );
+  }
+
   /**
-   * Advisory or informational FAIL: the review is already cleared (`advanceReview`); announce it
-   * and decide the advance past the node the review graded, for the stage to apply after the
-   * capture. Advisory also warns, naming the gates the verdict failed when it named any. A FAIL
-   * sent with no answer on a node that holds none decides no advance (R19, P6.35).
+   * Advisory or informational FAIL: announce it and decide the advance past the node the review
+   * graded, for the stage to apply after the capture. Advisory also warns, naming the gates the
+   * verdict failed when it named any. A FAIL that graded no answer left its review open, charged
+   * (R26): it advances nothing (R19, P6.35), and past the budget it exhausts as a blocking one.
    */
   private async handleNonBlockingFail(
     context: ExecutionContext,
     session: ChainSession,
     answer: Extract<ReviewAnswer, { kind: 'answered' }>,
-    verdictPayload: { rationale: string },
-    hasResponse: boolean
+    verdictPayload: { rationale: string }
   ): Promise<DeferredAdvance | undefined> {
-    const { review, enforcement, failedGateIds } = answer;
+    const { review, enforcement, failedGateIds, advance } = answer;
     const advisory = enforcement === 'advisory';
     const gateIds = advisory && failedGateIds.length > 0 ? [...failedGateIds] : [...review.gateIds];
     if (advisory) {
@@ -751,8 +831,9 @@ export class GateVerdictProcessor {
         }
       );
     }
+    await this.flagExhaustion(context, advance, verdictPayload.rationale);
     await this.emitGateEvents(context, 'failed', gateIds, verdictPayload.rationale);
-    if (!hasResponse && !this.holdsAnswer(review.nodeId, session)) {
+    if (advance.review !== null) {
       return undefined;
     }
     return {
@@ -812,11 +893,13 @@ export class GateVerdictProcessor {
   private recordVerdictDetection(
     context: ExecutionContext,
     verdictPayload: ParsedGateVerdict,
-    outcome: string
+    outcome: string,
+    nodeId: string
   ): void {
     const verdictDetection: NonNullable<typeof context.state.gates.verdictDetection> = {
       verdict: verdictPayload.verdict,
       source: verdictPayload.source,
+      nodeId,
     };
     verdictDetection.rationale = verdictPayload.rationale;
     if (verdictPayload.detectedPattern !== undefined) {

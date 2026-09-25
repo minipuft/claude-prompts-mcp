@@ -248,7 +248,16 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       !isInterruptResolutionAction(gateAction) &&
       this.stepReviewOf(session)?.phase === 'exhausted'
     ) {
-      await this.verdictProcessor.handleGateAction(context, session, gateAction, sessionContext);
+      const skipped = await this.verdictProcessor.handleGateAction(
+        context,
+        session,
+        gateAction,
+        sessionContext
+      );
+      if (skipped !== undefined) {
+        await this.verdictProcessor.applyDeferredAdvance(context, skipped);
+        await this.ensurePostAdvanceReview(context);
+      }
       this.logExit({ gateAction, handled: true });
       return;
     }
@@ -262,7 +271,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       this.resolveVerdictTrailer(context, currentNodeIdAtStart, currentStepAtStart)
     );
     if (verdictResult.earlyExit) {
-      await this.settleVerdict(context, sessionId, session, currentStepAtStart, verdictResult);
+      await this.settleVerdict(context, sessionId, session, verdictResult);
       await this.ensurePostAdvanceReview(context);
       this.logExit({ gateVerdict: 'answered', handled: true });
       return;
@@ -270,7 +279,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
 
     // Capture step result (placeholder or real response)
     const sessionForCapture = this.chainSessionStore.getSession(sessionId, scopeOptions) ?? session;
-    await this.stepCaptureService.captureStep(
+    const captured = await this.stepCaptureService.captureStep(
       context,
       sessionId,
       sessionForCapture,
@@ -286,8 +295,11 @@ export class StepResponseCaptureStage extends BasePipelineStage {
           verdictResult.deferredAdvance?.nodeId === currentNodeIdAtStart,
       }
     );
+    if (captured !== undefined) {
+      await this.verdictProcessor.applyDeferredAdvance(context, captured);
+    }
 
-    await this.settleVerdict(context, sessionId, session, currentStepAtStart, verdictResult);
+    await this.settleVerdict(context, sessionId, session, verdictResult);
 
     await this.ensurePostAdvanceReview(context);
 
@@ -334,18 +346,17 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    *    — and until that moved here, the announcement reached the client ahead of the
    *    `step_complete` for the step being answered (P4.89).
    *
-   * The advance passes the node the answered review graded. Applying it after
-   * `StepCaptureService` advanced the run itself is harmless — `advanceStep` no-ops on a node the
-   * run has already passed.
+   * The advance passes the node the answered review graded. Applying it after the capture's own
+   * advance is harmless — `advanceStep` no-ops on a node the run has already passed, and a no-op
+   * announces nothing.
    */
   private async settleVerdict(
     context: ExecutionContext,
     sessionId: string,
     session: NonNullable<ReturnType<ChainSessionService['getSession']>>,
-    currentStepAtStart: number,
     result: VerdictProcessingResult
   ): Promise<void> {
-    this.stepCaptureService.ledgerSubmittedVerdict(context, sessionId, session, currentStepAtStart);
+    this.stepCaptureService.ledgerSubmittedVerdict(context, sessionId, session);
     if (result.deferredAdvance !== undefined) {
       await this.verdictProcessor.applyDeferredAdvance(context, result.deferredAdvance);
     }
