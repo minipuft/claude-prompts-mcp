@@ -1,4 +1,4 @@
-// @lifecycle test - P6.26 / R29: a step under a pending shell check is held until the check passes, over Streamable HTTP.
+// @lifecycle test - P6.26 / R29 and P6.44 / R24: a step under a pending shell check is held until the check passes or is skipped, over Streamable HTTP.
 /**
  * MEASURED 2026-09-24 on `04b11390`: `>>quick_decision … :: verify:"test -f M"` with M absent.
  * Stage 16 captured the step's answer and advanced the run before stage 17 ran the check, so
@@ -7,7 +7,9 @@
  *
  * Now (R29) the pending check holds its step as an open gate review does: the capture records
  * the answer and moves nothing, a bounce announces nothing, and the call whose check passes
- * moves the run past the held step with one `step_complete`.
+ * moves the run past the held step with one `step_complete`. `gate_action: "skip"` on an
+ * exhausted check releases the same hold (R24), and is refused by name with no answer to skip
+ * past (P6.44).
  *
  * An inline `:: verify:` is armed once, when the run is created: once it passes it is cleared, so
  * the steps after the held one run unchecked (measured here, twin c).
@@ -132,5 +134,34 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
     const last = await answer(call, 'Step 3');
     expect(last.text).toContain('Chain complete');
     expect(count(last, CHAIN_COMPLETE)).toBe(1);
+  }, 180000);
+
+  test('P6.44 (a): skip on an exhausted check accepts the captured answer and advances', async () => {
+    const { call } = await startVerifiedChain(false, ' max:2');
+    await answer(call, 'Step 1');
+    const escalated = await call({ user_response: 'still missing' });
+    expect(escalated.text).toContain('Maximum Attempts Reached');
+    expect(count(escalated, STEP_COMPLETE)).toBe(0);
+
+    const skipped = await call({ gate_action: 'skip' });
+    expect(skipped.text).toContain('Progress 2/3');
+    expect(count(skipped, STEP_COMPLETE)).toBe(1);
+  }, 180000);
+
+  test('P6.44 (b) control: retry on an exhausted check resets attempts and keeps the step', async () => {
+    const { call } = await startVerifiedChain(false, ' max:2');
+    await answer(call, 'Step 1');
+    await call({ user_response: 'still missing' });
+
+    const retried = await call({ gate_action: 'retry' });
+    expect(retried.text).toContain('Attempts:** 0/2');
+    expect(count(retried, STEP_COMPLETE)).toBe(0);
+  }, 180000);
+
+  test('P6.44 (c): skip with no captured answer is refused by name', async () => {
+    const { raw, command } = await startVerifiedChain(false);
+    const refused = await raw({ command, gate_action: 'skip' });
+    expect(refused.text).toContain('nothing to skip past on step 1; answer it first');
+    expect(count(refused, STEP_COMPLETE)).toBe(0);
   }, 180000);
 });

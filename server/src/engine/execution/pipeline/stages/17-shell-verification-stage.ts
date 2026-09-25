@@ -76,6 +76,10 @@ export class ShellVerificationStage extends BasePipelineStage {
 
     // Handle gate_action response (retry/skip/abort)
     const gateAction = context.mcpRequest.gate_action;
+    if (gateAction === 'skip' && this.refusesSkip(context)) {
+      await this.saveToSession(context, pending);
+      return;
+    }
     if (gateAction !== undefined && pending.attemptCount >= pending.maxAttempts) {
       await this.handleGateAction(context, gateAction, pending);
       return;
@@ -300,6 +304,27 @@ export class ShellVerificationStage extends BasePipelineStage {
   }
 
   /**
+   * `skip` accepts the step's captured answer (R24), so on a run with no captured answer it has
+   * nothing to skip past and is refused by name. A single prompt has no run: skip there only
+   * clears the check, as it always has.
+   */
+  private refusesSkip(context: ExecutionContext): boolean {
+    if (runSessionId(context) === undefined || this.heldNodeId(context) !== undefined) return false;
+    const step = context.sessionContext?.currentStep ?? 1;
+    context.setResponse({
+      content: [
+        {
+          type: 'text',
+          text: `Shell verification skip refused: nothing to skip past on step ${step}; answer it first.`,
+        },
+      ],
+      isError: true,
+    });
+    this.logExit({ gateAction: 'skip', refused: 'no captured answer' });
+    return true;
+  }
+
+  /**
    * Clear pending state from session (on pass, skip, abort, or escalation).
    */
   private async clearFromSession(context: ExecutionContext): Promise<void> {
@@ -365,14 +390,17 @@ export class ShellVerificationStage extends BasePipelineStage {
         break;
       }
 
-      case 'skip':
+      case 'skip': {
+        const heldNodeId = this.heldNodeId(context);
         context.state.gates.pendingShellVerification = undefined;
         await this.clearFromSession(context);
+        await this.releaseHeldStep(context, heldNodeId, 'gate-skip');
         context.diagnostics.warn(this.name, 'User chose to skip shell verification', {
           gateId: pending.gateId,
         });
         this.logExit({ gateAction: 'skip' });
         break;
+      }
 
       case 'abort': {
         context.state.session.aborted = true;

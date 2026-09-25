@@ -202,10 +202,12 @@ scenarios:
         args: { command: '>>minimal_prompt :: verify:"exit 1" :fast' }
         capture:
           cid: 'chain_id: "(chain-[A-Za-z0-9_#-]+)"'
-      - tool: prompt_engine
-        args: { chain_id: '${cid}', gate_action: 'skip' }
+      # Since R24/R29 (P6.44) `skip` accepts the step's captured answer, so the answer comes
+      # first; a skip with none to accept is refused by name.
       - tool: prompt_engine
         args: { chain_id: '${cid}', user_response: 'done' }
+      - tool: prompt_engine
+        args: { chain_id: '${cid}', gate_action: 'skip' }
     # Reaching completion is the proof: the shell gate is configured to fail on EVERY attempt
     # (`exit 1`), so a run that finishes can only have bypassed it. Asserting the intermediate
     # response would measure which gate spoke next, which is the ambiguity that produced the

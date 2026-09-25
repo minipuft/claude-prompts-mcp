@@ -264,28 +264,57 @@ describe('ShellVerificationStage', () => {
       expect(executor.execute).not.toHaveBeenCalled();
     });
 
-    test('gate_action: skip does NOT set response (pipeline continues)', async () => {
+    test('gate_action: skip releases the held step through the advance owner (R24)', async () => {
       const executor = createMockExecutor(true);
       const sessionService = createMockSessionService();
+      (sessionService.getPendingShellVerification as jest.Mock).mockReturnValue({
+        nodeId: 'node-1',
+      });
+      const advanceOwner = createAdvanceOwner();
       const stage = new ShellVerificationStage(
         executor,
         createMockStateManager(),
         sessionService,
-        createAdvanceOwner(),
+        advanceOwner,
         createLogger()
       );
 
       const context = createEscalatedContext('skip');
       await stage.execute(context);
 
-      // Should NOT set a response (pipeline continues to next stages)
+      // No response: the pipeline continues and renders the step the run moved to
       expect(context.response).toBeUndefined();
-
-      // Should clear pending state
       expect(context.state.gates.pendingShellVerification).toBeUndefined();
       expect(sessionService.clearPendingShellVerification).toHaveBeenCalled();
+      expect(advanceOwner.applyDeferredAdvance).toHaveBeenCalledWith(context, {
+        sessionId: 'test-session',
+        nodeId: 'node-1',
+        reason: 'gate-skip',
+      });
+      expect(executor.execute).not.toHaveBeenCalled();
+    });
 
-      // Should NOT execute the verification command
+    test('gate_action: skip with no captured answer is refused by name and keeps the check', async () => {
+      const executor = createMockExecutor(true);
+      const sessionService = createMockSessionService();
+      const advanceOwner = createAdvanceOwner();
+      const stage = new ShellVerificationStage(
+        executor,
+        createMockStateManager(),
+        sessionService,
+        advanceOwner,
+        createLogger()
+      );
+
+      const context = createEscalatedContext('skip');
+      await stage.execute(context);
+
+      expect(JSON.stringify(context.response)).toContain(
+        'nothing to skip past on step 1; answer it first'
+      );
+      expect(sessionService.clearPendingShellVerification).not.toHaveBeenCalled();
+      expect(sessionService.setPendingShellVerification).toHaveBeenCalled();
+      expect(advanceOwner.applyDeferredAdvance).not.toHaveBeenCalled();
       expect(executor.execute).not.toHaveBeenCalled();
     });
   });
