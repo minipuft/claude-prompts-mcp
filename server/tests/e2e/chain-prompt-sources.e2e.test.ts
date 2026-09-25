@@ -175,12 +175,16 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
   const templates = (text: string): string[] => text.match(/BODY-sv_[a-z]+ topic=\S*/g) ?? [];
 
   /** Walk sv_chain's steps: PASS on step 1, FAIL on step 2 (opens its review), then PASS through. */
-  async function walkExpanded(run: { chainId: string; text: string; call: Call }, firstId: string) {
-    expect(templates(run.text)).toEqual(['BODY-sv_a topic=']);
+  async function walkExpanded(
+    run: { chainId: string; text: string; call: Call },
+    firstId: string,
+    topic = ''
+  ) {
+    expect(templates(run.text)).toEqual([`BODY-sv_a topic=${topic}`]);
     expect(run.text).not.toContain('CHAIN-OWN-TEMPLATE');
 
     const second = await run.call({ user_response: 'A out', gate_verdict: PASS });
-    expect(templates(second)).toEqual(['BODY-sv_b topic=']);
+    expect(templates(second)).toEqual([`BODY-sv_b topic=${topic}`]);
     expect(second).toContain('Progress 2/4');
 
     const failed = await run.call({ user_response: 'B out', gate_verdict: FAIL });
@@ -189,10 +193,10 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
     expect(runState(run.chainId).reviews).toEqual({ [`${firstId}-b`]: ['sv-block'] });
 
     const third = await run.call({ user_response: 'B fixed', gate_verdict: PASS });
-    expect(templates(third)).toEqual(['BODY-sv_a topic=']);
+    expect(templates(third)).toEqual([`BODY-sv_a topic=${topic}`]);
     expect(third).toContain('Progress 3/4');
     const fourth = await run.call({ user_response: 'C out', gate_verdict: PASS });
-    expect(templates(fourth)).toEqual(['BODY-sv_b topic=']);
+    expect(templates(fourth)).toEqual([`BODY-sv_b topic=${topic}`]);
     expect(fourth).toContain('Progress 4/4');
   }
 
@@ -239,6 +243,50 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       expect(templates(second)).toEqual(['BODY-sv_a topic=']);
       expect(second).toContain('CRIT-each-node');
       expect(second).toContain('### sv-block');
+    }, 120000);
+  });
+
+  describe('P6.80: a submitted workflow node', () => {
+    const workflow = (x: Record<string, unknown>) => ({
+      workflow: {
+        version: 1,
+        nodes: [
+          { id: 'x', ...x },
+          { id: 'y', promptId: 'sv_b' },
+        ],
+        edges: [{ from: 'x', to: 'y' }],
+      },
+    });
+
+    test('(a) a node naming a chain prompt runs its steps with their own templates and gates', async () => {
+      const run = await start(workflow({ promptId: 'sv_chain' }));
+      expect(runState(run.chainId).steps).toEqual([
+        'x-a:sv_a:["sv-block"]',
+        'x-b:sv_b:["sv-block"]',
+        'x-c:sv_a:["sv-block"]',
+        'y:sv_b:[]',
+      ]);
+      await walkExpanded(run, 'x');
+    }, 120000);
+
+    test('(b) control: a submission of single prompts keeps its nodes and ids', async () => {
+      const run = await start(workflow({ promptId: 'sv_a' }));
+      expect(runState(run.chainId).steps).toEqual(['x:sv_a:[]', 'y:sv_b:[]']);
+      expect(templates(run.text)).toEqual(['BODY-sv_a topic=']);
+      const second = await run.call({ user_response: 'A out' });
+      expect(templates(second)).toEqual(['BODY-sv_b topic=']);
+      expect(second).toContain('Progress 2/2');
+    }, 120000);
+
+    test("(c) the chain-prompt node's args reach every expanded step", async () => {
+      const run = await start(workflow({ promptId: 'sv_chain', args: { topic: 'TOPIC-X' } }));
+      const state = runState(run.chainId);
+      expect(state.args.slice(0, 3)).toEqual([
+        { topic: 'TOPIC-X' },
+        { topic: 'TOPIC-X' },
+        { topic: 'TOPIC-X' },
+      ]);
+      await walkExpanded(run, 'x', 'TOPIC-X');
     }, 120000);
   });
 });
