@@ -27,6 +27,7 @@ sys.path.insert(0, str(Path(__file__).parent / "lib"))
 from session_state import (
     UNKNOWN_INTERRUPT_LABEL,
     interrupt_exits,
+    is_subagent_payload,
     load_session_state,
 )
 
@@ -115,6 +116,13 @@ def main():
             }
             print(json.dumps(hook_response))
             sys.exit(0)
+
+    # Check 2 reads the pending gate by session_id, and a subagent's call arrives under its
+    # PARENT's: a worker resuming its own run is not held by the parent's review. The server
+    # still gates the worker's run. Check 1 above reads only the caller's own verdict, so it
+    # applies to a worker as it does to its parent.
+    if is_subagent_payload(hook_input):
+        sys.exit(0)
 
     # Check 2: Resuming chain without any resolution parameter while a gate is pending.
     # Any contract-flagged resolution verb (gate_verdict, gate_action, cancel, ...) passes:

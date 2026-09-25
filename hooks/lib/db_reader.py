@@ -207,16 +207,15 @@ def load_recoverable_chain_state(session_id: str | None) -> dict | None:
 
     Degradation ladder:
       - no session row, or no chain_id in it     → None (nothing to recover)
-      - state.db reachable, chain active + live  → fresh state from state.db
-      - state.db reachable, chain row live but
-        not in a step shape the converters serve
-        (a gated single-prompt execution is 0/0),
-        or no row at all (that run type is not
-        row-tracked; measured live 2026-08-21)   → the session snapshot —
-        which is this session's OWN recorded chain, so it can never be foreign
-      - state.db reachable, chain row(s) exist
-        and every one is terminal or dead-owned  → None (expired — do NOT
-        resurrect from the session snapshot; it is stale by definition here)
+      - state.db reachable, a projected row for
+        the chain with a live owner              → fresh state from state.db
+      - state.db reachable, no such row          → None. The server projects a
+        run to chain_sessions exactly while it is not complete (R30,
+        `isSessionActiveForHooks`), so an absent row means the run completed,
+        ended, or died with its server. A gated single prompt is a 1/1 run and
+        is projected too (measured 2026-09-25: 1/1 `working` after the render,
+        no row after the PASS verdict). The snapshot fallback that used to
+        serve here replayed a finished run as a stale step (P6.31).
       - no state.db reachable                    → the session snapshot as-is
         (the pre-existing fallback for hosts without a readable server db)
     """
@@ -238,49 +237,11 @@ def load_recoverable_chain_state(session_id: str | None) -> dict | None:
         result = _load_from_execution_view(conn, chain_id)
         if result is not None:
             return result
-        result = _load_from_session_table(conn, chain_id)
-        if result is not None:
-            return result
-        return dict(session) if _chain_row_is_alive(conn, chain_id) else None
+        return _load_from_session_table(conn, chain_id)
     except (sqlite3.Error, json.JSONDecodeError, KeyError, TypeError):
         return None
     finally:
         conn.close()
-
-
-def _chain_row_is_alive(conn: sqlite3.Connection, chain_id: str) -> bool:
-    """False only when row(s) exist for the chain and every one is terminal
-    or owned by a dead server PID — the shapes where a snapshot replay would
-    resume a run nothing can serve.
-
-    Everything else is True: a live non-terminal row whose step shape the
-    converters do not return (a gated single-prompt execution at 0/0 still
-    carries a real pending gate), NO row at all (that run type is not
-    row-tracked — measured live 2026-08-21 against a pending single-prompt
-    gate; and a graceful server exit deletes rows only when the conversation
-    is over, where the session id changes anyway), and schema drift (fails
-    open, matching the pre-scoping fallback). The snapshot this admits is
-    always the session's own recorded chain, never another client's.
-    """
-    try:
-        rows = conn.execute(
-            "SELECT run_owner_pid, run_status FROM chain_sessions WHERE chain_id = ?",
-            (chain_id,),
-        ).fetchall()
-    except sqlite3.OperationalError:
-        return True
-    if not rows:
-        return True
-    for row in rows:
-        if row["run_status"] in TERMINAL_RUN_STATUSES:
-            continue
-        try:
-            pid = int(row["run_owner_pid"])
-        except (ValueError, TypeError):
-            continue
-        if _is_pid_alive(pid):
-            return True
-    return False
 
 
 def load_active_chain_state(chain_id: str | None = None) -> dict | None:
@@ -470,8 +431,8 @@ def _is_projected_run_visible(current: int, total: int) -> bool:
     Visibility is decided once, server-side: `isSessionActiveForHooks` projects a row exactly
     while `!isRunComplete(session)`. So a row standing on a node (`1..total`) is in progress, and
     a row at `total + 1` is a run held open past its last node — a pending review, shell check,
-    or owed detached report; a completed run is never projected there. Only `current == 0` (no
-    node shape, e.g. a gated single-prompt at 0/0) is left to the caller's snapshot fallback.
+    or owed detached report; a completed run is never projected there. `current == 0` is a
+    zero-node run, which the server treats as complete on arrival and never projects.
     """
     return 0 < current <= total + 1
 

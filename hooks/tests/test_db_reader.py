@@ -104,6 +104,7 @@ def _chain_session_state(
     run_status: str = "working",
     pending_gate_review: dict | None = None,
     pending_shell_verification: dict | None = None,
+    chain_id: str = "chain-demo",
 ) -> str:
     """Serialize a ChainSession exactly as the only writer emits it.
 
@@ -115,7 +116,7 @@ def _chain_session_state(
     return json.dumps(
         {
             "sessionId": session_id,
-            "chainId": "chain-demo",
+            "chainId": chain_id,
             "currentStep": current,
             "totalSteps": total,
             "lastActivity": 1000,
@@ -184,11 +185,17 @@ def _insert_resource(conn: sqlite3.Connection, **kwargs) -> None:
     conn.commit()
 
 
-def _insert_session(conn: sqlite3.Connection, run_owner_pid: str, state: str, *, run_status: str = "working") -> None:
+def _insert_session(
+    conn: sqlite3.Connection,
+    run_owner_pid: str,
+    state: str,
+    *,
+    run_status: str = "working",
+    chain_id: str = "chain-demo",
+) -> None:
     conn.execute(
-        "INSERT INTO chain_sessions (run_owner_pid, chain_id, run_number, state, run_status) "
-        "VALUES (?, 'chain-demo', 1, ?, ?)",
-        (run_owner_pid, state, run_status),
+        "INSERT INTO chain_sessions (run_owner_pid, chain_id, run_number, state, run_status) VALUES (?, ?, 1, ?, ?)",
+        (run_owner_pid, chain_id, state, run_status),
     )
     conn.commit()
 
@@ -587,47 +594,38 @@ class TestCrossClientScoping:
 
         assert db_reader.load_recoverable_chain_state(self.SESSION) is None
 
-    def test_a_live_zero_step_gated_run_serves_the_snapshot(self, state_db):
-        """A gated single-prompt execution sits at step 0/0 — a shape the db
-        converters do not serve — while its gate is genuinely pending. Live
-        row + live owner must fall back to the session snapshot, not expire
-        (caught by driving the fixed hook against a real pending gate)."""
-        from session_state import save_session_state
-
-        save_session_state(
-            self.SESSION,
-            {"chain_id": "chain-demo", "current_step": 0, "total_steps": 0, "pending_gate": "code-quality"},
-        )
+    def test_a_live_run_with_no_projected_row_recovers_nothing(self, state_db):
+        """P6.61: the server projects a run exactly while it is not complete (R30), so with
+        state.db reachable and no row for the recorded chain the run is over. The session
+        snapshot still says step 2/3; serving it replayed a finished run as a stale step.
+        Another chain's live row stays in the table so the probe reads a populated db."""
+        self._record_session_chain("chain-demo")
         _insert_session(
             state_db,
             str(LIVE_PID),
-            _chain_session_state(
-                current=0,
-                total=0,
-                pending_gate_review={"gateIds": ["code-quality"], "attemptCount": 1},
-            ),
+            _chain_session_state(current=2, total=5, chain_id="chain-other"),
+            chain_id="chain-other",
         )
+
+        assert db_reader.load_recoverable_chain_state(self.SESSION) is None
+
+    def test_control_the_same_chain_projected_is_recovered(self, state_db):
+        """Positive control for the absence above: one row for the recorded chain, the rest
+        identical, and the loader serves that row."""
+        self._record_session_chain("chain-demo")
+        _insert_session(
+            state_db,
+            str(LIVE_PID),
+            _chain_session_state(current=2, total=5, chain_id="chain-other"),
+            chain_id="chain-other",
+        )
+        _insert_session(state_db, str(LIVE_PID), _chain_session_state(current=4, total=3))
 
         state = db_reader.load_recoverable_chain_state(self.SESSION)
 
         assert state is not None
-        assert state["pending_gate"] == "code-quality"
-
-    def test_an_untracked_run_type_serves_the_snapshot(self, state_db):
-        """No chain_sessions row exists for the session's chain while state.db
-        is reachable — the live shape of a gated single-prompt run, which is
-        not row-tracked. The session's own snapshot serves."""
-        from session_state import save_session_state
-
-        save_session_state(
-            self.SESSION,
-            {"chain_id": "chain-demo", "current_step": 0, "total_steps": 0, "pending_gate": "code-quality"},
-        )
-
-        state = db_reader.load_recoverable_chain_state(self.SESSION)
-
-        assert state is not None
-        assert state["pending_gate"] == "code-quality"
+        assert state["chain_id"] == "chain-demo"
+        assert state["current_step"] == 4
 
     def test_a_dead_owner_expires_the_chain(self, state_db):
         """The owning server exited (or its rows were PID-deleted): recovery
