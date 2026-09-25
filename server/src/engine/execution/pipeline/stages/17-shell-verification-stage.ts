@@ -26,6 +26,7 @@ import {
   createBounceBackFeedback,
   createEscalationFeedback,
 } from '../../../gates/shell/index.js';
+import { reviewHolding } from '../../capture/step-capture-service.js';
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
@@ -163,8 +164,8 @@ export class ShellVerificationStage extends BasePipelineStage {
     const heldNodeId = this.heldNodeId(context);
     context.state.gates.pendingShellVerification = undefined;
     await this.clearFromSession(context);
-    await this.releaseHeldStep(context, heldNodeId, 'captured');
-    const rearmed = await this.rearmForNextStep(context, pending, heldNodeId);
+    const release = await this.releaseHeldStep(context, heldNodeId, 'captured');
+    const rearmed = await this.rearmForNextStep(context, pending, heldNodeId, release);
 
     // LOOP MODE: Clear verify-state.db, unless the check stands again for the next step
     if (shellVerify.loop === true && !rearmed) {
@@ -346,37 +347,45 @@ export class ShellVerificationStage extends BasePipelineStage {
 
   /**
    * Release the hold on a step once its check passes or is skipped (R29): advance past it through
-   * the one advance owner, which announces its `step_complete` on this call. A step still under an
-   * open review is left to that review's verdict, which advances it once this check is gone.
+   * the one advance owner, which announces its `step_complete` on this call. A step an open review
+   * holds — its own, or an earlier node's (R14, `reviewHolding`, P6.53) — is left to that review.
    */
   private async releaseHeldStep(
     context: ExecutionContext,
     nodeId: string | undefined,
     reason: 'captured' | 'gate-skip'
-  ): Promise<void> {
+  ): Promise<'released' | 'left-to-review' | 'none'> {
     const sessionId = runSessionId(context);
-    if (nodeId === undefined || sessionId === undefined) return;
+    if (nodeId === undefined || sessionId === undefined) return 'none';
     const session = this.chainSessionService.getSession(sessionId, context.getScopeOptions());
-    if (session?.reviews?.[nodeId] !== undefined) return;
+    if (session !== undefined && reviewHolding(session, nodeId) !== undefined) {
+      return 'left-to-review';
+    }
     await this.advanceOwner.applyDeferredAdvance(context, { sessionId, nodeId, reason });
+    return 'released';
   }
 
   /**
    * A chain-level check grades every step's answer (R32). Once the release moved the run past the
    * held step onto a later node, the check stands again for that node: a fresh budget, no node
    * (the capture of the next answer names it, as on the render), and the loop's Stop-hook state
-   * written again. A release that completed the run, or moved nothing, leaves it cleared.
+   * written again. A step left to a review is re-armed the same way, on the node the run stands
+   * on: the review's verdict then moves the run (an armed check holds only a capture), and the
+   * next answer is checked (P6.53). A release that completed the run, or moved nothing, leaves it
+   * cleared.
    */
   private async rearmForNextStep(
     context: ExecutionContext,
     pending: PendingShellVerification,
-    releasedNodeId: string | undefined
+    releasedNodeId: string | undefined,
+    release: 'released' | 'left-to-review' | 'none'
   ): Promise<boolean> {
     const sessionId = runSessionId(context);
     if (sessionId === undefined || releasedNodeId === undefined) return false;
     const session = this.chainSessionService.getSession(sessionId, context.getScopeOptions());
     const standsOn = session?.state.currentNodeId;
-    if (standsOn === undefined || standsOn === null || standsOn === releasedNodeId) return false;
+    if (standsOn === undefined || standsOn === null) return false;
+    if (standsOn === releasedNodeId && release !== 'left-to-review') return false;
 
     const rearmed: PendingShellVerification = { ...pending, attemptCount: 0, previousResults: [] };
     await this.writeSnapshot(context, rearmed, undefined);
@@ -481,8 +490,8 @@ export class ShellVerificationStage extends BasePipelineStage {
         const heldNodeId = this.heldNodeId(context);
         context.state.gates.pendingShellVerification = undefined;
         await this.clearFromSession(context);
-        await this.releaseHeldStep(context, heldNodeId, 'gate-skip');
-        await this.rearmForNextStep(context, pending, heldNodeId);
+        const release = await this.releaseHeldStep(context, heldNodeId, 'gate-skip');
+        await this.rearmForNextStep(context, pending, heldNodeId, release);
         context.diagnostics.warn(this.name, 'User chose to skip shell verification', {
           gateId: pending.gateId,
         });

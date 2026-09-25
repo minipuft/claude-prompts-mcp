@@ -18,6 +18,17 @@
  * Now (R32) a chain-level check grades EVERY step's answer: once a pass or a skip releases step N
  * and the run stands on a later step, the check is pending again for it with a fresh attempt
  * budget, and the run completes only when the last step's check passes (P6.52).
+ *
+ * MEASURED 2026-09-25 on `253f91a5` (authored chain, one blocking gate per step): a check that
+ * passed while the step's own review was open left the step to that review and was cleared, not
+ * re-armed, so the review's PASS moved the run onto step 3 and step 3's answer completed the run
+ * with the marker deleted and the command never run. The release also read only the step's own
+ * review, while R14 lets an EARLIER node's open review hold a step.
+ *
+ * Now (P6.53) the release asks the one hold derivation the capture asks (`reviewHolding`), and a
+ * step left to a review keeps the check armed for the next answer: an armed check holds only the
+ * answer captured on the call, so the review's verdict moves the step and the next answer is
+ * checked.
  */
 import { afterEach, describe, expect, test } from '@jest/globals';
 
@@ -38,6 +49,9 @@ import {
 const STEP_COMPLETE = 'notifications/chain/step_complete';
 const CHAIN_COMPLETE = 'notifications/chain/complete';
 const PASS = 'GATE_REVIEW: PASS - three options with tradeoffs';
+const FAIL = 'GATE_REVIEW: FAIL - the step misses its gate';
+/** Opted out of the default gates, so each step carries exactly the one blocking gate below. */
+const OPT_OUT = { exclude: ['content-structure'], framework_gates: false };
 
 interface ToolOutcome {
   text: string;
@@ -60,7 +74,7 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
   async function startVerifiedChain(
     markerPresent: boolean,
     verifyOptions = '',
-    opening: { prompt?: string; user_response?: string } = {}
+    opening: { prompt?: string; user_response?: string; authored?: boolean } = {}
   ): Promise<{
     call: Call;
     raw: Call;
@@ -103,7 +117,10 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
         methods: outcome.notifications.map((n: StreamNotification) => n.method),
       };
     };
-    const prompt = opening.prompt ?? 'quick_decision topic:"pick a database"';
+    if (opening.authored === true) await authorBlockingChain(client, () => nextId++);
+    const prompt =
+      opening.prompt ??
+      (opening.authored === true ? 'sv_chain' : 'quick_decision topic:"pick a database"');
     const command = `>>${prompt} :: verify:"sh ${script}"${verifyOptions}`;
     const start = await raw(
       opening.user_response === undefined
@@ -120,6 +137,55 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
       command,
       runs,
     };
+  }
+
+  /**
+   * `sv_chain`: three authored steps, each carrying one gate declared `enforcement_mode:
+   * blocking`, so a FAIL opens a review that holds the step. `quick_decision` under `:: verify:`
+   * never opens one: its steps carry no review gates there, and a FAIL only warns.
+   */
+  async function authorBlockingChain(client: ModernMcpClient, id: () => number): Promise<void> {
+    const author = async (args: Record<string, unknown>): Promise<void> => {
+      const outcome = await client.callToolWithNotifications('resource_manager', args, id());
+      const result = outcome.result as { isError?: boolean; content?: unknown } | undefined;
+      if (result?.isError === true) throw new Error(JSON.stringify(result.content));
+    };
+    await author({
+      resource_type: 'gate',
+      action: 'create',
+      id: 'sv-block',
+      name: 'sv-block',
+      description: 'blocking e2e gate',
+      guidance: 'GUIDANCE-sv-block',
+      enforcement_mode: 'blocking',
+    });
+    for (const id of ['sv_a', 'sv_b']) {
+      await author({
+        resource_type: 'prompt',
+        action: 'create',
+        id,
+        category: 'general',
+        name: id,
+        description: `e2e step ${id}`,
+        user_message_template: `BODY-${id}`,
+        gate_configuration: OPT_OUT,
+      });
+    }
+    await author({
+      resource_type: 'prompt',
+      action: 'create',
+      id: 'sv_chain',
+      category: 'general',
+      name: 'sv_chain',
+      description: 'e2e chain with a blocking gate on every step',
+      user_message_template: 'chain',
+      gate_configuration: OPT_OUT,
+      chain_steps: [
+        { promptId: 'sv_a', stepName: 'A', inlineGateIds: ['sv-block'] },
+        { promptId: 'sv_b', stepName: 'B', inlineGateIds: ['sv-block'] },
+        { promptId: 'sv_a', stepName: 'C', inlineGateIds: ['sv-block'] },
+      ],
+    });
   }
 
   const answer = (call: Call, label: string): Promise<ToolOutcome> =>
@@ -348,5 +414,36 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
     expect(skipped.text).toContain('Progress 2/3');
     expect(count(skipped, STEP_COMPLETE)).toBe(1);
     expect(runs()).toBe(1);
+  }, 180000);
+
+  test('P6.53 (a): a check passed under its step review stands again, so the next step is checked', async () => {
+    const { call, marker, runs } = await startVerifiedChain(true, '', { authored: true });
+    expect(
+      (await call({ user_response: 'A out', gate_verdict: 'GATE_REVIEW: PASS - ok' })).text
+    ).toContain('Progress 2/3');
+
+    // Step 2's FAIL opens its review; the same call's check passes and leaves the step to it
+    const held = await call({ user_response: 'B out', gate_verdict: FAIL });
+    expect(count(held, STEP_COMPLETE)).toBe(0);
+    expect(runs()).toBe(2);
+
+    // The review's PASS moves the run: an armed check holds only a capture
+    const passed = await call({ gate_verdict: 'GATE_REVIEW: PASS - ok' });
+    expect(passed.text).toContain('Progress 3/3');
+    expect(count(passed, STEP_COMPLETE)).toBe(1);
+    expect(runs()).toBe(2);
+
+    // The check stood again, so step 3's answer is checked and bounces
+    unlinkSync(marker);
+    const bounced = await call({ user_response: 'C out', gate_verdict: 'GATE_REVIEW: PASS - ok' });
+    expect(bounced.text).toContain('Shell Verification FAILED (Attempt 1/5)');
+    expect(count(bounced, CHAIN_COMPLETE)).toBe(0);
+    expect(runs()).toBe(3);
+
+    // Control: fixed, the same answer passes and completes the run once
+    writeFileSync(marker, 'ok');
+    const last = await call({ user_response: 'C fixed' });
+    expect(count(last, CHAIN_COMPLETE)).toBe(1);
+    expect(runs()).toBe(4);
   }, 180000);
 });

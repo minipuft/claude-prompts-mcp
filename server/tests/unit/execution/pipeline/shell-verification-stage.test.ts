@@ -454,7 +454,7 @@ describe('ShellVerificationStage', () => {
         nodeId: 'node-1',
       });
       (sessionService.getSession as jest.Mock).mockReturnValue({
-        state: { currentNodeId: standsOn },
+        state: { currentNodeId: standsOn, nodes: [{ id: 'node-1' }, { id: 'node-2' }] },
       });
       const stateManager = createMockStateManager();
       const stage = new ShellVerificationStage(
@@ -509,6 +509,68 @@ describe('ShellVerificationStage', () => {
       expect(sessionService.clearPendingShellVerification).toHaveBeenCalled();
       expect(sessionService.setPendingShellVerification).not.toHaveBeenCalled();
       expect(stateManager.clearState).toHaveBeenCalledWith('chain-test#1');
+    });
+  });
+
+  /**
+   * P6.53: the release asks the one hold derivation (`reviewHolding`, R14): an open review of an
+   * EARLIER node holds the step the check passed, as it holds that step's capture. The check is
+   * re-armed for the next answer instead of cleared, so the review's verdict moves the run and the
+   * next answer is still checked.
+   */
+  describe('a passed check leaves its step to any review that holds it (P6.53)', () => {
+    const passingOnStep2 = (reviews: Record<string, unknown>) => {
+      const sessionService = createMockSessionService();
+      (sessionService.getSession as jest.Mock).mockReturnValue({
+        reviews,
+        state: { currentNodeId: 'node-2', nodes: [{ id: 'node-1' }, { id: 'node-2' }] },
+      });
+      const advanceOwner = createAdvanceOwner();
+      const stage = new ShellVerificationStage(
+        createMockExecutor(true),
+        createMockStateManager(),
+        sessionService,
+        advanceOwner,
+        createLogger()
+      );
+      const context = new ExecutionContext({ chain_id: 'chain-test#1', user_response: 'step 2' });
+      context.state.session.resumeSessionId = 'test-session';
+      context.state.session.capturedStep = { nodeId: 'node-2', ordinal: 2 };
+      context.state.gates.pendingShellVerification = {
+        gateId: 'shell-verify-inline',
+        shellVerify: { command: 'npm test' },
+        attemptCount: 0,
+        maxAttempts: 5,
+        previousResults: [],
+      };
+      return { stage, context, sessionService, advanceOwner };
+    };
+
+    test("step 1's open review holds step 2: nothing advances, the check stands for the next answer", async () => {
+      const { stage, context, sessionService, advanceOwner } = passingOnStep2({
+        'node-1': { nodeId: 'node-1', kind: 'gate', phase: 'awaiting-verdict' },
+      });
+
+      await stage.execute(context);
+
+      expect(advanceOwner.applyDeferredAdvance).not.toHaveBeenCalled();
+      const saves = (sessionService.setPendingShellVerification as jest.Mock).mock.calls;
+      expect(saves).toHaveLength(1);
+      const [, saved] = saves[0] as [string, Record<string, unknown>];
+      expect(saved).toMatchObject({ attemptCount: 0, previousResults: [] });
+      expect(saved['nodeId']).toBeUndefined();
+    });
+
+    test('control: with no review open the pass releases step 2', async () => {
+      const { stage, context, advanceOwner } = passingOnStep2({});
+
+      await stage.execute(context);
+
+      expect(advanceOwner.applyDeferredAdvance).toHaveBeenCalledWith(context, {
+        sessionId: 'test-session',
+        nodeId: 'node-2',
+        reason: 'captured',
+      });
     });
   });
 

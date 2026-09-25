@@ -722,9 +722,15 @@ export class GateVerdictProcessor {
    * A pending `:: verify:` check holds its step as an open review does (R29): every advance —
    * the capture's, a verdict's, a skip's — moves nothing while one is pending. The shell stage
    * clears the check first and then applies the held step's advance here, on the call it passes.
+   * A check armed for the next answer (no node yet) holds only the capture it will grade — the
+   * answer captured on this call — so a review it was left to still moves its step (P6.53).
    */
   async applyDeferredAdvance(context: ExecutionContext, advance: DeferredAdvance): Promise<void> {
-    if (this.chainSessionStore.getPendingShellVerification(advance.sessionId) !== undefined) {
+    const check = this.chainSessionStore.getPendingShellVerification(advance.sessionId);
+    if (
+      check !== undefined &&
+      (check.nodeId !== undefined || context.state.session.capturedStep?.nodeId === advance.nodeId)
+    ) {
       context.diagnostics.info(
         'GateVerdictProcessor',
         'Advance held by pending shell verification',

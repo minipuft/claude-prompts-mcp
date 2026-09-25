@@ -292,6 +292,39 @@ describe('GateVerdictProcessor defers every advance it decides', () => {
       expect(hooks.emitStepComplete).not.toHaveBeenCalled();
     });
 
+    /**
+     * P6.53: a check re-armed for the next answer (no node) after its pass was left to an open
+     * review holds only the capture it will grade. The review's verdict moves its step; an
+     * answer captured on this call is still held for the check.
+     */
+    test('P6.53: a check armed for the next answer lets a verdict move its step', async () => {
+      const { announcer, emitter } = announcing('node-1');
+      (store.getPendingShellVerification as jest.Mock).mockReturnValue({ attemptCount: 0 });
+      await announcer.applyDeferredAdvance(createContext(), {
+        sessionId: 'session-1',
+        nodeId: 'node-1',
+        reason: 'gate-pass',
+      });
+      expect(store.advanceStep).toHaveBeenCalledWith('session-1', 'node-1');
+      expect(emitter.emitChainStepComplete).toHaveBeenCalledTimes(1);
+    });
+
+    test('P6.53 control: the same check holds the answer captured on this call', async () => {
+      const { announcer, emitter } = announcing('node-1');
+      (store.getPendingShellVerification as jest.Mock).mockReturnValue({ attemptCount: 0 });
+      const context = createContext() as unknown as {
+        state: { session: { capturedStep?: { nodeId: string; ordinal: number } } };
+      };
+      context.state.session.capturedStep = { nodeId: 'node-1', ordinal: 1 };
+      await announcer.applyDeferredAdvance(context as never, {
+        sessionId: 'session-1',
+        nodeId: 'node-1',
+        reason: 'gate-pass',
+      });
+      expect(store.advanceStep).not.toHaveBeenCalled();
+      expect(emitter.emitChainStepComplete).not.toHaveBeenCalled();
+    });
+
     test('an advance the run already made announces nothing', async () => {
       // The store answers with the position the run already holds: nothing moved.
       const { announcer, hooks, emitter } = announcing('node-2');

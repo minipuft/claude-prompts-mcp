@@ -572,7 +572,7 @@ export class StepCaptureService {
     passClearedThisCall: boolean
   ): DeferredAdvance | undefined {
     const session = this.chainSessionStore.getSession(sessionId, context.getScopeOptions());
-    const review = session === undefined ? undefined : reviewHolding(session, target);
+    const review = session === undefined ? undefined : reviewHolding(session, target.nodeId);
     if (review === undefined) {
       return passClearedThisCall
         ? undefined
@@ -616,19 +616,20 @@ export class StepCaptureService {
 }
 
 /**
- * The open review that holds a captured step's advance: the review of the captured node itself,
- * else any open review of a node BEFORE it in the run (R14). PURE.
+ * The open review that holds a step's advance: the review of the node itself, else any open
+ * review of a node BEFORE it in the run (R14). PURE. The one hold derivation: the capture asks it
+ * before advancing, and the shell stage asks it before releasing a step its check held (P6.53).
  *
  * The store keeps one review per node, so a FAIL on step N's review sent with step N+1's answer
  * leaves N's review open beside N+1's capture; walking N+1 on would leave N's review behind the
  * run. A review of a later node does not hold an earlier capture, and a detached node's review
  * never holds one — completion counts those (`nodesHoldingRunOpen`).
  */
-function reviewHolding(session: ChainSession, target: StepTarget): GateReview | undefined {
+export function reviewHolding(session: ChainSession, nodeId: string): GateReview | undefined {
   const reviews = session.reviews ?? {};
-  const own = reviews[target.nodeId];
+  const own = reviews[nodeId];
   if (own !== undefined && own.kind !== 'detached') return own;
-  const position = ordinalOf(session.state.nodes, target.nodeId);
+  const position = ordinalOf(session.state.nodes, nodeId);
   return Object.values(reviews).find(
     (review) =>
       review.kind !== 'detached' && ordinalOf(session.state.nodes, review.nodeId) < position
@@ -643,7 +644,7 @@ function reviewHolding(session: ChainSession, target: StepTarget): GateReview | 
  * snapshot and this call answers the generic reason instead of inventing a gate id.
  */
 function describeOutstandingReview(session: ChainSession, target: StepTarget): InputRequiredReason {
-  const review = reviewHolding(session, target);
+  const review = reviewHolding(session, target.nodeId);
   const gateId = review?.gateIds[0];
   return gateId === undefined || review === undefined
     ? { kind: 'awaiting_response' }
