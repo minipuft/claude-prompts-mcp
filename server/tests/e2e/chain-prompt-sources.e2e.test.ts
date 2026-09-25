@@ -324,6 +324,15 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       await walkExpanded(run, 'x');
     }, 120000);
 
+    test('P6.96: the run id names the chain prompt on the workflow and arrow-chain sources', async () => {
+      const submitted = await start(workflow({ promptId: 'sv_chain' }));
+      const arrow = await start({ command: `>>sv_chain${ARROW}>>sv_b` });
+      expect(submitted.chainId).toMatch(/^chain-sv_chain#\d+$/);
+      expect(arrow.chainId).toMatch(/^chain-sv_chain#\d+$/);
+      // Control: a workflow of single prompts names its first node's prompt
+      expect((await start(workflow({ promptId: 'sv_a' }))).chainId).toMatch(/^chain-sv_a#\d+$/);
+    }, 120000);
+
     test('(b) control: a submission of single prompts keeps its nodes and ids', async () => {
       const run = await start(workflow({ promptId: 'sv_a' }));
       expect(runState(run.chainId).steps).toEqual(['x:sv_a:[]', 'y:sv_b:[]']);

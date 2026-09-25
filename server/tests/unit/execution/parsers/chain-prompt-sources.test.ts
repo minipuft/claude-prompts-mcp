@@ -296,6 +296,29 @@ describe('every command source naming a chain prompt projects the same steps', (
     expect(found).toEqual(claimed);
   });
 
+  test('P6.96: the base chain id source names the prompt the client named, on both IR sources', async () => {
+    // `SessionManagementStage.getBaseChainId` mints `chain-<parsedCommand.promptId>`.
+    const arrow = await parse({ command: `>>sv_chain topic="T"${ARROW}>>sv_b` });
+    const workflow = await parse({
+      workflow: { version: 1, nodes: [{ id: 'x', promptId: 'sv_chain' }] },
+    });
+    expect([arrow.promptId, workflow.promptId]).toEqual(['sv_chain', 'sv_chain']);
+    // Both expanded: the first step is the chain prompt's first step, not the id the run names
+    expect([arrow.steps?.[0]?.promptId, workflow.steps?.[0]?.promptId]).toEqual(['sv_a', 'sv_a']);
+    // Control: a workflow of single prompts names its first node's prompt
+    const single = await parse({
+      workflow: {
+        version: 1,
+        nodes: [
+          { id: 'x', promptId: 'sv_b' },
+          { id: 'y', promptId: 'sv_a' },
+        ],
+        edges: [{ from: 'x', to: 'y' }],
+      },
+    });
+    expect(single.promptId).toBe('sv_b');
+  });
+
   test('the remainder source refuses a chain prompt whose steps declare gates, by name', async () => {
     const { written, refusal } = await appendRemainder('sv_chain');
     expect(written).toEqual([]);

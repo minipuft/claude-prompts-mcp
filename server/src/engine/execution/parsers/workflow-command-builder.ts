@@ -124,11 +124,15 @@ export class WorkflowCommandBuilder {
       };
     }
 
+    // The prompt the CLIENT named first (R45), mirroring a symbolic chain's `parseResult.promptId`
+    // — the arrow-chain source's first segment, before any expansion. This is what
+    // `SessionManagementStage.getBaseChainId` falls back to, so a workflow whose first node names a
+    // chain prompt reads `chain-<chain prompt>` exactly as the arrow-chain spelling does, not
+    // `chain-<its first expanded step>`.
+    const firstNamed = ir.nodes.find((node) => node.id === validation.order[0])?.promptId;
+
     const parsedCommand: ParsedCommand = {
-      // The first step's prompt id, mirroring a symbolic chain's `parseResult.promptId`. This is
-      // what `SessionManagementStage.getBaseChainId` falls back to, so an IR run's base chain id
-      // reads `chain-<first prompt>` exactly as the equivalent symbolic chain's does.
-      promptId: firstStep.promptId,
+      promptId: firstNamed ?? firstStep.promptId,
       rawArgs: '',
       format: 'structured',
       confidence: 1,
