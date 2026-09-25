@@ -1422,6 +1422,51 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
     });
 
     /**
+     * P6.16 (R22): a prompt that turns framework gates off declares no sections, so its render
+     * shows none and stage 19 grades nothing for its node. The twin differs in ONE key — the
+     * flag — and opens the structural review exactly as before.
+     */
+    describe('a prompt with framework_gates: false is not graded for the sections (P6.16)', () => {
+      const oneLine = 'one line that mentions a placeholder';
+      const startWithDraftGates = async (frameworkGates: boolean | undefined) => {
+        parsedSteps = () =>
+          parsedFrameworkChain().map((step, index) =>
+            index === 0 && frameworkGates !== undefined
+              ? {
+                  ...step,
+                  convertedPrompt: {
+                    ...step.convertedPrompt!,
+                    gateConfiguration: { framework_gates: frameworkGates },
+                  },
+                }
+              : step
+          );
+        activeFramework = 'cageerf';
+        blockingGates = false;
+        const start = textOf(await pipeline.execute({ command: `>>draft --> >>review` }));
+        const { chainId } = onlySession();
+        await pipeline.execute({ chain_id: chainId, user_response: oneLine });
+        return start;
+      };
+
+      test('its render shows no Required Sections, no review opens, and the run advances', async () => {
+        const start = await startWithDraftGates(false);
+
+        expect(start).not.toContain('Required Sections');
+        expect(reviews()).toEqual({});
+        expect(onlySession().state.currentNodeId).toBe('review');
+      });
+
+      test('TWIN: the same one-line answer on a prompt without the flag opens the review', async () => {
+        const start = await startWithDraftGates(undefined);
+
+        expect(start).toContain('Required Sections');
+        expect(reviews()['draft']?.gateIds).toEqual(['__phase_guard__']);
+        expect(reviews()['draft']?.metadata?.['failedPhases']).toEqual(['context', 'analysis']);
+      });
+    });
+
+    /**
      * The twin differs in whose review is open: the node the run stands on, opened when it
      * rendered and never answered. A PASS alone captures nothing, so it advances nothing (R19,
      * P6.22) — before P6.22 this call moved the run to `review` with `draft` unanswered.

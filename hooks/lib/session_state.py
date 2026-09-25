@@ -120,6 +120,21 @@ def _interrupt_exits(state: ChainState) -> str:
     return " | ".join(interrupt_exits(state))
 
 
+def is_subagent_payload(hook_input: dict) -> bool:
+    """Did this hook fire inside an Agent-launched subagent?
+
+    A subagent's tool hooks arrive under its PARENT's `session_id`, so state keyed
+    by `session_id` belongs to the session that rendered the brief, not to this
+    caller. `agent_id` is the documented discriminator ("present only when the hook
+    fires inside a subagent call"), measured on real payloads: the plan tracker keyed
+    by parent session ab61dbec recorded `agent_id` a2ddec3330ad11b21, whose transcript
+    is `ab61dbec…/subagents/agent-a2ddec3330ad11b21.jsonl`. `transcript_path` cannot
+    discriminate: inside a subagent it names the parent's transcript (measured
+    2026-09-13 on SubagentStop). `agent_type` cannot either: `--agent` sets it too.
+    """
+    return bool(hook_input.get("agent_id"))
+
+
 def load_session_state(session_id: str) -> ChainState | None:
     """Load chain state for a session from SQLite."""
     data = load_state(TABLE_CHAIN_SESSION_STATE, session_id)

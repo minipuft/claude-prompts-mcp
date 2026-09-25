@@ -254,3 +254,70 @@ class TestDefect3ClearCondition:
         code, out = run_delegation_enforce(monkeypatch, capsys, session_id=session_id, tool_name="Bash")
         assert code == 0
         assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+# ── P6.18: a subagent's calls are not the delegating session's ─────────────
+
+
+def _real_payload(session_id: str, tool_name: str, tool_input: dict, *, agent_id: str | None) -> dict:
+    """The measured PreToolUse shape. Inside a subagent the payload keeps the
+    PARENT's session_id and transcript_path and adds agent_id/agent_type, so the
+    twins below differ in agent_id alone."""
+    payload = {
+        "session_id": session_id,
+        "transcript_path": f"/home/u/.claude/projects/-proj/{session_id}.jsonl",
+        "cwd": "/home/u/proj",
+        "permission_mode": "bypassPermissions",
+        "hook_event_name": "PreToolUse",
+        "tool_name": tool_name,
+        "tool_input": tool_input,
+        "tool_use_id": "toolu_01",
+    }
+    if agent_id:
+        payload.update({"agent_id": agent_id, "agent_type": "general-purpose"})
+    return payload
+
+
+class TestSubagentPayloadIsNotTheDelegator:
+    def _run(self, monkeypatch, capsys, payload):
+        monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
+        with pytest.raises(SystemExit) as excinfo:
+            delegation_enforce.main()
+        out = capsys.readouterr().out
+        return excinfo.value.code, (json.loads(out) if out.strip() else {})
+
+    def _arm(self, session_id: str) -> None:
+        TestDefect3ClearCondition()._arm(session_id)
+
+    def test_subagent_bash_allowed_and_state_untouched(self, patch_workspace, monkeypatch, capsys):
+        sid = "p618-sub-bash"
+        self._arm(sid)
+        payload = _real_payload(sid, "Bash", {"command": "ls"}, agent_id="acce70004ef9a4142")
+        code, out = self._run(monkeypatch, capsys, payload)
+        assert (code, out) == (0, {})
+        assert load_session_state(sid).get("pending_delegation") is True
+
+    def test_parent_bash_still_denied(self, patch_workspace, monkeypatch, capsys):
+        sid = "p618-parent-bash"
+        self._arm(sid)
+        code, out = self._run(monkeypatch, capsys, _real_payload(sid, "Bash", {"command": "ls"}, agent_id=None))
+        assert code == 0
+        assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert load_session_state(sid).get("pending_delegation") is True
+
+    def test_parent_agent_call_still_clears(self, patch_workspace, monkeypatch, capsys):
+        sid = "p618-parent-agent"
+        self._arm(sid)
+        payload = _real_payload(sid, "Agent", {"run_in_background": False}, agent_id=None)
+        code, out = self._run(monkeypatch, capsys, payload)
+        assert (code, out) == (0, {})
+        assert load_session_state(sid).get("pending_delegation") is False
+
+    def test_subagent_agent_call_does_not_clear_parent(self, patch_workspace, monkeypatch, capsys):
+        """A worker spawning its own helper has not delegated the parent's step."""
+        sid = "p618-sub-agent"
+        self._arm(sid)
+        payload = _real_payload(sid, "Agent", {"run_in_background": False}, agent_id="acce70004ef9a4142")
+        code, out = self._run(monkeypatch, capsys, payload)
+        assert (code, out) == (0, {})
+        assert load_session_state(sid).get("pending_delegation") is True
