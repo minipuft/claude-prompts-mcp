@@ -57,6 +57,7 @@ function createSinglePromptContext(overrides: {
     maxAttempts: number;
     gateTiers?: Record<string, 'check' | 'reminder'>;
     checkResults?: Array<{ gateId: string; passed: boolean; summary: string }>;
+    phase?: 'awaiting-verdict' | 'exhausted';
   };
   frameworkDecision?: { source: string; frameworkId: string };
   executionPlanOverrides?: Record<string, unknown>;
@@ -209,6 +210,46 @@ describe('ResponseAssembler – operator-aware CTA system', () => {
       expect(result).toContain('**Review Required**');
       expect(result).not.toContain('Continue:');
       expect(result).not.toContain('user_response');
+    });
+  });
+
+  describe('an exhausted review (P6.46)', () => {
+    const review = (phase: 'awaiting-verdict' | 'exhausted') => {
+      const context = createSinglePromptContext({
+        accumulatedGateIds: ['pr-security'],
+        chainId: 'chain-test#9',
+        pendingReview: {
+          combinedPrompt: '',
+          gateIds: [],
+          prompts: [],
+          createdAt: 0,
+          attemptCount: 2,
+          maxAttempts: 2,
+          phase,
+        },
+      });
+      context.gateInstructions =
+        "## Inline Gates\n\nAttest reminders in the verdict's `reminders` field.";
+      return assembler.formatSinglePromptResponse(context, {} as any);
+    };
+
+    test('offers the gate_action moves and no verdict template', () => {
+      const result = review('exhausted');
+
+      expect(result).toContain('**Review Retry Limit Reached**');
+      expect(result).toContain(
+        'Next: chain_id="chain-test#9", gate_action="retry" | gate_action="skip" | cancel: true'
+      );
+      expect(result).not.toContain('gate_verdict');
+      expect(result).not.toMatch(/attest reminders/i);
+    });
+
+    test('control: a review awaiting its verdict still offers the template and the guidance', () => {
+      const result = review('awaiting-verdict');
+
+      expect(result).toContain('gate_verdict={');
+      expect(result).toMatch(/attest reminders/i);
+      expect(result).not.toContain('Retry Limit Reached');
     });
   });
 

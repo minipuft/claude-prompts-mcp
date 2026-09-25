@@ -9,12 +9,14 @@
  * Position: After StepResponseCaptureStage, before StepExecutionStage
  *
  * Flow:
- * 1. Check for pendingShellVerification in state
- * 2. Execute shell command via ShellVerifyExecutor
- * 3. If PASS (exit 0): Clear verification, proceed
- * 4. If FAIL (exit != 0):
- *    - If attempts < 5: Return formatted error to chat (bounce-back)
- *    - If attempts >= 5: Return escalation with gate_action options
+ * 1. Check for pendingShellVerification in state; a `gate_action` is acted on at any attempt
+ * 2. The render call arms the check and runs nothing; only a call with a captured answer runs it
+ * 3. Execute shell command via ShellVerifyExecutor; the check holds its step until it passes
+ * 4. If PASS (exit 0): release the held step, then re-arm with a fresh budget for the next step
+ * 5. If FAIL (exit != 0):
+ *    - If attemptCount < maxAttempts (`max:N` or the preset): bounce-back feedback to chat
+ *    - If attemptCount >= maxAttempts: escalation with gate_action options; a further answer
+ *      re-renders it without running the command
  *
  * @see plans/ralph-mode-shell-verification-gates.md for the implementation plan
  */

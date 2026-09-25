@@ -309,4 +309,82 @@ describe('StepExecutionStage', () => {
     expect(context.state.session.chainComplete).toBe(true);
     expect(context.executionResults?.content).toBe('Execution complete.');
   });
+
+  describe('a pending review (P6.69)', () => {
+    const pendingReview = {
+      nodeId: 'n1',
+      gateIds: [],
+      attemptCount: 1,
+      maxAttempts: 2,
+      phase: 'awaiting-verdict',
+    } as any;
+    const sessionPlan = (strategy: 'prompt' | 'chain') =>
+      ({
+        strategy,
+        gates: [],
+        requiresFramework: false,
+        requiresSession: true,
+        llmValidationEnabled: false,
+      }) as any;
+
+    test('a command with no chain steps still renders: stage 20 has no step to render it with', async () => {
+      const { executor: chainExecutor, renderStepMock } = createChainExecutor();
+      const { sessionManager } = createSessionManager(runState('n1'));
+      const stage = new StepExecutionStage(chainExecutor, sessionManager, createLogger());
+
+      const context = new ExecutionContext({ command: '>>demo topic="AI"' });
+      context.executionPlan = sessionPlan('prompt');
+      context.sessionContext = {
+        sessionId: 'sess-review',
+        chainId: 'chain-demo#1',
+        isChainExecution: true,
+        currentStep: 1,
+        totalSteps: 1,
+        pendingReview,
+      };
+      context.parsedCommand = {
+        commandType: 'single',
+        convertedPrompt: samplePrompt,
+        promptArgs: { topic: 'AI' },
+      } as any;
+
+      await stage.execute(context);
+
+      expect(renderStepMock).not.toHaveBeenCalled();
+      expect(context.executionResults?.content).toContain('Process AI');
+    });
+
+    test('a chain step is left to stage 20, which renders the review as the step', async () => {
+      const { executor: chainExecutor, renderStepMock } = createChainExecutor();
+      const { sessionManager } = createSessionManager(runState('n1'));
+      const stage = new StepExecutionStage(chainExecutor, sessionManager, createLogger());
+
+      const context = new ExecutionContext({ command: '>>chain' });
+      context.executionPlan = sessionPlan('chain');
+      context.sessionContext = {
+        sessionId: 'sess-review',
+        chainId: 'chain-1',
+        isChainExecution: true,
+        currentStep: 1,
+        totalSteps: 1,
+        pendingReview,
+      };
+      context.parsedCommand = {
+        commandType: 'chain',
+        steps: [
+          {
+            stepNumber: 1,
+            promptId: 'step_one',
+            args: { topic: 'first' },
+            convertedPrompt: { ...samplePrompt, id: 'step_one' },
+          },
+        ],
+      } as any;
+
+      await stage.execute(context);
+
+      expect(renderStepMock).not.toHaveBeenCalled();
+      expect(context.executionResults).toBeUndefined();
+    });
+  });
 });

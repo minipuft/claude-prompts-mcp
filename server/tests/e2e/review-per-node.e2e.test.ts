@@ -12,7 +12,8 @@
  * - the final step's verdict closes the run, and `chain/complete` is the run's last notification;
  * - a FAIL past the retry budget offers the retry prompt and names only `gate_action` moves, a
  *   further verdict is refused, retry reopens the review, and skip accepts the step's recorded
- *   answer and moves the run on (R24) — or is refused on a step that holds none.
+ *   answer and moves the run on (R24) — or is refused on a step that holds none. A single prompt
+ *   with a blocking gate exhausts the same way and its reply offers the same moves (P6.46).
  *
  * A detached step's review at its late report is driven by `detached-review-at-report.e2e.test.ts`;
  * a final step's structural review holding `chain/complete` by `final-review-chain-complete.e2e.test.ts`.
@@ -40,6 +41,8 @@ const RETRY_EXHAUSTED = 'notifications/gate/retry_exhausted';
 /** Unique to `quick_decision`'s second step, so finding it says the run still owes step 2. */
 const STEP_2_BODY = 'For each option identified, provide:';
 const RETRY_PROMPT = 'Retry Limit Reached';
+/** The closing line of a verdict's gate guidance (`GATE_ATTESTATION_LINE`). */
+const ATTEST_REMINDERS = /attest reminders/i;
 const PASS = 'GATE_REVIEW: PASS - the step meets its gates';
 const FAIL = 'GATE_REVIEW: FAIL - the step misses its gates';
 
@@ -59,8 +62,10 @@ describe('Streamable HTTP: a gate review is a record of one node (shipped defaul
     teardown = [];
   });
 
-  /** A hermetic server running `quick_decision`; returns a caller bound to the run's chain id. */
-  async function startRun(): Promise<Call> {
+  /** A hermetic server running `quick_decision` (or `start`); returns a caller bound to the run. */
+  async function startRun(
+    start: Record<string, unknown> = { command: '>>quick_decision topic:"pick a database"' }
+  ): Promise<Call> {
     const roots = createHermeticRoots('review-per-node-e2e');
     runtimeRoot = roots.runtimeRoot;
     const workspace = path.join(roots.root, 'workspace');
@@ -84,9 +89,9 @@ describe('Streamable HTTP: a gate review is a record of one node (shipped defaul
         methods: outcome.notifications.map((n: StreamNotification) => n.method),
       };
     };
-    const start = await call({ command: '>>quick_decision topic:"pick a database"' });
-    const chainId = /chain_id="(chain-[A-Za-z0-9_#-]+)"/.exec(start.text)?.[1];
-    if (chainId === undefined) throw new Error(`no chain id in: ${start.text.slice(0, 400)}`);
+    const started = await call(start);
+    const chainId = /chain_id="(chain-[A-Za-z0-9_#-]+)"/.exec(started.text)?.[1];
+    if (chainId === undefined) throw new Error(`no chain id in: ${started.text.slice(0, 400)}`);
     return (args) => call({ chain_id: chainId, ...args });
   }
 
@@ -153,7 +158,6 @@ describe('Streamable HTTP: a gate review is a record of one node (shipped defaul
       expect(opened.text).toContain('→ Progress 2/3');
 
       const refused = await call({ gate_verdict: PASS });
-      console.log('DEBUGREFUSED', JSON.stringify(refused));
       expect(refused.isError).toBe(true);
       expect(refused.text).toContain('Step 2 has no answer yet');
       expect(refused.text).toContain('Nothing was recorded');
@@ -262,6 +266,7 @@ describe('Streamable HTTP: a gate review is a record of one node (shipped defaul
       // CONTROL: a FAIL inside the budget still asks for the next verdict.
       expect(first.text).toContain('Gate Review Required');
       expect(first.text).toContain('gate_verdict="GATE_REVIEW: PASS|FAIL');
+      expect(first.text).toMatch(ATTEST_REMINDERS);
 
       const second = await call({
         user_response: cageerfAnswer('Step 1 again'),
@@ -271,6 +276,8 @@ describe('Streamable HTTP: a gate review is a record of one node (shipped defaul
       expect(second.text).toContain('gate_action="retry" | gate_action="skip"');
       expect(second.text).not.toContain('gate_verdict=');
       expect(second.text).not.toContain('Gate Review Required');
+      // P6.45: nor the verdict guidance — it asked for a verdict the exhausted review refuses.
+      expect(second.text).not.toMatch(ATTEST_REMINDERS);
     }, 180000);
 
     /**
@@ -325,6 +332,40 @@ describe('Streamable HTTP: a gate review is a record of one node (shipped defaul
       expect(refused.isError).toBe(true);
       expect(refused.text).toContain('nothing to skip past on step 2; answer it first');
       expect(refused.methods).not.toContain(STEP_COMPLETE);
+    }, 180000);
+
+    /**
+     * P6.46: a single prompt reaches the same exhausted review. MEASURED 2026-09-25 on `a5819a70`:
+     * `>>review` with the shipped `pr-security` gate (declared `blocking`) holds on a FAIL, and
+     * the second FAIL exhausts the review at 2/2 and announces `retry_exhausted`. Its reply then
+     * still offered the `gate_verdict=` template and the attest guidance, and the verdict it
+     * invited was refused. (Without a blocking gate a single prompt's FAIL only warns and the run
+     * completes, so no review opens to exhaust.)
+     */
+    test('a single prompt exhausted review offers gate_action and no verdict', async () => {
+      const call = await startRun({
+        command: '>>review target:"src/index.ts"',
+        gates: ['pr-security'],
+      });
+      const first = await call({ user_response: 'my review', gate_verdict: FAIL });
+      // CONTROL: a FAIL inside the budget still asks for the next verdict.
+      expect(first.isError).toBe(false);
+      expect(first.text).toContain('gate_verdict=');
+      expect(first.text).toMatch(ATTEST_REMINDERS);
+      expect(first.methods).not.toContain(RETRY_EXHAUSTED);
+
+      const second = await call({ user_response: 'my review again', gate_verdict: FAIL });
+      expect(second.isError).toBe(false);
+      expect(second.methods).toContain(RETRY_EXHAUSTED);
+      expect(second.text).toContain('Retry Limit Reached');
+      expect(second.text).toContain('gate_action="retry" | gate_action="skip"');
+      expect(second.text).not.toContain('gate_verdict=');
+      expect(second.text).not.toMatch(ATTEST_REMINDERS);
+
+      // The move it offers is accepted.
+      const skipped = await call({ gate_action: 'skip' });
+      expect(skipped.isError).toBe(false);
+      expect(skipped.methods).toEqual([STEP_COMPLETE, CHAIN_COMPLETE]);
     }, 180000);
   });
 });

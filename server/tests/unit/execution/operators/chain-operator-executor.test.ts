@@ -346,29 +346,48 @@ describe('ChainOperatorExecutor', () => {
     expect(result.content).not.toContain('Post-Execution Review Guidelines');
   });
 
-  test('renders original intent section when chainContext has original_args', async () => {
+  test('renders the run original_args as intent for a node with no args of its own', async () => {
     const result = await executor.renderStep({
       executionType: 'normal',
       stepPrompts: [
         { stepNumber: 1, promptId: 'analyze', args: { code: 'intent test' } },
         { stepNumber: 2, promptId: 'summarize', args: {} },
       ],
-      currentStepIndex: 0,
+      currentStepIndex: 1,
       chainContext: {
         original_args: { command: '>>analyze', code: 'intent test' },
       },
     });
 
     expect(result.content).toContain('### Original Request Intent');
-    expect(result.content).toContain('Your work must satisfy this intent');
+    expect(result.content).toContain('This chain was initiated with the following request');
     expect(result.content).toContain('- **command**: >>analyze');
     expect(result.content).toContain('- **code**: intent test');
   });
 
-  test('omits original intent section when original_args is empty', async () => {
+  test("renders a node's own args as intent, not the run's first-node args (P6.41)", async () => {
     const result = await executor.renderStep({
       executionType: 'normal',
-      stepPrompts: [{ stepNumber: 1, promptId: 'analyze', args: { code: 'no intent' } }],
+      stepPrompts: [
+        { stepNumber: 1, promptId: 'analyze', args: { code: 'row one' } },
+        { stepNumber: 2, promptId: 'analyze', args: { code: 'row two' } },
+      ],
+      currentStepIndex: 1,
+      chainContext: {
+        original_args: { code: 'row one' },
+        currentStepArgs: { code: 'row two' },
+      },
+    });
+
+    expect(result.content).toContain('This step was given the following request');
+    expect(result.content).toContain('- **code**: row two');
+    expect(result.content).not.toContain('- **code**: row one');
+  });
+
+  test('omits original intent section when neither the node nor the run has args', async () => {
+    const result = await executor.renderStep({
+      executionType: 'normal',
+      stepPrompts: [{ stepNumber: 1, promptId: 'analyze', args: {} }],
       currentStepIndex: 0,
       chainContext: {
         original_args: {},

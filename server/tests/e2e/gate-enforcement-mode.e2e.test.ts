@@ -17,6 +17,8 @@
  * `content-structure` holds, and a legacy string verdict — no per-gate set — falls back to the
  * strictest gate on the step and holds.
  *
+ * The third case drives `gate_action: "skip"` on an exhausted advisory review (P6.49).
+ *
  * Gates are authored through `resource_manager`, so the file watcher's hot reload is on the path.
  */
 
@@ -229,5 +231,67 @@ describe('Streamable HTTP: a FAIL follows the gate declared enforcement_mode', (
     expect(legacy.text).not.toContain(STEP_B_MARKER);
     expect(legacy.text).toContain('Content Structure Guidelines');
     expect(legacy.text).toContain('Gate Review Required');
+  }, 240000);
+
+  /**
+   * P6.49: `gate_action: "skip"` on an exhausted ADVISORY review. MEASURED 2026-09-25 on
+   * `2cd9f65c`: an advisory FAIL that grades an answer advances at once, so an advisory review
+   * never exhausts while its step holds an answer. It exhausts only through FAILs that graded no
+   * answer, each of which leaves the review open and charged (R26): two such FAILs on the render's
+   * review spend the budget of 2 and announce `retry_exhausted`. Skip then has nothing to skip
+   * past and is refused by name (R19); once the step's answer is captured, skip accepts it and
+   * moves the run on, as it does for a blocking review (`review-per-node.e2e`, R24).
+   */
+  test('skip on an exhausted advisory review: refused with no answer, accepts a captured one', async () => {
+    const session = await authoredSession();
+    const bareFail = { gate_verdict: `GATE_REVIEW: FAIL - ${RATIONALE}` };
+    const exhaustedRun = async (twin: string) => {
+      const id = `em_chain_${twin}`;
+      const created = await session.callTool('resource_manager', {
+        resource_type: 'prompt',
+        action: 'create',
+        id,
+        category: 'general',
+        name: id,
+        description: `e2e twin ${twin}`,
+        user_message_template: 'chain',
+        gate_configuration: OPT_OUT,
+        chain_steps: [
+          { promptId: 'em_a', stepName: 'A', inlineGateIds: [ADVISE_GATE] },
+          { promptId: 'em_b', stepName: 'B' },
+        ],
+      });
+      expect(created.isError).toBe(false);
+      const start = await session.callTool('prompt_engine', { command: `>>${id}` });
+      const chainId = chainIdOf(start.text);
+      const call = (args: Record<string, unknown>) =>
+        session.callTool('prompt_engine', { chain_id: chainId, ...args });
+      const first = await call(bareFail);
+      expect(first.text).toContain(`Gate ${ADVISE_GATE} failed: ${RATIONALE}`);
+      expect(first.text).not.toContain(STEP_B_MARKER);
+      const spent = await call(bareFail);
+      expect(spent.text).toContain('Retry Limit Reached');
+      expect(spent.notifications.map((n) => n.method)).toContain(
+        'notifications/gate/retry_exhausted'
+      );
+      return call;
+    };
+
+    const unanswered = await exhaustedRun('p649_unanswered');
+    const refused = await unanswered({ gate_action: 'skip' });
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toContain('nothing to skip past on step 1; answer it first');
+
+    const answered = await exhaustedRun('p649_answered');
+    const held = await answered({ user_response: 'step A output' });
+    expect(held.text).toContain('Retry Limit Reached');
+    expect(held.text).not.toContain(STEP_B_MARKER);
+    const skipped = await answered({ gate_action: 'skip' });
+    expect(skipped.isError).toBe(false);
+    expect(skipped.text).toContain(STEP_B_MARKER);
+    expect(skipped.text).toContain('Progress 2/2');
+    expect(
+      skipped.notifications.filter((n) => n.method === 'notifications/chain/step_complete')
+    ).toHaveLength(1);
   }, 240000);
 });

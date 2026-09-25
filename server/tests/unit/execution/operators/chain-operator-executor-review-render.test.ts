@@ -5,6 +5,10 @@
  * (`fd8b825a`, which read `pendingGateReview`), then re-run unchanged against this one: the
  * graded step, the gate order handed to the guidance renderer, the explicit (inline) gate ids,
  * the retry hints, the last review line and the retry-limit block are all pinned byte for byte.
+ * Two deliberate changes since: row P6.41 (2026-09-25) renders the reviewed node's own args under
+ * "### Original Request Intent" in the first-attempt snapshot, where none rendered before; and
+ * row P6.45 drops the gate guidance from the exhausted snapshot, since it asks for a verdict an
+ * exhausted review refuses.
  */
 import { describe, test, expect, jest } from '@jest/globals';
 
@@ -96,6 +100,12 @@ describe('gate-review render of a current-step review is byte-identical (row 3.5
     expect(await render()).toMatchInlineSnapshot(`
       "## Original Task Instructions
 
+      ### Original Request Intent
+
+      This step was given the following request. Your work must satisfy this intent:
+
+      - **input**: beta
+
       Summarize the analysis. Context: beta
 
       ---
@@ -174,8 +184,6 @@ describe('gate-review render of a current-step review is byte-identical (row 3.5
 
       ---
 
-
-      GUIDANCE gates=code-quality,security,extra,step-inline,prompt-inline explicit=step-inline,code-quality,prompt-inline
 
       **Inline Gate Priority:** These inline gates triggered the review. Fix them before checking framework standards.
 

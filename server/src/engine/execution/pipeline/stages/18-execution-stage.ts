@@ -52,7 +52,11 @@ export class StepExecutionStage extends BasePipelineStage {
       return;
     }
 
-    if (context.sessionContext?.pendingReview) {
+    // Stage 20 renders a pending review as the reviewed chain STEP, so it needs chain steps to
+    // render. A command with none (a single prompt) has only this stage's render, which stage 21
+    // closes with the review's call to action — skipping it left the reply with no execution
+    // results at all (P6.69).
+    if (context.sessionContext?.pendingReview && (context.parsedCommand?.steps?.length ?? 0) > 0) {
       this.logExit({ skipped: 'Pending gate review detected' });
       return;
     }
