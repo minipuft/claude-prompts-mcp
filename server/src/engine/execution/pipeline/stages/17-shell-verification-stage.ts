@@ -26,12 +26,16 @@ import {
   createBounceBackFeedback,
   createEscalationFeedback,
 } from '../../../gates/shell/index.js';
+import { reviewHolding } from '../../capture/step-capture-service.js';
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { PendingShellVerificationSnapshot } from '#shared/types/chain-execution.js';
 import type { ChainSessionService } from '#shared/types/chain-session.js';
-import type { GateVerdictProcessor } from '../../../gates/services/gate-verdict-processor.js';
+import type {
+  DeferredAdvance,
+  GateVerdictProcessor,
+} from '../../../gates/services/gate-verdict-processor.js';
 import type { ExecutionContext } from '../../context/index.js';
 
 /**
@@ -78,6 +82,7 @@ export class ShellVerificationStage extends BasePipelineStage {
 
     // Handle gate_action response (retry/skip/abort)
     const gateAction = context.mcpRequest.gate_action;
+    if (this.reviewAnsweredAction(context, gateAction, pending)) return;
     if (gateAction === 'skip' && this.refusesSkip(context)) {
       await this.saveToSession(context, pending);
       return;
@@ -88,11 +93,12 @@ export class ShellVerificationStage extends BasePipelineStage {
       return;
     }
 
-    // The command checks an answer, so it runs only on a call that carries one (P6.27). The
-    // render call runs nothing and spends no attempt; it saves the check so the resume that
+    // The command checks an answer, so it runs only on a call that has one to grade (P6.27,
+    // P6.57). The render call runs nothing and spends no attempt, even when a `user_response`
+    // rides along: the run captured nothing on it. It saves the check so the resume that
     // answers it finds it (and the step stays held), and arms the Stop hook's loop state.
     const userResponse = context.mcpRequest.user_response?.trim();
-    if (userResponse === undefined || userResponse === '') {
+    if (userResponse === undefined || userResponse === '' || !this.hasAnswerToGrade(context)) {
       if (armedThisCall) await this.armOnRender(context, pending);
       this.logExit({ skipped: 'Awaiting user response before verification' });
       return;
@@ -101,7 +107,10 @@ export class ShellVerificationStage extends BasePipelineStage {
     // Spent: only a gate_action moves an exhausted check; an answer re-renders the escalation.
     const lastResult = pending.previousResults[pending.previousResults.length - 1];
     if (pending.attemptCount >= pending.maxAttempts && lastResult !== undefined) {
-      await this.handleVerificationFailed(context, lastResult, pending);
+      // Nothing ran on this call: render the escalation again, but log no failure and leave the
+      // loop state as the call that spent the last attempt left it (P6.59).
+      this.renderFeedback(context, lastResult, pending);
+      this.logExit({ passed: false, spent: true, attemptCount: pending.attemptCount });
       return;
     }
 
@@ -157,12 +166,14 @@ export class ShellVerificationStage extends BasePipelineStage {
     const { shellVerify } = pending;
 
     const heldNodeId = this.heldNodeId(context);
+    const heldReason = this.heldAdvanceReason(context, heldNodeId);
     context.state.gates.pendingShellVerification = undefined;
     await this.clearFromSession(context);
-    await this.releaseHeldStep(context, heldNodeId, 'captured');
+    const release = await this.releaseHeldStep(context, heldNodeId, heldReason);
+    const rearmed = await this.rearmForNextStep(context, pending, heldNodeId, release);
 
-    // LOOP MODE: Clear verify-state.db
-    if (shellVerify.loop === true) {
+    // LOOP MODE: Clear verify-state.db, unless the check stands again for the next step
+    if (shellVerify.loop === true && !rearmed) {
       await this.stateManager.clearState(this.resolveVerifyStateKey(context));
     }
 
@@ -194,26 +205,40 @@ export class ShellVerificationStage extends BasePipelineStage {
       maxAttempts: pending.maxAttempts,
     });
 
+    // Max attempts: clear verify-state.db (the Stop hook shouldn't keep trying). The session
+    // keeps the check — `retry` needs it; skip/abort or the next pass clears it.
+    if (pending.attemptCount >= pending.maxAttempts && shellVerify.loop === true) {
+      await this.stateManager.clearState(this.resolveVerifyStateKey(context));
+    }
+
+    this.renderFeedback(context, result, pending);
+
+    this.logExit({
+      passed: false,
+      attemptCount: pending.attemptCount,
+      maxAttempts: pending.maxAttempts,
+      escalated: pending.attemptCount >= pending.maxAttempts,
+    });
+  }
+
+  /**
+   * Short-circuit the pipeline with the bounce-back, or with the escalation once the attempts are
+   * spent (flagging the call as awaiting the user's `gate_action`). Renders only: no log, no
+   * loop state.
+   */
+  private renderFeedback(
+    context: ExecutionContext,
+    result: Awaited<ReturnType<ShellVerifyExecutor['execute']>>,
+    pending: PendingShellVerification
+  ): void {
     if (pending.attemptCount >= pending.maxAttempts) {
-      // Max attempts - escalate to user
       context.state.gates.retryLimitExceeded = true;
       context.state.gates.awaitingUserChoice = true;
       context.state.gates.escalationSource = 'shell-verify';
       context.state.gates.shellVerifyFeedback = createEscalationFeedback(result, pending);
-      // NOTE: Don't clear session — user may choose 'retry' which needs the pending state.
-      // Session is cleared in handleGateAction on skip/abort, or on next pass.
-
-      // Clear verify-state.db (Stop hook shouldn't keep trying)
-      if (shellVerify.loop === true) {
-        await this.stateManager.clearState(this.resolveVerifyStateKey(context));
-      }
     } else {
-      // More attempts remain - bounce-back
       context.state.gates.shellVerifyFeedback = createBounceBackFeedback(result, pending);
     }
-
-    // Short-circuit pipeline with feedback response.
-    // Both branches above always set shellVerifyFeedback — use message directly.
     const feedbackMessage = context.state.gates.shellVerifyFeedback.message;
 
     // Include chain_id so the LLM can resume the chain after fixing (prefer human-readable ID)
@@ -226,12 +251,47 @@ export class ShellVerificationStage extends BasePipelineStage {
     context.setResponse({
       content: [{ type: 'text', text: feedbackMessage + resumeHint }],
     });
+  }
 
-    this.logExit({
-      passed: false,
-      attemptCount: pending.attemptCount,
-      maxAttempts: pending.maxAttempts,
-      escalated: pending.attemptCount >= pending.maxAttempts,
+  /**
+   * One call acts once (P6.56): an action the step's exhausted review already answered on this
+   * call is not also applied to the check, which keeps holding the step. An abort ended the run
+   * there, so it still clears the check here.
+   */
+  private reviewAnsweredAction(
+    context: ExecutionContext,
+    gateAction: string | undefined,
+    pending: PendingShellVerification
+  ): boolean {
+    if (
+      gateAction === undefined ||
+      gateAction === 'abort' ||
+      context.state.gates.gateActionAnsweredReview !== true
+    ) {
+      return false;
+    }
+    if (gateAction === 'skip') this.renderStillPending(context, pending);
+    this.logExit({ skipped: 'gate_action answered the step review' });
+    return true;
+  }
+
+  /**
+   * A skip that answered the step's review leaves the check holding the step: say so, rather than
+   * render the held step again as if nothing were pending. Renders only.
+   */
+  private renderStillPending(context: ExecutionContext, pending: PendingShellVerification): void {
+    const chainId = context.getRequestedChainId() ?? context.state.session.resumeChainId;
+    const resumeHint =
+      chainId !== undefined
+        ? `\n\n---\n**Resume with:** \`chain_id: "${chainId}"\` and \`user_response\` containing your fix.`
+        : '';
+    context.setResponse({
+      content: [
+        {
+          type: 'text',
+          text: `## Shell Verification — Still Pending\n\nThe skip answered the step's gate review. The shell check still holds the step.\n\n**Command:** \`${String(pending.shellVerify.command)}\`\n**Attempts:** ${pending.attemptCount}/${pending.maxAttempts}\n\nSubmit your fix to re-run verification, or send \`gate_action: "skip"\` again to skip the check.${resumeHint}`,
+        },
+      ],
     });
   }
 
@@ -283,9 +343,23 @@ export class ShellVerificationStage extends BasePipelineStage {
     context: ExecutionContext,
     pending: PendingShellVerification
   ): Promise<void> {
+    // The node it holds open: the step captured on this call, else the node an earlier save
+    // named — a failing re-run on a call that captured nothing must not release the hold.
+    await this.writeSnapshot(context, pending, this.heldNodeId(context));
+  }
+
+  /** Persist the check as holding `nodeId`; `undefined` holds nothing until a capture names one. */
+  private async writeSnapshot(
+    context: ExecutionContext,
+    pending: PendingShellVerification,
+    nodeId: string | undefined
+  ): Promise<void> {
     const sessionId = context.getSessionId();
     if (!sessionId) return;
 
+    // An advance held on this node keeps its reason across re-saves of the same hold (P6.54)
+    const heldAdvance =
+      this.chainSessionService.getPendingShellVerification(sessionId)?.heldAdvance;
     const snapshot: PendingShellVerificationSnapshot = {
       gateId: pending.gateId,
       shellVerify: pending.shellVerify,
@@ -294,12 +368,37 @@ export class ShellVerificationStage extends BasePipelineStage {
       previousResults: pending.previousResults,
       originalGoal: pending.originalGoal,
       sourceGateIds: pending.sourceGateIds,
-      // The node it holds open: the step captured on this call, else the node an earlier save
-      // named — a failing re-run on a call that captured nothing must not release the hold.
-      nodeId: this.heldNodeId(context),
+      nodeId,
+      ...(heldAdvance !== undefined && heldAdvance.nodeId === nodeId ? { heldAdvance } : {}),
     };
 
     await this.chainSessionService.setPendingShellVerification(sessionId, snapshot);
+  }
+
+  /**
+   * On a run, the check grades a step's answer: the one captured on this call, or the held one an
+   * earlier save named (a re-run). A call that captured nothing on a check holding no step — the
+   * render, or a re-armed check before the next step is answered — has nothing to grade. A
+   * single prompt with no run grades the answer the call carries.
+   */
+  private hasAnswerToGrade(context: ExecutionContext): boolean {
+    return runSessionId(context) === undefined || this.heldNodeId(context) !== undefined;
+  }
+
+  /**
+   * Why the held step advances when this check releases it: the reason a verdict or a review's
+   * `gate_action` decided while the check held it (P6.54), else the capture's own.
+   */
+  private heldAdvanceReason(
+    context: ExecutionContext,
+    nodeId: string | undefined
+  ): DeferredAdvance['reason'] {
+    const sessionId = runSessionId(context);
+    const held =
+      sessionId === undefined
+        ? undefined
+        : this.chainSessionService.getPendingShellVerification(sessionId)?.heldAdvance;
+    return held !== undefined && held.nodeId === nodeId ? held.reason : 'captured';
   }
 
   /** The step this check holds: the one captured on this call, else the one an earlier save named. */
@@ -315,19 +414,56 @@ export class ShellVerificationStage extends BasePipelineStage {
 
   /**
    * Release the hold on a step once its check passes or is skipped (R29): advance past it through
-   * the one advance owner, which announces its `step_complete` on this call. A step still under an
-   * open review is left to that review's verdict, which advances it once this check is gone.
+   * the one advance owner, which announces its `step_complete` on this call. A step an open review
+   * holds — its own, or an earlier node's (R14, `reviewHolding`, P6.53) — is left to that review.
    */
   private async releaseHeldStep(
     context: ExecutionContext,
     nodeId: string | undefined,
-    reason: 'captured' | 'gate-skip'
-  ): Promise<void> {
+    reason: DeferredAdvance['reason']
+  ): Promise<'released' | 'left-to-review' | 'none'> {
     const sessionId = runSessionId(context);
-    if (nodeId === undefined || sessionId === undefined) return;
+    if (nodeId === undefined || sessionId === undefined) return 'none';
     const session = this.chainSessionService.getSession(sessionId, context.getScopeOptions());
-    if (session?.reviews?.[nodeId] !== undefined) return;
+    if (session !== undefined && reviewHolding(session, nodeId) !== undefined) {
+      return 'left-to-review';
+    }
     await this.advanceOwner.applyDeferredAdvance(context, { sessionId, nodeId, reason });
+    return 'released';
+  }
+
+  /**
+   * A chain-level check grades every step's answer (R32). Once the release moved the run past the
+   * held step onto a later node, the check stands again for that node: a fresh budget, no node
+   * (the capture of the next answer names it, as on the render), and the loop's Stop-hook state
+   * written again. A step left to a review is re-armed the same way, on the node the run stands
+   * on: the review's verdict then moves the run (an armed check holds only a capture), and the
+   * next answer is checked (P6.53). A release that completed the run, or moved nothing, leaves it
+   * cleared.
+   */
+  private async rearmForNextStep(
+    context: ExecutionContext,
+    pending: PendingShellVerification,
+    releasedNodeId: string | undefined,
+    release: 'released' | 'left-to-review' | 'none'
+  ): Promise<boolean> {
+    const sessionId = runSessionId(context);
+    if (sessionId === undefined || releasedNodeId === undefined) return false;
+    const session = this.chainSessionService.getSession(sessionId, context.getScopeOptions());
+    const standsOn = session?.state.currentNodeId;
+    if (standsOn === undefined || standsOn === null) return false;
+    if (standsOn === releasedNodeId && release !== 'left-to-review') return false;
+
+    const rearmed: PendingShellVerification = { ...pending, attemptCount: 0, previousResults: [] };
+    await this.writeSnapshot(context, rearmed, undefined);
+    if (rearmed.shellVerify.loop === true) {
+      await this.stateManager.writeState(this.resolveVerifyStateKey(context), rearmed);
+    }
+    context.diagnostics.info(this.name, 'Shell verification armed for the next step', {
+      gateId: rearmed.gateId,
+      nodeId: standsOn,
+    });
+    return true;
   }
 
   /**
@@ -421,7 +557,8 @@ export class ShellVerificationStage extends BasePipelineStage {
         const heldNodeId = this.heldNodeId(context);
         context.state.gates.pendingShellVerification = undefined;
         await this.clearFromSession(context);
-        await this.releaseHeldStep(context, heldNodeId, 'gate-skip');
+        const release = await this.releaseHeldStep(context, heldNodeId, 'gate-skip');
+        await this.rearmForNextStep(context, pending, heldNodeId, release);
         context.diagnostics.warn(this.name, 'User chose to skip shell verification', {
           gateId: pending.gateId,
         });

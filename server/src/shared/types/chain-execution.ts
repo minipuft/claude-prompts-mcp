@@ -531,6 +531,16 @@ export interface PendingShellVerificationSnapshot {
    * (as of 2026-09-23 · flips when no pre-`nodeId` snapshot can be loaded).
    */
   nodeId?: string;
+  /**
+   * An advance past `nodeId` that a verdict or a review's `gate_action` decided while this check
+   * held the step, and why (P6.54). The hold moved nothing, so the reason is kept here for the
+   * call whose pass releases the step: a skipped review's step is announced `failed`, not
+   * `passed`. Absent: the release is the capture's own (`captured`).
+   */
+  heldAdvance?: {
+    nodeId: string;
+    reason: 'gate-pass' | 'advisory-fail' | 'informational-fail' | 'gate-skip';
+  };
 }
 
 /**
