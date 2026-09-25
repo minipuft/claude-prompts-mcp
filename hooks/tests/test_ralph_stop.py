@@ -300,3 +300,76 @@ class TestMainDecisions:
 
     # test_delegation_pending_blocks removed — delegation handling
     # was removed from ralph-stop.py in the delegation refactor
+
+
+class TestStopWaitsOnEveryVisibleRun:
+    """Stop is blocked exactly while the loader returns a chain state (R30, hook side).
+
+    The loader keeps only rows the server projects, and the server projects a run exactly while
+    it is not complete, so a state coming back IS "the run needs the client". Re-deriving that
+    from `step < total` missed a run held past its last node (`step = total + 1`) by a shell
+    verification or an owed detached report.
+    """
+
+    def _stop(self, chain_state):
+        import contextlib
+        import io
+
+        captured = io.StringIO()
+        with patch("sys.stdin", io.StringIO(json.dumps({"session_id": "sess-stop"}))):
+            with patch.object(hook_mod, "load_verify_state", return_value=None):
+                with patch.object(hook_mod, "load_recoverable_chain_state", autospec=True, return_value=chain_state):
+                    with contextlib.redirect_stdout(captured):
+                        with pytest.raises(SystemExit) as exc_info:
+                            hook_mod.main()
+        output = captured.getvalue().strip()
+        return exc_info.value.code, json.loads(output) if output else None
+
+    @staticmethod
+    def _state(step, total, **extra):
+        state = {
+            "chain_id": "chain-demo#1",
+            "current_step": step,
+            "total_steps": total,
+            "pending_gate": None,
+            "pending_shell_verify": None,
+        }
+        state.update(extra)
+        return state
+
+    def test_a_run_held_past_its_end_by_a_shell_check_blocks_and_names_it(self):
+        code, output = self._stop(self._state(4, 3, pending_shell_verify="npm test"))
+
+        assert code == 0
+        assert output is not None and output["decision"] == "block"
+        assert "shell verification" in output["reason"]
+        assert "npm test" in output["reason"]
+        assert "gate_action" in output["reason"]
+
+    def test_a_run_held_past_its_end_with_nothing_pending_blocks_as_held(self):
+        code, output = self._stop(self._state(4, 3))
+
+        assert code == 0
+        assert output is not None and output["decision"] == "block"
+        assert "is held" in output["reason"]
+        assert 'chain_id="chain-demo#1"' in output["reason"]
+
+    def test_control_a_mid_chain_run_blocks_with_steps_remaining(self):
+        code, output = self._stop(self._state(1, 3))
+
+        assert output is not None and output["decision"] == "block"
+        assert "steps remain" in output["reason"]
+        assert "step 1/3" in output["reason"]
+
+    def test_no_chain_state_allows_stop(self):
+        code, output = self._stop(None)
+
+        assert code == 0
+        assert output is None
+
+    def test_control_a_pending_gate_keeps_the_gate_review_message(self):
+        code, output = self._stop(self._state(3, 3, pending_gate="code-quality"))
+
+        assert output is not None and output["decision"] == "block"
+        assert output["reason"].startswith("Chain chain-demo#1 has a pending gate review (step 3/3).")
+        assert "gate_verdict" in output["reason"]

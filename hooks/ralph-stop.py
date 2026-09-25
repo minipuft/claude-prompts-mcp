@@ -354,6 +354,34 @@ def spawn_isolated_iteration(verify_state: dict, last_result: dict, isolation_co
         }
 
 
+def chain_block_reason(chain_state: dict) -> str:
+    """The Stop reason for a visible run, picked from the hold the state carries."""
+    chain_id = chain_state.get("chain_id", "")
+    step = chain_state.get("current_step", 0)
+    total = chain_state.get("total_steps", 0)
+    resume = f'  prompt_engine(chain_id="{chain_id}")'
+    if chain_state.get("pending_gate"):
+        return (
+            f"Chain {chain_id} has a pending gate review (step {step}/{total}).\n\n"
+            f"Submit gate_verdict via prompt_engine:\n"
+            f'  chain_id="{chain_id}"\n'
+            f'  gate_verdict="GATE_REVIEW: PASS|FAIL - <reason>"'
+        )
+    if chain_state.get("pending_shell_verify"):
+        return (
+            f"Chain {chain_id} is waiting on a shell verification "
+            f"(`{chain_state['pending_shell_verify']}`).\n\n"
+            f'Submit the fix as user_response, or gate_action="retry|skip|abort", with '
+            f'chain_id="{chain_id}".'
+        )
+    if step <= total:
+        return f"Chain {chain_id} is active (step {step}/{total}): steps remain.\n\nContinue the chain:\n{resume}"
+    return (
+        f"Chain {chain_id} is held (an owed detached report or an open review on a finished "
+        f"step).\n\nResume it:\n{resume}"
+    )
+
+
 def main():
     # Read hook input from stdin (Claude Code passes context here)
     try:
@@ -377,35 +405,13 @@ def main():
         # Session-scoped: an unscoped read here let another client's chain
         # block THIS session's Stop event (cross-client leakage fix).
         chain_state = load_recoverable_chain_state(hook_session_id or None)
+        # R30: the loader returns only runs the server still projects, i.e. runs that are not
+        # complete, so a state coming back IS the block. No ordinal re-derivation here: that
+        # missed a run held past its last node (step = total + 1) by a check or an owed report.
         if chain_state:
-            chain_id = chain_state.get("chain_id", "")
-            step = chain_state.get("current_step", 0)
-            total = chain_state.get("total_steps", 0)
-            pending_gate = chain_state.get("pending_gate")
-
-            # Block if: steps remain OR pending gate/verify at final step
-            # (load_recoverable_chain_state already filters truly completed chains)
-            needs_continuation = chain_id and step > 0 and step < total
-            needs_review = chain_id and step > 0 and pending_gate
-
-            if needs_continuation or needs_review:
-                if pending_gate:
-                    reason = (
-                        f"Chain {chain_id} has a pending gate review (step {step}/{total}).\n\n"
-                        f"Submit gate_verdict via prompt_engine:\n"
-                        f'  chain_id="{chain_id}"\n'
-                        f'  gate_verdict="GATE_REVIEW: PASS|FAIL - <reason>"'
-                    )
-                else:
-                    reason = (
-                        f"Chain {chain_id} is active (step {step}/{total}).\n\n"
-                        f"Continue the chain:\n"
-                        f'  prompt_engine(chain_id="{chain_id}")'
-                    )
-
-                print(json.dumps({"decision": "block", "reason": reason}))
-                sys.stdout.flush()
-                sys.exit(0)
+            print(json.dumps({"decision": "block", "reason": chain_block_reason(chain_state)}))
+            sys.stdout.flush()
+            sys.exit(0)
 
         # No active chain or verification — allow stop
         sys.exit(0)
