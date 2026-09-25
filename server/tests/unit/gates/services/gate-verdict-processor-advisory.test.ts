@@ -40,6 +40,7 @@ function createStore(advancedTo: { ordinal: number; nodeId: string }) {
     clearReview: jest.fn(async () => later(undefined)),
     setReview: jest.fn(async () => later(undefined)),
     advanceStep: jest.fn(async () => later(advancedTo)),
+    getSession: jest.fn(() => undefined),
   } as unknown as ChainSessionService & Record<string, jest.Mock>;
 }
 
@@ -56,6 +57,7 @@ function createContext(enforcementMode: 'advisory' | 'informational') {
       session: {},
     },
     diagnostics: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
+    getScopeOptions: () => ({}),
     sessionContext: undefined as unknown,
   } as never;
 }

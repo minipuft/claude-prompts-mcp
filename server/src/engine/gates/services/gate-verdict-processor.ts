@@ -59,8 +59,8 @@ export interface DeferredAdvance {
   readonly sessionId: string;
   /** The node the run advances PAST — the node the answered review graded. */
   readonly nodeId: string;
-  /** Why the run advances, for the diagnostic line the application emits. */
-  readonly reason: 'gate-pass' | 'advisory-fail' | 'informational-fail' | 'gate-skip';
+  /** Why the run advances: the diagnostic line, and the `step_complete` status (skip: `failed`). */
+  readonly reason: 'captured' | 'gate-pass' | 'advisory-fail' | 'informational-fail' | 'gate-skip';
 }
 
 /**
@@ -433,38 +433,39 @@ export class GateVerdictProcessor {
         sessionId,
         skippedGates: context.state.gates.retryExhaustedGateIds,
       });
-      await this.announceSkippedStep(context, session, answer.review.nodeId);
       return { sessionId, nodeId: answer.review.nodeId, reason: 'gate-skip' };
     }
     return undefined;
   }
 
   /**
-   * Announce the step a skip accepted, on the skip's own call, with the output it was captured
-   * with. `failed`: its gates failed, and the run moves past it anyway.
+   * Announce the step the run just moved past, with the output it was captured with (R25). The
+   * one emitter of `step_complete` for a run's own advance; a skipped step is `failed`: its gates
+   * failed, and the run moves past it anyway.
    */
-  private async announceSkippedStep(
+  private async announceAdvancedStep(
     context: ExecutionContext,
     session: ChainSession,
-    nodeId: string
+    advance: DeferredAdvance
   ): Promise<void> {
-    const stepIndex = ordinalOf(session.state.nodes, nodeId);
-    const results = this.chainSessionStore.getChainContext(
-      session.sessionId,
-      context.getScopeOptions()
-    )['step_results'] as Record<number, string> | undefined;
+    if (this.hookRegistry === undefined && this.notificationEmitter === undefined) return;
+    const stepIndex = ordinalOf(session.state.nodes, advance.nodeId);
     try {
+      const results = this.chainSessionStore.getChainContext(
+        session.sessionId,
+        context.getScopeOptions()
+      )['step_results'] as Record<number, string> | undefined;
       const hookContext = buildPipelineHookContext(context);
       const output = results?.[stepIndex] ?? '';
       await this.hookRegistry?.emitStepComplete(session.chainId, stepIndex, output, hookContext);
       this.notificationEmitter?.emitChainStepComplete({
         chainId: session.chainId,
         stepIndex,
-        status: 'failed',
+        status: advance.reason === 'gate-skip' ? 'failed' : 'passed',
       });
     } catch (error) {
       this.logger.warn(
-        `[GateVerdictProcessor] Failed to announce skipped step ${stepIndex}: ${
+        `[GateVerdictProcessor] Failed to announce step ${stepIndex}: ${
           error instanceof Error ? error.message : String(error)
         }`
       );
@@ -694,9 +695,11 @@ export class GateVerdictProcessor {
   /**
    * Perform an advance this processor decided earlier in the same request (P4.89).
    *
-   * Called by `StepResponseCaptureStage` after `StepCaptureService` has captured and announced
-   * the step the verdict graded, and before the post-advance review check — so the run's terminal
-   * announcement can no longer arrive in front of the step event that produced it.
+   * Called by `StepResponseCaptureStage` after `StepCaptureService` has captured the step the
+   * verdict graded, and before the post-advance review check. Every advance past a node holding
+   * a real output runs here — the capture's own (`captured`) included — so this is where the run
+   * announces `step_complete` (R25): once, on the call that moves it, and only when it did move.
+   * A held capture or an in-budget FAIL moves nothing and announces nothing.
    *
    * The context snapshot is updated here rather than at decision time, because this is where the
    * new position exists. It is still written before the response is assembled, which is the
@@ -704,7 +707,12 @@ export class GateVerdictProcessor {
    * A store failure propagates, as it did when this ran inline.
    */
   async applyDeferredAdvance(context: ExecutionContext, advance: DeferredAdvance): Promise<void> {
+    const session = this.chainSessionStore.getSession(advance.sessionId, context.getScopeOptions());
+    const fromNodeId = session?.state.currentNodeId;
     const advanced = await this.chainSessionStore.advanceStep(advance.sessionId, advance.nodeId);
+    if (session !== undefined && advanced !== false && advanced.nodeId !== fromNodeId) {
+      await this.announceAdvancedStep(context, session, advance);
+    }
 
     const sessionContext = context.sessionContext;
     if (advanced !== false && sessionContext !== undefined) {

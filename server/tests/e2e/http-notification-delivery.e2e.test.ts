@@ -238,6 +238,63 @@ describe('Streamable HTTP notification delivery', () => {
     ]);
   }, 90000);
 
+  /**
+   * R25: `chain/step_complete` announces the run moving PAST a step, on the call that moves it —
+   * not the capture of an answer a review still holds. Until P6.24 it fired at capture, so an
+   * in-budget FAIL announced a step the run was still standing on.
+   */
+  describe('step_complete arrives on the call that moves the run past the step', () => {
+    const stepCompletesOf = (outcome: ToolOutcome) =>
+      outcome.notifications.filter((n) => n.method === 'notifications/chain/step_complete');
+
+    test('an in-budget FAIL announces nothing; the PASS that moves the run announces once', async () => {
+      const start = await callTool('prompt_engine', {
+        command: '>>quick_decision topic:"a held step"',
+      });
+      const chainId = chainIdOf(start.text);
+
+      const failed = await callTool('prompt_engine', {
+        chain_id: chainId,
+        user_response: cageerfAnswer('Options: one, two, three.'),
+        gate_verdict: 'GATE_REVIEW: FAIL - the tradeoffs are missing',
+      });
+      expect(methodsOf(failed)).toContain('notifications/gate/failed'); // the stream is read
+      expect(failed.text).toContain('→ Progress 1/3');
+      expect(stepCompletesOf(failed)).toEqual([]);
+
+      const passed = await callTool('prompt_engine', {
+        chain_id: chainId,
+        gate_verdict: 'GATE_REVIEW: PASS - the tradeoffs are named',
+      });
+      expect(passed.text).toContain('→ Progress 2/3');
+      expect(stepCompletesOf(passed).map((n) => n.params['stepIndex'])).toEqual([1]);
+    }, 60000);
+
+    test('CONTROL: an answer and its PASS on one call announce the step once', async () => {
+      const start = await callTool('prompt_engine', {
+        command: '>>quick_decision topic:"one call"',
+      });
+      const passed = await callTool('prompt_engine', {
+        chain_id: chainIdOf(start.text),
+        user_response: cageerfAnswer('Options: one, two, three.'),
+        gate_verdict: 'GATE_REVIEW: PASS - three options listed',
+      });
+      expect(passed.text).toContain('→ Progress 2/3');
+      expect(stepCompletesOf(passed).map((n) => n.params['stepIndex'])).toEqual([1]);
+    }, 60000);
+
+    test('a gate-free step announces once on the call that captures and advances it', async () => {
+      const start = await callTool('prompt_engine', {
+        command: '%clean >>quick_decision topic:"no gates"',
+      });
+      const answered = await callTool('prompt_engine', {
+        chain_id: chainIdOf(start.text),
+        user_response: 'Step 1: PostgreSQL, SQLite, DuckDB.',
+      });
+      expect(stepCompletesOf(answered).map((n) => n.params['stepIndex'])).toEqual([1]);
+    }, 60000);
+  });
+
   test('a framework switch delivers framework/changed on the causing call', async () => {
     const switched = await callTool('system_control', {
       action: 'framework',

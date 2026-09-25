@@ -186,17 +186,19 @@ describe('Streamable HTTP: a gate review is a record of one node (shipped defaul
       await call({ user_response: cageerfAnswer(`Step ${step}`), gate_verdict: PASS });
     }
 
-    // Answer and verdict on separate calls: the answer opens the final review, the run stays open.
+    // Answer and verdict on separate calls: the answer opens the final review, the run stays open
+    // on step 3, so nothing is announced yet (R25: step_complete marks the run moving past it).
     const reviewed = await call({ user_response: cageerfAnswer('Step 3') });
     expect(reviewed.isError).toBe(false);
     expect(reviewed.text).toContain('Gate Review Required');
-    expect(reviewed.methods).toEqual([STEP_COMPLETE]); // positive control: the stream is read
+    expect(reviewed.methods).toEqual([]);
     expect(reviewed.text).not.toContain('Chain complete');
 
+    // The PASS moves the run past step 3: its step_complete, then the terminal event, last.
     const closed = await call({ gate_verdict: PASS });
     expect(closed.isError).toBe(false);
     expect(closed.text).toContain('Chain complete');
-    expect(closed.methods).toEqual([CHAIN_COMPLETE]);
+    expect(closed.methods).toEqual([STEP_COMPLETE, CHAIN_COMPLETE]); // the stream is read
 
     // Nothing after it: a resume of the completed run carries no notification.
     const after = await call({});
@@ -279,14 +281,19 @@ describe('Streamable HTTP: a gate review is a record of one node (shipped defaul
       const call = await startRun();
       const first = await call({ user_response: cageerfAnswer('Step 1 kept'), gate_verdict: FAIL });
       expect(first.isError).toBe(false);
-      await call({ user_response: cageerfAnswer('Step 1 again'), gate_verdict: FAIL });
+      const second = await call({
+        user_response: cageerfAnswer('Step 1 again'),
+        gate_verdict: FAIL,
+      });
+      // The run stood on step 1 through both FAILs, so neither announced it (R25).
+      expect([...first.methods, ...second.methods]).not.toContain(STEP_COMPLETE);
 
       const skipped = await call({ gate_action: 'skip' });
       expect(skipped.isError).toBe(false);
       expect(skipped.text).not.toContain(RETRY_PROMPT);
       expect(skipped.text).toContain('→ Progress 2/3');
       expect(skipped.text).toContain(STEP_2_BODY);
-      expect(skipped.methods).toContain(STEP_COMPLETE);
+      expect(skipped.methods.filter((m) => m === STEP_COMPLETE)).toHaveLength(1);
 
       // Step 1's recorded output is the answer it was captured with, unchanged by the skip.
       const record = stepOneRecord();

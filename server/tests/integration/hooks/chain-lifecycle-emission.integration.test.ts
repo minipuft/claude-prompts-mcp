@@ -196,9 +196,10 @@ const buildPipeline = (options: {
   const realStages: Record<string, PipelineStage> = {
     SessionManagement: new SessionManagementStage(sessionStore, logger),
     StepResponseCapture: new StepResponseCaptureStage(
-      new GateVerdictProcessor(sessionStore, logger),
-      // The announcer under test: the same construction the composition root performs in
-      // `pipeline-builder.ts`, holding the registry and the emitter.
+      // The announcer under test — the advance point announces the step the run moved past
+      // (R25) — built the way the composition root builds it in `pipeline-builder.ts`, holding
+      // the registry and the emitter. The capture service holds them too, as it does there.
+      new GateVerdictProcessor(sessionStore, logger, hookRegistry, notificationEmitter),
       new StepCaptureService(sessionStore, logger, recordStore, hookRegistry, notificationEmitter),
       sessionStore,
       new UnknownObservationProcessor(sessionStore, logger),

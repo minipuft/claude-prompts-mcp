@@ -48,6 +48,8 @@ function createStore() {
     clearReview: jest.fn(async () => undefined),
     setReview: jest.fn(async () => undefined),
     isStepComplete: jest.fn(() => false),
+    getSession: jest.fn(() => undefined),
+    getChainContext: jest.fn(() => ({ step_results: { 1: 'step one answer' } })),
   } as unknown as ChainSessionService & Record<string, jest.Mock>;
 }
 
@@ -78,6 +80,8 @@ function createContext() {
     setResponse: jest.fn(),
     state: { gates: { enforcementMode: 'blocking' }, session: {} },
     diagnostics: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
+    getScopeOptions: () => ({}),
+    frameworkAuthority: { getCachedDecision: () => undefined },
     sessionContext: undefined as unknown,
   } as never;
 }
@@ -215,6 +219,101 @@ describe('GateVerdictProcessor defers every advance it decides', () => {
       .sessionContext;
     expect(snapshot.currentStep).toBe(2);
     expect(snapshot.currentNodeId).toBe('node-2');
+  });
+
+  /**
+   * R25 (P6.24): `step_complete` announces the run moving past a step, so the application point
+   * is also the one place it is emitted — only when the advance MOVED the run, which a held
+   * capture or an in-budget FAIL never reaches, and a re-applied advance does not do.
+   */
+  describe('the application announces the step the run moved past', () => {
+    const standingOn = (currentNodeId: string) =>
+      ({
+        sessionId: 'session-1',
+        chainId: 'chain-a',
+        state: { currentNodeId, nodes: [{ id: 'node-1' }, { id: 'node-2' }] },
+      }) as unknown as ChainSession;
+
+    function announcing(currentNodeId: string) {
+      (store.getSession as jest.Mock).mockReturnValue(standingOn(currentNodeId));
+      const hooks = { emitStepComplete: jest.fn(async () => undefined) };
+      const emitter = { emitChainStepComplete: jest.fn() };
+      const announcer = new GateVerdictProcessor(
+        store,
+        createLogger(),
+        hooks as never,
+        emitter as never
+      );
+      return { announcer, hooks, emitter };
+    }
+
+    test('an advance that moves the run announces the step once, with its output', async () => {
+      const { announcer, hooks, emitter } = announcing('node-1');
+      await announcer.applyDeferredAdvance(createContext(), {
+        sessionId: 'session-1',
+        nodeId: 'node-1',
+        reason: 'captured',
+      });
+      expect(emitter.emitChainStepComplete.mock.calls).toEqual([
+        [{ chainId: 'chain-a', stepIndex: 1, status: 'passed' }],
+      ]);
+      expect(hooks.emitStepComplete).toHaveBeenCalledTimes(1);
+      expect(hooks.emitStepComplete.mock.calls[0]?.slice(0, 3)).toEqual([
+        'chain-a',
+        1,
+        'step one answer',
+      ]);
+    });
+
+    test('a skip announces the step it moved past as failed', async () => {
+      const { announcer, emitter } = announcing('node-1');
+      await announcer.applyDeferredAdvance(createContext(), {
+        sessionId: 'session-1',
+        nodeId: 'node-1',
+        reason: 'gate-skip',
+      });
+      expect(emitter.emitChainStepComplete.mock.calls).toEqual([
+        [{ chainId: 'chain-a', stepIndex: 1, status: 'failed' }],
+      ]);
+    });
+
+    test('an advance the run already made announces nothing', async () => {
+      // The store answers with the position the run already holds: nothing moved.
+      const { announcer, hooks, emitter } = announcing('node-2');
+      await announcer.applyDeferredAdvance(createContext(), {
+        sessionId: 'session-1',
+        nodeId: 'node-1',
+        reason: 'gate-pass',
+      });
+      expect(store.advanceStep).toHaveBeenCalledTimes(1); // the probe ran
+      expect(emitter.emitChainStepComplete).not.toHaveBeenCalled();
+      expect(hooks.emitStepComplete).not.toHaveBeenCalled();
+    });
+  });
+
+  test('step_complete has one emitter for an advance, and the capture advances nothing itself', () => {
+    const engine = resolve(dirname(PROCESSOR_SOURCE), '../..');
+    const capture = readFileSync(
+      resolve(engine, 'execution/capture/step-capture-service.ts'),
+      'utf8'
+    );
+    const processor = readFileSync(PROCESSOR_SOURCE, 'utf8');
+
+    // The processor's one emitter sits in the method `applyDeferredAdvance` calls.
+    expect(processor.match(/\.emitChainStepComplete\(/g) ?? []).toHaveLength(1);
+    expect(processor.match(/this\.announceAdvancedStep\(/g) ?? []).toHaveLength(1);
+    const application = processor.slice(processor.indexOf('async applyDeferredAdvance('));
+    expect(application).toContain('this.announceAdvancedStep(');
+
+    // The capture service's own emitter serves a detached node's late report only, and its one
+    // store advance is passing a detached node on a placeholder, which announces nothing.
+    expect(capture.match(/\.emitChainStepComplete\(/g) ?? []).toHaveLength(1);
+    expect(capture.match(/this\.announceStepComplete\(/g) ?? []).toHaveLength(1);
+    const lateReport = capture.slice(capture.indexOf('async recordDetachedReport('));
+    expect(lateReport.slice(0, lateReport.indexOf('\n  }\n'))).toContain(
+      'this.announceStepComplete('
+    );
+    expect(capture.match(/chainSessionStore\.advanceStep\(/g) ?? []).toHaveLength(1);
   });
 
   test('the file performs an advance in exactly one place — the deferred application', () => {
