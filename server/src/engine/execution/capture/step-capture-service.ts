@@ -428,6 +428,10 @@ export class StepCaptureService {
    *   Present means {@link ledgerCapturedStep} already bound this call's verdicts (P4.76), so
    *   recording them again would double-count the same submission.
    *
+   * The row names the node whose review the verdict answered (`verdictDetection.nodeId`), which
+   * is not always the step the run stands on: a PASS sent alone for step 1's structural review
+   * while the run waits on a delegated step 2 records step 1, and step 2 gets no row (R27).
+   *
    * `status` is the STEP's lifecycle as this call leaves it, not the verdict's wording: a
    * cleared review means the step is done, an uncleared one means the run is waiting on the
    * submitter, which is what `input_required` says.
@@ -435,16 +439,24 @@ export class StepCaptureService {
   ledgerSubmittedVerdict(
     context: ExecutionContext,
     sessionId: string,
-    session: ChainSession,
-    currentStepAtStart: number
+    session: ChainSession
   ): void {
     if (this.executionRecordStore === null) return;
 
     const detection = context.state.gates.verdictDetection;
     if (detection === undefined || context.state.session.capturedStep !== undefined) return;
 
-    const target = this.resolveTarget(session, currentStepAtStart, true);
-    if (target === undefined) return;
+    // The node whose review the verdict answered, never the step the run stands on (R27): a
+    // verdict sent alone at a later step answers an earlier node's review and completes nothing.
+    const target = {
+      ordinal: ordinalOf(session.state.nodes, detection.nodeId),
+      nodeId: detection.nodeId,
+    };
+    if (target.ordinal === -1) {
+      throw new Error(
+        `Verdict answered a review of node ${target.nodeId}, which is not in the run`
+      );
+    }
 
     const steps = context.parsedCommand?.steps;
     const step =

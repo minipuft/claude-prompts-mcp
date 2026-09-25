@@ -774,6 +774,59 @@ describe('delegation handoff evidence at resume (Tier 2 row 2.7)', () => {
       expect(sessionStore.isStepComplete(sessionId, DELEGATED_NODE_ID)).toBe(false);
     });
 
+    /** The run's capture and verdict rows (render-time `working` rows left out), oldest first. */
+    const recordRows = (sessionId: string): Array<[number | null, string | null, string]> =>
+      (
+        db
+          .prepare(
+            `SELECT step_number, node_id, status FROM execution_records
+             WHERE session_id = ? AND step_number IS NOT NULL AND status != 'working'
+             ORDER BY execution_id ASC`
+          )
+          .all(sessionId) as Array<{
+          step_number: number | null;
+          node_id: string | null;
+          status: string;
+        }>
+      ).map((row) => [row.step_number, row.node_id, row.status]);
+
+    test("P6.36 (a): a verdict alone on step 1's review records step 1, never the delegated node", async () => {
+      const { pipeline, chainId, sessionId } = await resumeStep1With('step 1 output');
+      expect(openReviews()).toEqual([['n1', 'awaiting-verdict', 0]]);
+      expect(recordRows(sessionId)).toEqual([[1, 'n1', 'completed']]);
+
+      await pipeline.execute({ chain_id: chainId, gate_verdict: passVerdict } as any);
+
+      // R27: the verdict row names the node whose review it answered (step 1), and the
+      // delegated step 2 — which never produced anything — gets no row at all.
+      expect(recordRows(sessionId)).toEqual([
+        [1, 'n1', 'completed'],
+        [1, 'n1', 'completed'],
+      ]);
+      expect(onlySession().state.currentNodeId).toBe(DELEGATED_NODE_ID);
+    });
+
+    test('P6.36 (b) CONTROL: an answer, then a PASS on the same node, keeps its two rows (P4.86)', async () => {
+      const pipeline = buildPipeline({
+        sessionStore,
+        recordStore,
+        logger,
+        steps: parsedChainSteps().map((step) => ({ ...step, delegated: false })),
+      });
+      await pipeline.execute({ command: `>>draft --> >>review` } as any);
+      const { chainId, sessionId } = onlySession();
+
+      await pipeline.execute({ chain_id: chainId, user_response: 'step 1 output' } as any);
+      expect(onlySession().state.currentNodeId).toBe('n1');
+      await pipeline.execute({ chain_id: chainId, gate_verdict: passVerdict } as any);
+
+      expect(recordRows(sessionId)).toEqual([
+        [1, 'n1', 'completed'],
+        [1, 'n1', 'completed'],
+      ]);
+      expect(onlySession().state.currentNodeId).toBe(DELEGATED_NODE_ID);
+    });
+
     test('POSITIVE CONTROL: a conforming step 1 raises no review, and step 2 renders normally', async () => {
       const { rendered } = await resumeStep1With(conformingStep1);
 

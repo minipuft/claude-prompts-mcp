@@ -271,7 +271,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       this.resolveVerdictTrailer(context, currentNodeIdAtStart, currentStepAtStart)
     );
     if (verdictResult.earlyExit) {
-      await this.settleVerdict(context, sessionId, session, currentStepAtStart, verdictResult);
+      await this.settleVerdict(context, sessionId, session, verdictResult);
       await this.ensurePostAdvanceReview(context);
       this.logExit({ gateVerdict: 'answered', handled: true });
       return;
@@ -299,7 +299,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       await this.verdictProcessor.applyDeferredAdvance(context, captured);
     }
 
-    await this.settleVerdict(context, sessionId, session, currentStepAtStart, verdictResult);
+    await this.settleVerdict(context, sessionId, session, verdictResult);
 
     await this.ensurePostAdvanceReview(context);
 
@@ -354,10 +354,9 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     context: ExecutionContext,
     sessionId: string,
     session: NonNullable<ReturnType<ChainSessionService['getSession']>>,
-    currentStepAtStart: number,
     result: VerdictProcessingResult
   ): Promise<void> {
-    this.stepCaptureService.ledgerSubmittedVerdict(context, sessionId, session, currentStepAtStart);
+    this.stepCaptureService.ledgerSubmittedVerdict(context, sessionId, session);
     if (result.deferredAdvance !== undefined) {
       await this.verdictProcessor.applyDeferredAdvance(context, result.deferredAdvance);
     }

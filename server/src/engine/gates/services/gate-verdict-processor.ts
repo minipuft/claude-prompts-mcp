@@ -202,7 +202,7 @@ export class GateVerdictProcessor {
       return answer;
     }
     const { review, advance } = answer;
-    this.recordVerdictDetection(context, payload, advance.outcome);
+    this.recordVerdictDetection(context, payload, advance.outcome, review.nodeId);
     const passed = advance.outcome === 'passed';
     await this.emitGateEvents(
       context,
@@ -521,7 +521,7 @@ export class GateVerdictProcessor {
     }
 
     const { review, advance } = answer;
-    this.recordVerdictDetection(context, verdictPayload, advance.outcome);
+    this.recordVerdictDetection(context, verdictPayload, advance.outcome, review.nodeId);
     let deferredAdvance: DeferredAdvance | undefined;
     if (advance.outcome === 'passed') {
       deferredAdvance = {
@@ -893,11 +893,13 @@ export class GateVerdictProcessor {
   private recordVerdictDetection(
     context: ExecutionContext,
     verdictPayload: ParsedGateVerdict,
-    outcome: string
+    outcome: string,
+    nodeId: string
   ): void {
     const verdictDetection: NonNullable<typeof context.state.gates.verdictDetection> = {
       verdict: verdictPayload.verdict,
       source: verdictPayload.source,
+      nodeId,
     };
     verdictDetection.rationale = verdictPayload.rationale;
     if (verdictPayload.detectedPattern !== undefined) {
