@@ -22,11 +22,15 @@ HOOKS_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(HOOKS_DIR / "lib"))
 
 from hook_payloads import real_payload
-from session_state import load_session_state
+from session_state import load_session_state, save_session_state
 
 _post_spec = importlib.util.spec_from_file_location("post_prompt_engine", HOOKS_DIR / "post-prompt-engine.py")
 post_prompt_engine = importlib.util.module_from_spec(_post_spec)
 _post_spec.loader.exec_module(post_prompt_engine)
+
+_gate_spec = importlib.util.spec_from_file_location("gate_enforce", HOOKS_DIR / "gate-enforce.py")
+gate_enforce = importlib.util.module_from_spec(_gate_spec)
+_gate_spec.loader.exec_module(gate_enforce)
 
 TOOL = "mcp__claude-prompts__prompt_engine"
 WORKER_AGENT_ID = "acce70004ef9a4142"
@@ -135,3 +139,64 @@ class TestPostPromptEngineSubagentWritesNothing:
             _post(sid, "Chain complete (3/3) chain-parent#1", {"chain_id": "chain-parent#1"}, agent_id=None),
         )
         assert load_session_state(sid) is None
+
+
+PARENT_GATE_PENDING = {
+    "chain_id": "chain-parent#1",
+    "current_step": 2,
+    "total_steps": 3,
+    "pending_gate": "code-quality",
+}
+
+
+def _pre(session_id, tool_input, *, agent_id):
+    return real_payload(session_id, TOOL, tool_input, agent_id=agent_id)
+
+
+class TestGateEnforceSubagentIsNotHeldByTheParentGate:
+    """Check 2 reads the PARENT's pending_gate by session_id; a worker's resume of its own run
+    is the server's to gate, not the parent's review."""
+
+    def test_subagent_bare_resume_with_the_parent_gate_pending_is_allowed(self, patch_workspace, monkeypatch, capsys):
+        sid = "p643-sub-resume"
+        save_session_state(sid, dict(PARENT_GATE_PENDING))
+
+        code, out = _run(
+            gate_enforce, monkeypatch, capsys, _pre(sid, {"chain_id": "chain-worker#1"}, agent_id=WORKER_AGENT_ID)
+        )
+
+        assert (code, out) == (0, "")
+        assert load_session_state(sid)["pending_gate"] == "code-quality"
+
+    def test_control_the_parent_bare_resume_is_denied(self, patch_workspace, monkeypatch, capsys):
+        sid = "p643-parent-resume"
+        save_session_state(sid, dict(PARENT_GATE_PENDING))
+
+        code, out = _run(gate_enforce, monkeypatch, capsys, _pre(sid, {"chain_id": "chain-parent#1"}, agent_id=None))
+
+        assert code == 0
+        decision = json.loads(out)["hookSpecificOutput"]
+        assert decision["permissionDecision"] == "deny"
+        assert decision["permissionDecisionReason"].startswith("Gate review required: code-quality.")
+
+    def test_control_the_parent_resume_with_a_verdict_is_allowed(self, patch_workspace, monkeypatch, capsys):
+        sid = "p643-parent-verdict"
+        save_session_state(sid, dict(PARENT_GATE_PENDING))
+        tool_input = {"chain_id": "chain-parent#1", "gate_verdict": "GATE_REVIEW: PASS - criteria met"}
+
+        code, out = _run(gate_enforce, monkeypatch, capsys, _pre(sid, tool_input, agent_id=None))
+
+        assert (code, out) == (0, "")
+
+    def test_subagent_fail_verdict_still_gets_the_retry_guidance(self, patch_workspace, monkeypatch, capsys):
+        """Check 1 reads the caller's OWN verdict, not the parent's state, so it applies to a
+        worker exactly as to its parent."""
+        sid = "p643-sub-fail"
+        tool_input = {"chain_id": "chain-worker#1", "gate_verdict": "GATE_REVIEW: FAIL - criteria unmet"}
+
+        code, out = _run(gate_enforce, monkeypatch, capsys, _pre(sid, tool_input, agent_id=WORKER_AGENT_ID))
+
+        assert code == 0
+        decision = json.loads(out)["hookSpecificOutput"]
+        assert decision["permissionDecision"] == "deny"
+        assert decision["permissionDecisionReason"].startswith("Gate FAIL: criteria unmet.")
