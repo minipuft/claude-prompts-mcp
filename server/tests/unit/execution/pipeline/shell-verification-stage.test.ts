@@ -341,6 +341,72 @@ describe('ShellVerificationStage', () => {
     });
   });
 
+  // P6.52 / R32: a chain-level check grades every step's answer, not only the first held one.
+  describe('the check stands again for the next step (P6.52)', () => {
+    const passingRun = (standsOn: string | null) => {
+      const sessionService = createMockSessionService();
+      (sessionService.getPendingShellVerification as jest.Mock).mockReturnValue({
+        nodeId: 'node-1',
+      });
+      (sessionService.getSession as jest.Mock).mockReturnValue({
+        state: { currentNodeId: standsOn },
+      });
+      const stateManager = createMockStateManager();
+      const stage = new ShellVerificationStage(
+        createMockExecutor(true),
+        stateManager,
+        sessionService,
+        createAdvanceOwner(),
+        createLogger()
+      );
+      const context = new ExecutionContext({ chain_id: 'chain-test#1', user_response: 'fixed' });
+      context.state.session.resumeSessionId = 'test-session';
+      context.state.gates.pendingShellVerification = {
+        gateId: 'shell-verify-inline',
+        shellVerify: { command: 'npm test', loop: true },
+        attemptCount: 2,
+        maxAttempts: 5,
+        previousResults: [],
+        originalGoal: '>>chain',
+      };
+      return { stage, context, sessionService, stateManager };
+    };
+
+    test('a pass that moves the run to a later step re-arms it with a fresh budget and no node', async () => {
+      const { stage, context, sessionService, stateManager } = passingRun('node-2');
+
+      await stage.execute(context);
+
+      const saves = (sessionService.setPendingShellVerification as jest.Mock).mock.calls;
+      expect(saves).toHaveLength(1);
+      const [, saved] = saves[0] as [string, Record<string, unknown>];
+      expect(saved).toMatchObject({
+        gateId: 'shell-verify-inline',
+        attemptCount: 0,
+        previousResults: [],
+        maxAttempts: 5,
+        originalGoal: '>>chain',
+      });
+      expect(saved['nodeId']).toBeUndefined();
+      // The loop's Stop-hook state stands again rather than being cleared
+      expect(stateManager.writeState).toHaveBeenLastCalledWith(
+        'chain-test#1',
+        expect.objectContaining({ attemptCount: 0 })
+      );
+      expect(stateManager.clearState).not.toHaveBeenCalled();
+    });
+
+    test('control: the pass that completes the run leaves the check cleared', async () => {
+      const { stage, context, sessionService, stateManager } = passingRun(null);
+
+      await stage.execute(context);
+
+      expect(sessionService.clearPendingShellVerification).toHaveBeenCalled();
+      expect(sessionService.setPendingShellVerification).not.toHaveBeenCalled();
+      expect(stateManager.clearState).toHaveBeenCalledWith('chain-test#1');
+    });
+  });
+
   describe('gate_action handling', () => {
     const createEscalatedContext = (gateAction: 'retry' | 'skip' | 'abort') => {
       const context = new ExecutionContext({

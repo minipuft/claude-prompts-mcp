@@ -160,9 +160,10 @@ export class ShellVerificationStage extends BasePipelineStage {
     context.state.gates.pendingShellVerification = undefined;
     await this.clearFromSession(context);
     await this.releaseHeldStep(context, heldNodeId, 'captured');
+    const rearmed = await this.rearmForNextStep(context, pending, heldNodeId);
 
-    // LOOP MODE: Clear verify-state.db
-    if (shellVerify.loop === true) {
+    // LOOP MODE: Clear verify-state.db, unless the check stands again for the next step
+    if (shellVerify.loop === true && !rearmed) {
       await this.stateManager.clearState(this.resolveVerifyStateKey(context));
     }
 
@@ -283,6 +284,17 @@ export class ShellVerificationStage extends BasePipelineStage {
     context: ExecutionContext,
     pending: PendingShellVerification
   ): Promise<void> {
+    // The node it holds open: the step captured on this call, else the node an earlier save
+    // named — a failing re-run on a call that captured nothing must not release the hold.
+    await this.writeSnapshot(context, pending, this.heldNodeId(context));
+  }
+
+  /** Persist the check as holding `nodeId`; `undefined` holds nothing until a capture names one. */
+  private async writeSnapshot(
+    context: ExecutionContext,
+    pending: PendingShellVerification,
+    nodeId: string | undefined
+  ): Promise<void> {
     const sessionId = context.getSessionId();
     if (!sessionId) return;
 
@@ -294,9 +306,7 @@ export class ShellVerificationStage extends BasePipelineStage {
       previousResults: pending.previousResults,
       originalGoal: pending.originalGoal,
       sourceGateIds: pending.sourceGateIds,
-      // The node it holds open: the step captured on this call, else the node an earlier save
-      // named — a failing re-run on a call that captured nothing must not release the hold.
-      nodeId: this.heldNodeId(context),
+      nodeId,
     };
 
     await this.chainSessionService.setPendingShellVerification(sessionId, snapshot);
@@ -328,6 +338,35 @@ export class ShellVerificationStage extends BasePipelineStage {
     const session = this.chainSessionService.getSession(sessionId, context.getScopeOptions());
     if (session?.reviews?.[nodeId] !== undefined) return;
     await this.advanceOwner.applyDeferredAdvance(context, { sessionId, nodeId, reason });
+  }
+
+  /**
+   * A chain-level check grades every step's answer (R32). Once the release moved the run past the
+   * held step onto a later node, the check stands again for that node: a fresh budget, no node
+   * (the capture of the next answer names it, as on the render), and the loop's Stop-hook state
+   * written again. A release that completed the run, or moved nothing, leaves it cleared.
+   */
+  private async rearmForNextStep(
+    context: ExecutionContext,
+    pending: PendingShellVerification,
+    releasedNodeId: string | undefined
+  ): Promise<boolean> {
+    const sessionId = runSessionId(context);
+    if (sessionId === undefined || releasedNodeId === undefined) return false;
+    const session = this.chainSessionService.getSession(sessionId, context.getScopeOptions());
+    const standsOn = session?.state.currentNodeId;
+    if (standsOn === undefined || standsOn === null || standsOn === releasedNodeId) return false;
+
+    const rearmed: PendingShellVerification = { ...pending, attemptCount: 0, previousResults: [] };
+    await this.writeSnapshot(context, rearmed, undefined);
+    if (rearmed.shellVerify.loop === true) {
+      await this.stateManager.writeState(this.resolveVerifyStateKey(context), rearmed);
+    }
+    context.diagnostics.info(this.name, 'Shell verification armed for the next step', {
+      gateId: rearmed.gateId,
+      nodeId: standsOn,
+    });
+    return true;
   }
 
   /**
@@ -422,6 +461,7 @@ export class ShellVerificationStage extends BasePipelineStage {
         context.state.gates.pendingShellVerification = undefined;
         await this.clearFromSession(context);
         await this.releaseHeldStep(context, heldNodeId, 'gate-skip');
+        await this.rearmForNextStep(context, pending, heldNodeId);
         context.diagnostics.warn(this.name, 'User chose to skip shell verification', {
           gateId: pending.gateId,
         });

@@ -11,12 +11,17 @@
  * exhausted check releases the same hold (R24), and is refused by name with no answer to skip
  * past (P6.44).
  *
- * An inline `:: verify:` is armed once, when the run is created: once it passes it is cleared, so
- * the steps after the held one run unchecked (measured here, twin c).
+ * MEASURED 2026-09-25 on `5c6027f3`: an inline `:: verify:` was armed once, when the run was
+ * created, and cleared on its first pass, so every step after the first held one ran unchecked —
+ * step 2 answered with the marker deleted advanced with the command never run.
+ *
+ * Now (R32) a chain-level check grades EVERY step's answer: once a pass or a skip releases step N
+ * and the run stands on a later step, the check is pending again for it with a fresh attempt
+ * budget, and the run completes only when the last step's check passes (P6.52).
  */
 import { afterEach, describe, expect, test } from '@jest/globals';
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { createHermeticRoots } from './helpers/child-env.js';
@@ -144,8 +149,8 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
     expect(seen).toEqual([1, 1]);
   }, 180000);
 
-  test('P6.26 (c): once the held step is released, the last answer completes the run once', async () => {
-    const { call, marker } = await startVerifiedChain(false);
+  test('P6.26 (c): once the held step is released, each later answer is checked and the last completes the run once', async () => {
+    const { call, marker, runs } = await startVerifiedChain(false);
     const first = await answer(call, 'Step 1');
     expect(first.text).toContain('Shell Verification FAILED');
     writeFileSync(marker, 'ok');
@@ -154,6 +159,66 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
     const last = await answer(call, 'Step 3');
     expect(last.text).toContain('Chain complete');
     expect(count(last, CHAIN_COMPLETE)).toBe(1);
+    // Two runs on step 1, then one per later step (R32)
+    expect(runs()).toBe(4);
+  }, 180000);
+
+  test('P6.52 (a): the check stands again for step 2, and a failing step-2 answer bounces', async () => {
+    const { call, marker, runs } = await startVerifiedChain(false);
+    expect((await answer(call, 'Step 1')).text).toContain('Shell Verification FAILED');
+    expect(runs()).toBe(1);
+
+    writeFileSync(marker, 'ok');
+    const released = await call({ user_response: 'fixed' });
+    expect(released.text).toContain('Progress 2/3');
+    expect(count(released, STEP_COMPLETE)).toBe(1);
+    expect(runs()).toBe(2);
+
+    unlinkSync(marker);
+    const bounced = await answer(call, 'Step 2');
+    expect(bounced.text).toContain('Shell Verification FAILED (Attempt 1/5)');
+    expect(count(bounced, STEP_COMPLETE)).toBe(0);
+    expect(count(bounced, CHAIN_COMPLETE)).toBe(0);
+    expect(runs()).toBe(3);
+
+    writeFileSync(marker, 'ok');
+    const passed = await call({ user_response: 'fixed step 2' });
+    expect(passed.text).toContain('Progress 3/3');
+    expect(count(passed, STEP_COMPLETE)).toBe(1);
+    expect(runs()).toBe(4);
+
+    const last = await answer(call, 'Step 3');
+    expect(last.text).toContain('Chain complete');
+    expect(count(last, CHAIN_COMPLETE)).toBe(1);
+    expect(runs()).toBe(5);
+  }, 180000);
+
+  test('P6.52 (b) control: with the check passing, each answer runs it once and advances', async () => {
+    const { call, runs } = await startVerifiedChain(true);
+    const completions: number[] = [];
+    for (const step of [1, 2, 3]) {
+      const answered = await answer(call, `Step ${step}`);
+      expect(answered.text).not.toContain('Shell Verification FAILED');
+      expect(runs()).toBe(step);
+      completions.push(count(answered, CHAIN_COMPLETE));
+    }
+    expect(completions).toEqual([0, 0, 1]);
+  }, 180000);
+
+  test('P6.52 (c): skip on an exhausted step-1 check arms step 2 with a fresh budget', async () => {
+    const { call, runs } = await startVerifiedChain(false, ' max:2');
+    await answer(call, 'Step 1');
+    expect((await call({ user_response: 'still missing' })).text).toContain(
+      'Maximum Attempts Reached'
+    );
+    expect((await call({ gate_action: 'skip' })).text).toContain('Progress 2/3');
+    expect(runs()).toBe(2);
+
+    const step2 = await answer(call, 'Step 2');
+    expect(step2.text).toContain('Shell Verification FAILED (Attempt 1/2)');
+    expect(step2.text).not.toContain('Maximum Attempts Reached');
+    expect(count(step2, STEP_COMPLETE)).toBe(0);
+    expect(runs()).toBe(3);
   }, 180000);
 
   test('P6.44 (a): skip on an exhausted check accepts the captured answer and advances', async () => {
