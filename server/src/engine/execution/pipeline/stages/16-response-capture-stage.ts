@@ -248,7 +248,16 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       !isInterruptResolutionAction(gateAction) &&
       this.stepReviewOf(session)?.phase === 'exhausted'
     ) {
-      await this.verdictProcessor.handleGateAction(context, session, gateAction, sessionContext);
+      const skipped = await this.verdictProcessor.handleGateAction(
+        context,
+        session,
+        gateAction,
+        sessionContext
+      );
+      if (skipped !== undefined) {
+        await this.verdictProcessor.applyDeferredAdvance(context, skipped);
+        await this.ensurePostAdvanceReview(context);
+      }
       this.logExit({ gateAction, handled: true });
       return;
     }

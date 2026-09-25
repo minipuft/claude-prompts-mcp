@@ -10,8 +10,8 @@
  *   a verdict on its own call answers step 1's review and leaves step 2 owed; with no review
  *   open, the same bare verdict is refused and names the step to answer first;
  * - the final step's verdict closes the run, and `chain/complete` is the run's last notification;
- * - a FAIL past the retry budget offers the retry prompt, a further verdict is refused, and
- *   `gate_action` retry / skip moves the review.
+ * - a FAIL past the retry budget offers the retry prompt, a further verdict is refused, retry reopens the review, and skip accepts the step's recorded
+ *   answer and moves the run on (R24) — or is refused on a step that holds none.
  *
  * A detached step's review at its late report is driven by `detached-review-at-report.e2e.test.ts`;
  * a final step's structural review holding `chain/complete` by `final-review-chain-complete.e2e.test.ts`.
@@ -20,6 +20,7 @@ import { afterEach, describe, expect, test } from '@jest/globals';
 
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 
 import { createHermeticRoots } from './helpers/child-env.js';
 import { cageerfAnswer } from './helpers/cageerf-answer.js';
@@ -51,6 +52,7 @@ type Call = (args: Record<string, unknown>) => Promise<ToolOutcome>;
 
 describe('Streamable HTTP: a gate review is a record of one node (shipped defaults)', () => {
   let teardown: Array<() => void | Promise<void>> = [];
+  let runtimeRoot = '';
   afterEach(async () => {
     for (const fn of teardown.reverse()) await fn();
     teardown = [];
@@ -59,6 +61,7 @@ describe('Streamable HTTP: a gate review is a record of one node (shipped defaul
   /** A hermetic server running `quick_decision`; returns a caller bound to the run's chain id. */
   async function startRun(): Promise<Call> {
     const roots = createHermeticRoots('review-per-node-e2e');
+    runtimeRoot = roots.runtimeRoot;
     const workspace = path.join(roots.root, 'workspace');
     mkdirSync(workspace, { recursive: true });
     const port = await getAvailablePort();
@@ -84,6 +87,29 @@ describe('Streamable HTTP: a gate review is a record of one node (shipped defaul
     const chainId = /chain_id="(chain-[A-Za-z0-9_#-]+)"/.exec(start.text)?.[1];
     if (chainId === undefined) throw new Error(`no chain id in: ${start.text.slice(0, 400)}`);
     return (args) => call({ chain_id: chainId, ...args });
+  }
+
+  /**
+   * Step 1's recorded output as the run's store holds it: its node row, and the answer the
+   * argument history recorded for it (`kv_state` key `arg_history`).
+   */
+  function stepOneRecord(): { completed: boolean; history: string } {
+    const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+    try {
+      const node = db
+        .prepare(
+          'SELECT completed_at, is_placeholder FROM chain_run_nodes ORDER BY position LIMIT 1'
+        )
+        .get() as { completed_at: number | null; is_placeholder: number | null } | undefined;
+      const history = db.prepare("SELECT state FROM kv_state WHERE key = 'arg_history'").get() as
+        { state: string } | undefined;
+      return {
+        completed: node?.completed_at != null && node.is_placeholder !== 1,
+        history: history?.state ?? '',
+      };
+    } finally {
+      db.close();
+    }
   }
 
   describe('a structural review of step 1 is answered on step 1 while the run stands on step 2', () => {
@@ -223,15 +249,53 @@ describe('Streamable HTTP: a gate review is a record of one node (shipped defaul
       expect(again.text).not.toContain(RETRY_PROMPT);
     }, 180000);
 
-    test('skip closes the review and the run keeps step 1', async () => {
-      const call = await exhausted();
+    /**
+     * R24: skip accepts the answer step 1 already holds and moves the run past it, announcing
+     * step 1 on that call. Before, skip only cleared the review and the run stayed on step 1.
+     */
+    test('skip accepts the captured answer and the run moves to step 2', async () => {
+      const call = await startRun();
+      const first = await call({ user_response: cageerfAnswer('Step 1 kept'), gate_verdict: FAIL });
+      expect(first.isError).toBe(false);
+      await call({ user_response: cageerfAnswer('Step 1 again'), gate_verdict: FAIL });
 
       const skipped = await call({ gate_action: 'skip' });
       expect(skipped.isError).toBe(false);
-      expect(skipped.text).not.toContain('Review Required');
       expect(skipped.text).not.toContain(RETRY_PROMPT);
-      expect(skipped.text).toContain('→ Progress 1/3');
-      expect(skipped.text).not.toContain('gate_verdict="GATE_REVIEW');
+      expect(skipped.text).toContain('→ Progress 2/3');
+      expect(skipped.text).toContain(STEP_2_BODY);
+      expect(skipped.methods).toContain(STEP_COMPLETE);
+
+      // Step 1's recorded output is the answer it was captured with, unchanged by the skip.
+      const record = stepOneRecord();
+      expect(record.completed).toBe(true);
+      expect(record.history).toContain('Step 1 kept');
+      expect(record.history).not.toContain('Step 1 again');
+    }, 180000);
+
+    /** CONTROL for the move above: retry on the same exhausted review keeps the run on step 1. */
+    test('CONTROL: retry reopens step 1 at attempt 1 and the run stays', async () => {
+      const call = await exhausted();
+      const retried = await call({ gate_action: 'retry' });
+      expect(retried.isError).toBe(false);
+      expect(retried.text).toContain('**Gate Review Required** (attempt 1/2)');
+      expect(retried.text).toContain('→ Progress 1/3');
+      expect(retried.methods).not.toContain(STEP_COMPLETE);
+    }, 180000);
+
+    /** R19: an exhausted review of a step that holds no answer has nothing to skip past. */
+    test('skip on an exhausted review of an unanswered step is refused by name', async () => {
+      const call = await startRun();
+      await call({ user_response: cageerfAnswer('Step 1'), gate_verdict: PASS });
+      // Step 2's review opened when it rendered; two bare FAILs spend its budget.
+      await call({ gate_verdict: FAIL });
+      const spent = await call({ gate_verdict: FAIL });
+      expect(spent.text).toContain(RETRY_PROMPT);
+
+      const refused = await call({ gate_action: 'skip' });
+      expect(refused.isError).toBe(true);
+      expect(refused.text).toContain('nothing to skip past on step 2; answer it first');
+      expect(refused.methods).not.toContain(STEP_COMPLETE);
     }, 180000);
   });
 });

@@ -60,7 +60,7 @@ export interface DeferredAdvance {
   /** The node the run advances PAST — the node the answered review graded. */
   readonly nodeId: string;
   /** Why the run advances, for the diagnostic line the application emits. */
-  readonly reason: 'gate-pass' | 'advisory-fail' | 'informational-fail';
+  readonly reason: 'gate-pass' | 'advisory-fail' | 'informational-fail' | 'gate-skip';
 }
 
 /**
@@ -363,20 +363,23 @@ export class GateVerdictProcessor {
    * Resolve the step review's exhaustion with `gate_action` (retry/skip/abort).
    *
    * `retry` and `skip` are events on the review (`advanceReview`): retry reopens it with the
-   * counter reset, skip clears it. `abort` cancels the RUN, not just the request:
+   * counter reset, skip clears it and accepts the answer the step already holds (R24) — it
+   * announces that step and returns the advance past it, for the stage to apply. A skip on a step
+   * that holds no answer is refused by name and records nothing: a call with no answer advances
+   * nothing (R19). `abort` cancels the RUN, not just the request:
    * `context.state.session.aborted` is per-request state that stage 21 reads to write a
    * `cancelled` execution record — it says the run ended without ending it, and until the cancel
    * landed the next call resumed the chain the user had just aborted. `cancelChain` returns false
    * for an already-terminal run; the run is over either way, so the abort exit still stands.
    *
-   * @returns true: the pipeline exits early after an action.
+   * @returns the advance a skip decided; the pipeline exits early after every action.
    */
   async handleGateAction(
     context: ExecutionContext,
     session: ChainSession,
     gateAction: GateAction,
     sessionContext: SessionContext
-  ): Promise<boolean> {
+  ): Promise<DeferredAdvance | undefined> {
     const sessionId = session.sessionId;
     context.state.gates.retryLimitExceeded = false;
     context.state.gates.awaitingUserChoice = false;
@@ -396,7 +399,19 @@ export class GateVerdictProcessor {
           failedGates: context.state.gates.retryExhaustedGateIds,
         }
       );
-      return true;
+      return undefined;
+    }
+
+    const target = addressedReview(session);
+    if (
+      gateAction === 'skip' &&
+      target.kind === 'review' &&
+      !this.holdsAnswer(target.nodeId, session)
+    ) {
+      const ordinal = ordinalOf(session.state.nodes, target.nodeId);
+      const message = `❌ gate_action "skip" refused: nothing to skip past on step ${ordinal}; answer it first. Nothing was recorded.`;
+      context.setResponse({ content: [{ type: 'text', text: message }], isError: true });
+      return undefined;
     }
 
     const answer = await this.answerReview(context, session, {
@@ -418,8 +433,42 @@ export class GateVerdictProcessor {
         sessionId,
         skippedGates: context.state.gates.retryExhaustedGateIds,
       });
+      await this.announceSkippedStep(context, session, answer.review.nodeId);
+      return { sessionId, nodeId: answer.review.nodeId, reason: 'gate-skip' };
     }
-    return true;
+    return undefined;
+  }
+
+  /**
+   * Announce the step a skip accepted, on the skip's own call, with the output it was captured
+   * with. `failed`: its gates failed, and the run moves past it anyway.
+   */
+  private async announceSkippedStep(
+    context: ExecutionContext,
+    session: ChainSession,
+    nodeId: string
+  ): Promise<void> {
+    const stepIndex = ordinalOf(session.state.nodes, nodeId);
+    const results = this.chainSessionStore.getChainContext(
+      session.sessionId,
+      context.getScopeOptions()
+    )['step_results'] as Record<number, string> | undefined;
+    try {
+      const hookContext = buildPipelineHookContext(context);
+      const output = results?.[stepIndex] ?? '';
+      await this.hookRegistry?.emitStepComplete(session.chainId, stepIndex, output, hookContext);
+      this.notificationEmitter?.emitChainStepComplete({
+        chainId: session.chainId,
+        stepIndex,
+        status: 'failed',
+      });
+    } catch (error) {
+      this.logger.warn(
+        `[GateVerdictProcessor] Failed to announce skipped step ${stepIndex}: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
   }
 
   /**
