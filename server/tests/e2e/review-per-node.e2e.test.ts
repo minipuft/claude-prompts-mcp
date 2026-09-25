@@ -155,7 +155,6 @@ describe('Streamable HTTP: a gate review is a record of one node (shipped defaul
       expect(opened.text).toContain('→ Progress 2/3');
 
       const refused = await call({ gate_verdict: PASS });
-      console.log('DEBUGREFUSED', JSON.stringify(refused));
       expect(refused.isError).toBe(true);
       expect(refused.text).toContain('Step 2 has no answer yet');
       expect(refused.text).toContain('Nothing was recorded');
