@@ -10,7 +10,8 @@
  *   a verdict on its own call answers step 1's review and leaves step 2 owed; with no review
  *   open, the same bare verdict is refused and names the step to answer first;
  * - the final step's verdict closes the run, and `chain/complete` is the run's last notification;
- * - a FAIL past the retry budget offers the retry prompt, a further verdict is refused, retry reopens the review, and skip accepts the step's recorded
+ * - a FAIL past the retry budget offers the retry prompt and names only `gate_action` moves, a
+ *   further verdict is refused, retry reopens the review, and skip accepts the step's recorded
  *   answer and moves the run on (R24) — or is refused on a step that holds none.
  *
  * A detached step's review at its late report is driven by `detached-review-at-report.e2e.test.ts`;
@@ -247,6 +248,27 @@ describe('Streamable HTTP: a gate review is a record of one node (shipped defaul
       });
       expect(again.isError).toBe(false);
       expect(again.text).not.toContain(RETRY_PROMPT);
+    }, 180000);
+
+    /**
+     * The exhausted reply names only the moves the exhausted review accepts (P6.23): R9 refuses
+     * every verdict there, so offering one sent the caller into a refusal.
+     */
+    test('the exhausted reply offers gate_action and no verdict', async () => {
+      const call = await startRun();
+      const first = await call({ user_response: cageerfAnswer('Step 1'), gate_verdict: FAIL });
+      // CONTROL: a FAIL inside the budget still asks for the next verdict.
+      expect(first.text).toContain('Gate Review Required');
+      expect(first.text).toContain('gate_verdict="GATE_REVIEW: PASS|FAIL');
+
+      const second = await call({
+        user_response: cageerfAnswer('Step 1 again'),
+        gate_verdict: FAIL,
+      });
+      expect(second.text).toContain(RETRY_PROMPT);
+      expect(second.text).toContain('gate_action="retry" | gate_action="skip"');
+      expect(second.text).not.toContain('gate_verdict=');
+      expect(second.text).not.toContain('Gate Review Required');
     }, 180000);
 
     /**

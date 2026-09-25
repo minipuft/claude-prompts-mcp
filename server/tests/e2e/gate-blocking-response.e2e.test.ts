@@ -332,6 +332,7 @@ describe.each([
 
     const exhaustedOn: number[] = [];
     const counters: string[] = [];
+    const replies: string[] = [];
     for (let attempt = 1; attempt <= MAX_ATTEMPTS + 1; attempt++) {
       const outcome = await session.callTool('prompt_engine', {
         chain_id: chainId,
@@ -339,6 +340,7 @@ describe.each([
         gate_verdict: `GATE_REVIEW: FAIL - attempt ${attempt} is not good enough`,
       });
       counters.push(/\*\*Attempt \d+ of \d+\*\*/.exec(outcome.text)?.[0] ?? '(no counter)');
+      replies.push(outcome.text);
       const event = outcome.notifications.find(
         (n) => n.method === 'notifications/gate/retry_exhausted'
       );
@@ -363,6 +365,13 @@ describe.each([
       '**Attempt 5 of 5**',
       '**Attempt 5 of 5**',
     ]);
+
+    // P6.23 — the exhausting reply names the moves an exhausted review accepts, not a verdict
+    // (R9 refuses one); the reply before it, still in budget, asks for the verdict.
+    const [inBudget, spent] = replies.slice(-2) as [string, string];
+    expect(inBudget).toContain('gate_verdict=');
+    expect(spent).toContain(`chain_id="${chainId}", gate_action="retry" | gate_action="skip"`);
+    expect(spent).not.toContain('gate_verdict=');
   }, 180000);
 
   /**

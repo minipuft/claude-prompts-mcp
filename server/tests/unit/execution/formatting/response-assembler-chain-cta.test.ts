@@ -358,6 +358,37 @@ describe('ResponseAssembler – chain-path CTA methods', () => {
       expect(footer).toContain('user_response');
     });
 
+    test('an exhausted review names the gate_action moves, no verdict and no review block (P6.23)', () => {
+      const context = createChainContext({
+        currentStep: 1,
+        totalSteps: 3,
+        pendingReview: makePendingReview({ attemptCount: 2, maxAttempts: 2, phase: 'exhausted' }),
+      });
+
+      const reply = assembler.formatChainResponse(context, { isChainFormatting: true } as any);
+
+      expect(reply).toContain(
+        'Next: chain_id="chain-test#1", gate_action="retry" | gate_action="skip" | cancel: true'
+      );
+      expect(reply).not.toContain('gate_verdict');
+      expect(reply).not.toContain('Gate Review Required');
+      expect(reply).toContain('Progress 1/3');
+    });
+
+    test('an exhausted review on the final step still names its moves, not a verdict wait', () => {
+      const context = createChainContext({
+        currentStep: 3,
+        totalSteps: 3,
+        pendingReview: makePendingReview({ attemptCount: 2, maxAttempts: 2, phase: 'exhausted' }),
+      });
+
+      const footer = assembler.buildChainFooter(context);
+
+      expect(footer).toContain('Progress 3/3');
+      expect(footer).not.toContain('awaiting gate verdict');
+      expect(footer).toContain('gate_action="retry" | gate_action="skip"');
+    });
+
     test('user_response next line when no review (mid-chain)', () => {
       const context = createChainContext({
         currentStep: 1,
