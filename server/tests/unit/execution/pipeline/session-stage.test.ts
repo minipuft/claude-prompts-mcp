@@ -367,4 +367,68 @@ describe('SessionManagementStage', () => {
     expect(manager.setReview).not.toHaveBeenCalled();
     expect(context.sessionContext?.pendingReview).toBeUndefined();
   });
+  // P6.81: a chain prompt reaching this stage unprojected used to count `chainSteps` and mint
+  // healthy-looking `n1..nN` nodes, every one rendering the chain prompt's own template (P6.74).
+  describe('P6.81: the step count of a new run', () => {
+    const unprojected = (commandType: 'single' | 'chain'): ParsedCommand => {
+      const { steps: _steps, ...rest } = createParsedCommand();
+      return {
+        ...rest,
+        commandType,
+        convertedPrompt: {
+          id: 'chain_prompt',
+          name: 'chain_prompt',
+          description: 'a chain prompt',
+          category: 'test',
+          arguments: [],
+          userMessageTemplate: 'CHAIN-OWN-TEMPLATE',
+          systemMessage: null,
+          chainSteps: [
+            { promptId: 'first', stepName: 'A' },
+            { promptId: 'second', stepName: 'B' },
+          ],
+        },
+      } as ParsedCommand;
+    };
+
+    test.each(['single', 'chain'] as const)(
+      'a chain prompt parsed %s with no projected steps throws by name',
+      async (commandType) => {
+        const context = new ExecutionContext({ command: '>>chain_prompt' } as any);
+        context.executionPlan = createExecutionPlan();
+        context.parsedCommand = unprojected(commandType);
+
+        await expect(stage.execute(context)).rejects.toThrow(
+          'chain prompt chain_prompt reached the session stage with no projected steps'
+        );
+        expect(manager.createSession).not.toHaveBeenCalled();
+      }
+    );
+
+    test('control: a genuine single prompt still counts one step', async () => {
+      const context = new ExecutionContext({ command: '>>single_prompt' } as any);
+      context.executionPlan = createExecutionPlan({ strategy: 'single' });
+      const { steps: _steps, ...rest } = createParsedCommand();
+      context.parsedCommand = {
+        ...rest,
+        promptId: 'single_prompt',
+        commandType: 'single',
+        convertedPrompt: {
+          id: 'single_prompt',
+          name: 'single_prompt',
+          description: 'a single prompt',
+          category: 'test',
+          arguments: [],
+          userMessageTemplate: 'SINGLE',
+          systemMessage: null,
+        },
+      } as ParsedCommand;
+
+      await stage.execute(context);
+
+      expect(manager.createSession).toHaveBeenCalledTimes(1);
+      expect(manager.createSession.mock.calls[0]?.[2]).toBe(1);
+      expect(context.sessionContext?.totalSteps).toBe(1);
+    });
+  });
 });

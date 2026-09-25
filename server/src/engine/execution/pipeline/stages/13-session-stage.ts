@@ -292,13 +292,24 @@ export class SessionManagementStage extends BasePipelineStage {
     return chainId;
   }
 
+  /**
+   * A new run's step count: its projected steps, or 1 for a genuine single prompt.
+   *
+   * P6.81: a chain prompt with no projected steps throws. Counting `chainSteps` here minted
+   * healthy-looking `n1..nN` nodes whose every step rendered the chain prompt's own template
+   * (P6.74). Every source that names a chain prompt projects its steps before this stage, so
+   * reaching here without them means a new source skipped the projection.
+   */
   private getTotalSteps(context: ExecutionContext): number {
     // Use type guard for type-safe access to chain steps
     if (context.hasChainCommand()) {
       return context.parsedCommand.steps.length;
     }
-    if (context.parsedCommand?.convertedPrompt?.chainSteps?.length) {
-      return context.parsedCommand.convertedPrompt.chainSteps.length;
+    const prompt = context.parsedCommand?.convertedPrompt;
+    if ((prompt?.chainSteps?.length ?? 0) > 0) {
+      throw new Error(
+        `chain prompt ${prompt?.id} reached the session stage with no projected steps`
+      );
     }
     return 1;
   }
