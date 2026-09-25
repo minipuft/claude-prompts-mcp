@@ -200,32 +200,48 @@ describe('CommandParsingStage - commandType Integration', () => {
       return context.parsedCommand!;
     };
 
-    test.each([
-      ['a shell verification', '>>budget_chain :: verify:"true"'],
-      ['an anonymous gate criterion', '>>budget_chain :: "quality check"'],
-    ])(
-      'P6.74: a chain prompt followed by %s projects the same steps as the bare chain',
-      async (_label, command) => {
-        const direct = await parse('>>budget_chain');
-        const symbolic = await parse(command);
+    test('P6.74: a chain prompt followed by a shell verification projects the same steps as the bare chain', async () => {
+      const direct = await parse('>>budget_chain');
+      const symbolic = await parse('>>budget_chain :: verify:"true"');
 
-        expect(symbolic.format).toBe('symbolic');
-        expect(symbolic.commandType).toBe('chain');
-        // Byte-equal: one projection, two callers
-        expect(JSON.stringify(symbolic.steps)).toBe(JSON.stringify(direct.steps));
-        expect(symbolic.steps?.map((step) => step.nodeId)).toEqual(['first', 'second']);
-        expect(symbolic.budget).toEqual(direct.budget);
-      }
-    );
+      expect(symbolic.format).toBe('symbolic');
+      expect(symbolic.commandType).toBe('chain');
+      // Byte-equal: one projection, two callers
+      expect(JSON.stringify(symbolic.steps)).toBe(JSON.stringify(direct.steps));
+      expect(symbolic.steps?.map((step) => step.nodeId)).toEqual(['first', 'second']);
+      expect(symbolic.budget).toEqual(direct.budget);
+    });
 
-    test("P6.74: the operator's gates stay at command level beside the projected steps", async () => {
+    test('P6.78 (R37): a shell verification stays the command-level check and folds onto no step', async () => {
       const verified = await parse('>>budget_chain :: verify:"true"');
       expect(verified.namedInlineGates).toHaveLength(1);
       expect(verified.namedInlineGates?.[0]?.shellVerify?.command).toBe('true');
       expect(verified.steps?.every((step) => step.inlineGateCriteria === undefined)).toBe(true);
+    });
 
-      const criterion = await parse('>>budget_chain :: "quality check"');
-      expect(criterion.inlineGateCriteria).toEqual(['quality check']);
+    // P6.78 (R37): chain enhancement reads a step's gates only, so a criterion left at command
+    // level was an execution-scope gate no step reviewed. It now binds every projected step, and
+    // the steps differ from the bare chain's by exactly that criterion.
+    test.each([
+      ['an anonymous criterion', '>>budget_chain :: "quality check"', 'quality check'],
+      ['a canonical gate reference', '>>budget_chain :: code-quality', 'code-quality'],
+      ['a named non-shell gate', '>>budget_chain :: mygate:"cite sources"', 'mygate'],
+    ])('P6.78 (R37): %s binds every projected step', async (_label, command, folded) => {
+      const direct = await parse('>>budget_chain');
+      const symbolic = await parse(command);
+
+      expect(symbolic.commandType).toBe('chain');
+      expect(symbolic.inlineGateCriteria).toBeUndefined();
+      expect(symbolic.steps?.map((step) => step.inlineGateCriteria)).toEqual([[folded], [folded]]);
+      const withoutFold = symbolic.steps?.map(({ inlineGateCriteria: _folded, ...rest }) => rest);
+      expect(JSON.stringify(withoutFold)).toBe(JSON.stringify(direct.steps));
+    });
+
+    test('P6.78 (R37): a named non-shell gate stays registered under its own id at command level', async () => {
+      const named = await parse('>>budget_chain :: mygate:"cite sources" :: verify:"true"');
+      expect(named.namedInlineGates?.map((gate) => gate.gateId)).toContain('mygate');
+      // The shell check beside it is not folded
+      expect(named.steps?.map((step) => step.inlineGateCriteria)).toEqual([['mygate'], ['mygate']]);
     });
 
     test('P6.74 control: a single prompt with an operator still parses with no steps', async () => {

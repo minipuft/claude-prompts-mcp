@@ -76,6 +76,34 @@ function promptLevelDelegationFallback(
 }
 
 /**
+ * R37 (P6.78): a command-level `::` gate on a chain prompt binds EVERY projected step.
+ *
+ * Chain enhancement reads a step's `inlineGateIds` only, so a criterion left at command level
+ * registered an execution-scope gate no step reviewed. The anonymous and canonical criteria join
+ * each step's `inlineGateCriteria` (stage 05 creates one step gate per step, as it does for an
+ * arrow-chain segment's tokens) and leave the command level, as `stepsCarryInlineGates` clears it
+ * on the arrow-chain path. A named non-shell gate stays on `namedInlineGates`, which stage 05
+ * registers under its own id BEFORE it reads step criteria, so its id on a step resolves to that
+ * one gate. A shell verification is not folded: it is the run's check, not a step's (R32).
+ */
+function foldCommandGatesOntoSteps(
+  parsedCommand: ParsedCommand,
+  anonymousCriteria: readonly string[],
+  namedGates: readonly CollectedNamedGate[]
+): void {
+  const folded = [
+    ...anonymousCriteria,
+    ...namedGates.filter((gate) => gate.shellVerify === undefined).map((gate) => gate.gateId),
+  ];
+  if (folded.length === 0 || parsedCommand.steps === undefined) return;
+  parsedCommand.steps = parsedCommand.steps.map((step) => ({
+    ...step,
+    inlineGateCriteria: Array.from(new Set([...(step.inlineGateCriteria ?? []), ...folded])),
+  }));
+  delete parsedCommand.inlineGateCriteria;
+}
+
+/**
  * Builds structured ParsedCommand from symbolic operator parse results.
  *
  * Handles single-prompt and chain-based symbolic commands, resolving
@@ -208,8 +236,7 @@ export class SymbolicCommandBuilder {
     };
 
     // A chain prompt named with an operator (`>>chain :: verify:"…"`, `>>chain :: "criterion"`)
-    // runs its declared steps, projected exactly as a bare `>>chain` is (P6.74). The operator's
-    // gates stay at command level, where they sat before and where a bare chain has none.
+    // runs its declared steps, projected exactly as a bare `>>chain` is (P6.74).
     const projection = projectChainPromptSteps(
       convertedPrompt,
       resolvedArgs.processedArgs,
@@ -217,6 +244,7 @@ export class SymbolicCommandBuilder {
     );
     if (projection !== undefined) {
       Object.assign(parsedCommand, projection);
+      foldCommandGatesOntoSteps(parsedCommand, inlineCriteria, namedGates);
     }
 
     if (namedGates.length > 0) {

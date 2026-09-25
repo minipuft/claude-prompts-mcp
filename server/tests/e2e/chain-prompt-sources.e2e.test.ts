@@ -1,4 +1,4 @@
-// @lifecycle test - P6.79 / P6.80 / R40: an arrow-chain segment or a workflow node naming a chain prompt runs that prompt's steps, over Streamable HTTP.
+// @lifecycle test - P6.79 / P6.80 / R40: an arrow-chain segment or a workflow node naming a chain prompt runs that prompt's steps; P6.78 / R37: a command-level gate on a chain prompt binds each step, over Streamable HTTP.
 /**
  * MEASURED 2026-09-25 on `427899fe` (authored `sv_chain` = sv_a/sv_b/sv_a, each step carrying the
  * blocking `sv-block`; run state read from `chain_runs.state`):
@@ -11,6 +11,14 @@
  * Now (R40) `compileWorkflowIR` expands a node naming a chain prompt into the prompt's projected
  * steps in place (`expandChainPromptNodes`), ids `<node-id>-<step-id>`, so both sources run the
  * steps a bare `>>sv_chain` runs, with their own templates and gates.
+ *
+ * MEASURED 2026-09-25 on `a9b2615e`: `>>sv_chain :: "EXTRA-CRIT-78"`, `>>sv_chain :: code-quality`
+ * and `>>sv_chain :: mygate78:"NAMED-CRIT-78"` each ran the three steps with `inlineGateIds
+ * ["sv-block"]` only; the criterion registered a command-level gate chain enhancement never reads,
+ * and no reply carried it.
+ *
+ * Now (R37) the builder folds a command's anonymous, canonical and named non-shell gates onto
+ * every projected step; a shell verification stays the command-level check (R32).
  */
 import { afterAll, beforeAll, describe, expect, test } from '@jest/globals';
 
@@ -61,7 +69,12 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
     const port = await getAvailablePort();
     const baseUrl = `http://127.0.0.1:${port}`;
     const proc = startServerWithHttp(port, {
-      env: { HOME: roots.home, MCP_WORKSPACE: workspace, MCP_RUNTIME_ROOT: runtimeRoot },
+      env: {
+        HOME: roots.home,
+        MCP_WORKSPACE: workspace,
+        MCP_RUNTIME_ROOT: runtimeRoot,
+        MCP_SHELL_VERIFY_ALLOWLIST: 'false',
+      },
     });
     cleanup.push(() => killServer(proc));
     await waitForHealth(baseUrl, { timeout: 45000, interval: 200 });
@@ -287,6 +300,77 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
         { topic: 'TOPIC-X' },
       ]);
       await walkExpanded(run, 'x', 'TOPIC-X');
+    }, 120000);
+  });
+  describe('P6.78: a command-level gate on a chain prompt', () => {
+    /** Run to step 2, FAIL it, and return the replies plus the review the FAIL opened. */
+    async function walkToReview(command: string) {
+      const run = await start({ command });
+      const second = await run.call({ user_response: 'A out', gate_verdict: PASS });
+      const failed = await run.call({ user_response: 'B out', gate_verdict: FAIL });
+      return { run, second, failed, state: runState(run.chainId) };
+    }
+
+    test('(a) an anonymous criterion binds every step, and each review lists it beside sv-block', async () => {
+      const { second, failed, state } = await walkToReview('>>sv_chain :: "EXTRA-CRIT-78"');
+      expect(state.criteria).toEqual([['EXTRA-CRIT-78'], ['EXTRA-CRIT-78'], ['EXTRA-CRIT-78']]);
+      for (const step of state.steps) expect(step).toContain('"sv-block","temp_');
+      expect(templates(second)).toEqual(['BODY-sv_b topic=']);
+      expect(second).toContain('EXTRA-CRIT-78');
+      expect(failed).toContain('Gate Review Required');
+      expect(failed).toContain('### sv-block');
+      expect(failed).toContain('EXTRA-CRIT-78');
+      expect(state.reviews['b']).toEqual(expect.arrayContaining(['sv-block']));
+      expect(state.reviews['b']?.some((id) => id.startsWith('temp_'))).toBe(true);
+    }, 120000);
+
+    test('(b) control: a plain chain prompt carries only its own step gates', async () => {
+      const { second, state } = await walkToReview('>>sv_chain');
+      expect(state.steps).toEqual([
+        'a:sv_a:["sv-block"]',
+        'b:sv_b:["sv-block"]',
+        'c:sv_a:["sv-block"]',
+      ]);
+      expect(state.criteria).toEqual([[], [], []]);
+      expect(state.reviews).toEqual({ b: ['sv-block'] });
+      expect(second).not.toContain('EXTRA-CRIT-78');
+    }, 120000);
+
+    test('(c) a shell verification stays the command-level check and folds onto no step', async () => {
+      const run = await start({ command: '>>sv_chain :: verify:"false"' });
+      const state = runState(run.chainId);
+      expect(state.steps).toEqual([
+        'a:sv_a:["sv-block"]',
+        'b:sv_b:["sv-block"]',
+        'c:sv_a:["sv-block"]',
+      ]);
+      expect(state.criteria).toEqual([[], [], []]);
+      const held = await run.call({ user_response: 'A out', gate_verdict: PASS });
+      expect(held).toContain('Shell Verification FAILED (Attempt 1/5)');
+      expect(held).toContain('**Command:** `false`');
+    }, 120000);
+
+    test('(d) a canonical gate reference binds every step', async () => {
+      const { second, failed, state } = await walkToReview('>>sv_chain :: code-quality');
+      expect(state.steps).toEqual([
+        'a:sv_a:["sv-block","code-quality"]',
+        'b:sv_b:["sv-block","code-quality"]',
+        'c:sv_a:["sv-block","code-quality"]',
+      ]);
+      expect(second).toContain('Code Quality');
+      expect(state.reviews).toEqual({ b: ['sv-block', 'code-quality'] });
+      expect(failed).toContain('### sv-block');
+    }, 120000);
+
+    test('(e) a named non-shell gate binds every step under its own id', async () => {
+      const { second, state } = await walkToReview('>>sv_chain :: gate78e:"NAMED-CRIT-78"');
+      expect(state.steps).toEqual([
+        'a:sv_a:["sv-block","gate78e"]',
+        'b:sv_b:["sv-block","gate78e"]',
+        'c:sv_a:["sv-block","gate78e"]',
+      ]);
+      expect(second).toContain('NAMED-CRIT-78');
+      expect(state.reviews).toEqual({ b: ['sv-block', 'gate78e'] });
     }, 120000);
   });
 });
