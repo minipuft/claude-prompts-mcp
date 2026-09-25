@@ -45,6 +45,7 @@ import { ChainOperatorExecutor } from '../../../src/engine/execution/operators/c
 import { renderGateVerdict } from '../../../src/engine/gates/core/gate-verdict-renderer.js';
 import { GateEnforcementAuthority } from '../../../src/engine/execution/pipeline/decisions/gates/gate-enforcement-authority.js';
 import { PromptExecutionPipeline } from '../../../src/engine/execution/pipeline/prompt-execution-pipeline.js';
+import { DiagnosticAccumulator } from '../../../src/engine/execution/pipeline/state/accumulators/diagnostic-accumulator.js';
 import { SessionManagementStage } from '../../../src/engine/execution/pipeline/stages/13-session-stage.js';
 import { StepResponseCaptureStage } from '../../../src/engine/execution/pipeline/stages/16-response-capture-stage.js';
 import { StepExecutionStage } from '../../../src/engine/execution/pipeline/stages/18-execution-stage.js';
@@ -1024,6 +1025,51 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
       expect(text).toContain('Structural + Gate Review Required');
       expect(text).toContain(`(attempt 1/${gateReview.maxAttempts})`);
       expect(text).toContain('"## Context"');
+    });
+
+    /**
+     * R28 (P6.33, completing R17): a call that captured no step is still graded and warned about,
+     * but it opens no review — with no captured node there is nothing to grade against or hold.
+     * Here step 1's answer is captured and held by its review, and the same answer re-sent
+     * without a verdict captures nothing.
+     */
+    const stage19Exit = () =>
+      (logger.debug as jest.Mock).mock.calls
+        .filter((call) => call[0] === '[PhaseGuardVerification] Complete')
+        .at(-1)?.[1];
+
+    test('P6.33 (a): an answer re-sent to a held, completed step warns and opens no review', async () => {
+      const { chainId } = await openGatedFrameworkRun();
+      await pipeline.execute({ chain_id: chainId, user_response: 'one line' });
+      const held = structuredClone((onlySession() as unknown as ChainSession).reviews);
+      expect(Object.keys(held ?? {})).toEqual(['draft']);
+      const warn = jest.spyOn(DiagnosticAccumulator.prototype, 'warn');
+
+      await pipeline.execute({ chain_id: chainId, user_response: 'one line' });
+
+      expect(warn).toHaveBeenCalledWith(
+        'PhaseGuardVerification',
+        'Structural failure on a call that captured no step',
+        expect.anything()
+      );
+      warn.mockRestore();
+      expect(stage19Exit()).toEqual({
+        passed: false,
+        skipped: 'No captured step to key a review by',
+      });
+      expect((onlySession() as unknown as ChainSession).reviews).toEqual(held);
+      expect(onlySession().state.currentNodeId).toBe('draft');
+    });
+
+    test('P6.33 (b) CONTROL: a captured one-line answer opens its own structural review', async () => {
+      const { chainId } = await openGatedFrameworkRun();
+
+      await pipeline.execute({ chain_id: chainId, user_response: 'one line' });
+
+      expect(stage19Exit()).toMatchObject({ passed: false, createdPendingReview: true });
+      const review = stepReviewOf(onlySession()) as any;
+      expect(review.nodeId).toBe('draft');
+      expect(review.gateIds).toContain('__phase_guard__');
     });
 
     test('TWIN: the same step answered in sections reaches the gate review unchanged', async () => {
