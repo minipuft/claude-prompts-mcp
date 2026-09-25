@@ -15,6 +15,10 @@
  * Now (R15) the pending verification holds its node through `nodesHoldingRunOpen`: the bounce
  * carries no `chain/complete`, a failing re-run keeps holding, and the call that passes the check
  * completes the run and announces it exactly once.
+ *
+ * Since R29 (P6.26) a pending check holds the step it grades, not only the run's end: the bounced
+ * answers below never leave step 1, the passing call moves the run to step 2, and the run
+ * completes on its last answer, announced once.
  */
 import { afterEach, describe, expect, test } from '@jest/globals';
 
@@ -95,7 +99,7 @@ describe('Streamable HTTP: a failing shell verification on the last step holds t
   const completions = (outcome: ToolOutcome): number =>
     outcome.methods.filter((m) => m === CHAIN_COMPLETE).length;
 
-  /** Answer all three steps with the marker absent: every answer bounces, none completes. */
+  /** Answer three times with the marker absent: every answer bounces on step 1, none completes. */
   async function bounceEveryStep(call: Call): Promise<void> {
     for (const step of [1, 2, 3]) {
       const bounced = await answer(call, `Step ${step}`);
@@ -104,7 +108,7 @@ describe('Streamable HTTP: a failing shell verification on the last step holds t
     }
   }
 
-  test("the final step's bounce holds the run; the call that passes the check completes it once", async () => {
+  test('a bounce holds the step; the passing call moves on and the last answer completes once', async () => {
     const { call, start, marker } = await startVerifiedChain(false);
     expect(start.text).toContain('Shell Verification FAILED');
     await bounceEveryStep(call);
@@ -117,8 +121,13 @@ describe('Streamable HTTP: a failing shell verification on the last step holds t
     writeFileSync(marker, 'ok');
     const fixed = await call({ user_response: 'fixed' });
     expect(fixed.text).not.toContain('Shell Verification FAILED');
-    expect(fixed.text).toContain('Chain complete');
-    expect(completions(fixed)).toBe(1);
+    expect(fixed.text).toContain('Progress 2/3');
+    expect(completions(fixed)).toBe(0);
+
+    await answer(call, 'Step 2');
+    const last = await answer(call, 'Step 3');
+    expect(last.text).toContain('Chain complete');
+    expect(completions(last)).toBe(1);
 
     const after = await call({ user_response: 'after' });
     expect(after.text).toContain('Chain run already complete');

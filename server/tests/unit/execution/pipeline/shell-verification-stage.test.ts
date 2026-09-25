@@ -7,6 +7,7 @@ import type {
   ShellVerifyExecutor,
   VerifyActiveStateStore,
 } from '../../../../src/engine/gates/shell/index.js';
+import type { GateVerdictProcessor } from '../../../../src/engine/gates/services/gate-verdict-processor.js';
 import type { ChainSessionService } from '../../../../src/shared/types/chain-session.js';
 import type { Logger } from '../../../../src/infra/logging/index.js';
 
@@ -49,7 +50,15 @@ const createMockSessionService = (): ChainSessionService =>
     getPendingShellVerification: jest.fn().mockReturnValue(undefined),
     clearPendingShellVerification: jest.fn().mockResolvedValue(undefined),
     cancelChain: jest.fn<() => Promise<boolean>>().mockResolvedValue(true),
+    getSession: jest.fn().mockReturnValue(undefined),
   }) as unknown as ChainSessionService;
+
+/** The advance owner a released hold moves the run through (`GateVerdictProcessor`). */
+const createAdvanceOwner = () => ({
+  applyDeferredAdvance: jest
+    .fn<GateVerdictProcessor['applyDeferredAdvance']>()
+    .mockResolvedValue(undefined),
+});
 
 describe('ShellVerificationStage', () => {
   test('sets shellVerifyPassedForGates when verification passes with sourceGateIds', async () => {
@@ -59,6 +68,7 @@ describe('ShellVerificationStage', () => {
       executor,
       stateManager,
       createMockSessionService(),
+      createAdvanceOwner(),
       createLogger()
     );
 
@@ -88,6 +98,7 @@ describe('ShellVerificationStage', () => {
       executor,
       stateManager,
       createMockSessionService(),
+      createAdvanceOwner(),
       createLogger()
     );
 
@@ -116,6 +127,7 @@ describe('ShellVerificationStage', () => {
       executor,
       stateManager,
       createMockSessionService(),
+      createAdvanceOwner(),
       createLogger()
     );
 
@@ -145,6 +157,7 @@ describe('ShellVerificationStage', () => {
       executor,
       stateManager,
       createMockSessionService(),
+      createAdvanceOwner(),
       createLogger()
     );
 
@@ -196,6 +209,7 @@ describe('ShellVerificationStage', () => {
         executor,
         createMockStateManager(),
         sessionService,
+        createAdvanceOwner(),
         createLogger()
       );
 
@@ -223,6 +237,7 @@ describe('ShellVerificationStage', () => {
         executor,
         createMockStateManager(),
         sessionService,
+        createAdvanceOwner(),
         createLogger()
       );
 
@@ -256,6 +271,7 @@ describe('ShellVerificationStage', () => {
         executor,
         createMockStateManager(),
         sessionService,
+        createAdvanceOwner(),
         createLogger()
       );
 
@@ -292,6 +308,7 @@ describe('ShellVerificationStage', () => {
         executor,
         stateManager,
         createMockSessionService(),
+        createAdvanceOwner(),
         createLogger()
       );
 
@@ -325,6 +342,7 @@ describe('ShellVerificationStage', () => {
         executor,
         stateManager,
         createMockSessionService(),
+        createAdvanceOwner(),
         createLogger()
       );
 
@@ -355,6 +373,7 @@ describe('ShellVerificationStage', () => {
         executor,
         stateManager,
         createMockSessionService(),
+        createAdvanceOwner(),
         createLogger()
       );
 

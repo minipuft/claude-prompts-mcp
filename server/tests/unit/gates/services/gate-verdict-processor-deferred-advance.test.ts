@@ -44,6 +44,7 @@ const createLogger = (): Logger =>
 function createStore() {
   return {
     advanceStep: jest.fn(async () => ({ ordinal: 2, nodeId: 'node-2' })),
+    getPendingShellVerification: jest.fn((): unknown => undefined),
     recordGateReviewOutcome: jest.fn(async () => undefined),
     clearReview: jest.fn(async () => undefined),
     setReview: jest.fn(async () => undefined),
@@ -275,6 +276,20 @@ describe('GateVerdictProcessor defers every advance it decides', () => {
       expect(emitter.emitChainStepComplete.mock.calls).toEqual([
         [{ chainId: 'chain-a', stepIndex: 1, status: 'failed' }],
       ]);
+    });
+
+    test('R29: a pending shell verification holds every advance; nothing moves or announces', async () => {
+      const { announcer, hooks, emitter } = announcing('node-1');
+      (store.getPendingShellVerification as jest.Mock).mockReturnValue({ nodeId: 'node-1' });
+      await announcer.applyDeferredAdvance(createContext(), {
+        sessionId: 'session-1',
+        nodeId: 'node-1',
+        reason: 'gate-pass',
+      });
+      expect(store.getPendingShellVerification).toHaveBeenCalledWith('session-1');
+      expect(store.advanceStep).not.toHaveBeenCalled();
+      expect(emitter.emitChainStepComplete).not.toHaveBeenCalled();
+      expect(hooks.emitStepComplete).not.toHaveBeenCalled();
     });
 
     test('an advance the run already made announces nothing', async () => {

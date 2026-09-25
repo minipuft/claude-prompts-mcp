@@ -40,6 +40,7 @@ function createStore(advancedTo: { ordinal: number; nodeId: string }) {
     clearReview: jest.fn(async () => later(undefined)),
     setReview: jest.fn(async () => later(undefined)),
     advanceStep: jest.fn(async () => later(advancedTo)),
+    getPendingShellVerification: jest.fn(() => undefined),
     getSession: jest.fn(() => undefined),
   } as unknown as ChainSessionService & Record<string, jest.Mock>;
 }

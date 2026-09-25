@@ -402,6 +402,7 @@ export class PipelineBuilder {
       shellVerifyExecutor,
       verifyActiveStateStore,
       deps.chainSessionStore,
+      gateVerdictProcessor,
       deps.logger
     );
 

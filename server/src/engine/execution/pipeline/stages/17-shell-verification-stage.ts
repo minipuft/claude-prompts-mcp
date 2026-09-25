@@ -31,6 +31,7 @@ import { BasePipelineStage } from '../stage.js';
 import type { Logger } from '#infra/logging/index.js';
 import type { PendingShellVerificationSnapshot } from '#shared/types/chain-execution.js';
 import type { ChainSessionService } from '#shared/types/chain-session.js';
+import type { GateVerdictProcessor } from '../../../gates/services/gate-verdict-processor.js';
 import type { ExecutionContext } from '../../context/index.js';
 
 /**
@@ -51,6 +52,8 @@ export class ShellVerificationStage extends BasePipelineStage {
     private readonly shellVerifyExecutor: ShellVerifyExecutor,
     private readonly stateManager: VerifyActiveStateStore,
     private readonly chainSessionService: ChainSessionService,
+    /** The one advance owner (R25): a released hold moves the run and announces it there. */
+    private readonly advanceOwner: Pick<GateVerdictProcessor, 'applyDeferredAdvance'>,
     logger: Logger
   ) {
     super(logger);
@@ -122,8 +125,10 @@ export class ShellVerificationStage extends BasePipelineStage {
   ): Promise<void> {
     const { shellVerify } = pending;
 
+    const heldNodeId = this.heldNodeId(context);
     context.state.gates.pendingShellVerification = undefined;
     await this.clearFromSession(context);
+    await this.releaseHeldStep(context, heldNodeId, 'captured');
 
     // LOOP MODE: Clear verify-state.db
     if (shellVerify.loop === true) {
@@ -260,12 +265,38 @@ export class ShellVerificationStage extends BasePipelineStage {
       sourceGateIds: pending.sourceGateIds,
       // The node it holds open: the step captured on this call, else the node an earlier save
       // named — a failing re-run on a call that captured nothing must not release the hold.
-      nodeId:
-        context.state.session.capturedStep?.nodeId ??
-        this.chainSessionService.getPendingShellVerification(sessionId)?.nodeId,
+      nodeId: this.heldNodeId(context),
     };
 
     await this.chainSessionService.setPendingShellVerification(sessionId, snapshot);
+  }
+
+  /** The step this check holds: the one captured on this call, else the one an earlier save named. */
+  private heldNodeId(context: ExecutionContext): string | undefined {
+    const sessionId = runSessionId(context);
+    return (
+      context.state.session.capturedStep?.nodeId ??
+      (sessionId === undefined
+        ? undefined
+        : this.chainSessionService.getPendingShellVerification(sessionId)?.nodeId)
+    );
+  }
+
+  /**
+   * Release the hold on a step once its check passes or is skipped (R29): advance past it through
+   * the one advance owner, which announces its `step_complete` on this call. A step still under an
+   * open review is left to that review's verdict, which advances it once this check is gone.
+   */
+  private async releaseHeldStep(
+    context: ExecutionContext,
+    nodeId: string | undefined,
+    reason: 'captured' | 'gate-skip'
+  ): Promise<void> {
+    const sessionId = runSessionId(context);
+    if (nodeId === undefined || sessionId === undefined) return;
+    const session = this.chainSessionService.getSession(sessionId, context.getScopeOptions());
+    if (session?.reviews?.[nodeId] !== undefined) return;
+    await this.advanceOwner.applyDeferredAdvance(context, { sessionId, nodeId, reason });
   }
 
   /**
@@ -379,6 +410,12 @@ export class ShellVerificationStage extends BasePipelineStage {
   }
 }
 
+/** The run's session id, or `undefined` for a single prompt, which has no run. */
+function runSessionId(context: ExecutionContext): string | undefined {
+  const sessionId = context.getSessionId();
+  return sessionId === undefined || sessionId.length === 0 ? undefined : sessionId;
+}
+
 /**
  * Factory function for creating the shell verification stage.
  */
@@ -386,7 +423,14 @@ export function createShellVerificationStage(
   shellVerifyExecutor: ShellVerifyExecutor,
   stateManager: VerifyActiveStateStore,
   chainSessionService: ChainSessionService,
+  advanceOwner: Pick<GateVerdictProcessor, 'applyDeferredAdvance'>,
   logger: Logger
 ): ShellVerificationStage {
-  return new ShellVerificationStage(shellVerifyExecutor, stateManager, chainSessionService, logger);
+  return new ShellVerificationStage(
+    shellVerifyExecutor,
+    stateManager,
+    chainSessionService,
+    advanceOwner,
+    logger
+  );
 }
