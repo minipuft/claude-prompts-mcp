@@ -198,9 +198,15 @@ export class ChainOperatorExecutor {
         '## Review Context\n\nReview the original task and your output above against the gate criteria.\n\n---\n';
     }
 
-    // Build gate guidance using proper renderer for framework-aware, category-aware rendering
+    // Build gate guidance using proper renderer for framework-aware, category-aware rendering.
+    // Not for an exhausted review (P6.45): the guidance asks for a verdict, which that review
+    // refuses (R9). Its render carries the "Retry Limit Reached" moves instead, as the
+    // assembler's CTA and footer already do (P6.23).
+    const reviewExhausted = input.review.phase === 'exhausted';
     let gateGuidance = '';
-    if (gateGuidanceEnabled && gateIdsToRender.length > 0) {
+    if (reviewExhausted) {
+      this.logger.debug('[SymbolicChain] Gate guidance withheld: the review is exhausted');
+    } else if (gateGuidanceEnabled && gateIdsToRender.length > 0) {
       // Get framework and category context if available
       let frameworkType: string = DEFAULT_FRAMEWORK_ID;
       let category = 'general';

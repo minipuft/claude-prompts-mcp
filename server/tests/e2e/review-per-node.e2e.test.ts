@@ -40,6 +40,8 @@ const RETRY_EXHAUSTED = 'notifications/gate/retry_exhausted';
 /** Unique to `quick_decision`'s second step, so finding it says the run still owes step 2. */
 const STEP_2_BODY = 'For each option identified, provide:';
 const RETRY_PROMPT = 'Retry Limit Reached';
+/** The closing line of a verdict's gate guidance (`GATE_ATTESTATION_LINE`). */
+const ATTEST_REMINDERS = /attest reminders/i;
 const PASS = 'GATE_REVIEW: PASS - the step meets its gates';
 const FAIL = 'GATE_REVIEW: FAIL - the step misses its gates';
 
@@ -262,6 +264,7 @@ describe('Streamable HTTP: a gate review is a record of one node (shipped defaul
       // CONTROL: a FAIL inside the budget still asks for the next verdict.
       expect(first.text).toContain('Gate Review Required');
       expect(first.text).toContain('gate_verdict="GATE_REVIEW: PASS|FAIL');
+      expect(first.text).toMatch(ATTEST_REMINDERS);
 
       const second = await call({
         user_response: cageerfAnswer('Step 1 again'),
@@ -271,6 +274,8 @@ describe('Streamable HTTP: a gate review is a record of one node (shipped defaul
       expect(second.text).toContain('gate_action="retry" | gate_action="skip"');
       expect(second.text).not.toContain('gate_verdict=');
       expect(second.text).not.toContain('Gate Review Required');
+      // P6.45: nor the verdict guidance — it asked for a verdict the exhausted review refuses.
+      expect(second.text).not.toMatch(ATTEST_REMINDERS);
     }, 180000);
 
     /**
