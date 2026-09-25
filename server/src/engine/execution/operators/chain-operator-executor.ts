@@ -153,12 +153,10 @@ export class ChainOperatorExecutor {
       if (convertedPrompt) {
         // Prioritize currentStepArgs from chainContext (pipeline integration)
         // Fall back to targetStep.args for backward compatibility
-        const stepArgs = this.normalizeStepArgs(
+        const ownArgs =
           (chainContext['currentStepArgs'] as Record<string, unknown> | undefined) ??
-            targetStep?.args ??
-            {},
-          convertedPrompt
-        );
+          targetStep?.args;
+        const stepArgs = this.normalizeStepArgs(ownArgs ?? {}, convertedPrompt);
         const templateContext: Record<string, unknown> = { ...chainContext, ...stepArgs };
         this.applyWithheldToTemplateContext(
           templateContext,
@@ -174,7 +172,7 @@ export class ChainOperatorExecutor {
           convertedPrompt.promptDir
         );
 
-        const intentForReview = this.buildOriginalIntentSection(chainContext);
+        const intentForReview = this.buildOriginalIntentSection(chainContext, ownArgs);
         // Second `buildUnknownsSection` call site (the other is the normal step render). Both
         // respect the decision — a withhold honoured on one render path and not the other is
         // not a withhold.
@@ -387,10 +385,9 @@ export class ChainOperatorExecutor {
 
     // Prioritize currentStepArgs from chainContext (pipeline integration)
     // Fall back to step-level args captured during parsing
-    const stepArgs = this.normalizeStepArgs(
-      (chainContext['currentStepArgs'] as Record<string, unknown> | undefined) ?? step?.args ?? {},
-      convertedPrompt
-    );
+    const ownArgs =
+      (chainContext['currentStepArgs'] as Record<string, unknown> | undefined) ?? step?.args;
+    const stepArgs = this.normalizeStepArgs(ownArgs ?? {}, convertedPrompt);
 
     const templateContext: Record<string, unknown> = {
       ...chainContext,
@@ -469,7 +466,7 @@ export class ChainOperatorExecutor {
     const isFinalStep = currentStepIndex === totalSteps - 1;
 
     // Original Request Intent — provides delivery context for every chain step
-    const intentSection = this.buildOriginalIntentSection(chainContext);
+    const intentSection = this.buildOriginalIntentSection(chainContext, ownArgs);
     if (intentSection) {
       lines.push(intentSection);
     }
@@ -1017,23 +1014,35 @@ export class ChainOperatorExecutor {
   }
 
   /**
-   * Build Original Request Intent section from chainContext original_args.
-   * Provides delivery context so each step knows what the chain was initiated for.
+   * Build the Original Request Intent section: the request this step must satisfy.
+   *
+   * A node's OWN args win (P6.41). The run's `original_args` are its invocation args, which a
+   * compiled workflow or a `-->`/`==>` chain takes from its FIRST node, so reading them alone gave
+   * every delegated brief row 1's request. They remain the fallback for a node declaring no args
+   * of its own. Raw args, not `normalizeStepArgs` output: a prompt's defaults were not requested.
    */
-  private buildOriginalIntentSection(chainContext: Record<string, unknown>): string | null {
-    const originalArgs = chainContext['original_args'] as Record<string, unknown> | undefined;
-    if (!originalArgs || Object.keys(originalArgs).length === 0) {
+  private buildOriginalIntentSection(
+    chainContext: Record<string, unknown>,
+    nodeArgs: Record<string, unknown> | undefined
+  ): string | null {
+    const ownRequest = nodeArgs !== undefined && Object.keys(nodeArgs).length > 0;
+    const requestArgs = ownRequest
+      ? nodeArgs
+      : (chainContext['original_args'] as Record<string, unknown> | undefined);
+    if (!requestArgs || Object.keys(requestArgs).length === 0) {
       return null;
     }
 
     const lines: string[] = [
       '### Original Request Intent',
       '',
-      'This chain was initiated with the following request. Your work must satisfy this intent:',
+      ownRequest
+        ? 'This step was given the following request. Your work must satisfy this intent:'
+        : 'This chain was initiated with the following request. Your work must satisfy this intent:',
       '',
     ];
 
-    for (const [key, value] of Object.entries(originalArgs)) {
+    for (const [key, value] of Object.entries(requestArgs)) {
       const truncated =
         String(value).length > 200 ? String(value).substring(0, 200) + '...' : String(value);
       lines.push(`- **${key}**: ${truncated}`);

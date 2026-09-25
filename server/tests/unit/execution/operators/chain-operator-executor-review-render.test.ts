@@ -5,6 +5,8 @@
  * (`fd8b825a`, which read `pendingGateReview`), then re-run unchanged against this one: the
  * graded step, the gate order handed to the guidance renderer, the explicit (inline) gate ids,
  * the retry hints, the last review line and the retry-limit block are all pinned byte for byte.
+ * One deliberate change since: row P6.41 (2026-09-25) renders the reviewed node's own args under
+ * "### Original Request Intent" in the first-attempt snapshot, where none rendered before.
  */
 import { describe, test, expect, jest } from '@jest/globals';
 
@@ -95,6 +97,12 @@ describe('gate-review render of a current-step review is byte-identical (row 3.5
   test('first attempt', async () => {
     expect(await render()).toMatchInlineSnapshot(`
       "## Original Task Instructions
+
+      ### Original Request Intent
+
+      This step was given the following request. Your work must satisfy this intent:
+
+      - **input**: beta
 
       Summarize the analysis. Context: beta
 
