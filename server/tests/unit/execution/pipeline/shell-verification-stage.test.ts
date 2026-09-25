@@ -332,6 +332,56 @@ describe('ShellVerificationStage', () => {
       expect(context.state.gates.pendingShellVerification?.previousResults).toHaveLength(2);
     });
 
+    // P6.59: the re-render ran nothing, so it logs no failure and leaves the loop state alone.
+    const spentLoopCheck = (attemptCount: number, previousResults: (typeof failed)[]) => {
+      const executor = createMockExecutor(false);
+      const sessionService = createMockSessionService();
+      (sessionService.getPendingShellVerification as jest.Mock).mockReturnValue({
+        gateId: 'shell-verify-inline',
+        shellVerify: { command: 'npm test', loop: true },
+        attemptCount,
+        maxAttempts: 2,
+        previousResults,
+        nodeId: 'node-1',
+      });
+      const stateManager = createMockStateManager();
+      const stage = new ShellVerificationStage(
+        executor,
+        stateManager,
+        sessionService,
+        createAdvanceOwner(),
+        createLogger()
+      );
+      const context = replyCall({ user_response: 'one more try' });
+      const warn = jest.spyOn(context.diagnostics, 'warn');
+      return { stage, context, executor, stateManager, warn };
+    };
+    const loggedFailure = (warn: { mock: { calls: unknown[][] } }): boolean =>
+      warn.mock.calls.some((call) => call[1] === 'Shell verification FAILED');
+
+    test('the escalation re-render logs no failure and keeps the loop state', async () => {
+      const { stage, context, executor, stateManager, warn } = spentLoopCheck(2, [failed, failed]);
+
+      await stage.execute(context);
+
+      expect(executor.execute).not.toHaveBeenCalled();
+      expect(JSON.stringify(context.response)).toContain('Maximum Attempts Reached');
+      expect(context.state.gates.awaitingUserChoice).toBe(true);
+      expect(loggedFailure(warn)).toBe(false);
+      expect(stateManager.clearState).not.toHaveBeenCalled();
+    });
+
+    test('control: the failing run that spends the last attempt logs the failure and clears the loop state', async () => {
+      const { stage, context, executor, stateManager, warn } = spentLoopCheck(1, [failed]);
+
+      await stage.execute(context);
+
+      expect(executor.execute).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(context.response)).toContain('Maximum Attempts Reached');
+      expect(loggedFailure(warn)).toBe(true);
+      expect(stateManager.clearState).toHaveBeenCalledWith('chain-test#1');
+    });
+
     test('control: retry resets to 0/N, and the next answer runs the check', async () => {
       const executor = createMockExecutor(false);
       const sessionService = createMockSessionService();

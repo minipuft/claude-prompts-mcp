@@ -102,7 +102,10 @@ export class ShellVerificationStage extends BasePipelineStage {
     // Spent: only a gate_action moves an exhausted check; an answer re-renders the escalation.
     const lastResult = pending.previousResults[pending.previousResults.length - 1];
     if (pending.attemptCount >= pending.maxAttempts && lastResult !== undefined) {
-      await this.handleVerificationFailed(context, lastResult, pending);
+      // Nothing ran on this call: render the escalation again, but log no failure and leave the
+      // loop state as the call that spent the last attempt left it (P6.59).
+      this.renderFeedback(context, lastResult, pending);
+      this.logExit({ passed: false, spent: true, attemptCount: pending.attemptCount });
       return;
     }
 
@@ -196,26 +199,40 @@ export class ShellVerificationStage extends BasePipelineStage {
       maxAttempts: pending.maxAttempts,
     });
 
+    // Max attempts: clear verify-state.db (the Stop hook shouldn't keep trying). The session
+    // keeps the check — `retry` needs it; skip/abort or the next pass clears it.
+    if (pending.attemptCount >= pending.maxAttempts && shellVerify.loop === true) {
+      await this.stateManager.clearState(this.resolveVerifyStateKey(context));
+    }
+
+    this.renderFeedback(context, result, pending);
+
+    this.logExit({
+      passed: false,
+      attemptCount: pending.attemptCount,
+      maxAttempts: pending.maxAttempts,
+      escalated: pending.attemptCount >= pending.maxAttempts,
+    });
+  }
+
+  /**
+   * Short-circuit the pipeline with the bounce-back, or with the escalation once the attempts are
+   * spent (flagging the call as awaiting the user's `gate_action`). Renders only: no log, no
+   * loop state.
+   */
+  private renderFeedback(
+    context: ExecutionContext,
+    result: Awaited<ReturnType<ShellVerifyExecutor['execute']>>,
+    pending: PendingShellVerification
+  ): void {
     if (pending.attemptCount >= pending.maxAttempts) {
-      // Max attempts - escalate to user
       context.state.gates.retryLimitExceeded = true;
       context.state.gates.awaitingUserChoice = true;
       context.state.gates.escalationSource = 'shell-verify';
       context.state.gates.shellVerifyFeedback = createEscalationFeedback(result, pending);
-      // NOTE: Don't clear session — user may choose 'retry' which needs the pending state.
-      // Session is cleared in handleGateAction on skip/abort, or on next pass.
-
-      // Clear verify-state.db (Stop hook shouldn't keep trying)
-      if (shellVerify.loop === true) {
-        await this.stateManager.clearState(this.resolveVerifyStateKey(context));
-      }
     } else {
-      // More attempts remain - bounce-back
       context.state.gates.shellVerifyFeedback = createBounceBackFeedback(result, pending);
     }
-
-    // Short-circuit pipeline with feedback response.
-    // Both branches above always set shellVerifyFeedback — use message directly.
     const feedbackMessage = context.state.gates.shellVerifyFeedback.message;
 
     // Include chain_id so the LLM can resume the chain after fixing (prefer human-readable ID)
@@ -227,13 +244,6 @@ export class ShellVerificationStage extends BasePipelineStage {
 
     context.setResponse({
       content: [{ type: 'text', text: feedbackMessage + resumeHint }],
-    });
-
-    this.logExit({
-      passed: false,
-      attemptCount: pending.attemptCount,
-      maxAttempts: pending.maxAttempts,
-      escalated: pending.attemptCount >= pending.maxAttempts,
     });
   }
 
