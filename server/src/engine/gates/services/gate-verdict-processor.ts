@@ -385,6 +385,7 @@ export class GateVerdictProcessor {
     const sessionId = session.sessionId;
     context.state.gates.retryLimitExceeded = false;
     context.state.gates.awaitingUserChoice = false;
+    context.state.gates.gateActionAnsweredReview = true;
 
     if (gateAction === 'abort') {
       if (!(await this.chainSessionStore.cancelChain(sessionId))) {

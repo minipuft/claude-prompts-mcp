@@ -29,6 +29,14 @@
  * step left to a review keeps the check armed for the next answer: an armed check holds only the
  * answer captured on the call, so the review's verdict moves the step and the next answer is
  * checked.
+ *
+ * MEASURED 2026-09-25 on `92d21842` (authored chain): with step 1's review exhausted and its check
+ * at 2/5, one `gate_action: "skip"` skipped the review in stage 16 and then released the check in
+ * stage 17 — one call, two actions, and the check skipped with attempts left.
+ *
+ * Now (P6.56) one call acts once: a `gate_action` the step's exhausted review answered is not
+ * applied to the check too. The check keeps holding the step and the reply names it; the pass
+ * that later releases the step announces it `failed`, the skip the review recorded (P6.54).
  */
 import { afterEach, describe, expect, test } from '@jest/globals';
 
@@ -56,6 +64,8 @@ const OPT_OUT = { exclude: ['content-structure'], framework_gates: false };
 interface ToolOutcome {
   text: string;
   methods: string[];
+  /** The `status` of each `step_complete` on this call, in order. */
+  stepStatuses: unknown[];
 }
 
 type Call = (args: Record<string, unknown>) => Promise<ToolOutcome>;
@@ -115,6 +125,9 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
       return {
         text: (result?.content ?? []).map((part) => part.text ?? '').join('\n'),
         methods: outcome.notifications.map((n: StreamNotification) => n.method),
+        stepStatuses: outcome.notifications
+          .filter((n: StreamNotification) => n.method === STEP_COMPLETE)
+          .map((n: StreamNotification) => n.params['status']),
       };
     };
     if (opening.authored === true) await authorBlockingChain(client, () => nextId++);
@@ -445,5 +458,39 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
     const last = await call({ user_response: 'C fixed' });
     expect(count(last, CHAIN_COMPLETE)).toBe(1);
     expect(runs()).toBe(4);
+  }, 180000);
+
+  test('P6.56 (a): a skip that answers an exhausted review acts once; the check still holds the step', async () => {
+    const { call, marker, runs } = await startVerifiedChain(false, '', { authored: true });
+    await call({ user_response: 'A out', gate_verdict: FAIL });
+    const exhausted = await call({ user_response: 'A out again', gate_verdict: FAIL });
+    expect(exhausted.text).toContain('Shell Verification FAILED (Attempt 2/5)');
+    expect(runs()).toBe(2);
+
+    // The skip answers the exhausted review only: nothing moves, the check is named as pending
+    const skipped = await call({ gate_action: 'skip' });
+    expect(skipped.text).toContain('Shell Verification — Still Pending');
+    expect(skipped.text).toContain('**Attempts:** 2/5');
+    expect(skipped.text).not.toContain('Progress 2/3');
+    expect(count(skipped, STEP_COMPLETE)).toBe(0);
+    expect(runs()).toBe(2);
+
+    // The pass moves the step once, as the skip the review recorded (P6.54)
+    writeFileSync(marker, 'ok');
+    const passed = await call({ user_response: 'A fixed' });
+    expect(passed.text).toContain('Progress 2/3');
+    expect(passed.stepStatuses).toEqual(['failed']);
+    expect(runs()).toBe(3);
+  }, 180000);
+
+  test('P6.56 (b) control: skip with only the check pending releases the step, as today', async () => {
+    const { call, runs } = await startVerifiedChain(false, '', { authored: true });
+    const bounced = await call({ user_response: 'A out', gate_verdict: 'GATE_REVIEW: PASS - ok' });
+    expect(bounced.text).toContain('Shell Verification FAILED (Attempt 1/5)');
+
+    const skipped = await call({ gate_action: 'skip' });
+    expect(skipped.text).toContain('Progress 2/3');
+    expect(skipped.stepStatuses).toEqual(['failed']);
+    expect(runs()).toBe(1);
   }, 180000);
 });

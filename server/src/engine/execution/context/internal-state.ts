@@ -194,6 +194,12 @@ export interface PipelineInternalState {
     /** Which subsystem triggered the escalation (retry exhaustion). */
     escalationSource?: 'gate-review' | 'shell-verify';
     /**
+     * This call's `gate_action` answered the step's exhausted review (P6.56). Writer:
+     * `GateVerdictProcessor.handleGateAction`. Reader: `ShellVerificationStage`, which then does
+     * not act on the same action for a pending check: one call acts once.
+     */
+    gateActionAnsweredReview?: boolean;
+    /**
      * Accumulated gate IDs from enhancement stage for downstream use.
      *
      * RUN-WIDE, and deliberately so: the chain accumulator is never reset between steps, so this

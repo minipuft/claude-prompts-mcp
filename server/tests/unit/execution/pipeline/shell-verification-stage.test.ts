@@ -789,6 +789,53 @@ describe('ShellVerificationStage', () => {
       expect(executor.execute).not.toHaveBeenCalled();
     });
 
+    /**
+     * P6.56: one call acts once. When the step's exhausted review already answered this call's
+     * `gate_action` (stage 16), the check does not act on it too: it keeps holding the step.
+     */
+    test('P6.56: a skip the step review answered leaves the check holding the step, named', async () => {
+      const sessionService = createMockSessionService();
+      (sessionService.getPendingShellVerification as jest.Mock).mockReturnValue({
+        nodeId: 'node-1',
+      });
+      const advanceOwner = createAdvanceOwner();
+      const stage = new ShellVerificationStage(
+        createMockExecutor(true),
+        createMockStateManager(),
+        sessionService,
+        advanceOwner,
+        createLogger()
+      );
+      const context = createEscalatedContext('skip');
+      context.state.gates.gateActionAnsweredReview = true;
+
+      await stage.execute(context);
+
+      expect(advanceOwner.applyDeferredAdvance).not.toHaveBeenCalled();
+      expect(sessionService.clearPendingShellVerification).not.toHaveBeenCalled();
+      expect(context.state.gates.pendingShellVerification).toBeDefined();
+      expect(JSON.stringify(context.response)).toContain('Shell Verification — Still Pending');
+    });
+
+    test('P6.56: a retry the step review answered resets nothing on the check', async () => {
+      const sessionService = createMockSessionService();
+      const stage = new ShellVerificationStage(
+        createMockExecutor(true),
+        createMockStateManager(),
+        sessionService,
+        createAdvanceOwner(),
+        createLogger()
+      );
+      const context = createEscalatedContext('retry');
+      context.state.gates.gateActionAnsweredReview = true;
+
+      await stage.execute(context);
+
+      expect(context.state.gates.pendingShellVerification?.attemptCount).toBe(1);
+      expect(sessionService.setPendingShellVerification).not.toHaveBeenCalled();
+      expect(context.response).toBeUndefined();
+    });
+
     test('gate_action: skip with no captured answer is refused by name and keeps the check', async () => {
       const executor = createMockExecutor(true);
       const sessionService = createMockSessionService();

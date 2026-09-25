@@ -82,6 +82,7 @@ export class ShellVerificationStage extends BasePipelineStage {
 
     // Handle gate_action response (retry/skip/abort)
     const gateAction = context.mcpRequest.gate_action;
+    if (this.reviewAnsweredAction(context, gateAction, pending)) return;
     if (gateAction === 'skip' && this.refusesSkip(context)) {
       await this.saveToSession(context, pending);
       return;
@@ -249,6 +250,48 @@ export class ShellVerificationStage extends BasePipelineStage {
 
     context.setResponse({
       content: [{ type: 'text', text: feedbackMessage + resumeHint }],
+    });
+  }
+
+  /**
+   * One call acts once (P6.56): an action the step's exhausted review already answered on this
+   * call is not also applied to the check, which keeps holding the step. An abort ended the run
+   * there, so it still clears the check here.
+   */
+  private reviewAnsweredAction(
+    context: ExecutionContext,
+    gateAction: string | undefined,
+    pending: PendingShellVerification
+  ): boolean {
+    if (
+      gateAction === undefined ||
+      gateAction === 'abort' ||
+      context.state.gates.gateActionAnsweredReview !== true
+    ) {
+      return false;
+    }
+    if (gateAction === 'skip') this.renderStillPending(context, pending);
+    this.logExit({ skipped: 'gate_action answered the step review' });
+    return true;
+  }
+
+  /**
+   * A skip that answered the step's review leaves the check holding the step: say so, rather than
+   * render the held step again as if nothing were pending. Renders only.
+   */
+  private renderStillPending(context: ExecutionContext, pending: PendingShellVerification): void {
+    const chainId = context.getRequestedChainId() ?? context.state.session.resumeChainId;
+    const resumeHint =
+      chainId !== undefined
+        ? `\n\n---\n**Resume with:** \`chain_id: "${chainId}"\` and \`user_response\` containing your fix.`
+        : '';
+    context.setResponse({
+      content: [
+        {
+          type: 'text',
+          text: `## Shell Verification — Still Pending\n\nThe skip answered the step's gate review. The shell check still holds the step.\n\n**Command:** \`${String(pending.shellVerify.command)}\`\n**Attempts:** ${pending.attemptCount}/${pending.maxAttempts}\n\nSubmit your fix to re-run verification, or send \`gate_action: "skip"\` again to skip the check.${resumeHint}`,
+        },
+      ],
     });
   }
 
