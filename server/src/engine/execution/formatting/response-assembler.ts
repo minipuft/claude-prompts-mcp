@@ -192,7 +192,15 @@ export class ResponseAssembler {
       sections.push(this.formatValidationErrors(validationErrors));
     }
 
-    if (gateActive && this.isGateGuidanceInjectionEnabled(context) && context.gateInstructions) {
+    // An exhausted review takes no verdict (R9), so the guidance that closes on attesting in one
+    // is withheld, as the chain step's review render withholds it (P6.45, P6.46).
+    const reviewExhausted = context.sessionContext?.pendingReview?.phase === 'exhausted';
+    if (
+      gateActive &&
+      !reviewExhausted &&
+      this.isGateGuidanceInjectionEnabled(context) &&
+      context.gateInstructions
+    ) {
       sections.push(context.gateInstructions);
     }
 
@@ -281,7 +289,7 @@ export class ResponseAssembler {
     const exhausted = context.sessionContext?.pendingReview?.phase === 'exhausted';
     sections.push(
       exhausted
-        ? '**To proceed**: The retry budget is spent. Choose a `gate_action`: `retry`, or `skip` to accept the answer already given, or send `cancel: true`.'
+        ? `**To proceed**: ${EXHAUSTED_REVIEW_CHOICE}`
         : '**To proceed**: Address the gate criteria and resubmit with `gate_verdict`.'
     );
 
@@ -1332,6 +1340,12 @@ export class ResponseAssembler {
     if (gateIds.length === 0 || chainId == null || chainId.length === 0) return false;
 
     const pendingReview = context.sessionContext?.pendingReview;
+    // An exhausted review refuses every verdict (R9): offer the moves it accepts, no template.
+    if (pendingReview?.phase === 'exhausted') {
+      lines.push('**Review Retry Limit Reached**', '', `**Gates**: ${gateIds.join(', ')}`, '');
+      lines.push(EXHAUSTED_REVIEW_CHOICE, '', exhaustedReviewMoves(chainId));
+      return true;
+    }
     const structuredTemplate = buildStructuredVerdictTemplate(
       gateIds,
       pendingReview?.prompts ?? [],
@@ -1708,6 +1722,10 @@ function buildPromptLookup(prompts: readonly GateReviewPrompt[]): Map<string, Ga
   }
   return map;
 }
+
+/** What an exhausted review accepts, in the words every reply holding one uses. */
+const EXHAUSTED_REVIEW_CHOICE =
+  'The retry budget is spent. Choose a `gate_action`: `retry`, or `skip` to accept the answer already given, or send `cancel: true`.';
 
 /** The `Next:` line of a reply holding an exhausted review: the only moves it accepts (P6.23). */
 function exhaustedReviewMoves(chainId: string): string {
