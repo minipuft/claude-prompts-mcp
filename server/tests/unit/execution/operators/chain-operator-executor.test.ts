@@ -862,6 +862,90 @@ describe('ChainOperatorExecutor', () => {
   });
 });
 
+/**
+ * P6.131 (as of 2026-09-27 · flips when stage 20 hands the review render the call's injection
+ * decision, or stage 18 stops passing it). Traced on a scratch build with the P6.112 restore
+ * disabled: before P6.112 a claimed run's step 2 lacked the framework block the same-process step 2
+ * carried. The injection decision did NOT differ — both calls logged `system-prompt inject:false`
+ * ("Target 'steps' doesn't match execution context 'gate_review'", currentStep 1). What differed
+ * was the render path: the same-process call held the request gate targeting step b, so
+ * `ensurePostAdvanceReview` opened a review on b and stage 20 rendered it through the review path,
+ * whose chain context carries no `injectionState`, so framework injection defaults on; the claimed
+ * call had lost that gate, opened no review, and stage 18 rendered b as a normal step with the
+ * call's `injectionState`, which suppresses the block. Gate presence decides the path; the path
+ * decides the block.
+ */
+describe('P6.131: the framework block on a step follows the render path, not the injection decision', () => {
+  const step = {
+    stepNumber: 1,
+    promptId: 'analyze',
+    args: { code: 'alpha' },
+    frameworkContext: {
+      selectedFramework: { name: 'C.A.G.E.E.R.F Framework', framework: 'CAGEERF', id: 'cageerf' },
+      systemPrompt: 'FRAMEWORK-131',
+    } as any,
+  };
+  const measuredDecision = {
+    systemPrompt: {
+      inject: false,
+      reason: 'target mismatch',
+      source: 'global-config',
+      target: 'steps',
+    },
+  };
+  const review = {
+    nodeId: 'n1',
+    kind: 'gate',
+    phase: 'awaiting-verdict',
+    combinedPrompt: '',
+    gateIds: ['rq131'],
+    prompts: [],
+    createdAt: 0,
+    attemptCount: 0,
+    maxAttempts: 2,
+  };
+  const prompts = mockConvertedPrompts.map((prompt) => ({ ...prompt, systemMessage: undefined }));
+
+  test('stage 18 normal render with the measured decision carries no framework block', async () => {
+    const result = await new ChainOperatorExecutor(mockLogger, prompts as never).renderStep({
+      executionType: 'normal',
+      stepPrompts: [step],
+      currentStepIndex: 0,
+      chainContext: { injectionState: measuredDecision },
+    });
+    expect(result.content).toContain('Analyze this code: alpha');
+    expect(result.content).not.toContain('FRAMEWORK-131');
+  });
+
+  test('stage 20 review render of the same step, whose context carries no decision, carries it', async () => {
+    const result = await new ChainOperatorExecutor(mockLogger, prompts as never).renderStep({
+      executionType: 'gate_review',
+      review: review as never,
+      stepPrompts: [step],
+      chainContext: { current_step: 1, currentStepArgs: { code: 'alpha' } },
+      additionalGateIds: [],
+    });
+    expect(result.content).toContain('## 🎯 C.A.G.E.E.R.F Framework Active');
+    expect(result.content).toContain('FRAMEWORK-131');
+  });
+
+  test('control: the review render handed the measured decision withholds it too', async () => {
+    const result = await new ChainOperatorExecutor(mockLogger, prompts as never).renderStep({
+      executionType: 'gate_review',
+      review: review as never,
+      stepPrompts: [step],
+      chainContext: {
+        current_step: 1,
+        currentStepArgs: { code: 'alpha' },
+        injectionState: measuredDecision,
+      },
+      additionalGateIds: [],
+    });
+    expect(result.content).toContain('Analyze this code: alpha');
+    expect(result.content).not.toContain('FRAMEWORK-131');
+  });
+});
+
 describe('retired "Post-Execution Review Guidelines" pair — class guard', () => {
   // Row 0.4 (GateGuidanceRenderer.ts) and row 0.9 (this file's chain-operator-executor.ts
   // fallback) each retired one copy of the pair `**Post-Execution Review Guidelines:**` /
