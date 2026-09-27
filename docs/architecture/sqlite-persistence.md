@@ -526,6 +526,12 @@ held lock, and the rejection is the tool call's error; `replaceRemainder` and
 `applyUnknownObservations`, whose reply renders what they wrote, reject on a held lock too; a
 background persist (a lifecycle promotion, or the final save at shutdown) has no caller waiting,
 so its failure is logged with the context that started it.
+An awaited mutator whose save rejects puts memory back where the rows are before the error
+reaches the caller (R87): each takes a copy of what it is about to change, and
+`persistMutation` restores that copy and rethrows. A run a failed cancel could not write is still
+`working` in memory, so a retried cancel writes rather than answering "already cancelled" from a
+change the rows never received. A held lock keeps the change in memory, because the next persist
+writes it.
 
 **Both connections set `busy_timeout` from one constant**, `STATE_DB_BUSY_TIMEOUT_MS` in
 `shared/utils/runtime-state-location.ts`, beside the two path segments and for the same reason: the
