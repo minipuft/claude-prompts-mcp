@@ -1,4 +1,4 @@
-// @lifecycle test - P6.79 / P6.80 / R40: an arrow-chain segment or a workflow node naming a chain prompt runs that prompt's steps; P6.78 / R37: a command-level gate on a chain prompt binds each step; P6.97 / R43: a named inline gate belongs to the run that declared it; P6.99 / R44: a named gate on an arrow-chain segment binds that segment; P6.108 / R47: a run's temporary gates live exactly as long as the run; P6.104: a run's request gates reach every node they target; P6.107: a request gate id belongs to the run that holds it; P6.105: the arrow-chain source validates the expanded workflow; P6.110: one name in two arrow-chain segments is two gates; P6.113: a run re-sending a declared id keeps the id it registered; P6.117: a request gate target is checked against the declared node ids; P6.186: a completed run re-runs as the command that started it, or not at all, over Streamable HTTP.
+// @lifecycle test - P6.79 / P6.80 / R40: an arrow-chain segment or a workflow node naming a chain prompt runs that prompt's steps; P6.78 / R37: a command-level gate on a chain prompt binds each step; P6.97 / R43: a named inline gate belongs to the run that declared it; P6.99 / R44: a named gate on an arrow-chain segment binds that segment; P6.108 / R47: a run's temporary gates live exactly as long as the run; P6.104: a run's request gates reach every node they target; P6.107: a request gate id belongs to the run that holds it; P6.105: the arrow-chain source validates the expanded workflow; P6.110: one name in two arrow-chain segments is two gates; P6.113: a run re-sending a declared id keeps the id it registered; P6.117: a request gate target is checked against the declared node ids; P6.186: a completed run re-runs as the command that started it, or not at all; P6.187: a review re-render lists the run nodes after the current one, over Streamable HTTP.
 /**
  * MEASURED 2026-09-25 on `427899fe` (authored `sv_chain` = sv_a/sv_b/sv_a, each step carrying the
  * blocking `sv-block`; run state read from `chain_runs.state`):
@@ -1121,6 +1121,68 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       const run = await start({ command: '>>sv_a :: "CRIT-186s"' });
       const done = await run.call({ user_response: 'out', gate_verdict: PASS });
       expect(rerun(done)).toBe(`>>sv_a topic:"" :: 'CRIT-186s'`);
+    }, 120000);
+  });
+
+  /**
+   * P6.187 / R90. MEASURED 2026-09-27 on `6043612a`: a workflow `x`, `y` (gated `sv-drop`), `z`,
+   * with a blocking unknown raised on `x`. The FAIL on the inserted `inv-u-187a` (it inherits
+   * `sv-drop`, row 4.4) re-renders its review with "Remaining plan: `y`, `z`" — the nodes after the
+   * node under review, which IS the current node, so the list starts after it. Nothing after it
+   * is missing, so this is a pin, not a fix.
+   */
+  describe('P6.187: a review re-render lists the run nodes after the current one', () => {
+    const blocking = {
+      observations: [
+        { type: 'unknown_discovered', id: 'u-187a', statement: 'STATEMENT-u-187a', blocking: true },
+      ],
+    };
+    const listed = (text: string): string[] => {
+      const block = text.slice(text.indexOf('Remaining plan:'));
+      return [...block.split('\n\n')[0].matchAll(/^- `([^`]+)`/gm)].map((m) => m[1]);
+    };
+    /** The live nodes strictly after the run's current node, in run order. */
+    function after(chainId: string): string[] {
+      const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+      try {
+        const run = db
+          .prepare('SELECT session_id, current_node_id FROM chain_runs WHERE chain_id = ?')
+          .get(chainId) as { session_id: string; current_node_id: string };
+        const nodes = (
+          db
+            .prepare('SELECT node_id FROM chain_run_nodes WHERE session_id = ? ORDER BY position')
+            .all(run.session_id) as Array<{ node_id: string }>
+        ).map((row) => row.node_id);
+        return nodes.slice(nodes.indexOf(run.current_node_id) + 1);
+      } finally {
+        db.close();
+      }
+    }
+
+    test('twin: the retry render of an inserted node lists the nodes after it', async () => {
+      const run = await start({
+        workflow: {
+          version: 1,
+          nodes: [
+            { id: 'x', promptId: 'sv_a' },
+            { id: 'y', promptId: 'sv_b', inlineGateIds: ['sv-drop'] },
+            { id: 'z', promptId: 'sv_a' },
+          ],
+        },
+      });
+      await run.call({ user_response: 'A', ...blocking });
+      const retry = await run.call({ user_response: 'investigated', gate_verdict: FAIL });
+      expect(retry).toContain('Gate Review Required');
+      expect(runState(run.chainId).reviews).toEqual({ 'inv-u-187a': ['sv-drop'] });
+      expect(after(run.chainId)).toEqual(['y', 'z']);
+      expect(listed(retry)).toEqual(after(run.chainId));
+
+      // Control: a planned step's retry render, the unknown still open, lists what follows it.
+      await run.call({ user_response: 'investigated again', gate_verdict: PASS });
+      const planned = await run.call({ user_response: 'B', gate_verdict: FAIL });
+      expect(runState(run.chainId).reviews).toEqual({ y: ['sv-drop'] });
+      expect(after(run.chainId)).toEqual(['z']);
+      expect(listed(planned)).toEqual(after(run.chainId));
     }, 120000);
   });
 
