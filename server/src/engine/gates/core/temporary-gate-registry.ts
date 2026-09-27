@@ -127,8 +127,38 @@ export class TemporaryGateRegistry {
     scopeId?: string,
     options: { onIdCollision?: 'throw' | 'fresh-id' } = {}
   ): string {
-    const gateId = this.chooseGateId(definition.id, options.onIdCollision);
+    return this.storeGate(
+      this.chooseGateId(definition.id, options.onIdCollision),
+      definition,
+      scopeId
+    );
+  }
 
+  /**
+   * Register a gate under exactly the id a run recorded for it — `temp_…` included, which
+   * {@link createTemporaryGate} never accepts from a caller — for a run resumed in a process that
+   * never registered its gates (R54: a claimed handoff). The run's blueprint references its gates
+   * by those ids, so any other id would leave them unresolved. Returns false, and registers
+   * nothing, when the id is already held.
+   */
+  restoreTemporaryGate(
+    definition: Omit<TemporaryGateDefinition, 'created_at'>,
+    scopeId?: string
+  ): boolean {
+    const { id, ...recorded } = definition;
+    if (this.temporaryGates.has(id)) {
+      return false;
+    }
+    // `recorded` carries no `id`, so the gate keeps only the declared key it was recorded with.
+    this.storeGate(id, recorded, scopeId);
+    return true;
+  }
+
+  private storeGate(
+    gateId: string,
+    definition: Omit<TemporaryGateDefinition, 'id' | 'created_at'> & { id?: string },
+    scopeId?: string
+  ): string {
     // Check for ID collision
     if (this.temporaryGates.has(gateId)) {
       this.logger.warn(`[TEMP GATE REGISTRY] Gate ID collision: ${gateId}`);
