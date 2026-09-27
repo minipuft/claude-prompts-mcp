@@ -514,9 +514,14 @@ describe('PromptExecutionPipeline — a call that throws after the run exists', 
  * with only a `failed` execution record, so a later `chain_id` resumed a run nothing was ever
  * rendered for; a later call that threw left no trace on the next reply.
  *
- * Now a throw on the call that created the run (`lifecycleDecision` `create-new`) cancels it —
+ * Now a throw on the call that created the run (`lifecycleDecision` `create-new`) ends it —
  * its gates go with it through `onRunEnded` — and a later `chain_id` is refused naming the
  * failure; a later call's throw keeps the run `working`, and the next reply names it once.
+ *
+ * P6.132 / R56. MEASURED 2026-09-27 on `9f9ea9b1` (twin (d) before the fix): the refusal keyed on
+ * the run's newest earlier record being the run-level `failed` one, so a later call's throw
+ * followed by an operator's `cancel` (which writes no record) was refused "failed on its start
+ * call". A failed start call now ends its run `failed`, and the refusal keys on that status.
  */
 describe('PromptExecutionPipeline — a call that throws, and the call after it', () => {
   type Decision = 'create-new' | 'resume-chain-id' | 'resume-completed';
@@ -537,11 +542,22 @@ describe('PromptExecutionPipeline — a call that throws, and the call after it'
         records.filter((record) => record['sessionId'] === sessionId),
     } as unknown as ExecutionRecordStore;
     const run = { status: 'working' };
+    const terminal = (): boolean => ['completed', 'failed', 'cancelled'].includes(run.status);
     const sessionStore = {
       completeHeldRun: jest.fn(async (_sessionId: string) => false),
       getRunTelemetry: () => undefined,
-      // The builder's `onRunEnded` subscription, inlined: a run that ends releases its gates.
+      getSession: (sessionId: string) =>
+        sessionId === 'run-121' ? { sessionId, runStatus: run.status } : undefined,
+      // The store's terminal stickiness, and the builder's `onRunEnded` subscription, inlined:
+      // a run that ends releases its gates.
+      transitionRunStatus: jest.fn(async (sessionId: string, target: string) => {
+        if (terminal()) return false;
+        run.status = target;
+        registry.releaseRun(sessionId);
+        return true;
+      }),
       cancelChain: jest.fn(async (sessionId: string) => {
+        if (terminal()) return run.status === 'cancelled';
         run.status = 'cancelled';
         registry.releaseRun(sessionId);
         return true;
@@ -571,7 +587,9 @@ describe('PromptExecutionPipeline — a call that throws, and the call after it'
         if (decision === 'resume-completed') {
           context.state.session.resumeSessionId = 'run-121';
           context.state.session.resumeChainId = 'chain-121';
-          context.setResponse({ content: [{ type: 'text', text: 'Chain run already complete.' }] });
+          context.setResponse({
+            content: [{ type: 'text', text: `Chain run already complete.\nStatus: ${run.status}` }],
+          });
           return;
         }
         (context as unknown as { sessionContext: unknown }).sessionContext = {
@@ -615,8 +633,9 @@ describe('PromptExecutionPipeline — a call that throws, and the call after it'
 
     await expect(call('create-new', 'render exploded')).rejects.toThrow('render exploded');
 
-    expect(sessionStore.cancelChain).toHaveBeenCalledWith('run-121');
-    expect(run.status).toBe('cancelled');
+    expect(sessionStore.transitionRunStatus).toHaveBeenCalledWith('run-121', 'failed');
+    expect(sessionStore.cancelChain).not.toHaveBeenCalled();
+    expect(run.status).toBe('failed');
     expect(registry.getRunGates('run-121')).toEqual([]);
 
     const resumed = await call('resume-completed');
@@ -634,6 +653,7 @@ describe('PromptExecutionPipeline — a call that throws, and the call after it'
 
     await expect(call('resume-chain-id', 'capture exploded')).rejects.toThrow('capture exploded');
     expect(sessionStore.cancelChain).not.toHaveBeenCalled();
+    expect(sessionStore.transitionRunStatus).not.toHaveBeenCalled();
     expect(run.status).toBe('working');
     expect(registry.getRunGates('run-121').map((gate) => gate.id)).toEqual(gateIds);
 
@@ -641,6 +661,20 @@ describe('PromptExecutionPipeline — a call that throws, and the call after it'
     expect(contentText(next)).toBe('⚠️ The previous call failed: capture exploded\n\nSTEP-BODY');
     const after = await call('resume-chain-id');
     expect(contentText(after)).toBe('STEP-BODY');
+  });
+
+  test('(d) a later call that throws, then an explicit cancel: the next chain_id gets the cancelled-run reply, not a start-call failure', async () => {
+    const { call, run, sessionStore } = setup();
+    await call('create-new');
+    await expect(call('resume-chain-id', 'capture exploded')).rejects.toThrow('capture exploded');
+    // `prompt_engine(cancel: true)` ends the run outside the pipeline and writes no record, so the
+    // run's newest record is still the failed call's.
+    await sessionStore.cancelChain('run-121');
+    expect(run.status).toBe('cancelled');
+
+    const resumed = await call('resume-completed');
+    expect(resumed.isError).not.toBe(true);
+    expect(contentText(resumed)).toBe('Chain run already complete.\nStatus: cancelled');
   });
 
   test('(c) control: calls that do not throw are unchanged', async () => {
