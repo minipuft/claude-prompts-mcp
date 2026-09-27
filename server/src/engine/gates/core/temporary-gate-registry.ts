@@ -451,7 +451,7 @@ export class TemporaryGateRegistry {
     onIdCollision?: 'throw' | 'fresh-id'
   ): string {
     if (!requested || !this.isValidCustomId(requested)) {
-      return `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      return `temp_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
     }
     return onIdCollision === 'fresh-id' ? this.firstFreeId(requested) : requested;
   }
