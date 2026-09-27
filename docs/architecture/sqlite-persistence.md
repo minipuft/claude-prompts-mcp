@@ -13,7 +13,7 @@ module wins and this file is stale.
 
 Not 11, and not 13. `tenants` was deleted at v19 (F10); `chain_run_registry` was deleted at v22
 (P3 Tier 4), replaced by the two per-row tables below; `objects` and `version_entries` were added
-at v29. The schema is at v32. SQLite auto-creates `sqlite_sequence` for
+at v29. The schema is at v33. SQLite auto-creates `sqlite_sequence` for
 any table declaring `AUTOINCREMENT`; it is never declared in `applySchema()` and is excluded via
 `SQLITE_INTERNAL_TABLES`. A startup assert written against a raw `sqlite_master` count throws on
 every boot.
@@ -144,6 +144,19 @@ the node, `synthesizeStep` carries it onto the step, and gate enhancement walks 
 walks a parse-time one. Nullable with no DDL DEFAULT, NULL on every planned and inserted node and on
 every contributed node whose step declared no gates. `chain_run_nodes` is `ephemeral`, so the bump
 drops and recreates it and no migration is written; `DROPPED_ON_THIS_BUMP` stays empty.
+
+`chain_sessions.continuity_scope_id TEXT NOT NULL` arrived at v33 (P6.147), and `run_number` left.
+Run numbers are counted per continuity scope, so one HTTP server serving two workspaces holds
+`chain-x#1` in each. The old key `UNIQUE (run_owner_pid, chain_id, run_number)`, with `run_number` a
+literal 1, refused the second row; the persist transaction rolled back with it, and while both runs
+lived no run of that process reached `chain_runs` again. The key is now `(run_owner_pid, chain_id,
+continuity_scope_id)`: the run's own scope, with no DDL DEFAULT so a writer that omits it fails. It
+is not `workspace_id`, which stays the process's launch workspace. `run_number` had no reader but
+`v_execution_status` projecting it (none in `hooks/` or the three downstream repos), so the view
+lost that column too. The hooks loader still selects by chain id and PID liveness, so it tells two
+scopes' runs of one chain id apart by recency alone; `hooks/tests/test_db_reader.py` pins that.
+`chain_sessions` is `derived`, so the bump drops and recreates it; `DROPPED_ON_THIS_BUMP` stays
+empty.
 
 ## Four Tables Are Durable — A Schema Bump Must Not Destroy Them
 
@@ -556,14 +569,14 @@ Every table that declares scope columns also populates them. Until Tier 4 only `
 a startup migration backfilled the rest on the next boot — a treadmill against writers that never
 stopped emitting NULLs. `applyIdentityScopeMigration` was deleted once each writer conformed:
 
-| Table              | How its scope arrives                                                              |
-| ------------------ | ---------------------------------------------------------------------------------- |
-| `kv_state`         | `SqliteStateStore` — PRAGMA-derived column list                                    |
-| `resource_changes` | `defaultScope` on the tracker; the watcher fires with no request to thread         |
-| `chain_sessions`   | `defaultScope` on `ChainSessionStoreOptions`, bound in `projectToHookView`         |
-| `chain_runs`       | merged `runScope` — PID decides `run_owner_pid`, workspace fills the scope columns |
-| `chain_run_nodes`  | none of its own — scope travels via `session_id` to its `chain_runs` parent row    |
-| `version_history`  | scope injected into the service; all nine query sites bind it together             |
+| Table              | How its scope arrives                                                                                                    |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `kv_state`         | `SqliteStateStore` — PRAGMA-derived column list                                                                          |
+| `resource_changes` | `defaultScope` on the tracker; the watcher fires with no request to thread                                               |
+| `chain_sessions`   | `defaultScope` on `ChainSessionStoreOptions`, bound in `projectToHookView`; the run's own scope in `continuity_scope_id` |
+| `chain_runs`       | merged `runScope` — PID decides `run_owner_pid`, workspace fills the scope columns                                       |
+| `chain_run_nodes`  | none of its own — scope travels via `session_id` to its `chain_runs` parent row                                          |
+| `version_history`  | scope injected into the service; all nine query sites bind it together                                                   |
 
 **`version_history` had to move reads and writes together.** Scoping the writes alone would have
 broken version numbering, because `MAX(version)` would read a different set than the INSERT wrote

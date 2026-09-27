@@ -610,7 +610,9 @@ export class ChainSessionStore implements ChainSessionService {
    *
    * Filter rule: a session is "active for hooks" while its run is not complete
    * (see `isSessionActiveForHooks`).
-   * `run_owner_pid` is the server PID for cross-client isolation.
+   * `run_owner_pid` is the server PID for cross-client isolation. `continuity_scope_id` is the
+   * run's own scope: run numbers are counted per scope, so the PID, the chain id and the scope key
+   * the row (R70).
    *
    * Owner rule (R61): the projection holds exactly the canonical owner's row for a run. A run this
    * process projects is one it owns in `chain_runs` (a claim rewrote the owner), so another PID's
@@ -632,12 +634,13 @@ export class ChainSessionStore implements ChainSessionService {
         [row.chainId, this.serverPid, row.sessionId]
       );
       db.run(
-        `INSERT INTO chain_sessions (run_owner_pid, organization_id, workspace_id, chain_id, run_number, state, run_status, run_completed_at)
-         VALUES (?, ?, ?, ?, 1, ?, ?, ?)`,
+        `INSERT INTO chain_sessions (run_owner_pid, organization_id, workspace_id, continuity_scope_id, chain_id, state, run_status, run_completed_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           this.serverPid,
           this.workspaceScope?.organizationId ?? null,
           this.workspaceScope?.workspaceId ?? null,
+          row.continuityScopeId,
           row.chainId,
           row.state,
           row.runStatus,
@@ -654,6 +657,7 @@ export class ChainSessionStore implements ChainSessionService {
   private collectActiveSessionRows(): Array<{
     sessionId: string;
     chainId: string;
+    continuityScopeId: string;
     state: string;
     runStatus: ChainRunStatus;
     runCompletedAt: number | null;
@@ -661,6 +665,7 @@ export class ChainSessionStore implements ChainSessionService {
     const rows: Array<{
       sessionId: string;
       chainId: string;
+      continuityScopeId: string;
       state: string;
       runStatus: ChainRunStatus;
       runCompletedAt: number | null;
@@ -673,6 +678,9 @@ export class ChainSessionStore implements ChainSessionService {
       rows.push({
         sessionId: session.sessionId,
         chainId: session.chainId,
+        // The run's own scope (R70): one process serving two workspaces holds `chain-x#1` in
+        // each, so the projection's key needs it. Resolved as `createSession` resolves it.
+        continuityScopeId: resolveContinuityScopeId(session),
         runStatus,
         runCompletedAt: session.runCompletedAt ?? null,
         state: JSON.stringify({

@@ -144,7 +144,10 @@ export const TABLE_CONTRACTS: readonly TableContract[] = [
     // F3 closed at v20: the PID column is now named `run_owner_pid`, so no column name means both
     // a run owner and a workspace. Scope columns remain `workspace_id`/`organization_id`, bound by
     // projectToHookView from the store's defaultScope (Tier 4) — run ownership and workspace scope
-    // are separate questions and now have separate names.
+    // are separate questions and now have separate names. `continuity_scope_id` (v33, R70) is the
+    // run's own scope, part of the row key with the PID and the chain id: one process serving two
+    // workspaces holds `chain-x#1` in each. It is not `workspace_id`, which stays the launch
+    // workspace.
   },
   {
     table: 'kv_state',

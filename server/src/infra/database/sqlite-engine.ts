@@ -56,6 +56,20 @@ import { STATE_DB_WRITER_PRAGMAS } from '#shared/utils/runtime-state-location.js
 /**
  * Bump this when changing the embedded schema. Triggers drop-and-recreate.
  *
+ * v33: `chain_sessions` is keyed by `(run_owner_pid, chain_id, continuity_scope_id)` and drops
+ * `run_number` (P6.147, R70 — one process serving two continuity scopes).
+ *
+ * Run numbers are counted per continuity scope (`reserveRunNumbers`), so one HTTP server serving
+ * two workspaces holds `chain-x#1` in each, and the projection wrote both under the old
+ * `UNIQUE (run_owner_pid, chain_id, run_number)` with `run_number` a literal 1. The second INSERT
+ * failed that key, the persist transaction rolled back with it, and while both runs lived no run of
+ * the process reached `chain_runs` again. `continuity_scope_id` is the run's own scope (NOT NULL,
+ * no DDL DEFAULT, so a writer that omits it fails); `workspace_id` stays the process's launch
+ * workspace and answers a different question. `run_number` had no reader but the view projecting
+ * it, and none in the hooks or downstream repos (measured 2026-09-27). `chain_sessions` is
+ * `derived`, so the bump drops and recreates it: `DROPPED_ON_THIS_BUMP` stays empty and
+ * `DROPPED_AT_VERSION` does not move.
+ *
  * v32: adds `inline_gate_ids` to `chain_run_nodes` (P6.101, R68 — a contributed node carries its
  * step's gates).
  *
@@ -391,7 +405,7 @@ import { STATE_DB_WRITER_PRAGMAS } from '#shared/utils/runtime-state-location.js
  * `respondedAt`, which changes the `substate_json` shape in `execution_records`. Rows written by
  * v15 would decode to a lifecycle value outside `StepLifecycle`, so they must not survive.
  */
-const SCHEMA_VERSION = 32;
+const SCHEMA_VERSION = 33;
 
 /**
  * Tables whose rows exist nowhere else and therefore survive a SCHEMA_VERSION bump.
@@ -974,14 +988,14 @@ export class SqliteEngine implements DatabasePort {
         run_owner_pid TEXT NOT NULL,
         organization_id TEXT,
         workspace_id TEXT,
+        continuity_scope_id TEXT NOT NULL,
         chain_id TEXT NOT NULL,
-        run_number INTEGER NOT NULL,
         state TEXT NOT NULL,
         run_status TEXT NOT NULL DEFAULT 'working',
         run_completed_at INTEGER,
         created_at TEXT DEFAULT (datetime('now')),
         updated_at TEXT DEFAULT (datetime('now')),
-        UNIQUE (run_owner_pid, chain_id, run_number)
+        UNIQUE (run_owner_pid, chain_id, continuity_scope_id)
       );
 
       -- Shared key-value blob store for scoped state with a discriminator.
@@ -1342,7 +1356,6 @@ export class SqliteEngine implements DatabasePort {
         cs.id AS row_id,
         json_extract(cs.state, '$.sessionId') AS session_id,
         cs.chain_id,
-        cs.run_number,
         cs.run_status,
         cs.run_completed_at,
         json_extract(cs.state, '$.currentStep') AS current_step,

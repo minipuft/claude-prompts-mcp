@@ -192,10 +192,12 @@ def _insert_session(
     *,
     run_status: str = "working",
     chain_id: str = "chain-demo",
+    continuity_scope_id: str = "default",
 ) -> None:
     conn.execute(
-        "INSERT INTO chain_sessions (run_owner_pid, chain_id, run_number, state, run_status) VALUES (?, ?, 1, ?, ?)",
-        (run_owner_pid, chain_id, state, run_status),
+        "INSERT INTO chain_sessions (run_owner_pid, continuity_scope_id, chain_id, state, run_status) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (run_owner_pid, continuity_scope_id, chain_id, state, run_status),
     )
     conn.commit()
 
@@ -352,14 +354,46 @@ class TestActiveChainState:
         dead["lastActivity"] = 2000
         _insert_session(state_db, str(LIVE_PID), _chain_session_state(current=2, total=3))
         state_db.execute(
-            "INSERT INTO chain_sessions (run_owner_pid, chain_id, run_number, state, run_status, updated_at) "
-            "VALUES (?, ?, 1, ?, ?, datetime('now', '+1 minute'))",
+            "INSERT INTO chain_sessions (run_owner_pid, continuity_scope_id, chain_id, state, run_status, updated_at) "
+            "VALUES (?, 'default', ?, ?, ?, datetime('now', '+1 minute'))",
             (str(_dead_pid()), "chain-demo", json.dumps(dead), "working"),
         )
         if path == "session_table":
             state_db.execute("DROP VIEW v_execution_status")
         state_db.commit()
 
+        state = db_reader.load_active_chain_state("chain-demo")
+
+        assert state is not None
+        assert state["current_step"] == 2
+
+    @pytest.mark.parametrize("path", ["view", "session_table"])
+    def test_two_scopes_runs_of_one_chain_id_in_one_process_serve_the_newest(self, state_db, path):
+        """P6.147 pin (as of 2026-09-27 · flips when the chain tracker records a run's continuity
+        scope or session id in hooks-state.db and the loader selects by it).
+
+        One HTTP server serving two workspaces numbers runs per scope, so both hold `chain-demo`,
+        and since v33 the projection holds both rows (keyed by `continuity_scope_id`). The loader
+        selects by chain id and owner liveness only: the two runs are told apart by recency alone,
+        and the most recently active one is served whichever scope the conversation belongs to.
+        """
+        _insert_session(
+            state_db, str(LIVE_PID), _chain_session_state(session_id="a", current=1), continuity_scope_id="tenant-a"
+        )
+        # Positive control: with one scope's run the loader serves it.
+        assert db_reader.load_active_chain_state("chain-demo")["current_step"] == 1
+        newer = json.loads(_chain_session_state(session_id="b", current=2))
+        newer["lastActivity"] = 2000
+        state_db.execute(
+            "INSERT INTO chain_sessions (run_owner_pid, continuity_scope_id, chain_id, state, run_status, updated_at) "
+            "VALUES (?, 'tenant-b', 'chain-demo', ?, 'working', datetime('now', '+1 minute'))",
+            (str(LIVE_PID), json.dumps(newer)),
+        )
+        if path == "session_table":
+            state_db.execute("DROP VIEW v_execution_status")
+        state_db.commit()
+
+        assert state_db.execute("SELECT COUNT(*) FROM chain_sessions WHERE chain_id = 'chain-demo'").fetchone()[0] == 2
         state = db_reader.load_active_chain_state("chain-demo")
 
         assert state is not None
