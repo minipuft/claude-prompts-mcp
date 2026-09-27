@@ -51,6 +51,8 @@ const OPT_OUT = { exclude: ['content-structure'], framework_gates: false };
 const GATED_COMMAND = '>>sv_chain :: g112:"NAMED-112" :: "ANON-112"';
 const REQUEST_GATES = [{ id: 'rq112', name: 'rq112', criteria: ['REQ-112'], target_step_id: 'b' }];
 const MARKERS = ['NAMED-112', 'ANON-112', 'REQ-112', 'GUIDANCE-sv-block'];
+/** Assembled, so no command literal in this file carries the operator as prose. */
+const ARROW = ' -' + '-> ';
 
 interface Server {
   /** The server process's PID, which `chain_sessions.run_owner_pid` records. */
@@ -287,6 +289,50 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
       b: ['rq112', 'sv-block', 'g112', 'temp', 'temp', 'temp'],
     });
   }, 180000);
+
+  /**
+   * MEASURED 2026-09-27 on `530cf2c0` (driven, this harness): the claimed step 2 and the
+   * same-process step 2 both carried the framework block, although the call's injection decision
+   * for both was `system-prompt inject:false` (P6.131 trace): both open the post-advance review
+   * on `b` (the request gate targets it), and stage 20 built the review render's chain context
+   * without the call's `injectionState`, so the executor defaulted to injecting. The start call's
+   * step 1 is a review render too (the blocking `sv-block` opens its review up front) and carried
+   * the block the same way.
+   *
+   * Now (R63) the review render honours the call's decision as stage 18's normal render does:
+   * neither step 2 carries the block, equally. An ungated step, rendered by stage 18 under a
+   * decision that injects, is the positive control that the probe sees the block at all.
+   */
+  test('P6.143 the claimed and the same-process step 2 carry the framework block equally, as the call decided', async () => {
+    const block = (text: string): boolean => text.includes('C.A.G.E.E.R.F');
+    const claimed = await claimOnSecondServer(freshRoots(), {
+      command: GATED_COMMAND,
+      gates: REQUEST_GATES,
+    });
+
+    const server = await startServer(freshRoots());
+    await authorResources(server);
+    const opened = await server.call('prompt_engine', {
+      command: GATED_COMMAND,
+      gates: REQUEST_GATES,
+    });
+    const same = await server.call('prompt_engine', {
+      chain_id: chainIdOf(opened.text),
+      user_response: 'A out',
+      gate_verdict: PASS,
+    });
+
+    // Positive control: an ungated arrow-chain's step 1 is not a review, and the call's decision
+    // injects the framework's system prompt there, so the probe sees the framework when a
+    // decision says so.
+    const ungated = await server.call('prompt_engine', { command: `>>sv_a${ARROW}>>sv_b` });
+    expect(ungated.isError).toBe(false);
+    expect(block(ungated.text)).toBe(true);
+    expect({ claimed: block(claimed.firstReply), same: block(same.text) }).toEqual({
+      claimed: false,
+      same: false,
+    });
+  }, 240000);
 
   test('(c) a run with no temporary gates is claimed unchanged', async () => {
     const roots = freshRoots();
