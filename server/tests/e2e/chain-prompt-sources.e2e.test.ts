@@ -139,6 +139,44 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
         { promptId: 'sv_b', stepName: 'B' },
       ],
     });
+    // P6.160: two prompts that keep the shipped category and framework defaults, and an ungated
+    // chain of them, so a contributed step's defaults compare against a planned step's.
+    for (const id of ['sv_d', 'sv_e']) {
+      await author({
+        resource_type: 'prompt',
+        action: 'create',
+        id,
+        category: 'general',
+        name: id,
+        description: `e2e step ${id} with default gates`,
+        user_message_template: `BODY-${id} topic={{topic}}`,
+        arguments: TOPIC,
+      });
+    }
+    await author({
+      resource_type: 'prompt',
+      action: 'create',
+      id: 'sv_dpair',
+      category: 'general',
+      name: 'sv_dpair',
+      description: 'e2e ungated chain of default-gated steps',
+      user_message_template: 'CHAIN-OWN-TEMPLATE',
+      arguments: TOPIC,
+      gate_configuration: OPT_OUT,
+      chain_steps: [
+        { promptId: 'sv_d', stepName: 'A' },
+        { promptId: 'sv_e', stepName: 'B' },
+      ],
+    });
+    await author({
+      resource_type: 'gate',
+      action: 'create',
+      id: 'sv-drop',
+      name: 'sv-drop',
+      description: 'blocking e2e gate on a step a replace remainder drops',
+      guidance: 'GUIDANCE-sv-drop',
+      enforcement_mode: 'blocking',
+    });
     // 32 steps: one node naming it plus one more is 33 expanded nodes, past the cap of 32.
     await author({
       resource_type: 'prompt',
@@ -1328,6 +1366,128 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
         '- cap-exceeded: Expanding chain prompt "sv_big" yields 32 nodes; the expanded workflow has 32 nodes, exceeding the effective maxNodes cap of 29'
       );
       expect(runNodes(run.chainId)).toEqual(PLANNED);
+    }, 120000);
+
+    /** The node the run stands on, as `chain_runs.current_node_id` holds it. */
+    function currentNode(chainId: string): string | null {
+      const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+      try {
+        const row = db
+          .prepare('SELECT current_node_id FROM chain_runs WHERE chain_id = ?')
+          .get(chainId) as { current_node_id: string | null } | undefined;
+        return row?.current_node_id ?? null;
+      } finally {
+        db.close();
+      }
+    }
+
+    /** The gate reminders a step render asks the verdict to attest. */
+    const reminders = (text: string): string | undefined =>
+      /"reminders": \{"satisfied": (\[[^\]]*\])/.exec(text)?.[1];
+
+    const blockingUnknown = {
+      observations: [
+        {
+          type: 'unknown_discovered',
+          id: 'u-160',
+          statement: 'the rest of the plan is undecided',
+          blocking: true,
+        },
+      ],
+    };
+
+    /**
+     * P6.160 / R71. MEASURED 2026-09-27 on `0900e73d` (shipped defaults, CAGEERF): the ungated
+     * `sv_dpair` remainder rendered its steps with no gates at all, and a FAIL on `r1-b` was
+     * refused "Step 5 carries no gates", while the same prompts as planned steps carry the
+     * category and framework defaults. Only a GATED contributed node joined the gate walk.
+     */
+    test('P6.160 (a) an ungated remainder step carries the default gates a planned step does', async () => {
+      // The planned step's gate set, as its render asks the verdict to attest it. A planned
+      // step's own FAIL review is not the comparison: its CAGEERF phase guard grades the answer
+      // first and the review it opens is the structural one.
+      const planned = await start({ command: `>>sv_d${ARROW}>>sv_e` });
+      const plannedGates = JSON.parse(reminders(planned.text) ?? '[]') as string[];
+      expect(plannedGates).toEqual(['content-structure', 'framework-compliance']);
+
+      const { run, reply } = await appendTo(remainder({ promptId: 'sv_dpair' }));
+      expect(reply.isError).toBe(false);
+      const first = await run.call({ user_response: 'B out' });
+      expect(templates(first)).toEqual(['BODY-sv_d topic=']);
+      await run.call({ user_response: 'r1-a out', gate_verdict: PASS });
+      expect(currentNode(run.chainId)).toBe('r1-b');
+      const failed = await run.call({ user_response: 'r1-b out', gate_verdict: FAIL });
+      expect(failed).not.toContain('carries no gates');
+      expect(runState(run.chainId).reviews).toEqual({ 'r1-b': plannedGates });
+    }, 120000);
+
+    /**
+     * P6.160 / R71. MEASURED 2026-09-27 on `0900e73d`: a `replace` remainder dropping the planned
+     * `n2` (bound to `sv-drop`) ran its `sv_chain` steps with reviews `[sv-drop, sv-block]` — the
+     * joined steps were walked AFTER every parse step, so they accumulated the gate of a step the
+     * run no longer has. The walk now follows the run's node order.
+     */
+    test('P6.160 (b) a replace remainder walks in run order: the dropped step contributes nothing', async () => {
+      const run = await start({ command: `>>sv_a${ARROW}>>sv_b :: sv-drop` });
+      expect(runState(run.chainId).steps).toEqual(['n1:sv_a:[]', 'n2:sv_b:["sv-drop"]']);
+      await run.call({ user_response: 'A out', ...blockingUnknown });
+      const replaced = await tool('prompt_engine', {
+        chain_id: run.chainId,
+        user_response: 'investigated',
+        remainder: { mode: 'replace', nodes: [{ id: 'r1', promptId: 'sv_chain' }] },
+      });
+      expect(replaced.isError).toBe(false);
+      expect(runNodes(run.chainId)).toEqual([
+        'n1:sv_a:planned',
+        'inv-u-160:investigate_unknown:inserted',
+        'r1-a:sv_a:remainder',
+        'r1-b:sv_b:remainder',
+        'r1-c:sv_a:remainder',
+      ]);
+      if (currentNode(run.chainId) === 'inv-u-160') {
+        await run.call({ user_response: 'investigated again', gate_verdict: PASS });
+      }
+      const sequence: Array<Record<string, string[]>> = [];
+      for (const id of ['r1-a', 'r1-b', 'r1-c']) {
+        expect(currentNode(run.chainId)).toBe(id);
+        await run.call({ user_response: `${id} out`, gate_verdict: FAIL });
+        sequence.push(runState(run.chainId).reviews);
+        await run.call({ user_response: `${id} fixed`, gate_verdict: PASS });
+      }
+      expect(sequence).toEqual([
+        { 'r1-a': ['sv-block'] },
+        { 'r1-b': ['sv-block'] },
+        { 'r1-c': ['sv-block'] },
+      ]);
+    }, 120000);
+
+    /**
+     * P6.160 / R71. MEASURED 2026-09-27 on `0900e73d`: a gated single prompt is a run of one node
+     * with no parse steps, so gate enhancement resolved it as a single prompt and never joined the
+     * `sv_chain` remainder: a FAIL on `r1-a` opened no review and was reported as an advisory
+     * warning of the base prompt's own criterion.
+     */
+    test('P6.160 (c) a gated remainder on a one-node base opens its review', async () => {
+      const run = await start({ command: '>>sv_a :: "CRIT-160"' });
+      expect(runState(run.chainId).steps).toEqual([]);
+      await run.call({ user_response: 'out', ...blockingUnknown });
+      const appended = await tool('prompt_engine', {
+        chain_id: run.chainId,
+        user_response: 'investigated',
+        ...remainder({ promptId: 'sv_chain' }),
+      });
+      expect(appended.isError).toBe(false);
+      expect(runNodes(run.chainId).slice(-3)).toEqual([
+        'r1-a:sv_a:remainder',
+        'r1-b:sv_b:remainder',
+        'r1-c:sv_a:remainder',
+      ]);
+      expect(currentNode(run.chainId)).toBe('r1-a');
+      const failed = await run.call({ user_response: 'r1-a out', gate_verdict: FAIL });
+      expect(failed).not.toContain('Advisory Gate Warnings');
+      const review = runState(run.chainId).reviews;
+      expect(Object.keys(review)).toEqual(['r1-a']);
+      expect(review['r1-a']).toContain('sv-block');
     }, 120000);
   });
 
