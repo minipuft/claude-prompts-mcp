@@ -9,7 +9,6 @@ import type {
   WorkflowEdge,
   WorkflowIR,
   WorkflowNode,
-  WorkflowPromptInfo,
   WorkflowRejection,
 } from '#modules/workflow-ir/types.js';
 import type {
@@ -108,16 +107,6 @@ function foldCommandGatesOntoSteps(
     inlineGateCriteria: Array.from(new Set([...(step.inlineGateCriteria ?? []), ...folded])),
   }));
   delete parsedCommand.inlineGateCriteria;
-}
-
-/**
- * A resolved prompt's validator projection with `required` withheld: the arrow-chain source does
- * not enforce it (see `buildSymbolicChain`). Existence still answers through the shared lookup.
- */
-function withoutRequiredArguments(
-  info: WorkflowPromptInfo | undefined
-): WorkflowPromptInfo | undefined {
-  return info === undefined ? undefined : { ...info, requiredArguments: [] };
 }
 
 /**
@@ -397,15 +386,15 @@ export class SymbolicCommandBuilder {
     // P6.105: the same validator, expanding as the workflow source does, so a chain-prompt
     // segment counts its steps against the node cap and a request gate naming the segment's node
     // is retargeted to its last step. The node's args are the command string's, resolved above
-    // through `ArgumentParser`, which does not enforce `required` on this source (P7-F6) — so
-    // `required` is left out of what the validator is told, and the IR-only check stays IR-only.
+    // through `ArgumentParser`, which fills every declared argument (`""` when nothing supplies
+    // it), so the validator's `required` check is told the full lookup and never fires here
+    // (P6.123: a lookup withholding `required` answered the same question a second time).
     // P6.117: the request's gates ride on the IR the validator checks, so a `target_step_id` no
     // segment declares is refused `gate-target-missing` as on the workflow source. Validation
     // only: they stay request gates, registered from `requestedOverrides` at stage 11.
-    const promptInfo = workflowPromptInfoLookup(lookupPrompt);
     const validated = requestGates.length > 0 ? { ...ir, gates: requestGates } : ir;
     const validation = this.workflowIr.validate(validated, {
-      lookupPrompt: (promptId) => withoutRequiredArguments(promptInfo(promptId)),
+      lookupPrompt: workflowPromptInfoLookup(lookupPrompt),
       expandWith: lookupPrompt,
     });
     if (!validation.ok) {
