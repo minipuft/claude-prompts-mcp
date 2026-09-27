@@ -195,6 +195,32 @@ describe('S9 — inline gate token attribution in symbolic chains', () => {
       expect(parsedCommand.inlineGateCriteria ?? []).toEqual([]);
     });
 
+    test('P6.110: one name declared in two segments binds each segment to its own occurrence', async () => {
+      const arrow = ' -' + '-> ';
+      const command = `>>a :: g110:"ONE"${arrow}>>b :: g110:"TWO"${arrow}>>a`;
+      const detection = parser.detectOperators(command);
+      const parseResult = parser.buildParseResult(command, detection, 'a', '');
+
+      expect(parseResult.executionPlan.steps.map((step) => step.inlineGateCriteria)).toEqual([
+        ['g110'],
+        ['g110#2'],
+        undefined,
+      ]);
+      const built = await createBuilder().buildSymbolicCommand(parseResult, (id: string) =>
+        makePrompt(id)
+      );
+      if (!built.ok) throw new Error(JSON.stringify(built.rejections));
+      expect(built.parsedCommand.namedInlineGates?.map((gate) => gate.criteria)).toEqual([
+        ['ONE'],
+        ['TWO'],
+      ]);
+      expect(built.parsedCommand.steps?.map((step) => step.inlineGateCriteria)).toEqual([
+        ['g110'],
+        ['g110#2'],
+        [],
+      ]);
+    });
+
     test("P6.99: a named gate registers globally and binds only its own segment's node", async () => {
       const command = '>>a :: security:"no secrets" --> >>b';
       const detection = parser.detectOperators(command);

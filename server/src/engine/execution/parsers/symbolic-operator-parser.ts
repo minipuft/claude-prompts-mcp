@@ -37,6 +37,21 @@ import { mintSequentialIds } from '#shared/utils/node-order.js';
 export type FrameworkIdLookup = (normalizedId: string) => boolean;
 
 /**
+ * The criteria entry a step carries to bind the `occurrence`-th named gate declared under `name`
+ * in one command (P6.110): the plain name for the first, `<name>#<n>` for each later one.
+ *
+ * One name in two arrow-chain segments is two gates, each bound to its own segment. Both
+ * register (the second under a fresh id, P6.97), so a key by name alone resolved every segment
+ * to whichever registered last. The parser writes this key into the segment's criteria, the
+ * builder into a chain prompt's folded steps, and `InlineGateProcessor.processInlineGates`
+ * maps it to the id the gate registered under — one derivation for the three. `#` cannot occur
+ * in a declared gate id, so a key never collides with another name.
+ */
+export function namedGateBindingKey(name: string, occurrence: number): string {
+  return occurrence <= 1 ? name : `${name}#${occurrence}`;
+}
+
+/**
  * Parser responsible for detecting and structuring symbolic command operators.
  *
  * The parser keeps regex-based detection isolated from the unified parser so that
@@ -466,6 +481,9 @@ export class SymbolicCommandParser {
       splitResults.map((r) => `${r.delegated ? '==> ' : ''}${r.text}`)
     );
 
+    // Named gates seen so far, by name, across segments in order (P6.110): the Nth segment
+    // declaring a name binds the Nth gate registered under it, not the last.
+    const namedOccurrences = new Map<string, number>();
     const steps: ChainStep[] = splitResults.map((result, index) => {
       // Clean operators from individual steps before validation
       // This allows syntax like: @CAGEERF >>step1 --> %lean @ReACT >>step2
@@ -475,8 +493,10 @@ export class SymbolicCommandParser {
       // S9: pull `::`-form gate tokens out of THIS segment before the promptId/args regex
       // runs, so a token like `:: code-quality` neither pollutes the step's positional args
       // nor evaporates — anonymous/canonical criteria attach to this step.
-      const { text: gateFreeStep, criteria: stepGateCriteria } =
-        this.extractInlineGateTokens(cleanedStep);
+      const { text: gateFreeStep, criteria: stepGateCriteria } = this.extractInlineGateTokens(
+        cleanedStep,
+        namedOccurrences
+      );
 
       const stepMatch = gateFreeStep.match(/^(?:>>)?([A-Za-z0-9_-]+)(?:\s+([\s\S]*))?$/);
       if (!stepMatch) {
@@ -541,15 +561,22 @@ export class SymbolicCommandParser {
   /**
    * What one `::` token attaches to the segment carrying it, or `undefined` when the match is not a
    * gate token to strip. A named gate REGISTERS once, globally (`namedInlineGates`, stage 05, under
-   * its own id); its id joins the segment's criteria so the segment's node binds it (R44) — the
+   * its own id); its binding key (`namedGateBindingKey`: the id, or `<id>#<n>` for the Nth
+   * segment declaring it, P6.110) joins the segment's criteria so the segment's node binds it (R44) — the
    * representation `foldCommandGatesOntoSteps` gives a chain prompt's steps (R37), which is what
    * lets an expanded chain-prompt segment carry it to every step. A shell verification binds no
    * segment: it stays the run's command-level check (R32).
    */
-  private segmentGateCriteria(match: RegExpMatchArray): string[] | undefined {
+  private segmentGateCriteria(
+    match: RegExpMatchArray,
+    namedOccurrences: Map<string, number>
+  ): string[] | undefined {
     const [, , namedColonId, namedColonText, anonQuoted, canonicalOrUnquoted] = match;
     if (namedColonId != null && namedColonText != null) {
-      return namedColonId === 'verify' ? [] : [namedColonId];
+      if (namedColonId === 'verify') return [];
+      const occurrence = (namedOccurrences.get(namedColonId) ?? 0) + 1;
+      namedOccurrences.set(namedColonId, occurrence);
+      return [namedGateBindingKey(namedColonId, occurrence)];
     }
     const text = anonQuoted ?? canonicalOrUnquoted;
     return text != null ? this.parseCriteria(text) : undefined;
@@ -569,7 +596,10 @@ export class SymbolicCommandParser {
    * the reason gate stripping was historically skipped in parseChainOperator entirely.
    * Quote-aware: tokens inside quoted argument values are never matched.
    */
-  private extractInlineGateTokens(segment: string): { text: string; criteria: string[] } {
+  private extractInlineGateTokens(
+    segment: string,
+    namedOccurrences: Map<string, number>
+  ): { text: string; criteria: string[] } {
     const criteria: string[] = [];
     const removals: Array<{ start: number; end: number }> = [];
 
@@ -582,7 +612,7 @@ export class SymbolicCommandParser {
         continue;
       }
 
-      const segmentCriteria = this.segmentGateCriteria(match);
+      const segmentCriteria = this.segmentGateCriteria(match, namedOccurrences);
       if (segmentCriteria !== undefined) {
         criteria.push(...segmentCriteria);
         removals.push({ start: index, end: index + match[0].length });

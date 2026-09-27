@@ -1,4 +1,4 @@
-// @lifecycle test - P6.79 / P6.80 / R40: an arrow-chain segment or a workflow node naming a chain prompt runs that prompt's steps; P6.78 / R37: a command-level gate on a chain prompt binds each step; P6.97 / R43: a named inline gate belongs to the run that declared it; P6.99 / R44: a named gate on an arrow-chain segment binds that segment; P6.108 / R47: a run's temporary gates live exactly as long as the run; P6.104: a run's request gates reach every node they target; P6.107: a request gate id belongs to the run that holds it; P6.105: the arrow-chain source validates the expanded workflow, over Streamable HTTP.
+// @lifecycle test - P6.79 / P6.80 / R40: an arrow-chain segment or a workflow node naming a chain prompt runs that prompt's steps; P6.78 / R37: a command-level gate on a chain prompt binds each step; P6.97 / R43: a named inline gate belongs to the run that declared it; P6.99 / R44: a named gate on an arrow-chain segment binds that segment; P6.108 / R47: a run's temporary gates live exactly as long as the run; P6.104: a run's request gates reach every node they target; P6.107: a request gate id belongs to the run that holds it; P6.105: the arrow-chain source validates the expanded workflow; P6.110: one name in two arrow-chain segments is two gates, over Streamable HTTP.
 /**
  * MEASURED 2026-09-25 on `427899fe` (authored `sv_chain` = sv_a/sv_b/sv_a, each step carrying the
  * blocking `sv-block`; run state read from `chain_runs.state`):
@@ -691,6 +691,48 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
         true,
         true,
       ]);
+    }, 120000);
+  });
+
+  /**
+   * MEASURED 2026-09-26 on `35959ffb`: arrow-chain `>>sv_a :: g110:"ONE-110"` then
+   * `>>sv_b :: g110:"TWO-110"` registered both gates (`g110`, `g110-2`), but the per-call
+   * declared-name map kept the last, so both segments bound `g110-2` and step 1 rendered TWO.
+   */
+  describe('P6.110: one name in two arrow-chain segments is two gates', () => {
+    test('(a) each segment binds, renders and reviews its own criteria', async () => {
+      const run = await start({
+        command: `>>sv_a :: g110:"ONE-110"${ARROW}>>sv_b :: g110:"TWO-110"`,
+      });
+      expect(runState(run.chainId).steps).toEqual(['n1:sv_a:["g110"]', 'n2:sv_b:["g110-2"]']);
+      expect(run.text).toContain('ONE-110');
+      expect(run.text).not.toContain('TWO-110');
+      const failedFirst = await run.call({ user_response: 'A out', gate_verdict: FAIL });
+      expect(failedFirst).toContain('Gate Review Required');
+      expect(failedFirst).toContain('ONE-110');
+      expect(failedFirst).not.toContain('TWO-110');
+      expect(runState(run.chainId).reviews).toEqual({ n1: ['g110'] });
+
+      const second = await run.call({ user_response: 'A fixed', gate_verdict: PASS });
+      expect(templates(second)).toEqual(['BODY-sv_b topic=']);
+      expect(second).toContain('TWO-110');
+      // Step 2's render and review also list step 1's `g110` through the forward accumulation
+      // P6.98 leaves to the owner's ruling (as P6.99 (b) pins), so step 2 is pinned on its bound
+      // gate and on its review carrying `g110-2`.
+      const failedSecond = await run.call({ user_response: 'B out', gate_verdict: FAIL });
+      expect(failedSecond).toContain('TWO-110');
+      const reviews = runState(run.chainId).reviews;
+      expect(Object.keys(reviews)).toEqual(['n2']);
+      expect(reviews['n2']).toContain('g110-2');
+    }, 120000);
+
+    test('(b) control: one name in one segment binds that segment only', async () => {
+      const run = await start({ command: `>>sv_a :: g110c:"ONLY-110"${ARROW}>>sv_b` });
+      expect(runState(run.chainId).steps).toEqual(['n1:sv_a:["g110c"]', 'n2:sv_b:[]']);
+      expect(run.text).toContain('ONLY-110');
+      const failed = await run.call({ user_response: 'A out', gate_verdict: FAIL });
+      expect(failed).toContain('ONLY-110');
+      expect(runState(run.chainId).reviews).toEqual({ n1: ['g110c'] });
     }, 120000);
   });
 

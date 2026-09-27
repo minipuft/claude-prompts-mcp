@@ -1,4 +1,4 @@
-// @lifecycle canonical - P6.97 / R43: a named inline gate belongs to the run that declared it.
+// @lifecycle canonical - P6.97 / R43: a named inline gate belongs to the run that declared it. P6.110: one name in two segments is two gates.
 /**
  * MEASURED 2026-09-25 on `a5ea0338` (driven, one server): `>>sv_chain :: g97:"CRIT-ONE"`, then a
  * second run `>>sv_chain :: g97:"CRIT-TWO"` rendered and reviewed `CRIT-ONE`. The registry threw
@@ -105,5 +105,55 @@ describe('InlineGateProcessor: two runs declaring one named gate id', () => {
     ]);
     expect(registry.getTemporaryGate('g97')?.pass_criteria).toEqual(['CRIT-ONE']);
     expect(registry.getTemporaryGate('g97-2')?.pass_criteria).toEqual(['CRIT-TWO']);
+  });
+});
+
+/**
+ * P6.110: one named id in two arrow-chain segments with different criteria. MEASURED 2026-09-26
+ * on `35959ffb` (driven): both registered (`g110`, `g110-2`), and both segments bound `g110-2`,
+ * because the declared-name map kept the last. The parser now writes `g110` on the first segment
+ * and `g110#2` on the second (`namedGateBindingKey`), and the processor keys by occurrence.
+ */
+describe('InlineGateProcessor: one name declared in two segments', () => {
+  const twoSegments = (secondKey: string): ParsedCommand =>
+    ({
+      promptId: 'sv_a',
+      rawArgs: '',
+      format: 'symbolic',
+      confidence: 1,
+      metadata: {
+        originalCommand: '',
+        parseStrategy: 'symbolic',
+        detectedFormat: 'symbolic',
+        warnings: [],
+      },
+      namedInlineGates: [
+        { gateId: 'g110', criteria: ['ONE'] },
+        { gateId: 'g110', criteria: ['TWO'] },
+      ],
+      steps: [
+        { stepNumber: 1, promptId: 'sv_a', args: {}, inlineGateCriteria: ['g110'] },
+        { stepNumber: 2, promptId: 'sv_b', args: {}, inlineGateCriteria: [secondKey] },
+      ],
+    }) as unknown as ParsedCommand;
+
+  test('each segment binds the gate it declared', async () => {
+    const registry = new TemporaryGateRegistry(logger());
+    const processor = new InlineGateProcessor(registry, inlineResolver, logger());
+    const command = twoSegments('g110#2');
+    await processor.processInlineGates(new ExecutionContext({ command: 'run' }), command);
+
+    expect(command.steps?.map((step) => step.inlineGateIds)).toEqual([['g110'], ['g110-2']]);
+    expect(registry.getTemporaryGate('g110')?.pass_criteria).toEqual(['ONE']);
+    expect(registry.getTemporaryGate('g110-2')?.pass_criteria).toEqual(['TWO']);
+  });
+
+  test('control: a second segment naming the plain id binds the first declaration', async () => {
+    const registry = new TemporaryGateRegistry(logger());
+    const processor = new InlineGateProcessor(registry, inlineResolver, logger());
+    const command = twoSegments('g110');
+    await processor.processInlineGates(new ExecutionContext({ command: 'run' }), command);
+
+    expect(command.steps?.map((step) => step.inlineGateIds)).toEqual([['g110'], ['g110']]);
   });
 });

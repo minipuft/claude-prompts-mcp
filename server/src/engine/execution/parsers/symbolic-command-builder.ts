@@ -1,6 +1,7 @@
 // @lifecycle canonical - Builds ParsedCommand structures from symbolic operator parse results.
 
 import { projectChainPromptSteps } from './chain-step-projection.js';
+import { namedGateBindingKey } from './symbolic-operator-parser.js';
 import { workflowPromptInfoLookup } from '../workflow-prompt-lookup.js';
 
 import type { Logger } from '#infra/logging/index.js';
@@ -75,9 +76,17 @@ function foldCommandGatesOntoSteps(
   anonymousCriteria: readonly string[],
   namedGates: readonly CollectedNamedGate[]
 ): void {
+  const occurrences = new Map<string, number>();
   const folded = [
     ...anonymousCriteria,
-    ...namedGates.filter((gate) => gate.shellVerify === undefined).map((gate) => gate.gateId),
+    ...namedGates
+      .filter((gate) => gate.shellVerify === undefined)
+      .map((gate) => {
+        // A name declared twice is two gates (P6.110): each binds under its own key.
+        const occurrence = (occurrences.get(gate.gateId) ?? 0) + 1;
+        occurrences.set(gate.gateId, occurrence);
+        return namedGateBindingKey(gate.gateId, occurrence);
+      }),
   ];
   if (folded.length === 0 || parsedCommand.steps === undefined) return;
   parsedCommand.steps = parsedCommand.steps.map((step) => ({
