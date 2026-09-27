@@ -452,7 +452,8 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     expect(failed).toContain('A-ONE');
     expect(failed).not.toContain('B-ONE');
     expect(runRow(roots, chainId)?.reviews).toEqual({ a: ['sv-block', 'g140-2'] });
-    // The tier map follows too: the remapped gate is still a reminder the verdict attests.
+    // The remapped gate is still a reminder the verdict attests (stage 20 derives the tiers from
+    // the review's rewritten ids; the store's own tier-map rewrite is pinned in the unit test).
     expect(failed).toContain('"satisfied": ["sv-block", "g140-2"]');
 
     // P6.141 (a): the run's inline gate ids read through the same remap.
