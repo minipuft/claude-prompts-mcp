@@ -96,6 +96,11 @@ describe('InlineGateProcessor.restoreRunGates', () => {
   test('(b) control: in the process that holds them, nothing registers', async () => {
     const registry = new TemporaryGateRegistry(logger());
     const started = await startRun(registry);
+    // The pipeline's `finally` hands the start call's gates to the run it created (R47).
+    registry.adoptIntoRun('run-1', [
+      ...(started.inlineGateIds ?? []),
+      ...(started.steps ?? []).flatMap((step) => step.inlineGateIds ?? []),
+    ]);
     const processor = new InlineGateProcessor(registry, resolver, logger());
     const { context, parsed } = restoredOn(started, 'run-1');
 
@@ -124,6 +129,45 @@ describe('InlineGateProcessor.restoreRunGates', () => {
 
     expect(registry.getTemporaryGate('g112-2')?.pass_criteria).toEqual(['NAMED']);
     expect(registry.getTemporaryGate('g112')).toBeUndefined();
+  });
+
+  test('P6.129 (f) a recorded id another run holds here restores under a fresh id the restored command references', async () => {
+    const started = await startRun(new TemporaryGateRegistry(logger()));
+    expect(started.inlineGateIds).toEqual(['g112']);
+
+    const registry = new TemporaryGateRegistry(logger());
+    registry.adoptIntoRun('run-other', [
+      registry.createTemporaryGate({
+        id: 'g112',
+        name: 'g112',
+        type: 'validation',
+        scope: 'execution',
+        description: 'the claiming server run',
+        guidance: 'OTHER',
+        pass_criteria: ['OTHER'],
+        source: 'automatic',
+      }),
+    ]);
+    const processor = new InlineGateProcessor(registry, resolver, logger());
+    const { context, parsed } = restoredOn(started, 'run-1');
+    const restored = await processor.restoreRunGates(context, parsed);
+
+    expect(restored).toContain('g112-2');
+    expect(registry.getTemporaryGate('g112-2')?.pass_criteria).toEqual(['NAMED']);
+    expect(registry.getTemporaryGate('g112-2')?.declared_key).toBe('g112');
+    expect(registry.getTemporaryGate('g112')?.pass_criteria).toEqual(['OTHER']);
+    expect(parsed.inlineGateIds).toEqual(['g112-2']);
+    expect(parsed.steps?.map((step) => step.inlineGateIds?.slice(0, 2))).toEqual([
+      ['sv-block', 'g112-2'],
+      ['sv-block', 'g112-2'],
+    ]);
+    // The blueprint keeps the recorded id; the next call re-reads the run's own gate by its key.
+    expect(started.inlineGateIds).toEqual(['g112']);
+    registry.adoptIntoRun('run-1', restored);
+    const next = restoredOn(started, 'run-1');
+    expect(await processor.restoreRunGates(next.context, next.parsed)).toEqual([]);
+    expect(next.parsed.inlineGateIds).toEqual(['g112-2']);
+    expect(registry.getTemporaryGate('g112-3')).toBeUndefined();
   });
 
   test('(e) a criterion naming another gate by its generated id stays a reference', async () => {

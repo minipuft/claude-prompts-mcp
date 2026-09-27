@@ -10,6 +10,7 @@
  * | inline definition | `temporary-gate-registrar.ts` `registerOneInlineDefinition` | `inline_gate_definitions[].id` | `resolveHeldForThisRun` |
  * | named inline gate | `inline-gate-processor.ts` `createNamedInlineGate` | `:: name:"…"` | `declaredNamedGates` |
  * | anonymous criteria | `inline-gate-processor.ts` `createInlineGate` | none | exempt: the registry mints `temp_…` |
+ * | claimed named gate | `inline-gate-processor.ts` `restoreRunGates` | the recorded id | `resolveDeclared` (P6.129, R60) |
  *
  * Each non-exempt row drives its real caller twice on one run holding the id: the second call must
  * not reach `createTemporaryGate` with that id. The call-site count is asserted against this
@@ -111,6 +112,18 @@ const CALLERS: readonly CreateCaller[] = [
       const parsed = namedCommand();
       await processor.processInlineGates(callOf(runId), parsed);
       return parsed.inlineGateIds ?? [];
+    },
+  },
+  {
+    name: 'claimed named gate',
+    site: 'engine/gates/services/inline-gate-processor.ts',
+    heldId: 'g120',
+    // A restore runs only on a resume, so the first call is already the run's.
+    call: async (registry, runId) => {
+      const processor = new InlineGateProcessor(registry, inlineResolver, logger());
+      const context = callOf(runId ?? 'run-120');
+      context.state.session.isBlueprintRestored = true;
+      return processor.restoreRunGates(context, { ...namedCommand(), inlineGateIds: ['g120'] });
     },
   },
   {

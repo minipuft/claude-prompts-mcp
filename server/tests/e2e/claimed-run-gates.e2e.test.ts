@@ -17,6 +17,11 @@
  * each temporary gate the blueprint references and this process does not hold, under the id the
  * blueprint recorded, and hands the start call's request gates (`parsedCommand.requestGates`,
  * written by stage 13) back to stage 11 when the run owns none.
+ *
+ * P6.129 / R60 (measured 2026-09-27 on `1c1603d5`): when the claiming server already ran another
+ * run declaring `g129`, the claimed step 2 rendered that run's `B-ONE`, not its own `A-ONE` — the
+ * recorded id was held, so nothing restored, and the steps carry registered ids, not declared
+ * names. Now it registers under `g129-2` and this call's restored command references that id.
  */
 import { afterEach, describe, expect, test } from '@jest/globals';
 
@@ -184,7 +189,8 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
   /** Start a run on a first server, mint its handoff, and claim it on a second one. */
   async function claimOnSecondServer(
     roots: Roots,
-    start: Record<string, unknown>
+    start: Record<string, unknown>,
+    beforeClaim?: (second: Server) => Promise<void>
   ): Promise<{ chainId: string; second: Server; firstReply: string }> {
     const first = await startServer(roots);
     await authorResources(first);
@@ -196,6 +202,7 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     // The second server starts while the first owns the row: a start after the first exits
     // deletes the dead owner's runs (pinned below).
     const second = await startServer(roots);
+    await beforeClaim?.(second);
     await first.stop();
     const claimed = await second.call('prompt_engine', {
       claim_token: token,
@@ -285,5 +292,69 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
       gate_verdict: FAIL,
     });
     expect(runRow(roots, chainId)?.reviews).toEqual({ b: ['sv-block'] });
+  }, 180000);
+  /** The `chain_sessions` projection rows for `chainId`: owner PID and projected step. */
+  function projectionRows(roots: Roots, chainId: string): Array<{ pid: string; step: number }> {
+    const db = new DatabaseSync(path.join(roots.runtimeRoot, 'runtime-state', 'state.db'));
+    try {
+      const rows = db
+        .prepare('SELECT run_owner_pid, state FROM chain_sessions WHERE chain_id = ? ORDER BY id')
+        .all(chainId) as Array<{ run_owner_pid: string; state: string }>;
+      return rows.map((row) => ({
+        pid: row.run_owner_pid,
+        step: (JSON.parse(row.state) as { currentStep: number }).currentStep,
+      }));
+    } finally {
+      db.close();
+    }
+  }
+
+  test('P6.129 (a) a claimed named gate whose id the claiming server holds for another run keeps its own criteria', async () => {
+    const roots = freshRoots();
+    let otherChainId = '';
+    const { chainId, second, firstReply } = await claimOnSecondServer(
+      roots,
+      { command: '>>sv_chain :: g129:"A-ONE"' },
+      async (server) => {
+        await server.call('resource_manager', {
+          resource_type: 'prompt',
+          action: 'create',
+          id: 'sv_chain_other',
+          category: 'general',
+          name: 'sv_chain_other',
+          description: 'a second chain the claiming server runs',
+          user_message_template: 'OTHER-OWN-TEMPLATE',
+          gate_configuration: OPT_OUT,
+          chain_steps: [
+            { promptId: 'sv_a', stepName: 'A' },
+            { promptId: 'sv_b', stepName: 'B' },
+          ],
+        });
+        const other = await server.call('prompt_engine', {
+          command: '>>sv_chain_other :: g129:"B-ONE"',
+        });
+        expect(other.text).toContain('B-ONE');
+        otherChainId = chainIdOf(other.text);
+      }
+    );
+    expect(firstReply).toContain('A-ONE');
+    expect(firstReply).not.toContain('B-ONE');
+
+    const failed = await second.call('prompt_engine', {
+      chain_id: chainId,
+      user_response: 'B out',
+      gate_verdict: FAIL,
+    });
+    expect(failed.text).toContain('A-ONE');
+    expect(failed.text).not.toContain('B-ONE');
+    expect(runRow(roots, chainId)?.reviews).toEqual({ b: ['sv-block', 'g129-2'] });
+
+    const other = await second.call('prompt_engine', {
+      chain_id: otherChainId,
+      user_response: 'A out',
+      gate_verdict: PASS,
+    });
+    expect(other.text).toContain('B-ONE');
+    expect(other.text).not.toContain('A-ONE');
   }, 180000);
 });
