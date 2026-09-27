@@ -17,6 +17,16 @@
  * each temporary gate the blueprint references and this process does not hold, under the id the
  * blueprint recorded, and hands the start call's request gates (`parsedCommand.requestGates`,
  * written by stage 13) back to stage 11 when the run owns none.
+ *
+ * P6.129 / R60 (measured 2026-09-27 on `1c1603d5`): when the claiming server already ran another
+ * run declaring `g129`, the claimed step 2 rendered that run's `B-ONE`, not its own `A-ONE` — the
+ * recorded id was held, so nothing restored, and the steps carry registered ids, not declared
+ * names. Now it registers under `g129-2` and this call's restored command references that id.
+ *
+ * P6.130 / R61 (measured 2026-09-27 on `b7a08753`): after a claim `chain_sessions` held the dead
+ * first owner's row (step 1) and the claimer's (step 2) until a later startup's cleanup. The hooks
+ * loader already served the claimer's (its PID-liveness check skips the dead row); the projection
+ * now drops another PID's row for a run it projects, so it holds exactly the owner's.
  */
 import { afterEach, describe, expect, test } from '@jest/globals';
 
@@ -43,6 +53,8 @@ const REQUEST_GATES = [{ id: 'rq112', name: 'rq112', criteria: ['REQ-112'], targ
 const MARKERS = ['NAMED-112', 'ANON-112', 'REQ-112', 'GUIDANCE-sv-block'];
 
 interface Server {
+  /** The server process's PID, which `chain_sessions.run_owner_pid` records. */
+  pid: string;
   call(name: string, args: Record<string, unknown>): Promise<{ isError: boolean; text: string }>;
   stop(): Promise<void>;
 }
@@ -92,6 +104,7 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     const client = new ModernMcpClient(baseUrl, 'claimed-run-gates-e2e');
     let nextId = 1;
     return {
+      pid: String(proc.pid),
       call: async (name, args) => {
         const outcome = await client.callToolWithNotifications(name, args, nextId++);
         const result = outcome.result as
@@ -184,8 +197,9 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
   /** Start a run on a first server, mint its handoff, and claim it on a second one. */
   async function claimOnSecondServer(
     roots: Roots,
-    start: Record<string, unknown>
-  ): Promise<{ chainId: string; second: Server; firstReply: string }> {
+    start: Record<string, unknown>,
+    beforeClaim?: (second: Server) => Promise<void>
+  ): Promise<{ chainId: string; first: Server; second: Server; firstReply: string }> {
     const first = await startServer(roots);
     await authorResources(first);
     const opened = await first.call('prompt_engine', start);
@@ -196,6 +210,7 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     // The second server starts while the first owns the row: a start after the first exits
     // deletes the dead owner's runs (pinned below).
     const second = await startServer(roots);
+    await beforeClaim?.(second);
     await first.stop();
     const claimed = await second.call('prompt_engine', {
       claim_token: token,
@@ -203,7 +218,7 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
       gate_verdict: PASS,
     });
     expect(claimed.isError).toBe(false);
-    return { chainId, second, firstReply: claimed.text };
+    return { chainId, first, second, firstReply: claimed.text };
   }
 
   test('pin: a stop-and-restart leaves the run nothing to resume', async () => {
@@ -285,5 +300,119 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
       gate_verdict: FAIL,
     });
     expect(runRow(roots, chainId)?.reviews).toEqual({ b: ['sv-block'] });
+  }, 180000);
+  /** The `chain_sessions` projection rows for `chainId`: owner PID and projected step. */
+  function projectionRows(roots: Roots, chainId: string): Array<{ pid: string; step: number }> {
+    const db = new DatabaseSync(path.join(roots.runtimeRoot, 'runtime-state', 'state.db'));
+    try {
+      const rows = db
+        .prepare('SELECT run_owner_pid, state FROM chain_sessions WHERE chain_id = ? ORDER BY id')
+        .all(chainId) as Array<{ run_owner_pid: string; state: string }>;
+      return rows.map((row) => ({
+        pid: row.run_owner_pid,
+        step: (JSON.parse(row.state) as { currentStep: number }).currentStep,
+      }));
+    } finally {
+      db.close();
+    }
+  }
+
+  test('P6.129 (a) a claimed named gate whose id the claiming server holds for another run keeps its own criteria', async () => {
+    const roots = freshRoots();
+    let otherChainId = '';
+    const { chainId, second, firstReply } = await claimOnSecondServer(
+      roots,
+      { command: '>>sv_chain :: g129:"A-ONE"' },
+      async (server) => {
+        await server.call('resource_manager', {
+          resource_type: 'prompt',
+          action: 'create',
+          id: 'sv_chain_other',
+          category: 'general',
+          name: 'sv_chain_other',
+          description: 'a second chain the claiming server runs',
+          user_message_template: 'OTHER-OWN-TEMPLATE',
+          gate_configuration: OPT_OUT,
+          chain_steps: [
+            { promptId: 'sv_a', stepName: 'A' },
+            { promptId: 'sv_b', stepName: 'B' },
+          ],
+        });
+        const other = await server.call('prompt_engine', {
+          command: '>>sv_chain_other :: g129:"B-ONE"',
+        });
+        expect(other.text).toContain('B-ONE');
+        otherChainId = chainIdOf(other.text);
+      }
+    );
+    expect(firstReply).toContain('A-ONE');
+    expect(firstReply).not.toContain('B-ONE');
+
+    const failed = await second.call('prompt_engine', {
+      chain_id: chainId,
+      user_response: 'B out',
+      gate_verdict: FAIL,
+    });
+    expect(failed.text).toContain('A-ONE');
+    expect(failed.text).not.toContain('B-ONE');
+    expect(runRow(roots, chainId)?.reviews).toEqual({ b: ['sv-block', 'g129-2'] });
+
+    const other = await second.call('prompt_engine', {
+      chain_id: otherChainId,
+      user_response: 'A out',
+      gate_verdict: PASS,
+    });
+    expect(other.text).toContain('B-ONE');
+    expect(other.text).not.toContain('A-ONE');
+  }, 180000);
+
+  test('P6.130 (a) after a claim the projection holds exactly the claimer row for the run', async () => {
+    const roots = freshRoots();
+    const { chainId, first, second } = await claimOnSecondServer(roots, { command: '>>sv_chain' });
+    expect(first.pid).not.toBe(second.pid);
+    expect(projectionRows(roots, chainId)).toEqual([{ pid: second.pid, step: 2 }]);
+
+    // (c) A later startup's stale-PID cleanup finds nothing left to delete for the run.
+    const third = await startServer(roots);
+    expect(third.pid).not.toBe(second.pid);
+    expect(projectionRows(roots, chainId)).toEqual([{ pid: second.pid, step: 2 }]);
+  }, 180000);
+
+  test('P6.130 (d) control: two live servers each running their own run under one chain id keep both rows', async () => {
+    const roots = freshRoots();
+    const first = await startServer(roots);
+    await authorResources(first);
+    const second = await startServer(roots);
+    const firstChain = chainIdOf(
+      (await first.call('prompt_engine', { command: '>>sv_chain' })).text
+    );
+    const secondChain = chainIdOf(
+      (await second.call('prompt_engine', { command: '>>sv_chain' })).text
+    );
+    // Each process numbers runs from its own memory, so both mint the same id for different runs.
+    expect(secondChain).toBe(firstChain);
+    await second.call('prompt_engine', {
+      chain_id: secondChain,
+      user_response: 'A out',
+      gate_verdict: PASS,
+    });
+    expect(projectionRows(roots, firstChain)).toEqual([
+      { pid: first.pid, step: 1 },
+      { pid: second.pid, step: 2 },
+    ]);
+  }, 180000);
+
+  test('P6.130 (b) control: an unclaimed run keeps its one row', async () => {
+    const roots = freshRoots();
+    const server = await startServer(roots);
+    await authorResources(server);
+    const chainId = chainIdOf((await server.call('prompt_engine', { command: '>>sv_chain' })).text);
+    expect(projectionRows(roots, chainId)).toEqual([{ pid: server.pid, step: 1 }]);
+    await server.call('prompt_engine', {
+      chain_id: chainId,
+      user_response: 'A out',
+      gate_verdict: PASS,
+    });
+    expect(projectionRows(roots, chainId)).toEqual([{ pid: server.pid, step: 2 }]);
   }, 180000);
 });

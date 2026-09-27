@@ -16,6 +16,7 @@ import { ExecutionContext } from '../context/index.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { ExecutionRecordStore } from '#modules/chains/execution-record-store.js';
+import type { ExecutionRecord } from '#shared/types/chain-execution.js';
 import type { ChainSessionService } from '#shared/types/chain-session.js';
 import type {
   MetricsCollector,
@@ -142,11 +143,13 @@ export class PromptExecutionPipeline {
    * A start call that throws leaves a run nothing was rendered for (R55): the client got the
    * error, not step 1. "Start call" is stage 13's own `lifecycleDecision` for the call that created
    * the run (`create-new` / `create-force-restart`) — the fact stage 20 already reads for "the
-   * run-creating call". The run is cancelled, which releases its gates (`onRunEnded`); the
-   * `failed` record just written stays, and a later `chain_id` is refused naming it
-   * ({@link reportPreviousFailure}). A later call's throw leaves the run `working`.
+   * run-creating call". The run ends `failed` (R56) — the one status no other path writes, so a
+   * later `chain_id` is refused on the status itself, naming the `failed` record just written
+   * ({@link reportPreviousFailure}); an operator's `cancel` stays `cancelled`. Ending it releases
+   * its gates (`onRunEnded`, fired for every terminal status). A later call's throw leaves the run
+   * `working`.
    *
-   * A cancel that fails is logged, not thrown: this runs inside the error boundary, and the
+   * A transition that fails is logged, not thrown: this runs inside the error boundary, and the
    * failure the caller must see is the one that brought it here.
    */
   private async endRunOfFailedStartCall(context: ExecutionContext, failure: Error): Promise<void> {
@@ -160,7 +163,7 @@ export class PromptExecutionPipeline {
       return;
     }
     try {
-      await this.chainSessionStore.cancelChain(sessionId);
+      await this.chainSessionStore.transitionRunStatus(sessionId, 'failed');
     } catch (cancelError) {
       this.logger.error('[Pipeline] Could not end the run of a failed start call', {
         sessionId,
@@ -171,13 +174,15 @@ export class PromptExecutionPipeline {
   }
 
   /**
-   * Name the previous call's failure on this call's reply, once (R55). The run's newest record
-   * written before this call (below `watermark`) being the error boundary's run-level `failed`
-   * one means the call before this one threw: a resume of a live run gets the reply prefixed
-   * with it, and a resume stage 13 answered as already ended — a run a failed start call ended —
-   * is refused naming it. This call's own records then sit above that record, so the call after
-   * it says nothing. The pipeline owns this because it wrote the record, and because it is the
-   * one point every reply passes: a stage that sets a response early skips the formatting stage.
+   * Name the previous call's failure on this call's reply, once (R55). A resume stage 13 answered
+   * as already ended is refused when the run's STATUS is `failed` — only a failed start call
+   * writes it (R56) — naming the newest run-level `failed` record; any other ended run keeps
+   * stage 13's reply, so a run an operator cancelled right after a call threw reads as cancelled.
+   * On a live run, the newest record written before this call (below `watermark`) being that
+   * run-level `failed` one means the call before this one threw, and the reply is prefixed with
+   * it; this call's own records then sit above it, so the call after says nothing. The pipeline
+   * owns this because it wrote the record, and because it is the one point every reply passes: a
+   * stage that sets a response early skips the formatting stage.
    */
   private reportPreviousFailure(context: ExecutionContext, watermark: string | undefined): void {
     const response = context.response;
@@ -190,20 +195,17 @@ export class PromptExecutionPipeline {
     ) {
       return;
     }
+    const scope = context.getScopeOptions();
+    const isRunLevelFailure = (record: ExecutionRecord): boolean =>
+      record.status === 'failed' && record.nodeId === undefined && record.stepNumber === undefined;
     const earlier = this.executionRecordStore
-      .queryBySession(sessionId, context.getScopeOptions())
+      .queryBySession(sessionId, scope)
       .filter((record) => record.executionId < watermark);
-    const previous = earlier[earlier.length - 1];
-    if (
-      previous?.status !== 'failed' ||
-      previous.nodeId !== undefined ||
-      previous.stepNumber !== undefined
-    ) {
-      return;
-    }
-    const message = previous.errorMessage ?? 'no message recorded';
     if (context.state.session.lifecycleDecision === 'resume-completed') {
-      const chainId = context.state.session.resumeChainId ?? previous.chainId ?? sessionId;
+      if (this.chainSessionStore?.getSession(sessionId, scope)?.runStatus !== 'failed') return;
+      const failed = earlier.filter(isRunLevelFailure).at(-1);
+      const message = failed?.errorMessage ?? 'no message recorded';
+      const chainId = context.state.session.resumeChainId ?? failed?.chainId ?? sessionId;
       context.setResponse({
         content: [
           {
@@ -218,6 +220,11 @@ export class PromptExecutionPipeline {
       });
       return;
     }
+    const previous = earlier.at(-1);
+    if (previous === undefined || !isRunLevelFailure(previous)) {
+      return;
+    }
+    const message = previous.errorMessage ?? 'no message recorded';
     const [first, ...rest] = response.content;
     if (first?.type !== 'text') {
       return;

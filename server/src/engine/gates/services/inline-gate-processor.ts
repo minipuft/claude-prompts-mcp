@@ -23,13 +23,18 @@ interface InlineGateScope {
 /** A binding key -> the id this run's gate declared under it registered as, if any (R49). */
 type DeclaredGateView = (key: string) => string | undefined;
 
-/** Register one of a restored run's gates under the id its blueprint recorded (R54). */
+/**
+ * Register one of a restored run's gates under the id its blueprint recorded (R54); returns the id
+ * it registered. A held id registers nothing, unless `onHeld` is `'fresh-id'`: then it registers
+ * under the first free `<id>-N` (R60).
+ */
 type RestoreGate = (
   id: string,
   criteria: readonly string[],
   identity: { name: string; description: string; declared_key?: string },
-  stepNumber?: number
-) => void;
+  stepNumber?: number,
+  onHeld?: 'skip' | 'fresh-id'
+) => string | undefined;
 
 /**
  * Internal result of processing gate criteria.
@@ -232,25 +237,31 @@ export class InlineGateProcessor {
       return [];
     }
     const restored: string[] = [];
-    const restore: RestoreGate = (id, criteria, identity, stepNumber) => {
-      const registered = this.temporaryGateRegistry.restoreTemporaryGate(
-        {
-          id,
-          ...identity,
-          type: 'validation',
-          scope: stepNumber !== undefined ? 'step' : 'execution',
-          guidance: formatCriteriaAsGuidance(criteria),
-          pass_criteria: [...criteria],
-          source: 'automatic',
-        },
-        this.getScopeId(context, stepNumber)
-      );
-      if (registered) {
-        restored.push(id);
+    const restore: RestoreGate = (id, criteria, identity, stepNumber, onHeld = 'skip') => {
+      const definition = {
+        ...identity,
+        type: 'validation' as const,
+        scope: stepNumber !== undefined ? ('step' as const) : ('execution' as const),
+        guidance: formatCriteriaAsGuidance(criteria),
+        pass_criteria: [...criteria],
+        source: 'automatic' as const,
+      };
+      const scopeId = this.getScopeId(context, stepNumber);
+      const registered =
+        onHeld === 'fresh-id'
+          ? this.temporaryGateRegistry.createTemporaryGate({ id, ...definition }, scopeId, {
+              onIdCollision: 'fresh-id',
+            })
+          : this.temporaryGateRegistry.restoreTemporaryGate({ id, ...definition }, scopeId)
+            ? id
+            : undefined;
+      if (registered !== undefined) {
+        restored.push(registered);
       }
+      return registered;
     };
 
-    this.restoreNamedGates(parsedCommand, restore);
+    this.restoreNamedGates(parsedCommand, restore, runId);
     await this.restoreAnonymousGates(parsedCommand, restore, (key) =>
       this.temporaryGateRegistry.resolveDeclared(key, runId, restored)
     );
@@ -258,9 +269,21 @@ export class InlineGateProcessor {
     return restored;
   }
 
-  /** Each named gate under the id the command recorded for it: `name`, or `name-N` (R43). */
-  private restoreNamedGates(parsedCommand: ParsedCommand, restore: RestoreGate): void {
+  /**
+   * Each named gate under the id the command recorded for it: `name`, or `name-N` (R43). When
+   * that id is held here by ANOTHER run's gate (a claim onto a server running a same-named gate),
+   * the gate registers under a fresh `<id>-N` with the recorded binding key, and this call's
+   * restored command references the fresh id in place of the recorded one (R60): the steps carry
+   * registered ids, not declared names, so nothing resolves the key for them. The blueprint keeps
+   * the recorded id; every later call re-reads the run's own gate by its key.
+   */
+  private restoreNamedGates(
+    parsedCommand: ParsedCommand,
+    restore: RestoreGate,
+    runId: string
+  ): void {
     const commandIds = parsedCommand.inlineGateIds ?? [];
+    const remap = new Map<string, string>();
     const claimed = new Set<string>();
     const occurrences = new Map<string, number>();
     for (const namedGate of parsedCommand.namedInlineGates ?? []) {
@@ -272,13 +295,31 @@ export class InlineGateProcessor {
       const recordedId = commandIds.find(
         (id) => !claimed.has(id) && isRegisteredUnder(id, namedGate.gateId)
       );
-      if (recordedId !== undefined) {
-        claimed.add(recordedId);
-        restore(recordedId, namedGate.criteria, {
-          name: namedGate.gateId,
-          description: `Named inline gate "${namedGate.gateId}" from symbolic syntax`,
-          declared_key: namedGateBindingKey(namedGate.gateId, occurrence),
-        });
+      if (recordedId === undefined) {
+        continue;
+      }
+      claimed.add(recordedId);
+      const bindingKey = namedGateBindingKey(namedGate.gateId, occurrence);
+      const ownId =
+        this.temporaryGateRegistry.resolveDeclared(bindingKey, runId, []) ??
+        restore(
+          recordedId,
+          namedGate.criteria,
+          {
+            name: namedGate.gateId,
+            description: `Named inline gate "${namedGate.gateId}" from symbolic syntax`,
+            declared_key: bindingKey,
+          },
+          undefined,
+          'fresh-id'
+        );
+      if (ownId !== undefined && ownId !== recordedId) {
+        remap.set(recordedId, ownId);
+      }
+    }
+    for (const target of [parsedCommand, ...(parsedCommand.steps ?? [])]) {
+      if (remap.size > 0 && target.inlineGateIds !== undefined) {
+        target.inlineGateIds = target.inlineGateIds.map((id) => remap.get(id) ?? id);
       }
     }
   }

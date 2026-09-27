@@ -644,6 +644,170 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
     }, 120000);
   });
 
+  /** `chain_runs.state` exactly as stored, so an untouched run compares byte for byte. */
+  function rawRunState(chainId: string): string | undefined {
+    const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+    try {
+      const row = db.prepare('SELECT state FROM chain_runs WHERE chain_id = ?').get(chainId) as
+        { state: string } | undefined;
+      return row?.state;
+    } finally {
+      db.close();
+    }
+  }
+
+  /** A resume carrying one request gate, as a client sends it. */
+  const resumeWithGate = (chainId: string, answer: string, target: string, marker: string) =>
+    tool('prompt_engine', {
+      chain_id: chainId,
+      user_response: answer,
+      gate_verdict: PASS,
+      gates: [{ name: marker.toLowerCase(), criteria: [marker], target_step_id: target }],
+    });
+
+  /**
+   * MEASURED 2026-09-27 on `5f187905` (driven, this harness): a workflow `{x: sv_chain, y: sv_b}`
+   * resumed at `x-b` with a gate targeting `x` was refused `gate-target-missing`, while `x-b` was
+   * accepted — the reverse of the start call, which accepts `x` and retargets it to `x-c` (R51). The
+   * blueprint carried the expanded step ids only.
+   *
+   * Now (R58) the blueprint carries the run's declared node ids and the retarget map, and a resume
+   * checks and retargets its request gates exactly as the start call did.
+   */
+  describe('P6.133: a resume addresses the nodes the run declared', () => {
+    const workflow = {
+      workflow: {
+        version: 1,
+        nodes: [
+          { id: 'x', promptId: 'sv_chain' },
+          { id: 'y', promptId: 'sv_b' },
+        ],
+        edges: [{ from: 'x', to: 'y' }],
+      },
+    };
+
+    test("(a) a gate on the expanded node's declared id is accepted and renders on its last step", async () => {
+      const run = await start(workflow);
+      const stored = JSON.parse(rawRunState(run.chainId) ?? '{}') as {
+        blueprint?: { parsedCommand?: { declaredNodes?: unknown } };
+      };
+      expect(stored.blueprint?.parsedCommand?.declaredNodes).toEqual({
+        ids: ['x', 'y'],
+        lastStepOf: { x: 'x-c' },
+      });
+      const second = await run.call({ user_response: 'A out', gate_verdict: PASS });
+      expect(templates(second)).toEqual(['BODY-sv_b topic=']);
+
+      const third = await resumeWithGate(run.chainId, 'B out', 'x', 'TGT-133-A');
+      expect(third.isError).toBe(false);
+      expect(templates(third.text)).toEqual(['BODY-sv_a topic=']);
+      expect(third.text).toContain('Progress 3/4');
+      expect(third.text).toContain('TGT-133-A');
+    }, 120000);
+
+    test('(b) an expanded step id is refused by name, the run untouched', async () => {
+      const run = await start(workflow);
+      await run.call({ user_response: 'A out', gate_verdict: PASS });
+      const before = rawRunState(run.chainId);
+      expect(before).toBeDefined();
+
+      const refused = await resumeWithGate(run.chainId, 'B out', 'x-b', 'TGT-133-B');
+      expect(refused.isError).toBe(true);
+      expect(refused.text).toContain('[gate-target-missing] node "x-b"');
+      expect(rawRunState(run.chainId)).toBe(before);
+    }, 120000);
+
+    test('(c) control: a run with no expanded node resumes as before, and carries no declared map', async () => {
+      const run = await start({
+        workflow: {
+          version: 1,
+          nodes: [
+            { id: 'p', promptId: 'sv_a' },
+            { id: 'q', promptId: 'sv_b' },
+          ],
+          edges: [{ from: 'p', to: 'q' }],
+        },
+      });
+      const second = await resumeWithGate(run.chainId, 'P out', 'q', 'TGT-133-C');
+      expect(second.isError).toBe(false);
+      expect(templates(second.text)).toEqual(['BODY-sv_b topic=']);
+      expect(second.text).toContain('TGT-133-C');
+      expect(rawRunState(run.chainId)).not.toContain('declaredNodes');
+    }, 120000);
+
+    test('(d) the arrow-chain form: a gate on the segment node renders on its last step', async () => {
+      const run = await start({ command: `>>sv_chain${ARROW}>>sv_b` });
+      await run.call({ user_response: 'A out', gate_verdict: PASS });
+
+      const third = await resumeWithGate(run.chainId, 'B out', 'n1', 'TGT-133-D');
+      expect(third.isError).toBe(false);
+      expect(templates(third.text)).toEqual(['BODY-sv_a topic=']);
+      expect(third.text).toContain('TGT-133-D');
+
+      const refused = await resumeWithGate(run.chainId, 'C out', 'n1-c', 'TGT-133-E');
+      expect(refused.isError).toBe(true);
+      expect(refused.text).toContain('[gate-target-missing] node "n1-c"');
+    }, 120000);
+  });
+
+  /**
+   * MEASURED 2026-09-27 on `5f187905` (driven, this harness): a `>>sv_chain` run standing at `b`,
+   * resumed with a gate targeting `a`, was accepted and advanced to `c` — a gate that can never
+   * fire, its step already answered.
+   *
+   * Now (R59) a request gate naming a node the run has already passed is refused by name.
+   */
+  describe('P6.134: a resume refuses a gate on a step the run has already passed', () => {
+    test('(a) a target behind the current node is refused by name, the run untouched', async () => {
+      const run = await start({ command: '>>sv_chain' });
+      await run.call({ user_response: 'A out', gate_verdict: PASS });
+      const before = rawRunState(run.chainId);
+
+      const refused = await resumeWithGate(run.chainId, 'B out', 'a', 'TGT-134-A');
+      expect(refused.isError).toBe(true);
+      expect(refused.text).toContain('target_step_id "a" names a step the run has already passed');
+      expect(refused.text).not.toContain('TGT-134-A');
+      expect(rawRunState(run.chainId)).toBe(before);
+    }, 120000);
+
+    test('(b) control: the current node and a later node are accepted', async () => {
+      const current = await start({ command: '>>sv_chain' });
+      await current.call({ user_response: 'A out', gate_verdict: PASS });
+      const onCurrent = await resumeWithGate(current.chainId, 'B out', 'b', 'TGT-134-B');
+      expect(onCurrent.isError).toBe(false);
+      expect(templates(onCurrent.text)).toEqual(['BODY-sv_a topic=']);
+
+      const later = await start({ command: '>>sv_chain' });
+      await later.call({ user_response: 'A out', gate_verdict: PASS });
+      const onLater = await resumeWithGate(later.chainId, 'B out', 'c', 'TGT-134-C');
+      expect(onLater.isError).toBe(false);
+      expect(templates(onLater.text)).toEqual(['BODY-sv_a topic=']);
+      expect(onLater.text).toContain('TGT-134-C');
+    }, 120000);
+
+    test('(d) control: re-sending a start-call gate under its id stays accepted after its step', async () => {
+      const gates = [{ id: 'rs134', name: 'rs134', criteria: ['RS-134'], target_step_id: 'a' }];
+      const run = await start({ command: '>>sv_chain', gates });
+      expect(run.text).toContain('RS-134');
+      await run.call({ user_response: 'A out', gate_verdict: PASS, gates });
+      const resent = await tool('prompt_engine', {
+        chain_id: run.chainId,
+        user_response: 'B out',
+        gate_verdict: PASS,
+        gates,
+      });
+      expect(resent.isError).toBe(false);
+      expect(templates(resent.text)).toEqual(['BODY-sv_a topic=']);
+    }, 120000);
+
+    test('(c) control: a one-node run standing at n1 accepts a gate on n1', async () => {
+      const run = await start({ command: '>>sv_a :: "CRIT-134"' });
+      const answered = await resumeWithGate(run.chainId, 'out', 'n1', 'TGT-134-N1');
+      expect(answered.isError).toBe(false);
+      expect(answered.text).not.toContain('already passed');
+    }, 120000);
+  });
+
   /**
    * PIN (as of 2026-09-27 · flips when a gated single prompt stops opening a run). A single prompt
    * with an inline gate operator opens a run of ONE node, `n1` (R52), because the planner requires
@@ -715,6 +879,47 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
 
       await run.call({ user_response: 'out', gate_verdict: PASS });
       expect(runRows(run.chainId).run).toEqual({ run_status: 'completed', current_node_id: null });
+    }, 120000);
+
+    /**
+     * P6.135 PIN (as of 2026-09-27 · flips when a reader shows a stepless run's node prompt id —
+     * the interrupt's remaining nodes, a node-driven render of `n1`, an execution record's
+     * `prompt_id` — or when the mint records the parsed prompt id). The one node a stepless run
+     * mints records the CHAIN id as its prompt (`ChainSessionStore.resolveCreationNodes`); measured
+     * readers: `chain_run_nodes.prompt_id` only. The re-render after a FAIL renders the prompt
+     * itself, the session list names the blueprint's prompt, execution records carry no prompt
+     * id, and the interrupt lists only nodes after the current one, of which a one-node run has
+     * none.
+     */
+    test('P6.135 the one node records the chain id as its prompt, and no reply shows it', async () => {
+      const run = await start({ command: '>>sv_a :: "sv-block"' });
+      const failed = await run.call({ user_response: 'out', gate_verdict: FAIL });
+      expect(templates(failed)).toEqual(['BODY-sv_a topic=']);
+      const listed = (await tool('system_control', { action: 'session', operation: 'list' })).text;
+      expect(listed).toContain(`**Chain**: \`${run.chainId}\` (\`sv_a\`)`);
+      const history = (
+        await tool('system_control', {
+          action: 'execution_history',
+          operation: 'steps',
+          session_id: run.chainId,
+        })
+      ).text;
+      const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+      try {
+        const nodes = db
+          .prepare(
+            'SELECT n.node_id, n.prompt_id FROM chain_run_nodes n ' +
+              'JOIN chain_runs r ON r.session_id = n.session_id WHERE r.chain_id = ?'
+          )
+          .all(run.chainId);
+        expect(nodes).toEqual([{ node_id: 'n1', prompt_id: run.chainId }]);
+      } finally {
+        db.close();
+      }
+      for (const text of [run.text, failed, listed, history]) {
+        expect(text).not.toContain(`(\`${run.chainId}\`)`);
+        expect(text).not.toContain(`· ${run.chainId}`);
+      }
     }, 120000);
   });
 

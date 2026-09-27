@@ -29,6 +29,7 @@ import { workflowPromptInfoLookup } from '../workflow-prompt-lookup.js';
 import type { Logger } from '#infra/logging/index.js';
 import type { WorkflowCompilation, WorkflowCompilerDeps } from '#modules/workflow-ir/compiler.js';
 import type {
+  ExpandedWorkflow,
   WorkflowIR,
   WorkflowRejection,
   WorkflowValidation,
@@ -161,12 +162,28 @@ export class WorkflowCommandBuilder {
     });
 
     const lastStepOf = validation.expanded?.lastStepOf ?? {};
+    const declaredNodes = declaredNodesOf(validation.order, validation.expanded);
     return {
       ok: true,
-      parsedCommand,
+      parsedCommand:
+        declaredNodes === undefined ? parsedCommand : { ...parsedCommand, declaredNodes },
       retargetRequestedGates: (gates) => this.workflowIr.retargetGates(gates, lastStepOf),
     };
   }
+}
+
+/**
+ * What a resume needs to address the run as its start call did (R58): the declared node ids and
+ * the retarget map, for a run a chain-prompt node expanded. Undefined when nothing expanded. One
+ * derivation for both IR-building sources (this builder and the arrow-chain one).
+ */
+export function declaredNodesOf(
+  order: readonly string[],
+  expanded: ExpandedWorkflow | undefined
+): ParsedCommand['declaredNodes'] {
+  return expanded === undefined
+    ? undefined
+    : { ids: [...order], lastStepOf: { ...expanded.lastStepOf } };
 }
 
 /**

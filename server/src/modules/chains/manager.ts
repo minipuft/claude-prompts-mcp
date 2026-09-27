@@ -555,6 +555,12 @@ export class ChainSessionStore implements ChainSessionService {
    * (see `isSessionActiveForHooks`).
    * `run_owner_pid` is the server PID for cross-client isolation.
    *
+   * Owner rule (R61): the projection holds exactly the canonical owner's row for a run. A run this
+   * process projects is one it owns in `chain_runs` (a claim rewrote the owner), so another PID's
+   * row for the same run is the previous owner's, left stale; it is deleted here, keyed by chain id
+   * AND the run's session id, because two servers mint run numbers independently and can both hold
+   * a live `chain-x#1` of different runs.
+   *
    * Must be called inside an active transaction. The caller (`persistSessions`)
    * owns the transaction boundary so blob save and projection succeed or fail
    * atomically.
@@ -563,6 +569,11 @@ export class ChainSessionStore implements ChainSessionService {
     const activeRows = this.collectActiveSessionRows();
     db.run('DELETE FROM chain_sessions WHERE run_owner_pid = ?', [this.serverPid]);
     for (const row of activeRows) {
+      db.run(
+        `DELETE FROM chain_sessions
+          WHERE chain_id = ? AND run_owner_pid != ? AND json_extract(state, '$.sessionId') = ?`,
+        [row.chainId, this.serverPid, row.sessionId]
+      );
       db.run(
         `INSERT INTO chain_sessions (run_owner_pid, organization_id, workspace_id, chain_id, run_number, state, run_status, run_completed_at)
          VALUES (?, ?, ?, ?, 1, ?, ?, ?)`,
@@ -584,12 +595,14 @@ export class ChainSessionStore implements ChainSessionService {
    * A session is "active" while its run is not complete (`isSessionActiveForHooks`).
    */
   private collectActiveSessionRows(): Array<{
+    sessionId: string;
     chainId: string;
     state: string;
     runStatus: ChainRunStatus;
     runCompletedAt: number | null;
   }> {
     const rows: Array<{
+      sessionId: string;
       chainId: string;
       state: string;
       runStatus: ChainRunStatus;
@@ -601,6 +614,7 @@ export class ChainSessionStore implements ChainSessionService {
       const runStatus: ChainRunStatus = session.runStatus ?? 'working';
       const shownNodeId = resolveShownReview(session);
       rows.push({
+        sessionId: session.sessionId,
         chainId: session.chainId,
         runStatus,
         runCompletedAt: session.runCompletedAt ?? null,

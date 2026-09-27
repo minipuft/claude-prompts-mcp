@@ -316,6 +316,20 @@ describe('ChainSessionStore — run-status lifecycle (Tier 2)', () => {
     expect(ended).toEqual(['done', 'stopped', 'live']);
   });
 
+  test('a run that ends failed announces its end (R56: a failed start call releases its gates)', async () => {
+    manager = newManager('ended-failed');
+    const ended: string[] = [];
+    manager.onRunEnded((sessionId) => ended.push(sessionId));
+    await manager.createSession('broken', 'chain-broken', 2);
+
+    expect(await manager.transitionRunStatus('broken', 'failed')).toBe(true);
+    expect(await manager.transitionRunStatus('broken', 'failed')).toBe(true);
+    expect(ended).toEqual(['broken']);
+    // Sticky: an operator's cancel afterwards does not relabel it.
+    expect(await manager.cancelChain('broken')).toBe(false);
+    expect(manager.getSession('broken')?.runStatus).toBe('failed');
+  });
+
   test('transitionRunStatus refuses transitions out of terminal states (stickiness)', async () => {
     manager = newManager('stickiness');
     for (const terminal of ['completed', 'failed', 'cancelled'] as const) {
