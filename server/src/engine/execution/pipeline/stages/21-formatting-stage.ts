@@ -62,7 +62,11 @@ export class ResponseFormattingStage extends BasePipelineStage {
       sessionId: session.sessionId,
       chainId: session.chainId,
       // `nodeId` deliberately omitted: this record describes the RUN reaching a terminal
-      // status, not a node. `buildAppendParams` binds the column NULL for it.
+      // status, not a node. `buildAppendParams` binds the column NULL for it. The prompt is the
+      // run's own — the parsed command's, the one the run id names (R66).
+      ...(context.parsedCommand?.promptId !== undefined
+        ? { promptId: context.parsedCommand.promptId }
+        : {}),
       status,
       startedAt: completedAt,
       completedAt,

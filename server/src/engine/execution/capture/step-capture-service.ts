@@ -1,6 +1,7 @@
 // @lifecycle canonical - Captures step results (placeholder or real) in chain sessions.
 
 import { handoffNodeToken, resolveHandoffEvidenceReason } from '../delegation/handoff-contract.js';
+import { planNodeDrivenRender } from '../operators/node-step-projection.js';
 import { buildPipelineHookContext } from '../pipeline/hook-context.js';
 
 import type { Logger } from '#infra/logging/index.js';
@@ -14,6 +15,7 @@ import type {
 } from '#shared/types/index.js';
 import type { DeferredAdvance } from '../../gates/services/gate-verdict-processor.js';
 import type { ExecutionContext, SessionContext } from '../context/index.js';
+import type { ChainStepPrompt } from '../operators/types.js';
 
 import { currentOrdinal, nodeIdAt, ordinalOf, totalOf } from '#shared/utils/node-order.js';
 
@@ -203,7 +205,9 @@ export class StepCaptureService {
     await this.chainSessionStore.completeStep(sessionId, target.nodeId, {
       preservePlaceholder: false,
     });
-    this.ledgerCapturedStep(context, sessionId, session.chainId, target, reply);
+    this.ledgerCapturedStep(context, sessionId, session.chainId, target, reply, {
+      holdable: false,
+    });
     await this.announceStepComplete(context, session.chainId, target, reply);
   }
 
@@ -274,7 +278,9 @@ export class StepCaptureService {
       preservePlaceholder: false,
     });
 
-    this.ledgerCapturedStep(context, sessionId, chainId, target, responseContent);
+    this.ledgerCapturedStep(context, sessionId, chainId, target, responseContent, {
+      holdable: true,
+    });
 
     // Publish which step this call GRADED, for the stages that run after the advance (row 2.11).
     // Here rather than at either call site because this is the one place a non-placeholder
@@ -358,16 +364,26 @@ export class StepCaptureService {
     sessionId: string,
     chainId: string,
     target: StepTarget,
-    responseContent: string
+    responseContent: string,
+    options: { readonly holdable: boolean }
   ): void {
     if (this.executionRecordStore === null) return;
 
-    // Same two-key resolution as GateReviewStage: the node id is the identity, the ordinal is
-    // the fallback for a chain parsed before node-id minting.
-    const steps = context.parsedCommand?.steps;
-    const step =
-      steps?.find((candidate) => candidate.nodeId === target.nodeId) ??
-      steps?.find((candidate) => candidate.stepNumber === target.ordinal);
+    const session = this.chainSessionStore.getSession(sessionId, context.getScopeOptions());
+    const { step, promptId } = recordedStep(context, session, target.nodeId, target.ordinal);
+    // A verdict on this call that left a review holding this step leaves the step waiting on the
+    // submitter (R66): a FAIL sent with the answer keeps the review open, and the record says so
+    // rather than `completed` — the outcome test `ledgerSubmittedVerdict` applies to the same
+    // verdict sent alone. Stage 16 processed it before the capture, so the store's reviews are
+    // current. An answer sent with NO verdict keeps its `completed` row (P4.86: the record of what
+    // the step produced; its verdict appends the next row). A detached report is never held here —
+    // it answers a node the run already passed.
+    const detection = context.state.gates.verdictDetection;
+    const heldBy =
+      options.holdable && detection !== undefined && detection.outcome !== 'cleared'
+        ? session
+        : undefined;
+    const held = heldBy !== undefined && reviewHolding(heldBy, target.nodeId) !== undefined;
 
     // The token is derived from the step the same way the brief derived it — one exported
     // derivation, so "what the brief printed" and "what the record measures the reply against"
@@ -389,11 +405,13 @@ export class StepCaptureService {
       chainId,
       stepNumber: target.ordinal,
       nodeId: target.nodeId,
-      ...(step?.promptId !== undefined ? { promptId: step.promptId } : {}),
-      status: 'completed',
+      ...(promptId !== undefined ? { promptId } : {}),
+      status: held ? 'input_required' : 'completed',
       substate: { respondedAt: capturedAt },
       startedAt: capturedAt,
-      completedAt: capturedAt,
+      ...(held
+        ? { inputRequired: describeOutstandingReview(heldBy, target) }
+        : { completedAt: capturedAt }),
       ...(handoffEvidence !== undefined ? { handoffEvidence } : {}),
       ...(gateVerdicts !== undefined ? { gateVerdicts } : {}),
       scope: context.getScopeOptions(),
@@ -458,10 +476,7 @@ export class StepCaptureService {
       );
     }
 
-    const steps = context.parsedCommand?.steps;
-    const step =
-      steps?.find((candidate) => candidate.nodeId === target.nodeId) ??
-      steps?.find((candidate) => candidate.stepNumber === target.ordinal);
+    const { promptId } = recordedStep(context, session, target.nodeId, target.ordinal);
 
     const gateVerdicts = context.state.gates.perGateVerdicts;
     const submittedAt = Date.now();
@@ -471,7 +486,7 @@ export class StepCaptureService {
       chainId: session.chainId,
       stepNumber: target.ordinal,
       nodeId: target.nodeId,
-      ...(step?.promptId !== undefined ? { promptId: step.promptId } : {}),
+      ...(promptId !== undefined ? { promptId } : {}),
       status: detection.outcome === 'cleared' ? 'completed' : 'input_required',
       substate: { respondedAt: submittedAt },
       startedAt: submittedAt,
@@ -634,6 +649,52 @@ export function reviewHolding(session: ChainSession, nodeId: string): GateReview
     (review) =>
       review.kind !== 'detached' && ordinalOf(session.state.nodes, review.nodeId) < position
   );
+}
+
+/**
+ * The step an execution record describes, and the prompt the record names (R66). PURE.
+ *
+ * One resolution for every step-level record writer (this service's two, stage 20's first-render
+ * row), and it is the renderer's: {@link planNodeDrivenRender} over the run's live node list, so a
+ * record names the prompt that rendered. The writers used to look the step up in the PARSE-TIME
+ * array by node id and fall back to the ordinal, which is wrong for any node the parse did not
+ * mint — measured 2026-09-27: an inserted `inv-u-r` at ordinal 2 was recorded as parse step 2's
+ * `sv_b`, and remainder nodes `r1-a`/`r1-b` (ordinals past the parse array) recorded no prompt.
+ *
+ * A stepless run (one prompt, no chain steps) mints one node whose `promptId` is the CHAIN id
+ * (`ChainSessionStore.resolveCreationNodes`, pinned by P6.135), so its planned node names the
+ * parsed command's prompt instead — the prompt the run id names. With no run node to resolve
+ * (no session, or a node the run does not carry) the ordinal lookup is all there is.
+ */
+export function recordedStep(
+  context: ExecutionContext,
+  session: ChainSession | undefined,
+  nodeId: string | undefined,
+  ordinal: number
+): { step: ChainStepPrompt | undefined; promptId: string | undefined } {
+  const parseSteps = context.parsedCommand?.steps ?? [];
+  const nodes = session?.state.nodes ?? [];
+  const index = nodeId === undefined ? -1 : nodes.findIndex((node) => node.id === nodeId);
+  const node = nodes[index];
+  if (node === undefined) {
+    const step = parseSteps.find((candidate) => candidate.stepNumber === ordinal);
+    return {
+      step,
+      promptId:
+        step?.promptId ?? (parseSteps.length === 0 ? context.parsedCommand?.promptId : undefined),
+    };
+  }
+  if (parseSteps.length === 0 && (node.origin ?? 'planned') === 'planned') {
+    return { step: undefined, promptId: context.parsedCommand?.promptId };
+  }
+  const step = planNodeDrivenRender({
+    nodes,
+    parseSteps,
+    currentNodeId: node.id,
+    fallbackOrdinal: ordinal,
+    ledger: session?.unknownsLedger,
+  }).steps[index];
+  return { step, promptId: step?.promptId };
 }
 
 /**

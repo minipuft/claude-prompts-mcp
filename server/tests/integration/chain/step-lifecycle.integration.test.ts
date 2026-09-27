@@ -603,9 +603,18 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
       gate_verdict: failVerdict,
     } as any);
 
-    const rows = completedVerdicts(onlySession().sessionId);
-    expect(rows).toHaveLength(1);
-    const parsed = JSON.parse(rows[0] ?? '[]') as Array<Record<string, unknown>>;
+    // P6.144 / R66: the FAIL left the review holding step 1, so the row the capture writes says
+    // the step awaits its review — it was `completed` before, beside the open review.
+    const rows = db
+      .prepare(
+        `SELECT status, gate_verdicts_json FROM execution_records
+         WHERE session_id = ? AND status != 'working' ORDER BY execution_id ASC`
+      )
+      .all(onlySession().sessionId) as Array<{ status: string; gate_verdicts_json: string }>;
+    expect(rows.map((row) => row.status)).toEqual(['input_required']);
+    const parsed = JSON.parse(rows[0]?.gate_verdicts_json ?? '[]') as Array<
+      Record<string, unknown>
+    >;
     expect(parsed).toHaveLength(1);
     expect(parsed[0]).toMatchObject({
       gateId: GATE_ID,
