@@ -46,6 +46,7 @@ import { retargetGates } from '../../../../src/modules/workflow-ir/chain-prompt-
 import { compileWorkflowIR } from '../../../../src/modules/workflow-ir/compiler.js';
 import { DEFAULT_WORKFLOW_CAPS } from '../../../../src/modules/workflow-ir/node-schema.js';
 import { validateWorkflowIR } from '../../../../src/modules/workflow-ir/validator.js';
+import { workflowPromptInfoLookup } from '../../../../src/engine/execution/workflow-prompt-lookup.js';
 
 import type { ParsedCommand } from '../../../../src/engine/execution/context/index.js';
 import type {
@@ -104,7 +105,14 @@ const svBig = prompt('sv_big', {
     stepName: `S${index + 1}`,
   })),
 });
-const prompts = [svA, svB, svChain, svPair, svDefault, svBig];
+/** P6.116: a prompt declaring a `required` argument. */
+const svReq = prompt('sv_req', {
+  arguments: [
+    { name: 'topic', type: 'string', required: true },
+    { name: 'tone', type: 'string', required: false },
+  ],
+});
+const prompts = [svA, svB, svChain, svPair, svDefault, svBig, svReq];
 const lookup = (id: string): ConvertedPrompt | undefined => prompts.find((p) => p.id === id);
 
 const logger = createSimpleLogger();
@@ -511,5 +519,97 @@ describe('P6.105: every IR-building source validates the expanded workflow', () 
       refusal: () => refusalFrom({ command: `>>sv_big${ARROW}>>sv_b` }, skipping),
     };
     expect(await unvalidated([...VALIDATED, planted])).toEqual(['planted-unvalidated']);
+  });
+});
+
+/**
+ * P6.116 / R48: the arrow-chain source tells the validator no `required` arguments
+ * (`withoutRequiredArguments`); the Workflow IR source does, and refuses a node omitting one.
+ * MEASURED 2026-09-26 on `83355182`: the arrow-chain node for `sv_req` with no `topic` carries
+ * `topic: ""` (ArgumentParser's `empty_fallback` fills every declared argument, for every argument
+ * string tried), so the key-presence check could not fire there either way; the pin is therefore
+ * on what the builder TELLS the validator, beside the observable refusal.
+ */
+describe('P6.116: only the workflow source enforces `required`', () => {
+  const REQUIRED = /omits required argument "topic" of prompt "sv_req"/;
+  type Source = readonly [string, () => Promise<string | undefined>];
+  const MISSING_REQUIRED: readonly Source[] = [
+    ['arrow-chain', () => refusalFrom({ command: `>>sv_req${ARROW}>>sv_b` })],
+    [
+      'workflow-ir',
+      () => refusalFrom({ workflow: { version: 1, nodes: [{ id: 'x', promptId: 'sv_req' }] } }),
+    ],
+  ];
+
+  async function refusing(sources: readonly Source[]): Promise<string[]> {
+    const names: string[] = [];
+    for (const [name, refusal] of sources) {
+      if (REQUIRED.test((await refusal()) ?? '')) names.push(name);
+    }
+    return names;
+  }
+
+  type ValidatorDeps = Parameters<WorkflowIrPort['validate']>[1];
+  /** The sources whose validator call was told `sv_req` declares a `required` argument. */
+  async function toldRequired(
+    arrowBuilderDeps: (deps: ValidatorDeps) => ValidatorDeps = (deps) => deps
+  ): Promise<string[]> {
+    const told: string[] = [];
+    // `asBuilt` stands in the builder's place: what reaches the recorder is what it passed.
+    const recording = (name: string, asBuilt: typeof arrowBuilderDeps): WorkflowIrPort => ({
+      ...workflowIrPort,
+      validate: (ir, deps) => {
+        const passed = asBuilt(deps);
+        if ((passed.lookupPrompt('sv_req')?.requiredArguments.length ?? 0) > 0) told.push(name);
+        return workflowIrPort.validate(ir, passed);
+      },
+    });
+    const recorded = new CommandParsingStage(
+      new UnifiedCommandParser(logger),
+      argumentParser,
+      () => prompts,
+      logger,
+      new SymbolicCommandBuilder(
+        argumentParser,
+        logger,
+        recording('arrow-chain', arrowBuilderDeps)
+      ),
+      {
+        workflowCommandBuilder: new WorkflowCommandBuilder(
+          recording('workflow-ir', (deps) => deps),
+          logger
+        ),
+      }
+    );
+    await refusalFrom({ command: `>>sv_req${ARROW}>>sv_b` }, recorded);
+    await refusalFrom(
+      { workflow: { version: 1, nodes: [{ id: 'x', promptId: 'sv_req' }] } },
+      recorded
+    );
+    return told;
+  }
+
+  test('the workflow source refuses the missing argument by name; the arrow-chain source parses', async () => {
+    expect(await refusing(MISSING_REQUIRED)).toEqual(['workflow-ir']);
+    const arrow = await parse({ command: `>>sv_req${ARROW}>>sv_b` });
+    expect(arrow.steps?.map((step) => step.promptId)).toEqual(['sv_req', 'sv_b']);
+    // Control: the same workflow node supplying the argument parses
+    expect(
+      await refusalFrom({
+        workflow: { version: 1, nodes: [{ id: 'x', promptId: 'sv_req', args: { topic: 'T' } }] },
+      })
+    ).toBeUndefined();
+  });
+
+  test('only the workflow builder tells the validator a `required` argument', async () => {
+    expect(await toldRequired()).toEqual(['workflow-ir']);
+  });
+
+  test('control: a planted arrow-chain builder that passes `required` is named', async () => {
+    const passingRequired = (deps: ValidatorDeps): ValidatorDeps => ({
+      ...deps,
+      lookupPrompt: workflowPromptInfoLookup(lookup),
+    });
+    expect(await toldRequired(passingRequired)).toEqual(['arrow-chain', 'workflow-ir']);
   });
 });
