@@ -58,6 +58,7 @@ import { GateVerdictProcessor } from '../../../src/engine/gates/services/gate-ve
 import { ResponseFormatter } from '../../../src/mcp/tools/prompt-engine/processors/response-formatter.js';
 import { ExecutionRecordStore } from '../../../src/modules/chains/execution-record-store.js';
 import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
+import { ArgumentHistoryTracker } from '../../../src/modules/text-refs/argument-history-tracker.js';
 import { ExecutionHistoryActionHandler } from '../../../src/mcp/tools/system-control/handlers/execution-history-action-handler.js';
 
 import type { PipelineStage } from '../../../src/engine/execution/pipeline/stage.js';
@@ -1590,6 +1591,61 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
       expect(textOf(reply)).toContain('gate_action "retry", "skip" or "abort"');
       expect(reviews()['draft']?.attemptCount).toBe(2);
     });
+  });
+
+  /**
+   * P6.145 PIN (R67; as of 2026-09-27 · flips when `persistStepResult` passes a step's prompt id to
+   * `trackExecution`, or argument history gains a per-step reader). Argument history answers "what
+   * did this RUN receive", so `ChainSessionStore.persistStepResult` keys every captured step by the
+   * run's chain id, by design; the prompt a step ran is the execution record's to name (R66), and
+   * re-keying argument history per step would make two stores answer one question. CONTROL: the
+   * execution record of the same capture names the step's prompt.
+   */
+  test('P6.145: argument history keys a captured step by the run, its record by the prompt', async () => {
+    const tracker = new ArgumentHistoryTracker(logger, 10);
+    const tracked = jest.spyOn(tracker, 'trackExecution').mockResolvedValue('entry');
+    const trackedStore = new ChainSessionStore(
+      logger,
+      new StubTextReferenceStore() as any,
+      { cleanupIntervalMs: 60_000 },
+      tracker
+    );
+    const trackedPipeline = buildPipeline({
+      sessionStore: trackedStore,
+      recordStore,
+      logger,
+      steps: () => parsedSteps(),
+      blockingGates: () => false,
+      activeFramework: () => activeFramework,
+    });
+    try {
+      await trackedPipeline.execute({ command: `>>draft --> >>review` });
+      const session = Array.from(
+        (
+          trackedStore as unknown as { activeSessions: Map<string, ChainSession> }
+        ).activeSessions.values()
+      )[0] as ChainSession;
+      await trackedPipeline.execute({
+        chain_id: session.chainId,
+        user_response: 'step 1 output',
+      } as any);
+
+      expect(tracked).toHaveBeenCalledTimes(1);
+      expect(tracked.mock.calls[0]?.[0]).toMatchObject({
+        promptId: session.chainId,
+        nodeId: 'draft',
+        stepNumber: 1,
+      });
+      const record = db
+        .prepare(
+          `SELECT node_id, prompt_id FROM execution_records
+           WHERE session_id = ? AND status = 'completed'`
+        )
+        .all(session.sessionId);
+      expect(record).toEqual([{ node_id: 'draft', prompt_id: 'draft' }]);
+    } finally {
+      await trackedStore.cleanup();
+    }
   });
 });
 
