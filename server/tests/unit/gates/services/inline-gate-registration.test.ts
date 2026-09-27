@@ -125,6 +125,65 @@ describe('TemporaryGateRegistrar.registerInlineGateDefinitions', () => {
     expect(ids).toEqual(['section-contract', 'section-contract-2']);
   });
 
+  describe('a canonical gate id is refused (P6.183, R85)', () => {
+    const canonical = (id: string) => id.toLowerCase() === 'content-structure';
+    const guarded = (registry: unknown, logger: ReturnType<typeof createLogger>) =>
+      new TemporaryGateRegistrar(
+        registry as never,
+        undefined,
+        logger as never,
+        undefined,
+        canonical
+      );
+
+    it('a declared canonical id registers nothing and names the id', () => {
+      const registry = createRegistry();
+      const logger = createLogger();
+      const ids = register(guarded(registry, logger), createContext() as never, [
+        promptWith([validDefinition({ id: 'content-structure' })]),
+      ]);
+      expect(ids).toEqual([]);
+      expect(registry.createTemporaryGate).not.toHaveBeenCalled();
+      expect(String(logger.warn.mock.calls[0]?.[0])).toContain(
+        "may not shadow a canonical gate id ('content-structure')"
+      );
+    });
+
+    it('a name whose slug is a canonical id registers nothing', () => {
+      const registry = createRegistry();
+      const ids = register(guarded(registry, createLogger()), createContext() as never, [
+        promptWith([validDefinition({ name: 'Content Structure' })]),
+      ]);
+      expect(ids).toEqual([]);
+      expect(registry.createTemporaryGate).not.toHaveBeenCalled();
+    });
+
+    it("a chain prompt's step definition under a canonical id registers nothing", () => {
+      const registry = createRegistry();
+      const registered = guarded(registry, createLogger()).registerStepGateDefinitions(
+        createContext() as never,
+        [
+          {
+            ref: 'content-structure',
+            promptId: 'demo',
+            definition: validDefinition({ id: 'content-structure' }),
+          },
+        ] as never,
+        true
+      );
+      expect([...registered]).toEqual([]);
+      expect(registry.createTemporaryGate).not.toHaveBeenCalled();
+    });
+
+    it('control: an id no canonical gate carries registers', () => {
+      const registry = createRegistry();
+      const ids = register(guarded(registry, createLogger()), createContext() as never, [
+        promptWith([validDefinition({ id: 'ctl183' }), validDefinition()]),
+      ]);
+      expect(ids).toEqual(['ctl183', 'section-contract']);
+    });
+  });
+
   it('records the registered ids on pipeline state', () => {
     const registry = createRegistry();
     const context = createContext();

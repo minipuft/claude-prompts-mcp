@@ -201,6 +201,11 @@ When they do execute:
   one gate per definition: a resume, and every step that runs the same prompt, reuse the gate the
   run already holds. Two definitions of one prompt that share a name become `<slug>` and
   `<slug>-2`.
+- A definition may not take a **canonical gate's id**, declared or as the slug of its name: `id:
+content-structure`, or `name: Content Structure` with no `id`, is refused with a logged warning
+  naming the id, and the canonical gate keeps its own criteria. Registered, it would have replaced
+  that gate's criteria for every run on the server while it lived. Give the definition another id
+  or name.
 - A `scope: chain` definition belongs to the run it registers in, from the call that starts the
   run: the run files it under its own chain id, its chain-scoped gate summary lists it, and it is
   released when that run ends — never with another run's.
