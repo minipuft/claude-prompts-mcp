@@ -92,14 +92,37 @@ describe('TemporaryGateRegistrar.registerInlineGateDefinitions', () => {
     });
   });
 
-  it('accepts a definition with no declared id, taking a registry-assigned one', () => {
+  it('registers a definition with no declared id under the slug of its name (P6.172)', () => {
     const registry = createRegistry();
     const registrar = buildRegistrar(registry, createLogger());
 
     const ids = register(registrar, createContext() as never, [promptWith([validDefinition()])]);
 
-    expect(ids).toHaveLength(1);
-    expect(ids[0]).toMatch(/^temp_/);
+    expect(ids).toEqual(['section-contract']);
+  });
+
+  it('one id-less definition carried by three steps is one gate, and a resume holds it (P6.172)', () => {
+    const registry = createRegistry();
+    const registrar = buildRegistrar(registry, createLogger());
+    const step = promptWith([validDefinition()]);
+
+    const first = register(registrar, createContext() as never, [step, step, step]);
+    const resumed = register(registrar, createContext(first) as never, [step, step, step]);
+
+    expect(first).toEqual(['section-contract', 'section-contract', 'section-contract']);
+    expect(resumed).toEqual(['section-contract', 'section-contract', 'section-contract']);
+    expect(registry.createTemporaryGate).toHaveBeenCalledTimes(1);
+  });
+
+  it('two id-less definitions of one prompt sharing a name stay two gates (P6.172)', () => {
+    const registry = createRegistry();
+    const registrar = buildRegistrar(registry, createLogger());
+
+    const ids = register(registrar, createContext() as never, [
+      promptWith([validDefinition(), validDefinition({ guidance: 'a second body' })]),
+    ]);
+
+    expect(ids).toEqual(['section-contract', 'section-contract-2']);
   });
 
   it('records the registered ids on pipeline state', () => {

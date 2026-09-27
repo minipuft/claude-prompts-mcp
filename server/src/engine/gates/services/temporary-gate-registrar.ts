@@ -13,7 +13,7 @@ import type {
   TemporaryGateRegistry,
 } from '../core/temporary-gate-registry.js';
 
-import { nodeIdAt, ordinalOf } from '#shared/utils/node-order.js';
+import { mintNodeIds, nodeIdAt, ordinalOf } from '#shared/utils/node-order.js';
 
 /**
  * Anything that may carry inline gate definitions — structurally a `ConvertedPrompt`, declared
@@ -754,7 +754,7 @@ export class TemporaryGateRegistrar {
     }
 
     const registeredIds: string[] = [];
-    for (const definition of definitions as GateBody[]) {
+    for (const definition of withDefinitionIds(definitions as GateBody[])) {
       const gateId = this.registerOneInlineDefinition(context, registry, definition, {
         promptId: prompt?.id,
         thisCall: [...earlierIds, ...registeredIds],
@@ -930,6 +930,31 @@ function inlineScopeId(context: ExecutionContext, scope: InlineScope): string {
     return context.mcpRequest.chain_id ?? context.getSessionId() ?? 'execution';
   }
   return context.getSessionId() ?? context.mcpRequest.chain_id ?? 'execution';
+}
+
+/**
+ * Every definition with the id it registers under: its declared `id`, else the slug of its `name`
+ * (P6.172, the rule `stepGateDefinitionsOf` applies to a chain prompt's definitions, R76). An
+ * id-less definition used to register as a fresh `temp_…` gate on every call and for every step
+ * carrying its prompt, so a run held one gate per call per step; under its slug a resume, and a
+ * second step of the same prompt, finds the one it holds. Two definitions of one prompt sharing a
+ * name take `<slug>-2`, as `mintNodeIds` numbers step names. A definition with no `name` is left
+ * as given, for `registerOneInlineDefinition` to refuse. PURE.
+ */
+function withDefinitionIds(definitions: readonly GateBody[]): GateBody[] {
+  const named = definitions.filter((definition) => typeof definition['name'] === 'string');
+  const ids = mintNodeIds(
+    named.map((definition) => ({
+      ...(typeof definition['id'] === 'string' ? { id: definition['id'] } : {}),
+      stepName: definition['name'] as string,
+    }))
+  );
+  return definitions.map((definition) => {
+    const index = named.indexOf(definition);
+    return index === -1 || typeof definition['id'] === 'string'
+      ? definition
+      : { ...definition, id: ids[index] };
+  });
 }
 
 /**
