@@ -64,15 +64,6 @@ export function delay(ms: number): Promise<void> {
 }
 
 /**
- * Create a unique identifier
- */
-export function createUniqueId(prefix: string = ''): string {
-  const timestamp = Date.now();
-  const random = Math.random().toString(36).slice(2, 11);
-  return prefix ? `${prefix}_${timestamp}_${random}` : `${timestamp}_${random}`;
-}
-
-/**
  * Safely stringify an object, handling circular references
  */
 export function safeStringify(obj: any, indent: number = 0): string {
