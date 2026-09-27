@@ -1223,6 +1223,62 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
     }, 120000);
   });
 
+  /**
+   * P6.157. A delegated node's handoff evidence is read off ITS OWN step. MEASURED 2026-09-27 on
+   * `76ee7f4e`: `>>sv_a ==> >>sv_b` with a blocking unknown on step 1 inserts `inv-u-*` at ordinal
+   * 2, and answering it was REFUSED "Delegated node n2: the resume carries no trailer" — stage 16's
+   * resume lookup fell back to the parse step at the node's ordinal, the delegated `n2`. The same
+   * fallback left a delegated remainder node (ordinal past the parse array) unchecked. The capture's
+   * evidence already resolved through `recordedStep` (P6.144); the resume now does too.
+   */
+  describe("P6.157: a delegated node's handoff evidence is its own step's", () => {
+    const trailer = (node: string) => `out\n\n\`\`\`\nHANDOFF RESULT\nnode: ${node}\n\`\`\``;
+    const blocking = (id: string) => ({
+      observations: [{ type: 'unknown_discovered', id, statement: 'undecided', blocking: true }],
+    });
+    function evidence(chainId: string): string[] {
+      const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+      try {
+        const rows = db
+          .prepare(
+            "SELECT node_id, handoff_evidence FROM execution_records WHERE chain_id = ? AND status = 'completed' AND node_id IS NOT NULL ORDER BY execution_id"
+          )
+          .all(chainId) as Array<{ node_id: string; handoff_evidence: string | null }>;
+        return rows.map((row) => `${row.node_id}:${row.handoff_evidence ?? '-'}`);
+      } finally {
+        db.close();
+      }
+    }
+
+    test('(a) a delegated remainder node after an insertion records its own evidence', async () => {
+      const run = await start({ command: `>>sv_a${ARROW}>>sv_b` });
+      await run.call({ user_response: 'A out', ...blocking('u-157') });
+      await run.call({
+        user_response: 'investigated',
+        remainder: { mode: 'append', nodes: [{ id: 'r1', promptId: 'sv_b', delegated: true }] },
+      });
+      await run.call({ user_response: 'B out' });
+      await run.call({ user_response: trailer('r1') });
+      expect(evidence(run.chainId)).toEqual(['n1:-', 'inv-u-157:-', 'n2:-', 'r1:ok']);
+    }, 120000);
+
+    test('(b) an inserted node ahead of a delegated step is answered as itself', async () => {
+      const run = await start({ command: '>>sv_a ==> >>sv_b' });
+      await run.call({ user_response: 'A out', ...blocking('u-157b') });
+      const answered = await run.call({ user_response: 'investigated' });
+      expect(answered).not.toContain('carries no trailer');
+      await run.call({ user_response: trailer('n2') });
+      expect(evidence(run.chainId)).toEqual(['n1:-', 'inv-u-157b:-', 'n2:ok']);
+    }, 120000);
+
+    test('(c) control: a delegated planned step with no insertion records its evidence', async () => {
+      const run = await start({ command: '>>sv_a ==> >>sv_b' });
+      await run.call({ user_response: 'A out' });
+      await run.call({ user_response: trailer('n2') });
+      expect(evidence(run.chainId)).toEqual(['n1:-', 'n2:ok']);
+    }, 120000);
+  });
+
   describe('P6.93: a remainder naming a chain prompt', () => {
     /** The run's live nodes, as `chain_run_nodes` holds them. */
     function runNodes(chainId: string): string[] {
