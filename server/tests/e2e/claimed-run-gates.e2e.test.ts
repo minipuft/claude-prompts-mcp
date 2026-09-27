@@ -790,8 +790,8 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
    * P6.164 / R73. MEASURED 2026-09-27 on `c3cf5989`, two runs of one chain on one server: both
    * start calls filed their chain-scoped gate under `chain:execution`, and both lines read `none`.
    * The registry releases a run's gates by the run's ownership index (`releaseRun`), so a cancel
-   * never took the other run's gate; the one clear-by-scope path (`cleanupScopeByKey`) is
-   * reachable only for a scope carrying an expiry, which nothing sets. Pinned here: one run ends,
+   * never took the other run's gate, and the registry has no path that clears a scope's gates
+   * together. Pinned here: one run ends,
    * the other keeps its gate and its own scope lists it.
    */
   test('P6.164 (b) two runs on one server: one ends, the other keeps its chain-scoped gate', async () => {
