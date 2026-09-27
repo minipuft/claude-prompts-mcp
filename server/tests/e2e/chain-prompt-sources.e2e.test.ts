@@ -524,6 +524,64 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
     }, 120000);
   });
 
+  /**
+   * MEASURED 2026-09-27 on `327dcbce` (driven, this harness): a request gate targeting `nope` on a
+   * direct `>>sv_chain` opened `chain-sv_chain#1` with review `{a:["sv-block"]}` and never rendered;
+   * on `>>sv_chain :: "…"` it opened `chain-sv_chain#2`; on a single prompt `>>sv_a` it rendered
+   * anyway, the target ignored. Neither source called the validator, and the registrar only logs
+   * "target_step_id not found in this run". A single prompt declares one node, `n1` (the id the
+   * symbolic parser mints for its one step).
+   */
+  describe('P6.124: every command source checks a request gate target', () => {
+    const NOPE = '[gate-target-missing] node "nope": Gate binding targets step id "nope"';
+    const refusedWithoutRun = async (args: Record<string, unknown>): Promise<void> => {
+      const before = countRuns();
+      const result = await tool('prompt_engine', args);
+      expect(result.isError).toBe(true);
+      expect(result.text).toContain('Nothing was executed and no run was created.');
+      expect(result.text).toContain(NOPE);
+      expect(countRuns()).toBe(before);
+    };
+
+    test('(a) a direct chain prompt refuses a target no step declares, creating nothing', async () => {
+      await refusedWithoutRun({
+        command: '>>sv_chain',
+        gates: [{ name: 'tgt124a', criteria: ['TGT-124-A'], target_step_id: 'nope' }],
+      });
+    }, 120000);
+
+    test('(b) a single symbolic chain prompt refuses the same target, creating nothing', async () => {
+      await refusedWithoutRun({
+        command: '>>sv_chain :: "CRIT-124-B"',
+        gates: [{ name: 'tgt124b', criteria: ['TGT-124-B'], target_step_id: 'nope' }],
+      });
+    }, 120000);
+
+    test('(c) control: a target naming step `b` opens the run and renders on step b only', async () => {
+      const before = countRuns();
+      const gates = [{ name: 'tgt124c', criteria: ['TGT-124-C'], target_step_id: 'b' }];
+      const run = await start({ command: '>>sv_chain', gates });
+      expect(countRuns()).toBe(before + 1);
+      expect(run.text).not.toContain('TGT-124-C');
+      const second = await run.call({ user_response: 'A out', gate_verdict: PASS });
+      expect(templates(second)).toEqual(['BODY-sv_b topic=']);
+      expect(second).toContain('TGT-124-C');
+    }, 120000);
+
+    test('(d) a single prompt declares `n1`: another target is refused, `n1` renders', async () => {
+      await refusedWithoutRun({
+        command: '>>sv_a',
+        gates: [{ name: 'tgt124d', criteria: ['TGT-124-D'], target_step_id: 'nope' }],
+      });
+      const n1 = await tool('prompt_engine', {
+        command: '>>sv_a',
+        gates: [{ name: 'tgt124e', criteria: ['TGT-124-E'], target_step_id: 'n1' }],
+      });
+      expect(n1.isError).toBe(false);
+      expect(n1.text).toContain('TGT-124-E');
+    }, 120000);
+  });
+
   describe('P6.93: a remainder naming a chain prompt', () => {
     /** The run's live nodes, as `chain_run_nodes` holds them. */
     function runNodes(chainId: string): string[] {

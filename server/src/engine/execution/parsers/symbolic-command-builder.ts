@@ -10,6 +10,7 @@ import type {
   WorkflowIR,
   WorkflowNode,
   WorkflowPromptInfo,
+  WorkflowRejection,
 } from '#modules/workflow-ir/types.js';
 import type {
   ExecutionContext as ArgumentExecutionContext,
@@ -22,6 +23,14 @@ import type { SymbolicCommandParseResult } from './types/operator-types.js';
 import type { WorkflowCommandResult, WorkflowIrPort } from './workflow-command-builder.js';
 
 import { PromptError } from '#shared/utils/index.js';
+import { mintSequentialIds } from '#shared/utils/node-order.js';
+
+/** No cap binds the IR a non-IR command declares: its size is the prompt's, not a submission's. */
+const UNBOUNDED_CAPS: NonNullable<Parameters<WorkflowIrPort['validate']>[1]['caps']> = {
+  maxNodes: Infinity,
+  maxFanOut: Infinity,
+  maxInsertions: Infinity,
+};
 
 type ParsedArgumentsResult = {
   processedArgs: Record<string, any>;
@@ -147,13 +156,38 @@ export class SymbolicCommandBuilder {
   ): Promise<WorkflowCommandResult> {
     const hasChainOperator = this.hasChainOperator(parseResult);
     if (!hasChainOperator) {
-      return {
-        ok: true,
-        parsedCommand: await this.buildSingleSymbolicPrompt(parseResult, findPrompt),
-        retargetRequestedGates: (gates) => [...gates],
-      };
+      const parsedCommand = await this.buildSingleSymbolicPrompt(parseResult, findPrompt);
+      const rejections = this.requestGateTargetRejections(parsedCommand, requestGates);
+      return rejections.length > 0
+        ? { ok: false, rejections }
+        : { ok: true, parsedCommand, retargetRequestedGates: (gates) => [...gates] };
     }
     return this.buildSymbolicChain(parseResult, findPrompt, requestGates);
+  }
+
+  /**
+   * P6.124: a request gate's `target_step_id` checked against the node ids a command that builds
+   * no Workflow IR declares (a direct `>>prompt`, a single symbolic command) — one node per parsed
+   * step, or `n1` for a single prompt, the id the symbolic parser mints for its one step. The
+   * check is the validator's own `gate-target-missing`, reached through the port because `engine/`
+   * may not value-import it; unbounded caps and a lookup that resolves every prompt leave the
+   * gate targets the only thing this IR can fail on.
+   */
+  requestGateTargetRejections(
+    parsedCommand: ParsedCommand,
+    requestGates: NonNullable<WorkflowIR['gates']>
+  ): readonly WorkflowRejection[] {
+    if (requestGates.length === 0) return [];
+    const steps = parsedCommand.steps ?? [];
+    const nodes: WorkflowNode[] =
+      steps.length > 0
+        ? steps.map((step) => ({ id: step.nodeId ?? '', promptId: step.promptId }))
+        : mintSequentialIds(1).map((id) => ({ id, promptId: parsedCommand.promptId }));
+    const validation = this.workflowIr.validate(
+      { version: 1, nodes, gates: requestGates },
+      { lookupPrompt: () => ({ requiredArguments: [] }), caps: UNBOUNDED_CAPS }
+    );
+    return validation.ok ? [] : validation.rejections;
   }
 
   /**

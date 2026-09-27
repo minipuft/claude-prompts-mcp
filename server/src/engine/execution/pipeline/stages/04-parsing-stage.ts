@@ -131,7 +131,8 @@ export class CommandParsingStage extends BasePipelineStage {
           requestedGates(context)
         );
         if (!symbolic.ok) {
-          // An arrow-chain the Workflow IR validator refused (P6.105): the same addressed
+          // An arrow-chain the Workflow IR validator refused (P6.105), or a request gate
+          // targeting a step the command does not declare (P6.124): the same addressed
           // rejection a workflow submission gets, before any store is touched.
           this.rejectWorkflow(context, symbolic.rejections);
           return;
@@ -156,7 +157,18 @@ export class CommandParsingStage extends BasePipelineStage {
         return;
       }
 
-      context.parsedCommand = await this.buildDirectCommand(parseResult, context);
+      const direct = await this.buildDirectCommand(parseResult, context);
+      // P6.124: a request gate targeting a step this command does not declare is refused as the
+      // IR-building sources refuse it, before any store is touched.
+      const rejections = this.symbolicCommandBuilder.requestGateTargetRejections(
+        direct,
+        requestedGates(context)
+      );
+      if (rejections.length > 0) {
+        this.rejectWorkflow(context, rejections);
+        return;
+      }
+      context.parsedCommand = direct;
 
       this.logExit({
         promptId: context.parsedCommand.promptId,

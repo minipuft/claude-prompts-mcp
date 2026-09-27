@@ -25,6 +25,8 @@ const createMockSymbolicCommandBuilder = (
 ): SymbolicCommandBuilder =>
   ({
     buildSymbolicCommand: jest.fn(),
+    // No request gates reach these tests; the target check itself is pinned in chain-prompt-sources
+    requestGateTargetRejections: jest.fn().mockReturnValue([]),
     collectGateCriteria: jest.fn().mockReturnValue({ anonymousCriteria: [], namedGates: [] }),
     ...overrides,
   }) as unknown as SymbolicCommandBuilder;

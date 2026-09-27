@@ -523,6 +523,87 @@ describe('P6.105: every IR-building source validates the expanded workflow', () 
 });
 
 /**
+ * P6.117 / P6.124: every command source that can carry a request gate refuses a `target_step_id`
+ * naming no node it declares, with the validator's `gate-target-missing`, before any run exists.
+ * Measured 2026-09-27 on `327dcbce`: the direct and single-symbolic sources never called the
+ * validator (driven: the gate was kept and never rendered). Request gates reach stage 04 on
+ * `requestedOverrides.gates`, which stage 01 copies from the `gates` parameter; this harness sets
+ * it the same way. The remainder source is exempt: its node spec has no gates channel.
+ */
+describe('P6.124: every source carrying a request gate checks its target', () => {
+  const NOPE = '[gate-target-missing] node "nope": Gate binding targets step id "nope"';
+  const GATES = [{ name: 'tgt', criteria: ['TGT'], target_step_id: 'nope' }];
+  const EXEMPT: Readonly<Record<string, string>> = {
+    'remainder-append': 'a remainder node spec carries no gates channel',
+  };
+
+  /** Stage 04 with the request gates stage 01 would have captured from `gates`. */
+  async function gatedRefusal(
+    request: Record<string, unknown>,
+    through: CommandParsingStage = stage
+  ): Promise<string | undefined> {
+    const context = new ExecutionContext(request as never);
+    if (Array.isArray(request['gates'])) {
+      context.state.gates.requestedOverrides = { gates: [...(request['gates'] as unknown[])] };
+    }
+    await through.execute(context);
+    return context.response?.content.map((part) => ('text' in part ? part.text : '')).join('\n');
+  }
+
+  type GatedSource = readonly [string, () => Promise<string | undefined>];
+  const GATED: readonly GatedSource[] = [
+    ['direct', () => gatedRefusal({ command: '>>sv_chain', gates: GATES })],
+    ['single-symbolic', () => gatedRefusal({ command: '>>sv_chain :: "C"', gates: GATES })],
+    ['arrow-chain', () => gatedRefusal({ command: `>>sv_a${ARROW}>>sv_b`, gates: GATES })],
+    [
+      'workflow-ir',
+      () =>
+        gatedRefusal({
+          workflow: { version: 1, nodes: [{ id: 'x', promptId: 'sv_chain' }], gates: GATES },
+        }),
+    ],
+  ];
+
+  async function unchecked(sources: readonly GatedSource[]): Promise<string[]> {
+    const names: string[] = [];
+    for (const [name, refusal] of sources) {
+      if (!((await refusal()) ?? '').includes(NOPE)) names.push(name);
+    }
+    return names;
+  }
+
+  test('every enumerated command source is gated here or exempt with a reason', () => {
+    const covered = [...GATED.map(([name]) => name), ...Object.keys(EXEMPT)].sort();
+    expect(covered).toEqual(SOURCES.map((source) => source.name).sort());
+  });
+
+  test.each(GATED)('%s refuses an undeclared target by name', async (name, refusal) => {
+    expect(await unchecked([[name, refusal]])).toEqual([]);
+  });
+
+  test('controls: a declared target parses on every source; a single prompt declares `n1`', async () => {
+    const declared = [{ name: 'tgt', criteria: ['TGT'], target_step_id: 'b' }];
+    expect(await gatedRefusal({ command: '>>sv_chain', gates: declared })).toBeUndefined();
+    expect(await gatedRefusal({ command: '>>sv_chain :: "C"', gates: declared })).toBeUndefined();
+    const n1 = [{ name: 'tgt', criteria: ['TGT'], target_step_id: 'n1' }];
+    expect(await gatedRefusal({ command: '>>sv_a', gates: n1 })).toBeUndefined();
+    expect(await gatedRefusal({ command: '>>sv_a', gates: GATES })).toContain(NOPE);
+  });
+
+  test('control: a planted source that skips the check is named', async () => {
+    const skipping = stageWith({
+      ...workflowIrPort,
+      validate: (ir) => ({ ok: true, order: ir.nodes.map((node) => node.id) }),
+    });
+    const planted: GatedSource = [
+      'planted-unchecked',
+      () => gatedRefusal({ command: '>>sv_chain', gates: GATES }, skipping),
+    ];
+    expect(await unchecked([...GATED, planted])).toEqual(['planted-unchecked']);
+  });
+});
+
+/**
  * P6.116 / R48: the arrow-chain source tells the validator no `required` arguments
  * (`withoutRequiredArguments`); the Workflow IR source does, and refuses a node omitting one.
  * MEASURED 2026-09-26 on `83355182`: the arrow-chain node for `sv_req` with no `topic` carries
