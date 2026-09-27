@@ -615,10 +615,12 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
     await (store as unknown as { initPromise: Promise<void> }).initPromise;
     // Two steps, not one: `isSessionActiveForHooks` only projects a run with steps remaining,
     // so a single-step run never reaches the INSERT this test makes fail.
-    await store.createSession('sess-rollback', 'chain-rollback#1', 2, {}, {
-      nodes: nodes(['n1', 'p', 'One'], ['n2', 'p', 'Two']),
-    } as never);
-    await (store as unknown as { persistSessions: () => Promise<void> }).persistSessions();
+    // The failure reaches the caller (R74): only a held lock is swallowed, and this is not one.
+    await expect(
+      store.createSession('sess-rollback', 'chain-rollback#1', 2, {}, {
+        nodes: nodes(['n1', 'p', 'One'], ['n2', 'p', 'Two']),
+      } as never)
+    ).rejects.toThrow('projection failed on purpose');
 
     expect(
       engine.query('SELECT session_id FROM chain_runs WHERE session_id = ?', ['sess-rollback'])
