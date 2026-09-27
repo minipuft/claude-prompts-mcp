@@ -2,11 +2,13 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test, jest } from '@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { DatabaseSync } from 'node:sqlite';
 
 import { SqliteEngine } from '../../../src/infra/database/index.js';
 import { SqliteStateStore } from '../../../src/infra/database/stores/sqlite-store.js';
 import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
 import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
+import { STATE_DB_BUSY_TIMEOUT_MS } from '../../../src/shared/utils/runtime-state-location.js';
 
 import type { Logger } from '../../../src/infra/logging/index.js';
 
@@ -448,6 +450,88 @@ describe('Tenant Isolation', () => {
       } finally {
         spy.mockRestore();
       }
+    });
+
+    /**
+     * P6.177 (R74). The held-lock swallow against a REAL lock: a second `node:sqlite` connection on
+     * the same `state.db` holds a write transaction for longer than the store's busy timeout. The
+     * wait is bounded by lowering the store connection's own `busy_timeout` with a PRAGMA through
+     * the engine (restored after), so the twin costs a quarter second, not five.
+     */
+    describe('P6.177: a lock another connection holds, and a constraint it planted', () => {
+      const HARNESS_BUSY_TIMEOUT_MS = 250;
+      let other: DatabaseSync;
+
+      beforeEach(() => {
+        dbManager.run(`PRAGMA busy_timeout = ${HARNESS_BUSY_TIMEOUT_MS}`);
+        other = new DatabaseSync(path.join(tmpDir, 'runtime-state', 'state.db'));
+      });
+
+      afterEach(() => {
+        if (other.isTransaction) other.exec('ROLLBACK');
+        other.close();
+        dbManager.run(`PRAGMA busy_timeout = ${STATE_DB_BUSY_TIMEOUT_MS}`);
+      });
+
+      test('a write lock held past the busy timeout is logged, and the next persist heals it', async () => {
+        const errorLog = logger.error as jest.Mock;
+        errorLog.mockClear();
+        other.exec('BEGIN IMMEDIATE');
+
+        // The real error the swallow classifies: SQLITE_BUSY, read off node:sqlite's errcode
+        const direct = (
+          chainSessionStore as unknown as { persistSessionsOrThrow: () => Promise<void> }
+        ).persistSessionsOrThrow();
+        const busy = await direct.then(
+          () => undefined,
+          (error: unknown) => error as { errcode?: number; message?: string }
+        );
+        expect(busy?.errcode !== undefined && busy.errcode & 0xff).toBe(5);
+
+        const session = await chainSessionStore.createSession('p177-a', 'chain-p177a#1', 2);
+        expect(session.sessionId).toBe('p177-a');
+        expect(String(errorLog.mock.calls.at(-1)?.[0])).toMatch(/lock held/);
+        expect(projectedRuns('chain-p177a#1')).toEqual([]);
+
+        // Positive control: once the lock is released the next persist writes the run
+        other.exec('ROLLBACK');
+        await chainSessionStore.cancelChain('p177-a');
+        const rows = dbManager.query<{ session_id: string }>(
+          'SELECT session_id FROM chain_runs WHERE chain_id = ?',
+          ['chain-p177a#1']
+        );
+        expect(rows.map((row) => row.session_id)).toEqual(['p177-a']);
+      });
+
+      test('a constraint the other connection planted throws the save to its caller', async () => {
+        other.exec(
+          "CREATE UNIQUE INDEX p177_plant ON chain_sessions(chain_id) WHERE chain_id = 'chain-p177b#1'"
+        );
+        try {
+          await chainSessionStore.createSession(
+            'p177-b',
+            'chain-p177b#1',
+            2,
+            {},
+            {
+              continuityScopeId: 'tenant-a',
+            }
+          );
+          await expect(
+            chainSessionStore.createSession(
+              'p177-c',
+              'chain-p177b#1',
+              2,
+              {},
+              {
+                continuityScopeId: 'tenant-b',
+              }
+            )
+          ).rejects.toMatchObject({ errcode: 2067 });
+        } finally {
+          other.exec('DROP INDEX p177_plant');
+        }
+      });
     });
 
     /**
