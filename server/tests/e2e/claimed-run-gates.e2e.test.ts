@@ -701,10 +701,12 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
    * and prints gate NAMES, so it can show neither a recorded nor a restored id. Only a prompt's
    * `inline_gate_definitions` with `scope: chain` register there (`inlineScopeId`), and only with
    * `gates.executeInlineGateDefinitions` (default false; named inline gates are `execution`-scoped
-   * and never listed). They register under `chain:<mcpRequest.chain_id ?? sessionId>`: the start
-   * call carries no chain id, so on the server that started the run the line reads `none` while
-   * the run's review holds `cg148`; a claimer that registers the gate on a `chain_id` call lists
-   * it, and the claimer's own other run of the same prompt reads `none`.
+   * and never listed). They register under `chain:<mcpRequest.chain_id ?? sessionId ?? 'execution'>`,
+   * and the call that starts a run has neither yet: its gate lands in the process-wide
+   * `chain:execution` bucket (measured by pointing the summary at that bucket, which listed
+   * `cg148` on the first server). So on the server that started the run the line reads `none`
+   * while the run's review holds `cg148`; a claimer that registers the gate on a `chain_id` call
+   * lists it, and the claimer's own other run of the same prompt reads `none`.
    */
   test('P6.148 pin: the chain-scoped gate line after a claim with a collision', async () => {
     const roots = freshRoots();
