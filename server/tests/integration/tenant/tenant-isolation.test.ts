@@ -282,6 +282,64 @@ describe('Tenant Isolation', () => {
       expect(tenantBList[0]?.sessionId).toBe('tenant-b-session');
     });
 
+    /** The hook projection's rows for `chainId`: the run each row carries and its scope. */
+    const projectedRuns = (chainId: string): Array<{ sessionId: string; scope: string }> =>
+      dbManager
+        .query<{ state: string; continuity_scope_id: string }>(
+          `SELECT state, continuity_scope_id FROM chain_sessions WHERE chain_id = ? ORDER BY id`,
+          [chainId]
+        )
+        .map((row) => ({
+          sessionId: (JSON.parse(row.state) as { sessionId: string }).sessionId,
+          scope: row.continuity_scope_id,
+        }));
+
+    test('P6.147 (a) one process projects both scopes runs of one chain id', async () => {
+      await chainSessionStore.createSession(
+        'p147-a',
+        'chain-p147#1',
+        2,
+        {},
+        {
+          continuityScopeId: 'tenant-a',
+        }
+      );
+      await chainSessionStore.createSession(
+        'p147-b',
+        'chain-p147#1',
+        2,
+        {},
+        {
+          continuityScopeId: 'tenant-b',
+        }
+      );
+
+      // Positive control: both runs reached `chain_runs`, the rows the projection derives from.
+      const runs = dbManager.query<{ session_id: string }>(
+        `SELECT session_id FROM chain_runs WHERE chain_id = ? ORDER BY session_id`,
+        ['chain-p147#1']
+      );
+      expect(runs.map((row) => row.session_id)).toEqual(['p147-a', 'p147-b']);
+      expect(projectedRuns('chain-p147#1')).toEqual([
+        { sessionId: 'p147-a', scope: 'tenant-a' },
+        { sessionId: 'p147-b', scope: 'tenant-b' },
+      ]);
+    });
+
+    test('P6.147 (b) control: one scope projects its one run', async () => {
+      await chainSessionStore.createSession(
+        'p147-c',
+        'chain-p147c#1',
+        2,
+        {},
+        {
+          continuityScopeId: 'tenant-c',
+        }
+      );
+
+      expect(projectedRuns('chain-p147c#1')).toEqual([{ sessionId: 'p147-c', scope: 'tenant-c' }]);
+    });
+
     test('clearing one tenant sessions does not affect another tenant', async () => {
       await chainSessionStore.createSession(
         'tenant-a-session',

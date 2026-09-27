@@ -6,6 +6,7 @@ import {
   composeJudgeReviewPrompt,
 } from '../../../gates/core/review-utils.js';
 import { runGateReviewEvidence } from '../../../gates/services/gate-review-evidence.js';
+import { recordedStep } from '../../capture/step-capture-service.js';
 import { planNodeDrivenRender } from '../../operators/node-step-projection.js';
 import { resolveGroundTruthCoverage } from '../decisions/gates/ground-truth-coverage.js';
 import { resolveShownReview } from '../decisions/gates/review-target.js';
@@ -118,12 +119,16 @@ export class GateReviewStage extends BasePipelineStage {
     const session = context.sessionContext;
     if (session === undefined) return;
 
-    const steps = context.parsedCommand?.steps;
     const currentNodeId = session.currentNodeId ?? undefined;
     const stepNumber = session.currentStep ?? 1;
-    const step =
-      (currentNodeId !== undefined ? steps?.find((s) => s.nodeId === currentNodeId) : undefined) ??
-      steps?.find((s) => s.stepNumber === stepNumber);
+    // The one record-step resolution every step-level writer uses (R66): the renderer's, over the
+    // run's live nodes, so the row names the prompt that rendered.
+    const { step, promptId } = recordedStep(
+      context,
+      this.chainSessionStore.getSession(session.sessionId, context.getScopeOptions()),
+      currentNodeId,
+      stepNumber
+    );
 
     const renderedAt = Date.now();
     this.collaborators.executionRecordStore.append({
@@ -138,7 +143,7 @@ export class GateReviewStage extends BasePipelineStage {
         : currentNodeId !== undefined
           ? { nodeId: currentNodeId }
           : {}),
-      ...(step?.promptId !== undefined ? { promptId: step.promptId } : {}),
+      ...(promptId !== undefined ? { promptId } : {}),
       status: 'working',
       substate: { renderedAt },
       startedAt: renderedAt,

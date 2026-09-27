@@ -107,8 +107,10 @@ const latestHookRow = (
   if (last === undefined) return undefined;
   const columnList = /INSERT INTO chain_sessions \(([^)]*)\)/.exec(last.sql)?.[1] ?? '';
   const columns = columnList.split(',').map((c) => c.trim());
-  // `state` is the 5th bound parameter (run_number is a literal 1 in the statement).
-  const state = JSON.parse(String(last.params[4])) as Record<string, unknown>;
+  const state = JSON.parse(String(last.params[columns.indexOf('state')])) as Record<
+    string,
+    unknown
+  >;
   return { columns, params: last.params, state };
 };
 
@@ -186,8 +188,8 @@ describe('chain_sessions hook projection — byte parity', () => {
       'run_owner_pid',
       'organization_id',
       'workspace_id',
+      'continuity_scope_id',
       'chain_id',
-      'run_number',
       'state',
       'run_status',
       'run_completed_at',
@@ -323,7 +325,7 @@ describe('chain_sessions hook projection — byte parity', () => {
     expect(countHookRows(db)).toBe(rowsBefore + 1);
     expect(row.state['currentStep']).toBe(3);
     expect(row.state['totalSteps']).toBe(2);
-    expect(row.params[5]).toBe('working');
+    expect(row.params[row.columns.indexOf('run_status')]).toBe('working');
   });
 
   test('a run past its last node owed a detached report stays projected (P6.29)', async () => {

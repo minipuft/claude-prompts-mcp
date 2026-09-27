@@ -129,7 +129,11 @@ export class PromptExecutionPipeline {
       chainId: session.chainId,
       // `nodeId` deliberately omitted: this closes out the RUN from the pipeline's single error
       // boundary, which sees every failure but not which node was mid-render. `buildAppendParams`
-      // binds the column NULL for it.
+      // binds the column NULL for it. The prompt is the run's own — the parsed command's, the one
+      // the run id names (R66); absent when the failure came before a command parsed.
+      ...(context.parsedCommand?.promptId !== undefined
+        ? { promptId: context.parsedCommand.promptId }
+        : {}),
       status: 'failed',
       errorMessage: failure.message,
       startedAt: failedAt,

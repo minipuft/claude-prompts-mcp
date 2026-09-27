@@ -144,7 +144,10 @@ export const TABLE_CONTRACTS: readonly TableContract[] = [
     // F3 closed at v20: the PID column is now named `run_owner_pid`, so no column name means both
     // a run owner and a workspace. Scope columns remain `workspace_id`/`organization_id`, bound by
     // projectToHookView from the store's defaultScope (Tier 4) — run ownership and workspace scope
-    // are separate questions and now have separate names.
+    // are separate questions and now have separate names. `continuity_scope_id` (v33, R70) is the
+    // run's own scope, part of the row key with the PID and the chain id: one process serving two
+    // workspaces holds `chain-x#1` in each. It is not `workspace_id`, which stays the launch
+    // workspace.
   },
   {
     table: 'kv_state',
@@ -425,6 +428,13 @@ export const TABLE_CONTRACTS: readonly TableContract[] = [
     //                     "Reported" has no column of its own: it is `milestone = 'completed'`
     //                     with `is_placeholder = 0`, already on this row. Partial population BY
     //                     ROW TYPE — NULL on every blocking node.
+    //
+    // v32 (P6.101, R68) added one more, also in the owner's INSERT list:
+    //   inline_gate_ids — a contributed node's step gate ids, JSON array or NULL. The same reason
+    //                     as `args_json`: the node has no parse step, so its step's gates live
+    //                     here or nowhere. Read back onto `ChainNode.inlineGateIds`, which
+    //                     `synthesizeStep` carries onto the step gate enhancement walks. NULL on
+    //                     every planned and inserted node and every ungated contributed one.
     // None needs an `acceptedPhantomColumns` entry — all appear in the owner's INSERT list.
   },
   {

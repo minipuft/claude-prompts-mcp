@@ -30,7 +30,7 @@
  */
 import { afterEach, describe, expect, test } from '@jest/globals';
 
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -222,6 +222,55 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     expect(claimed.isError).toBe(false);
     return { chainId, first, second, firstReply: claimed.text };
   }
+
+  /**
+   * P6.101 / R68: a contributed node's step gates live in `chain_run_nodes.inline_gate_ids` (v32),
+   * and a claim rebuilds the run from those rows — the in-memory node the first server held is
+   * gone. MEASURED 2026-09-27 on `6dad55f3`: the remainder below was refused by name (R46), so no
+   * claim of it existed. Driven: server A appends `sv_chain` as a remainder, B claims and FAILs
+   * the first contributed step, which opens a review of its `sv-block` gate.
+   */
+  test('P6.101 a claimed run keeps the gates its contributed steps declared', async () => {
+    const roots = freshRoots();
+    const first = await startServer(roots);
+    await authorResources(first);
+    const chainId = chainIdOf(
+      (await first.call('prompt_engine', { command: `>>sv_a${ARROW}>>sv_b` })).text
+    );
+    await first.call('prompt_engine', {
+      chain_id: chainId,
+      user_response: 'A out',
+      observations: [
+        { type: 'unknown_discovered', id: 'u-101', statement: 'undecided', blocking: true },
+      ],
+    });
+    const appended = await first.call('prompt_engine', {
+      chain_id: chainId,
+      user_response: 'investigated',
+      remainder: { mode: 'append', nodes: [{ id: 'r1', promptId: 'sv_chain' }] },
+    });
+    expect(appended.isError).toBe(false);
+    const minted = await first.call('prompt_engine', { chain_id: chainId, handoff: true });
+    const token = /Token: `(hnd_[^`]+)`/.exec(minted.text)?.[1];
+    if (token === undefined) throw new Error(`no token in: ${minted.text}`);
+    const second = await startServer(roots);
+    await first.stop();
+
+    const claimed = await second.call('prompt_engine', {
+      claim_token: token,
+      user_response: 'B out',
+    });
+    expect(claimed.isError).toBe(false);
+    expect(claimed.text).toContain('BODY-sv_a');
+    const failed = await second.call('prompt_engine', {
+      chain_id: chainId,
+      user_response: 'r1-a out',
+      gate_verdict: FAIL,
+    });
+    expect(failed.text).toContain('Gate Review Required');
+    expect(failed.text).toContain('GUIDANCE-sv-block');
+    expect(runRow(roots, chainId)?.reviews).toEqual({ 'r1-a': ['sv-block'] });
+  }, 180000);
 
   test('pin: a stop-and-restart leaves the run nothing to resume', async () => {
     const roots = freshRoots();
@@ -529,6 +578,217 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
       metadata: ['g140', 'sv-block'],
     });
   }, 180000);
+
+  /** Run `sv_chain_other` on `server` with a named gate `g146`, authoring the prompt on first use. */
+  async function runOtherG146(server: Server, criterion: string, author: boolean): Promise<void> {
+    if (author) {
+      await server.call('resource_manager', {
+        resource_type: 'prompt',
+        action: 'create',
+        id: 'sv_chain_other',
+        category: 'general',
+        name: 'sv_chain_other',
+        description: 'a second chain the claiming server runs',
+        user_message_template: 'OTHER-OWN-TEMPLATE',
+        gate_configuration: OPT_OUT,
+        chain_steps: [
+          { promptId: 'sv_a', stepName: 'A' },
+          { promptId: 'sv_b', stepName: 'B' },
+        ],
+      });
+    }
+    const other = await server.call('prompt_engine', {
+      command: `>>sv_chain_other :: g146:"${criterion}"`,
+    });
+    expect(other.text).toContain(criterion);
+  }
+
+  /** Mint the run's handoff token on `owner`. */
+  async function mintToken(owner: Server, chainId: string): Promise<string> {
+    const minted = await owner.call('prompt_engine', { chain_id: chainId, handoff: true });
+    const token = /Token: `(hnd_[^`]+)`/.exec(minted.text)?.[1];
+    if (token === undefined) throw new Error(`no token in: ${minted.text}`);
+    return token;
+  }
+
+  /**
+   * P6.146 / R69 (MEASURED 2026-09-27 on `852c3da5`): server A opens the step-a review of a run
+   * declaring `g146:"A-ONE"`; B, running its own `g146`, claims with a FAIL and the review is
+   * rewritten to `g146-2`; B hands off to C, which holds `g146` AND `g146-2` for runs of its own.
+   * C's claim re-derived `{g146: g146-3}` from the blueprint alone, which does not contain the
+   * review's `g146-2`, so the review kept naming C's other run's gate and C's FAIL graded `C-TWO`.
+   * With no collision on C the review still named `g146-2`, a gate C does not hold, and `A-ONE`
+   * never rendered. Now the applied remap rides the run (`ChainSession.gateRemap`, persisted in
+   * `chain_runs.state`) and each claim composes onto it. The single-claim control is P6.140 (b).
+   */
+  async function claimTwice(
+    roots: Roots,
+    collide: boolean
+  ): Promise<{ chainId: string; third: Server; failed: string; sessionId: string }> {
+    const first = await startServer(roots);
+    await authorResources(first);
+    const chainId = chainIdOf(
+      (await first.call('prompt_engine', { command: '>>sv_chain :: g146:"A-ONE"' })).text
+    );
+    expect(runRow(roots, chainId)?.reviews).toEqual({ a: ['sv-block', 'g146'] });
+    const firstToken = await mintToken(first, chainId);
+    const second = await startServer(roots);
+    await runOtherG146(second, 'B-ONE', true);
+    await first.stop();
+    // An answer with no verdict leaves the review open, so C's FAIL is the review's first.
+    const claimed = await second.call('prompt_engine', {
+      claim_token: firstToken,
+      user_response: 'A out',
+    });
+    expect(claimed.isError).toBe(false);
+    // Positive control: the first claim rewrote the review to its fresh id.
+    expect(runRow(roots, chainId)?.reviews).toEqual({ a: ['sv-block', 'g146-2'] });
+    const secondToken = await mintToken(second, chainId);
+    const third = await startServer(roots);
+    if (collide) {
+      await runOtherG146(third, 'C-ONE', false);
+      await runOtherG146(third, 'C-TWO', false);
+    }
+    await second.stop();
+    const failed = await third.call('prompt_engine', {
+      claim_token: secondToken,
+      user_response: 'A out again',
+      gate_verdict: FAIL,
+    });
+    expect(failed.isError).toBe(false);
+    const db = new DatabaseSync(path.join(roots.runtimeRoot, 'runtime-state', 'state.db'));
+    try {
+      const row = db
+        .prepare('SELECT session_id FROM chain_runs WHERE chain_id = ?')
+        .get(chainId) as { session_id: string };
+      return { chainId, third, failed: failed.text, sessionId: row.session_id };
+    } finally {
+      db.close();
+    }
+  }
+
+  test('P6.146 (a) a second claim of a remapped run renders its own criteria and names the claimer fresh id', async () => {
+    const roots = freshRoots();
+    const { chainId, third, failed, sessionId } = await claimTwice(roots, true);
+    expect(failed).toContain('Gate Review Required');
+    expect(failed).toContain('A-ONE');
+    expect(failed).not.toContain('C-TWO');
+    expect(failed).not.toContain('C-ONE');
+    expect(runRow(roots, chainId)?.reviews).toEqual({ a: ['sv-block', 'g146-3'] });
+    expect(await reportedInlineGateIds(third, chainId, sessionId)).toEqual({
+      summary: 'g146-3, sv-block',
+      metadata: ['g146-3', 'sv-block'],
+    });
+  }, 240000);
+
+  test('P6.146 (b) a second claimer holding no g146 returns the review to the recorded id', async () => {
+    const roots = freshRoots();
+    const { chainId, third, failed, sessionId } = await claimTwice(roots, false);
+    expect(failed).toContain('A-ONE');
+    expect(runRow(roots, chainId)?.reviews).toEqual({ a: ['sv-block', 'g146'] });
+    expect(await reportedInlineGateIds(third, chainId, sessionId)).toEqual({
+      summary: 'g146, sv-block',
+      metadata: ['g146', 'sv-block'],
+    });
+  }, 240000);
+
+  /**
+   * P6.148 pin (as of 2026-09-27 on `351645814` · flips when a `chain`-scoped definition registers
+   * under the run's chain id on the call that starts the run, or when `buildSessionGateSummary`
+   * reads the run's own registered gates instead of the registry's `chain:<chainId>` scope).
+   *
+   * The "Chain-Scoped Temporary Gates" line reads `getTemporaryGatesForScope('chain', chainId)`
+   * and prints gate NAMES, so it can show neither a recorded nor a restored id. Only a prompt's
+   * `inline_gate_definitions` with `scope: chain` register there (`inlineScopeId`), and only with
+   * `gates.executeInlineGateDefinitions` (default false; named inline gates are `execution`-scoped
+   * and never listed). They register under `chain:<mcpRequest.chain_id ?? sessionId ?? 'execution'>`,
+   * and the call that starts a run has neither yet: its gate lands in the process-wide
+   * `chain:execution` bucket (measured by pointing the summary at that bucket, which listed
+   * `cg148` on the first server). So on the server that started the run the line reads `none`
+   * while the run's review holds `cg148`; a claimer that registers the gate on a `chain_id` call
+   * lists it, and the claimer's own other run of the same prompt reads `none`.
+   */
+  test('P6.148 pin: the chain-scoped gate line after a claim with a collision', async () => {
+    const roots = freshRoots();
+    writeFileSync(
+      path.join(roots.workspace, 'config.json'),
+      JSON.stringify({ gates: { executeInlineGateDefinitions: true } })
+    );
+    const chainLine = async (server: Server, chainId: string): Promise<string | undefined> =>
+      /- Chain-Scoped Temporary Gates: (.*)/.exec(
+        (await server.call('prompt_engine', { command: `gates chain ${chainId}` })).text
+      )?.[1];
+    const first = await startServer(roots);
+    await authorResources(first);
+    const author = async (args: Record<string, unknown>): Promise<void> => {
+      const result = await first.call('resource_manager', args);
+      if (result.isError) throw new Error(result.text);
+    };
+    await author({
+      resource_type: 'prompt',
+      action: 'create',
+      id: 'sv_a148',
+      category: 'general',
+      name: 'sv_a148',
+      description: 'step carrying a chain-scoped inline definition',
+      user_message_template: 'BODY-sv_a148',
+      gate_configuration: {
+        ...OPT_OUT,
+        inline_gate_definitions: [
+          {
+            id: 'cg148',
+            name: 'cg148',
+            type: 'validation',
+            scope: 'chain',
+            description: 'chain-scoped e2e gate',
+            guidance: 'CHAIN-148',
+            pass_criteria: ['CHAIN-148'],
+          },
+        ],
+      },
+    });
+    await author({
+      resource_type: 'prompt',
+      action: 'create',
+      id: 'sv_chain148',
+      category: 'general',
+      name: 'sv_chain148',
+      description: 'chain whose steps carry a chain-scoped gate',
+      user_message_template: 'CHAIN148',
+      gate_configuration: OPT_OUT,
+      chain_steps: [
+        { promptId: 'sv_a148', stepName: 'A' },
+        { promptId: 'sv_b', stepName: 'B' },
+        { promptId: 'sv_a148', stepName: 'C' },
+      ],
+    });
+    const chainId = chainIdOf(
+      (await first.call('prompt_engine', { command: '>>sv_chain148 :: g148:"A-ONE"' })).text
+    );
+    await first.call('prompt_engine', {
+      chain_id: chainId,
+      user_response: 'A draft',
+      gate_verdict: FAIL,
+    });
+    // Positive control: the chain-scoped gate is the run's own — its review names it.
+    expect(runRow(roots, chainId)?.reviews).toEqual({ a: ['g148', 'cg148'] });
+    expect(await chainLine(first, chainId)).toBe('none');
+    const token = await mintToken(first, chainId);
+
+    const second = await startServer(roots);
+    const otherChainId = chainIdOf(
+      (await second.call('prompt_engine', { command: '>>sv_chain148 :: g148:"B-TWO"' })).text
+    );
+    await first.stop();
+    const claimed = await second.call('prompt_engine', {
+      claim_token: token,
+      user_response: 'A out',
+      gate_verdict: PASS,
+    });
+    expect(claimed.isError).toBe(false);
+    expect(await chainLine(second, chainId)).toBe('cg148');
+    expect(await chainLine(second, otherChainId)).toBe('none');
+  }, 240000);
 
   test('P6.130 (a) after a claim the projection holds exactly the claimer row for the run', async () => {
     const roots = freshRoots();

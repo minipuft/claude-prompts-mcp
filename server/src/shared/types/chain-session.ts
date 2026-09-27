@@ -194,6 +194,12 @@ export interface RemainderNodeSpec {
    * still has its own producer (stage 06 for parse-time steps, `synthesizeStep` for these).
    */
   readonly delegated?: boolean;
+  /**
+   * The step's gate ids (P6.101, R68): what a chain prompt's step declares, or what the node
+   * itself declared. Carried onto the node, persisted in `chain_run_nodes.inline_gate_ids`, and
+   * walked by gate enhancement on the step `synthesizeStep` builds.
+   */
+  readonly inlineGateIds?: readonly string[];
 }
 
 /**
@@ -307,6 +313,13 @@ export interface ChainSession {
    * (`nodesHoldingRunOpen`).
    */
   reviews?: Record<string, GateReview>;
+  /**
+   * Recorded gate id to the id the owning process registered it under, for each named gate a
+   * claim could not restore under its recorded id because that process held it for another run
+   * (R60, R69). Persisted with the run, so a later claimer composes onto it: the open reviews name
+   * these ids. The blueprint keeps the recorded ids. Absent when every gate kept its recorded id.
+   */
+  gateRemap?: Record<string, string>;
   /** Pending shell verification state for bounce-back resume across MCP requests. */
   pendingShellVerification?: PendingShellVerificationSnapshot;
   blueprint?: SessionBlueprint;
@@ -558,9 +571,11 @@ export interface ChainSessionService {
   getInlineGateIds(sessionId: string, scope?: StateStoreOptions): string[] | undefined;
   /**
    * Adopt the gate ids this process registered for a restored run in place of the ids its
-   * blueprint recorded (R60 amended): `remap` is recorded id to registered id. The run's open
-   * reviews are rewritten through the review writer, and every read of the recorded inline gate
-   * ids resolves through the map for the session's lifetime here. The blueprint is untouched.
+   * blueprint recorded (R60 amended): `remap` is recorded id to registered id, and a recorded id
+   * it leaves out registered under itself. It composes onto the map an earlier claimer persisted
+   * on the run (`gateRemap`, R69), so an open review naming that claimer's id is rewritten to this
+   * process's id too. Every read of the recorded inline gate ids resolves through the run's map.
+   * The blueprint is untouched.
    */
   remapRunGates(sessionId: string, remap: ReadonlyMap<string, string>): Promise<void>;
   /**

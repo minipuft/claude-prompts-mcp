@@ -71,6 +71,8 @@ interface ResidualRunState {
   pendingGateReview?: unknown;
   detachedGateReviews?: unknown;
   pendingShellVerification?: unknown;
+  /** `ChainSession.gateRemap` (R69). */
+  gateRemap?: Record<string, string>;
   blueprint?: SessionBlueprint;
   lifecycle?: ChainSessionLifecycle;
   unknownsLedger?: UnknownLedgerEntry[];
@@ -123,6 +125,11 @@ interface ChainRunNodeRow {
    */
   delegated: number | null;
   args_json: string | null;
+  /**
+   * v32 (P6.101): a contributed node's step gate ids, JSON array or NULL. Optional because a
+   * SELECT that does not name it hands back no key, which {@link reconstructNode} reads as absent.
+   */
+  inline_gate_ids?: string | null;
   /** v31 (Tier 4): when a detached step was spawned; NULL on every other node. */
   spawned_at?: number | null;
 }
@@ -154,7 +161,8 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
       `SELECT n.session_id, n.node_id, n.position, n.prompt_id, n.step_name, n.milestone,
               n.is_placeholder, n.rendered_at, n.responded_at, n.completed_at,
               n.declared_sections_json,
-              n.origin, n.origin_unknown_id, n.delegated, n.args_json, n.spawned_at
+              n.origin, n.origin_unknown_id, n.delegated, n.args_json, n.inline_gate_ids,
+              n.spawned_at
          FROM chain_run_nodes n
          JOIN chain_runs r ON r.session_id = n.session_id
         WHERE r.run_owner_pid = ?
@@ -237,9 +245,9 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
           `INSERT INTO chain_run_nodes (
              session_id, node_id, position, prompt_id, step_name, milestone,
              is_placeholder, rendered_at, responded_at, completed_at,
-             origin, origin_unknown_id, declared_sections_json, delegated, args_json, spawned_at,
-             updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             origin, origin_unknown_id, declared_sections_json, delegated, args_json,
+             inline_gate_ids, spawned_at, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             session.sessionId,
             node.id,
@@ -266,6 +274,8 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
             // nothing" and "declared not delegated" stay distinguishable on the row.
             node.delegated === undefined ? null : node.delegated ? 1 : 0,
             node.args === undefined ? null : JSON.stringify(node.args),
+            // P6.101: a contributed node's step gates. NULL when it carries none.
+            node.inlineGateIds === undefined ? null : JSON.stringify(node.inlineGateIds),
             // Tier 4: the detached lifecycle's way in. NULL for every node never spawned.
             metadata?.spawnedAt ?? null,
             updatedAt,
@@ -331,7 +341,8 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
     const nodeRows = this.db.query<ChainRunNodeRow>(
       `SELECT session_id, node_id, position, prompt_id, step_name, milestone,
               is_placeholder, rendered_at, responded_at, completed_at,
-              declared_sections_json, origin, origin_unknown_id, spawned_at
+              declared_sections_json, origin, origin_unknown_id, delegated, args_json,
+              inline_gate_ids, spawned_at
          FROM chain_run_nodes
         WHERE session_id = ?
         ORDER BY position`,
@@ -381,6 +392,7 @@ function toResidual(session: ChainSession): ResidualRunState {
   if (session.pendingShellVerification !== undefined) {
     residual.pendingShellVerification = session.pendingShellVerification;
   }
+  if (session.gateRemap !== undefined) residual.gateRemap = session.gateRemap;
   if (session.blueprint !== undefined) residual.blueprint = session.blueprint;
   if (session.unknownsLedger !== undefined) residual.unknownsLedger = session.unknownsLedger;
   if (session.gatesFiredCount !== undefined) residual.gatesFiredCount = session.gatesFiredCount;
@@ -461,7 +473,30 @@ function reconstructNode(node: ChainRunNodeRow): ChainNode {
   if (args !== undefined) {
     reconstructed.args = args;
   }
+  // P6.101: the contributed node's step gates — as with `args`, the only statement of them a
+  // cold-loaded or claimed run has, so both node SELECTs name the column.
+  const inlineGateIds = parseNodeGateIds(node.inline_gate_ids);
+  if (inlineGateIds !== undefined) {
+    reconstructed.inlineGateIds = inlineGateIds;
+  }
   return reconstructed;
+}
+
+/**
+ * Read back a contributed node's gate ids. A malformed payload, or one holding anything but
+ * strings, is treated as absent for the reason `parseNodeArgs` drops a malformed bag: a run must
+ * stay resumable, and the loss is visible — the step renders without the gate.
+ */
+function parseNodeGateIds(raw: string | null | undefined): string[] | undefined {
+  if (raw === null || raw === undefined) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.every((id) => typeof id === 'string')
+      ? parsed
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -514,6 +549,7 @@ function applyResidual(session: ChainSession, residual: ResidualRunState): void 
   const optional: Array<[keyof ResidualRunState, keyof ChainSession]> = [
     ['continuityScopeId', 'continuityScopeId'],
     ['pendingShellVerification', 'pendingShellVerification'],
+    ['gateRemap', 'gateRemap'],
     ['blueprint', 'blueprint'],
     ['lifecycle', 'lifecycle'],
     ['unknownsLedger', 'unknownsLedger'],

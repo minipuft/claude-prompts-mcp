@@ -317,6 +317,34 @@ describe('ChainSessionStore.remapRunGates (R60 amended)', () => {
     expect(review?.gateIds).toEqual(['sv', 'g1']);
     expect(review?.gateTiers).toEqual({ sv: 'reminder', g1: 'reminder' });
     expect(inlineIdsOf(manager)).toEqual({ summary: ['g1', 'sv'], metadata: ['g1', 'sv'] });
+    expect(manager.getSession('run-1')?.gateRemap).toBeUndefined();
+  });
+
+  test('P6.146: a second claim composes onto the map the first one persisted on the run', async () => {
+    await claimedRun();
+    await manager.remapRunGates('run-1', new Map([['g1', 'g1-2']]));
+    // Positive control: the first claim's map rides the run, keyed by the recorded id.
+    expect(manager.getSession('run-1')?.gateRemap).toEqual({ g1: 'g1-2' });
+
+    await manager.remapRunGates('run-1', new Map([['g1', 'g1-3']]));
+
+    const review = manager.getReview('run-1', 'n1');
+    expect(review?.gateIds).toEqual(['sv', 'g1-3']);
+    expect(review?.prompts.map((prompt) => prompt.gateId)).toEqual(['sv', 'g1-3']);
+    expect(review?.gateTiers).toEqual({ sv: 'reminder', 'g1-3': 'reminder' });
+    expect(manager.getSession('run-1')?.gateRemap).toEqual({ g1: 'g1-3' });
+    expect(inlineIdsOf(manager)).toEqual({ summary: ['g1-3', 'sv'], metadata: ['g1-3', 'sv'] });
+    expect(manager.getSessionBlueprint('run-1')?.parsedCommand.inlineGateIds).toEqual(['g1']);
+  });
+
+  test('P6.146: a claimer that registers the recorded id returns the review to it', async () => {
+    await claimedRun();
+    await manager.remapRunGates('run-1', new Map([['g1', 'g1-2']]));
+    await manager.remapRunGates('run-1', new Map());
+
+    expect(manager.getReview('run-1', 'n1')?.gateIds).toEqual(['sv', 'g1']);
+    expect(manager.getSession('run-1')?.gateRemap).toBeUndefined();
+    expect(inlineIdsOf(manager)).toEqual({ summary: ['g1', 'sv'], metadata: ['g1', 'sv'] });
   });
 });
 

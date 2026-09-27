@@ -285,7 +285,9 @@ export class PipelineBuilder {
       deps.lightweightGateSystem.gateLoader,
       new GateMetricsRecorder(deps.getAnalyticsService),
       deps.logger,
-      runStepViewProvider
+      runStepViewProvider,
+      // A contributed step's prompt (P6.101): its node has no parse-time step to carry one.
+      (promptId) => deps.getConvertedPrompts().find((prompt) => prompt.id === promptId)
     );
     const temporaryGateRegistrar = new TemporaryGateRegistrar(
       temporaryGateRegistry,

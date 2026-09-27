@@ -264,7 +264,8 @@ export class InlineGateProcessor {
     };
 
     const remap = this.restoreNamedGates(parsedCommand, restore, runId);
-    // The run's open reviews and its inline-id reads follow the remap too (R60 amended).
+    // The run's open reviews and its inline-id reads follow the remap too (R60 amended), composed
+    // onto the map an earlier claimer persisted on the run (R69) — even when this one is empty.
     await this.runGateStore.remapRunGates(runId, remap);
     await this.restoreAnonymousGates(parsedCommand, restore, (key) =>
       this.temporaryGateRegistry.resolveDeclared(key, runId, restored)

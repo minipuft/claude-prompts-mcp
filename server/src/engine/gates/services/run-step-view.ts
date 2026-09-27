@@ -11,6 +11,7 @@
 // (the `ActiveFrameworkIdProvider` pattern already used by `GateEnhancementService`) instead of
 // widening the gate layer's reach into the whole session store.
 
+import type { ChainNode } from '#shared/types/chain-execution.js';
 import type { ChainSession, ChainSessionService } from '#shared/types/index.js';
 import type { StateStoreOptions } from '#shared/types/persistence.js';
 
@@ -25,6 +26,12 @@ export interface RunStepView {
   readonly sessionId?: string;
   /** The run's live node ids, in run order. */
   readonly nodeIds: readonly string[];
+  /**
+   * The run's live nodes, in run order (P6.101). Gate enhancement reads a CONTRIBUTED node's step
+   * gates off it (`ChainNode.inlineGateIds`): such a node has no parse-time step, so the walk would
+   * otherwise never see them. Absent only in hand-built views.
+   */
+  readonly nodes?: readonly ChainNode[];
   /**
    * Node ids the mutation policy retired (`milestone='skipped'`). A gate whose resolved target
    * is one of these must never fire: the step it was authored against will not execute, and
@@ -114,6 +121,7 @@ export function createRunStepViewProvider(store: ChainSessionService): RunStepVi
     const view: RunStepView = {
       sessionId: session.sessionId,
       nodeIds,
+      nodes: session.state.nodes,
       skippedNodeIds,
       currentNodeId: session.state.currentNodeId,
       complete: isRunComplete(session),

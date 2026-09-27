@@ -265,19 +265,21 @@ delegates the step that follows it, exactly as in a full chain.
 The string form is **narrower, not different**: it derives each node id from the prompt id, carries
 no edges, and refuses a raw `::` token (see below).
 
-**A contributed node carries `{id, promptId, stepName, args, delegated}` and nothing else.** It has
-no parse-time step for the rest of the vocabulary to live on — the renderer builds its step from
-the node — so every other node field is **refused by name** rather than accepted and dropped:
-`inputMapping`, `outputMapping`, `visibility`, `subagentModel`, `agentType`, `framework`,
-`retries`, `inlineGateIds`, `inlineGateCriteria`, `await`. A contributed node always blocks: which
+**A contributed node carries `{id, promptId, stepName, args, delegated, inlineGateIds}` and nothing
+else.** It has no parse-time step for the rest of the vocabulary to live on — the renderer builds
+its step from the node — so every other node field is **refused by name** rather than accepted and
+dropped: `inputMapping`, `outputMapping`, `visibility`, `subagentModel`, `agentType`, `framework`,
+`retries`, `inlineGateCriteria`, `await`. `inlineGateIds` travels with the node and its step is
+gated, enhanced and reviewed exactly as a planned step is. A contributed node always blocks: which
 nodes a run does not wait on is decided when the run starts. Ask for isolation with `delegated: true`, and
 bind a gate with the `gates` parameter and its `target_step_id`.
 
 A contributed node naming a chain prompt is expanded in place exactly as a submitted one is
 ([above](#a-node-naming-a-chain-prompt)): `r1` becomes `r1-a`, `r1-b`, each rendering its own
-template with the node's `args`. When an expanded step declares a field a contributed node cannot
-carry — a chain prompt whose steps declare `inlineGateIds`, for one — the remainder is **refused by
-name**, per step, and nothing is written, rather than running the steps without their gates.
+template with the node's `args` and its own `inlineGateIds` — so the bundled `research_chain` runs as
+a remainder with its step gates. When an expanded step declares a field a contributed node cannot
+carry — an `inputMapping`, for one — the remainder is **refused by name**, per step, and nothing is
+written, rather than running the steps without it.
 
 Caps carry over: one accepted remainder per unknown id, a per-run ceiling in the shape of
 `maxInsertions`, and `maxNodes` counted as the run's nodes after the write (a `replace` counts
