@@ -24,7 +24,7 @@ import type { DelegationPayload } from '../delegation/types.js';
 import type { GateOperator } from '../parsers/types/operator-types.js';
 import type { ConvertedPrompt, ExecutionModifiers } from '../types.js';
 
-import { ordinalOf } from '#shared/utils/node-order.js';
+import { ordinalOf, parseStepForNode } from '#shared/utils/node-order.js';
 
 /**
  * Max check-tier gates given a `per_gate` slot in the verdict template.
@@ -755,13 +755,12 @@ export class ResponseAssembler {
       // `undefined` = no run view to ask. Fall through to the pre-P6 offset.
     }
 
-    const currentNodeId = context.sessionContext?.currentNodeId;
-    const currentStep = context.sessionContext?.currentStep ?? 1;
-    const currentIndex =
-      currentNodeId != null && nodeAddressed
-        ? steps.findIndex((step) => step.nodeId === currentNodeId)
-        : steps.findIndex((step) => step.stepNumber === currentStep);
-    return currentIndex >= 0 ? currentIndex + 1 : undefined;
+    const current = parseStepForNode(
+      steps,
+      context.sessionContext?.currentNodeId,
+      context.sessionContext?.currentStep ?? 1
+    );
+    return current === undefined ? undefined : steps.indexOf(current) + 1;
   }
 
   /**
@@ -1483,14 +1482,9 @@ export class ResponseAssembler {
     const steps = context.parsedCommand?.steps;
     const currentStep = context.sessionContext?.currentStep;
     if (steps != null && currentStep != null && currentStep > 0) {
-      // Node id first (P4 row 5.4): post-mutation the node ordinal in `currentStep` no longer
-      // names parse step N. An inserted node has no parse step; fall back to the ordinal so the
-      // pre-mutation behavior is preserved for legacy chains without node ids.
-      const currentNodeId = context.sessionContext?.currentNodeId;
-      const byNode =
-        currentNodeId != null ? steps.find((s) => s.nodeId === currentNodeId) : undefined;
-      const step = byNode ?? steps.find((s) => s.stepNumber === currentStep);
-      return step?.convertedPrompt;
+      // By node (R77): an inserted node has no parse step, and the one at its ordinal is not it.
+      return parseStepForNode(steps, context.sessionContext?.currentNodeId, currentStep)
+        ?.convertedPrompt;
     }
 
     return undefined;

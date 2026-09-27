@@ -1,6 +1,9 @@
 // @lifecycle canonical - Core gate enhancement logic for prompt enrichment.
 import { DEFAULT_FRAMEWORK_GATE_ID, GateSetResolver } from './gate-set-resolver.js';
-import { planNodeDrivenRender } from '../../execution/operators/node-step-projection.js';
+import {
+  planNodeDrivenRender,
+  steplessBaseStep,
+} from '../../execution/operators/node-step-projection.js';
 import { parseChainGateDefinitionRef } from '../../execution/parsers/chain-step-projection.js';
 import { resolveEnforcementMode } from '../../execution/pipeline/decisions/index.js';
 import { isFrameworkInjected } from '../../execution/pipeline/decisions/injection/index.js';
@@ -189,13 +192,16 @@ export class GateEnhancementService {
     const inlineGateIds = context.parsedCommand?.inlineGateIds ?? [];
     // A stepless run (a gated single prompt, P6.127) that a remainder grew is walked as a chain:
     // its one planned node is the prompt itself, and every node contributed after it is a step
-    // (R71). The contributed steps are NOT added to `parsedCommand.steps`, which stays empty so
-    // the render keeps its single-prompt route.
+    // (R71). The contributed steps are NOT added to `parsedCommand.steps`, which stays empty: the
+    // walk is published instead, and stage 18 renders the run's nodes over it (R78), so a step's
+    // gate instructions reach the render of the step they were written for.
     const base = this.steplessBaseStep(context, prompt, inlineGateIds);
     const walk = base === undefined ? [] : this.walkInRunOrder(context, [base], []);
-    return walk.length > 1
-      ? { type: 'chain', steps: walk }
-      : { type: 'single', prompt, inlineGateIds };
+    if (walk.length <= 1) {
+      return { type: 'single', prompt, inlineGateIds };
+    }
+    context.state.gates.steplessRunSteps = walk;
+    return { type: 'chain', steps: walk };
   }
 
   /**
@@ -376,6 +382,13 @@ export class GateEnhancementService {
 
     this.addGatesToAccumulator(context, registeredGates.temporaryGateIds, 'temporary-request');
     this.addGatesToAccumulator(context, registeredGates.canonicalGateIds, 'framework-guide');
+    context.state.gates.chainWalkSettings = {
+      gatesConfig,
+      frameworkGateIds,
+      inlineDefinitionGateIds,
+      stepDefinitionIds: stepInput.stepDefinitionIds,
+      seedGateIds: [...context.gates.getAll()],
+    };
 
     let totalGatesApplied = 0;
     for (const step of steps) {
@@ -455,26 +468,9 @@ export class GateEnhancementService {
 
     const activeFrameworkId = this.getActiveFrameworkId(context);
     const stepFrameworkId = step.frameworkContext?.selectedFramework?.id ?? activeFrameworkId;
-
-    // Read from the step's own prompt, not the chain entry prompt: each step is a distinct
-    // prompt and may carry its own injection block and its own `gateConfiguration`.
-    const frameworkInjected = isFrameworkInjected({
-      modifiers: step.executionPlan?.modifiers,
-      promptInjection: prompt.injection,
-    });
-    const inlineGateIds = resolvedInlineGateIds(step, input.stepDefinitionIds);
     const resolution = await this.resolveIntoAccumulator(
       context,
-      stepResolutionInput({
-        step,
-        inlineGateIds,
-        prompt,
-        frameworkId: stepFrameworkId,
-        frameworkInjected,
-        frameworkGatesEnabled: input.gatesConfig?.enableFrameworkGates !== false,
-        knownFrameworkGateIds: [...input.frameworkGateIds],
-        inlineDefinitionGateIds: input.inlineDefinitionGateIds,
-      })
+      walkedStepResolutionInput(step, prompt, stepFrameworkId, input)
     );
 
     const gateIds = this.stepApplicableGateIds(step, input, activeFrameworkId, resolution);
@@ -866,8 +862,8 @@ export class GateEnhancementService {
    * `parsedCommand.steps`: a per-call copy (a resume restores a clone of the blueprint, a re-sent
    * command parses afresh), never written back, and the list stages 18 and 20 and the capture
    * project the run's nodes over — by node id, so the step object the walk writes gate
-   * instructions onto is the one they render. A stepless run joins into a throwaway list, so its
-   * `parsedCommand.steps` stays empty and its render keeps the single-prompt route.
+   * instructions onto is the one they render. A stepless run joins into a list of its own, so its
+   * `parsedCommand.steps` stays empty; the walk is published for stage 18 to render over (R78).
    *
    * `parseSteps` itself is returned untouched when the run contributed nothing — an unmutated run,
    * or one only insertions changed, walks byte-identically — and for a legacy chain whose parse
@@ -914,15 +910,13 @@ export class GateEnhancementService {
     if (baseNode === undefined) {
       return undefined;
     }
-    return {
-      stepNumber: 1,
-      nodeId: baseNode.id,
-      promptId: prompt.id,
+    return steplessBaseStep({
+      baseNodeId: baseNode.id,
+      prompt,
       args: context.parsedCommand?.promptArgs ?? {},
-      convertedPrompt: prompt,
-      inlineGateIds: [...inlineGateIds],
-      ...(context.executionPlan !== undefined ? { executionPlan: context.executionPlan } : {}),
-    };
+      inlineGateIds,
+      executionPlan: context.executionPlan,
+    });
   }
 
   /**
@@ -992,6 +986,45 @@ export class GateEnhancementService {
       { nodeId: step.nodeId, stepNumber: step.stepNumber },
       runStepView
     );
+  }
+
+  /**
+   * The review an INSERTED current node inherits, re-derived against the run as it stands NOW
+   * (P6.170, R81), or undefined when the current node was not inserted or no chain walk ran on
+   * this call.
+   *
+   * A `remainder` is applied in stage 16, after this call's walk (stage 11) computed the inherited
+   * review and stage 13 opened it — so a `replace` submitted on the call answering an inserted
+   * node left that review naming the gates of the steps the replace dropped. Re-deriving is the
+   * walk again over the live run, from the gates the call held before its walk, collecting each
+   * step's resolution by id: the call's own accumulator is not touched, since it still feeds the
+   * gate guidance already injected for this call. PURE apart from reading the run and resolving.
+   */
+  async inheritedReviewGateIdsNow(context: ExecutionContext): Promise<string[] | undefined> {
+    const settings = context.state.gates.chainWalkSettings;
+    const runStepView = this.resolveRunStepView(context);
+    if (settings === undefined || runStepView?.currentNodeOrigin === undefined) {
+      return undefined;
+    }
+    const gateContext = this.resolveGateContext(context);
+    if (gateContext?.type !== 'chain') {
+      return undefined;
+    }
+    const resolver = this.buildGateSetResolver();
+    const activeFrameworkId = this.getActiveFrameworkId(context);
+    const accumulated = new Set(settings.seedGateIds);
+    for (const step of gateContext.steps) {
+      const prompt = step.convertedPrompt;
+      if (prompt === undefined || this.shouldSkip(step.executionPlan?.modifiers)) {
+        continue;
+      }
+      const frameworkId = step.frameworkContext?.selectedFramework.id ?? activeFrameworkId;
+      const resolution = await resolver.resolve(
+        walkedStepResolutionInput(step, prompt, frameworkId, settings)
+      );
+      resolution.accepted.forEach((gate) => accumulated.add(gate.id));
+    }
+    return this.inheritedReviewGateIds([...accumulated], runStepView);
   }
 
   /**
@@ -1202,6 +1235,35 @@ function resolvedInlineGateIds(
   stepDefinitionIds: ReadonlyMap<string, string>
 ): string[] | undefined {
   return step.inlineGateIds?.map((gateId) => stepDefinitionIds.get(gateId) ?? gateId);
+}
+
+/**
+ * The resolution input for one step of the gate walk: its own prompt (not the chain entry
+ * prompt — each step may carry its own injection block and `gateConfiguration`), its inline gates
+ * with chain-prompt references resolved, and the walk's settings. PURE.
+ */
+function walkedStepResolutionInput(
+  step: ChainStepPrompt,
+  prompt: ConvertedPrompt,
+  frameworkId: string | undefined,
+  settings: Pick<
+    ChainStepEnhancementInput,
+    'gatesConfig' | 'frameworkGateIds' | 'inlineDefinitionGateIds' | 'stepDefinitionIds'
+  >
+): GateResolutionInput {
+  return stepResolutionInput({
+    step,
+    inlineGateIds: resolvedInlineGateIds(step, settings.stepDefinitionIds),
+    prompt,
+    frameworkId,
+    frameworkInjected: isFrameworkInjected({
+      modifiers: step.executionPlan?.modifiers,
+      promptInjection: prompt.injection,
+    }),
+    frameworkGatesEnabled: settings.gatesConfig?.enableFrameworkGates !== false,
+    knownFrameworkGateIds: [...settings.frameworkGateIds],
+    inlineDefinitionGateIds: settings.inlineDefinitionGateIds,
+  });
 }
 
 /**

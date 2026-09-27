@@ -8,6 +8,7 @@ import {
   mintSequentialIds,
   nextAfter,
   ordinalOf,
+  parseStepForNode,
   totalOf,
 } from '../../../src/shared/utils/node-order.js';
 
@@ -180,6 +181,31 @@ describe('node-order', () => {
       it('is true for the only node in a single-node chain', () => {
         expect(isTerminal(single, 'only')).toBe(true);
       });
+    });
+  });
+
+  describe('parseStepForNode (P6.176 / R77)', () => {
+    const steps = [
+      { stepNumber: 1, nodeId: 'n1', promptId: 'a' },
+      { stepNumber: 2, nodeId: 'n2', promptId: 'b' },
+    ];
+
+    it('answers by node id when the steps carry node ids', () => {
+      expect(parseStepForNode(steps, 'n2', 1)?.promptId).toBe('b');
+    });
+
+    it('answers nothing for a node the parse did not mint, whatever its ordinal names', () => {
+      expect(parseStepForNode(steps, 'inv-u-1', 2)).toBeUndefined();
+    });
+
+    it('answers by ordinal only with no node address: no node id, or steps carrying none', () => {
+      expect(parseStepForNode(steps, undefined, 2)?.promptId).toBe('b');
+      expect(parseStepForNode(steps, null, 1)?.promptId).toBe('a');
+      const legacy = [
+        { stepNumber: 1, promptId: 'a' },
+        { stepNumber: 2, promptId: 'b' },
+      ];
+      expect(parseStepForNode(legacy, 'n2', 2)?.promptId).toBe('b');
     });
   });
 });

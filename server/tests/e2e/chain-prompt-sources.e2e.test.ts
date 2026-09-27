@@ -139,6 +139,19 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
         { promptId: 'sv_b', stepName: 'B' },
       ],
     });
+    // P6.176: a step whose template reads a named output, so a capture under the wrong step's
+    // `outputMapping` is visible in the next render.
+    await author({
+      resource_type: 'prompt',
+      action: 'create',
+      id: 'sv_out',
+      category: 'general',
+      name: 'sv_out',
+      description: 'e2e step reading a named output',
+      user_message_template: 'BODY-sv_out named={{outputs.named_y}}',
+      arguments: TOPIC,
+      gate_configuration: OPT_OUT,
+    });
     // P6.160: two prompts that keep the shipped category and framework defaults, and an ungated
     // chain of them, so a contributed step's defaults compare against a planned step's.
     for (const id of ['sv_d', 'sv_e']) {
@@ -1279,6 +1292,108 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
     }, 120000);
   });
 
+  /**
+   * P6.176 / R77. Every step lookup resolves by node: after an insertion the parse step at the
+   * inserted node's ordinal is the NEXT planned step, never the inserted one.
+   */
+  describe('P6.176: an inserted node is never read as the planned step at its ordinal', () => {
+    const blocking = (id: string) => ({
+      observations: [
+        { type: 'unknown_discovered', id, statement: `STATEMENT-${id}`, blocking: true },
+      ],
+    });
+    function review(chainId: string, nodeId: string): { gateIds?: string[]; maxAttempts?: number } {
+      const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+      try {
+        const row = db.prepare('SELECT state FROM chain_runs WHERE chain_id = ?').get(chainId) as
+          { state: string } | undefined;
+        const state = JSON.parse(row?.state ?? '{}') as {
+          reviews?: Record<string, { gateIds?: string[]; maxAttempts?: number }>;
+        };
+        return state.reviews?.[nodeId] ?? {};
+      } finally {
+        db.close();
+      }
+    }
+    const nodes = (y: Record<string, unknown>, z?: Record<string, unknown>) => ({
+      workflow: {
+        version: 1,
+        nodes: [
+          { id: 'x', promptId: 'sv_a' },
+          { id: 'y', ...y },
+          ...(z !== undefined ? [{ id: 'z', ...z }] : []),
+        ],
+      },
+    });
+
+    /**
+     * MEASURED 2026-09-27 on `c8fd3237`: the first review of the inserted `inv-u-176a` quoted
+     * `**topic**: TB` (the planned `n2`'s argument) under "Original Request Intent", then
+     * `## Investigate: ` and "Ledger id: ``" — `getChainContext` read the blueprint step at the
+     * inserted node's ordinal and its args replaced the node's own.
+     */
+    test("(a) an inserted node's review quotes its own statement and ledger id", async () => {
+      const run = await start({ command: `>>sv_a${ARROW}>>sv_b topic:"TB"${ARROW}>>sv_d` });
+      await run.call({ user_response: 'A out', ...blocking('u-176a') });
+      const review = await run.call({ user_response: 'investigated' });
+      expect(review).toContain('## Original Task Instructions');
+      expect(review).toContain('## Investigate: STATEMENT-u-176a');
+      expect(review).toContain('Ledger id: `u-176a`');
+      expect(review).not.toContain('**topic**: TB');
+    }, 120000);
+
+    /** MEASURED on `c8fd3237`: the inserted node's review took `y`'s `retries: 5`. */
+    test("(b) an inserted node's review takes no retries of the planned step at its ordinal", async () => {
+      const gated = { promptId: 'sv_b', inlineGateIds: ['sv-block'] };
+      const control = await start(nodes(gated));
+      await control.call({ user_response: 'A out', ...blocking('u-176b0') });
+      await control.call({ user_response: 'investigated', gate_verdict: FAIL });
+      const defaultAttempts = review(control.chainId, 'inv-u-176b0').maxAttempts;
+      expect(defaultAttempts).toBeGreaterThan(0);
+      expect(defaultAttempts).not.toBe(5);
+
+      const run = await start(nodes({ ...gated, retries: 5 }));
+      await run.call({ user_response: 'A out', ...blocking('u-176b') });
+      await run.call({ user_response: 'investigated', gate_verdict: FAIL });
+      expect(review(run.chainId, 'inv-u-176b')).toMatchObject({
+        gateIds: ['sv-block'],
+        maxAttempts: defaultAttempts,
+      });
+
+      // Positive control: the step that declares the retries still gets them
+      const own = await start(nodes({ ...gated, retries: 5 }));
+      await own.call({ user_response: 'A out' });
+      await own.call({ user_response: 'B out', gate_verdict: FAIL });
+      expect(review(own.chainId, 'y').maxAttempts).toBe(5);
+    }, 120000);
+
+    /**
+     * MEASURED on `c8fd3237`: `y` rendered `named=INV-ANSWER` (the inserted node's answer, captured
+     * under `y`'s `outputMapping`) and `z` rendered the same — `y`'s own answer was captured under
+     * `z`'s mapping (none), so it never reached its name.
+     */
+    test("(c) a captured answer lands under its own node's output names", async () => {
+      const run = await start(
+        nodes({ promptId: 'sv_out', outputMapping: { named_y: 'output' } }, { promptId: 'sv_out' })
+      );
+      await run.call({ user_response: 'A out', ...blocking('u-176c') });
+      const y = await run.call({ user_response: 'INV-ANSWER' });
+      expect(y.match(/BODY-sv_out named=\S*/g)).toEqual(['BODY-sv_out named=']);
+      const z = await run.call({ user_response: 'Y-ANSWER' });
+      expect(z.match(/BODY-sv_out named=\S*/g)).toEqual(['BODY-sv_out named=Y-ANSWER']);
+    }, 120000);
+
+    test("(d) control: with no insertion the named output and the retries are the planned steps'", async () => {
+      const run = await start(
+        nodes({ promptId: 'sv_out', outputMapping: { named_y: 'output' } }, { promptId: 'sv_out' })
+      );
+      const y = await run.call({ user_response: 'A out' });
+      expect(y.match(/BODY-sv_out named=\S*/g)).toEqual(['BODY-sv_out named=']);
+      const z = await run.call({ user_response: 'Y-ANSWER' });
+      expect(z.match(/BODY-sv_out named=\S*/g)).toEqual(['BODY-sv_out named=Y-ANSWER']);
+    }, 120000);
+  });
+
   describe('P6.93: a remainder naming a chain prompt', () => {
     /** The run's live nodes, as `chain_run_nodes` holds them. */
     function runNodes(chainId: string): string[] {
@@ -1491,6 +1606,14 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       }
     }
 
+    /** Every section CAGEERF requires, each past its 100-character floor, so its guard passes. */
+    const SECTIONS = ['Context', 'Analysis', 'Goals', 'Execution']
+      .map(
+        (header) =>
+          `## ${header}\n${`The ${header.toLowerCase()} of this answer, stated in full. `.repeat(4)}`
+      )
+      .join('\n\n');
+
     /** The gate reminders a step render asks the verdict to attest. */
     const reminders = (text: string): string | undefined =>
       /"reminders": \{"satisfied": (\[[^\]]*\])/.exec(text)?.[1];
@@ -1524,12 +1647,105 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       expect(reply.isError).toBe(false);
       const first = await run.call({ user_response: 'B out' });
       expect(templates(first)).toEqual(['BODY-sv_d topic=']);
-      await run.call({ user_response: 'r1-a out', gate_verdict: PASS });
+      // Since P6.169 a contributed step is phase-guarded as a planned one is, so each answer
+      // carries the framework's sections and the FAIL's review is the gate review.
+      await run.call({ user_response: `r1-a out\n${SECTIONS}`, gate_verdict: PASS });
       expect(currentNode(run.chainId)).toBe('r1-b');
-      const failed = await run.call({ user_response: 'r1-b out', gate_verdict: FAIL });
+      const failed = await run.call({ user_response: `r1-b out\n${SECTIONS}`, gate_verdict: FAIL });
       expect(failed).not.toContain('carries no gates');
       expect(runState(run.chainId).reviews).toEqual({ 'r1-b': plannedGates });
     }, 120000);
+
+    /**
+     * P6.170 / R81. MEASURED 2026-09-27 on `5f536fc9`: the call answering the inserted
+     * `inv-u-160` with a `replace` remainder dropping `n2` (bound to `sv-drop`) opened the
+     * inserted node's review as `[sv-drop]`, a gate of the step the same call dropped. Stage 11
+     * walks the run and stage 13 opens the review before stage 16 applies the remainder. A
+     * `replace` submitted on the call that INSERTS the node drops that node too (measured), so the
+     * answering call is the one that reaches it. The review is now re-derived after the
+     * remainder, against the run the remainder left.
+     */
+    describe("P6.170: an inserted node's review follows the remainder its answering call applied", () => {
+      async function insertInvestigation() {
+        const run = await start({ command: `>>sv_a${ARROW}>>sv_b :: sv-drop` });
+        await run.call({ user_response: 'A out', ...blockingUnknown });
+        expect(currentNode(run.chainId)).toBe('inv-u-160');
+        return run;
+      }
+
+      test('(a) a replace on the answering call leaves no gate of a dropped step on the review', async () => {
+        const run = await insertInvestigation();
+        const replaced = await tool('prompt_engine', {
+          chain_id: run.chainId,
+          user_response: 'investigated',
+          remainder: { mode: 'replace', nodes: [{ id: 'r1', promptId: 'sv_chain' }] },
+        });
+        expect(replaced.isError).toBe(false);
+        expect(runNodes(run.chainId).slice(-3)).toEqual([
+          'r1-a:sv_a:remainder',
+          'r1-b:sv_b:remainder',
+          'r1-c:sv_a:remainder',
+        ]);
+        expect(runState(run.chainId).reviews).toEqual({ 'inv-u-160': ['sv-block'] });
+        expect(replaced.text).not.toContain('sv-drop');
+      }, 120000);
+
+      test('(b) control: an insertion with no remainder inherits the blocked step as before', async () => {
+        const run = await insertInvestigation();
+        await run.call({ user_response: 'investigated', gate_verdict: FAIL });
+        expect(runState(run.chainId).reviews).toEqual({ 'inv-u-160': ['sv-drop'] });
+      }, 120000);
+    });
+
+    /**
+     * P6.169 / R79. MEASURED 2026-09-27 on `c52dacbe` (shipped CAGEERF): `sv_d` as the planned
+     * `n2` of `>>sv_a --> >>sv_d` declared the framework's section headers and a PASS with none
+     * opened `{n2: [__phase_guard__]}`; the same prompt as the remainder node `r1` of
+     * `>>sv_a --> >>sv_b` declared none and the same PASS opened nothing — a contributed step has
+     * no framework context, and its render read the declaration from that alone.
+     */
+    describe('P6.169: a contributed step declares its framework sections as a planned step does', () => {
+      /** Walk to the step answered last and answer it PASS with no sections; its reply and reviews. */
+      async function passWithoutSections(command: string, contributed: boolean) {
+        const run = await start({ command });
+        await run.call({ user_response: 'A out', ...blockingUnknown });
+        const investigated = await run.call({
+          user_response: 'investigated',
+          gate_verdict: PASS,
+          ...(contributed ? remainder({ promptId: 'sv_d' }) : {}),
+        });
+        const target = contributed ? 'r1' : 'n2';
+        let rendered = investigated;
+        for (let hop = 0; hop < 3 && currentNode(run.chainId) !== target; hop++) {
+          rendered = await run.call({ user_response: 'out', gate_verdict: PASS });
+        }
+        expect(currentNode(run.chainId)).toBe(target);
+        await run.call({ user_response: `${target} out`, gate_verdict: PASS });
+        return { rendered, reviews: runState(run.chainId).reviews };
+      }
+
+      test('(a) a remainder step answered PASS with no sections opens its phase guard', async () => {
+        const { rendered, reviews } = await passWithoutSections(`>>sv_a${ARROW}>>sv_b`, true);
+        expect(rendered).toContain('## Context');
+        expect(reviews).toEqual({ r1: ['__phase_guard__'] });
+      }, 120000);
+
+      test('(b) control: the same prompt as a planned step is unchanged', async () => {
+        const { rendered, reviews } = await passWithoutSections(`>>sv_a${ARROW}>>sv_d`, false);
+        expect(rendered).toContain('## Context');
+        expect(reviews).toEqual({ n2: ['__phase_guard__'] });
+      }, 120000);
+
+      test('(c) control: under %clean a remainder step declares nothing and opens nothing', async () => {
+        const { rendered, reviews } = await passWithoutSections(
+          `%clean >>sv_a${ARROW}>>sv_b`,
+          true
+        );
+        expect(rendered).toContain('BODY-sv_d');
+        expect(rendered).not.toContain('## Context');
+        expect(reviews).toEqual({});
+      }, 120000);
+    });
 
     /**
      * P6.160 / R71. MEASURED 2026-09-27 on `0900e73d`: a `replace` remainder dropping the planned
@@ -1598,6 +1814,107 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       const review = runState(run.chainId).reviews;
       expect(Object.keys(review)).toEqual(['r1-a']);
       expect(review['r1-a']).toContain('sv-block');
+    }, 120000);
+
+    /**
+     * P6.168 / R78. MEASURED 2026-09-27 on `9262bbdf` (shipped defaults): a gated single prompt is
+     * a run with no parse steps, so stage 18 sent every call of `>>sv_a :: "CRIT-168"` down the
+     * single-prompt route, which renders the command's own prompt. After a blocking unknown the
+     * inserted `investigate_unknown` node rendered `BODY-sv_a`, and after an `sv_pair` remainder
+     * `r1-b` rendered `BODY-sv_a` too, while every record named the node's own prompt. The run's
+     * nodes now decide the route: a run grown past its one node renders each node's own prompt.
+     */
+    test('P6.168 (a) a grown one-node run renders each node its own prompt; (b) each record names it', async () => {
+      const run = await start({ command: '>>sv_a :: "CRIT-168"' });
+      const inserted = await run.call({ user_response: 'out', ...blockingUnknown });
+      expect(currentNode(run.chainId)).toBe('inv-u-160');
+      expect(templates(inserted)).toEqual([]);
+      expect(inserted).toContain('- **statement**: the rest of the plan is undecided');
+
+      const appended = await run.call({
+        user_response: 'investigated',
+        gate_verdict: PASS,
+        ...remainder({ promptId: 'sv_pair' }),
+      });
+      expect(currentNode(run.chainId)).toBe('r1-a');
+      const rendered = [templates(appended)];
+      for (const node of ['r1-a', 'r1-b']) {
+        expect(currentNode(run.chainId)).toBe(node);
+        const reply = await run.call({ user_response: `${node} out`, gate_verdict: PASS });
+        rendered.push(templates(reply));
+      }
+      expect(rendered).toEqual([['BODY-sv_a topic='], ['BODY-sv_b topic='], []]);
+
+      const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+      try {
+        const working = (
+          db
+            .prepare(
+              "SELECT node_id, prompt_id FROM execution_records WHERE chain_id = ? AND status = 'working' ORDER BY execution_id"
+            )
+            .all(run.chainId) as Array<{ node_id: string; prompt_id: string }>
+        ).map((row) => `${row.node_id}:${row.prompt_id}`);
+        expect(working).toEqual([
+          'n1:sv_a',
+          'inv-u-160:investigate_unknown',
+          'r1-a:sv_a',
+          'r1-b:sv_b',
+        ]);
+      } finally {
+        db.close();
+      }
+    }, 120000);
+
+    /**
+     * P6.168 / R78 control: a one-node run that nothing grew keeps the single-prompt route. The
+     * reply from its task context on is pinned byte for byte as the route rendered it on
+     * `9262bbdf`, before the route read the run's nodes (the framework preamble above it is the
+     * framework's text, not the route's).
+     */
+    test('P6.168 (c) control: a one-node run with no growth renders through the single-prompt route', async () => {
+      const run = await start({ command: '>>sv_a :: "CRIT-ONE"' });
+      const fromTask = run.text
+        .slice(run.text.indexOf('## Task Context'))
+        .replace(/temp_\d+_[a-z0-9]+/g, 'TEMP')
+        .replace(/chain-sv_a#\d+/g, 'CHAIN');
+      expect(fromTask).toBe(
+        [
+          '## Task Context',
+          '',
+          'BODY-sv_a topic=',
+          '',
+          '---',
+          '',
+          '## Inline Gates',
+          '',
+          '### Reminders',
+          '',
+          '1. CRIT-ONE',
+          '',
+          "Attest reminders in the verdict's `reminders` field; checks are recorded by the engine.",
+          '',
+          '---',
+          '',
+          '---',
+          '**Review Required**',
+          '',
+          '**Gates**: TEMP',
+          '',
+          'Checks are recorded by the engine; attest reminders in one field, then submit:',
+          '',
+          '```',
+          'chain_id="CHAIN"',
+          'gate_verdict={',
+          '  "overall": "PASS",',
+          '  "rationale": "<overall assessment>",',
+          '  "per_gate": [',
+          '    {"index": 1, "passed": true, "rationale": "TEMP: <why>"}',
+          '  ]',
+          '}',
+          '```',
+          'Re-run: `>>sv_a topic:"" :: \'CRIT-ONE\'`',
+        ].join('\n')
+      );
     }, 120000);
   });
 

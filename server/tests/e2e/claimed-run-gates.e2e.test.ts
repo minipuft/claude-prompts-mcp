@@ -790,8 +790,8 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
    * P6.164 / R73. MEASURED 2026-09-27 on `c3cf5989`, two runs of one chain on one server: both
    * start calls filed their chain-scoped gate under `chain:execution`, and both lines read `none`.
    * The registry releases a run's gates by the run's ownership index (`releaseRun`), so a cancel
-   * never took the other run's gate; the one clear-by-scope path (`cleanupScopeByKey`) is
-   * reachable only for a scope carrying an expiry, which nothing sets. Pinned here: one run ends,
+   * never took the other run's gate, and the registry has no path that clears a scope's gates
+   * together. Pinned here: one run ends,
    * the other keeps its gate and its own scope lists it.
    */
   test('P6.164 (b) two runs on one server: one ends, the other keeps its chain-scoped gate', async () => {
@@ -862,6 +862,98 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     });
     expect(runRow(roots, kept)?.reviews).toEqual({ a: ['cg164-2'] });
     expect(failed.text).toContain('CHAIN-164');
+  }, 180000);
+
+  /**
+   * P6.172 / R82. MEASURED 2026-09-27 on `7e6697b4` with `gates.executeInlineGateDefinitions` on: a
+   * three-step chain of one step prompt whose inline definition declares no `id` (name `g172`,
+   * `scope: chain`) listed `g172` three times after its start call, six after the second call and
+   * nine after the third, and step `b`'s FAIL reviewed three `temp_…` gates — one fresh gate per
+   * step per call, because only a declared id was looked up among the gates the run holds. The
+   * same prompt declaring `id: dg172` listed one gate throughout. Now an id-less definition
+   * registers under the slug of its name, as a chain prompt's already did (R76).
+   */
+  test('P6.172 an id-less inline definition is one gate across three calls; a declared id is unchanged', async () => {
+    const roots = freshRoots();
+    writeFileSync(
+      path.join(roots.workspace, 'config.json'),
+      JSON.stringify({ gates: { executeInlineGateDefinitions: true } })
+    );
+    const server = await startServer(roots);
+    const author = async (args: Record<string, unknown>): Promise<void> => {
+      const result = await server.call('resource_manager', args);
+      if (result.isError) throw new Error(result.text);
+    };
+    const definitions = {
+      sv_x172: { name: 'g172', guidance: 'IDLESS-172' },
+      sv_y172: { id: 'dg172', name: 'dg172', guidance: 'DECL-172' },
+    };
+    for (const [id, definition] of Object.entries(definitions)) {
+      await author({
+        resource_type: 'prompt',
+        action: 'create',
+        id,
+        category: 'general',
+        name: id,
+        description: 'step carrying one chain-scoped inline definition',
+        user_message_template: `BODY-${id}`,
+        gate_configuration: {
+          ...OPT_OUT,
+          inline_gate_definitions: [
+            {
+              ...definition,
+              type: 'validation',
+              scope: 'chain',
+              description: 'e2e inline definition',
+              pass_criteria: [definition.guidance],
+            },
+          ],
+        },
+      });
+      await author({
+        resource_type: 'prompt',
+        action: 'create',
+        id: `${id}_chain`,
+        category: 'general',
+        name: `${id}_chain`,
+        description: 'three steps of one step prompt',
+        user_message_template: 'CHAIN172',
+        gate_configuration: OPT_OUT,
+        chain_steps: ['A', 'B', 'C'].map((stepName) => ({ promptId: id, stepName })),
+      });
+    }
+    const chainLine = async (chainId: string): Promise<string | undefined> =>
+      /- Chain-Scoped Temporary Gates: (.*)/.exec(
+        (await server.call('prompt_engine', { command: `gates chain ${chainId}` })).text
+      )?.[1];
+    const threeCalls = async (promptId: string) => {
+      const chainId = chainIdOf(
+        (await server.call('prompt_engine', { command: `>>${promptId}_chain` })).text
+      );
+      const lines = [await chainLine(chainId)];
+      await server.call('prompt_engine', {
+        chain_id: chainId,
+        user_response: 'A out',
+        gate_verdict: PASS,
+      });
+      lines.push(await chainLine(chainId));
+      const failed = await server.call('prompt_engine', {
+        chain_id: chainId,
+        user_response: 'B out',
+        gate_verdict: FAIL,
+      });
+      lines.push(await chainLine(chainId));
+      return { lines, reviews: runRow(roots, chainId)?.reviews, failed: failed.text };
+    };
+
+    const idless = await threeCalls('sv_x172');
+    expect(idless.lines).toEqual(['g172', 'g172', 'g172']);
+    expect(idless.reviews).toEqual({ b: ['g172'] });
+    expect(idless.failed).toContain('IDLESS-172');
+
+    const declared = await threeCalls('sv_y172');
+    expect(declared.lines).toEqual(['dg172', 'dg172', 'dg172']);
+    expect(declared.reviews).toEqual({ b: ['dg172'] });
   }, 180000);
 
   /**

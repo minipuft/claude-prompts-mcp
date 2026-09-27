@@ -17,7 +17,13 @@ import type { DeferredAdvance } from '../../gates/services/gate-verdict-processo
 import type { ExecutionContext, SessionContext } from '../context/index.js';
 import type { ChainStepPrompt } from '../operators/types.js';
 
-import { currentOrdinal, nodeIdAt, ordinalOf, totalOf } from '#shared/utils/node-order.js';
+import {
+  currentOrdinal,
+  nodeIdAt,
+  ordinalOf,
+  parseStepForNode,
+  totalOf,
+} from '#shared/utils/node-order.js';
 
 const PLACEHOLDER_SOURCE = 'StepResponseCaptureStage';
 
@@ -200,7 +206,7 @@ export class StepCaptureService {
       isPlaceholder: false,
       source: 'detached_report',
       capturedAt: Date.now(),
-      outputMapping: this.getStepOutputMapping(context, target.ordinal),
+      outputMapping: this.getStepOutputMapping(context, session, target),
     });
     await this.chainSessionStore.completeStep(sessionId, target.nodeId, {
       preservePlaceholder: false,
@@ -502,14 +508,17 @@ export class StepCaptureService {
     );
   }
 
-  getStepOutputMapping(
+  /**
+   * The named outputs the captured node declares — ITS step's, resolved as every record writer
+   * resolves it (`recordedStep`). By ordinal, an inserted node published its answer under the
+   * next planned step's names and that step's own answer under the step after it (P6.176).
+   */
+  private getStepOutputMapping(
     context: ExecutionContext,
-    stepNumber: number
+    session: ChainSession,
+    target: StepTarget
   ): Record<string, string> | undefined {
-    const steps = context.parsedCommand?.steps;
-    if (steps === undefined) return undefined;
-    const step = steps.find((s) => s.stepNumber === stepNumber);
-    return step?.outputMapping;
+    return recordedStep(context, session, target.nodeId, target.ordinal).step?.outputMapping;
   }
 
   private buildPlaceholderContent(chainId: string, stepNumber: number, totalSteps: number): string {
@@ -537,7 +546,7 @@ export class StepCaptureService {
       `User response detected for step ${target.ordinal} (${target.nodeId}), replacing placeholder with real content`
     );
 
-    const outputMapping = this.getStepOutputMapping(context, target.ordinal);
+    const outputMapping = this.getStepOutputMapping(context, session, target);
     await this.captureRealResponse(
       context,
       sessionId,
@@ -562,7 +571,7 @@ export class StepCaptureService {
     captureResponse: string,
     passClearedThisCall: boolean
   ): Promise<DeferredAdvance | undefined> {
-    const outputMapping = this.getStepOutputMapping(context, target.ordinal);
+    const outputMapping = this.getStepOutputMapping(context, session, target);
     await this.captureRealResponse(
       context,
       sessionId,
@@ -664,7 +673,8 @@ export function reviewHolding(session: ChainSession, nodeId: string): GateReview
  * A stepless run (one prompt, no chain steps) mints one node whose `promptId` is the CHAIN id
  * (`ChainSessionStore.resolveCreationNodes`, pinned by P6.135), so its planned node names the
  * parsed command's prompt instead — the prompt the run id names. With no run node to resolve
- * (no session, or a node the run does not carry) the ordinal lookup is all there is.
+ * (no session, or a node the run does not carry) the parse steps answer by node id, and by
+ * ordinal only when they carry no node ids (`parseStepForNode`).
  */
 export function recordedStep(
   context: ExecutionContext,
@@ -677,7 +687,7 @@ export function recordedStep(
   const index = nodeId === undefined ? -1 : nodes.findIndex((node) => node.id === nodeId);
   const node = nodes[index];
   if (node === undefined) {
-    const step = parseSteps.find((candidate) => candidate.stepNumber === ordinal);
+    const step = parseStepForNode(parseSteps, nodeId, ordinal);
     return {
       step,
       promptId:

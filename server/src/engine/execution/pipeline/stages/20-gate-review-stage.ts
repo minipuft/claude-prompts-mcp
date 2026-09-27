@@ -393,6 +393,9 @@ export class GateReviewStage extends BasePipelineStage {
         review: reviewForRender,
         additionalGateIds: reviewForRender.gateIds,
         scope: context.getScopeOptions(),
+        ...(context.executionPlan?.modifiers !== undefined
+          ? { runModifiers: context.executionPlan.modifiers }
+          : {}),
       });
 
       this.recordReviewedDeclaration(sessionId, renderResult);

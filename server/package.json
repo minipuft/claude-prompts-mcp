@@ -217,6 +217,8 @@
     "validate:scoped-framework-reads": "node scripts/validate-scoped-framework-reads.js",
     "validate:review-by-node": "node scripts/validate-review-by-node.js",
     "validate:review-by-node:self-test": "node scripts/validate-review-by-node.js --self-test",
+    "validate:step-lookup-by-node": "node scripts/validate-step-lookup-by-node.js",
+    "validate:step-lookup-by-node:self-test": "node scripts/validate-step-lookup-by-node.js --self-test",
     "validate:tool-parameter-reads": "node scripts/validate-tool-parameter-reads.js",
     "validate:tool-parameter-reads:self-test": "node scripts/validate-tool-parameter-reads.js --self-test",
     "validate:telemetry-attribute-emitters": "node scripts/validate-telemetry-attribute-emitters.js",

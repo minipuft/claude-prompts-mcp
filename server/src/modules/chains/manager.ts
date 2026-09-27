@@ -73,6 +73,7 @@ import {
   nextAfter,
   nodeIdAt,
   ordinalOf,
+  parseStepForNode,
   totalOf,
 } from '#shared/utils/node-order.js';
 import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
@@ -487,7 +488,19 @@ export class ChainSessionStore implements ChainSessionService {
   }
 
   /**
-   * Save sessions to file (for STDIO transport persistence)
+   * Persist every live run, for a caller that awaits it (R74, P6.175).
+   *
+   * The store's save callers fall into three classes by where a failure goes:
+   *  - AWAITED (this method, 21 mutators from `createSession` to `clearSessionsForChain`): any
+   *    failure but a held lock rejects, and the rejection reaches the tool call as its error —
+   *    no caller outside this file catches one, and the one that does
+   *    (`endRunOfFailedStartCall`) is already answering a failed call. A held lock is logged and
+   *    the call reports success, because the next persist rewrites the whole live set;
+   *  - AWAITED, NOTHING SWALLOWED ({@link persistSessionsOrThrow}: `replaceRemainder`,
+   *    `applyUnknownObservations`): the two writes whose own reply renders what was written, so
+   *    even a held lock fails the call;
+   *  - BACKGROUND ({@link persistSessionsAsync}, and `cleanup` at shutdown): no client is waiting,
+   *    so the failure is logged with the context that started it.
    */
   private async saveSessions(): Promise<void> {
     await this.persistSessions();
@@ -530,9 +543,9 @@ export class ChainSessionStore implements ChainSessionService {
    * The persist above, with the failure left for the caller to decide about.
    *
    * `architecture.md`'s state-mutation contract: persistence THROWS and the caller owns the
-   * response. A caller that reports "your remainder was applied" cannot use the swallowing
-   * variant — it would report success while the rows say the run still holds the old plan, and
-   * the divergence would only surface on the next cold load.
+   * response. A caller whose reply renders what it wrote ("your remainder was applied") cannot
+   * use {@link saveSessions}, which reports success over a held lock — the reply would show a
+   * plan the rows do not hold, and the divergence would only surface on the next cold load.
    *
    * Persists run ONE AT A TIME. The write awaits `runRegistry.save` inside its transaction, so a
    * second persist starting in that gap (a fire-and-forget `persistSessionsAsync` from a lifecycle
@@ -798,6 +811,7 @@ export class ChainSessionStore implements ChainSessionService {
     }
   }
 
+  /** A background persist (lifecycle promotion): no caller waits, so a failure is logged. */
   private persistSessionsAsync(context: string): void {
     this.saveSessions().catch((error) => {
       this.logger.warn(
@@ -2736,13 +2750,10 @@ export class ChainSessionStore implements ChainSessionService {
    * order: an invalid batch throws before `session.unknownsLedger` is touched, and a
    * persist failure throws rather than reporting a success the disk does not back.
    *
-   * That last clause was FALSE from the day this method landed until row 1.4 (2026-08-30). It
-   * called `saveSessions`, which routes to the log-and-swallow `persistSessions`, so a failed
-   * write returned the new ledger and the caller reported the batch applied. It now calls
-   * {@link persistSessionsOrThrow} — the same write with the failure left to the caller —
-   * because a declared unknown is the one thing in this subsystem the CLIENT is told about: the
-   * ledger it just wrote is rendered back into this same call's chain context and, from row 2.1,
-   * into a `chain_interrupt`. Reporting either against rows that were never committed hands the
+   * It calls {@link persistSessionsOrThrow}, not {@link saveSessions}: the latter still logs and
+   * continues past a held lock (R74), and a declared unknown is the one thing in this subsystem
+   * the CLIENT is told about: the ledger it just wrote is rendered back into this same call's
+   * chain context and, from row 2.1, into a `chain_interrupt`. Reporting either against rows that were never committed hands the
    * client a plan the server cannot resume, and the divergence surfaces only on a cold load.
    *
    * A failed persist therefore fails the CALL. It propagates as a non-validation error out of
@@ -2910,10 +2921,11 @@ export class ChainSessionStore implements ChainSessionService {
       return undefined;
     }
 
+    // By node (R77): a node the parse did not mint has no blueprint step. By clamped ordinal, an
+    // inserted node's review quoted the next planned step's arguments in place of its own
+    // `statement` and `unknown_id`, and a remainder node past the array took the last step's.
     const currentStep = currentOrdinal(session.state.nodes, session.state.currentNodeId) || 1;
-    const maxIndex = blueprintSteps.length - 1;
-    const resolvedIndex = Math.min(Math.max(currentStep - 1, 0), maxIndex);
-    const args = blueprintSteps[resolvedIndex]?.args;
+    const args = parseStepForNode(blueprintSteps, session.state.currentNodeId, currentStep)?.args;
     if (!args || Object.keys(args).length === 0) {
       return undefined;
     }

@@ -2,11 +2,13 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test, jest } from '@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { DatabaseSync } from 'node:sqlite';
 
 import { SqliteEngine } from '../../../src/infra/database/index.js';
 import { SqliteStateStore } from '../../../src/infra/database/stores/sqlite-store.js';
 import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
 import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
+import { STATE_DB_BUSY_TIMEOUT_MS } from '../../../src/shared/utils/runtime-state-location.js';
 
 import type { Logger } from '../../../src/infra/logging/index.js';
 
@@ -448,6 +450,167 @@ describe('Tenant Isolation', () => {
       } finally {
         spy.mockRestore();
       }
+    });
+
+    /**
+     * P6.177 (R74). The held-lock swallow against a REAL lock: a second `node:sqlite` connection on
+     * the same `state.db` holds a write transaction for longer than the store's busy timeout. The
+     * wait is bounded by lowering the store connection's own `busy_timeout` with a PRAGMA through
+     * the engine (restored after), so the twin costs a quarter second, not five.
+     */
+    describe('P6.177: a lock another connection holds, and a constraint it planted', () => {
+      const HARNESS_BUSY_TIMEOUT_MS = 250;
+      let other: DatabaseSync;
+
+      beforeEach(() => {
+        dbManager.run(`PRAGMA busy_timeout = ${HARNESS_BUSY_TIMEOUT_MS}`);
+        other = new DatabaseSync(path.join(tmpDir, 'runtime-state', 'state.db'));
+      });
+
+      afterEach(() => {
+        if (other.isTransaction) other.exec('ROLLBACK');
+        other.close();
+        dbManager.run(`PRAGMA busy_timeout = ${STATE_DB_BUSY_TIMEOUT_MS}`);
+      });
+
+      test('a write lock held past the busy timeout is logged, and the next persist heals it', async () => {
+        const errorLog = logger.error as jest.Mock;
+        errorLog.mockClear();
+        other.exec('BEGIN IMMEDIATE');
+
+        // The real error the swallow classifies: SQLITE_BUSY, read off node:sqlite's errcode
+        const direct = (
+          chainSessionStore as unknown as { persistSessionsOrThrow: () => Promise<void> }
+        ).persistSessionsOrThrow();
+        const busy = await direct.then(
+          () => undefined,
+          (error: unknown) => error as { errcode?: number; message?: string }
+        );
+        expect(busy?.errcode !== undefined && busy.errcode & 0xff).toBe(5);
+
+        const session = await chainSessionStore.createSession('p177-a', 'chain-p177a#1', 2);
+        expect(session.sessionId).toBe('p177-a');
+        expect(String(errorLog.mock.calls.at(-1)?.[0])).toMatch(/lock held/);
+        expect(projectedRuns('chain-p177a#1')).toEqual([]);
+
+        // Positive control: once the lock is released the next persist writes the run
+        other.exec('ROLLBACK');
+        await chainSessionStore.cancelChain('p177-a');
+        const rows = dbManager.query<{ session_id: string }>(
+          'SELECT session_id FROM chain_runs WHERE chain_id = ?',
+          ['chain-p177a#1']
+        );
+        expect(rows.map((row) => row.session_id)).toEqual(['p177-a']);
+      });
+
+      test('a constraint the other connection planted throws the save to its caller', async () => {
+        other.exec(
+          "CREATE UNIQUE INDEX p177_plant ON chain_sessions(chain_id) WHERE chain_id = 'chain-p177b#1'"
+        );
+        try {
+          await chainSessionStore.createSession(
+            'p177-b',
+            'chain-p177b#1',
+            2,
+            {},
+            {
+              continuityScopeId: 'tenant-a',
+            }
+          );
+          await expect(
+            chainSessionStore.createSession(
+              'p177-c',
+              'chain-p177b#1',
+              2,
+              {},
+              {
+                continuityScopeId: 'tenant-b',
+              }
+            )
+          ).rejects.toMatchObject({ errcode: 2067 });
+        } finally {
+          other.exec('DROP INDEX p177_plant');
+        }
+      });
+    });
+
+    /**
+     * P6.175 (R74). One caller per save class, each with a planted rejection: an AWAITED mutator
+     * whose result the client is told (`cancelChain`) rejects on anything but a held lock; an
+     * awaited write whose reply renders what it wrote (`applyUnknownObservations`) rejects even on
+     * a held lock; a BACKGROUND persist (a lifecycle promotion) logs, naming its context.
+     */
+    describe('P6.175: every save class fails loudly', () => {
+      const constraint = () =>
+        Object.assign(new Error('P175 planted: UNIQUE constraint failed'), {
+          code: 'ERR_SQLITE_ERROR',
+          errcode: 2067,
+        });
+      const heldLock = () =>
+        Object.assign(new Error('P175 planted: database is locked'), {
+          code: 'ERR_SQLITE_ERROR',
+          errcode: 5,
+        });
+      const plant = (error: Error) =>
+        jest.spyOn(chainSessionStore as any, 'persistSessionsOrThrow').mockRejectedValueOnce(error);
+
+      test('awaited: a cancel whose save fails rejects instead of reporting the run cancelled', async () => {
+        await chainSessionStore.createSession('p175-a', 'chain-p175a#1', 2);
+        const spy = plant(constraint());
+        try {
+          await expect(chainSessionStore.cancelChain('p175-a')).rejects.toThrow(/P175 planted/);
+        } finally {
+          spy.mockRestore();
+        }
+        // Control: a cancel with nothing planted persists. A second run, because the failed
+        // cancel already marked `p175-a` cancelled in memory, and a repeat returns before saving.
+        await chainSessionStore.createSession('p175-a2', 'chain-p175a2#1', 2);
+        await expect(chainSessionStore.cancelChain('p175-a2')).resolves.toBe(true);
+        const persisted = dbManager.query<{ run_status: string }>(
+          'SELECT run_status FROM chain_runs WHERE session_id = ?',
+          ['p175-a2']
+        );
+        expect(persisted.map((row) => row.run_status)).toEqual(['cancelled']);
+      });
+
+      test('awaited, nothing swallowed: a held lock fails an observation batch', async () => {
+        await chainSessionStore.createSession('p175-b', 'chain-p175b#1', 2);
+        const nodeId = chainSessionStore.getSession('p175-b')!.state.nodes[0]!.id;
+        const observation = {
+          type: 'unknown_discovered' as const,
+          id: 'u-175',
+          statement: 'undecided',
+          blocking: false,
+        };
+        const spy = plant(heldLock());
+        try {
+          await expect(
+            chainSessionStore.applyUnknownObservations('p175-b', nodeId, [observation])
+          ).rejects.toThrow(/database is locked/);
+        } finally {
+          spy.mockRestore();
+        }
+      });
+
+      test('background: a lifecycle promotion whose save fails is logged with its context', async () => {
+        await chainSessionStore.createSession('p175-c', 'chain-p175c#1', 2);
+        const session = chainSessionStore.getSession('p175-c')!;
+        session.lifecycle = 'dormant';
+        const warn = logger.warn as jest.Mock;
+        warn.mockClear();
+        const spy = plant(constraint());
+        try {
+          expect(chainSessionStore.getSession('p175-c')?.lifecycle).toBe('canonical');
+          await new Promise((resolve) => setImmediate(resolve));
+          expect(warn.mock.calls.map((call) => String(call[0]))).toContainEqual(
+            expect.stringMatching(
+              /Failed to persist sessions \(lifecycle-promotion\): P175 planted/
+            )
+          );
+        } finally {
+          spy.mockRestore();
+        }
+      });
     });
 
     test('clearing one tenant sessions does not affect another tenant', async () => {

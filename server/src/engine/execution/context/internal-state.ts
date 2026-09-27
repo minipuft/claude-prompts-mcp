@@ -1,6 +1,7 @@
 // @lifecycle canonical - Defines internal execution context state contracts.
 import type {
   ConfirmationRequired,
+  GateSystemSettings,
   GateVerdictSummary,
   RequestIdentityContext,
   ScriptExecutionResult,
@@ -8,6 +9,7 @@ import type {
 } from '#shared/types/index.js';
 import type { PendingShellVerification, ShellVerifyResult } from '../../gates/shell/index.js';
 import type { GateEnforcementMode } from '../../gates/types.js';
+import type { ChainStepPrompt } from '../operators/types.js';
 import type { GateSetEnforcement } from '../pipeline/decisions/gates/index.js';
 import type { InjectionState } from '../pipeline/decisions/injection/index.js';
 import type { ChainInterrupt } from '../pipeline/decisions/mutation/index.js';
@@ -219,6 +221,28 @@ export interface PipelineInternalState {
      * guidance INJECTION and run-wide inheritance, and narrowing it would scope those too.
      */
     reviewGateIds?: string[];
+    /**
+     * The gate walk of a stepless run a remainder grew (R71): its base step, then each step a
+     * remainder contributed, in run order, with the gate instructions stage 11 wrote on them.
+     * Writer: `GateEnhancementService.resolveGateContext`, only for such a run — `parsedCommand.steps`
+     * stays empty for it. Reader: stage 18, which renders the run's nodes over these steps (R78).
+     * Absent when the walk is the base step alone; the render then derives that step itself.
+     */
+    steplessRunSteps?: ChainStepPrompt[];
+    /**
+     * What this call's chain gate walk resolved against (P6.170): its settings and the gates the
+     * call held before the walk. Writer: `GateEnhancementService.enhanceChainSteps` (stage 11).
+     * Reader: `GateEnhancementService.inheritedReviewGateIdsNow`, which walks the run again after
+     * stage 16 applied a `remainder`, so an inserted node's review is computed against the run the
+     * remainder left (R81).
+     */
+    chainWalkSettings?: {
+      readonly gatesConfig: GateSystemSettings | undefined;
+      readonly frameworkGateIds: Set<string>;
+      readonly inlineDefinitionGateIds: readonly string[];
+      readonly stepDefinitionIds: ReadonlyMap<string, string>;
+      readonly seedGateIds: readonly string[];
+    };
     /**
      * Gate IDs each DETACHED (`await: run`) step is reviewed against, keyed by its parse-time
      * step number — the key `collectDetachedNodeFacts` resolves a step's node by (row 4.8).

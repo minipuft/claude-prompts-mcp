@@ -17,6 +17,7 @@
 
 import type { ChainNode } from '#shared/types/chain-execution.js';
 import type { UnknownLedgerEntry } from '#shared/types/chain-session.js';
+import type { ConvertedPrompt, ExecutionPlan } from '../types.js';
 import type { ChainStepPrompt } from './types.js';
 
 /**
@@ -177,11 +178,40 @@ function synthesizeStep(
     promptId: node.promptId,
     args,
     ...(node.delegated === true ? { delegated: true } : {}),
+    ...(node.origin === 'remainder' ? { contributed: true as const } : {}),
     // A contributed node's step gates (R68): the parse-time field, so gate enhancement and the
     // review render read them exactly as they read a planned step's.
     ...(node.inlineGateIds !== undefined && node.inlineGateIds.length > 0
       ? { inlineGateIds: [...node.inlineGateIds] }
       : {}),
+  };
+}
+
+/**
+ * The step a stepless run's one planned node stands for (P6.127): the command's own prompt, its
+ * arguments, its inline gates and its plan, under the node id the run minted for it. PURE.
+ *
+ * One derivation for the two readers of a stepless run that a remainder or insertion grew: the
+ * gate walk (`GateEnhancementService`, R71) walks it as the run's first step, and the render
+ * (stage 18, R78) projects the run's nodes over it. The node's own `promptId` is not usable — a
+ * one-node run records its chain id there (P6.135) — so the base node is matched by id to this
+ * step, and every other node is synthesized from itself by {@link planNodeDrivenRender}.
+ */
+export function steplessBaseStep(input: {
+  readonly baseNodeId: string;
+  readonly prompt: ConvertedPrompt;
+  readonly args: Record<string, unknown>;
+  readonly inlineGateIds: readonly string[];
+  readonly executionPlan: ExecutionPlan | undefined;
+}): ChainStepPrompt {
+  return {
+    stepNumber: 1,
+    nodeId: input.baseNodeId,
+    promptId: input.prompt.id,
+    args: input.args,
+    convertedPrompt: input.prompt,
+    inlineGateIds: [...input.inlineGateIds],
+    ...(input.executionPlan !== undefined ? { executionPlan: input.executionPlan } : {}),
   };
 }
 

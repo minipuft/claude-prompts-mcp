@@ -715,6 +715,9 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       this.logExit({ remainder: 'refused' });
       return false;
     }
+    if (remainder.kind === 'applied') {
+      await this.reviewInsertedNodeAfterRemainder(context, sessionId, sessionContext);
+    }
 
     if (!(await this.resolveInterrupt(context, sessionId, sessionContext, remainder))) {
       this.logExit({ interruptAction: 'refused' });
@@ -723,6 +726,46 @@ export class StepResponseCaptureStage extends BasePipelineStage {
 
     await this.raiseInterrupt(context, sessionId, insertedThisCall);
     return true;
+  }
+
+  /**
+   * Re-open an inserted node's unanswered review against the run a remainder just changed
+   * (P6.170, R81). Stage 13 opened it from stage 11's walk, which ran before the remainder was
+   * applied: after a `replace` it named the gates of the steps the replace dropped. The gate set
+   * is `GateEnhancementService.inheritedReviewGateIdsNow`'s; this method only swaps the stored
+   * review. A review already answered keeps its gates — its attempts were graded against them.
+   */
+  private async reviewInsertedNodeAfterRemainder(
+    context: ExecutionContext,
+    sessionId: string,
+    sessionContext: SessionContext
+  ): Promise<void> {
+    const service = this.collaborators.gateEnhancementService;
+    const nodeId = this.chainSessionStore.getSession(sessionId, context.getScopeOptions())?.state
+      .currentNodeId;
+    const review =
+      typeof nodeId === 'string' ? this.chainSessionStore.getReview(sessionId, nodeId) : undefined;
+    if (service === undefined || review?.kind !== 'gate' || review.attemptCount > 0) {
+      return;
+    }
+    const gateIds = await service.inheritedReviewGateIdsNow(context);
+    if (gateIds === undefined || sameMembers(gateIds, review.gateIds)) {
+      return;
+    }
+    const authority = context.gateEnforcement;
+    if (authority === undefined) {
+      throw new Error(
+        `The review of ${review.nodeId} must be re-opened after the remainder, but no gate enforcement authority is wired`
+      );
+    }
+    await this.chainSessionStore.clearReview(sessionId, review.nodeId);
+    sessionContext.pendingReview = undefined;
+    await authority.createReviewForStep(context, sessionContext, gateIds);
+    context.diagnostics.info(this.name, 'Inserted node review re-derived after remainder', {
+      nodeId: review.nodeId,
+      from: review.gateIds,
+      to: gateIds,
+    });
   }
 
   /**
@@ -1205,4 +1248,10 @@ function describeMutation(decision: ChainMutation): string {
     return `skip_node ${decision.nodeId} for unknown ${decision.unknownId}`;
   }
   return `none (${decision.reason})`;
+}
+
+/** Whether two gate lists hold the same ids, in any order. PURE. */
+function sameMembers(left: readonly string[], right: readonly string[]): boolean {
+  const members = new Set(right);
+  return left.length === right.length && left.every((id) => members.has(id));
 }

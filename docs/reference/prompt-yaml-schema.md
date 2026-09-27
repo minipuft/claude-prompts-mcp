@@ -197,6 +197,10 @@ When they do execute:
   chain's gates accumulate. A definition with no `id` registers under the slug of its name
   (`source-citations`). This holds whether the chain runs bare, as a workflow or arrow-chain segment,
   or as a remainder. A step prompt's own definitions contribute at rank 60 as above.
+- A step prompt's definition with no `id` registers under the slug of its name too, so a run holds
+  one gate per definition: a resume, and every step that runs the same prompt, reuse the gate the
+  run already holds. Two definitions of one prompt that share a name become `<slug>` and
+  `<slug>-2`.
 - A `scope: chain` definition belongs to the run it registers in, from the call that starts the
   run: the run files it under its own chain id, its chain-scoped gate summary lists it, and it is
   released when that run ends — never with another run's.

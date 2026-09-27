@@ -79,7 +79,6 @@ interface ScopeInfo {
   scope_id: string;
   gates: Set<string>;
   created_at: number;
-  expires_at?: number;
 }
 
 /**
@@ -399,7 +398,8 @@ export class TemporaryGateRegistry {
   }
 
   /**
-   * Clean up expired gates and scopes
+   * Remove every gate whose own `expires_at` has passed. A scope has no expiry: it empties as its
+   * gates leave ({@link removeFromScope}).
    */
   cleanupExpiredGates(): number {
     const now = Date.now();
@@ -410,13 +410,6 @@ export class TemporaryGateRegistry {
       if (gate.expires_at && gate.expires_at <= now) {
         this.removeTemporaryGate(gateId);
         cleanedCount++;
-      }
-    }
-
-    // Clean up expired scopes
-    for (const [scopeKey, scopeInfo] of this.scopeManagement.entries()) {
-      if (scopeInfo.expires_at && scopeInfo.expires_at <= now) {
-        this.cleanupScopeByKey(scopeKey);
       }
     }
 
@@ -497,19 +490,6 @@ export class TemporaryGateRegistry {
       if (scopeInfo.gates.size === 0) {
         this.scopeManagement.delete(scopeKey);
       }
-    }
-  }
-
-  /**
-   * Cleanup scope by key
-   */
-  private cleanupScopeByKey(scopeKey: string): void {
-    const scopeInfo = this.scopeManagement.get(scopeKey);
-    if (scopeInfo) {
-      for (const gateId of scopeInfo.gates) {
-        this.removeTemporaryGate(gateId);
-      }
-      this.scopeManagement.delete(scopeKey);
     }
   }
 

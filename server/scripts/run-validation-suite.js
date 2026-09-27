@@ -435,6 +435,20 @@ export const SUITE = [
       'CHECKED — plants every write, declaration and read form (assignment, delete, ??= through a literal key, object-literal key, destructuring, a const-typed element key, a SQL path) beside three decoys (a comment, a longer name, a method containing the word) and asserts the exact line:kind set',
   },
   {
+    script: 'validate:step-lookup-by-node',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse:
+      'CHECKED — falsified 2026-09-27 by restoring the ordinal lookup `steps.find((s) => s.stepNumber === stepNumber)` in `StepCaptureService.getStepOutputMapping` (reported by path:line as an ordinal match). Every accepted entry must still match a live finding (satisfied-exception check), and the scan fails closed below 200 src files. Blind spots stated in the header: a per-step predicate outside a find-family callback, an ordinal under another name or through two assignments, gate targets authored by ordinal, and tests/scripts/hooks',
+  },
+  {
+    script: 'validate:step-lookup-by-node:self-test',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse:
+      "CHECKED — plants both shapes (find/findIndex/filter and a function expression, both operand orders, `==` and `!==`; a direct, a one-hop, a stepPrompts and a recorded-index access) beside decoys (a comment, a node-id match, an index found by identity, a literal index, a presence check, a conditional, a non-step find, another object's stepNumber, a bare render-plan index) and asserts the exact line:shape list; with index checking off the planted indexes must vanish",
+  },
+  {
     script: 'validate:tool-parameter-reads',
     io: 'read',
     reads: ['file'],

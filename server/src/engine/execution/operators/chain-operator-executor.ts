@@ -123,9 +123,8 @@ export class ChainOperatorExecutor {
 
     // Get the last actual step that was executed
     const fallbackIndex = stepPrompts.length - 1;
-    const lastStepIndex = reviewStep
-      ? stepPrompts.findIndex((step) => step.stepNumber === reviewStep.stepNumber)
-      : fallbackIndex;
+    // By identity: `reviewStep` is an element of `stepPrompts`, never matched back by ordinal.
+    const lastStepIndex = reviewStep ? stepPrompts.indexOf(reviewStep) : fallbackIndex;
     const targetStep =
       reviewStep ??
       (lastStepIndex >= 0 ? stepPrompts[lastStepIndex] : (stepPrompts[fallbackIndex] ?? undefined));
@@ -280,7 +279,7 @@ export class ChainOperatorExecutor {
     // decision already resolved above, matching renderNormalStep's semantics exactly rather
     // than introducing a second definition of "final".
     const isTargetFinalStep = targetIndex === stepPrompts.length - 1;
-    const declaredSections = this.resolveDeclaredSections(targetStep);
+    const declaredSections = await this.resolveDeclaredSections(targetStep, input);
     const responseFormatSection = this.buildResponseFormatSection(
       isTargetFinalStep,
       gateGuidanceEnabled,
@@ -559,7 +558,7 @@ export class ChainOperatorExecutor {
     // saw, and the run-wide header set then blocked it on its siblings' vocabulary. Suppression
     // by FREQUENCY is a different question and deliberately does not withhold them: the step was
     // given the framework, just not a second copy of its system prompt.
-    const declaredSections = this.resolveDeclaredSections(step);
+    const declaredSections = await this.resolveDeclaredSections(step, input);
     lines.push(this.buildResponseFormatSection(isFinalStep, gateGuidanceEnabled, declaredSections));
 
     // NEXT-step delegation gets a one-line ADVISORY, never a full handoff (S7): the old full CTA
@@ -732,15 +731,24 @@ export class ChainOperatorExecutor {
    * reads the same absence back (nothing recorded for that node) and grades it against nothing.
    * Emission and grading follow one declaration (P4.111 / R85).
    */
-  private resolveDeclaredSections(step?: ChainStepPrompt): DeclaredSection[] {
+  private async resolveDeclaredSections(
+    step: ChainStepPrompt | undefined,
+    input: ChainStepExecutionInput
+  ): Promise<DeclaredSection[]> {
     const provider = this.collaborators?.declaredSectionsProvider;
+    // A step a remainder contributed has no plan and may have no converted prompt of its own (it
+    // is built from its node): it reads the run's modifiers and its prompt from the catalog, as a
+    // planned step reads both from itself (R79).
+    const contributed = step?.contributed === true;
+    const prompt =
+      step?.convertedPrompt ??
+      (contributed ? this.convertedPrompts.find((p) => p.id === step.promptId) : undefined);
+    const modifiers = contributed ? input.runModifiers : step?.executionPlan?.modifiers;
     // Two opt-outs, one answer: the step declined the framework itself, or its prompt turned the
     // framework's gates off (R22) — the sections are graded, so they are a gate.
     const declinesFramework =
-      !isFrameworkInjected({
-        modifiers: step?.executionPlan?.modifiers,
-        promptInjection: step?.convertedPrompt?.injection,
-      }) || !declaresFrameworkSections(step?.convertedPrompt);
+      !isFrameworkInjected({ modifiers, promptInjection: prompt?.injection }) ||
+      !declaresFrameworkSections(prompt);
     if (!provider || declinesFramework) {
       return [];
     }
@@ -750,7 +758,15 @@ export class ChainOperatorExecutor {
     // discriminator is not its lowercased id. `19-phase-guard-verification-stage` resolves on
     // `.id` for the same reason, and the two must agree or the declaration names other headers
     // than the guard grades.
-    const frameworkId = step?.frameworkContext?.selectedFramework.id ?? '';
+    //
+    // A contributed step carries no framework context, so it resolves its framework as its
+    // framework GUIDANCE does (`resolveFrameworkContext`: the active framework): a step shown a
+    // framework's guidance is declared that framework's sections, and the phase guard binds it as
+    // it binds a planned step (R79). Reading the step's own context alone declared nothing for it.
+    const frameworkContext = contributed
+      ? await this.resolveFrameworkContext(step, input.scope)
+      : step?.frameworkContext;
+    const frameworkId = frameworkContext?.selectedFramework?.id ?? '';
     if (frameworkId === '') {
       this.logger.debug('[SymbolicChain] No resolved framework id — declaring no sections', {
         promptId: step?.promptId,

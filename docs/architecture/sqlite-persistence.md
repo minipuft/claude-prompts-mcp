@@ -521,6 +521,11 @@ its transaction), and the only failure the store logs and continues past is `SQL
 `SQLITE_LOCKED` after `busy_timeout` — transient, because every persist rewrites the whole live
 set. A constraint violation recurs on every persist, so it reaches the tool call as an error rather
 than being logged while every later save of the process is lost (R74).
+Three save classes follow from that: the store's awaited mutators reject on every failure but a
+held lock, and the rejection is the tool call's error; `replaceRemainder` and
+`applyUnknownObservations`, whose reply renders what they wrote, reject on a held lock too; a
+background persist (a lifecycle promotion, or the final save at shutdown) has no caller waiting,
+so its failure is logged with the context that started it.
 
 **Both connections set `busy_timeout` from one constant**, `STATE_DB_BUSY_TIMEOUT_MS` in
 `shared/utils/runtime-state-location.ts`, beside the two path segments and for the same reason: the

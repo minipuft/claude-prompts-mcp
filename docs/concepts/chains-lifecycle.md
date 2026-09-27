@@ -272,6 +272,9 @@ insert or skip -> rendering follows the mutated node list.
 skipped node never renders — the run proceeds straight to the next live node. Rendering, gate
 targeting, step totals, the CTA footer, and the Python hook projection all re-derive from the
 run's current (possibly mutated) node list rather than the original parse-time step list.
+An inserted step reads only its own definition: its review quotes its own statement and ledger
+id, its retry limit is the default, and it publishes no named output. No lookup takes the planned
+step at the inserted step's position (`validate:step-lookup-by-node` refuses one).
 
 **A step's own gate declarations bind its own set.** A chain accumulates gates as it walks — step
 N sees what steps 1..N-1 collected, plus anything the caller supplied for the run — but the set a
@@ -323,7 +326,10 @@ discovery invalidated the shape of the plan". `remainder` can: the caller author
 as Workflow IR nodes and the server validates it against the same schema, validator and caps a
 `workflow` submission meets. The server never authors step content — the posture is unchanged, the
 model declares and the server validates. Accepted nodes are recorded with `origin:'remainder'` and
-the id of the unknown that motivated them. See
+the id of the unknown that motivated them. A remainder sent on the call that answers an inserted
+investigation node is applied before that node's review is settled: a review the call opened, and
+not yet answered, is re-derived against the run the remainder leaves, so it never names a gate of a
+step a `replace` dropped. See
 [MCP Tools](../reference/mcp-tools.md#blocking-unknown-interrupt).
 
 **`affected_step_ids` is derived from DECLARED LINKS ONLY.** It lists exactly the steps some

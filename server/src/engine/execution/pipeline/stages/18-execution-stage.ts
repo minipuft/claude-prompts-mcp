@@ -6,7 +6,7 @@ import {
   collectRunHolds,
   describeHeldRun,
 } from '../../delegation/detached.js';
-import { planNodeDrivenRender } from '../../operators/node-step-projection.js';
+import { planNodeDrivenRender, steplessBaseStep } from '../../operators/node-step-projection.js';
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
@@ -15,7 +15,7 @@ import type { ChainSessionService } from '#shared/types/index.js';
 import type { ScriptReferenceResolverPort } from '#shared/utils/jsonUtils.js';
 import type { ExecutionContext } from '../../context/index.js';
 import type { ChainOperatorExecutor } from '../../operators/chain-operator-executor.js';
-import type { ChainStepRenderResult } from '../../operators/types.js';
+import type { ChainStepPrompt, ChainStepRenderResult } from '../../operators/types.js';
 import type { PromptReferenceResolver } from '../../reference/prompt-reference-resolver.js';
 
 import { isRunComplete, isRunHeldOpen } from '#shared/types/chain-session.js';
@@ -97,11 +97,47 @@ export class StepExecutionStage extends BasePipelineStage {
     // The ResponseFormattingStage will handle appending gate instructions
     // Use type guard for type-safe chain detection
     if (context.executionPlan.strategy === 'chain' && context.hasChainCommand()) {
-      await this.executeChainStep(context);
+      await this.executeChainStep(context, context.parsedCommand.steps);
+      return;
+    }
+
+    // A stepless run (a gated single prompt) that an insertion or a remainder grew is rendered by
+    // its NODES, as a chain is (R78): the single-prompt route renders the command's own prompt,
+    // which put the base prompt's body on every node the run added.
+    const grownRunSteps = this.grownSteplessRunSteps(context);
+    if (grownRunSteps !== undefined) {
+      await this.executeChainStep(context, grownRunSteps);
       return;
     }
 
     await this.executeSinglePrompt(context);
+  }
+
+  /**
+   * The parse steps a stepless run's nodes render over, or undefined while the run has exactly its
+   * one node (or there is no run), which keeps the single-prompt route. Stage 11's walk when it
+   * published one — it carries the gate instructions written for each step — else the base step
+   * alone; every node neither names is synthesized from itself by the projection.
+   */
+  private grownSteplessRunSteps(context: ExecutionContext): ChainStepPrompt[] | undefined {
+    const session = context.sessionContext;
+    const prompt = context.parsedCommand?.convertedPrompt;
+    if (session === undefined || prompt === undefined) return undefined;
+    const nodes = this.chainSessionStore.getSession(session.sessionId, context.getScopeOptions())
+      ?.state.nodes;
+    const baseNode = nodes?.[0];
+    if (baseNode === undefined || nodes === undefined || nodes.length <= 1) return undefined;
+    return (
+      context.state.gates.steplessRunSteps ?? [
+        steplessBaseStep({
+          baseNodeId: baseNode.id,
+          prompt,
+          args: context.parsedCommand?.promptArgs ?? {},
+          inlineGateIds: context.parsedCommand?.inlineGateIds ?? [],
+          executionPlan: context.executionPlan,
+        }),
+      ]
+    );
   }
 
   /**
@@ -150,17 +186,19 @@ export class StepExecutionStage extends BasePipelineStage {
     return true;
   }
 
-  private async executeChainStep(context: ExecutionContext): Promise<void> {
+  private async executeChainStep(
+    context: ExecutionContext,
+    steps: readonly ChainStepPrompt[]
+  ): Promise<void> {
     // Type-safe access using direct field access with proper null checks
     const session = context.sessionContext;
-    const steps = context.parsedCommand?.steps;
     const executionPlan = context.executionPlan;
 
     if (!session) {
       throw new Error('Session context not available for chain execution');
     }
 
-    if (!steps || !Array.isArray(steps) || steps.length === 0) {
+    if (steps.length === 0) {
       throw new Error('Chain steps not available for chain execution');
     }
 
@@ -236,6 +274,7 @@ export class StepExecutionStage extends BasePipelineStage {
       },
       additionalGateIds: executionPlan.gates,
       scope: scopeOptions,
+      ...(executionPlan.modifiers !== undefined ? { runModifiers: executionPlan.modifiers } : {}),
     });
 
     context.executionResults = this.createExecutionResults(renderResult);
