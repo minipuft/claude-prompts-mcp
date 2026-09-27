@@ -15,6 +15,8 @@ import type { Logger } from '#infra/logging/index.js';
 import type { ExecutionContext } from '../../context/index.js';
 import type { ChainStepPrompt } from '../../operators/types.js';
 
+import { parseStepForNode } from '#shared/utils/node-order.js';
+
 type InjectionConfigProvider = () => InjectionConfig;
 
 /**
@@ -252,18 +254,11 @@ export class InjectionControlStage extends BasePipelineStage {
    * silent misattribution rather than a missing declaration.
    */
   private resolveCurrentChainStep(context: ExecutionContext): ChainStepPrompt | undefined {
-    const steps = context.parsedCommand?.steps ?? [];
-    const currentNodeId = context.sessionContext?.currentNodeId;
-
-    if (typeof currentNodeId === 'string') {
-      const hasNodeIds = steps.some((step) => typeof step.nodeId === 'string');
-      if (hasNodeIds) {
-        return steps.find((step) => step.nodeId === currentNodeId);
-      }
-    }
-
-    const currentStep = context.sessionContext?.currentStep ?? 1;
-    return steps[currentStep - 1];
+    return parseStepForNode(
+      context.parsedCommand?.steps ?? [],
+      context.sessionContext?.currentNodeId,
+      context.sessionContext?.currentStep ?? 1
+    );
   }
 
   /**

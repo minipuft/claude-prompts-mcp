@@ -73,6 +73,7 @@ import {
   nextAfter,
   nodeIdAt,
   ordinalOf,
+  parseStepForNode,
   totalOf,
 } from '#shared/utils/node-order.js';
 import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
@@ -2910,10 +2911,11 @@ export class ChainSessionStore implements ChainSessionService {
       return undefined;
     }
 
+    // By node (R77): a node the parse did not mint has no blueprint step. By clamped ordinal, an
+    // inserted node's review quoted the next planned step's arguments in place of its own
+    // `statement` and `unknown_id`, and a remainder node past the array took the last step's.
     const currentStep = currentOrdinal(session.state.nodes, session.state.currentNodeId) || 1;
-    const maxIndex = blueprintSteps.length - 1;
-    const resolvedIndex = Math.min(Math.max(currentStep - 1, 0), maxIndex);
-    const args = blueprintSteps[resolvedIndex]?.args;
+    const args = parseStepForNode(blueprintSteps, session.state.currentNodeId, currentStep)?.args;
     if (!args || Object.keys(args).length === 0) {
       return undefined;
     }

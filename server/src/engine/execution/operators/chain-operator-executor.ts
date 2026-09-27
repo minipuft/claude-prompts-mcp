@@ -123,9 +123,8 @@ export class ChainOperatorExecutor {
 
     // Get the last actual step that was executed
     const fallbackIndex = stepPrompts.length - 1;
-    const lastStepIndex = reviewStep
-      ? stepPrompts.findIndex((step) => step.stepNumber === reviewStep.stepNumber)
-      : fallbackIndex;
+    // By identity: `reviewStep` is an element of `stepPrompts`, never matched back by ordinal.
+    const lastStepIndex = reviewStep ? stepPrompts.indexOf(reviewStep) : fallbackIndex;
     const targetStep =
       reviewStep ??
       (lastStepIndex >= 0 ? stepPrompts[lastStepIndex] : (stepPrompts[fallbackIndex] ?? undefined));

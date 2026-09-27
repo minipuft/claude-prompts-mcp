@@ -272,6 +272,9 @@ insert or skip -> rendering follows the mutated node list.
 skipped node never renders — the run proceeds straight to the next live node. Rendering, gate
 targeting, step totals, the CTA footer, and the Python hook projection all re-derive from the
 run's current (possibly mutated) node list rather than the original parse-time step list.
+An inserted step reads only its own definition: its review quotes its own statement and ledger
+id, its retry limit is the default, and it publishes no named output. No lookup takes the planned
+step at the inserted step's position (`validate:step-lookup-by-node` refuses one).
 
 **A step's own gate declarations bind its own set.** A chain accumulates gates as it walks — step
 N sees what steps 1..N-1 collected, plus anything the caller supplied for the run — but the set a

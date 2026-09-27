@@ -28,6 +28,8 @@ import type { GateDefinitionProvider } from '../../../../gates/core/gate-loader.
 import type { LightweightGateDefinition } from '../../../../gates/types.js';
 import type { ExecutionContext, SessionContext } from '../../../context/index.js';
 
+import { parseStepForNode } from '#shared/utils/node-order.js';
+
 // VerdictPattern type is now imported from gates/config
 
 /**
@@ -340,14 +342,16 @@ export class GateEnforcementAuthority {
       return null;
     }
 
-    // The step definition is addressed by its node id; position is the fallback for a context
-    // with no node id — mirrors the resolution `GateEnhancementService` and stage 18 use.
+    // The step definition is addressed by its node id (R77): an inserted node has no parse step,
+    // and the one at its ordinal would lend it that step's `retries`. Position only when the
+    // context names no node.
     const currentStepNumber = sessionContext.currentStep ?? 1;
-    const steps = context.parsedCommand?.steps;
     const currentNodeId = sessionContext.currentNodeId ?? undefined;
-    const currentStep =
-      (currentNodeId !== undefined ? steps?.find((s) => s.nodeId === currentNodeId) : undefined) ??
-      steps?.find((s) => s.stepNumber === currentStepNumber);
+    const currentStep = parseStepForNode(
+      context.parsedCommand?.steps ?? [],
+      currentNodeId,
+      currentStepNumber
+    );
     const nodeId = currentNodeId ?? currentStep?.nodeId;
     if (nodeId === undefined) {
       throw new Error(

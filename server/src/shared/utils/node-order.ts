@@ -165,3 +165,21 @@ export function currentOrdinal(nodes: NodeOrderInput, currentNodeId: string | nu
   const ordinal = ordinalOf(nodes, currentNodeId);
   return ordinal === -1 ? 0 : ordinal;
 }
+
+/**
+ * The parse-time step a node address names (R77). PURE.
+ *
+ * By node id whenever a node id is given and the steps carry node ids: a node the parse did not
+ * mint (an inserted or contributed node) HAS no parse step, and the step at its ordinal is a
+ * different node's. By ordinal only when there is no node address to use — steps parsed before
+ * node-id minting, or no node id known. `validate:step-lookup-by-node` refuses a step lookup by
+ * ordinal anywhere else in `src/`, so this is the one place that choice is made.
+ */
+export function parseStepForNode<
+  T extends { readonly nodeId?: string; readonly stepNumber?: number },
+>(steps: readonly T[], nodeId: string | null | undefined, ordinal: number): T | undefined {
+  if (typeof nodeId === 'string' && steps.some((step) => (step.nodeId ?? '').length > 0)) {
+    return steps.find((step) => step.nodeId === nodeId);
+  }
+  return steps.find((step) => step.stepNumber === ordinal);
+}

@@ -139,6 +139,19 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
         { promptId: 'sv_b', stepName: 'B' },
       ],
     });
+    // P6.176: a step whose template reads a named output, so a capture under the wrong step's
+    // `outputMapping` is visible in the next render.
+    await author({
+      resource_type: 'prompt',
+      action: 'create',
+      id: 'sv_out',
+      category: 'general',
+      name: 'sv_out',
+      description: 'e2e step reading a named output',
+      user_message_template: 'BODY-sv_out named={{outputs.named_y}}',
+      arguments: TOPIC,
+      gate_configuration: OPT_OUT,
+    });
     // P6.160: two prompts that keep the shipped category and framework defaults, and an ungated
     // chain of them, so a contributed step's defaults compare against a planned step's.
     for (const id of ['sv_d', 'sv_e']) {
@@ -1276,6 +1289,108 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       await run.call({ user_response: 'A out' });
       await run.call({ user_response: trailer('n2') });
       expect(evidence(run.chainId)).toEqual(['n1:-', 'n2:ok']);
+    }, 120000);
+  });
+
+  /**
+   * P6.176 / R77. Every step lookup resolves by node: after an insertion the parse step at the
+   * inserted node's ordinal is the NEXT planned step, never the inserted one.
+   */
+  describe('P6.176: an inserted node is never read as the planned step at its ordinal', () => {
+    const blocking = (id: string) => ({
+      observations: [
+        { type: 'unknown_discovered', id, statement: `STATEMENT-${id}`, blocking: true },
+      ],
+    });
+    function review(chainId: string, nodeId: string): { gateIds?: string[]; maxAttempts?: number } {
+      const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+      try {
+        const row = db.prepare('SELECT state FROM chain_runs WHERE chain_id = ?').get(chainId) as
+          { state: string } | undefined;
+        const state = JSON.parse(row?.state ?? '{}') as {
+          reviews?: Record<string, { gateIds?: string[]; maxAttempts?: number }>;
+        };
+        return state.reviews?.[nodeId] ?? {};
+      } finally {
+        db.close();
+      }
+    }
+    const nodes = (y: Record<string, unknown>, z?: Record<string, unknown>) => ({
+      workflow: {
+        version: 1,
+        nodes: [
+          { id: 'x', promptId: 'sv_a' },
+          { id: 'y', ...y },
+          ...(z !== undefined ? [{ id: 'z', ...z }] : []),
+        ],
+      },
+    });
+
+    /**
+     * MEASURED 2026-09-27 on `c8fd3237`: the first review of the inserted `inv-u-176a` quoted
+     * `**topic**: TB` (the planned `n2`'s argument) under "Original Request Intent", then
+     * `## Investigate: ` and "Ledger id: ``" — `getChainContext` read the blueprint step at the
+     * inserted node's ordinal and its args replaced the node's own.
+     */
+    test("(a) an inserted node's review quotes its own statement and ledger id", async () => {
+      const run = await start({ command: `>>sv_a${ARROW}>>sv_b topic:"TB"${ARROW}>>sv_d` });
+      await run.call({ user_response: 'A out', ...blocking('u-176a') });
+      const review = await run.call({ user_response: 'investigated' });
+      expect(review).toContain('## Original Task Instructions');
+      expect(review).toContain('## Investigate: STATEMENT-u-176a');
+      expect(review).toContain('Ledger id: `u-176a`');
+      expect(review).not.toContain('**topic**: TB');
+    }, 120000);
+
+    /** MEASURED on `c8fd3237`: the inserted node's review took `y`'s `retries: 5`. */
+    test("(b) an inserted node's review takes no retries of the planned step at its ordinal", async () => {
+      const gated = { promptId: 'sv_b', inlineGateIds: ['sv-block'] };
+      const control = await start(nodes(gated));
+      await control.call({ user_response: 'A out', ...blocking('u-176b0') });
+      await control.call({ user_response: 'investigated', gate_verdict: FAIL });
+      const defaultAttempts = review(control.chainId, 'inv-u-176b0').maxAttempts;
+      expect(defaultAttempts).toBeGreaterThan(0);
+      expect(defaultAttempts).not.toBe(5);
+
+      const run = await start(nodes({ ...gated, retries: 5 }));
+      await run.call({ user_response: 'A out', ...blocking('u-176b') });
+      await run.call({ user_response: 'investigated', gate_verdict: FAIL });
+      expect(review(run.chainId, 'inv-u-176b')).toMatchObject({
+        gateIds: ['sv-block'],
+        maxAttempts: defaultAttempts,
+      });
+
+      // Positive control: the step that declares the retries still gets them
+      const own = await start(nodes({ ...gated, retries: 5 }));
+      await own.call({ user_response: 'A out' });
+      await own.call({ user_response: 'B out', gate_verdict: FAIL });
+      expect(review(own.chainId, 'y').maxAttempts).toBe(5);
+    }, 120000);
+
+    /**
+     * MEASURED on `c8fd3237`: `y` rendered `named=INV-ANSWER` (the inserted node's answer, captured
+     * under `y`'s `outputMapping`) and `z` rendered the same — `y`'s own answer was captured under
+     * `z`'s mapping (none), so it never reached its name.
+     */
+    test("(c) a captured answer lands under its own node's output names", async () => {
+      const run = await start(
+        nodes({ promptId: 'sv_out', outputMapping: { named_y: 'output' } }, { promptId: 'sv_out' })
+      );
+      await run.call({ user_response: 'A out', ...blocking('u-176c') });
+      const y = await run.call({ user_response: 'INV-ANSWER' });
+      expect(y.match(/BODY-sv_out named=\S*/g)).toEqual(['BODY-sv_out named=']);
+      const z = await run.call({ user_response: 'Y-ANSWER' });
+      expect(z.match(/BODY-sv_out named=\S*/g)).toEqual(['BODY-sv_out named=Y-ANSWER']);
+    }, 120000);
+
+    test("(d) control: with no insertion the named output and the retries are the planned steps'", async () => {
+      const run = await start(
+        nodes({ promptId: 'sv_out', outputMapping: { named_y: 'output' } }, { promptId: 'sv_out' })
+      );
+      const y = await run.call({ user_response: 'A out' });
+      expect(y.match(/BODY-sv_out named=\S*/g)).toEqual(['BODY-sv_out named=']);
+      const z = await run.call({ user_response: 'Y-ANSWER' });
+      expect(z.match(/BODY-sv_out named=\S*/g)).toEqual(['BODY-sv_out named=Y-ANSWER']);
     }, 120000);
   });
 
