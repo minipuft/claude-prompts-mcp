@@ -23,7 +23,9 @@ import { describe, expect, test, jest, beforeEach } from '@jest/globals';
 
 import { createParsingSystem } from '../../../src/engine/execution/parsers/index.js';
 import { SymbolicCommandBuilder } from '../../../src/engine/execution/parsers/symbolic-command-builder.js';
+import { retargetGates } from '../../../src/modules/workflow-ir/chain-prompt-expansion.js';
 import { compileWorkflowIR } from '../../../src/modules/workflow-ir/compiler.js';
+import { validateWorkflowIR } from '../../../src/modules/workflow-ir/validator.js';
 import { ChainOperatorExecutor } from '../../../src/engine/execution/operators/chain-operator-executor.js';
 import { CommandParsingStage } from '../../../src/engine/execution/pipeline/stages/04-parsing-stage.js';
 import { OperatorValidationStage } from '../../../src/engine/execution/pipeline/stages/06-operator-validation-stage.js';
@@ -567,7 +569,11 @@ describe('Delegation Operator (==>) Flow', () => {
         parsing.argumentParser,
         () => chainPrompts,
         mockLogger,
-        new SymbolicCommandBuilder(parsing.argumentParser, mockLogger, compileWorkflowIR)
+        new SymbolicCommandBuilder(parsing.argumentParser, mockLogger, {
+          validate: validateWorkflowIR,
+          compile: compileWorkflowIR,
+          retargetGates,
+        })
       );
       const context = new ExecutionContext({ command });
       await stage04.execute(context);

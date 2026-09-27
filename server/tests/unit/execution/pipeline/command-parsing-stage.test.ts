@@ -233,15 +233,19 @@ describe('CommandParsingStage', () => {
 
     const mockBuilder = createMockSymbolicCommandBuilder({
       buildSymbolicCommand: jest.fn<any>().mockResolvedValue({
-        promptId: 'demo_prompt',
-        rawArgs: 'input="World"',
-        format: 'symbolic',
-        commandType: 'single',
-        confidence: 0.82,
-        metadata: symbolicParseResult.metadata,
-        convertedPrompt,
-        promptArgs: { input: 'World' },
-        inlineGateCriteria: ['Use emojis'],
+        ok: true,
+        retargetRequestedGates: (gates: unknown[]) => gates,
+        parsedCommand: {
+          promptId: 'demo_prompt',
+          rawArgs: 'input="World"',
+          format: 'symbolic',
+          commandType: 'single',
+          confidence: 0.82,
+          metadata: symbolicParseResult.metadata,
+          convertedPrompt,
+          promptArgs: { input: 'World' },
+          inlineGateCriteria: ['Use emojis'],
+        },
       }),
     });
 
@@ -351,17 +355,21 @@ describe('CommandParsingStage', () => {
 
     const mockBuilder = createMockSymbolicCommandBuilder({
       buildSymbolicCommand: jest.fn<any>().mockResolvedValue({
-        promptId: 'step_one',
-        rawArgs: '',
-        format: 'symbolic',
-        commandType: 'chain',
-        confidence: 0.77,
-        metadata: symbolicParseResult.metadata,
-        promptArgs: {},
-        steps: [
-          { promptId: 'step_one', args: { name: 'Alpha' }, inlineGateCriteria: ['Gate A'] },
-          { promptId: 'step_two', args: { topic: 'Z' }, inlineGateCriteria: ['Gate B'] },
-        ],
+        ok: true,
+        retargetRequestedGates: (gates: unknown[]) => gates,
+        parsedCommand: {
+          promptId: 'step_one',
+          rawArgs: '',
+          format: 'symbolic',
+          commandType: 'chain',
+          confidence: 0.77,
+          metadata: symbolicParseResult.metadata,
+          promptArgs: {},
+          steps: [
+            { promptId: 'step_one', args: { name: 'Alpha' }, inlineGateCriteria: ['Gate A'] },
+            { promptId: 'step_two', args: { topic: 'Z' }, inlineGateCriteria: ['Gate B'] },
+          ],
+        },
       }),
     });
 

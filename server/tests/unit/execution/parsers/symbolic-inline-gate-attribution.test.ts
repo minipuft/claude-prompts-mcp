@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 
 import { createSymbolicCommandParser } from '../../../../src/engine/execution/parsers/symbolic-operator-parser.js';
 import { SymbolicCommandBuilder } from '../../../../src/engine/execution/parsers/symbolic-command-builder.js';
+import { retargetGates } from '../../../../src/modules/workflow-ir/chain-prompt-expansion.js';
 import { compileWorkflowIR } from '../../../../src/modules/workflow-ir/compiler.js';
+import { validateWorkflowIR } from '../../../../src/modules/workflow-ir/validator.js';
 
 import type {
   ArgumentParser,
@@ -167,7 +169,11 @@ describe('S9 — inline gate token attribution in symbolic chains', () => {
       const argumentParser = {
         parseArguments: jest.fn(async () => createArgumentResult()),
       } as unknown as ArgumentParser;
-      return new SymbolicCommandBuilder(argumentParser, logger, compileWorkflowIR);
+      return new SymbolicCommandBuilder(argumentParser, logger, {
+        validate: validateWorkflowIR,
+        compile: compileWorkflowIR,
+        retargetGates,
+      });
     }
 
     test('step carries inlineGateCriteria and no orphan command-level gate is seeded', async () => {
@@ -177,7 +183,9 @@ describe('S9 — inline gate token attribution in symbolic chains', () => {
 
       const builder = createBuilder();
       const findPrompt = (id: string) => makePrompt(id);
-      const parsedCommand = await builder.buildSymbolicCommand(parseResult, findPrompt);
+      const built = await builder.buildSymbolicCommand(parseResult, findPrompt);
+      if (!built.ok) throw new Error(JSON.stringify(built.rejections));
+      const parsedCommand = built.parsedCommand;
 
       expect(parseResult.executionPlan.steps[0].inlineGateCriteria).toEqual(['code-quality']);
       expect(parsedCommand.steps?.[0]?.inlineGateCriteria).toEqual(['code-quality']);
@@ -193,9 +201,9 @@ describe('S9 — inline gate token attribution in symbolic chains', () => {
       const parseResult = parser.buildParseResult(command, detection, 'a', '');
 
       const builder = createBuilder();
-      const parsedCommand = await builder.buildSymbolicCommand(parseResult, (id: string) =>
-        makePrompt(id)
-      );
+      const built = await builder.buildSymbolicCommand(parseResult, (id: string) => makePrompt(id));
+      if (!built.ok) throw new Error(JSON.stringify(built.rejections));
+      const parsedCommand = built.parsedCommand;
 
       expect(parsedCommand.namedInlineGates).toEqual([
         { gateId: 'security', criteria: ['no secrets'] },

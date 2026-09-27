@@ -144,26 +144,26 @@ export class PipelineBuilder {
 
     // ── Stages 04-09: Parsing, Planning, Scripts ──
 
-    // `compileWorkflowIR` is passed to BOTH command builders (row A.2): a `-->` chain and a
-    // submitted IR are the same representation, so they compile through the same function rather
-    // than through two projections that agree by hand. Same layer reason as the port below — the
-    // composition root is the only place allowed to name both sides.
+    // The composition root is the only layer that may name both sides: `engine/` cannot
+    // value-import `modules/workflow-ir/` (dependency-cruiser `engine-no-modules-or-mcp-value`,
+    // error severity), and these functions are pure, so passing them as a port costs nothing at
+    // runtime and keeps the layer edge honest. ONE port for BOTH command builders (row A.2,
+    // P6.105): an arrow-chain and a submitted IR are the same representation, so they validate,
+    // compile and retarget through the same functions rather than two that agree by hand.
+    // Constructed per pipeline, holding no state — the Streamable HTTP transport rebuilds the
+    // server per request, so anything cached here would exist on STDIO and vanish on HTTP.
+    const workflowIrPort = {
+      validate: validateWorkflowIR,
+      compile: compileWorkflowIR,
+      retargetGates,
+    };
     const symbolicCommandBuilder = new SymbolicCommandBuilder(
       deps.parsingSystem.argumentParser,
       deps.logger,
-      compileWorkflowIR
+      workflowIrPort
     );
     const blueprintResolver = new ChainBlueprintResolver(deps.chainSessionStore, deps.logger);
-    // The composition root is the only layer that may name both sides: `engine/` cannot
-    // value-import `modules/workflow-ir/` (dependency-cruiser `engine-no-modules-or-mcp-value`,
-    // error severity), and these three functions are pure, so passing them as a port costs
-    // nothing at runtime and keeps the layer edge honest. Constructed per pipeline, holding no
-    // state — the Streamable HTTP transport rebuilds the server per request, so anything cached
-    // here would exist on STDIO and vanish on HTTP.
-    const workflowCommandBuilder = new WorkflowCommandBuilder(
-      { validate: validateWorkflowIR, compile: compileWorkflowIR, retargetGates },
-      deps.logger
-    );
+    const workflowCommandBuilder = new WorkflowCommandBuilder(workflowIrPort, deps.logger);
     const commandParsingStage = new CommandParsingStage(
       deps.parsingSystem.commandParser,
       deps.parsingSystem.argumentParser,

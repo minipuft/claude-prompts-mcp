@@ -125,10 +125,18 @@ export class CommandParsingStage extends BasePipelineStage {
         parseResult.format === 'symbolic' &&
         (parseResult as SymbolicCommandParseResult).executionPlan
       ) {
-        const symbolicCommand = await this.symbolicCommandBuilder.buildSymbolicCommand(
+        const symbolic = await this.symbolicCommandBuilder.buildSymbolicCommand(
           parseResult as SymbolicCommandParseResult,
           (idOrName) => this.findConvertedPrompt(idOrName)
         );
+        if (!symbolic.ok) {
+          // An arrow-chain the Workflow IR validator refused (P6.105): the same addressed
+          // rejection a workflow submission gets, before any store is touched.
+          this.rejectWorkflow(context, symbolic.rejections);
+          return;
+        }
+        const symbolicCommand = symbolic.parsedCommand;
+        retargetRequestedGates(context, symbolic.retargetRequestedGates);
 
         const symbolicPrompt = this.findConvertedPrompt(symbolicCommand.promptId);
         this.mergeRequestArguments(

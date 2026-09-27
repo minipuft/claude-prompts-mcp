@@ -1,4 +1,4 @@
-// @lifecycle test - P6.79 / P6.80 / R40: an arrow-chain segment or a workflow node naming a chain prompt runs that prompt's steps; P6.78 / R37: a command-level gate on a chain prompt binds each step; P6.97 / R43: a named inline gate belongs to the run that declared it; P6.99 / R44: a named gate on an arrow-chain segment binds that segment; P6.108 / R47: a run's temporary gates live exactly as long as the run; P6.104: a run's request gates reach every node they target; P6.107: a request gate id belongs to the run that holds it, over Streamable HTTP.
+// @lifecycle test - P6.79 / P6.80 / R40: an arrow-chain segment or a workflow node naming a chain prompt runs that prompt's steps; P6.78 / R37: a command-level gate on a chain prompt binds each step; P6.97 / R43: a named inline gate belongs to the run that declared it; P6.99 / R44: a named gate on an arrow-chain segment binds that segment; P6.108 / R47: a run's temporary gates live exactly as long as the run; P6.104: a run's request gates reach every node they target; P6.107: a request gate id belongs to the run that holds it; P6.105: the arrow-chain source validates the expanded workflow, over Streamable HTTP.
 /**
  * MEASURED 2026-09-25 on `427899fe` (authored `sv_chain` = sv_a/sv_b/sv_a, each step carrying the
  * blocking `sv-block`; run state read from `chain_runs.state`):
@@ -404,6 +404,61 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       const second = await run.call({ user_response: 'A out' });
       expect(templates(second)).toEqual(['BODY-sv_b topic=']);
       expect(second).toContain('TGT-NODE-Y');
+    }, 120000);
+  });
+
+  /**
+   * MEASURED 2026-09-26 on `867c74bd`: arrow-chain `>>sv_big` then `>>sv_b` compiled to 33 steps
+   * and opened a run (the cap was checked on the workflow source only), and a request gate
+   * targeting `n1` on arrow-chain `>>sv_chain` then `>>sv_b` never rendered: the arrow-chain
+   * source never validated, so no expansion retargeted `n1` to its last expanded step.
+   */
+  describe('P6.105: the arrow-chain source validates the expanded workflow', () => {
+    test('(a) a chain-prompt segment expanding past the node cap is refused by name, creating nothing', async () => {
+      const before = countRuns();
+      const result = await tool('prompt_engine', { command: `>>sv_big${ARROW}>>sv_b` });
+      expect(result.isError).toBe(true);
+      expect(result.text).toContain('Nothing was executed and no run was created.');
+      expect(result.text).toContain(
+        '[cap-exceeded] node "n1": Expanding chain prompt "sv_big" yields 32 nodes; the expanded workflow has 33 nodes, exceeding the effective maxNodes cap of 32'
+      );
+      expect(countRuns()).toBe(before);
+    }, 120000);
+
+    test("(b) a request gate targeting a chain-prompt segment binds that segment's last expanded step", async () => {
+      const gates = [{ name: 'tgt105', criteria: ['TGT-105-N1'], target_step_id: 'n1' }];
+      const run = await start({ command: `>>sv_chain${ARROW}>>sv_b`, gates });
+      expect(runState(run.chainId).steps).toEqual([
+        'n1-a:sv_a:["sv-block"]',
+        'n1-b:sv_b:["sv-block"]',
+        'n1-c:sv_a:["sv-block"]',
+        'n2:sv_b:[]',
+      ]);
+      expect(run.text).not.toContain('TGT-105-N1');
+      const second = await run.call({ user_response: 'A out', gate_verdict: PASS });
+      expect(second).not.toContain('TGT-105-N1');
+      const third = await run.call({ user_response: 'B out', gate_verdict: PASS });
+      expect(templates(third)).toEqual(['BODY-sv_a topic=']);
+      expect(third).toContain('TGT-105-N1');
+      const failed = await run.call({ user_response: 'C out', gate_verdict: FAIL });
+      expect(failed).toContain('Gate Review Required');
+      expect(failed).toContain('TGT-105-N1');
+      const reviews = runState(run.chainId).reviews;
+      expect(Object.keys(reviews)).toEqual(['n1-c']);
+      expect(reviews['n1-c']).toHaveLength(2);
+      expect(reviews['n1-c']).toContain('sv-block');
+    }, 120000);
+
+    test('(c) control: an arrow-chain of single prompts opens its run and its gate stays on its node', async () => {
+      const before = countRuns();
+      const gates = [{ name: 'tgt105c', criteria: ['TGT-105-N2'], target_step_id: 'n2' }];
+      const run = await start({ command: `>>sv_a${ARROW}>>sv_b`, gates });
+      expect(countRuns()).toBe(before + 1);
+      expect(runState(run.chainId).steps).toEqual(['n1:sv_a:[]', 'n2:sv_b:[]']);
+      expect(run.text).not.toContain('TGT-105-N2');
+      const second = await run.call({ user_response: 'A out' });
+      expect(templates(second)).toEqual(['BODY-sv_b topic=']);
+      expect(second).toContain('TGT-105-N2');
     }, 120000);
   });
 

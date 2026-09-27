@@ -35,7 +35,10 @@ import { ArgumentParser } from '../../../../src/engine/execution/parsers/argumen
 import { projectChainPromptSteps } from '../../../../src/engine/execution/parsers/chain-step-projection.js';
 import { UnifiedCommandParser } from '../../../../src/engine/execution/parsers/command-parser.js';
 import { SymbolicCommandBuilder } from '../../../../src/engine/execution/parsers/symbolic-command-builder.js';
-import { WorkflowCommandBuilder } from '../../../../src/engine/execution/parsers/workflow-command-builder.js';
+import {
+  WorkflowCommandBuilder,
+  type WorkflowIrPort,
+} from '../../../../src/engine/execution/parsers/workflow-command-builder.js';
 import { CommandParsingStage } from '../../../../src/engine/execution/pipeline/stages/04-parsing-stage.js';
 import { RemainderProcessor } from '../../../../src/engine/execution/capture/remainder-processor.js';
 import { createSimpleLogger } from '../../../../src/infra/logging/index.js';
@@ -93,24 +96,40 @@ const svDefault = prompt('sv_default', {
     { promptId: 'sv_b', stepName: 'B', args: { depth: 'deep' } },
   ],
 });
-const prompts = [svA, svB, svChain, svPair, svDefault];
+/** P6.105: 32 steps — one segment naming it plus one more is 33 expanded nodes, past the cap. */
+const svBig = prompt('sv_big', {
+  userMessageTemplate: 'CHAIN-OWN-TEMPLATE',
+  chainSteps: Array.from({ length: 32 }, (_, index) => ({
+    promptId: 'sv_a',
+    stepName: `S${index + 1}`,
+  })),
+});
+const prompts = [svA, svB, svChain, svPair, svDefault, svBig];
 const lookup = (id: string): ConvertedPrompt | undefined => prompts.find((p) => p.id === id);
 
 const logger = createSimpleLogger();
 const argumentParser = new ArgumentParser(logger);
-const stage = new CommandParsingStage(
-  new UnifiedCommandParser(logger),
-  argumentParser,
-  () => prompts,
-  logger,
-  new SymbolicCommandBuilder(argumentParser, logger, compileWorkflowIR),
-  {
-    workflowCommandBuilder: new WorkflowCommandBuilder(
-      { validate: validateWorkflowIR, compile: compileWorkflowIR, retargetGates },
-      logger
-    ),
-  }
-);
+const workflowIrPort = { validate: validateWorkflowIR, compile: compileWorkflowIR, retargetGates };
+const stageWith = (symbolicPort: WorkflowIrPort): CommandParsingStage =>
+  new CommandParsingStage(
+    new UnifiedCommandParser(logger),
+    argumentParser,
+    () => prompts,
+    logger,
+    new SymbolicCommandBuilder(argumentParser, logger, symbolicPort),
+    { workflowCommandBuilder: new WorkflowCommandBuilder(workflowIrPort, logger) }
+  );
+const stage = stageWith(workflowIrPort);
+
+/** The reply stage 04 set instead of a parsed command, or `undefined` when it parsed. */
+async function refusalFrom(
+  request: Record<string, unknown>,
+  through: CommandParsingStage = stage
+): Promise<string | undefined> {
+  const context = new ExecutionContext(request as never);
+  await through.execute(context);
+  return context.response?.content.map((part) => ('text' in part ? part.text : '')).join('\n');
+}
 
 async function parse(request: Record<string, unknown>): Promise<ParsedCommand> {
   const context = new ExecutionContext(request as never);
@@ -416,5 +435,81 @@ describe('P6.95: a chain prompt named with no run arguments', () => {
       }
     }
     expect(names).toEqual(['planted-undefaulted']);
+  });
+});
+
+/**
+ * P6.105: every source that builds a Workflow IR validates it EXPANDED, so a chain prompt counts
+ * its steps against the node cap wherever it is named. Measured 2026-09-26 on `867c74bd`: the
+ * arrow-chain source compiled `sv_big` plus one segment to 33 steps and opened a run, because it
+ * never called the validator. Each row names a 32-step chain prompt plus one more node.
+ */
+describe('P6.105: every IR-building source validates the expanded workflow', () => {
+  interface ValidatedSource {
+    readonly name: string;
+    /** The refusal text, or `undefined` when the source accepted the over-cap workflow. */
+    readonly refusal: () => Promise<string | undefined>;
+  }
+  const VALIDATED: readonly ValidatedSource[] = [
+    { name: 'arrow-chain', refusal: () => refusalFrom({ command: `>>sv_big${ARROW}>>sv_b` }) },
+    {
+      name: 'workflow-ir',
+      refusal: () =>
+        refusalFrom({
+          workflow: {
+            version: 1,
+            nodes: [
+              { id: 'x', promptId: 'sv_big' },
+              { id: 'y', promptId: 'sv_b' },
+            ],
+            edges: [{ from: 'x', to: 'y' }],
+          },
+        }),
+    },
+    // The run already holds one node, so the appended chain prompt makes 33.
+    { name: 'remainder-append', refusal: async () => (await appendRemainder('sv_big')).refusal },
+  ];
+  // `[cap-exceeded] node "n1": …` (stage 04's render) or `- cap-exceeded: …` (the remainder's)
+  const CAP = /cap-exceeded\]?:? (node "[\w-]+": )?Expanding chain prompt "sv_big" yields 32 nodes/;
+
+  async function unvalidated(sources: readonly ValidatedSource[]): Promise<string[]> {
+    const names: string[] = [];
+    for (const source of sources) {
+      if (!CAP.test((await source.refusal()) ?? '')) names.push(source.name);
+    }
+    return names;
+  }
+
+  test.each(VALIDATED.map((source) => [source.name, source] as const))(
+    '%s refuses a chain prompt expanding past the node cap, by name',
+    async (_name, source) => {
+      expect(await unvalidated([source])).toEqual([]);
+    }
+  );
+
+  test('the arrow-chain refusal is the workflow rejection, addressed to the segment node', async () => {
+    const refusal = await refusalFrom({ command: `>>sv_big${ARROW}>>sv_b` });
+    expect(refusal).toContain('Nothing was executed and no run was created.');
+    expect(refusal).toContain('[cap-exceeded] node "n1": Expanding chain prompt "sv_big"');
+    // Positive control: the same segment under the cap parses
+    expect(await refusalFrom({ command: `>>sv_chain${ARROW}>>sv_b` })).toBeUndefined();
+  });
+
+  test('an unregistered prompt on the arrow-chain source stays a PromptError', async () => {
+    await expect(refusalFrom({ command: `>>sv_a${ARROW}>>sv_missing` })).rejects.toThrow(
+      /Converted prompt data not found for chain step: sv_missing/
+    );
+  });
+
+  test('control: a planted arrow-chain builder that skips the validator fails by name', async () => {
+    const skipping = stageWith({
+      ...workflowIrPort,
+      validate: (ir) => ({ ok: true, order: ir.nodes.map((node) => node.id) }),
+    });
+    const planted: ValidatedSource = {
+      name: 'planted-unvalidated',
+      refusal: () => refusalFrom({ command: `>>sv_big${ARROW}>>sv_b` }, skipping),
+    };
+    expect(await unvalidated([...VALIDATED, planted])).toEqual(['planted-unvalidated']);
   });
 });

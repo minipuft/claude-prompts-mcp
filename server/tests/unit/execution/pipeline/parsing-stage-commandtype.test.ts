@@ -10,7 +10,9 @@ import { ExecutionContext } from '../../../../src/engine/execution/context/execu
 import { ArgumentParser } from '../../../../src/engine/execution/parsers/argument-parser.js';
 import { UnifiedCommandParser } from '../../../../src/engine/execution/parsers/command-parser.js';
 import { SymbolicCommandBuilder } from '../../../../src/engine/execution/parsers/symbolic-command-builder.js';
+import { retargetGates } from '../../../../src/modules/workflow-ir/chain-prompt-expansion.js';
 import { compileWorkflowIR } from '../../../../src/modules/workflow-ir/compiler.js';
+import { validateWorkflowIR } from '../../../../src/modules/workflow-ir/validator.js';
 import { CommandParsingStage } from '../../../../src/engine/execution/pipeline/stages/04-parsing-stage.js';
 import { createSimpleLogger } from '../../../../src/infra/logging/index.js';
 
@@ -76,11 +78,11 @@ describe('CommandParsingStage - commandType Integration', () => {
   let stage: CommandParsingStage;
 
   beforeEach(() => {
-    const symbolicCommandBuilder = new SymbolicCommandBuilder(
-      argumentParser,
-      logger,
-      compileWorkflowIR
-    );
+    const symbolicCommandBuilder = new SymbolicCommandBuilder(argumentParser, logger, {
+      validate: validateWorkflowIR,
+      compile: compileWorkflowIR,
+      retargetGates,
+    });
     stage = new CommandParsingStage(
       commandParser,
       argumentParser,

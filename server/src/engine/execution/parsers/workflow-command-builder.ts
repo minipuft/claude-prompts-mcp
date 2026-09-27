@@ -34,8 +34,8 @@ import type {
   WorkflowValidation,
 } from '#modules/workflow-ir/types.js';
 import type { WorkflowValidatorDeps } from '#modules/workflow-ir/validator.js';
-import type { PromptLookup } from './symbolic-command-builder.js';
 import type { ParsedCommand } from '../context/index.js';
+import type { ConvertedPromptLookup } from '../workflow-prompt-lookup.js';
 
 /**
  * The `modules/workflow-ir/` surface this builder consumes, supplied by the composition root.
@@ -55,7 +55,11 @@ export interface WorkflowIrPort {
   retargetGates<Gate>(gates: readonly Gate[], lastStepOf: Readonly<Record<string, string>>): Gate[];
 }
 
-/** Discriminated build result. Mirrors the module's own `{ok:true}|{ok:false, rejections[]}`. */
+/**
+ * Discriminated build result. Mirrors the module's own `{ok:true}|{ok:false, rejections[]}`.
+ * Shared by both IR-building command sources: the arrow-chain source validates through the same
+ * port (P6.105), so a refusal from either reaches stage 04's one rejection render.
+ */
 export type WorkflowCommandResult =
   | {
       readonly ok: true;
@@ -91,7 +95,7 @@ export class WorkflowCommandBuilder {
    * any store is touched. Throwing would route it through the pipeline's error boundary instead,
    * which is the path that emits a terminal execution record.
    */
-  build(ir: WorkflowIR, findPrompt: PromptLookup): WorkflowCommandResult {
+  build(ir: WorkflowIR, findPrompt: ConvertedPromptLookup): WorkflowCommandResult {
     // `expandWith` makes the validator check the EXPANDED IR — the node cap counts a chain
     // prompt's steps, not the one node naming it (R41).
     const validation = this.workflowIr.validate(ir, {

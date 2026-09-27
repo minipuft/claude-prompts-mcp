@@ -1,10 +1,10 @@
 // @lifecycle canonical - Builds ParsedCommand structures from symbolic operator parse results.
 
 import { projectChainPromptSteps } from './chain-step-projection.js';
+import { workflowPromptInfoLookup } from '../workflow-prompt-lookup.js';
 
 import type { Logger } from '#infra/logging/index.js';
-import type { WorkflowCompilation, WorkflowCompilerDeps } from '#modules/workflow-ir/compiler.js';
-import type { WorkflowEdge, WorkflowIR, WorkflowNode } from '#modules/workflow-ir/types.js';
+import type { WorkflowEdge, WorkflowNode, WorkflowPromptInfo } from '#modules/workflow-ir/types.js';
 import type {
   ExecutionContext as ArgumentExecutionContext,
   ArgumentParser,
@@ -13,25 +13,9 @@ import type { ShellVerifyGate } from '../../gates/shell/types.js';
 import type { ParsedCommand } from '../context/index.js';
 import type { ConvertedPrompt } from '../types.js';
 import type { SymbolicCommandParseResult } from './types/operator-types.js';
+import type { WorkflowCommandResult, WorkflowIrPort } from './workflow-command-builder.js';
 
 import { PromptError } from '#shared/utils/index.js';
-
-/**
- * `compileWorkflowIR`, injected.
- *
- * Same seam and the same reason as `WorkflowIrPort` in `workflow-command-builder.ts`: the
- * compiler lives in `modules/workflow-ir/` (Layer 3) and dependency-cruiser's
- * `engine-no-modules-or-mcp-value` bars `engine/` from value-importing it. The composition root
- * (`PipelineBuilder`) is the one layer that may name both sides. Narrower than `WorkflowIrPort`
- * because a `-->` command needs no validator: its nodes are minted by the parser, not submitted
- * by a client, so there is no untrusted shape to reject and no order to derive — the chain is
- * linear by construction.
- */
-export type WorkflowCompileFn = (
-  ir: WorkflowIR,
-  order: readonly string[],
-  deps: WorkflowCompilerDeps
-) => WorkflowCompilation;
 
 type ParsedArgumentsResult = {
   processedArgs: Record<string, any>;
@@ -104,6 +88,16 @@ function foldCommandGatesOntoSteps(
 }
 
 /**
+ * A resolved prompt's validator projection with `required` withheld: the arrow-chain source does
+ * not enforce it (see `buildSymbolicChain`). Existence still answers through the shared lookup.
+ */
+function withoutRequiredArguments(
+  info: WorkflowPromptInfo | undefined
+): WorkflowPromptInfo | undefined {
+  return info === undefined ? undefined : { ...info, requiredArguments: [] };
+}
+
+/**
  * Builds structured ParsedCommand from symbolic operator parse results.
  *
  * Handles single-prompt and chain-based symbolic commands, resolving
@@ -115,20 +109,34 @@ export class SymbolicCommandBuilder {
   constructor(
     private readonly argumentParser: ArgumentParser,
     private readonly logger: Logger,
-    private readonly compileWorkflow: WorkflowCompileFn
+    /**
+     * The `modules/workflow-ir/` surface, injected by the composition root for the reason
+     * `WorkflowIrPort` states. The arrow-chain source validates through it as the workflow
+     * source does (P6.105): its nodes are minted by the parser, but a segment naming a chain
+     * prompt still expands, so the node cap and the gate retargets are facts of the EXPANDED IR.
+     */
+    private readonly workflowIr: WorkflowIrPort
   ) {}
 
   /**
    * Build a ParsedCommand from a symbolic parse result.
    * Dispatches to single-prompt or chain builder based on operator presence.
+   *
+   * The same result shape the workflow source returns: an arrow-chain the validator refuses is a
+   * client error the caller renders before any store is touched, and an unregistered prompt
+   * still throws `PromptError`.
    */
   async buildSymbolicCommand(
     parseResult: SymbolicCommandParseResult,
     findPrompt: PromptLookup
-  ): Promise<ParsedCommand> {
+  ): Promise<WorkflowCommandResult> {
     const hasChainOperator = this.hasChainOperator(parseResult);
     if (!hasChainOperator) {
-      return this.buildSingleSymbolicPrompt(parseResult, findPrompt);
+      return {
+        ok: true,
+        parsedCommand: await this.buildSingleSymbolicPrompt(parseResult, findPrompt),
+        retargetRequestedGates: (gates) => [...gates],
+      };
     }
     return this.buildSymbolicChain(parseResult, findPrompt);
   }
@@ -288,7 +296,7 @@ export class SymbolicCommandBuilder {
   private async buildSymbolicChain(
     parseResult: SymbolicCommandParseResult,
     findPrompt: PromptLookup
-  ): Promise<ParsedCommand> {
+  ): Promise<WorkflowCommandResult> {
     const nodes: WorkflowNode[] = [];
     const order: string[] = [];
     const promptsById = new Map<string, ConvertedPrompt>();
@@ -310,47 +318,15 @@ export class SymbolicCommandBuilder {
       if (!step.promptId) {
         continue;
       }
-
-      const convertedPrompt = findPrompt(step.promptId);
-      if (!convertedPrompt) {
-        throw new PromptError(`Converted prompt data not found for chain step: ${step.promptId}`);
-      }
-
-      const stepArgumentInput = argumentInputs[index];
-      const fallbackArgs =
-        step.args && step.args.trim().length > 0
-          ? await this.parseArgumentsSafely(step.args, convertedPrompt)
-          : undefined;
-
-      const stepGateCriteria = step.inlineGateCriteria ?? [];
-
-      const resolvedArgs = await this.resolveArgumentPayload(
-        convertedPrompt,
-        stepArgumentInput,
-        stepGateCriteria,
-        fallbackArgs?.processedArgs
+      const { node, prompt } = await this.toChainNode(
+        { ...step, promptId: step.promptId },
+        argumentInputs[index],
+        findPrompt,
+        nodes.length
       );
-
-      // Frozen at mint by `symbolic-operator-parser.generateExecutionPlan`, never re-minted here:
-      // a locally derived id would diverge from the `n1..nK` the rest of the run addresses. The
-      // fallback covers only a step the parser did not number, which its own chain path cannot
-      // produce — it exists so an unnumbered step fails as a duplicate id rather than silently
-      // losing its identity.
-      const nodeId = step.nodeId ?? `n${nodes.length + 1}`;
-      promptsById.set(convertedPrompt.id, convertedPrompt);
-      order.push(nodeId);
-      nodes.push({
-        id: nodeId,
-        promptId: convertedPrompt.id,
-        args: resolvedArgs.processedArgs,
-        // Written even when empty: this path has always put an `inlineGateCriteria` array on
-        // every step, and `compileNode` spreads what it is given. An absent key and an empty
-        // array are the same to `InlineGateProcessor` but not to a reader doing `.length`.
-        inlineGateCriteria: resolvedArgs.inlineCriteria,
-        ...(step.delegated === true ? { delegated: true } : {}),
-        // The prompt-level fallback OQ-A2b kept path-local. See the method docblock.
-        ...promptLevelDelegationFallback(convertedPrompt),
-      });
+      promptsById.set(prompt.id, prompt);
+      order.push(node.id);
+      nodes.push(node);
     }
 
     // Linear by construction — a `-->` command declares a sequence, not a dependency graph. The
@@ -361,14 +337,28 @@ export class SymbolicCommandBuilder {
       .slice(1)
       .map((to, index) => ({ from: order[index] as string, to }));
 
-    const compilation = this.compileWorkflow(
-      { version: 1, nodes, ...(edges.length > 0 ? { edges } : {}) },
-      order,
-      // A memo over the prompts THIS call already resolved through `findPrompt` above — every
-      // node's `promptId` is a `convertedPrompt.id` set in that same loop, so the map always
-      // hits and the `??` arm is the shared lookup standing behind it.
-      { lookupPrompt: (promptId) => promptsById.get(promptId) ?? findPrompt(promptId) }
-    );
+    // A memo over the prompts THIS call already resolved through `findPrompt` above — every
+    // node's `promptId` is a `convertedPrompt.id` set in that same loop, so the map always hits
+    // and the `??` arm is the shared lookup standing behind it.
+    const lookupPrompt = (promptId: string): ConvertedPrompt | undefined =>
+      promptsById.get(promptId) ?? findPrompt(promptId);
+    const ir = { version: 1 as const, nodes, ...(edges.length > 0 ? { edges } : {}) };
+
+    // P6.105: the same validator, expanding as the workflow source does, so a chain-prompt
+    // segment counts its steps against the node cap and a request gate naming the segment's node
+    // is retargeted to its last step. The node's args are the command string's, resolved above
+    // through `ArgumentParser`, which does not enforce `required` on this source (P7-F6) — so
+    // `required` is left out of what the validator is told, and the IR-only check stays IR-only.
+    const promptInfo = workflowPromptInfoLookup(lookupPrompt);
+    const validation = this.workflowIr.validate(ir, {
+      lookupPrompt: (promptId) => withoutRequiredArguments(promptInfo(promptId)),
+      expandWith: lookupPrompt,
+    });
+    if (!validation.ok) {
+      return { ok: false, rejections: validation.rejections };
+    }
+
+    const compilation = this.workflowIr.compile(ir, order, { lookupPrompt });
 
     const parsedCommand: ParsedCommand = {
       ...parseResult,
@@ -385,7 +375,61 @@ export class SymbolicCommandBuilder {
       parsedCommand.styleSelection = parseResult.executionPlan.styleSelection;
     }
 
-    return parsedCommand;
+    const lastStepOf = validation.expanded?.lastStepOf ?? {};
+    return {
+      ok: true,
+      parsedCommand,
+      retargetRequestedGates: (gates) => this.workflowIr.retargetGates(gates, lastStepOf),
+    };
+  }
+
+  /** One arrow-chain segment as an IR node, its args resolved from the command string. */
+  private async toChainNode(
+    step: SymbolicCommandParseResult['executionPlan']['steps'][number] & { promptId: string },
+    stepArgumentInput: string | undefined,
+    findPrompt: PromptLookup,
+    precedingNodes: number
+  ): Promise<{ node: WorkflowNode; prompt: ConvertedPrompt }> {
+    const convertedPrompt = findPrompt(step.promptId);
+    if (!convertedPrompt) {
+      throw new PromptError(`Converted prompt data not found for chain step: ${step.promptId}`);
+    }
+
+    const fallbackArgs =
+      step.args && step.args.trim().length > 0
+        ? await this.parseArgumentsSafely(step.args, convertedPrompt)
+        : undefined;
+
+    const stepGateCriteria = step.inlineGateCriteria ?? [];
+
+    const resolvedArgs = await this.resolveArgumentPayload(
+      convertedPrompt,
+      stepArgumentInput,
+      stepGateCriteria,
+      fallbackArgs?.processedArgs
+    );
+
+    // Frozen at mint by `symbolic-operator-parser.generateExecutionPlan`, never re-minted here:
+    // a locally derived id would diverge from the `n1..nK` the rest of the run addresses. The
+    // fallback covers only a step the parser did not number, which its own chain path cannot
+    // produce — it exists so an unnumbered step fails as a duplicate id rather than silently
+    // losing its identity.
+    const nodeId = step.nodeId ?? `n${precedingNodes + 1}`;
+    return {
+      node: {
+        id: nodeId,
+        promptId: convertedPrompt.id,
+        args: resolvedArgs.processedArgs,
+        // Written even when empty: this path has always put an `inlineGateCriteria` array on
+        // every step, and `compileNode` spreads what it is given. An absent key and an empty
+        // array are the same to `InlineGateProcessor` but not to a reader doing `.length`.
+        inlineGateCriteria: resolvedArgs.inlineCriteria,
+        ...(step.delegated === true ? { delegated: true } : {}),
+        // The prompt-level fallback OQ-A2b kept path-local. See `buildSymbolicChain`'s docblock.
+        ...promptLevelDelegationFallback(convertedPrompt),
+      },
+      prompt: convertedPrompt,
+    };
   }
 
   private hasChainOperator(parseResult: SymbolicCommandParseResult): boolean {
