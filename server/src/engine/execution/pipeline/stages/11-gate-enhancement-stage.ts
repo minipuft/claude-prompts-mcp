@@ -1,6 +1,7 @@
 // @lifecycle canonical - Enriches prompts with gate instructions prior to execution.
 import { inlineDefinitionCarriers } from '../../../gates/services/gate-enhancement-service.js';
 import { BasePipelineStage } from '../stage.js';
+import { buildWorkflowRejectionResponse } from '../workflow-rejection-response.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { GateSystemSettings } from '#shared/types/index.js';
@@ -17,7 +18,7 @@ type GateSystemSettingsProvider = () => GateSystemSettings | undefined;
  *
  * Dependencies: context.executionPlan, context.convertedPrompt or context.parsedCommand.steps
  * Output: Enhanced prompts with gate instructions, context.activeGateIds
- * Can Early Exit: No
+ * Can Early Exit: Yes (a request gate targeting a step a resume can no longer reach, R65)
  */
 export class GateEnhancementStage extends BasePipelineStage {
   readonly name = 'GateEnhancement';
@@ -53,6 +54,21 @@ export class GateEnhancementStage extends BasePipelineStage {
 
     if (this.enhancementService.shouldSkip(executionPlan.modifiers)) {
       this.logExit({ skipped: 'Gate enhancement disabled by execution modifier' });
+      return;
+    }
+
+    // R65: a resume's request gate targeting a step it can no longer reach is refused here, before
+    // any registration, in stage 04's rejection shape — the registrar alone knows the run's
+    // position and the gates it holds.
+    const unreachable = this.registrar.unreachableStepTargets(context);
+    if (unreachable.length > 0) {
+      context.diagnostics.warn(this.name, 'Gate target refused', { count: unreachable.length });
+      context.setResponse(
+        buildWorkflowRejectionResponse(
+          unreachable.map((refusal) => ({ reason: 'gate-target-passed', ...refusal }))
+        )
+      );
+      this.logExit({ refusedGateTargets: unreachable.length });
       return;
     }
 

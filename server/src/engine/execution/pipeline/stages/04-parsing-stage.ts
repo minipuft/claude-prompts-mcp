@@ -3,6 +3,7 @@ import { getExplicitArgumentKeys } from '../../parsers/argument-parser.js';
 import { projectChainPromptSteps } from '../../parsers/chain-step-projection.js';
 import { COMMAND_SOURCE_EXCLUSIVITY_MESSAGE } from '../../validation/schemas.js';
 import { BasePipelineStage } from '../stage.js';
+import { buildWorkflowRejectionResponse } from '../workflow-rejection-response.js';
 
 import type { Logger } from '#infra/logging/index.js';
 // ChainSessionService no longer needed — blueprint resolution delegated to ChainBlueprintResolver
@@ -266,44 +267,19 @@ export class CommandParsingStage extends BasePipelineStage {
   }
 
   /**
-   * Turn typed rejections into an addressed client response and stop the pipeline here.
-   *
-   * Every line names the offending node or edge and the rule violated, because acceptance clause
-   * (b) is "actionable", and a client that has to guess WHICH node failed fixes its submission one
-   * error per round trip — the failure mode the rejection vocabulary exists to remove.
+   * Refuse the command with typed rejections and stop the pipeline here, through the one render
+   * every refusing stage shares ({@link buildWorkflowRejectionResponse}).
    */
   private rejectWorkflow(
     context: ExecutionContext,
     rejections: readonly WorkflowRejection[]
   ): void {
-    const lines = rejections.map((rejection) => {
-      const address =
-        rejection.edge !== undefined
-          ? `edge ${rejection.edge.from} -> ${rejection.edge.to}`
-          : rejection.nodeId !== undefined
-            ? `node "${rejection.nodeId}"`
-            : 'workflow';
-      return `• [${rejection.reason}] ${address}: ${rejection.detail}`;
-    });
-
     context.diagnostics.warn(this.name, 'Workflow submission rejected', {
       count: rejections.length,
       reasons: rejections.map((rejection) => rejection.reason),
     });
 
-    context.setResponse({
-      content: [
-        {
-          type: 'text',
-          text: [
-            `❌ Workflow rejected — ${rejections.length} problem${rejections.length === 1 ? '' : 's'} found. Nothing was executed and no run was created.`,
-            '',
-            ...lines,
-          ].join('\n'),
-        },
-      ],
-      isError: true,
-    });
+    context.setResponse(buildWorkflowRejectionResponse(rejections));
 
     this.logExit({ rejectedWorkflow: rejections.length });
   }

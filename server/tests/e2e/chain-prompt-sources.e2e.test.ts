@@ -756,8 +756,25 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
    * fire, its step already answered.
    *
    * Now (R59) a request gate naming a node the run has already passed is refused by name.
+   *
+   * MEASURED 2026-09-27 on `656427ea` (driven, this harness, before R64/R65): a resume targeting the
+   * node it answers (`b` at `b`, `n1` on a one-node run) was accepted and rendered nowhere; a gate
+   * first sent on a resume and re-sent once its target passed was refused (stage 13's exemption
+   * read only the start call's gate ids); `target_step_number: 1` at `b` was accepted unchecked.
+   *
+   * Now (R64, R65) the registrar (stage 11) refuses a NEW gate targeting the node the call answers
+   * or an earlier one, in either name form, through stage 04's rejection render; a gate the run
+   * already holds under its id is the held gate, whichever call first sent it.
    */
-  describe('P6.134: a resume refuses a gate on a step the run has already passed', () => {
+  describe('P6.134/P6.136-P6.138: a resume refuses a gate on a step it can no longer reach', () => {
+    const numbered = (chainId: string, answer: string, step: number, marker: string) =>
+      tool('prompt_engine', {
+        chain_id: chainId,
+        user_response: answer,
+        gate_verdict: PASS,
+        gates: [{ name: marker.toLowerCase(), criteria: [marker], target_step_number: step }],
+      });
+
     test('(a) a target behind the current node is refused by name, the run untouched', async () => {
       const run = await start({ command: '>>sv_chain' });
       await run.call({ user_response: 'A out', gate_verdict: PASS });
@@ -765,17 +782,25 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
 
       const refused = await resumeWithGate(run.chainId, 'B out', 'a', 'TGT-134-A');
       expect(refused.isError).toBe(true);
-      expect(refused.text).toContain('target_step_id "a" names a step the run has already passed');
+      expect(refused.text).toContain('❌ Workflow rejected — 1 problem found.');
+      expect(refused.text).toContain(
+        '[gate-target-passed] node "a": target_step_id "a" names a step the run has already passed'
+      );
       expect(refused.text).not.toContain('TGT-134-A');
       expect(rawRunState(run.chainId)).toBe(before);
     }, 120000);
 
-    test('(b) control: the current node and a later node are accepted', async () => {
+    test('(b) the node this call answers is refused by name (R64); a later node is accepted', async () => {
       const current = await start({ command: '>>sv_chain' });
       await current.call({ user_response: 'A out', gate_verdict: PASS });
+      const before = rawRunState(current.chainId);
       const onCurrent = await resumeWithGate(current.chainId, 'B out', 'b', 'TGT-134-B');
-      expect(onCurrent.isError).toBe(false);
-      expect(templates(onCurrent.text)).toEqual(['BODY-sv_a topic=']);
+      expect(onCurrent.isError).toBe(true);
+      expect(onCurrent.text).toContain(
+        '[gate-target-passed] node "b": target_step_id "b" names the step this call answers; target "c" or later'
+      );
+      expect(onCurrent.text).not.toContain('TGT-134-B');
+      expect(rawRunState(current.chainId)).toBe(before);
 
       const later = await start({ command: '>>sv_chain' });
       await later.call({ user_response: 'A out', gate_verdict: PASS });
@@ -783,6 +808,25 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       expect(onLater.isError).toBe(false);
       expect(templates(onLater.text)).toEqual(['BODY-sv_a topic=']);
       expect(onLater.text).toContain('TGT-134-C');
+    }, 120000);
+
+    test('(c) a one-node run: n1 is accepted on the start call and refused on the resume that answers it', async () => {
+      const gates = (marker: string) => [
+        { name: marker.toLowerCase(), criteria: [marker], target_step_id: 'n1' },
+      ];
+      const run = await start({ command: '>>sv_a :: "CRIT-134"', gates: gates('TGT-134-START') });
+      expect(run.text).toContain('TGT-134-START');
+
+      const answered = await tool('prompt_engine', {
+        chain_id: run.chainId,
+        user_response: 'out',
+        gate_verdict: PASS,
+        gates: gates('TGT-134-N1'),
+      });
+      expect(answered.isError).toBe(true);
+      expect(answered.text).toContain(
+        'target_step_id "n1" names the step this call answers; the run has no later step'
+      );
     }, 120000);
 
     test('(d) control: re-sending a start-call gate under its id stays accepted after its step', async () => {
@@ -800,11 +844,52 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       expect(templates(resent.text)).toEqual(['BODY-sv_a topic=']);
     }, 120000);
 
-    test('(c) control: a one-node run standing at n1 accepts a gate on n1', async () => {
-      const run = await start({ command: '>>sv_a :: "CRIT-134"' });
-      const answered = await resumeWithGate(run.chainId, 'out', 'n1', 'TGT-134-N1');
-      expect(answered.isError).toBe(false);
-      expect(answered.text).not.toContain('already passed');
+    test('(e) a gate first sent on a resume is the held gate when re-sent after its step', async () => {
+      const gates = [{ id: 'rs136', name: 'rs136', criteria: ['RS-136'], target_step_id: 'b' }];
+      const run = await start({ command: '>>sv_chain' });
+      const first = await tool('prompt_engine', {
+        chain_id: run.chainId,
+        user_response: 'A out',
+        gate_verdict: PASS,
+        gates,
+      });
+      expect(first.isError).toBe(false);
+      expect(first.text).toContain('RS-136');
+
+      for (const answer of ['B out', 'C out']) {
+        const resent = await tool('prompt_engine', {
+          chain_id: run.chainId,
+          user_response: answer,
+          gate_verdict: PASS,
+          gates,
+        });
+        expect(resent.isError).toBe(false);
+        expect(resent.text).not.toContain('gate-target-passed');
+      }
+    }, 120000);
+
+    test('(f) target_step_number at a passed step is refused by name, the run untouched', async () => {
+      const run = await start({ command: '>>sv_chain' });
+      await run.call({ user_response: 'A out', gate_verdict: PASS });
+      const before = rawRunState(run.chainId);
+
+      const refused = await numbered(run.chainId, 'B out', 1, 'TGT-138-1');
+      expect(refused.isError).toBe(true);
+      expect(refused.text).toContain(
+        '[gate-target-passed] node "a": target_step_number 1 names a step the run has already passed'
+      );
+      expect(refused.text).not.toContain('TGT-138-1');
+      expect(rawRunState(run.chainId)).toBe(before);
+    }, 120000);
+
+    test('(g) control: target_step_number at a later step is accepted and renders there', async () => {
+      const run = await start({ command: '>>sv_chain' });
+      await run.call({ user_response: 'A out', gate_verdict: PASS });
+
+      const accepted = await numbered(run.chainId, 'B out', 3, 'TGT-138-3');
+      expect(accepted.isError).toBe(false);
+      expect(templates(accepted.text)).toEqual(['BODY-sv_a topic=']);
+      expect(accepted.text).toContain('TGT-138-3');
     }, 120000);
   });
 

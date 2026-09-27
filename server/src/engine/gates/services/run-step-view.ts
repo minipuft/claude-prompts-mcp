@@ -14,6 +14,8 @@
 import type { ChainSession, ChainSessionService } from '#shared/types/index.js';
 import type { StateStoreOptions } from '#shared/types/persistence.js';
 
+import { isRunComplete } from '#shared/types/chain-session.js';
+
 export interface RunStepView {
   /**
    * The run's session id — the key its temporary gates are owned under (R47). Stage 11 runs before
@@ -41,6 +43,11 @@ export interface RunStepView {
    * exactly the case where the run would stand at its first node.
    */
   readonly currentNodeId?: string | null;
+  /**
+   * True when the run has ended (`isRunComplete`): a resume of it is answered by the session
+   * stage's already-complete reply, so no step target of that call is judged against its position.
+   */
+  readonly complete?: boolean;
   /**
    * Provenance of the node the run is standing at — present ONLY when the mutation policy
    * INSERTED that node mid-run (P5-F4, closing the last surviving P4-F3 shape).
@@ -109,6 +116,7 @@ export function createRunStepViewProvider(store: ChainSessionService): RunStepVi
       nodeIds,
       skippedNodeIds,
       currentNodeId: session.state.currentNodeId,
+      complete: isRunComplete(session),
     };
 
     const currentNodeOrigin = resolveInsertedNodeOrigin(session);

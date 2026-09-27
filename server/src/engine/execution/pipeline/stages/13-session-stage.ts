@@ -18,7 +18,7 @@ import type { ExecutionPlan } from '../../types.js';
 
 import { isRunComplete } from '#shared/types/chain-session.js';
 import { formatChainId, nextRunNumber, stripRunNumber } from '#shared/utils/chain-id-codec.js';
-import { currentOrdinal, mintSequentialIds, ordinalOf, totalOf } from '#shared/utils/node-order.js';
+import { currentOrdinal, mintSequentialIds, totalOf } from '#shared/utils/node-order.js';
 
 /**
  * Pipeline Stage 13: Session Management
@@ -187,26 +187,19 @@ export class SessionManagementStage extends BasePipelineStage {
   }
 
   /**
-   * Answer a resume that must not reach the run, before any session context is published: the
-   * run already ended, or (R59) this call targets a gate at a node the run already passed, which
-   * could never fire. Refused here because this is where the resumed run's position is first
-   * known — stage 04 holds only the blueprint. True when the call was answered.
+   * Answer a resume of a run that already ended, before any session context is published. True
+   * when the call was answered. (A request gate targeting a step the run has passed is refused
+   * earlier, by the gate registrar at stage 11, R65.)
    */
   private answerWithoutResuming(context: ExecutionContext, session: ChainSession): boolean {
-    if (isRunComplete(session)) {
-      context.setResponse(this.buildAlreadyCompleteResponse(session));
-      context.state.session.lifecycleDecision = 'resume-completed';
-      this.logExit({
-        skipped: 'Run already complete',
-        chainId: session.chainId,
-        runStatus: session.runStatus ?? 'working',
-      });
-      return true;
-    }
-    const refusal = passedTargetRefusal(context, session);
-    if (refusal === undefined) return false;
-    context.setResponse(refusal);
-    this.logExit({ skipped: 'Gate target already passed', chainId: session.chainId });
+    if (!isRunComplete(session)) return false;
+    context.setResponse(this.buildAlreadyCompleteResponse(session));
+    context.state.session.lifecycleDecision = 'resume-completed';
+    this.logExit({
+      skipped: 'Run already complete',
+      chainId: session.chainId,
+      runStatus: session.runStatus ?? 'working',
+    });
     return true;
   }
 
@@ -456,63 +449,4 @@ function temporaryRequestGates(
     const ref = reference(gate);
     return ref === undefined || !canonicalIds.includes(ref);
   });
-}
-
-/**
- * The first `target_step_id` among the gates THIS call adds naming a node the resumed run has
- * already passed (R59), or undefined. A declared node that expanded into a chain prompt's steps is
- * passed once its last step is (the run blueprint's `declaredNodes.lastStepOf`, the address its
- * gates retarget to, R58). A run standing on no node has passed them all. An id the run does not have is stage 04's
- * refusal, not this one. A gate re-sent under the id of one the start call registered (the
- * blueprint's `requestGates`) is exempt: the registrar reuses it rather than adding one, and the
- * start call checked it when it was sent — a client re-sending its gates on every call is the
- * pattern the registrar's held-id reuse exists for (P6.113).
- */
-function passedGateTarget(context: ExecutionContext, session: ChainSession): string | undefined {
-  const { nodes, currentNodeId } = session.state;
-  const current = currentNodeId === null ? nodes.length + 1 : ordinalOf(nodes, currentNodeId);
-  // The run's own stored blueprint: what its start call declared and registered, whichever path
-  // built this call's parsed command.
-  const started = session.blueprint?.parsedCommand as ParsedCommand | undefined;
-  const lastStepOf = started?.declaredNodes?.lastStepOf ?? {};
-  const startIds = new Set((started?.requestGates ?? []).map(gateIdOf));
-  for (const gate of context.mcpRequest.gates ?? []) {
-    const target =
-      typeof gate !== 'string' && 'target_step_id' in gate ? gate.target_step_id : undefined;
-    const id = gateIdOf(gate);
-    if (target === undefined || (id !== undefined && startIds.has(id))) continue;
-    const position = ordinalOf(nodes, lastStepOf[target] ?? target);
-    if (position !== -1 && position < current) return target;
-  }
-  return undefined;
-}
-
-/** A request gate's explicit `id`, when it carries one. */
-function gateIdOf(gate: GateSpecification): string | undefined {
-  return typeof gate !== 'string' && 'id' in gate && typeof gate.id === 'string'
-    ? gate.id
-    : undefined;
-}
-
-/** The refusal for {@link passedGateTarget}, or undefined when this call targets no passed step. */
-function passedTargetRefusal(
-  context: ExecutionContext,
-  session: ChainSession
-): ToolResponse | undefined {
-  const target = passedGateTarget(context, session);
-  if (target === undefined) return undefined;
-  const standing = session.state.currentNodeId;
-  const at = standing === null ? 'past its last step' : `at step "${standing}"`;
-  return {
-    content: [
-      {
-        type: 'text',
-        text:
-          `❌ **Gate Refused**: target_step_id "${target}" names a step the run has already ` +
-          `passed (run \`${session.chainId}\` is ${at}). A gate there could never fire; target ` +
-          'the current step or a later one. Nothing was executed and the run did not advance.',
-      },
-    ],
-    isError: true,
-  };
 }
