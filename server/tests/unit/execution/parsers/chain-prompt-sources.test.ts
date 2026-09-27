@@ -83,7 +83,16 @@ const svPair = prompt('sv_pair', {
     { promptId: 'sv_b', stepName: 'B', args: { depth: 'deep' } },
   ],
 });
-const prompts = [svA, svB, svChain, svPair];
+/** P6.95: a chain prompt whose run argument declares a default. */
+const svDefault = prompt('sv_default', {
+  arguments: [{ name: 'topic', type: 'string', required: false, defaultValue: 'DEF-95' }],
+  userMessageTemplate: 'CHAIN-OWN-TEMPLATE',
+  chainSteps: [
+    { promptId: 'sv_a', stepName: 'A' },
+    { promptId: 'sv_b', stepName: 'B', args: { depth: 'deep' } },
+  ],
+});
+const prompts = [svA, svB, svChain, svPair, svDefault];
 const lookup = (id: string): ConvertedPrompt | undefined => prompts.find((p) => p.id === id);
 
 const logger = createSimpleLogger();
@@ -328,5 +337,83 @@ describe('every command source naming a chain prompt projects the same steps', (
       'r1-a',
       'r1-b',
     ]);
+  });
+});
+
+/**
+ * P6.95 (OQ-A2b stands): with NO run arguments the command-string sources resolve the chain
+ * prompt's declared arguments through `ArgumentParser` (author default, else `""`) and project
+ * those onto every step, while a Workflow IR node's `args` is a declared object `compileNode`
+ * never re-derives defaults for, so its steps carry only what the node declared. MEASURED
+ * 2026-09-26 (driven, workflow `{x: <chain whose step declares topic default DEF-95>}`, no args):
+ * the step renders `topic=DEF-95` on every source, because the render resolves the step prompt's
+ * own defaults; the difference is in `args` only, so it is pinned here rather than fixed.
+ *
+ * The comparison EXCLUDES DEFAULTED KEYS: a key the run did not supply whose value is the chain
+ * prompt's declared default or the parser's `""` fallback is dropped before comparing. Applying
+ * the defaults to the IR row instead would hide the `""` fallback, which no declaration names.
+ */
+describe('P6.95: a chain prompt named with no run arguments', () => {
+  const NO_ARG_SOURCES: ReadonlyArray<readonly [string, Record<string, unknown>]> = [
+    ['direct', { command: '>>sv_default' }],
+    ['single-symbolic', { command: '>>sv_default :: verify:"true"' }],
+    ['arrow-chain', { command: `>>sv_default${ARROW}>>sv_b` }],
+    ['workflow-ir', { workflow: { version: 1, nodes: [{ id: 'x', promptId: 'sv_default' }] } }],
+  ];
+  const stepsOf = async (request: Record<string, unknown>) =>
+    (await parse(request)).steps?.slice(0, 2);
+  const defaulted = new Map(
+    (svDefault.arguments ?? []).map((arg) => [arg.name, [arg.defaultValue, '']] as const)
+  );
+  /** A step's args without the keys the run did not supply and a default filled. */
+  const withoutDefaulted = (steps: readonly ChainStepPrompt[] | undefined): string[] =>
+    rows(
+      (steps ?? []).map((step) => ({
+        ...step,
+        args: Object.fromEntries(
+          Object.entries(step.args ?? {}).filter(
+            ([key, value]) => !(defaulted.get(key) ?? []).includes(value as never)
+          )
+        ),
+      }))
+    );
+  const projected = rows(projectChainPromptSteps(svDefault, {}, lookup)?.steps);
+
+  test('the IR contract: only the workflow source leaves the defaulted key off its steps', async () => {
+    const topics: Record<string, unknown[]> = {};
+    for (const [name, request] of NO_ARG_SOURCES) {
+      topics[name] = ((await stepsOf(request)) ?? []).map((step) => step.args?.['topic']);
+    }
+    expect(topics).toEqual({
+      direct: ['DEF-95', 'DEF-95'],
+      'single-symbolic': ['DEF-95', 'DEF-95'],
+      'arrow-chain': ['DEF-95', 'DEF-95'],
+      'workflow-ir': [undefined, undefined],
+    });
+  });
+
+  test.each(NO_ARG_SOURCES)(
+    '%s yields the projected steps once defaulted keys are excluded',
+    async (_name, request) => {
+      expect(withoutDefaulted(await stepsOf(request))).toEqual(projected);
+    }
+  );
+
+  test('control: a planted source carrying an unsupplied, undefaulted key still fails by name', async () => {
+    const planted = async () =>
+      ((await stepsOf({ command: '>>sv_default' })) ?? []).map((step) => ({
+        ...step,
+        args: { ...step.args, topic: 'NOT-A-DEFAULT' },
+      }));
+    const names: string[] = [];
+    for (const [name, steps] of [
+      ...NO_ARG_SOURCES.map(([n, request]) => [n, () => stepsOf(request)] as const),
+      ['planted-undefaulted', planted] as const,
+    ]) {
+      if (JSON.stringify(withoutDefaulted(await steps())) !== JSON.stringify(projected)) {
+        names.push(name);
+      }
+    }
+    expect(names).toEqual(['planted-undefaulted']);
   });
 });
