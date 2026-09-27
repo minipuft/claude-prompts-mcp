@@ -148,7 +148,10 @@ describe('stripper 3 — the stage-04 projection onto ChainStepPrompt', () => {
       mockArgumentParser as ArgumentParser,
       () => [chainPrompt, stepPrompt, setupPrompt],
       createLogger() as never,
-      { buildSymbolicCommand: jest.fn() } as unknown as SymbolicCommandBuilder
+      {
+        buildSymbolicCommand: jest.fn(),
+        requestGateTargetRejections: jest.fn().mockReturnValue([]),
+      } as unknown as SymbolicCommandBuilder
     );
 
     const context = new ExecutionContext({ command: '>>gated_chain' });

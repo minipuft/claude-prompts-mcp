@@ -193,8 +193,9 @@ describe('a request gate with an id (P6.107)', () => {
  * sent it on. MEASURED 2026-09-26 on `83355182`: registration binds `apply_to_steps: [currentStep]`
  * once; the run's declared id (R49) is what makes a later re-send register nothing and leave that
  * binding alone. A gate sent WITHOUT an `id` has no declared id: re-sent on step 3 it registers a
- * second gate bound to step 3 (as of 2026-09-26 · flips when id-less request gates gain a
- * declared key, e.g. one derived from their body).
+ * second gate bound to step 3, and the run holds both until it is released. Ruling R50 accepts
+ * that: the client names a gate it means to re-send, and nothing derives an identity from a body.
+ * Pinned by P6.122 below, so a body-derived key cannot arrive silently.
  */
 describe('an untargeted chain request gate stays bound to its first step (P6.114)', () => {
   const NODE_IDS = ['n1', 'n2', 'n3'];
@@ -244,6 +245,32 @@ describe('an untargeted chain request gate stays bound to its first step (P6.114
     expect(registry.getTemporaryGate('ug114')?.apply_to_steps).toEqual([1]);
     expect(registry.getTemporaryGate('ug114-2')).toBeUndefined();
     expect(registry.getRunGates('run-114').map((held) => held.id)).toEqual(['ug114']);
+  });
+
+  test('P6.122 (R50): an id-less gate re-sent on step 3 is a second gate, bound to step 3', async () => {
+    const { registry, create, started, resumed } = await startAndResume({
+      criteria: ['IDLESS-122'],
+    });
+
+    expect(started.temporaryGateIds).toHaveLength(1);
+    const [first] = started.temporaryGateIds;
+    const second = resumed.temporaryGateIds.find((id) => id !== first);
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(first).toMatch(/^temp_/);
+    expect(second).toMatch(/^temp_/);
+    expect(registry.getTemporaryGate(first!)?.apply_to_steps).toEqual([1]);
+    expect(registry.getTemporaryGate(second!)?.apply_to_steps).toEqual([3]);
+
+    registry.adoptIntoRun('run-114', resumed.temporaryGateIds);
+    expect(
+      registry
+        .getRunGates('run-114')
+        .map((held) => held.id)
+        .sort()
+    ).toEqual([first, second].sort());
+    registry.releaseRun('run-114');
+    expect(registry.getTemporaryGate(first!)).toBeUndefined();
+    expect(registry.getTemporaryGate(second!)).toBeUndefined();
   });
 
   test('control: a targeted gate binds its target, re-sent or not', async () => {

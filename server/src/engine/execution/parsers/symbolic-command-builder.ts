@@ -9,7 +9,7 @@ import type {
   WorkflowEdge,
   WorkflowIR,
   WorkflowNode,
-  WorkflowPromptInfo,
+  WorkflowRejection,
 } from '#modules/workflow-ir/types.js';
 import type {
   ExecutionContext as ArgumentExecutionContext,
@@ -22,6 +22,14 @@ import type { SymbolicCommandParseResult } from './types/operator-types.js';
 import type { WorkflowCommandResult, WorkflowIrPort } from './workflow-command-builder.js';
 
 import { PromptError } from '#shared/utils/index.js';
+import { mintSequentialIds } from '#shared/utils/node-order.js';
+
+/** No cap binds the IR a non-IR command declares: its size is the prompt's, not a submission's. */
+const UNBOUNDED_CAPS: NonNullable<Parameters<WorkflowIrPort['validate']>[1]['caps']> = {
+  maxNodes: Infinity,
+  maxFanOut: Infinity,
+  maxInsertions: Infinity,
+};
 
 type ParsedArgumentsResult = {
   processedArgs: Record<string, any>;
@@ -102,16 +110,6 @@ function foldCommandGatesOntoSteps(
 }
 
 /**
- * A resolved prompt's validator projection with `required` withheld: the arrow-chain source does
- * not enforce it (see `buildSymbolicChain`). Existence still answers through the shared lookup.
- */
-function withoutRequiredArguments(
-  info: WorkflowPromptInfo | undefined
-): WorkflowPromptInfo | undefined {
-  return info === undefined ? undefined : { ...info, requiredArguments: [] };
-}
-
-/**
  * Builds structured ParsedCommand from symbolic operator parse results.
  *
  * Handles single-prompt and chain-based symbolic commands, resolving
@@ -147,13 +145,38 @@ export class SymbolicCommandBuilder {
   ): Promise<WorkflowCommandResult> {
     const hasChainOperator = this.hasChainOperator(parseResult);
     if (!hasChainOperator) {
-      return {
-        ok: true,
-        parsedCommand: await this.buildSingleSymbolicPrompt(parseResult, findPrompt),
-        retargetRequestedGates: (gates) => [...gates],
-      };
+      const parsedCommand = await this.buildSingleSymbolicPrompt(parseResult, findPrompt);
+      const rejections = this.requestGateTargetRejections(parsedCommand, requestGates);
+      return rejections.length > 0
+        ? { ok: false, rejections }
+        : { ok: true, parsedCommand, retargetRequestedGates: (gates) => [...gates] };
     }
     return this.buildSymbolicChain(parseResult, findPrompt, requestGates);
+  }
+
+  /**
+   * P6.124: a request gate's `target_step_id` checked against the node ids a command that builds
+   * no Workflow IR declares (a direct `>>prompt`, a single symbolic command) — one node per parsed
+   * step, or `n1` for a single prompt, the id the symbolic parser mints for its one step. The
+   * check is the validator's own `gate-target-missing`, reached through the port because `engine/`
+   * may not value-import it; unbounded caps and a lookup that resolves every prompt leave the
+   * gate targets the only thing this IR can fail on.
+   */
+  requestGateTargetRejections(
+    parsedCommand: ParsedCommand,
+    requestGates: NonNullable<WorkflowIR['gates']>
+  ): readonly WorkflowRejection[] {
+    if (requestGates.length === 0) return [];
+    const steps = parsedCommand.steps ?? [];
+    const nodes: WorkflowNode[] =
+      steps.length > 0
+        ? steps.map((step) => ({ id: step.nodeId ?? '', promptId: step.promptId }))
+        : mintSequentialIds(1).map((id) => ({ id, promptId: parsedCommand.promptId }));
+    const validation = this.workflowIr.validate(
+      { version: 1, nodes, gates: requestGates },
+      { lookupPrompt: () => ({ requiredArguments: [] }), caps: UNBOUNDED_CAPS }
+    );
+    return validation.ok ? [] : validation.rejections;
   }
 
   /**
@@ -363,15 +386,15 @@ export class SymbolicCommandBuilder {
     // P6.105: the same validator, expanding as the workflow source does, so a chain-prompt
     // segment counts its steps against the node cap and a request gate naming the segment's node
     // is retargeted to its last step. The node's args are the command string's, resolved above
-    // through `ArgumentParser`, which does not enforce `required` on this source (P7-F6) — so
-    // `required` is left out of what the validator is told, and the IR-only check stays IR-only.
+    // through `ArgumentParser`, which fills every declared argument (`""` when nothing supplies
+    // it), so the validator's `required` check is told the full lookup and never fires here
+    // (P6.123: a lookup withholding `required` answered the same question a second time).
     // P6.117: the request's gates ride on the IR the validator checks, so a `target_step_id` no
     // segment declares is refused `gate-target-missing` as on the workflow source. Validation
     // only: they stay request gates, registered from `requestedOverrides` at stage 11.
-    const promptInfo = workflowPromptInfoLookup(lookupPrompt);
     const validated = requestGates.length > 0 ? { ...ir, gates: requestGates } : ir;
     const validation = this.workflowIr.validate(validated, {
-      lookupPrompt: (promptId) => withoutRequiredArguments(promptInfo(promptId)),
+      lookupPrompt: workflowPromptInfoLookup(lookupPrompt),
       expandWith: lookupPrompt,
     });
     if (!validation.ok) {

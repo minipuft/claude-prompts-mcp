@@ -1,6 +1,7 @@
 // @lifecycle canonical - Parses incoming commands into structured operators.
 import { getExplicitArgumentKeys } from '../../parsers/argument-parser.js';
 import { projectChainPromptSteps } from '../../parsers/chain-step-projection.js';
+import { COMMAND_SOURCE_EXCLUSIVITY_MESSAGE } from '../../validation/schemas.js';
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
@@ -94,6 +95,16 @@ export class CommandParsingStage extends BasePipelineStage {
       return;
     }
 
+    // P6.119: `command` beside a `chain_id` names two runs. The tool schema refuses it; an
+    // in-process caller skips the schema, and an append never reaches here as a command
+    // (`PromptExecutor` rewrites it into `remainder` first), so no such pair is admissible.
+    if (collectSourceConflicts(context).length > 1) {
+      this.rejectWorkflow(context, [
+        { reason: 'mutually-exclusive-source', detail: COMMAND_SOURCE_EXCLUSIVITY_MESSAGE },
+      ]);
+      return;
+    }
+
     if (context.isResponseOnlyMode()) {
       this.logger.debug('[ParsingStage] Response-only mode detected - resuming chain', {
         chainId: context.mcpRequest.chain_id,
@@ -131,7 +142,8 @@ export class CommandParsingStage extends BasePipelineStage {
           requestedGates(context)
         );
         if (!symbolic.ok) {
-          // An arrow-chain the Workflow IR validator refused (P6.105): the same addressed
+          // An arrow-chain the Workflow IR validator refused (P6.105), or a request gate
+          // targeting a step the command does not declare (P6.124): the same addressed
           // rejection a workflow submission gets, before any store is touched.
           this.rejectWorkflow(context, symbolic.rejections);
           return;
@@ -156,7 +168,18 @@ export class CommandParsingStage extends BasePipelineStage {
         return;
       }
 
-      context.parsedCommand = await this.buildDirectCommand(parseResult, context);
+      const direct = await this.buildDirectCommand(parseResult, context);
+      // P6.124: a request gate targeting a step this command does not declare is refused as the
+      // IR-building sources refuse it, before any store is touched.
+      const rejections = this.symbolicCommandBuilder.requestGateTargetRejections(
+        direct,
+        requestedGates(context)
+      );
+      if (rejections.length > 0) {
+        this.rejectWorkflow(context, rejections);
+        return;
+      }
+      context.parsedCommand = direct;
 
       this.logExit({
         promptId: context.parsedCommand.promptId,
@@ -368,6 +391,9 @@ export class CommandParsingStage extends BasePipelineStage {
  *
  * `user_response` and `gate_verdict` are not listed: they are resume payloads that are inert
  * without a `chain_id`, which is listed.
+ *
+ * Also read with no workflow present: both names returned means `command` beside `chain_id`
+ * (P6.119), refused by the same rule.
  */
 function collectSourceConflicts(context: ExecutionContext): string[] {
   const conflicts: string[] = [];

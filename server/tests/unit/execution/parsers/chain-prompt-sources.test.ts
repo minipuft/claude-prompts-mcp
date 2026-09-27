@@ -46,7 +46,6 @@ import { retargetGates } from '../../../../src/modules/workflow-ir/chain-prompt-
 import { compileWorkflowIR } from '../../../../src/modules/workflow-ir/compiler.js';
 import { DEFAULT_WORKFLOW_CAPS } from '../../../../src/modules/workflow-ir/node-schema.js';
 import { validateWorkflowIR } from '../../../../src/modules/workflow-ir/validator.js';
-import { workflowPromptInfoLookup } from '../../../../src/engine/execution/workflow-prompt-lookup.js';
 
 import type { ParsedCommand } from '../../../../src/engine/execution/context/index.js';
 import type {
@@ -523,12 +522,92 @@ describe('P6.105: every IR-building source validates the expanded workflow', () 
 });
 
 /**
- * P6.116 / R48: the arrow-chain source tells the validator no `required` arguments
- * (`withoutRequiredArguments`); the Workflow IR source does, and refuses a node omitting one.
- * MEASURED 2026-09-26 on `83355182`: the arrow-chain node for `sv_req` with no `topic` carries
- * `topic: ""` (ArgumentParser's `empty_fallback` fills every declared argument, for every argument
- * string tried), so the key-presence check could not fire there either way; the pin is therefore
- * on what the builder TELLS the validator, beside the observable refusal.
+ * P6.117 / P6.124: every command source that can carry a request gate refuses a `target_step_id`
+ * naming no node it declares, with the validator's `gate-target-missing`, before any run exists.
+ * Measured 2026-09-27 on `327dcbce`: the direct and single-symbolic sources never called the
+ * validator (driven: the gate was kept and never rendered). Request gates reach stage 04 on
+ * `requestedOverrides.gates`, which stage 01 copies from the `gates` parameter; this harness sets
+ * it the same way. The remainder source is exempt: its node spec has no gates channel.
+ */
+describe('P6.124: every source carrying a request gate checks its target', () => {
+  const NOPE = '[gate-target-missing] node "nope": Gate binding targets step id "nope"';
+  const GATES = [{ name: 'tgt', criteria: ['TGT'], target_step_id: 'nope' }];
+  const EXEMPT: Readonly<Record<string, string>> = {
+    'remainder-append': 'a remainder node spec carries no gates channel',
+  };
+
+  /** Stage 04 with the request gates stage 01 would have captured from `gates`. */
+  async function gatedRefusal(
+    request: Record<string, unknown>,
+    through: CommandParsingStage = stage
+  ): Promise<string | undefined> {
+    const context = new ExecutionContext(request as never);
+    if (Array.isArray(request['gates'])) {
+      context.state.gates.requestedOverrides = { gates: [...(request['gates'] as unknown[])] };
+    }
+    await through.execute(context);
+    return context.response?.content.map((part) => ('text' in part ? part.text : '')).join('\n');
+  }
+
+  type GatedSource = readonly [string, () => Promise<string | undefined>];
+  const GATED: readonly GatedSource[] = [
+    ['direct', () => gatedRefusal({ command: '>>sv_chain', gates: GATES })],
+    ['single-symbolic', () => gatedRefusal({ command: '>>sv_chain :: "C"', gates: GATES })],
+    ['arrow-chain', () => gatedRefusal({ command: `>>sv_a${ARROW}>>sv_b`, gates: GATES })],
+    [
+      'workflow-ir',
+      () =>
+        gatedRefusal({
+          workflow: { version: 1, nodes: [{ id: 'x', promptId: 'sv_chain' }], gates: GATES },
+        }),
+    ],
+  ];
+
+  async function unchecked(sources: readonly GatedSource[]): Promise<string[]> {
+    const names: string[] = [];
+    for (const [name, refusal] of sources) {
+      if (!((await refusal()) ?? '').includes(NOPE)) names.push(name);
+    }
+    return names;
+  }
+
+  test('every enumerated command source is gated here or exempt with a reason', () => {
+    const covered = [...GATED.map(([name]) => name), ...Object.keys(EXEMPT)].sort();
+    expect(covered).toEqual(SOURCES.map((source) => source.name).sort());
+  });
+
+  test.each(GATED)('%s refuses an undeclared target by name', async (name, refusal) => {
+    expect(await unchecked([[name, refusal]])).toEqual([]);
+  });
+
+  test('controls: a declared target parses on every source; a single prompt declares `n1`', async () => {
+    const declared = [{ name: 'tgt', criteria: ['TGT'], target_step_id: 'b' }];
+    expect(await gatedRefusal({ command: '>>sv_chain', gates: declared })).toBeUndefined();
+    expect(await gatedRefusal({ command: '>>sv_chain :: "C"', gates: declared })).toBeUndefined();
+    const n1 = [{ name: 'tgt', criteria: ['TGT'], target_step_id: 'n1' }];
+    expect(await gatedRefusal({ command: '>>sv_a', gates: n1 })).toBeUndefined();
+    expect(await gatedRefusal({ command: '>>sv_a', gates: GATES })).toContain(NOPE);
+  });
+
+  test('control: a planted source that skips the check is named', async () => {
+    const skipping = stageWith({
+      ...workflowIrPort,
+      validate: (ir) => ({ ok: true, order: ir.nodes.map((node) => node.id) }),
+    });
+    const planted: GatedSource = [
+      'planted-unchecked',
+      () => gatedRefusal({ command: '>>sv_chain', gates: GATES }, skipping),
+    ];
+    expect(await unchecked([...GATED, planted])).toEqual(['planted-unchecked']);
+  });
+});
+
+/**
+ * P6.116 / P6.123: only the workflow source refuses a node omitting a `required` argument. Both
+ * builders hand the validator the same lookup (the arrow-chain source's `required`-withholding
+ * helper was deleted in P6.123 after it measured no observable effect); the arrow-chain source
+ * still refuses nothing because `ArgumentParser`'s `empty_fallback` fills every declared argument
+ * of a segment (`topic: ""`), so the key the check looks for is always present.
  */
 describe('P6.116: only the workflow source enforces `required`', () => {
   const REQUIRED = /omits required argument "topic" of prompt "sv_req"/;
@@ -549,67 +628,17 @@ describe('P6.116: only the workflow source enforces `required`', () => {
     return names;
   }
 
-  type ValidatorDeps = Parameters<WorkflowIrPort['validate']>[1];
-  /** The sources whose validator call was told `sv_req` declares a `required` argument. */
-  async function toldRequired(
-    arrowBuilderDeps: (deps: ValidatorDeps) => ValidatorDeps = (deps) => deps
-  ): Promise<string[]> {
-    const told: string[] = [];
-    // `asBuilt` stands in the builder's place: what reaches the recorder is what it passed.
-    const recording = (name: string, asBuilt: typeof arrowBuilderDeps): WorkflowIrPort => ({
-      ...workflowIrPort,
-      validate: (ir, deps) => {
-        const passed = asBuilt(deps);
-        if ((passed.lookupPrompt('sv_req')?.requiredArguments.length ?? 0) > 0) told.push(name);
-        return workflowIrPort.validate(ir, passed);
-      },
-    });
-    const recorded = new CommandParsingStage(
-      new UnifiedCommandParser(logger),
-      argumentParser,
-      () => prompts,
-      logger,
-      new SymbolicCommandBuilder(
-        argumentParser,
-        logger,
-        recording('arrow-chain', arrowBuilderDeps)
-      ),
-      {
-        workflowCommandBuilder: new WorkflowCommandBuilder(
-          recording('workflow-ir', (deps) => deps),
-          logger
-        ),
-      }
-    );
-    await refusalFrom({ command: `>>sv_req${ARROW}>>sv_b` }, recorded);
-    await refusalFrom(
-      { workflow: { version: 1, nodes: [{ id: 'x', promptId: 'sv_req' }] } },
-      recorded
-    );
-    return told;
-  }
-
   test('the workflow source refuses the missing argument by name; the arrow-chain source parses', async () => {
     expect(await refusing(MISSING_REQUIRED)).toEqual(['workflow-ir']);
     const arrow = await parse({ command: `>>sv_req${ARROW}>>sv_b` });
     expect(arrow.steps?.map((step) => step.promptId)).toEqual(['sv_req', 'sv_b']);
+    // Why: the argument parser filled the omitted required key, so the check finds it present
+    expect(arrow.steps?.[0]?.args).toMatchObject({ topic: '' });
     // Control: the same workflow node supplying the argument parses
     expect(
       await refusalFrom({
         workflow: { version: 1, nodes: [{ id: 'x', promptId: 'sv_req', args: { topic: 'T' } }] },
       })
     ).toBeUndefined();
-  });
-
-  test('only the workflow builder tells the validator a `required` argument', async () => {
-    expect(await toldRequired()).toEqual(['workflow-ir']);
-  });
-
-  test('control: a planted arrow-chain builder that passes `required` is named', async () => {
-    const passingRequired = (deps: ValidatorDeps): ValidatorDeps => ({
-      ...deps,
-      lookupPrompt: workflowPromptInfoLookup(lookup),
-    });
-    expect(await toldRequired(passingRequired)).toEqual(['arrow-chain', 'workflow-ir']);
   });
 });

@@ -45,6 +45,7 @@ import * as path from 'node:path';
 
 import { SqliteEngine } from '../../../src/infra/database/index.js';
 
+import { ChainBlueprintResolver } from '../../../src/engine/execution/parsers/chain-blueprint-resolver.js';
 import { createParsingSystem } from '../../../src/engine/execution/parsers/index.js';
 import { SymbolicCommandBuilder } from '../../../src/engine/execution/parsers/symbolic-command-builder.js';
 import { WorkflowCommandBuilder } from '../../../src/engine/execution/parsers/workflow-command-builder.js';
@@ -58,6 +59,7 @@ import { TextReferenceStore } from '../../../src/modules/text-refs/index.js';
 import { retargetGates } from '../../../src/modules/workflow-ir/chain-prompt-expansion.js';
 import { compileWorkflowIR } from '../../../src/modules/workflow-ir/compiler.js';
 import { validateWorkflowIR } from '../../../src/modules/workflow-ir/validator.js';
+import { COMMAND_SOURCE_EXCLUSIVITY_MESSAGE } from '../../../src/engine/execution/validation/schemas.js';
 
 import type { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
 import type { PipelineStage } from '../../../src/engine/execution/pipeline/stage.js';
@@ -155,6 +157,9 @@ const STAGE_ORDER = [
   'ResponseFormatting',
 ] as const;
 
+/** Every stubbed stage that ran, in order; reset per test. Stage 05 is `InlineGateExtraction`. */
+const stubStagesRun: string[] = [];
+
 const buildPipeline = (
   sessionStore: ChainSessionStore,
   logger: Logger
@@ -177,7 +182,10 @@ const buildPipeline = (
         compile: compileWorkflowIR,
         retargetGates,
       }),
-      { workflowCommandBuilder }
+      {
+        workflowCommandBuilder,
+        blueprintResolver: new ChainBlueprintResolver(sessionStore, logger),
+      }
     ),
     OperatorValidation: new OperatorValidationStage(null, logger),
     SessionManagement: new SessionManagementStage(sessionStore, logger),
@@ -214,7 +222,12 @@ const buildPipeline = (
         },
       };
     }
-    return { name, execute: async () => undefined };
+    return {
+      name,
+      execute: async () => {
+        stubStagesRun.push(name);
+      },
+    };
   });
 
   return new PromptExecutionPipeline(stages, {
@@ -271,6 +284,7 @@ describe('P6 Tier 5: a Workflow IR run is an ordinary chain run — or it writes
     );
     await awaitInit(store);
     pipeline = buildPipeline(store, logger);
+    stubStagesRun.length = 0;
   });
 
   afterEach(async () => {
@@ -487,6 +501,67 @@ describe('P6 Tier 5: a Workflow IR run is an ordinary chain run — or it writes
       expect(response.isError).toBe(true);
       expect(textOf(response)).toContain("'chain_id'");
       expect(allCounts().chain_runs).toBe(0);
+    });
+
+    /**
+     * P6.119: `command` beside a `chain_id` that is not an append. The tool schema refuses it, but
+     * an in-process caller hands the pipeline this request directly; it reached stage 05 with only
+     * `resumeChainId` set. Stage 04 refuses it with the schema's own message.
+     */
+    describe('command plus a non-append chain_id (P6.119)', () => {
+      const startRun = async (): Promise<string> => {
+        await run({ command: '>>ir_equivalent_chain' });
+        const chainId = runRows()[0]?.['chain_id'];
+        expect(typeof chainId).toBe('string');
+        stubStagesRun.length = 0;
+        return chainId as string;
+      };
+
+      test('is refused by name before stage 05, writing nothing', async () => {
+        const chainId = await startRun();
+        const before = allCounts();
+
+        const response = await run({ command: '>>research_docs', chain_id: chainId });
+
+        expect(response.isError).toBe(true);
+        expect(textOf(response)).toContain(COMMAND_SOURCE_EXCLUSIVITY_MESSAGE);
+        expect(stubStagesRun).not.toContain('InlineGateExtraction');
+        expect(allCounts()).toEqual(before);
+      });
+
+      test('control: chain_id alone resumes the run', async () => {
+        const chainId = await startRun();
+
+        const response = await run({ chain_id: chainId, user_response: 'step one done' });
+
+        expect(response.isError).toBe(false);
+        expect(textOf(response)).not.toContain(COMMAND_SOURCE_EXCLUSIVITY_MESSAGE);
+        expect(runRows().map((row) => row['chain_id'])).toEqual([chainId]);
+      });
+
+      test('control: command alone starts a run and reaches stage 05', async () => {
+        const response = await run({ command: '>>ir_equivalent_chain' });
+
+        expect(response.isError).toBe(false);
+        expect(stubStagesRun).toContain('InlineGateExtraction');
+        expect(allCounts().chain_runs).toBe(1);
+      });
+
+      test('control: chain_id plus an append (as the executor hands it over) is not refused', async () => {
+        // `PromptExecutor` rewrites an arrow-append command into `remainder` before the pipeline,
+        // so at stage 04 an append never carries a command.
+        const chainId = await startRun();
+
+        const response = await run({
+          chain_id: chainId,
+          user_response: 'step one done',
+          remainder: { mode: 'append', nodes: [{ id: 'appended', promptId: 'write_report' }] },
+        });
+
+        expect(response.isError).toBe(false);
+        expect(textOf(response)).not.toContain(COMMAND_SOURCE_EXCLUSIVITY_MESSAGE);
+        expect(runRows().map((row) => row['chain_id'])).toEqual([chainId]);
+      });
     });
 
     test('a workflow on its own is NOT rejected — the guard bounds itself', async () => {
