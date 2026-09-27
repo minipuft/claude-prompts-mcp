@@ -106,17 +106,7 @@ export class CommandParsingStage extends BasePipelineStage {
     }
 
     if (context.isResponseOnlyMode()) {
-      this.logger.debug('[ParsingStage] Response-only mode detected - resuming chain', {
-        chainId: context.mcpRequest.chain_id,
-        hasUserResponse: Boolean(context.mcpRequest.user_response),
-      });
-      if (!this.blueprintResolver) {
-        this.handleError(
-          new Error('ChainBlueprintResolver unavailable for response-only execution')
-        );
-      }
-      this.blueprintResolver.restoreFromBlueprint(context);
-      this.logExit({ skipped: 'Response-only session rehydrated' });
+      this.resumeFromBlueprint(context);
       return;
     }
 
@@ -189,6 +179,38 @@ export class CommandParsingStage extends BasePipelineStage {
     } catch (error) {
       this.handleError(error, 'Command parsing failed');
     }
+  }
+
+  /**
+   * The resume path: restore the run's stored blueprint instead of parsing anything.
+   *
+   * P6.126: this call's request gates target the run's declared node ids — the restored parsed
+   * steps' ids, or `n1` for a one-node run — checked as every start source checks them (P6.124),
+   * and refused before any stage touches the run. The start call's own gates, which the blueprint
+   * carries, were checked when that call ran.
+   */
+  private resumeFromBlueprint(context: ExecutionContext): void {
+    this.logger.debug('[ParsingStage] Response-only mode detected - resuming chain', {
+      chainId: context.mcpRequest.chain_id,
+      hasUserResponse: Boolean(context.mcpRequest.user_response),
+    });
+    if (!this.blueprintResolver) {
+      this.handleError(new Error('ChainBlueprintResolver unavailable for response-only execution'));
+    }
+    this.blueprintResolver.restoreFromBlueprint(context);
+    const restored = context.parsedCommand;
+    if (restored === undefined) {
+      this.handleError(new Error('Blueprint restore set no parsed command'));
+    }
+    const rejections = this.symbolicCommandBuilder.requestGateTargetRejections(
+      restored,
+      requestedGates(context)
+    );
+    if (rejections.length > 0) {
+      this.rejectWorkflow(context, rejections);
+      return;
+    }
+    this.logExit({ skipped: 'Response-only session rehydrated' });
   }
 
   /**

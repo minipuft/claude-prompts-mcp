@@ -32,6 +32,7 @@ import { fileURLToPath } from 'node:url';
 
 import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
 import { ArgumentParser } from '../../../../src/engine/execution/parsers/argument-parser.js';
+import { ChainBlueprintResolver } from '../../../../src/engine/execution/parsers/chain-blueprint-resolver.js';
 import { projectChainPromptSteps } from '../../../../src/engine/execution/parsers/chain-step-projection.js';
 import { UnifiedCommandParser } from '../../../../src/engine/execution/parsers/command-parser.js';
 import { SymbolicCommandBuilder } from '../../../../src/engine/execution/parsers/symbolic-command-builder.js';
@@ -528,6 +529,13 @@ describe('P6.105: every IR-building source validates the expanded workflow', () 
  * validator (driven: the gate was kept and never rendered). Request gates reach stage 04 on
  * `requestedOverrides.gates`, which stage 01 copies from the `gates` parameter; this harness sets
  * it the same way. The remainder source is exempt: its node spec has no gates channel.
+ *
+ * P6.126: a resume (`chain_id`, no command) carries `gates` too, and builds no `ParsedCommand` — it
+ * restores the run's — so it is not in `SOURCES` (the projection list) and is enumerated here by
+ * its own predicate: every `.restoreFromBlueprint(` call in `src/`. Its row drives the real stage
+ * 04 and the real `ChainBlueprintResolver` over a store holding a blueprint stage 04 itself parsed.
+ * Measured 2026-09-27 on `2a3e69c1` (driven): the resume kept `target_step_id: "nope"`, advanced
+ * the run, and never rendered the criterion.
  */
 describe('P6.124: every source carrying a request gate checks its target', () => {
   const NOPE = '[gate-target-missing] node "nope": Gate binding targets step id "nope"';
@@ -549,6 +557,31 @@ describe('P6.124: every source carrying a request gate checks its target', () =>
     return context.response?.content.map((part) => ('text' in part ? part.text : '')).join('\n');
   }
 
+  /** Stage 04 able to resume one run, whose stored blueprint is `blueprint`. */
+  const resumingStage = (
+    blueprint: ParsedCommand,
+    port: WorkflowIrPort = workflowIrPort
+  ): CommandParsingStage => {
+    const store = {
+      getSessionBlueprint: () => undefined,
+      getSessionByChainIdentifier: (chainId: string) => ({
+        sessionId: 's126',
+        chainId,
+        blueprint: { parsedCommand: blueprint, executionPlan: { steps: [] } },
+      }),
+    } as unknown as ChainSessionService;
+    return new CommandParsingStage(
+      new UnifiedCommandParser(logger),
+      argumentParser,
+      () => prompts,
+      logger,
+      new SymbolicCommandBuilder(argumentParser, logger, port),
+      { blueprintResolver: new ChainBlueprintResolver(store, logger) }
+    );
+  };
+  const resume = (gates: unknown[], through: CommandParsingStage) =>
+    gatedRefusal({ chain_id: 'chain-sv_chain#1', user_response: 'out', gates }, through);
+
   type GatedSource = readonly [string, () => Promise<string | undefined>];
   const GATED: readonly GatedSource[] = [
     ['direct', () => gatedRefusal({ command: '>>sv_chain', gates: GATES })],
@@ -561,6 +594,7 @@ describe('P6.124: every source carrying a request gate checks its target', () =>
           workflow: { version: 1, nodes: [{ id: 'x', promptId: 'sv_chain' }], gates: GATES },
         }),
     ],
+    ['resume', async () => resume(GATES, resumingStage(await parse({ command: '>>sv_chain' })))],
   ];
 
   async function unchecked(sources: readonly GatedSource[]): Promise<string[]> {
@@ -573,7 +607,13 @@ describe('P6.124: every source carrying a request gate checks its target', () =>
 
   test('every enumerated command source is gated here or exempt with a reason', () => {
     const covered = [...GATED.map(([name]) => name), ...Object.keys(EXEMPT)].sort();
-    expect(covered).toEqual(SOURCES.map((source) => source.name).sort());
+    expect(covered).toEqual([...SOURCES.map((source) => source.name), 'resume'].sort());
+  });
+
+  test('the resume row owns every blueprint restore in src', () => {
+    expect(sitesMatching(SRC, /\.restoreFromBlueprint\(/g)).toEqual([
+      'engine/execution/pipeline/stages/04-parsing-stage.ts',
+    ]);
   });
 
   test.each(GATED)('%s refuses an undeclared target by name', async (name, refusal) => {
@@ -587,6 +627,12 @@ describe('P6.124: every source carrying a request gate checks its target', () =>
     const n1 = [{ name: 'tgt', criteria: ['TGT'], target_step_id: 'n1' }];
     expect(await gatedRefusal({ command: '>>sv_a', gates: n1 })).toBeUndefined();
     expect(await gatedRefusal({ command: '>>sv_a', gates: GATES })).toContain(NOPE);
+    // A resume checks against the RUN's node ids: `b` on a three-step run, `n1` on a one-node run.
+    const chainRun = resumingStage(await parse({ command: '>>sv_chain' }));
+    expect(await resume(declared, chainRun)).toBeUndefined();
+    const oneNode = resumingStage(await parse({ command: '>>sv_a' }));
+    expect(await resume(n1, oneNode)).toBeUndefined();
+    expect(await resume(declared, oneNode)).toContain('[gate-target-missing] node "b"');
   });
 
   test('control: a planted source that skips the check is named', async () => {
@@ -599,6 +645,15 @@ describe('P6.124: every source carrying a request gate checks its target', () =>
       () => gatedRefusal({ command: '>>sv_chain', gates: GATES }, skipping),
     ];
     expect(await unchecked([...GATED, planted])).toEqual(['planted-unchecked']);
+  });
+
+  test('control: a planted resume that skips the check is named', async () => {
+    const skipping = resumingStage(await parse({ command: '>>sv_chain' }), {
+      ...workflowIrPort,
+      validate: (ir) => ({ ok: true, order: ir.nodes.map((node) => node.id) }),
+    });
+    const planted: GatedSource = ['planted-resume-unchecked', () => resume(GATES, skipping)];
+    expect(await unchecked([...GATED, planted])).toEqual(['planted-resume-unchecked']);
   });
 });
 

@@ -582,6 +582,68 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
     }, 120000);
   });
 
+  /**
+   * MEASURED 2026-09-27 on `2a3e69c1`: a resume carrying `gates: [{ target_step_id: "nope" }]` on a
+   * live `>>sv_chain` run returned `isError: false`, advanced the run, and never rendered the
+   * criterion. The resume restores the run's blueprint and now checks the targets against the
+   * run's declared node ids, as every start source does (P6.124).
+   */
+  describe('P6.126: a resume checks a request gate target against the run it resumes', () => {
+    const NOPE = '[gate-target-missing] node "nope": Gate binding targets step id "nope"';
+
+    /** `chain_runs.state` exactly as stored, so an untouched run compares byte for byte. */
+    function rawState(chainId: string): string | undefined {
+      const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+      try {
+        const row = db.prepare('SELECT state FROM chain_runs WHERE chain_id = ?').get(chainId) as
+          { state: string } | undefined;
+        return row?.state;
+      } finally {
+        db.close();
+      }
+    }
+
+    test('(a) a target the run does not declare is refused by name, the run untouched', async () => {
+      const run = await start({ command: '>>sv_chain' });
+      const second = await run.call({ user_response: 'A out', gate_verdict: PASS });
+      expect(templates(second)).toEqual(['BODY-sv_b topic=']);
+      const before = rawState(run.chainId);
+      expect(before).toBeDefined();
+      const runs = countRuns();
+
+      const refused = await tool('prompt_engine', {
+        chain_id: run.chainId,
+        user_response: 'B out',
+        gate_verdict: PASS,
+        gates: [{ name: 'tgt126a', criteria: ['TGT-126-A'], target_step_id: 'nope' }],
+      });
+      expect(refused.isError).toBe(true);
+      expect(refused.text).toContain(NOPE);
+      expect(refused.text).not.toContain('TGT-126-A');
+      expect(rawState(run.chainId)).toBe(before);
+      expect(countRuns()).toBe(runs);
+
+      // The run is still at step b: the same answer advances it to step c.
+      const third = await run.call({ user_response: 'B out', gate_verdict: PASS });
+      expect(templates(third)).toEqual(['BODY-sv_a topic=']);
+      expect(third).not.toContain('TGT-126-A');
+    }, 120000);
+
+    test("(b) control: a target naming the run's next node renders there", async () => {
+      const run = await start({ command: '>>sv_chain' });
+      expect(run.text).not.toContain('TGT-126-B');
+      const second = await tool('prompt_engine', {
+        chain_id: run.chainId,
+        user_response: 'A out',
+        gate_verdict: PASS,
+        gates: [{ name: 'tgt126b', criteria: ['TGT-126-B'], target_step_id: 'b' }],
+      });
+      expect(second.isError).toBe(false);
+      expect(templates(second.text)).toEqual(['BODY-sv_b topic=']);
+      expect(second.text).toContain('TGT-126-B');
+    }, 120000);
+  });
+
   describe('P6.93: a remainder naming a chain prompt', () => {
     /** The run's live nodes, as `chain_run_nodes` holds them. */
     function runNodes(chainId: string): string[] {
