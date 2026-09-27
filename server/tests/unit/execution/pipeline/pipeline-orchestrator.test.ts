@@ -2,6 +2,8 @@ import { describe, expect, jest, test } from '@jest/globals';
 
 import { PromptExecutionPipeline } from '../../../../src/engine/execution/pipeline/prompt-execution-pipeline.js';
 
+import { TemporaryGateRegistry } from '../../../../src/engine/gates/core/temporary-gate-registry.js';
+
 import type { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
 import type { PipelinePorts } from '../../../../src/engine/execution/pipeline/prompt-execution-pipeline.js';
 import type { PipelineStage } from '../../../../src/engine/execution/pipeline/stage.js';
@@ -55,7 +57,10 @@ const createStage = (
 
 const createPipeline = (
   overrides: Partial<Record<StageName, PipelineStage>> = {},
-  ports: Pick<PipelinePorts, 'executionRecordStore' | 'chainSessionStore'> = {},
+  ports: Pick<
+    PipelinePorts,
+    'executionRecordStore' | 'chainSessionStore' | 'temporaryGateRegistry'
+  > = {},
   tracker: string[] = []
 ): { pipeline: PromptExecutionPipeline; tracker: string[] } => {
   const wrapStage = (stage: PipelineStage): PipelineStage => ({
@@ -421,5 +426,82 @@ describe('PromptExecutionPipeline — the run-completion point', () => {
     await pipeline.execute({ command: 'noop' });
 
     expect(store.completeHeldRun).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * P6.111. MEASURED 2026-09-26 on `936611fd`: a run's call adopted its temporary gates only after a
+ * completed stage loop, so a call that threw after stage 13 created (or resumed) the run released
+ * its gates as unowned. The run itself is not ended by a throw — the error boundary writes a
+ * `failed` execution record and nothing transitions the run (`transitionRunStatus` has one caller,
+ * `completeHeldRun`), so it stays `working` and a `chain_id` resume reaches it — and continued
+ * without the gates its own call registered.
+ */
+describe('PromptExecutionPipeline — a call that throws after the run exists', () => {
+  const setup = (throwAt: StageName | undefined) => {
+    const registry = new TemporaryGateRegistry(createLogger());
+    let gateId = '';
+    const registers = createStage('GateEnhancement', (context) => {
+      gateId = registry.createTemporaryGate({
+        name: 'g111',
+        type: 'validation',
+        scope: 'execution',
+        description: 'd',
+        guidance: 'G111',
+        source: 'manual',
+      });
+      context.state.gates.temporaryGateIds = [gateId];
+    });
+    const session = createStage('SessionManagement', (context) => {
+      (context as unknown as { sessionContext: unknown }).sessionContext = {
+        sessionId: 'run-111',
+        chainId: 'chain-111',
+        currentStep: 1,
+        totalSteps: 2,
+      };
+    });
+    const overrides: Partial<Record<StageName, PipelineStage>> = {
+      GateEnhancement: registers,
+      SessionManagement: session,
+    };
+    if (throwAt !== undefined) {
+      overrides[throwAt] = createStage(throwAt, () => {
+        throw new Error('stage failed after the run was created');
+      });
+    }
+    const store = { completeHeldRun: jest.fn(async (_sessionId: string) => false) };
+    const { pipeline } = createPipeline(overrides, {
+      temporaryGateRegistry: registry,
+      chainSessionStore: store as unknown as ChainSessionService,
+    });
+    return { pipeline, registry, store, gateId: () => gateId };
+  };
+
+  test("the run owns the call's gates, and the run is not completed", async () => {
+    const { pipeline, registry, store, gateId } = setup('StepExecution');
+
+    await expect(pipeline.execute({ command: '>>demo' })).rejects.toThrow(
+      'stage failed after the run was created'
+    );
+
+    expect(registry.getRunGates('run-111').map((gate) => gate.id)).toEqual([gateId()]);
+    expect(store.completeHeldRun).not.toHaveBeenCalled();
+  });
+
+  test('control: a call that completes still hands the run its gates', async () => {
+    const { pipeline, registry, store, gateId } = setup(undefined);
+
+    await pipeline.execute({ command: '>>demo' });
+
+    expect(registry.getRunGates('run-111').map((gate) => gate.id)).toEqual([gateId()]);
+    expect(store.completeHeldRun).toHaveBeenCalledWith('run-111');
+  });
+
+  test('control: a throw before any run exists adopts nothing', async () => {
+    const { pipeline, registry } = setup('FrameworkResolution');
+
+    await expect(pipeline.execute({ command: '>>demo' })).rejects.toThrow();
+
+    expect(registry.getRunGates('run-111')).toEqual([]);
   });
 });
