@@ -1599,6 +1599,107 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       expect(Object.keys(review)).toEqual(['r1-a']);
       expect(review['r1-a']).toContain('sv-block');
     }, 120000);
+
+    /**
+     * P6.168 / R78. MEASURED 2026-09-27 on `9262bbdf` (shipped defaults): a gated single prompt is
+     * a run with no parse steps, so stage 18 sent every call of `>>sv_a :: "CRIT-168"` down the
+     * single-prompt route, which renders the command's own prompt. After a blocking unknown the
+     * inserted `investigate_unknown` node rendered `BODY-sv_a`, and after an `sv_pair` remainder
+     * `r1-b` rendered `BODY-sv_a` too, while every record named the node's own prompt. The run's
+     * nodes now decide the route: a run grown past its one node renders each node's own prompt.
+     */
+    test('P6.168 (a) a grown one-node run renders each node its own prompt; (b) each record names it', async () => {
+      const run = await start({ command: '>>sv_a :: "CRIT-168"' });
+      const inserted = await run.call({ user_response: 'out', ...blockingUnknown });
+      expect(currentNode(run.chainId)).toBe('inv-u-160');
+      expect(templates(inserted)).toEqual([]);
+      expect(inserted).toContain('- **statement**: the rest of the plan is undecided');
+
+      const appended = await run.call({
+        user_response: 'investigated',
+        gate_verdict: PASS,
+        ...remainder({ promptId: 'sv_pair' }),
+      });
+      expect(currentNode(run.chainId)).toBe('r1-a');
+      const rendered = [templates(appended)];
+      for (const node of ['r1-a', 'r1-b']) {
+        expect(currentNode(run.chainId)).toBe(node);
+        const reply = await run.call({ user_response: `${node} out`, gate_verdict: PASS });
+        rendered.push(templates(reply));
+      }
+      expect(rendered).toEqual([['BODY-sv_a topic='], ['BODY-sv_b topic='], []]);
+
+      const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+      try {
+        const working = (
+          db
+            .prepare(
+              "SELECT node_id, prompt_id FROM execution_records WHERE chain_id = ? AND status = 'working' ORDER BY execution_id"
+            )
+            .all(run.chainId) as Array<{ node_id: string; prompt_id: string }>
+        ).map((row) => `${row.node_id}:${row.prompt_id}`);
+        expect(working).toEqual([
+          'n1:sv_a',
+          'inv-u-160:investigate_unknown',
+          'r1-a:sv_a',
+          'r1-b:sv_b',
+        ]);
+      } finally {
+        db.close();
+      }
+    }, 120000);
+
+    /**
+     * P6.168 / R78 control: a one-node run that nothing grew keeps the single-prompt route. The
+     * reply from its task context on is pinned byte for byte as the route rendered it on
+     * `9262bbdf`, before the route read the run's nodes (the framework preamble above it is the
+     * framework's text, not the route's).
+     */
+    test('P6.168 (c) control: a one-node run with no growth renders through the single-prompt route', async () => {
+      const run = await start({ command: '>>sv_a :: "CRIT-ONE"' });
+      const fromTask = run.text
+        .slice(run.text.indexOf('## Task Context'))
+        .replace(/temp_\d+_[a-z0-9]+/g, 'TEMP')
+        .replace(/chain-sv_a#\d+/g, 'CHAIN');
+      expect(fromTask).toBe(
+        [
+          '## Task Context',
+          '',
+          'BODY-sv_a topic=',
+          '',
+          '---',
+          '',
+          '## Inline Gates',
+          '',
+          '### Reminders',
+          '',
+          '1. CRIT-ONE',
+          '',
+          "Attest reminders in the verdict's `reminders` field; checks are recorded by the engine.",
+          '',
+          '---',
+          '',
+          '---',
+          '**Review Required**',
+          '',
+          '**Gates**: TEMP',
+          '',
+          'Checks are recorded by the engine; attest reminders in one field, then submit:',
+          '',
+          '```',
+          'chain_id="CHAIN"',
+          'gate_verdict={',
+          '  "overall": "PASS",',
+          '  "rationale": "<overall assessment>",',
+          '  "per_gate": [',
+          '    {"index": 1, "passed": true, "rationale": "TEMP: <why>"}',
+          '  ]',
+          '}',
+          '```',
+          'Re-run: `>>sv_a topic:"" :: \'CRIT-ONE\'`',
+        ].join('\n')
+      );
+    }, 120000);
   });
 
   describe('P6.78: a command-level gate on a chain prompt', () => {

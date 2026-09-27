@@ -274,7 +274,9 @@ gated, enhanced and reviewed exactly as a planned step is — declared gates or 
 category and framework defaults a planned step does. Gate enhancement walks the run's steps in the
 run's node order, so a contributed step accumulates only the gates of the steps before it in the run
 (a planned step a `replace` removed contributes none), and a run that began as one gated prompt is
-walked the same way. A contributed node always blocks: which
+walked the same way — and, once an insertion or a remainder has grown it past its one node, rendered
+the same way: each node renders its own prompt, where it used to render the first prompt's body on
+every node. A contributed node always blocks: which
 nodes a run does not wait on is decided when the run starts. Ask for isolation with `delegated: true`, and
 bind a gate with the `gates` parameter and its `target_step_id`.
 
