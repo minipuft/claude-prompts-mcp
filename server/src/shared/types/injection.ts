@@ -65,7 +65,7 @@ export type ExecutionContextType = 'step' | 'gate_review';
  * Target modes for injection.
  * Controls WHERE content is injected during chain execution.
  *
- * - 'steps': Inject only on normal step execution (not gate reviews)
+ * - 'steps': Inject on every step render, including a step rendered for its gate review
  * - 'gates': Inject only on gate review steps (not normal execution)
  * - 'both': Inject on both step execution and gate reviews (default)
  */
@@ -549,7 +549,7 @@ export const DECISION_SOURCE_DESCRIPTIONS: Readonly<Record<InjectionDecisionSour
  * Human-readable descriptions for injection targets.
  */
 export const INJECTION_TARGET_DESCRIPTIONS: Readonly<Record<InjectionTarget, string>> = {
-  steps: 'Inject only on normal step execution (not gate reviews)',
+  steps: 'Inject on every step render, including a step rendered for its gate review',
   gates: 'Inject only on gate review steps (not normal execution)',
   both: 'Inject on both step execution and gate reviews (default)',
 } as const;

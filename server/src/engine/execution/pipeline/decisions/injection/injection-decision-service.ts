@@ -286,10 +286,12 @@ export class InjectionDecisionService {
       return decision;
     }
 
-    // Check if target matches execution context
-    const matches =
-      (target === 'steps' && executionContext === 'step') ||
-      (target === 'gates' && executionContext === 'gate_review');
+    // R63: a gate review render renders its step (stage 20 renders the reviewed step's own
+    // template), so it is a step render for the target — 'steps' matches it as well as a normal
+    // render, and a step's framework block no longer depends on which stage rendered it. The
+    // 'gate_review' context keeps its other meaning: 'gates' matches only it, and it bypasses
+    // frequency for gate-guidance above. 'both' returned above, so any other target is 'gates'.
+    const matches = target === 'steps' || executionContext === 'gate_review';
 
     if (matches) {
       return decision;

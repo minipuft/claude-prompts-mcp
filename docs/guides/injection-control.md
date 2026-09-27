@@ -67,11 +67,11 @@ Controls how often injection occurs during chain execution:
 
 Controls which execution contexts receive injection:
 
-| Value   | Receives Injection          | Use When                                                                                     |
-| ------- | --------------------------- | -------------------------------------------------------------------------------------------- |
-| `steps` | Normal chain step execution | Default for system-prompt and style — framework and formatting only needed during generation |
-| `gates` | Gate review responses only  | Rarely useful alone                                                                          |
-| `both`  | Both steps and gate reviews | Default for gate-guidance — criteria needed during both generation and review                |
+| Value   | Receives Injection                                               | Use When                                                                                                                 |
+| ------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `steps` | Every step render, including a step rendered for its gate review | Default for system-prompt and style — a step carries the same framework block whether it renders normally or as a review |
+| `gates` | Gate review responses only                                       | Rarely useful alone                                                                                                      |
+| `both`  | Both steps and gate reviews                                      | Default for gate-guidance — criteria needed during both generation and review                                            |
 
 ### Enable/Disable
 

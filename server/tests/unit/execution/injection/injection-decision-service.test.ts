@@ -302,4 +302,46 @@ describe('InjectionDecisionService', () => {
   // P4.52 — zero production callers (syncRuntimeOverrides() is the bulk-replace path every
   // real caller uses instead), and the caching behavior this block tested is already
   // covered live-method-first: object identity across two decide() calls, above.
+
+  /**
+   * P6.152 / R63 amended: a gate review render renders its step, so the target filter counts it
+   * as a step render. The 'gate_review' context keeps its other two readers: 'gates' matches only
+   * it, and it bypasses frequency for a gate-guidance target that includes gates.
+   */
+  describe('P6.152: target filter against the execution context', () => {
+    const decideWith = (
+      injectionType: InjectionType,
+      target: 'steps' | 'gates' | 'both',
+      currentStep: number,
+      executionContext: 'step' | 'gate_review'
+    ) =>
+      new InjectionDecisionService(
+        {
+          ...DEFAULT_INJECTION_CONFIG,
+          [injectionType]: { enabled: true, frequency: { mode: 'first-only' }, target },
+        },
+        mockLogger
+      ).decide({ injectionType, currentStep, totalSteps: 3, executionContext });
+
+    it("'steps' injects on a normal render and on a review render alike", () => {
+      expect({
+        step: decideWith('system-prompt', 'steps', 1, 'step').inject,
+        review: decideWith('system-prompt', 'steps', 1, 'gate_review').inject,
+      }).toEqual({ step: true, review: true });
+    });
+
+    it("'gates' still injects on a review render only", () => {
+      expect({
+        step: decideWith('system-prompt', 'gates', 1, 'step').inject,
+        review: decideWith('system-prompt', 'gates', 1, 'gate_review').inject,
+      }).toEqual({ step: false, review: true });
+    });
+
+    it('a review render still bypasses frequency for gate guidance targeting gates', () => {
+      expect({
+        step: decideWith('gate-guidance', 'both', 2, 'step').inject,
+        review: decideWith('gate-guidance', 'both', 2, 'gate_review').inject,
+      }).toEqual({ step: false, review: true });
+    });
+  });
 });

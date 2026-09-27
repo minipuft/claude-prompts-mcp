@@ -6,6 +6,8 @@ import { describe, test, expect, beforeEach, jest } from '@jest/globals';
 
 import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
 import { ChainOperatorExecutor } from '../../../../src/engine/execution/operators/chain-operator-executor.js';
+import { DEFAULT_INJECTION_CONFIG } from '../../../../src/engine/execution/pipeline/decisions/injection/constants.js';
+import { InjectionDecisionService } from '../../../../src/engine/execution/pipeline/decisions/injection/injection-decision-service.js';
 import { GateReviewStage } from '../../../../src/engine/execution/pipeline/stages/20-gate-review-stage.js';
 
 import type { DeclaredSection } from '../../../../src/engine/frameworks/declared-sections.js';
@@ -866,18 +868,18 @@ describe('ChainOperatorExecutor', () => {
 
 /**
  * P6.131 traced a step's framework block following the render path, not the injection decision:
- * stage 18 handed the executor the call's `injectionState`, stage 20 did not, so a review render
- * of a step whose decision was `system-prompt inject:false` (target 'steps', execution context
- * 'gate_review') still carried the block — the executor's "no decision, inject" default.
+ * stage 18 handed the executor the call's `injectionState`, stage 20 did not. P6.143 / R63: one
+ * decision per call, and stage 20 hands the review render the call's system-prompt decision.
  *
- * P6.143 / R63: one injection decision per call. Stage 20 now hands the review render the call's
- * system-prompt decision (not its gate-guidance one, which targets steps and would hide the gates
- * under review), so the review render of the same step withholds the block exactly as the normal
- * render does. Driven through the real stage 20 and executor; the planted control is a call with
- * no recorded decision, which still reaches the default and shows the block, so the probe sees
- * it when it is there.
+ * P6.152 / R63 amended: that decision was computed for execution context 'gate_review', and the
+ * target filter read shipped `target: "steps"` as "not a review", so every review render dropped
+ * the block (and the executor re-checked the target on top). A review render of a step IS a step
+ * render for the target. Driven here through the real InjectionDecisionService, stage 20 and
+ * executor under the shipped system-prompt config: the decision for a review call now says inject
+ * and both renders carry the block; the control is a decision that says no (frequency skips step
+ * 2), which hides it on both renders, so the probe is shown to see the block's absence too.
  */
-describe("P6.143: the framework block on a step follows the call's injection decision on every render path", () => {
+describe('P6.152: a review render of a step follows the steps target, like the normal render', () => {
   const step = {
     stepNumber: 1,
     nodeId: 'n1',
@@ -888,14 +890,22 @@ describe("P6.143: the framework block on a step follows the call's injection dec
       systemPrompt: 'FRAMEWORK-131',
     } as any,
   };
-  const measuredDecision = {
-    systemPrompt: {
-      inject: false,
-      reason: 'target mismatch',
-      source: 'global-config',
-      target: 'steps',
-    },
-  };
+  /**
+   * One call's decisions under shipped defaults (`frameworks.injection.systemPrompt` is
+   * `{ frequency: 3, target: 'steps' }`). A fresh service per call: the service caches per type.
+   */
+  const decide = (currentStep: number, executionContext: 'step' | 'gate_review') =>
+    new InjectionDecisionService(
+      {
+        ...DEFAULT_INJECTION_CONFIG,
+        'system-prompt': {
+          enabled: true,
+          frequency: { mode: 'every', interval: 3 },
+          target: 'steps',
+        },
+      },
+      mockLogger
+    ).decideAll({ currentStep, totalSteps: 3, executionContext });
   const review = {
     nodeId: 'n1',
     kind: 'gate',
@@ -910,7 +920,7 @@ describe("P6.143: the framework block on a step follows the call's injection dec
   const prompts = mockConvertedPrompts.map((prompt) => ({ ...prompt, systemMessage: undefined }));
 
   /** Stage 20's review render of `step`, for a call whose recorded decision is `decision`. */
-  const reviewRender = async (decision: typeof measuredDecision | undefined): Promise<string> => {
+  const reviewRender = async (decision: ReturnType<typeof decide>): Promise<string> => {
     const store = {
       getReview: jest.fn().mockReturnValue(review),
       recordStepDeclaration: jest.fn(),
@@ -938,32 +948,46 @@ describe("P6.143: the framework block on a step follows the call's injection dec
       totalSteps: 1,
       pendingReview: true,
     } as any;
-    if (decision !== undefined) context.state.injection = decision as any;
+    context.state.injection = decision;
     await stage.execute(context);
     return String(context.executionResults?.content ?? '');
   };
 
-  test('stage 18 normal render with the measured decision carries no framework block', async () => {
-    const result = await new ChainOperatorExecutor(mockLogger, prompts as never).renderStep({
-      executionType: 'normal',
-      stepPrompts: [step],
-      currentStepIndex: 0,
-      chainContext: { injectionState: measuredDecision },
-    });
-    expect(result.content).toContain('Analyze this code: alpha');
-    expect(result.content).not.toContain('FRAMEWORK-131');
+  /** Stage 18's normal render of `step`, handed `decision` as stage 18 hands it. */
+  const normalRender = async (decision: ReturnType<typeof decide>): Promise<string> =>
+    (
+      await new ChainOperatorExecutor(mockLogger, prompts as never).renderStep({
+        executionType: 'normal',
+        stepPrompts: [step],
+        currentStepIndex: 0,
+        chainContext: { injectionState: decision },
+      })
+    ).content;
+
+  test('the decision for a review call under target steps says inject', () => {
+    expect(decide(1, 'gate_review').systemPrompt).toMatchObject({ inject: true, target: 'steps' });
   });
 
-  test('stage 20 review render of the same step, handed the call decision, carries none either', async () => {
-    const content = await reviewRender(measuredDecision);
-    expect(content).toContain('Analyze this code: alpha');
-    expect(content).not.toContain('FRAMEWORK-131');
+  test('stage 20 review render and stage 18 normal render both carry the block', async () => {
+    const reviewed = await reviewRender(decide(1, 'gate_review'));
+    const normal = await normalRender(decide(1, 'step'));
+    expect(reviewed).toContain('Analyze this code: alpha');
+    expect(normal).toContain('Analyze this code: alpha');
+    expect({
+      review: reviewed.includes('FRAMEWORK-131'),
+      normal: normal.includes('FRAMEWORK-131'),
+    }).toEqual({ review: true, normal: true });
+    expect(reviewed).toContain('## 🎯 C.A.G.E.E.R.F Framework Active');
   });
 
-  test('planted control: a review render for a call with no recorded decision shows the block', async () => {
-    const content = await reviewRender(undefined);
-    expect(content).toContain('## 🎯 C.A.G.E.E.R.F Framework Active');
-    expect(content).toContain('FRAMEWORK-131');
+  test('control: a decision that says no hides the block on both renders', async () => {
+    const reviewed = await reviewRender(decide(2, 'gate_review'));
+    const normal = await normalRender(decide(2, 'step'));
+    expect(reviewed).toContain('Analyze this code: alpha');
+    expect({
+      review: reviewed.includes('FRAMEWORK-131'),
+      normal: normal.includes('FRAMEWORK-131'),
+    }).toEqual({ review: false, normal: false });
   });
 });
 

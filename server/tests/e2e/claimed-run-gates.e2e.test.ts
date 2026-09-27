@@ -295,13 +295,15 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
    * same-process step 2 both carried the framework block, although the call's injection decision
    * for both was `system-prompt inject:false` (P6.131 trace): both open the post-advance review
    * on `b` (the request gate targets it), and stage 20 built the review render's chain context
-   * without the call's `injectionState`, so the executor defaulted to injecting. The start call's
-   * step 1 is a review render too (the blocking `sv-block` opens its review up front) and carried
-   * the block the same way.
+   * without the call's `injectionState`, so the executor defaulted to injecting.
    *
-   * Now (R63) the review render honours the call's decision as stage 18's normal render does:
-   * neither step 2 carries the block, equally. An ungated step, rendered by stage 18 under a
-   * decision that injects, is the positive control that the probe sees the block at all.
+   * R63: the review render honours the call's decision as stage 18's normal render does. P6.152
+   * (R63 amended): that decision was computed for context 'gate_review', which the target filter
+   * read as "not a step" under the shipped `target: "steps"`, so every review render dropped the
+   * block. A review render of a step is a step render for the target, so step 2 now carries the
+   * block exactly when an ungated chain's step 2, rendered normally by stage 18 on the same kind
+   * of resume call, does: the three are pinned as one value. The ungated step 1 is the positive
+   * control that the probe sees the block at all.
    */
   test('P6.143 the claimed and the same-process step 2 carry the framework block equally, as the call decided', async () => {
     const block = (text: string): boolean => text.includes('C.A.G.E.E.R.F');
@@ -328,9 +330,17 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     const ungated = await server.call('prompt_engine', { command: `>>sv_a${ARROW}>>sv_b` });
     expect(ungated.isError).toBe(false);
     expect(block(ungated.text)).toBe(true);
-    expect({ claimed: block(claimed.firstReply), same: block(same.text) }).toEqual({
-      claimed: false,
-      same: false,
+    // The same kind of call rendering step 2 normally (stage 18, no review).
+    const ungatedStep2 = await server.call('prompt_engine', {
+      chain_id: chainIdOf(ungated.text),
+      user_response: 'A out',
+    });
+    expect(ungatedStep2.isError).toBe(false);
+    const normal = block(ungatedStep2.text);
+    expect({ claimed: block(claimed.firstReply), same: block(same.text), normal }).toEqual({
+      claimed: true,
+      same: true,
+      normal: true,
     });
   }, 240000);
 
