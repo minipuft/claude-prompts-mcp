@@ -18,7 +18,7 @@ import type { ExecutionPlan } from '../../types.js';
 
 import { isRunComplete } from '#shared/types/chain-session.js';
 import { formatChainId, nextRunNumber, stripRunNumber } from '#shared/utils/chain-id-codec.js';
-import { currentOrdinal, mintSequentialIds, totalOf } from '#shared/utils/node-order.js';
+import { currentOrdinal, mintSequentialIds, ordinalOf, totalOf } from '#shared/utils/node-order.js';
 
 /**
  * Pipeline Stage 13: Session Management
@@ -91,14 +91,11 @@ export class SessionManagementStage extends BasePipelineStage {
       // Answering here, before any session context is published, is what stops it: with no
       // `context.sessionContext` the capture stage skips, and with `context.response` set both
       // the execution and formatting stages skip too.
-      if (existingSession !== undefined && !isRestart && isRunComplete(existingSession)) {
-        context.setResponse(this.buildAlreadyCompleteResponse(existingSession));
-        context.state.session.lifecycleDecision = 'resume-completed';
-        this.logExit({
-          skipped: 'Run already complete',
-          chainId: existingSession.chainId,
-          runStatus: existingSession.runStatus ?? 'working',
-        });
+      if (
+        existingSession !== undefined &&
+        !isRestart &&
+        this.answerWithoutResuming(context, existingSession)
+      ) {
         return;
       }
 
@@ -185,6 +182,30 @@ export class SessionManagementStage extends BasePipelineStage {
     } catch (error) {
       this.handleError(error, 'Session management failed');
     }
+  }
+
+  /**
+   * Answer a resume that must not reach the run, before any session context is published: the
+   * run already ended, or (R59) this call targets a gate at a node the run already passed, which
+   * could never fire. Refused here because this is where the resumed run's position is first
+   * known — stage 04 holds only the blueprint. True when the call was answered.
+   */
+  private answerWithoutResuming(context: ExecutionContext, session: ChainSession): boolean {
+    if (isRunComplete(session)) {
+      context.setResponse(this.buildAlreadyCompleteResponse(session));
+      context.state.session.lifecycleDecision = 'resume-completed';
+      this.logExit({
+        skipped: 'Run already complete',
+        chainId: session.chainId,
+        runStatus: session.runStatus ?? 'working',
+      });
+      return true;
+    }
+    const refusal = passedTargetRefusal(context, session);
+    if (refusal === undefined) return false;
+    context.setResponse(refusal);
+    this.logExit({ skipped: 'Gate target already passed', chainId: session.chainId });
+    return true;
   }
 
   /**
@@ -433,4 +454,48 @@ function temporaryRequestGates(
     const ref = reference(gate);
     return ref === undefined || !canonicalIds.includes(ref);
   });
+}
+
+/**
+ * The first `target_step_id` among THIS call's `gates` naming a node the resumed run has already
+ * passed (R59), or undefined. A declared node that expanded into a chain prompt's steps is passed
+ * once its last step is (`declaredNodes.lastStepOf`, the address its gates retarget to, R58). A run
+ * standing on no node has passed them all. An id the run does not have is stage 04's refusal, not
+ * this one; the start call's gates, which the blueprint restores, are not this call's.
+ */
+function passedGateTarget(context: ExecutionContext, session: ChainSession): string | undefined {
+  const { nodes, currentNodeId } = session.state;
+  const current = currentNodeId === null ? nodes.length + 1 : ordinalOf(nodes, currentNodeId);
+  const lastStepOf = context.parsedCommand?.declaredNodes?.lastStepOf ?? {};
+  for (const gate of context.mcpRequest.gates ?? []) {
+    const target =
+      typeof gate !== 'string' && 'target_step_id' in gate ? gate.target_step_id : undefined;
+    if (target === undefined) continue;
+    const position = ordinalOf(nodes, lastStepOf[target] ?? target);
+    if (position !== -1 && position < current) return target;
+  }
+  return undefined;
+}
+
+/** The refusal for {@link passedGateTarget}, or undefined when this call targets no passed step. */
+function passedTargetRefusal(
+  context: ExecutionContext,
+  session: ChainSession
+): ToolResponse | undefined {
+  const target = passedGateTarget(context, session);
+  if (target === undefined) return undefined;
+  const standing = session.state.currentNodeId;
+  const at = standing === null ? 'past its last step' : `at step "${standing}"`;
+  return {
+    content: [
+      {
+        type: 'text',
+        text:
+          `❌ **Gate Refused**: target_step_id "${target}" names a step the run has already ` +
+          `passed (run \`${session.chainId}\` is ${at}). A gate there could never fire; target ` +
+          'the current step or a later one. Nothing was executed and the run did not advance.',
+      },
+    ],
+    isError: true,
+  };
 }

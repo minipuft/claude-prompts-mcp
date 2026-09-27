@@ -751,6 +751,49 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
   });
 
   /**
+   * MEASURED 2026-09-27 on `5f187905` (driven, this harness): a `>>sv_chain` run standing at `b`,
+   * resumed with a gate targeting `a`, was accepted and advanced to `c` — a gate that can never
+   * fire, its step already answered.
+   *
+   * Now (R59) a request gate naming a node the run has already passed is refused by name.
+   */
+  describe('P6.134: a resume refuses a gate on a step the run has already passed', () => {
+    test('(a) a target behind the current node is refused by name, the run untouched', async () => {
+      const run = await start({ command: '>>sv_chain' });
+      await run.call({ user_response: 'A out', gate_verdict: PASS });
+      const before = rawRunState(run.chainId);
+
+      const refused = await resumeWithGate(run.chainId, 'B out', 'a', 'TGT-134-A');
+      expect(refused.isError).toBe(true);
+      expect(refused.text).toContain('target_step_id "a" names a step the run has already passed');
+      expect(refused.text).not.toContain('TGT-134-A');
+      expect(rawRunState(run.chainId)).toBe(before);
+    }, 120000);
+
+    test('(b) control: the current node and a later node are accepted', async () => {
+      const current = await start({ command: '>>sv_chain' });
+      await current.call({ user_response: 'A out', gate_verdict: PASS });
+      const onCurrent = await resumeWithGate(current.chainId, 'B out', 'b', 'TGT-134-B');
+      expect(onCurrent.isError).toBe(false);
+      expect(templates(onCurrent.text)).toEqual(['BODY-sv_a topic=']);
+
+      const later = await start({ command: '>>sv_chain' });
+      await later.call({ user_response: 'A out', gate_verdict: PASS });
+      const onLater = await resumeWithGate(later.chainId, 'B out', 'c', 'TGT-134-C');
+      expect(onLater.isError).toBe(false);
+      expect(templates(onLater.text)).toEqual(['BODY-sv_a topic=']);
+      expect(onLater.text).toContain('TGT-134-C');
+    }, 120000);
+
+    test('(c) control: a one-node run standing at n1 accepts a gate on n1', async () => {
+      const run = await start({ command: '>>sv_a :: "CRIT-134"' });
+      const answered = await resumeWithGate(run.chainId, 'out', 'n1', 'TGT-134-N1');
+      expect(answered.isError).toBe(false);
+      expect(answered.text).not.toContain('already passed');
+    }, 120000);
+  });
+
+  /**
    * PIN (as of 2026-09-27 · flips when a gated single prompt stops opening a run). A single prompt
    * with an inline gate operator opens a run of ONE node, `n1` (R52), because the planner requires
    * a session for any `gate` operator (`ExecutionPlanner.requiresSession`, its operator clause — not
