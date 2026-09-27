@@ -30,7 +30,7 @@
  */
 import { afterEach, describe, expect, test } from '@jest/globals';
 
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -690,6 +690,102 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
       summary: 'g146, sv-block',
       metadata: ['g146', 'sv-block'],
     });
+  }, 240000);
+
+  /**
+   * P6.148 pin (as of 2026-09-27 on `351645814` · flips when a `chain`-scoped definition registers
+   * under the run's chain id on the call that starts the run, or when `buildSessionGateSummary`
+   * reads the run's own registered gates instead of the registry's `chain:<chainId>` scope).
+   *
+   * The "Chain-Scoped Temporary Gates" line reads `getTemporaryGatesForScope('chain', chainId)`
+   * and prints gate NAMES, so it can show neither a recorded nor a restored id. Only a prompt's
+   * `inline_gate_definitions` with `scope: chain` register there (`inlineScopeId`), and only with
+   * `gates.executeInlineGateDefinitions` (default false; named inline gates are `execution`-scoped
+   * and never listed). They register under `chain:<mcpRequest.chain_id ?? sessionId>`: the start
+   * call carries no chain id, so on the server that started the run the line reads `none` while
+   * the run's review holds `cg148`; a claimer that registers the gate on a `chain_id` call lists
+   * it, and the claimer's own other run of the same prompt reads `none`.
+   */
+  test('P6.148 pin: the chain-scoped gate line after a claim with a collision', async () => {
+    const roots = freshRoots();
+    writeFileSync(
+      path.join(roots.workspace, 'config.json'),
+      JSON.stringify({ gates: { executeInlineGateDefinitions: true } })
+    );
+    const chainLine = async (server: Server, chainId: string): Promise<string | undefined> =>
+      /- Chain-Scoped Temporary Gates: (.*)/.exec(
+        (await server.call('prompt_engine', { command: `gates chain ${chainId}` })).text
+      )?.[1];
+    const first = await startServer(roots);
+    await authorResources(first);
+    const author = async (args: Record<string, unknown>): Promise<void> => {
+      const result = await first.call('resource_manager', args);
+      if (result.isError) throw new Error(result.text);
+    };
+    await author({
+      resource_type: 'prompt',
+      action: 'create',
+      id: 'sv_a148',
+      category: 'general',
+      name: 'sv_a148',
+      description: 'step carrying a chain-scoped inline definition',
+      user_message_template: 'BODY-sv_a148',
+      gate_configuration: {
+        ...OPT_OUT,
+        inline_gate_definitions: [
+          {
+            id: 'cg148',
+            name: 'cg148',
+            type: 'validation',
+            scope: 'chain',
+            description: 'chain-scoped e2e gate',
+            guidance: 'CHAIN-148',
+            pass_criteria: ['CHAIN-148'],
+          },
+        ],
+      },
+    });
+    await author({
+      resource_type: 'prompt',
+      action: 'create',
+      id: 'sv_chain148',
+      category: 'general',
+      name: 'sv_chain148',
+      description: 'chain whose steps carry a chain-scoped gate',
+      user_message_template: 'CHAIN148',
+      gate_configuration: OPT_OUT,
+      chain_steps: [
+        { promptId: 'sv_a148', stepName: 'A' },
+        { promptId: 'sv_b', stepName: 'B' },
+        { promptId: 'sv_a148', stepName: 'C' },
+      ],
+    });
+    const chainId = chainIdOf(
+      (await first.call('prompt_engine', { command: '>>sv_chain148 :: g148:"A-ONE"' })).text
+    );
+    await first.call('prompt_engine', {
+      chain_id: chainId,
+      user_response: 'A draft',
+      gate_verdict: FAIL,
+    });
+    // Positive control: the chain-scoped gate is the run's own — its review names it.
+    expect(runRow(roots, chainId)?.reviews).toEqual({ a: ['g148', 'cg148'] });
+    expect(await chainLine(first, chainId)).toBe('none');
+    const token = await mintToken(first, chainId);
+
+    const second = await startServer(roots);
+    const otherChainId = chainIdOf(
+      (await second.call('prompt_engine', { command: '>>sv_chain148 :: g148:"B-TWO"' })).text
+    );
+    await first.stop();
+    const claimed = await second.call('prompt_engine', {
+      claim_token: token,
+      user_response: 'A out',
+      gate_verdict: PASS,
+    });
+    expect(claimed.isError).toBe(false);
+    expect(await chainLine(second, chainId)).toBe('cg148');
+    expect(await chainLine(second, otherChainId)).toBe('none');
   }, 240000);
 
   test('P6.130 (a) after a claim the projection holds exactly the claimer row for the run', async () => {
