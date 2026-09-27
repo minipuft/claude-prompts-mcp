@@ -450,6 +450,78 @@ describe('Tenant Isolation', () => {
       }
     });
 
+    /**
+     * P6.175 (R74). One caller per save class, each with a planted rejection: an AWAITED mutator
+     * whose result the client is told (`cancelChain`) rejects on anything but a held lock; an
+     * awaited write whose reply renders what it wrote (`applyUnknownObservations`) rejects even on
+     * a held lock; a BACKGROUND persist (a lifecycle promotion) logs, naming its context.
+     */
+    describe('P6.175: every save class fails loudly', () => {
+      const constraint = () =>
+        Object.assign(new Error('P175 planted: UNIQUE constraint failed'), {
+          code: 'ERR_SQLITE_ERROR',
+          errcode: 2067,
+        });
+      const heldLock = () =>
+        Object.assign(new Error('P175 planted: database is locked'), {
+          code: 'ERR_SQLITE_ERROR',
+          errcode: 5,
+        });
+      const plant = (error: Error) =>
+        jest.spyOn(chainSessionStore as any, 'persistSessionsOrThrow').mockRejectedValueOnce(error);
+
+      test('awaited: a cancel whose save fails rejects instead of reporting the run cancelled', async () => {
+        await chainSessionStore.createSession('p175-a', 'chain-p175a#1', 2);
+        const spy = plant(constraint());
+        try {
+          await expect(chainSessionStore.cancelChain('p175-a')).rejects.toThrow(/P175 planted/);
+        } finally {
+          spy.mockRestore();
+        }
+        // Control: the same cancel with nothing planted resolves
+        await expect(chainSessionStore.cancelChain('p175-a')).resolves.toBe(true);
+      });
+
+      test('awaited, nothing swallowed: a held lock fails an observation batch', async () => {
+        await chainSessionStore.createSession('p175-b', 'chain-p175b#1', 2);
+        const nodeId = chainSessionStore.getSession('p175-b')!.state.nodes[0]!.id;
+        const observation = {
+          type: 'unknown_discovered' as const,
+          id: 'u-175',
+          statement: 'undecided',
+          blocking: false,
+        };
+        const spy = plant(heldLock());
+        try {
+          await expect(
+            chainSessionStore.applyUnknownObservations('p175-b', nodeId, [observation])
+          ).rejects.toThrow(/database is locked/);
+        } finally {
+          spy.mockRestore();
+        }
+      });
+
+      test('background: a lifecycle promotion whose save fails is logged with its context', async () => {
+        await chainSessionStore.createSession('p175-c', 'chain-p175c#1', 2);
+        const session = chainSessionStore.getSession('p175-c')!;
+        session.lifecycle = 'dormant';
+        const warn = logger.warn as jest.Mock;
+        warn.mockClear();
+        const spy = plant(constraint());
+        try {
+          expect(chainSessionStore.getSession('p175-c')?.lifecycle).toBe('canonical');
+          await new Promise((resolve) => setImmediate(resolve));
+          expect(warn.mock.calls.map((call) => String(call[0]))).toContainEqual(
+            expect.stringMatching(
+              /Failed to persist sessions \(lifecycle-promotion\): P175 planted/
+            )
+          );
+        } finally {
+          spy.mockRestore();
+        }
+      });
+    });
+
     test('clearing one tenant sessions does not affect another tenant', async () => {
       await chainSessionStore.createSession(
         'tenant-a-session',
