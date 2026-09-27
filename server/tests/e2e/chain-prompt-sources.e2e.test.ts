@@ -880,6 +880,47 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       await run.call({ user_response: 'out', gate_verdict: PASS });
       expect(runRows(run.chainId).run).toEqual({ run_status: 'completed', current_node_id: null });
     }, 120000);
+
+    /**
+     * P6.135 PIN (as of 2026-09-27 · flips when a reader shows a stepless run's node prompt id —
+     * the interrupt's remaining nodes, a node-driven render of `n1`, an execution record's
+     * `prompt_id` — or when the mint records the parsed prompt id). The one node a stepless run
+     * mints records the CHAIN id as its prompt (`ChainSessionStore.resolveCreationNodes`); measured
+     * readers: `chain_run_nodes.prompt_id` only. The re-render after a FAIL renders the prompt
+     * itself, the session list names the blueprint's prompt, execution records carry no prompt
+     * id, and the interrupt lists only nodes after the current one, of which a one-node run has
+     * none.
+     */
+    test('P6.135 the one node records the chain id as its prompt, and no reply shows it', async () => {
+      const run = await start({ command: '>>sv_a :: "sv-block"' });
+      const failed = await run.call({ user_response: 'out', gate_verdict: FAIL });
+      expect(templates(failed)).toEqual(['BODY-sv_a topic=']);
+      const listed = (await tool('system_control', { action: 'session', operation: 'list' })).text;
+      expect(listed).toContain(`**Chain**: \`${run.chainId}\` (\`sv_a\`)`);
+      const history = (
+        await tool('system_control', {
+          action: 'execution_history',
+          operation: 'steps',
+          session_id: run.chainId,
+        })
+      ).text;
+      const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+      try {
+        const nodes = db
+          .prepare(
+            'SELECT n.node_id, n.prompt_id FROM chain_run_nodes n ' +
+              'JOIN chain_runs r ON r.session_id = n.session_id WHERE r.chain_id = ?'
+          )
+          .all(run.chainId);
+        expect(nodes).toEqual([{ node_id: 'n1', prompt_id: run.chainId }]);
+      } finally {
+        db.close();
+      }
+      for (const text of [run.text, failed, listed, history]) {
+        expect(text).not.toContain(`(\`${run.chainId}\`)`);
+        expect(text).not.toContain(`· ${run.chainId}`);
+      }
+    }, 120000);
   });
 
   describe('P6.93: a remainder naming a chain prompt', () => {
