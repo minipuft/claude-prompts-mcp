@@ -1,0 +1,78 @@
+id: interview
+name: Interview
+category: analysis
+description: >-
+  A stop the planner calls on its own judgment, before a guess becomes a build.
+  Fire it when a taste or metaphor word is about to become a mechanism, a second
+  character complaint lands on one surface, a reference is named ambiguously, a
+  muse or technique pass ends on a fork that would change the build, or a
+  planner-authored bound is about to be judged against the owner's grade. Asks
+  the whole open frontier in one round, each question numbered with a
+  recommended answer and a class, and closes with a rulings block (D1..Dn) for
+  the plan's implementation notes. With `exit` set, it hands off to
+  research_chain, design_muse or tech_recommendation instead, emitting that
+  prompt's arguments and the reason the stop routed there. Protocol:
+  /unknowns Move 3.
+systemMessageFile: system-message.md
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: decision
+    type: string
+    required: true
+    description: >-
+      What is about to be built or decided — the step this stop holds back (e.g.
+      'turn the "foam" metaphor into the surface shader's edge law').
+  - name: trigger
+    type: string
+    required: true
+    description: >-
+      Why the stop fired. One of: taste-word-becomes-mechanism |
+      second-character-complaint | ambiguous-reference | open-fork |
+      self-authored-bound | other.
+    validation:
+      pattern: '^(taste-word-becomes-mechanism|second-character-complaint|ambiguous-reference|open-fork|self-authored-bound|other)$'
+  - name: frontier
+    type: string
+    required: false
+    description: >-
+      Questions already known, numbered, each with its recommended answer. The
+      prompt completes the frontier; it does not discard these.
+  - name: exit
+    type: string
+    required: false
+    description: >-
+      Where the stop goes: interview (default) | research_chain | design_muse |
+      tech_recommendation. A non-interview exit emits that prompt's arguments
+      instead of a question round.
+    validation:
+      pattern: '^(|interview|research_chain|design_muse|tech_recommendation)$'
+  - name: position
+    type: string
+    required: false
+    description: >-
+      The operator's stated position: exploring | converging | committed.
+      Exploring turns the round into candidate rulings to react to; committed
+      asks nothing and records rulings from the stated position.
+    validation:
+      pattern: '^(|exploring|converging|committed)$'
+gateConfiguration:
+  framework_gates: true
+  inline_gate_definitions:
+    - id: frontier-shape
+      name: Frontier Shape
+      type: validation
+      scope: execution
+      severity: high
+      description: >-
+        Every frontier question carries a recommended answer and a class; no
+        question depends on another in the same round.
+      guidance: |-
+        - Each question is numbered and carries ➡ a recommended answer with its reasoning
+        - Each question names its class: architecture | contract | scope | taste
+        - A question whose answer depends on another question open this round waits for a later round
+        - Facts (repo, filesystem, docs) are probed by the planner, never asked of the operator
+      pass_criteria:
+        - Every numbered question has a ➡ recommended answer
+        - Every numbered question names a class from architecture, contract, scope, taste
+        - No question in the round depends on the answer to another question in the same round
+        - The output ends in a rulings block, or, for a non-interview exit, that prompt's arguments plus a one-line routing reason
