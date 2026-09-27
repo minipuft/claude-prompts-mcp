@@ -9,13 +9,15 @@
  * | --- | --- | --- |
  * | `prompt-execution-pipeline.ts` `emitFailureRecord` | run failed | parsed command |
  * | `18-execution-stage.ts` chain render | step working | the rendered step |
+ * | `18-execution-stage.ts` `ledgerRenderedRunPrompt` | one-node run step working (P6.156) | `recordedStep` |
  * | `20-gate-review-stage.ts` `ledgerFirstRenderedStep` | step working | `recordedStep` |
  * | `21-formatting-stage.ts` `emitChainTerminalRecord` | run terminal | parsed command |
  * | `step-capture-service.ts` `ledgerCapturedStep` | step completed / input_required | `recordedStep` |
  * | `step-capture-service.ts` `ledgerSubmittedVerdict` | step verdict | `recordedStep` |
  *
  * The predicate is the append's object literal naming `promptId`. The count is asserted against the
- * table, so a seventh append fails until it is classified here; the planted site proves the
+ * table, so an eighth append fails until it is classified here (the seventh, stage 18's
+ * single-prompt render, was added 2026-09-27 by P6.156); the planted site proves the
  * predicate reports an append that names no prompt.
  */
 import { describe, expect, test } from '@jest/globals';
@@ -56,7 +58,7 @@ function sourceFiles(dir: string): string[] {
 
 const SITES: Readonly<Record<string, number>> = {
   'engine/execution/pipeline/prompt-execution-pipeline.ts': 1,
-  'engine/execution/pipeline/stages/18-execution-stage.ts': 1,
+  'engine/execution/pipeline/stages/18-execution-stage.ts': 2,
   'engine/execution/pipeline/stages/20-gate-review-stage.ts': 1,
   'engine/execution/pipeline/stages/21-formatting-stage.ts': 1,
   'engine/execution/capture/step-capture-service.ts': 2,

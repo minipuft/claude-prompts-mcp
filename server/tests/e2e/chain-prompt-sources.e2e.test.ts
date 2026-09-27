@@ -1127,8 +1127,32 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       const run = await start({ command: '>>sv_a :: "sv-block"' });
       await run.call({ user_response: 'out', gate_verdict: PASS });
       expect(records(run.chainId)).toEqual([
+        { step: 1, node: 'n1', prompt: 'sv_a', status: 'working', reason: null },
         { step: 1, node: 'n1', prompt: 'sv_a', status: 'completed', reason: null },
         { step: null, node: null, prompt: 'sv_a', status: 'completed', reason: null },
+      ]);
+    }, 120000);
+
+    /**
+     * P6.156. MEASURED 2026-09-27 on `84ffa5ea` (this file's (b) pinned it): a one-node run's
+     * ledger began at its answer — `[completed n1 sv_a, run completed sv_a]` — because the start
+     * call renders through stage 18's single-prompt path, which appended nothing. The chain path
+     * ledgers `working` on the render that starts a step, and not again on a retry.
+     */
+    test('P6.156 (a) a one-node run ledgers working on its start call, and once per step', async () => {
+      const run = await start({ command: '>>sv_a :: "sv-block"' });
+      expect(records(run.chainId)).toEqual([
+        { step: 1, node: 'n1', prompt: 'sv_a', status: 'working', reason: null },
+      ]);
+      // A FAIL re-renders the step (P6.69) — its retry, which the chain path does not re-ledger.
+      await run.call({ user_response: 'out', gate_verdict: FAIL });
+      expect(records(run.chainId).filter((row) => row.status === 'working')).toHaveLength(1);
+    }, 120000);
+
+    test('P6.156 (b) control: a chain start still ledgers its first step working', async () => {
+      const run = await start({ command: '>>sv_chain' });
+      expect(records(run.chainId)).toEqual([
+        { step: 1, node: 'a', prompt: 'sv_a', status: 'working', reason: null },
       ]);
     }, 120000);
 
