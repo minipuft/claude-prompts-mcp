@@ -199,7 +199,7 @@ const createSessionManager = (): jest.Mocked<ChainSessionStore> =>
     getSessionByChainIdentifier: jest.fn(),
     getLatestSessionForBaseChain: jest.fn(),
     getRunHistory: jest.fn().mockReturnValue([]),
-    createSession: jest.fn().mockResolvedValue(undefined),
+    createSession: jest.fn(async (sessionId: string, chainId: string) => ({ sessionId, chainId })),
     getReview: jest.fn().mockReturnValue(undefined),
     clearSession: jest.fn(),
     cleanup: jest.fn(),
@@ -216,7 +216,8 @@ describe('Symbolic pipeline coverage', () => {
     const inlineGateProcessor = new InlineGateProcessor(
       registry as any,
       createResolver() as any,
-      logger
+      logger,
+      { remapRunGates: async () => undefined }
     );
     const inlineStage = new InlineGateExtractionStage(inlineGateProcessor, logger);
     await inlineStage.execute(context);

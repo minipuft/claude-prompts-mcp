@@ -33,6 +33,15 @@ export interface RegisteredGateResult {
 }
 
 /**
+ * A request gate a resume can no longer reach (R59, R64): the node it names, as the client
+ * addresses it, and why. Stage 11 renders it through stage 04's render as a `gate-target-passed` rejection.
+ */
+export interface StepTargetRefusal {
+  readonly nodeId: string;
+  readonly detail: string;
+}
+
+/**
  * Normalized gate input structure for creating temporary gates.
  */
 export interface NormalizedGateInput {
@@ -363,6 +372,34 @@ export class TemporaryGateRegistrar {
         : [],
       canonicalGateIds: Array.from(canonicalGateIds),
     };
+  }
+
+  /**
+   * The refusals for this call's NEW request gates that target a step a resume can no longer
+   * reach (R59, R64, R65): a node the run has already passed, or the node this call answers — it
+   * answers that node and renders the next, so a gate there could never fire. Checked here, before
+   * any registration, because this is where the run's position and the gates it holds are both
+   * known. A gate the run already holds under its id is the held gate (R49), whichever call first
+   * sent it; `target_step_number` is judged as the node it names. Empty on the call that starts a
+   * run (its first node is the step it renders, R59), on a restart, and on a run that has ended
+   * (the session stage answers that one). A target the run does not declare is stage 04's refusal.
+   */
+  unreachableStepTargets(context: ExecutionContext): StepTargetRefusal[] {
+    const view = this.resolveRunView(context);
+    if (view === undefined || view.complete === true || context.mcpRequest.force_restart === true) {
+      return [];
+    }
+    const lastStepOf = context.parsedCommand?.declaredNodes?.lastStepOf ?? {};
+    const gates = (context.state.gates.requestedOverrides?.gates ?? []) as RawGateInput[];
+    return gates.flatMap((gate) => {
+      if (typeof gate !== 'object') return [];
+      const rejection = unreachableTargetRejection(gate, view, lastStepOf);
+      const held =
+        rejection !== undefined &&
+        typeof gate.id === 'string' &&
+        this.resolveHeldForThisRun(context, gate.id, []) !== undefined;
+      return rejection === undefined || held ? [] : [rejection];
+    });
   }
 
   /**
@@ -948,4 +985,82 @@ function readInlineGateSource(body: GateBody): TemporaryGateDefinition['source']
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * The refusal for one request gate whose target a resume can no longer reach, or undefined. PURE.
+ * A run standing on no node has passed them all; a position this view cannot place judges nothing.
+ */
+function unreachableTargetRejection(
+  gate: Exclude<RawGateInput, string>,
+  view: RunStepView,
+  lastStepOf: Readonly<Record<string, string>>
+): StepTargetRefusal | undefined {
+  const current = currentOrdinalOf(view);
+  const target = stepTargetOf(gate, view.nodeIds);
+  if (current === -1 || target === undefined || target.position === -1) return undefined;
+  if (target.position > current) return undefined;
+  const nodeId = declaredAddress(target.nodeId, lastStepOf);
+  const named =
+    target.form === 'id' ? `target_step_id "${nodeId}"` : `target_step_number ${target.number}`;
+  const next = nodeIdAt(view.nodeIds, current + 1);
+  const why =
+    target.position < current
+      ? 'names a step the run has already passed'
+      : next === null
+        ? 'names the step this call answers; the run has no later step'
+        : `names the step this call answers; target "${declaredAddress(next, lastStepOf)}" or later`;
+  return {
+    nodeId,
+    detail: `${named} ${why}. A gate there could never fire; the run did not advance.`,
+  };
+}
+
+/**
+ * The id a client addresses `nodeId` by: the declared node a chain-prompt node expanded into it
+ * (stage 04 retargets a declared id to its last step, R58), else the id itself.
+ */
+function declaredAddress(nodeId: string, lastStepOf: Readonly<Record<string, string>>): string {
+  const declared = Object.keys(lastStepOf);
+  return (
+    declared.find((id) => lastStepOf[id] === nodeId) ??
+    declared.find((id) => nodeId.startsWith(`${id}-`)) ??
+    nodeId
+  );
+}
+
+/** The run's position as an ordinal: past its last node when it stands on none; -1 when unknown. */
+function currentOrdinalOf(view: RunStepView): number {
+  if (view.currentNodeId === null) return view.nodeIds.length + 1;
+  return view.currentNodeId === undefined ? -1 : ordinalOf(view.nodeIds, view.currentNodeId);
+}
+
+/**
+ * The step a request gate targets, in either name form (the id wins when both are given, as in
+ * `resolveStepTarget`), with its ordinal in `nodeIds` (-1 when the run has no such step).
+ */
+function stepTargetOf(
+  gate: Exclude<RawGateInput, string>,
+  nodeIds: readonly string[]
+):
+  | { form: 'id'; nodeId: string; position: number }
+  | { form: 'number'; number: number; nodeId: string; position: number }
+  | undefined {
+  if (typeof gate.target_step_id === 'string') {
+    return {
+      form: 'id',
+      nodeId: gate.target_step_id,
+      position: ordinalOf(nodeIds, gate.target_step_id),
+    };
+  }
+  if (typeof gate.target_step_number !== 'number') return undefined;
+  const nodeId = nodeIdAt(nodeIds, gate.target_step_number);
+  return nodeId === null
+    ? undefined
+    : {
+        form: 'number',
+        number: gate.target_step_number,
+        nodeId,
+        position: gate.target_step_number,
+      };
 }

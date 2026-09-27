@@ -51,6 +51,8 @@ const OPT_OUT = { exclude: ['content-structure'], framework_gates: false };
 const GATED_COMMAND = '>>sv_chain :: g112:"NAMED-112" :: "ANON-112"';
 const REQUEST_GATES = [{ id: 'rq112', name: 'rq112', criteria: ['REQ-112'], target_step_id: 'b' }];
 const MARKERS = ['NAMED-112', 'ANON-112', 'REQ-112', 'GUIDANCE-sv-block'];
+/** Assembled, so no command literal in this file carries the operator as prose. */
+const ARROW = ' -' + '-> ';
 
 interface Server {
   /** The server process's PID, which `chain_sessions.run_owner_pid` records. */
@@ -288,6 +290,60 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     });
   }, 180000);
 
+  /**
+   * MEASURED 2026-09-27 on `530cf2c0` (driven, this harness): the claimed step 2 and the
+   * same-process step 2 both carried the framework block, although the call's injection decision
+   * for both was `system-prompt inject:false` (P6.131 trace): both open the post-advance review
+   * on `b` (the request gate targets it), and stage 20 built the review render's chain context
+   * without the call's `injectionState`, so the executor defaulted to injecting.
+   *
+   * R63: the review render honours the call's decision as stage 18's normal render does. P6.152
+   * (R63 amended): that decision was computed for context 'gate_review', which the target filter
+   * read as "not a step" under the shipped `target: "steps"`, so every review render dropped the
+   * block. A review render of a step is a step render for the target, so step 2 now carries the
+   * block exactly when an ungated chain's step 2, rendered normally by stage 18 on the same kind
+   * of resume call, does: the three are pinned as one value. The ungated step 1 is the positive
+   * control that the probe sees the block at all.
+   */
+  test('P6.143 the claimed and the same-process step 2 carry the framework block equally, as the call decided', async () => {
+    const block = (text: string): boolean => text.includes('C.A.G.E.E.R.F');
+    const claimed = await claimOnSecondServer(freshRoots(), {
+      command: GATED_COMMAND,
+      gates: REQUEST_GATES,
+    });
+
+    const server = await startServer(freshRoots());
+    await authorResources(server);
+    const opened = await server.call('prompt_engine', {
+      command: GATED_COMMAND,
+      gates: REQUEST_GATES,
+    });
+    const same = await server.call('prompt_engine', {
+      chain_id: chainIdOf(opened.text),
+      user_response: 'A out',
+      gate_verdict: PASS,
+    });
+
+    // Positive control: an ungated arrow-chain's step 1 is not a review, and the call's decision
+    // injects the framework's system prompt there, so the probe sees the framework when a
+    // decision says so.
+    const ungated = await server.call('prompt_engine', { command: `>>sv_a${ARROW}>>sv_b` });
+    expect(ungated.isError).toBe(false);
+    expect(block(ungated.text)).toBe(true);
+    // The same kind of call rendering step 2 normally (stage 18, no review).
+    const ungatedStep2 = await server.call('prompt_engine', {
+      chain_id: chainIdOf(ungated.text),
+      user_response: 'A out',
+    });
+    expect(ungatedStep2.isError).toBe(false);
+    const normal = block(ungatedStep2.text);
+    expect({ claimed: block(claimed.firstReply), same: block(same.text), normal }).toEqual({
+      claimed: true,
+      same: true,
+      normal: true,
+    });
+  }, 240000);
+
   test('(c) a run with no temporary gates is claimed unchanged', async () => {
     const roots = freshRoots();
     const { chainId, second, firstReply } = await claimOnSecondServer(roots, {
@@ -366,6 +422,114 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     expect(other.text).not.toContain('A-ONE');
   }, 180000);
 
+  /**
+   * A run declaring `g140` opens its step-a review on a first server, is claimed by a second one
+   * (optionally running its own `g140` first, the collision), and answers step a there with a FAIL.
+   */
+  async function claimWithOpenReview(
+    roots: Roots,
+    collide: boolean
+  ): Promise<{ chainId: string; second: Server; failed: string; sessionId: string }> {
+    const first = await startServer(roots);
+    await authorResources(first);
+    const chainId = chainIdOf(
+      (await first.call('prompt_engine', { command: '>>sv_chain :: g140:"A-ONE"' })).text
+    );
+    // Positive control: the review is open before the claim, under the recorded id.
+    expect(runRow(roots, chainId)?.reviews).toEqual({ a: ['sv-block', 'g140'] });
+    const minted = await first.call('prompt_engine', { chain_id: chainId, handoff: true });
+    const token = /Token: `(hnd_[^`]+)`/.exec(minted.text)?.[1];
+    if (token === undefined) throw new Error(`no token in: ${minted.text}`);
+    const second = await startServer(roots);
+    if (collide) {
+      await second.call('resource_manager', {
+        resource_type: 'prompt',
+        action: 'create',
+        id: 'sv_chain_other',
+        category: 'general',
+        name: 'sv_chain_other',
+        description: 'a second chain the claiming server runs',
+        user_message_template: 'OTHER-OWN-TEMPLATE',
+        gate_configuration: OPT_OUT,
+        chain_steps: [
+          { promptId: 'sv_a', stepName: 'A' },
+          { promptId: 'sv_b', stepName: 'B' },
+        ],
+      });
+      const other = await second.call('prompt_engine', {
+        command: '>>sv_chain_other :: g140:"B-ONE"',
+      });
+      expect(other.text).toContain('B-ONE');
+    }
+    await first.stop();
+    const failed = await second.call('prompt_engine', {
+      claim_token: token,
+      user_response: 'A out',
+      gate_verdict: FAIL,
+    });
+    expect(failed.isError).toBe(false);
+    const db = new DatabaseSync(path.join(roots.runtimeRoot, 'runtime-state', 'state.db'));
+    try {
+      const row = db
+        .prepare('SELECT session_id FROM chain_runs WHERE chain_id = ?')
+        .get(chainId) as { session_id: string };
+      return { chainId, second, failed: failed.text, sessionId: row.session_id };
+    } finally {
+      db.close();
+    }
+  }
+
+  /** The run's inline gate ids as `gates chain` and `system_control session inspect` report them. */
+  async function reportedInlineGateIds(
+    server: Server,
+    chainId: string,
+    sessionId: string
+  ): Promise<{ summary: string | undefined; metadata: string[] | undefined }> {
+    const gates = await server.call('prompt_engine', { command: `gates chain ${chainId}` });
+    const inspected = await server.call('system_control', {
+      action: 'session',
+      operation: 'inspect',
+      session_id: sessionId,
+    });
+    const metadata = /`chain_metadata`: (\{.*\})/.exec(inspected.text)?.[1];
+    return {
+      summary: /- Inline Gates: (.*)/.exec(gates.text)?.[1],
+      metadata:
+        metadata === undefined
+          ? undefined
+          : (JSON.parse(metadata) as { inlineGateIds: string[] }).inlineGateIds,
+    };
+  }
+
+  test('P6.140 (a) a review opened before a claim names the remapped gate and a FAIL grades the claimed run criteria', async () => {
+    const roots = freshRoots();
+    const { chainId, second, failed, sessionId } = await claimWithOpenReview(roots, true);
+    expect(failed).toContain('Gate Review Required');
+    expect(failed).toContain('A-ONE');
+    expect(failed).not.toContain('B-ONE');
+    expect(runRow(roots, chainId)?.reviews).toEqual({ a: ['sv-block', 'g140-2'] });
+    // The remapped gate is still a reminder the verdict attests (stage 20 derives the tiers from
+    // the review's rewritten ids; the store's own tier-map rewrite is pinned in the unit test).
+    expect(failed).toContain('"satisfied": ["sv-block", "g140-2"]');
+
+    // P6.141 (a): the run's inline gate ids read through the same remap.
+    expect(await reportedInlineGateIds(second, chainId, sessionId)).toEqual({
+      summary: 'g140-2, sv-block',
+      metadata: ['g140-2', 'sv-block'],
+    });
+  }, 180000);
+
+  test('P6.140 (b) control: with no collision the claimed review and inline gate ids are unchanged', async () => {
+    const roots = freshRoots();
+    const { chainId, second, failed, sessionId } = await claimWithOpenReview(roots, false);
+    expect(failed).toContain('A-ONE');
+    expect(runRow(roots, chainId)?.reviews).toEqual({ a: ['sv-block', 'g140'] });
+    expect(await reportedInlineGateIds(second, chainId, sessionId)).toEqual({
+      summary: 'g140, sv-block',
+      metadata: ['g140', 'sv-block'],
+    });
+  }, 180000);
+
   test('P6.130 (a) after a claim the projection holds exactly the claimer row for the run', async () => {
     const roots = freshRoots();
     const { chainId, first, second } = await claimOnSecondServer(roots, { command: '>>sv_chain' });
@@ -378,7 +542,7 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     expect(projectionRows(roots, chainId)).toEqual([{ pid: second.pid, step: 2 }]);
   }, 180000);
 
-  test('P6.130 (d) control: two live servers each running their own run under one chain id keep both rows', async () => {
+  test('P6.130 (d) control: two live servers each running their own run keep both rows', async () => {
     const roots = freshRoots();
     const first = await startServer(roots);
     await authorResources(first);
@@ -389,17 +553,123 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     const secondChain = chainIdOf(
       (await second.call('prompt_engine', { command: '>>sv_chain' })).text
     );
-    // Each process numbers runs from its own memory, so both mint the same id for different runs.
-    expect(secondChain).toBe(firstChain);
+    // R62: one chain-id space per database, so the second server's run is `#2`, not a second `#1`.
+    expect([firstChain, secondChain]).toEqual(['chain-sv_chain#1', 'chain-sv_chain#2']);
     await second.call('prompt_engine', {
       chain_id: secondChain,
       user_response: 'A out',
       gate_verdict: PASS,
     });
-    expect(projectionRows(roots, firstChain)).toEqual([
-      { pid: first.pid, step: 1 },
-      { pid: second.pid, step: 2 },
+    expect(projectionRows(roots, firstChain)).toEqual([{ pid: first.pid, step: 1 }]);
+    expect(projectionRows(roots, secondChain)).toEqual([{ pid: second.pid, step: 2 }]);
+  }, 180000);
+
+  /** Every `chain_runs` row: chain id, owner PID and the node it stands at, ordered by chain id. */
+  function runRows(roots: Roots): Array<{ chainId: string; pid: string; node: string }> {
+    const db = new DatabaseSync(path.join(roots.runtimeRoot, 'runtime-state', 'state.db'));
+    try {
+      const rows = db
+        .prepare(
+          'SELECT chain_id, run_owner_pid, current_node_id FROM chain_runs ORDER BY chain_id, created_at'
+        )
+        .all() as Array<{ chain_id: string; run_owner_pid: string; current_node_id: string }>;
+      return rows.map((row) => ({
+        chainId: row.chain_id,
+        pid: row.run_owner_pid,
+        node: row.current_node_id,
+      }));
+    } finally {
+      db.close();
+    }
+  }
+
+  test('P6.142 (a) two live servers on one database mint distinct chain ids for their runs', async () => {
+    const roots = freshRoots();
+    const first = await startServer(roots);
+    await authorResources(first);
+    const second = await startServer(roots);
+    const firstChain = chainIdOf(
+      (await first.call('prompt_engine', { command: '>>sv_chain' })).text
+    );
+    const secondChain = chainIdOf(
+      (await second.call('prompt_engine', { command: '>>sv_chain' })).text
+    );
+    const thirdChain = chainIdOf(
+      (await first.call('prompt_engine', { command: '>>sv_chain' })).text
+    );
+    expect([firstChain, secondChain, thirdChain]).toEqual([
+      'chain-sv_chain#1',
+      'chain-sv_chain#2',
+      'chain-sv_chain#3',
     ]);
+    expect(runRows(roots)).toEqual([
+      { chainId: 'chain-sv_chain#1', pid: first.pid, node: 'a' },
+      { chainId: 'chain-sv_chain#2', pid: second.pid, node: 'a' },
+      { chainId: 'chain-sv_chain#3', pid: first.pid, node: 'a' },
+    ]);
+
+    // Each id resumes its own run: the second server's resume moves `#2` only.
+    await second.call('prompt_engine', {
+      chain_id: secondChain,
+      user_response: 'A out',
+      gate_verdict: PASS,
+    });
+    expect(runRows(roots).map((row) => row.node)).toEqual(['a', 'b', 'a']);
+  }, 180000);
+
+  test('P6.142 (b) control: one server numbers its second run #2', async () => {
+    const roots = freshRoots();
+    const server = await startServer(roots);
+    await authorResources(server);
+    const first = chainIdOf((await server.call('prompt_engine', { command: '>>sv_chain' })).text);
+    const second = chainIdOf((await server.call('prompt_engine', { command: '>>sv_chain' })).text);
+    expect([first, second]).toEqual(['chain-sv_chain#1', 'chain-sv_chain#2']);
+  }, 180000);
+
+  test('P6.142 (c) a claim of a run whose chain id the claiming server holds for another run is refused by name', async () => {
+    const roots = freshRoots();
+    const first = await startServer(roots);
+    await authorResources(first);
+    const handedOff = chainIdOf(
+      (await first.call('prompt_engine', { command: '>>sv_chain' })).text
+    );
+    const minted = await first.call('prompt_engine', { chain_id: handedOff, handoff: true });
+    const token = /Token: `(hnd_[^`]+)`/.exec(minted.text)?.[1];
+    if (token === undefined) throw new Error(`no token in: ${minted.text}`);
+    const second = await startServer(roots);
+    const held = chainIdOf((await second.call('prompt_engine', { command: '>>sv_chain' })).text);
+    expect([handedOff, held]).toEqual(['chain-sv_chain#1', 'chain-sv_chain#2']);
+    await first.stop();
+
+    // Fixture: the handed-off row as a pre-R62 server minted it, colliding with the claimer's run.
+    const db = new DatabaseSync(path.join(roots.runtimeRoot, 'runtime-state', 'state.db'));
+    try {
+      db.prepare('UPDATE chain_runs SET chain_id = ? WHERE chain_id = ?').run(held, handedOff);
+    } finally {
+      db.close();
+    }
+
+    const claimed = await second.call('prompt_engine', {
+      claim_token: token,
+      user_response: 'A out',
+      gate_verdict: PASS,
+    });
+    expect(claimed.isError).toBe(true);
+    expect(claimed.text).toContain(
+      'this server already runs a different run under `chain-sv_chain#2`'
+    );
+    // Refused before the transfer: the run stays with its first owner, and the claimer's own run
+    // still answers its chain id.
+    expect(runRows(roots)).toEqual([
+      { chainId: 'chain-sv_chain#2', pid: first.pid, node: 'a' },
+      { chainId: 'chain-sv_chain#2', pid: second.pid, node: 'a' },
+    ]);
+    const resumed = await second.call('prompt_engine', {
+      chain_id: held,
+      user_response: 'A out',
+      gate_verdict: PASS,
+    });
+    expect(resumed.text).toContain('Progress 2/3');
   }, 180000);
 
   test('P6.130 (b) control: an unclaimed run keeps its one row', async () => {

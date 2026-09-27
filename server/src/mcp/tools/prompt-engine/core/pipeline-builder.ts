@@ -176,7 +176,8 @@ export class PipelineBuilder {
     const inlineGateProcessor = new InlineGateProcessor(
       temporaryGateRegistry,
       deps.gateReferenceResolver,
-      deps.logger
+      deps.logger,
+      deps.chainSessionStore
     );
     const inlineGateStage = new InlineGateExtractionStage(inlineGateProcessor, deps.logger);
     const operatorValidationStage = new OperatorValidationStage(

@@ -42,6 +42,10 @@ const createRegistry = () => {
       (gateId: string) =>
         gates.find((gate) => gate['id'] === gateId) as Record<string, unknown> | undefined
     ),
+    // The run holds a gate registered under its id; only the harness's run exists.
+    resolveDeclared: jest.fn(
+      (key: string) => gates.find((gate) => gate['id'] === key)?.['id'] as string | undefined
+    ),
   };
 };
 
@@ -177,8 +181,20 @@ const reviewGatesFor = async (options: {
       skipNodeIds.includes(nodeId) ? { clean: true } : undefined
     )
   );
-  const context = new ExecutionContext({ chain_id: 'chain-demo#1', gates: gateSpecs } as never);
-  context.state.gates.requestedOverrides = { gates: gateSpecs };
+  // A resume's step-targeted gate is one the run already holds (R64, R65: a NEW gate targeting
+  // the node the call answers, or an earlier one, is refused at this stage): an earlier call
+  // registered each under the id it is re-sent with here. The call that starts a run has no run
+  // to hold anything, so its gates are new.
+  const sent =
+    options.view === undefined
+      ? gateSpecs
+      : gateSpecs.map((spec, index) => {
+          const held = { id: `temp_${index + 1}`, ...spec };
+          registry.createTemporaryGate(held);
+          return held;
+        });
+  const context = new ExecutionContext({ chain_id: 'chain-demo#1', gates: sent } as never);
+  context.state.gates.requestedOverrides = { gates: sent };
   context.executionPlan = {
     strategy: 'chain',
     gates: [],

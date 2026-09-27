@@ -802,6 +802,15 @@ export class PromptExecutor {
               'blueprint, so nothing here can resume it. Restart it from its command instead.'
           ),
         };
+      case 'chain-id-held':
+        return {
+          refusal: this.textError(
+            `❌ **Claim Refused**: this server already runs a different run under ` +
+              `\`${result.chainId}\`, so that \`chain_id\` could not tell the two apart. The ` +
+              'run stays with its owner; finish or cancel the run here first, or claim it on ' +
+              'another server.'
+          ),
+        };
       default: {
         const unreachable: never = result;
         return { refusal: this.textError(`❌ **Claim Refused**: ${JSON.stringify(unreachable)}`) };

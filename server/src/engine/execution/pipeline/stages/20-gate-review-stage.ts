@@ -356,10 +356,15 @@ export class GateReviewStage extends BasePipelineStage {
         }
       }
 
-      const chainContext = this.chainSessionStore.getChainContext(
-        sessionId,
-        context.getScopeOptions()
-      );
+      // R63: one framework-injection decision per call. The review render honours the call's
+      // recorded system-prompt decision exactly as stage 18's normal render does, so a step's
+      // framework block does not depend on which stage rendered it. Only that decision: the
+      // call's gate-guidance decision targets steps (shipped `target: "steps"`), and handed to a
+      // review it hides the very gates the review asks a verdict on.
+      const chainContext = {
+        ...this.chainSessionStore.getChainContext(sessionId, context.getScopeOptions()),
+        injectionState: { systemPrompt: context.state.injection.systemPrompt },
+      };
       // Node-driven, for the same reason stage 18 is (P4 row 3.4 / DEV-T3-7). The review body is
       // the reviewed step's own template, and `resolveReviewStep` locates it with the ordinal
       // `getChainContext` publishes — which counts the RUN's nodes. Handing it the parse-time

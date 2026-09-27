@@ -278,6 +278,13 @@ export type WorkflowRejectionReason =
   | 'cycle'
   | 'cap-exceeded'
   | 'gate-target-missing'
+  /**
+   * A resume's request gate targets a node the run has already passed, or the node the call
+   * answers (R59, R64), so it could never fire. Produced by the gate registrar (stage 11), which
+   * alone knows the run's position and which gates it holds (R65) — like
+   * `mutually-exclusive-source`, outside the validator, through the same addressed channel.
+   */
+  | 'gate-target-passed'
   | 'required-argument-missing'
   | 'unknown-visibility-item';
 

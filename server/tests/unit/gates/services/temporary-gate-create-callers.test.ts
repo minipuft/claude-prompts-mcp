@@ -108,7 +108,9 @@ const CALLERS: readonly CreateCaller[] = [
     site: 'engine/gates/services/inline-gate-processor.ts',
     heldId: 'g120',
     call: async (registry, runId) => {
-      const processor = new InlineGateProcessor(registry, inlineResolver, logger());
+      const processor = new InlineGateProcessor(registry, inlineResolver, logger(), {
+        remapRunGates: async () => undefined,
+      });
       const parsed = namedCommand();
       await processor.processInlineGates(callOf(runId), parsed);
       return parsed.inlineGateIds ?? [];
@@ -120,7 +122,9 @@ const CALLERS: readonly CreateCaller[] = [
     heldId: 'g120',
     // A restore runs only on a resume, so the first call is already the run's.
     call: async (registry, runId) => {
-      const processor = new InlineGateProcessor(registry, inlineResolver, logger());
+      const processor = new InlineGateProcessor(registry, inlineResolver, logger(), {
+        remapRunGates: async () => undefined,
+      });
       const context = callOf(runId ?? 'run-120');
       context.state.session.isBlueprintRestored = true;
       return processor.restoreRunGates(context, { ...namedCommand(), inlineGateIds: ['g120'] });

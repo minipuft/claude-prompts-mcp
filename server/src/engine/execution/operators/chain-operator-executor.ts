@@ -652,23 +652,17 @@ export class ChainOperatorExecutor {
   }
 
   /**
-   * Determine whether framework injection is enabled for gate reviews.
-   * Checks both the inject flag and the target configuration.
+   * Determine whether framework injection is enabled for a gate review render.
+   *
+   * Reads the recorded decision's `inject` only. The decision service already matched the target
+   * against the call's execution context, and under R63 a review render of a step is a step render
+   * for the target, so `'steps'` includes it; re-checking the target here would hide the block on
+   * a decision that said inject.
    */
   private isFrameworkInjectionEnabledForGates(chainContext: Record<string, unknown>): boolean {
     const injectionState = chainContext['injectionState'] as InjectionState | undefined;
-    if (!injectionState?.systemPrompt) {
-      return true; // Default to enabled if no decision exists
-    }
-
-    const decision = injectionState.systemPrompt;
-    if (!decision.inject) {
-      return false; // Explicitly disabled
-    }
-
-    // Check target - 'both' or 'gates' allows injection on gate reviews
-    const target = decision.target ?? 'both';
-    return target === 'both' || target === 'gates';
+    const decision = injectionState?.systemPrompt;
+    return decision === undefined || decision.inject;
   }
 
   /**

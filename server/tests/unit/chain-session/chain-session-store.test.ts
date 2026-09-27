@@ -243,6 +243,83 @@ describe('ChainSessionStore', () => {
   });
 });
 
+describe('ChainSessionStore.remapRunGates (R60 amended)', () => {
+  let manager: ChainSessionStore;
+
+  beforeEach(() => {
+    jest.spyOn(ChainSessionStore.prototype as any, 'saveSessions').mockResolvedValue(undefined);
+    jest.spyOn(ChainSessionStore.prototype as any, 'loadSessions').mockResolvedValue(undefined);
+    jest
+      .spyOn(ChainSessionStore.prototype as any, 'startCleanupScheduler')
+      .mockImplementation(() => {});
+  });
+
+  afterEach(async () => {
+    await manager.cleanup();
+    jest.restoreAllMocks();
+  });
+
+  /** A claimed run whose blueprint recorded `g1`, with the review its first server opened. */
+  async function claimedRun(): Promise<void> {
+    manager = new ChainSessionStore(createLogger(), new StubTextReferenceStore() as any, {
+      cleanupIntervalMs: 1000,
+    });
+    const blueprint = {
+      parsedCommand: {
+        promptId: 'sv_chain',
+        inlineGateIds: ['g1'],
+        steps: [{ stepNumber: 1, promptId: 'sv_a', args: {}, inlineGateIds: ['sv', 'g1'] }],
+      },
+      executionPlan: { strategy: 'chain', gates: [], requiresSession: true },
+    } as unknown as SessionBlueprint;
+    await manager.createSession('run-1', 'chain-sv_chain#1', 1, {}, { blueprint });
+    await manager.setReview('run-1', {
+      nodeId: 'n1',
+      kind: 'gate',
+      phase: 'awaiting-verdict',
+      combinedPrompt: '',
+      gateIds: ['sv', 'g1'],
+      prompts: [
+        { gateId: 'sv', criteriaSummary: 'SV' },
+        { gateId: 'g1', criteriaSummary: 'OWN' },
+      ],
+      gateTiers: { sv: 'reminder', g1: 'reminder' },
+      createdAt: 1,
+      attemptCount: 0,
+      maxAttempts: 2,
+    });
+  }
+
+  const inlineIdsOf = (store: ChainSessionStore) => ({
+    summary: store.getInlineGateIds('run-1'),
+    metadata: (store.getChainContext('run-1')['chain_metadata'] as { inlineGateIds: string[] })
+      .inlineGateIds,
+  });
+
+  test('P6.140 and P6.141: the open review and the inline gate reads name the registered id', async () => {
+    await claimedRun();
+    await manager.remapRunGates('run-1', new Map([['g1', 'g1-2']]));
+
+    const review = manager.getReview('run-1', 'n1');
+    expect(review?.gateIds).toEqual(['sv', 'g1-2']);
+    expect(review?.prompts.map((prompt) => prompt.gateId)).toEqual(['sv', 'g1-2']);
+    expect(review?.gateTiers).toEqual({ sv: 'reminder', 'g1-2': 'reminder' });
+    expect(inlineIdsOf(manager)).toEqual({ summary: ['g1-2', 'sv'], metadata: ['g1-2', 'sv'] });
+    // The blueprint stays the recorded truth.
+    expect(manager.getSessionBlueprint('run-1')?.parsedCommand.inlineGateIds).toEqual(['g1']);
+  });
+
+  test('control: an empty remap leaves the review and the reads as recorded', async () => {
+    await claimedRun();
+    await manager.remapRunGates('run-1', new Map());
+
+    const review = manager.getReview('run-1', 'n1');
+    expect(review?.gateIds).toEqual(['sv', 'g1']);
+    expect(review?.gateTiers).toEqual({ sv: 'reminder', g1: 'reminder' });
+    expect(inlineIdsOf(manager)).toEqual({ summary: ['g1', 'sv'], metadata: ['g1', 'sv'] });
+  });
+});
+
 describe('ChainSessionStore — run-status lifecycle (Tier 2)', () => {
   let manager: ChainSessionStore;
   let saveSpy: jest.SpyInstance;

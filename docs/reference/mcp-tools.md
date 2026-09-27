@@ -446,10 +446,16 @@ prompt_engine(command:"draft-outline --> draft --> polish", gates:[
 ])
 ```
 
-An unresolvable `target_step_id` (no step in the run carries it) is warned and selects nothing —
-it is never silently widened to apply to every step. A `target_step_id` that resolves to a node
-later retired by the adaptive mutation policy (`milestone:"skipped"`) also selects nothing — the
-guard is checked per-call against the run's live node list, not just once at registration.
+A request gate's `target_step_id` must name a node the run declared; any other id is refused
+`gate-target-missing` before anything runs, never widened to every step. A node that named a chain
+prompt is addressed by its declared id, and the gate reviews that node's last step; its expanded
+step ids (`x-b`) are not addressable. On a resume (`chain_id`), a gate in either form targeting a
+step the run has already passed, or the step the call answers, could never fire: it is refused by
+name as `gate-target-passed` (`target_step_id "b" names the step this call answers; target "c" or
+later`) and the run stays where it was. A gate re-sent under an `id` the run already holds is that
+same gate, so a client re-sending its gates on every call is accepted after their step. A target
+later retired by the adaptive mutation policy (`milestone:"skipped"`) selects nothing — checked
+per call against the run's live node list, not just once at registration.
 
 ### Visibility Policy
 

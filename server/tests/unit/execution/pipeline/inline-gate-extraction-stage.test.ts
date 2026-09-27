@@ -55,7 +55,9 @@ const createStage = (
   resolver: GateReferenceResolver
 ): InlineGateExtractionStage => {
   const logger = createLogger();
-  const inlineGateProcessor = new InlineGateProcessor(registry, resolver, logger);
+  const inlineGateProcessor = new InlineGateProcessor(registry, resolver, logger, {
+    remapRunGates: async () => undefined,
+  });
   return new InlineGateExtractionStage(inlineGateProcessor, logger);
 };
 

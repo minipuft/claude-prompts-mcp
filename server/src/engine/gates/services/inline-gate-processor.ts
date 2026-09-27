@@ -5,6 +5,7 @@ import { loadShellPresets } from '../config/index.js';
 import { SHELL_VERIFY_DEFAULTS } from '../constants.js';
 
 import type { Logger } from '#infra/logging/index.js';
+import type { ChainSessionService } from '#shared/types/chain-session.js';
 import type { GateScope } from '#shared/types/execution.js';
 import type { GateReferenceResolver, GateReferenceResolution } from './gate-reference-resolver.js';
 import type { ExecutionContext, ParsedCommand } from '../../execution/context/index.js';
@@ -101,7 +102,8 @@ export class InlineGateProcessor {
   constructor(
     private readonly temporaryGateRegistry: TemporaryGateRegistry,
     private readonly gateReferenceResolver: GateReferenceResolver,
-    private readonly logger: Logger
+    private readonly logger: Logger,
+    private readonly runGateStore: Pick<ChainSessionService, 'remapRunGates'>
   ) {}
 
   /**
@@ -261,7 +263,9 @@ export class InlineGateProcessor {
       return registered;
     };
 
-    this.restoreNamedGates(parsedCommand, restore, runId);
+    const remap = this.restoreNamedGates(parsedCommand, restore, runId);
+    // The run's open reviews and its inline-id reads follow the remap too (R60 amended).
+    await this.runGateStore.remapRunGates(runId, remap);
     await this.restoreAnonymousGates(parsedCommand, restore, (key) =>
       this.temporaryGateRegistry.resolveDeclared(key, runId, restored)
     );
@@ -275,13 +279,14 @@ export class InlineGateProcessor {
    * the gate registers under a fresh `<id>-N` with the recorded binding key, and this call's
    * restored command references the fresh id in place of the recorded one (R60): the steps carry
    * registered ids, not declared names, so nothing resolves the key for them. The blueprint keeps
-   * the recorded id; every later call re-reads the run's own gate by its key.
+   * the recorded id; every later call re-reads the run's own gate by its key. Returns the remap,
+   * recorded id to registered id.
    */
   private restoreNamedGates(
     parsedCommand: ParsedCommand,
     restore: RestoreGate,
     runId: string
-  ): void {
+  ): Map<string, string> {
     const commandIds = parsedCommand.inlineGateIds ?? [];
     const remap = new Map<string, string>();
     const claimed = new Set<string>();
@@ -322,6 +327,7 @@ export class InlineGateProcessor {
         target.inlineGateIds = target.inlineGateIds.map((id) => remap.get(id) ?? id);
       }
     }
+    return remap;
   }
 
   /**
