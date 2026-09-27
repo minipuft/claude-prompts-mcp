@@ -9,11 +9,12 @@
  *
  * `ChainManager.persistSessionsOrThrow` is the other high-traffic transaction, running on every
  * chain step, and the question asked of it was the same. The answer is measured here rather than
- * read: a recording `DatabasePort` captures the statements the transaction issues, IN ORDER, and
- * the first one is a `DELETE`. There is no window between a read and a write because there is no
- * read before the write — so the transaction is correct as DEFERRED, and this test is what fails if
- * a later edit puts a `SELECT` at the top of that body, where it would silently acquire the shape
- * `'immediate'` exists for.
+ * read: a recording `DatabasePort` captures the statements each transaction issues, IN ORDER, with
+ * the mode it began in. A step's persist opens with a `DELETE` — no read before the write, so it
+ * stays DEFERRED. The persist that first writes a new run is the exception (R62): it reads every
+ * owner's run numbers for the chain and then writes the run under the next one, which is the
+ * read-then-write shape, so it begins IMMEDIATE. This test fails if either shape drifts: a `SELECT`
+ * at the top of a DEFERRED persist, or the reserving persist losing its lock.
  *
  * The second case is the cost side of the same question: an IMMEDIATE lock excludes other WRITERS,
  * not readers. Under WAL a reader sees the last committed snapshot while a write transaction is
@@ -75,20 +76,30 @@ describe('transaction lock mode', () => {
 
     // The seam: every statement, in the order the transaction issues it.
     const statements: string[] = [];
+    const transactions: Array<{ mode: TransactionMode; statements: string[] }> = [];
     let inTransaction = false;
     const recordingPort = {
       isInitialized: () => engine.isInitialized(),
       initialize: () => engine.initialize(),
       query: (sql: string, params?: unknown[]) => {
-        if (inTransaction) statements.push(sql);
+        if (inTransaction) {
+          statements.push(sql);
+          transactions.at(-1)?.statements.push(sql);
+        }
         return engine.query(sql, params);
       },
       queryOne: (sql: string, params?: unknown[]) => {
-        if (inTransaction) statements.push(sql);
+        if (inTransaction) {
+          statements.push(sql);
+          transactions.at(-1)?.statements.push(sql);
+        }
         return engine.queryOne(sql, params);
       },
       run: (sql: string, params?: unknown[]) => {
-        if (inTransaction) statements.push(sql);
+        if (inTransaction) {
+          statements.push(sql);
+          transactions.at(-1)?.statements.push(sql);
+        }
         return engine.run(sql, params);
       },
       transaction: <T>(fn: () => T | Promise<T>, mode?: TransactionMode) =>
@@ -96,6 +107,7 @@ describe('transaction lock mode', () => {
       beginTransaction: (mode?: TransactionMode) => {
         engine.beginTransaction(mode);
         inTransaction = true;
+        transactions.push({ mode: mode ?? 'deferred', statements: [] });
       },
       commit: () => {
         inTransaction = false;
@@ -127,13 +139,25 @@ describe('transaction lock mode', () => {
     // would read as "no read before the write" just as loudly as a correct body does.
     expect(statements.length).toBeGreaterThan(0);
 
-    // The property: nothing is read before the first write, so there is no lock to upgrade.
-    const firstWriteAt = statements.findIndex((sql) =>
-      ['INSERT', 'UPDATE', 'DELETE'].includes(verbOf(sql))
+    // The property: a transaction that reads before its first write holds the write lock from
+    // BEGIN. The create's persist reserves the run number (a read of `chain_runs`); the step's
+    // persist reads nothing before it writes.
+    const shapes = transactions.map((tx) => ({
+      mode: tx.mode,
+      first: verbOf(tx.statements[0] ?? ''),
+      readsBeforeWrite: tx.statements
+        .slice(
+          0,
+          tx.statements.findIndex((sql) => ['INSERT', 'UPDATE', 'DELETE'].includes(verbOf(sql)))
+        )
+        .some((sql) => verbOf(sql) === 'SELECT'),
+    }));
+    const [create, ...steps] = shapes;
+    expect(create).toEqual({ mode: 'immediate', first: 'SELECT', readsBeforeWrite: true });
+    expect(steps.length).toBeGreaterThan(0);
+    expect(steps).toEqual(
+      steps.map(() => ({ mode: 'deferred', first: 'DELETE', readsBeforeWrite: false }))
     );
-    expect(firstWriteAt).toBe(0);
-    expect(verbOf(statements[0] ?? '')).toBe('DELETE');
-    expect(statements.slice(0, firstWriteAt).filter((sql) => verbOf(sql) === 'SELECT')).toEqual([]);
 
     await engine.shutdown();
   });

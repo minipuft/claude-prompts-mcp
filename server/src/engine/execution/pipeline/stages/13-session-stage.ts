@@ -144,7 +144,9 @@ export class SessionManagementStage extends BasePipelineStage {
         // Carries the ids minted at parse time into the run — the only path by which an
         // authored `id:` (or a symbolic chain's frozen `nK`) becomes the run's identity.
         const nodes = this.buildChainNodes(context, chainId, totalSteps);
-        await this.chainSessionStore.createSession(
+        // The store reserves the run number across every server on this `state.db` (R62), so
+        // the id it created the run under can differ from the one minted here.
+        const created = await this.chainSessionStore.createSession(
           resolvedSessionId,
           chainId,
           totalSteps,
@@ -154,7 +156,7 @@ export class SessionManagementStage extends BasePipelineStage {
 
         sessionContext = {
           sessionId: resolvedSessionId,
-          chainId,
+          chainId: created.chainId,
           isChainExecution: true,
           currentStep: 1,
           // Derived from the same node list handed to the store rather than read back off its

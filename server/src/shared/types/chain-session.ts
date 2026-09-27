@@ -507,13 +507,15 @@ export interface ChainSessionLookupOptions extends StateStoreOptions {
 /**
  * Outcome of claiming a handed-off run (plan 2A). The registry produces the first three; the
  * store adds `no-blueprint` after inspecting what it received (OQ-1: a run nothing can resume
- * is refused rather than loaded).
+ * is refused rather than loaded), and `chain-id-held` before any transfer when this server
+ * already runs a different run under the claimed chain id (R62: a `chain_id` must name one run).
  */
 export type ChainHandoffClaimResult =
   | { status: 'claimed'; session: ChainSession }
   | { status: 'unknown-token' }
   | { status: 'workspace-mismatch'; rowWorkspaceId: string; claimantWorkspaceId: string }
-  | { status: 'no-blueprint'; chainId: string };
+  | { status: 'no-blueprint'; chainId: string }
+  | { status: 'chain-id-held'; chainId: string };
 
 export interface ChainSessionService {
   /**
@@ -523,6 +525,9 @@ export interface ChainSessionService {
    * identity list. Callers that have parsed steps pass `nodes` (ids minted at parse time);
    * callers that only know a count get `mintSequentialIds(totalSteps)` synthesized for them, so
    * the legacy call shape keeps working.
+   *
+   * `chainId` is provisional: the store reserves the run number across every server on the
+   * database (R62) and may create the run under a later one, so read it off the returned session.
    */
   createSession(
     sessionId: string,

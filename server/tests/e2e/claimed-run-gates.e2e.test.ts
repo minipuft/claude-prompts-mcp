@@ -378,7 +378,7 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     expect(projectionRows(roots, chainId)).toEqual([{ pid: second.pid, step: 2 }]);
   }, 180000);
 
-  test('P6.130 (d) control: two live servers each running their own run under one chain id keep both rows', async () => {
+  test('P6.130 (d) control: two live servers each running their own run keep both rows', async () => {
     const roots = freshRoots();
     const first = await startServer(roots);
     await authorResources(first);
@@ -389,17 +389,123 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     const secondChain = chainIdOf(
       (await second.call('prompt_engine', { command: '>>sv_chain' })).text
     );
-    // Each process numbers runs from its own memory, so both mint the same id for different runs.
-    expect(secondChain).toBe(firstChain);
+    // R62: one chain-id space per database, so the second server's run is `#2`, not a second `#1`.
+    expect([firstChain, secondChain]).toEqual(['chain-sv_chain#1', 'chain-sv_chain#2']);
     await second.call('prompt_engine', {
       chain_id: secondChain,
       user_response: 'A out',
       gate_verdict: PASS,
     });
-    expect(projectionRows(roots, firstChain)).toEqual([
-      { pid: first.pid, step: 1 },
-      { pid: second.pid, step: 2 },
+    expect(projectionRows(roots, firstChain)).toEqual([{ pid: first.pid, step: 1 }]);
+    expect(projectionRows(roots, secondChain)).toEqual([{ pid: second.pid, step: 2 }]);
+  }, 180000);
+
+  /** Every `chain_runs` row: chain id, owner PID and the node it stands at, ordered by chain id. */
+  function runRows(roots: Roots): Array<{ chainId: string; pid: string; node: string }> {
+    const db = new DatabaseSync(path.join(roots.runtimeRoot, 'runtime-state', 'state.db'));
+    try {
+      const rows = db
+        .prepare(
+          'SELECT chain_id, run_owner_pid, current_node_id FROM chain_runs ORDER BY chain_id, created_at'
+        )
+        .all() as Array<{ chain_id: string; run_owner_pid: string; current_node_id: string }>;
+      return rows.map((row) => ({
+        chainId: row.chain_id,
+        pid: row.run_owner_pid,
+        node: row.current_node_id,
+      }));
+    } finally {
+      db.close();
+    }
+  }
+
+  test('P6.142 (a) two live servers on one database mint distinct chain ids for their runs', async () => {
+    const roots = freshRoots();
+    const first = await startServer(roots);
+    await authorResources(first);
+    const second = await startServer(roots);
+    const firstChain = chainIdOf(
+      (await first.call('prompt_engine', { command: '>>sv_chain' })).text
+    );
+    const secondChain = chainIdOf(
+      (await second.call('prompt_engine', { command: '>>sv_chain' })).text
+    );
+    const thirdChain = chainIdOf(
+      (await first.call('prompt_engine', { command: '>>sv_chain' })).text
+    );
+    expect([firstChain, secondChain, thirdChain]).toEqual([
+      'chain-sv_chain#1',
+      'chain-sv_chain#2',
+      'chain-sv_chain#3',
     ]);
+    expect(runRows(roots)).toEqual([
+      { chainId: 'chain-sv_chain#1', pid: first.pid, node: 'a' },
+      { chainId: 'chain-sv_chain#2', pid: second.pid, node: 'a' },
+      { chainId: 'chain-sv_chain#3', pid: first.pid, node: 'a' },
+    ]);
+
+    // Each id resumes its own run: the second server's resume moves `#2` only.
+    await second.call('prompt_engine', {
+      chain_id: secondChain,
+      user_response: 'A out',
+      gate_verdict: PASS,
+    });
+    expect(runRows(roots).map((row) => row.node)).toEqual(['a', 'b', 'a']);
+  }, 180000);
+
+  test('P6.142 (b) control: one server numbers its second run #2', async () => {
+    const roots = freshRoots();
+    const server = await startServer(roots);
+    await authorResources(server);
+    const first = chainIdOf((await server.call('prompt_engine', { command: '>>sv_chain' })).text);
+    const second = chainIdOf((await server.call('prompt_engine', { command: '>>sv_chain' })).text);
+    expect([first, second]).toEqual(['chain-sv_chain#1', 'chain-sv_chain#2']);
+  }, 180000);
+
+  test('P6.142 (c) a claim of a run whose chain id the claiming server holds for another run is refused by name', async () => {
+    const roots = freshRoots();
+    const first = await startServer(roots);
+    await authorResources(first);
+    const handedOff = chainIdOf(
+      (await first.call('prompt_engine', { command: '>>sv_chain' })).text
+    );
+    const minted = await first.call('prompt_engine', { chain_id: handedOff, handoff: true });
+    const token = /Token: `(hnd_[^`]+)`/.exec(minted.text)?.[1];
+    if (token === undefined) throw new Error(`no token in: ${minted.text}`);
+    const second = await startServer(roots);
+    const held = chainIdOf((await second.call('prompt_engine', { command: '>>sv_chain' })).text);
+    expect([handedOff, held]).toEqual(['chain-sv_chain#1', 'chain-sv_chain#2']);
+    await first.stop();
+
+    // Fixture: the handed-off row as a pre-R62 server minted it, colliding with the claimer's run.
+    const db = new DatabaseSync(path.join(roots.runtimeRoot, 'runtime-state', 'state.db'));
+    try {
+      db.prepare('UPDATE chain_runs SET chain_id = ? WHERE chain_id = ?').run(held, handedOff);
+    } finally {
+      db.close();
+    }
+
+    const claimed = await second.call('prompt_engine', {
+      claim_token: token,
+      user_response: 'A out',
+      gate_verdict: PASS,
+    });
+    expect(claimed.isError).toBe(true);
+    expect(claimed.text).toContain(
+      'this server already runs a different run under `chain-sv_chain#2`'
+    );
+    // Refused before the transfer: the run stays with its first owner, and the claimer's own run
+    // still answers its chain id.
+    expect(runRows(roots)).toEqual([
+      { chainId: 'chain-sv_chain#2', pid: first.pid, node: 'a' },
+      { chainId: 'chain-sv_chain#2', pid: second.pid, node: 'a' },
+    ]);
+    const resumed = await second.call('prompt_engine', {
+      chain_id: held,
+      user_response: 'A out',
+      gate_verdict: PASS,
+    });
+    expect(resumed.text).toContain('Progress 2/3');
   }, 180000);
 
   test('P6.130 (b) control: an unclaimed run keeps its one row', async () => {

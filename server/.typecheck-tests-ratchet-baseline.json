@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-24T03:04:42.454Z",
+  "generatedAt": "2026-09-27T10:36:01.270Z",
   "project": "tsconfig.test.json",
   "scope": "tests/",
   "totals": {
-    "errors": 342
+    "errors": 341
   },
   "byCode": {
     "TS18046": 3,
@@ -13,7 +13,7 @@
     "TS2307": 3,
     "TS2322": 49,
     "TS2339": 34,
-    "TS2345": 82,
+    "TS2345": 81,
     "TS2353": 41,
     "TS2367": 1,
     "TS2416": 1,
@@ -75,7 +75,7 @@
     "tests/unit/execution/pipeline/state/gate-enforcement-authority.test.ts": 3,
     "tests/unit/execution/pipeline/step-execution-stage.test.ts": 13,
     "tests/unit/execution/pipeline/step-response-capture-stage.test.ts": 8,
-    "tests/unit/execution/pipeline/symbolic-stage.test.ts": 9,
+    "tests/unit/execution/pipeline/symbolic-stage.test.ts": 8,
     "tests/unit/execution/planning/execution-planner.test.ts": 2,
     "tests/unit/execution/reference/prompt-reference-validator.test.ts": 1,
     "tests/unit/execution/reference/script-reference-resolver.test.ts": 7,

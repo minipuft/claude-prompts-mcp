@@ -63,7 +63,7 @@ import {
   isTerminalRunStatus,
   stampLegacyReview,
 } from '#shared/types/chain-session.js';
-import { parseRunNumber, stripRunNumber } from '#shared/utils/chain-id-codec.js';
+import { formatChainId, parseRunNumber, stripRunNumber } from '#shared/utils/chain-id-codec.js';
 // Node identity is what the store addresses by; every integer position it emits is derived
 // here and nowhere else, so the projection arithmetic has exactly one definition.
 import {
@@ -243,6 +243,12 @@ export class ChainSessionStore implements ChainSessionService {
   private injectedDbEngine?: DatabasePort;
   private resolvedDbEngine?: DatabasePort;
   private readonly serverPid = String(process.pid);
+  /**
+   * Runs created since the last committed persist whose run number `chain_runs` has not yet
+   * reserved (R62). The number a caller minted comes from this process's memory; the persist that
+   * first writes the run re-reads every owner's rows and re-mints past them.
+   */
+  private readonly unreservedRuns = new Set<string>();
   private readonly pidScope: StateStoreOptions = { continuityScopeId: String(process.pid) };
   private readonly workspaceScope: StateStoreOptions | undefined;
 
@@ -526,20 +532,68 @@ export class ChainSessionStore implements ChainSessionService {
     if (!db) {
       // No DB engine wired — fall back to non-transactional save (test contexts).
       this.evictClaimedSessions(await this.runRegistry.save(sessions, this.runScope));
+      this.unreservedRuns.clear();
       return;
     }
-    db.beginTransaction();
+    // A run-number reservation reads `chain_runs` and then writes it: `immediate` makes the pair
+    // one unit against another server's persist.
+    const reserving = this.unreservedRuns.size > 0;
+    db.beginTransaction(reserving ? 'immediate' : 'deferred');
     try {
+      if (reserving) this.reserveRunNumbers(db);
       const claimedElsewhere = await this.runRegistry.save(sessions, this.runScope);
       // Evict BEFORE the projection so the hook view does not re-advertise a run this
       // process no longer owns.
       this.evictClaimedSessions(claimedElsewhere);
       this.projectToHookView(db);
       db.commit();
+      if (reserving) this.unreservedRuns.clear();
     } catch (txError) {
       db.rollback();
       throw txError;
     }
+  }
+
+  /**
+   * One chain-id space per `state.db` (R62): a new run's number is past the highest number ANY
+   * owner's `chain_runs` row holds for its base chain id. The caller minted from this process's
+   * memory, which cannot see a second live server's runs, so both servers minted `chain-x#1`.
+   * Counted within the run's continuity scope, the unit every chain-id lookup filters by: a
+   * `chain_id` resolves only among its own scope's runs, so another scope's `#1` names nothing here.
+   * Must run inside the persist's `immediate` transaction, before the run's row is written.
+   */
+  private reserveRunNumbers(db: DatabasePort): void {
+    for (const sessionId of this.unreservedRuns) {
+      const session = this.activeSessions.get(sessionId);
+      const minted = session === undefined ? undefined : parseRunNumber(session.chainId);
+      if (session === undefined || minted === undefined) continue;
+      const baseChainId = stripRunNumber(session.chainId);
+      const held = db.query<{ chain_id: string }>(
+        `SELECT chain_id FROM chain_runs
+          WHERE base_chain_id = ? AND session_id != ?
+            AND json_extract(state, '$.continuityScopeId') IS ?`,
+        [baseChainId, sessionId, session.continuityScopeId ?? null]
+      );
+      const highest = Math.max(0, ...held.map((row) => parseRunNumber(row.chain_id) ?? 0));
+      if (minted > highest) continue;
+      this.renameNewRun(session, formatChainId(baseChainId, highest + 1));
+    }
+  }
+
+  /** Re-key a run no caller has addressed yet under its reserved chain id. */
+  private renameNewRun(session: ChainSession, chainId: string): void {
+    const previous = session.chainId;
+    this.chainSessionMapping.get(previous)?.delete(session.sessionId);
+    if (this.chainSessionMapping.get(previous)?.size === 0) {
+      this.chainSessionMapping.delete(previous);
+    }
+    this.removeRunFromBaseTracking(previous);
+    session.chainId = chainId;
+    const sessionIds = this.chainSessionMapping.get(chainId) ?? new Set<string>();
+    sessionIds.add(session.sessionId);
+    this.chainSessionMapping.set(chainId, sessionIds);
+    this.registerRunHistory(chainId);
+    this.logger.debug(`[ChainSessionStore] Run ${previous} reserved as ${chainId}`);
   }
 
   /**
@@ -772,7 +826,9 @@ export class ChainSessionStore implements ChainSessionService {
     const baseChainId = this.registerRunHistory(chainId);
     await this.pruneExcessRuns(baseChainId);
 
-    // Persist to file
+    // The persist reserves the run number across every owner and may re-mint `session.chainId`
+    // (R62): callers read the chain id off the returned session.
+    this.unreservedRuns.add(sessionId);
     await this.saveSessions();
 
     this.logger.debug(
@@ -1166,6 +1222,11 @@ export class ChainSessionStore implements ChainSessionService {
    */
   async claimHandoff(token: string): Promise<ChainHandoffClaimResult> {
     await this.initPromise;
+    const heldChainId = this.findHeldChainIdForToken(token);
+    if (heldChainId !== undefined) {
+      this.logger.warn(`[Handoff] Refusing claim: ${heldChainId} already names another run here`);
+      return { status: 'chain-id-held', chainId: heldChainId };
+    }
     const result = this.runRegistry.claimRunByToken(token, this.runScope);
     if (result.status !== 'claimed') return result;
 
@@ -1185,6 +1246,29 @@ export class ChainSessionStore implements ChainSessionService {
     await this.saveSessions();
     this.logger.info(`[Handoff] Claimed ${session.chainId} (session ${session.sessionId})`);
     return result;
+  }
+
+  /**
+   * The chain id of the run `token` hands off, when this server already holds a DIFFERENT run
+   * under it in the same continuity scope (a pair minted before R62 reserved run numbers across
+   * owners). Read before the transfer, so a refused claim leaves the run with its owner.
+   */
+  private findHeldChainIdForToken(token: string): string | undefined {
+    const row = this.resolvedDbEngine?.queryOne<{
+      session_id: string;
+      chain_id: string;
+      scope: string | null;
+    }>(
+      `SELECT session_id, chain_id, json_extract(state, '$.continuityScopeId') AS scope
+         FROM chain_runs WHERE handoff_token = ?`,
+      [token]
+    );
+    if (row === null || row === undefined) return undefined;
+    const held = [...(this.chainSessionMapping.get(row.chain_id) ?? [])].some((sessionId) => {
+      const session = this.activeSessions.get(sessionId);
+      return sessionId !== row.session_id && (session?.continuityScopeId ?? null) === row.scope;
+    });
+    return held ? row.chain_id : undefined;
   }
 
   async cancelChain(sessionId: string, scope?: StateStoreOptions): Promise<boolean> {
