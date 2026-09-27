@@ -187,3 +187,77 @@ describe('a request gate with an id (P6.107)', () => {
     expect(result.temporaryGateIds).toEqual(['rq107']);
   });
 });
+
+/**
+ * P6.114 (ruling): an untargeted request gate on a chain is the run's gate for the step the client
+ * sent it on. MEASURED 2026-09-26 on `83355182`: registration binds `apply_to_steps: [currentStep]`
+ * once; the run's declared id (R49) is what makes a later re-send register nothing and leave that
+ * binding alone. A gate sent WITHOUT an `id` has no declared id: re-sent on step 3 it registers a
+ * second gate bound to step 3 (as of 2026-09-26 · flips when id-less request gates gain a
+ * declared key, e.g. one derived from their body).
+ */
+describe('an untargeted chain request gate stays bound to its first step (P6.114)', () => {
+  const NODE_IDS = ['n1', 'n2', 'n3'];
+
+  /** A call of a three-step chain standing at `currentStep`; `sessionId` undefined starts the run. */
+  const chainCallOf = (
+    sessionId: string | undefined,
+    currentStep: number,
+    gates: unknown[]
+  ): ExecutionContext => {
+    const context = new ExecutionContext({ command: '>>demo' });
+    context.state.gates.requestedOverrides = { gates };
+    context.parsedCommand = {
+      commandType: 'chain',
+      steps: NODE_IDS.map((nodeId, index) => ({
+        stepNumber: index + 1,
+        nodeId,
+        promptId: nodeId,
+        args: {},
+      })),
+    } as never;
+    if (sessionId !== undefined) {
+      context.sessionContext = { sessionId, isChainExecution: true, currentStep };
+    }
+    return context;
+  };
+
+  const startAndResume = async (gate: Record<string, unknown>) => {
+    const registry = new TemporaryGateRegistry(logger());
+    const create = jest.spyOn(registry, 'createTemporaryGate');
+    const registrar = new TemporaryGateRegistrar(registry, undefined, logger());
+    const started = await registrar.registerTemporaryGates(chainCallOf(undefined, 1, [gate]));
+    registry.adoptIntoRun('run-114', started.temporaryGateIds);
+    const resumed = await registrar.registerTemporaryGates(chainCallOf('run-114', 3, [gate]));
+    return { registry, create, started, resumed };
+  };
+
+  test('re-sent on step 3: still bound to step 1, and nothing registers again', async () => {
+    const { registry, create, started, resumed } = await startAndResume({
+      id: 'ug114',
+      criteria: ['UNTARGETED-114'],
+    });
+
+    expect(started.temporaryGateIds).toEqual(['ug114']);
+    expect(resumed.temporaryGateIds).toEqual(['ug114']);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(registry.getTemporaryGate('ug114')?.apply_to_steps).toEqual([1]);
+    expect(registry.getTemporaryGate('ug114-2')).toBeUndefined();
+    expect(registry.getRunGates('run-114').map((held) => held.id)).toEqual(['ug114']);
+  });
+
+  test('control: a targeted gate binds its target, re-sent or not', async () => {
+    const { registry, create, resumed } = await startAndResume({
+      id: 'tg114',
+      criteria: ['TARGETED-114'],
+      target_step_id: 'n2',
+    });
+
+    expect(resumed.temporaryGateIds).toEqual(['tg114']);
+    expect(create).toHaveBeenCalledTimes(1);
+    const held = registry.getTemporaryGate('tg114');
+    expect(held?.target_step_id).toBe('n2');
+    expect(held?.target_step_number).toBe(2);
+    expect(held?.apply_to_steps).toBeUndefined();
+  });
+});
