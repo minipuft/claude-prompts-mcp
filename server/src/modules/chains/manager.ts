@@ -252,12 +252,6 @@ export class ChainSessionStore implements ChainSessionService {
    * first writes the run re-reads every owner's rows and re-mints past them.
    */
   private readonly unreservedRuns = new Set<string>();
-  /**
-   * Per run, the gate ids this process registered in place of the ids its blueprint recorded
-   * (R60 amended). In memory only: the blueprint stays the recorded truth, and a later claim
-   * elsewhere re-derives its own map.
-   */
-  private readonly runGateRemaps = new Map<string, ReadonlyMap<string, string>>();
   private readonly pidScope: StateStoreOptions = { continuityScopeId: String(process.pid) };
   private readonly workspaceScope: StateStoreOptions | undefined;
 
@@ -1193,7 +1187,6 @@ export class ChainSessionStore implements ChainSessionService {
       const session = this.activeSessions.get(sessionId);
       if (session === undefined) continue;
       this.activeSessions.delete(sessionId);
-      this.runGateRemaps.delete(sessionId);
       this.chainSessionMapping.get(session.chainId)?.delete(sessionId);
       this.logger.info(
         `[Handoff] Session ${sessionId} (${session.chainId}) claimed by another server; evicted`
@@ -2090,20 +2083,26 @@ export class ChainSessionStore implements ChainSessionService {
   }
 
   async remapRunGates(sessionId: string, remap: ReadonlyMap<string, string>): Promise<void> {
-    if (remap.size === 0) return;
     const session = this.activeSessions.get(sessionId);
     if (session === undefined) {
-      this.logger.warn(`Attempted to remap the gates of non-existent session: ${sessionId}`);
+      if (remap.size > 0) {
+        this.logger.warn(`Attempted to remap the gates of non-existent session: ${sessionId}`);
+      }
       return;
     }
-    this.runGateRemaps.set(sessionId, new Map(remap));
+    // R69: the run carries the map an earlier claimer applied, and its reviews name that
+    // claimer's ids, so this process's map composes onto it rather than replacing it.
+    const { applied, rewrite } = composeGateRemap(session.gateRemap ?? {}, remap);
+    const mapChanged = !sameGateRemap(session.gateRemap ?? {}, applied);
+    if (Object.keys(applied).length > 0) session.gateRemap = applied;
+    else delete session.gateRemap;
     const stale = Object.values(session.reviews ?? {}).filter((review) =>
-      reviewGateIds(review).some((id) => remap.has(id))
+      reviewGateIds(review).some((id) => rewrite.has(id))
     );
     for (const review of stale) {
-      writeReview(session, remapReviewGateIds(review, remap));
+      writeReview(session, remapReviewGateIds(review, rewrite));
     }
-    if (stale.length > 0) await this.saveSessions();
+    if (mapChanged || stale.length > 0) await this.saveSessions();
   }
 
   async setReview(sessionId: string, review: GateReview): Promise<void> {
@@ -2615,7 +2614,6 @@ export class ChainSessionStore implements ChainSessionService {
     }
 
     this.activeSessions.delete(sessionId);
-    this.runGateRemaps.delete(sessionId);
   }
 
   private removeRunFromBaseTracking(chainId: string): void {
@@ -2856,7 +2854,7 @@ export class ChainSessionStore implements ChainSessionService {
       return [];
     }
 
-    const remap = this.runGateRemaps.get(sessionId);
+    const remap = new Map(Object.entries(this.activeSessions.get(sessionId)?.gateRemap ?? {}));
     const ids = new Set<string>();
 
     const recordIds = (values?: string[]) => {
@@ -2865,7 +2863,7 @@ export class ChainSessionStore implements ChainSessionService {
       }
       for (const id of values) {
         if (typeof id === 'string' && id.trim().length > 0) {
-          ids.add(remap?.get(id) ?? id);
+          ids.add(remap.get(id) ?? id);
         }
       }
     };
@@ -2999,6 +2997,46 @@ function writeReview(session: ChainSession, review: GateReview): void {
   }
   reviews[review.nodeId] = review;
   session.reviews = reviews;
+}
+
+/**
+ * Compose the gate remap a run carries with the one this process just applied (R69). `prior` maps
+ * each recorded id to the id an earlier claimer registered, and the run's open reviews name those
+ * ids; `current` maps recorded ids to this process's own. A recorded id `current` leaves out
+ * registered here under itself. Returns the run's new map (identity entries dropped) and the
+ * rewrite that carries every id a review may name, recorded or earlier-registered, to this
+ * process's id. PURE.
+ */
+function composeGateRemap(
+  prior: Readonly<Record<string, string>>,
+  current: ReadonlyMap<string, string>
+): { applied: Record<string, string>; rewrite: Map<string, string> } {
+  const earlierIds = new Map(Object.entries(prior));
+  const applied: Record<string, string> = {};
+  const rewrite = new Map<string, string>();
+  for (const recorded of new Set([...earlierIds.keys(), ...current.keys()])) {
+    const registered = current.get(recorded) ?? recorded;
+    if (registered !== recorded) {
+      applied[recorded] = registered;
+      rewrite.set(recorded, registered);
+    }
+    const earlier = earlierIds.get(recorded);
+    if (earlier !== undefined && earlier !== registered) rewrite.set(earlier, registered);
+  }
+  return { applied, rewrite };
+}
+
+/** True when two gate remaps hold the same entries. PURE. */
+function sameGateRemap(
+  left: Readonly<Record<string, string>>,
+  right: Readonly<Record<string, string>>
+): boolean {
+  const rightEntries = new Map(Object.entries(right));
+  const leftEntries = Object.entries(left);
+  return (
+    leftEntries.length === rightEntries.size &&
+    leftEntries.every(([key, value]) => rightEntries.get(key) === value)
+  );
 }
 
 /** Every gate id an open review names: its gates, its rendered prompts and its tier map. */

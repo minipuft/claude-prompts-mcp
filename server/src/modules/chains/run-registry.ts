@@ -71,6 +71,8 @@ interface ResidualRunState {
   pendingGateReview?: unknown;
   detachedGateReviews?: unknown;
   pendingShellVerification?: unknown;
+  /** `ChainSession.gateRemap` (R69). */
+  gateRemap?: Record<string, string>;
   blueprint?: SessionBlueprint;
   lifecycle?: ChainSessionLifecycle;
   unknownsLedger?: UnknownLedgerEntry[];
@@ -390,6 +392,7 @@ function toResidual(session: ChainSession): ResidualRunState {
   if (session.pendingShellVerification !== undefined) {
     residual.pendingShellVerification = session.pendingShellVerification;
   }
+  if (session.gateRemap !== undefined) residual.gateRemap = session.gateRemap;
   if (session.blueprint !== undefined) residual.blueprint = session.blueprint;
   if (session.unknownsLedger !== undefined) residual.unknownsLedger = session.unknownsLedger;
   if (session.gatesFiredCount !== undefined) residual.gatesFiredCount = session.gatesFiredCount;
@@ -546,6 +549,7 @@ function applyResidual(session: ChainSession, residual: ResidualRunState): void 
   const optional: Array<[keyof ResidualRunState, keyof ChainSession]> = [
     ['continuityScopeId', 'continuityScopeId'],
     ['pendingShellVerification', 'pendingShellVerification'],
+    ['gateRemap', 'gateRemap'],
     ['blueprint', 'blueprint'],
     ['lifecycle', 'lifecycle'],
     ['unknownsLedger', 'unknownsLedger'],
