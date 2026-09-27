@@ -288,9 +288,14 @@ does outside a chain.
 skipped never fires. A step-targeted gate also enters gate REVIEW only on the step it targets —
 an untargeted gate still reviews every step, run-wide inheritance unchanged. Known residual: a
 mutation-inserted node standing as the current step matches no parse-time step, so review falls
-back to run-wide for that step. Inserted investigation nodes carry no gates in v1 — their only
-output is observations, so adding review friction to them would work against the point of
-inserting one.
+back to run-wide for that step. So an inserted investigation node inherits the walk's untargeted
+gates, and a FAIL on it opens a review as on any step. What it is spared is structural friction: it
+declares no framework sections and no phase guard binds it, because its only output is
+observations, and grading their shape would work against the point of inserting one. When the call
+that answers it also replaces the remainder, its unanswered review is re-derived against the run
+that remainder leaves (see [Replacing the remainder](#blocking-unknown-interrupt)), so the node
+inherits what the next call would compute — even when the remainder dropped the step its unknown
+targeted. Whether such a node should inherit nothing is an open owner decision.
 
 **Audit trail**: a run's terminal `execution_records` row also carries `nodes_inserted` and
 `nodes_skipped` — how many mutations of each kind happened over the life of the run. See
