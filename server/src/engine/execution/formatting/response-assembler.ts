@@ -5,6 +5,7 @@ import { SHELL_VERIFY_DEFAULT_MAX_ITERATIONS } from '../../gates/shell/types.js'
 import { handoffNodeToken } from '../delegation/handoff-contract.js';
 import { DelegationRenderer } from '../delegation/renderer.js';
 import { getHandoffFooterInstruction } from '../delegation/strategy.js';
+import { formatShellVerifyToken } from '../parsers/symbolic-operator-parser.js';
 import { isUnknownInterruptPending } from '../pipeline/decisions/index.js';
 import { isFrameworkInjected } from '../pipeline/decisions/injection/index.js';
 import { PHASE_GUARD_GATE_ID } from '../pipeline/stages/19-phase-guard-verification-stage.js';
@@ -1557,19 +1558,15 @@ export class ResponseAssembler {
 
   /** Appends inline gate criteria and named gates as suffixes. */
   private appendGateSuffixes(parts: string[], context: ExecutionContext): void {
-    const inlineCriteria = context.parsedCommand?.inlineGateCriteria;
-    if (inlineCriteria != null && inlineCriteria.length > 0) {
-      for (const criteria of inlineCriteria) {
-        parts.push(`:: '${criteria}'`);
-      }
+    for (const criteria of context.parsedCommand?.inlineGateCriteria ?? []) {
+      parts.push(`:: '${criteria}'`);
     }
-
-    const namedGates = context.parsedCommand?.namedInlineGates;
-    if (namedGates != null && namedGates.length > 0) {
-      for (const gate of namedGates) {
-        const criteriaText = gate.criteria[0] ?? '';
-        parts.push(`:: ${gate.gateId}:"${criteriaText}"`);
-      }
+    for (const { gateId, criteria, shellVerify } of context.parsedCommand?.namedInlineGates ?? []) {
+      parts.push(
+        shellVerify !== undefined
+          ? formatShellVerifyToken(shellVerify)
+          : `:: ${gateId}:"${criteria[0] ?? ''}"`
+      );
     }
   }
 
@@ -1600,11 +1597,13 @@ export class ResponseAssembler {
     arg: { name: string; required: boolean; defaultValue?: unknown },
     userArgs?: Record<string, unknown>
   ): string | null {
+    // JSON quoting is the escape set the argument parser decodes (`parseQuotedValue`), so a value
+    // carrying a quote or a backslash re-parses to itself (P6.178, R89).
     if (userArgs != null && arg.name in userArgs) {
-      return `${arg.name}:"${String(userArgs[arg.name])}"`;
+      return `${arg.name}:${JSON.stringify(String(userArgs[arg.name]))}`;
     }
     if (arg.defaultValue !== undefined) {
-      return `${arg.name}:"${String(arg.defaultValue)}"`;
+      return `${arg.name}:${JSON.stringify(String(arg.defaultValue))}`;
     }
     if (arg.required) {
       return `${arg.name}:"<${arg.name}>"`;
