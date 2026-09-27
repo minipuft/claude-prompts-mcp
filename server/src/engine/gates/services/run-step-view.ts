@@ -15,6 +15,12 @@ import type { ChainSession, ChainSessionService } from '#shared/types/index.js';
 import type { StateStoreOptions } from '#shared/types/persistence.js';
 
 export interface RunStepView {
+  /**
+   * The run's session id — the key its temporary gates are owned under (R47). Stage 11 runs before
+   * stage 13 resolves the session, and only a response-only resume learns it earlier (stage 04),
+   * so a resume that re-sends its command finds its run here. Absent only in hand-built views.
+   */
+  readonly sessionId?: string;
   /** The run's live node ids, in run order. */
   readonly nodeIds: readonly string[];
   /**
@@ -99,6 +105,7 @@ export function createRunStepViewProvider(store: ChainSessionService): RunStepVi
     );
 
     const view: RunStepView = {
+      sessionId: session.sessionId,
       nodeIds,
       skippedNodeIds,
       currentNodeId: session.state.currentNodeId,

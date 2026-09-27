@@ -248,6 +248,11 @@ export class TemporaryGateRegistry {
     }
   }
 
+  /** The run that owns `gateId`, or undefined when no run has adopted it. */
+  ownerOf(gateId: string): string | undefined {
+    return this.gateOwners.get(gateId);
+  }
+
   /** The gates `runId` owns. */
   getRunGates(runId: string): TemporaryGateDefinition[] {
     const gates: TemporaryGateDefinition[] = [];

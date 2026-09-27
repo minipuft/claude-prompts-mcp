@@ -1,4 +1,4 @@
-// @lifecycle test - P6.79 / P6.80 / R40: an arrow-chain segment or a workflow node naming a chain prompt runs that prompt's steps; P6.78 / R37: a command-level gate on a chain prompt binds each step; P6.97 / R43: a named inline gate belongs to the run that declared it; P6.99 / R44: a named gate on an arrow-chain segment binds that segment; P6.108 / R47: a run's temporary gates live exactly as long as the run; P6.104: a run's request gates reach every node they target, over Streamable HTTP.
+// @lifecycle test - P6.79 / P6.80 / R40: an arrow-chain segment or a workflow node naming a chain prompt runs that prompt's steps; P6.78 / R37: a command-level gate on a chain prompt binds each step; P6.97 / R43: a named inline gate belongs to the run that declared it; P6.99 / R44: a named gate on an arrow-chain segment binds that segment; P6.108 / R47: a run's temporary gates live exactly as long as the run; P6.104: a run's request gates reach every node they target; P6.107: a request gate id belongs to the run that holds it, over Streamable HTTP.
 /**
  * MEASURED 2026-09-25 on `427899fe` (authored `sv_chain` = sv_a/sv_b/sv_a, each step carrying the
  * blocking `sv-block`; run state read from `chain_runs.state`):
@@ -812,6 +812,67 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       const failed = await run.call({ user_response: 'out 1', gate_verdict: FAIL });
       expect(failed).toContain('Gate Review Required');
       expect(Object.keys(runState(run.chainId).reviews)).toEqual(['p1']);
+    }, 120000);
+  });
+
+  /**
+   * MEASURED 2026-09-26 on `9f833361`: a second live run sending `gates: [{ id: "rg107" }]` with
+   * its own criteria rendered and reviewed the first run's (`reviews {p1: ["rg107"]}` on both), the
+   * id having been skipped as "already registered".
+   */
+  describe('P6.107: a request gate id belongs to the run that holds it', () => {
+    const threeNodes = (gates: unknown[]) => ({
+      workflow: {
+        version: 1,
+        nodes: [
+          { id: 'p1', promptId: 'sv_a' },
+          { id: 'p2', promptId: 'sv_b' },
+          { id: 'p3', promptId: 'sv_a' },
+        ],
+        edges: [
+          { from: 'p1', to: 'p2' },
+          { from: 'p2', to: 'p3' },
+        ],
+        gates,
+      },
+    });
+
+    test("(a) a resume re-sending the run's gate is the same gate, and it still grades", async () => {
+      const gates = [{ id: 'rq107e', name: 'rq107e', criteria: ['RQ-107'], target_step_id: 'p3' }];
+      const run = await start(threeNodes(gates));
+      await run.call({ user_response: 'out 1', gate_verdict: PASS, gates });
+      const step3 = await run.call({ user_response: 'out 2', gate_verdict: PASS, gates });
+      expect(step3).toContain('RQ-107');
+      const failed = await run.call({ user_response: 'out 3', gate_verdict: FAIL, gates });
+      expect(failed).toContain('Gate Review Required');
+      expect(runState(run.chainId).reviews).toEqual({ p3: ['rq107e'] });
+    }, 120000);
+
+    test('(b) two live runs declaring one id each grade their own criteria', async () => {
+      const first = await start(
+        threeNodes([{ id: 'rg107e', name: 'rg107e', criteria: ['RG-ONE'] }])
+      );
+      const second = await start(
+        threeNodes([{ id: 'rg107e', name: 'rg107e', criteria: ['RG-TWO'] }])
+      );
+      expect(second.text).toContain('RG-TWO');
+      expect(second.text).not.toContain('RG-ONE');
+      const secondFailed = await second.call({ user_response: 'out 1', gate_verdict: FAIL });
+      expect(secondFailed).toContain('RG-TWO');
+      expect(runState(second.chainId).reviews).toEqual({ p1: ['rg107e-2'] });
+      const firstFailed = await first.call({ user_response: 'out 1', gate_verdict: FAIL });
+      expect(firstFailed).toContain('RG-ONE');
+      expect(firstFailed).not.toContain('RG-TWO');
+      expect(runState(first.chainId).reviews).toEqual({ p1: ['rg107e'] });
+    }, 120000);
+
+    test('(c) control: a fresh id registers under itself', async () => {
+      const run = await start(
+        threeNodes([{ id: 'fresh107e', name: 'fresh107e', criteria: ['FRESH-107'] }])
+      );
+      expect(run.text).toContain('FRESH-107');
+      await run.call({ user_response: 'out 1', gate_verdict: FAIL });
+      expect(runState(run.chainId).reviews).toEqual({ p1: ['fresh107e'] });
     }, 120000);
   });
 });
