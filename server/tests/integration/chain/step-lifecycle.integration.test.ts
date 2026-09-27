@@ -749,6 +749,44 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
     });
   });
 
+  /**
+   * P6.161 / R72 (as of 2026-09-27 · flips when a record reader needs held-ness without a verdict
+   * row). A held review's step records what its call SENT: an answer with no verdict keeps the
+   * `completed` row (P4.86 — the verdict appends the next row), while an answer carrying a FAIL
+   * leaves `input_required` (R66). One test holds both, so neither half can move alone.
+   */
+  test('P6.161: an answer-only call on a held review records completed; a FAIL records input_required', async () => {
+    const failVerdict = renderGateVerdict({
+      overall: 'FAIL',
+      rationale: 'the gate is not met',
+      per_gate: [{ index: 1, passed: false, rationale: 'no evidence of review' }],
+    });
+    const newestSession = () =>
+      Array.from((sessionStore as any).activeSessions.values()).at(-1) as {
+        sessionId: string;
+        chainId: string;
+        reviews?: Record<string, GateReview>;
+      };
+
+    await pipeline.execute({ command: `>>draft --> >>review` });
+    const answered = newestSession();
+    await pipeline.execute({ chain_id: answered.chainId, user_response: 'step 1 output' } as any);
+    // Positive control: the review still holds step 1, so the `completed` row is R72's reading
+    // of a held step, not the row of a step nothing held.
+    expect(Object.keys(newestSession().reviews ?? {})).not.toHaveLength(0);
+    expect(stepRows(answered.sessionId).map((row) => row.status)).toEqual(['completed']);
+
+    await pipeline.execute({ command: `>>draft --> >>review` });
+    const failed = newestSession();
+    expect(failed.sessionId).not.toBe(answered.sessionId);
+    await pipeline.execute({
+      chain_id: failed.chainId,
+      user_response: 'step 1 output',
+      gate_verdict: failVerdict,
+    } as any);
+    expect(stepRows(failed.sessionId).map((row) => row.status)).toEqual(['input_required']);
+  });
+
   test('positive control: a second call carrying no verdict appends no verdict row', async () => {
     // Same drive, same two calls, the `gate_verdict` argument removed — so the row asserted
     // above is evidence about the verdict rather than about making a second call at all.
