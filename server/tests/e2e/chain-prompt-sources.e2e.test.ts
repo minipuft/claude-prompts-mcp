@@ -1,4 +1,4 @@
-// @lifecycle test - P6.79 / P6.80 / R40: an arrow-chain segment or a workflow node naming a chain prompt runs that prompt's steps; P6.78 / R37: a command-level gate on a chain prompt binds each step; P6.97 / R43: a named inline gate belongs to the run that declared it; P6.99 / R44: a named gate on an arrow-chain segment binds that segment; P6.108 / R47: a run's temporary gates live exactly as long as the run; P6.104: a run's request gates reach every node they target; P6.107: a request gate id belongs to the run that holds it; P6.105: the arrow-chain source validates the expanded workflow; P6.110: one name in two arrow-chain segments is two gates; P6.113: a run re-sending a declared id keeps the id it registered, over Streamable HTTP.
+// @lifecycle test - P6.79 / P6.80 / R40: an arrow-chain segment or a workflow node naming a chain prompt runs that prompt's steps; P6.78 / R37: a command-level gate on a chain prompt binds each step; P6.97 / R43: a named inline gate belongs to the run that declared it; P6.99 / R44: a named gate on an arrow-chain segment binds that segment; P6.108 / R47: a run's temporary gates live exactly as long as the run; P6.104: a run's request gates reach every node they target; P6.107: a request gate id belongs to the run that holds it; P6.105: the arrow-chain source validates the expanded workflow; P6.110: one name in two arrow-chain segments is two gates; P6.113: a run re-sending a declared id keeps the id it registered; P6.117: a request gate target is checked against the declared node ids, over Streamable HTTP.
 /**
  * MEASURED 2026-09-25 on `427899fe` (authored `sv_chain` = sv_a/sv_b/sv_a, each step carrying the
  * blocking `sv-block`; run state read from `chain_runs.state`):
@@ -459,6 +459,68 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       const second = await run.call({ user_response: 'A out' });
       expect(templates(second)).toEqual(['BODY-sv_b topic=']);
       expect(second).toContain('TGT-105-N2');
+    }, 120000);
+  });
+
+  /**
+   * MEASURED 2026-09-26 on `4861cc5c`: a request gate on the arrow-chain source targeting an id no
+   * segment declares (`nope`) was accepted, opened a run and never rendered, because the arrow
+   * builder validated an IR without the request's gates; a workflow submission's own `gates` were
+   * checked, a `gates` parameter sent beside it was not. On the same tree an arrow-chain gate
+   * targeting the expanded id `n1-b` was accepted and rendered on that step.
+   */
+  describe('P6.117: a request gate target is checked against the declared node ids', () => {
+    const NOPE = '[gate-target-missing] node "nope": Gate binding targets step id "nope"';
+
+    test('(a) an arrow-chain request gate naming no declared node is refused by name, creating nothing', async () => {
+      const before = countRuns();
+      const gates = [{ name: 'tgt117', criteria: ['TGT-117-NOPE'], target_step_id: 'nope' }];
+      const result = await tool('prompt_engine', { command: `>>sv_a${ARROW}>>sv_b`, gates });
+      expect(result.isError).toBe(true);
+      expect(result.text).toContain('Nothing was executed and no run was created.');
+      expect(result.text).toContain(NOPE);
+      expect(countRuns()).toBe(before);
+    }, 120000);
+
+    test('(b) a `gates` parameter beside a workflow naming no declared node is refused by name', async () => {
+      const before = countRuns();
+      const result = await tool('prompt_engine', {
+        workflow: {
+          version: 1,
+          nodes: [
+            { id: 'x', promptId: 'sv_a' },
+            { id: 'y', promptId: 'sv_b' },
+          ],
+        },
+        gates: [{ name: 'tgt117w', criteria: ['TGT-117-W'], target_step_id: 'nope' }],
+      });
+      expect(result.isError).toBe(true);
+      expect(result.text).toContain(NOPE);
+      expect(countRuns()).toBe(before);
+    }, 120000);
+
+    // Before P6.117 this gate was accepted and rendered on `n1-b`: an expanded id is not a declared
+    // one, and the arrow-chain source now answers as the workflow source does (P6.106).
+    test('(d) an arrow-chain request gate naming an expanded id is refused like a workflow one', async () => {
+      const before = countRuns();
+      const gates = [{ name: 'tgt117x', criteria: ['TGT-117-XB'], target_step_id: 'n1-b' }];
+      const result = await tool('prompt_engine', { command: `>>sv_chain${ARROW}>>sv_b`, gates });
+      expect(result.isError).toBe(true);
+      expect(result.text).toContain(
+        '[gate-target-missing] node "n1-b": Gate binding targets step id "n1-b"'
+      );
+      expect(countRuns()).toBe(before);
+    }, 120000);
+
+    test('(c) control: the same arrow-chain gate targeting `n2` opens the run and renders on n2', async () => {
+      const before = countRuns();
+      const gates = [{ name: 'tgt117c', criteria: ['TGT-117-N2'], target_step_id: 'n2' }];
+      const run = await start({ command: `>>sv_a${ARROW}>>sv_b`, gates });
+      expect(countRuns()).toBe(before + 1);
+      expect(run.text).not.toContain('TGT-117-N2');
+      const second = await run.call({ user_response: 'A out' });
+      expect(templates(second)).toEqual(['BODY-sv_b topic=']);
+      expect(second).toContain('TGT-117-N2');
     }, 120000);
   });
 

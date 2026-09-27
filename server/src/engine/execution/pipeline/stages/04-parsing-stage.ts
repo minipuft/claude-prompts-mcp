@@ -127,7 +127,8 @@ export class CommandParsingStage extends BasePipelineStage {
       ) {
         const symbolic = await this.symbolicCommandBuilder.buildSymbolicCommand(
           parseResult as SymbolicCommandParseResult,
-          (idOrName) => this.findConvertedPrompt(idOrName)
+          (idOrName) => this.findConvertedPrompt(idOrName),
+          requestedGates(context)
         );
         if (!symbolic.ok) {
           // An arrow-chain the Workflow IR validator refused (P6.105): the same addressed
@@ -196,8 +197,9 @@ export class CommandParsingStage extends BasePipelineStage {
       );
     }
 
-    const result = this.workflowCommandBuilder.build(workflow, (idOrName) =>
-      this.findConvertedPrompt(idOrName)
+    const result = this.workflowCommandBuilder.build(
+      withRequestedGates(workflow, context),
+      (idOrName) => this.findConvertedPrompt(idOrName)
     );
 
     if (!result.ok) {
@@ -377,6 +379,24 @@ function collectSourceConflicts(context: ExecutionContext): string[] {
     conflicts.push("'chain_id'");
   }
   return conflicts;
+}
+
+/**
+ * The request's gates as stage 01 captured them: the `gates` parameter plus, on a workflow
+ * submission, the workflow's own `gates` (the executor concatenates them, same objects).
+ */
+function requestedGates(context: ExecutionContext): NonNullable<WorkflowIR['gates']> {
+  return (context.state.gates.requestedOverrides?.gates ?? []) as NonNullable<WorkflowIR['gates']>;
+}
+
+/**
+ * The submission with every requested gate on it, for validation (P6.117): a `gates` parameter
+ * sent beside a workflow addresses the same declared node ids as the workflow's own `gates`.
+ */
+function withRequestedGates(workflow: WorkflowIR, context: ExecutionContext): WorkflowIR {
+  const own = workflow.gates ?? [];
+  const beside = requestedGates(context).filter((gate) => !own.includes(gate));
+  return beside.length > 0 ? { ...workflow, gates: [...own, ...beside] } : workflow;
 }
 
 /**
