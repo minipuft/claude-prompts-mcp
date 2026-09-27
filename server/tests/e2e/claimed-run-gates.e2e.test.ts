@@ -223,6 +223,55 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     return { chainId, first, second, firstReply: claimed.text };
   }
 
+  /**
+   * P6.101 / R68: a contributed node's step gates live in `chain_run_nodes.inline_gate_ids` (v32),
+   * and a claim rebuilds the run from those rows — the in-memory node the first server held is
+   * gone. MEASURED 2026-09-27 on `6dad55f3`: the remainder below was refused by name (R46), so no
+   * claim of it existed. Driven: server A appends `sv_chain` as a remainder, B claims and FAILs
+   * the first contributed step, which opens a review of its `sv-block` gate.
+   */
+  test('P6.101 a claimed run keeps the gates its contributed steps declared', async () => {
+    const roots = freshRoots();
+    const first = await startServer(roots);
+    await authorResources(first);
+    const chainId = chainIdOf(
+      (await first.call('prompt_engine', { command: `>>sv_a${ARROW}>>sv_b` })).text
+    );
+    await first.call('prompt_engine', {
+      chain_id: chainId,
+      user_response: 'A out',
+      observations: [
+        { type: 'unknown_discovered', id: 'u-101', statement: 'undecided', blocking: true },
+      ],
+    });
+    const appended = await first.call('prompt_engine', {
+      chain_id: chainId,
+      user_response: 'investigated',
+      remainder: { mode: 'append', nodes: [{ id: 'r1', promptId: 'sv_chain' }] },
+    });
+    expect(appended.isError).toBe(false);
+    const minted = await first.call('prompt_engine', { chain_id: chainId, handoff: true });
+    const token = /Token: `(hnd_[^`]+)`/.exec(minted.text)?.[1];
+    if (token === undefined) throw new Error(`no token in: ${minted.text}`);
+    const second = await startServer(roots);
+    await first.stop();
+
+    const claimed = await second.call('prompt_engine', {
+      claim_token: token,
+      user_response: 'B out',
+    });
+    expect(claimed.isError).toBe(false);
+    expect(claimed.text).toContain('BODY-sv_a');
+    const failed = await second.call('prompt_engine', {
+      chain_id: chainId,
+      user_response: 'r1-a out',
+      gate_verdict: FAIL,
+    });
+    expect(failed.text).toContain('Gate Review Required');
+    expect(failed.text).toContain('GUIDANCE-sv-block');
+    expect(runRow(roots, chainId)?.reviews).toEqual({ 'r1-a': ['sv-block'] });
+  }, 180000);
+
   test('pin: a stop-and-restart leaves the run nothing to resume', async () => {
     const roots = freshRoots();
     const first = await startServer(roots);

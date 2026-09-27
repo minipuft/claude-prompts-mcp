@@ -249,13 +249,16 @@ function projectNodes(
         // the way down to the column.
         ...(node.args !== undefined ? { args: { ...node.args } } : {}),
         ...(node.delegated !== undefined ? { delegated: node.delegated } : {}),
+        ...(node.inlineGateIds !== undefined ? { inlineGateIds: [...node.inlineGateIds] } : {}),
       },
     ];
   });
 }
 
 /**
- * The IR node fields a remainder node CARRIES into the run (row A.5).
+ * The IR node fields a remainder node CARRIES into the run (row A.5; `inlineGateIds` since
+ * P6.101 / R68, when the node gained a `chain_run_nodes.inline_gate_ids` column to carry them —
+ * before that a chain prompt whose steps declared gates was refused by name as a remainder).
  *
  * Exported for `remainder-node-fields.test.ts`, which asserts this list plus
  * {@link REMAINDER_REFUSED_NODE_FIELDS} covers `workflowNodeSchema`'s key set exactly. That gate
@@ -270,6 +273,7 @@ export const REMAINDER_CARRIED_NODE_FIELDS = [
   'stepName',
   'args',
   'delegated',
+  'inlineGateIds',
 ] as const;
 
 /**
@@ -288,7 +292,6 @@ export const REMAINDER_REFUSED_NODE_FIELDS: Readonly<Record<string, string>> = {
   agentType: 'declare delegated:true; the host agent is a parse-time prompt-level hint',
   framework: 'the run-wide framework applies to a contributed node',
   retries: 'no synthesized step reads a retry count',
-  inlineGateIds: 'bind the gate with the `gates` parameter and its target_step_id',
   inlineGateCriteria:
     'raw `::` tokens are resolved at parse time, which a contributed node has already passed; ' +
     'bind the gate with the `gates` parameter and its target_step_id',

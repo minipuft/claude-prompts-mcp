@@ -623,6 +623,15 @@ export interface ChainNode {
    * sees a synthesized step, because it runs at parse time and is skipped on a blueprint resume.
    */
   delegated?: boolean;
+  /**
+   * The step's gate ids, for a node with no parse-time step (P6.101, R68).
+   *
+   * Present on a contributed node whose step declared gates — a remainder or arrow-append naming
+   * a chain prompt whose steps carry `inlineGateIds`. A planned node's gates are on its parse
+   * step, so a second copy here would be a fact nothing keeps in step. `synthesizeStep` carries
+   * them onto the step and gate enhancement walks that step the way it walks a parse-time one.
+   */
+  inlineGateIds?: string[];
 }
 
 /**

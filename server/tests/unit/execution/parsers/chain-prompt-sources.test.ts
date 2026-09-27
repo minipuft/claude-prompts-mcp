@@ -15,10 +15,10 @@
  * A fifth source writes store nodes rather than a `ParsedCommand`: a model-authored remainder
  * (the `remainder` parameter, and the `chain_id` arrow-append the executor rewrites into it). It is
  * driven through the real `RemainderProcessor.apply` against a session with an open blocking
- * unknown and a store that records the node specs `replaceRemainder` is handed (P6.93). A
- * contributed node carries only `{id, promptId, stepName, args, delegated}`, so this row names an
- * UNGATED chain prompt (`sv_pair`) and its expected rows come from that prompt's projection; a
- * chain prompt whose steps declare gates is refused by name (asserted below).
+ * unknown and a store that records the node specs `replaceRemainder` is handed (P6.93). Since
+ * P6.101 (R68) a contributed node carries its step's `inlineGateIds`, so this row names the gated
+ * `sv_chain` like every other source; before, a chain prompt whose steps declared gates was
+ * refused by name as a remainder and this row named the ungated `sv_pair`.
  *
  * The enumeration is closed by two predicates, not by this list alone: every `: ParsedCommand = {`
  * construction and every `.replaceRemainder(` call in `src/` must be claimed by a row below, so a
@@ -238,16 +238,16 @@ const SOURCES: readonly CommandSource[] = [
     name: 'remainder-append',
     sites: [],
     writes: ['engine/execution/capture/remainder-processor.ts'],
-    chainPrompt: svPair,
-    // What the store writes, as steps: a contributed node carries no gate ids.
+    // What the store writes, as steps: a contributed node carries its step's gate ids (R68).
     steps: async () =>
-      (await appendRemainder('sv_pair')).written.map(
+      (await appendRemainder('sv_chain')).written.map(
         (spec, index) =>
           ({
             stepNumber: index + 1,
             nodeId: spec.id,
             promptId: spec.promptId,
             args: spec.args,
+            ...(spec.inlineGateIds !== undefined ? { inlineGateIds: [...spec.inlineGateIds] } : {}),
             variableName: spec.stepName,
           }) as ChainStepPrompt
       ),
@@ -356,14 +356,18 @@ describe('every command source naming a chain prompt projects the same steps', (
     expect(single.promptId).toBe('sv_b');
   });
 
-  test('the remainder source refuses a chain prompt whose steps declare gates, by name', async () => {
+  test('P6.101: the remainder source writes a gated chain prompt with its step gates', async () => {
     const { written, refusal } = await appendRemainder('sv_chain');
-    expect(written).toEqual([]);
-    expect(refusal).toContain('- step "r1-a": inlineGateIds');
-    // Positive control: the ungated chain prompt reaches the store
-    expect((await appendRemainder('sv_pair')).written.map((spec) => spec.id)).toEqual([
-      'r1-a',
-      'r1-b',
+    expect(refusal).toBeUndefined();
+    expect(written.map((spec) => [spec.id, spec.inlineGateIds])).toEqual([
+      ['r1-a', ['sv-block']],
+      ['r1-b', ['sv-block']],
+      ['r1-c', ['sv-block']],
+    ]);
+    // Control: an ungated chain prompt's specs carry no gate ids
+    expect((await appendRemainder('sv_pair')).written.map((spec) => spec.inlineGateIds)).toEqual([
+      undefined,
+      undefined,
     ]);
   });
 });

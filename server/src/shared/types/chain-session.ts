@@ -194,6 +194,12 @@ export interface RemainderNodeSpec {
    * still has its own producer (stage 06 for parse-time steps, `synthesizeStep` for these).
    */
   readonly delegated?: boolean;
+  /**
+   * The step's gate ids (P6.101, R68): what a chain prompt's step declares, or what the node
+   * itself declared. Carried onto the node, persisted in `chain_run_nodes.inline_gate_ids`, and
+   * walked by gate enhancement on the step `synthesizeStep` builds.
+   */
+  readonly inlineGateIds?: readonly string[];
 }
 
 /**

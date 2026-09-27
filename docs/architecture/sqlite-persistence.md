@@ -13,7 +13,7 @@ module wins and this file is stale.
 
 Not 11, and not 13. `tenants` was deleted at v19 (F10); `chain_run_registry` was deleted at v22
 (P3 Tier 4), replaced by the two per-row tables below; `objects` and `version_entries` were added
-at v29. The schema is at v31. SQLite auto-creates `sqlite_sequence` for
+at v29. The schema is at v32. SQLite auto-creates `sqlite_sequence` for
 any table declaring `AUTOINCREMENT`; it is never declared in `applySchema()` and is excluded via
 `SQLITE_INTERNAL_TABLES`. A startup assert written against a raw `sqlite_master` count throws on
 every boot.
@@ -135,6 +135,15 @@ reader of the pair. Nullable with no DDL DEFAULT, NULL on every blocking node an
 the run has not reached. `chain_run_nodes` is `ephemeral`, so the bump drops and recreates it and
 no migration is written; `DROPPED_ON_THIS_BUMP` stays empty. No test hand-writes this table's DDL
 today; the parity test holds any copy added later to the engine's column set.
+
+`chain_run_nodes.inline_gate_ids TEXT` arrived at v32 (P6.101). A node a remainder or an
+arrow-append contributes has no parse-time step, so the gates its step declares — a chain prompt's
+step `inlineGateIds` — had nowhere to live, and such a remainder was refused by name. The column
+holds them as a JSON array beside `args_json` and `delegated`; `run-registry` reads it back onto
+the node, `synthesizeStep` carries it onto the step, and gate enhancement walks that step as it
+walks a parse-time one. Nullable with no DDL DEFAULT, NULL on every planned and inserted node and on
+every contributed node whose step declared no gates. `chain_run_nodes` is `ephemeral`, so the bump
+drops and recreates it and no migration is written; `DROPPED_ON_THIS_BUMP` stays empty.
 
 ## Four Tables Are Durable — A Schema Bump Must Not Destroy Them
 

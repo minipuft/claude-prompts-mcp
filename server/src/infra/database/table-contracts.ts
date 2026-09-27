@@ -425,6 +425,13 @@ export const TABLE_CONTRACTS: readonly TableContract[] = [
     //                     "Reported" has no column of its own: it is `milestone = 'completed'`
     //                     with `is_placeholder = 0`, already on this row. Partial population BY
     //                     ROW TYPE — NULL on every blocking node.
+    //
+    // v32 (P6.101, R68) added one more, also in the owner's INSERT list:
+    //   inline_gate_ids — a contributed node's step gate ids, JSON array or NULL. The same reason
+    //                     as `args_json`: the node has no parse step, so its step's gates live
+    //                     here or nowhere. Read back onto `ChainNode.inlineGateIds`, which
+    //                     `synthesizeStep` carries onto the step gate enhancement walks. NULL on
+    //                     every planned and inserted node and every ungated contributed one.
     // None needs an `acceptedPhantomColumns` entry — all appear in the owner's INSERT list.
   },
   {

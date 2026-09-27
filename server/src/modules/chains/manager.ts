@@ -179,6 +179,9 @@ function mintRemainderNodes(
       // the hook projection pins the resulting key set.
       ...(spec.args !== undefined ? { args: spec.args } : {}),
       ...(spec.delegated !== undefined ? { delegated: spec.delegated } : {}),
+      ...(spec.inlineGateIds !== undefined && spec.inlineGateIds.length > 0
+        ? { inlineGateIds: [...spec.inlineGateIds] }
+        : {}),
     };
   });
 }

@@ -1202,14 +1202,91 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       expect(fifth).toContain('Progress 5/5');
     }, 120000);
 
-    test("(a') a chain prompt whose steps declare gates is refused by name, writing nothing", async () => {
+    /** Each remainder node's `inline_gate_ids` column, in run order (P6.101). */
+    function nodeGates(chainId: string): string[] {
+      const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+      try {
+        const rows = db
+          .prepare(
+            'SELECT n.node_id, n.inline_gate_ids FROM chain_run_nodes n ' +
+              'JOIN chain_runs r ON r.session_id = n.session_id WHERE r.chain_id = ? ' +
+              "AND n.origin = 'remainder' ORDER BY n.position"
+          )
+          .all(chainId) as Array<{ node_id: string; inline_gate_ids: string | null }>;
+        return rows.map((row) => `${row.node_id}:${row.inline_gate_ids ?? 'null'}`);
+      } finally {
+        db.close();
+      }
+    }
+
+    /**
+     * Walk the appended sv_chain steps, FAILing each once: every step's FAIL opens a review of its
+     * own `sv-block` gate, and the PASS that clears it moves the run on. Gate guidance on a plain
+     * step render follows the shipped injection frequency (first-only), so the review is where a
+     * contributed step's gate shows, as it is for a parse-time step past the first.
+     */
+    async function walkGatedRemainder(run: { chainId: string; call: Call }, ids: string[]) {
+      const first = await run.call({ user_response: 'B out' });
+      expect(templates(first)).toEqual(['BODY-sv_a topic=']);
+      const bodies = ['BODY-sv_b topic=', 'BODY-sv_a topic='];
+      for (const [index, id] of ids.entries()) {
+        const failed = await run.call({ user_response: `${id} out`, gate_verdict: FAIL });
+        expect(failed).toContain('Gate Review Required');
+        expect(failed).toContain('### sv-block');
+        expect(runState(run.chainId).reviews).toEqual({ [id]: ['sv-block'] });
+        const passed = await run.call({ user_response: `${id} fixed`, gate_verdict: PASS });
+        if (index < bodies.length) expect(templates(passed)).toEqual([bodies[index]]);
+        expect(runState(run.chainId).reviews).toEqual({});
+      }
+    }
+
+    /**
+     * P6.101 / R68. MEASURED 2026-09-27 on `6dad55f3`: this remainder was refused by name (R46,
+     * "- step \"r1-b\": inlineGateIds"), because a contributed node carried only {id, promptId,
+     * stepName, args, delegated} and its synthesized step had no gates. Now the node carries its
+     * step's gate ids (`chain_run_nodes.inline_gate_ids`, v32) and gate enhancement walks the
+     * step the way it walks a parse-time one.
+     */
+    test('(a) P6.101: a chain prompt whose steps declare gates runs them with those gates', async () => {
       const { run, reply } = await appendTo(remainder({ promptId: 'sv_chain' }));
-      expect(reply.isError).toBe(true);
-      expect(reply.text).toContain(
-        'remainder refused: a node names a chain prompt whose steps declare fields a contributed node cannot carry'
+      expect(reply.isError).toBe(false);
+      expect(runNodes(run.chainId)).toEqual([
+        ...PLANNED,
+        'r1-a:sv_a:remainder',
+        'r1-b:sv_b:remainder',
+        'r1-c:sv_a:remainder',
+      ]);
+      expect(nodeGates(run.chainId)).toEqual([
+        'r1-a:["sv-block"]',
+        'r1-b:["sv-block"]',
+        'r1-c:["sv-block"]',
+      ]);
+      await walkGatedRemainder({ chainId: run.chainId, call: run.call }, ['r1-a', 'r1-b', 'r1-c']);
+    }, 120000);
+
+    test('(d) P6.101: a bundled chain prompt whose steps declare gates is accepted as a remainder', async () => {
+      const { run, reply } = await appendTo(
+        remainder({ promptId: 'research_chain', args: { topic: 'caching' } })
       );
-      expect(reply.text).toContain('- step "r1-b": inlineGateIds');
-      expect(runNodes(run.chainId)).toEqual(PLANNED);
+      expect(reply.isError).toBe(false);
+      // Its steps declare no ids, so each node id derives from the step's name
+      expect(runNodes(run.chainId).slice(PLANNED.length)).toEqual([
+        'r1-initial-scan-step-1-of-4:initial_scan:remainder',
+        'r1-deep-investigation-step-2-of-4:deep_investigation:remainder',
+        'r1-synthesis-step-3-of-4:research_synthesis:remainder',
+        'r1-action-plan-step-4-of-4:action_plan:remainder',
+      ]);
+      expect(nodeGates(run.chainId)).toEqual([
+        'r1-initial-scan-step-1-of-4:null',
+        'r1-deep-investigation-step-2-of-4:["Source Citations"]',
+        'r1-synthesis-step-3-of-4:null',
+        'r1-action-plan-step-4-of-4:["Actionable Recommendations"]',
+      ]);
+      const first = await run.call({ user_response: 'B out' });
+      expect(first).toContain('Progress 4/7');
+      const second = await run.call({ user_response: 'scan out', gate_verdict: PASS });
+      expect(second).toContain('Progress 5/7');
+      expect(second).not.toContain('Error');
     }, 120000);
 
     test('(b) control: a remainder of single prompts is unchanged', async () => {
@@ -1218,7 +1295,7 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       expect(runNodes(run.chainId)).toEqual([...PLANNED, 'r1:sv_b:remainder']);
     }, 120000);
 
-    test('(c) the arrow-append spelling reaches the same expansion and the same refusal', async () => {
+    test('(c) the arrow-append spelling reaches the same expansion and carries the same gates', async () => {
       const plain = await appendTo(arrowAppend('sv_pair'));
       expect(plain.reply.isError).toBe(false);
       expect(runNodes(plain.run.chainId)).toEqual([
@@ -1229,10 +1306,19 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       const fourth = await plain.run.call({ user_response: 'B out' });
       expect(templates(fourth)).toEqual(['BODY-sv_a topic=']);
 
+      // (b) P6.101: the gated chain prompt, appended by arrow, runs with its gates
       const gated = await appendTo(arrowAppend('sv_chain'));
-      expect(gated.reply.isError).toBe(true);
-      expect(gated.reply.text).toContain('- step "sv-chain-b": inlineGateIds');
-      expect(runNodes(gated.run.chainId)).toEqual(PLANNED);
+      expect(gated.reply.isError).toBe(false);
+      expect(nodeGates(gated.run.chainId)).toEqual([
+        'sv-chain-a:["sv-block"]',
+        'sv-chain-b:["sv-block"]',
+        'sv-chain-c:["sv-block"]',
+      ]);
+      await walkGatedRemainder({ chainId: gated.run.chainId, call: gated.run.call }, [
+        'sv-chain-a',
+        'sv-chain-b',
+        'sv-chain-c',
+      ]);
     }, 120000);
 
     test("(d) the node cap counts the run's nodes after the write, expanded", async () => {

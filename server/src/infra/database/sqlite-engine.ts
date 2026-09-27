@@ -56,6 +56,19 @@ import { STATE_DB_WRITER_PRAGMAS } from '#shared/utils/runtime-state-location.js
 /**
  * Bump this when changing the embedded schema. Triggers drop-and-recreate.
  *
+ * v32: adds `inline_gate_ids` to `chain_run_nodes` (P6.101, R68 — a contributed node carries its
+ * step's gates).
+ *
+ * A node a remainder or an arrow-append contributes has no entry in `parsedCommand.steps`; its step
+ * is synthesized from the node (`node-step-projection.synthesizeStep`), so a gate the step declared
+ * had nowhere to live, and a chain prompt whose steps declare gates was REFUSED as a remainder by
+ * name rather than run ungated. This column is where the gate ids survive a cold load, beside
+ * `args_json` and `delegated` (v27), and `run-registry.reconstructNode` reads them back onto the
+ * node. JSON array of gate ids; nullable with NO DDL DEFAULT, for the reason `origin` has none. NULL
+ * is every planned and inserted node, and every contributed node whose step declared no gates —
+ * partial population BY ROW TYPE. `chain_run_nodes` is `ephemeral`, so the bump drops and recreates
+ * it: `DROPPED_ON_THIS_BUMP` stays empty and `DROPPED_AT_VERSION` does not move.
+ *
  * v31: adds `spawned_at` to `chain_run_nodes` (delegation handoff contract, Tier 4 — detached
  * delegation).
  *
@@ -378,7 +391,7 @@ import { STATE_DB_WRITER_PRAGMAS } from '#shared/utils/runtime-state-location.js
  * `respondedAt`, which changes the `substate_json` shape in `execution_records`. Rows written by
  * v15 would decode to a lifecycle value outside `StepLifecycle`, so they must not survive.
  */
-const SCHEMA_VERSION = 31;
+const SCHEMA_VERSION = 32;
 
 /**
  * Tables whose rows exist nowhere else and therefore survive a SCHEMA_VERSION bump.
@@ -1186,6 +1199,10 @@ export class SqliteEngine implements DatabasePort {
         delegated INTEGER,
         -- Resolved argument bag, JSON object. NULL when the node declared no arguments.
         args_json TEXT,
+        -- v32 (P6.101): the contributed node's step gate ids, JSON array. NULL when its step
+        -- declared none, and on every planned and inserted node, whose gates live on their parse
+        -- step. Nullable with NO DDL DEFAULT, for the reason origin has none.
+        inline_gate_ids TEXT,
         -- v31 (Tier 4): when a detached (await: run) step's brief was rendered. NULL on every
         -- blocking node and on a detached node the run has not reached. A spawned node whose
         -- milestone is not a real completed output is one the run may not complete without.

@@ -1,11 +1,13 @@
 // @lifecycle canonical - Core gate enhancement logic for prompt enrichment.
 import { DEFAULT_FRAMEWORK_GATE_ID, GateSetResolver } from './gate-set-resolver.js';
+import { planNodeDrivenRender } from '../../execution/operators/node-step-projection.js';
 import { resolveEnforcementMode } from '../../execution/pipeline/decisions/index.js';
 import { isFrameworkInjected } from '../../execution/pipeline/decisions/injection/index.js';
 import { resolveDeclaredArtifacts } from '../utils/artifact-kinds.js';
 
 import type { StateStoreOptions } from '#infra/database/stores/interface.js';
 import type { Logger } from '#infra/logging/index.js';
+import type { ChainNode } from '#shared/types/chain-execution.js';
 import type { GateSystemSettings } from '#shared/types/index.js';
 import type { GateMetricsRecorder } from './gate-metrics-recorder.js';
 import type { GateService } from './gate-service-interface.js';
@@ -23,6 +25,9 @@ import type { GateContext } from '../core/gate-definitions.js';
 import type { GateDefinitionProvider } from '../core/gate-loader.js';
 import type { TemporaryGateRegistry } from '../core/temporary-gate-registry.js';
 import type { GateManager } from '../gate-manager.js';
+
+/** Resolves a prompt id to its converted prompt; undefined when no such prompt is loaded. */
+export type PromptLookup = (promptId: string) => ConvertedPrompt | undefined;
 
 /**
  * Every prompt in this execution that may carry inline gate definitions.
@@ -103,7 +108,14 @@ export class GateEnhancementService {
      * and the call that starts a chain have no run, and a chain that never mutates selects
      * identically with or without it.
      */
-    private readonly runStepViewProvider?: RunStepViewProvider
+    private readonly runStepViewProvider?: RunStepViewProvider,
+    /**
+     * Resolves a contributed step's prompt (P6.101). A node a remainder contributed has no
+     * parse-time step, so nothing else supplies the prompt its gates resolve against. Optional
+     * for the pipelines built without contributed nodes; a run that HAS a gated contributed node
+     * and no lookup is refused by name in {@link joinContributedSteps}.
+     */
+    private readonly promptLookup?: PromptLookup
   ) {}
 
   /**
@@ -156,11 +168,17 @@ export class GateEnhancementService {
    */
   resolveGateContext(context: ExecutionContext): GateEnhancementContext | null {
     if (context.hasChainCommand()) {
-      return { type: 'chain', steps: context.parsedCommand.steps };
+      return {
+        type: 'chain',
+        steps: this.joinContributedSteps(context, context.parsedCommand.steps),
+      };
     }
 
     if (context.parsedCommand?.steps !== undefined && context.parsedCommand.steps.length > 0) {
-      return { type: 'chain', steps: context.parsedCommand.steps };
+      return {
+        type: 'chain',
+        steps: this.joinContributedSteps(context, context.parsedCommand.steps),
+      };
     }
 
     if (context.hasSinglePromptCommand()) {
@@ -812,6 +830,47 @@ export class GateEnhancementService {
    * Resolved once per chain enhancement rather than per step: the answer cannot change while
    * one call walks the step list, and a per-step lookup would let it appear to.
    */
+  /**
+   * Join the run's gated CONTRIBUTED steps to this call's step list, and return it (P6.101, R68).
+   *
+   * A node a remainder or arrow-append contributed has no parse-time step, so the walk — which
+   * reads each step's `inlineGateIds` (`stepResolutionInput`) — never saw the gates its step
+   * declared. Its step is the one `synthesizeStep` builds from the node, now carrying those ids;
+   * it joins the walk here with its prompt resolved, so it is enhanced, reviewed and rendered
+   * exactly as a parse-time step is.
+   *
+   * Appended to `steps` IN PLACE, which is `parsedCommand.steps`: that is a per-call copy (a
+   * resume restores a clone of the blueprint, a re-sent command parses afresh) and never written
+   * back, and it is the list stages 18 and 20 and the capture project the run's nodes over — by
+   * node id, so the joined step object, with the gate instructions the walk writes onto it, is the
+   * one they render. An ungated contributed node is left to `synthesizeStep` alone, as before.
+   *
+   * A legacy chain whose parse steps carry no node ids pairs nodes positionally, and a joined step
+   * WITH a node id would switch that pairing off, so such a chain joins nothing.
+   */
+  private joinContributedSteps(
+    context: ExecutionContext,
+    steps: ChainStepPrompt[]
+  ): ChainStepPrompt[] {
+    const nodes = this.resolveRunStepView(context)?.nodes ?? [];
+    const contributed = contributedGatedSteps(nodes, steps);
+    if (contributed.length === 0) {
+      return steps;
+    }
+    const lookup = this.promptLookup;
+    if (lookup === undefined) {
+      throw new Error(
+        `Contributed step(s) ${contributed.map((step) => step.nodeId).join(', ')} declare gates, ` +
+          'but gate enhancement was built without a prompt lookup to resolve their prompts'
+      );
+    }
+    for (const step of contributed) {
+      const convertedPrompt = lookup(step.promptId);
+      steps.push(convertedPrompt === undefined ? step : { ...step, convertedPrompt });
+    }
+    return steps;
+  }
+
   private resolveRunStepView(context: ExecutionContext): RunStepView | undefined {
     if (this.runStepViewProvider === undefined) {
       return undefined;
@@ -1029,6 +1088,37 @@ export class GateEnhancementService {
 // ============================================================================
 // Pure helpers for chain-step enhancement
 // ============================================================================
+
+/**
+ * The steps of the run's contributed nodes that declare gates, as `synthesizeStep` builds them —
+ * the nodes no parse step names (P6.101). PURE. Empty for a legacy chain whose parse steps carry
+ * no node ids (positional pairing; see `joinContributedSteps`).
+ */
+function contributedGatedSteps(
+  nodes: readonly ChainNode[],
+  parseSteps: readonly ChainStepPrompt[]
+): ChainStepPrompt[] {
+  const parsedIds = new Set(
+    parseSteps.flatMap((step) =>
+      typeof step.nodeId === 'string' && step.nodeId.length > 0 ? [step.nodeId] : []
+    )
+  );
+  if (nodes.length === 0 || parsedIds.size === 0) {
+    return [];
+  }
+  const planned = planNodeDrivenRender({
+    nodes,
+    parseSteps,
+    currentNodeId: undefined,
+    fallbackOrdinal: 1,
+  }).steps;
+  return planned.filter(
+    (step) =>
+      step.nodeId !== undefined &&
+      !parsedIds.has(step.nodeId) &&
+      (step.inlineGateIds?.length ?? 0) > 0
+  );
+}
 
 /**
  * One step's contribution to the chain's cumulative gate resolution.
