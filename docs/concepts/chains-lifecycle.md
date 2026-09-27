@@ -323,7 +323,10 @@ discovery invalidated the shape of the plan". `remainder` can: the caller author
 as Workflow IR nodes and the server validates it against the same schema, validator and caps a
 `workflow` submission meets. The server never authors step content — the posture is unchanged, the
 model declares and the server validates. Accepted nodes are recorded with `origin:'remainder'` and
-the id of the unknown that motivated them. See
+the id of the unknown that motivated them. A remainder sent on the call that answers an inserted
+investigation node is applied before that node's review is settled: a review the call opened, and
+not yet answered, is re-derived against the run the remainder leaves, so it never names a gate of a
+step a `replace` dropped. See
 [MCP Tools](../reference/mcp-tools.md#blocking-unknown-interrupt).
 
 **`affected_step_ids` is derived from DECLARED LINKS ONLY.** It lists exactly the steps some

@@ -382,6 +382,13 @@ export class GateEnhancementService {
 
     this.addGatesToAccumulator(context, registeredGates.temporaryGateIds, 'temporary-request');
     this.addGatesToAccumulator(context, registeredGates.canonicalGateIds, 'framework-guide');
+    context.state.gates.chainWalkSettings = {
+      gatesConfig,
+      frameworkGateIds,
+      inlineDefinitionGateIds,
+      stepDefinitionIds: stepInput.stepDefinitionIds,
+      seedGateIds: [...context.gates.getAll()],
+    };
 
     let totalGatesApplied = 0;
     for (const step of steps) {
@@ -461,26 +468,9 @@ export class GateEnhancementService {
 
     const activeFrameworkId = this.getActiveFrameworkId(context);
     const stepFrameworkId = step.frameworkContext?.selectedFramework?.id ?? activeFrameworkId;
-
-    // Read from the step's own prompt, not the chain entry prompt: each step is a distinct
-    // prompt and may carry its own injection block and its own `gateConfiguration`.
-    const frameworkInjected = isFrameworkInjected({
-      modifiers: step.executionPlan?.modifiers,
-      promptInjection: prompt.injection,
-    });
-    const inlineGateIds = resolvedInlineGateIds(step, input.stepDefinitionIds);
     const resolution = await this.resolveIntoAccumulator(
       context,
-      stepResolutionInput({
-        step,
-        inlineGateIds,
-        prompt,
-        frameworkId: stepFrameworkId,
-        frameworkInjected,
-        frameworkGatesEnabled: input.gatesConfig?.enableFrameworkGates !== false,
-        knownFrameworkGateIds: [...input.frameworkGateIds],
-        inlineDefinitionGateIds: input.inlineDefinitionGateIds,
-      })
+      walkedStepResolutionInput(step, prompt, stepFrameworkId, input)
     );
 
     const gateIds = this.stepApplicableGateIds(step, input, activeFrameworkId, resolution);
@@ -999,6 +989,45 @@ export class GateEnhancementService {
   }
 
   /**
+   * The review an INSERTED current node inherits, re-derived against the run as it stands NOW
+   * (P6.170, R81), or undefined when the current node was not inserted or no chain walk ran on
+   * this call.
+   *
+   * A `remainder` is applied in stage 16, after this call's walk (stage 11) computed the inherited
+   * review and stage 13 opened it — so a `replace` submitted on the call answering an inserted
+   * node left that review naming the gates of the steps the replace dropped. Re-deriving is the
+   * walk again over the live run, from the gates the call held before its walk, collecting each
+   * step's resolution by id: the call's own accumulator is not touched, since it still feeds the
+   * gate guidance already injected for this call. PURE apart from reading the run and resolving.
+   */
+  async inheritedReviewGateIdsNow(context: ExecutionContext): Promise<string[] | undefined> {
+    const settings = context.state.gates.chainWalkSettings;
+    const runStepView = this.resolveRunStepView(context);
+    if (settings === undefined || runStepView?.currentNodeOrigin === undefined) {
+      return undefined;
+    }
+    const gateContext = this.resolveGateContext(context);
+    if (gateContext?.type !== 'chain') {
+      return undefined;
+    }
+    const resolver = this.buildGateSetResolver();
+    const activeFrameworkId = this.getActiveFrameworkId(context);
+    const accumulated = new Set(settings.seedGateIds);
+    for (const step of gateContext.steps) {
+      const prompt = step.convertedPrompt;
+      if (prompt === undefined || this.shouldSkip(step.executionPlan?.modifiers)) {
+        continue;
+      }
+      const frameworkId = step.frameworkContext?.selectedFramework.id ?? activeFrameworkId;
+      const resolution = await resolver.resolve(
+        walkedStepResolutionInput(step, prompt, frameworkId, settings)
+      );
+      resolution.accepted.forEach((gate) => accumulated.add(gate.id));
+    }
+    return this.inheritedReviewGateIds([...accumulated], runStepView);
+  }
+
+  /**
    * The review scope for an INSERTED node (P5-F4, owner ruling row 4.4).
    *
    * The node the triggering unknown blocked is the review scope to inherit: an investigation node
@@ -1206,6 +1235,35 @@ function resolvedInlineGateIds(
   stepDefinitionIds: ReadonlyMap<string, string>
 ): string[] | undefined {
   return step.inlineGateIds?.map((gateId) => stepDefinitionIds.get(gateId) ?? gateId);
+}
+
+/**
+ * The resolution input for one step of the gate walk: its own prompt (not the chain entry
+ * prompt — each step may carry its own injection block and `gateConfiguration`), its inline gates
+ * with chain-prompt references resolved, and the walk's settings. PURE.
+ */
+function walkedStepResolutionInput(
+  step: ChainStepPrompt,
+  prompt: ConvertedPrompt,
+  frameworkId: string | undefined,
+  settings: Pick<
+    ChainStepEnhancementInput,
+    'gatesConfig' | 'frameworkGateIds' | 'inlineDefinitionGateIds' | 'stepDefinitionIds'
+  >
+): GateResolutionInput {
+  return stepResolutionInput({
+    step,
+    inlineGateIds: resolvedInlineGateIds(step, settings.stepDefinitionIds),
+    prompt,
+    frameworkId,
+    frameworkInjected: isFrameworkInjected({
+      modifiers: step.executionPlan?.modifiers,
+      promptInjection: prompt.injection,
+    }),
+    frameworkGatesEnabled: settings.gatesConfig?.enableFrameworkGates !== false,
+    knownFrameworkGateIds: [...settings.frameworkGateIds],
+    inlineDefinitionGateIds: settings.inlineDefinitionGateIds,
+  });
 }
 
 /**

@@ -1,6 +1,7 @@
 // @lifecycle canonical - Defines internal execution context state contracts.
 import type {
   ConfirmationRequired,
+  GateSystemSettings,
   GateVerdictSummary,
   RequestIdentityContext,
   ScriptExecutionResult,
@@ -228,6 +229,20 @@ export interface PipelineInternalState {
      * Absent when the walk is the base step alone; the render then derives that step itself.
      */
     steplessRunSteps?: ChainStepPrompt[];
+    /**
+     * What this call's chain gate walk resolved against (P6.170): its settings and the gates the
+     * call held before the walk. Writer: `GateEnhancementService.enhanceChainSteps` (stage 11).
+     * Reader: `GateEnhancementService.inheritedReviewGateIdsNow`, which walks the run again after
+     * stage 16 applied a `remainder`, so an inserted node's review is computed against the run the
+     * remainder left (R81).
+     */
+    chainWalkSettings?: {
+      readonly gatesConfig: GateSystemSettings | undefined;
+      readonly frameworkGateIds: Set<string>;
+      readonly inlineDefinitionGateIds: readonly string[];
+      readonly stepDefinitionIds: ReadonlyMap<string, string>;
+      readonly seedGateIds: readonly string[];
+    };
     /**
      * Gate IDs each DETACHED (`await: run`) step is reviewed against, keyed by its parse-time
      * step number — the key `collectDetachedNodeFacts` resolves a step's node by (row 4.8).

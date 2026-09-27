@@ -1542,6 +1542,47 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
     }, 120000);
 
     /**
+     * P6.170 / R81. MEASURED 2026-09-27 on `5f536fc9`: the call answering the inserted
+     * `inv-u-160` with a `replace` remainder dropping `n2` (bound to `sv-drop`) opened the
+     * inserted node's review as `[sv-drop]`, a gate of the step the same call dropped. Stage 11
+     * walks the run and stage 13 opens the review before stage 16 applies the remainder. A
+     * `replace` submitted on the call that INSERTS the node drops that node too (measured), so the
+     * answering call is the one that reaches it. The review is now re-derived after the
+     * remainder, against the run the remainder left.
+     */
+    describe("P6.170: an inserted node's review follows the remainder its answering call applied", () => {
+      async function insertInvestigation() {
+        const run = await start({ command: `>>sv_a${ARROW}>>sv_b :: sv-drop` });
+        await run.call({ user_response: 'A out', ...blockingUnknown });
+        expect(currentNode(run.chainId)).toBe('inv-u-160');
+        return run;
+      }
+
+      test('(a) a replace on the answering call leaves no gate of a dropped step on the review', async () => {
+        const run = await insertInvestigation();
+        const replaced = await tool('prompt_engine', {
+          chain_id: run.chainId,
+          user_response: 'investigated',
+          remainder: { mode: 'replace', nodes: [{ id: 'r1', promptId: 'sv_chain' }] },
+        });
+        expect(replaced.isError).toBe(false);
+        expect(runNodes(run.chainId).slice(-3)).toEqual([
+          'r1-a:sv_a:remainder',
+          'r1-b:sv_b:remainder',
+          'r1-c:sv_a:remainder',
+        ]);
+        expect(runState(run.chainId).reviews).toEqual({ 'inv-u-160': ['sv-block'] });
+        expect(replaced.text).not.toContain('sv-drop');
+      }, 120000);
+
+      test('(b) control: an insertion with no remainder inherits the blocked step as before', async () => {
+        const run = await insertInvestigation();
+        await run.call({ user_response: 'investigated', gate_verdict: FAIL });
+        expect(runState(run.chainId).reviews).toEqual({ 'inv-u-160': ['sv-drop'] });
+      }, 120000);
+    });
+
+    /**
      * P6.169 / R79. MEASURED 2026-09-27 on `c52dacbe` (shipped CAGEERF): `sv_d` as the planned
      * `n2` of `>>sv_a --> >>sv_d` declared the framework's section headers and a PASS with none
      * opened `{n2: [__phase_guard__]}`; the same prompt as the remainder node `r1` of
