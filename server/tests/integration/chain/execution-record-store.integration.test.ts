@@ -222,6 +222,20 @@ describe('ExecutionRecordStore (integration)', () => {
     expect(records.map((r) => r.stepNumber)).toEqual([1, 2, 3, 4, 5]);
   });
 
+  // P6.121 / R55: the pipeline tells a run's earlier records from its own call's by this id.
+  test('watermark() sorts after every record appended before it and before every one after', () => {
+    const append = (stepNumber: number) =>
+      store.append({ sessionId: 'sess-mark', stepNumber, status: 'working' });
+    const before = [append(1), append(2)];
+    const mark = store.watermark();
+    const after = [append(3), append(4)];
+
+    const ids = store.queryBySession('sess-mark').map((record) => record.executionId);
+    expect(ids.filter((id) => id < mark)).toEqual(before);
+    expect(ids.filter((id) => id > mark)).toEqual(after);
+    expect(ids).not.toContain(mark);
+  });
+
   test('AC4: queryByChain returns same records as queryBySession via different key', () => {
     store.append({
       sessionId: 'sess-by-chain',

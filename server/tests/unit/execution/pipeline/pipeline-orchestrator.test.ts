@@ -251,6 +251,8 @@ describe('PromptExecutionPipeline failure records', () => {
         appended.push(input);
         return 'exec-id';
       },
+      watermark: () => 'watermark-id',
+      queryBySession: () => [],
     } as unknown as ExecutionRecordStore;
     return { store, appended };
   };
@@ -503,5 +505,150 @@ describe('PromptExecutionPipeline — a call that throws after the run exists', 
     await expect(pipeline.execute({ command: '>>demo' })).rejects.toThrow();
 
     expect(registry.getRunGates('run-111')).toEqual([]);
+  });
+});
+
+/**
+ * P6.121 / R55. MEASURED 2026-09-27 on `ff936b05` (this harness; a throw after stage 13 is not
+ * constructible on the shipped server, P6.111): a start call that threw left its run `working`
+ * with only a `failed` execution record, so a later `chain_id` resumed a run nothing was ever
+ * rendered for; a later call that threw left no trace on the next reply.
+ *
+ * Now a throw on the call that created the run (`lifecycleDecision` `create-new`) cancels it —
+ * its gates go with it through `onRunEnded` — and a later `chain_id` is refused naming the
+ * failure; a later call's throw keeps the run `working`, and the next reply names it once.
+ */
+describe('PromptExecutionPipeline — a call that throws, and the call after it', () => {
+  type Decision = 'create-new' | 'resume-chain-id' | 'resume-completed';
+
+  const setup = () => {
+    const registry = new TemporaryGateRegistry(createLogger());
+    const records: Array<Record<string, unknown> & { executionId: string }> = [];
+    let sequence = 0;
+    const nextId = (): string => `r${String((sequence += 1)).padStart(6, '0')}`;
+    const recordStore = {
+      watermark: nextId,
+      append: (input: Record<string, unknown>) => {
+        const executionId = nextId();
+        records.push({ ...input, executionId });
+        return executionId;
+      },
+      queryBySession: (sessionId: string) =>
+        records.filter((record) => record['sessionId'] === sessionId),
+    } as unknown as ExecutionRecordStore;
+    const run = { status: 'working' };
+    const sessionStore = {
+      completeHeldRun: jest.fn(async (_sessionId: string) => false),
+      getRunTelemetry: () => undefined,
+      // The builder's `onRunEnded` subscription, inlined: a run that ends releases its gates.
+      cancelChain: jest.fn(async (sessionId: string) => {
+        run.status = 'cancelled';
+        registry.releaseRun(sessionId);
+        return true;
+      }),
+    };
+
+    let decision: Decision = 'create-new';
+    let throwMessage: string | undefined;
+    const overrides: Partial<Record<StageName, PipelineStage>> = {
+      GateEnhancement: createStage('GateEnhancement', (context) => {
+        if (decision !== 'create-new') return;
+        context.state.gates.temporaryGateIds = [
+          registry.createTemporaryGate({
+            name: 'g121',
+            type: 'validation',
+            scope: 'execution',
+            description: 'd',
+            guidance: 'G121',
+            source: 'manual',
+          }),
+        ];
+      }),
+      // Stage 13, as far as this row reads it: the decision, the session, and the early answer
+      // it gives a resume of an ended run (no session context is published for that one).
+      SessionManagement: createStage('SessionManagement', (context) => {
+        context.state.session.lifecycleDecision = decision;
+        if (decision === 'resume-completed') {
+          context.state.session.resumeSessionId = 'run-121';
+          context.state.session.resumeChainId = 'chain-121';
+          context.setResponse({ content: [{ type: 'text', text: 'Chain run already complete.' }] });
+          return;
+        }
+        (context as unknown as { sessionContext: unknown }).sessionContext = {
+          sessionId: 'run-121',
+          chainId: 'chain-121',
+          currentStep: 1,
+          totalSteps: 3,
+        };
+      }),
+      // Stage 18: every call that renders writes the step's `working` record, then may throw.
+      StepExecution: createStage('StepExecution', (context) => {
+        recordStore.append({
+          sessionId: 'run-121',
+          nodeId: 'n1',
+          stepNumber: 1,
+          status: 'working',
+        });
+        if (throwMessage !== undefined) throw new Error(throwMessage);
+        context.setResponse({ content: [{ type: 'text', text: 'STEP-BODY' }] });
+      }),
+    };
+    const { pipeline } = createPipeline(overrides, {
+      temporaryGateRegistry: registry,
+      executionRecordStore: recordStore,
+      chainSessionStore: sessionStore as unknown as ChainSessionService,
+    });
+    const call = async (next: Decision, throws?: string) => {
+      decision = next;
+      throwMessage = throws;
+      return pipeline.execute(
+        next === 'create-new'
+          ? { command: '>>demo' }
+          : { chain_id: 'chain-121', user_response: 'x' }
+      );
+    };
+    return { call, registry, run, sessionStore };
+  };
+
+  test('(a) a start call that throws ends its run, releases its gates, and a later chain_id is refused naming it', async () => {
+    const { call, registry, run, sessionStore } = setup();
+
+    await expect(call('create-new', 'render exploded')).rejects.toThrow('render exploded');
+
+    expect(sessionStore.cancelChain).toHaveBeenCalledWith('run-121');
+    expect(run.status).toBe('cancelled');
+    expect(registry.getRunGates('run-121')).toEqual([]);
+
+    const resumed = await call('resume-completed');
+    expect(resumed.isError).toBe(true);
+    expect(contentText(resumed)).toContain(
+      'run `chain-121` failed on its start call: render exploded'
+    );
+  });
+
+  test('(b) a later call that throws keeps the run working, and the next reply names it once', async () => {
+    const { call, registry, run, sessionStore } = setup();
+    await call('create-new');
+    const gateIds = registry.getRunGates('run-121').map((gate) => gate.id);
+    expect(gateIds).toHaveLength(1);
+
+    await expect(call('resume-chain-id', 'capture exploded')).rejects.toThrow('capture exploded');
+    expect(sessionStore.cancelChain).not.toHaveBeenCalled();
+    expect(run.status).toBe('working');
+    expect(registry.getRunGates('run-121').map((gate) => gate.id)).toEqual(gateIds);
+
+    const next = await call('resume-chain-id');
+    expect(contentText(next)).toBe('⚠️ The previous call failed: capture exploded\n\nSTEP-BODY');
+    const after = await call('resume-chain-id');
+    expect(contentText(after)).toBe('STEP-BODY');
+  });
+
+  test('(c) control: calls that do not throw are unchanged', async () => {
+    const { call, run, sessionStore } = setup();
+    expect(contentText(await call('create-new'))).toBe('STEP-BODY');
+    expect(contentText(await call('resume-chain-id'))).toBe('STEP-BODY');
+    expect(contentText(await call('resume-chain-id'))).toBe('STEP-BODY');
+    expect(sessionStore.cancelChain).not.toHaveBeenCalled();
+    expect(run.status).toBe('working');
   });
 });
