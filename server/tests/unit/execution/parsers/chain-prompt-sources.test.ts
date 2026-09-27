@@ -635,6 +635,38 @@ describe('P6.124: every source carrying a request gate checks its target', () =>
     expect(await resume(declared, oneNode)).toContain('[gate-target-missing] node "b"');
   });
 
+  // P6.133 / R58: a run a chain-prompt node expanded resumes in the address space its start call
+  // used — the declared `x` is accepted and retargeted to its last step, the expanded `x-b` refused.
+  test('a resume of an expanded run checks and retargets against the declared ids', async () => {
+    const expanded = resumingStage(
+      await parse({
+        workflow: {
+          version: 1,
+          nodes: [
+            { id: 'x', promptId: 'sv_chain' },
+            { id: 'y', promptId: 'sv_b' },
+          ],
+          edges: [{ from: 'x', to: 'y' }],
+        },
+      })
+    );
+    const context = new ExecutionContext({
+      chain_id: 'chain-sv_chain#1',
+      user_response: 'out',
+    } as never);
+    context.state.gates.requestedOverrides = {
+      gates: [{ name: 'tgt', criteria: ['TGT'], target_step_id: 'x' }],
+    };
+    await expanded.execute(context);
+    expect(context.response).toBeUndefined();
+    expect(context.state.gates.requestedOverrides?.gates).toEqual([
+      { name: 'tgt', criteria: ['TGT'], target_step_id: 'x-c' },
+    ]);
+
+    const expandedStep = [{ name: 'tgt', criteria: ['TGT'], target_step_id: 'x-b' }];
+    expect(await resume(expandedStep, expanded)).toContain('[gate-target-missing] node "x-b"');
+  });
+
   test('control: a planted source that skips the check is named', async () => {
     const skipping = stageWith({
       ...workflowIrPort,

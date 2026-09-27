@@ -2,6 +2,7 @@
 
 import { projectChainPromptSteps } from './chain-step-projection.js';
 import { namedGateBindingKey } from './symbolic-operator-parser.js';
+import { declaredNodesOf } from './workflow-command-builder.js';
 import { workflowPromptInfoLookup } from '../workflow-prompt-lookup.js';
 
 import type { Logger } from '#infra/logging/index.js';
@@ -168,15 +169,30 @@ export class SymbolicCommandBuilder {
   ): readonly WorkflowRejection[] {
     if (requestGates.length === 0) return [];
     const steps = parsedCommand.steps ?? [];
+    // R58: a run a chain-prompt node expanded is addressed by the ids it DECLARED, as its start
+    // call was — its steps carry expanded ids.
+    const declared = parsedCommand.declaredNodes?.ids;
     const nodes: WorkflowNode[] =
-      steps.length > 0
-        ? steps.map((step) => ({ id: step.nodeId ?? '', promptId: step.promptId }))
-        : mintSequentialIds(1).map((id) => ({ id, promptId: parsedCommand.promptId }));
+      declared !== undefined
+        ? declared.map((id) => ({ id, promptId: parsedCommand.promptId }))
+        : steps.length > 0
+          ? steps.map((step) => ({ id: step.nodeId ?? '', promptId: step.promptId }))
+          : mintSequentialIds(1).map((id) => ({ id, promptId: parsedCommand.promptId }));
     const validation = this.workflowIr.validate(
       { version: 1, nodes, gates: requestGates },
       { lookupPrompt: () => ({ requiredArguments: [] }), caps: UNBOUNDED_CAPS }
     );
     return validation.ok ? [] : validation.rejections;
+  }
+
+  /**
+   * R58: the retarget a resumed run's start call applied to its request gates — a gate naming a
+   * node that expanded into a chain prompt's steps points at the node's last step — read from the
+   * map the blueprint carries (`declaredNodes`). Identity for a run nothing expanded.
+   */
+  declaredNodeRetarget(parsedCommand: ParsedCommand): <Gate>(gates: readonly Gate[]) => Gate[] {
+    const lastStepOf = parsedCommand.declaredNodes?.lastStepOf ?? {};
+    return (gates) => this.workflowIr.retargetGates(gates, lastStepOf);
   }
 
   /**
@@ -416,6 +432,11 @@ export class SymbolicCommandBuilder {
     }
     if (parseResult.executionPlan.styleSelection !== undefined) {
       parsedCommand.styleSelection = parseResult.executionPlan.styleSelection;
+    }
+
+    const declaredNodes = declaredNodesOf(validation.order, validation.expanded);
+    if (declaredNodes !== undefined) {
+      parsedCommand.declaredNodes = declaredNodes;
     }
 
     const lastStepOf = validation.expanded?.lastStepOf ?? {};

@@ -187,7 +187,9 @@ export class CommandParsingStage extends BasePipelineStage {
    * P6.126: this call's request gates target the run's declared node ids — the restored parsed
    * steps' ids, or `n1` for a one-node run — checked as every start source checks them (P6.124),
    * and refused before any stage touches the run. The start call's own gates, which the blueprint
-   * carries, were checked when that call ran.
+   * carries, were checked when that call ran. R58: a run a chain-prompt node expanded is checked
+   * against the ids it DECLARED, and its gates retargeted to the node's last step, exactly as its
+   * start call's were (`declaredNodes` on the blueprint).
    */
   private resumeFromBlueprint(context: ExecutionContext): void {
     this.logger.debug('[ParsingStage] Response-only mode detected - resuming chain', {
@@ -210,6 +212,7 @@ export class CommandParsingStage extends BasePipelineStage {
       this.rejectWorkflow(context, rejections);
       return;
     }
+    retargetRequestedGates(context, this.symbolicCommandBuilder.declaredNodeRetarget(restored));
     this.logExit({ skipped: 'Response-only session rehydrated' });
   }
 

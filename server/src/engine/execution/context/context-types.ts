@@ -64,6 +64,20 @@ export interface ParsedCommand extends CommandParseResult {
    * (`InlineGateProcessor.restoreRunGates`). Absent when the start call sent none.
    */
   requestGates?: GateSpecification[];
+  /**
+   * The node ids the run DECLARED, and each expanded node's last expanded step (R58). Written by
+   * the IR-building command sources (workflow, arrow-chain) only when a node named a chain prompt
+   * and expanded, and carried to the blueprint by the same clone as `budget`. The run's steps then
+   * carry expanded ids (`x-a`, `x-b`), so a resume reads this to check a request gate's
+   * `target_step_id` against the declared ids and retarget it to the last step, exactly as the
+   * start call did. Absent when nothing expanded: every step id is then a declared id.
+   */
+  declaredNodes?: {
+    /** The declared node ids, in declared run order. */
+    ids: string[];
+    /** Each expanded node's id -> the id of its last expanded step. */
+    lastStepOf: Record<string, string>;
+  };
 }
 
 /**

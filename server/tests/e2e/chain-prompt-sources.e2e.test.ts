@@ -644,6 +644,112 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
     }, 120000);
   });
 
+  /** `chain_runs.state` exactly as stored, so an untouched run compares byte for byte. */
+  function rawRunState(chainId: string): string | undefined {
+    const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+    try {
+      const row = db.prepare('SELECT state FROM chain_runs WHERE chain_id = ?').get(chainId) as
+        { state: string } | undefined;
+      return row?.state;
+    } finally {
+      db.close();
+    }
+  }
+
+  /** A resume carrying one request gate, as a client sends it. */
+  const resumeWithGate = (chainId: string, answer: string, target: string, marker: string) =>
+    tool('prompt_engine', {
+      chain_id: chainId,
+      user_response: answer,
+      gate_verdict: PASS,
+      gates: [{ name: marker.toLowerCase(), criteria: [marker], target_step_id: target }],
+    });
+
+  /**
+   * MEASURED 2026-09-27 on `5f187905` (driven, this harness): a workflow `{x: sv_chain, y: sv_b}`
+   * resumed at `x-b` with a gate targeting `x` was refused `gate-target-missing`, while `x-b` was
+   * accepted — the reverse of the start call, which accepts `x` and retargets it to `x-c` (R51). The
+   * blueprint carried the expanded step ids only.
+   *
+   * Now (R58) the blueprint carries the run's declared node ids and the retarget map, and a resume
+   * checks and retargets its request gates exactly as the start call did.
+   */
+  describe('P6.133: a resume addresses the nodes the run declared', () => {
+    const workflow = {
+      workflow: {
+        version: 1,
+        nodes: [
+          { id: 'x', promptId: 'sv_chain' },
+          { id: 'y', promptId: 'sv_b' },
+        ],
+        edges: [{ from: 'x', to: 'y' }],
+      },
+    };
+
+    test("(a) a gate on the expanded node's declared id is accepted and renders on its last step", async () => {
+      const run = await start(workflow);
+      const stored = JSON.parse(rawRunState(run.chainId) ?? '{}') as {
+        blueprint?: { parsedCommand?: { declaredNodes?: unknown } };
+      };
+      expect(stored.blueprint?.parsedCommand?.declaredNodes).toEqual({
+        ids: ['x', 'y'],
+        lastStepOf: { x: 'x-c' },
+      });
+      const second = await run.call({ user_response: 'A out', gate_verdict: PASS });
+      expect(templates(second)).toEqual(['BODY-sv_b topic=']);
+
+      const third = await resumeWithGate(run.chainId, 'B out', 'x', 'TGT-133-A');
+      expect(third.isError).toBe(false);
+      expect(templates(third.text)).toEqual(['BODY-sv_a topic=']);
+      expect(third.text).toContain('Progress 3/4');
+      expect(third.text).toContain('TGT-133-A');
+    }, 120000);
+
+    test('(b) an expanded step id is refused by name, the run untouched', async () => {
+      const run = await start(workflow);
+      await run.call({ user_response: 'A out', gate_verdict: PASS });
+      const before = rawRunState(run.chainId);
+      expect(before).toBeDefined();
+
+      const refused = await resumeWithGate(run.chainId, 'B out', 'x-b', 'TGT-133-B');
+      expect(refused.isError).toBe(true);
+      expect(refused.text).toContain('[gate-target-missing] node "x-b"');
+      expect(rawRunState(run.chainId)).toBe(before);
+    }, 120000);
+
+    test('(c) control: a run with no expanded node resumes as before, and carries no declared map', async () => {
+      const run = await start({
+        workflow: {
+          version: 1,
+          nodes: [
+            { id: 'p', promptId: 'sv_a' },
+            { id: 'q', promptId: 'sv_b' },
+          ],
+          edges: [{ from: 'p', to: 'q' }],
+        },
+      });
+      const second = await resumeWithGate(run.chainId, 'P out', 'q', 'TGT-133-C');
+      expect(second.isError).toBe(false);
+      expect(templates(second.text)).toEqual(['BODY-sv_b topic=']);
+      expect(second.text).toContain('TGT-133-C');
+      expect(rawRunState(run.chainId)).not.toContain('declaredNodes');
+    }, 120000);
+
+    test('(d) the arrow-chain form: a gate on the segment node renders on its last step', async () => {
+      const run = await start({ command: `>>sv_chain${ARROW}>>sv_b` });
+      await run.call({ user_response: 'A out', gate_verdict: PASS });
+
+      const third = await resumeWithGate(run.chainId, 'B out', 'n1', 'TGT-133-D');
+      expect(third.isError).toBe(false);
+      expect(templates(third.text)).toEqual(['BODY-sv_a topic=']);
+      expect(third.text).toContain('TGT-133-D');
+
+      const refused = await resumeWithGate(run.chainId, 'C out', 'n1-c', 'TGT-133-E');
+      expect(refused.isError).toBe(true);
+      expect(refused.text).toContain('[gate-target-missing] node "n1-c"');
+    }, 120000);
+  });
+
   /**
    * PIN (as of 2026-09-27 · flips when a gated single prompt stops opening a run). A single prompt
    * with an inline gate operator opens a run of ONE node, `n1` (R52), because the planner requires
