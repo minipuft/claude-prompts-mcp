@@ -1,4 +1,4 @@
-// @lifecycle test - P6.79 / P6.80 / R40: an arrow-chain segment or a workflow node naming a chain prompt runs that prompt's steps; P6.78 / R37: a command-level gate on a chain prompt binds each step; P6.97 / R43: a named inline gate belongs to the run that declared it; P6.99 / R44: a named gate on an arrow-chain segment binds that segment; P6.108 / R47: a run's temporary gates live exactly as long as the run; P6.104: a run's request gates reach every node they target; P6.107: a request gate id belongs to the run that holds it; P6.105: the arrow-chain source validates the expanded workflow; P6.110: one name in two arrow-chain segments is two gates; P6.113: a run re-sending a declared id keeps the id it registered; P6.117: a request gate target is checked against the declared node ids, over Streamable HTTP.
+// @lifecycle test - P6.79 / P6.80 / R40: an arrow-chain segment or a workflow node naming a chain prompt runs that prompt's steps; P6.78 / R37: a command-level gate on a chain prompt binds each step; P6.97 / R43: a named inline gate belongs to the run that declared it; P6.99 / R44: a named gate on an arrow-chain segment binds that segment; P6.108 / R47: a run's temporary gates live exactly as long as the run; P6.104: a run's request gates reach every node they target; P6.107: a request gate id belongs to the run that holds it; P6.105: the arrow-chain source validates the expanded workflow; P6.110: one name in two arrow-chain segments is two gates; P6.113: a run re-sending a declared id keeps the id it registered; P6.117: a request gate target is checked against the declared node ids; P6.186: a completed run re-runs as the command that started it, or not at all, over Streamable HTTP.
 /**
  * MEASURED 2026-09-25 on `427899fe` (authored `sv_chain` = sv_a/sv_b/sv_a, each step carrying the
  * blocking `sv-block`; run state read from `chain_runs.state`):
@@ -1056,6 +1056,71 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
         expect(text).not.toContain(`(\`${run.chainId}\`)`);
         expect(text).not.toContain(`· ${run.chainId}`);
       }
+    }, 120000);
+  });
+
+  /**
+   * P6.186 / R89. MEASURED 2026-09-27 on `97c33a89`: `>>sv_a` arrow-chain `>>sv_b`, completed with
+   * and without an inserted node, and a two-node workflow each printed "Chain execution complete"
+   * and no `Re-run:`, while `>>sv_pair :: "CRIT-P"` completed with `Re-run: >>sv_pair topic:""` —
+   * its criterion dropped, so the line started a run with no gate. A `Re-run:` line is the command
+   * that re-parses to the run, or absent: a chain prompt names one, an arrow-chain or a workflow
+   * does not (neither its first segment nor its last is the run).
+   */
+  describe('P6.186: a completed run re-runs as the command that started it, or not at all', () => {
+    const rerun = (text: string): string | undefined => /Re-run: `([^`]*)`/.exec(text)?.[1];
+    const blocking = {
+      observations: [
+        { type: 'unknown_discovered', id: 'u-186', statement: 'STATEMENT-u-186', blocking: true },
+      ],
+    };
+
+    test('(a) a chain prompt completes with a Re-run that starts the same run', async () => {
+      const run = await start({ command: '>>sv_pair :: "CRIT-186"' });
+      await run.call({ user_response: 'A', gate_verdict: PASS });
+      const done = await run.call({ user_response: 'B', gate_verdict: PASS });
+      expect(done).toContain('Chain execution complete');
+      const line = rerun(done);
+      expect(line).toBe(`>>sv_pair topic:"" :: 'CRIT-186'`);
+
+      const again = await start({ command: line ?? '' });
+      // Each run registers its own temporary gate for the criterion, under a fresh id.
+      const steps = (chainId: string) =>
+        runState(chainId).steps.map((step) => step.replace(/temp_\d+_[a-z0-9]+/g, 'TEMP'));
+      expect(steps(again.chainId)).toEqual(steps(run.chainId));
+      expect(steps(run.chainId)).toEqual(['a:sv_a:["TEMP"]', 'b:sv_b:["TEMP"]']);
+      expect(runState(again.chainId).criteria).toEqual(runState(run.chainId).criteria);
+      expect(runState(run.chainId).criteria).toEqual([['CRIT-186'], ['CRIT-186']]);
+    }, 120000);
+
+    test('(b) an arrow-chain, with and without an inserted node, and a workflow complete with no Re-run', async () => {
+      const plain = await start({ command: `>>sv_a topic:"T186"${ARROW}>>sv_b` });
+      await plain.call({ user_response: 'A' });
+      const inserted = await start({ command: `>>sv_a${ARROW}>>sv_b` });
+      await inserted.call({ user_response: 'A', ...blocking });
+      await inserted.call({ user_response: 'investigated' });
+      const workflow = await start({
+        workflow: {
+          version: 1,
+          nodes: [
+            { id: 'x', promptId: 'sv_a' },
+            { id: 'y', promptId: 'sv_b' },
+          ],
+        },
+      });
+      await workflow.call({ user_response: 'A' });
+      for (const run of [plain, inserted, workflow]) {
+        const done = await run.call({ user_response: 'B' });
+        expect(done).toContain('Chain execution complete');
+        expect(done).not.toContain('Re-run:');
+        expect(done).not.toContain('>>prompt');
+      }
+    }, 120000);
+
+    test('positive control: a gated single prompt completes with its Re-run', async () => {
+      const run = await start({ command: '>>sv_a :: "CRIT-186s"' });
+      const done = await run.call({ user_response: 'out', gate_verdict: PASS });
+      expect(rerun(done)).toBe(`>>sv_a topic:"" :: 'CRIT-186s'`);
     }, 120000);
   });
 
