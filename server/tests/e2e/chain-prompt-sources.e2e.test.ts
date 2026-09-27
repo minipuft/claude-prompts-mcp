@@ -785,6 +785,21 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       expect(onLater.text).toContain('TGT-134-C');
     }, 120000);
 
+    test('(d) control: re-sending a start-call gate under its id stays accepted after its step', async () => {
+      const gates = [{ id: 'rs134', name: 'rs134', criteria: ['RS-134'], target_step_id: 'a' }];
+      const run = await start({ command: '>>sv_chain', gates });
+      expect(run.text).toContain('RS-134');
+      await run.call({ user_response: 'A out', gate_verdict: PASS, gates });
+      const resent = await tool('prompt_engine', {
+        chain_id: run.chainId,
+        user_response: 'B out',
+        gate_verdict: PASS,
+        gates,
+      });
+      expect(resent.isError).toBe(false);
+      expect(templates(resent.text)).toEqual(['BODY-sv_a topic=']);
+    }, 120000);
+
     test('(c) control: a one-node run standing at n1 accepts a gate on n1', async () => {
       const run = await start({ command: '>>sv_a :: "CRIT-134"' });
       const answered = await resumeWithGate(run.chainId, 'out', 'n1', 'TGT-134-N1');

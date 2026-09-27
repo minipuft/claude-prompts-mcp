@@ -457,24 +457,39 @@ function temporaryRequestGates(
 }
 
 /**
- * The first `target_step_id` among THIS call's `gates` naming a node the resumed run has already
- * passed (R59), or undefined. A declared node that expanded into a chain prompt's steps is passed
- * once its last step is (`declaredNodes.lastStepOf`, the address its gates retarget to, R58). A run
- * standing on no node has passed them all. An id the run does not have is stage 04's refusal, not
- * this one; the start call's gates, which the blueprint restores, are not this call's.
+ * The first `target_step_id` among the gates THIS call adds naming a node the resumed run has
+ * already passed (R59), or undefined. A declared node that expanded into a chain prompt's steps is
+ * passed once its last step is (the run blueprint's `declaredNodes.lastStepOf`, the address its
+ * gates retarget to, R58). A run standing on no node has passed them all. An id the run does not have is stage 04's
+ * refusal, not this one. A gate re-sent under the id of one the start call registered (the
+ * blueprint's `requestGates`) is exempt: the registrar reuses it rather than adding one, and the
+ * start call checked it when it was sent — a client re-sending its gates on every call is the
+ * pattern the registrar's held-id reuse exists for (P6.113).
  */
 function passedGateTarget(context: ExecutionContext, session: ChainSession): string | undefined {
   const { nodes, currentNodeId } = session.state;
   const current = currentNodeId === null ? nodes.length + 1 : ordinalOf(nodes, currentNodeId);
-  const lastStepOf = context.parsedCommand?.declaredNodes?.lastStepOf ?? {};
+  // The run's own stored blueprint: what its start call declared and registered, whichever path
+  // built this call's parsed command.
+  const started = session.blueprint?.parsedCommand as ParsedCommand | undefined;
+  const lastStepOf = started?.declaredNodes?.lastStepOf ?? {};
+  const startIds = new Set((started?.requestGates ?? []).map(gateIdOf));
   for (const gate of context.mcpRequest.gates ?? []) {
     const target =
       typeof gate !== 'string' && 'target_step_id' in gate ? gate.target_step_id : undefined;
-    if (target === undefined) continue;
+    const id = gateIdOf(gate);
+    if (target === undefined || (id !== undefined && startIds.has(id))) continue;
     const position = ordinalOf(nodes, lastStepOf[target] ?? target);
     if (position !== -1 && position < current) return target;
   }
   return undefined;
+}
+
+/** A request gate's explicit `id`, when it carries one. */
+function gateIdOf(gate: GateSpecification): string | undefined {
+  return typeof gate !== 'string' && 'id' in gate && typeof gate.id === 'string'
+    ? gate.id
+    : undefined;
 }
 
 /** The refusal for {@link passedGateTarget}, or undefined when this call targets no passed step. */
