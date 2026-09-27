@@ -539,6 +539,23 @@ export class SymbolicCommandParser {
   }
 
   /**
+   * What one `::` token attaches to the segment carrying it, or `undefined` when the match is not a
+   * gate token to strip. A named gate REGISTERS once, globally (`namedInlineGates`, stage 05, under
+   * its own id); its id joins the segment's criteria so the segment's node binds it (R44) — the
+   * representation `foldCommandGatesOntoSteps` gives a chain prompt's steps (R37), which is what
+   * lets an expanded chain-prompt segment carry it to every step. A shell verification binds no
+   * segment: it stays the run's command-level check (R32).
+   */
+  private segmentGateCriteria(match: RegExpMatchArray): string[] | undefined {
+    const [, , namedColonId, namedColonText, anonQuoted, canonicalOrUnquoted] = match;
+    if (namedColonId != null && namedColonText != null) {
+      return namedColonId === 'verify' ? [] : [namedColonId];
+    }
+    const text = anonQuoted ?? canonicalOrUnquoted;
+    return text != null ? this.parseCriteria(text) : undefined;
+  }
+
+  /**
    * Extract `::`-form inline gate tokens from a single chain-step segment (S9).
    *
    * Strips every matched token from the segment text so it cannot pollute the step's
@@ -565,23 +582,9 @@ export class SymbolicCommandParser {
         continue;
       }
 
-      const namedColonId = match[2];
-      const namedColonText = match[3];
-      const anonQuoted = match[4];
-      const canonicalOrUnquoted = match[5];
-
-      if (namedColonId != null && namedColonText != null) {
-        // Named gate: strip the token; registration stays global.
-        removals.push({ start: index, end: index + match[0].length });
-        continue;
-      }
-      if (anonQuoted != null) {
-        criteria.push(...this.parseCriteria(anonQuoted));
-        removals.push({ start: index, end: index + match[0].length });
-        continue;
-      }
-      if (canonicalOrUnquoted != null) {
-        criteria.push(...this.parseCriteria(canonicalOrUnquoted));
+      const segmentCriteria = this.segmentGateCriteria(match);
+      if (segmentCriteria !== undefined) {
+        criteria.push(...segmentCriteria);
         removals.push({ start: index, end: index + match[0].length });
       }
     }

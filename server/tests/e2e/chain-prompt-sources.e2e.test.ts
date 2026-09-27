@@ -1,4 +1,4 @@
-// @lifecycle test - P6.79 / P6.80 / R40: an arrow-chain segment or a workflow node naming a chain prompt runs that prompt's steps; P6.78 / R37: a command-level gate on a chain prompt binds each step; P6.97 / R43: a named inline gate belongs to the run that declared it, over Streamable HTTP.
+// @lifecycle test - P6.79 / P6.80 / R40: an arrow-chain segment or a workflow node naming a chain prompt runs that prompt's steps; P6.78 / R37: a command-level gate on a chain prompt binds each step; P6.97 / R43: a named inline gate belongs to the run that declared it; P6.99 / R44: a named gate on an arrow-chain segment binds that segment, over Streamable HTTP.
 /**
  * MEASURED 2026-09-25 on `427899fe` (authored `sv_chain` = sv_a/sv_b/sv_a, each step carrying the
  * blocking `sv-block`; run state read from `chain_runs.state`):
@@ -584,6 +584,53 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       ]);
       expect(second).toContain('NAMED-CRIT-78');
       expect(state.reviews).toEqual({ b: ['sv-block', 'gate78e'] });
+    }, 120000);
+  });
+
+  describe('P6.99: a named gate on an arrow-chain segment binds that segment', () => {
+    test('(a) a named gate on segment 2 binds step 2 and its review; step 1 carries none', async () => {
+      const run = await start({ command: `>>sv_a${ARROW}>>sv_b :: g99e:"NAMED-99"` });
+      expect(runState(run.chainId).steps).toEqual(['n1:sv_a:[]', 'n2:sv_b:["g99e"]']);
+      expect(run.text).not.toContain('NAMED-99');
+      const second = await run.call({ user_response: 'A out', gate_verdict: PASS });
+      expect(second).toContain('### g99e');
+      expect(second).toContain('NAMED-99');
+      const failed = await run.call({ user_response: 'B out', gate_verdict: FAIL });
+      expect(failed).toContain('Gate Review Required');
+      expect(runState(run.chainId).reviews).toEqual({ n2: ['g99e'] });
+    }, 120000);
+
+    test("(a') a named gate on a chain-prompt segment binds every expanded step", async () => {
+      const run = await start({ command: `>>sv_a${ARROW}>>sv_chain :: g99g:"SEG-99"` });
+      expect(runState(run.chainId).steps).toEqual([
+        'n1:sv_a:[]',
+        'n2-a:sv_a:["sv-block","g99g"]',
+        'n2-b:sv_b:["sv-block","g99g"]',
+        'n2-c:sv_a:["sv-block","g99g"]',
+      ]);
+    }, 120000);
+
+    // Pinned on the steps' bound gates only: a review or render on n2-* still lists the first
+    // segment's gate through the forward accumulation P6.98 leaves to the owner's ruling.
+    test("(b) a named gate on the first segment does not bind the chain-prompt segment's steps", async () => {
+      const run = await start({ command: `>>sv_a :: g99f:"LEAD-99"${ARROW}>>sv_chain` });
+      expect(runState(run.chainId).steps).toEqual([
+        'n1:sv_a:["g99f"]',
+        'n2-a:sv_a:["sv-block"]',
+        'n2-b:sv_b:["sv-block"]',
+        'n2-c:sv_a:["sv-block"]',
+      ]);
+      expect(run.text).toContain('LEAD-99');
+    }, 120000);
+
+    test('(c) control: anonymous per-segment criteria stay on their own segment', async () => {
+      const run = await start({ command: `>>sv_a :: "ANON-A-99"${ARROW}>>sv_b :: "ANON-B-99"` });
+      const state = runState(run.chainId);
+      expect(state.criteria).toEqual([['ANON-A-99'], ['ANON-B-99']]);
+      expect(state.steps.map((step) => /^n\d:sv_[ab]:\["temp_[^",]+"\]$/.test(step))).toEqual([
+        true,
+        true,
+      ]);
     }, 120000);
   });
 
