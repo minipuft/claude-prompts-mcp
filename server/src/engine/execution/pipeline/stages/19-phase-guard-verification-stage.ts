@@ -391,10 +391,7 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
     const fromContext = context.frameworkContext?.selectedFramework?.id;
     if (fromContext) return fromContext;
 
-    const cached = context.frameworkAuthority.getCachedDecision();
-    if (cached?.shouldApply && cached.frameworkId) return cached.frameworkId;
-
-    return undefined;
+    return context.frameworkAuthority.getCachedFrameworkId();
   }
 
   /**

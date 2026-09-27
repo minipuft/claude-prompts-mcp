@@ -1080,13 +1080,17 @@ export class PromptExecutor {
     );
   }
 
-  private async resolveFrameworkContextForPrompt(promptId: string, scope?: StateStoreOptions) {
+  private async resolveFrameworkContextForPrompt(
+    promptId: string,
+    scope?: StateStoreOptions,
+    frameworkId?: string
+  ) {
     const prompt = this.convertedPrompts.find((p) => p.id === promptId);
     if (!prompt) {
       return null;
     }
 
-    const frameworkContext = await this.getFrameworkExecutionContext(prompt, scope);
+    const frameworkContext = await this.getFrameworkExecutionContext(prompt, scope, frameworkId);
     if (!frameworkContext) {
       return {
         category: prompt.category,
@@ -1100,9 +1104,11 @@ export class PromptExecutor {
     };
   }
 
+  /** `frameworkId` is the run's decision when the caller has one; else the active framework. */
   private async getFrameworkExecutionContext(
     prompt: ConvertedPrompt,
-    scope: StateStoreOptions | undefined
+    scope: StateStoreOptions | undefined,
+    frameworkId?: string
   ): Promise<FrameworkExecutionContext | null> {
     if (!this.frameworkManager || !this.frameworkStateStore) {
       return null;
@@ -1113,9 +1119,9 @@ export class PromptExecutor {
     }
 
     try {
-      const activeFramework = this.frameworkStateStore.getActiveFramework(scope);
+      const userPreference = frameworkId ?? this.frameworkStateStore.getActiveFramework(scope).type;
       return this.frameworkManager.generateExecutionContext(prompt, {
-        userPreference: activeFramework.type,
+        userPreference,
         scope,
       });
     } catch (error) {

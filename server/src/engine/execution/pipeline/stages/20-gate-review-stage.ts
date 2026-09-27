@@ -396,6 +396,10 @@ export class GateReviewStage extends BasePipelineStage {
         ...(context.executionPlan?.modifiers !== undefined
           ? { runModifiers: context.executionPlan.modifiers }
           : {}),
+        // The run's framework decision, which a contributed step renders under (R88).
+        ...(context.frameworkAuthority.getCachedFrameworkId() !== undefined
+          ? { runFrameworkId: context.frameworkAuthority.getCachedFrameworkId() }
+          : {}),
       });
 
       this.recordReviewedDeclaration(sessionId, renderResult);

@@ -1745,6 +1745,34 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
         expect(rendered).not.toContain('## Context');
         expect(reviews).toEqual({});
       }, 120000);
+
+      /**
+       * P6.179 / R88. MEASURED 2026-09-27 on `ce5666f7` (shipped CAGEERF active): under `^ReACT`
+       * the remainder step `r1` rendered the ACTIVE framework's `## Context` while its run was
+       * graded on ReACT's phases, so a PASS with no sections opened nothing. A contributed step now
+       * resolves the run's framework decision, the one its grading reads.
+       */
+      describe("P6.179: a contributed step follows the run's framework decision", () => {
+        test('(a) under an override the remainder step declares the run framework and is guarded', async () => {
+          const { rendered, reviews } = await passWithoutSections(
+            `^ReACT >>sv_a${ARROW}>>sv_b`,
+            true
+          );
+          expect(rendered).toContain('## Reasoning');
+          expect(rendered).not.toContain('## Context');
+          expect(reviews).toEqual({ r1: ['__phase_guard__'] });
+        }, 120000);
+
+        test('(c) control: a planned step under the override is unchanged', async () => {
+          const { rendered, reviews } = await passWithoutSections(
+            `^ReACT >>sv_a${ARROW}>>sv_d`,
+            false
+          );
+          expect(rendered).toContain('## Reasoning');
+          expect(rendered).not.toContain('## Context');
+          expect(reviews).toEqual({ n2: ['__phase_guard__'] });
+        }, 120000);
+      });
     });
 
     /**
