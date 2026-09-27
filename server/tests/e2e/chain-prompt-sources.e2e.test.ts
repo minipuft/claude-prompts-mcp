@@ -582,6 +582,142 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
     }, 120000);
   });
 
+  /**
+   * MEASURED 2026-09-27 on `2a3e69c1`: a resume carrying `gates: [{ target_step_id: "nope" }]` on a
+   * live `>>sv_chain` run returned `isError: false`, advanced the run, and never rendered the
+   * criterion. The resume restores the run's blueprint and now checks the targets against the
+   * run's declared node ids, as every start source does (P6.124).
+   */
+  describe('P6.126: a resume checks a request gate target against the run it resumes', () => {
+    const NOPE = '[gate-target-missing] node "nope": Gate binding targets step id "nope"';
+
+    /** `chain_runs.state` exactly as stored, so an untouched run compares byte for byte. */
+    function rawState(chainId: string): string | undefined {
+      const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+      try {
+        const row = db.prepare('SELECT state FROM chain_runs WHERE chain_id = ?').get(chainId) as
+          { state: string } | undefined;
+        return row?.state;
+      } finally {
+        db.close();
+      }
+    }
+
+    test('(a) a target the run does not declare is refused by name, the run untouched', async () => {
+      const run = await start({ command: '>>sv_chain' });
+      const second = await run.call({ user_response: 'A out', gate_verdict: PASS });
+      expect(templates(second)).toEqual(['BODY-sv_b topic=']);
+      const before = rawState(run.chainId);
+      expect(before).toBeDefined();
+      const runs = countRuns();
+
+      const refused = await tool('prompt_engine', {
+        chain_id: run.chainId,
+        user_response: 'B out',
+        gate_verdict: PASS,
+        gates: [{ name: 'tgt126a', criteria: ['TGT-126-A'], target_step_id: 'nope' }],
+      });
+      expect(refused.isError).toBe(true);
+      expect(refused.text).toContain(NOPE);
+      expect(refused.text).not.toContain('TGT-126-A');
+      expect(rawState(run.chainId)).toBe(before);
+      expect(countRuns()).toBe(runs);
+
+      // The run is still at step b: the same answer advances it to step c.
+      const third = await run.call({ user_response: 'B out', gate_verdict: PASS });
+      expect(templates(third)).toEqual(['BODY-sv_a topic=']);
+      expect(third).not.toContain('TGT-126-A');
+    }, 120000);
+
+    test("(b) control: a target naming the run's next node renders there", async () => {
+      const run = await start({ command: '>>sv_chain' });
+      expect(run.text).not.toContain('TGT-126-B');
+      const second = await tool('prompt_engine', {
+        chain_id: run.chainId,
+        user_response: 'A out',
+        gate_verdict: PASS,
+        gates: [{ name: 'tgt126b', criteria: ['TGT-126-B'], target_step_id: 'b' }],
+      });
+      expect(second.isError).toBe(false);
+      expect(templates(second.text)).toEqual(['BODY-sv_b topic=']);
+      expect(second.text).toContain('TGT-126-B');
+    }, 120000);
+  });
+
+  /**
+   * PIN (as of 2026-09-27 · flips when a gated single prompt stops opening a run). A single prompt
+   * with an inline gate operator opens a run of ONE node, `n1` (R52), because the planner requires
+   * a session for any `gate` operator (`ExecutionPlanner.requiresSession`, its operator clause — not
+   * a held review: the criterion's gate is advisory, and a FAIL on it only warns); `>>sv_a` alone
+   * carries no gate (its `gate_configuration` excludes every default) and opens none. The row is read: the
+   * reply hands out its `chain_id`, and the call that answers it resumes and completes that run.
+   * The `steps: []` the P6.124 measurement saw is the blueprint's `parsedCommand.steps`, which a
+   * single prompt never has; the run's node list lives in `chain_run_nodes`.
+   */
+  describe('P6.127: a gated single prompt is a run of one node', () => {
+    function runRows(chainId: string): {
+      run?: { run_status: string; current_node_id: string | null };
+      nodes: Array<{ node_id: string; position: number }>;
+      view: Array<{ current_step: number; total_steps: number }>;
+    } {
+      const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+      try {
+        const run = db
+          .prepare(
+            'SELECT session_id, run_status, current_node_id FROM chain_runs WHERE chain_id = ?'
+          )
+          .get(chainId) as
+          { session_id: string; run_status: string; current_node_id: string | null } | undefined;
+        const nodes = (
+          run === undefined
+            ? []
+            : db
+                .prepare(
+                  'SELECT node_id, position FROM chain_run_nodes WHERE session_id = ? ORDER BY position'
+                )
+                .all(run.session_id)
+        ) as Array<{ node_id: string; position: number }>;
+        const view = db
+          .prepare('SELECT current_step, total_steps FROM v_execution_status WHERE chain_id = ?')
+          .all(chainId) as Array<{ current_step: number; total_steps: number }>;
+        return {
+          ...(run === undefined
+            ? {}
+            : { run: { run_status: run.run_status, current_node_id: run.current_node_id } }),
+          nodes: nodes.map(({ node_id, position }) => ({ node_id, position })),
+          view: view.map(({ current_step, total_steps }) => ({ current_step, total_steps })),
+        };
+      } finally {
+        db.close();
+      }
+    }
+
+    test('control: the bare prompt carries no gate and opens no run', async () => {
+      const before = countRuns();
+      const bare = await tool('prompt_engine', { command: '>>sv_a' });
+      expect(bare.isError).toBe(false);
+      expect(templates(bare.text)).toEqual(['BODY-sv_a topic=']);
+      expect(bare.text).not.toContain('chain_id');
+      expect(countRuns()).toBe(before);
+    }, 120000);
+
+    test('an inline gate opens one node `n1`, shown 1/1, resumed and completed by its answer', async () => {
+      const before = countRuns();
+      const run = await start({ command: '>>sv_a :: "CRIT-127"' });
+      expect(countRuns()).toBe(before + 1);
+      expect(run.text).toContain('CRIT-127');
+      expect(runRows(run.chainId)).toEqual({
+        run: { run_status: 'working', current_node_id: 'n1' },
+        nodes: [{ node_id: 'n1', position: 1 }],
+        view: [{ current_step: 1, total_steps: 1 }],
+      });
+      expect(runState(run.chainId).steps).toEqual([]);
+
+      await run.call({ user_response: 'out', gate_verdict: PASS });
+      expect(runRows(run.chainId).run).toEqual({ run_status: 'completed', current_node_id: null });
+    }, 120000);
+  });
+
   describe('P6.93: a remainder naming a chain prompt', () => {
     /** The run's live nodes, as `chain_run_nodes` holds them. */
     function runNodes(chainId: string): string[] {

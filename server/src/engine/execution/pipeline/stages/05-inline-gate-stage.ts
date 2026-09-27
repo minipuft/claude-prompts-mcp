@@ -27,14 +27,20 @@ export class InlineGateExtractionStage extends BasePipelineStage {
   async execute(context: ExecutionContext): Promise<void> {
     this.logEntry(context);
 
-    if (context.state.session.isBlueprintRestored) {
-      this.logExit({ skipped: 'Session blueprint restored' });
-      return;
-    }
-
     const parsedCommand = context.parsedCommand;
     if (!parsedCommand) {
       this.logExit({ skipped: 'Parsed command missing' });
+      return;
+    }
+
+    // A restored blueprint was processed by the call that started the run; its gates are
+    // re-registered only where this process does not hold them (R54: a claimed run).
+    if (context.state.session.isBlueprintRestored) {
+      const restoredIds = await this.inlineGateProcessor.restoreRunGates(context, parsedCommand);
+      context.state.gates.temporaryGateIds = Array.from(
+        new Set([...context.state.gates.temporaryGateIds, ...restoredIds])
+      );
+      this.logExit({ restoredRunGates: restoredIds.length });
       return;
     }
 

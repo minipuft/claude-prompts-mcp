@@ -171,6 +171,16 @@ export class ExecutionRecordStore {
     return executionId;
   }
   /**
+   * An id from the same monotonic factory `append` uses, never inserted: every record appended
+   * after this call sorts above it, every record appended before sorts below, even within one
+   * millisecond. The pipeline takes one at the start of a call to tell the run's earlier records
+   * from the ones this call writes (R55).
+   */
+  watermark(): string {
+    return ulid();
+  }
+
+  /**
    * Return all records for a session ordered by creation (ULID order).
    * Scope filter is applied when provided so cross-tenant rows are excluded.
    */

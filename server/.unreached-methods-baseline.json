@@ -1,11 +1,10 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-23T09:35:52.298Z",
-  "total": 9,
+  "generatedAt": "2026-09-27T08:10:30.603Z",
+  "total": 8,
   "methods": [
     "EnhancedLogger.initLogFile",
     "ExecutionRecordStore.queryByChain",
-    "ExecutionRecordStore.queryBySession",
     "GateAccumulator.getBySource",
     "GateAccumulator.getEntry",
     "GateAccumulator.has",
@@ -21,7 +20,6 @@
     "EnhancedLogger.initLogFile": "reached only through a duck-typed cast the static walker can't resolve: runtime/context.ts calls `(logger as any).initLogFile()` behind a `typeof ... === 'function'` guard, for every logger `createLogger()` returns (P4.52, 2026-09-20).",
     "PendingConfirmationTracker.hasPending": "sole non-destructive test-observation window for pending-confirmation state: checkAndClearPending clears on match (single-use), so hasPending is the only way tests assert a pending confirmation exists without consuming it — 10 call sites in pending-confirmation-tracker.test.ts (P4.52, 2026-09-20).",
     "PendingConfirmationTracker.clear": "has its own dedicated behavioral test (multi-entry clear + hasPending verification), not merely incidental teardown; kept as tested capability alongside hasPending (P4.52, 2026-09-20).",
-    "ExecutionRecordStore.queryByChain": "sole test-observation window for the `WHERE chain_id = ?` predicate and its tenant scoping (AC4/AC5, execution-record-store.integration.test.ts); the only production readers (analytics-action-handler.ts, execution-history-action-handler.ts) call queryRecent(), which never filters by chain_id or session_id in JS — verified, not just assumed. Both write and query sides are documented as intentional in-process consumers in this class's own header (P4.52, 2026-09-20).",
-    "ExecutionRecordStore.queryBySession": "sole test-observation window for the `WHERE session_id = ?` predicate and its tenant scoping (AC3/AC4/AC5, execution-record-store.integration.test.ts); see ExecutionRecordStore.queryByChain — same class, same finding (P4.52, 2026-09-20)."
+    "ExecutionRecordStore.queryByChain": "sole test-observation window for the `WHERE chain_id = ?` predicate and its tenant scoping (AC4/AC5, execution-record-store.integration.test.ts); the only production readers (analytics-action-handler.ts, execution-history-action-handler.ts) call queryRecent(), which never filters by chain_id or session_id in JS — verified, not just assumed. Both write and query sides are documented as intentional in-process consumers in this class's own header (P4.52, 2026-09-20)."
   }
 }

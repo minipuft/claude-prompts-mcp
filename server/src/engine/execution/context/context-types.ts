@@ -9,6 +9,7 @@
 
 import type { PendingGateReview } from '#shared/types/chain-execution.js';
 import type { DeclaredRunBudget } from '#shared/types/chain-session.js';
+import type { GateSpecification } from '#shared/types/execution.js';
 import type { ChainStepPrompt } from '../operators/types.js';
 import type { CommandParseResult } from '../parsers/command-parser.js';
 import type { ConvertedPrompt, ExecutionModifiers } from '../types.js';
@@ -55,6 +56,14 @@ export interface ParsedCommand extends CommandParseResult {
    * Absent on every other submission path. Absence means "server defaults", never "zero".
    */
   budget?: DeclaredRunBudget;
+  /**
+   * The start call's request gates that registered as temporary gates (R54), written by
+   * `SessionManagementStage.buildSessionBlueprint` onto the blueprint's clone only — the same ride
+   * `budget` takes. A resume carries no `gates`, and the registry holding the registered ones is in
+   * memory, so a run claimed by another server re-registers them from here
+   * (`InlineGateProcessor.restoreRunGates`). Absent when the start call sent none.
+   */
+  requestGates?: GateSpecification[];
 }
 
 /**

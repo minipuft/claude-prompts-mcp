@@ -23,6 +23,14 @@ interface InlineGateScope {
 /** A binding key -> the id this run's gate declared under it registered as, if any (R49). */
 type DeclaredGateView = (key: string) => string | undefined;
 
+/** Register one of a restored run's gates under the id its blueprint recorded (R54). */
+type RestoreGate = (
+  id: string,
+  criteria: readonly string[],
+  identity: { name: string; description: string; declared_key?: string },
+  stepNumber?: number
+) => void;
+
 /**
  * Internal result of processing gate criteria.
  */
@@ -199,6 +207,139 @@ export class InlineGateProcessor {
       registeredIds,
       namedCount: parsedCommand.namedInlineGates?.length ?? 0,
     };
+  }
+
+  /**
+   * Re-register the temporary gates a restored run's blueprint references and this process does
+   * not hold (R54) — a run claimed from another server (the 2A handoff) is the one resume whose
+   * gates were registered in a process that is not this one. Stage 05 skips processing on a
+   * restored blueprint, and the registry is in memory, so without this the run's named gates, its
+   * anonymous criteria and its request gates stop rendering and reviewing from the claim on.
+   *
+   * Each gate registers under the id the blueprint recorded (`restoreTemporaryGate`), so the
+   * steps' `inlineGateIds` resolve unchanged; a held id is skipped. That makes the restore
+   * idempotent by construction: on a resume in the process that registered them, every id is held
+   * and nothing registers. Request gates are not referenced by the blueprint's ids: the ones the
+   * start call registered ride `parsedCommand.requestGates` (stage 13), and are handed back to the
+   * request-gate registrar (stage 11) when the run owns none. Returns the ids registered here.
+   */
+  async restoreRunGates(
+    context: ExecutionContext,
+    parsedCommand: ParsedCommand
+  ): Promise<string[]> {
+    const runId = context.getSessionId();
+    if (runId === undefined) {
+      return [];
+    }
+    const restored: string[] = [];
+    const restore: RestoreGate = (id, criteria, identity, stepNumber) => {
+      const registered = this.temporaryGateRegistry.restoreTemporaryGate(
+        {
+          id,
+          ...identity,
+          type: 'validation',
+          scope: stepNumber !== undefined ? 'step' : 'execution',
+          guidance: formatCriteriaAsGuidance(criteria),
+          pass_criteria: [...criteria],
+          source: 'automatic',
+        },
+        this.getScopeId(context, stepNumber)
+      );
+      if (registered) {
+        restored.push(id);
+      }
+    };
+
+    this.restoreNamedGates(parsedCommand, restore);
+    await this.restoreAnonymousGates(parsedCommand, restore, (key) =>
+      this.temporaryGateRegistry.resolveDeclared(key, runId, restored)
+    );
+    this.restoreRequestGates(context, parsedCommand, runId);
+    return restored;
+  }
+
+  /** Each named gate under the id the command recorded for it: `name`, or `name-N` (R43). */
+  private restoreNamedGates(parsedCommand: ParsedCommand, restore: RestoreGate): void {
+    const commandIds = parsedCommand.inlineGateIds ?? [];
+    const claimed = new Set<string>();
+    const occurrences = new Map<string, number>();
+    for (const namedGate of parsedCommand.namedInlineGates ?? []) {
+      if (namedGate.shellVerify !== undefined || !isValidGateCriteria(namedGate.criteria)) {
+        continue;
+      }
+      const occurrence = (occurrences.get(namedGate.gateId) ?? 0) + 1;
+      occurrences.set(namedGate.gateId, occurrence);
+      const recordedId = commandIds.find(
+        (id) => !claimed.has(id) && isRegisteredUnder(id, namedGate.gateId)
+      );
+      if (recordedId !== undefined) {
+        claimed.add(recordedId);
+        restore(recordedId, namedGate.criteria, {
+          name: namedGate.gateId,
+          description: `Named inline gate "${namedGate.gateId}" from symbolic syntax`,
+          declared_key: namedGateBindingKey(namedGate.gateId, occurrence),
+        });
+      }
+    }
+  }
+
+  /**
+   * Each carrier's anonymous criteria under the one generated id it references — the last, since
+   * `applyGateResult` appends it after the references it resolved.
+   */
+  private async restoreAnonymousGates(
+    parsedCommand: ParsedCommand,
+    restore: RestoreGate,
+    declaredNamedGates: DeclaredGateView
+  ): Promise<void> {
+    const carriers: Array<{ target: InlineGateTarget; stepNumber?: number }> = [
+      { target: parsedCommand },
+      ...(parsedCommand.steps ?? []).map((step) => ({ target: step, stepNumber: step.stepNumber })),
+    ];
+    for (const { target, stepNumber } of carriers) {
+      const recordedId = [...(target.inlineGateIds ?? [])]
+        .reverse()
+        .find((id) => AUTO_GENERATED_GATE_ID.test(id));
+      if (
+        !isValidGateCriteria(target.inlineGateCriteria) ||
+        recordedId === undefined ||
+        this.temporaryGateRegistry.getTemporaryGate(recordedId) !== undefined
+      ) {
+        continue;
+      }
+      // A criterion naming another run's gate by its generated id was a reference, not text.
+      const inlineCriteria = (
+        await this.partitionGateCriteria(target.inlineGateCriteria, declaredNamedGates)
+      ).inlineCriteria.filter((criterion) => !AUTO_GENERATED_GATE_ID.test(criterion));
+      if (inlineCriteria.length > 0) {
+        const description =
+          stepNumber !== undefined
+            ? `Inline criteria for step ${stepNumber}`
+            : 'Inline criteria for symbolic command';
+        restore(
+          recordedId,
+          inlineCriteria,
+          { name: 'Inline Validation Criteria', description },
+          stepNumber
+        );
+      }
+    }
+  }
+
+  /** The start call's request gates, handed back to stage 11 while the run owns none of them. */
+  private restoreRequestGates(
+    context: ExecutionContext,
+    parsedCommand: ParsedCommand,
+    runId: string
+  ): void {
+    const requestGates = parsedCommand.requestGates ?? [];
+    const runOwnsRequestGates = this.temporaryGateRegistry
+      .getRunGates(runId)
+      .some((gate) => gate.origin === 'request');
+    if (requestGates.length > 0 && !runOwnsRequestGates) {
+      const current = context.state.gates.requestedOverrides?.gates ?? [];
+      context.state.gates.requestedOverrides = { gates: [...requestGates, ...current] };
+    }
   }
 
   private async applyGateCriteria(
@@ -525,4 +666,12 @@ export class InlineGateProcessor {
       preset: shellVerify.preset,
     });
   }
+}
+
+/** The auto-generated temporary gate id form (`TemporaryGateRegistry.chooseGateId`). */
+const AUTO_GENERATED_GATE_ID = /^temp_\d+_[a-z0-9]+$/;
+
+/** Whether `id` is what a named gate declared as `name` registered under: `name` or `name-N` (R43). */
+function isRegisteredUnder(id: string, name: string): boolean {
+  return id === name || (id.startsWith(`${name}-`) && /^\d+$/.test(id.slice(name.length + 1)));
 }

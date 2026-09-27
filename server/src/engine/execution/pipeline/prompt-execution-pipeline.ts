@@ -139,6 +139,99 @@ export class PromptExecutionPipeline {
   }
 
   /**
+   * A start call that throws leaves a run nothing was rendered for (R55): the client got the
+   * error, not step 1. "Start call" is stage 13's own `lifecycleDecision` for the call that created
+   * the run (`create-new` / `create-force-restart`) — the fact stage 20 already reads for "the
+   * run-creating call". The run is cancelled, which releases its gates (`onRunEnded`); the
+   * `failed` record just written stays, and a later `chain_id` is refused naming it
+   * ({@link reportPreviousFailure}). A later call's throw leaves the run `working`.
+   *
+   * A cancel that fails is logged, not thrown: this runs inside the error boundary, and the
+   * failure the caller must see is the one that brought it here.
+   */
+  private async endRunOfFailedStartCall(context: ExecutionContext, failure: Error): Promise<void> {
+    const decision = context.state.session.lifecycleDecision;
+    const sessionId = context.sessionContext?.sessionId;
+    if (
+      (decision !== 'create-new' && decision !== 'create-force-restart') ||
+      sessionId === undefined ||
+      this.chainSessionStore === undefined
+    ) {
+      return;
+    }
+    try {
+      await this.chainSessionStore.cancelChain(sessionId);
+    } catch (cancelError) {
+      this.logger.error('[Pipeline] Could not end the run of a failed start call', {
+        sessionId,
+        failure: failure.message,
+        error: toError(cancelError).message,
+      });
+    }
+  }
+
+  /**
+   * Name the previous call's failure on this call's reply, once (R55). The run's newest record
+   * written before this call (below `watermark`) being the error boundary's run-level `failed`
+   * one means the call before this one threw: a resume of a live run gets the reply prefixed
+   * with it, and a resume stage 13 answered as already ended — a run a failed start call ended —
+   * is refused naming it. This call's own records then sit above that record, so the call after
+   * it says nothing. The pipeline owns this because it wrote the record, and because it is the
+   * one point every reply passes: a stage that sets a response early skips the formatting stage.
+   */
+  private reportPreviousFailure(context: ExecutionContext, watermark: string | undefined): void {
+    const response = context.response;
+    const sessionId = context.sessionContext?.sessionId ?? context.getSessionId();
+    if (
+      this.executionRecordStore === undefined ||
+      watermark === undefined ||
+      response === undefined ||
+      sessionId === undefined
+    ) {
+      return;
+    }
+    const earlier = this.executionRecordStore
+      .queryBySession(sessionId, context.getScopeOptions())
+      .filter((record) => record.executionId < watermark);
+    const previous = earlier[earlier.length - 1];
+    if (
+      previous?.status !== 'failed' ||
+      previous.nodeId !== undefined ||
+      previous.stepNumber !== undefined
+    ) {
+      return;
+    }
+    const message = previous.errorMessage ?? 'no message recorded';
+    if (context.state.session.lifecycleDecision === 'resume-completed') {
+      const chainId = context.state.session.resumeChainId ?? previous.chainId ?? sessionId;
+      context.setResponse({
+        content: [
+          {
+            type: 'text',
+            text:
+              `❌ **Run Refused**: run \`${chainId}\` failed on its start call: ${message}\n\n` +
+              'Nothing was rendered for it, so there is nothing to resume. Start a new run with ' +
+              'the chain command.',
+          },
+        ],
+        isError: true,
+      });
+      return;
+    }
+    const [first, ...rest] = response.content;
+    if (first?.type !== 'text') {
+      return;
+    }
+    context.setResponse({
+      ...response,
+      content: [
+        { ...first, text: `⚠️ The previous call failed: ${message}\n\n${first.text}` },
+        ...rest,
+      ],
+    });
+  }
+
+  /**
    * The ONE point a run adopts the temporary gates its calls register (R47): after the stage
    * loop, whether it completed or threw (P6.111), where the session exists even on the call that
    * created it (stage 13 runs after the stages that register gates), and before
@@ -197,6 +290,8 @@ export class PromptExecutionPipeline {
     });
 
     const pipelineStart = Date.now();
+    // Taken before any stage runs, so the run's records below it are earlier calls' (R55).
+    const recordWatermark = this.executionRecordStore?.watermark();
     const commandMetricId = this.createCommandMetricId();
     context.state.lifecycle.metricId = commandMetricId;
     // Owned here rather than by `runStages` because the catch and finally blocks
@@ -220,6 +315,7 @@ export class PromptExecutionPipeline {
       if (!context.response) {
         throw new Error('Pipeline completed without producing a response');
       }
+      this.reportPreviousFailure(context, recordWatermark);
 
       if (context.response.isError) {
         commandStatus = 'error';
@@ -244,6 +340,7 @@ export class PromptExecutionPipeline {
         stages: stageMetrics,
       });
       this.emitFailureRecord(context, failure);
+      await this.endRunOfFailedStartCall(context, failure);
       this.finishRootSpan(rootSpan, {
         context,
         stageMetrics,

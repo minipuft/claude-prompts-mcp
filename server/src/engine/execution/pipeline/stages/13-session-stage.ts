@@ -5,6 +5,7 @@ import { resolveShownReview } from '../decisions/gates/review-target.js';
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
+import type { GateSpecification } from '#shared/types/execution.js';
 import type {
   ChainNode,
   ChainSession,
@@ -381,6 +382,13 @@ export class SessionManagementStage extends BasePipelineStage {
 
     const parsedClone = this.cloneParsedCommand(context.parsedCommand);
     const planClone = this.cloneExecutionPlan(context.executionPlan);
+    const requestGates = temporaryRequestGates(
+      context.state.gates.requestedOverrides?.gates,
+      context.state.gates.canonicalGateIdsFromTemporary
+    );
+    if (requestGates.length > 0) {
+      parsedClone.requestGates = JSON.parse(JSON.stringify(requestGates)) as GateSpecification[];
+    }
 
     const blueprint: SessionBlueprint = {
       parsedCommand: parsedClone,
@@ -401,4 +409,28 @@ export class SessionManagementStage extends BasePipelineStage {
   private cloneExecutionPlan(plan: ExecutionPlan): ExecutionPlan {
     return JSON.parse(JSON.stringify(plan)) as ExecutionPlan;
   }
+}
+
+/**
+ * The request's gates that registered as temporary gates, for the run to re-register after a
+ * claim (R54): every entry but the canonical references stage 11 resolved
+ * (`canonicalGateIdsFromTemporary`) — a canonical one applies to the start call's step only, and
+ * restoring it would apply it again on the step the claim resumes.
+ */
+function temporaryRequestGates(
+  gates: readonly unknown[] | undefined,
+  canonicalIds: readonly string[]
+): unknown[] {
+  const reference = (gate: unknown): string | undefined =>
+    typeof gate === 'string'
+      ? gate.trim()
+      : typeof gate === 'object' &&
+          gate !== null &&
+          typeof (gate as { id?: unknown }).id === 'string'
+        ? (gate as { id: string }).id.trim()
+        : undefined;
+  return (gates ?? []).filter((gate) => {
+    const ref = reference(gate);
+    return ref === undefined || !canonicalIds.includes(ref);
+  });
 }
