@@ -260,8 +260,8 @@ export class TemporaryGateRegistry {
 
   /**
    * The id `key` was declared as for this run (R49) — the run's one declared-id map, read off the
-   * gates its index holds: a gate `runId` owns, else one of this call's `callGateIds` no run has
-   * adopted yet (the call that starts a run registers before the run exists, and adoption hands
+   * gates its index holds: a gate `runId` owns, else one of `callGateIds`, the gates this call
+   * registered (the call that starts a run registers before the run exists, and adoption hands
    * its gates to the run keys and all). Undefined when neither holds the key: the caller
    * registers, under a fresh id if another run holds the declared one.
    */
@@ -271,13 +271,9 @@ export class TemporaryGateRegistry {
     callGateIds: readonly string[]
   ): string | undefined {
     const owned = runId === undefined ? [] : [...(this.runGates.get(runId) ?? [])];
-    return [...owned, ...callGateIds].find((gateId) => {
-      const owner = this.gateOwners.get(gateId);
-      return (
-        this.temporaryGates.get(gateId)?.declared_key === key &&
-        (owner === undefined || owner === runId)
-      );
-    });
+    return [...owned, ...callGateIds].find(
+      (gateId) => this.temporaryGates.get(gateId)?.declared_key === key
+    );
   }
 
   /** The gates `runId` owns. */
