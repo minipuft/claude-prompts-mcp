@@ -249,6 +249,12 @@ export class ChainSessionStore implements ChainSessionService {
    * first writes the run re-reads every owner's rows and re-mints past them.
    */
   private readonly unreservedRuns = new Set<string>();
+  /**
+   * Per run, the gate ids this process registered in place of the ids its blueprint recorded
+   * (R60 amended). In memory only: the blueprint stays the recorded truth, and a later claim
+   * elsewhere re-derives its own map.
+   */
+  private readonly runGateRemaps = new Map<string, ReadonlyMap<string, string>>();
   private readonly pidScope: StateStoreOptions = { continuityScopeId: String(process.pid) };
   private readonly workspaceScope: StateStoreOptions | undefined;
 
@@ -1184,6 +1190,7 @@ export class ChainSessionStore implements ChainSessionService {
       const session = this.activeSessions.get(sessionId);
       if (session === undefined) continue;
       this.activeSessions.delete(sessionId);
+      this.runGateRemaps.delete(sessionId);
       this.chainSessionMapping.get(session.chainId)?.delete(sessionId);
       this.logger.info(
         `[Handoff] Session ${sessionId} (${session.chainId}) claimed by another server; evicted`
@@ -2075,7 +2082,7 @@ export class ChainSessionStore implements ChainSessionService {
       return undefined;
     }
 
-    const inlineIds = this.collectInlineGateIds(session.blueprint.parsedCommand);
+    const inlineIds = this.collectInlineGateIds(session.blueprint.parsedCommand, sessionId);
     return inlineIds.length > 0 ? inlineIds : undefined;
   }
 
@@ -2086,6 +2093,7 @@ export class ChainSessionStore implements ChainSessionService {
       this.logger.warn(`Attempted to remap the gates of non-existent session: ${sessionId}`);
       return;
     }
+    this.runGateRemaps.set(sessionId, new Map(remap));
     const stale = Object.values(session.reviews ?? {}).filter((review) =>
       reviewGateIds(review).some((id) => remap.has(id))
     );
@@ -2604,6 +2612,7 @@ export class ChainSessionStore implements ChainSessionService {
     }
 
     this.activeSessions.delete(sessionId);
+    this.runGateRemaps.delete(sessionId);
   }
 
   private removeRunFromBaseTracking(chainId: string): void {
@@ -2829,17 +2838,22 @@ export class ChainSessionStore implements ChainSessionService {
       category: convertedPrompt?.category,
       gates: plan?.gates ?? [],
       strategy: plan?.strategy,
-      inlineGateIds: this.collectInlineGateIds(parsed),
+      inlineGateIds: this.collectInlineGateIds(parsed, session.sessionId),
     };
 
     return metadata;
   }
 
-  private collectInlineGateIds(parsedCommand?: ParsedCommandSnapshot): string[] {
+  /** The blueprint's inline gate ids, each resolved through the run's gate remap (R60 amended). */
+  private collectInlineGateIds(
+    parsedCommand: ParsedCommandSnapshot | undefined,
+    sessionId: string
+  ): string[] {
     if (!parsedCommand) {
       return [];
     }
 
+    const remap = this.runGateRemaps.get(sessionId);
     const ids = new Set<string>();
 
     const recordIds = (values?: string[]) => {
@@ -2848,7 +2862,7 @@ export class ChainSessionStore implements ChainSessionService {
       }
       for (const id of values) {
         if (typeof id === 'string' && id.trim().length > 0) {
-          ids.add(id);
+          ids.add(remap?.get(id) ?? id);
         }
       }
     };

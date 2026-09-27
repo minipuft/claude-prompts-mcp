@@ -423,22 +423,54 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     }
   }
 
+  /** The run's inline gate ids as `gates chain` and `system_control session inspect` report them. */
+  async function reportedInlineGateIds(
+    server: Server,
+    chainId: string,
+    sessionId: string
+  ): Promise<{ summary: string | undefined; metadata: string[] | undefined }> {
+    const gates = await server.call('prompt_engine', { command: `gates chain ${chainId}` });
+    const inspected = await server.call('system_control', {
+      action: 'session',
+      operation: 'inspect',
+      session_id: sessionId,
+    });
+    const metadata = /`chain_metadata`: (\{.*\})/.exec(inspected.text)?.[1];
+    return {
+      summary: /- Inline Gates: (.*)/.exec(gates.text)?.[1],
+      metadata:
+        metadata === undefined
+          ? undefined
+          : (JSON.parse(metadata) as { inlineGateIds: string[] }).inlineGateIds,
+    };
+  }
+
   test('P6.140 (a) a review opened before a claim names the remapped gate and a FAIL grades the claimed run criteria', async () => {
     const roots = freshRoots();
-    const { chainId, failed } = await claimWithOpenReview(roots, true);
+    const { chainId, second, failed, sessionId } = await claimWithOpenReview(roots, true);
     expect(failed).toContain('Gate Review Required');
     expect(failed).toContain('A-ONE');
     expect(failed).not.toContain('B-ONE');
     expect(runRow(roots, chainId)?.reviews).toEqual({ a: ['sv-block', 'g140-2'] });
     // The tier map follows too: the remapped gate is still a reminder the verdict attests.
     expect(failed).toContain('"satisfied": ["sv-block", "g140-2"]');
+
+    // P6.141 (a): the run's inline gate ids read through the same remap.
+    expect(await reportedInlineGateIds(second, chainId, sessionId)).toEqual({
+      summary: 'g140-2, sv-block',
+      metadata: ['g140-2', 'sv-block'],
+    });
   }, 180000);
 
-  test('P6.140 (b) control: with no collision the claimed review is unchanged', async () => {
+  test('P6.140 (b) control: with no collision the claimed review and inline gate ids are unchanged', async () => {
     const roots = freshRoots();
-    const { chainId, failed } = await claimWithOpenReview(roots, false);
+    const { chainId, second, failed, sessionId } = await claimWithOpenReview(roots, false);
     expect(failed).toContain('A-ONE');
     expect(runRow(roots, chainId)?.reviews).toEqual({ a: ['sv-block', 'g140'] });
+    expect(await reportedInlineGateIds(second, chainId, sessionId)).toEqual({
+      summary: 'g140, sv-block',
+      metadata: ['g140', 'sv-block'],
+    });
   }, 180000);
 
   test('P6.130 (a) after a claim the projection holds exactly the claimer row for the run', async () => {

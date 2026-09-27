@@ -559,7 +559,8 @@ export interface ChainSessionService {
   /**
    * Adopt the gate ids this process registered for a restored run in place of the ids its
    * blueprint recorded (R60 amended): `remap` is recorded id to registered id. The run's open
-   * reviews are rewritten through the review writer. The blueprint is untouched.
+   * reviews are rewritten through the review writer, and every read of the recorded inline gate
+   * ids resolves through the map for the session's lifetime here. The blueprint is untouched.
    */
   remapRunGates(sessionId: string, remap: ReadonlyMap<string, string>): Promise<void>;
   /**
