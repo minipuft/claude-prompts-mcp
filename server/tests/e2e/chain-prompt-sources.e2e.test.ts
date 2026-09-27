@@ -1316,9 +1316,10 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       ]);
       expect(nodeGates(run.chainId)).toEqual([
         'r1-initial-scan-step-1-of-4:null',
-        'r1-deep-investigation-step-2-of-4:["Source Citations"]',
+        // P6.158: a name the chain prompt's own definitions declare travels as a reference
+        'r1-deep-investigation-step-2-of-4:["research_chain:Source Citations"]',
         'r1-synthesis-step-3-of-4:null',
-        'r1-action-plan-step-4-of-4:["Actionable Recommendations"]',
+        'r1-action-plan-step-4-of-4:["research_chain:Actionable Recommendations"]',
       ]);
       const first = await run.call({ user_response: 'B out' });
       expect(first).toContain('Progress 4/7');

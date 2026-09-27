@@ -687,6 +687,51 @@ export class TemporaryGateRegistrar {
     return registeredIds;
   }
 
+  /**
+   * Register the inline definitions a CHAIN prompt declares for the steps that name them
+   * (P6.158), and return the id each step reference registered under.
+   *
+   * A chain prompt's definitions are not a step prompt's, so {@link registerInlineGateDefinitions}
+   * never sees them, and they bind only the steps that name them: each registered id is read as
+   * that step's own gate, never contributed to every step. Same enablement, same per-definition
+   * containment, and the same held-id reuse on a resume (P6.107) as a step prompt's definitions.
+   */
+  registerStepGateDefinitions(
+    context: ExecutionContext,
+    definitions: ReadonlyArray<StepGateDefinition>,
+    enabled: boolean
+  ): ReadonlyMap<string, string> {
+    const registered = new Map<string, string>();
+    const registry = this.temporaryGateRegistry;
+    if (!enabled || definitions.length === 0) {
+      return registered;
+    }
+    if (registry === undefined) {
+      this.logger.warn(
+        '[TemporaryGateRegistrar] Chain gate definitions present but no registry available',
+        { refs: definitions.map((entry) => entry.ref) }
+      );
+      return registered;
+    }
+
+    for (const { ref, promptId, definition } of definitions) {
+      if (registered.has(ref)) continue;
+      const gateId = this.registerOneInlineDefinition(context, registry, definition, {
+        promptId,
+        thisCall: [...registered.values()],
+      });
+      if (gateId !== undefined) registered.set(ref, gateId);
+    }
+
+    if (registered.size > 0) {
+      context.state.gates.temporaryGateIds = [
+        ...context.state.gates.temporaryGateIds,
+        ...new Set(registered.values()),
+      ];
+    }
+    return registered;
+  }
+
   /** Register one prompt's definitions. Returns the canonical ids that were created. */
   private registerPromptInlineDefinitions(
     context: ExecutionContext,
@@ -850,6 +895,13 @@ export class TemporaryGateRegistrar {
 // ============================================================================
 // Pure helpers for inline gate definitions
 // ============================================================================
+
+/** One chain-prompt inline definition a step names, by the reference the step carries. */
+export interface StepGateDefinition {
+  readonly ref: string;
+  readonly promptId: string;
+  readonly definition: GateBody;
+}
 
 const INLINE_SCOPES = ['execution', 'session', 'chain', 'step'] as const;
 type InlineScope = (typeof INLINE_SCOPES)[number];

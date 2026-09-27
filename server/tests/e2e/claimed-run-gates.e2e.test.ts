@@ -790,6 +790,101 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     expect(await chainLine(second, otherChainId)).toBe('none');
   }, 240000);
 
+  /**
+   * P6.158. MEASURED 2026-09-27 on `7b2e30ce` with `gates.executeInlineGateDefinitions` on (and
+   * off): the bundled `research_chain` declares `Source Citations` in the CHAIN prompt's own
+   * `inline_gate_definitions` and names it on step 2 (`inlineGateIds`), but only a STEP prompt's
+   * definitions ever registered, so no step-2 review named it — bare or as a remainder;
+   * `tech_evaluation_chain`'s `Verified Claims` likewise. Now the projection carries a chain-defined
+   * name as a reference into the chain prompt, and gate enhancement registers that definition for
+   * the step naming it. Phase guards are off so the review is the gate review, not the structural
+   * one the bundled steps' CAGEERF sections would open first.
+   */
+  async function definitionsServer(): Promise<{ roots: Roots; server: Server }> {
+    const roots = freshRoots();
+    writeFileSync(
+      path.join(roots.workspace, 'config.json'),
+      JSON.stringify({
+        gates: { executeInlineGateDefinitions: true },
+        phaseGuards: { mode: 'off', maxRetries: 2 },
+      })
+    );
+    const server = await startServer(roots);
+    await authorResources(server);
+    return { roots, server };
+  }
+
+  test("P6.158 (a) a bare chain prompt's step 2 review names the gate its own definitions declare", async () => {
+    const { roots, server } = await definitionsServer();
+    const chainId = chainIdOf(
+      (await server.call('prompt_engine', { command: '>>research_chain topic:"caching"' })).text
+    );
+    await server.call('prompt_engine', {
+      chain_id: chainId,
+      user_response: 'scan out',
+      gate_verdict: FAIL,
+    });
+    // Step 1 does not name it, so it opens no review of it.
+    expect(runRow(roots, chainId)?.reviews['initial-scan-step-1-of-4']).not.toContain(
+      'source-citations'
+    );
+    await server.call('prompt_engine', {
+      chain_id: chainId,
+      user_response: 'scan fixed',
+      gate_verdict: PASS,
+    });
+    const failed = await server.call('prompt_engine', {
+      chain_id: chainId,
+      user_response: 'deep out',
+      gate_verdict: FAIL,
+    });
+    expect(Object.keys(runRow(roots, chainId)?.reviews ?? {})).toEqual([
+      'deep-investigation-step-2-of-4',
+    ]);
+    expect(runRow(roots, chainId)?.reviews['deep-investigation-step-2-of-4']).toContain(
+      'source-citations'
+    );
+    expect(failed.text).toContain('Source Citations');
+  }, 180000);
+
+  test('P6.158 (b) the same chain prompt as a remainder reviews the gate on its step 2', async () => {
+    const { roots, server } = await definitionsServer();
+    const chainId = chainIdOf(
+      (await server.call('prompt_engine', { command: `>>sv_a${ARROW}>>sv_b` })).text
+    );
+    await server.call('prompt_engine', {
+      chain_id: chainId,
+      user_response: 'A out',
+      observations: [
+        { type: 'unknown_discovered', id: 'u158', statement: 'the rest', blocking: true },
+      ],
+    });
+    const appended = await server.call('prompt_engine', {
+      chain_id: chainId,
+      user_response: 'investigated',
+      remainder: {
+        mode: 'append',
+        nodes: [{ id: 'r1', promptId: 'research_chain', args: { topic: 'caching' } }],
+      },
+    });
+    expect(appended.isError).toBe(false);
+    await server.call('prompt_engine', { chain_id: chainId, user_response: 'B out' });
+    await server.call('prompt_engine', {
+      chain_id: chainId,
+      user_response: 'scan out',
+      gate_verdict: PASS,
+    });
+    const failed = await server.call('prompt_engine', {
+      chain_id: chainId,
+      user_response: 'deep out',
+      gate_verdict: FAIL,
+    });
+    const reviews = runRow(roots, chainId)?.reviews ?? {};
+    expect(Object.keys(reviews)).toEqual(['r1-deep-investigation-step-2-of-4']);
+    expect(reviews['r1-deep-investigation-step-2-of-4']).toContain('source-citations');
+    expect(failed.text).toContain('Source Citations');
+  }, 180000);
+
   test('P6.130 (a) after a claim the projection holds exactly the claimer row for the run', async () => {
     const roots = freshRoots();
     const { chainId, first, second } = await claimOnSecondServer(roots, { command: '>>sv_chain' });

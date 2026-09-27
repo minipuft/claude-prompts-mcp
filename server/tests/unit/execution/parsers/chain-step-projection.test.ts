@@ -1,7 +1,10 @@
 // @lifecycle test - P6.74 / R36: one projection of a chain prompt's steps for every command source.
 import { describe, expect, test } from '@jest/globals';
 
-import { projectChainPromptSteps } from '../../../../src/engine/execution/parsers/chain-step-projection.js';
+import {
+  parseChainGateDefinitionRef,
+  projectChainPromptSteps,
+} from '../../../../src/engine/execution/parsers/chain-step-projection.js';
 import { PromptError } from '../../../../src/shared/utils/index.js';
 
 import type { ConvertedPrompt } from '../../../../src/engine/execution/types.js';
@@ -66,6 +69,45 @@ describe('projectChainPromptSteps', () => {
     // a step declaring args gets its own copy (control)
     expect(second?.args).toBe(runArgs);
     expect(first?.args).not.toBe(runArgs);
+  });
+
+  test("P6.158: a gate the chain prompt's own definitions declare travels as a reference into it", () => {
+    const defining = prompt('defining_chain', {
+      chainSteps: [
+        { promptId: 'step_a', stepName: 'A', inlineGateIds: ['Chain Check', 'g-a'] },
+        { promptId: 'step_b', stepName: 'B', inlineGateIds: ['cc-id'] },
+      ],
+      gateConfiguration: {
+        inline_gate_definitions: [
+          {
+            name: 'Chain Check',
+            type: 'validation',
+            scope: 'step',
+            description: 'd',
+            guidance: 'g',
+          },
+          {
+            id: 'cc-id',
+            name: 'By Id',
+            type: 'validation',
+            scope: 'step',
+            description: 'd',
+            guidance: 'g',
+          },
+        ] as NonNullable<ConvertedPrompt['gateConfiguration']>['inline_gate_definitions'],
+      },
+    });
+    const steps = projectChainPromptSteps(defining, {}, lookup)?.steps ?? [];
+    // The control `g-a` names no definition of the chain prompt, so it stays as written.
+    expect(steps.map((step) => step.inlineGateIds)).toEqual([
+      ['defining_chain:Chain Check', 'g-a'],
+      ['defining_chain:cc-id'],
+    ]);
+    expect(parseChainGateDefinitionRef('defining_chain:Chain Check')).toEqual({
+      chainPromptId: 'defining_chain',
+      gateKey: 'Chain Check',
+    });
+    expect(parseChainGateDefinitionRef('g-a')).toBeUndefined();
   });
 
   test('a step naming an unregistered prompt throws by name', () => {

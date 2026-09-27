@@ -191,6 +191,12 @@ When they do execute:
   (`pass_criteria`) replace the whole array rather than appending, and objects (`context`,
   `retry_config`) replace wholesale rather than merging key by key — so a narrowed criteria list
   stays narrowed, and a `retry_config` is never a blend neither source authored.
+- A **chain** prompt's definitions register for the steps that name them in `inlineGateIds`, by
+  `name` or `id` — the bundled `research_chain` names `Source Citations` on step 2 — and such a step
+  reviews the definition exactly as it would a registered gate it names: from that step on, as the
+  chain's gates accumulate. A definition with no `id` registers under the slug of its name
+  (`source-citations`). This holds whether the chain runs bare, as a workflow or arrow-chain segment,
+  or as a remainder. A step prompt's own definitions contribute at rank 60 as above.
 
 ## Injection
 
