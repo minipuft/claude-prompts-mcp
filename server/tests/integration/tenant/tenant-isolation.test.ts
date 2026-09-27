@@ -562,8 +562,15 @@ describe('Tenant Isolation', () => {
         } finally {
           spy.mockRestore();
         }
-        // Control: the same cancel with nothing planted resolves
-        await expect(chainSessionStore.cancelChain('p175-a')).resolves.toBe(true);
+        // Control: a cancel with nothing planted persists. A second run, because the failed
+        // cancel already marked `p175-a` cancelled in memory, and a repeat returns before saving.
+        await chainSessionStore.createSession('p175-a2', 'chain-p175a2#1', 2);
+        await expect(chainSessionStore.cancelChain('p175-a2')).resolves.toBe(true);
+        const persisted = dbManager.query<{ run_status: string }>(
+          'SELECT run_status FROM chain_runs WHERE session_id = ?',
+          ['p175-a2']
+        );
+        expect(persisted.map((row) => row.run_status)).toEqual(['cancelled']);
       });
 
       test('awaited, nothing swallowed: a held lock fails an observation batch', async () => {
