@@ -1,4 +1,4 @@
-// @lifecycle canonical - P6.107: a caller-chosen temporary gate id belongs to the run that holds it.
+// @lifecycle canonical - P6.107: a caller-chosen temporary gate id belongs to the run that holds it. P6.113: a run resolves a declared id to the one it registered.
 /**
  * MEASURED 2026-09-26 on `9f833361` (driven, one server): a prompt's `inline_gate_definitions`
  * entry with a declared `id` logged "Failed to register inline gate definition … Temporary gate ID
@@ -60,7 +60,7 @@ describe('an inline definition with a declared id (P6.107)', () => {
     expect(started).toEqual(['def107']);
     expect(resumed).toEqual(['def107']);
     expect(log.warn).not.toHaveBeenCalled();
-    expect(registry.ownerOf('def107')).toBe('run-1');
+    expect(registry.getRunGates('run-1').map((gate) => gate.id)).toEqual(['def107']);
   });
 
   test('a differing body on the same run merges over the held one', () => {
@@ -91,6 +91,72 @@ describe('an inline definition with a declared id (P6.107)', () => {
     expect(second).toEqual(['def107-2']);
     expect(registry.getTemporaryGate('def107')?.guidance).toBe('ONE');
     expect(registry.getTemporaryGate('def107-2')?.guidance).toBe('TWO');
+  });
+});
+
+/**
+ * P6.113 / R49. MEASURED 2026-09-26 on `936611fd` (driven, one server): run 1 held `rg`, run 2
+ * registered `rg-2`, and every resume of run 2 re-sending `gates: [{ id: "rg" }]` registered
+ * `rg-3`, then `rg-4`: the held `rg` was run 1's, and nothing mapped run 2's declared `rg` to the
+ * `rg-2` it owned. The run's declared ids now resolve through the registry's run index.
+ */
+describe('a run holding a fresh id re-sends the declared one (P6.113)', () => {
+  test('a request gate resolves to the id the run registered, and registers nothing', async () => {
+    const registry = new TemporaryGateRegistry(logger());
+    const registrar = new TemporaryGateRegistrar(registry, undefined, logger());
+    const gate = (criterion: string) => [{ id: 'rg113', name: 'rg113', criteria: [criterion] }];
+
+    const first = await registrar.registerTemporaryGates(callOf(undefined, gate('ONE')));
+    registry.adoptIntoRun('run-1', first.temporaryGateIds);
+    const second = await registrar.registerTemporaryGates(callOf(undefined, gate('TWO')));
+    registry.adoptIntoRun('run-2', second.temporaryGateIds);
+    const resumed = await registrar.registerTemporaryGates(callOf('run-2', gate('TWO')));
+
+    expect(second.temporaryGateIds).toEqual(['rg113-2']);
+    expect(resumed.temporaryGateIds).toEqual(['rg113-2']);
+    expect(registry.getTemporaryGate('rg113-3')).toBeUndefined();
+    expect(registry.getRunGates('run-2').map((held) => held.id)).toEqual(['rg113-2']);
+  });
+
+  test('an inline definition resolves to the id the run registered, with no warning', () => {
+    const registry = new TemporaryGateRegistry(logger());
+    const log = logger();
+    const registrar = new TemporaryGateRegistrar(registry, undefined, log);
+
+    registry.adoptIntoRun(
+      'run-1',
+      registrar.registerInlineGateDefinitions(callOf(undefined), [carrier('ONE')], true)
+    );
+    const second = registrar.registerInlineGateDefinitions(
+      callOf(undefined),
+      [carrier('TWO')],
+      true
+    );
+    registry.adoptIntoRun('run-2', second);
+    const resumed = registrar.registerInlineGateDefinitions(
+      callOf('run-2'),
+      [carrier('TWO')],
+      true
+    );
+
+    expect(second).toEqual(['def107-2']);
+    expect(resumed).toEqual(['def107-2']);
+    expect(registry.getTemporaryGate('def107-3')).toBeUndefined();
+    expect(log.warn).not.toHaveBeenCalled();
+  });
+
+  test('control: a third live run declaring the id still gets its own', async () => {
+    const registry = new TemporaryGateRegistry(logger());
+    const registrar = new TemporaryGateRegistrar(registry, undefined, logger());
+    const gate = [{ id: 'rg113c', name: 'rg113c', criteria: ['X'] }];
+    for (const run of ['run-1', 'run-2']) {
+      registry.adoptIntoRun(
+        run,
+        (await registrar.registerTemporaryGates(callOf(undefined, gate))).temporaryGateIds
+      );
+    }
+    const third = await registrar.registerTemporaryGates(callOf(undefined, gate));
+    expect(third.temporaryGateIds).toEqual(['rg113c-3']);
   });
 });
 

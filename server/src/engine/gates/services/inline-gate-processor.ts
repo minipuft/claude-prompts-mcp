@@ -20,6 +20,9 @@ interface InlineGateScope {
   readonly stepNumber?: number;
 }
 
+/** A binding key -> the id this run's gate declared under it registered as, if any (R49). */
+type DeclaredGateView = (key: string) => string | undefined;
+
 /**
  * Internal result of processing gate criteria.
  */
@@ -101,10 +104,14 @@ export class InlineGateProcessor {
   ): Promise<InlineGateProcessingResult> {
     const createdIds: string[] = [];
     const registeredIds: string[] = [];
-    // Binding key -> the id THIS run's gate registered under. A step names a folded named gate
-    // by its declared name, and another live run may hold that name in the registry (R43); a name
-    // declared again in the same command is keyed by its occurrence (P6.110).
-    const declaredNamedGates = new Map<string, string>();
+    // Binding key -> the id THIS run's gate registered under, read from the run's declared-id map
+    // (R49) as this call sees it: a step names a folded named gate by its declared name, and another
+    // live run may hold that name in the registry (R43); a name declared again in the same command
+    // is keyed by its occurrence (P6.110). Stage 05 runs only on a call that parses a command,
+    // which on the MCP surface starts a run, so the view is this call's own registrations.
+    const runId = context.getSessionId();
+    const declaredNamedGates: DeclaredGateView = (key) =>
+      this.temporaryGateRegistry.resolveDeclared(key, runId, createdIds);
     const occurrences = new Map<string, number>();
 
     // Process named inline gates (e.g., `:: security:"no secrets"`)
@@ -146,11 +153,14 @@ export class InlineGateProcessor {
         const occurrence = (occurrences.get(namedGate.gateId) ?? 0) + 1;
         occurrences.set(namedGate.gateId, occurrence);
         if (namedGate.gateId && isValidGateCriteria(namedGate.criteria)) {
-          const gateId = this.createNamedInlineGate(context, namedGate.gateId, namedGate.criteria, {
-            promptId: parsedCommand.promptId,
-          });
+          const bindingKey = namedGateBindingKey(namedGate.gateId, occurrence);
+          const gateId =
+            declaredNamedGates(bindingKey) ??
+            this.createNamedInlineGate(context, namedGate.gateId, namedGate.criteria, {
+              promptId: parsedCommand.promptId,
+              bindingKey,
+            });
           if (gateId) {
-            declaredNamedGates.set(namedGateBindingKey(namedGate.gateId, occurrence), gateId);
             parsedCommand.inlineGateIds = this.appendGateId(parsedCommand.inlineGateIds, gateId);
             createdIds.push(gateId);
           }
@@ -195,7 +205,7 @@ export class InlineGateProcessor {
     context: ExecutionContext,
     criteria: readonly string[],
     scope: InlineGateScope,
-    declaredNamedGates: ReadonlyMap<string, string>
+    declaredNamedGates: DeclaredGateView
   ): Promise<GateProcessingResult> {
     const partitioned = await this.partitionGateCriteria(criteria, declaredNamedGates);
     let temporaryGateId: string | undefined;
@@ -308,7 +318,7 @@ export class InlineGateProcessor {
     context: ExecutionContext,
     explicitId: string,
     criteria: readonly string[],
-    scope: InlineGateScope
+    scope: InlineGateScope & { readonly bindingKey: string }
   ): string | null {
     if (!explicitId || !isValidGateCriteria(criteria)) {
       this.logger.warn('[InlineGateProcessor] Invalid named gate input', {
@@ -328,6 +338,7 @@ export class InlineGateProcessor {
       const gateId = this.temporaryGateRegistry.createTemporaryGate(
         {
           id: explicitId,
+          declared_key: scope.bindingKey,
           name: explicitId,
           type: 'validation',
           scope: gateScope,
@@ -360,7 +371,7 @@ export class InlineGateProcessor {
 
   private async partitionGateCriteria(
     criteria: readonly string[],
-    declaredNamedGates: ReadonlyMap<string, string>
+    declaredNamedGates: DeclaredGateView
   ): Promise<{ inlineCriteria: string[]; registeredGateIds: string[] }> {
     const inlineCriteria: string[] = [];
     const registeredGateIds: string[] = [];
@@ -371,7 +382,7 @@ export class InlineGateProcessor {
         continue;
       }
 
-      const registryGateId = declaredNamedGates.get(trimmed) ?? this.lookupTemporaryGateId(trimmed);
+      const registryGateId = declaredNamedGates(trimmed) ?? this.lookupTemporaryGateId(trimmed);
       if (registryGateId) {
         registeredGateIds.push(registryGateId);
         continue;

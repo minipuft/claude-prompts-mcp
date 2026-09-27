@@ -62,6 +62,13 @@ export interface TemporaryGateDefinition {
    * resume carries no `gates`, so a run reads its own request gates back by this mark (R47).
    */
   origin?: 'request';
+  /**
+   * The key the caller declared this gate under: a request gate's or inline definition's `id`,
+   * or a named inline gate's binding key (`name`, `name#n`). The gate may have registered under a
+   * fresh `<id>-N`; {@link TemporaryGateRegistry.resolveDeclared} resolves the key back to it for
+   * the run that owns it (R49). Absent on a gate nobody named.
+   */
+  declared_key?: string;
 }
 
 /**
@@ -148,8 +155,10 @@ export class TemporaryGateRegistry {
       apply_to_steps,
       enforcement_mode,
       origin,
+      declared_key,
       ...defWithoutId
     } = definition;
+    const declaredKey = declared_key ?? definition.id;
 
     const tempGate: TemporaryGateDefinition = {
       id: gateId,
@@ -169,6 +178,7 @@ export class TemporaryGateRegistry {
       ...(apply_to_steps !== undefined ? { apply_to_steps } : {}),
       ...(enforcement_mode !== undefined ? { enforcement_mode } : {}),
       ...(origin !== undefined ? { origin } : {}),
+      ...(declaredKey !== undefined ? { declared_key: declaredKey } : {}),
     };
 
     // Store the gate
@@ -248,9 +258,26 @@ export class TemporaryGateRegistry {
     }
   }
 
-  /** The run that owns `gateId`, or undefined when no run has adopted it. */
-  ownerOf(gateId: string): string | undefined {
-    return this.gateOwners.get(gateId);
+  /**
+   * The id `key` was declared as for this run (R49) — the run's one declared-id map, read off the
+   * gates its index holds: a gate `runId` owns, else one of this call's `callGateIds` no run has
+   * adopted yet (the call that starts a run registers before the run exists, and adoption hands
+   * its gates to the run keys and all). Undefined when neither holds the key: the caller
+   * registers, under a fresh id if another run holds the declared one.
+   */
+  resolveDeclared(
+    key: string,
+    runId: string | undefined,
+    callGateIds: readonly string[]
+  ): string | undefined {
+    const owned = runId === undefined ? [] : [...(this.runGates.get(runId) ?? [])];
+    return [...owned, ...callGateIds].find((gateId) => {
+      const owner = this.gateOwners.get(gateId);
+      return (
+        this.temporaryGates.get(gateId)?.declared_key === key &&
+        (owner === undefined || owner === runId)
+      );
+    });
   }
 
   /** The gates `runId` owns. */

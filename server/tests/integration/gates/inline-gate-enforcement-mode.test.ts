@@ -80,7 +80,7 @@ describe('an inline gate declares its own enforcement mode (row 1.5)', () => {
     registry = new TemporaryGateRegistry(logger as never);
     const prompt = loadPromptWithInlineGate(dir, gateId, modeLine);
     const context = {
-      state: { gates: {} },
+      state: { gates: { temporaryGateIds: [] } },
       mcpRequest: {},
       getSessionId: () => 'session-1',
     };

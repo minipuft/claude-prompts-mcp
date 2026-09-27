@@ -1,4 +1,4 @@
-// @lifecycle test - P6.79 / P6.80 / R40: an arrow-chain segment or a workflow node naming a chain prompt runs that prompt's steps; P6.78 / R37: a command-level gate on a chain prompt binds each step; P6.97 / R43: a named inline gate belongs to the run that declared it; P6.99 / R44: a named gate on an arrow-chain segment binds that segment; P6.108 / R47: a run's temporary gates live exactly as long as the run; P6.104: a run's request gates reach every node they target; P6.107: a request gate id belongs to the run that holds it; P6.105: the arrow-chain source validates the expanded workflow; P6.110: one name in two arrow-chain segments is two gates, over Streamable HTTP.
+// @lifecycle test - P6.79 / P6.80 / R40: an arrow-chain segment or a workflow node naming a chain prompt runs that prompt's steps; P6.78 / R37: a command-level gate on a chain prompt binds each step; P6.97 / R43: a named inline gate belongs to the run that declared it; P6.99 / R44: a named gate on an arrow-chain segment binds that segment; P6.108 / R47: a run's temporary gates live exactly as long as the run; P6.104: a run's request gates reach every node they target; P6.107: a request gate id belongs to the run that holds it; P6.105: the arrow-chain source validates the expanded workflow; P6.110: one name in two arrow-chain segments is two gates; P6.113: a run re-sending a declared id keeps the id it registered, over Streamable HTTP.
 /**
  * MEASURED 2026-09-25 on `427899fe` (authored `sv_chain` = sv_a/sv_b/sv_a, each step carrying the
  * blocking `sv-block`; run state read from `chain_runs.state`):
@@ -970,6 +970,50 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       expect(run.text).toContain('FRESH-107');
       await run.call({ user_response: 'out 1', gate_verdict: FAIL });
       expect(runState(run.chainId).reviews).toEqual({ p1: ['fresh107e'] });
+    }, 120000);
+  });
+
+  /**
+   * MEASURED 2026-09-26 on `936611fd` (driven): run 1 held `rg`, run 2 got `rg-2`, and each resume
+   * of run 2 re-sending `gates: [{ id: "rg" }]` registered `rg-3`, then `rg-4` — the held `rg` was
+   * run 1's, and no map sent run 2's declared `rg` back to its `rg-2`.
+   */
+  describe('P6.113: a run holding a fresh id re-sends the declared one', () => {
+    const threeNodes = (criterion: string) => ({
+      workflow: {
+        version: 1,
+        nodes: [
+          { id: 'p1', promptId: 'sv_a' },
+          { id: 'p2', promptId: 'sv_b' },
+          { id: 'p3', promptId: 'sv_a' },
+        ],
+        edges: [
+          { from: 'p1', to: 'p2' },
+          { from: 'p2', to: 'p3' },
+        ],
+        gates: [{ id: 'rg113e', name: 'rg113e', criteria: [criterion], target_step_id: 'p3' }],
+      },
+    });
+
+    test("(a) the re-sent gate stays the run's own id, and grades its own criteria", async () => {
+      const first = await start(threeNodes('RG113-ONE'));
+      const second = await start(threeNodes('RG113-TWO'));
+      const gates = threeNodes('RG113-TWO').workflow.gates;
+      await second.call({ user_response: 'out 1', gate_verdict: PASS, gates });
+      const step3 = await second.call({ user_response: 'out 2', gate_verdict: PASS, gates });
+      expect(step3).toContain('RG113-TWO');
+      expect(step3).not.toContain('RG113-ONE');
+      const failed = await second.call({ user_response: 'out 3', gate_verdict: FAIL, gates });
+      expect(failed).toContain('Gate Review Required');
+      expect(runState(second.chainId).reviews).toEqual({ p3: ['rg113e-2'] });
+
+      // Control: run 1, still live, keeps its own id and criteria.
+      await first.call({ user_response: 'out 1', gate_verdict: PASS });
+      await first.call({ user_response: 'out 2', gate_verdict: PASS });
+      const firstFailed = await first.call({ user_response: 'out 3', gate_verdict: FAIL });
+      expect(firstFailed).toContain('RG113-ONE');
+      expect(firstFailed).not.toContain('RG113-TWO');
+      expect(runState(first.chainId).reviews).toEqual({ p3: ['rg113e'] });
     }, 120000);
   });
 });

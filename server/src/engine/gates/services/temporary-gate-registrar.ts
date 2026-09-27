@@ -263,13 +263,18 @@ export class TemporaryGateRegistrar {
             ? rawGate.id
             : null;
 
-        // The same gate again — a resume re-sending it, or a repeat in this request (P6.107).
-        // An id another run holds is not this gate: it registers under a fresh id below.
-        if (gateIdCandidate && this.isHeldForThisRun(context, gateIdCandidate, createdIds)) {
+        // The same gate again — a resume re-sending it, or a repeat in this request (P6.107) —
+        // resolves through the run's declared ids, so a run holding `<id>-2` keeps it (R49). An
+        // id another run holds is not this gate: it registers under a fresh id below.
+        const heldId =
+          gateIdCandidate === null
+            ? undefined
+            : this.resolveHeldForThisRun(context, gateIdCandidate, createdIds);
+        if (heldId !== undefined) {
           this.logger.debug('[TemporaryGateRegistrar] Skipping gate already registered', {
-            gateId: gateIdCandidate,
+            gateId: heldId,
           });
-          createdIds.push(gateIdCandidate);
+          createdIds.push(heldId);
           continue;
         }
 
@@ -707,10 +712,11 @@ export class TemporaryGateRegistrar {
     const scope = readInlineScope(definition);
 
     try {
-      const held =
-        declaredId !== undefined && this.isHeldForThisRun(context, declaredId, source.thisCall)
-          ? registry.getTemporaryGate(declaredId)
-          : undefined;
+      const heldId =
+        declaredId === undefined
+          ? undefined
+          : this.resolveHeldForThisRun(context, declaredId, source.thisCall);
+      const held = heldId === undefined ? undefined : registry.getTemporaryGate(heldId);
       const body =
         held === undefined ? definition : mergeGateBody(held as unknown as GateBody, definition);
       const gate = buildInlineTemporaryGate(body, name, scope, declaredId);
@@ -736,22 +742,19 @@ export class TemporaryGateRegistrar {
   }
 
   /**
-   * Whether `gateId` is registered and belongs to THIS run: adopted by the session this call
-   * resumes, or registered earlier in this call (before any run has adopted it).
+   * The id THIS run's gate declared as `declaredId` registered under (R49): one the session this
+   * call resumes owns, or one registered earlier in this call (before any run has adopted it).
+   * The registry's run index answers; undefined means this run holds no such gate.
    */
-  private isHeldForThisRun(
+  private resolveHeldForThisRun(
     context: ExecutionContext,
-    gateId: string,
+    declaredId: string,
     thisCall: readonly string[]
-  ): boolean {
-    if (this.temporaryGateRegistry?.getTemporaryGate(gateId) === undefined) {
-      return false;
-    }
-    const owner = this.temporaryGateRegistry.ownerOf(gateId);
-    if (owner !== undefined) {
-      return owner === this.resolveRunId(context);
-    }
-    return thisCall.includes(gateId) || context.state.gates.temporaryGateIds.includes(gateId);
+  ): string | undefined {
+    return this.temporaryGateRegistry?.resolveDeclared(declaredId, this.resolveRunId(context), [
+      ...thisCall,
+      ...context.state.gates.temporaryGateIds,
+    ]);
   }
 
   private async resolveCanonicalGateId(
