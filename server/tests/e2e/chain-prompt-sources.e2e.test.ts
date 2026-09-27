@@ -1170,6 +1170,35 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
     }, 120000);
   });
 
+  /**
+   * P6.159. MEASURED 2026-09-27 on `efac1bbf`: `>>sv_a ==> >>sv_b` with a blocking unknown on step 1
+   * inserts `inv-u-159`, and that reply's advisory read `Step 2 ("sv_b") is delegated` beside
+   * `Progress 2/3`. The prompt was right (the index is found by node id); the coordinates were the
+   * parse step's, so the delegated step was named as the step the client was standing on.
+   */
+  describe("P6.159: the next-step advisory names the delegated step's place in the run", () => {
+    const advisory = (text: string): string | undefined =>
+      /Step \d+ \("[^"]+"\) is delegated/.exec(text)?.[0];
+
+    test('(a) after an insertion the advisory counts the inserted node', async () => {
+      const run = await start({ command: '>>sv_a ==> >>sv_b' });
+      const reply = await run.call({
+        user_response: 'A out',
+        observations: [
+          { type: 'unknown_discovered', id: 'u-159', statement: 'undecided', blocking: true },
+        ],
+      });
+      expect(reply).toContain('Progress 2/3');
+      expect(advisory(reply)).toBe('Step 3 ("sv_b") is delegated');
+    }, 120000);
+
+    test('(b) control: with no insertion the advisory names parse step 2', async () => {
+      const run = await start({ command: '>>sv_a ==> >>sv_b' });
+      expect(run.text).toContain('Progress 1/2');
+      expect(advisory(run.text)).toBe('Step 2 ("sv_b") is delegated');
+    }, 120000);
+  });
+
   describe('P6.93: a remainder naming a chain prompt', () => {
     /** The run's live nodes, as `chain_run_nodes` holds them. */
     function runNodes(chainId: string): string[] {
