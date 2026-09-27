@@ -70,7 +70,7 @@ describe('transaction lock mode', () => {
     await fs.rm(testDir, { recursive: true, force: true });
   });
 
-  it('writes before it reads when persisting chain sessions, so DEFERRED holds', async () => {
+  it('a chain persist that reads before it writes holds the write lock from BEGIN', async () => {
     const engine = await SqliteEngine.getInstance(createLogger(), { dbPath });
     await engine.initialize();
 
