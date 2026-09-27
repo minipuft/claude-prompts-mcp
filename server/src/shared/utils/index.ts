@@ -68,7 +68,7 @@ export function delay(ms: number): Promise<void> {
  */
 export function createUniqueId(prefix: string = ''): string {
   const timestamp = Date.now();
-  const random = Math.random().toString(36).substr(2, 9);
+  const random = Math.random().toString(36).slice(2, 11);
   return prefix ? `${prefix}_${timestamp}_${random}` : `${timestamp}_${random}`;
 }
 
