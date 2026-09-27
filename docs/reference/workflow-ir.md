@@ -81,6 +81,25 @@ prompt YAML directly, so an IR node carrying it would be a field with no reader 
 `id` is required here, unlike `chainSteps.id`, which is optional: a YAML step has a `stepName` to
 slug an id from, and a submitted node has no such fallback that edges could address.
 
+### A node naming a chain prompt
+
+A node whose prompt declares steps is **expanded in place** at validation into those steps, with
+ids `<node>-<step>` (`x-a`, `x-b`, …). A chain prompt means one thing in every source: without the
+expansion the node ran as one step rendering the chain prompt's own template, with none of its
+steps and none of their gates, while a bare `>>chain` ran the steps.
+
+- The node's `args` are the run arguments of every expanded step; its gates (`inlineGateIds`,
+  `inlineGateCriteria`) are added to each step's own; its `delegated`, `subagentModel`,
+  `agentType`, `framework`, `retries`, `await` and `visibility` override each step's. The node is
+  the caller's statement about the whole segment.
+- `inputMapping` lands on the first expanded step and `outputMapping` on the last.
+- Edges into the node re-attach to its first step, edges out of it to its last; the expanded steps
+  run in the prompt's declared order.
+- A gate whose `target_step_id` names the node addresses its **last** step: the node's id means
+  "when this node is done". An expanded id (`x-b`) is not a declared id and is refused
+  `gate-target-missing`.
+- The node cap counts expanded steps (see [Budget](#budget)).
+
 ---
 
 ## Edges and Ordering
@@ -154,13 +173,13 @@ and `gather` is declared first, so it goes first. Reversing the two edges change
 
 Split by enforcement posture, and the split is the contract.
 
-| Field                 | Posture      | Default | Behavior                                                          |
-| --------------------- | ------------ | ------- | ----------------------------------------------------------------- |
-| `maxNodes`            | **Enforced** | 32      | Node count above the effective cap is rejected.                   |
-| `maxFanOut`           | **Enforced** | 8       | Outgoing edges from one node above the effective cap is rejected. |
-| `maxInsertions`       | **Enforced** | 3       | Narrows the adaptive-mutation insertion ceiling for the run.      |
-| `declaredCostCeiling` | Recorded     | —       | Recorded on the run. Never enforced, never compared.              |
-| `pauseOnBlocking`     | **Enforced** | `false` | Hard-pauses the run when a blocking unknown lands. See below.     |
+| Field                 | Posture      | Default | Behavior                                                                     |
+| --------------------- | ------------ | ------- | ---------------------------------------------------------------------------- |
+| `maxNodes`            | **Enforced** | 32      | Node count, chain prompts counted as their steps, above the cap is rejected. |
+| `maxFanOut`           | **Enforced** | 8       | Outgoing edges from one node above the effective cap is rejected.            |
+| `maxInsertions`       | **Enforced** | 3       | Narrows the adaptive-mutation insertion ceiling for the run.                 |
+| `declaredCostCeiling` | Recorded     | —       | Recorded on the run. Never enforced, never compared.                         |
+| `pauseOnBlocking`     | **Enforced** | `false` | Hard-pauses the run when a blocking unknown lands. See below.                |
 
 `pauseOnBlocking` is the supervised-run dial. With it `false` (the default), a blocking unknown
 raises a **soft interrupt**: the investigation step is inserted, the response carries the
@@ -254,9 +273,17 @@ the node — so every other node field is **refused by name** rather than accept
 nodes a run does not wait on is decided when the run starts. Ask for isolation with `delegated: true`, and
 bind a gate with the `gates` parameter and its `target_step_id`.
 
+A contributed node naming a chain prompt is expanded in place exactly as a submitted one is
+([above](#a-node-naming-a-chain-prompt)): `r1` becomes `r1-a`, `r1-b`, each rendering its own
+template with the node's `args`. When an expanded step declares a field a contributed node cannot
+carry — a chain prompt whose steps declare `inlineGateIds`, for one — the remainder is **refused by
+name**, per step, and nothing is written, rather than running the steps without their gates.
+
 Caps carry over: one accepted remainder per unknown id, a per-run ceiling in the shape of
-`maxInsertions`, and `maxNodes` counted as executed nodes PLUS the submission, so rewriting the
-tail repeatedly cannot buy back budget the run has already spent.
+`maxInsertions`, and `maxNodes` counted as the run's nodes after the write (a `replace` counts
+executed nodes PLUS the submission, an `append` every node the run holds PLUS the submission), with
+a chain prompt counted as its steps, so rewriting the tail repeatedly cannot buy back budget the run
+has already spent.
 
 ### Mutual exclusivity
 
@@ -284,19 +311,19 @@ submission is fixed in one pass rather than one error per round trip.
 
 **Nothing is written on rejection** — no run row, no session, no version.
 
-| Reason                      | Fires when                                                                       |
-| --------------------------- | -------------------------------------------------------------------------------- |
-| `empty-workflow`            | `nodes` is empty.                                                                |
-| `invalid-node-id`           | A node id is not kebab-case.                                                     |
-| `duplicate-node-id`         | Two nodes declare the same id.                                                   |
-| `unknown-prompt`            | A node's `promptId` is not registered.                                           |
-| `required-argument-missing` | A node omits an argument its prompt declares required.                           |
-| `unknown-visibility-item`   | A `visibility` entry is outside the item vocabulary.                             |
-| `edge-endpoint-missing`     | An edge's `from` or `to` names no declared node.                                 |
-| `cycle`                     | Edges form a cycle. The detail names every node in the stuck set.                |
-| `cap-exceeded`              | The submission's node count or fan-out breaches the effective cap.               |
-| `gate-target-missing`       | A gate's `target_step_id` names no declared node, or an inline gate id is empty. |
-| `mutually-exclusive-source` | The call carried a workflow **and** a `command` or `chain_id`.                   |
+| Reason                      | Fires when                                                                                                                                                                                                                                       |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `empty-workflow`            | `nodes` is empty.                                                                                                                                                                                                                                |
+| `invalid-node-id`           | A node id is not kebab-case.                                                                                                                                                                                                                     |
+| `duplicate-node-id`         | Two nodes declare the same id.                                                                                                                                                                                                                   |
+| `unknown-prompt`            | A node's `promptId` is not registered.                                                                                                                                                                                                           |
+| `required-argument-missing` | A node omits an argument its prompt declares required.                                                                                                                                                                                           |
+| `unknown-visibility-item`   | A `visibility` entry is outside the item vocabulary.                                                                                                                                                                                             |
+| `edge-endpoint-missing`     | An edge's `from` or `to` names no declared node.                                                                                                                                                                                                 |
+| `cycle`                     | Edges form a cycle. The detail names every node in the stuck set.                                                                                                                                                                                |
+| `cap-exceeded`              | The submission's node count or fan-out breaches the effective cap. A node naming a chain prompt counts as its steps: `Expanding chain prompt "…" yields N nodes; the expanded workflow has M nodes, exceeding the effective maxNodes cap of 32`. |
+| `gate-target-missing`       | A gate's `target_step_id` names no declared node, or an inline gate id is empty.                                                                                                                                                                 |
+| `mutually-exclusive-source` | The call carried a workflow **and** a `command` or `chain_id`.                                                                                                                                                                                   |
 
 Every reason but the last is produced by validating one workflow in isolation.
 `mutually-exclusive-source` is about the shape of the whole request, so it is raised by the parsing
