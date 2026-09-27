@@ -84,15 +84,22 @@ export class GateEnhancementStage extends BasePipelineStage {
     // ADR 0001 (d) ships inline gate execution in two releases. Both the enablement check and
     // the single-vs-chain prompt walk live in services, so this stage adds no branches of its
     // own — it stays a thin orchestrator.
+    const executeDefinitions = gatesConfig?.executeInlineGateDefinitions === true;
     const inlineDefinitionGateIds = this.registrar.registerInlineGateDefinitions(
       context,
       inlineDefinitionCarriers(gateContext),
-      gatesConfig?.executeInlineGateDefinitions === true
+      executeDefinitions
+    );
+    // A chain prompt's own definitions bind the steps that name them (P6.158).
+    const stepDefinitionIds = this.registrar.registerStepGateDefinitions(
+      context,
+      this.enhancementService.chainStepGateDefinitions(gateContext),
+      executeDefinitions
     );
 
     if (gateContext.type === 'chain') {
       await this.enhancementService.enhanceChainSteps(
-        gateContext,
+        { ...gateContext, stepDefinitionIds },
         context,
         registeredGates,
         gatesConfig,

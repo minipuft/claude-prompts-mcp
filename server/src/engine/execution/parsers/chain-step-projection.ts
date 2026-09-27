@@ -44,6 +44,7 @@ export function projectChainPromptSteps(
     return undefined;
   }
 
+  const definedGates = chainGateDefinitionKeys(chainPrompt);
   // Minted once per parse, in step order — explicit `id` wins, otherwise a slug of
   // `stepName` (P3 Tier 1, additive only: nothing downstream consumes this yet).
   const nodeIds = mintNodeIds(chainSteps);
@@ -89,7 +90,18 @@ export function projectChainPromptSteps(
       // there is no prompt-level equivalent to fall back to, and the step's own declaration
       // is the whole binding. Reader: `GateEnhancementService.enhanceChainSteps`, which
       // feeds these to `GateSetResolver` at rank `inline-operator`.
-      ...(step.inlineGateIds != null ? { inlineGateIds: [...step.inlineGateIds] } : {}),
+      //
+      // A name the CHAIN prompt's own `inline_gate_definitions` define is carried as a reference
+      // into that prompt (P6.158): the step prompt knows nothing of it, and a remainder node
+      // persists only this list, so the reference is the one thing that reaches gate
+      // enhancement on every command source.
+      ...(step.inlineGateIds != null
+        ? {
+            inlineGateIds: step.inlineGateIds.map((gateId) =>
+              definedGates.has(gateId) ? chainGateDefinitionRef(chainPrompt.id, gateId) : gateId
+            ),
+          }
+        : {}),
       // Row A.2 (OQ-A2b): the two fields the `-->` surface always carried and the node
       // vocabulary did not declare. Same three-stripper rule as `inlineGateIds` above, and
       // the same no-`stepConverted`-fallback posture — `inlineGateCriteria` has no
@@ -115,4 +127,33 @@ export function projectChainPromptSteps(
     steps,
     ...(chainPrompt.budget !== undefined ? { budget: chainPrompt.budget } : {}),
   };
+}
+
+/**
+ * A step's reference to an inline gate definition its CHAIN prompt declares (P6.158):
+ * `<chainPromptId>:<name or id>`. A prompt id never holds a colon, so the first one splits it.
+ */
+function chainGateDefinitionRef(chainPromptId: string, gateKey: string): string {
+  return `${chainPromptId}:${gateKey}`;
+}
+
+/** The chain prompt id and gate key a {@link chainGateDefinitionRef} names, or undefined. */
+export function parseChainGateDefinitionRef(
+  gateId: string
+): { chainPromptId: string; gateKey: string } | undefined {
+  const split = gateId.indexOf(':');
+  return split <= 0 || split === gateId.length - 1
+    ? undefined
+    : { chainPromptId: gateId.slice(0, split), gateKey: gateId.slice(split + 1) };
+}
+
+/** Every name and id the chain prompt's own inline gate definitions answer to. */
+function chainGateDefinitionKeys(chainPrompt: ConvertedPrompt): ReadonlySet<string> {
+  return new Set(
+    (chainPrompt.gateConfiguration?.inline_gate_definitions ?? []).flatMap((definition) =>
+      [definition.name, definition.id].filter(
+        (key): key is string => typeof key === 'string' && key.length > 0
+      )
+    )
+  );
 }

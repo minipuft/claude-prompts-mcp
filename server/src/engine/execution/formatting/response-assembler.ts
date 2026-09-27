@@ -24,6 +24,8 @@ import type { DelegationPayload } from '../delegation/types.js';
 import type { GateOperator } from '../parsers/types/operator-types.js';
 import type { ConvertedPrompt, ExecutionModifiers } from '../types.js';
 
+import { ordinalOf } from '#shared/utils/node-order.js';
+
 /**
  * Max check-tier gates given a `per_gate` slot in the verdict template.
  *
@@ -550,13 +552,19 @@ export class ResponseAssembler {
     const fallbackStepNumber =
       ((metadata['stepNumber'] as number | undefined) ?? context.sessionContext?.currentStep ?? 0) +
       1;
-    const stepNumber = parsedNext?.stepNumber ?? fallbackStepNumber;
+    // The run places the step, not the parse array (P6.159): after an insertion, parse step 2 is
+    // the run's step 3 of 3 — the count `Progress` uses, retired nodes included.
+    const runNodeIds = this.resolveRunStepView(context)?.nodeIds ?? [];
+    const runOrdinal = ordinalOf(runNodeIds, parsedNext?.nodeId ?? '');
+    const stepNumber = runOrdinal > 0 ? runOrdinal : (parsedNext?.stepNumber ?? fallbackStepNumber);
     const totalSteps =
-      parsedNext !== undefined
-        ? (context.parsedCommand?.steps?.length ?? 0)
-        : ((metadata['totalSteps'] as number | undefined) ??
-          context.sessionContext?.totalSteps ??
-          0);
+      runOrdinal > 0
+        ? runNodeIds.length
+        : parsedNext !== undefined
+          ? (context.parsedCommand?.steps?.length ?? 0)
+          : ((metadata['totalSteps'] as number | undefined) ??
+            context.sessionContext?.totalSteps ??
+            0);
     const parsedNextName = parsedNext?.convertedPrompt?.name;
     const promptName =
       parsedNext !== undefined

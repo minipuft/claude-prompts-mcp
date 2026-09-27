@@ -253,7 +253,11 @@ export class PromptExecutionPipeline {
   private adoptCallGatesIntoRun(context: ExecutionContext): void {
     const sessionId = context.sessionContext?.sessionId;
     if (sessionId === undefined || this.temporaryGateRegistry === undefined) return;
-    this.temporaryGateRegistry.adoptIntoRun(sessionId, context.state.gates.temporaryGateIds);
+    this.temporaryGateRegistry.adoptIntoRun(
+      sessionId,
+      context.state.gates.temporaryGateIds,
+      context.sessionContext?.chainId
+    );
   }
 
   /**

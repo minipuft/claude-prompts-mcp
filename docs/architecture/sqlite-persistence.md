@@ -515,6 +515,13 @@ front. `skills-sync`'s manifest batch opens with a `DELETE` for the same reason.
 costs readers nothing: under WAL a reader still sees the last committed snapshot, which is what lets
 the Python hooks keep reading while the server writes.
 
+**A chain-run persist that fails throws to its caller, unless the failure is a held lock.** The
+store's persists run one at a time (each waits for the one in flight, since the write awaits inside
+its transaction), and the only failure the store logs and continues past is `SQLITE_BUSY`/
+`SQLITE_LOCKED` after `busy_timeout` — transient, because every persist rewrites the whole live
+set. A constraint violation recurs on every persist, so it reaches the tool call as an error rather
+than being logged while every later save of the process is lost (R74).
+
 **Both connections set `busy_timeout` from one constant**, `STATE_DB_BUSY_TIMEOUT_MS` in
 `shared/utils/runtime-state-location.ts`, beside the two path segments and for the same reason: the
 CLI opens its own connection and cannot import `runtime/`, so two hand-typed values would drift and

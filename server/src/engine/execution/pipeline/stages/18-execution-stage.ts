@@ -1,5 +1,6 @@
 // @lifecycle canonical - Runs operator executors and orchestrates outputs.
 import { hasFrameworkGuidance } from '../../../frameworks/utils/framework-detection.js';
+import { recordedStep } from '../../capture/step-capture-service.js';
 import {
   collectDetachedNodeFacts,
   collectRunHolds,
@@ -296,6 +297,40 @@ export class StepExecutionStage extends BasePipelineStage {
     this.logExit({ stepRendered: renderResult.stepNumber });
   }
 
+  /**
+   * A one-node run's render is its step's `working` record, written as the chain render above
+   * writes one (P6.156): before this, a stepless run's ledger began at its answer. Once per step,
+   * as on the chain path: a render under an open review is that step's retry (P6.69 routes it
+   * here), which already has its row — unless this call created the run. The step and prompt come
+   * from `recordedStep`, the resolution every step-level writer shares, which names the parsed
+   * command's prompt for a stepless run's planned node. A single prompt with no run has no ledger.
+   */
+  private ledgerRenderedRunPrompt(context: ExecutionContext): void {
+    const session = context.sessionContext;
+    if (this.executionRecordStore === null || session === undefined) return;
+    const decision = context.state.session.lifecycleDecision;
+    const createsRun = decision === 'create-new' || decision === 'create-force-restart';
+    if (session.pendingReview !== undefined && !createsRun) return;
+
+    const scopeOptions = context.getScopeOptions();
+    const run = this.chainSessionStore.getSession(session.sessionId, scopeOptions);
+    const nodeId = run?.state.currentNodeId ?? session.currentNodeId ?? undefined;
+    const stepNumber = session.currentStep ?? 1;
+    const { promptId } = recordedStep(context, run, nodeId, stepNumber);
+    const renderedAt = Date.now();
+    this.executionRecordStore.append({
+      sessionId: session.sessionId,
+      chainId: session.chainId ?? run?.chainId,
+      stepNumber,
+      ...(nodeId !== undefined ? { nodeId } : {}),
+      promptId,
+      status: 'working',
+      substate: { renderedAt },
+      startedAt: renderedAt,
+      scope: scopeOptions,
+    });
+  }
+
   private async executeSinglePrompt(context: ExecutionContext): Promise<void> {
     // Type-safe access using direct field access with proper null checks
     const prompt = context.parsedCommand?.convertedPrompt;
@@ -371,6 +406,8 @@ export class StepExecutionStage extends BasePipelineStage {
       },
       generatedAt: Date.now(),
     };
+
+    this.ledgerRenderedRunPrompt(context);
 
     // Record diagnostic for single prompt execution
     context.diagnostics.info(this.name, 'Single prompt executed', {

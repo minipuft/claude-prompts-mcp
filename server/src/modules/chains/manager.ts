@@ -252,6 +252,8 @@ export class ChainSessionStore implements ChainSessionService {
    * first writes the run re-reads every owner's rows and re-mints past them.
    */
   private readonly unreservedRuns = new Set<string>();
+  /** The tail of the persists in flight: each waits for the one before it (see `persistSessionsOrThrow`). */
+  private persistQueue: Promise<void> = Promise.resolve();
   private readonly pidScope: StateStoreOptions = { continuityScopeId: String(process.pid) };
   private readonly workspaceScope: StateStoreOptions | undefined;
 
@@ -505,18 +507,21 @@ export class ChainSessionStore implements ChainSessionService {
    * and nothing outstays the synchronous write. The clone existed to turn `stepStates` into
    * an array for JSON, and `stepStates` is now rows.
    *
-   * Log-and-continue is this method's DELIBERATE posture, kept for the callers it has always
-   * had: an advisory mutation, a step capture and a cleanup pass each prefer a logged persist
-   * failure to a thrown one, because none of them can do anything about it. Callers that need
-   * the opposite — a write whose success they are about to REPORT — call
-   * {@link persistSessionsOrThrow}, which is the same write without the swallow.
+   * Log-and-continue survives for ONE failure class only: a lock another connection still held
+   * after `STATE_DB_BUSY_TIMEOUT_MS` (`SQLITE_BUSY`/`SQLITE_LOCKED`, see
+   * {@link isTransientLockError}). That class is transient because every persist writes the whole
+   * live set, so the next one heals it. Everything else throws to the caller (R74): a constraint
+   * violation recurs on every persist, so swallowing it once meant losing every save of the
+   * process silently while the rows it collided with lived (P6.147). Callers that report a write
+   * call {@link persistSessionsOrThrow}, which swallows nothing.
    */
   private async persistSessions(): Promise<void> {
     try {
       await this.persistSessionsOrThrow();
     } catch (error) {
+      if (!isTransientLockError(error)) throw error;
       this.logger.error(
-        `Failed to save sessions: ${error instanceof Error ? error.message : String(error)}`
+        `Failed to save sessions (lock held, the next persist rewrites them): ${error instanceof Error ? error.message : String(error)}`
       );
     }
   }
@@ -528,8 +533,20 @@ export class ChainSessionStore implements ChainSessionService {
    * response. A caller that reports "your remainder was applied" cannot use the swallowing
    * variant — it would report success while the rows say the run still holds the old plan, and
    * the divergence would only surface on the next cold load.
+   *
+   * Persists run ONE AT A TIME. The write awaits `runRegistry.save` inside its transaction, so a
+   * second persist starting in that gap (a fire-and-forget `persistSessionsAsync` from a lifecycle
+   * promotion, say) met `cannot start a transaction within a transaction`, and its changes were
+   * written by nobody. The swallow above hid that until R74 made it throw.
    */
-  private async persistSessionsOrThrow(): Promise<void> {
+  private persistSessionsOrThrow(): Promise<void> {
+    const write = this.persistQueue.then(() => this.writeSessions());
+    this.persistQueue = write.catch(() => undefined);
+    return write;
+  }
+
+  /** One transactional write of the live set; only {@link persistSessionsOrThrow} calls it. */
+  private async writeSessions(): Promise<void> {
     const db = this.resolvedDbEngine;
     const sessions = Array.from(this.activeSessions.values());
     if (!db) {
@@ -2994,6 +3011,20 @@ export function createChainSessionStore(
  *   a current-step review keyed onto a detached node's open review, or the reverse. Both are
  *   unreachable today; a silent overwrite would lose an open review.
  */
+/**
+ * Whether a persist failure is a lock another connection held past the busy timeout. Classified by
+ * `node:sqlite`'s `errcode` (the extended result code): its low byte is the primary code, where 5
+ * is `SQLITE_BUSY` and 6 is `SQLITE_LOCKED`. The message is not used, because a constraint
+ * violation's text names the columns, never the class. A `SQLITE_CONSTRAINT` (primary 19) and any
+ * error with no `errcode` are not transient.
+ */
+function isTransientLockError(error: unknown): boolean {
+  const errcode = (error as { errcode?: unknown } | null)?.errcode;
+  if (typeof errcode !== 'number') return false;
+  const primary = errcode & 0xff;
+  return primary === 5 || primary === 6;
+}
+
 function writeReview(session: ChainSession, review: GateReview): void {
   const reviews = { ...session.reviews };
   const detached = review.kind === 'detached';

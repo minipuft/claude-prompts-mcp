@@ -1,5 +1,6 @@
 // @lifecycle canonical - Captures model responses and lifecycle decisions.
 import { addressedReview } from '../../../gates/services/gate-verdict-processor.js';
+import { recordedStep } from '../../capture/step-capture-service.js';
 import { UnknownObservationValidationError } from '../../capture/unknown-observation-processor.js';
 import {
   collectDetachedNodeFacts,
@@ -587,21 +588,25 @@ export class StepResponseCaptureStage extends BasePipelineStage {
   }
 
   /**
-   * The parse-time step a resume addresses: the node id is the identity, the ordinal is the
-   * fallback for a chain parsed before node-id minting — the same two-key resolution
-   * `ledgerCapturedStep` and stage 20 use.
+   * The step a resume addresses, resolved as every record writer resolves it (`recordedStep`):
+   * through the renderer over the run's live nodes, so an inserted or contributed node is its own
+   * synthesized step. The two-key lookup this replaced (parse step by node id, else by ordinal)
+   * handed an inserted `inv-u-*` at ordinal 2 the parse step at ordinal 2 — a delegated `n2` — and
+   * refused its answer for lacking `n2`'s trailer, while a delegated remainder node, whose ordinal
+   * is past the parse array, was never checked at all (P6.157).
    */
   private resolveResumeStep(
     context: ExecutionContext,
     currentNodeIdAtStart: string | null,
     currentStepAtStart: number
   ): ChainStepPrompt | undefined {
-    const steps = context.parsedCommand?.steps;
-    return (
-      (currentNodeIdAtStart !== null
-        ? steps?.find((candidate) => candidate.nodeId === currentNodeIdAtStart)
-        : undefined) ?? steps?.find((candidate) => candidate.stepNumber === currentStepAtStart)
-    );
+    const sessionId = context.sessionContext?.sessionId;
+    const session =
+      sessionId === undefined
+        ? undefined
+        : this.chainSessionStore.getSession(sessionId, context.getScopeOptions());
+    return recordedStep(context, session, currentNodeIdAtStart ?? undefined, currentStepAtStart)
+      .step;
   }
 
   /**

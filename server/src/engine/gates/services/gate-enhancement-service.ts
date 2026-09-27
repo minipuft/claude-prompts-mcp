@@ -1,6 +1,7 @@
 // @lifecycle canonical - Core gate enhancement logic for prompt enrichment.
 import { DEFAULT_FRAMEWORK_GATE_ID, GateSetResolver } from './gate-set-resolver.js';
 import { planNodeDrivenRender } from '../../execution/operators/node-step-projection.js';
+import { parseChainGateDefinitionRef } from '../../execution/parsers/chain-step-projection.js';
 import { resolveEnforcementMode } from '../../execution/pipeline/decisions/index.js';
 import { isFrameworkInjected } from '../../execution/pipeline/decisions/injection/index.js';
 import { resolveDeclaredArtifacts } from '../utils/artifact-kinds.js';
@@ -13,7 +14,7 @@ import type { GateMetricsRecorder } from './gate-metrics-recorder.js';
 import type { GateService } from './gate-service-interface.js';
 import type { GateResolutionInput, GateResolutionResult } from './gate-set-resolver.js';
 import type { RunStepView, RunStepViewProvider } from './run-step-view.js';
-import type { RegisteredGateResult } from './temporary-gate-registrar.js';
+import type { RegisteredGateResult, StepGateDefinition } from './temporary-gate-registrar.js';
 import type { ExecutionContext, SessionContext } from '../../execution/context/index.js';
 import type { ChainStepPrompt } from '../../execution/operators/types.js';
 import type { FrameworkDecisionInput } from '../../execution/pipeline/decisions/index.js';
@@ -25,6 +26,8 @@ import type { GateContext } from '../core/gate-definitions.js';
 import type { GateDefinitionProvider } from '../core/gate-loader.js';
 import type { TemporaryGateRegistry } from '../core/temporary-gate-registry.js';
 import type { GateManager } from '../gate-manager.js';
+
+import { mintNodeIds } from '#shared/utils/node-order.js';
 
 /** Resolves a prompt id to its converted prompt; undefined when no such prompt is loaded. */
 export type PromptLookup = (promptId: string) => ConvertedPrompt | undefined;
@@ -59,6 +62,12 @@ export interface SinglePromptGateContext {
 export interface ChainStepGateContext {
   readonly type: 'chain';
   readonly steps: ChainStepPrompt[];
+  /**
+   * The id each chain-prompt gate reference a step carries registered under (P6.158), from
+   * `TemporaryGateRegistrar.registerStepGateDefinitions`. A reference with no entry is left as
+   * given, and resolves to no gate.
+   */
+  readonly stepDefinitionIds?: ReadonlyMap<string, string>;
 }
 
 export type GateEnhancementContext = SinglePromptGateContext | ChainStepGateContext;
@@ -86,6 +95,7 @@ interface ChainStepEnhancementInput {
   readonly inlineDefinitionGateIds: readonly string[];
   readonly runStepView: RunStepView | undefined;
   readonly currentStepKey: CurrentStepKey;
+  readonly stepDefinitionIds: ReadonlyMap<string, string>;
 }
 
 /**
@@ -167,37 +177,46 @@ export class GateEnhancementService {
    * Type-safe resolution of gate enhancement context.
    */
   resolveGateContext(context: ExecutionContext): GateEnhancementContext | null {
-    if (context.hasChainCommand()) {
-      return {
-        type: 'chain',
-        steps: this.joinContributedSteps(context, context.parsedCommand.steps),
-      };
+    const steps = context.parsedCommand?.steps;
+    if (context.hasChainCommand() || (steps !== undefined && steps.length > 0)) {
+      return { type: 'chain', steps: this.walkInRunOrder(context, steps ?? [], steps ?? []) };
     }
 
-    if (context.parsedCommand?.steps !== undefined && context.parsedCommand.steps.length > 0) {
-      return {
-        type: 'chain',
-        steps: this.joinContributedSteps(context, context.parsedCommand.steps),
-      };
+    const prompt = context.parsedCommand?.convertedPrompt;
+    if (prompt === undefined) {
+      return null;
     }
+    const inlineGateIds = context.parsedCommand?.inlineGateIds ?? [];
+    // A stepless run (a gated single prompt, P6.127) that a remainder grew is walked as a chain:
+    // its one planned node is the prompt itself, and every node contributed after it is a step
+    // (R71). The contributed steps are NOT added to `parsedCommand.steps`, which stays empty so
+    // the render keeps its single-prompt route.
+    const base = this.steplessBaseStep(context, prompt, inlineGateIds);
+    const walk = base === undefined ? [] : this.walkInRunOrder(context, [base], []);
+    return walk.length > 1
+      ? { type: 'chain', steps: walk }
+      : { type: 'single', prompt, inlineGateIds };
+  }
 
-    if (context.hasSinglePromptCommand()) {
-      return {
-        type: 'single',
-        prompt: context.parsedCommand.convertedPrompt,
-        inlineGateIds: context.parsedCommand.inlineGateIds ?? [],
-      };
+  /**
+   * The chain-prompt gate definitions this walk's steps reference (P6.158), for the registrar to
+   * register before the walk reads them. Empty for a single prompt, and when no step carries one.
+   */
+  chainStepGateDefinitions(gateContext: GateEnhancementContext): StepGateDefinition[] {
+    if (gateContext.type !== 'chain') {
+      return [];
     }
-
-    if (context.parsedCommand?.convertedPrompt !== undefined) {
-      return {
-        type: 'single',
-        prompt: context.parsedCommand.convertedPrompt,
-        inlineGateIds: context.parsedCommand.inlineGateIds ?? [],
-      };
+    const lookup = this.promptLookup;
+    const refs = gateContext.steps.flatMap((step) =>
+      (step.inlineGateIds ?? []).filter((id) => parseChainGateDefinitionRef(id) !== undefined)
+    );
+    if (refs.length > 0 && lookup === undefined) {
+      throw new Error(
+        `Step gate reference(s) ${refs.join(', ')} name a chain prompt's definitions, ` +
+          'but gate enhancement was built without a prompt lookup to resolve them'
+      );
     }
-
-    return null;
+    return lookup === undefined ? [] : stepGateDefinitionsOf(gateContext.steps, lookup);
   }
 
   /**
@@ -352,6 +371,7 @@ export class GateEnhancementService {
       inlineDefinitionGateIds,
       runStepView,
       currentStepKey: this.resolveCurrentStepKey(runStepView),
+      stepDefinitionIds: gateContext.stepDefinitionIds ?? new Map(),
     };
 
     this.addGatesToAccumulator(context, registeredGates.temporaryGateIds, 'temporary-request');
@@ -442,10 +462,12 @@ export class GateEnhancementService {
       modifiers: step.executionPlan?.modifiers,
       promptInjection: prompt.injection,
     });
+    const inlineGateIds = resolvedInlineGateIds(step, input.stepDefinitionIds);
     const resolution = await this.resolveIntoAccumulator(
       context,
       stepResolutionInput({
         step,
+        inlineGateIds,
         prompt,
         frameworkId: stepFrameworkId,
         frameworkInjected,
@@ -544,7 +566,11 @@ export class GateEnhancementService {
       const result = await input.gateService.enhancePrompt(
         prompt,
         gateIds,
-        stepGateContext(prompt, step, stepFrameworkId)
+        stepGateContext(
+          prompt,
+          resolvedInlineGateIds(step, input.stepDefinitionIds),
+          stepFrameworkId
+        )
       );
 
       const enhancedTemplate = result.enhancedPrompt.userMessageTemplate ?? '';
@@ -825,52 +851,86 @@ export class GateEnhancementService {
   }
 
   /**
+   * The steps this call's gate walk visits, in RUN order (P6.101, P6.160, R71).
+   *
+   * A node a remainder or arrow-append contributed has no parse-time step, so a walk over
+   * `parseSteps` alone never saw it: its step declared gates nobody resolved, and an ungated one
+   * got none of the category or framework defaults every planned step gets. Every contributed node
+   * is walked here as a planned step is — its step the one `synthesizeStep` builds from the node,
+   * its prompt resolved — and the walk follows the run's node order, so a step accumulates only the
+   * gates of the steps before it IN THE RUN. A parse step a `replace` remainder dropped is not a
+   * node of the run and contributes nothing; an inserted node is not walked (its review is
+   * inherited, `publishChainGateState`).
+   *
+   * Each contributed step is appended to `joinInto` IN PLACE. For a chain that is
+   * `parsedCommand.steps`: a per-call copy (a resume restores a clone of the blueprint, a re-sent
+   * command parses afresh), never written back, and the list stages 18 and 20 and the capture
+   * project the run's nodes over — by node id, so the step object the walk writes gate
+   * instructions onto is the one they render. A stepless run joins into a throwaway list, so its
+   * `parsedCommand.steps` stays empty and its render keeps the single-prompt route.
+   *
+   * `parseSteps` itself is returned untouched when the run contributed nothing — an unmutated run,
+   * or one only insertions changed, walks byte-identically — and for a legacy chain whose parse
+   * steps carry no node ids, which pairs nodes positionally.
+   */
+  private walkInRunOrder(
+    context: ExecutionContext,
+    parseSteps: ChainStepPrompt[],
+    joinInto: ChainStepPrompt[]
+  ): ChainStepPrompt[] {
+    const walk = runOrderWalk(this.resolveRunStepView(context)?.nodes ?? [], parseSteps);
+    if (walk === undefined) {
+      return parseSteps;
+    }
+    const lookup = this.promptLookup;
+    if (lookup === undefined) {
+      throw new Error(
+        `Contributed step(s) ${walk.contributed.map((step) => step.nodeId).join(', ')} join the ` +
+          'gate walk, but gate enhancement was built without a prompt lookup to resolve their prompts'
+      );
+    }
+    return walk.steps.map((step) => {
+      if (!walk.contributed.includes(step)) {
+        return step;
+      }
+      const convertedPrompt = lookup(step.promptId);
+      const joined = convertedPrompt === undefined ? step : { ...step, convertedPrompt };
+      joinInto.push(joined);
+      return joined;
+    });
+  }
+
+  /**
+   * The step a stepless run's one planned node stands for — the prompt itself, under the node id
+   * the run minted for it — or undefined when this call has no run. PURE apart from reading the
+   * run view.
+   */
+  private steplessBaseStep(
+    context: ExecutionContext,
+    prompt: ConvertedPrompt,
+    inlineGateIds: string[]
+  ): ChainStepPrompt | undefined {
+    const baseNode = this.resolveRunStepView(context)?.nodes?.[0];
+    if (baseNode === undefined) {
+      return undefined;
+    }
+    return {
+      stepNumber: 1,
+      nodeId: baseNode.id,
+      promptId: prompt.id,
+      args: context.parsedCommand?.promptArgs ?? {},
+      convertedPrompt: prompt,
+      inlineGateIds: [...inlineGateIds],
+      ...(context.executionPlan !== undefined ? { executionPlan: context.executionPlan } : {}),
+    };
+  }
+
+  /**
    * The live run's step identities for this call, or undefined when there is no run.
    *
    * Resolved once per chain enhancement rather than per step: the answer cannot change while
    * one call walks the step list, and a per-step lookup would let it appear to.
    */
-  /**
-   * Join the run's gated CONTRIBUTED steps to this call's step list, and return it (P6.101, R68).
-   *
-   * A node a remainder or arrow-append contributed has no parse-time step, so the walk — which
-   * reads each step's `inlineGateIds` (`stepResolutionInput`) — never saw the gates its step
-   * declared. Its step is the one `synthesizeStep` builds from the node, now carrying those ids;
-   * it joins the walk here with its prompt resolved, so it is enhanced, reviewed and rendered
-   * exactly as a parse-time step is.
-   *
-   * Appended to `steps` IN PLACE, which is `parsedCommand.steps`: that is a per-call copy (a
-   * resume restores a clone of the blueprint, a re-sent command parses afresh) and never written
-   * back, and it is the list stages 18 and 20 and the capture project the run's nodes over — by
-   * node id, so the joined step object, with the gate instructions the walk writes onto it, is the
-   * one they render. An ungated contributed node is left to `synthesizeStep` alone, as before.
-   *
-   * A legacy chain whose parse steps carry no node ids pairs nodes positionally, and a joined step
-   * WITH a node id would switch that pairing off, so such a chain joins nothing.
-   */
-  private joinContributedSteps(
-    context: ExecutionContext,
-    steps: ChainStepPrompt[]
-  ): ChainStepPrompt[] {
-    const nodes = this.resolveRunStepView(context)?.nodes ?? [];
-    const contributed = contributedGatedSteps(nodes, steps);
-    if (contributed.length === 0) {
-      return steps;
-    }
-    const lookup = this.promptLookup;
-    if (lookup === undefined) {
-      throw new Error(
-        `Contributed step(s) ${contributed.map((step) => step.nodeId).join(', ')} declare gates, ` +
-          'but gate enhancement was built without a prompt lookup to resolve their prompts'
-      );
-    }
-    for (const step of contributed) {
-      const convertedPrompt = lookup(step.promptId);
-      steps.push(convertedPrompt === undefined ? step : { ...step, convertedPrompt });
-    }
-    return steps;
-  }
-
   private resolveRunStepView(context: ExecutionContext): RunStepView | undefined {
     if (this.runStepViewProvider === undefined) {
       return undefined;
@@ -1090,21 +1150,27 @@ export class GateEnhancementService {
 // ============================================================================
 
 /**
- * The steps of the run's contributed nodes that declare gates, as `synthesizeStep` builds them —
- * the nodes no parse step names (P6.101). PURE. Empty for a legacy chain whose parse steps carry
- * no node ids (positional pairing; see `joinContributedSteps`).
+ * The gate walk in the run's node order (P6.160, R71), or undefined when it is `parseSteps` as
+ * given: no run, no contributed node, or a legacy chain whose parse steps carry no node ids. PURE.
+ *
+ * Per node: the parse step naming it, by reference (gate enhancement writes onto that object);
+ * else, for a contributed node, the step `synthesizeStep` builds from it (listed again in
+ * `contributed`); an inserted node is skipped. A parse step no node names — one a `replace`
+ * remainder dropped — is not in the walk.
  */
-function contributedGatedSteps(
+export function runOrderWalk(
   nodes: readonly ChainNode[],
   parseSteps: readonly ChainStepPrompt[]
-): ChainStepPrompt[] {
-  const parsedIds = new Set(
+): { steps: ChainStepPrompt[]; contributed: ChainStepPrompt[] } | undefined {
+  const byNodeId = new Map(
     parseSteps.flatMap((step) =>
-      typeof step.nodeId === 'string' && step.nodeId.length > 0 ? [step.nodeId] : []
+      typeof step.nodeId === 'string' && step.nodeId.length > 0 ? [[step.nodeId, step]] : []
     )
   );
-  if (nodes.length === 0 || parsedIds.size === 0) {
-    return [];
+  const isContributed = (node: ChainNode): boolean =>
+    node.origin === 'remainder' && !byNodeId.has(node.id);
+  if (byNodeId.size === 0 || !nodes.some(isContributed)) {
+    return undefined;
   }
   const planned = planNodeDrivenRender({
     nodes,
@@ -1112,11 +1178,54 @@ function contributedGatedSteps(
     currentNodeId: undefined,
     fallbackOrdinal: 1,
   }).steps;
-  return planned.filter(
-    (step) =>
-      step.nodeId !== undefined &&
-      !parsedIds.has(step.nodeId) &&
-      (step.inlineGateIds?.length ?? 0) > 0
+  const steps: ChainStepPrompt[] = [];
+  const contributed: ChainStepPrompt[] = [];
+  nodes.forEach((node, index) => {
+    const parsed = byNodeId.get(node.id);
+    const synthesized = planned[index];
+    if (parsed !== undefined) {
+      steps.push(parsed);
+    } else if (isContributed(node) && synthesized !== undefined) {
+      steps.push(synthesized);
+      contributed.push(synthesized);
+    }
+  });
+  return { steps, contributed };
+}
+
+/**
+ * A step's `inlineGateIds` with each chain-prompt reference replaced by the id it registered
+ * under (P6.158). PURE. A reference nothing registered stays as given and resolves to no gate.
+ */
+function resolvedInlineGateIds(
+  step: ChainStepPrompt,
+  stepDefinitionIds: ReadonlyMap<string, string>
+): string[] | undefined {
+  return step.inlineGateIds?.map((gateId) => stepDefinitionIds.get(gateId) ?? gateId);
+}
+
+/**
+ * Every chain-prompt gate definition the walk's steps reference, with the definition it names
+ * (P6.158). PURE apart from the lookup. A definition declaring no `id` registers under its name's
+ * slug, so a resume finds the one it registered (P6.107) rather than minting a gate per call.
+ */
+function stepGateDefinitionsOf(
+  steps: readonly ChainStepPrompt[],
+  lookup: PromptLookup
+): StepGateDefinition[] {
+  return steps.flatMap((step) =>
+    (step.inlineGateIds ?? []).flatMap((ref) => {
+      const parsed = parseChainGateDefinitionRef(ref);
+      const chainPrompt = parsed === undefined ? undefined : lookup(parsed.chainPromptId);
+      const definition = chainPrompt?.gateConfiguration?.inline_gate_definitions?.find(
+        (candidate) => candidate.id === parsed?.gateKey || candidate.name === parsed?.gateKey
+      );
+      if (chainPrompt === undefined || definition === undefined) {
+        return [];
+      }
+      const id = mintNodeIds([{ id: definition.id, stepName: definition.name }])[0];
+      return [{ ref, promptId: chainPrompt.id, definition: { ...definition, id } }];
+    })
   );
 }
 
@@ -1128,6 +1237,8 @@ function contributedGatedSteps(
  */
 function stepResolutionInput(args: {
   readonly step: ChainStepPrompt;
+  /** The step's `inlineGateIds`, chain-prompt references resolved (P6.158). */
+  readonly inlineGateIds: string[] | undefined;
   readonly prompt: ConvertedPrompt;
   readonly frameworkId: string | undefined;
   readonly frameworkInjected: boolean;
@@ -1149,7 +1260,7 @@ function stepResolutionInput(args: {
     frameworkInjected: args.frameworkInjected,
     frameworkGatesEnabled: args.frameworkGatesEnabled,
     knownFrameworkGateIds: args.knownFrameworkGateIds,
-    inlineOperatorGateIds: Array.isArray(step.inlineGateIds) ? step.inlineGateIds : [],
+    inlineOperatorGateIds: args.inlineGateIds ?? [],
     plannedGateIds: plannedGates,
     inlineDefinitionGateIds: args.inlineDefinitionGateIds,
     // A step with no category must not pull in registry gates on a 'general' fallback.
@@ -1165,12 +1276,12 @@ function stepResolutionInput(args: {
  */
 function stepGateContext(
   prompt: ConvertedPrompt,
-  step: ChainStepPrompt,
+  inlineGateIds: string[] | undefined,
   frameworkId: string | undefined
 ): GateContext {
   const gateCtx: GateContext = { promptId: prompt.id };
-  if (Array.isArray(step.inlineGateIds)) {
-    gateCtx.explicitGateIds = step.inlineGateIds;
+  if (inlineGateIds !== undefined) {
+    gateCtx.explicitGateIds = inlineGateIds;
   }
   if (frameworkId !== undefined) {
     gateCtx.framework = frameworkId;

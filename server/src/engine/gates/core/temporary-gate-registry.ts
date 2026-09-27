@@ -273,8 +273,14 @@ export class TemporaryGateRegistry {
    * Hand the gates a call registered to the run that call belongs to (R47). The run then owns
    * them until it ends: their expiry timer is dropped, because a run may wait longer than any
    * timer between two calls. A gate another run already owns stays with that run.
+   *
+   * A `chain`-scoped gate is filed under the run's chain id here (P6.164, R73). The call that
+   * starts a run registers before the run has a chain id, so its chain-scoped gates were filed
+   * under a server-wide stand-in (`chain:execution`) shared by every run's start call: the run's
+   * own `chain:<chainId>` scope never listed them, and anything reading or clearing that bucket
+   * reached every run's at once. `chainId` absent re-keys nothing.
    */
-  adoptIntoRun(runId: string, gateIds: readonly string[]): void {
+  adoptIntoRun(runId: string, gateIds: readonly string[], chainId?: string): void {
     for (const gateId of gateIds) {
       const gate = this.temporaryGates.get(gateId);
       if (gate === undefined || this.gateOwners.has(gateId)) {
@@ -285,7 +291,22 @@ export class TemporaryGateRegistry {
       owned.add(gateId);
       this.runGates.set(runId, owned);
       this.clearExpiry(gate);
+      if (chainId !== undefined) {
+        this.fileUnderChain(gate, chainId);
+      }
     }
+  }
+
+  /** Move a `chain`-scoped gate's scope association to `chain:<chainId>`. */
+  private fileUnderChain(gate: TemporaryGateDefinition, chainId: string): void {
+    if (gate.scope !== 'chain' || gate.scope_id === chainId) {
+      return;
+    }
+    if (gate.scope_id !== undefined) {
+      this.removeFromScope(gate.id, gate.scope, gate.scope_id);
+    }
+    gate.scope_id = chainId;
+    this.associateWithScope(gate.id, gate.scope, chainId);
   }
 
   /**

@@ -340,6 +340,116 @@ describe('Tenant Isolation', () => {
       expect(projectedRuns('chain-p147c#1')).toEqual([{ sessionId: 'p147-c', scope: 'tenant-c' }]);
     });
 
+    /**
+     * P6.166 (R74). A planted UNIQUE index turns the P6.147 pair back into a projection collision:
+     * the second save must THROW at the caller, not log and report the run created. The partial
+     * index names one chain id, so other tests' rows cannot trip it.
+     */
+    test('P6.166 a constraint violation in the projection throws the save to its caller', async () => {
+      const plant = `CREATE UNIQUE INDEX p166_plant ON chain_sessions(chain_id)
+        WHERE chain_id = 'chain-p166#1'`;
+      dbManager.run(plant);
+      try {
+        await chainSessionStore.createSession(
+          'p166-a',
+          'chain-p166#1',
+          2,
+          {},
+          {
+            continuityScopeId: 'tenant-a',
+          }
+        );
+        await expect(
+          chainSessionStore.createSession(
+            'p166-b',
+            'chain-p166#1',
+            2,
+            {},
+            {
+              continuityScopeId: 'tenant-b',
+            }
+          )
+        ).rejects.toThrow(/UNIQUE constraint failed: chain_sessions\.chain_id/);
+        // Positive control on the table the defect lives in: the failed save rolled back, so
+        // `chain_runs` holds only the first run.
+        const runs = dbManager.query<{ session_id: string }>(
+          `SELECT session_id FROM chain_runs WHERE chain_id = ? ORDER BY session_id`,
+          ['chain-p166#1']
+        );
+        expect(runs.map((row) => row.session_id)).toEqual(['p166-a']);
+      } finally {
+        dbManager.run('DROP INDEX p166_plant');
+      }
+    });
+
+    test('P6.166 control: the same pair saves cleanly without the planted index', async () => {
+      await chainSessionStore.createSession(
+        'p166-c',
+        'chain-p166c#1',
+        2,
+        {},
+        {
+          continuityScopeId: 'tenant-a',
+        }
+      );
+      await chainSessionStore.createSession(
+        'p166-d',
+        'chain-p166c#1',
+        2,
+        {},
+        {
+          continuityScopeId: 'tenant-b',
+        }
+      );
+
+      expect(projectedRuns('chain-p166c#1')).toEqual([
+        { sessionId: 'p166-c', scope: 'tenant-a' },
+        { sessionId: 'p166-d', scope: 'tenant-b' },
+      ]);
+    });
+
+    test('P6.166 two persists in flight at once both commit, one after the other', async () => {
+      // A fire-and-forget persist (a lifecycle promotion) overlapping an awaited one used to meet
+      // `cannot start a transaction within a transaction`, which the old swallow hid.
+      await chainSessionStore.createSession(
+        'p166-f',
+        'chain-p166f#1',
+        2,
+        {},
+        {
+          continuityScopeId: 'tenant-a',
+        }
+      );
+      const persist = () =>
+        (
+          chainSessionStore as unknown as { persistSessions: () => Promise<void> }
+        ).persistSessions();
+
+      await expect(Promise.all([persist(), persist()])).resolves.toEqual([undefined, undefined]);
+      expect(projectedRuns('chain-p166f#1')).toEqual([{ sessionId: 'p166-f', scope: 'tenant-a' }]);
+    });
+
+    test('P6.166 a lock held past the busy timeout is logged and the save continues', async () => {
+      // The one class `persistSessions` still swallows: SQLITE_BUSY (errcode 5), transient
+      // because the next persist rewrites every live run.
+      const errorLog = logger.error as jest.Mock;
+      errorLog.mockClear();
+      const busy = Object.assign(new Error('database is locked'), {
+        code: 'ERR_SQLITE_ERROR',
+        errcode: 5,
+      });
+      const spy = jest
+        .spyOn(chainSessionStore as any, 'persistSessionsOrThrow')
+        .mockRejectedValueOnce(busy);
+      try {
+        const session = await chainSessionStore.createSession('p166-e', 'chain-p166e#1', 2);
+        expect(session.sessionId).toBe('p166-e');
+        expect(String(errorLog.mock.calls.at(-1)?.[0])).toMatch(/lock held.*database is locked/);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
     test('clearing one tenant sessions does not affect another tenant', async () => {
       await chainSessionStore.createSession(
         'tenant-a-session',
