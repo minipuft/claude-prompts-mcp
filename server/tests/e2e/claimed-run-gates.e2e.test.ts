@@ -366,6 +366,81 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     expect(other.text).not.toContain('A-ONE');
   }, 180000);
 
+  /**
+   * A run declaring `g140` opens its step-a review on a first server, is claimed by a second one
+   * (optionally running its own `g140` first, the collision), and answers step a there with a FAIL.
+   */
+  async function claimWithOpenReview(
+    roots: Roots,
+    collide: boolean
+  ): Promise<{ chainId: string; second: Server; failed: string; sessionId: string }> {
+    const first = await startServer(roots);
+    await authorResources(first);
+    const chainId = chainIdOf(
+      (await first.call('prompt_engine', { command: '>>sv_chain :: g140:"A-ONE"' })).text
+    );
+    // Positive control: the review is open before the claim, under the recorded id.
+    expect(runRow(roots, chainId)?.reviews).toEqual({ a: ['sv-block', 'g140'] });
+    const minted = await first.call('prompt_engine', { chain_id: chainId, handoff: true });
+    const token = /Token: `(hnd_[^`]+)`/.exec(minted.text)?.[1];
+    if (token === undefined) throw new Error(`no token in: ${minted.text}`);
+    const second = await startServer(roots);
+    if (collide) {
+      await second.call('resource_manager', {
+        resource_type: 'prompt',
+        action: 'create',
+        id: 'sv_chain_other',
+        category: 'general',
+        name: 'sv_chain_other',
+        description: 'a second chain the claiming server runs',
+        user_message_template: 'OTHER-OWN-TEMPLATE',
+        gate_configuration: OPT_OUT,
+        chain_steps: [
+          { promptId: 'sv_a', stepName: 'A' },
+          { promptId: 'sv_b', stepName: 'B' },
+        ],
+      });
+      const other = await second.call('prompt_engine', {
+        command: '>>sv_chain_other :: g140:"B-ONE"',
+      });
+      expect(other.text).toContain('B-ONE');
+    }
+    await first.stop();
+    const failed = await second.call('prompt_engine', {
+      claim_token: token,
+      user_response: 'A out',
+      gate_verdict: FAIL,
+    });
+    expect(failed.isError).toBe(false);
+    const db = new DatabaseSync(path.join(roots.runtimeRoot, 'runtime-state', 'state.db'));
+    try {
+      const row = db
+        .prepare('SELECT session_id FROM chain_runs WHERE chain_id = ?')
+        .get(chainId) as { session_id: string };
+      return { chainId, second, failed: failed.text, sessionId: row.session_id };
+    } finally {
+      db.close();
+    }
+  }
+
+  test('P6.140 (a) a review opened before a claim names the remapped gate and a FAIL grades the claimed run criteria', async () => {
+    const roots = freshRoots();
+    const { chainId, failed } = await claimWithOpenReview(roots, true);
+    expect(failed).toContain('Gate Review Required');
+    expect(failed).toContain('A-ONE');
+    expect(failed).not.toContain('B-ONE');
+    expect(runRow(roots, chainId)?.reviews).toEqual({ a: ['sv-block', 'g140-2'] });
+    // The tier map follows too: the remapped gate is still a reminder the verdict attests.
+    expect(failed).toContain('"satisfied": ["sv-block", "g140-2"]');
+  }, 180000);
+
+  test('P6.140 (b) control: with no collision the claimed review is unchanged', async () => {
+    const roots = freshRoots();
+    const { chainId, failed } = await claimWithOpenReview(roots, false);
+    expect(failed).toContain('A-ONE');
+    expect(runRow(roots, chainId)?.reviews).toEqual({ a: ['sv-block', 'g140'] });
+  }, 180000);
+
   test('P6.130 (a) after a claim the projection holds exactly the claimer row for the run', async () => {
     const roots = freshRoots();
     const { chainId, first, second } = await claimOnSecondServer(roots, { command: '>>sv_chain' });

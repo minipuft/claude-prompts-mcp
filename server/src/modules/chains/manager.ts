@@ -2079,6 +2079,22 @@ export class ChainSessionStore implements ChainSessionService {
     return inlineIds.length > 0 ? inlineIds : undefined;
   }
 
+  async remapRunGates(sessionId: string, remap: ReadonlyMap<string, string>): Promise<void> {
+    if (remap.size === 0) return;
+    const session = this.activeSessions.get(sessionId);
+    if (session === undefined) {
+      this.logger.warn(`Attempted to remap the gates of non-existent session: ${sessionId}`);
+      return;
+    }
+    const stale = Object.values(session.reviews ?? {}).filter((review) =>
+      reviewGateIds(review).some((id) => remap.has(id))
+    );
+    for (const review of stale) {
+      writeReview(session, remapReviewGateIds(review, remap));
+    }
+    if (stale.length > 0) await this.saveSessions();
+  }
+
   async setReview(sessionId: string, review: GateReview): Promise<void> {
     const session = this.activeSessions.get(sessionId);
     if (!session) {
@@ -2966,6 +2982,36 @@ function writeReview(session: ChainSession, review: GateReview): void {
   }
   reviews[review.nodeId] = review;
   session.reviews = reviews;
+}
+
+/** Every gate id an open review names: its gates, its rendered prompts and its tier map. */
+function reviewGateIds(review: GateReview): string[] {
+  return [
+    ...review.gateIds,
+    ...review.prompts.flatMap((prompt) => (prompt.gateId === undefined ? [] : [prompt.gateId])),
+    ...Object.keys(review.gateTiers ?? {}),
+  ];
+}
+
+/**
+ * A copy of `review` naming each gate through `remap` (R60 amended) wherever the render and the
+ * verdict read a gate id. `history` and `checkResults` stay as recorded: they are what happened.
+ */
+function remapReviewGateIds(review: GateReview, remap: ReadonlyMap<string, string>): GateReview {
+  const to = (id: string): string => remap.get(id) ?? id;
+  const copy = cloneReview(review);
+  return {
+    ...copy,
+    gateIds: copy.gateIds.map(to),
+    prompts: copy.prompts.map((prompt) =>
+      prompt.gateId === undefined ? prompt : { ...prompt, gateId: to(prompt.gateId) }
+    ),
+    ...(copy.gateTiers !== undefined && {
+      gateTiers: Object.fromEntries(
+        Object.entries(copy.gateTiers).map(([id, tier]) => [to(id), tier])
+      ),
+    }),
+  };
 }
 
 /** Remove the review of `nodeId`; `reviews` goes when it empties. */

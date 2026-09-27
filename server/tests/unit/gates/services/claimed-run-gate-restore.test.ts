@@ -21,6 +21,13 @@ const logger = (): Logger => ({
   debug: jest.fn(),
 });
 
+/** The run store's remap writer (R60 amended), recording what each restore handed it. */
+const runGateStore = (): {
+  remapRunGates: jest.Mock<(runId: string, remap: ReadonlyMap<string, string>) => Promise<void>>;
+} => ({
+  remapRunGates: jest.fn(async () => undefined),
+});
+
 /** `sv-block` is canonical; everything else is criteria text. */
 const resolver = {
   resolve: async (ref: string) =>
@@ -64,7 +71,7 @@ const restoredOn = (
 };
 
 async function startRun(registry: TemporaryGateRegistry): Promise<ParsedCommand> {
-  const processor = new InlineGateProcessor(registry, resolver, logger());
+  const processor = new InlineGateProcessor(registry, resolver, logger(), runGateStore());
   const started = gatedChain();
   await processor.processInlineGates(new ExecutionContext({ command: 'start' }), started);
   return started;
@@ -77,7 +84,7 @@ describe('InlineGateProcessor.restoreRunGates', () => {
     expect(stepTemps.every((id) => /^temp_\d+_[a-z0-9]+$/.test(id ?? ''))).toBe(true);
 
     const registry = new TemporaryGateRegistry(logger());
-    const processor = new InlineGateProcessor(registry, resolver, logger());
+    const processor = new InlineGateProcessor(registry, resolver, logger(), runGateStore());
     const { context, parsed } = restoredOn(started, 'run-1');
     const restored = await processor.restoreRunGates(context, parsed);
 
@@ -101,11 +108,14 @@ describe('InlineGateProcessor.restoreRunGates', () => {
       ...(started.inlineGateIds ?? []),
       ...(started.steps ?? []).flatMap((step) => step.inlineGateIds ?? []),
     ]);
-    const processor = new InlineGateProcessor(registry, resolver, logger());
+    const store = runGateStore();
+    const processor = new InlineGateProcessor(registry, resolver, logger(), store);
     const { context, parsed } = restoredOn(started, 'run-1');
 
     expect(await processor.restoreRunGates(context, parsed)).toEqual([]);
     expect(registry.getTemporaryGate('g112-2')).toBeUndefined();
+    // P6.140 control: nothing remapped, so the run's reviews are handed an empty map.
+    expect(store.remapRunGates.mock.calls).toEqual([['run-1', new Map()]]);
   });
 
   test('(c) a named gate recorded under a fresh id is restored under that id', async () => {
@@ -123,7 +133,7 @@ describe('InlineGateProcessor.restoreRunGates', () => {
     expect(started.inlineGateIds).toEqual(['g112-2']);
 
     const registry = new TemporaryGateRegistry(logger());
-    const processor = new InlineGateProcessor(registry, resolver, logger());
+    const processor = new InlineGateProcessor(registry, resolver, logger(), runGateStore());
     const { context, parsed } = restoredOn(started, 'run-1');
     await processor.restoreRunGates(context, parsed);
 
@@ -148,11 +158,14 @@ describe('InlineGateProcessor.restoreRunGates', () => {
         source: 'automatic',
       }),
     ]);
-    const processor = new InlineGateProcessor(registry, resolver, logger());
+    const store = runGateStore();
+    const processor = new InlineGateProcessor(registry, resolver, logger(), store);
     const { context, parsed } = restoredOn(started, 'run-1');
     const restored = await processor.restoreRunGates(context, parsed);
 
     expect(restored).toContain('g112-2');
+    // P6.140: the run's store is handed the same remap its restored command carries.
+    expect(store.remapRunGates.mock.calls).toEqual([['run-1', new Map([['g112', 'g112-2']])]]);
     expect(registry.getTemporaryGate('g112-2')?.pass_criteria).toEqual(['NAMED']);
     expect(registry.getTemporaryGate('g112-2')?.declared_key).toBe('g112');
     expect(registry.getTemporaryGate('g112')?.pass_criteria).toEqual(['OTHER']);
@@ -187,7 +200,7 @@ describe('InlineGateProcessor.restoreRunGates', () => {
         'ANON',
       ];
     }
-    await new InlineGateProcessor(first, resolver, logger()).processInlineGates(
+    await new InlineGateProcessor(first, resolver, logger(), runGateStore()).processInlineGates(
       new ExecutionContext({ command: 'start' }),
       started
     );
@@ -196,7 +209,10 @@ describe('InlineGateProcessor.restoreRunGates', () => {
 
     const registry = new TemporaryGateRegistry(logger());
     const { context, parsed } = restoredOn(started, 'run-1');
-    await new InlineGateProcessor(registry, resolver, logger()).restoreRunGates(context, parsed);
+    await new InlineGateProcessor(registry, resolver, logger(), runGateStore()).restoreRunGates(
+      context,
+      parsed
+    );
 
     expect(registry.getTemporaryGate(own)?.pass_criteria).toEqual(['ANON']);
     expect(registry.getTemporaryGate(referenced)).toBeUndefined();
@@ -207,7 +223,7 @@ describe('InlineGateProcessor.restoreRunGates', () => {
     started.requestGates = [{ id: 'rq112', name: 'rq112', criteria: ['REQ'] }];
 
     const registry = new TemporaryGateRegistry(logger());
-    const processor = new InlineGateProcessor(registry, resolver, logger());
+    const processor = new InlineGateProcessor(registry, resolver, logger(), runGateStore());
     const claimed = restoredOn(started, 'run-1');
     await processor.restoreRunGates(claimed.context, claimed.parsed);
     expect(claimed.context.state.gates.requestedOverrides?.gates).toEqual(started.requestGates);

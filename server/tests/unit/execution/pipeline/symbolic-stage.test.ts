@@ -216,7 +216,8 @@ describe('Symbolic pipeline coverage', () => {
     const inlineGateProcessor = new InlineGateProcessor(
       registry as any,
       createResolver() as any,
-      logger
+      logger,
+      { remapRunGates: async () => undefined }
     );
     const inlineStage = new InlineGateExtractionStage(inlineGateProcessor, logger);
     await inlineStage.execute(context);

@@ -557,6 +557,12 @@ export interface ChainSessionService {
   getSessionBlueprint(sessionId: string, scope?: StateStoreOptions): SessionBlueprint | undefined;
   getInlineGateIds(sessionId: string, scope?: StateStoreOptions): string[] | undefined;
   /**
+   * Adopt the gate ids this process registered for a restored run in place of the ids its
+   * blueprint recorded (R60 amended): `remap` is recorded id to registered id. The run's open
+   * reviews are rewritten through the review writer. The blueprint is untouched.
+   */
+  remapRunGates(sessionId: string, remap: ReadonlyMap<string, string>): Promise<void>;
+  /**
    * Store `review` at `reviews[review.nodeId]`, replacing only that node's review: one review per
    * node, and every other node's review stays open.
    */
