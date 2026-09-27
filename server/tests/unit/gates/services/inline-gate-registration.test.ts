@@ -28,9 +28,12 @@ const createRegistry = () => {
     }),
     getTemporaryGate: jest.fn((id: string) => gates.get(id)),
     removeTemporaryGate: jest.fn((id: string) => gates.delete(id)),
-    // No run has adopted anything here: a held id counts as this run's only when this call
-    // registered it (`state.gates.temporaryGateIds`).
-    ownerOf: jest.fn((_id: string): string | undefined => undefined),
+    // No run has adopted anything here: a declared id is this run's only when this call
+    // registered it (`state.gates.temporaryGateIds`), found by the key it was declared under.
+    resolveDeclared: jest.fn(
+      (key: string, _runId: string | undefined, callGateIds: readonly string[]) =>
+        callGateIds.find((id) => (gates.get(id)?.['declared_key'] ?? gates.get(id)?.['id']) === key)
+    ),
   };
 };
 

@@ -189,6 +189,7 @@ const createTemporaryGateRegistry = () => ({
     .mockReturnValueOnce('step_gate_1')
     .mockReturnValueOnce('step_gate_2'),
   getTemporaryGate: jest.fn().mockReturnValue(undefined),
+  resolveDeclared: jest.fn().mockReturnValue(undefined),
 });
 
 const createSessionManager = (): jest.Mocked<ChainSessionStore> =>

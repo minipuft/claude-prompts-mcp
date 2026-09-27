@@ -23,7 +23,12 @@ const createRegistry = (overrides?: {
     overrides?.createTemporaryGate ?? jest.fn().mockReturnValue('temp_gate');
   const getTemporaryGate = overrides?.getTemporaryGate ?? jest.fn();
   return {
-    registry: { createTemporaryGate, getTemporaryGate } as unknown as TemporaryGateRegistry,
+    // No run holds a declared key here: every named gate registers (R49's view is empty).
+    registry: {
+      createTemporaryGate,
+      getTemporaryGate,
+      resolveDeclared: jest.fn(),
+    } as unknown as TemporaryGateRegistry,
     createTemporaryGate,
     getTemporaryGate,
   };

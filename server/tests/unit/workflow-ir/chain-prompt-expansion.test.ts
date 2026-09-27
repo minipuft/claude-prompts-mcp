@@ -1,4 +1,4 @@
-// @lifecycle test - P6.79 / R40: a Workflow IR node naming a chain prompt is expanded into the prompt's projected steps; P6.92 / R41: the validator checks the expanded IR.
+// @lifecycle test - P6.79 / R40: a Workflow IR node naming a chain prompt is expanded into the prompt's projected steps; P6.92 / R41: the validator checks the expanded IR; P6.106: a gate target addresses a declared id.
 import { describe, expect, test } from '@jest/globals';
 
 import { expandChainPromptNodes } from '../../../src/modules/workflow-ir/chain-prompt-expansion.js';
@@ -205,6 +205,22 @@ describe('P6.92: validateWorkflowIR with expandWith checks the expanded IR', () 
     expect(validation.expanded?.ir.gates).toEqual([
       { name: 'tgt', criteria: ['TGT'], target_step_id: 'y' },
     ]);
+  });
+
+  // P6.106: the client's address space is the ids it DECLARED. `x-b` exists only after expansion,
+  // so it is refused although the expanded IR holds it; `x` addresses the segment's last step.
+  test('(d) a gate target is checked against the declared ids: `x` accepted, expanded `x-b` refused', () => {
+    expect(validateWorkflowIR(withGate('x'), deps).ok).toBe(true);
+    expect(validateWorkflowIR(withGate('x-b'), deps)).toEqual({
+      ok: false,
+      rejections: [
+        {
+          reason: 'gate-target-missing',
+          nodeId: 'x-b',
+          detail: 'Gate binding targets step id "x-b", but no node declares that id',
+        },
+      ],
+    });
   });
 
   test('control: an IR of single prompts returns no expanded IR', () => {

@@ -1,4 +1,4 @@
-// @lifecycle canonical - P6.97 / R43: a named inline gate belongs to the run that declared it. P6.110: one name in two segments is two gates.
+// @lifecycle canonical - P6.97 / R43: a named inline gate belongs to the run that declared it. P6.110: one name in two segments is two gates. P6.115: a run parsing its command again resolves its named gates.
 /**
  * MEASURED 2026-09-25 on `a5ea0338` (driven, one server): `>>sv_chain :: g97:"CRIT-ONE"`, then a
  * second run `>>sv_chain :: g97:"CRIT-TWO"` rendered and reviewed `CRIT-ONE`. The registry threw
@@ -155,5 +155,86 @@ describe('InlineGateProcessor: one name declared in two segments', () => {
     await processor.processInlineGates(new ExecutionContext({ command: 'run' }), command);
 
     expect(command.steps?.map((step) => step.inlineGateIds)).toEqual([['g110'], ['g110']]);
+  });
+});
+
+/**
+ * P6.115 / R49: a call that knows its run and parses the run's command again resolves each named
+ * gate through the run's declared-id map instead of minting `<id>-N`. MEASURED 2026-09-26 on
+ * `936611fd` (driven): no `prompt_engine` call shape reaches stage 05 on a live run — `command`
+ * plus `chain_id` is refused by the tool schema unless it is an append (whose `::` is refused and
+ * whose blueprint is restored), and a command naming a chain id inline starts a new run — so this
+ * is pinned here, on a context carrying the run id, rather than driven.
+ */
+describe('InlineGateProcessor: a run parsing its command again', () => {
+  const resumeOf = (runId: string): ExecutionContext => {
+    const context = new ExecutionContext({ command: 'again' });
+    context.state.session.resumeSessionId = runId;
+    return context;
+  };
+
+  test('(b) a named gate the run holds resolves to it, and nothing registers', async () => {
+    const registry = new TemporaryGateRegistry(logger());
+    const processor = new InlineGateProcessor(registry, inlineResolver, logger());
+    const started = new ExecutionContext({ command: 'start' });
+    await processor.processInlineGates(started, foldedChain('CRIT-ONE'));
+    registry.adoptIntoRun('run-1', ['g97']);
+
+    const again = foldedChain('CRIT-ONE');
+    await processor.processInlineGates(resumeOf('run-1'), again);
+
+    expect(again.inlineGateIds).toEqual(['g97']);
+    expect(again.steps?.map((step) => step.inlineGateIds)).toEqual([
+      ['sv-block', 'g97'],
+      ['sv-block', 'g97'],
+    ]);
+    expect(registry.getTemporaryGate('g97-2')).toBeUndefined();
+  });
+
+  test('(c) control: another live run declaring the name gets its own', async () => {
+    const registry = new TemporaryGateRegistry(logger());
+    const processor = new InlineGateProcessor(registry, inlineResolver, logger());
+    await processor.processInlineGates(new ExecutionContext({ command: 'a' }), foldedChain('ONE'));
+    registry.adoptIntoRun('run-1', ['g97']);
+
+    const other = foldedChain('TWO');
+    await processor.processInlineGates(resumeOf('run-2'), other);
+
+    expect(other.inlineGateIds).toEqual(['g97-2']);
+    expect(registry.getTemporaryGate('g97')?.pass_criteria).toEqual(['ONE']);
+  });
+
+  test('(d) both occurrence keys of a two-segment command resolve per run; nothing new mints', async () => {
+    const registry = new TemporaryGateRegistry(logger());
+    const processor = new InlineGateProcessor(registry, inlineResolver, logger());
+    const twoSegments = (): ParsedCommand =>
+      ({
+        promptId: 'sv_a',
+        rawArgs: '',
+        format: 'symbolic',
+        confidence: 1,
+        metadata: {
+          originalCommand: '',
+          parseStrategy: 'symbolic',
+          detectedFormat: 'symbolic',
+          warnings: [],
+        },
+        namedInlineGates: [
+          { gateId: 'g110', criteria: ['ONE'] },
+          { gateId: 'g110', criteria: ['TWO'] },
+        ],
+        steps: [
+          { stepNumber: 1, promptId: 'sv_a', args: {}, inlineGateCriteria: ['g110'] },
+          { stepNumber: 2, promptId: 'sv_b', args: {}, inlineGateCriteria: ['g110#2'] },
+        ],
+      }) as unknown as ParsedCommand;
+    await processor.processInlineGates(new ExecutionContext({ command: 'a' }), twoSegments());
+    registry.adoptIntoRun('run-1', ['g110', 'g110-2']);
+
+    const again = twoSegments();
+    await processor.processInlineGates(resumeOf('run-1'), again);
+
+    expect(again.steps?.map((step) => step.inlineGateIds)).toEqual([['g110'], ['g110-2']]);
+    expect(registry.getTemporaryGate('g110-3')).toBeUndefined();
   });
 });

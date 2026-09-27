@@ -5,7 +5,12 @@ import { namedGateBindingKey } from './symbolic-operator-parser.js';
 import { workflowPromptInfoLookup } from '../workflow-prompt-lookup.js';
 
 import type { Logger } from '#infra/logging/index.js';
-import type { WorkflowEdge, WorkflowNode, WorkflowPromptInfo } from '#modules/workflow-ir/types.js';
+import type {
+  WorkflowEdge,
+  WorkflowIR,
+  WorkflowNode,
+  WorkflowPromptInfo,
+} from '#modules/workflow-ir/types.js';
 import type {
   ExecutionContext as ArgumentExecutionContext,
   ArgumentParser,
@@ -137,7 +142,8 @@ export class SymbolicCommandBuilder {
    */
   async buildSymbolicCommand(
     parseResult: SymbolicCommandParseResult,
-    findPrompt: PromptLookup
+    findPrompt: PromptLookup,
+    requestGates: NonNullable<WorkflowIR['gates']> = []
   ): Promise<WorkflowCommandResult> {
     const hasChainOperator = this.hasChainOperator(parseResult);
     if (!hasChainOperator) {
@@ -147,7 +153,7 @@ export class SymbolicCommandBuilder {
         retargetRequestedGates: (gates) => [...gates],
       };
     }
-    return this.buildSymbolicChain(parseResult, findPrompt);
+    return this.buildSymbolicChain(parseResult, findPrompt, requestGates);
   }
 
   /**
@@ -304,7 +310,8 @@ export class SymbolicCommandBuilder {
    */
   private async buildSymbolicChain(
     parseResult: SymbolicCommandParseResult,
-    findPrompt: PromptLookup
+    findPrompt: PromptLookup,
+    requestGates: NonNullable<WorkflowIR['gates']>
   ): Promise<WorkflowCommandResult> {
     const nodes: WorkflowNode[] = [];
     const order: string[] = [];
@@ -358,8 +365,12 @@ export class SymbolicCommandBuilder {
     // is retargeted to its last step. The node's args are the command string's, resolved above
     // through `ArgumentParser`, which does not enforce `required` on this source (P7-F6) — so
     // `required` is left out of what the validator is told, and the IR-only check stays IR-only.
+    // P6.117: the request's gates ride on the IR the validator checks, so a `target_step_id` no
+    // segment declares is refused `gate-target-missing` as on the workflow source. Validation
+    // only: they stay request gates, registered from `requestedOverrides` at stage 11.
     const promptInfo = workflowPromptInfoLookup(lookupPrompt);
-    const validation = this.workflowIr.validate(ir, {
+    const validated = requestGates.length > 0 ? { ...ir, gates: requestGates } : ir;
+    const validation = this.workflowIr.validate(validated, {
       lookupPrompt: (promptId) => withoutRequiredArguments(promptInfo(promptId)),
       expandWith: lookupPrompt,
     });

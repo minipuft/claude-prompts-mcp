@@ -636,6 +636,8 @@ describe('GateEnhancementStage', () => {
         }
         return undefined;
       }),
+      // This call's earlier registration is the run's gate declared as `gdpr-check` (R49).
+      resolveDeclared: jest.fn((key: string) => (key === 'gdpr-check' ? 'gdpr-check' : undefined)),
     } as any;
 
     const stage = createStage({
@@ -690,7 +692,11 @@ describe('GateEnhancementStage', () => {
     );
 
     // Full TemporaryGateInput was already registered by inline-gate-extraction stage
-    expect(tempGateRegistry.getTemporaryGate).toHaveBeenCalledWith('gdpr-check');
+    expect(tempGateRegistry.resolveDeclared).toHaveBeenCalledWith(
+      'gdpr-check',
+      undefined,
+      expect.any(Array)
+    );
   });
 
   test('uses GateAccumulator for priority-based deduplication', async () => {

@@ -140,10 +140,11 @@ export class PromptExecutionPipeline {
 
   /**
    * The ONE point a run adopts the temporary gates its calls register (R47): after the stage
-   * loop, where the session exists even on the call that created it (stage 13 runs after the
-   * stages that register gates), and before {@link completeFinishedRun}, so a run that ends on
-   * this call releases them with everything else it owns. A call with no run adopts nothing;
-   * stage 02's cleanup removes its gates when the response is set.
+   * loop, whether it completed or threw (P6.111), where the session exists even on the call that
+   * created it (stage 13 runs after the stages that register gates), and before
+   * {@link completeFinishedRun}, so a run that ends on this call releases them with everything
+   * else it owns. A call with no run adopts nothing; stage 02's cleanup removes its gates when
+   * the response is set.
    */
   private adoptCallGatesIntoRun(context: ExecutionContext): void {
     const sessionId = context.sessionContext?.sessionId;
@@ -206,8 +207,14 @@ export class PromptExecutionPipeline {
     let commandError: string | undefined;
 
     try {
-      const earlyExitStage = await this.runStages(context, stageMetrics);
-      this.adoptCallGatesIntoRun(context);
+      let earlyExitStage: string | undefined;
+      try {
+        earlyExitStage = await this.runStages(context, stageMetrics);
+      } finally {
+        // Throw or not (P6.111): a throw does not end the run, so a stage failing after stage 13
+        // created or resumed it must still hand it this call's gates, or they go as unowned.
+        this.adoptCallGatesIntoRun(context);
+      }
       await this.completeFinishedRun(context);
 
       if (!context.response) {
