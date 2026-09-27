@@ -1,6 +1,7 @@
 // @lifecycle canonical - Parses incoming commands into structured operators.
 import { getExplicitArgumentKeys } from '../../parsers/argument-parser.js';
 import { projectChainPromptSteps } from '../../parsers/chain-step-projection.js';
+import { COMMAND_SOURCE_EXCLUSIVITY_MESSAGE } from '../../validation/schemas.js';
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
@@ -91,6 +92,16 @@ export class CommandParsingStage extends BasePipelineStage {
     const workflow = context.mcpRequest.workflow;
     if (workflow !== undefined) {
       this.executeWorkflowSubmission(context, workflow);
+      return;
+    }
+
+    // P6.119: `command` beside a `chain_id` names two runs. The tool schema refuses it; an
+    // in-process caller skips the schema, and an append never reaches here as a command
+    // (`PromptExecutor` rewrites it into `remainder` first), so no such pair is admissible.
+    if (collectSourceConflicts(context).length > 1) {
+      this.rejectWorkflow(context, [
+        { reason: 'mutually-exclusive-source', detail: COMMAND_SOURCE_EXCLUSIVITY_MESSAGE },
+      ]);
       return;
     }
 
@@ -380,6 +391,9 @@ export class CommandParsingStage extends BasePipelineStage {
  *
  * `user_response` and `gate_verdict` are not listed: they are resume payloads that are inert
  * without a `chain_id`, which is listed.
+ *
+ * Also read with no workflow present: both names returned means `command` beside `chain_id`
+ * (P6.119), refused by the same rule.
  */
 function collectSourceConflicts(context: ExecutionContext): string[] {
   const conflicts: string[] = [];

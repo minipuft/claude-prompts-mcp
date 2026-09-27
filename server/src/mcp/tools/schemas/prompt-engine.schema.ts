@@ -23,6 +23,7 @@ import type { GateVerdictSubmission } from '#engine/gates/core/gate-verdict-rend
 import type { RemainderSubmission } from '#modules/workflow-ir/types.js';
 
 import { isAppendCommand } from '#engine/execution/parsers/append-command-parser.js';
+import { COMMAND_SOURCE_EXCLUSIVITY_MESSAGE } from '#engine/execution/validation/schemas.js';
 import { CHAIN_ID_FORMAT_MESSAGE, CHAIN_ID_PATTERN } from '#shared/utils/chain-id-codec.js';
 import {
   describeNestedSchemaRefusal,
@@ -642,10 +643,7 @@ function withSourceExclusivity<
       }
       return COMMAND_SOURCE_PARAMETERS.filter((name) => value[name] !== undefined).length <= 1;
     },
-    {
-      message:
-        "Provide exactly one of 'command', 'chain_id', 'workflow' or 'claim_token'. A workflow submission is a complete run description and cannot be combined with a command string or a resume token; a claim token names the run it resumes. The ONE exception is an append: 'chain_id' plus a 'command' whose first token is '-->' extends the running chain.",
-    }
+    { message: COMMAND_SOURCE_EXCLUSIVITY_MESSAGE }
   );
 }
 
