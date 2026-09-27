@@ -218,10 +218,11 @@ describe('row 4.1 — the three branches of a blocking-unknown interrupt', () =>
       .get(SESSION) as { interrupts_raised: number; remainders_accepted: number };
 
   const declarePause = async (): Promise<void> => {
-    await store.updateSessionBlueprint(SESSION, {
+    // A run's blueprint is written once, when its session is created; set it on the live run.
+    store.getSession(SESSION)!.blueprint = {
       parsedCommand: { budget: { pauseOnBlocking: true } },
       executionPlan: {},
-    } as never);
+    } as never;
   };
 
   beforeEach(async () => {

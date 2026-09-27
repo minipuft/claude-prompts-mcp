@@ -121,10 +121,11 @@ describe('mid-chain blocking-unknown interrupt (rows 2.1-2.3)', () => {
 
   /** Turn the hard-pause knob on for the run, the way a Workflow IR submission does. */
   const declarePauseOnBlocking = async (): Promise<void> => {
-    await store.updateSessionBlueprint('sess-1', {
+    // A run's blueprint is written once, when its session is created; set it on the live run.
+    store.getSession('sess-1')!.blueprint = {
       parsedCommand: { budget: { pauseOnBlocking: true } },
       executionPlan: {},
-    } as never);
+    } as never;
   };
 
   /** Drive one call that declares the blocking unknown. */

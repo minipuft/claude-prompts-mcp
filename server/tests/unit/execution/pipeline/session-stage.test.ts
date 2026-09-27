@@ -78,7 +78,6 @@ const createSessionManager = (): jest.Mocked<ChainSessionService> => {
     getChainContext: jest.fn(),
     getOriginalArgs: jest.fn(),
     getSessionBlueprint: jest.fn(),
-    updateSessionBlueprint: jest.fn(),
     getInlineGateIds: jest.fn(),
     clearSessionsForChain: jest.fn(),
     listActiveSessions: jest.fn().mockReturnValue([]),

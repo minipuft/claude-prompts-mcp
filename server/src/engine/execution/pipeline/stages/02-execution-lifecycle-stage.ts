@@ -11,9 +11,11 @@ import type { CleanupHandler } from '../../context/internal-state.js';
 /**
  * Pipeline Stage 02: Execution Lifecycle
  *
- * Establishes per-request scope identifiers and cleanup hooks so temporary
- * gates, inline guidance, and other execution-scoped resources are removed
- * once the pipeline completes.
+ * Establishes the per-request scope identifier and the cleanup hook that ends
+ * this call's temporary gates. A gate the call's run adopted (the pipeline hands
+ * them over after its stage loop) lives with the run and is released when the run
+ * ends; every other gate this call registered is removed here, once the response
+ * is set (R47).
  */
 export class ExecutionLifecycleStage extends BasePipelineStage {
   readonly name = 'ExecutionLifecycle';
@@ -33,14 +35,7 @@ export class ExecutionLifecycleStage extends BasePipelineStage {
 
     const cleanupHandlers = this.ensureCleanupHandlers(context);
     cleanupHandlers.push(async () => {
-      try {
-        this.temporaryGateRegistry.cleanupScope('execution', scopeId);
-      } catch (error) {
-        this.logger.warn('[ExecutionLifecycleStage] Failed to cleanup execution scope', {
-          scopeId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
+      this.temporaryGateRegistry.releaseUnowned(context.state.gates.temporaryGateIds);
     });
 
     context.state.lifecycle.startTimestamp = Date.now();

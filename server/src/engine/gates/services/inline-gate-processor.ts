@@ -285,7 +285,6 @@ export class InlineGateProcessor {
         scopeId
       );
 
-      this.trackTemporaryGateScope(context, gateScope, scopeId);
       return gateId;
     } catch (error) {
       this.logger.warn('[InlineGateProcessor] Failed to register inline gate', {
@@ -342,7 +341,6 @@ export class InlineGateProcessor {
         criteria,
       });
 
-      this.trackTemporaryGateScope(context, gateScope, scopeId);
       return gateId;
     } catch (error) {
       this.logger.warn('[InlineGateProcessor] Failed to create named inline gate', {
@@ -444,27 +442,6 @@ export class InlineGateProcessor {
     }
 
     return `${baseScope}:command`;
-  }
-
-  private trackTemporaryGateScope(
-    context: ExecutionContext,
-    scope: GateScope,
-    scopeId: string
-  ): void {
-    if (!scopeId) {
-      return;
-    }
-
-    const scopes = context.state.gates.temporaryGateScopes ?? [];
-
-    if (!context.state.gates.temporaryGateScopes) {
-      context.state.gates.temporaryGateScopes = scopes;
-    }
-
-    const exists = scopes.some((entry) => entry.scope === scope && entry.scopeId === scopeId);
-    if (!exists) {
-      scopes.push({ scope, scopeId });
-    }
   }
 
   /**

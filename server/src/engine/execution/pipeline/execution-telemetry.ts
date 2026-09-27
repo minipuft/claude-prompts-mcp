@@ -44,7 +44,6 @@ const STAGE_TYPES: Readonly<Record<string, PipelineStageType>> = {
   PhaseGuardVerification: 'verification',
   GateReview: 'gate_review',
   ResponseFormatting: 'post_processing',
-  PostFormattingCleanup: 'post_processing',
 };
 
 /** Classify a stage for `PipelineStageMetric.stageType`. */

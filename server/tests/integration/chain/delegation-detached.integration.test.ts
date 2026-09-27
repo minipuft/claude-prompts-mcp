@@ -203,7 +203,6 @@ const STAGE_ORDER = [
   'PhaseGuardVerification',
   'GateReview',
   'ResponseFormatting',
-  'PostFormattingCleanup',
 ] as const;
 
 /**

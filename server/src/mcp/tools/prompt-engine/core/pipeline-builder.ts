@@ -58,7 +58,6 @@ import {
   createPhaseGuardVerificationStage,
   GateReviewStage,
   ResponseFormattingStage,
-  PostFormattingCleanupStage,
 } from '#engine/execution/pipeline/index.js';
 import { resolveDeclaredSections } from '#engine/frameworks/declared-sections.js';
 import { getDefaultRuntimeLoader } from '#engine/frameworks/definitions/index.js';
@@ -453,11 +452,11 @@ export class PipelineBuilder {
       deps.executionRecordStore,
       deps.chainSessionStore
     );
-    const postFormattingStage = new PostFormattingCleanupStage(
-      deps.chainSessionStore,
-      temporaryGateRegistry,
-      deps.logger
-    );
+    // A run's temporary gates live as long as the run (R47): the pipeline hands a call's gates
+    // to its run, and they are released here when the run ends.
+    deps.chainSessionStore.onRunEnded((sessionId) => {
+      temporaryGateRegistry.releaseRun(sessionId);
+    });
 
     // Execution order. The array IS the contract — the pipeline runs it front to
     // back and does no reordering of its own.
@@ -502,7 +501,6 @@ export class PipelineBuilder {
       phaseGuardVerificationStage,
       gateReviewStage,
       formattingStage,
-      postFormattingStage,
     ];
 
     return new PromptExecutionPipeline(stages, {
@@ -514,6 +512,7 @@ export class PipelineBuilder {
       // rather than admitting both empty representations into the ports interface.
       executionRecordStore: deps.executionRecordStore ?? undefined,
       chainSessionStore: deps.chainSessionStore,
+      temporaryGateRegistry,
     });
   }
 

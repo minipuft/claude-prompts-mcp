@@ -303,7 +303,6 @@ export class TemporaryGateRegistrar {
         const gateId = registry.createTemporaryGate(tempGateDefinition, scopeId);
 
         createdIds.push(gateId);
-        this.trackTemporaryGateScope(context, gate.scope ?? 'execution', scopeId);
 
         this.logger.debug('[TemporaryGateRegistrar] Registered temporary gate', {
           gateId,
@@ -671,7 +670,6 @@ export class TemporaryGateRegistrar {
         inlineScopeId(context, scope)
       );
 
-      this.trackTemporaryGateScope(context, scope, inlineScopeId(context, scope));
       return gateId;
     } catch (error) {
       this.logger.warn('[TemporaryGateRegistrar] Failed to register inline gate definition', {
@@ -680,32 +678,6 @@ export class TemporaryGateRegistrar {
         error: error instanceof Error ? error.message : String(error),
       });
       return undefined;
-    }
-  }
-
-  private trackTemporaryGateScope(
-    context: ExecutionContext,
-    scope: string,
-    scopeId?: string
-  ): void {
-    if (!scopeId) {
-      return;
-    }
-
-    const normalizedScope: 'execution' | 'session' | 'chain' | 'step' =
-      scope === 'session' || scope === 'chain' || scope === 'step' ? scope : 'execution';
-
-    const scopes = context.state.gates.temporaryGateScopes ?? [];
-
-    if (!context.state.gates.temporaryGateScopes) {
-      context.state.gates.temporaryGateScopes = scopes;
-    }
-
-    const exists = scopes.some(
-      (entry) => entry.scope === normalizedScope && entry.scopeId === scopeId
-    );
-    if (!exists) {
-      scopes.push({ scope: normalizedScope, scopeId });
     }
   }
 

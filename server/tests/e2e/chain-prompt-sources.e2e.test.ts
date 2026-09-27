@@ -1,4 +1,4 @@
-// @lifecycle test - P6.79 / P6.80 / R40: an arrow-chain segment or a workflow node naming a chain prompt runs that prompt's steps; P6.78 / R37: a command-level gate on a chain prompt binds each step; P6.97 / R43: a named inline gate belongs to the run that declared it; P6.99 / R44: a named gate on an arrow-chain segment binds that segment, over Streamable HTTP.
+// @lifecycle test - P6.79 / P6.80 / R40: an arrow-chain segment or a workflow node naming a chain prompt runs that prompt's steps; P6.78 / R37: a command-level gate on a chain prompt binds each step; P6.97 / R43: a named inline gate belongs to the run that declared it; P6.99 / R44: a named gate on an arrow-chain segment binds that segment; P6.108 / R47: a run's temporary gates live exactly as long as the run, over Streamable HTTP.
 /**
  * MEASURED 2026-09-25 on `427899fe` (authored `sv_chain` = sv_a/sv_b/sv_a, each step carrying the
  * blocking `sv-block`; run state read from `chain_runs.state`):
@@ -664,6 +664,92 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       expect(again.text).toContain('### g97s');
       expect(again.text).toContain('SINGLE-TWO-97');
       expect(again.text).not.toContain('SINGLE-ONE-97');
+    }, 120000);
+  });
+
+  /**
+   * MEASURED 2026-09-26 on `9f833361` (0 `PostFormattingCleanup` stage starts in 12 formatted
+   * replies): a completed run's named gate still held its id (the next run declaring it
+   * registered `-2`), a completed run's `temp_…` step gate still rendered when a later command
+   * named it, and nothing but a 1 h timer ever removed either.
+   */
+  describe('P6.108: a run owns its temporary gates until it ends', () => {
+    /** Whether a new call naming `tempId` as its criterion still reaches that gate's body. */
+    const resolves = async (tempId: string, marker: string): Promise<boolean> =>
+      (await tool('prompt_engine', { command: `>>sv_b :: "${tempId}"` })).text.includes(marker);
+    const stepGate = (chainId: string, index: number): string =>
+      /temp_\d+_[a-z0-9]+/.exec(runState(chainId).steps[index] ?? '')?.[0] ?? '';
+
+    test('(a) named and step gates resolve on every resume, then are gone once the run completes', async () => {
+      const named = await start({ command: '>>sv_chain :: g108a:"CRIT-108A"' });
+      expect(await named.call({ user_response: 'A out', gate_verdict: PASS })).toContain(
+        'CRIT-108A'
+      );
+      expect(await named.call({ user_response: 'B out', gate_verdict: PASS })).toContain(
+        'CRIT-108A'
+      );
+      await named.call({ user_response: 'C out', gate_verdict: PASS });
+      const next = await start({ command: '>>sv_chain :: g108a:"CRIT-108A-NEXT"' });
+      expect(runState(next.chainId).steps[0]).toBe('a:sv_a:["sv-block","g108a"]');
+
+      const run = await start({ command: `>>sv_a :: "XA-108"${ARROW}>>sv_b :: "YB-108"` });
+      const first = stepGate(run.chainId, 0);
+      // Positive control: while the run is live, the probe reaches its step gate.
+      expect(await resolves(first, 'XA-108')).toBe(true);
+      expect(await run.call({ user_response: 'A out', gate_verdict: PASS })).toContain('YB-108');
+      await run.call({ user_response: 'B out', gate_verdict: PASS });
+      expect(await resolves(first, 'XA-108')).toBe(false);
+    }, 120000);
+
+    test('(b) a cancelled run releases its gates', async () => {
+      const run = await start({ command: '>>sv_chain :: g108b:"CRIT-108B"' });
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        await run.call({ user_response: 'A out', gate_verdict: FAIL });
+      }
+      await run.call({ gate_action: 'abort' });
+      const next = await start({ command: '>>sv_chain :: g108b:"CRIT-108B-NEXT"' });
+      expect(runState(next.chainId).steps[0]).toBe('a:sv_a:["sv-block","g108b"]');
+    }, 120000);
+
+    test('(c) a call with no run releases its gates when its response is set', async () => {
+      const first = await tool('prompt_engine', {
+        command: '>>sv_a',
+        gates: [{ id: 'sc108', name: 'sc108', criteria: ['SINGLE-108-ONE'] }],
+      });
+      expect(first.text).not.toMatch(/chain_id/);
+      expect(first.text).toContain('SINGLE-108-ONE');
+      const second = await tool('prompt_engine', {
+        command: '>>sv_a',
+        gates: [{ id: 'sc108', name: 'sc108', criteria: ['SINGLE-108-TWO'] }],
+      });
+      expect(second.text).toContain('SINGLE-108-TWO');
+      expect(second.text).not.toContain('SINGLE-108-ONE');
+    }, 120000);
+
+    test('(d) control: a live run keeps its own gates while another run declaring the id completes', async () => {
+      const first = await start({ command: '>>sv_chain :: g108d:"CRIT-108D-ONE"' });
+      const second = await start({ command: '>>sv_chain :: g108d:"CRIT-108D-TWO"' });
+      for (const answer of ['A out', 'B out', 'C out']) {
+        await first.call({ user_response: answer, gate_verdict: PASS });
+      }
+      const step2 = await second.call({ user_response: 'A out', gate_verdict: PASS });
+      expect(step2).toContain('CRIT-108D-TWO');
+      expect(step2).not.toContain('CRIT-108D-ONE');
+      await second.call({ user_response: 'B out', gate_verdict: FAIL });
+      expect(runState(second.chainId).reviews).toEqual({ b: ['sv-block', 'g108d-2'] });
+    }, 120000);
+
+    // P6.98 twin, pinned as it holds: step 3 still renders and reviews the earlier segments'
+    // step gates, which live as long as the run. The mechanism is the chain accumulator step N
+    // inherits from steps 1..N-1 (P4.110), not the gate lifetime; that is P6.12, the owner's.
+    test('(e) the forward accumulation is not the gate lifetime', async () => {
+      const run = await start({
+        command: `>>sv_a :: "XA-108E"${ARROW}>>sv_b :: "YB-108E"${ARROW}>>sv_a`,
+      });
+      await run.call({ user_response: 'A out', gate_verdict: PASS });
+      const step3 = await run.call({ user_response: 'B out', gate_verdict: PASS });
+      expect(step3).toContain('XA-108E');
+      expect(step3).toContain('YB-108E');
     }, 120000);
   });
 });

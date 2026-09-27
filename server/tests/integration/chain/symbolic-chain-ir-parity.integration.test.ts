@@ -157,7 +157,6 @@ const STAGE_ORDER = [
   'PhaseGuardVerification',
   'GateReview',
   'ResponseFormatting',
-  'PostFormattingCleanup',
 ] as const;
 
 const buildPipeline = (options: {

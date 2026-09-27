@@ -235,6 +235,7 @@ export class ChainSessionStore implements ChainSessionService {
   private runChainToBase: Map<string, string> = new Map(); // runChainId -> baseChainId
   private runRegistry!: ChainRunRegistry;
   private readonly sessionClearedCallbacks: SessionClearedCallback[] = [];
+  private readonly runEndedCallbacks: Array<(sessionId: string) => void> = [];
   private readonly defaultSessionTimeoutMs: number;
   private readonly reviewSessionTimeoutMs: number;
   private readonly cleanupIntervalMs: number;
@@ -380,6 +381,31 @@ export class ChainSessionStore implements ChainSessionService {
    */
   onSessionCleared(callback: SessionClearedCallback): void {
     this.sessionClearedCallbacks.push(callback);
+  }
+
+  /**
+   * Register a callback invoked once a run ENDS: it reached a terminal status (completed, failed,
+   * cancelled — {@link announceRunTerminal}) or its session was removed (clear, prune, stale
+   * sweep — {@link removeSessionArtifacts}). A removed run may already have ended, so a callback
+   * must tolerate a second call for the same session. Used to release what lives as long as a
+   * run, such as its temporary gates (R47).
+   */
+  onRunEnded(callback: (sessionId: string) => void): void {
+    this.runEndedCallbacks.push(callback);
+  }
+
+  private notifyRunEnded(sessionId: string): void {
+    for (const callback of this.runEndedCallbacks) {
+      try {
+        callback(sessionId);
+      } catch (error) {
+        this.logger.warn(
+          `Run-ended callback failed for ${sessionId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
+    }
   }
 
   /**
@@ -1196,6 +1222,7 @@ export class ChainSessionStore implements ChainSessionService {
    */
   private async announceRunTerminal(session: ChainSession, status: ChainRunStatus): Promise<void> {
     if (!isTerminalRunStatus(status)) return;
+    this.notifyRunEnded(session.sessionId);
     if (this.hookRegistry === undefined && this.notificationEmitter === undefined) return;
 
     // `isTerminalRunStatus` is a boolean predicate over the shared TERMINAL_RUN_STATUSES list,
@@ -1944,21 +1971,6 @@ export class ChainSessionStore implements ChainSessionService {
     return this.cloneBlueprint(session.blueprint);
   }
 
-  async updateSessionBlueprint(sessionId: string, blueprint: SessionBlueprint): Promise<void> {
-    const session = this.activeSessions.get(sessionId);
-    if (!session) {
-      if (this.logger) {
-        this.logger.warn(
-          `[ChainSessionStore] Attempted to update blueprint for non-existent session: ${sessionId}`
-        );
-      }
-      return;
-    }
-
-    session.blueprint = this.cloneBlueprint(blueprint);
-    await this.saveSessions();
-  }
-
   getInlineGateIds(sessionId: string, _scope?: StateStoreOptions): string[] | undefined {
     const session = this.activeSessions.get(sessionId);
     if (!session?.blueprint?.parsedCommand) {
@@ -2463,6 +2475,7 @@ export class ChainSessionStore implements ChainSessionService {
   }
 
   private async removeSessionArtifacts(sessionId: string): Promise<void> {
+    this.notifyRunEnded(sessionId);
     if (this.argumentHistoryTracker) {
       try {
         await this.argumentHistoryTracker.clearSession(sessionId);

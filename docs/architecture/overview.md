@@ -32,7 +32,7 @@ flowchart LR
         B[STDIO/Streamable HTTP]
     end
 
-    subgraph Pipeline["PromptExecutionPipeline (22 stages)"]
+    subgraph Pipeline["PromptExecutionPipeline (21 stages)"]
         direction TB
         C1[Parse & Validate]
         C2[Plan & Enhance]
@@ -109,7 +109,7 @@ flowchart LR
 | ---------------- | ----------------------- | --------------------------------------------------------------- |
 | **MCP Protocol** | 3 registered tools      | Receive MCP requests, validate schemas, return responses        |
 | **Routing**      | resource_manager router | Routes CRUD operations to specialized managers                  |
-| **Execution**    | Pipeline + 22 stages    | Transform request → parse → enhance → execute → format          |
+| **Execution**    | Pipeline + 21 stages    | Transform request → parse → enhance → execute → format          |
 | **Service**      | Managers + registries   | Business logic for prompts, frameworks, gates, styles, sessions |
 | **Persistence**  | File system + SQLite    | Hot-reload sources (YAML/MD), runtime state (SQLite)            |
 
@@ -118,7 +118,7 @@ flowchart LR
 The `PromptExecutionPipeline` is the architectural centerpiece. Every `prompt_engine` call:
 
 1. Creates fresh `ExecutionContext` (ephemeral state)
-2. Flows through up to 22 stages sequentially
+2. Flows through up to 21 stages sequentially
 3. Each stage reads/writes to context
 4. Services are called as needed by stages
 5. Response assembled at the end
@@ -201,7 +201,7 @@ alone.
 
 ## Execution Pipeline
 
-Every `prompt_engine` call flows through up to 22 stages. Stage file numbers `01-`…`22-` match this order, but the **`stages` array in `pipeline-builder.ts` is the contract** — the pipeline runs it front to back and does no reordering, so a renamed file changes nothing on its own.
+Every `prompt_engine` call flows through up to 21 stages. Stage file numbers `01-`…`21-` match this order, but the **`stages` array in `pipeline-builder.ts` is the contract** — the pipeline runs it front to back and does no reordering, so a renamed file changes nothing on its own.
 
 ### Stage Execution Order
 
@@ -238,7 +238,6 @@ The pipeline runs stages in this order (from the `stages` array in `pipeline-bui
 │19. PhaseGuardVerification*   Check framework phase guards          │
 │20. GateReview                Validate gate verdicts (PASS/FAIL)     │
 │21. ResponseFormatting        Assemble response + usage CTA          │
-│22. PostFormattingCleanup     Clean up temporary state               │
 └─────────────────────────────────────────────────────────────────────┘
 
 * Stages 8-9 (Script), 17 (ShellVerification), 19 (PhaseGuardVerification) are optional
@@ -937,7 +936,7 @@ See [Telemetry & Observability Guide](../guides/telemetry-observability.md) for 
 
 ### Execution (`src/engine/execution/`)
 
-- **Pipeline**: 22-stage sequential processing (see [Stage Execution Order](#stage-execution-order))
+- **Pipeline**: 21-stage sequential processing (see [Stage Execution Order](#stage-execution-order))
 - **Parsers**: Multi-format (symbolic `-->`, JSON, key=value)
 - **Context**: `ExecutionContext` with type guards for chain vs single execution
 - **Validation**: Request schema validation via generated Zod schemas
@@ -959,7 +958,7 @@ See [Telemetry & Observability Guide](../guides/telemetry-observability.md) for 
 - **Session cleanup**: 24h default for stale sessions
 - **Argument history**: Configurable retention limits
 - **Template cache**: LRU with size limits
-- **Temporary gates**: Auto-expiration
+- **Temporary gates**: A run owns the gates its calls register until it completes, is cancelled, pruned or cleared; a call with no run releases its own once its response is set
 
 ---
 

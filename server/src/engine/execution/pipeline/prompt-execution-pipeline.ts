@@ -29,6 +29,7 @@ import type {
 import type { GateEnforcementAuthority } from './decisions/index.js';
 import type { StageMetricSummary } from './execution-telemetry.js';
 import type { PipelineStage } from './stage.js';
+import type { TemporaryGateRegistry } from '../../gates/core/temporary-gate-registry.js';
 import type { Span } from '@opentelemetry/api';
 
 /**
@@ -59,6 +60,12 @@ export interface PipelinePorts {
    * while completed runs carry it.
    */
   chainSessionStore?: ChainSessionService;
+
+  /**
+   * Where a run adopts the temporary gates its calls register (R47). Optional for the same
+   * reason as `chainSessionStore`: a pipeline wired without one registers no temporary gates.
+   */
+  temporaryGateRegistry?: TemporaryGateRegistry;
 }
 
 export class PromptExecutionPipeline {
@@ -69,6 +76,7 @@ export class PromptExecutionPipeline {
   private readonly gateEnforcement: GateEnforcementAuthority | undefined;
   private readonly executionRecordStore: ExecutionRecordStore | undefined;
   private readonly chainSessionStore: ChainSessionService | undefined;
+  private readonly temporaryGateRegistry: TemporaryGateRegistry | undefined;
 
   /**
    * @param stages Executed in array order. The caller owns the ordering and its
@@ -94,6 +102,7 @@ export class PromptExecutionPipeline {
     this.gateEnforcement = ports.gateEnforcement;
     this.executionRecordStore = ports.executionRecordStore;
     this.chainSessionStore = ports.chainSessionStore;
+    this.temporaryGateRegistry = ports.temporaryGateRegistry;
   }
 
   /**
@@ -127,6 +136,19 @@ export class PromptExecutionPipeline {
       scope: context.getScopeOptions(),
       ...(telemetry ?? {}),
     });
+  }
+
+  /**
+   * The ONE point a run adopts the temporary gates its calls register (R47): after the stage
+   * loop, where the session exists even on the call that created it (stage 13 runs after the
+   * stages that register gates), and before {@link completeFinishedRun}, so a run that ends on
+   * this call releases them with everything else it owns. A call with no run adopts nothing;
+   * stage 02's cleanup removes its gates when the response is set.
+   */
+  private adoptCallGatesIntoRun(context: ExecutionContext): void {
+    const sessionId = context.sessionContext?.sessionId;
+    if (sessionId === undefined || this.temporaryGateRegistry === undefined) return;
+    this.temporaryGateRegistry.adoptIntoRun(sessionId, context.state.gates.temporaryGateIds);
   }
 
   /**
@@ -185,6 +207,7 @@ export class PromptExecutionPipeline {
 
     try {
       const earlyExitStage = await this.runStages(context, stageMetrics);
+      this.adoptCallGatesIntoRun(context);
       await this.completeFinishedRun(context);
 
       if (!context.response) {

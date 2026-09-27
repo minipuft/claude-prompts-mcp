@@ -236,7 +236,7 @@ Read the relevant doc before editing. Update docs when behavior changes.
 **Thin handlers route to domain processors. CRUD logic lives in processors, not handlers.**
 
 ```
-prompt_engine  → PromptExecutor → PipelineBuilder → Pipeline (22 stages)
+prompt_engine  → PromptExecutor → PipelineBuilder → Pipeline (21 stages)
 resource_manager → Router → Handler (≤125 lines) → Processors (lifecycle/discovery/versioning)
 system_control → SystemControl Router → 12 action handlers
 ```
