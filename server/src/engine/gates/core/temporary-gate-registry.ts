@@ -103,13 +103,10 @@ export class TemporaryGateRegistry {
    */
   createTemporaryGate(
     definition: Omit<TemporaryGateDefinition, 'id' | 'created_at'> & { id?: string },
-    scopeId?: string
+    scopeId?: string,
+    options: { onIdCollision?: 'throw' | 'fresh-id' } = {}
   ): string {
-    // Use provided ID if valid, otherwise generate new one
-    const gateId =
-      definition.id && this.isValidCustomId(definition.id)
-        ? definition.id
-        : `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const gateId = this.chooseGateId(definition.id, options.onIdCollision);
 
     // Check for ID collision
     if (this.temporaryGates.has(gateId)) {
@@ -375,6 +372,32 @@ export class TemporaryGateRegistry {
       }
       this.scopeManagement.delete(scopeKey);
     }
+  }
+
+  /**
+   * A valid caller-chosen id, else a generated `temp_…` one. Under 'fresh-id' a caller-chosen id
+   * already held by another run's gate becomes the first free `<id>-2`, `<id>-3`, … instead of
+   * throwing below, so the declaring run grades its OWN criteria while the earlier gate stays with
+   * the run that still references it (R43). The caller uses the returned id; `name` keeps the
+   * declared one.
+   */
+  private chooseGateId(
+    requested: string | undefined,
+    onIdCollision?: 'throw' | 'fresh-id'
+  ): string {
+    if (!requested || !this.isValidCustomId(requested)) {
+      return `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    }
+    return onIdCollision === 'fresh-id' ? this.firstFreeId(requested) : requested;
+  }
+
+  /** `id` when unheld, else the first unheld `<id>-N` from 2 — the node-id suffix convention. */
+  private firstFreeId(id: string): string {
+    let candidate = id;
+    for (let suffix = 2; this.temporaryGates.has(candidate); suffix += 1) {
+      candidate = `${id}-${suffix}`;
+    }
+    return candidate;
   }
 
   /**

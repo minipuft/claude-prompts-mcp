@@ -174,8 +174,31 @@ export type { WorkflowEdge, WorkflowRejection, WorkflowRejectionReason } from '.
 
 /** Discriminated result of validation or linearization. `order` is the linearized node ids. */
 export type WorkflowValidation =
-  | { readonly ok: true; readonly order: readonly string[] }
+  | {
+      readonly ok: true;
+      readonly order: readonly string[];
+      /**
+       * The IR the run will actually execute, present only when the caller supplied
+       * `expandWith` AND at least one node named a chain prompt (R41). `order` stays the
+       * DECLARED order, because `compileWorkflowIR` takes the declared IR and expands it itself.
+       */
+      readonly expanded?: ExpandedWorkflow;
+    }
   | { readonly ok: false; readonly rejections: readonly WorkflowRejection[] };
+
+/** An IR and its run order after every chain-prompt node was expanded (R40). */
+export interface ExpandedWorkflow {
+  readonly ir: WorkflowIR;
+  readonly order: readonly string[];
+  /**
+   * Each expanded node's id → the id of its LAST expanded step. A gate `target_step_id` naming
+   * the node addresses "when this node is done", which is its last step (R41). Empty when
+   * nothing expanded.
+   */
+  readonly lastStepOf: Readonly<Record<string, string>>;
+  /** Each expanded node's id → the ids of its expanded steps, in run order. */
+  readonly stepsOf: Readonly<Record<string, readonly string[]>>;
+}
 
 /**
  * What the validator needs to know about a referenced prompt.

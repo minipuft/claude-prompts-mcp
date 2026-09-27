@@ -18,8 +18,10 @@ import type { Logger } from '../../../../src/infra/logging/index.js';
  * A `::` gate token inside a chain segment used to stay in the segment text, so it polluted
  * the step's positional args AND never reached `ExecutionStep.inlineGateCriteria` (which had
  * zero writers). These tests pin the fix: the token is stripped from the segment and the
- * anonymous/canonical criteria attach to the step that carried it. Named forms are stripped
- * but stay on the global namedInlineGates path. The deprecated `=` form is untouched.
+ * anonymous/canonical criteria attach to the step that carried it. A named form registers once on
+ * the global namedInlineGates path, and since R44 (P6.99) its id also joins the criteria of the
+ * segment that carried it, so that segment's node binds it; `verify:` stays command-level (R32).
+ * The deprecated `=` form is untouched.
  */
 describe('S9 — inline gate token attribution in symbolic chains', () => {
   let parser: ReturnType<typeof createSymbolicCommandParser>;
@@ -77,14 +79,17 @@ describe('S9 — inline gate token attribution in symbolic chains', () => {
     expect(chainOp.steps[1].inlineGateCriteria).toBeUndefined();
   });
 
-  test('named gate token is stripped from args but NOT step-attributed', () => {
+  test('P6.99: a named gate token is stripped from args and its id binds only its own segment', () => {
     const command = '>>a :: security:"no secrets" --> >>b';
     const detection = parser.detectOperators(command);
 
     const chainOp = detection.operators.find((op): op is ChainOperator => op.type === 'chain');
     expect(chainOp).toBeDefined();
     expect(chainOp?.steps[0].args).toBe('');
-    expect(chainOp?.steps[0].inlineGateCriteria).toBeUndefined();
+    expect(chainOp?.steps.map((step) => step.inlineGateCriteria)).toEqual([
+      ['security'],
+      undefined,
+    ]);
 
     // Named-gate registration stays on the global path (feeds namedInlineGates).
     const namedGate = detection.operators.find(
@@ -94,6 +99,16 @@ describe('S9 — inline gate token attribution in symbolic chains', () => {
     if (namedGate?.type === 'gate') {
       expect(namedGate.parsedCriteria).toEqual(['no secrets']);
     }
+  });
+
+  test('P6.99: a named gate on a later segment binds that segment, not the first', () => {
+    const chainOp = chainOpOf('>>a --> >>b :: mygate:"NAMED-99"');
+    expect(chainOp.steps.map((step) => step.inlineGateCriteria)).toEqual([undefined, ['mygate']]);
+  });
+
+  test('P6.99 control: a `verify:` token on a segment stays command-level and binds no segment', () => {
+    const chainOp = chainOpOf('>>a --> >>b :: verify:"true"');
+    expect(chainOp.steps.map((step) => step.inlineGateCriteria)).toEqual([undefined, undefined]);
   });
 
   test('regression: `::` inside a double-quoted arg value is preserved verbatim', () => {
@@ -172,7 +187,7 @@ describe('S9 — inline gate token attribution in symbolic chains', () => {
       expect(parsedCommand.inlineGateCriteria ?? []).toEqual([]);
     });
 
-    test('named gate keeps its global namedInlineGates handling', async () => {
+    test("P6.99: a named gate registers globally and binds only its own segment's node", async () => {
       const command = '>>a :: security:"no secrets" --> >>b';
       const detection = parser.detectOperators(command);
       const parseResult = parser.buildParseResult(command, detection, 'a', '');
@@ -185,7 +200,10 @@ describe('S9 — inline gate token attribution in symbolic chains', () => {
       expect(parsedCommand.namedInlineGates).toEqual([
         { gateId: 'security', criteria: ['no secrets'] },
       ]);
-      expect(parsedCommand.steps?.[0]?.inlineGateCriteria).toEqual([]);
+      expect(parsedCommand.steps?.map((step) => step.inlineGateCriteria)).toEqual([
+        ['security'],
+        [],
+      ]);
       expect(parsedCommand.inlineGateCriteria ?? []).toEqual([]);
     });
   });

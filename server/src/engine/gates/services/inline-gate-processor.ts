@@ -100,6 +100,9 @@ export class InlineGateProcessor {
   ): Promise<InlineGateProcessingResult> {
     const createdIds: string[] = [];
     const registeredIds: string[] = [];
+    // Declared name -> the id THIS run's gate registered under. A step names a folded named gate
+    // by its declared name, and another live run may hold that name in the registry (R43).
+    const declaredNamedGates = new Map<string, string>();
 
     // Process named inline gates (e.g., `:: security:"no secrets"`)
     if (
@@ -142,6 +145,7 @@ export class InlineGateProcessor {
             promptId: parsedCommand.promptId,
           });
           if (gateId) {
+            declaredNamedGates.set(namedGate.gateId, gateId);
             parsedCommand.inlineGateIds = this.appendGateId(parsedCommand.inlineGateIds, gateId);
             createdIds.push(gateId);
           }
@@ -151,9 +155,12 @@ export class InlineGateProcessor {
 
     // Validate and create inline gate for the main command (anonymous criteria)
     if (isValidGateCriteria(parsedCommand.inlineGateCriteria)) {
-      const result = await this.applyGateCriteria(context, parsedCommand.inlineGateCriteria, {
-        promptId: parsedCommand.promptId,
-      });
+      const result = await this.applyGateCriteria(
+        context,
+        parsedCommand.inlineGateCriteria,
+        { promptId: parsedCommand.promptId },
+        declaredNamedGates
+      );
       this.applyGateResult(parsedCommand, result, createdIds, registeredIds);
     }
 
@@ -161,10 +168,12 @@ export class InlineGateProcessor {
     if (Array.isArray(parsedCommand.steps) && parsedCommand.steps.length > 0) {
       for (const step of parsedCommand.steps) {
         if (hasInlineGateCriteria(step)) {
-          const result = await this.applyGateCriteria(context, step.inlineGateCriteria, {
-            promptId: step.promptId,
-            stepNumber: step.stepNumber,
-          });
+          const result = await this.applyGateCriteria(
+            context,
+            step.inlineGateCriteria,
+            { promptId: step.promptId, stepNumber: step.stepNumber },
+            declaredNamedGates
+          );
           this.applyGateResult(step, result, createdIds, registeredIds);
         }
       }
@@ -180,9 +189,10 @@ export class InlineGateProcessor {
   private async applyGateCriteria(
     context: ExecutionContext,
     criteria: readonly string[],
-    scope: InlineGateScope
+    scope: InlineGateScope,
+    declaredNamedGates: ReadonlyMap<string, string>
   ): Promise<GateProcessingResult> {
-    const partitioned = await this.partitionGateCriteria(criteria);
+    const partitioned = await this.partitionGateCriteria(criteria, declaredNamedGates);
     let temporaryGateId: string | undefined;
 
     if (partitioned.inlineCriteria.length > 0) {
@@ -322,7 +332,8 @@ export class InlineGateProcessor {
           pass_criteria: [...criteria],
           source: 'automatic',
         } as any,
-        scopeId
+        scopeId,
+        { onIdCollision: 'fresh-id' }
       );
 
       this.logger.debug('[InlineGateProcessor] Created named inline gate', {
@@ -345,7 +356,8 @@ export class InlineGateProcessor {
   }
 
   private async partitionGateCriteria(
-    criteria: readonly string[]
+    criteria: readonly string[],
+    declaredNamedGates: ReadonlyMap<string, string>
   ): Promise<{ inlineCriteria: string[]; registeredGateIds: string[] }> {
     const inlineCriteria: string[] = [];
     const registeredGateIds: string[] = [];
@@ -356,7 +368,7 @@ export class InlineGateProcessor {
         continue;
       }
 
-      const registryGateId = this.lookupTemporaryGateId(trimmed);
+      const registryGateId = declaredNamedGates.get(trimmed) ?? this.lookupTemporaryGateId(trimmed);
       if (registryGateId) {
         registeredGateIds.push(registryGateId);
         continue;

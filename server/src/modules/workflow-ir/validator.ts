@@ -15,6 +15,7 @@
  * address and every later rejection would be ambiguous about which one it meant.
  */
 
+import { expandChainPromptNodes } from './chain-prompt-expansion.js';
 import { linearize } from './linearizer.js';
 import {
   DEFAULT_WORKFLOW_CAPS,
@@ -23,6 +24,7 @@ import {
 } from './node-schema.js';
 import {
   WORKFLOW_VISIBILITY_ITEMS,
+  type ExpandedWorkflow,
   type WorkflowIR,
   type WorkflowNode,
   type WorkflowPromptInfo,
@@ -30,12 +32,21 @@ import {
   type WorkflowValidation,
 } from './types.js';
 
+import type { ConvertedPrompt } from '#engine/execution/types.js';
+
 /** Everything the validator needs from outside itself. Injected, never imported. */
 export interface WorkflowValidatorDeps {
   /** Resolve a prompt id. `undefined` means the id does not exist → `unknown-prompt`. */
   readonly lookupPrompt: (promptId: string) => WorkflowPromptInfo | undefined;
   /** Server caps. A submission's `budget` may narrow these, never widen. */
   readonly caps?: WorkflowCaps;
+  /**
+   * The converted-prompt lookup `compileWorkflowIR` expands with (R41). When supplied, a node
+   * naming a chain prompt is expanded here too, the node cap counts the EXPANDED nodes, and every
+   * gate target is re-checked on the expanded IR — so what is validated is what runs. Without it
+   * the declared IR is all that is checked, which undercounts every chain-prompt node as one.
+   */
+  readonly expandWith?: (promptId: string) => ConvertedPrompt | undefined;
 }
 
 /**
@@ -86,7 +97,46 @@ export function validateWorkflowIR(
   if (!linearization.ok) {
     return { ok: false, rejections: linearization.rejections };
   }
-  return { ok: true, order: linearization.order };
+  if (deps.expandWith === undefined) {
+    return { ok: true, order: linearization.order };
+  }
+
+  const expanded = expandChainPromptNodes(ir, linearization.order, deps.expandWith);
+  if (expanded.ir === ir) {
+    return { ok: true, order: linearization.order };
+  }
+  const expandedRejections = collectExpansionRejections(ir, expanded, serverCaps);
+  return expandedRejections.length > 0
+    ? { ok: false, rejections: expandedRejections }
+    : { ok: true, order: linearization.order, expanded };
+}
+
+/**
+ * The two structural facts re-checked on the EXPANDED IR (R41): the node cap, and that every
+ * gate target still names a node. The cap refusal names each chain prompt that grew the run, so
+ * the client sees why two declared nodes exceed a cap of 32.
+ */
+function collectExpansionRejections(
+  declared: WorkflowIR,
+  expanded: ExpandedWorkflow,
+  serverCaps: WorkflowCaps
+): WorkflowRejection[] {
+  const rejections: WorkflowRejection[] = [];
+  const effectiveMaxNodes = Math.min(serverCaps.maxNodes, declared.budget?.maxNodes ?? Infinity);
+  const total = expanded.ir.nodes.length;
+  if (total > effectiveMaxNodes) {
+    for (const node of declared.nodes) {
+      const steps = expanded.stepsOf[node.id];
+      if (steps === undefined) continue;
+      rejections.push({
+        reason: 'cap-exceeded',
+        nodeId: node.id,
+        detail: `Expanding chain prompt "${node.promptId}" yields ${steps.length} nodes; the expanded workflow has ${total} nodes, exceeding the effective maxNodes cap of ${effectiveMaxNodes}`,
+      });
+    }
+  }
+  collectGateTargetRejections(expanded.ir, new Set(expanded.ir.nodes.map((n) => n.id)), rejections);
+  return rejections;
 }
 
 /**

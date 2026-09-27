@@ -1,8 +1,9 @@
-// @lifecycle test - P6.79 / R40: a Workflow IR node naming a chain prompt is expanded into the prompt's projected steps.
+// @lifecycle test - P6.79 / R40: a Workflow IR node naming a chain prompt is expanded into the prompt's projected steps; P6.92 / R41: the validator checks the expanded IR.
 import { describe, expect, test } from '@jest/globals';
 
 import { expandChainPromptNodes } from '../../../src/modules/workflow-ir/chain-prompt-expansion.js';
 import { compileWorkflowIR } from '../../../src/modules/workflow-ir/compiler.js';
+import { validateWorkflowIR } from '../../../src/modules/workflow-ir/validator.js';
 
 import type { ConvertedPrompt } from '../../../src/engine/execution/types.js';
 import type { WorkflowIR } from '../../../src/modules/workflow-ir/types.js';
@@ -151,5 +152,66 @@ describe('expandChainPromptNodes', () => {
     ]);
     expect(compiled.steps.map((step) => step.stepNumber)).toEqual([1, 2, 3, 4]);
     expect(compiled.steps[0]?.convertedPrompt).toBe(svA);
+  });
+});
+
+describe('P6.92: validateWorkflowIR with expandWith checks the expanded IR', () => {
+  const info = (id: string) =>
+    lookup(id) === undefined ? undefined : { requiredArguments: [] as string[] };
+  const deps = { lookupPrompt: info, expandWith: lookup };
+  const withGate = (target: string): WorkflowIR => ({
+    version: 1,
+    nodes: [
+      { id: 'x', promptId: 'sv_chain' },
+      { id: 'y', promptId: 'sv_b' },
+    ],
+    edges: [{ from: 'x', to: 'y' }],
+    gates: [{ name: 'tgt', criteria: ['TGT'], target_step_id: target }],
+  });
+
+  test('(a) a chain-prompt node expanding past maxNodes is refused by name', () => {
+    const ir: WorkflowIR = { ...withGate('y'), budget: { maxNodes: 3 } };
+    expect(validateWorkflowIR(ir, deps)).toEqual({
+      ok: false,
+      rejections: [
+        {
+          reason: 'cap-exceeded',
+          nodeId: 'x',
+          detail:
+            'Expanding chain prompt "sv_chain" yields 3 nodes; the expanded workflow has 4 nodes, exceeding the effective maxNodes cap of 3',
+        },
+      ],
+    });
+    // Positive control: the same IR at the cap passes, and without expandWith the declared
+    // two nodes are all that is counted.
+    expect(validateWorkflowIR({ ...ir, budget: { maxNodes: 4 } }, deps).ok).toBe(true);
+    expect(validateWorkflowIR(ir, { lookupPrompt: info }).ok).toBe(true);
+  });
+
+  test("(b) a gate targeting a chain-prompt node is retargeted to the node's last step", () => {
+    const validation = validateWorkflowIR(withGate('x'), deps);
+    if (!validation.ok) throw new Error(JSON.stringify(validation.rejections));
+    expect(validation.order).toEqual(['x', 'y']);
+    expect(validation.expanded?.lastStepOf).toEqual({ x: 'x-c' });
+    expect(validation.expanded?.stepsOf).toEqual({ x: ['x-a', 'x-b', 'x-c'] });
+    expect(validation.expanded?.ir.gates).toEqual([
+      { name: 'tgt', criteria: ['TGT'], target_step_id: 'x-c' },
+    ]);
+  });
+
+  test('(c) control: a gate targeting a single-prompt node is unchanged', () => {
+    const validation = validateWorkflowIR(withGate('y'), deps);
+    if (!validation.ok) throw new Error(JSON.stringify(validation.rejections));
+    expect(validation.expanded?.ir.gates).toEqual([
+      { name: 'tgt', criteria: ['TGT'], target_step_id: 'y' },
+    ]);
+  });
+
+  test('control: an IR of single prompts returns no expanded IR', () => {
+    const validation = validateWorkflowIR(
+      { version: 1, nodes: [{ id: 'x', promptId: 'sv_a' }] },
+      deps
+    );
+    expect(validation).toEqual({ ok: true, order: ['x'] });
   });
 });

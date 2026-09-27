@@ -337,7 +337,8 @@ describe('InlineGateExtractionStage', () => {
         name: 'security',
         pass_criteria: ['no secrets'],
       }),
-      expect.any(String)
+      expect.any(String),
+      { onIdCollision: 'fresh-id' }
     );
     expect(context.parsedCommand?.inlineGateIds).toContain('temp_gate');
     expect(context.state.gates.temporaryGateIds?.length).toBeGreaterThan(0);
@@ -424,7 +425,8 @@ describe('InlineGateExtractionStage', () => {
         id: 'verify',
         name: 'verify',
       }),
-      expect.any(String)
+      expect.any(String),
+      { onIdCollision: 'fresh-id' }
     );
 
     // Should NOT set up shell verification
