@@ -117,8 +117,11 @@ export class TemporaryGateRegistrar {
 
     const registry = this.temporaryGateRegistry;
     const registryAvailable = registry !== undefined;
+    // A resume carries no `gates`: the run's own request gates, registered by the call that
+    // started it, are what this call's steps are enhanced and reviewed against (R47).
+    const runRequestGateIds = this.resolveRunRequestGateIds(context);
     if (!tempGateInputs.length) {
-      return { temporaryGateIds: [], canonicalGateIds: [] };
+      return { temporaryGateIds: runRequestGateIds, canonicalGateIds: [] };
     }
 
     const scopeId =
@@ -277,6 +280,7 @@ export class TemporaryGateRegistrar {
           description: gate.description ?? effectiveGuidance.substring(0, 100),
           guidance: effectiveGuidance,
           source: gate.source,
+          origin: 'request',
         };
 
         if (gateIdCandidate) {
@@ -345,9 +349,26 @@ export class TemporaryGateRegistrar {
     }
 
     return {
-      temporaryGateIds: registryAvailable ? createdIds : [],
+      temporaryGateIds: registryAvailable
+        ? [...new Set([...runRequestGateIds, ...createdIds])]
+        : [],
       canonicalGateIds: Array.from(canonicalGateIds),
     };
+  }
+
+  /**
+   * The request gates the run this call resumes already owns. Empty on the call that starts a
+   * run: the session does not exist yet, and that call's own `gates` are the run's.
+   */
+  private resolveRunRequestGateIds(context: ExecutionContext): string[] {
+    const sessionId = context.getSessionId();
+    if (sessionId === undefined || this.temporaryGateRegistry === undefined) {
+      return [];
+    }
+    return this.temporaryGateRegistry
+      .getRunGates(sessionId)
+      .filter((gate) => gate.origin === 'request')
+      .map((gate) => gate.id);
   }
 
   /**

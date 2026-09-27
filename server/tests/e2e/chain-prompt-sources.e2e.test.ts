@@ -1,4 +1,4 @@
-// @lifecycle test - P6.79 / P6.80 / R40: an arrow-chain segment or a workflow node naming a chain prompt runs that prompt's steps; P6.78 / R37: a command-level gate on a chain prompt binds each step; P6.97 / R43: a named inline gate belongs to the run that declared it; P6.99 / R44: a named gate on an arrow-chain segment binds that segment; P6.108 / R47: a run's temporary gates live exactly as long as the run, over Streamable HTTP.
+// @lifecycle test - P6.79 / P6.80 / R40: an arrow-chain segment or a workflow node naming a chain prompt runs that prompt's steps; P6.78 / R37: a command-level gate on a chain prompt binds each step; P6.97 / R43: a named inline gate belongs to the run that declared it; P6.99 / R44: a named gate on an arrow-chain segment binds that segment; P6.108 / R47: a run's temporary gates live exactly as long as the run; P6.104: a run's request gates reach every node they target, over Streamable HTTP.
 /**
  * MEASURED 2026-09-25 on `427899fe` (authored `sv_chain` = sv_a/sv_b/sv_a, each step carrying the
  * blocking `sv-block`; run state read from `chain_runs.state`):
@@ -385,10 +385,15 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       const second = await run.call({ user_response: 'A out' });
       expect(templates(second)).toEqual(['BODY-sv_b topic=']);
       expect(second).toContain('TGT-NODE-X');
+      // Since P6.104 the resume still carries the run's request gate, so x-b's answer is graded
+      // against it before the run moves on.
       const third = await run.call({ user_response: 'B out' });
-      expect(templates(third)).toEqual(['BODY-sv_b topic=']);
-      expect(third).toContain('Progress 3/3');
-      expect(third).not.toContain('TGT-NODE-X');
+      expect(third).toContain('TGT-NODE-X');
+      expect(Object.keys(runState(run.chainId).reviews)).toEqual(['x-b']);
+      const fourth = await run.call({ user_response: 'B out', gate_verdict: PASS });
+      expect(templates(fourth)).toEqual(['BODY-sv_b topic=']);
+      expect(fourth).toContain('Progress 3/3');
+      expect(fourth).not.toContain('TGT-NODE-X');
     }, 120000);
 
     test('(c) control: a gate targeting a single-prompt node is unchanged', async () => {
@@ -750,6 +755,63 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       const step3 = await run.call({ user_response: 'B out', gate_verdict: PASS });
       expect(step3).toContain('XA-108E');
       expect(step3).toContain('YB-108E');
+    }, 120000);
+  });
+
+  /**
+   * MEASURED 2026-09-26 on `9f833361`: on a four-node workflow of single prompts, a request gate
+   * targeting p2 rendered there but its FAIL was refused "Step 2 carries no gates"; one
+   * targeting p3 or p4 never rendered. A resume carries no `gates`, and nothing restored the
+   * start call's (`requestedOverrides` is written only from the current request, stage 01).
+   */
+  describe("P6.104: a run's request gates reach every node they target", () => {
+    const fourNodes = (target: string, marker: string) => ({
+      workflow: {
+        version: 1,
+        nodes: ['p1', 'p2', 'p3', 'p4'].map((id, index) => ({
+          id,
+          promptId: index % 2 === 0 ? 'sv_a' : 'sv_b',
+        })),
+        edges: [
+          { from: 'p1', to: 'p2' },
+          { from: 'p2', to: 'p3' },
+          { from: 'p3', to: 'p4' },
+        ],
+        gates: [{ name: 'tgt104', criteria: [marker], target_step_id: target }],
+      },
+    });
+
+    test.each([
+      ['p2', 2],
+      ['p3', 3],
+      ['p4', 4],
+    ])(
+      '(a) a gate on %s renders on its node and a FAIL there opens its review',
+      async (target, ordinal) => {
+        const marker = `TGT-104-${target.toUpperCase()}`;
+        const run = await start(fourNodes(target, marker));
+        let reply = run.text;
+        for (let step = 1; step < ordinal; step += 1) {
+          expect(reply).not.toContain(marker);
+          reply = await run.call({ user_response: `out ${step}`, gate_verdict: PASS });
+        }
+        expect(reply).toContain(marker);
+        const failed = await run.call({ user_response: `out ${ordinal}`, gate_verdict: FAIL });
+        expect(failed).toContain('Gate Review Required');
+        expect(failed).toContain(marker);
+        const reviews = runState(run.chainId).reviews;
+        expect(Object.keys(reviews)).toEqual([target]);
+        expect(reviews[target]).toHaveLength(1);
+      },
+      120000
+    );
+
+    test('(b) control: a gate on the first node renders and grades there', async () => {
+      const run = await start(fourNodes('p1', 'TGT-104-P1'));
+      expect(run.text).toContain('TGT-104-P1');
+      const failed = await run.call({ user_response: 'out 1', gate_verdict: FAIL });
+      expect(failed).toContain('Gate Review Required');
+      expect(Object.keys(runState(run.chainId).reviews)).toEqual(['p1']);
     }, 120000);
   });
 });

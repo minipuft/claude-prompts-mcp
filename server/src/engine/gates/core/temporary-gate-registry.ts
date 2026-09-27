@@ -57,6 +57,11 @@ export interface TemporaryGateDefinition {
   apply_to_steps?: number[];
   /** What a FAIL does; absent means undeclared, and `resolveEnforcementMode` decides. */
   enforcement_mode?: GateEnforcementMode;
+  /**
+   * `'request'` for a gate the caller sent in the request's `gates` (a workflow's included). A
+   * resume carries no `gates`, so a run reads its own request gates back by this mark (R47).
+   */
+  origin?: 'request';
 }
 
 /**
@@ -142,6 +147,7 @@ export class TemporaryGateRegistry {
       target_step_id,
       apply_to_steps,
       enforcement_mode,
+      origin,
       ...defWithoutId
     } = definition;
 
@@ -162,6 +168,7 @@ export class TemporaryGateRegistry {
       ...(target_step_id !== undefined ? { target_step_id } : {}),
       ...(apply_to_steps !== undefined ? { apply_to_steps } : {}),
       ...(enforcement_mode !== undefined ? { enforcement_mode } : {}),
+      ...(origin !== undefined ? { origin } : {}),
     };
 
     // Store the gate
@@ -239,6 +246,18 @@ export class TemporaryGateRegistry {
       this.runGates.set(runId, owned);
       this.clearExpiry(gate);
     }
+  }
+
+  /** The gates `runId` owns. */
+  getRunGates(runId: string): TemporaryGateDefinition[] {
+    const gates: TemporaryGateDefinition[] = [];
+    for (const gateId of this.runGates.get(runId) ?? []) {
+      const gate = this.temporaryGates.get(gateId);
+      if (gate !== undefined) {
+        gates.push(gate);
+      }
+    }
+    return gates;
   }
 
   /** Remove every gate `runId` owns — the run completed, was cancelled, pruned or cleared. */
