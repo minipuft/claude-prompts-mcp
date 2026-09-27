@@ -693,22 +693,18 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
   }, 240000);
 
   /**
-   * P6.148 pin (as of 2026-09-27 on `351645814` · flips when a `chain`-scoped definition registers
-   * under the run's chain id on the call that starts the run, or when `buildSessionGateSummary`
-   * reads the run's own registered gates instead of the registry's `chain:<chainId>` scope).
-   *
-   * The "Chain-Scoped Temporary Gates" line reads `getTemporaryGatesForScope('chain', chainId)`
-   * and prints gate NAMES, so it can show neither a recorded nor a restored id. Only a prompt's
-   * `inline_gate_definitions` with `scope: chain` register there (`inlineScopeId`), and only with
-   * `gates.executeInlineGateDefinitions` (default false; named inline gates are `execution`-scoped
-   * and never listed). They register under `chain:<mcpRequest.chain_id ?? sessionId ?? 'execution'>`,
-   * and the call that starts a run has neither yet: its gate lands in the process-wide
-   * `chain:execution` bucket (measured by pointing the summary at that bucket, which listed
-   * `cg148` on the first server). So on the server that started the run the line reads `none`
-   * while the run's review holds `cg148`; a claimer that registers the gate on a `chain_id` call
-   * lists it, and the claimer's own other run of the same prompt reads `none`.
+   * P6.148 / P6.164 / R73. The "Chain-Scoped Temporary Gates" line reads
+   * `getTemporaryGatesForScope('chain', chainId)` and prints gate NAMES. Only a prompt's
+   * `inline_gate_definitions` with `scope: chain` register there, and only with
+   * `gates.executeInlineGateDefinitions` (default false). MEASURED 2026-09-27 on `351645814` (the
+   * P6.148 pin): the call that starts a run has no chain id yet, so its chain-scoped gate was filed
+   * under the server-wide `chain:execution` bucket and the line read `none` on the server that
+   * started the run while the run's review held `cg148`; a claimer, registering on a `chain_id`
+   * call, listed it. Now the run files its adopted chain-scoped gates under its own chain id (the
+   * R47 adoption point), so the starter lists the gate, the claimer is unchanged, and the
+   * claimer's own run of the same prompt lists its own.
    */
-  test('P6.148 pin: the chain-scoped gate line after a claim with a collision', async () => {
+  test('P6.164 (a) the starter lists its chain-scoped gate; (c) control: the claimer is unchanged', async () => {
     const roots = freshRoots();
     writeFileSync(
       path.join(roots.workspace, 'config.json'),
@@ -772,7 +768,7 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     });
     // Positive control: the chain-scoped gate is the run's own — its review names it.
     expect(runRow(roots, chainId)?.reviews).toEqual({ a: ['g148', 'cg148'] });
-    expect(await chainLine(first, chainId)).toBe('none');
+    expect(await chainLine(first, chainId)).toBe('cg148');
     const token = await mintToken(first, chainId);
 
     const second = await startServer(roots);
@@ -787,8 +783,86 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     });
     expect(claimed.isError).toBe(false);
     expect(await chainLine(second, chainId)).toBe('cg148');
-    expect(await chainLine(second, otherChainId)).toBe('none');
+    expect(await chainLine(second, otherChainId)).toBe('cg148');
   }, 240000);
+
+  /**
+   * P6.164 / R73. MEASURED 2026-09-27 on `c3cf5989`, two runs of one chain on one server: both
+   * start calls filed their chain-scoped gate under `chain:execution`, and both lines read `none`.
+   * The registry releases a run's gates by the run's ownership index (`releaseRun`), so a cancel
+   * never took the other run's gate; the one clear-by-scope path (`cleanupScopeByKey`) is
+   * reachable only for a scope carrying an expiry, which nothing sets. Pinned here: one run ends,
+   * the other keeps its gate and its own scope lists it.
+   */
+  test('P6.164 (b) two runs on one server: one ends, the other keeps its chain-scoped gate', async () => {
+    const roots = freshRoots();
+    writeFileSync(
+      path.join(roots.workspace, 'config.json'),
+      JSON.stringify({ gates: { executeInlineGateDefinitions: true } })
+    );
+    const server = await startServer(roots);
+    await authorResources(server);
+    const author = async (args: Record<string, unknown>): Promise<void> => {
+      const result = await server.call('resource_manager', args);
+      if (result.isError) throw new Error(result.text);
+    };
+    await author({
+      resource_type: 'prompt',
+      action: 'create',
+      id: 'sv_a164',
+      category: 'general',
+      name: 'sv_a164',
+      description: 'step carrying a chain-scoped inline definition',
+      user_message_template: 'BODY-sv_a164',
+      gate_configuration: {
+        ...OPT_OUT,
+        inline_gate_definitions: [
+          {
+            id: 'cg164',
+            name: 'cg164',
+            type: 'validation',
+            scope: 'chain',
+            description: 'chain-scoped e2e gate',
+            guidance: 'CHAIN-164',
+            pass_criteria: ['CHAIN-164'],
+          },
+        ],
+      },
+    });
+    await author({
+      resource_type: 'prompt',
+      action: 'create',
+      id: 'sv_chain164',
+      category: 'general',
+      name: 'sv_chain164',
+      description: 'chain whose steps carry a chain-scoped gate',
+      user_message_template: 'CHAIN164',
+      gate_configuration: OPT_OUT,
+      chain_steps: [
+        { promptId: 'sv_a164', stepName: 'A' },
+        { promptId: 'sv_b', stepName: 'B' },
+      ],
+    });
+    const chainLine = async (chainId: string): Promise<string | undefined> =>
+      /- Chain-Scoped Temporary Gates: (.*)/.exec(
+        (await server.call('prompt_engine', { command: `gates chain ${chainId}` })).text
+      )?.[1];
+    const ended = chainIdOf(
+      (await server.call('prompt_engine', { command: '>>sv_chain164' })).text
+    );
+    const kept = chainIdOf((await server.call('prompt_engine', { command: '>>sv_chain164' })).text);
+    expect([await chainLine(ended), await chainLine(kept)]).toEqual(['cg164', 'cg164']);
+
+    await server.call('prompt_engine', { chain_id: ended, cancel: true });
+    expect([await chainLine(ended), await chainLine(kept)]).toEqual(['none', 'cg164']);
+    const failed = await server.call('prompt_engine', {
+      chain_id: kept,
+      user_response: 'A draft',
+      gate_verdict: FAIL,
+    });
+    expect(runRow(roots, kept)?.reviews).toEqual({ a: ['cg164-2'] });
+    expect(failed.text).toContain('CHAIN-164');
+  }, 180000);
 
   /**
    * P6.158. MEASURED 2026-09-27 on `7b2e30ce` with `gates.executeInlineGateDefinitions` on (and

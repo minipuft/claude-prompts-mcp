@@ -197,6 +197,9 @@ When they do execute:
   chain's gates accumulate. A definition with no `id` registers under the slug of its name
   (`source-citations`). This holds whether the chain runs bare, as a workflow or arrow-chain segment,
   or as a remainder. A step prompt's own definitions contribute at rank 60 as above.
+- A `scope: chain` definition belongs to the run it registers in, from the call that starts the
+  run: the run files it under its own chain id, its chain-scoped gate summary lists it, and it is
+  released when that run ends — never with another run's.
 
 ## Injection
 

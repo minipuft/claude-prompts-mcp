@@ -288,3 +288,55 @@ describe('an untargeted chain request gate stays bound to its first step (P6.114
     expect(held?.apply_to_steps).toBeUndefined();
   });
 });
+
+describe("a run files its start call's chain-scoped gates under its chain id (P6.164, R73)", () => {
+  const chainCarrier = {
+    id: 'demo',
+    gateConfiguration: {
+      inline_gate_definitions: [
+        { id: 'cg164', name: 'cg164', type: 'validation', scope: 'chain', guidance: 'CHAIN-164' },
+      ],
+    },
+  };
+  const names = (registry: TemporaryGateRegistry, scopeId: string): string[] =>
+    registry.getTemporaryGatesForScope('chain', scopeId).map((gate) => gate.id);
+
+  test('two runs: each chain scope lists its own gate, and one run ending leaves the other', () => {
+    const registry = new TemporaryGateRegistry(logger());
+    const registrar = new TemporaryGateRegistrar(registry, undefined, logger());
+
+    const first = registrar.registerInlineGateDefinitions(callOf(undefined), [chainCarrier], true);
+    const second = registrar.registerInlineGateDefinitions(callOf(undefined), [chainCarrier], true);
+    // Positive control: before adoption both start calls share the server-wide bucket.
+    expect(names(registry, 'execution')).toEqual(['cg164', 'cg164-2']);
+
+    registry.adoptIntoRun('run-1', first, 'chain-demo#1');
+    registry.adoptIntoRun('run-2', second, 'chain-demo#2');
+    expect([
+      names(registry, 'execution'),
+      names(registry, 'chain-demo#1'),
+      names(registry, 'chain-demo#2'),
+    ]).toEqual([[], ['cg164'], ['cg164-2']]);
+
+    registry.releaseRun('run-1');
+    expect([names(registry, 'chain-demo#1'), names(registry, 'chain-demo#2')]).toEqual([
+      [],
+      ['cg164-2'],
+    ]);
+  });
+
+  test('control: a gate that is not chain-scoped keeps its scope', () => {
+    const registry = new TemporaryGateRegistry(logger());
+    const registrar = new TemporaryGateRegistrar(registry, undefined, logger());
+    const started = registrar.registerInlineGateDefinitions(
+      callOf(undefined),
+      [carrier('G')],
+      true
+    );
+    registry.adoptIntoRun('run-1', started, 'chain-demo#1');
+    expect(registry.getTemporaryGate('def107')?.scope_id).toBe('execution');
+    expect(registry.getTemporaryGatesForScope('execution', 'execution').map((g) => g.id)).toEqual([
+      'def107',
+    ]);
+  });
+});

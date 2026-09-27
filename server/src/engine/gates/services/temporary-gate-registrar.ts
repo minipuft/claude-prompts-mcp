@@ -919,7 +919,9 @@ function readInlineScope(definition: GateBody): InlineScope {
  *
  * A `chain`-scoped definition binds to the chain so it survives across steps; everything else
  * binds to the session or the command, matching what `registerTemporaryGates` already does for
- * caller-supplied specs.
+ * caller-supplied specs. The call that starts a run has no chain id yet, so its chain-scoped gate
+ * lands under `chain:execution` for that call only: the run files it under `chain:<chainId>` when
+ * it adopts the call's gates (`TemporaryGateRegistry.adoptIntoRun`, P6.164).
  */
 function inlineScopeId(context: ExecutionContext, scope: InlineScope): string {
   // `getSessionId` is a plain method on ExecutionContext, so no optional call — the older
