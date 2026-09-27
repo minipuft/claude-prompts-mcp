@@ -57,6 +57,11 @@ export interface TemporaryGateDefinition {
   apply_to_steps?: number[];
   /** What a FAIL does; absent means undeclared, and `resolveEnforcementMode` decides. */
   enforcement_mode?: GateEnforcementMode;
+  /**
+   * `'request'` for a gate the caller sent in the request's `gates` (a workflow's included). A
+   * resume carries no `gates`, so a run reads its own request gates back by this mark (R47).
+   */
+  origin?: 'request';
 }
 
 /**
@@ -78,6 +83,13 @@ export class TemporaryGateRegistry {
   private temporaryGates: Map<string, TemporaryGateDefinition>;
   private scopeManagement: Map<string, ScopeInfo>;
   private cleanupTimers: Map<string, NodeJS.Timeout>;
+  /**
+   * Run (session id) -> the temporary gates that run owns, and the reverse (R47). A gate a run
+   * adopts lives as long as the run and is removed by {@link releaseRun}; a gate no run adopts
+   * lives for the call that registered it and is removed by {@link releaseUnowned}.
+   */
+  private runGates: Map<string, Set<string>>;
+  private gateOwners: Map<string, string>;
   private maxMemoryGates: number;
   private defaultExpirationMs: number;
 
@@ -92,6 +104,8 @@ export class TemporaryGateRegistry {
     this.temporaryGates = new Map();
     this.scopeManagement = new Map();
     this.cleanupTimers = new Map();
+    this.runGates = new Map();
+    this.gateOwners = new Map();
     this.maxMemoryGates = options.maxMemoryGates || 1000;
     this.defaultExpirationMs = options.defaultExpirationMs || 3600000; // 1 hour
 
@@ -133,6 +147,7 @@ export class TemporaryGateRegistry {
       target_step_id,
       apply_to_steps,
       enforcement_mode,
+      origin,
       ...defWithoutId
     } = definition;
 
@@ -153,6 +168,7 @@ export class TemporaryGateRegistry {
       ...(target_step_id !== undefined ? { target_step_id } : {}),
       ...(apply_to_steps !== undefined ? { apply_to_steps } : {}),
       ...(enforcement_mode !== undefined ? { enforcement_mode } : {}),
+      ...(origin !== undefined ? { origin } : {}),
     };
 
     // Store the gate
@@ -213,6 +229,63 @@ export class TemporaryGateRegistry {
     return gates;
   }
 
+  /**
+   * Hand the gates a call registered to the run that call belongs to (R47). The run then owns
+   * them until it ends: their expiry timer is dropped, because a run may wait longer than any
+   * timer between two calls. A gate another run already owns stays with that run.
+   */
+  adoptIntoRun(runId: string, gateIds: readonly string[]): void {
+    for (const gateId of gateIds) {
+      const gate = this.temporaryGates.get(gateId);
+      if (gate === undefined || this.gateOwners.has(gateId)) {
+        continue;
+      }
+      this.gateOwners.set(gateId, runId);
+      const owned = this.runGates.get(runId) ?? new Set<string>();
+      owned.add(gateId);
+      this.runGates.set(runId, owned);
+      this.clearExpiry(gate);
+    }
+  }
+
+  /** The run that owns `gateId`, or undefined when no run has adopted it. */
+  ownerOf(gateId: string): string | undefined {
+    return this.gateOwners.get(gateId);
+  }
+
+  /** The gates `runId` owns. */
+  getRunGates(runId: string): TemporaryGateDefinition[] {
+    const gates: TemporaryGateDefinition[] = [];
+    for (const gateId of this.runGates.get(runId) ?? []) {
+      const gate = this.temporaryGates.get(gateId);
+      if (gate !== undefined) {
+        gates.push(gate);
+      }
+    }
+    return gates;
+  }
+
+  /** Remove every gate `runId` owns — the run completed, was cancelled, pruned or cleared. */
+  releaseRun(runId: string): number {
+    const owned = [...(this.runGates.get(runId) ?? [])];
+    for (const gateId of owned) {
+      this.removeTemporaryGate(gateId);
+    }
+    this.runGates.delete(runId);
+    return owned.length;
+  }
+
+  /** Remove the gates in `gateIds` that no run adopted: a call with no run is over. */
+  releaseUnowned(gateIds: readonly string[]): number {
+    let released = 0;
+    for (const gateId of new Set(gateIds)) {
+      if (!this.gateOwners.has(gateId) && this.removeTemporaryGate(gateId)) {
+        released += 1;
+      }
+    }
+    return released;
+  }
+
   convertToLightweightGate(tempGate: TemporaryGateDefinition): LightweightGateDefinition {
     return toGateDefinition(liftTemporaryGate(tempGate));
   }
@@ -228,6 +301,12 @@ export class TemporaryGateRegistry {
 
     // Remove from registry
     this.temporaryGates.delete(gateId);
+
+    const owner = this.gateOwners.get(gateId);
+    if (owner !== undefined) {
+      this.gateOwners.delete(gateId);
+      this.runGates.get(owner)?.delete(gateId);
+    }
 
     // Clean up scope associations
     if (gate.scope_id) {
@@ -275,30 +354,6 @@ export class TemporaryGateRegistry {
   }
 
   /**
-   * Clean up all gates for a specific scope
-   */
-  cleanupScope(scope: string, scopeId?: string): number {
-    const scopeKey = scopeId ? `${scope}:${scopeId}` : scope;
-    const scopeInfo = this.scopeManagement.get(scopeKey);
-
-    if (!scopeInfo) {
-      return 0;
-    }
-
-    let cleanedCount = 0;
-    for (const gateId of scopeInfo.gates) {
-      if (this.removeTemporaryGate(gateId)) {
-        cleanedCount++;
-      }
-    }
-
-    this.scopeManagement.delete(scopeKey);
-
-    this.logger.debug(`[TEMP GATE REGISTRY] Cleaned up scope ${scopeKey}: ${cleanedCount} gates`);
-    return cleanedCount;
-  }
-
-  /**
    * Force cleanup to free memory
    */
   private performCleanup(): void {
@@ -323,6 +378,16 @@ export class TemporaryGateRegistry {
       }
 
       this.logger.warn(`[TEMP GATE REGISTRY] Force removed ${toRemove} oldest gates`);
+    }
+  }
+
+  /** Drop a gate's expiry: a run-owned gate ends with its run, not with a timer. */
+  private clearExpiry(gate: TemporaryGateDefinition): void {
+    delete gate.expires_at;
+    const timer = this.cleanupTimers.get(gate.id);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      this.cleanupTimers.delete(gate.id);
     }
   }
 
@@ -386,7 +451,7 @@ export class TemporaryGateRegistry {
     onIdCollision?: 'throw' | 'fresh-id'
   ): string {
     if (!requested || !this.isValidCustomId(requested)) {
-      return `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      return `temp_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
     }
     return onIdCollision === 'fresh-id' ? this.firstFreeId(requested) : requested;
   }

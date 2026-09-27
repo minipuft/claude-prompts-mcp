@@ -136,7 +136,6 @@ const allStageNames = [
   'PhaseGuardVerification',
   'GateReview',
   'ResponseFormatting',
-  'PostFormattingCleanup',
 ] as const;
 
 // The four stages the builder may omit; excluded unless a test opts in.
@@ -163,7 +162,7 @@ function createPipeline(options: {
   const build = (name: string): PipelineStage => {
     if (options.stageOverrides?.[name]) return options.stageOverrides[name]!;
     // Set response in LAST stage so all stages execute (no early exit)
-    if (name === 'PostFormattingCleanup') {
+    if (name === 'ResponseFormatting') {
       return createStage(name, (context) => {
         if (!context.response) {
           context.setResponse({ content: [{ type: 'text', text: 'ok' }] });
@@ -197,9 +196,9 @@ describe('Pipeline Hook Emissions (Phase 1.3b)', () => {
 
     // First stage should be RequestNormalization
     expect(hookRegistry.beforeCalls[0]!.stage).toBe('RequestNormalization');
-    // Last stage should be PostFormattingCleanup
+    // Last stage should be ResponseFormatting
     expect(hookRegistry.afterCalls[hookRegistry.afterCalls.length - 1]!.stage).toBe(
-      'PostFormattingCleanup'
+      'ResponseFormatting'
     );
   });
 
@@ -795,7 +794,6 @@ describe('Pipeline Telemetry Correctness (Tier 1)', () => {
       expect(byName.get('PhaseGuardVerification')).toBe('verification');
       expect(byName.get('GateReview')).toBe('gate_review');
       expect(byName.get('ResponseFormatting')).toBe('post_processing');
-      expect(byName.get('PostFormattingCleanup')).toBe('post_processing');
 
       // No registered stage may report the catch-all.
       expect(metrics.stageMetrics.filter((m) => m.stageType === 'other')).toEqual([]);

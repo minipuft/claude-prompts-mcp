@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 
 import { createSymbolicCommandParser } from '../../../../src/engine/execution/parsers/symbolic-operator-parser.js';
 import { SymbolicCommandBuilder } from '../../../../src/engine/execution/parsers/symbolic-command-builder.js';
+import { retargetGates } from '../../../../src/modules/workflow-ir/chain-prompt-expansion.js';
 import { compileWorkflowIR } from '../../../../src/modules/workflow-ir/compiler.js';
+import { validateWorkflowIR } from '../../../../src/modules/workflow-ir/validator.js';
 
 import type {
   ArgumentParser,
@@ -167,7 +169,11 @@ describe('S9 — inline gate token attribution in symbolic chains', () => {
       const argumentParser = {
         parseArguments: jest.fn(async () => createArgumentResult()),
       } as unknown as ArgumentParser;
-      return new SymbolicCommandBuilder(argumentParser, logger, compileWorkflowIR);
+      return new SymbolicCommandBuilder(argumentParser, logger, {
+        validate: validateWorkflowIR,
+        compile: compileWorkflowIR,
+        retargetGates,
+      });
     }
 
     test('step carries inlineGateCriteria and no orphan command-level gate is seeded', async () => {
@@ -177,7 +183,9 @@ describe('S9 — inline gate token attribution in symbolic chains', () => {
 
       const builder = createBuilder();
       const findPrompt = (id: string) => makePrompt(id);
-      const parsedCommand = await builder.buildSymbolicCommand(parseResult, findPrompt);
+      const built = await builder.buildSymbolicCommand(parseResult, findPrompt);
+      if (!built.ok) throw new Error(JSON.stringify(built.rejections));
+      const parsedCommand = built.parsedCommand;
 
       expect(parseResult.executionPlan.steps[0].inlineGateCriteria).toEqual(['code-quality']);
       expect(parsedCommand.steps?.[0]?.inlineGateCriteria).toEqual(['code-quality']);
@@ -187,15 +195,41 @@ describe('S9 — inline gate token attribution in symbolic chains', () => {
       expect(parsedCommand.inlineGateCriteria ?? []).toEqual([]);
     });
 
+    test('P6.110: one name declared in two segments binds each segment to its own occurrence', async () => {
+      const arrow = ' -' + '-> ';
+      const command = `>>a :: g110:"ONE"${arrow}>>b :: g110:"TWO"${arrow}>>a`;
+      const detection = parser.detectOperators(command);
+      const parseResult = parser.buildParseResult(command, detection, 'a', '');
+
+      expect(parseResult.executionPlan.steps.map((step) => step.inlineGateCriteria)).toEqual([
+        ['g110'],
+        ['g110#2'],
+        undefined,
+      ]);
+      const built = await createBuilder().buildSymbolicCommand(parseResult, (id: string) =>
+        makePrompt(id)
+      );
+      if (!built.ok) throw new Error(JSON.stringify(built.rejections));
+      expect(built.parsedCommand.namedInlineGates?.map((gate) => gate.criteria)).toEqual([
+        ['ONE'],
+        ['TWO'],
+      ]);
+      expect(built.parsedCommand.steps?.map((step) => step.inlineGateCriteria)).toEqual([
+        ['g110'],
+        ['g110#2'],
+        [],
+      ]);
+    });
+
     test("P6.99: a named gate registers globally and binds only its own segment's node", async () => {
       const command = '>>a :: security:"no secrets" --> >>b';
       const detection = parser.detectOperators(command);
       const parseResult = parser.buildParseResult(command, detection, 'a', '');
 
       const builder = createBuilder();
-      const parsedCommand = await builder.buildSymbolicCommand(parseResult, (id: string) =>
-        makePrompt(id)
-      );
+      const built = await builder.buildSymbolicCommand(parseResult, (id: string) => makePrompt(id));
+      if (!built.ok) throw new Error(JSON.stringify(built.rejections));
+      const parsedCommand = built.parsedCommand;
 
       expect(parsedCommand.namedInlineGates).toEqual([
         { gateId: 'security', criteria: ['no secrets'] },

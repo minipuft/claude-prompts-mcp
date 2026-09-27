@@ -164,12 +164,10 @@ describe('ChainSessionStore', () => {
     );
   });
 
-  test('updateSessionBlueprint stores snapshot independently', async () => {
+  test('createSession stores the blueprint snapshot independently', async () => {
     manager = new ChainSessionStore(createLogger(), new StubTextReferenceStore() as any, {
       cleanupIntervalMs: 1000,
     });
-
-    await manager.createSession('session-blueprint', 'chain-blueprint', 1);
 
     const blueprint: SessionBlueprint = {
       parsedCommand: {
@@ -194,7 +192,7 @@ describe('ChainSessionStore', () => {
       gateInstructions: 'Persisted gate instructions',
     };
 
-    manager.updateSessionBlueprint('session-blueprint', blueprint);
+    await manager.createSession('session-blueprint', 'chain-blueprint', 1, {}, { blueprint });
 
     const stored = manager.getSessionBlueprint('session-blueprint');
     expect(stored?.gateInstructions).toBe('Persisted gate instructions');
@@ -216,8 +214,6 @@ describe('ChainSessionStore', () => {
       cleanupIntervalMs: 1000,
     });
 
-    await manager.createSession('session-nodeid', 'chain-nodeid', 2);
-
     const blueprint: SessionBlueprint = {
       parsedCommand: {
         promptId: 'chain-nodeid',
@@ -235,7 +231,7 @@ describe('ChainSessionStore', () => {
       },
     };
 
-    manager.updateSessionBlueprint('session-nodeid', blueprint);
+    await manager.createSession('session-nodeid', 'chain-nodeid', 2, {}, { blueprint });
 
     const storedSteps = manager.getSessionBlueprint('session-nodeid')?.parsedCommand.steps;
     expect(storedSteps?.map((step) => step.nodeId)).toEqual(['research', 'review']);
@@ -299,6 +295,25 @@ describe('ChainSessionStore — run-status lifecycle (Tier 2)', () => {
     const session = (manager as any).activeSessions.get('s1');
     expect(session.runStatus).toBe('completed');
     expect(typeof session.runCompletedAt).toBe('number');
+  });
+
+  test('a run announces its end once: completion, cancel, then removal (R47)', async () => {
+    manager = newManager('ended');
+    const ended: string[] = [];
+    manager.onRunEnded((sessionId) => ended.push(sessionId));
+    await manager.createSession('done', 'chain-done', 1);
+    await manager.createSession('stopped', 'chain-stopped', 1);
+    await manager.createSession('live', 'chain-live', 1);
+
+    await manager.transitionRunStatus('done', 'completed');
+    // Asked again, completion is already the status: no second announcement.
+    await manager.transitionRunStatus('done', 'completed');
+    await manager.cancelChain('stopped');
+    await manager.cancelChain('stopped');
+    expect(ended).toEqual(['done', 'stopped']);
+
+    await manager.clearSession('live');
+    expect(ended).toEqual(['done', 'stopped', 'live']);
   });
 
   test('transitionRunStatus refuses transitions out of terminal states (stickiness)', async () => {

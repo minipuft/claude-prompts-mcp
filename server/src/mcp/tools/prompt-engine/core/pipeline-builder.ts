@@ -58,7 +58,6 @@ import {
   createPhaseGuardVerificationStage,
   GateReviewStage,
   ResponseFormattingStage,
-  PostFormattingCleanupStage,
 } from '#engine/execution/pipeline/index.js';
 import { resolveDeclaredSections } from '#engine/frameworks/declared-sections.js';
 import { getDefaultRuntimeLoader } from '#engine/frameworks/definitions/index.js';
@@ -82,6 +81,7 @@ import {
 import { createToolDetectionService } from '#modules/automation/detection/tool-detection-service.js';
 import { createScriptExecutor } from '#modules/automation/execution/script-executor.js';
 import { createToolTriggerFilter } from '#modules/automation/execution/tool-trigger-filter.js';
+import { retargetGates } from '#modules/workflow-ir/chain-prompt-expansion.js';
 import { compileWorkflowIR } from '#modules/workflow-ir/compiler.js';
 import { DEFAULT_WORKFLOW_CAPS } from '#modules/workflow-ir/node-schema.js';
 import { validateWorkflowIR } from '#modules/workflow-ir/validator.js';
@@ -144,26 +144,26 @@ export class PipelineBuilder {
 
     // ── Stages 04-09: Parsing, Planning, Scripts ──
 
-    // `compileWorkflowIR` is passed to BOTH command builders (row A.2): a `-->` chain and a
-    // submitted IR are the same representation, so they compile through the same function rather
-    // than through two projections that agree by hand. Same layer reason as the port below — the
-    // composition root is the only place allowed to name both sides.
+    // The composition root is the only layer that may name both sides: `engine/` cannot
+    // value-import `modules/workflow-ir/` (dependency-cruiser `engine-no-modules-or-mcp-value`,
+    // error severity), and these functions are pure, so passing them as a port costs nothing at
+    // runtime and keeps the layer edge honest. ONE port for BOTH command builders (row A.2,
+    // P6.105): an arrow-chain and a submitted IR are the same representation, so they validate,
+    // compile and retarget through the same functions rather than two that agree by hand.
+    // Constructed per pipeline, holding no state — the Streamable HTTP transport rebuilds the
+    // server per request, so anything cached here would exist on STDIO and vanish on HTTP.
+    const workflowIrPort = {
+      validate: validateWorkflowIR,
+      compile: compileWorkflowIR,
+      retargetGates,
+    };
     const symbolicCommandBuilder = new SymbolicCommandBuilder(
       deps.parsingSystem.argumentParser,
       deps.logger,
-      compileWorkflowIR
+      workflowIrPort
     );
     const blueprintResolver = new ChainBlueprintResolver(deps.chainSessionStore, deps.logger);
-    // The composition root is the only layer that may name both sides: `engine/` cannot
-    // value-import `modules/workflow-ir/` (dependency-cruiser `engine-no-modules-or-mcp-value`,
-    // error severity), and these three functions are pure, so passing them as a port costs
-    // nothing at runtime and keeps the layer edge honest. Constructed per pipeline, holding no
-    // state — the Streamable HTTP transport rebuilds the server per request, so anything cached
-    // here would exist on STDIO and vanish on HTTP.
-    const workflowCommandBuilder = new WorkflowCommandBuilder(
-      { validate: validateWorkflowIR, compile: compileWorkflowIR },
-      deps.logger
-    );
+    const workflowCommandBuilder = new WorkflowCommandBuilder(workflowIrPort, deps.logger);
     const commandParsingStage = new CommandParsingStage(
       deps.parsingSystem.commandParser,
       deps.parsingSystem.argumentParser,
@@ -453,11 +453,11 @@ export class PipelineBuilder {
       deps.executionRecordStore,
       deps.chainSessionStore
     );
-    const postFormattingStage = new PostFormattingCleanupStage(
-      deps.chainSessionStore,
-      temporaryGateRegistry,
-      deps.logger
-    );
+    // A run's temporary gates live as long as the run (R47): the pipeline hands a call's gates
+    // to its run, and they are released here when the run ends.
+    deps.chainSessionStore.onRunEnded((sessionId) => {
+      temporaryGateRegistry.releaseRun(sessionId);
+    });
 
     // Execution order. The array IS the contract — the pipeline runs it front to
     // back and does no reordering of its own.
@@ -502,7 +502,6 @@ export class PipelineBuilder {
       phaseGuardVerificationStage,
       gateReviewStage,
       formattingStage,
-      postFormattingStage,
     ];
 
     return new PromptExecutionPipeline(stages, {
@@ -514,6 +513,7 @@ export class PipelineBuilder {
       // rather than admitting both empty representations into the ports interface.
       executionRecordStore: deps.executionRecordStore ?? undefined,
       chainSessionStore: deps.chainSessionStore,
+      temporaryGateRegistry,
     });
   }
 

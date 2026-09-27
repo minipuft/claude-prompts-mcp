@@ -125,6 +125,7 @@ import { ResponseFormatter } from '../../../src/mcp/tools/prompt-engine/processo
 import { ExecutionRecordStore } from '../../../src/modules/chains/execution-record-store.js';
 import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
 import { TextReferenceStore } from '../../../src/modules/text-refs/index.js';
+import { retargetGates } from '../../../src/modules/workflow-ir/chain-prompt-expansion.js';
 import { compileWorkflowIR } from '../../../src/modules/workflow-ir/compiler.js';
 import { validateWorkflowIR } from '../../../src/modules/workflow-ir/validator.js';
 
@@ -228,7 +229,6 @@ const STAGE_ORDER = [
   'PhaseGuardVerification',
   'GateReview',
   'ResponseFormatting',
-  'PostFormattingCleanup',
 ] as const;
 
 /**
@@ -244,7 +244,7 @@ const buildPipeline = (options: {
   const { sessionStore, recordStore, logger } = options;
   const parsingSystem = createParsingSystem(logger);
   const workflowCommandBuilder = new WorkflowCommandBuilder(
-    { validate: validateWorkflowIR, compile: compileWorkflowIR },
+    { validate: validateWorkflowIR, compile: compileWorkflowIR, retargetGates },
     logger
   );
   const chainExecutor = new ChainOperatorExecutor(logger as never, PROMPTS);
@@ -258,7 +258,11 @@ const buildPipeline = (options: {
       parsingSystem.argumentParser,
       () => PROMPTS,
       logger,
-      new SymbolicCommandBuilder(parsingSystem.argumentParser, logger, compileWorkflowIR),
+      new SymbolicCommandBuilder(parsingSystem.argumentParser, logger, {
+        validate: validateWorkflowIR,
+        compile: compileWorkflowIR,
+        retargetGates,
+      }),
       {
         workflowCommandBuilder,
         blueprintResolver: new ChainBlueprintResolver(sessionStore, logger),

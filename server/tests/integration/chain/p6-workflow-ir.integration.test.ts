@@ -55,6 +55,7 @@ import { OperatorValidationStage } from '../../../src/engine/execution/pipeline/
 import { SessionManagementStage } from '../../../src/engine/execution/pipeline/stages/13-session-stage.js';
 import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
 import { TextReferenceStore } from '../../../src/modules/text-refs/index.js';
+import { retargetGates } from '../../../src/modules/workflow-ir/chain-prompt-expansion.js';
 import { compileWorkflowIR } from '../../../src/modules/workflow-ir/compiler.js';
 import { validateWorkflowIR } from '../../../src/modules/workflow-ir/validator.js';
 
@@ -152,7 +153,6 @@ const STAGE_ORDER = [
   'PhaseGuardVerification',
   'GateReview',
   'ResponseFormatting',
-  'PostFormattingCleanup',
 ] as const;
 
 const buildPipeline = (
@@ -161,7 +161,7 @@ const buildPipeline = (
 ): PromptExecutionPipeline => {
   const parsingSystem = createParsingSystem(logger);
   const workflowCommandBuilder = new WorkflowCommandBuilder(
-    { validate: validateWorkflowIR, compile: compileWorkflowIR },
+    { validate: validateWorkflowIR, compile: compileWorkflowIR, retargetGates },
     logger
   );
 
@@ -172,7 +172,11 @@ const buildPipeline = (
       parsingSystem.argumentParser,
       () => PROMPTS,
       logger,
-      new SymbolicCommandBuilder(parsingSystem.argumentParser, logger, compileWorkflowIR),
+      new SymbolicCommandBuilder(parsingSystem.argumentParser, logger, {
+        validate: validateWorkflowIR,
+        compile: compileWorkflowIR,
+        retargetGates,
+      }),
       { workflowCommandBuilder }
     ),
     OperatorValidation: new OperatorValidationStage(null, logger),

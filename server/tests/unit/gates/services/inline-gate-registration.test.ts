@@ -27,11 +27,15 @@ const createRegistry = () => {
       return id;
     }),
     getTemporaryGate: jest.fn((id: string) => gates.get(id)),
+    removeTemporaryGate: jest.fn((id: string) => gates.delete(id)),
+    // No run has adopted anything here: a held id counts as this run's only when this call
+    // registered it (`state.gates.temporaryGateIds`).
+    ownerOf: jest.fn((_id: string): string | undefined => undefined),
   };
 };
 
-const createContext = () => ({
-  state: { gates: {} as Record<string, unknown> },
+const createContext = (temporaryGateIds: string[] = []) => ({
+  state: { gates: { temporaryGateIds } as Record<string, unknown> },
   mcpRequest: { chain_id: undefined as string | undefined },
   getSessionId: () => 'session-1',
 });
@@ -154,7 +158,7 @@ describe('TemporaryGateRegistrar.registerInlineGateDefinitions', () => {
 
       expect(ids).toEqual([]);
       expect(registry.createTemporaryGate).not.toHaveBeenCalled();
-      expect(context.state.gates['temporaryGateIds']).toBeUndefined();
+      expect(context.state.gates['temporaryGateIds']).toEqual([]);
     });
   });
 
@@ -170,7 +174,8 @@ describe('TemporaryGateRegistrar.registerInlineGateDefinitions', () => {
       });
       const registrar = buildRegistrar(registry, createLogger());
 
-      register(registrar, createContext() as never, [
+      // Held by this call (P6.107): another run's gate is never merged over.
+      register(registrar, createContext(['shared']) as never, [
         promptWith([
           validDefinition({ id: 'shared', guidance: 'prompt guidance', pass_criteria: ['one'] }),
         ]),

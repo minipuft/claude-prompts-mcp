@@ -74,7 +74,9 @@ import { ResponseFormatter } from '../../../src/mcp/tools/prompt-engine/processo
 import { ExecutionRecordStore } from '../../../src/modules/chains/execution-record-store.js';
 import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
 import { TextReferenceStore } from '../../../src/modules/text-refs/index.js';
+import { retargetGates } from '../../../src/modules/workflow-ir/chain-prompt-expansion.js';
 import { compileWorkflowIR } from '../../../src/modules/workflow-ir/compiler.js';
+import { validateWorkflowIR } from '../../../src/modules/workflow-ir/validator.js';
 
 import type { PipelineStage } from '../../../src/engine/execution/pipeline/stage.js';
 import type { ConvertedPrompt } from '../../../src/engine/execution/types.js';
@@ -157,7 +159,6 @@ const STAGE_ORDER = [
   'PhaseGuardVerification',
   'GateReview',
   'ResponseFormatting',
-  'PostFormattingCleanup',
 ] as const;
 
 const buildPipeline = (options: {
@@ -178,7 +179,11 @@ const buildPipeline = (options: {
       parsingSystem.argumentParser,
       () => PROMPTS,
       logger,
-      new SymbolicCommandBuilder(parsingSystem.argumentParser, logger, compileWorkflowIR),
+      new SymbolicCommandBuilder(parsingSystem.argumentParser, logger, {
+        validate: validateWorkflowIR,
+        compile: compileWorkflowIR,
+        retargetGates,
+      }),
       { blueprintResolver: new ChainBlueprintResolver(sessionStore, logger) }
     ),
     OperatorValidation: new OperatorValidationStage(null, logger),

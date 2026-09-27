@@ -163,8 +163,6 @@ export interface PipelineInternalState {
     };
     /** IDs of temporary gates created for this execution */
     temporaryGateIds: string[];
-    /** Scopes for temporary gates */
-    temporaryGateScopes?: Array<{ scope: string; scopeId: string }>;
     /** IDs of framework-specific gates registered for this execution */
     frameworkGateIds: string[];
     /** IDs of canonical gates that were resolved from temporary inputs */

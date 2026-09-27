@@ -675,7 +675,8 @@ describe('GateEnhancementStage', () => {
         name: 'Inline Validation Criteria',
         pass_criteria: ['toxicity'],
       }),
-      expect.any(String)
+      expect.any(String),
+      { onIdCollision: 'fresh-id' }
     );
 
     // CustomCheck is converted to inline gate with description as guidance
@@ -684,7 +685,8 @@ describe('GateEnhancementStage', () => {
         name: 'red-team',
         description: 'Confirm exfil path',
       }),
-      expect.any(String)
+      expect.any(String),
+      { onIdCollision: 'fresh-id' }
     );
 
     // Full TemporaryGateInput was already registered by inline-gate-extraction stage

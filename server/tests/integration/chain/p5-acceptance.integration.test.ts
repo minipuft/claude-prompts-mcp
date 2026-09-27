@@ -278,7 +278,6 @@ const STAGE_ORDER = [
   'PhaseGuardVerification',
   'GateReview',
   'ResponseFormatting',
-  'PostFormattingCleanup',
 ] as const;
 
 /**
@@ -408,6 +407,9 @@ const buildPipeline = (options: {
     gateEnforcement: new GateEnforcementAuthority(sessionStore, logger),
     executionRecordStore: recordStore,
     chainSessionStore: sessionStore,
+    // As production wires it: the run adopts the gates its calls register, so a request gate
+    // re-sent on a later call is the run's own gate, not another run's (P6.107).
+    temporaryGateRegistry: gateRegistry,
   });
 };
 

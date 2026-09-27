@@ -35,4 +35,3 @@ export {
 } from './stages/19-phase-guard-verification-stage.js';
 export { GateReviewStage } from './stages/20-gate-review-stage.js';
 export { ResponseFormattingStage } from './stages/21-formatting-stage.js';
-export { PostFormattingCleanupStage } from './stages/22-post-formatting-cleanup-stage.js';

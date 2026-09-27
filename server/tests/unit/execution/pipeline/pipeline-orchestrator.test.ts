@@ -31,7 +31,6 @@ const stageOrder = [
   'StepExecution',
   'GateReview',
   'ResponseFormatting',
-  'PostFormattingCleanup',
 ] as const;
 type StageName = (typeof stageOrder)[number];
 

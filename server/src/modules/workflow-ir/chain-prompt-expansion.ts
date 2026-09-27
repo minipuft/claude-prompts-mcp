@@ -33,7 +33,6 @@
 
 import type { ChainStepPrompt } from '#engine/execution/operators/types.js';
 import type { ConvertedPrompt } from '#engine/execution/types.js';
-import type { GateSpecification } from '#shared/types/execution.js';
 import type { ExpandedWorkflow, WorkflowEdge, WorkflowIR, WorkflowNode } from './types.js';
 
 import { projectChainPromptSteps } from '#engine/execution/parsers/chain-step-projection.js';
@@ -102,14 +101,20 @@ export function expandChainPromptNodes(
 
 /**
  * Point every gate whose `target_step_id` names an expanded node at that node's last step.
- * A gate naming any other id, a bare gate id, and a gate with no target are returned as given.
+ * A gate naming any other id, a bare gate id, and a gate with no target are returned as given;
+ * a retargeted gate is a new object, so the caller's gates are never mutated.
+ *
+ * Generic over the element type because it has two callers with two vocabularies: the IR's
+ * `gates` (`GateSpecification`) and stage 04's request `gates` channel (`unknown[]`, the client's
+ * payload), which reaches it through `WorkflowIrPort.retargetGates` — `engine/` may not
+ * value-import this module.
  */
-function retargetGates(
-  gates: readonly GateSpecification[],
+export function retargetGates<Gate>(
+  gates: readonly Gate[],
   lastStepOf: Readonly<Record<string, string>>
-): GateSpecification[] {
+): Gate[] {
   return gates.map((gate) => {
-    if (typeof gate !== 'object') return gate;
+    if (typeof gate !== 'object' || gate === null) return gate;
     const target = (gate as { target_step_id?: unknown }).target_step_id;
     const retarget = typeof target === 'string' ? lastStepOf[target] : undefined;
     return retarget === undefined ? gate : { ...gate, target_step_id: retarget };

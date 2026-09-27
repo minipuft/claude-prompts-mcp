@@ -550,7 +550,6 @@ export interface ChainSessionService {
   getRunTelemetry(sessionId: string, scope?: StateStoreOptions): RunTelemetry | undefined;
   getOriginalArgs(sessionId: string): Record<string, unknown>;
   getSessionBlueprint(sessionId: string, scope?: StateStoreOptions): SessionBlueprint | undefined;
-  updateSessionBlueprint(sessionId: string, blueprint: SessionBlueprint): Promise<void>;
   getInlineGateIds(sessionId: string, scope?: StateStoreOptions): string[] | undefined;
   /**
    * Store `review` at `reviews[review.nodeId]`, replacing only that node's review: one review per
@@ -745,6 +744,8 @@ export interface ChainSessionService {
   onSessionCleared(
     callback: (sessionId: string, session: ChainSession) => void | Promise<void>
   ): void;
+  /** Register a callback invoked once a run ends: a terminal status, or its session removed. */
+  onRunEnded(callback: (sessionId: string) => void): void;
   /**
    * Apply a batch of typed unknown observations to the session's ledger.
    *

@@ -46,6 +46,8 @@ const createRegistry = () => {
       (gateId: string) =>
         gates.find((gate) => gate['id'] === gateId) as Record<string, unknown> | undefined
     ),
+    // No run has adopted anything: these tests register on the call that starts the run.
+    getRunGates: jest.fn(() => []),
   };
 };
 

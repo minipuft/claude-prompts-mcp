@@ -174,7 +174,6 @@ const stageOrder = [
   'StepExecution',
   'GateReview',
   'ResponseFormatting',
-  'PostFormattingCleanup',
 ] as const;
 
 describe('run telemetry, session counters through the ledger', () => {

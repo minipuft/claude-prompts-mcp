@@ -1,4 +1,4 @@
-// @lifecycle test - P6.79 / P6.80 / R40: an arrow-chain segment or a workflow node naming a chain prompt runs that prompt's steps; P6.78 / R37: a command-level gate on a chain prompt binds each step; P6.97 / R43: a named inline gate belongs to the run that declared it; P6.99 / R44: a named gate on an arrow-chain segment binds that segment, over Streamable HTTP.
+// @lifecycle test - P6.79 / P6.80 / R40: an arrow-chain segment or a workflow node naming a chain prompt runs that prompt's steps; P6.78 / R37: a command-level gate on a chain prompt binds each step; P6.97 / R43: a named inline gate belongs to the run that declared it; P6.99 / R44: a named gate on an arrow-chain segment binds that segment; P6.108 / R47: a run's temporary gates live exactly as long as the run; P6.104: a run's request gates reach every node they target; P6.107: a request gate id belongs to the run that holds it; P6.105: the arrow-chain source validates the expanded workflow; P6.110: one name in two arrow-chain segments is two gates, over Streamable HTTP.
 /**
  * MEASURED 2026-09-25 on `427899fe` (authored `sv_chain` = sv_a/sv_b/sv_a, each step carrying the
  * blocking `sv-block`; run state read from `chain_runs.state`):
@@ -385,10 +385,15 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       const second = await run.call({ user_response: 'A out' });
       expect(templates(second)).toEqual(['BODY-sv_b topic=']);
       expect(second).toContain('TGT-NODE-X');
+      // Since P6.104 the resume still carries the run's request gate, so x-b's answer is graded
+      // against it before the run moves on.
       const third = await run.call({ user_response: 'B out' });
-      expect(templates(third)).toEqual(['BODY-sv_b topic=']);
-      expect(third).toContain('Progress 3/3');
-      expect(third).not.toContain('TGT-NODE-X');
+      expect(third).toContain('TGT-NODE-X');
+      expect(Object.keys(runState(run.chainId).reviews)).toEqual(['x-b']);
+      const fourth = await run.call({ user_response: 'B out', gate_verdict: PASS });
+      expect(templates(fourth)).toEqual(['BODY-sv_b topic=']);
+      expect(fourth).toContain('Progress 3/3');
+      expect(fourth).not.toContain('TGT-NODE-X');
     }, 120000);
 
     test('(c) control: a gate targeting a single-prompt node is unchanged', async () => {
@@ -399,6 +404,61 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       const second = await run.call({ user_response: 'A out' });
       expect(templates(second)).toEqual(['BODY-sv_b topic=']);
       expect(second).toContain('TGT-NODE-Y');
+    }, 120000);
+  });
+
+  /**
+   * MEASURED 2026-09-26 on `867c74bd`: arrow-chain `>>sv_big` then `>>sv_b` compiled to 33 steps
+   * and opened a run (the cap was checked on the workflow source only), and a request gate
+   * targeting `n1` on arrow-chain `>>sv_chain` then `>>sv_b` never rendered: the arrow-chain
+   * source never validated, so no expansion retargeted `n1` to its last expanded step.
+   */
+  describe('P6.105: the arrow-chain source validates the expanded workflow', () => {
+    test('(a) a chain-prompt segment expanding past the node cap is refused by name, creating nothing', async () => {
+      const before = countRuns();
+      const result = await tool('prompt_engine', { command: `>>sv_big${ARROW}>>sv_b` });
+      expect(result.isError).toBe(true);
+      expect(result.text).toContain('Nothing was executed and no run was created.');
+      expect(result.text).toContain(
+        '[cap-exceeded] node "n1": Expanding chain prompt "sv_big" yields 32 nodes; the expanded workflow has 33 nodes, exceeding the effective maxNodes cap of 32'
+      );
+      expect(countRuns()).toBe(before);
+    }, 120000);
+
+    test("(b) a request gate targeting a chain-prompt segment binds that segment's last expanded step", async () => {
+      const gates = [{ name: 'tgt105', criteria: ['TGT-105-N1'], target_step_id: 'n1' }];
+      const run = await start({ command: `>>sv_chain${ARROW}>>sv_b`, gates });
+      expect(runState(run.chainId).steps).toEqual([
+        'n1-a:sv_a:["sv-block"]',
+        'n1-b:sv_b:["sv-block"]',
+        'n1-c:sv_a:["sv-block"]',
+        'n2:sv_b:[]',
+      ]);
+      expect(run.text).not.toContain('TGT-105-N1');
+      const second = await run.call({ user_response: 'A out', gate_verdict: PASS });
+      expect(second).not.toContain('TGT-105-N1');
+      const third = await run.call({ user_response: 'B out', gate_verdict: PASS });
+      expect(templates(third)).toEqual(['BODY-sv_a topic=']);
+      expect(third).toContain('TGT-105-N1');
+      const failed = await run.call({ user_response: 'C out', gate_verdict: FAIL });
+      expect(failed).toContain('Gate Review Required');
+      expect(failed).toContain('TGT-105-N1');
+      const reviews = runState(run.chainId).reviews;
+      expect(Object.keys(reviews)).toEqual(['n1-c']);
+      expect(reviews['n1-c']).toHaveLength(2);
+      expect(reviews['n1-c']).toContain('sv-block');
+    }, 120000);
+
+    test('(c) control: an arrow-chain of single prompts opens its run and its gate stays on its node', async () => {
+      const before = countRuns();
+      const gates = [{ name: 'tgt105c', criteria: ['TGT-105-N2'], target_step_id: 'n2' }];
+      const run = await start({ command: `>>sv_a${ARROW}>>sv_b`, gates });
+      expect(countRuns()).toBe(before + 1);
+      expect(runState(run.chainId).steps).toEqual(['n1:sv_a:[]', 'n2:sv_b:[]']);
+      expect(run.text).not.toContain('TGT-105-N2');
+      const second = await run.call({ user_response: 'A out' });
+      expect(templates(second)).toEqual(['BODY-sv_b topic=']);
+      expect(second).toContain('TGT-105-N2');
     }, 120000);
   });
 
@@ -634,6 +694,48 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
     }, 120000);
   });
 
+  /**
+   * MEASURED 2026-09-26 on `35959ffb`: arrow-chain `>>sv_a :: g110:"ONE-110"` then
+   * `>>sv_b :: g110:"TWO-110"` registered both gates (`g110`, `g110-2`), but the per-call
+   * declared-name map kept the last, so both segments bound `g110-2` and step 1 rendered TWO.
+   */
+  describe('P6.110: one name in two arrow-chain segments is two gates', () => {
+    test('(a) each segment binds, renders and reviews its own criteria', async () => {
+      const run = await start({
+        command: `>>sv_a :: g110:"ONE-110"${ARROW}>>sv_b :: g110:"TWO-110"`,
+      });
+      expect(runState(run.chainId).steps).toEqual(['n1:sv_a:["g110"]', 'n2:sv_b:["g110-2"]']);
+      expect(run.text).toContain('ONE-110');
+      expect(run.text).not.toContain('TWO-110');
+      const failedFirst = await run.call({ user_response: 'A out', gate_verdict: FAIL });
+      expect(failedFirst).toContain('Gate Review Required');
+      expect(failedFirst).toContain('ONE-110');
+      expect(failedFirst).not.toContain('TWO-110');
+      expect(runState(run.chainId).reviews).toEqual({ n1: ['g110'] });
+
+      const second = await run.call({ user_response: 'A fixed', gate_verdict: PASS });
+      expect(templates(second)).toEqual(['BODY-sv_b topic=']);
+      expect(second).toContain('TWO-110');
+      // Step 2's render and review also list step 1's `g110` through the forward accumulation
+      // P6.98 leaves to the owner's ruling (as P6.99 (b) pins), so step 2 is pinned on its bound
+      // gate and on its review carrying `g110-2`.
+      const failedSecond = await run.call({ user_response: 'B out', gate_verdict: FAIL });
+      expect(failedSecond).toContain('TWO-110');
+      const reviews = runState(run.chainId).reviews;
+      expect(Object.keys(reviews)).toEqual(['n2']);
+      expect(reviews['n2']).toContain('g110-2');
+    }, 120000);
+
+    test('(b) control: one name in one segment binds that segment only', async () => {
+      const run = await start({ command: `>>sv_a :: g110c:"ONLY-110"${ARROW}>>sv_b` });
+      expect(runState(run.chainId).steps).toEqual(['n1:sv_a:["g110c"]', 'n2:sv_b:[]']);
+      expect(run.text).toContain('ONLY-110');
+      const failed = await run.call({ user_response: 'A out', gate_verdict: FAIL });
+      expect(failed).toContain('ONLY-110');
+      expect(runState(run.chainId).reviews).toEqual({ n1: ['g110c'] });
+    }, 120000);
+  });
+
   describe('P6.97: a named inline gate belongs to the run that declared it', () => {
     test('(a) a second run reusing the id grades its own criteria; (b) control: the first, still live, keeps its own', async () => {
       const first = await start({ command: '>>sv_chain :: g97e:"CRIT-ONE-97"' });
@@ -664,6 +766,210 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       expect(again.text).toContain('### g97s');
       expect(again.text).toContain('SINGLE-TWO-97');
       expect(again.text).not.toContain('SINGLE-ONE-97');
+    }, 120000);
+  });
+
+  /**
+   * MEASURED 2026-09-26 on `9f833361` (0 `PostFormattingCleanup` stage starts in 12 formatted
+   * replies): a completed run's named gate still held its id (the next run declaring it
+   * registered `-2`), a completed run's `temp_…` step gate still rendered when a later command
+   * named it, and nothing but a 1 h timer ever removed either.
+   */
+  describe('P6.108: a run owns its temporary gates until it ends', () => {
+    /** Whether a new call naming `tempId` as its criterion still reaches that gate's body. */
+    const resolves = async (tempId: string, marker: string): Promise<boolean> =>
+      (await tool('prompt_engine', { command: `>>sv_b :: "${tempId}"` })).text.includes(marker);
+    const stepGate = (chainId: string, index: number): string =>
+      /temp_\d+_[a-z0-9]+/.exec(runState(chainId).steps[index] ?? '')?.[0] ?? '';
+
+    test('(a) named and step gates resolve on every resume, then are gone once the run completes', async () => {
+      const named = await start({ command: '>>sv_chain :: g108a:"CRIT-108A"' });
+      expect(await named.call({ user_response: 'A out', gate_verdict: PASS })).toContain(
+        'CRIT-108A'
+      );
+      expect(await named.call({ user_response: 'B out', gate_verdict: PASS })).toContain(
+        'CRIT-108A'
+      );
+      await named.call({ user_response: 'C out', gate_verdict: PASS });
+      const next = await start({ command: '>>sv_chain :: g108a:"CRIT-108A-NEXT"' });
+      expect(runState(next.chainId).steps[0]).toBe('a:sv_a:["sv-block","g108a"]');
+
+      const run = await start({ command: `>>sv_a :: "XA-108"${ARROW}>>sv_b :: "YB-108"` });
+      const first = stepGate(run.chainId, 0);
+      // Positive control: while the run is live, the probe reaches its step gate.
+      expect(await resolves(first, 'XA-108')).toBe(true);
+      expect(await run.call({ user_response: 'A out', gate_verdict: PASS })).toContain('YB-108');
+      await run.call({ user_response: 'B out', gate_verdict: PASS });
+      expect(await resolves(first, 'XA-108')).toBe(false);
+    }, 120000);
+
+    test('(b) a cancelled run releases its gates', async () => {
+      const run = await start({ command: '>>sv_chain :: g108b:"CRIT-108B"' });
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        await run.call({ user_response: 'A out', gate_verdict: FAIL });
+      }
+      await run.call({ gate_action: 'abort' });
+      const next = await start({ command: '>>sv_chain :: g108b:"CRIT-108B-NEXT"' });
+      expect(runState(next.chainId).steps[0]).toBe('a:sv_a:["sv-block","g108b"]');
+    }, 120000);
+
+    test('(c) a call with no run releases its gates when its response is set', async () => {
+      const first = await tool('prompt_engine', {
+        command: '>>sv_a',
+        gates: [{ id: 'sc108', name: 'sc108', criteria: ['SINGLE-108-ONE'] }],
+      });
+      expect(first.text).not.toMatch(/chain_id/);
+      expect(first.text).toContain('SINGLE-108-ONE');
+      const second = await tool('prompt_engine', {
+        command: '>>sv_a',
+        gates: [{ id: 'sc108', name: 'sc108', criteria: ['SINGLE-108-TWO'] }],
+      });
+      expect(second.text).toContain('SINGLE-108-TWO');
+      expect(second.text).not.toContain('SINGLE-108-ONE');
+    }, 120000);
+
+    test('(d) control: a live run keeps its own gates while another run declaring the id completes', async () => {
+      const first = await start({ command: '>>sv_chain :: g108d:"CRIT-108D-ONE"' });
+      const second = await start({ command: '>>sv_chain :: g108d:"CRIT-108D-TWO"' });
+      for (const answer of ['A out', 'B out', 'C out']) {
+        await first.call({ user_response: answer, gate_verdict: PASS });
+      }
+      const step2 = await second.call({ user_response: 'A out', gate_verdict: PASS });
+      expect(step2).toContain('CRIT-108D-TWO');
+      expect(step2).not.toContain('CRIT-108D-ONE');
+      await second.call({ user_response: 'B out', gate_verdict: FAIL });
+      expect(runState(second.chainId).reviews).toEqual({ b: ['sv-block', 'g108d-2'] });
+    }, 120000);
+
+    // P6.98 twin, pinned as it holds: step 3 still renders and reviews the earlier segments'
+    // step gates, which live as long as the run. The mechanism is the chain accumulator step N
+    // inherits from steps 1..N-1 (P4.110), not the gate lifetime; that is P6.12, the owner's.
+    test('(e) the forward accumulation is not the gate lifetime', async () => {
+      const run = await start({
+        command: `>>sv_a :: "XA-108E"${ARROW}>>sv_b :: "YB-108E"${ARROW}>>sv_a`,
+      });
+      await run.call({ user_response: 'A out', gate_verdict: PASS });
+      const step3 = await run.call({ user_response: 'B out', gate_verdict: PASS });
+      expect(step3).toContain('XA-108E');
+      expect(step3).toContain('YB-108E');
+    }, 120000);
+  });
+
+  /**
+   * MEASURED 2026-09-26 on `9f833361`: on a four-node workflow of single prompts, a request gate
+   * targeting p2 rendered there but its FAIL was refused "Step 2 carries no gates"; one
+   * targeting p3 or p4 never rendered. A resume carries no `gates`, and nothing restored the
+   * start call's (`requestedOverrides` is written only from the current request, stage 01).
+   */
+  describe("P6.104: a run's request gates reach every node they target", () => {
+    const fourNodes = (target: string, marker: string) => ({
+      workflow: {
+        version: 1,
+        nodes: ['p1', 'p2', 'p3', 'p4'].map((id, index) => ({
+          id,
+          promptId: index % 2 === 0 ? 'sv_a' : 'sv_b',
+        })),
+        edges: [
+          { from: 'p1', to: 'p2' },
+          { from: 'p2', to: 'p3' },
+          { from: 'p3', to: 'p4' },
+        ],
+        gates: [{ name: 'tgt104', criteria: [marker], target_step_id: target }],
+      },
+    });
+
+    test.each([
+      ['p2', 2],
+      ['p3', 3],
+      ['p4', 4],
+    ])(
+      '(a) a gate on %s renders on its node and a FAIL there opens its review',
+      async (target, ordinal) => {
+        const marker = `TGT-104-${target.toUpperCase()}`;
+        const run = await start(fourNodes(target, marker));
+        let reply = run.text;
+        for (let step = 1; step < ordinal; step += 1) {
+          expect(reply).not.toContain(marker);
+          reply = await run.call({ user_response: `out ${step}`, gate_verdict: PASS });
+        }
+        expect(reply).toContain(marker);
+        const failed = await run.call({ user_response: `out ${ordinal}`, gate_verdict: FAIL });
+        expect(failed).toContain('Gate Review Required');
+        expect(failed).toContain(marker);
+        const reviews = runState(run.chainId).reviews;
+        expect(Object.keys(reviews)).toEqual([target]);
+        expect(reviews[target]).toHaveLength(1);
+      },
+      120000
+    );
+
+    test('(b) control: a gate on the first node renders and grades there', async () => {
+      const run = await start(fourNodes('p1', 'TGT-104-P1'));
+      expect(run.text).toContain('TGT-104-P1');
+      const failed = await run.call({ user_response: 'out 1', gate_verdict: FAIL });
+      expect(failed).toContain('Gate Review Required');
+      expect(Object.keys(runState(run.chainId).reviews)).toEqual(['p1']);
+    }, 120000);
+  });
+
+  /**
+   * MEASURED 2026-09-26 on `9f833361`: a second live run sending `gates: [{ id: "rg107" }]` with
+   * its own criteria rendered and reviewed the first run's (`reviews {p1: ["rg107"]}` on both), the
+   * id having been skipped as "already registered".
+   */
+  describe('P6.107: a request gate id belongs to the run that holds it', () => {
+    const threeNodes = (gates: unknown[]) => ({
+      workflow: {
+        version: 1,
+        nodes: [
+          { id: 'p1', promptId: 'sv_a' },
+          { id: 'p2', promptId: 'sv_b' },
+          { id: 'p3', promptId: 'sv_a' },
+        ],
+        edges: [
+          { from: 'p1', to: 'p2' },
+          { from: 'p2', to: 'p3' },
+        ],
+        gates,
+      },
+    });
+
+    test("(a) a resume re-sending the run's gate is the same gate, and it still grades", async () => {
+      const gates = [{ id: 'rq107e', name: 'rq107e', criteria: ['RQ-107'], target_step_id: 'p3' }];
+      const run = await start(threeNodes(gates));
+      await run.call({ user_response: 'out 1', gate_verdict: PASS, gates });
+      const step3 = await run.call({ user_response: 'out 2', gate_verdict: PASS, gates });
+      expect(step3).toContain('RQ-107');
+      const failed = await run.call({ user_response: 'out 3', gate_verdict: FAIL, gates });
+      expect(failed).toContain('Gate Review Required');
+      expect(runState(run.chainId).reviews).toEqual({ p3: ['rq107e'] });
+    }, 120000);
+
+    test('(b) two live runs declaring one id each grade their own criteria', async () => {
+      const first = await start(
+        threeNodes([{ id: 'rg107e', name: 'rg107e', criteria: ['RG-ONE'] }])
+      );
+      const second = await start(
+        threeNodes([{ id: 'rg107e', name: 'rg107e', criteria: ['RG-TWO'] }])
+      );
+      expect(second.text).toContain('RG-TWO');
+      expect(second.text).not.toContain('RG-ONE');
+      const secondFailed = await second.call({ user_response: 'out 1', gate_verdict: FAIL });
+      expect(secondFailed).toContain('RG-TWO');
+      expect(runState(second.chainId).reviews).toEqual({ p1: ['rg107e-2'] });
+      const firstFailed = await first.call({ user_response: 'out 1', gate_verdict: FAIL });
+      expect(firstFailed).toContain('RG-ONE');
+      expect(firstFailed).not.toContain('RG-TWO');
+      expect(runState(first.chainId).reviews).toEqual({ p1: ['rg107e'] });
+    }, 120000);
+
+    test('(c) control: a fresh id registers under itself', async () => {
+      const run = await start(
+        threeNodes([{ id: 'fresh107e', name: 'fresh107e', criteria: ['FRESH-107'] }])
+      );
+      expect(run.text).toContain('FRESH-107');
+      await run.call({ user_response: 'out 1', gate_verdict: FAIL });
+      expect(runState(run.chainId).reviews).toEqual({ p1: ['fresh107e'] });
     }, 120000);
   });
 });

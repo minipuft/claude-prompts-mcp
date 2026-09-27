@@ -1,4 +1,5 @@
 // @lifecycle canonical - Processes inline gate criteria from :: operator syntax.
+import { namedGateBindingKey } from '../../execution/parsers/symbolic-operator-parser.js';
 import { formatCriteriaAsGuidance } from '../../execution/pipeline/criteria-guidance.js';
 import { loadShellPresets } from '../config/index.js';
 import { SHELL_VERIFY_DEFAULTS } from '../constants.js';
@@ -100,9 +101,11 @@ export class InlineGateProcessor {
   ): Promise<InlineGateProcessingResult> {
     const createdIds: string[] = [];
     const registeredIds: string[] = [];
-    // Declared name -> the id THIS run's gate registered under. A step names a folded named gate
-    // by its declared name, and another live run may hold that name in the registry (R43).
+    // Binding key -> the id THIS run's gate registered under. A step names a folded named gate
+    // by its declared name, and another live run may hold that name in the registry (R43); a name
+    // declared again in the same command is keyed by its occurrence (P6.110).
     const declaredNamedGates = new Map<string, string>();
+    const occurrences = new Map<string, number>();
 
     // Process named inline gates (e.g., `:: security:"no secrets"`)
     if (
@@ -140,12 +143,14 @@ export class InlineGateProcessor {
           continue;
         }
 
+        const occurrence = (occurrences.get(namedGate.gateId) ?? 0) + 1;
+        occurrences.set(namedGate.gateId, occurrence);
         if (namedGate.gateId && isValidGateCriteria(namedGate.criteria)) {
           const gateId = this.createNamedInlineGate(context, namedGate.gateId, namedGate.criteria, {
             promptId: parsedCommand.promptId,
           });
           if (gateId) {
-            declaredNamedGates.set(namedGate.gateId, gateId);
+            declaredNamedGates.set(namedGateBindingKey(namedGate.gateId, occurrence), gateId);
             parsedCommand.inlineGateIds = this.appendGateId(parsedCommand.inlineGateIds, gateId);
             createdIds.push(gateId);
           }
@@ -285,7 +290,6 @@ export class InlineGateProcessor {
         scopeId
       );
 
-      this.trackTemporaryGateScope(context, gateScope, scopeId);
       return gateId;
     } catch (error) {
       this.logger.warn('[InlineGateProcessor] Failed to register inline gate', {
@@ -342,7 +346,6 @@ export class InlineGateProcessor {
         criteria,
       });
 
-      this.trackTemporaryGateScope(context, gateScope, scopeId);
       return gateId;
     } catch (error) {
       this.logger.warn('[InlineGateProcessor] Failed to create named inline gate', {
@@ -444,27 +447,6 @@ export class InlineGateProcessor {
     }
 
     return `${baseScope}:command`;
-  }
-
-  private trackTemporaryGateScope(
-    context: ExecutionContext,
-    scope: GateScope,
-    scopeId: string
-  ): void {
-    if (!scopeId) {
-      return;
-    }
-
-    const scopes = context.state.gates.temporaryGateScopes ?? [];
-
-    if (!context.state.gates.temporaryGateScopes) {
-      context.state.gates.temporaryGateScopes = scopes;
-    }
-
-    const exists = scopes.some((entry) => entry.scope === scope && entry.scopeId === scopeId);
-    if (!exists) {
-      scopes.push({ scope, scopeId });
-    }
   }
 
   /**

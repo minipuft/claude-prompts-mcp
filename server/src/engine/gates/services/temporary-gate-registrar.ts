@@ -5,7 +5,7 @@ import { formatCriteriaAsGuidance } from '../../execution/pipeline/criteria-guid
 import type { Logger } from '#infra/logging/index.js';
 import type { GateBody } from './gate-body-merge.js';
 import type { GateReferenceResolver } from './gate-reference-resolver.js';
-import type { RunStepViewProvider } from './run-step-view.js';
+import type { RunStepView, RunStepViewProvider } from './run-step-view.js';
 import type { ExecutionContext } from '../../execution/context/index.js';
 import type { TemporaryGateInput } from '../../execution/types.js';
 import type {
@@ -117,8 +117,11 @@ export class TemporaryGateRegistrar {
 
     const registry = this.temporaryGateRegistry;
     const registryAvailable = registry !== undefined;
+    // A resume carries no `gates`: the run's own request gates, registered by the call that
+    // started it, are what this call's steps are enhanced and reviewed against (R47).
+    const runRequestGateIds = this.resolveRunRequestGateIds(context);
     if (!tempGateInputs.length) {
-      return { temporaryGateIds: [], canonicalGateIds: [] };
+      return { temporaryGateIds: runRequestGateIds, canonicalGateIds: [] };
     }
 
     const scopeId =
@@ -260,7 +263,9 @@ export class TemporaryGateRegistrar {
             ? rawGate.id
             : null;
 
-        if (gateIdCandidate && registry.getTemporaryGate(gateIdCandidate)) {
+        // The same gate again — a resume re-sending it, or a repeat in this request (P6.107).
+        // An id another run holds is not this gate: it registers under a fresh id below.
+        if (gateIdCandidate && this.isHeldForThisRun(context, gateIdCandidate, createdIds)) {
           this.logger.debug('[TemporaryGateRegistrar] Skipping gate already registered', {
             gateId: gateIdCandidate,
           });
@@ -277,6 +282,7 @@ export class TemporaryGateRegistrar {
           description: gate.description ?? effectiveGuidance.substring(0, 100),
           guidance: effectiveGuidance,
           source: gate.source,
+          origin: 'request',
         };
 
         if (gateIdCandidate) {
@@ -300,10 +306,11 @@ export class TemporaryGateRegistrar {
           tempGateDefinition.apply_to_steps = gate.apply_to_steps;
         }
 
-        const gateId = registry.createTemporaryGate(tempGateDefinition, scopeId);
+        const gateId = registry.createTemporaryGate(tempGateDefinition, scopeId, {
+          onIdCollision: 'fresh-id',
+        });
 
         createdIds.push(gateId);
-        this.trackTemporaryGateScope(context, gate.scope ?? 'execution', scopeId);
 
         this.logger.debug('[TemporaryGateRegistrar] Registered temporary gate', {
           gateId,
@@ -346,9 +353,26 @@ export class TemporaryGateRegistrar {
     }
 
     return {
-      temporaryGateIds: registryAvailable ? createdIds : [],
+      temporaryGateIds: registryAvailable
+        ? [...new Set([...runRequestGateIds, ...createdIds])]
+        : [],
       canonicalGateIds: Array.from(canonicalGateIds),
     };
+  }
+
+  /**
+   * The request gates the run this call resumes already owns. Empty on the call that starts a
+   * run: the session does not exist yet, and that call's own `gates` are the run's.
+   */
+  private resolveRunRequestGateIds(context: ExecutionContext): string[] {
+    const sessionId = this.resolveRunId(context);
+    if (sessionId === undefined || this.temporaryGateRegistry === undefined) {
+      return [];
+    }
+    return this.temporaryGateRegistry
+      .getRunGates(sessionId)
+      .filter((gate) => gate.origin === 'request')
+      .map((gate) => gate.id);
   }
 
   /**
@@ -359,17 +383,28 @@ export class TemporaryGateRegistrar {
    * target, so the request's own `chain_id` is the only run handle available this early.
    */
   private resolveRunNodeIds(context: ExecutionContext): readonly string[] | undefined {
+    const view = this.resolveRunView(context);
+    return view !== undefined && view.nodeIds.length > 0 ? view.nodeIds : undefined;
+  }
+
+  /** The run the request's chain id names, or undefined when this call has none to ask about. */
+  private resolveRunView(context: ExecutionContext): RunStepView | undefined {
     if (this.runStepViewProvider === undefined) {
       return undefined;
     }
-
     const chainId = context.getRequestedChainId();
-    if (chainId === undefined) {
-      return undefined;
-    }
+    return chainId === undefined
+      ? undefined
+      : this.runStepViewProvider(chainId, context.getScopeOptions());
+  }
 
-    const view = this.runStepViewProvider(chainId, context.getScopeOptions());
-    return view !== undefined && view.nodeIds.length > 0 ? view.nodeIds : undefined;
+  /**
+   * The session id of the run this call resumes: known from stage 04 on a response-only resume,
+   * otherwise read off the run the request's chain id names. Undefined on the call that starts a
+   * run.
+   */
+  private resolveRunId(context: ExecutionContext): string | undefined {
+    return context.getSessionId() ?? this.resolveRunView(context)?.sessionId;
   }
 
   /**
@@ -595,7 +630,7 @@ export class TemporaryGateRegistrar {
     const registeredIds: string[] = [];
 
     for (const prompt of prompts) {
-      registeredIds.push(...this.registerPromptInlineDefinitions(context, prompt));
+      registeredIds.push(...this.registerPromptInlineDefinitions(context, prompt, registeredIds));
     }
 
     if (registeredIds.length > 0) {
@@ -613,7 +648,9 @@ export class TemporaryGateRegistrar {
   /** Register one prompt's definitions. Returns the canonical ids that were created. */
   private registerPromptInlineDefinitions(
     context: ExecutionContext,
-    prompt: InlineDefinitionCarrier | undefined
+    prompt: InlineDefinitionCarrier | undefined,
+    /** Ids this call already registered for earlier prompts. */
+    earlierIds: readonly string[]
   ): string[] {
     const definitions = prompt?.gateConfiguration?.inline_gate_definitions;
     const registry = this.temporaryGateRegistry;
@@ -631,7 +668,10 @@ export class TemporaryGateRegistrar {
 
     const registeredIds: string[] = [];
     for (const definition of definitions as GateBody[]) {
-      const gateId = this.registerOneInlineDefinition(context, registry, definition, prompt?.id);
+      const gateId = this.registerOneInlineDefinition(context, registry, definition, {
+        promptId: prompt?.id,
+        thisCall: [...earlierIds, ...registeredIds],
+      });
       if (gateId !== undefined) {
         registeredIds.push(gateId);
       }
@@ -640,13 +680,20 @@ export class TemporaryGateRegistrar {
     return registeredIds;
   }
 
-  /** Register one inline definition, merging over any existing body. Returns its canonical id. */
+  /**
+   * Register one inline definition. Returns its canonical id.
+   *
+   * A declared id this run already holds is the same gate (P6.107): re-registering it on a resume
+   * is a no-op, and only a body that differs merges over the held one (ADR 0001 (b)). An id
+   * another run holds is that run's gate, never merged over: this one registers under a fresh id.
+   */
   private registerOneInlineDefinition(
     context: ExecutionContext,
     registry: TemporaryGateRegistry,
     definition: GateBody,
-    promptId: string | undefined
+    source: { promptId: string | undefined; thisCall: readonly string[] }
   ): string | undefined {
+    const { promptId } = source;
     const name = typeof definition['name'] === 'string' ? definition['name'] : undefined;
     if (name === undefined) {
       // The loader already warns and drops these; reaching here means a caller bypassed it.
@@ -660,19 +707,24 @@ export class TemporaryGateRegistrar {
     const scope = readInlineScope(definition);
 
     try {
-      const existing = declaredId === undefined ? undefined : registry.getTemporaryGate(declaredId);
+      const held =
+        declaredId !== undefined && this.isHeldForThisRun(context, declaredId, source.thisCall)
+          ? registry.getTemporaryGate(declaredId)
+          : undefined;
       const body =
-        existing === undefined
-          ? definition
-          : mergeGateBody(existing as unknown as GateBody, definition);
+        held === undefined ? definition : mergeGateBody(held as unknown as GateBody, definition);
+      const gate = buildInlineTemporaryGate(body, name, scope, declaredId);
 
-      const gateId = registry.createTemporaryGate(
-        buildInlineTemporaryGate(body, name, scope, declaredId),
-        inlineScopeId(context, scope)
-      );
+      if (held !== undefined) {
+        if (isSameInlineGate(held, gate)) {
+          return held.id;
+        }
+        registry.removeTemporaryGate(held.id);
+      }
 
-      this.trackTemporaryGateScope(context, scope, inlineScopeId(context, scope));
-      return gateId;
+      return registry.createTemporaryGate(gate, inlineScopeId(context, scope), {
+        onIdCollision: 'fresh-id',
+      });
     } catch (error) {
       this.logger.warn('[TemporaryGateRegistrar] Failed to register inline gate definition', {
         promptId,
@@ -683,30 +735,23 @@ export class TemporaryGateRegistrar {
     }
   }
 
-  private trackTemporaryGateScope(
+  /**
+   * Whether `gateId` is registered and belongs to THIS run: adopted by the session this call
+   * resumes, or registered earlier in this call (before any run has adopted it).
+   */
+  private isHeldForThisRun(
     context: ExecutionContext,
-    scope: string,
-    scopeId?: string
-  ): void {
-    if (!scopeId) {
-      return;
+    gateId: string,
+    thisCall: readonly string[]
+  ): boolean {
+    if (this.temporaryGateRegistry?.getTemporaryGate(gateId) === undefined) {
+      return false;
     }
-
-    const normalizedScope: 'execution' | 'session' | 'chain' | 'step' =
-      scope === 'session' || scope === 'chain' || scope === 'step' ? scope : 'execution';
-
-    const scopes = context.state.gates.temporaryGateScopes ?? [];
-
-    if (!context.state.gates.temporaryGateScopes) {
-      context.state.gates.temporaryGateScopes = scopes;
+    const owner = this.temporaryGateRegistry.ownerOf(gateId);
+    if (owner !== undefined) {
+      return owner === this.resolveRunId(context);
     }
-
-    const exists = scopes.some(
-      (entry) => entry.scope === normalizedScope && entry.scopeId === scopeId
-    );
-    if (!exists) {
-      scopes.push({ scope: normalizedScope, scopeId });
-    }
+    return thisCall.includes(gateId) || context.state.gates.temporaryGateIds.includes(gateId);
   }
 
   private async resolveCanonicalGateId(
@@ -867,6 +912,29 @@ function applyOptionalInlineFields(
   }
 
   return definition;
+}
+
+/** Whether a held gate already carries every field `next` would register. */
+function isSameInlineGate(
+  held: TemporaryGateDefinition,
+  next: Omit<TemporaryGateDefinition, 'id' | 'created_at'>
+): boolean {
+  const comparable = (gate: Omit<TemporaryGateDefinition, 'id' | 'created_at'>): string =>
+    JSON.stringify([
+      gate.name,
+      gate.type,
+      gate.scope,
+      gate.description,
+      gate.guidance,
+      gate.source,
+      gate.pass_criteria,
+      gate.context,
+      gate.apply_to_steps,
+      gate.target_step_number,
+      gate.target_step_id,
+      gate.enforcement_mode,
+    ]);
+  return comparable(held) === comparable(next);
 }
 
 /** Provenance of an inline definition, defaulting to `manual`. */
