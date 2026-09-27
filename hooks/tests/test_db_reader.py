@@ -340,6 +340,31 @@ class TestActiveChainState:
 
         assert db_reader.load_active_chain_state("chain-demo") is None
 
+    @pytest.mark.parametrize("path", ["view", "session_table"])
+    def test_a_claimed_run_serves_the_claimer_row_over_the_dead_first_owner(self, state_db, path):
+        """P6.130 (as of 2026-09-27 · flips when the loader drops its PID-liveness check).
+
+        Before R61 a claim left the dead first owner's projection row beside the claimer's until a
+        later startup cleanup. The dead row here is the NEWER one, so ordering alone would serve
+        it: the liveness check is what picks the claimer's, on both read paths.
+        """
+        dead = json.loads(_chain_session_state(current=1, total=3))
+        dead["lastActivity"] = 2000
+        _insert_session(state_db, str(LIVE_PID), _chain_session_state(current=2, total=3))
+        state_db.execute(
+            "INSERT INTO chain_sessions (run_owner_pid, chain_id, run_number, state, run_status, updated_at) "
+            "VALUES (?, ?, 1, ?, ?, datetime('now', '+1 minute'))",
+            (str(_dead_pid()), "chain-demo", json.dumps(dead), "working"),
+        )
+        if path == "session_table":
+            state_db.execute("DROP VIEW v_execution_status")
+        state_db.commit()
+
+        state = db_reader.load_active_chain_state("chain-demo")
+
+        assert state is not None
+        assert state["current_step"] == 2
+
     def test_a_non_numeric_owner_is_skipped(self, state_db):
         """A non-PID value must not be coerced into a liveness check.
 
