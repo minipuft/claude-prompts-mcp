@@ -274,6 +274,7 @@ export class StepExecutionStage extends BasePipelineStage {
       },
       additionalGateIds: executionPlan.gates,
       scope: scopeOptions,
+      ...(executionPlan.modifiers !== undefined ? { runModifiers: executionPlan.modifiers } : {}),
     });
 
     context.executionResults = this.createExecutionResults(renderResult);

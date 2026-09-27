@@ -129,6 +129,8 @@ describe('planNodeDrivenRender', () => {
       promptId: 'prompt-alt',
       args: { topic: 'cache TTL' },
       delegated: true,
+      // Marked contributed, so its render reads the run's modifiers and framework (R79).
+      contributed: true,
     });
   });
 

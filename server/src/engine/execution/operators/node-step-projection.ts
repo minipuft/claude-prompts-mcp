@@ -178,6 +178,7 @@ function synthesizeStep(
     promptId: node.promptId,
     args,
     ...(node.delegated === true ? { delegated: true } : {}),
+    ...(node.origin === 'remainder' ? { contributed: true as const } : {}),
     // A contributed node's step gates (R68): the parse-time field, so gate enhancement and the
     // review render read them exactly as they read a planned step's.
     ...(node.inlineGateIds !== undefined && node.inlineGateIds.length > 0

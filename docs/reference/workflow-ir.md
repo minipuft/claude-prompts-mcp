@@ -271,7 +271,10 @@ its step from the node — so every other node field is **refused by name** rath
 dropped: `inputMapping`, `outputMapping`, `visibility`, `subagentModel`, `agentType`, `framework`,
 `retries`, `inlineGateCriteria`, `await`. `inlineGateIds` travels with the node and its step is
 gated, enhanced and reviewed exactly as a planned step is — declared gates or none, it carries the
-category and framework defaults a planned step does. Gate enhancement walks the run's steps in the
+category and framework defaults a planned step does. Under an active framework its render declares
+the framework's section headers as a planned step's does, so the phase guard grades its answer
+against them; an investigation step a blocking unknown inserted still declares none. Gate
+enhancement walks the run's steps in the
 run's node order, so a contributed step accumulates only the gates of the steps before it in the run
 (a planned step a `replace` removed contributes none), and a run that began as one gated prompt is
 walked the same way — and, once an insertion or a remainder has grown it past its one node, rendered

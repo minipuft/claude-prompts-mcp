@@ -1491,6 +1491,14 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       }
     }
 
+    /** Every section CAGEERF requires, each past its 100-character floor, so its guard passes. */
+    const SECTIONS = ['Context', 'Analysis', 'Goals', 'Execution']
+      .map(
+        (header) =>
+          `## ${header}\n${`The ${header.toLowerCase()} of this answer, stated in full. `.repeat(4)}`
+      )
+      .join('\n\n');
+
     /** The gate reminders a step render asks the verdict to attest. */
     const reminders = (text: string): string | undefined =>
       /"reminders": \{"satisfied": (\[[^\]]*\])/.exec(text)?.[1];
@@ -1524,12 +1532,64 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       expect(reply.isError).toBe(false);
       const first = await run.call({ user_response: 'B out' });
       expect(templates(first)).toEqual(['BODY-sv_d topic=']);
-      await run.call({ user_response: 'r1-a out', gate_verdict: PASS });
+      // Since P6.169 a contributed step is phase-guarded as a planned one is, so each answer
+      // carries the framework's sections and the FAIL's review is the gate review.
+      await run.call({ user_response: `r1-a out\n${SECTIONS}`, gate_verdict: PASS });
       expect(currentNode(run.chainId)).toBe('r1-b');
-      const failed = await run.call({ user_response: 'r1-b out', gate_verdict: FAIL });
+      const failed = await run.call({ user_response: `r1-b out\n${SECTIONS}`, gate_verdict: FAIL });
       expect(failed).not.toContain('carries no gates');
       expect(runState(run.chainId).reviews).toEqual({ 'r1-b': plannedGates });
     }, 120000);
+
+    /**
+     * P6.169 / R79. MEASURED 2026-09-27 on `c52dacbe` (shipped CAGEERF): `sv_d` as the planned
+     * `n2` of `>>sv_a --> >>sv_d` declared the framework's section headers and a PASS with none
+     * opened `{n2: [__phase_guard__]}`; the same prompt as the remainder node `r1` of
+     * `>>sv_a --> >>sv_b` declared none and the same PASS opened nothing — a contributed step has
+     * no framework context, and its render read the declaration from that alone.
+     */
+    describe('P6.169: a contributed step declares its framework sections as a planned step does', () => {
+      /** Walk to the step answered last and answer it PASS with no sections; its reply and reviews. */
+      async function passWithoutSections(command: string, contributed: boolean) {
+        const run = await start({ command });
+        await run.call({ user_response: 'A out', ...blockingUnknown });
+        const investigated = await run.call({
+          user_response: 'investigated',
+          gate_verdict: PASS,
+          ...(contributed ? remainder({ promptId: 'sv_d' }) : {}),
+        });
+        const target = contributed ? 'r1' : 'n2';
+        let rendered = investigated;
+        for (let hop = 0; hop < 3 && currentNode(run.chainId) !== target; hop++) {
+          rendered = await run.call({ user_response: 'out', gate_verdict: PASS });
+        }
+        expect(currentNode(run.chainId)).toBe(target);
+        await run.call({ user_response: `${target} out`, gate_verdict: PASS });
+        return { rendered, reviews: runState(run.chainId).reviews };
+      }
+
+      test('(a) a remainder step answered PASS with no sections opens its phase guard', async () => {
+        const { rendered, reviews } = await passWithoutSections(`>>sv_a${ARROW}>>sv_b`, true);
+        expect(rendered).toContain('## Context');
+        expect(reviews).toEqual({ r1: ['__phase_guard__'] });
+      }, 120000);
+
+      test('(b) control: the same prompt as a planned step is unchanged', async () => {
+        const { rendered, reviews } = await passWithoutSections(`>>sv_a${ARROW}>>sv_d`, false);
+        expect(rendered).toContain('## Context');
+        expect(reviews).toEqual({ n2: ['__phase_guard__'] });
+      }, 120000);
+
+      test('(c) control: under %clean a remainder step declares nothing and opens nothing', async () => {
+        const { rendered, reviews } = await passWithoutSections(
+          `%clean >>sv_a${ARROW}>>sv_b`,
+          true
+        );
+        expect(rendered).toContain('BODY-sv_d');
+        expect(rendered).not.toContain('## Context');
+        expect(reviews).toEqual({});
+      }, 120000);
+    });
 
     /**
      * P6.160 / R71. MEASURED 2026-09-27 on `0900e73d`: a `replace` remainder dropping the planned

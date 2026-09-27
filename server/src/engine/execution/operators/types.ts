@@ -5,7 +5,7 @@ import type { ScriptReferenceResolverPort } from '#shared/utils/jsonUtils.js';
 import type { DeclaredSection } from '../../frameworks/declared-sections.js';
 import type { FrameworkExecutionContext } from '../../frameworks/types/index.js';
 import type { PromptReferenceResolver } from '../reference/index.js';
-import type { ConvertedPrompt, ExecutionPlan } from '../types.js';
+import type { ConvertedPrompt, ExecutionModifiers, ExecutionPlan } from '../types.js';
 
 /**
  * Represents a single step in a chain execution workflow.
@@ -42,6 +42,13 @@ export interface ChainStepPrompt {
   /** True if this step should be delegated to a sub-agent via Task tool */
   delegated?: boolean;
   /**
+   * True on a step a `remainder` contributed (`origin: 'remainder'`), set where the step is built
+   * from its node (`node-step-projection.synthesizeStep`). Such a step has no plan and no framework
+   * context of its own, so its render reads the run's modifiers and resolves its framework as its
+   * guidance does (R79). An inserted step is not marked: whether it declares sections is open.
+   */
+  readonly contributed?: true;
+  /**
    * Whether the run waits for this step's worker (`node`, the default) or continues past it
    * (`run`, detached delegation — Tier 4). A DECLARATION: `markDelegatedStepPrompts` (stage 06)
    * marks an `await: run` step delegated, and the run's node lifecycle (spawned at render,
@@ -71,7 +78,8 @@ export interface ChainStepPrompt {
 
 /** The framework a chain step renders under, as the executor's fallback resolver reports it. */
 export interface StepFrameworkContext {
-  selectedFramework?: { type: string; name: string };
+  /** `id` is what a framework guide is keyed by; `type` is its display discriminator. */
+  selectedFramework?: { id?: string; type: string; name: string };
   category?: string;
   systemPrompt?: string;
 }
@@ -91,6 +99,12 @@ interface BaseChainStepExecutionInput {
    * framework, and this decides whose — omitted, the launch workspace's.
    */
   readonly scope?: StateStoreOptions;
+  /**
+   * The run's modifiers (`%clean`, `%lean`, …), read for a step that carries no plan of its own:
+   * a step a remainder contributed, or an inserted one. A planned step's plan holds the same
+   * command modifiers, so both answer "did this step decline the framework" alike (R79).
+   */
+  readonly runModifiers?: ExecutionModifiers;
 }
 
 /**
