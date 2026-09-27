@@ -20,16 +20,22 @@
  *
  * WHAT COUNTS AS A FINDING — two shapes, found through the AST:
  *   - ordinal match : an equality comparison (`===`, `==`, `!==`, `!=`) between the
- *                     `.stepNumber` of a find-family callback's own parameter and a non-literal,
- *                     inside that callback (`find`/`findIndex`/`findLast`/`findLastIndex`/
- *                     `filter`/`some`/`every`). A comparison against a literal or `undefined` is a
- *                     presence check; another object's `stepNumber` (a gate's target ordinal)
- *                     compares a target, not the element being looked up.
+ *                     `.stepNumber` of a step and a non-literal, where the step is a parameter of
+ *                     ANY enclosing function — a find-family callback (`find`/`findIndex`/
+ *                     `filter`/...), a `forEach`/`map` callback, or a per-step predicate method
+ *                     standing outside any callback (`isCurrentStep(step, key)`) — or the variable
+ *                     of a `for…of` over a step array. A comparison against a literal or
+ *                     `undefined` is a presence check; another object's `stepNumber` compares
+ *                     something else, not the element being looked up.
  *   - ordinal index : an element access on a step array (the receiver's last name ends in `steps`,
- *                     `Steps` or `stepPrompts`) whose argument — or, for an identifier argument,
- *                     that identifier's initializer — names an ordinal (`currentStep`,
+ *                     `Steps` or `stepPrompts`) whose argument names an ordinal (`currentStep`,
  *                     `stepNumber`, `ordinal`, `currentOrdinal`, `contextStep`, or a recorded
- *                     `.stepIndex`). `steps[0]`, an index found by identity (`findIndex(...
+ *                     `.stepIndex`) — itself, or through what its identifiers were assigned: each
+ *                     identifier resolves to its initializer and to every `=` assignment to it,
+ *                     and those resolve in turn, so an ordinal renamed (`const i = ordinal;
+ *                     const j = i`) or reassigned (`let k; k = currentStep`) is still an
+ *                     ordinal. A property's receiver is not resolved (`plan.currentIndex` is not
+ *                     `plan`'s initializer). `steps[0]`, an index found by identity (`findIndex(...
  *                     nodeId ...)`), and a bare index parameter into the node-driven render plan
  *                     (which IS run order) do not count.
  *
@@ -37,20 +43,21 @@
  * its shape. Every entry carries an as-of date and the observation that flips it, and the
  * satisfied-exception check fails an entry that no longer matches any finding.
  *
- * WHAT THIS DELIBERATELY DOES NOT CATCH (as of 2026-09-27 · flips when any of these shapes appears):
- *   - a per-step predicate method outside a find-family callback (`GateEnhancementService
- *     .isCurrentStep` compares node ids first over the run-order walk, which carries every node's
- *     id; its ordinal branch is reached only for steps with no node id);
- *   - an ordinal carried under another name, or through more than one assignment;
- *   - gate TARGETS authored by ordinal (`target_step_number`, `apply_to_steps`) — a declared input
- *     surface, validated against the run by stage 11, not a step lookup;
- *   - `tests/`, `scripts/` and `hooks/`.
+ * ACCEPTED SHAPES, NOT SCANNED (R91, as of 2026-09-27 · flips when a shape below starts answering
+ * "which step is this node" rather than the reason it states):
+ *   - gate TARGETS authored by ordinal: a comparison whose other operand is a gate's
+ *     `target_step_number` / `targetStepNumber`, or `apply_to_steps` membership. The ordinal there
+ *     is what the gate's AUTHOR wrote, a declared input surface validated against the run by stage
+ *     11 — comparing a step to it is matching an authored position, not resolving a node;
+ *   - `tests/`, `scripts/` and `hooks/`: none of them runs inside the server, so none can hand an
+ *     inserted node a neighbour's data. A test that builds steps by ordinal is fixture shape.
  *
  * A green run is not a run that reached nothing: the scan fails closed below
  * `MINIMUM_SOURCE_FILES` scanned files, and every accepted entry must match a live finding.
  *
  * `--self-test` plants both shapes in every listed form beside decoys, in an in-memory program, and
- * asserts exactly the planted lines are found.
+ * asserts exactly the planted lines are found; then switches resolution off, and the match scope
+ * back to find-family callbacks, and asserts exactly the plants each widening closed vanish.
  */
 
 import fs from 'node:fs';
@@ -84,6 +91,8 @@ const EQUALITY = new Set([
   SyntaxKind.ExclamationEqualsToken,
 ]);
 const STEP_ARRAY = /(steps|stepPrompts)$/i;
+/** The other operand of an accepted comparison: an ordinal the gate's author wrote (R91). */
+const GATE_TARGET = /\b(target_step_number|targetStepNumber)\b/;
 const ORDINAL_NAME =
   /\b(currentStep|stepNumber|ordinal|currentOrdinal|contextStep)\b|\.stepIndex\b/;
 
@@ -100,6 +109,18 @@ const ACCEPTED = [
     asOf: '2026-09-27',
     flipsWhen:
       'every parse path mints node ids and `ChainStepPrompt.nodeId` becomes required (P3 D10) — ' +
+      'delete the ordinal branch',
+  },
+  {
+    subject: 'src/engine/gates/services/gate-enhancement-service.ts',
+    where: 'isCurrentStep',
+    shape: 'ordinal match',
+    reason:
+      'A per-step predicate over the run-order walk, node id first: the walk carries every ' +
+      "node's id, so the ordinal branch answers only a step with no node id (a legacy parse).",
+    asOf: '2026-09-27',
+    flipsWhen:
+      '`ChainStepPrompt.nodeId` becomes required (P3 D10), or the walk stops carrying node ids — ' +
       'delete the ordinal branch',
   },
   {
@@ -148,12 +169,31 @@ function findFamilyCallback(node) {
     : undefined;
 }
 
-/** `<param>.stepNumber`, where `<param>` is a parameter of `callback`. */
-function isElementStepNumber(node, callback) {
+/**
+ * Whether `receiver` stands for one step: a parameter of any function enclosing it (a callback, or
+ * a per-step predicate outside any callback), or the variable of a `for…of` over a step array.
+ * `onlyFindFamily` is the validator mutation the self-test documents: the pre-R91 scope.
+ */
+function isStepElement(receiver, onlyFindFamily) {
+  const declaration = receiver.getSymbol()?.getDeclarations()[0];
+  if (declaration === undefined) return false;
+  if (Node.isParameterDeclaration(declaration)) {
+    // Scoping puts every read of a parameter inside the function declaring it.
+    return !onlyFindFamily || findFamilyCallback(receiver) === declaration.getParent();
+  }
+  if (onlyFindFamily || !Node.isVariableDeclaration(declaration)) return false;
+  const loop = declaration.getFirstAncestorByKind(SyntaxKind.ForOfStatement);
+  if (loop === undefined || loop.getInitializer() !== declaration.getParent()) return false;
+  const iterated = loop.getExpression();
+  const name = Node.isPropertyAccessExpression(iterated) ? iterated.getName() : iterated.getText();
+  return STEP_ARRAY.test(name);
+}
+
+/** `<step>.stepNumber`, where `<step>` is a single step (see `isStepElement`). */
+function isElementStepNumber(node, onlyFindFamily) {
   if (!Node.isPropertyAccessExpression(node) || node.getName() !== 'stepNumber') return false;
   const receiver = node.getExpression();
-  if (!Node.isIdentifier(receiver)) return false;
-  return callback.getParameters().some((param) => param.getName() === receiver.getText());
+  return Node.isIdentifier(receiver) && isStepElement(receiver, onlyFindFamily);
 }
 
 /** A literal, `undefined`, or `null`: comparing against one is a presence check. */
@@ -175,24 +215,59 @@ function receiverName(access) {
   return undefined;
 }
 
-/** The text an index argument derives from: itself, and one hop through a local initializer. */
-function indexSourceText(argument) {
-  if (!Node.isIdentifier(argument)) return argument.getText();
-  const declaration = argument.getSymbol()?.getDeclarations()[0];
-  const initializer =
-    declaration !== undefined && Node.isVariableDeclaration(declaration)
-      ? declaration.getInitializer()
-      : undefined;
-  return `${argument.getText()} ${initializer?.getText() ?? ''}`;
+/**
+ * The text an index expression derives from: itself, then — for every identifier in it that is a
+ * value rather than a property's receiver — the variable's initializer and every `=` assignment to
+ * it in the file, resolved in turn. `seen`
+ * stops a cycle; `resolve: false` is the validator mutation the self-test documents (no
+ * resolution at all), under which a renamed or reassigned ordinal reads as nothing.
+ */
+function indexSourceText(expression, resolve = true, seen = new Set()) {
+  const texts = [expression.getText()];
+  if (!resolve) return texts[0];
+  const identifiers = Node.isIdentifier(expression)
+    ? [expression]
+    : expression.getDescendantsOfKind(SyntaxKind.Identifier);
+  for (const identifier of identifiers) {
+    // A property's receiver is not the value: `plan.currentIndex` is not `plan`'s initializer.
+    const parent = identifier.getParent();
+    if (Node.isPropertyAccessExpression(parent) && parent.getExpression() === identifier) continue;
+    const symbol = identifier.getSymbol();
+    const declaration = symbol?.getDeclarations()[0];
+    if (declaration === undefined || !Node.isVariableDeclaration(declaration)) continue;
+    if (seen.has(declaration)) continue;
+    seen.add(declaration);
+    const sources = [declaration.getInitializer()];
+    for (const assignment of identifier
+      .getSourceFile()
+      .getDescendantsOfKind(SyntaxKind.BinaryExpression)) {
+      const left = assignment.getLeft();
+      if (
+        assignment.getOperatorToken().getKind() === SyntaxKind.EqualsToken &&
+        Node.isIdentifier(left) &&
+        left.getSymbol() === symbol
+      ) {
+        sources.push(assignment.getRight());
+      }
+    }
+    for (const source of sources) {
+      if (source !== undefined) texts.push(indexSourceText(source, resolve, seen));
+    }
+  }
+  return texts.join(' ');
 }
 
 /**
- * Every finding in one source file. `checkIndex` exists for the validator mutation the self-test
- * documents: with it off, an ordinal index reads as nothing at all.
+ * Every finding in one source file. The options exist for the validator mutations the self-test
+ * documents: `checkIndex: false` reads no ordinal index at all, `resolve: false` reads an index
+ * only as written, and `onlyFindFamily: true` reads a match only inside a find-family callback.
  *
  * @returns {Array<{ line: number, where: string, shape: 'ordinal match'|'ordinal index', text: string }>}
  */
-export function scanSourceFile(sourceFile, { checkIndex = true } = {}) {
+export function scanSourceFile(
+  sourceFile,
+  { checkIndex = true, resolve = true, onlyFindFamily = false } = {}
+) {
   const hits = [];
   const record = (node, shape) =>
     hits.push({
@@ -204,15 +279,15 @@ export function scanSourceFile(sourceFile, { checkIndex = true } = {}) {
 
   sourceFile.forEachDescendant((node) => {
     if (Node.isBinaryExpression(node) && EQUALITY.has(node.getOperatorToken().getKind())) {
-      const callback = findFamilyCallback(node);
-      if (callback === undefined) return;
       const [left, right] = [node.getLeft(), node.getRight()];
-      const other = isElementStepNumber(left, callback)
+      const other = isElementStepNumber(left, onlyFindFamily)
         ? right
-        : isElementStepNumber(right, callback)
+        : isElementStepNumber(right, onlyFindFamily)
           ? left
           : undefined;
-      if (other !== undefined && !isLiteralLike(other)) record(node, 'ordinal match');
+      if (other !== undefined && !isLiteralLike(other) && !GATE_TARGET.test(other.getText())) {
+        record(node, 'ordinal match');
+      }
       return;
     }
     if (checkIndex && Node.isElementAccessExpression(node)) {
@@ -222,7 +297,7 @@ export function scanSourceFile(sourceFile, { checkIndex = true } = {}) {
         name !== undefined &&
         STEP_ARRAY.test(name) &&
         argument !== undefined &&
-        ORDINAL_NAME.test(indexSourceText(argument))
+        ORDINAL_NAME.test(indexSourceText(argument, resolve))
       ) {
         record(node, 'ordinal index');
       }
@@ -283,6 +358,37 @@ function planIndex(stepIndex: number, review: { stepIndex: number }) {
   const q = stepPrompts[review.stepIndex];
   return [p, q];
 }
+function renamed(ordinal: number, currentStep: number) {
+  const first = ordinal - 1;
+  const second = first;
+  const r = steps[second];
+  let moved = 0;
+  moved = currentStep;
+  const s2 = blueprintSteps[moved];
+  return [r, s2];
+}
+function isHere(step: Step, key: { ordinal: number }) {
+  return step.stepNumber === key.ordinal;
+}
+const isAt = (s: Step, ordinal: number) => s.stepNumber === ordinal;
+function walk(ordinal: number) {
+  for (const s of steps) if (s.stepNumber === ordinal) return s;
+  return undefined;
+}
+declare const gates: Array<{ stepNumber: number }>;
+declare function build(n: number): { currentIndex: number };
+function renamedDecoys(step: Step, gate: { target_step_number?: number }, ordinal: number) {
+  const t = gate.target_step_number === step.stepNumber;
+  const u = step.stepNumber === undefined;
+  for (const g of gates) if (g.stepNumber === ordinal) return g;
+  const matched = steps[0];
+  const v = matched.stepNumber === ordinal;
+  const plan = build(ordinal);
+  const w = stepPrompts[plan.currentIndex];
+  const safe = 0;
+  const x = steps[safe];
+  return [t, u, v, w, x];
+}
 `;
 
 /** `line:shape` for each planted finding, in source order. */
@@ -295,7 +401,16 @@ const SELF_TEST_EXPECTED = [
   '13:ordinal index', // one hop through a clamped initializer
   '14:ordinal index', // a stepPrompts receiver
   '31:ordinal index', // a recorded `.stepIndex`
+  '37:ordinal index', // an ordinal renamed through two assignments (R91)
+  '40:ordinal index', // an ordinal reassigned with `=` (R91)
+  '44:ordinal match', // a per-step predicate method outside any callback (R91)
+  '46:ordinal match', // a per-step arrow predicate, named, outside any callback (R91)
+  '48:ordinal match', // a `for…of` over a step array (R91)
 ];
+
+/** The plants that need resolution (the one-hop line 13 and the two R91 ones), and R91's others. */
+const SELF_TEST_RESOLVED = ['13:ordinal index', '37:ordinal index', '40:ordinal index'];
+const SELF_TEST_OUTSIDE_CALLBACK = ['44:ordinal match', '46:ordinal match', '48:ordinal match'];
 
 function runSelfTest() {
   const project = new Project({ useInMemoryFileSystem: true });
@@ -314,12 +429,30 @@ function runSelfTest() {
     console.error(`[${GATE}] SELF-TEST FAILED: checkIndex:false still reported an ordinal index`);
     process.exit(1);
   }
+  // Each resolved or R91 plant is found BECAUSE of that widening: switched off, exactly those vanish.
+  for (const [mutation, lost] of [
+    [{ resolve: false }, SELF_TEST_RESOLVED],
+    [{ onlyFindFamily: true }, SELF_TEST_OUTSIDE_CALLBACK],
+  ]) {
+    const found = scanSourceFile(file, mutation).map((hit) => `${hit.line}:${hit.shape}`);
+    const expected = SELF_TEST_EXPECTED.filter((line) => !lost.includes(line));
+    if (JSON.stringify(found) !== JSON.stringify(expected)) {
+      console.error(`[${GATE}] SELF-TEST FAILED under ${JSON.stringify(mutation)}`);
+      console.error(`  expected ${JSON.stringify(expected)}`);
+      console.error(`  found    ${JSON.stringify(found)}`);
+      process.exit(1);
+    }
+  }
   console.log(
     `[${GATE}] self-test OK — ${SELF_TEST_EXPECTED.length} planted lookups (find/findIndex/filter ` +
       'and a function expression, both operand orders, `==` and `!==`, a direct, a one-hop, a ' +
-      'stepPrompts and a recorded-index access) found with their shape; a comment, a node-id match, an index found by ' +
-      'identity, a literal index, a presence check, a conditional, a non-step find, another ' +
-      "object's stepNumber and a bare render-plan index are not."
+      'stepPrompts and a recorded-index access; an ordinal renamed twice and one reassigned; a ' +
+      'predicate method, a named arrow predicate and a for-of over steps) found with their shape; ' +
+      'a comment, a node-id match, an index found by identity, a literal index, a presence check, ' +
+      "a conditional, a non-step find, another object's stepNumber, a bare render-plan index, a " +
+      "gate's authored target, a for-of over another array, a local step and a property of a " +
+      'value built from an ordinal are not. Without resolution the three resolved plants vanish; ' +
+      'scoped to find-family callbacks the three predicate plants do.'
   );
   process.exit(0);
 }
