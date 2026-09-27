@@ -81,6 +81,7 @@ import {
 import { createToolDetectionService } from '#modules/automation/detection/tool-detection-service.js';
 import { createScriptExecutor } from '#modules/automation/execution/script-executor.js';
 import { createToolTriggerFilter } from '#modules/automation/execution/tool-trigger-filter.js';
+import { retargetGates } from '#modules/workflow-ir/chain-prompt-expansion.js';
 import { compileWorkflowIR } from '#modules/workflow-ir/compiler.js';
 import { DEFAULT_WORKFLOW_CAPS } from '#modules/workflow-ir/node-schema.js';
 import { validateWorkflowIR } from '#modules/workflow-ir/validator.js';
@@ -160,7 +161,7 @@ export class PipelineBuilder {
     // state — the Streamable HTTP transport rebuilds the server per request, so anything cached
     // here would exist on STDIO and vanish on HTTP.
     const workflowCommandBuilder = new WorkflowCommandBuilder(
-      { validate: validateWorkflowIR, compile: compileWorkflowIR },
+      { validate: validateWorkflowIR, compile: compileWorkflowIR, retargetGates },
       deps.logger
     );
     const commandParsingStage = new CommandParsingStage(

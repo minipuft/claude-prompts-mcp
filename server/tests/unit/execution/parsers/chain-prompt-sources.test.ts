@@ -39,6 +39,7 @@ import { WorkflowCommandBuilder } from '../../../../src/engine/execution/parsers
 import { CommandParsingStage } from '../../../../src/engine/execution/pipeline/stages/04-parsing-stage.js';
 import { RemainderProcessor } from '../../../../src/engine/execution/capture/remainder-processor.js';
 import { createSimpleLogger } from '../../../../src/infra/logging/index.js';
+import { retargetGates } from '../../../../src/modules/workflow-ir/chain-prompt-expansion.js';
 import { compileWorkflowIR } from '../../../../src/modules/workflow-ir/compiler.js';
 import { DEFAULT_WORKFLOW_CAPS } from '../../../../src/modules/workflow-ir/node-schema.js';
 import { validateWorkflowIR } from '../../../../src/modules/workflow-ir/validator.js';
@@ -105,7 +106,7 @@ const stage = new CommandParsingStage(
   new SymbolicCommandBuilder(argumentParser, logger, compileWorkflowIR),
   {
     workflowCommandBuilder: new WorkflowCommandBuilder(
-      { validate: validateWorkflowIR, compile: compileWorkflowIR },
+      { validate: validateWorkflowIR, compile: compileWorkflowIR, retargetGates },
       logger
     ),
   }

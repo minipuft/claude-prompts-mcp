@@ -198,7 +198,7 @@ export class CommandParsingStage extends BasePipelineStage {
     }
 
     context.parsedCommand = result.parsedCommand;
-    retargetRequestedGates(context, result.gateTargetRetargets);
+    retargetRequestedGates(context, result.retargetRequestedGates);
     this.logExit({
       promptId: result.parsedCommand.promptId,
       format: result.parsedCommand.format,
@@ -377,21 +377,16 @@ function collectSourceConflicts(context: ExecutionContext): string[] {
  *
  * The workflow's `gates` are read from the request channel (`requestedOverrides.gates`, where the
  * executor concatenates them onto the `gates` parameter), never from the IR, so the retarget the
- * expansion computed is applied here. New objects: the originals are the client's submission.
+ * expansion computed is applied here — through the builder's result, which binds the expansion's
+ * own `retargetGates` (`engine/` may not value-import it). It returns new objects: the originals
+ * are the client's submission.
  */
 function retargetRequestedGates(
   context: ExecutionContext,
-  retargets: Readonly<Record<string, string>>
+  retarget: <Gate>(gates: readonly Gate[]) => Gate[]
 ): void {
   const overrides = context.state.gates.requestedOverrides;
-  const gates = overrides?.gates;
-  if (overrides === undefined || !Array.isArray(gates) || Object.keys(retargets).length === 0) {
-    return;
+  if (overrides !== undefined && Array.isArray(overrides.gates)) {
+    overrides.gates = retarget(overrides.gates);
   }
-  overrides.gates = gates.map((gate: unknown) => {
-    if (typeof gate !== 'object' || gate === null) return gate;
-    const target = (gate as { target_step_id?: unknown }).target_step_id;
-    const retarget = typeof target === 'string' ? retargets[target] : undefined;
-    return retarget === undefined ? gate : { ...gate, target_step_id: retarget };
-  });
 }

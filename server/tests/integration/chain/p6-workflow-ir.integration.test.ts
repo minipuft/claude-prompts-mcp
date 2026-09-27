@@ -55,6 +55,7 @@ import { OperatorValidationStage } from '../../../src/engine/execution/pipeline/
 import { SessionManagementStage } from '../../../src/engine/execution/pipeline/stages/13-session-stage.js';
 import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
 import { TextReferenceStore } from '../../../src/modules/text-refs/index.js';
+import { retargetGates } from '../../../src/modules/workflow-ir/chain-prompt-expansion.js';
 import { compileWorkflowIR } from '../../../src/modules/workflow-ir/compiler.js';
 import { validateWorkflowIR } from '../../../src/modules/workflow-ir/validator.js';
 
@@ -160,7 +161,7 @@ const buildPipeline = (
 ): PromptExecutionPipeline => {
   const parsingSystem = createParsingSystem(logger);
   const workflowCommandBuilder = new WorkflowCommandBuilder(
-    { validate: validateWorkflowIR, compile: compileWorkflowIR },
+    { validate: validateWorkflowIR, compile: compileWorkflowIR, retargetGates },
     logger
   );
 

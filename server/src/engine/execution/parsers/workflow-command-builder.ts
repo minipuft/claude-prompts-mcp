@@ -40,9 +40,9 @@ import type { ParsedCommand } from '../context/index.js';
 /**
  * The `modules/workflow-ir/` surface this builder consumes, supplied by the composition root.
  *
- * One port with two members rather than two injected callbacks: validation returns the order
- * compilation consumes, so wiring them from two places would let a caller compile under an order
- * a different validator produced.
+ * One port rather than separate injected callbacks: validation returns the order compilation
+ * consumes and the expansion `retargetGates` applies, so wiring them from several places would let
+ * a caller compile or retarget under what a different validator produced.
  */
 export interface WorkflowIrPort {
   validate(ir: WorkflowIR, deps: WorkflowValidatorDeps): WorkflowValidation;
@@ -51,6 +51,8 @@ export interface WorkflowIrPort {
     order: readonly string[],
     deps: WorkflowCompilerDeps
   ): WorkflowCompilation;
+  /** The expansion's own gate retarget (R41), for gates that live outside the IR. */
+  retargetGates<Gate>(gates: readonly Gate[], lastStepOf: Readonly<Record<string, string>>): Gate[];
 }
 
 /** Discriminated build result. Mirrors the module's own `{ok:true}|{ok:false, rejections[]}`. */
@@ -59,10 +61,11 @@ export type WorkflowCommandResult =
       readonly ok: true;
       readonly parsedCommand: ParsedCommand;
       /**
-       * A node naming a chain prompt → its last expanded step (R41). The run's gates are read from
-       * the request's `gates` channel, not from the IR, so the caller applies this there.
+       * Point a gate targeting a node that names a chain prompt at its last expanded step (R41).
+       * The run's gates are read from the request's `gates` channel, not from the IR, so the
+       * caller applies this there.
        */
-      readonly gateTargetRetargets: Readonly<Record<string, string>>;
+      readonly retargetRequestedGates: <Gate>(gates: readonly Gate[]) => Gate[];
     }
   | { readonly ok: false; readonly rejections: readonly WorkflowRejection[] };
 
@@ -153,10 +156,11 @@ export class WorkflowCommandBuilder {
       order: validation.order,
     });
 
+    const lastStepOf = validation.expanded?.lastStepOf ?? {};
     return {
       ok: true,
       parsedCommand,
-      gateTargetRetargets: validation.expanded?.lastStepOf ?? {},
+      retargetRequestedGates: (gates) => this.workflowIr.retargetGates(gates, lastStepOf),
     };
   }
 }
