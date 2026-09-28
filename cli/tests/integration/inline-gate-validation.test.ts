@@ -279,6 +279,61 @@ describe('inline gate definitions the loader drops (P6.231)', () => {
     });
 
     /**
+     * P6.246 (R131). A refused rollback MAY leave a `Bridge: prior live state` row: the bridge is
+     * written before the transaction because it records a true fact about the state the rollback
+     * found (an out-of-band edit), and a refusal does not make that fact false. MEASURED
+     * 2026-09-28 on `34066b692`: driven here, not read.
+     */
+    describe('P6.246 a refused rollback and the bridge row', () => {
+      const BRIDGE = 'Bridge: prior live state (era transition or out-of-band edit)';
+      const allRows = (): string[] => {
+        const history = run(['history', 'prompt', 'test-prompt', '--workspace', workspace, '--json']);
+        return (JSON.parse(history.output) as { versions: { description: string }[] }).versions
+          .map((version) => version.description);
+      };
+      const seedDroppedAndClean = () =>
+        seedVersionHistory(workspace, 'prompt', 'test-prompt', [
+          {
+            version: 1,
+            snapshot: { ...baseSnapshot, gateConfiguration: DROPPED_GATE_CONFIGURATION },
+            description: 'Version 1',
+          },
+          { version: 2, snapshot: baseSnapshot, description: 'Version 2' },
+        ]);
+
+      it('(a) over an out-of-band edit it leaves exactly one new row, the bridge', () => {
+        seedDroppedAndClean();
+        const edited = readFileSync(promptFile, 'utf8').replace(
+          /^description: .*$/m,
+          'description: Edited by hand.',
+        );
+        writeFileSync(promptFile, edited);
+        const before = allRows();
+
+        const refused = run(['rollback', 'prompt', 'test-prompt', '1', '--workspace', workspace]);
+
+        expect(refused.exitCode).toBe(1);
+        expect(readFileSync(promptFile, 'utf8')).toContain('Edited by hand.');
+        const after = allRows();
+        expect([...after].sort()).toEqual([...before, BRIDGE].sort());
+        expect(after.filter((row) => row.startsWith('Rollback to'))).toEqual([]);
+      });
+
+      it('(b) control: over a live state already recorded it leaves zero new rows', () => {
+        seedDroppedAndClean();
+        // Record the live state through a real write: a rollback to v2 lands and records it.
+        expect(run(['rollback', 'prompt', 'test-prompt', '2', '--workspace', workspace]).exitCode).toBe(0);
+        const before = allRows();
+        expect(before.filter((row) => row.startsWith('Rollback to'))).toEqual(['Rollback to v2']);
+
+        const refused = run(['rollback', 'prompt', 'test-prompt', '1', '--workspace', workspace]);
+
+        expect(refused.exitCode).toBe(1);
+        expect(allRows()).toEqual(before);
+      });
+    });
+
+    /**
      * P6.250 (R128). MEASURED 2026-09-28 on `9a6383f08`: `cpm rollback` accepted no `--no-validate`
      * (the flag parsed and was never passed on), so a restore blocked by an error the differential
      * does not exempt had no way through, unlike `rename`, `move` and `link-gate`.
