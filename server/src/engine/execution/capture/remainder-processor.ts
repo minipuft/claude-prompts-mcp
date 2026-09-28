@@ -145,10 +145,11 @@ export class RemainderProcessor {
    * Which unknown this remainder answers, or `undefined` when the run is not entitled to one.
    *
    * `decideInterrupt` is reused rather than re-scanning the ledger, so "which blocking unknown is
-   * the run stopped on" has ONE definition — the most recently discovered open one. A second scan
-   * here would let the payload name one unknown while the recorded provenance
-   * (`origin_unknown_id`) named another, and the per-unknown-id remainder cap would then be
-   * counting a different thing than the interrupt the caller answered.
+   * the run stopped on" has ONE definition — the first open blocking unknown the latest declaring
+   * call declared, a re-opened one counting as declared by the call that re-opened it (R119,
+   * R122). A second scan here would let the payload name one unknown while the recorded
+   * provenance (`origin_unknown_id`) named another, and the per-unknown-id remainder cap would
+   * then be counting a different thing than the interrupt the caller answered.
    *
    * The synthetic review is the second entitlement the plan grants (OQ-3: "while a blocking
    * unknown is open … or `__unknown_interrupt__` is pending"). It matters in exactly one state: a

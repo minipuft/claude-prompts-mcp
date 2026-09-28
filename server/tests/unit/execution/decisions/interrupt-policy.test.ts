@@ -153,9 +153,9 @@ describe('decideInterrupt', () => {
     expect(decideInterrupt(buildInput({ ledger }))?.affectedStepIds).toEqual(['n3', 'n4']);
   });
 
-  test('the most recently discovered open blocking unknown is the one reported', () => {
-    // Guard: selectTriggeringUnknown's `>=` comparison on discoveredAtStep. Declared oldest-last
-    // so ledger order and discovery order disagree.
+  test('an open blocking unknown from the latest discovery step is the one reported', () => {
+    // Guard: selectTriggeringUnknown's comparison on discoveredAtStep. Declared oldest-last so
+    // ledger order and discovery order disagree.
     const ledger = [
       entry({ id: 'fresh', blocking: true, discoveredAtStep: 3 }),
       entry({ id: 'stale', blocking: true, discoveredAtStep: 1 }),
