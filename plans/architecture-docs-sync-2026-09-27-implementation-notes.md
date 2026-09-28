@@ -1,7 +1,7 @@
 ---
 title: "Architecture docs sync — implementation notes (append-only)"
 date: 2026-09-27
-status: backlog
+status: reference
 tags: []
 ---
 
@@ -71,3 +71,12 @@ Plan: `plans/architecture-docs-sync-2026-09-27.md`. Rulings live in the plan's t
 - Accepted after re-running the stage validator and reading the box; committed `fbdb1a4d2` together with the CHANGELOG bullets (Added ×2, Documentation ×1). DEV-T1-10: the worker filled all four rows of the box column rather than the two the brief named, matching the sibling columns and the real `framework/{id}` URI — accepted; the brief's "two lines" was a miscount of the box's grammar.
 - Boundary snapshot is `fbdb1a4d2`, tree clean. Already green on it: `typecheck`, `lint:ratchet` (2533/733, no regression), `typecheck:tests:ratchet` (341, no regression). Running: `test:all`, `validate:all`.
 - `git diff origin/main --stat` reviewed for out-of-slice edits before the PR (recorded below when measured).
+
+## 2026-09-27 · boundary suite on `fbdb1a4d2`
+
+- `validate:all`: ✅ 79/79 in 172.8 s, exit 0 captured directly (`npm run validate:all > log; echo exit=$?`). Includes the new `validate:pipeline-stage-table` step and `plans:retire:check`.
+- `typecheck` exit 0 · `lint:ratchet` OK 2533/733 no regression · `typecheck:tests:ratchet` OK 341 no regression.
+- **DEV-T1-11 (planner, measurement).** The first `test:all` run wrote `test:all exit=0` from `${PIPESTATUS[0]:-$?}` after `| tail -40` — under zsh `PIPESTATUS` is empty, so the line recorded `tail`'s exit, and the 40-line tail had also cut off two of the three `Tests:` blocks. Memory `feedback_zsh_probe_mechanics` names exactly this. Re-run without a pipe: unit 5912 passed / 1 skipped (334 suites) · integration 1346 passed (114 suites) · **e2e 579 failed / 28 passed (45 of 47 suites)**, exit 1.
+- **e2e attribution: tree state, not the slice.** Every failure is `buildServerEnv: refusing to prepare an environment for a stale …/server/dist/index.js — missing — run npm run build` (`tests/e2e/helpers/child-env.ts:63`). The worktree was cut fresh and `dist/` is gitignored; memory `feedback_bundled_dependency_needs_start_probe` / "build dist before e2e" applies. Action: `npm run build` then `test:e2e` alone, exit captured directly. Recorded as a writeback because a fresh-worktree boundary run will hit it every time — the boundary row should say "build first".
+- e2e after `npm run build`: 47/47 suites, 607 passed / 2 skipped, 522 s. The process still exited 1 from Jest's `globalTeardown` tree-state guard: one working-tree entry appeared during the run — `plans/architecture-docs-sync-2026-09-27-implementation-notes.md`, which the planner appended to WHILE e2e ran. The guard did its job on the planner's own write; the tests are green. Not re-run (9 min) — the guard's message names the exact entry and it is this file.
+- Plan retired as `reference` in this PR (footer gate CLOSURE rule); `publish:` stays unruled until the owner speaks — the branch does not leave this machine before that.
