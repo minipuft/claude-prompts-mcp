@@ -1519,6 +1519,53 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
   });
 
   /**
+   * P6.184 / R150 pins R86. MEASURED 2026-09-28 on `f2c12e359` (driven, `system_control session
+   * inspect`): a completed `>>sv_a topic:"T1"` arrow-chain `>>sv_b topic:"T2"` run lists no
+   * `currentStepArgs` and no `input`, while mid-run step 2 lists `{"topic":"T2"}` under both.
+   * `getChainContext` reads them from `getCurrentStepArgs`, which looks the step up by node; a run
+   * standing on no node looks up ordinal N plus 1, which names no parse step. The early return in
+   * `refuseRemainder` answers a remainder, not this path.
+   */
+  describe('P6.184: a completed run exposes no current step args', () => {
+    /** The run's context variables, as `system_control session inspect` lists them. */
+    async function inspectContext(chainId: string): Promise<string> {
+      const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+      let sessionId: string | undefined;
+      try {
+        sessionId = (
+          db.prepare('SELECT session_id FROM chain_runs WHERE chain_id = ?').get(chainId) as
+            { session_id: string } | undefined
+        )?.session_id;
+      } finally {
+        db.close();
+      }
+      if (sessionId === undefined) throw new Error(`no chain_runs row for ${chainId}`);
+      const inspected = await tool('system_control', {
+        action: 'session',
+        operation: 'inspect',
+        session_id: sessionId,
+      });
+      expect(inspected.isError).toBe(false);
+      return inspected.text.split('### 📄 Context Variables')[1] ?? '';
+    }
+
+    test('(a) mid-run the current step args are listed; (b) once complete they are not', async () => {
+      const run = await start({ command: `>>sv_a topic:"T1"${ARROW}>>sv_b topic:"T2"` });
+      await run.call({ user_response: 'A out' });
+      const running = await inspectContext(run.chainId);
+      expect(running).toContain('- `currentStepArgs`: {"topic":"T2"}');
+      expect(running).toContain('- `input`: {"topic":"T2"}');
+
+      const done = await run.call({ user_response: 'B out' });
+      expect(done).toContain('Chain execution complete');
+      const completed = await inspectContext(run.chainId);
+      expect(completed).toContain('- `current_node_id`: null');
+      expect(completed).not.toContain('`currentStepArgs`');
+      expect(completed).not.toContain('`input`');
+    }, 120000);
+  });
+
+  /**
    * P6.197 / R97. MEASURED 2026-09-27 on `1d81798e`: `>>sv_a` arrow-chain `>>sv_b`, a blocking
    * `u-197` raised on `n1` and never resolved, answered through to completion. The completing reply
    * read "Chain execution complete" and then rendered the "Blocking Unknown" section with its
