@@ -16,6 +16,8 @@ import { fileURLToPath } from 'node:url';
 
 import { runValidatedMutation } from '@cli-shared/resource-operations.js';
 
+import { seedVersionHistory } from '../helpers/seed-version-history.js';
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CLI = join(__dirname, '../../dist/cpm.js');
 const VERSIONED_WS = join(__dirname, '../fixtures/versioned-workspace');
@@ -81,6 +83,70 @@ describe('inline gate definitions the loader drops (P6.231)', () => {
     );
   });
 
+  /**
+   * P6.237 (R124). MEASURED 2026-09-28 on `46b4568a`: `cpm rename`, `cpm move` and
+   * `cpm link-gate` of a prompt already carrying a dropped definition exited 0 and printed nothing
+   * about it: the differential demoted the error to a warning, and no success path printed
+   * warnings. Each now prints them the way `cpm validate` prints an entry's issues.
+   */
+  const STRUCTURAL_COMMANDS: { name: string; args: string[] }[] = [
+    { name: 'rename', args: ['rename', 'prompt', 'test-prompt', 'renamed-prompt'] },
+    { name: 'move', args: ['move', 'prompt', 'test-prompt', '--category', 'moved'] },
+    { name: 'link-gate', args: ['link-gate', 'test-prompt', 'test-gate'] },
+  ];
+  const SCOPE_WARNING = /^gateConfiguration\.inline_gate_definitions\[0\]: .*scope \(must be one of/;
+  // The fixture prompt also carries an unrelated advisory (no arguments), which every success
+  // path prints too; the twins read only the inline-gate warnings.
+  const inlineGateWarnings = (jsonOutput: string): string[] =>
+    (JSON.parse(jsonOutput) as { warnings: string[] }).warnings.filter((warning) =>
+      warning.includes('inline_gate_definitions'),
+    );
+
+  it.each(STRUCTURAL_COMMANDS)(
+    'P6.237 (a) cpm $name prints the pre-existing definition as a warning on success',
+    ({ args }) => {
+      carryDroppedDefinition();
+
+      const { output, exitCode } = run([...args, '--workspace', workspace]);
+
+      expect(exitCode).toBe(0);
+      const warningLines = output.split('\n').filter((line) => line.includes('inline_gate_definitions'));
+      expect(warningLines).toHaveLength(1);
+      expect(warningLines[0]?.trim()).toMatch(/scope \(must be one of/);
+    },
+  );
+
+  it.each(STRUCTURAL_COMMANDS)(
+    'P6.237 (a) cpm $name --json carries the warning in `warnings`',
+    ({ args }) => {
+      carryDroppedDefinition();
+
+      const { output, exitCode } = run([...args, '--workspace', workspace, '--json']);
+
+      expect(exitCode).toBe(0);
+      expect(inlineGateWarnings(output)).toEqual([expect.stringMatching(SCOPE_WARNING)]);
+    },
+  );
+
+  it.each(STRUCTURAL_COMMANDS)(
+    'P6.237 (b) control: cpm $name of a clean prompt prints no warning',
+    ({ args }) => {
+      const text = run([...args, '--workspace', workspace]);
+      expect(text.exitCode).toBe(0);
+      expect(text.output).not.toContain('inline_gate_definitions');
+
+      rmSync(workspace, { recursive: true, force: true });
+      cpSync(VERSIONED_WS, workspace, { recursive: true });
+      const json = run([...args, '--workspace', workspace, '--json']);
+      expect(json.exitCode).toBe(0);
+      expect(inlineGateWarnings(json.output)).toEqual([]);
+      // Positive control: the channel is live on this path — it carries the unrelated advisory.
+      expect((JSON.parse(json.output) as { warnings: string[] }).warnings).toEqual([
+        expect.stringContaining('no arguments defined'),
+      ]);
+    },
+  );
+
   it('(c) a mutation that introduces one is refused and rolled back', () => {
     const before = readFileSync(promptFile, 'utf8');
     const location = {
@@ -104,5 +170,112 @@ describe('inline gate definitions the loader drops (P6.231)', () => {
       expect.stringContaining('scope (must be one of'),
     ]);
     expect(readFileSync(promptFile, 'utf8')).toBe(before);
+  });
+
+  /**
+   * P6.238 (R125). MEASURED 2026-09-28 on `f38340a1`: `cpm rollback` to a version whose snapshot
+   * carried a definition the loader drops wrote it with no check and exited 0, because the restore
+   * wrote the file itself and never validated. A restore is a write: it now runs the same
+   * validator and the same differential against the CURRENT file as every other CLI write.
+   */
+  describe('P6.238 cpm rollback', () => {
+    const DROPPED_GATE_CONFIGURATION = {
+      inline_gate_definitions: [
+        {
+          name: 'Cites Sources',
+          type: 'validation',
+          description: 'Every claim names its source.',
+          guidance: 'Check each claim for a named source.',
+        },
+      ],
+    };
+    const baseSnapshot = { id: 'test-prompt', name: 'Test Prompt', description: 'Restored text.' };
+    const rollbackRows = (): string[] => {
+      const history = run(['history', 'prompt', 'test-prompt', '--workspace', workspace, '--json']);
+      return (JSON.parse(history.output) as { versions: { description: string }[] }).versions
+        .map((version) => version.description)
+        .filter((description) => description.startsWith('Rollback to'));
+    };
+
+    it('(a) a restore that brings back a dropped definition is refused and the file is untouched', () => {
+      seedVersionHistory(workspace, 'prompt', 'test-prompt', [
+        {
+          version: 1,
+          snapshot: { ...baseSnapshot, gateConfiguration: DROPPED_GATE_CONFIGURATION },
+          description: 'Version 1',
+        },
+      ]);
+      const before = readFileSync(promptFile);
+
+      const { output, exitCode } = run([
+        'rollback', 'prompt', 'test-prompt', '1', '--workspace', workspace, '--json',
+      ]);
+
+      expect(exitCode).toBe(1);
+      const refusal = JSON.parse(output) as {
+        validation: { errors: { path: string; message: string }[] };
+        rollback: { performed: boolean };
+      };
+      expect(refusal.validation.errors).toEqual([
+        expect.objectContaining({
+          path: 'gateConfiguration.inline_gate_definitions[0]',
+          message: expect.stringMatching(/scope \(must be one of/),
+        }),
+      ]);
+      expect(refusal.rollback.performed).toBe(true);
+      expect(readFileSync(promptFile).equals(before)).toBe(true);
+      expect(rollbackRows()).toEqual([]);
+    });
+
+    it('(b) a restore over a file that already carries one warns and succeeds', () => {
+      carryDroppedDefinition();
+      seedVersionHistory(workspace, 'prompt', 'test-prompt', [
+        { version: 1, snapshot: baseSnapshot, description: 'Version 1' },
+      ]);
+
+      const text = run(['rollback', 'prompt', 'test-prompt', '1', '--workspace', workspace]);
+
+      expect(text.exitCode).toBe(0);
+      expect(readFileSync(promptFile, 'utf8')).toContain('Restored text.');
+      const warningLines = text.output
+        .split('\n')
+        .filter((line) => line.includes('inline_gate_definitions'));
+      expect(warningLines).toHaveLength(1);
+      expect(warningLines[0]?.trim()).toMatch(/scope \(must be one of/);
+      expect(rollbackRows()).toEqual(['Rollback to v1']);
+    });
+
+    it('(b) --json carries the warning in `warnings`', () => {
+      carryDroppedDefinition();
+      seedVersionHistory(workspace, 'prompt', 'test-prompt', [
+        { version: 1, snapshot: baseSnapshot, description: 'Version 1' },
+      ]);
+
+      const json = run([
+        'rollback', 'prompt', 'test-prompt', '1', '--workspace', workspace, '--json',
+      ]);
+
+      expect(json.exitCode).toBe(0);
+      expect(inlineGateWarnings(json.output)).toEqual([expect.stringMatching(SCOPE_WARNING)]);
+    });
+
+    it('(c) control: a clean rollback restores, records and prints no inline-gate warning', () => {
+      seedVersionHistory(workspace, 'prompt', 'test-prompt', [
+        { version: 1, snapshot: baseSnapshot, description: 'Version 1' },
+      ]);
+
+      const json = run([
+        'rollback', 'prompt', 'test-prompt', '1', '--workspace', workspace, '--json',
+      ]);
+
+      expect(json.exitCode).toBe(0);
+      expect(readFileSync(promptFile, 'utf8')).toContain('Restored text.');
+      expect(inlineGateWarnings(json.output)).toEqual([]);
+      // Positive control: the channel is live on this path — it carries the unrelated advisories.
+      expect((JSON.parse(json.output) as { warnings: string[] }).warnings).toEqual(
+        expect.arrayContaining([expect.stringContaining('no arguments defined')]),
+      );
+      expect(rollbackRows()).toEqual(['Rollback to v1']);
+    });
   });
 });

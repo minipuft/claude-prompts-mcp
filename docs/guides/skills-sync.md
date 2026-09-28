@@ -106,7 +106,10 @@ created for you.
 Writes follow the same roots:
 
 - `clone` creates the resource under the workspace's `resources/` when a workspace is set, and under
-  the package's otherwise.
+  the package's otherwise. It refuses an imported prompt, or a companion step's `prompt.yaml`, whose
+  `gateConfiguration.inline_gate_definitions` carries an entry the loader would drop, naming the
+  definition and the field, and restores what was there before. With `--force`, a definition the
+  replaced file already carried is printed as a warning and does not block the import.
 - `pull` writes an edit back to the resource's own source files. It refuses a resource whose source
   is in the bundled package tree while a workspace or `MCP_RESOURCES_PATH` is set, because a package
   update replaces that tree. Copy the resource into your workspace and pull again.

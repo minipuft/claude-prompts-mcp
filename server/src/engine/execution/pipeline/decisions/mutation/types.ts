@@ -80,8 +80,10 @@ export interface DecideMutationInput {
   readonly currentNodeId: string | null;
   /** Count of insertions already applied earlier in this run (OQ-P4-5's 3-per-run cap). */
   readonly insertedCount: number;
-  /** Unknown ids that have already received an investigation insertion earlier in this run
-   * (OQ-P4-5's 1-per-unknown-id cap). */
+  /** Unknown ids that have already received an investigation insertion since their CURRENT
+   * discovery (OQ-P4-5's 1-per-unknown-id cap, counted per declaration since R127 — a re-opened
+   * unknown's step from before it was resolved does not count). `investigatedUnknownIds` is the
+   * one derivation. */
   readonly insertedUnknownIds: readonly string[];
   /**
    * A run-level insertion cap the SUBMISSION declared — today only a Workflow IR's

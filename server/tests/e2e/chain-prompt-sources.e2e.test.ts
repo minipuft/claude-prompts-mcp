@@ -1716,6 +1716,46 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       expect(mid.unknownId).toBe('u-234new');
     }, 120000);
 
+    /**
+     * P6.241 (R127). MEASURED 2026-09-28 on `beae567f`, the P6.234 run: after the re-open,
+     * `u-234old` was absent from `uninvestigated_unknown_ids` although this call inserted no step
+     * for it, and declaring it again inserted nothing (`cap-reached`, the per-id cap) — its step
+     * from BEFORE it was resolved still counted. A re-open is a new declaration, so only a step
+     * inserted since the unknown's current discovery investigates it.
+     */
+    test('P6.241 (a) a re-opened unknown is listed until it gets a new step, and gets one', async () => {
+      const run = await start({ command: `>>sv_a${ARROW}>>sv_b${ARROW}>>sv_b` });
+      await callRun(run.chainId, { user_response: 'A', observations: [unknown('u-241old')] });
+      await callRun(run.chainId, {
+        user_response: 'investigated old',
+        observations: [
+          {
+            type: 'unknown_resolved',
+            id: 'u-241old',
+            statement: 'answered',
+            resolution: 'answered',
+          },
+        ],
+      });
+      const reopened = await callRun(run.chainId, {
+        user_response: 'B',
+        observations: [unknown('u-241new'), unknown('u-241old')],
+      });
+      expect(inserted(run.chainId)).toEqual(['inv-u-241old', 'inv-u-241new']);
+      // (b) control: `u-241new` has a step inserted since its discovery, so it is not listed.
+      expect(reopened.uninvestigated).toEqual(['u-241old']);
+      expect(reopened.lineIds).toEqual(['u-241old']);
+
+      // Declared again, it gets its own step — the second for this id, the first since the re-open.
+      const again = await callRun(run.chainId, {
+        user_response: 'investigated new',
+        observations: [unknown('u-241old')],
+      });
+      expect(inserted(run.chainId)).toEqual(['inv-u-241old', 'inv-u-241new', 'inv-u-241old-2']);
+      expect(again.uninvestigated).toEqual([]);
+      expect(again.section).not.toContain(LEFT_OUT);
+    }, 120000);
+
     test('(b) control: one blocking unknown gets its step and no such line', async () => {
       const run = await start({ command: `>>sv_a${ARROW}>>sv_b` });
       const mid = await callRun(run.chainId, {

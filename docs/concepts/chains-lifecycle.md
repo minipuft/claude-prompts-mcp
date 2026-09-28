@@ -261,6 +261,8 @@ insert or skip -> rendering follows the mutated node list.
   no way to signal it.
 - **Caps**: 1 insertion per unknown id, 3 insertions per run. A capped or non-qualifying
   observation mutates nothing — the call still succeeds, it just has no side effect on the graph.
+  The per-id cap counts per declaration: a re-opened unknown is a new declaration, so the step
+  it got before it was resolved no longer counts, and it can get a new one within the per-run cap.
 - **One insertion per call**: a call declaring several blocking unknowns inserts a step for the
   first only, and the interrupt is about that same first one. The rest stay open, and the
   interrupt names them as open with no investigation step;

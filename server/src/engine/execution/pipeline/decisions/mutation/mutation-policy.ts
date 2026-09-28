@@ -2,6 +2,8 @@
 
 import { MAX_INSERTIONS_PER_RUN } from './types.js';
 
+import type { ChainNode } from '#shared/types/chain-execution.js';
+import type { UnknownLedgerEntry } from '#shared/types/chain-session.js';
 import type { ChainMutation, DecideMutationInput } from './types.js';
 
 import { currentOrdinal, ordinalOf } from '#shared/utils/node-order.js';
@@ -40,6 +42,37 @@ export function decideMutation(input: DecideMutationInput): ChainMutation {
   }
 
   return { kind: 'none', reason: 'no-trigger' };
+}
+
+/**
+ * The ledger's unknown ids an inserted investigation step answers SINCE their current discovery
+ * (R127) — the per-unknown-id cap's input and the interrupt's "no investigation step" test, one
+ * rule for both.
+ *
+ * A re-open is a new declaration (R122), so a step inserted before the unknown was resolved does
+ * not answer it once it is re-opened. The comparison is by ordinal: an investigation step goes in
+ * after the node its unknown was declared at, and nothing is ever inserted at or before the node
+ * a run stands on, so a step standing at an ordinal PAST the entry's `discoveredAtStep` was
+ * inserted by or after that discovery, while one at or before it predates it. An inserted node
+ * whose unknown is no longer in the ledger still counts for its id: nothing re-declares an id the
+ * ledger does not hold without re-stamping it.
+ */
+export function investigatedUnknownIds(
+  ledger: readonly UnknownLedgerEntry[],
+  nodes: readonly ChainNode[]
+): ReadonlySet<string> {
+  const investigated = new Set<string>();
+  nodes.forEach((node, index) => {
+    const unknownId = node.originUnknownId;
+    if (node.origin !== 'inserted' || unknownId === undefined) {
+      return;
+    }
+    const entry = ledger.find((candidate) => candidate.id === unknownId);
+    if (entry === undefined || index + 1 > entry.discoveredAtStep) {
+      investigated.add(unknownId);
+    }
+  });
+  return investigated;
 }
 
 /**

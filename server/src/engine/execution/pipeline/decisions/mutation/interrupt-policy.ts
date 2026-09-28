@@ -1,5 +1,8 @@
 // @lifecycle canonical - Sole owner of the mid-chain blocking-unknown interrupt decision.
 
+import { investigatedUnknownIds } from './mutation-policy.js';
+import { UNKNOWN_INTERRUPT_GATE_ID } from './types.js';
+
 import type { ChainNode, PendingGateReview } from '#shared/types/chain-execution.js';
 import type { UnknownLedgerEntry } from '#shared/types/chain-session.js';
 import type {
@@ -10,8 +13,6 @@ import type {
 } from './types.js';
 
 import { currentOrdinal, ordinalOf } from '#shared/utils/node-order.js';
-
-import { UNKNOWN_INTERRUPT_GATE_ID } from './types.js';
 
 /**
  * Whether a pending review is the synthetic one a hard-paused blocking unknown raises (D-2).
@@ -149,17 +150,17 @@ function collectAffectedStepIds(input: DecideInterruptInput): readonly string[] 
 }
 
 /**
- * Open blocking entries with no `inserted` node naming them. The mutation policy inserts at most
- * one investigation step per call, so this is where a second discovery in one batch — or one the
- * run's insertion cap refused — surfaces, instead of being implied by the step the reply renders.
+ * Open blocking entries no `inserted` node investigates since their current discovery. The
+ * mutation policy inserts at most one investigation step per call, so this is where a second
+ * discovery in one batch — or one the run's insertion cap refused, or a re-opened unknown whose
+ * only step predates its resolution (R127) — surfaces, instead of being implied by the step the
+ * reply renders.
  */
 function collectUninvestigatedUnknownIds(
   open: readonly UnknownLedgerEntry[],
   nodes: readonly ChainNode[]
 ): readonly string[] {
-  const investigated = new Set(
-    nodes.filter((node) => node.origin === 'inserted').map((node) => node.originUnknownId)
-  );
+  const investigated = investigatedUnknownIds(open, nodes);
   return open.filter((entry) => !investigated.has(entry.id)).map((entry) => entry.id);
 }
 

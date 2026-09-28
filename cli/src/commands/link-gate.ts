@@ -14,7 +14,11 @@ import { updateRowDescription } from '@modules/versioning/snapshot-contract.js';
 import { resourceFileSet } from '@shared/utils/resource-file-set.js';
 import { resolveWorkspace, findResource, resolveResourceDir } from '../lib/workspace.js';
 import { output } from '../lib/output.js';
-import { printValidationFailure } from '../lib/resource-validation.js';
+import {
+  mutationWarnings,
+  printMutationWarnings,
+  printValidationFailure,
+} from '../lib/resource-validation.js';
 
 interface LinkGateOptions {
   workspace?: string;
@@ -73,6 +77,7 @@ export async function linkGateCmd(options: LinkGateOptions): Promise<number> {
   const result = mutation.operation;
 
   const verb = result.action === 'removed' ? 'Unlinked' : 'Linked';
+  const warnings = mutationWarnings(mutation.validation);
 
   if (options.json) {
     output(
@@ -87,11 +92,13 @@ export async function linkGateCmd(options: LinkGateOptions): Promise<number> {
         ...(record.version === undefined ? {} : { version: record.version }),
         ...(record.reason === undefined ? {} : { not_recorded_reason: record.reason }),
         ...(record.degraded === undefined ? {} : { snapshot_degraded_reason: record.degraded }),
+        warnings,
       },
       { json: true },
     );
   } else {
     console.log(`${verb} gate '${options.gateId}' ${result.action === 'removed' ? 'from' : 'to'} prompt '${options.promptId}'`);
+    printMutationWarnings(warnings);
     console.log(
       record.recorded
         ? `Recorded as version ${record.version}.`

@@ -208,7 +208,13 @@ const ACTION_METADATA_MAP = new Map<
 );
 
 /**
- * Validate required fields in operation arguments with contextual error messages
+ * Validate required fields in operation arguments with contextual error messages.
+ *
+ * **Missing means `== null || === ''`** (R126): an absent key, `null`, and an empty string are
+ * missing; `0` and `false` are values. A truthiness check read `version: 0` and
+ * `from_version: 0` as missing, so a version the caller named was refused as one never sent. The
+ * snapshot contract answers the same question with its own stated rule (`missingRequiredFields`,
+ * `== null`, because a recorded empty string is a value there) — one rule per domain, each stated.
  */
 export function validateRequiredFields<T extends object, K extends keyof T & string>(
   args: T,
@@ -217,7 +223,8 @@ export function validateRequiredFields<T extends object, K extends keyof T & str
   const missing: string[] = [];
 
   for (const field of required) {
-    if (!args[field]) {
+    const value: unknown = args[field];
+    if (value == null || value === '') {
       missing.push(field);
     }
   }

@@ -47,8 +47,8 @@ export interface ResourceVerificationChecks {
    * prompt write already refuses, before writing, only the definitions its edit introduced
    * (`diagnosePromptWrite`), and then verifies the written file here — a flat check at that point
    * would roll back an unrelated edit to a prompt that already carried one. The CLI adapter
-   * (`cli-shared/resource-validation.ts`) opts in, and `runValidatedMutation` keeps the CLI's
-   * mutations differential.
+   * (`cli-shared/resource-validation.ts`) and the skills-sync import (`cloneCommand`) opt in, and
+   * each stays differential through `exemptPreExistingUnloadableGates`.
    */
   unloadableInlineGates?: boolean;
 }
@@ -129,6 +129,39 @@ function findUnloadableInlineGates(data: unknown): ResourceVerificationIssue[] {
       message: `(${label}) ${problem}. The loader drops a definition missing it, so the gate would never load.`,
     }));
   });
+}
+
+/** Identity of an unloadable-inline-gate issue across a write: its definition and field. */
+function unloadableGateKey(issue: ResourceVerificationIssue): string | undefined {
+  return issue.code === UNLOADABLE_INLINE_GATE_CODE ? `${issue.path} ${issue.message}` : undefined;
+}
+
+/**
+ * Differential for inline gate definitions the loader drops (R117 amended): one the resource
+ * already carried before the write is reported as a warning, never blocking, so an unrelated
+ * edit (a rename, a move, a gate link, a skills-sync re-import) of such a prompt still lands; only
+ * one the write introduced keeps the result invalid. Every other error stays as the validator
+ * reported it. `before` is the verdict on the file the write replaces, or `null` when there was
+ * none — a fresh file carries nothing, so every definition it brings is refused.
+ */
+export function exemptPreExistingUnloadableGates(
+  before: ResourceVerificationResult | null,
+  after: ResourceVerificationResult
+): ResourceVerificationResult {
+  if (before === null || after.valid) return after;
+  const held = new Set(before.errors.map(unloadableGateKey).filter((key) => key !== undefined));
+  const carried = after.errors.filter((issue) => {
+    const key = unloadableGateKey(issue);
+    return key !== undefined && held.has(key);
+  });
+  if (carried.length === 0) return after;
+  const errors = after.errors.filter((issue) => !carried.includes(issue));
+  return {
+    ...after,
+    valid: errors.length === 0,
+    errors,
+    warnings: [...after.warnings, ...carried],
+  };
 }
 
 /**

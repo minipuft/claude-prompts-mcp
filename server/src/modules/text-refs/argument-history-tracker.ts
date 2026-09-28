@@ -31,10 +31,20 @@ const DEFAULT_STATE: PersistedArgumentHistory = {
  * Operates independently of conversation history to ensure reliable execution context.
  */
 export class ArgumentHistoryTracker {
-  /** Chain ID to entries mapping */
+  /**
+   * History key to entries. **The key is the SESSION id** (R116 third amendment): `trackExecution`
+   * files an entry under its `sessionId`, and only a sessionless call — which no production caller
+   * makes — falls back to its `promptId`. The map, the persisted `chains` blob and `getStats`'s
+   * `totalChains` keep the older "chain" names because the blob shape is persisted.
+   *
+   * An evicted session's history stays here and in the persisted blob, and nothing in this process
+   * reads it: the one reader, `ChainSessionStore.getChainContext`, answers `{}` for a session it no
+   * longer holds before it asks this tracker (as of 2026-09-28 · flips when a claimer loads the
+   * evictor's history or history is keyed by run).
+   */
   private chainHistory: Map<string, ArgumentHistoryEntry[]> = new Map();
 
-  /** Session ID to chain ID mapping */
+  /** Session id to its history key, which `trackExecution` sets to the session id itself. */
   private sessionToChain: Map<string, string> = new Map();
 
   /** Maximum entries per chain (FIFO cleanup) */
@@ -130,8 +140,8 @@ export class ArgumentHistoryTracker {
     // Generate unique entry ID
     const entryId = `entry_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
-    // Determine chain ID (use sessionId if provided, otherwise promptId)
-    const chainId = sessionId || promptId;
+    // The history key: the session id, or the prompt id for a sessionless call (see `chainHistory`).
+    const historyKey = sessionId || promptId;
 
     // Create entry
     const entry: ArgumentHistoryEntry = {
@@ -158,28 +168,28 @@ export class ArgumentHistoryTracker {
     }
 
     // Get or create chain history
-    if (!this.chainHistory.has(chainId)) {
-      this.chainHistory.set(chainId, []);
+    if (!this.chainHistory.has(historyKey)) {
+      this.chainHistory.set(historyKey, []);
     }
 
-    const chainEntries = this.chainHistory.get(chainId)!;
+    const chainEntries = this.chainHistory.get(historyKey)!;
     chainEntries.push(entry);
 
     // Enforce max entries limit (FIFO)
     if (chainEntries.length > this.maxEntriesPerChain) {
       const removed = chainEntries.shift();
       this.logger.debug(
-        `Removed oldest entry ${removed?.entryId} from chain ${chainId} (limit: ${this.maxEntriesPerChain})`
+        `Removed oldest entry ${removed?.entryId} from history ${historyKey} (limit: ${this.maxEntriesPerChain})`
       );
     }
 
     // Update session-to-chain mapping
     if (sessionId) {
-      this.sessionToChain.set(sessionId, chainId);
+      this.sessionToChain.set(sessionId, historyKey);
     }
 
     this.logger.debug(
-      `Tracked execution: chainId=${chainId}, promptId=${promptId}, step=${stepNumber}, entryId=${entryId}`
+      `Tracked execution: historyKey=${historyKey}, promptId=${promptId}, step=${stepNumber}, entryId=${entryId}`
     );
 
     // Persist to SQLite
@@ -189,10 +199,11 @@ export class ArgumentHistoryTracker {
   }
 
   /**
-   * Get argument history for a specific chain
+   * Get the argument history filed under a session id — the key `trackExecution` files under, a
+   * sessionless call's prompt id aside (see `chainHistory`).
    */
-  getChainHistory(chainId: string): ArgumentHistoryEntry[] {
-    const entries = this.chainHistory.get(chainId) || [];
+  getChainHistory(sessionId: string): ArgumentHistoryEntry[] {
+    const entries = this.chainHistory.get(sessionId) || [];
     return entries.map((entry) => ({ ...entry }));
   }
 
@@ -200,8 +211,7 @@ export class ArgumentHistoryTracker {
    * Get argument history for a session
    */
   getSessionHistory(sessionId: string): ArgumentHistoryEntry[] {
-    const chainId = this.sessionToChain.get(sessionId) || sessionId;
-    return this.getChainHistory(chainId);
+    return this.getChainHistory(this.sessionToChain.get(sessionId) || sessionId);
   }
 
   /**
@@ -289,12 +299,14 @@ export class ArgumentHistoryTracker {
    * Clear history for a specific session
    */
   async clearSession(sessionId: string): Promise<void> {
-    const chainId = this.sessionToChain.get(sessionId);
+    const historyKey = this.sessionToChain.get(sessionId);
 
-    if (chainId) {
-      this.chainHistory.delete(chainId);
+    if (historyKey) {
+      this.chainHistory.delete(historyKey);
       this.sessionToChain.delete(sessionId);
-      this.logger.debug(`Cleared argument history for session ${sessionId} (chain ${chainId})`);
+      this.logger.debug(
+        `Cleared argument history for session ${sessionId} (history key ${historyKey})`
+      );
       await this.saveToStore();
     }
   }
@@ -335,13 +347,13 @@ export class ArgumentHistoryTracker {
 
     try {
       const chains: Record<string, ArgumentHistoryEntry[]> = {};
-      this.chainHistory.forEach((entries, chainId) => {
-        chains[chainId] = entries;
+      this.chainHistory.forEach((entries, historyKey) => {
+        chains[historyKey] = entries;
       });
 
       const sessionToChain: Record<string, string> = {};
-      this.sessionToChain.forEach((chainId, sessionId) => {
-        sessionToChain[sessionId] = chainId;
+      this.sessionToChain.forEach((historyKey, sessionId) => {
+        sessionToChain[sessionId] = historyKey;
       });
 
       const persistedData: PersistedArgumentHistory = {
@@ -374,13 +386,13 @@ export class ArgumentHistoryTracker {
       const persistedData: PersistedArgumentHistory = await this.store.load(this.scope);
 
       this.chainHistory.clear();
-      Object.entries(persistedData.chains).forEach(([chainId, entries]) => {
-        this.chainHistory.set(chainId, entries);
+      Object.entries(persistedData.chains).forEach(([historyKey, entries]) => {
+        this.chainHistory.set(historyKey, entries);
       });
 
       this.sessionToChain.clear();
-      Object.entries(persistedData.sessionToChain).forEach(([sessionId, chainId]) => {
-        this.sessionToChain.set(sessionId, chainId);
+      Object.entries(persistedData.sessionToChain).forEach(([sessionId, historyKey]) => {
+        this.sessionToChain.set(sessionId, historyKey);
       });
 
       const stats = this.getStats();

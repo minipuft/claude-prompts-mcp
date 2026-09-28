@@ -41,6 +41,11 @@ import {
   ResourceVerificationService,
   type ResourceVerificationType,
 } from '../resources/services/index.js';
+import {
+  exemptPreExistingUnloadableGates,
+  UNLOADABLE_INLINE_GATE_CODE,
+  type ResourceVerificationResult,
+} from '../resources/services/resource-verification-service.js';
 
 import type { GateActivationContext, GateActivationRules } from '#engine/gates/types/index.js';
 import type { ArtifactKind } from '#engine/gates/utils/artifact-kinds.js';
@@ -4637,6 +4642,9 @@ async function pullCommand(
  * - gates/{id}/ → copied to canonical gates, added to gateConfiguration.include
  * - resources/{stepId}/ → copied as sub-prompts, added to chainSteps
  */
+/** What the import checks beyond each resource's schema (R117, third amendment). */
+const IMPORT_VERIFICATION_CHECKS = { unloadableInlineGates: true } as const;
+
 async function cloneCommand(
   opts: SkillsSyncOptions,
   output: SkillsSyncOutput,
@@ -4771,6 +4779,55 @@ async function cloneCommand(
     const stepTargetDir = path.join(targetDir, stepEntry.name);
     mutationTargets.set(stepTargetDir, { path: stepTargetDir, kind: 'directory' });
   }
+
+  // R117 (third amendment): the import opts into the unloadable-inline-gate check, differential
+  // against the file each write replaces — read here, before `mutate` overwrites it. A fresh
+  // import has no verdict, so a definition the loader drops is refused naming the field; one the
+  // replaced file already carried is a warning.
+  const verdictsBefore = new Map<string, ResourceVerificationResult>();
+  const replacedFiles: ImportValidationTarget[] = [
+    {
+      resourceType: resourceVerificationType,
+      resourceId,
+      filePath: path.join(targetDir, yamlFileName),
+    },
+    ...stepDirEntries.map((entry) => ({
+      resourceType: 'prompts' as const,
+      resourceId: entry.name,
+      filePath: path.join(targetDir, entry.name, 'prompt.yaml'),
+    })),
+  ];
+  for (const replaced of replacedFiles) {
+    if (!existsSync(replaced.filePath)) continue;
+    verdictsBefore.set(
+      replaced.filePath,
+      verificationService.validateFile(
+        replaced.resourceType,
+        replaced.resourceId,
+        replaced.filePath,
+        IMPORT_VERIFICATION_CHECKS
+      )
+    );
+  }
+  const verifyImported = (target: ImportValidationTarget): ResourceVerificationResult => {
+    const result = exemptPreExistingUnloadableGates(
+      verdictsBefore.get(target.filePath) ?? null,
+      verificationService.validateFile(
+        target.resourceType,
+        target.resourceId,
+        target.filePath,
+        IMPORT_VERIFICATION_CHECKS
+      )
+    );
+    if (!result.valid) {
+      throw new ResourceVerificationError(verificationService.toFailurePayload(result, false));
+    }
+    for (const issue of result.warnings) {
+      if (issue.code !== UNLOADABLE_INLINE_GATE_CODE) continue;
+      output.warn(`  warning ${target.filePath}: ${issue.path}: ${issue.message}`);
+    }
+    return result;
+  };
 
   let validationTargets: ImportValidationTarget[] = [];
   const transactionResult = await mutationTransaction.run({
@@ -4963,27 +5020,13 @@ async function cloneCommand(
     },
     validate: async () => {
       for (const target of validationTargets) {
-        const result = verificationService.validateFile(
-          target.resourceType,
-          target.resourceId,
-          target.filePath
-        );
-        if (!result.valid) {
-          throw new ResourceVerificationError(verificationService.toFailurePayload(result, false));
-        }
+        verifyImported(target);
       }
-
-      const primaryValidation = verificationService.validateFile(
-        resourceVerificationType,
+      return verifyImported({
+        resourceType: resourceVerificationType,
         resourceId,
-        path.join(targetDir, yamlFileName)
-      );
-      if (!primaryValidation.valid) {
-        throw new ResourceVerificationError(
-          verificationService.toFailurePayload(primaryValidation, false)
-        );
-      }
-      return primaryValidation;
+        filePath: path.join(targetDir, yamlFileName),
+      });
     },
   });
 

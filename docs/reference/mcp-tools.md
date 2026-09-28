@@ -1724,7 +1724,9 @@ prompt_engine(
 ```
 
 - **Caps**: 1 insertion per unknown id, 3 insertions per run. A capped or non-qualifying
-  observation still applies to the ledger — it just mutates nothing in the node list.
+  observation still applies to the ledger — it just mutates nothing in the node list. The per-id
+  cap counts steps inserted since the unknown's current discovery: a re-opened unknown's step from
+  before it was resolved does not count, so it can get a new one within the per-run cap.
 - **One insertion per call.** A call that declares several blocking unknowns inserts a step for
   the first one only; the others stay open in the ledger with no step. The interrupt is about that
   same first one, and its section names the others on an `Open with no investigation step` line, and `structuredContent.chain_interrupt`
@@ -1805,7 +1807,8 @@ step investigates, and the one the text section names. A re-opened unknown count
 the call that re-opens it, at its place in that call's order. `open_blocking_unknowns` lists every
 blocking unknown still open, in the order the run discovered them, so a run holding two reports
 both on the machine half as well as the text. `uninvestigated_unknown_ids` is the subset no
-inserted step investigates, in the same order: the ids the text's `Open with no investigation
+inserted step investigates since its current discovery (a re-opened unknown's earlier step does
+not count), in the same order: the ids the text's `Open with no investigation
 step` line names, empty when every open one has its step or the run has completed.
 
 A paused run never offers "answer the step" — it issued no step. It never offers a bare

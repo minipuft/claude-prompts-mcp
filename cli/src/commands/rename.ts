@@ -7,7 +7,11 @@ import {
 } from '../lib/workspace.js';
 import { output, icons, color } from '../lib/output.js';
 import { TYPE_MAP, historyRef, singularName } from '../lib/types.js';
-import { printValidationFailure } from '../lib/resource-validation.js';
+import {
+  mutationWarnings,
+  printMutationWarnings,
+  printValidationFailure,
+} from '../lib/resource-validation.js';
 
 interface RenameOptions {
   workspace?: string;
@@ -88,11 +92,13 @@ export async function rename(options: RenameOptions): Promise<number> {
   renameHistoryResource(result.newPath!, historyRef(type, match.id), options.newId!);
 
   const refs = scanReferences(workspace, options.oldId!);
+  const warnings = mutationWarnings(mutation.validation);
 
   if (options.json) {
-    output({ id: options.newId, oldId: options.oldId, type: singularName(type), oldPath: result.oldPath, newPath: result.newPath, references: refs }, { json: true });
+    output({ id: options.newId, oldId: options.oldId, type: singularName(type), oldPath: result.oldPath, newPath: result.newPath, references: refs, warnings }, { json: true });
   } else {
     console.log(`Renamed ${singularName(type)} '${options.oldId}' -> '${options.newId}'`);
+    printMutationWarnings(warnings);
     if (refs.length > 0) {
       console.error(`\n${icons.warn()} References to '${options.oldId}' found (${refs.length}):`);
       for (const ref of refs) {

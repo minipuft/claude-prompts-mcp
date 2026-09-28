@@ -96,7 +96,11 @@ export type {
 } from './injection/index.js';
 
 // Adaptive chain-mutation decision (P4 Tier 1 — pure; wired into stage 16 at Tier 3)
-export { decideMutation, MAX_INSERTIONS_PER_RUN } from './mutation/index.js';
+export {
+  decideMutation,
+  investigatedUnknownIds,
+  MAX_INSERTIONS_PER_RUN,
+} from './mutation/index.js';
 export type { ChainMutation, DecideMutationInput, MutationNoneReason } from './mutation/index.js';
 
 // Mid-chain blocking-unknown interrupt (row 1.1 — pure; wired into stage 16 at row 2.1)
