@@ -415,6 +415,11 @@ prompt_engine(command:"code_review", gates:[
 - Multiple distinct validation criteria in one command
 - Self-documenting commands that LLMs can parse unambiguously
 
+A named inline gate, a full gate definition in `gates`, or a prompt's inline gate definition may
+not take a canonical gate's id (`:: content-structure:"…"`, `gates:[{id:"content-structure",
+criteria:[…]}]`). Registered, it would replace that gate's criteria for every run on the server;
+it is refused instead, with a logged warning naming the id, and the run keeps the canonical gate.
+
 ### Chain Step Targeting
 
 A full gate definition may target one chain step by 1-based position (`target_step_number`) or by

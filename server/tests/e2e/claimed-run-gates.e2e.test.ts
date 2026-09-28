@@ -1143,6 +1143,96 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
   }, 180000);
 
   /**
+   * P6.193 / R94. The two other paths choosing a temporary gate's id. MEASURED 2026-09-27 on
+   * `20f40ca6` with `gates.executeInlineGateDefinitions` on, every run left open: a request gate
+   * `{id: content-structure, criteria: [REQ-193]}` was reviewed as `content-structure` rendering
+   * REQ-193 instead of the canonical guidance, and so was every later plain run on the server; a
+   * named inline gate `:: content-structure:"NAMED-193"` did the same with NAMED-193. Gate loading
+   * reads the temporary registry first, keyed by id per process. `createTemporaryGate` now refuses
+   * a canonical id for every caller (the refusal is a server-log warning; the run keeps the
+   * canonical gate). A request gate carrying `name` and `description` as well never reached the
+   * registry under its id: it registered as `temp_…` and rendered its description only.
+   */
+  test('P6.193 a request gate or named inline gate may not shadow a canonical gate id', async () => {
+    const roots = freshRoots();
+    writeFileSync(
+      path.join(roots.workspace, 'config.json'),
+      JSON.stringify({ gates: { executeInlineGateDefinitions: true } })
+    );
+    const server = await startServer(roots);
+    const author = async (args: Record<string, unknown>): Promise<void> => {
+      const result = await server.call('resource_manager', args);
+      if (result.isError) throw new Error(result.text);
+    };
+    await author({
+      resource_type: 'prompt',
+      action: 'create',
+      id: 'sv_p193',
+      category: 'general',
+      name: 'sv_p193',
+      description: 'step for P6.193',
+      user_message_template: 'BODY-193',
+      gate_configuration: { framework_gates: false },
+    });
+    await author({
+      resource_type: 'prompt',
+      action: 'create',
+      id: 'sv_p193_chain',
+      category: 'general',
+      name: 'sv_p193_chain',
+      description: 'two steps',
+      user_message_template: 'CHAIN193',
+      gate_configuration: { framework_gates: false },
+      chain_steps: ['A', 'B'].map((stepName) => ({ promptId: 'sv_p193', stepName })),
+    });
+    const markers = ['Use clear headings', 'REQ-193', 'NAMED-193', 'RQC-193', 'NMC-193'];
+    /** Start a run (left open, so any gate it registered stays held) and FAIL its first step. */
+    const failFirst = async (start: Record<string, unknown>) => {
+      const started = await server.call('prompt_engine', start);
+      const chainId = chainIdOf(started.text);
+      const failed = await server.call('prompt_engine', {
+        chain_id: chainId,
+        user_response: 'A out',
+        gate_verdict: FAIL,
+      });
+      return {
+        reviews: runRow(roots, chainId)?.reviews,
+        failShown: markers.filter((marker) => failed.text.includes(marker)),
+        startText: started.text,
+      };
+    };
+    const plain = { command: '>>sv_p193_chain' };
+    const canonical = { reviews: { a: ['content-structure'] }, failShown: ['Use clear headings'] };
+    // Positive control: a plain run is reviewed on the canonical guidance.
+    expect(await failFirst(plain)).toMatchObject(canonical);
+
+    // (a) A request gate under the canonical id: its run, and a later plain run, keep the canonical
+    // gate. (A request gate carrying `name` and `description` loses its id before registration —
+    // see the note above — so the shape that reaches the registry is the one driven here.)
+    const request = { ...plain, gates: [{ id: 'content-structure', criteria: ['REQ-193'] }] };
+    expect(await failFirst(request)).toMatchObject(canonical);
+    expect(await failFirst(plain)).toMatchObject(canonical);
+
+    // (b) A named inline gate under the canonical id: the same.
+    expect(
+      await failFirst({ command: '>>sv_p193_chain :: content-structure:"NAMED-193"' })
+    ).toMatchObject(canonical);
+    expect(await failFirst(plain)).toMatchObject(canonical);
+
+    // (c) Control: a non-colliding request gate and named gate register beside the canonical one.
+    expect(
+      await failFirst({ ...plain, gates: [{ id: 'rqc193', criteria: ['RQC-193'] }] })
+    ).toMatchObject({
+      reviews: { a: ['rqc193', 'content-structure'] },
+      failShown: ['Use clear headings', 'RQC-193'],
+    });
+    expect(await failFirst({ command: '>>sv_p193_chain :: nmc193:"NMC-193"' })).toMatchObject({
+      reviews: { a: ['nmc193', 'content-structure'] },
+      failShown: ['Use clear headings', 'NMC-193'],
+    });
+  }, 240000);
+
+  /**
    * P6.158. MEASURED 2026-09-27 on `7b2e30ce` with `gates.executeInlineGateDefinitions` on (and
    * off): the bundled `research_chain` declares `Source Citations` in the CHAIN prompt's own
    * `inline_gate_definitions` and names it on step 2 (`inlineGateIds`), but only a STEP prompt's

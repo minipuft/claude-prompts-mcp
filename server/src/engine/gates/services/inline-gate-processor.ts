@@ -492,7 +492,7 @@ export class InlineGateProcessor {
       return gateId;
     } catch (error) {
       this.logger.warn('[InlineGateProcessor] Failed to register inline gate', {
-        error,
+        error: error instanceof Error ? error.message : String(error),
         criteria,
         scope,
       });
@@ -549,7 +549,7 @@ export class InlineGateProcessor {
       return gateId;
     } catch (error) {
       this.logger.warn('[InlineGateProcessor] Failed to create named inline gate', {
-        error,
+        error: error instanceof Error ? error.message : String(error),
         explicitId,
         criteria,
         scope,
