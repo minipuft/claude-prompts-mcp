@@ -1058,14 +1058,14 @@ export class ResponseAssembler {
    */
   buildInterruptStructuredContent(context: ExecutionContext): Record<string, unknown> | undefined {
     const interrupt = context.state.session.chainInterrupt;
-    if (interrupt === undefined) {
-      return undefined;
-    }
+    if (interrupt === undefined) return undefined;
 
     return {
       kind: 'chain_interrupt',
       reason: interrupt.reason,
+      // `unknown` is the most recent (what this interrupt is about); the list is every open one.
       unknown: { id: interrupt.unknownId, statement: interrupt.statement },
+      open_blocking_unknowns: [...interrupt.openBlockingUnknowns], // already `{id, statement}`
       affected_step_ids: [...interrupt.affectedStepIds],
       // camelCase `promptId`/`stepName` inside these entries is the plan's declared shape, not
       // an oversight: they name IR node fields a caller would author back verbatim in a
