@@ -82,12 +82,6 @@ export interface OperationResult {
   metadata?: any;
 }
 
-export interface ValidationContext {
-  operation: string;
-  requiredFields: string[];
-  providedFields: string[];
-}
-
 export interface FileOperationResult {
   exists: boolean;
   path?: string;

@@ -6,7 +6,6 @@
 import nunjucks from 'nunjucks';
 
 import { promptResourceMetadata } from '../../../../metadata/definitions/prompt-resource.js';
-import { ValidationContext } from '../core/types.js';
 
 import type { PromptResourceActionId } from '../../../../metadata/definitions/prompt-resource.js';
 import type { ToolDefinitionInput } from '../../core/types.js';
@@ -260,25 +259,6 @@ export function validateRequiredFields<T extends object, K extends keyof T & str
 
     throw new ValidationError(errorMessage);
   }
-}
-
-/**
- * Validate operation arguments with context
- */
-export function validateOperationArgs(
-  args: any,
-  operation: string,
-  required: string[]
-): ValidationContext {
-  const providedFields = Object.keys(args);
-
-  validateRequiredFields(args, required);
-
-  return {
-    operation,
-    requiredFields: required,
-    providedFields,
-  };
 }
 
 /**
