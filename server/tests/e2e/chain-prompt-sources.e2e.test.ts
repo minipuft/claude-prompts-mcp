@@ -1000,6 +1000,80 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
   });
 
   /**
+   * MEASURED 2026-09-28 on `6b6fff7aa` (driven, this harness): a `>>sv_chain` run standing at `b`,
+   * resumed with `user_response` plus a FAIL verdict and a gate targeting `b`, was refused "names
+   * the step this call answers; target \"c\" or later", although a FAIL re-renders `b` for the
+   * retry. The same gate sent with a verdict alone, after `b`'s review had opened, was refused the
+   * same way; accepting it there would not reach the review, whose gate set is fixed when it opens.
+   *
+   * Now (R146) a FAIL resume that opens the current node's review accepts a gate on that node, and
+   * the retry render carries it; a gate on a node the run passed, or sent while the node's review
+   * is already open, is refused by name.
+   */
+  describe('P6.149: a FAIL resume accepts a gate on the node it re-renders', () => {
+    const failWithGate = (
+      chainId: string,
+      answer: string | undefined,
+      target: string,
+      marker: string
+    ) =>
+      tool('prompt_engine', {
+        chain_id: chainId,
+        ...(answer === undefined ? {} : { user_response: answer }),
+        gate_verdict: FAIL,
+        gates: [
+          {
+            id: marker.toLowerCase(),
+            name: marker.toLowerCase(),
+            criteria: [marker],
+            target_step_id: target,
+          },
+        ],
+      });
+
+    test('(a) the retry render of the current node carries the gate, and its review holds it', async () => {
+      const run = await start({ command: '>>sv_chain' });
+      await run.call({ user_response: 'A out', gate_verdict: PASS });
+
+      const retried = await failWithGate(run.chainId, 'B out', 'b', 'TGT-149-A');
+      expect(retried.isError).toBe(false);
+      expect(retried.text).not.toContain('gate-target-passed');
+      expect(retried.text).toContain('Gate Review Required');
+      expect(retried.text).toContain('TGT-149-A');
+      expect(retried.text).toContain('### sv-block');
+      expect(runState(run.chainId).reviews['b']).toHaveLength(2);
+    }, 120000);
+
+    test('(b) control: the same FAIL resume aiming at a passed node is refused as before', async () => {
+      const run = await start({ command: '>>sv_chain' });
+      await run.call({ user_response: 'A out', gate_verdict: PASS });
+      const before = rawRunState(run.chainId);
+
+      const refused = await failWithGate(run.chainId, 'B out', 'a', 'TGT-149-B');
+      expect(refused.isError).toBe(true);
+      expect(refused.text).toContain(
+        '[gate-target-passed] node "a": target_step_id "a" names a step the run has already passed'
+      );
+      expect(refused.text).not.toContain('TGT-149-B');
+      expect(rawRunState(run.chainId)).toBe(before);
+    }, 120000);
+
+    test('(c) control: a FAIL graded against an already open review is refused by name', async () => {
+      const run = await start({ command: '>>sv_chain' });
+      await run.call({ user_response: 'A out', gate_verdict: PASS });
+      await run.call({ user_response: 'B out' });
+      const before = rawRunState(run.chainId);
+
+      const refused = await failWithGate(run.chainId, undefined, 'b', 'TGT-149-C');
+      expect(refused.isError).toBe(true);
+      expect(refused.text).toContain(
+        '[gate-target-passed] node "b": target_step_id "b" names the step whose open review this call grades; that review keeps the gates it opened with'
+      );
+      expect(rawRunState(run.chainId)).toBe(before);
+    }, 120000);
+  });
+
+  /**
    * PIN (as of 2026-09-27 · flips when a gated single prompt stops opening a run). A single prompt
    * with an inline gate operator opens a run of ONE node, `n1` (R52), because the planner requires
    * a session for any `gate` operator (`ExecutionPlanner.requiresSession`, its operator clause — not
