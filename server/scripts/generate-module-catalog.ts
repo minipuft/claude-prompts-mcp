@@ -10,6 +10,13 @@ import {
   runDependencyCruiser,
   type DependencyCruiserGraph,
 } from './lib/dependency-cruiser-graph.js';
+import {
+  TABLE_CONTRACTS,
+  VIEW_CONTRACTS,
+  type Retention,
+  type TableContract,
+  type ViewContract,
+} from '../src/infra/database/table-contracts.js';
 import { collectOwnershipRecords, resolveOwnershipDefinitions } from './lib/domain-ownership.js';
 import {
   loadSemanticModuleTree,
@@ -37,10 +44,25 @@ export interface OwnershipCatalogRow {
   readonly definedIn: string;
 }
 
+/** One `state.db` table or view, as `table-contracts.ts` declares it. */
+export interface RuntimeStateRow {
+  readonly name: string;
+  readonly kind: 'table' | 'view';
+  /** Nearest semantic module to the owner path; a view takes its source table's owner. `—` when none resolves. */
+  readonly ownerModuleId: string;
+  /** `—` for a view: it holds no rows of its own. */
+  readonly posture: string;
+  readonly scope: string;
+  readonly retention: string;
+  /** The table a view projects; `—` for a table. */
+  readonly projects: string;
+}
+
 export interface ModuleCatalogModel {
   readonly descriptors: readonly SemanticModuleDescriptor[];
   readonly edges: readonly BoundaryEdge[];
   readonly ownership: readonly OwnershipCatalogRow[];
+  readonly state: readonly RuntimeStateRow[];
 }
 
 function sourceModulePath(modulePath: string): boolean {
@@ -108,6 +130,62 @@ export function collectOwnershipRows(
     );
 }
 
+function firstSentence(text: string): string {
+  const match = /^(.*?\.)(?:\s|$)/su.exec(text.trim());
+  return match?.[1] ?? text.trim();
+}
+
+/** Every `Retention` variant, rendered deterministically as short text. */
+export function renderRetention(retention: Retention, rationale?: string): string {
+  if (retention === 'unbounded-justified') {
+    return rationale === undefined
+      ? 'unbounded (justified)'
+      : `unbounded (justified: ${firstSentence(rationale)})`;
+  }
+  if ('maxRows' in retention) return `maxRows: ${retention.maxRows}`;
+  if ('maxRowsPerResource' in retention) {
+    return `maxRowsPerResource: ${retention.maxRowsPerResource}`;
+  }
+  return `maxAgeDays: ${retention.maxAgeDays}`;
+}
+
+/**
+ * The declarations `validate:table-contracts` checks, one row per table then per view, in
+ * declaration order — that order is the durable-restore order, so it is kept rather than sorted.
+ */
+export function collectRuntimeStateRows(
+  tables: readonly TableContract[],
+  views: readonly ViewContract[],
+  descriptors: readonly SemanticModuleDescriptor[],
+  serverRoot: string
+): RuntimeStateRow[] {
+  const ownerModuleId = (owner: string | undefined): string =>
+    owner === undefined
+      ? '—'
+      : (nearestSemanticDescriptor(owner, descriptors, serverRoot)?.id ?? '—');
+  const ownerByTable = new Map(tables.map((contract) => [contract.table, contract.owner]));
+  return [
+    ...tables.map((contract) => ({
+      name: contract.table,
+      kind: 'table' as const,
+      ownerModuleId: ownerModuleId(contract.owner),
+      posture: contract.posture,
+      scope: contract.scope,
+      retention: renderRetention(contract.retention, contract.retentionRationale),
+      projects: '—',
+    })),
+    ...views.map((contract) => ({
+      name: contract.view,
+      kind: 'view' as const,
+      ownerModuleId: ownerModuleId(ownerByTable.get(contract.sourceTable)),
+      posture: '—',
+      scope: '—',
+      retention: '—',
+      projects: contract.sourceTable,
+    })),
+  ];
+}
+
 function escapeTableCell(value: string): string {
   return value.replaceAll('|', '\\|').replaceAll('\n', ' ');
 }
@@ -141,6 +219,15 @@ export function renderModuleCatalog(model: ModuleCatalogModel): string {
       `| ${escapeTableCell(row.capability)} | \`${row.symbol}\` | \`${row.moduleId}\` | \`${row.definedIn}\` |`
   );
 
+  const stateRows = model.state.map((row) => {
+    const owner = row.ownerModuleId === '—' ? '—' : `\`${row.ownerModuleId}\``;
+    const projects = row.projects === '—' ? '—' : `\`${row.projects}\``;
+    return (
+      `| \`${row.name}\` | ${row.kind} | ${owner} | ${row.posture} | ${row.scope} | ` +
+      `${escapeTableCell(row.retention)} | ${projects} |`
+    );
+  });
+
   const nodes = model.descriptors.map(
     (descriptor) => `  ${mermaidId(descriptor.id)}["${descriptor.id}"]`
   );
@@ -173,6 +260,19 @@ capability listed here and a row there cannot diverge. "Defined in" is relative 
 | --- | --- | --- | --- |
 ${ownershipRows.join('\n')}
 
+## Runtime state
+
+Generated from \`server/src/infra/database/table-contracts.ts\`, which \`validate:table-contracts\`
+checks against the schema DDL so no \`state.db\` table exists without a declared single owner,
+posture, scope and retention; a view is owned by the owner of the table it projects. Posture says
+whether rows survive a \`SCHEMA_VERSION\` recreate: \`durable\` rows exist nowhere else and are
+carried across it, while \`derived\` rows are rebuilt from a source outside the database and
+\`ephemeral\` rows are dropped because losing them is accepted.
+
+| Name | Kind | Owner module | Posture | Scope | Retention | Projects |
+| --- | --- | --- | --- | --- | --- | --- |
+${stateRows.join('\n')}
+
 ## Observed boundary graph
 
 Solid arrows include at least one value import. Dotted arrows contain only type imports.
@@ -194,6 +294,7 @@ export function buildModuleCatalog(): ModuleCatalogModel {
     descriptors: tree.descriptors,
     edges: aggregateBoundaryEdges(graph, tree.descriptors, SERVER_ROOT),
     ownership: collectOwnershipRows(tree.descriptors, REPO_ROOT, SOURCE_ROOT),
+    state: collectRuntimeStateRows(TABLE_CONTRACTS, VIEW_CONTRACTS, tree.descriptors, SERVER_ROOT),
   };
 }
 
@@ -212,7 +313,8 @@ function checkModuleCatalog(): void {
     throw new Error('module catalog drifted; run npm run generate:module-catalog');
   }
   process.stdout.write(
-    `generate:module-catalog --check OK — ${model.descriptors.length} boundaries\n`
+    `generate:module-catalog --check OK — ${model.descriptors.length} boundaries, ` +
+      `${model.state.length} state rows\n`
   );
 }
 
@@ -284,7 +386,28 @@ function selfTest(): void {
       definedIn: 'alpha/alpha-service.ts',
     },
   ];
-  const rendered = renderModuleCatalog({ descriptors, edges, ownership });
+  const state = collectRuntimeStateRows(
+    [
+      {
+        table: 'alpha_runs',
+        owner: 'src/alpha/store.ts',
+        posture: 'durable',
+        scope: 'workspace',
+        retention: 'unbounded-justified',
+        retentionRationale: 'One row per alpha. Bounded by the alpha tree.',
+        readers: [],
+      },
+    ],
+    [{ view: 'v_alpha', sourceTable: 'alpha_runs', readers: [] }],
+    descriptors,
+    root
+  );
+  assert.equal(state.length, 2);
+  assert.equal(renderRetention({ maxRows: 1 }), 'maxRows: 1');
+  assert.equal(renderRetention({ maxRowsPerResource: 50 }), 'maxRowsPerResource: 50');
+  assert.equal(renderRetention({ maxAgeDays: 7 }), 'maxAgeDays: 7');
+  assert.equal(renderRetention('unbounded-justified'), 'unbounded (justified)');
+  const rendered = renderModuleCatalog({ descriptors, edges, ownership, state });
   assert.match(rendered, /alpha --> module_beta/u);
   assert.doesNotMatch(rendered, /node:path/u);
   assert.match(rendered, /## Domain ownership/u);
@@ -292,8 +415,17 @@ function selfTest(): void {
     rendered,
     /\| Alpha capability \| `AlphaService` \| `alpha` \| `alpha\/alpha-service\.ts` \|/u
   );
-  assert.equal(rendered, renderModuleCatalog({ descriptors, edges, ownership }));
-  process.stdout.write('generate:module-catalog self-test — 7/7 cases passed\n');
+  assert.match(
+    rendered,
+    /\| `alpha_runs` \| table \| `alpha` \| durable \| workspace \| unbounded \(justified: One row per alpha\.\) \| — \|/u
+  );
+  assert.match(rendered, /\| `v_alpha` \| view \| `alpha` \| — \| — \| — \| `alpha_runs` \|/u);
+  assert.ok(
+    rendered.indexOf('## Domain ownership') < rendered.indexOf('## Runtime state') &&
+      rendered.indexOf('## Runtime state') < rendered.indexOf('## Observed boundary graph')
+  );
+  assert.equal(rendered, renderModuleCatalog({ descriptors, edges, ownership, state }));
+  process.stdout.write('generate:module-catalog self-test — 14/14 cases passed\n');
 }
 
 function main(): void {

@@ -71,6 +71,32 @@ capability listed here and a row there cannot diverge. "Defined in" is relative 
 | Style resolution | `StyleManager` | `formatting` | `modules/formatting/style-manager.ts` |
 | Prompt resolution | `PromptRegistry` | `prompts` | `modules/prompts/registry.ts` |
 
+## Runtime state
+
+Generated from `server/src/infra/database/table-contracts.ts`, which `validate:table-contracts`
+checks against the schema DDL so no `state.db` table exists without a declared single owner,
+posture, scope and retention; a view is owned by the owner of the table it projects. Posture says
+whether rows survive a `SCHEMA_VERSION` recreate: `durable` rows exist nowhere else and are
+carried across it, while `derived` rows are rebuilt from a source outside the database and
+`ephemeral` rows are dropped because losing them is accepted.
+
+| Name | Kind | Owner module | Posture | Scope | Retention | Projects |
+| --- | --- | --- | --- | --- | --- | --- |
+| `schema_version` | table | `infra-database` | derived | none | maxRows: 1 | — |
+| `chain_sessions` | table | `chains` | derived | run-owner-pid | unbounded (justified: Holds only live runs; rows are DELETEd per-PID by cleanupStalePidRows when a server exits.) | — |
+| `kv_state` | table | `infra-database` | ephemeral | workspace | unbounded (justified: One row per (scope, key) discriminator, so growth is bounded by workspace count.) | — |
+| `resource_index` | table | `infra-database` | derived | none | unbounded (justified: One row per on-disk resource; bounded by the resource tree itself.) | — |
+| `skills_sync_manifests` | table | `skills-sync` | durable | client-scope | unbounded (justified: One row per exported resource per (client, scope); the owner rewrites the set on each export.) | — |
+| `version_history` | table | `versioning` | durable | workspace | maxRowsPerResource: 50 | — |
+| `objects` | table | `cli-shared` | durable | workspace | unbounded (justified: The referenced closure of version_history, which is itself capped at maxRowsPerResource: 50, times the files per resource, times a per-blob byte limit the write path enforces.) | — |
+| `version_entries` | table | `cli-shared` | durable | workspace | unbounded (justified: One row per (version row, file).) | — |
+| `resource_changes` | table | `infra-observability` | derived | workspace | maxRows: 1000 | — |
+| `chain_runs` | table | `chains` | ephemeral | run-owner-pid | unbounded (justified: One row per live run of one owning process.) | — |
+| `chain_run_nodes` | table | `chains` | ephemeral | run-owner-pid | unbounded (justified: One row per node of a live run; deleted with its run.) | — |
+| `execution_records` | table | `chains` | ephemeral | workspace | maxRows: 5000 | — |
+| `v_execution_status` | view | `chains` | — | — | — | `chain_sessions` |
+| `v_execution_history` | view | `chains` | — | — | — | `execution_records` |
+
 ## Observed boundary graph
 
 Solid arrows include at least one value import. Dotted arrows contain only type imports.
