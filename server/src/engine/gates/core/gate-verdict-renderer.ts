@@ -11,9 +11,8 @@
  * This module is the structured alternative: the submission is an object the
  * schema validates, and rendering turns it into the canonical `full-hyphen`
  * form the parser already accepts. Nothing downstream changes — `gate_verdict`
- * stays a `string` at `execution-context.ts`, `validation/schemas.ts`, and
- * `request-validator.ts`, all of which consume a verdict that was already
- * parsed.
+ * stays a `string` at `execution-context.ts` and `request-validator.ts`, both
+ * of which consume a verdict that was already parsed.
  *
  * **Render-then-parse is only sound if it is lossless.** That is the property
  * the tests assert directly: for every valid submission, parsing the rendered

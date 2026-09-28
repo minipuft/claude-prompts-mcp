@@ -935,9 +935,9 @@ export class McpToolRouter {
             const trimmedUserResponse = args.user_response?.trim();
             // A structured submission is rendered to the canonical form here,
             // at the boundary, so the pipeline keeps receiving a `string`.
-            // Widening `gate_verdict` downstream would touch execution-context,
-            // validation/schemas, and request-validator for no gain — each
-            // already consumes a verdict that has been parsed.
+            // Widening `gate_verdict` downstream would touch execution-context
+            // and request-validator for no gain — each already consumes a
+            // verdict that has been parsed.
             const trimmedGateVerdict = isGateVerdictSubmission(args.gate_verdict)
               ? renderGateVerdict(args.gate_verdict)
               : args.gate_verdict?.trim();

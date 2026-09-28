@@ -16,6 +16,10 @@ import {
   describeUnresolvedChainStep,
   resolveChainSteps,
 } from '#modules/prompts/chain-step-resolution.js';
+import {
+  describeInlineGate,
+  findInlineGateFieldProblems,
+} from '#modules/prompts/yaml-prompt-loader.js';
 import { ResourceVerificationService } from '#modules/resources/services/index.js';
 import { ValidationError } from '#shared/utils/index.js';
 
@@ -708,12 +712,38 @@ function findShadowingDefinitions(
   });
 }
 
+/**
+ * Inline definitions the loader would drop (R108), by the loader's own list
+ * (`findInlineGateFieldProblems`): a written prompt carrying one serves no gate for it.
+ */
+function findUnloadableDefinitions(gateConfiguration: unknown): PromptWriteDefect[] {
+  if (typeof gateConfiguration !== 'object' || gateConfiguration === null) return [];
+  const definitions = (gateConfiguration as { inline_gate_definitions?: unknown })
+    .inline_gate_definitions;
+  if (!Array.isArray(definitions)) return [];
+  return definitions.flatMap((definition: unknown, index) => {
+    const isObject = typeof definition === 'object' && definition !== null;
+    const body = isObject ? (definition as Record<string, unknown>) : {};
+    const label = describeInlineGate(body, index);
+    const problems = isObject
+      ? findInlineGateFieldProblems(body)
+      : ['definition (must be an object)'];
+    return problems.map((problem) => ({
+      key: `inline-gate:${label}:${problem}`,
+      message:
+        `gateConfiguration.inline_gate_definitions[${index}] (${label}): ${problem}. ` +
+        `The loader drops a definition missing it, so the gate would never load.`,
+    }));
+  });
+}
+
 function collectPromptWriteDefects(
   candidate: PromptWriteCandidate,
   checks: PromptWriteChecks
 ): PromptWriteDefect[] {
   const defects: PromptWriteDefect[] = [];
   defects.push(...findShadowingDefinitions(candidate.gateConfiguration, checks.isCanonicalGateId));
+  defects.push(...findUnloadableDefinitions(candidate.gateConfiguration));
 
   for (const field of TEMPLATE_BODY_FIELDS) {
     const value = candidate[field];

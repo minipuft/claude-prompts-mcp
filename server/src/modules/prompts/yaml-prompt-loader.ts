@@ -151,8 +151,12 @@ const INLINE_GATE_ENFORCEMENT_MODES = ['blocking', 'advisory', 'informational'] 
  *
  * Extracted from the loop as a pure function for two reasons — the loop needs the field names to
  * report, and it measured cyclomatic 23 against a limit of 10 with the checks inlined.
+ *
+ * Exported as the one list `resource_manager` refuses a write by (`diagnosePromptWrite`, R108): a
+ * definition this returns problems for is dropped at load, so writing it would ship a gate that
+ * never loads.
  */
-function findInlineGateFieldProblems(definition: Record<string, unknown>): string[] {
+export function findInlineGateFieldProblems(definition: Record<string, unknown>): string[] {
   const problems: string[] = [];
 
   if (typeof definition['name'] !== 'string') {
@@ -259,7 +263,7 @@ function buildInlineGateDefinition(definition: Record<string, unknown>): InlineG
 }
 
 /** Best-effort label for a definition that failed validation — its own name may be the problem. */
-function describeInlineGate(definition: Record<string, unknown>, index: number): string {
+export function describeInlineGate(definition: Record<string, unknown>, index: number): string {
   const id = definition['id'];
   if (typeof id === 'string' && id.length > 0) {
     return id;

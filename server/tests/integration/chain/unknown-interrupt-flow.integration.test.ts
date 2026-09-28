@@ -488,6 +488,7 @@ describe('interrupt rendering: text section and structuredContent (row 2.4)', ()
       openBlockingUnknowns: [
         { id: 'cache-ttl', statement: 'TTL for the new cache layer is undecided' },
       ],
+      uninvestigatedUnknownIds: [],
       affectedStepIds: ['final-review'],
       remainingNodes: [
         { id: 'inv-cache-ttl', promptId: 'investigate_unknown', stepName: 'Investigate: TTL' },
@@ -577,6 +578,9 @@ describe('interrupt rendering: text section and structuredContent (row 2.4)', ()
       kind: 'chain_interrupt',
       reason: 'blocking_unknown',
       unknown: { id: 'cache-ttl', statement: 'TTL for the new cache layer is undecided' },
+      open_blocking_unknowns: [
+        { id: 'cache-ttl', statement: 'TTL for the new cache layer is undecided' },
+      ],
       affected_step_ids: ['final-review'],
       remaining_nodes: [
         { id: 'inv-cache-ttl', promptId: 'investigate_unknown', stepName: 'Investigate: TTL' },
@@ -630,6 +634,7 @@ describe('interrupt rendering: text section and structuredContent (row 2.4)', ()
       openBlockingUnknowns: [
         { id: 'cache-ttl', statement: 'TTL for the new cache layer is undecided' },
       ],
+      uninvestigatedUnknownIds: [],
       affectedStepIds: [],
       remainingNodes: [],
       paused: false,

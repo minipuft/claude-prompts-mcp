@@ -69,13 +69,13 @@ export function decideInterrupt(input: DecideInterruptInput): ChainInterrupt | u
     return undefined;
   }
 
+  const open = input.ledger.filter((entry) => entry.state === 'active' && entry.blocking === true);
   return {
     reason: 'blocking_unknown',
     unknownId: unknown.id,
     statement: unknown.statement,
-    openBlockingUnknowns: input.ledger
-      .filter((entry) => entry.state === 'active' && entry.blocking === true)
-      .map((entry) => ({ id: entry.id, statement: entry.statement })),
+    openBlockingUnknowns: open.map((entry) => ({ id: entry.id, statement: entry.statement })),
+    uninvestigatedUnknownIds: collectUninvestigatedUnknownIds(open, input.nodes),
     affectedStepIds: collectAffectedStepIds(input),
     remainingNodes: summarizeRemainingNodes(input),
     paused: input.pauseOnBlocking === true,
@@ -141,6 +141,21 @@ function collectAffectedStepIds(input: DecideInterruptInput): readonly string[] 
   }
 
   return [...byOrdinal.keys()].sort((a, b) => a - b).map((ordinal) => byOrdinal.get(ordinal) ?? '');
+}
+
+/**
+ * Open blocking entries with no `inserted` node naming them. The mutation policy inserts at most
+ * one investigation step per call, so this is where a second discovery in one batch — or one the
+ * run's insertion cap refused — surfaces, instead of being implied by the step the reply renders.
+ */
+function collectUninvestigatedUnknownIds(
+  open: readonly UnknownLedgerEntry[],
+  nodes: readonly ChainNode[]
+): readonly string[] {
+  const investigated = new Set(
+    nodes.filter((node) => node.origin === 'inserted').map((node) => node.originUnknownId)
+  );
+  return open.filter((entry) => !investigated.has(entry.id)).map((entry) => entry.id);
 }
 
 /**

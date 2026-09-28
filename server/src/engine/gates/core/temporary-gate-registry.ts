@@ -154,6 +154,15 @@ export class TemporaryGateRegistry {
     );
   }
 
+  /**
+   * The id a gate recorded under `id` would register under with `onIdCollision: 'fresh-id'` right
+   * now: `id` when unheld and not canonical, else the first free `<id>-N`. For a restore that must
+   * rewrite what it hands back before the registration happens (R110).
+   */
+  freshIdFor(id: string): string {
+    return this.firstFreeId(id);
+  }
+
   /** Whether `gateId` names a canonical gate, which no temporary gate may register under. */
   shadowsCanonicalGate(gateId: string): boolean {
     return this.isCanonicalGateId?.(gateId) === true;

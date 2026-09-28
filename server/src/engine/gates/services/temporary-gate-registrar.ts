@@ -414,7 +414,7 @@ export class TemporaryGateRegistrar {
     return (context.mcpRequest.gates ?? []).flatMap((gate) => {
       if (typeof gate !== 'object' || !('id' in gate) || typeof gate.id !== 'string') return [];
       const refusal = registry.canonicalIdRefusal(gate.id);
-      return refusal === undefined || !this.gateInputContainsInlineContent(gate)
+      return refusal === undefined || !gateInputContainsInlineContent(gate)
         ? []
         : [{ detail: `request gate "${gate.id}": ${refusal}` }];
     });
@@ -878,7 +878,7 @@ export class TemporaryGateRegistrar {
       return undefined;
     }
 
-    if (typeof gate === 'object' && gate !== null && this.gateInputContainsInlineContent(gate)) {
+    if (typeof gate === 'object' && gate !== null && gateInputContainsInlineContent(gate)) {
       return undefined;
     }
 
@@ -910,16 +910,19 @@ export class TemporaryGateRegistrar {
 
     return undefined;
   }
+}
 
-  private gateInputContainsInlineContent(gate: Record<string, unknown>): boolean {
-    const hasCriteria = Array.isArray(gate['criteria']) && gate['criteria'].length > 0;
-    const hasPassCriteria =
-      Array.isArray(gate['pass_criteria']) && gate['pass_criteria'].length > 0;
-    const hasGuidance = typeof gate['guidance'] === 'string' && gate['guidance'].trim().length > 0;
-    const hasDescription =
-      typeof gate['description'] === 'string' && gate['description'].trim().length > 0;
-    return hasCriteria || hasPassCriteria || hasGuidance || hasDescription;
-  }
+/**
+ * Whether a request gate carries content of its own. One that does is a gate, not a reference: under
+ * a canonical id it is refused (R100), and a run's recorded one restores under a fresh id (R110).
+ */
+export function gateInputContainsInlineContent(gate: Record<string, unknown>): boolean {
+  const hasCriteria = Array.isArray(gate['criteria']) && gate['criteria'].length > 0;
+  const hasPassCriteria = Array.isArray(gate['pass_criteria']) && gate['pass_criteria'].length > 0;
+  const hasGuidance = typeof gate['guidance'] === 'string' && gate['guidance'].trim().length > 0;
+  const hasDescription =
+    typeof gate['description'] === 'string' && gate['description'].trim().length > 0;
+  return hasCriteria || hasPassCriteria || hasGuidance || hasDescription;
 }
 
 // ============================================================================

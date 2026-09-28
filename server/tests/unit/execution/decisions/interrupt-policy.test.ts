@@ -92,6 +92,8 @@ describe('decideInterrupt', () => {
       unknownId: 'cache-ttl',
       statement: 'TTL is undecided',
       openBlockingUnknowns: [{ id: 'cache-ttl', statement: 'TTL is undecided' }],
+      // No node was inserted for it in this fixture.
+      uninvestigatedUnknownIds: ['cache-ttl'],
       affectedStepIds: [],
       remainingNodes: [
         { id: 'n3', promptId: 'p3', stepName: 'Review n3' },
@@ -176,6 +178,32 @@ describe('decideInterrupt', () => {
       { id: 'fresh', statement: 'fresh statement' },
       { id: 'stale', statement: 'stale statement' },
     ]);
+  });
+
+  test('P6.217: uninvestigatedUnknownIds lists the open blocking entries no inserted node names', () => {
+    // Guard: one call inserts at most one investigation step (the first blocking discovery), so
+    // the second of two declared together has no `inserted` node; the reply names it (R114).
+    const ledger = [
+      entry({ id: 'u-a', blocking: true }),
+      entry({ id: 'u-b', blocking: true }),
+      entry({ id: 'advisory', blocking: false }),
+    ];
+    const inserted = (unknownId: string): ChainNode => ({
+      id: `inv-${unknownId}`,
+      promptId: 'investigate_unknown',
+      stepName: 'Investigate',
+      origin: 'inserted',
+      originUnknownId: unknownId,
+    });
+    const withA = [NODES[0]!, inserted('u-a'), ...NODES.slice(1)];
+    expect(decideInterrupt(buildInput({ ledger, nodes: withA }))?.uninvestigatedUnknownIds).toEqual(
+      ['u-b']
+    );
+    // Control: once both have their step, nothing is left out.
+    const withBoth = [NODES[0]!, inserted('u-b'), inserted('u-a'), ...NODES.slice(1)];
+    expect(
+      decideInterrupt(buildInput({ ledger, nodes: withBoth }))?.uninvestigatedUnknownIds
+    ).toEqual([]);
   });
 
   test('paused mirrors the pauseOnBlocking knob in both directions', () => {

@@ -492,12 +492,20 @@ export class UnifiedCommandParser {
         }
 
         const mods = innerResult.modifiers;
+        const rawArgs = data['args'] ? JSON.stringify(data['args']) : innerResult.rawArgs;
+        const plan = innerResult.executionPlan;
+        // The inner command's operators are the command's (R112): the same parse the symbolic
+        // form gets, carried whole. Outer `args` fill the first step, as they fill `rawArgs`.
+        const firstStep = plan?.steps[0];
+        if (data['args'] && firstStep !== undefined) firstStep.args = rawArgs;
         return {
           promptId: innerResult.promptId,
-          rawArgs: data['args'] ? JSON.stringify(data['args']) : innerResult.rawArgs,
+          rawArgs,
           format: 'json',
           confidence,
           ...(mods !== undefined && { modifiers: mods }),
+          ...(innerResult.operators !== undefined && { operators: innerResult.operators }),
+          ...(plan !== undefined && { executionPlan: plan }),
           metadata: {
             originalCommand: command,
             parseStrategy: 'json',
