@@ -493,3 +493,43 @@ describe('reserved operators (operators.json status: reserved)', () => {
     expect(result.promptId).toBe('analyze');
   });
 });
+
+/**
+ * P6.196 / R96. MEASURED 2026-09-27 on `9e05bce6` through `parseCommand`: `>>analyze :: "it's
+ * fine"` parsed as the criterion `it`, with ` s fine"` left in the args, and no signal. The gate
+ * grammar delimits a criterion or a verify command with either quote and has no escape, so a quote
+ * inside the text is refused by name at parse, the way a reserved operator is.
+ */
+describe('P6.196: a quote inside a gate criterion or verify command is refused by name', () => {
+  const parser = new UnifiedCommandParser(mockLogger);
+
+  test('(a) a criterion holding an apostrophe is refused, naming the operator and the quote', async () => {
+    await expect(parser.parseCommand(`>>analyze :: "it's fine"`, basePrompts)).rejects.toThrow(
+      /Operator "::" cannot take a criterion containing the quote character '/
+    );
+  });
+
+  test('(a) a named criterion closed by its own quote character mid-text is refused', async () => {
+    await expect(
+      parser.parseCommand(`>>analyze :: tone:"say "hi" first"`, basePrompts)
+    ).rejects.toThrow(/Operator "::" cannot take a criterion containing the quote character "/);
+  });
+
+  test('(b) a verify command holding a double quote is refused', async () => {
+    await expect(
+      parser.parseCommand(`>>analyze :: verify:'grep "x" out.txt'`, basePrompts)
+    ).rejects.toThrow(
+      /Operator "::" cannot take a verify command containing the quote character "/
+    );
+  });
+
+  test('(c) control: a plain criterion and a plain verify command parse as before', async () => {
+    const plain = await parser.parseCommand('>>analyze :: "plain"', basePrompts);
+    expect(plain.promptId).toBe('analyze');
+    expect(JSON.stringify(plain.operators)).toContain('"parsedCriteria":["plain"]');
+    const verify = await parser.parseCommand('>>analyze :: verify:"npm test" :fast', basePrompts);
+    expect(JSON.stringify(verify.operators)).toContain('"command":"npm test"');
+    const single = await parser.parseCommand(">>analyze :: 'single quoted'", basePrompts);
+    expect(JSON.stringify(single.operators)).toContain('"parsedCriteria":["single quoted"]');
+  });
+});

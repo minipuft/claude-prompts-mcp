@@ -18,6 +18,7 @@ import { normalizeSymbolicPrefixes } from './parser-utils.js';
 import {
   SymbolicCommandParser,
   createSymbolicCommandParser,
+  rejectQuoteInGateText,
   type FrameworkIdLookup,
 } from './symbolic-operator-parser.js';
 import scoringContract from '../../../../tooling/contracts/registries/suggestion-scoring.json' with { type: 'json' };
@@ -189,6 +190,7 @@ export class UnifiedCommandParser {
 
     // Reserved operators are documented but not executable — fail loudly rather than drop them
     rejectReservedOperators(tokens);
+    rejectQuoteInGateText(preprocessed);
 
     // Try each strategy in order of confidence (now operating on preprocessed command)
     const sortedStrategies = [...this.strategies].sort((a, b) => b.confidence - a.confidence);

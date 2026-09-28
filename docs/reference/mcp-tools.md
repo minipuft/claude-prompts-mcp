@@ -409,6 +409,10 @@ prompt_engine(command:"code_review", gates:[
 ])
 ````
 
+**A criterion or a `verify:` command cannot contain a quote character.** The text is delimited by
+`"` or `'`, and there is no escape, so `:: "it's fine"` is refused at parse, naming `::` and the
+quote. Reword the text without it: `:: "it is fine"`.
+
 **Named inline gates** (`:: id:"criteria"`) are useful when you want:
 
 - Trackable gate IDs in output (shows as "security" not "Inline Validation Criteria")
