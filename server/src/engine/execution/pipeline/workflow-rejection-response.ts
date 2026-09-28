@@ -11,9 +11,14 @@ import type { ToolResponse } from '#shared/types/index.js';
  * for every stage that refuses a command (04 for its shape and targets, 11 for a target a resume
  * can no longer reach, R65, and 05 and 11 for a named or request gate under a canonical gate id,
  * R100), so a client parses one shape whichever stage answered.
+ *
+ * `resumedChainId` is the run a refused resume names, or `undefined` for a first call. It is
+ * required so every refusing stage decides it: a refused resume leaves an existing run where it
+ * stood, and "no run was created" would tell its client the run is gone (R143).
  */
 export function buildWorkflowRejectionResponse(
-  rejections: readonly WorkflowRejection[]
+  rejections: readonly WorkflowRejection[],
+  resumedChainId: string | undefined
 ): ToolResponse {
   const lines = rejections.map((rejection) => {
     const address =
@@ -24,12 +29,16 @@ export function buildWorkflowRejectionResponse(
           : 'workflow';
     return `• [${rejection.reason}] ${address}: ${rejection.detail}`;
   });
+  const outcome =
+    resumedChainId === undefined
+      ? 'no run was created.'
+      : `run \`${resumedChainId}\` was not moved: its state is what it was before this call.`;
   return {
     content: [
       {
         type: 'text',
         text: [
-          `❌ Workflow rejected — ${rejections.length} problem${rejections.length === 1 ? '' : 's'} found. Nothing was executed and no run was created.`,
+          `❌ Workflow rejected — ${rejections.length} problem${rejections.length === 1 ? '' : 's'} found. Nothing was executed and ${outcome}`,
           '',
           ...lines,
         ].join('\n'),

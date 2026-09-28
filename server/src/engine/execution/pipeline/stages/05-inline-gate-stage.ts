@@ -53,7 +53,8 @@ export class InlineGateExtractionStage extends BasePipelineStage {
       });
       context.setResponse(
         buildWorkflowRejectionResponse(
-          collisions.map((refusal) => ({ reason: 'gate-id-canonical' as const, ...refusal }))
+          collisions.map((refusal) => ({ reason: 'gate-id-canonical' as const, ...refusal })),
+          context.state.session.resumeChainId
         )
       );
       this.logExit({ refusedNamedGates: collisions.length });

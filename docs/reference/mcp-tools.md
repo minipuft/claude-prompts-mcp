@@ -547,6 +547,10 @@ A rejection names its subject and its rule:
 • [cap-exceeded] workflow: budget.maxNodes of 64 exceeds the server cap of 32; a declared budget may only narrow a cap, never widen it
 ```
 
+A resume refused in the same shape (a request gate targeting a step the run has already passed)
+names its run instead: `Nothing was executed and run \`chain-…#1\` was not moved: its state is
+what it was before this call.` The run is still open, and the next call resumes it as before.
+
 Full field reference, the linearization rule, and the complete rejection vocabulary:
 [Workflow IR Reference](./workflow-ir.md).
 

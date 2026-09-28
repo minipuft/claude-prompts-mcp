@@ -71,7 +71,9 @@ export class GateEnhancementStage extends BasePipelineStage {
     ];
     if (refused.length > 0) {
       context.diagnostics.warn(this.name, 'Request gate refused', { count: refused.length });
-      context.setResponse(buildWorkflowRejectionResponse(refused));
+      context.setResponse(
+        buildWorkflowRejectionResponse(refused, context.state.session.resumeChainId)
+      );
       this.logExit({ refusedRequestGates: refused.length });
       return;
     }

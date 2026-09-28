@@ -945,6 +945,61 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
   });
 
   /**
+   * MEASURED 2026-09-28 on `7c42c64ad` (driven, this harness): a resume stage 11 refuses (a gate
+   * targeting the passed node `a`) answered "Nothing was executed and no run was created." — the
+   * one shared rejection render said it for every refusing call, though the resume's run existed
+   * and stood where it stood.
+   *
+   * A resume of a COMPLETED run is not refused at all: stage 13 answers "✓ Chain run already
+   * complete." (isError false), gate or no gate, and never reaches this render.
+   *
+   * Now (R143) the render says a refused resume did not move its run, and a refused first call
+   * still says no run was created.
+   */
+  describe('P6.150: a refused resume says its run was not moved', () => {
+    test('(a) a resume refused by stage 11 names its run as not moved, the run untouched', async () => {
+      const run = await start({ command: '>>sv_chain' });
+      await run.call({ user_response: 'A out', gate_verdict: PASS });
+      const before = rawRunState(run.chainId);
+
+      const refused = await resumeWithGate(run.chainId, 'B out', 'a', 'TGT-150-A');
+      expect(refused.isError).toBe(true);
+      expect(refused.text).toContain('[gate-target-passed] node "a"');
+      expect(refused.text).toContain(
+        `Nothing was executed and run \`${run.chainId}\` was not moved: its state is what it was before this call.`
+      );
+      expect(refused.text).not.toContain('no run was created');
+      expect(rawRunState(run.chainId)).toBe(before);
+    }, 120000);
+
+    test('(b) control: a refused first call still says no run was created', async () => {
+      const before = countRuns();
+      const refused = await tool('prompt_engine', {
+        command: '>>sv_chain',
+        gates: [{ name: 'tgt-150-b', criteria: ['TGT-150-B'], target_step_id: 'zz' }],
+      });
+      expect(refused.isError).toBe(true);
+      expect(refused.text).toContain('[gate-target-missing]');
+      expect(refused.text).toContain('Nothing was executed and no run was created.');
+      expect(refused.text).not.toContain('was not moved');
+      expect(countRuns()).toBe(before);
+    }, 120000);
+
+    test('(c) control: a resume of a completed run is answered as complete, not refused', async () => {
+      const run = await start({ command: '>>sv_chain' });
+      for (const answer of ['A out', 'B out', 'C out']) {
+        await run.call({ user_response: answer, gate_verdict: PASS });
+      }
+      const before = rawRunState(run.chainId);
+      const late = await resumeWithGate(run.chainId, 'D out', 'a', 'TGT-150-C');
+      expect(late.isError).toBe(false);
+      expect(late.text).toContain('✓ Chain run already complete.');
+      expect(late.text).not.toContain('Workflow rejected');
+      expect(rawRunState(run.chainId)).toBe(before);
+    }, 120000);
+  });
+
+  /**
    * PIN (as of 2026-09-27 · flips when a gated single prompt stops opening a run). A single prompt
    * with an inline gate operator opens a run of ONE node, `n1` (R52), because the planner requires
    * a session for any `gate` operator (`ExecutionPlanner.requiresSession`, its operator clause — not
