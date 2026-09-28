@@ -1740,7 +1740,7 @@ Either variant carries `structuredContent.chain_interrupt`:
     "statement": "TTL for the new cache layer is undecided",
   },
   "affected_step_ids": ["review"], // declared target_step_id links only
-  "remaining_nodes": [{ "id": "…", "promptId": "…", "stepName": "…" }], // post-insert
+  "remaining_nodes": [{ "id": "…", "promptId": "…", "stepName": "…" }], // after the rendered step
   "paused": false,
   "resume": {
     "chain_id": "chain-draft#4",
@@ -1748,6 +1748,10 @@ Either variant carries `structuredContent.chain_interrupt`:
   },
 }
 ```
+
+**`remaining_nodes` and `affected_step_ids` start after the step this reply renders.** On a soft
+interrupt that is the step the call advanced to (the inserted investigation step, on the call that
+inserts it), so the step you are handed now is never listed as still to come.
 
 **`resume.verbs` is state-dependent, not additive.** A PAUSED run lists a different set, and the
 two are not subsets of one another in either direction:

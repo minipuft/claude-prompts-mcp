@@ -1161,6 +1161,19 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       return [...block.split('\n\n')[0].matchAll(/^- `([^`]+)`/gm)].map((m) => m[1]);
     };
     /** The live nodes strictly after the run's current node, in run order. */
+    /** The node the run stands on, which is the node the last reply rendered. */
+    function currentNode(chainId: string): string {
+      const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+      try {
+        return (
+          db.prepare('SELECT current_node_id FROM chain_runs WHERE chain_id = ?').get(chainId) as {
+            current_node_id: string;
+          }
+        ).current_node_id;
+      } finally {
+        db.close();
+      }
+    }
     function after(chainId: string): string[] {
       const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
       try {
@@ -1202,6 +1215,63 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       expect(runState(run.chainId).reviews).toEqual({ y: ['sv-drop'] });
       expect(after(run.chainId)).toEqual(['z']);
       expect(listed(planned)).toEqual(after(run.chainId));
+    }, 120000);
+
+    /**
+     * P6.195 / R95. MEASURED 2026-09-27 on `0a40f109` (P6.187's concern, re-driven): the call that
+     * answers `x` with a blocking unknown renders the inserted `inv-u-195a` and listed
+     * "Remaining plan: `inv-u-195a`, `y`, `z`"; `>>sv_a` arrow-chain `>>sv_b`, answering its
+     * inserted node, rendered `n2` and listed `n2`. The interrupt was measured from the node the
+     * call answered, before the advance, while the retry render measures from the node it renders.
+     */
+    test('P6.195 (a) the inserting call lists the nodes after the inserted node it renders', async () => {
+      const run = await start({
+        workflow: {
+          version: 1,
+          nodes: [
+            { id: 'x', promptId: 'sv_a' },
+            { id: 'y', promptId: 'sv_b' },
+            { id: 'z', promptId: 'sv_a' },
+          ],
+        },
+      });
+      const inserting = await run.call({
+        user_response: 'A',
+        observations: [
+          {
+            type: 'unknown_discovered',
+            id: 'u-195a',
+            statement: 'STATEMENT-u-195a',
+            blocking: true,
+          },
+        ],
+      });
+      expect(inserting).toContain('STATEMENT-u-195a');
+      expect(currentNode(run.chainId)).toBe('inv-u-195a');
+      expect(after(run.chainId)).toEqual(['y', 'z']);
+      expect(listed(inserting)).toEqual(after(run.chainId));
+    }, 120000);
+
+    test('P6.195 (b) the call answering the inserted node lists nothing after the last node it renders', async () => {
+      const run = await start({ command: `>>sv_a${ARROW}>>sv_b` });
+      await run.call({
+        user_response: 'A',
+        observations: [
+          {
+            type: 'unknown_discovered',
+            id: 'u-195b',
+            statement: 'STATEMENT-u-195b',
+            blocking: true,
+          },
+        ],
+      });
+      const answering = await run.call({ user_response: 'investigated' });
+      expect(answering).toContain('BODY-sv_b');
+      expect(answering).toContain('STATEMENT-u-195b');
+      expect(currentNode(run.chainId)).toBe('n2');
+      expect(after(run.chainId)).toEqual([]);
+      expect(answering).toContain('Remaining plan: none');
+      expect(listed(answering)).toEqual([]);
     }, 120000);
   });
 
