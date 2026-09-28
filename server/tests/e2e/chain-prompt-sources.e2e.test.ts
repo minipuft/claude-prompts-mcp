@@ -1119,6 +1119,25 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       expect(runState(plain.chainId).args).toEqual([{ topic: 'T194' }, { topic: '' }]);
     }, 120000);
 
+    /**
+     * P6.222 / R112 amended. MEASURED 2026-09-28 on `04b951cb`: the JSON form of
+     * `>>sv_a topic:"T222"` arrow-chain `>>sv_b` completed with no `Re-run:` — the line keyed on
+     * `parseStrategy === 'symbolic'`. The JSON form's decoded command is one the parser consumed
+     * whole, so it renders as the symbolic form's does and re-parses to the same run.
+     */
+    test('P6.222 (a) a JSON-form arrow-chain re-runs as its decoded command', async () => {
+      const inner = `>>sv_a topic:"T222"${ARROW}>>sv_b`;
+      const run = await start({ command: JSON.stringify({ command: inner }) });
+      await run.call({ user_response: 'A' });
+      const done = await run.call({ user_response: 'B' });
+      expect(done).toContain('Chain execution complete');
+      expect(rerun(done)).toBe(inner);
+      const again = await start({ command: rerun(done) ?? '' });
+      expect(runState(again.chainId).steps).toEqual(runState(run.chainId).steps);
+      expect(runState(again.chainId).args).toEqual(runState(run.chainId).args);
+      expect(runState(run.chainId).args).toEqual([{ topic: 'T222' }, { topic: '' }]);
+    }, 120000);
+
     test('P6.194 (b) a workflow completes with no Re-run and never >>prompt', async () => {
       const workflow = await start({
         workflow: {
