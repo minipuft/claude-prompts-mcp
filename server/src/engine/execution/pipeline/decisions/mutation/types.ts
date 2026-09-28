@@ -161,6 +161,14 @@ export interface ChainInterrupt {
    * (R105), while the mid-run interrupt is about {@link unknownId} alone. */
   readonly openBlockingUnknowns: readonly { readonly id: string; readonly statement: string }[];
   /**
+   * The open blocking unknowns no inserted investigation step names, in ledger order (R114).
+   *
+   * One call inserts at most one step — {@link decideMutation} takes the FIRST blocking discovery
+   * in the call's batch — so a second blocking unknown declared in the same call gets none, and
+   * the reply names it rather than letting the step it hands over (the first one's) imply it.
+   */
+  readonly uninvestigatedUnknownIds: readonly string[];
+  /**
    * Steps the open blocking unknowns DECLARED they affect, via `target_step_id` (OQ-2).
    *
    * Declared links only. Textual scanning of step names or statements was rejected as a

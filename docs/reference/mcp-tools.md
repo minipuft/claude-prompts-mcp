@@ -1715,6 +1715,11 @@ prompt_engine(
 
 - **Caps**: 1 insertion per unknown id, 3 insertions per run. A capped or non-qualifying
   observation still applies to the ledger — it just mutates nothing in the node list.
+- **One insertion per call.** A call that declares several blocking unknowns inserts a step for
+  the first one only; the others stay open in the ledger with no step. The interrupt section names
+  them on an `Open with no investigation step` line, and `structuredContent.chain_interrupt`
+  lists them in `open_blocking_unknowns`. Declare one again on a later call to insert its step
+  (within the caps), resolve it, or cover it in a `remainder`.
 - The current node can never be a skip target — only strictly-ahead, not-yet-executed nodes.
 - A run's terminal `execution_records` row carries two more terminal-row facts for this: how many
   nodes were inserted and how many were skipped over the run's life (`nodes_inserted`,

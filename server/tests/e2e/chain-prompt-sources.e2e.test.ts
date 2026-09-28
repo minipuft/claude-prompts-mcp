@@ -1503,6 +1503,89 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
   });
 
   /**
+   * P6.217 / R114. MEASURED 2026-09-28 on `cd2957a6`: `>>sv_a` arrow-chain `>>sv_b`, blocking
+   * `u-217a` and `u-217b` declared in ONE call on `n1`. The run inserted one step, `inv-u-217a`
+   * (the first declared), `remaining_nodes` read `[n2]`, and the ledger held both open; the reply
+   * handed over "Investigate: STATEMENT-u-217a" under a "Blocking Unknown" section naming
+   * `u-217b`, which never got a step. Declaring `u-217b` again on a later call inserted
+   * `inv-u-217b`. One insertion per call is the policy's rule (`decideMutation` takes the first
+   * blocking discovery; insert-precedence is pinned), so the interrupt now names the open blocking
+   * unknowns no inserted step investigates.
+   */
+  describe('P6.217: two blocking unknowns declared in one call', () => {
+    const LEFT_OUT = 'Open with no investigation step (one call inserts one';
+    const unknown = (id: string) => ({
+      type: 'unknown_discovered',
+      id,
+      statement: `STATEMENT-${id}`,
+      blocking: true,
+    });
+    async function callRun(chainId: string, args: Record<string, unknown>) {
+      const outcome = await client.callToolWithNotifications(
+        'prompt_engine',
+        { chain_id: chainId, ...args },
+        nextId++
+      );
+      const result = outcome.result as {
+        content?: Array<{ text?: string }>;
+        structuredContent?: { chain_interrupt?: { remaining_nodes?: Array<{ id: string }> } };
+      };
+      const text = (result.content ?? []).map((part) => part.text ?? '').join('\n');
+      return {
+        section: text.slice(text.indexOf('**Blocking Unknown**')),
+        remaining: result.structuredContent?.chain_interrupt?.remaining_nodes?.map((n) => n.id),
+      };
+    }
+    function inserted(chainId: string): string[] {
+      const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+      try {
+        const rows = db
+          .prepare(
+            "SELECT n.node_id FROM chain_run_nodes n JOIN chain_runs r ON r.session_id = n.session_id WHERE r.chain_id = ? AND n.origin = 'inserted' ORDER BY n.position"
+          )
+          .all(chainId) as Array<{ node_id: string }>;
+        return rows.map((row) => row.node_id);
+      } finally {
+        db.close();
+      }
+    }
+
+    test('(a) one step is inserted, and the interrupt names the unknown left without one', async () => {
+      const run = await start({ command: `>>sv_a${ARROW}>>sv_b` });
+      const mid = await callRun(run.chainId, {
+        user_response: 'A',
+        observations: [unknown('u-217a'), unknown('u-217b')],
+      });
+      expect(inserted(run.chainId)).toEqual(['inv-u-217a']);
+      expect(mid.remaining).toEqual(['n2']);
+      expect(mid.section).toContain(
+        `${LEFT_OUT}, for the first blocking unknown it declares): u-217b`
+      );
+
+      // Declared again on a later call, it gets its own step and leaves the list.
+      await callRun(run.chainId, { user_response: 'investigated a' });
+      const again = await callRun(run.chainId, {
+        user_response: 'B',
+        observations: [unknown('u-217b')],
+      });
+      expect(inserted(run.chainId)).toEqual(['inv-u-217a', 'inv-u-217b']);
+      expect(again.section).toContain('**Blocking Unknown**');
+      expect(again.section).not.toContain(LEFT_OUT);
+    }, 120000);
+
+    test('(b) control: one blocking unknown gets its step and no such line', async () => {
+      const run = await start({ command: `>>sv_a${ARROW}>>sv_b` });
+      const mid = await callRun(run.chainId, {
+        user_response: 'A',
+        observations: [unknown('u-217c')],
+      });
+      expect(inserted(run.chainId)).toEqual(['inv-u-217c']);
+      expect(mid.section).toContain('**Blocking Unknown**');
+      expect(mid.section).not.toContain(LEFT_OUT);
+    }, 120000);
+  });
+
+  /**
    * P6.144 / R66. MEASURED 2026-09-27 on `6dad55f3`: after `>>sv_a :: "sv-block"` and a FAIL sent
    * with the answer, the run held one record, `completed` with `prompt_id` null, and
    * `execution_history` listed `completed step 1`. The capture writer (`ledgerCapturedStep`) wrote
