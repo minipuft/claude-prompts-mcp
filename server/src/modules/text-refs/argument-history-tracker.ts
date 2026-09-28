@@ -113,7 +113,8 @@ export class ArgumentHistoryTracker {
    * Automatically enforces max entries limit per chain (FIFO).
    *
    * @param options - Tracking options
-   * @returns Unique entry ID, or `undefined` when the session id is empty and so records nothing
+   * @returns Unique entry ID
+   * @throws when `sessionId` is empty: the type refuses a missing id, and an empty one names no session either
    */
   async trackExecution(options: {
     promptId: string;
@@ -125,7 +126,7 @@ export class ArgumentHistoryTracker {
     stepNumber?: number;
     stepResult?: string;
     metadata?: Record<string, any>;
-  }): Promise<string | undefined> {
+  }): Promise<string> {
     // Auto-initialize if not yet ready (guards against fire-and-forget init race)
     if (!this.initialized) {
       await this.initialize();
@@ -138,8 +139,9 @@ export class ArgumentHistoryTracker {
 
     // The history key is the session id (see `chainHistory`); an empty one names no session.
     if (sessionId === '') {
-      this.logger.debug(`Argument history not tracked for ${promptId}: the session id is empty`);
-      return undefined;
+      throw new Error(
+        `Argument history for ${promptId} needs a session id: the history is keyed by session, and an empty id names none`
+      );
     }
     const historyKey = sessionId;
 

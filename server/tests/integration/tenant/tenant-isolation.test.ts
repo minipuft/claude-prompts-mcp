@@ -1295,6 +1295,43 @@ describe('Tenant Isolation', () => {
       expect(typeof sessionless).toBe('function');
     });
 
+    /**
+     * P6.258 (R141): the type refuses a missing session id; an empty one is the same defect the
+     * type cannot see, so it throws with the reason rather than recording nothing silently.
+     */
+    test('P6.258 (a) an empty session id throws and records nothing', async () => {
+      const tracker = new ArgumentHistoryTracker(logger, 50, argHistoryStore() as never, {
+        workspaceId: 'ws-p258',
+      });
+      await tracker.initialize();
+
+      await expect(
+        tracker.trackExecution({ promptId: 'p258', sessionId: '', originalArgs: { n: 1 } })
+      ).rejects.toThrow(/needs a session id.*an empty id names none/);
+      expect(tracker.getSessionHistory('')).toEqual([]);
+    });
+
+    test('P6.258 (b) control: a non-empty session id on the same tracker records as before', async () => {
+      const tracker = new ArgumentHistoryTracker(logger, 50, argHistoryStore() as never, {
+        workspaceId: 'ws-p258b',
+      });
+      await tracker.initialize();
+
+      await expect(
+        tracker.trackExecution({ promptId: 'p258', sessionId: '', originalArgs: { n: 1 } })
+      ).rejects.toThrow();
+      const entryId = await tracker.trackExecution({
+        promptId: 'p258',
+        sessionId: 's-258b',
+        originalArgs: { n: 2 },
+      });
+
+      expect(entryId).toMatch(/^entry_/);
+      expect(tracker.getSessionHistory('s-258b')).toEqual([
+        expect.objectContaining({ entryId, promptId: 'p258', sessionId: 's-258b' }),
+      ]);
+    });
+
     test('P6.251 (b) control: a sessioned call records under its session as before', async () => {
       const tracker = new ArgumentHistoryTracker(logger, 50, argHistoryStore() as never, {
         workspaceId: 'ws-p251b',
