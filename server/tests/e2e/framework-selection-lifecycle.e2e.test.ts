@@ -567,12 +567,13 @@ describe('P6.198: a framework override needs no system toggle on a step added mi
   const PASS = 'GATE_REVIEW: PASS - ok';
 
   /**
-   * ReACT active, the framework system disabled, two prompts, and a run grown by an inserted and a
-   * remainder step.
+   * The framework system disabled, and a run grown by an inserted and a remainder step. Only the
+   * remainder's `p198_a` keeps the framework's sections: the planned `p198_s1` and `p198_b` declare
+   * none, so no answer is graded against a framework and both runs reach the remainder step.
    */
   async function runWithAddedSteps(command: string) {
     const session = await start(startHttpSession, await newWorkspace());
-    for (const id of ['p198_a', 'p198_b']) {
+    for (const id of ['p198_s1', 'p198_b', 'p198_a']) {
       const created = await session.callTool('resource_manager', {
         resource_type: 'prompt',
         action: 'create',
@@ -581,14 +582,10 @@ describe('P6.198: a framework override needs no system toggle on a step added mi
         category: 'general',
         description: 'A step rendering under the run framework',
         user_message_template: `BODY-${id}`,
-        // `p198_b` declares no sections, so the answer to it is never graded against a framework
-        // and both runs reach the remainder step whatever framework a planned step renders.
-        ...(id === 'p198_b' ? { gate_configuration: { framework_gates: false } } : {}),
+        ...(id === 'p198_a' ? {} : { gate_configuration: { framework_gates: false } }),
       });
       expect(created.isError).toBe(false);
     }
-    // ReACT is also the ACTIVE framework, so the twin and its control differ only in the operator.
-    await switchTo(session, 'react');
     const disabled = await session.callTool('system_control', {
       action: 'framework',
       operation: 'disable',
@@ -618,8 +615,8 @@ describe('P6.198: a framework override needs no system toggle on a step added mi
   }
 
   it('(a) under ^ReACT the planned, inserted and remainder steps all render ReACT', async () => {
-    const run = await runWithAddedSteps('^ReACT >>p198_a --> >>p198_b');
-    expect(run.planned.text).toContain(REACT_SECTION);
+    const run = await runWithAddedSteps('^ReACT >>p198_s1 --> >>p198_b');
+    expect(run.planned.text).toContain('ReACT Framework Active');
     expect(run.inserted.text).toContain('## Investigate: rest undecided');
     expect(run.inserted.text).toContain('ReACT Framework Active');
     expect(run.plannedSecond.text).toContain('BODY-p198_b');
@@ -631,13 +628,14 @@ describe('P6.198: a framework override needs no system toggle on a step added mi
   it('(b) control: with no override the steps added mid-run still render no framework', async () => {
     // Only the added steps: with the system disabled and no override, a PLANNED step renders the
     // active framework today (measured 2026-09-28, reported as a finding, not ruled here). The
-    // one difference from (a) is the operator, so the bypass is keyed on the override alone.
-    const run = await runWithAddedSteps('>>p198_a --> >>p198_b');
+    // one difference from (a) is the operator, so the bypass is keyed on the override alone:
+    // the run still decides the active framework here, and an added step must not render it.
+    const run = await runWithAddedSteps('>>p198_s1 --> >>p198_b');
     expect(run.inserted.text).toContain('## Investigate: rest undecided');
-    expect(run.inserted.text).not.toContain('ReACT Framework Active');
+    expect(run.inserted.text).not.toContain('Framework Active');
     expect(run.contributed.text).not.toContain('BODY-p198_b');
     expect(run.contributed.text).toContain('BODY-p198_a');
-    expect(run.contributed.text).not.toContain(REACT_SECTION);
-    expect(run.contributed.text).not.toContain('ReACT Framework Active');
+    expect(run.contributed.text).not.toContain('**Required Sections**');
+    expect(run.contributed.text).not.toContain('Framework Active');
   }, 120000);
 });
