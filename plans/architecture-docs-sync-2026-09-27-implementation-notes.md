@@ -16,3 +16,10 @@ Plan: `plans/architecture-docs-sync-2026-09-27.md`. Rulings live in the plan's t
 - DEV-T1-1: the planner prompt routes public documentation through `>>documentation_change`; row 1.5 is dispatched under `>>strategic_worker` instead (R7). Reason recorded in the plan.
 - DEV-T1-2: `>>tech_recommendation` said "TypeScript compiler API" for the stage parser; R2 overrides it to node builtins because the docs CI route has no `node_modules`. The recommendation did not know that constraint.
 - Dependency-cruiser `--metrics` probed on main: JSON gains a top-level `folders[]` with `name` (e.g. `src/cli-shared`), `afferentCouplings`, `efferentCouplings`, `instability`; modules gain `instability`. `src/cli-shared` measured I = 0.86 (Ca 12, Ce 75).
+
+## 2026-09-27 · handoff 1.1 (sonnet)
+
+- Accepted after spot-read: two boxes gone, two sentences in, count 11 → 12 at one site (the other `11` was inside a deleted box). Committed `0d1e31dd3`.
+- Finding F1: `overview.md` held THREE ASCII boxes, not two — the planner's inventory came from the `23 stg` grep, which found the two that carried a stale count and missed the one that carried none. The verification phrase on row 1.1 ("only the stage box remains") was therefore unfalsifiable as written. Folded into row 1.5 as a delete-or-keep decision with its evidence named.
+- Finding F2 (worker): "internally uses **5 specialized managers**" is an uncounted claim in the same section. Folded into row 1.5.
+- Feedback accepted: an inventory built from the symptom's grep is a list, not an enumeration — the enumeration predicate for "hand-drawn diagram" is `┌`, and the row should have been cut from that count.
