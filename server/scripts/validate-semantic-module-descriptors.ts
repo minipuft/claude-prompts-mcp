@@ -7,9 +7,11 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
+import { describeDefinitionProblem, resolveOwnershipDefinitions } from './lib/domain-ownership.js';
 import {
   formatDescriptorProblems,
   loadSemanticModuleTree,
+  type DescriptorProblem,
   type DescriptorTree,
 } from './lib/semantic-module-descriptors.js';
 
@@ -40,6 +42,37 @@ function parseArgs(args: readonly string[]): CliOptions {
     }
   }
   return { repoRoot, selfTest, sourceRoot };
+}
+
+/**
+ * Every `extension` entry must name a symbol exported by exactly one file inside its module — the
+ * same rule `owns` is held to, through the same definition scan. Runs only on a tree whose
+ * descriptors parsed, since a module that failed to parse has no entries to check.
+ */
+function checkExtensionDefinitions(tree: DescriptorTree): DescriptorProblem[] {
+  const entries = tree.descriptors.flatMap((descriptor) =>
+    (descriptor.extension ?? []).map((entry) => ({ descriptor, entry }))
+  );
+  if (entries.length === 0) return [];
+  const definitions = resolveOwnershipDefinitions(
+    tree.sourceRoot,
+    entries.map(({ entry }) => entry.symbol)
+  );
+  const problems: DescriptorProblem[] = [];
+  for (const { descriptor, entry } of entries) {
+    const problem = describeDefinitionProblem(
+      entry.symbol,
+      descriptor.id,
+      descriptor.sourcePath,
+      definitions
+    );
+    if (problem === null) continue;
+    problems.push({
+      path: path.relative(tree.repoRoot, descriptor.descriptorPath).split(path.sep).join('/'),
+      message: `module '${descriptor.id}' extension '${entry.point}' names ${problem}`,
+    });
+  }
+  return problems;
 }
 
 function writeDescriptor(directory: string, body: string): void {
@@ -146,7 +179,54 @@ function selfTest(): void {
     /unexpected descriptor beneath internal/u
   );
 
-  process.stdout.write('validate:module-descriptors self-test — 9/9 cases passed\n');
+  const extensionChild = (symbol: string): string =>
+    `${VALID_CHILD}\nextension:\n  - point: Fixture registry\n    symbol: ${symbol}\n    how: Add an entry.\n`;
+  const inspectExtension = (
+    symbol: string,
+    mutate?: (_root: string, _source: string) => void
+  ): string => {
+    let problems: DescriptorProblem[] = [];
+    withFixture((root, source) => {
+      writeDescriptor(source, VALID_ROOT);
+      writeDescriptor(path.join(source, 'child'), extensionChild(symbol));
+      writeFileSync(
+        path.join(source, 'child', 'registry.ts'),
+        'export class ChildRegistry {}\n',
+        'utf8'
+      );
+      writeFileSync(path.join(source, 'root-registry.ts'), 'export class RootRegistry {}\n');
+      mutate?.(root, source);
+      const tree = loadSemanticModuleTree({ repoRoot: root, sourceRoot: source });
+      problems = [...tree.problems, ...checkExtensionDefinitions(tree)];
+    });
+    return formatDescriptorProblems(problems);
+  };
+
+  assert.equal(inspectExtension('ChildRegistry'), '');
+  assert.match(
+    inspectExtension('AbsentRegistry'),
+    /module 'fixture-child' extension 'Fixture registry' names AbsentRegistry, which no file under server\/src exports/u
+  );
+  assert.match(
+    inspectExtension('RootRegistry'),
+    /names RootRegistry, defined outside module 'fixture-child' at src\/root-registry\.ts/u
+  );
+  assert.match(
+    inspectExtension('ChildRegistry', (_root, source) =>
+      writeFileSync(path.join(source, 'child', 'twin.ts'), 'export const ChildRegistry = 1;\n')
+    ),
+    /names ChildRegistry, which 2 files export/u
+  );
+  const duplicateExtension = inspectFixture(
+    undefined,
+    `${VALID_CHILD}\nextension:\n  - point: P\n    symbol: S\n    how: H.\n  - point: P\n    symbol: S\n    how: H.\n`
+  );
+  assert.match(
+    formatDescriptorProblems(duplicateExtension.problems),
+    /duplicate extension entry: S already declares 'P'/u
+  );
+
+  process.stdout.write('validate:module-descriptors self-test — 14/14 cases passed\n');
 }
 
 function main(): void {
@@ -156,9 +236,10 @@ function main(): void {
     return;
   }
   const tree = loadSemanticModuleTree(options);
-  if (tree.problems.length > 0) {
+  const problems = [...tree.problems, ...checkExtensionDefinitions(tree)];
+  if (problems.length > 0) {
     process.stderr.write(
-      `validate:module-descriptors FAILED — ${tree.problems.length} problem(s)\n${formatDescriptorProblems(tree.problems)}\n`
+      `validate:module-descriptors FAILED — ${problems.length} problem(s)\n${formatDescriptorProblems(problems)}\n`
     );
     process.exitCode = 1;
     return;

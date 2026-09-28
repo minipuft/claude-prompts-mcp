@@ -179,6 +179,16 @@ jobs:
         working-directory: .
         run: node server/scripts/validate-readme.js --mode=block
 
+      # The pipeline stage table in docs/architecture/overview.md is documentation too: a hand edit
+      # to it classifies as `docs` and skips `validate:all`, which is exactly the edit that lets the
+      # table drift from the `stages` array in pipeline-builder.ts. Registered only in the suite, it
+      # would be dead on that pull request. It imports only node: builtins, so it needs no
+      # node_modules on either lightweight route.
+      - name: Validate pipeline stage table (lightweight routes)
+        if: needs.classify.outputs.scope != 'full'
+        working-directory: .
+        run: node server/scripts/validate-pipeline-stage-table.js
+
       # CLAUDE.md, AGENTS.md, and .claude/rules/*.md are documentation paths, so their pull
       # requests intentionally skip validate:all. The full route checks this inside that suite;
       # lightweight routes run the same byte comparison here so a stale projection cannot merge.

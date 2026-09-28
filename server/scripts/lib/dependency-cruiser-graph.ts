@@ -41,8 +41,27 @@ const SummarySchema = z
   })
   .passthrough();
 
+/**
+ * One folder's stability metrics, present only when dependency-cruiser runs with `--metrics`.
+ *
+ * dependency-cruiser's `doc/cli.md` (`--metrics`) defines instability as
+ * `# dependencies / (# dependencies + # dependents)` — Ce/(Ca+Ce), adapted from Robert C. Martin's
+ * package metrics with folders standing in for components. A folder's counts include every
+ * module beneath it, subfolders included. Folders outside the cruised tree (node builtins,
+ * `node_modules`) appear only as dependency targets and carry no counts of their own.
+ */
+const FolderMetricsSchema = z
+  .object({
+    name: z.string(),
+    afferentCouplings: z.number().int().nonnegative().optional(),
+    efferentCouplings: z.number().int().nonnegative().optional(),
+    instability: z.number().min(0).max(1).optional(),
+  })
+  .passthrough();
+
 const DependencyCruiserGraphSchema = z.object({
   modules: z.array(ModuleSchema),
+  folders: z.array(FolderMetricsSchema).optional(),
   summary: SummarySchema,
 });
 
@@ -58,6 +77,8 @@ export interface DependencyCruiserRun {
 export interface RunDependencyCruiserOptions {
   readonly config?: string;
   readonly cwd: string;
+  /** Pass `--metrics`, which adds `folders[]` to the graph. */
+  readonly metrics?: boolean;
   readonly source?: string;
 }
 
@@ -92,7 +113,15 @@ export function runDependencyCruiser(options: RunDependencyCruiserOptions): Depe
     '.bin',
     process.platform === 'win32' ? 'depcruise.cmd' : 'depcruise'
   );
-  const result = spawnSync(executable, ['--config', config, '-T', 'json', source], {
+  const args = [
+    '--config',
+    config,
+    '-T',
+    'json',
+    ...(options.metrics ? ['--metrics'] : []),
+    source,
+  ];
+  const result = spawnSync(executable, args, {
     cwd: options.cwd,
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,

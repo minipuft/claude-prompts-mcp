@@ -14,11 +14,15 @@ How a prompt goes from what you type to a structured, validated response — and
 
 ---
 
-## System Overview
+## Building Block View
+
+This view answers which components exist and how they fit together: the three-tool MCP surface, the semantic module boundaries underneath it, and the pipeline's own internal architecture. The generated inventory backs it — [`docs/reference/module-catalog.md`](../reference/module-catalog.md) renders each module's boundary, dependencies, and domain ownership straight from its `module.yaml` descriptor — and the sections below narrate what that inventory means for a developer extending the system.
+
+### System Overview
 
 The server receives commands through three MCP tools, processes them through a multi-stage pipeline that injects validation and reasoning guidance, and returns structured responses to the client.
 
-### Request Lifecycle
+#### Request Lifecycle
 
 This is how a `prompt_engine` request actually flows through the system:
 
@@ -60,50 +64,11 @@ flowchart LR
     C3 --> B --> A
 ```
 
-### How Requests Flow Through the System
+#### How Requests Flow Through the System
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        MCP Protocol Layer                        │
-│  ┌─────────────┐  ┌──────────────┐  ┌─────────────┐             │
-│  │prompt_engine│  │resource_manager│ │system_control│            │
-│  └──────┬──────┘  └───────┬──────┘  └──────┬──────┘             │
-├─────────┼─────────────────┼────────────────┼────────────────────┤
-│         │                 │                │   Routing Layer     │
-│         │          ┌──────┴──────┐         │                     │
-│         │          │   Router    │         │                     │
-│         │          └──────┬──────┘         │                     │
-│         │     ┌───────────┼───────────┐    │                     │
-│         │     ▼           ▼           ▼    │                     │
-│         │ ┌───────┐ ┌─────────┐ ┌─────────┐│                     │
-│         │ │Prompt │ │  Gate   │ │Framework││                     │
-│         │ │Manager│ │ Manager │ │ Manager ││                     │
-│         │ └───────┘ └─────────┘ └─────────┘│                     │
-├─────────┼─────────────────────────────────┼────────────────────┤
-│         │                                  │   Execution Layer   │
-│         ▼                                  │                     │
-│  ┌──────────────────┐                      │                     │
-│  │PromptExecution   │                      │                     │
-│  │Pipeline (23 stg) │                      │                     │
-│  └────────┬─────────┘                      │                     │
-├───────────┼────────────────────────────────┼────────────────────┤
-│           │                                │   Service Layer     │
-│     ┌─────┴─────┬──────────┬───────────┬───┴───────┐            │
-│     ▼           ▼          ▼           ▼           ▼            │
-│ ┌───────┐  ┌─────────┐  ┌───────┐  ┌───────┐  ┌─────────┐      │
-│ │Prompts│  │Frameworks│  │ Gates │  │Styles │  │Sessions │      │
-│ │Registry│ │ Manager │  │Manager│  │Manager│  │ Manager │      │
-│ └───┬───┘  └────┬────┘  └───┬───┘  └───┬───┘  └────┬────┘      │
-├─────┼───────────┼───────────┼──────────┼───────────┼────────────┤
-│     │           │           │          │           │  Persistence│
-│     ▼           ▼           ▼          ▼           ▼             │
-│ prompts/    frameworks/  gates/    styles/    runtime-state/  │
-│ *.md,json   */method.yaml  */gate.yaml */style.yaml  state.db    │
-│             */phases.yaml  */guidance  */guidance   (SQLite)     │
-└─────────────────────────────────────────────────────────────────┘
-```
+The request path is MCP tool -> router/pipeline -> domain services -> persistence, and the observed import graph between modules is generated in the [module catalog](../reference/module-catalog.md#observed-boundary-graph); the `What Each Layer Does` table below names each layer's components.
 
-### What Each Layer Does
+#### What Each Layer Does
 
 | Layer            | Components              | Responsibility                                                  |
 | ---------------- | ----------------------- | --------------------------------------------------------------- |
@@ -113,7 +78,7 @@ flowchart LR
 | **Service**      | Managers + registries   | Business logic for prompts, frameworks, gates, styles, sessions |
 | **Persistence**  | File system + SQLite    | Hot-reload sources (YAML/MD), runtime state (SQLite)            |
 
-### Why The Pipeline Matters
+#### Why The Pipeline Matters
 
 The `PromptExecutionPipeline` is the architectural centerpiece. Every `prompt_engine` call:
 
@@ -129,7 +94,7 @@ This design means:
 - **Debuggable**: Each stage logs entry/exit with timing and memory metrics
 - **Extensible**: Add a stage file, register it, done
 
-### Key Design Decisions
+#### Key Design Decisions
 
 | Decision                     | Rationale                                                       |
 | ---------------------------- | --------------------------------------------------------------- |
@@ -143,9 +108,9 @@ This design means:
 
 ---
 
-## Quick Start for Developers
+### Quick Start for Developers
 
-### Semantic Module Boundaries
+#### Semantic Module Boundaries
 
 The source tree is organized by semantic boundaries rather than by a directory list maintained in
 this document. Each governed boundary has a colocated `module.yaml` that records its identity,
@@ -172,7 +137,7 @@ alone.
 | `server/src/shared`     | Provides cross-layer types, abstractions, and pure utilities.                  |
 | `server/src/cli-shared` | Adapts shared behavior for the standalone CLI surface.                         |
 
-### Common Tasks
+#### Common Tasks
 
 | Task                                      | Where to Look                                                                                       |
 | ----------------------------------------- | --------------------------------------------------------------------------------------------------- |
@@ -183,7 +148,7 @@ alone.
 | Debug persisted state                     | Consult [SQLite Persistence](sqlite-persistence.md) for table and writer ownership.                 |
 | Modify tool schemas                       | Edit `server/tooling/contracts/*.json`, then run `npm --prefix server run generate:contracts`.      |
 
-### Entry Points
+#### Entry Points
 
 | File                                                         | Purpose                                |
 | ------------------------------------------------------------ | -------------------------------------- |
@@ -199,139 +164,30 @@ alone.
 
 ---
 
-## Execution Pipeline
+### MCP Tool Architecture
 
-Every `prompt_engine` call flows through up to 21 stages. Stage file numbers `01-`…`21-` match this order, but the **`stages` array in `pipeline-builder.ts` is the contract** — the pipeline runs it front to back and does no reordering, so a renamed file changes nothing on its own.
-
-### Stage Execution Order
-
-The pipeline runs stages in this order (from the `stages` array in `pipeline-builder.ts`):
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        INITIALIZE & PARSE                           │
-├─────────────────────────────────────────────────────────────────────┤
-│ 1. RequestNormalization      Consolidate deprecated params → `gates`│
-│ 2. ExecutionLifecycle        Initialize execution tracking          │
-│ 3. IdentityResolution        Resolve the workspace continuity scope │
-│ 4. CommandParsing            Parse command, extract arguments       │
-│ 5. InlineGate                Register `::` criteria as temp gates   │
-│ 6. OperatorValidation        Validate `@framework` overrides        │
-├─────────────────────────────────────────────────────────────────────┤
-│                        PLAN & ENHANCE                               │
-├─────────────────────────────────────────────────────────────────────┤
-│ 7. ExecutionPlanning         Determine strategy, gates, session     │
-│ 8. ScriptExecution*          Run matched script tools               │
-│ 9. ScriptAutoExecute*        Call MCP tools from script output      │
-│10. JudgeSelection            Select evaluation criteria (%judge)    │
-│11. GateEnhancement           Process gates, render guidance         │
-│12. FrameworkResolution       Resolve active framework               │
-│13. SessionManagement         Chain/session lifecycle                │
-│14. InjectionControl          Control framework injection per-step   │
-│15. PromptGuidance            Inject framework guidance            │
-├─────────────────────────────────────────────────────────────────────┤
-│                        EXECUTE & FORMAT                             │
-├─────────────────────────────────────────────────────────────────────┤
-│16. ResponseCapture           Capture previous step results          │
-│17. ShellVerification*        Run shell commands to validate work    │
-│18. StepExecution             Execute prompts with Nunjucks          │
-│19. PhaseGuardVerification*   Check framework phase guards          │
-│20. GateReview                Validate gate verdicts (PASS/FAIL)     │
-│21. ResponseFormatting        Assemble response + usage CTA          │
-└─────────────────────────────────────────────────────────────────────┘
-
-* Stages 8-9 (Script), 17 (ShellVerification), 19 (PhaseGuardVerification) are optional
-```
-
-### Pipeline Behavior
-
-| Behavior         | Description                                                   |
-| ---------------- | ------------------------------------------------------------- |
-| **Sequential**   | Stages execute in order, no skipping                          |
-| **Early exit**   | Pipeline stops when `context.response` is set                 |
-| **Stage no-ops** | Stages may skip based on context (e.g., frameworks disabled)  |
-| **Metrics**      | Each stage reports timing and memory delta                    |
-| **Recovery**     | Errors in a stage are caught, logged, and can trigger cleanup |
-
-### Script Tool Pipeline
-
-Stages 8 and 9 enable prompts to include validation scripts that auto-trigger based on user input.
-
-```
-User Input → ScriptExecution → ScriptAutoExecute → Template Context
-                     │                  │
-                     ▼                  ▼
-            Schema match?          Script returned
-            Run script             {valid: true, auto_execute}?
-                                   Call MCP tool
-```
-
-| Stage                 | Trigger                              | Output                                     |
-| --------------------- | ------------------------------------ | ------------------------------------------ |
-| **ScriptExecution**   | User args match tool's `schema.json` | Script result → `{{tool_<id>}}`            |
-| **ScriptAutoExecute** | Script returns `auto_execute` block  | MCP tool response → `{{tool_<id>_result}}` |
-
-**Use case**: Meta-prompts like `>>create_gate` that validate input and auto-create resources.
-
-See [Script Tools Guide](../guides/script-tools.md) for building script-enabled prompts.
-
----
-
-## MCP Tool Architecture
-
-### External vs Internal Tools
+#### External vs Internal Tools
 
 The server exposes **3 MCP tools** to clients but internally uses **5 specialized managers**:
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    MCP Protocol (3 tools)                    │
-│  ┌─────────────┐  ┌──────────────┐  ┌──────────────┐        │
-│  │prompt_engine│  │resource_manager│ │system_control│       │
-│  └──────┬──────┘  └───────┬──────┘  └───────┬──────┘        │
-└─────────┼─────────────────┼─────────────────┼───────────────┘
-          │                 │                 │
-          ▼                 ▼                 ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    Internal Managers                         │
-│                                                              │
-│  prompt_engine ──► PromptExecutor ──► PipelineBuilder       │
-│                                        └► PromptExecution   │
-│                                           Pipeline (23 stg) │
-│                                                              │
-│  resource_manager ──► Router ──┬► PromptResourceHandler     │
-│                                │   └► lifecycle/discovery/  │
-│                                │      versioning processors │
-│                                ├► GateToolHandler           │
-│                                │   └► lifecycle/discovery/  │
-│                                │      versioning processors │
-│                                └► FrameworkToolHandler       │
-│                                    └► lifecycle/discovery/  │
-│                                       versioning/validation │
-│                                                              │
-│  system_control ──► SystemControl Router                    │
-│                      └► 11 action handlers                  │
-│                         (status, framework, gates, session, │
-│                          guide, analytics, config, etc.)    │
-└─────────────────────────────────────────────────────────────┘
-```
+The request path is MCP tool -> router/pipeline -> domain services -> persistence; the `Tool Responsibilities` table below names each tool's internal target, and the `mcp-tools` boundary row in the [module catalog](../reference/module-catalog.md#observed-boundary-graph) shows the observed import graph.
 
-### Tool Responsibilities
+#### Tool Responsibilities
 
 | Tool               | Purpose                                       | Internal Target                                                                  |
 | ------------------ | --------------------------------------------- | -------------------------------------------------------------------------------- |
 | `prompt_engine`    | Execute prompts and chains                    | PromptExecutor → PipelineBuilder → PromptExecutionPipeline                       |
 | `resource_manager` | CRUD for prompts, gates, frameworks           | Router → Handler → Processors (lifecycle/discovery/versioning per resource type) |
-| `system_control`   | System status, framework switching, analytics | SystemControl router → 11 specialized action handlers                            |
+| `system_control`   | System status, framework switching, analytics | SystemControl router → 12 specialized action handlers                            |
 
-### Why This Design?
+#### Why This Design?
 
 1. **Token Economy**: 3 tools consume less context than 5+ tools
 2. **Intent Clarity**: LLMs route better through a unified CRUD interface
 3. **Separation of Concerns**: Internal managers can evolve independently
 4. **Contract Stability**: External API (3 tools) stays stable while internal structure can change
 
-### MCP Resources (Read-Only Discovery)
+#### MCP Resources (Read-Only Discovery)
 
 In addition to tools, the server can expose **MCP Resources** for token-efficient read-only access.
 This surface is **opt-in** — `resources.registerWithMcp` defaults to `false`, so a stock server
@@ -346,10 +202,10 @@ advertises no resources at all:
      │              │              │              │              │
      ▼              ▼              ▼              ▼              ▼
 ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐
-│ Prompts  │  │  Gates   │  │Methodol- │  │ Sessions │  │ Metrics  │
-│ prompt/  │  │  gate/   │  │  ogies   │  │ session/ │  │ metrics/ │
-│ prompt/  │  │  gate/   │  │methodol- │  │ session/ │  │ pipeline │
-│   {id}   │  │   {id}   │  │  ogy/    │  │{chainId} │  │          │
+│ Prompts  │  │  Gates   │  │Framework │  │ Sessions │  │ Metrics  │
+│ prompt/  │  │  gate/   │  │framework/│  │ session/ │  │ metrics/ │
+│ prompt/  │  │  gate/   │  │framework/│  │ session/ │  │ pipeline │
+│   {id}   │  │   {id}   │  │   {id}   │  │{chainId} │  │          │
 └──────────┘  └──────────┘  └──────────┘  └──────────┘  └──────────┘
      │              │              │              │              │
      ▼              ▼              ▼              ▼              ▼
@@ -377,428 +233,9 @@ See [MCP Resources documentation](../reference/mcp-tools.md#mcp-resources--token
 
 ---
 
-## Pipeline State Management
+### Component Architecture
 
-Three centralized components prevent bugs from distributed state:
-
-### State Components
-
-| Component                    | Purpose                                          | Access                       |
-| ---------------------------- | ------------------------------------------------ | ---------------------------- |
-| `GateAccumulator`            | Collects gates with priority-based deduplication | `context.gates`              |
-| `DiagnosticAccumulator`      | Collects warnings/errors from stages             | `context.diagnostics`        |
-| `FrameworkDecisionAuthority` | Single source for framework decisions            | `context.frameworkAuthority` |
-
-### GateAccumulator
-
-Prevents duplicate gates by tracking source priority:
-
-```typescript
-// Priority order (higher wins):
-// inline-operator (100) > temporary-request (80) > prompt-config (60) >
-// chain-level (50) > framework (40) > registry-auto (20)
-// A gate chosen during a judge phase enters at 100 — the menu directs re-entry
-// through the `::` operator.
-
-context.gates.add("research-quality", "registry-auto");
-context.gates.addAll(frameworkGates, "framework-guide");
-const finalGates = context.gates.getAll(); // Deduplicated
-```
-
-### FrameworkDecisionAuthority
-
-Resolves framework from multiple sources:
-
-```typescript
-// Priority: modifiers (%clean/%lean) > @ operator > global
-// A judge-phase framework choice re-enters through `@framework`, so it arrives
-// as operatorOverride rather than through a separate client channel.
-const decision = context.frameworkAuthority.decide({
-  modifiers: context.executionPlan?.modifiers,
-  operatorOverride: context.parsedCommand?.frameworkOverride,
-  globalActiveFramework: "CAGEERF",
-});
-if (decision.shouldApply) {
-  // Use decision.frameworkId
-}
-```
-
-### DiagnosticAccumulator
-
-Creates audit trail across stages:
-
-```typescript
-context.diagnostics.info(this.name, "Gate enhancement complete", {
-  gateCount: context.gates.size,
-  sources: context.gates.getSourceCounts(),
-});
-```
-
-### Assertion–Gate Review Composition
-
-Assertions (structural, deterministic) and LLM quality gates (subjective) check orthogonal dimensions. When both are active, their results compose rather than compete:
-
-| Gate Type                                    | Stage | Checks                                                         | Nature        |
-| -------------------------------------------- | ----- | -------------------------------------------------------------- | ------------- |
-| Assertion gates (`__assertion_structural__`) | 09b   | Structure — are required sections present, minimum length met? | Deterministic |
-| Shell verification (`:: verify:`)            | 08b   | Command output — does shell command pass?                      | Deterministic |
-| LLM quality gates                            | 08    | Content quality — depth of analysis, actionability?            | Subjective    |
-
-**The review entity**: a gate review is a record of one node's output. `GateReview`
-(`shared/types/chain-execution.ts`) carries `nodeId` (the node whose answer it grades), `kind`
-(`gate` for a step's gates, `structural` for a failed phase guard, `detached` for a detached
-node's late report) and `phase` (`awaiting-verdict`, `awaiting-replacement` or `exhausted`), plus
-its gates, prompts, attempt counter and history. Every open review of a run lives in
-`ChainSession.reviews`, keyed by that node id; there is no second slot. The graded node is not
-always the one the run stands on: a structural review grades the step a capture just walked
-past, a detached node's review opens on its late report, and a final-step review outlives the
-walk past the last node. The store keeps at most one non-detached review per run, beside any
-number of detached ones.
-
-- **One creation path**: `GateEnforcementAuthority.createReview(sessionId, kind, nodeId, …)`
-  (`execution/pipeline/decisions/gates/`). The step review at render, a detached node's review
-  at its report, and the review a verdict opens when none was open all go through it, and the key
-  is always the node, never the run's position.
-- **One answering path**: `GateVerdictProcessor.answerReview` handles every verdict, replacement
-  report and `gate_action`. It asks `resolveReviewTarget` which review the call addresses (the
-  node a `HANDOFF RESULT` trailer names, else the current node's review, else the run's one
-  non-detached review), applies the event with `advanceReview`, and persists what it returns.
-- **One transition table**: `advanceReview` (`decisions/gates/review-lifecycle.ts`) is pure and
-  owns the attempt counter. `awaiting-verdict` accepts a verdict; `awaiting-replacement` (detached
-  only) accepts a replacement report; `exhausted` accepts only `gate_action` retry, skip or abort
-  (a detached review refuses abort). A blocking FAIL charges one attempt and lands on `exhausted`
-  when the budget is spent; an advisory or informational FAIL charges it and clears the review. A
-  PASS over a failing `shell_verify` / `script_tool` result is refused, and a refusal charges
-  nothing.
-- **One completion point**: the pipeline asks `completeHeldRun` after the stage loop on every
-  chain call, whichever stage ended it, so after every review the call can open exists. A run
-  past its last node completes only when no node holds it open (`nodesHoldingRunOpen`: an
-  unreported detached node, or any open review), so `chain/complete` follows the final verdict.
-  A late-report call that stage 16 answers also asks the same method there, because its reply
-  says whether the run completed.
-
-**Composition contract**: When Stage 19 assertions pass and a pending LLM gate review exists, the
-assertion results are **merged into** the gate review prompt as pre-validated structural context.
-The LLM reviewer sees "Structure: PASS (N/N phases)" and focuses on content quality. The gate
-review is retained, not cleared.
-
-**Assertion failures**: When assertions fail and the graded node has an open gate review, the
-structural findings are **merged into** that review (R103): its `gateIds` gain
-`__phase_guard__`, the missing-section hints lead its `retryHints`, and everything the gate
-brought (its criteria, its `retry_config` budget, the attempts already spent and its history)
-survives. It stays ONE review with ONE attempt counter, rendered as "Structural + Gate Review
-Required", and one `gate_verdict` answers both. When the graded node has no gate review open, the
-assertions open a `structural` review of their own, on the phase guard's budget.
-`composeStructuralReview` (`execution/pipeline/decisions/gates/structural-review-composition.ts`)
-decides which: an unknown-interrupt hold, or a review of a different node, is never merged into.
-
-**A detached node's late report** is graded the same way, against the recorded output rather
-than the text of the call. Stage 16 lands the report and calls stage 19's `gradeLateReport`,
-which checks the headers the detached node declared. A failing grade is composed onto that
-node's review (one review naming the gates and the missing sections), or opens a detached
-structural review when no gate applies. A replacement report is graded afresh and keeps the
-attempts already spent.
-
-**Double-injection guard**: `metadata.assertionContext` is checked before injecting. If already
-present (e.g., retry cycle), the summary is not prepended again.
-
-**Authority model**: `sessionContext.pendingReview` is a fast-path signal (present = render the
-review screen). Stage 20 re-reads the review from the chain session store before rendering, so
-the record in `ChainSession.reviews` is the authoritative source.
-
-**Escalation source tracking**: When retry limits are exceeded, `context.state.gates.escalationSource` indicates whether the escalation originated from `'gate-review'` (Stage 08) or `'shell-verify'` (Stage 08b). Both stages write to the shared `retryLimitExceeded` / `awaitingUserChoice` flags sequentially.
-
----
-
-## Pipeline Domain Services
-
-Pipeline stages are thin orchestrators (~60-210 lines). Domain logic lives in services owned by their respective domains, injected via stage constructors.
-
-### Gate Domain (`engine/gates/`)
-
-| Service                  | Location          | Purpose                                                            | Stage                 |
-| ------------------------ | ----------------- | ------------------------------------------------------------------ | --------------------- |
-| `GateEnhancementService` | `gates/services/` | Gate selection, framework coordination, prompt enhancement         | 05 GateEnhancement    |
-| `TemporaryGateRegistrar` | `gates/services/` | Inline/temp gate normalization and registration                    | 05 GateEnhancement    |
-| `GateMetricsRecorder`    | `gates/services/` | Gate usage analytics                                               | 05 GateEnhancement    |
-| `GateVerdictProcessor`   | `gates/services/` | Verdict parsing, gate action handling, deferred verdicts           | 08 ResponseCapture    |
-| `InlineGateProcessor`    | `gates/services/` | `::` criteria parsing, shell-verify extraction, temp gate creation | 02 InlineGate         |
-| `GateShellVerifyRunner`  | `gates/services/` | Shell command execution for `:: verify:` gates                     | 08b ShellVerification |
-| `JudgeResourceCollector` | `gates/judge/`    | Collect styles/frameworks/gates for judge selection                | 06a JudgeSelection    |
-| `JudgeMenuFormatter`     | `gates/judge/`    | Format resource menus for two-phase judge flow                     | 06a JudgeSelection    |
-
-### Execution Domain (`engine/execution/`)
-
-| Service                  | Location                | Purpose                                                                                                            | Stage                 |
-| ------------------------ | ----------------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------- |
-| `ChainBlueprintResolver` | `execution/parsers/`    | Restore chain session blueprints for response-only mode                                                            | 01 CommandParsing     |
-| `SymbolicCommandBuilder` | `execution/parsers/`    | Build ParsedCommand from symbolic operator parse results                                                           | 01 CommandParsing     |
-| `StepCaptureService`     | `execution/capture/`    | Step result capture, placeholder generation                                                                        | 08 ResponseCapture    |
-| `ResponseAssembler`      | `execution/formatting/` | Response formatting, chain footer building, usage CTA, gate validation info                                        | 10 ResponseFormatting |
-| `ChainOperatorExecutor`  | `execution/operators/`  | Chain step rendering, delegation CTA building                                                                      | 09 StepExecution      |
-| `handoff-contract.ts`    | `execution/delegation/` | Delegated node token derivation, `HANDOFF RESULT` trailer parsing, and the evidence decision a resume must satisfy | 08 ResponseCapture    |
-
-**Enforcement layering.** `handoff-contract.ts` is the one module that derives a delegated node's token, parses a worker's `HANDOFF RESULT` trailer, and decides whether a resume satisfies the configured `execution.delegation.evidence` mode; `StepCaptureService` and the ResponseCapture stage both call it rather than re-deriving any of the three. The stage refuses the resume when that decision is `missing` under `required`, and either way `execution_records.handoff_evidence` records which of the four reasons the resume carried. Client-side hooks — Claude Code's `delegation-enforce.py` — only tighten on top of this, denying a spawn call that is not pinned to the foreground; they never substitute for the server's own check.
-
-### See Also
-
-- [Gate System Guide](../guides/gates.md) — gate definitions, activation rules, enforcement
-- [Injection Control](../guides/injection-control.md) — how framework/gate/style guidance is injected per step
-- [Stage Execution Order](#stage-execution-order) — full pipeline stage listing with descriptions
-
----
-
-## Ephemeral vs Persistent State
-
-Understanding which state survives across MCP requests is critical for cross-request features.
-
-### State Lifecycle
-
-| Category               | Lifecycle                        | Storage                | Access                     |
-| ---------------------- | -------------------------------- | ---------------------- | -------------------------- |
-| **Ephemeral**          | Dies after each request          | `ExecutionContext`     | `context.state.*`          |
-| **Session-Persistent** | Survives across session requests | `ChainSessionStore`    | `chainSessionStore.get*()` |
-| **Global-Persistent**  | Survives server restarts         | `runtime-state/*.json` | State managers             |
-
-### Ephemeral State (Per-Request)
-
-Recreated fresh for every MCP tool call:
-
-```typescript
-// WRONG: Lost after response
-context.state.gates.retryLimitExceeded = true;
-
-// Request 2: Always undefined!
-if (context.state.gates.retryLimitExceeded) {
-  /* Never runs */
-}
-```
-
-### Session-Persistent State
-
-Survives across requests for the same session:
-
-```typescript
-// CORRECT: Persists to SQLite chain_sessions table
-await chainSessionStore.setPendingGateReview(sessionId, review);
-
-// Next request: Works!
-const review = chainSessionStore.getReview(sessionId, nodeId);
-```
-
-### Global-Persistent State
-
-Survives server restarts. All state persisted in `runtime-state/state.db` (SQLite via `node:sqlite`).
-
-| State               | Store                    | SQLite Table                                                                                                          |
-| ------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| Framework selection | `FrameworkStateStore`    | `framework_state`                                                                                                     |
-| Gate system enabled | `GateStateStore`         | `gate_system_state`                                                                                                   |
-| Chain sessions      | `ChainSessionStore`      | `chain_sessions`                                                                                                      |
-| Chain run tracking  | `ChainRunRegistry`       | `chain_runs` + `chain_run_nodes` (one row per run + one row per node; replaces the retired `chain_run_registry` blob) |
-| Argument history    | `ArgumentHistoryTracker` | `argument_history`                                                                                                    |
-| Resource index      | `ResourceIndexer`        | `resource_index`                                                                                                      |
-| Resource hashes     | `ResourceIndexer`        | `resource_hash_cache`                                                                                                 |
-| Resource changes    | `ResourceChangeTracker`  | `resource_changes`                                                                                                    |
-
-### State Flow Diagram
-
-```
-Request 1                          Request 2
-─────────                          ─────────
-context.state = {}                 context.state = {}  ← Fresh!
-    │                                  │
-    ▼                                  ▼
-Set ephemeral flag                 Ephemeral flag is undefined
-context.state.X = true                 │
-    │                                  ▼
-    ▼                              Read from session manager
-Save to session manager            chainSessionStore.get*(sessionId)
-chainSessionStore.set*(...)          │
-    │                                  ▼
-    ▼                              State available!
-Response sent
-(context.state discarded)
-```
-
-### Anti-Patterns
-
-```typescript
-// WRONG: Storing cross-request state in context
-context.state.gates.retryLimitExceeded = true; // Lost!
-
-// WRONG: Mixing ephemeral and persistent reads
-const fromContext = context.state.gates.enforcementMode; // Ephemeral
-const fromSession = chainSessionStore.getReview(sessionId, nodeId); // Persistent
-// These may be out of sync!
-
-// CORRECT: Single source of truth
-const isExceeded = chainSessionStore.isRetryLimitExceeded(sessionId); // Always persistent
-```
-
----
-
-## Write-Path Coherence
-
-Resources (prompts, gates, frameworks, styles) can be written by multiple systems. This section documents how writes from different sources converge to a consistent state.
-
-### Write Paths
-
-| Writer                      | Resources                          | Transactional                 | Validated       | Versioned      |
-| --------------------------- | ---------------------------------- | ----------------------------- | --------------- | -------------- |
-| `resource_manager` MCP tool | Prompts, gates, frameworks         | `ResourceMutationTransaction` | Schema-verified | Auto-versioned |
-| HTTP API (`api.ts`)         | Categories (directory creation)    | No                            | No              | No             |
-| CLI (`cli-shared/`)         | All types (scaffold, rename, move) | Rollback on failure           | Schema-verified | No             |
-
-### Coherence Model
-
-All writers persist resources as YAML files on disk. The server detects changes through the `FileObserver`, which watches all resource directories:
-
-```
-Writer (MCP tool / CLI / HTTP API)
-  |
-  v
-YAML files written to disk
-  |
-  v
-FileObserver detects change (~500ms debounce)
-  |
-  v
-HotReloadObserver triggers fullServerRefresh()
-  |
-  v
-ResourceIndexer.syncAll() updates SQLite index
-PromptAssetManager reloads prompt cache
-MCP notification sent to clients
-```
-
-### Watched Directories
-
-| Resource     | Directory Source                                                                                               | Registration                                              |
-| ------------ | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| Prompts      | every root the catalog is composed from — primary, bundled, and each workspace overlay — plus category subdirs | `buildWatchTargets()` in `prompt-watch-setup.ts`          |
-| Gates        | `getWatchDirectories()` (primary gates dir plus every overlay, bundled included)                               | `createGateHotReloadRegistration()` auxiliary reload      |
-| Frameworks   | `getWatchDirectories()` (primary frameworks dir plus every overlay, bundled included)                          | `createFrameworkHotReloadRegistration()` auxiliary reload |
-| Styles       | `loader.getWatchDirectories()` (primary workspace styles dir plus every overlay, bundled included)             | `createStyleHotReloadRegistration()` auxiliary reload     |
-| Script tools | the prompts folder (prompt-local `tools/` folders) plus the workspace scripts folder (`getScriptsDirectory()`) | `buildScriptAuxiliaryReloadConfig()` auxiliary reload     |
-| Change log   | `trackedResourceRoots()` — primary prompts and gates dirs plus every overlay, **not** the bundled tree         | `buildResourceChangeTrackerAuxiliaryReloadConfig()`       |
-
-The prompts row watches each prompts root itself. Until 2026-09-17 the primary was watched through
-its PARENT — `<workspace>/resources`, or the whole workspace for a legacy `<workspace>/prompts` —
-because `startHotReload` still reduced its argument with `path.dirname` after callers had switched
-from a config-file path to the directory. Every other type keeps its own watcher, so nothing was
-observed only through that parent.
-
-An overlay counts as a root whether or not it exists yet (`getOverlayResourceCandidates()`): the
-loaders read an absent root as empty, and the watcher arms on it once it appears. Framework files
-take exactly one path, the auxiliary registration; there is no dedicated framework callback.
-
-### Folders created while the server runs
-
-`FileObserver` polls once a second for a registered directory that does not exist, then arms
-chokidar on it and reports every file already inside. Nothing can report an entry written AND
-removed inside that window, and the server may already hold it — `resource_manager` registers a
-created framework or gate directly. So once a late directory's watcher finishes its first scan,
-`HotReloadObserver` reconciles it: every auxiliary registration whose directories overlap it runs
-its required `reconcile` (frameworks and gates unregister runtime entries whose files are gone;
-styles and script tools drop their caches; the change log records removals), and the prompt catalog
-reloads in full. A shorter poll would only narrow the window.
-
-### Limitations
-
-- **Debounce delay**: FileObserver uses ~500ms debounce, so rapid successive writes may batch into a single reload event.
-- **No write coordination**: If the MCP tool and CLI write the same resource simultaneously, the last write wins. This is acceptable because concurrent writes to the same resource are not an expected usage pattern.
-- **CLI writes are invisible until detected**: After a CLI write, the MCP server sees stale state until the FileObserver fires. Next MCP tool call after the debounce window will see updated state.
-- **A folder that exists at startup is not reconciled when its watcher arms.** Startup loads each root and then arms the watchers, about a second later on a polled filesystem; a change inside that gap is absorbed into the watcher's first scan. Only folders created after startup are reconciled (above). _(as of 2026-09-17 · flips when a startup root is also reconciled once its first scan completes)_
-
----
-
-## Context Management
-
-Two context systems serve different purposes:
-
-### TextReferenceManager
-
-- **Purpose**: Chain step outputs, template references, placeholder resolution
-- **Scope**: Execution sessions
-- **Storage**: In-memory + optional file persistence
-- **Use cases**: Multi-step chains, template interpolation, gate review context
-
-### ArgumentHistoryTracker
-
-- **Purpose**: Execution arguments and step results for reproducibility
-- **Scope**: Execution sessions
-- **Storage**: SQLite (`argument_history` table)
-- **Use cases**: Gate reviews, debugging, step replay
-
-```mermaid
-graph TB
-    subgraph "MCP Client"
-        A[User Request]
-    end
-
-    subgraph "Prompt Engine"
-        B[Request Processing]
-        C[Parallel Context Tracking]
-    end
-
-    subgraph "Context Managers"
-        D[TextReferenceManager]
-        E[ArgumentHistoryTracker]
-    end
-
-    subgraph "Execution"
-        F[Prompt/Template/Chain]
-        G[Gate Review]
-    end
-
-    A --> B --> C
-    C --> D
-    C --> E
-    D --> F
-    E --> F
-    F --> G
-    E --> G
-```
-
----
-
-## Framework Guidance Injection
-
-`InjectionDecisionService` controls what gets prepended to prompts at execution time.
-
-### Injection Types
-
-| Type             | Injects                                | Default Frequency (Chains) |
-| ---------------- | -------------------------------------- | -------------------------- |
-| `system-prompt`  | Framework (CAGEERF phases, ReACT loop) | Every 2 steps              |
-| `gate-guidance`  | Quality validation criteria            | Every step                 |
-| `style-guidance` | Response formatting hints              | First step only            |
-
-### Resolution Hierarchy
-
-Each injection type resolves independently through a 7-level hierarchy. First match wins:
-
-```
-Modifier → Runtime Override → Step Config → Chain Config → Category Config → Global Config → System Default
-   ↑              ↑               ↑             ↑              ↑               ↑              ↑
- %clean     system_control    per-step      per-chain     per-category    config.jsonc   hardcoded
-```
-
-**Key internals**:
-
-- `HierarchyResolver` walks the config tree for each injection type
-- `ConditionEvaluator` handles conditional rules (gate status, step position)
-- Decisions are cached per-request in `InjectionDecisionService`
-- Frequency modes: `every` (with interval), `first-only`, `never`
-
-For user-facing configuration and examples, see [MCP Tooling Guide → Injection Control](../reference/mcp-tools.md#injection-control).
-
----
-
-## Component Architecture
-
-### Runtime (`src/runtime/`)
+#### Runtime (`src/runtime/`)
 
 Four-phase startup:
 
@@ -807,7 +244,7 @@ Four-phase startup:
 3. **Module Init**: MCP tools, transports, execution engine
 4. **Launch**: Health monitoring, graceful shutdown
 
-### Transports (`src/infra/http/transport/`)
+#### Transports (`src/infra/http/transport/`)
 
 | Transport       | Protocol                       | Use Case                    | Status |
 | --------------- | ------------------------------ | --------------------------- | ------ |
@@ -895,25 +332,25 @@ call HTTP APIs from a browser. Requests without `Origin` remain valid for server
 Authentication and rate limiting run before body parsing or prompt lookup, responses are
 `no-store`, and credentials are removed from request logs.
 
-### Prompts (`src/modules/prompts/`)
+#### Prompts (`src/modules/prompts/`)
 
 - **Registry**: Dynamic registration with category organization
 - **Hot-Reload**: File watching with debounced updates
 - **Templates**: Nunjucks with custom filters and async rendering
 
-### Frameworks (`src/engine/frameworks/`)
+#### Frameworks (`src/engine/frameworks/`)
 
 - **Manager**: Stateless orchestration, loads definitions from framework registry
 - **State Store**: Persists active framework to SQLite `framework_state` table
 - **Guides**: CAGEERF, ReACT, 5W1H, SCAMPER, FOCUS, Liquescent implementations
 
-### Gates (`src/engine/gates/`)
+#### Gates (`src/engine/gates/`)
 
 - **Manager**: Orchestrates gate lifecycle and validation
 - **Registry**: Hot-reloaded gate definitions from `server/resources/gates/`
 - **Services**: Gate resolution, guidance rendering, compositional gates
 
-### Telemetry (`src/infra/observability/telemetry/`)
+#### Telemetry (`src/infra/observability/telemetry/`)
 
 OpenTelemetry-based tracing with data safety enforcement:
 
@@ -927,14 +364,14 @@ The hook system is the single fan-out point for pipeline/gate/chain events. The 
 
 See [Telemetry & Observability Guide](../guides/telemetry-observability.md) for configuration, attribute reference, and troubleshooting.
 
-### Styles (`src/modules/formatting/`)
+#### Styles (`src/modules/formatting/`)
 
 - **Manager**: Orchestrates style lifecycle
 - **Registry**: Hot-reloaded style definitions from `server/resources/styles/`, overlaid by a
   workspace `resources/styles/{id}/` the same way prompts, gates and frameworks are
 - **Loader**: YAML + MD parsing with schema validation
 
-### Execution (`src/engine/execution/`)
+#### Execution (`src/engine/execution/`)
 
 - **Pipeline**: 21-stage sequential processing (see [Stage Execution Order](#stage-execution-order))
 - **Parsers**: Multi-format (symbolic `-->`, JSON, key=value)
@@ -943,30 +380,11 @@ See [Telemetry & Observability Guide](../guides/telemetry-observability.md) for 
 
 ---
 
-## Performance Characteristics
-
-| Operation        | Target    | Notes                  |
-| ---------------- | --------- | ---------------------- |
-| Server startup   | <3s       | 4-phase initialization |
-| Tool response    | <500ms    | Most operations        |
-| Framework switch | <100ms    | Framework change       |
-| Template render  | <50ms     | Complex Nunjucks       |
-| Chain step       | 100-500ms | Depends on complexity  |
-
-### Memory Management
-
-- **Session cleanup**: 24h default for stale sessions
-- **Argument history**: Configurable retention limits
-- **Template cache**: LRU with size limits
-- **Temporary gates**: A run owns the gates its calls register until it completes, is cancelled, pruned or cleared; a call with no run releases its own once its response is set
-
----
-
-## Contract-Driven Development
+### Contract-Driven Development
 
 MCP tool parameters and descriptions are generated from contract files:
 
-### Contract Flow
+#### Contract Flow
 
 ```
 tooling/contracts/*.json          # Source of truth
@@ -979,7 +397,7 @@ src/mcp/contracts/schemas/_generated/
 └── *.generated.ts                # Per-tool TypeScript types
 ```
 
-### Why Contracts?
+#### Why Contracts?
 
 1. **Single Source of Truth**: Parameter definitions live in one place
 2. **Type Safety**: Generated Zod schemas ensure runtime validation matches types
@@ -987,6 +405,532 @@ src/mcp/contracts/schemas/_generated/
 4. **Documentation Sync**: Parameter docs generated from contracts
 
 See [MCP Contract Standards](../../.claude/rules/mcp-contracts.md) for maintenance workflow.
+
+---
+
+## Runtime View
+
+This view answers what happens, in what order, when a request executes: the pipeline's stage sequence, its state model, and the persistence, coherence, and injection concerns that unfold across a request's lifetime. The stage order below is a checked artifact, not prose — `validate:pipeline-stage-table` reads the `stages` array in `pipeline-builder.ts` and fails the build the moment this document's Stage Execution Order box drifts from it.
+
+### Execution Pipeline
+
+Every `prompt_engine` call flows through up to 21 stages. Stage file numbers `01-`…`21-` match this order, but the **`stages` array in `pipeline-builder.ts` is the contract** — the pipeline runs it front to back and does no reordering, so a renamed file changes nothing on its own.
+
+#### Stage Execution Order
+
+The pipeline runs stages in this order (from the `stages` array in `pipeline-builder.ts`):
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        INITIALIZE & PARSE                           │
+├─────────────────────────────────────────────────────────────────────┤
+│ 1. RequestNormalization      Consolidate deprecated params → `gates`│
+│ 2. ExecutionLifecycle        Initialize execution tracking          │
+│ 3. IdentityResolution        Resolve the workspace continuity scope │
+│ 4. CommandParsing            Parse command, extract arguments       │
+│ 5. InlineGateExtraction      Register `::` criteria as temp gates   │
+│ 6. OperatorValidation        Validate `@framework` overrides        │
+├─────────────────────────────────────────────────────────────────────┤
+│                        PLAN & ENHANCE                               │
+├─────────────────────────────────────────────────────────────────────┤
+│ 7. ExecutionPlanning         Determine strategy, gates, session     │
+│ 8. ScriptExecution*          Run matched script tools               │
+│ 9. ScriptAutoExecute*        Call MCP tools from script output      │
+│10. JudgeSelection            Select evaluation criteria (%judge)    │
+│11. GateEnhancement           Process gates, render guidance         │
+│12. FrameworkResolution       Resolve active framework               │
+│13. SessionManagement         Chain/session lifecycle                │
+│14. InjectionControl          Control framework injection per-step   │
+│15. PromptGuidance            Inject framework guidance            │
+├─────────────────────────────────────────────────────────────────────┤
+│                        EXECUTE & FORMAT                             │
+├─────────────────────────────────────────────────────────────────────┤
+│16. StepResponseCapture       Capture previous step results          │
+│17. ShellVerification*        Run shell commands to validate work    │
+│18. StepExecution             Execute prompts with Nunjucks          │
+│19. PhaseGuardVerification*   Check framework phase guards          │
+│20. GateReview                Validate gate verdicts (PASS/FAIL)     │
+│21. ResponseFormatting        Assemble response + usage CTA          │
+└─────────────────────────────────────────────────────────────────────┘
+
+* Stages 8-9 (Script), 12 (FrameworkResolution — an inert stub when no framework manager is wired), 17 (ShellVerification), 19 (PhaseGuardVerification) are optional
+```
+
+#### Pipeline Behavior
+
+| Behavior         | Description                                                                                                                    |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| **Sequential**   | Runs in array order; a stage that sets `context.response` ends the run                                                         |
+| **Early exit**   | Pipeline stops when `context.response` is set                                                                                  |
+| **Stage no-ops** | Stages may skip based on context (e.g., frameworks disabled)                                                                   |
+| **Metrics**      | Each stage reports timing and memory delta                                                                                     |
+| **Recovery**     | A failed stage is logged with metrics and a span, then rethrown — no later stage runs; only `finally` cleanup handlers execute |
+
+#### Script Tool Pipeline
+
+Stages 8 and 9 enable prompts to include validation scripts that auto-trigger based on user input.
+
+```
+User Input → ScriptExecution → ScriptAutoExecute → Template Context
+                     │                  │
+                     ▼                  ▼
+            Schema match?          Script returned
+            Run script             {valid: true, auto_execute}?
+                                   Call MCP tool
+```
+
+| Stage                 | Trigger                              | Output                                     |
+| --------------------- | ------------------------------------ | ------------------------------------------ |
+| **ScriptExecution**   | User args match tool's `schema.json` | Script result → `{{tool_<id>}}`            |
+| **ScriptAutoExecute** | Script returns `auto_execute` block  | MCP tool response → `{{tool_<id>_result}}` |
+
+**Use case**: Meta-prompts like `>>create_gate` that validate input and auto-create resources.
+
+See [Script Tools Guide](../guides/script-tools.md) for building script-enabled prompts.
+
+---
+
+### Pipeline State Management
+
+Three centralized components prevent bugs from distributed state:
+
+#### State Components
+
+| Component                    | Purpose                                          | Access                       |
+| ---------------------------- | ------------------------------------------------ | ---------------------------- |
+| `GateAccumulator`            | Collects gates with priority-based deduplication | `context.gates`              |
+| `DiagnosticAccumulator`      | Collects warnings/errors from stages             | `context.diagnostics`        |
+| `FrameworkDecisionAuthority` | Single source for framework decisions            | `context.frameworkAuthority` |
+
+#### GateAccumulator
+
+Prevents duplicate gates by tracking source priority:
+
+```typescript
+// Priority order (higher wins):
+// inline-operator (100) > temporary-request (80) > prompt-config (60) >
+// chain-level (50) > framework (40) > registry-auto (20)
+// A gate chosen during a judge phase enters at 100 — the menu directs re-entry
+// through the `::` operator.
+
+context.gates.add("research-quality", "registry-auto");
+context.gates.addAll(frameworkGates, "framework-guide");
+const finalGates = context.gates.getAll(); // Deduplicated
+```
+
+#### FrameworkDecisionAuthority
+
+Resolves framework from multiple sources:
+
+```typescript
+// Priority: modifiers (%clean/%lean) > @ operator > global
+// A judge-phase framework choice re-enters through `@framework`, so it arrives
+// as operatorOverride rather than through a separate client channel.
+const decision = context.frameworkAuthority.decide({
+  modifiers: context.executionPlan?.modifiers,
+  operatorOverride: context.parsedCommand?.frameworkOverride,
+  globalActiveFramework: "CAGEERF",
+});
+if (decision.shouldApply) {
+  // Use decision.frameworkId
+}
+```
+
+#### DiagnosticAccumulator
+
+Creates audit trail across stages:
+
+```typescript
+context.diagnostics.info(this.name, "Gate enhancement complete", {
+  gateCount: context.gates.size,
+  sources: context.gates.getSourceCounts(),
+});
+```
+
+#### Assertion–Gate Review Composition
+
+Assertions (structural, deterministic) and LLM quality gates (subjective) check orthogonal dimensions. When both are active, their results compose rather than compete:
+
+| Gate Type                                    | Stage | Checks                                                         | Nature        |
+| -------------------------------------------- | ----- | -------------------------------------------------------------- | ------------- |
+| Assertion gates (`__assertion_structural__`) | 09b   | Structure — are required sections present, minimum length met? | Deterministic |
+| Shell verification (`:: verify:`)            | 08b   | Command output — does shell command pass?                      | Deterministic |
+| LLM quality gates                            | 08    | Content quality — depth of analysis, actionability?            | Subjective    |
+
+**The review entity**: a gate review is a record of one node's output. `GateReview`
+(`shared/types/chain-execution.ts`) carries `nodeId` (the node whose answer it grades), `kind`
+(`gate` for a step's gates, `structural` for a failed phase guard, `detached` for a detached
+node's late report) and `phase` (`awaiting-verdict`, `awaiting-replacement` or `exhausted`), plus
+its gates, prompts, attempt counter and history. Every open review of a run lives in
+`ChainSession.reviews`, keyed by that node id; there is no second slot. The graded node is not
+always the one the run stands on: a structural review grades the step a capture just walked
+past, a detached node's review opens on its late report, and a final-step review outlives the
+walk past the last node. The store keeps at most one non-detached review per run, beside any
+number of detached ones.
+
+- **One creation path**: `GateEnforcementAuthority.createReview(sessionId, kind, nodeId, …)`
+  (`execution/pipeline/decisions/gates/`). The step review at render, a detached node's review
+  at its report, and the review a verdict opens when none was open all go through it, and the key
+  is always the node, never the run's position.
+- **One answering path**: `GateVerdictProcessor.answerReview` handles every verdict, replacement
+  report and `gate_action`. It asks `resolveReviewTarget` which review the call addresses (the
+  node a `HANDOFF RESULT` trailer names, else the current node's review, else the run's one
+  non-detached review), applies the event with `advanceReview`, and persists what it returns.
+- **One transition table**: `advanceReview` (`decisions/gates/review-lifecycle.ts`) is pure and
+  owns the attempt counter. `awaiting-verdict` accepts a verdict; `awaiting-replacement` (detached
+  only) accepts a replacement report; `exhausted` accepts only `gate_action` retry, skip or abort
+  (a detached review refuses abort). A blocking FAIL charges one attempt and lands on `exhausted`
+  when the budget is spent; an advisory or informational FAIL charges it and clears the review. A
+  PASS over a failing `shell_verify` / `script_tool` result is refused, and a refusal charges
+  nothing.
+- **One completion point**: the pipeline asks `completeHeldRun` after the stage loop on every
+  chain call, whichever stage ended it, so after every review the call can open exists. A run
+  past its last node completes only when no node holds it open (`nodesHoldingRunOpen`: an
+  unreported detached node, or any open review), so `chain/complete` follows the final verdict.
+  A late-report call that stage 16 answers also asks the same method there, because its reply
+  says whether the run completed.
+
+**Composition contract**: When Stage 19 assertions pass and a pending LLM gate review exists, the
+assertion results are **merged into** the gate review prompt as pre-validated structural context.
+The LLM reviewer sees "Structure: PASS (N/N phases)" and focuses on content quality. The gate
+review is retained, not cleared.
+
+**Assertion failures**: When assertions fail and the graded node has an open gate review, the
+structural findings are **merged into** that review (R103): its `gateIds` gain
+`__phase_guard__`, the missing-section hints lead its `retryHints`, and everything the gate
+brought (its criteria, its `retry_config` budget, the attempts already spent and its history)
+survives. It stays ONE review with ONE attempt counter, rendered as "Structural + Gate Review
+Required", and one `gate_verdict` answers both. When the graded node has no gate review open, the
+assertions open a `structural` review of their own, on the phase guard's budget.
+`composeStructuralReview` (`execution/pipeline/decisions/gates/structural-review-composition.ts`)
+decides which: an unknown-interrupt hold, or a review of a different node, is never merged into.
+
+**A detached node's late report** is graded the same way, against the recorded output rather
+than the text of the call. Stage 16 lands the report and calls stage 19's `gradeLateReport`,
+which checks the headers the detached node declared. A failing grade is composed onto that
+node's review (one review naming the gates and the missing sections), or opens a detached
+structural review when no gate applies. A replacement report is graded afresh and keeps the
+attempts already spent.
+
+**Double-injection guard**: `metadata.assertionContext` is checked before injecting. If already
+present (e.g., retry cycle), the summary is not prepended again.
+
+**Authority model**: `sessionContext.pendingReview` is a fast-path signal (present = render the
+review screen). Stage 20 re-reads the review from the chain session store before rendering, so
+the record in `ChainSession.reviews` is the authoritative source.
+
+**Escalation source tracking**: When retry limits are exceeded, `context.state.gates.escalationSource` indicates whether the escalation originated from `'gate-review'` (Stage 08) or `'shell-verify'` (Stage 08b). Both stages write to the shared `retryLimitExceeded` / `awaitingUserChoice` flags sequentially.
+
+---
+
+### Pipeline Domain Services
+
+Pipeline stages are thin orchestrators (~60-210 lines). Domain logic lives in services owned by their respective domains, injected via stage constructors.
+
+#### Gate Domain (`engine/gates/`)
+
+| Service                  | Location          | Purpose                                                            | Stage                 |
+| ------------------------ | ----------------- | ------------------------------------------------------------------ | --------------------- |
+| `GateEnhancementService` | `gates/services/` | Gate selection, framework coordination, prompt enhancement         | 05 GateEnhancement    |
+| `TemporaryGateRegistrar` | `gates/services/` | Inline/temp gate normalization and registration                    | 05 GateEnhancement    |
+| `GateMetricsRecorder`    | `gates/services/` | Gate usage analytics                                               | 05 GateEnhancement    |
+| `GateVerdictProcessor`   | `gates/services/` | Verdict parsing, gate action handling, deferred verdicts           | 08 ResponseCapture    |
+| `InlineGateProcessor`    | `gates/services/` | `::` criteria parsing, shell-verify extraction, temp gate creation | 02 InlineGate         |
+| `GateShellVerifyRunner`  | `gates/services/` | Shell command execution for `:: verify:` gates                     | 08b ShellVerification |
+| `JudgeResourceCollector` | `gates/judge/`    | Collect styles/frameworks/gates for judge selection                | 06a JudgeSelection    |
+| `JudgeMenuFormatter`     | `gates/judge/`    | Format resource menus for two-phase judge flow                     | 06a JudgeSelection    |
+
+#### Execution Domain (`engine/execution/`)
+
+| Service                  | Location                | Purpose                                                                                                            | Stage                 |
+| ------------------------ | ----------------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------- |
+| `ChainBlueprintResolver` | `execution/parsers/`    | Restore chain session blueprints for response-only mode                                                            | 01 CommandParsing     |
+| `SymbolicCommandBuilder` | `execution/parsers/`    | Build ParsedCommand from symbolic operator parse results                                                           | 01 CommandParsing     |
+| `StepCaptureService`     | `execution/capture/`    | Step result capture, placeholder generation                                                                        | 08 ResponseCapture    |
+| `ResponseAssembler`      | `execution/formatting/` | Response formatting, chain footer building, usage CTA, gate validation info                                        | 10 ResponseFormatting |
+| `ChainOperatorExecutor`  | `execution/operators/`  | Chain step rendering, delegation CTA building                                                                      | 09 StepExecution      |
+| `handoff-contract.ts`    | `execution/delegation/` | Delegated node token derivation, `HANDOFF RESULT` trailer parsing, and the evidence decision a resume must satisfy | 08 ResponseCapture    |
+
+**Enforcement layering.** `handoff-contract.ts` is the one module that derives a delegated node's token, parses a worker's `HANDOFF RESULT` trailer, and decides whether a resume satisfies the configured `execution.delegation.evidence` mode; `StepCaptureService` and the ResponseCapture stage both call it rather than re-deriving any of the three. The stage refuses the resume when that decision is `missing` under `required`, and either way `execution_records.handoff_evidence` records which of the four reasons the resume carried. Client-side hooks — Claude Code's `delegation-enforce.py` — only tighten on top of this, denying a spawn call that is not pinned to the foreground; they never substitute for the server's own check.
+
+#### See Also
+
+- [Gate System Guide](../guides/gates.md) — gate definitions, activation rules, enforcement
+- [Injection Control](../guides/injection-control.md) — how framework/gate/style guidance is injected per step
+- [Stage Execution Order](#stage-execution-order) — full pipeline stage listing with descriptions
+
+---
+
+### Ephemeral vs Persistent State
+
+Understanding which state survives across MCP requests is critical for cross-request features.
+
+#### State Lifecycle
+
+| Category               | Lifecycle                        | Storage                | Access                     |
+| ---------------------- | -------------------------------- | ---------------------- | -------------------------- |
+| **Ephemeral**          | Dies after each request          | `ExecutionContext`     | `context.state.*`          |
+| **Session-Persistent** | Survives across session requests | `ChainSessionStore`    | `chainSessionStore.get*()` |
+| **Global-Persistent**  | Survives server restarts         | `runtime-state/*.json` | State managers             |
+
+#### Ephemeral State (Per-Request)
+
+Recreated fresh for every MCP tool call:
+
+```typescript
+// WRONG: Lost after response
+context.state.gates.retryLimitExceeded = true;
+
+// Request 2: Always undefined!
+if (context.state.gates.retryLimitExceeded) {
+  /* Never runs */
+}
+```
+
+#### Session-Persistent State
+
+Survives across requests for the same session:
+
+```typescript
+// CORRECT: Persists to SQLite chain_sessions table
+await chainSessionStore.setPendingGateReview(sessionId, review);
+
+// Next request: Works!
+const review = chainSessionStore.getReview(sessionId, nodeId);
+```
+
+#### Global-Persistent State
+
+Survives server restarts. All state persisted in `runtime-state/state.db` (SQLite via `node:sqlite`).
+
+| State               | Store                    | SQLite Table                                                                                                          |
+| ------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| Framework selection | `FrameworkStateStore`    | `framework_state`                                                                                                     |
+| Gate system enabled | `GateStateStore`         | `gate_system_state`                                                                                                   |
+| Chain sessions      | `ChainSessionStore`      | `chain_sessions`                                                                                                      |
+| Chain run tracking  | `ChainRunRegistry`       | `chain_runs` + `chain_run_nodes` (one row per run + one row per node; replaces the retired `chain_run_registry` blob) |
+| Argument history    | `ArgumentHistoryTracker` | `argument_history`                                                                                                    |
+| Resource index      | `ResourceIndexer`        | `resource_index`                                                                                                      |
+| Resource hashes     | `ResourceIndexer`        | `resource_hash_cache`                                                                                                 |
+| Resource changes    | `ResourceChangeTracker`  | `resource_changes`                                                                                                    |
+
+#### State Flow Diagram
+
+```
+Request 1                          Request 2
+─────────                          ─────────
+context.state = {}                 context.state = {}  ← Fresh!
+    │                                  │
+    ▼                                  ▼
+Set ephemeral flag                 Ephemeral flag is undefined
+context.state.X = true                 │
+    │                                  ▼
+    ▼                              Read from session manager
+Save to session manager            chainSessionStore.get*(sessionId)
+chainSessionStore.set*(...)          │
+    │                                  ▼
+    ▼                              State available!
+Response sent
+(context.state discarded)
+```
+
+#### Anti-Patterns
+
+```typescript
+// WRONG: Storing cross-request state in context
+context.state.gates.retryLimitExceeded = true; // Lost!
+
+// WRONG: Mixing ephemeral and persistent reads
+const fromContext = context.state.gates.enforcementMode; // Ephemeral
+const fromSession = chainSessionStore.getReview(sessionId, nodeId); // Persistent
+// These may be out of sync!
+
+// CORRECT: Single source of truth
+const isExceeded = chainSessionStore.isRetryLimitExceeded(sessionId); // Always persistent
+```
+
+---
+
+### Write-Path Coherence
+
+Resources (prompts, gates, frameworks, styles) can be written by multiple systems. This section documents how writes from different sources converge to a consistent state.
+
+#### Write Paths
+
+| Writer                      | Resources                          | Transactional                 | Validated       | Versioned      |
+| --------------------------- | ---------------------------------- | ----------------------------- | --------------- | -------------- |
+| `resource_manager` MCP tool | Prompts, gates, frameworks         | `ResourceMutationTransaction` | Schema-verified | Auto-versioned |
+| HTTP API (`api.ts`)         | Categories (directory creation)    | No                            | No              | No             |
+| CLI (`cli-shared/`)         | All types (scaffold, rename, move) | Rollback on failure           | Schema-verified | No             |
+
+#### Coherence Model
+
+All writers persist resources as YAML files on disk. The server detects changes through the `FileObserver`, which watches all resource directories:
+
+```
+Writer (MCP tool / CLI / HTTP API)
+  |
+  v
+YAML files written to disk
+  |
+  v
+FileObserver detects change (~500ms debounce)
+  |
+  v
+HotReloadObserver triggers fullServerRefresh()
+  |
+  v
+ResourceIndexer.syncAll() updates SQLite index
+PromptAssetManager reloads prompt cache
+MCP notification sent to clients
+```
+
+#### Watched Directories
+
+| Resource     | Directory Source                                                                                               | Registration                                              |
+| ------------ | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Prompts      | every root the catalog is composed from — primary, bundled, and each workspace overlay — plus category subdirs | `buildWatchTargets()` in `prompt-watch-setup.ts`          |
+| Gates        | `getWatchDirectories()` (primary gates dir plus every overlay, bundled included)                               | `createGateHotReloadRegistration()` auxiliary reload      |
+| Frameworks   | `getWatchDirectories()` (primary frameworks dir plus every overlay, bundled included)                          | `createFrameworkHotReloadRegistration()` auxiliary reload |
+| Styles       | `loader.getWatchDirectories()` (primary workspace styles dir plus every overlay, bundled included)             | `createStyleHotReloadRegistration()` auxiliary reload     |
+| Script tools | the prompts folder (prompt-local `tools/` folders) plus the workspace scripts folder (`getScriptsDirectory()`) | `buildScriptAuxiliaryReloadConfig()` auxiliary reload     |
+| Change log   | `trackedResourceRoots()` — primary prompts and gates dirs plus every overlay, **not** the bundled tree         | `buildResourceChangeTrackerAuxiliaryReloadConfig()`       |
+
+The prompts row watches each prompts root itself. Until 2026-09-17 the primary was watched through
+its PARENT — `<workspace>/resources`, or the whole workspace for a legacy `<workspace>/prompts` —
+because `startHotReload` still reduced its argument with `path.dirname` after callers had switched
+from a config-file path to the directory. Every other type keeps its own watcher, so nothing was
+observed only through that parent.
+
+An overlay counts as a root whether or not it exists yet (`getOverlayResourceCandidates()`): the
+loaders read an absent root as empty, and the watcher arms on it once it appears. Framework files
+take exactly one path, the auxiliary registration; there is no dedicated framework callback.
+
+#### Folders created while the server runs
+
+`FileObserver` polls once a second for a registered directory that does not exist, then arms
+chokidar on it and reports every file already inside. Nothing can report an entry written AND
+removed inside that window, and the server may already hold it — `resource_manager` registers a
+created framework or gate directly. So once a late directory's watcher finishes its first scan,
+`HotReloadObserver` reconciles it: every auxiliary registration whose directories overlap it runs
+its required `reconcile` (frameworks and gates unregister runtime entries whose files are gone;
+styles and script tools drop their caches; the change log records removals), and the prompt catalog
+reloads in full. A shorter poll would only narrow the window.
+
+#### Limitations
+
+- **Debounce delay**: FileObserver uses ~500ms debounce, so rapid successive writes may batch into a single reload event.
+- **No write coordination**: If the MCP tool and CLI write the same resource simultaneously, the last write wins. This is acceptable because concurrent writes to the same resource are not an expected usage pattern.
+- **CLI writes are invisible until detected**: After a CLI write, the MCP server sees stale state until the FileObserver fires. Next MCP tool call after the debounce window will see updated state.
+- **A folder that exists at startup is not reconciled when its watcher arms.** Startup loads each root and then arms the watchers, about a second later on a polled filesystem; a change inside that gap is absorbed into the watcher's first scan. Only folders created after startup are reconciled (above). _(as of 2026-09-17 · flips when a startup root is also reconciled once its first scan completes)_
+
+---
+
+### Context Management
+
+Two context systems serve different purposes:
+
+#### TextReferenceManager
+
+- **Purpose**: Chain step outputs, template references, placeholder resolution
+- **Scope**: Execution sessions
+- **Storage**: In-memory + optional file persistence
+- **Use cases**: Multi-step chains, template interpolation, gate review context
+
+#### ArgumentHistoryTracker
+
+- **Purpose**: Execution arguments and step results for reproducibility
+- **Scope**: Execution sessions
+- **Storage**: SQLite (`argument_history` table)
+- **Use cases**: Gate reviews, debugging, step replay
+
+```mermaid
+graph TB
+    subgraph "MCP Client"
+        A[User Request]
+    end
+
+    subgraph "Prompt Engine"
+        B[Request Processing]
+        C[Parallel Context Tracking]
+    end
+
+    subgraph "Context Managers"
+        D[TextReferenceManager]
+        E[ArgumentHistoryTracker]
+    end
+
+    subgraph "Execution"
+        F[Prompt/Template/Chain]
+        G[Gate Review]
+    end
+
+    A --> B --> C
+    C --> D
+    C --> E
+    D --> F
+    E --> F
+    F --> G
+    E --> G
+```
+
+---
+
+### Framework Guidance Injection
+
+`InjectionDecisionService` controls what gets prepended to prompts at execution time.
+
+#### Injection Types
+
+| Type             | Injects                                | Default Frequency (Chains) |
+| ---------------- | -------------------------------------- | -------------------------- |
+| `system-prompt`  | Framework (CAGEERF phases, ReACT loop) | Every 2 steps              |
+| `gate-guidance`  | Quality validation criteria            | Every step                 |
+| `style-guidance` | Response formatting hints              | First step only            |
+
+#### Resolution Hierarchy
+
+Each injection type resolves independently through a 7-level hierarchy. First match wins:
+
+```
+Modifier → Runtime Override → Step Config → Chain Config → Category Config → Global Config → System Default
+   ↑              ↑               ↑             ↑              ↑               ↑              ↑
+ %clean     system_control    per-step      per-chain     per-category    config.jsonc   hardcoded
+```
+
+**Key internals**:
+
+- `HierarchyResolver` walks the config tree for each injection type
+- `ConditionEvaluator` handles conditional rules (gate status, step position)
+- Decisions are cached per-request in `InjectionDecisionService`
+- Frequency modes: `every` (with interval), `first-only`, `never`
+
+For user-facing configuration and examples, see [MCP Tooling Guide → Injection Control](../reference/mcp-tools.md#injection-control).
+
+---
+
+### Performance Characteristics
+
+| Operation        | Target    | Notes                  |
+| ---------------- | --------- | ---------------------- |
+| Server startup   | <3s       | 4-phase initialization |
+| Tool response    | <500ms    | Most operations        |
+| Framework switch | <100ms    | Framework change       |
+| Template render  | <50ms     | Complex Nunjucks       |
+| Chain step       | 100-500ms | Depends on complexity  |
+
+#### Memory Management
+
+- **Session cleanup**: 24h default for stale sessions
+- **Argument history**: Configurable retention limits
+- **Template cache**: LRU with size limits
+- **Temporary gates**: A run owns the gates its calls register until it completes, is cancelled, pruned or cleared; a call with no run releases its own once its response is set
+
+---
+
+## Crosscutting Concepts
+
+This view answers which rules apply everywhere rather than to one component or one request: transport parity between STDIO and Streamable HTTP, workspace/tenant scope isolation across `state.db`, and the shell-verification controls that bound what a gate-authored command may run and where. Those decisions live in the root `CLAUDE.md` — Core Principle 3 (transport parity), the `state.db` scope-isolation notes, and the `MCP_SHELL_VERIFY_ALLOWLIST` / `MCP_SHELL_VERIFY_ALLOWED_DIRS` environment constraints — and the runtime-state and extension-point inventories they govern are generated into [`docs/reference/module-catalog.md`](../reference/module-catalog.md)'s `## Runtime state` and `## Extension points` sections. This view links to both rather than restating them.
 
 ---
 

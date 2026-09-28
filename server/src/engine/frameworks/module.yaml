@@ -9,3 +9,7 @@ owns:
     symbol: FrameworkManager
   - capability: Framework validity
     symbol: FrameworkManager
+extension:
+  - point: Framework definitions
+    symbol: RuntimeFrameworkLoader
+    how: Add a `<id>/framework.yaml` directory under a frameworks resource root; `discoverFrameworks` finds it and `FrameworkRegistry` registers every discovered id beyond the shipped list as a generic guide.
