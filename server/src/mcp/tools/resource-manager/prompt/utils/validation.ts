@@ -11,6 +11,7 @@ import { ValidationContext } from '../core/types.js';
 import type { PromptResourceActionId } from '../../../../metadata/definitions/prompt-resource.js';
 import type { ToolDefinitionInput } from '../../core/types.js';
 
+import { withDefinitionIds } from '#engine/gates/services/temporary-gate-registrar.js';
 import {
   describeUnresolvedChainStep,
   resolveChainSteps,
@@ -665,8 +666,54 @@ function findTemplateSyntaxError(text: string): string | undefined {
   }
 }
 
-function collectPromptWriteDefects(candidate: PromptWriteCandidate): PromptWriteDefect[] {
+/** What a produced prompt is checked against beyond its own text. */
+export interface PromptWriteChecks {
+  /**
+   * Whether an id names a canonical gate (P6.192, R94). An inline definition registering under
+   * one would replace that gate's criteria for every run on the server, so the runtime refuses it
+   * (`registerOneInlineDefinition`); this is where the author hears it first. Absent, no check.
+   */
+  isCanonicalGateId?: (gateId: string) => boolean;
+}
+
+/**
+ * Inline definitions whose id — declared, or the slug of their `name`, by the rule the runtime
+ * registers them under (`withDefinitionIds`) — is a canonical gate's.
+ */
+function findShadowingDefinitions(
+  gateConfiguration: unknown,
+  isCanonicalGateId: ((gateId: string) => boolean) | undefined
+): PromptWriteDefect[] {
+  if (isCanonicalGateId === undefined || typeof gateConfiguration !== 'object') return [];
+  const definitions = (gateConfiguration as { inline_gate_definitions?: unknown } | null)
+    ?.inline_gate_definitions;
+  if (!Array.isArray(definitions)) return [];
+  const bodies = definitions.map((definition: unknown) =>
+    typeof definition === 'object' && definition !== null
+      ? (definition as Record<string, unknown>)
+      : {}
+  );
+  return withDefinitionIds(bodies).flatMap((definition, index) => {
+    const id = definition['id'];
+    if (typeof id !== 'string' || !isCanonicalGateId(id)) return [];
+    return [
+      {
+        key: `shadow:${id.toLowerCase()}`,
+        message:
+          `gateConfiguration.inline_gate_definitions[${index}]: id '${id}' is a canonical gate's ` +
+          `id, and a temporary gate may not shadow a canonical gate. Give the definition another ` +
+          `id or name.`,
+      },
+    ];
+  });
+}
+
+function collectPromptWriteDefects(
+  candidate: PromptWriteCandidate,
+  checks: PromptWriteChecks
+): PromptWriteDefect[] {
   const defects: PromptWriteDefect[] = [];
+  defects.push(...findShadowingDefinitions(candidate.gateConfiguration, checks.isCanonicalGateId));
 
   for (const field of TEMPLATE_BODY_FIELDS) {
     const value = candidate[field];
@@ -727,15 +774,16 @@ function collectPromptWriteDefects(candidate: PromptWriteCandidate): PromptWrite
  */
 export function diagnosePromptWrite(
   before: PromptWriteCandidate | null | undefined,
-  after: PromptWriteCandidate
+  after: PromptWriteCandidate,
+  checks: PromptWriteChecks = {}
 ): PromptWriteDiagnosis {
-  const afterDefects = collectPromptWriteDefects(after);
+  const afterDefects = collectPromptWriteDefects(after, checks);
   if (afterDefects.length === 0) {
     return { blocking: [], preExisting: [] };
   }
 
   const beforeKeys = new Set(
-    before != null ? collectPromptWriteDefects(before).map((defect) => defect.key) : []
+    before != null ? collectPromptWriteDefects(before, checks).map((defect) => defect.key) : []
   );
 
   const blocking: PromptWriteDefect[] = [];

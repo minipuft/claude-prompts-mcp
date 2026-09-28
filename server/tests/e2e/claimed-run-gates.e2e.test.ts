@@ -973,43 +973,63 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
       path.join(roots.workspace, 'config.json'),
       JSON.stringify({ gates: { executeInlineGateDefinitions: true } })
     );
-    const server = await startServer(roots);
-    const author = async (args: Record<string, unknown>): Promise<void> => {
-      const result = await server.call('resource_manager', args);
-      if (result.isError) throw new Error(result.text);
-    };
     const definitions: Record<string, Record<string, unknown> | undefined> = {
       sv_c183: { id: 'content-structure', name: 'content-structure', guidance: 'DECL-183' },
       sv_s183: { name: 'Content Structure', guidance: 'SLUG-183' },
       sv_n183: { id: 'ctl183', name: 'ctl183', guidance: 'CTL-183' },
       sv_p183: undefined,
     };
+    const stepPrompt = (id: string, definition: Record<string, unknown> | undefined) => ({
+      id,
+      category: 'general',
+      name: id,
+      description: 'step for P6.183',
+      gate_configuration: {
+        framework_gates: false,
+        ...(definition === undefined
+          ? {}
+          : {
+              inline_gate_definitions: [
+                {
+                  ...definition,
+                  type: 'validation',
+                  scope: 'chain',
+                  description: 'e2e inline definition',
+                  pass_criteria: [definition['guidance']],
+                },
+              ],
+            }),
+      },
+    });
+    // Since P6.192 `resource_manager` refuses a shadowing definition, so the two that shadow are
+    // written into the workspace before boot: a file on disk still reaches the runtime refusal.
+    for (const id of ['sv_c183', 'sv_s183']) {
+      const { gate_configuration, ...fields } = stepPrompt(id, definitions[id]);
+      const dir = path.join(roots.workspace, 'resources', 'prompts', 'general', id);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(
+        path.join(dir, 'prompt.yaml'),
+        JSON.stringify({
+          ...fields,
+          userMessageTemplate: `BODY-${id}`,
+          gateConfiguration: gate_configuration,
+        })
+      );
+    }
+    const server = await startServer(roots);
+    const author = async (args: Record<string, unknown>): Promise<void> => {
+      const result = await server.call('resource_manager', args);
+      if (result.isError) throw new Error(result.text);
+    };
     for (const [id, definition] of Object.entries(definitions)) {
-      await author({
-        resource_type: 'prompt',
-        action: 'create',
-        id,
-        category: 'general',
-        name: id,
-        description: 'step for P6.183',
-        user_message_template: `BODY-${id}`,
-        gate_configuration: {
-          framework_gates: false,
-          ...(definition === undefined
-            ? {}
-            : {
-                inline_gate_definitions: [
-                  {
-                    ...definition,
-                    type: 'validation',
-                    scope: 'chain',
-                    description: 'e2e inline definition',
-                    pass_criteria: [definition['guidance']],
-                  },
-                ],
-              }),
-        },
-      });
+      if (id !== 'sv_c183' && id !== 'sv_s183') {
+        await author({
+          resource_type: 'prompt',
+          action: 'create',
+          ...stepPrompt(id, definition),
+          user_message_template: `BODY-${id}`,
+        });
+      }
       await author({
         resource_type: 'prompt',
         action: 'create',
@@ -1053,6 +1073,74 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
       failShown: ['Use clear headings', 'CTL-183'],
     });
   }, 240000);
+
+  /**
+   * P6.192 / R94. MEASURED_192
+   */
+  test('P6.192 resource_manager refuses an inline definition shadowing a canonical gate id', async () => {
+    const roots = freshRoots();
+    const server = await startServer(roots);
+    const draft = (id: string, definition: Record<string, unknown>) => ({
+      resource_type: 'prompt',
+      id,
+      category: 'general',
+      name: id,
+      description: 'step for P6.192',
+      user_message_template: `BODY-${id}`,
+      gate_configuration: {
+        framework_gates: false,
+        inline_gate_definitions: [
+          {
+            ...definition,
+            type: 'validation',
+            scope: 'chain',
+            description: 'e2e',
+            pass_criteria: ['P-192'],
+          },
+        ],
+      },
+    });
+    const refusal = /content-structure.*canonical gate/;
+    const declared = { id: 'content-structure', name: 'content-structure', guidance: 'DECL-192' };
+    const slugged = { name: 'Content Structure', guidance: 'SLUG-192' };
+
+    // (a) A declared canonical id: validate and create both refuse it, naming the id.
+    for (const action of ['validate', 'create']) {
+      const result = await server.call('resource_manager', {
+        ...draft('sv_c192', declared),
+        action,
+      });
+      expect({ action, isError: result.isError }).toEqual({ action, isError: true });
+      expect(result.text).toMatch(refusal);
+    }
+    // (b) A name whose slug is the canonical id: the same.
+    const slug = await server.call('resource_manager', {
+      ...draft('sv_s192', slugged),
+      action: 'create',
+    });
+    expect(slug.isError).toBe(true);
+    expect(slug.text).toMatch(refusal);
+
+    // (c) Control: a non-colliding definition is accepted.
+    const control = await server.call('resource_manager', {
+      ...draft('sv_n192', { id: 'ctl192', name: 'ctl192', guidance: 'CTL-192' }),
+      action: 'create',
+    });
+    expect(control.isError).toBe(false);
+
+    // An update adding a shadowing definition, and its preview, refuse it too.
+    const shadowing = draft('sv_n192', declared).gate_configuration;
+    for (const extra of [{ action: 'preview', preview_action: 'update' }, { action: 'update' }]) {
+      const result = await server.call('resource_manager', {
+        resource_type: 'prompt',
+        id: 'sv_n192',
+        gate_configuration: shadowing,
+        ...extra,
+      });
+      expect({ ...extra, isError: result.isError }).toEqual({ ...extra, isError: true });
+      expect(result.text).toMatch(refusal);
+    }
+  }, 180000);
 
   /**
    * P6.158. MEASURED 2026-09-27 on `7b2e30ce` with `gates.executeInlineGateDefinitions` on (and

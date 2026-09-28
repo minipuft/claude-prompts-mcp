@@ -957,7 +957,7 @@ function inlineScopeId(context: ExecutionContext, scope: InlineScope): string {
  * name take `<slug>-2`, as `mintNodeIds` numbers step names. A definition with no `name` is left
  * as given, for `registerOneInlineDefinition` to refuse. PURE.
  */
-function withDefinitionIds(definitions: readonly GateBody[]): GateBody[] {
+export function withDefinitionIds(definitions: readonly GateBody[]): GateBody[] {
   const named = definitions.filter((definition) => typeof definition['name'] === 'string');
   const ids = mintNodeIds(
     named.map((definition) => ({
