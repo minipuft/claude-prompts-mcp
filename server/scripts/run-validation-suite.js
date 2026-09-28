@@ -285,6 +285,13 @@ export const SUITE = [
     converse: 'unexamined',
   },
   {
+    script: 'validate:pipeline-stage-table',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse:
+      'NOT checked — a stage class renamed consistently in both the code and the doc passes, and a stage whose behavior changed passes: the check reads names, order and counts, never the row descriptions or what a stage does',
+  },
+  {
     script: 'validate:conformance-coverage',
     io: 'read',
     reads: ['file', 'walk'],

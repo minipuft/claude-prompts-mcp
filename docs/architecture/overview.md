@@ -176,7 +176,7 @@ The pipeline runs stages in this order (from the `stages` array in `pipeline-bui
 │ 2. ExecutionLifecycle        Initialize execution tracking          │
 │ 3. IdentityResolution        Resolve the workspace continuity scope │
 │ 4. CommandParsing            Parse command, extract arguments       │
-│ 5. InlineGate                Register `::` criteria as temp gates   │
+│ 5. InlineGateExtraction      Register `::` criteria as temp gates   │
 │ 6. OperatorValidation        Validate `@framework` overrides        │
 ├─────────────────────────────────────────────────────────────────────┤
 │                        PLAN & ENHANCE                               │
@@ -193,7 +193,7 @@ The pipeline runs stages in this order (from the `stages` array in `pipeline-bui
 ├─────────────────────────────────────────────────────────────────────┤
 │                        EXECUTE & FORMAT                             │
 ├─────────────────────────────────────────────────────────────────────┤
-│16. ResponseCapture           Capture previous step results          │
+│16. StepResponseCapture       Capture previous step results          │
 │17. ShellVerification*        Run shell commands to validate work    │
 │18. StepExecution             Execute prompts with Nunjucks          │
 │19. PhaseGuardVerification*   Check framework phase guards          │
