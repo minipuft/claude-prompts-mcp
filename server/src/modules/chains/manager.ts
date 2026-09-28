@@ -226,10 +226,9 @@ const MAX_RUN_HISTORY = 10;
 /** What a removal released, queued until its persist returns (R93): see `releaseRemovedRuns`. */
 interface RunRelease {
   sessionIds: string[];
-  chainIds: string[];
 }
 
-const emptyRunRelease = (): RunRelease => ({ sessionIds: [], chainIds: [] });
+const emptyRunRelease = (): RunRelease => ({ sessionIds: [] });
 
 /**
  * Chain Session Store
@@ -2021,7 +2020,7 @@ export class ChainSessionStore implements ChainSessionService {
     const ordinal = ordinalOf(session.state.nodes, nodeId);
 
     this.textReferenceStore.storeChainStepResult(
-      session.chainId,
+      session.sessionId,
       nodeId,
       stepResult,
       metadataPayload,
@@ -2064,7 +2063,10 @@ export class ChainSessionStore implements ChainSessionService {
     }
 
     // Get chain variables from text reference manager (single source of truth)
-    const chainVariables = this.textReferenceStore.buildChainVariables(session.chainId);
+    const chainVariables = this.textReferenceStore.buildChainVariables(
+      session.sessionId,
+      session.chainId
+    );
 
     // Get original arguments + previous results from ArgumentHistoryTracker (with graceful fallback)
     // No initializer: all three paths below (tracker success, tracker failure, no tracker)
@@ -2595,7 +2597,6 @@ export class ChainSessionStore implements ChainSessionService {
       if (chainSessions.size === 0) {
         this.chainSessionMapping.delete(session.chainId);
         this.removeRunFromBaseTracking(session.chainId);
-        release.chainIds.push(session.chainId);
       }
     }
 
@@ -2626,9 +2627,9 @@ export class ChainSessionStore implements ChainSessionService {
     const release = emptyRunRelease();
     for (const runChainId of runChainIds) {
       this.removeRunChainSessionsForScope(runChainId, scopeFilter, release);
-      // A run another scope still holds keeps its step results and history, as in `clearSession` (R102).
+      // A run another scope still holds keeps its history, as in `clearSession` (R102); step
+      // results are per session, so only the removed sessions' results are released (R107).
       if (this.chainSessionMapping.has(runChainId)) continue;
-      release.chainIds.push(runChainId);
       this.removeRunFromBaseTracking(runChainId);
     }
 
@@ -2708,7 +2709,6 @@ export class ChainSessionStore implements ChainSessionService {
       }
 
       const removedSessions = this.removeRunChainSessions(removedChainId, release);
-      release.chainIds.push(removedChainId);
       this.removeRunFromBaseTracking(removedChainId);
 
       this.logger?.info(
@@ -2763,7 +2763,8 @@ export class ChainSessionStore implements ChainSessionService {
 
   /**
    * The side effects of a removal that no snapshot can undo, in the order they always ran:
-   * run-ended callbacks and argument history per session, then step results per run chain.
+   * run-ended callbacks and argument history per session, then step results per session (keyed
+   * by session since R107, so a removal releases exactly the sessions it removed).
    * Called only after `persistMutation` returns, so a rejected save releases nothing and its
    * retry releases exactly once.
    */
@@ -2783,8 +2784,8 @@ export class ChainSessionStore implements ChainSessionService {
         }
       }
     }
-    for (const chainId of release.chainIds) {
-      this.textReferenceStore.clearChainStepResults(chainId);
+    for (const sessionId of release.sessionIds) {
+      this.textReferenceStore.clearChainStepResults(sessionId);
     }
   }
 

@@ -26,10 +26,16 @@ type StoredStepResult = {
 
 export class TextReferenceStore {
   private readonly logger: Logger;
-  /** chainId -> nodeId -> result. Node-keyed since P3 Tier 2; was step-number-keyed. */
+  /**
+   * sessionId -> nodeId -> result. Node-keyed since P3 Tier 2; was step-number-keyed.
+   *
+   * Keyed by the run's SESSION id, never its chain id (R107): two scopes can each hold a session
+   * on one run chain id, and a chain-id key let them read and overwrite each other's
+   * `stepN_result`. In memory only; nothing persists or restores it.
+   */
   private readonly chainStepResults: Record<string, Record<string, StoredStepResult>> = {};
   /**
-   * chainId -> outputMapping key -> the publishing step's whole content.
+   * sessionId -> outputMapping key -> the publishing step's whole content.
    *
    * Rendered under the reserved {@link NAMED_OUTPUT_NAMESPACE} object, never spread flat —
    * see {@link buildChainVariables}.
@@ -54,17 +60,17 @@ export class TextReferenceStore {
    * The unread value is named in the debug line below rather than dropped silently.
    */
   storeChainStepResult(
-    chainId: string,
+    sessionId: string,
     nodeId: string,
     content: string,
     metadata?: Record<string, any>,
     ordinal?: number
   ): void {
-    if (!this.chainStepResults[chainId]) {
-      this.chainStepResults[chainId] = {};
+    if (!this.chainStepResults[sessionId]) {
+      this.chainStepResults[sessionId] = {};
     }
 
-    const chainResults = this.chainStepResults[chainId];
+    const chainResults = this.chainStepResults[sessionId];
     const stepResult: StoredStepResult = {
       content,
       timestamp: Date.now(),
@@ -78,19 +84,19 @@ export class TextReferenceStore {
     chainResults[nodeId] = stepResult;
 
     this.logger.debug(
-      `[TextReferenceStore] Stored node ${nodeId} result for chain ${chainId} (${content.length} chars)`
+      `[TextReferenceStore] Stored node ${nodeId} result for session ${sessionId} (${content.length} chars)`
     );
 
     // Store under named outputs if outputMapping is provided
     const outputMapping = metadata?.['outputMapping'] as Record<string, string> | undefined;
     if (outputMapping) {
-      if (!this.namedOutputs[chainId]) {
-        this.namedOutputs[chainId] = {};
+      if (!this.namedOutputs[sessionId]) {
+        this.namedOutputs[sessionId] = {};
       }
       for (const [outputName, selector] of Object.entries(outputMapping)) {
-        this.namedOutputs[chainId][outputName] = content;
+        this.namedOutputs[sessionId][outputName] = content;
         this.logger.debug(
-          `[TextReferenceStore] Stored named output '${NAMED_OUTPUT_NAMESPACE}.${outputName}' for chain ${chainId} ` +
+          `[TextReferenceStore] Stored named output '${NAMED_OUTPUT_NAMESPACE}.${outputName}' for session ${sessionId} ` +
             `(whole step content; declared selector '${selector}' is not read — P6-F2)`
         );
       }
@@ -98,15 +104,15 @@ export class TextReferenceStore {
   }
 
   /**
-   * Retrieve all step results for a chain as a map of position -> content.
+   * Retrieve all step results for a run's session as a map of position -> content.
    *
    * Position-keyed on purpose: this is the read shape the rendering context and its consumers
    * already expect. The single-node lookups that once sat beside it are both gone: the content
    * one (`getChainStepResult`) had no caller, and the metadata one (`getChainStepMetadata`) went
    * with `ChainSessionStore.updateStepResult`, its only caller, in P4.91.
    */
-  getChainStepResults(chainId: string): Record<number, string> {
-    const chainResults = this.chainStepResults[chainId] || {};
+  getChainStepResults(sessionId: string): Record<number, string> {
+    const chainResults = this.chainStepResults[sessionId] || {};
     const results: Record<number, string> = {};
 
     Object.values(chainResults).forEach((stepData) => {
@@ -129,9 +135,11 @@ export class TextReferenceStore {
    * Omitted entirely while empty, matching `previous_step_results` / `unknowns_ledger`, so a
    * template can branch on presence. A chain declaring no `outputMapping` therefore renders
    * byte-identically to a build without this namespace.
+   *
+   * Results are read under `sessionId`; `chainId` is only published as `{{chain_id}}` (R107).
    */
-  buildChainVariables(chainId: string): Record<string, any> {
-    const stepResults = this.getChainStepResults(chainId);
+  buildChainVariables(sessionId: string, chainId: string): Record<string, any> {
+    const stepResults = this.getChainStepResults(sessionId);
     const variables: Record<string, any> = {};
 
     Object.entries(stepResults).forEach(([stepNum, content]) => {
@@ -144,7 +152,7 @@ export class TextReferenceStore {
     variables['step_results'] = stepResults;
 
     // Named outputs land in their own namespace object, never spread flat.
-    const namedOutputs = this.namedOutputs[chainId];
+    const namedOutputs = this.namedOutputs[sessionId];
     if (namedOutputs && Object.keys(namedOutputs).length > 0) {
       variables[NAMED_OUTPUT_NAMESPACE] = { ...namedOutputs };
     }
@@ -153,12 +161,12 @@ export class TextReferenceStore {
   }
 
   /**
-   * Clear all stored step results for a chain (used when sessions reset).
+   * Clear all stored step results for one run's session (used when the session is removed).
    */
-  clearChainStepResults(chainId: string): void {
-    delete this.chainStepResults[chainId];
-    delete this.namedOutputs[chainId];
-    this.logger.debug(`[TextReferenceStore] Cleared all step results for chain ${chainId}`);
+  clearChainStepResults(sessionId: string): void {
+    delete this.chainStepResults[sessionId];
+    delete this.namedOutputs[sessionId];
+    this.logger.debug(`[TextReferenceStore] Cleared all step results for session ${sessionId}`);
   }
 }
 
