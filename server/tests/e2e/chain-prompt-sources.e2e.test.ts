@@ -1900,6 +1900,37 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
           expect(reviews).toEqual({ n2: ['__phase_guard__'] });
         }, 120000);
       });
+
+      /**
+       * P6.189 / R92. MEASURED 2026-09-27 on `2bfcf98f` (shipped CAGEERF active): under `^ReACT` the
+       * investigation step `inv-u-160` a blocking unknown inserted rendered the ACTIVE framework's
+       * guidance (`C.A.G.E.E.R.F Framework Active`) in a run deciding ReACT. An inserted step now
+       * resolves the run's framework decision as a contributed step does, and stays unguarded (R83).
+       */
+      describe("P6.189: an inserted step's framework guidance follows the run's decision", () => {
+        /** Raise a blocking unknown on step 1; the inserted step's render, and a sectionless PASS on it. */
+        async function insertedUnder(command: string) {
+          const run = await start({ command });
+          const inserted = await run.call({ user_response: 'A out', ...blockingUnknown });
+          expect(currentNode(run.chainId)).toBe('inv-u-160');
+          await run.call({ user_response: 'investigated', gate_verdict: PASS });
+          return { inserted, reviews: runState(run.chainId).reviews };
+        }
+
+        test('(a) under an override the inserted step names the run framework and stays unguarded', async () => {
+          const { inserted, reviews } = await insertedUnder(`^ReACT >>sv_a${ARROW}>>sv_b`);
+          expect(inserted).toContain('ReACT Framework Active');
+          expect(inserted).not.toContain('C.A.G.E.E.R.F');
+          expect(reviews).toEqual({});
+        }, 120000);
+
+        test('(b) control: with no override the inserted step keeps the active framework', async () => {
+          const { inserted, reviews } = await insertedUnder(`>>sv_a${ARROW}>>sv_b`);
+          expect(inserted).toContain('C.A.G.E.E.R.F Framework Active');
+          expect(inserted).not.toContain('ReACT');
+          expect(reviews).toEqual({});
+        }, 120000);
+      });
     });
 
     /**

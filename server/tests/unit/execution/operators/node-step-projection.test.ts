@@ -87,6 +87,8 @@ describe('planNodeDrivenRender', () => {
       nodeId: 'inv-cache-ttl',
       promptId: 'investigate_unknown',
       args: { unknown_id: 'cache-ttl', statement: 'TTL undecided' },
+      // Marked so its framework guidance follows the run's decision (P6.189, R92).
+      inserted: true,
     });
     // Everything after the insertion moves to its NODE ordinal — the whole point.
     expect(plan.steps.map((entry) => [entry.stepNumber, entry.promptId])).toEqual([
