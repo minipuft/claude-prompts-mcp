@@ -1850,6 +1850,112 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       }, 120000);
     });
 
+    /**
+     * P6.253 (R136). MEASURED 2026-09-28 on `6b03ea0be`: `>>sv_a` arrow-chain `>>sv_b` arrow-chain
+     * `>>sv_b`, blocking `u-253` declared on `n1`, an `append` remainder `[r1]` accepted while
+     * answering `inv-u-253` (landing at the END of the run, after `n2` and `n3`), the unknown
+     * resolved on `n2` and re-opened on `n3` (inserting `inv-u-253-2`). A remainder for the
+     * re-opened unknown was refused `cap-reached`: the cap read `r1`'s ordinal, which was still
+     * ahead of the re-discovery, as its acceptance. A remainder node now carries the ordinal the
+     * run stood on when it was accepted (`chain_run_nodes.accepted_at_step`), and the cap reads that.
+     */
+    describe('P6.253: the remainder cap reads the acceptance stamp', () => {
+      const appendWith = (...ids: string[]) => ({
+        remainder: {
+          mode: 'append',
+          nodes: ids.map((id) => ({ id, promptId: 'sv_b' })),
+        },
+      });
+      function stampedNodes(chainId: string): string[] {
+        const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+        try {
+          const rows = db
+            .prepare(
+              'SELECT n.node_id, n.origin, n.accepted_at_step FROM chain_run_nodes n ' +
+                'JOIN chain_runs r ON r.session_id = n.session_id WHERE r.chain_id = ? ' +
+                'ORDER BY n.position'
+            )
+            .all(chainId) as Array<{
+            node_id: string;
+            origin: string;
+            accepted_at_step: number | null;
+          }>;
+          return rows.map((row) =>
+            row.accepted_at_step === null
+              ? `${row.node_id}:${row.origin}`
+              : `${row.node_id}:${row.origin}@${row.accepted_at_step}`
+          );
+        } finally {
+          db.close();
+        }
+      }
+      /** Declare `u-253` on `n1` and append `[r1]` while answering its investigation step. */
+      async function appendAhead(chainId: string) {
+        await callRun(chainId, { user_response: 'A', observations: [unknown('u-253')] });
+        const first = await callRun(chainId, {
+          user_response: 'investigated',
+          ...appendWith('r1'),
+        });
+        expect(first.text).not.toContain('remainder refused');
+        // Accepted standing on `inv-u-253` (ordinal 2), placed at ordinal 5.
+        expect(stampedNodes(chainId)).toEqual([
+          'n1:planned',
+          'inv-u-253:inserted',
+          'n2:planned',
+          'n3:planned',
+          'r1:remainder@2',
+        ]);
+      }
+
+      test('(a) a re-opened unknown whose earlier remainder is still ahead accepts a new one', async () => {
+        const run = await start({ command: `>>sv_a${ARROW}>>sv_b${ARROW}>>sv_b` });
+        await appendAhead(run.chainId);
+        await callRun(run.chainId, {
+          user_response: 'n2 out',
+          observations: [
+            {
+              type: 'unknown_resolved',
+              id: 'u-253',
+              statement: 'answered',
+              resolution: 'answered',
+            },
+          ],
+        });
+        // Re-opened on `n3` (ordinal 4) while `r1` still stands ahead of it.
+        await callRun(run.chainId, { user_response: 'n3 out', observations: [unknown('u-253')] });
+        expect(inserted(run.chainId)).toEqual(['inv-u-253', 'inv-u-253-2']);
+        const again = await callRun(run.chainId, {
+          user_response: 'investigated again',
+          ...appendWith('r2'),
+        });
+        expect(again.text).not.toContain('remainder refused');
+        expect(stampedNodes(run.chainId)).toEqual([
+          'n1:planned',
+          'inv-u-253:inserted',
+          'n2:planned',
+          'n3:planned',
+          'inv-u-253-2:inserted',
+          'r1:remainder@2',
+          'r2:remainder@5',
+        ]);
+      }, 120000);
+
+      test('(b) control: a second remainder while the first is current is refused', async () => {
+        const run = await start({ command: `>>sv_a${ARROW}>>sv_b${ARROW}>>sv_b` });
+        await appendAhead(run.chainId);
+        // Still open, never resolved: `r1` answers this declaration, so the per-id cap holds.
+        const second = await callRun(run.chainId, { user_response: 'n2 out', ...appendWith('r9') });
+        expect(second.text).toContain('remainder refused (cap-reached)');
+        expect(stampedNodes(run.chainId)).toEqual([
+          'n1:planned',
+          'inv-u-253:inserted',
+          'n2:planned',
+          'n3:planned',
+          'r1:remainder@2',
+        ]);
+      }, 120000);
+    });
+
     test('(b) control: one blocking unknown gets its step and no such line', async () => {
       const run = await start({ command: `>>sv_a${ARROW}>>sv_b` });
       const mid = await callRun(run.chainId, {

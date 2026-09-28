@@ -412,21 +412,29 @@ describe('investigatedUnknownIds (R127)', () => {
 /**
  * P6.248 (R133): the per-unknown-id REMAINDER cap reads the same comparison, over
  * `origin: 'remainder'` nodes. Driven end to end in `chain-prompt-sources.e2e.test.ts` (P6.248).
+ * Since P6.253 (R136) a remainder is read by its acceptance stamp, not its ordinal (P6.253 there).
  */
 describe('investigatedUnknownIds over remainders (R133)', () => {
-  const node = (id: string, origin: ChainNode['origin'], unknownId?: string): ChainNode => ({
+  const node = (
+    id: string,
+    origin: ChainNode['origin'],
+    unknownId?: string,
+    acceptedAtStep?: number
+  ): ChainNode => ({
     id,
     promptId: id,
     stepName: id,
     origin,
     ...(unknownId === undefined ? {} : { originUnknownId: unknownId }),
+    ...(acceptedAtStep === undefined ? {} : { acceptedAtStep }),
   });
-  // `u` declared at n1, investigated at 2, rewritten as [r1, r2], resolved, re-opened at r2 (4).
+  // `u` declared at n1, investigated at 2, rewritten as [r1, r2] while standing on inv-u (2),
+  // resolved, re-opened at r2 (4).
   const nodes = [
     node('n1', 'planned'),
     node('inv-u', 'inserted', 'u'),
-    node('r1', 'remainder', 'u'),
-    node('r2', 'remainder', 'u'),
+    node('r1', 'remainder', 'u', 2),
+    node('r2', 'remainder', 'u', 2),
     node('inv-u-2', 'inserted', 'u'),
   ];
 
@@ -445,27 +453,39 @@ describe('investigatedUnknownIds over remainders (R133)', () => {
   });
 
   /**
-   * The ordinal is an exact stamp for an insertion, not for an `append`: an appended remainder
-   * stands at the end of the run, so one accepted before the re-open still counts while the run
-   * has not walked past it. As of 2026-09-28 · flips when a persisted insertion stamp lands (then
-   * the ordinal is no longer the stamp).
+   * P6.253 (R136), the P6.248 limit pin inverted. The ordinal is an exact stamp for an insertion,
+   * not for an `append`: an appended remainder stands at the end of the run. Until 2026-09-28 one
+   * accepted before the re-open still counted while the run had not walked past it; the persisted
+   * acceptance stamp (`accepted_at_step`) is what the comparator reads for a remainder now.
    */
-  test('(c) an earlier remainder still ahead of the run counts against the re-opened unknown', () => {
-    const ahead = [node('n1', 'planned'), node('n2', 'planned'), node('r1', 'remainder', 'u')];
+  test('(c) an earlier remainder still ahead of the run does not count against the re-opened unknown', () => {
+    // Appended while standing on n1 (1); `u` re-opened on n2 (2); r1 still ahead at ordinal 3.
+    const ahead = [node('n1', 'planned'), node('n2', 'planned'), node('r1', 'remainder', 'u', 1)];
     const ledger = [ledgerEntry({ id: 'u', blocking: true, discoveredAtStep: 2 })];
-    expect([...investigatedUnknownIds(ledger, ahead, 'remainder')]).toEqual(['u']);
+    expect([...investigatedUnknownIds(ledger, ahead, 'remainder')]).toEqual([]);
+    // Control: the same remainder accepted standing on n2 answers the current declaration.
+    const current = [node('n1', 'planned'), node('n2', 'planned'), node('r1', 'remainder', 'u', 2)];
+    expect([...investigatedUnknownIds(ledger, current, 'remainder')]).toEqual(['u']);
+  });
+
+  test('(d) a remainder with no acceptance stamp keeps counting, so the cap stays shut', () => {
+    const unstamped = [node('n1', 'planned'), node('n2', 'planned'), node('r1', 'remainder', 'u')];
+    const ledger = [ledgerEntry({ id: 'u', blocking: true, discoveredAtStep: 2 })];
+    expect([...investigatedUnknownIds(ledger, unstamped, 'remainder')]).toEqual(['u']);
   });
 });
 
 /**
- * P6.252 (R134): the two ordering rules R127's and R133's ordinal comparison stands on, pinned on
- * the store that enforces them — `ChainSessionStore.insertNodeAfter` and `replaceRemainder`. The
- * comparator reads a node's ordinal as its insertion stamp; that holds only while nothing lands at
- * or before the node the run stands on. Each pin drives the real store and then asks the
- * comparator about the node it produced.
+ * P6.252 (R134): the two ordering rules R127's and R133's comparison stands on, pinned on the store
+ * that enforces them — `ChainSessionStore.insertNodeAfter` and `replaceRemainder`. Each pin drives
+ * the real store and then asks the comparator about the node it produced.
  *
- * as of 2026-09-28 · flips when a persisted insertion stamp lands (then the ordinal is no longer
- * the stamp)
+ * as of 2026-09-28 · the flip condition ARRIVED with P6.253 (R136): a remainder now carries a
+ * persisted acceptance stamp (`accepted_at_step`), and the comparator reads that for remainders.
+ * What still holds: (a) an INSERTED node's ordinal is its stamp, which is true only while nothing
+ * lands at or before the node the run stands on; (b) a remainder never displaces the node the run
+ * stands on, so the ordinal its stamp records keeps naming the node it was accepted on. Flips when
+ * an inserted node carries a persisted stamp of its own (then rule (a) stops being load-bearing).
  */
 describe('the ordering rules the ordinal stamp relies on (R134)', () => {
   let store: ChainSessionStore | undefined;
@@ -531,8 +551,9 @@ describe('the ordering rules the ordinal stamp relies on (R134)', () => {
       'replace'
     );
     expect(outcome.kind).toBe('applied');
-    // n1 (behind) and n2 (current) survive; only n3 was replaced, at ordinal 3.
+    // n1 (behind) and n2 (current) survive; only n3 was replaced, at ordinal 3, stamped with n2's.
     expect(ids(s)).toEqual(['n1', 'n2', 'alternative']);
+    expect(nodesOf(s)[2]?.acceptedAtStep).toBe(2);
     expect([...investigatedUnknownIds(declaredHere, nodesOf(s), 'remainder')]).toEqual(['u']);
   });
 });

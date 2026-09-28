@@ -3,6 +3,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 
+import { seedVersionHistory } from '../helpers/seed-version-history.js';
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CLI = join(__dirname, '../../dist/cpm.js');
 
@@ -159,5 +161,60 @@ describe('cpm config (config.jsonc)', () => {
     const { exitCode, stdout } = run(['config', 'list', '--workspace', tmpWs]);
     expect(exitCode).not.toBe(0);
     expect(stdout).toContain('Failed to parse config.json');
+  });
+  /**
+   * P6.255 (R139). `cpm config set` records through `setConfigValueRecorded`, which calls
+   * `recordCheckpointedWrite` exactly as `cpm rollback` does: the bridge row first, then the
+   * transaction. A value the validator refuses throws inside that transaction, so a refused set
+   * MAY leave a `Bridge: prior live state` row, the same as the P6.246 rollback twins pin.
+   * MEASURED 2026-09-28 on `07e7dc545`: driven here, not read.
+   */
+  describe('P6.255 a refused config set and the bridge row', () => {
+    const BRIDGE = 'Bridge: prior live state (era transition or out-of-band edit)';
+    const configRows = (): string[] => {
+      const history = run(['config', 'history', '--workspace', tmpWs, '--json']);
+      return (JSON.parse(history.stdout) as { versions: { description: string }[] }).versions.map(
+        (version) => version.description,
+      );
+    };
+    const seedRecordedSet = (label: string): string => {
+      tmpWs = makeWorkspace(label);
+      // An empty history: the seeder creates `state.db` and a strict `config.json`.
+      seedVersionHistory(tmpWs, 'config', 'config', []);
+      expect(run(['config', 'set', 'gates.enabled', 'false', '--workspace', tmpWs]).exitCode).toBe(0);
+      return join(tmpWs, 'config.json');
+    };
+
+    it('(a) over an out-of-band edit it leaves exactly one new row, the bridge', () => {
+      const configPath = seedRecordedSet('p255-edited');
+      const edited = readFileSync(configPath, 'utf8').replace('"enabled": false', '"enabled": true');
+      expect(edited).toContain('"enabled": true');
+      writeFileSync(configPath, edited);
+      const before = configRows();
+
+      const refused = run(['config', 'set', 'gates.enabled', 'notabool', '--workspace', tmpWs]);
+
+      expect(refused.exitCode).toBe(1);
+      expect(refused.stdout).toContain('Validation failed');
+      expect(readFileSync(configPath, 'utf8')).toBe(edited);
+      const after = configRows();
+      expect([...after].sort()).toEqual([...before, BRIDGE].sort());
+      expect(after.filter((row) => row.startsWith('Set ')).length).toBe(
+        before.filter((row) => row.startsWith('Set ')).length,
+      );
+    });
+
+    it('(b) control: over a live state already recorded it leaves zero new rows', () => {
+      const configPath = seedRecordedSet('p255-recorded');
+      const live = readFileSync(configPath, 'utf8');
+      const before = configRows();
+      expect(before).toContain('Set gates.enabled');
+
+      const refused = run(['config', 'set', 'gates.enabled', 'notabool', '--workspace', tmpWs]);
+
+      expect(refused.exitCode).toBe(1);
+      expect(readFileSync(configPath, 'utf8')).toBe(live);
+      expect(configRows()).toEqual(before);
+    });
   });
 });

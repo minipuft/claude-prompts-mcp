@@ -435,6 +435,14 @@ export const TABLE_CONTRACTS: readonly TableContract[] = [
     //                     here or nowhere. Read back onto `ChainNode.inlineGateIds`, which
     //                     `synthesizeStep` carries onto the step gate enhancement walks. NULL on
     //                     every planned and inserted node and every ungated contributed one.
+    //
+    // v34 (P6.253, R136) added one more, also in the owner's INSERT list:
+    //   accepted_at_step — the ordinal of the node the run stood on when a remainder node was
+    //                     accepted. An `append` places a remainder at the end of the run, so its
+    //                     position is not when it was added; the per-unknown-id remainder cap
+    //                     (`investigatedUnknownIds`) compares this to the unknown's current
+    //                     `discoveredAtStep`. Read back onto `ChainNode.acceptedAtStep`. NULL on
+    //                     every planned and inserted node — partial population BY ROW TYPE.
     // None needs an `acceptedPhantomColumns` entry — all appear in the owner's INSERT list.
   },
   {

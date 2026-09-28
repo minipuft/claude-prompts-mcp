@@ -45,21 +45,16 @@ export function decideMutation(input: DecideMutationInput): ChainMutation {
 }
 
 /**
- * The ledger's unknown ids a node of `origin` answers SINCE their current discovery (R127, R133)
- * — the one comparison behind three questions: the per-unknown-id insertion cap and the
+ * The ledger's unknown ids a node of `origin` answers SINCE their current discovery (R127, R133,
+ * R136) — the one comparison behind three questions: the per-unknown-id insertion cap and the
  * interrupt's "no investigation step" test (`'inserted'`), and the per-unknown-id remainder cap
  * (`'remainder'`, read by `ChainSessionStore.replaceRemainder`).
  *
  * A re-open is a new declaration (R122), so a node added before the unknown was resolved does
- * not answer it once it is re-opened. The comparison is by ordinal: nodes go in strictly after
- * the node a run stands on, and nothing is ever inserted at or before it, so a node standing at an
- * ordinal PAST the entry's `discoveredAtStep` may have been added by or after that discovery,
- * while one at or before it predates it. An inserted step sits right after the node that declared
- * its unknown, so for `'inserted'` the ordinal is an exact stamp. A remainder may stand further
- * out — `append` adds at the end of the run — so a remainder accepted before the re-open still
- * counts while the run has not yet walked past it (as of 2026-09-28 · flips when a persisted
- * insertion stamp lands). A node whose unknown is no longer in the ledger still counts for its
- * id: nothing re-declares an id the ledger does not hold without re-stamping it.
+ * not answer it once it is re-opened. A node counts when it was added PAST the entry's
+ * `discoveredAtStep` on the ledger's ordinal scale — see {@link addedAtOrdinal} for how each
+ * origin states that. A node whose unknown is no longer in the ledger still counts for its id:
+ * nothing re-declares an id the ledger does not hold without re-stamping it.
  */
 export function investigatedUnknownIds(
   ledger: readonly UnknownLedgerEntry[],
@@ -73,11 +68,29 @@ export function investigatedUnknownIds(
       return;
     }
     const entry = ledger.find((candidate) => candidate.id === unknownId);
-    if (entry === undefined || index + 1 > entry.discoveredAtStep) {
+    if (entry === undefined || addedAtOrdinal(node, index) > entry.discoveredAtStep) {
       investigated.add(unknownId);
     }
   });
   return investigated;
+}
+
+/**
+ * When `node` came into the run, on the ordinal scale `discoveredAtStep` uses.
+ *
+ * An inserted node lands right after the node that declared its unknown, and nothing is ever
+ * inserted at or before the node a run stands on, so its own ordinal is its stamp. A remainder is
+ * not placed there — `append` adds it at the END of the run — so it carries the ordinal the run
+ * stood on when it was accepted (`acceptedAtStep`, persisted as `accepted_at_step`), and it came
+ * in at the first ordinal after that. A remainder without a stamp cannot be placed before any
+ * discovery, so it reads as added after every one and keeps counting: the cap stays shut rather
+ * than opening on a missing fact.
+ */
+function addedAtOrdinal(node: ChainNode, index: number): number {
+  if (node.origin === 'remainder') {
+    return node.acceptedAtStep === undefined ? Number.POSITIVE_INFINITY : node.acceptedAtStep + 1;
+  }
+  return index + 1;
 }
 
 /**

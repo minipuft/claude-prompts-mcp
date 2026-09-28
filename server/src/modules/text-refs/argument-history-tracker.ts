@@ -32,9 +32,8 @@ const DEFAULT_STATE: PersistedArgumentHistory = {
 export class ArgumentHistoryTracker {
   /**
    * History key to entries. **The key is the SESSION id** (R116 third amendment): `trackExecution`
-   * files an entry under its `sessionId`, and a sessionless call records nothing (R135: no
-   * production caller makes one, and a prompt-id key would pool every sessionless run of a prompt
-   * into one history). The map and the persisted `chains` blob keep the older "chain" name because
+   * files an entry under its `sessionId`, which is required (R137: a call without one does not
+   * compile; a prompt-id key would pool every sessionless run of a prompt into one history). The map and the persisted `chains` blob keep the older "chain" name because
    * the blob shape is persisted.
    *
    * An evicted session's history stays here and in the persisted blob, and nothing in this process
@@ -114,12 +113,11 @@ export class ArgumentHistoryTracker {
    * Automatically enforces max entries limit per chain (FIFO).
    *
    * @param options - Tracking options
-   * @returns Unique entry ID, or `undefined` when the call carries no session id and so records
-   *   nothing
+   * @returns Unique entry ID, or `undefined` when the session id is empty and so records nothing
    */
   async trackExecution(options: {
     promptId: string;
-    sessionId?: string;
+    sessionId: string;
     originalArgs: Record<string, any>;
     /** Stable node id of the step (chain executions). */
     nodeId?: string;
@@ -138,9 +136,9 @@ export class ArgumentHistoryTracker {
     // Generate unique entry ID
     const entryId = `entry_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
-    // The history key is the session id (see `chainHistory`); a sessionless call has none.
-    if (sessionId === undefined || sessionId === '') {
-      this.logger.debug(`Argument history not tracked for ${promptId}: the call has no session id`);
+    // The history key is the session id (see `chainHistory`); an empty one names no session.
+    if (sessionId === '') {
+      this.logger.debug(`Argument history not tracked for ${promptId}: the session id is empty`);
       return undefined;
     }
     const historyKey = sessionId;
@@ -301,30 +299,6 @@ export class ArgumentHistoryTracker {
   }
 
   /**
-   * Get statistics about tracked history
-   */
-  getStats(): {
-    totalEntries: number;
-    totalSessions: number;
-    averageEntriesPerChain: number;
-  } {
-    let totalEntries = 0;
-    this.chainHistory.forEach((entries) => {
-      totalEntries += entries.length;
-    });
-
-    // One history per session key (see `chainHistory`), so the map's size IS the session count.
-    const totalSessions = this.chainHistory.size;
-    const averageEntriesPerChain = totalSessions > 0 ? totalEntries / totalSessions : 0;
-
-    return {
-      totalEntries,
-      totalSessions,
-      averageEntriesPerChain,
-    };
-  }
-
-  /**
    * Save argument history to SQLite via DatabasePort.
    */
   private async saveToStore(): Promise<void> {
@@ -375,9 +349,13 @@ export class ArgumentHistoryTracker {
       // id to itself. It is ignored rather than migrated: `chains` is keyed by the same session
       // ids, so the map carried nothing `chains` does not already say.
 
-      const stats = this.getStats();
+      // One history per session key (see `chainHistory`), so the map's size IS the session count.
+      let entryCount = 0;
+      this.chainHistory.forEach((entries) => {
+        entryCount += entries.length;
+      });
       this.logger.info(
-        `Loaded argument history: ${stats.totalSessions} sessions, ${stats.totalEntries} entries`
+        `Loaded argument history: ${this.chainHistory.size} sessions, ${entryCount} entries`
       );
     } catch (error) {
       this.logger.error('Failed to load argument history:', error);

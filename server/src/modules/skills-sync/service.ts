@@ -64,6 +64,8 @@ import {
   isIgnoredPromptEntryName,
   isReservedPromptDirectoryName,
 } from '#shared/utils/prompt-layout.js';
+import { parseYamlOrThrow } from '#shared/utils/yaml/index.js';
+import { serializeYamlPreservingSource } from '#shared/utils/yaml/yaml-document-writer.js';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -4376,8 +4378,9 @@ function describeBundledPullRefusal(
  * No post-write verification, unlike `clone` (R132). A pull writes prose fields only — `name` and
  * `description` into the YAML, the message and guidance sections into their markdown files — and
  * never an inline gate definition, so a differential against the file it edits could refuse
- * nothing the pull introduced. A definition the YAML already carries is re-serialized unchanged;
- * the P6.245 twin in `tests/integration/skills-sync/pull-command.test.ts` pins that.
+ * nothing the pull introduced. A definition the YAML already carries is left byte for byte, since
+ * the write is source-preserving (P6.256); the P6.245 twin in
+ * `tests/integration/skills-sync/pull-command.test.ts` pins that.
  */
 async function pullCommand(
   opts: SkillsSyncOptions,
@@ -4608,9 +4611,12 @@ async function pullCommand(
             const yamlPath = sourcePath;
             const yamlContent = await readOptionalFile(yamlPath);
             if (!yamlContent) continue;
-            const doc = yaml.load(yamlContent) as Record<string, unknown>;
+            // Source-preserving, like every other resource writer: a one-field edit rewrites
+            // that field's token only, so the author's comments and flow-style lists survive
+            // (P6.256). A whole-document dump dropped the comments and re-rendered every line.
+            const doc = parseYamlOrThrow<Record<string, unknown>>(yamlContent);
             doc[change.section] = change.newContent;
-            await writeFile(yamlPath, yaml.dump(doc, { lineWidth: 120 }));
+            await writeFile(yamlPath, serializeYamlPreservingSource(doc, yamlContent).content);
             scopeWrittenPaths.add(yamlPath);
             output.log(`    wrote ${change.section} → ${yamlPath}`);
             wroteAny = true;
