@@ -490,14 +490,17 @@ export class ChainSessionStore implements ChainSessionService {
   /**
    * Persist every live run, for a caller that awaits it (R74, P6.175).
    *
-   * The store's save callers fall into three classes by where a failure goes:
-   *  - AWAITED (this method, 21 mutators from `createSession` to `clearSessionsForChain`): any
-   *    failure but a held lock rejects, and the rejection reaches the tool call as its error —
+   * The store's save callers fall into three classes by where a failure goes. Every AWAITED
+   * caller persists through {@link persistMutation}, which restores the memory it changed when
+   * the save rejects (R87):
+   *  - AWAITED (through this method, 21 mutators from `createSession` to
+   *    `clearSessionsForChain`): any failure but a held lock rejects, and the rejection reaches
+   *    the tool call as its error —
    *    no caller outside this file catches one, and the one that does
    *    (`endRunOfFailedStartCall`) is already answering a failed call. A held lock is logged and
    *    the call reports success, because the next persist rewrites the whole live set;
-   *  - AWAITED, NOTHING SWALLOWED ({@link persistSessionsOrThrow}: `replaceRemainder`,
-   *    `applyUnknownObservations`): the two writes whose own reply renders what was written, so
+   *  - AWAITED, NOTHING SWALLOWED (`strict`, through {@link persistSessionsOrThrow}:
+   *    `replaceRemainder`, `applyUnknownObservations`): the two writes whose own reply renders what was written, so
    *    even a held lock fails the call;
    *  - BACKGROUND ({@link persistSessionsAsync}, and `cleanup` at shutdown): no client is waiting,
    *    so the failure is logged with the context that started it.
@@ -556,6 +559,84 @@ export class ChainSessionStore implements ChainSessionService {
     const write = this.persistQueue.then(() => this.writeSessions());
     this.persistQueue = write.catch(() => undefined);
     return write;
+  }
+
+  /**
+   * Persist what a mutator just changed, or put memory back where the rows are (R87, P6.185).
+   *
+   * The one path every awaited mutator persists through, in the state-mutation contract's order:
+   * the mutator validates, takes its `snapshot`, mutates memory, and calls this; a persist that
+   * rejects restores the snapshot and then rethrows, and the mutator logs success only once this
+   * returns. Without the restore a rejected save left memory AHEAD of the rows, and a retry
+   * answered from memory — a second `cancelChain` returned `true` from its "already cancelled"
+   * early return and wrote nothing, so the run stayed `working` in `chain_runs` while this process
+   * believed it cancelled. The rows are the truth: memory rolls back to them, never the reverse.
+   *
+   * `strict` persists through {@link persistSessionsOrThrow} (a held lock fails the call too);
+   * otherwise through {@link saveSessions}, which reports success over a held lock — memory is
+   * then kept, because the next persist writes the whole live set and heals the rows.
+   */
+  private async persistMutation(
+    snapshot: MemorySnapshot,
+    options: { strict?: boolean } = {}
+  ): Promise<void> {
+    try {
+      await (options.strict === true ? this.persistSessionsOrThrow() : this.saveSessions());
+    } catch (error) {
+      snapshot.restore();
+      this.logger.warn(
+        `[ChainSessionStore] Save rejected; in-memory change rolled back: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * A copy of one run's own state, restored IN PLACE: callers hold the session object itself
+   * (`getSession` returns it), so a restore that swapped the map entry would leave them reading
+   * the rejected change. The blueprint is shared, not copied: nothing after creation writes it.
+   */
+  private snapshotRun(session: ChainSession): MemorySnapshot {
+    const { blueprint: _blueprint, ...own } = session;
+    const copy = structuredClone(own);
+    return {
+      restore: () => {
+        const target = session as unknown as Record<string, unknown>;
+        for (const key of Object.keys(target)) {
+          if (key !== 'blueprint' && !(key in copy)) delete target[key];
+        }
+        Object.assign(session, copy);
+      },
+    };
+  }
+
+  /**
+   * A copy of WHICH runs this process holds and how they are indexed, for a mutator that adds or
+   * removes a run (`createSession`, `clearSession`, `clearSessionsForChain`). The runs themselves
+   * are kept by reference: adding or removing one does not change its contents.
+   */
+  private snapshotRunMembership(): MemorySnapshot {
+    const sessions = new Map(this.activeSessions);
+    const chainSessions = new Map(
+      [...this.chainSessionMapping].map(([chainId, ids]) => [chainId, new Set(ids)] as const)
+    );
+    const baseChains = new Map(
+      [...this.baseChainMapping].map(([baseId, runs]) => [baseId, [...runs]] as const)
+    );
+    const runToBase = new Map(this.runChainToBase);
+    const unreserved = new Set(this.unreservedRuns);
+    return {
+      restore: () => {
+        replaceMapContents(this.activeSessions, sessions);
+        replaceMapContents(this.chainSessionMapping, chainSessions);
+        replaceMapContents(this.baseChainMapping, baseChains);
+        replaceMapContents(this.runChainToBase, runToBase);
+        this.unreservedRuns.clear();
+        for (const sessionId of unreserved) this.unreservedRuns.add(sessionId);
+      },
+    };
   }
 
   /** One transactional write of the live set; only {@link persistSessionsOrThrow} calls it. */
@@ -835,6 +916,7 @@ export class ChainSessionStore implements ChainSessionService {
     await this.initPromise;
     const resolvedScope = options?.continuityScopeId ?? resolveContinuityScopeId(options);
     const nodes = this.resolveCreationNodes(chainId, totalSteps, options?.nodes);
+    const snapshot = this.snapshotRunMembership();
     const session: ChainSession = {
       sessionId,
       chainId,
@@ -871,7 +953,7 @@ export class ChainSessionStore implements ChainSessionService {
     // The persist reserves the run number across every owner and may re-mint `session.chainId`
     // (R62): callers read the chain id off the returned session.
     this.unreservedRuns.add(sessionId);
-    await this.saveSessions();
+    await this.persistMutation(snapshot);
 
     this.logger.debug(
       `Created chain session ${sessionId} for chain ${chainId} with ${totalSteps} steps`
@@ -1080,13 +1162,13 @@ export class ChainSessionStore implements ChainSessionService {
     }
 
     const fromLabel = currentState ?? 'NONE';
-    this.logger.debug(
-      `[StepLifecycle] Transitioning step ${nodeId} from ${fromLabel} to ${newMilestone}`
-    );
-
+    const snapshot = this.snapshotRun(session);
     this.setStepState(sessionId, nodeId, newMilestone, isPlaceholder);
 
-    await this.saveSessions();
+    await this.persistMutation(snapshot);
+    this.logger.debug(
+      `[StepLifecycle] Transitioned step ${nodeId} from ${fromLabel} to ${newMilestone}`
+    );
 
     return true;
   }
@@ -1139,17 +1221,17 @@ export class ChainSessionStore implements ChainSessionService {
       }
     }
 
+    const snapshot = this.snapshotRun(session);
     session.runStatus = target;
     if (isTerminalRunStatus(target)) {
       session.runCompletedAt = Date.now();
     }
     session.lastActivity = Date.now();
 
+    await this.persistMutation(snapshot);
     this.logger.debug(
       `[ChainRunStatus] Transitioned session ${sessionId} from '${currentStatus}' to '${target}'`
     );
-
-    await this.saveSessions();
     await this.announceRunTerminal(session, target);
     return true;
   }
@@ -1171,6 +1253,7 @@ export class ChainSessionStore implements ChainSessionService {
       this.logger.warn(`[StepLifecycle] Cannot mark ${nodeId} spawned: no session ${sessionId}`);
       return false;
     }
+    const snapshot = this.snapshotRun(session);
     session.state.stepStates ??= new Map<string, StepMetadata>();
     const existing = session.state.stepStates.get(nodeId);
     if (existing?.spawnedAt !== undefined) {
@@ -1183,7 +1266,7 @@ export class ChainSessionStore implements ChainSessionService {
       spawnedAt: now,
     });
     session.lastActivity = now;
-    await this.saveSessions();
+    await this.persistMutation(snapshot);
     return true;
   }
 
@@ -1250,9 +1333,10 @@ export class ChainSessionStore implements ChainSessionService {
     }
     // 20 random bytes, base64url: unguessable, shell/URL safe, pasted exactly once.
     const token = `hnd_${randomBytes(20).toString('base64url')}`;
+    const snapshot = this.snapshotRun(session);
     session.handoffToken = token;
     session.lastActivity = Date.now();
-    await this.saveSessions();
+    await this.persistMutation(snapshot);
     this.logger.info(`[Handoff] Minted token for session ${sessionId} (${session.chainId})`);
     return { token, chainId: session.chainId, sessionId };
   }
@@ -1277,6 +1361,9 @@ export class ChainSessionStore implements ChainSessionService {
       this.logger.warn(`[Handoff] Claimed ${session.chainId} carries no blueprint; refusing`);
       return { status: 'no-blueprint', chainId: session.chainId };
     }
+    // The claim above is its own committed write: the row is this server's now, so a rejected
+    // save below restores the run's own fields but keeps it held, which is what the rows say.
+    const snapshot = this.snapshotRun(session);
     if (!(session.state.stepStates instanceof Map)) session.state.stepStates = new Map();
     session.lifecycle = 'dormant';
     session.lastActivity = Date.now();
@@ -1285,7 +1372,7 @@ export class ChainSessionStore implements ChainSessionService {
     sessionIds.add(session.sessionId);
     this.chainSessionMapping.set(session.chainId, sessionIds);
     this.ensureRunMappingConsistency();
-    await this.saveSessions();
+    await this.persistMutation(snapshot);
     this.logger.info(`[Handoff] Claimed ${session.chainId} (session ${session.sessionId})`);
     return result;
   }
@@ -1333,13 +1420,13 @@ export class ChainSessionStore implements ChainSessionService {
       return false;
     }
 
+    const snapshot = this.snapshotRun(session);
     session.runStatus = 'cancelled';
     session.runCompletedAt = Date.now();
     session.lastActivity = Date.now();
 
+    await this.persistMutation(snapshot);
     this.logger.info(`[ChainRunStatus] Cancelled session ${sessionId} (was '${currentStatus}')`);
-
-    await this.saveSessions();
     await this.announceRunTerminal(session, 'cancelled');
     return true;
   }
@@ -1453,6 +1540,7 @@ export class ChainSessionStore implements ChainSessionService {
     };
 
     const isPlaceholder = metadataRecord.isPlaceholder;
+    const snapshot = this.snapshotRun(session);
 
     // Determine the appropriate state based on whether this is a placeholder
     const milestone: StepMilestone = isPlaceholder ? 'rendered' : 'responded';
@@ -1482,8 +1570,7 @@ export class ChainSessionStore implements ChainSessionService {
       metadataRecord.isPlaceholder
     );
 
-    // Persist to file
-    await this.saveSessions();
+    await this.persistMutation(snapshot);
 
     return true;
   }
@@ -1517,6 +1604,7 @@ export class ChainSessionStore implements ChainSessionService {
     const existingMetadata = this.getStepState(sessionId, nodeId);
     const preservePlaceholder = Boolean(options?.preservePlaceholder);
     const isPlaceholder = preservePlaceholder ? Boolean(existingMetadata?.isPlaceholder) : false;
+    const snapshot = this.snapshotRun(session);
 
     // Transition to COMPLETED state while respecting placeholder metadata when requested
     this.setStepState(sessionId, nodeId, 'completed', isPlaceholder);
@@ -1531,7 +1619,7 @@ export class ChainSessionStore implements ChainSessionService {
     session.state.lastUpdated = Date.now();
     session.lastActivity = Date.now();
 
-    await this.saveSessions();
+    await this.persistMutation(snapshot);
     return true;
   }
 
@@ -1580,6 +1668,7 @@ export class ChainSessionStore implements ChainSessionService {
     // nothing will ever render. Skipped nodes are deliberately NOT appended to `executionOrder`: that list is the
     // record of what the run actually executed, and it is read to reconstruct step results, so a
     // node with no result in it would read as an executed step with a missing response.
+    const snapshot = this.snapshotRun(session);
     let next = nextAfter(nodes, nodeId);
     let skippedPast = 0;
     while (next !== null && session.state.stepStates?.get(next)?.state === 'skipped') {
@@ -1601,14 +1690,14 @@ export class ChainSessionStore implements ChainSessionService {
     session.lastActivity = Date.now();
 
     const ordinal = currentOrdinal(nodes, next);
-    this.logger?.debug(
-      `[StepLifecycle] Advanced past node ${nodeId} to ${next ?? 'run-complete'} (ordinal ${ordinal})`
-    );
 
     // No completion here: advancing past the terminal node leaves the run standing on no node
     // with a non-terminal status, and `completeHeldRun` — asked after the call is graded — decides
     // whether it is finished (P4.157 / R12).
-    await this.saveSessions();
+    await this.persistMutation(snapshot);
+    this.logger?.debug(
+      `[StepLifecycle] Advanced past node ${nodeId} to ${next ?? 'run-complete'} (ordinal ${ordinal})`
+    );
 
     return { nodeId: next, ordinal };
   }
@@ -1696,16 +1785,16 @@ export class ChainSessionStore implements ChainSessionService {
     }
 
     // `anchor` is 1-based, so it is already the array index one past the anchor node.
+    const snapshot = this.snapshotRun(session);
     nodes.splice(anchor, 0, inserted);
 
     session.state.lastUpdated = Date.now();
     session.lastActivity = Date.now();
 
+    await this.persistMutation(snapshot);
     this.logger.debug(
-      `[ChainMutation] Inserted node ${nodeId} after ${afterNodeId} at ordinal ${anchor + 1} of ${totalOf(nodes)} (session ${sessionId}, unknown ${spec.unknownId ?? 'none'})`
+      `[ChainMutation] Inserted node ${nodeId} after ${afterNodeId} at ordinal ${anchor + 1} of ${totalOf(session.state.nodes)} (session ${sessionId}, unknown ${spec.unknownId ?? 'none'})`
     );
-
-    await this.saveSessions();
     return inserted;
   }
 
@@ -1766,16 +1855,16 @@ export class ChainSessionStore implements ChainSessionService {
       return false;
     }
 
+    const snapshot = this.snapshotRun(session);
     this.setStepState(sessionId, nodeId, 'skipped');
 
     session.state.lastUpdated = Date.now();
     session.lastActivity = Date.now();
 
+    await this.persistMutation(snapshot);
     this.logger.debug(
       `[ChainMutation] Skipped node ${nodeId} (ordinal ${target}) in session ${sessionId}, resolved unknown ${unknownId}`
     );
-
-    await this.saveSessions();
     return true;
   }
 
@@ -1820,6 +1909,7 @@ export class ChainSessionStore implements ChainSessionService {
       return { kind: 'rejected', reason: 'session-unknown' };
     }
 
+    const snapshot = this.snapshotRun(session);
     const existing = session.state.nodes;
     const here = currentOrdinal(existing, session.state.currentNodeId);
     const minted = mintRemainderNodes(nodes, existing, unknownId);
@@ -1844,7 +1934,7 @@ export class ChainSessionStore implements ChainSessionService {
     session.state.lastUpdated = Date.now();
     session.lastActivity = Date.now();
 
-    await this.persistSessionsOrThrow();
+    await this.persistMutation(snapshot, { strict: true });
 
     return { kind: 'applied', mode, nodes: minted };
   }
@@ -2133,6 +2223,7 @@ export class ChainSessionStore implements ChainSessionService {
     // claimer's ids, so this process's map composes onto it rather than replacing it.
     const { applied, rewrite } = composeGateRemap(session.gateRemap ?? {}, remap);
     const mapChanged = !sameGateRemap(session.gateRemap ?? {}, applied);
+    const snapshot = this.snapshotRun(session);
     if (Object.keys(applied).length > 0) session.gateRemap = applied;
     else delete session.gateRemap;
     const stale = Object.values(session.reviews ?? {}).filter((review) =>
@@ -2141,7 +2232,7 @@ export class ChainSessionStore implements ChainSessionService {
     for (const review of stale) {
       writeReview(session, remapReviewGateIds(review, rewrite));
     }
-    if (mapChanged || stale.length > 0) await this.saveSessions();
+    if (mapChanged || stale.length > 0) await this.persistMutation(snapshot);
   }
 
   async setReview(sessionId: string, review: GateReview): Promise<void> {
@@ -2151,15 +2242,17 @@ export class ChainSessionStore implements ChainSessionService {
       return;
     }
 
+    const snapshot = this.snapshotRun(session);
     writeReview(session, cloneReview(review));
-    await this.saveSessions();
+    await this.persistMutation(snapshot);
   }
 
   async clearReview(sessionId: string, nodeId: string): Promise<void> {
     const session = this.activeSessions.get(sessionId);
     if (session?.reviews?.[nodeId] === undefined) return;
+    const snapshot = this.snapshotRun(session);
     deleteReview(session, nodeId);
-    await this.saveSessions();
+    await this.persistMutation(snapshot);
   }
 
   /**
@@ -2204,8 +2297,9 @@ export class ChainSessionStore implements ChainSessionService {
       return;
     }
 
+    const snapshot = this.snapshotRun(session);
     deleteReview(session, target.nodeId);
-    await this.saveSessions();
+    await this.persistMutation(snapshot);
   }
 
   async setPendingShellVerification(
@@ -2220,8 +2314,9 @@ export class ChainSessionStore implements ChainSessionService {
       return;
     }
 
+    const snapshot = this.snapshotRun(session);
     session.pendingShellVerification = { ...state };
-    await this.saveSessions();
+    await this.persistMutation(snapshot);
   }
 
   getPendingShellVerification(sessionId: string): PendingShellVerificationSnapshot | undefined {
@@ -2235,8 +2330,9 @@ export class ChainSessionStore implements ChainSessionService {
       return;
     }
 
+    const snapshot = this.snapshotRun(session);
     delete session.pendingShellVerification;
-    await this.saveSessions();
+    await this.persistMutation(snapshot);
   }
 
   /**
@@ -2255,11 +2351,12 @@ export class ChainSessionStore implements ChainSessionService {
       );
       return;
     }
+    const snapshot = this.snapshotRun(session);
     session.gatesFiredCount = (session.gatesFiredCount ?? 0) + 1;
     if (outcome.verdict === 'FAIL') {
       session.gateRetriesCount = (session.gateRetriesCount ?? 0) + 1;
     }
-    await this.saveSessions();
+    await this.persistMutation(snapshot);
   }
 
   /**
@@ -2478,6 +2575,7 @@ export class ChainSessionStore implements ChainSessionService {
     // Notify listeners before removing session (so they can inspect session state)
     await this.notifySessionCleared(sessionId, session);
 
+    const snapshot = this.snapshotRunMembership();
     await this.removeSessionArtifacts(sessionId);
 
     // Remove from chain mapping
@@ -2491,8 +2589,7 @@ export class ChainSessionStore implements ChainSessionService {
       }
     }
 
-    // Persist to file
-    await this.saveSessions();
+    await this.persistMutation(snapshot);
 
     if (this.logger) {
       this.logger.debug(`Cleared session ${sessionId} for chain ${session.chainId}`);
@@ -2512,14 +2609,14 @@ export class ChainSessionStore implements ChainSessionService {
       runChainIds.push(chainId);
     }
 
+    const snapshot = this.snapshotRunMembership();
     for (const runChainId of runChainIds) {
       await this.removeRunChainSessionsForScope(runChainId, scopeFilter);
       this.textReferenceStore.clearChainStepResults(runChainId);
       this.removeRunFromBaseTracking(runChainId);
     }
 
-    // Persist to file
-    await this.saveSessions();
+    await this.persistMutation(snapshot);
 
     if (this.logger) {
       this.logger.debug(`Cleared all sessions for chain ${chainId}`);
@@ -2787,11 +2884,12 @@ export class ChainSessionStore implements ChainSessionService {
         : stepOrdinal
     );
 
+    const snapshot = this.snapshotRun(session);
     session.unknownsLedger = nextLedger;
     session.state.lastUpdated = Date.now();
     session.lastActivity = Date.now();
 
-    await this.persistSessionsOrThrow();
+    await this.persistMutation(snapshot, { strict: true });
 
     return nextLedger.map((entry) => ({ ...entry }));
   }
@@ -3023,6 +3121,17 @@ export function createChainSessionStore(
  *   a current-step review keyed onto a detached node's open review, or the reverse. Both are
  *   unreachable today; a silent overwrite would lose an open review.
  */
+/** What a mutator is about to change in memory, and how to put it back (R87). */
+interface MemorySnapshot {
+  restore(): void;
+}
+
+/** Make `target` hold exactly `source`'s entries, keeping `target`'s identity. */
+function replaceMapContents<K, V>(target: Map<K, V>, source: ReadonlyMap<K, V>): void {
+  target.clear();
+  for (const [key, value] of source) target.set(key, value);
+}
+
 /**
  * Whether a persist failure is a lock another connection held past the busy timeout. Classified by
  * `node:sqlite`'s `errcode` (the extended result code): its low byte is the primary code, where 5

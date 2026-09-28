@@ -273,7 +273,9 @@ dropped: `inputMapping`, `outputMapping`, `visibility`, `subagentModel`, `agentT
 gated, enhanced and reviewed exactly as a planned step is — declared gates or none, it carries the
 category and framework defaults a planned step does. Under an active framework its render declares
 the framework's section headers as a planned step's does, so the phase guard grades its answer
-against them; an investigation step a blocking unknown inserted still declares none. Gate
+against them; the framework is the run's own decision, so under an operator override (`^ReACT`) a
+contributed step is shown and graded on ReACT, not the active framework. An investigation step a
+blocking unknown inserted still declares none. Gate
 enhancement walks the run's steps in the
 run's node order, so a contributed step accumulates only the gates of the steps before it in the run
 (a planned step a `replace` removed contributes none), and a run that began as one gated prompt is

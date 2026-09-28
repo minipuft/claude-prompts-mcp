@@ -86,6 +86,15 @@ export class FrameworkDecisionAuthority {
   }
 
   /**
+   * The framework this request's decision applies, or undefined when it applies none or nothing
+   * has decided yet. Never computes: a reader that must not prime the cache with its own input
+   * (the phase guard, a contributed step's render) reads the run's decision through this.
+   */
+  getCachedFrameworkId(): string | undefined {
+    return this.decision?.shouldApply === true ? this.decision.frameworkId : undefined;
+  }
+
+  /**
    * Get the framework ID if applicable, or undefined if framework is disabled.
    * Convenience method for stages that just need the ID.
    */

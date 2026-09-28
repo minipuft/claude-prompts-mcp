@@ -275,6 +275,10 @@ export class StepExecutionStage extends BasePipelineStage {
       additionalGateIds: executionPlan.gates,
       scope: scopeOptions,
       ...(executionPlan.modifiers !== undefined ? { runModifiers: executionPlan.modifiers } : {}),
+      // The run's framework decision, which a contributed step renders under (R88).
+      ...(context.frameworkAuthority.getCachedFrameworkId() !== undefined
+        ? { runFrameworkId: context.frameworkAuthority.getCachedFrameworkId() }
+        : {}),
     });
 
     context.executionResults = this.createExecutionResults(renderResult);

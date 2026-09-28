@@ -562,8 +562,8 @@ describe('Tenant Isolation', () => {
         } finally {
           spy.mockRestore();
         }
-        // Control: a cancel with nothing planted persists. A second run, because the failed
-        // cancel already marked `p175-a` cancelled in memory, and a repeat returns before saving.
+        // Control: a cancel with nothing planted persists, on a second run so this control does
+        // not depend on the rollback P6.185 pins below.
         await chainSessionStore.createSession('p175-a2', 'chain-p175a2#1', 2);
         await expect(chainSessionStore.cancelChain('p175-a2')).resolves.toBe(true);
         const persisted = dbManager.query<{ run_status: string }>(
@@ -610,6 +610,81 @@ describe('Tenant Isolation', () => {
         } finally {
           spy.mockRestore();
         }
+      });
+    });
+
+    /**
+     * P6.185 (R87). MEASURED 2026-09-27 on `55c4d0fb`: a `cancelChain` whose save rejected left the
+     * run `cancelled` in memory, and a second `cancelChain` answered `true` from its "already
+     * cancelled" early return without writing — the rows still said `working`. A mutator whose
+     * persist rejects now restores the memory it changed before rethrowing.
+     */
+    describe('P6.185: a mutator whose save fails leaves memory where the rows are', () => {
+      const constraint = () =>
+        Object.assign(new Error('P185 planted: UNIQUE constraint failed'), {
+          code: 'ERR_SQLITE_ERROR',
+          errcode: 2067,
+        });
+      const plant = () =>
+        jest
+          .spyOn(chainSessionStore as any, 'persistSessionsOrThrow')
+          .mockRejectedValueOnce(constraint());
+      const rowStatus = (sessionId: string) =>
+        dbManager
+          .query<{
+            run_status: string;
+          }>('SELECT run_status FROM chain_runs WHERE session_id = ?', [sessionId])
+          .map((row) => row.run_status);
+      const rowNodes = (sessionId: string) =>
+        dbManager
+          .query<{
+            node_id: string;
+          }>('SELECT node_id FROM chain_run_nodes WHERE session_id = ? ORDER BY position', [
+            sessionId,
+          ])
+          .map((row) => row.node_id);
+
+      test('(a) after a rejected cancel the run is still working, and the retry writes', async () => {
+        await chainSessionStore.createSession('p185-a', 'chain-p185a#1', 2);
+        const spy = plant();
+        try {
+          await expect(chainSessionStore.cancelChain('p185-a')).rejects.toThrow(/P185 planted/);
+        } finally {
+          spy.mockRestore();
+        }
+        expect(chainSessionStore.getSession('p185-a')?.runStatus).toBe('working');
+        expect(rowStatus('p185-a')).toEqual(['working']);
+        await expect(chainSessionStore.cancelChain('p185-a')).resolves.toBe(true);
+        expect(rowStatus('p185-a')).toEqual(['cancelled']);
+      });
+
+      test('(b) control: a clean cancel is unchanged', async () => {
+        await chainSessionStore.createSession('p185-b', 'chain-p185b#1', 2);
+        await expect(chainSessionStore.cancelChain('p185-b')).resolves.toBe(true);
+        expect(chainSessionStore.getSession('p185-b')?.runStatus).toBe('cancelled');
+        expect(rowStatus('p185-b')).toEqual(['cancelled']);
+      });
+
+      test('(c) a rejected remainder leaves the prior nodes in memory', async () => {
+        await chainSessionStore.createSession('p185-c', 'chain-p185c#1', 3);
+        const before = chainSessionStore.getSession('p185-c')!.state.nodes.map((node) => node.id);
+        expect(rowNodes('p185-c')).toEqual(before);
+        const spy = plant();
+        try {
+          await expect(
+            chainSessionStore.replaceRemainder(
+              'p185-c',
+              [{ promptId: 'p-alt', stepName: 'Reconsider' }],
+              'u-185',
+              'replace'
+            )
+          ).rejects.toThrow(/P185 planted/);
+        } finally {
+          spy.mockRestore();
+        }
+        const after = chainSessionStore.getSession('p185-c')!.state.nodes.map((node) => node.id);
+        expect(after).toEqual(before);
+        expect(rowNodes('p185-c')).toEqual(before);
       });
     });
 

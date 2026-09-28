@@ -1,4 +1,4 @@
-// @lifecycle test - P6.79 / P6.80 / R40: an arrow-chain segment or a workflow node naming a chain prompt runs that prompt's steps; P6.78 / R37: a command-level gate on a chain prompt binds each step; P6.97 / R43: a named inline gate belongs to the run that declared it; P6.99 / R44: a named gate on an arrow-chain segment binds that segment; P6.108 / R47: a run's temporary gates live exactly as long as the run; P6.104: a run's request gates reach every node they target; P6.107: a request gate id belongs to the run that holds it; P6.105: the arrow-chain source validates the expanded workflow; P6.110: one name in two arrow-chain segments is two gates; P6.113: a run re-sending a declared id keeps the id it registered; P6.117: a request gate target is checked against the declared node ids, over Streamable HTTP.
+// @lifecycle test - P6.79 / P6.80 / R40: an arrow-chain segment or a workflow node naming a chain prompt runs that prompt's steps; P6.78 / R37: a command-level gate on a chain prompt binds each step; P6.97 / R43: a named inline gate belongs to the run that declared it; P6.99 / R44: a named gate on an arrow-chain segment binds that segment; P6.108 / R47: a run's temporary gates live exactly as long as the run; P6.104: a run's request gates reach every node they target; P6.107: a request gate id belongs to the run that holds it; P6.105: the arrow-chain source validates the expanded workflow; P6.110: one name in two arrow-chain segments is two gates; P6.113: a run re-sending a declared id keeps the id it registered; P6.117: a request gate target is checked against the declared node ids; P6.186: a completed run re-runs as the command that started it, or not at all; P6.187: a review re-render lists the run nodes after the current one, over Streamable HTTP.
 /**
  * MEASURED 2026-09-25 on `427899fe` (authored `sv_chain` = sv_a/sv_b/sv_a, each step carrying the
  * blocking `sv-block`; run state read from `chain_runs.state`):
@@ -1060,6 +1060,133 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
   });
 
   /**
+   * P6.186 / R89. MEASURED 2026-09-27 on `97c33a89`: `>>sv_a` arrow-chain `>>sv_b`, completed with
+   * and without an inserted node, and a two-node workflow each printed "Chain execution complete"
+   * and no `Re-run:`, while `>>sv_pair :: "CRIT-P"` completed with `Re-run: >>sv_pair topic:""` —
+   * its criterion dropped, so the line started a run with no gate. A `Re-run:` line is the command
+   * that re-parses to the run, or absent: a chain prompt names one, an arrow-chain or a workflow
+   * does not (neither its first segment nor its last is the run).
+   */
+  describe('P6.186: a completed run re-runs as the command that started it, or not at all', () => {
+    const rerun = (text: string): string | undefined => /Re-run: `([^`]*)`/.exec(text)?.[1];
+    const blocking = {
+      observations: [
+        { type: 'unknown_discovered', id: 'u-186', statement: 'STATEMENT-u-186', blocking: true },
+      ],
+    };
+
+    test('(a) a chain prompt completes with a Re-run that starts the same run', async () => {
+      const run = await start({ command: '>>sv_pair :: "CRIT-186"' });
+      await run.call({ user_response: 'A', gate_verdict: PASS });
+      const done = await run.call({ user_response: 'B', gate_verdict: PASS });
+      expect(done).toContain('Chain execution complete');
+      const line = rerun(done);
+      expect(line).toBe(`>>sv_pair topic:"" :: 'CRIT-186'`);
+
+      const again = await start({ command: line ?? '' });
+      // Each run registers its own temporary gate for the criterion, under a fresh id.
+      const steps = (chainId: string) =>
+        runState(chainId).steps.map((step) => step.replace(/temp_\d+_[a-z0-9]+/g, 'TEMP'));
+      expect(steps(again.chainId)).toEqual(steps(run.chainId));
+      expect(steps(run.chainId)).toEqual(['a:sv_a:["TEMP"]', 'b:sv_b:["TEMP"]']);
+      expect(runState(again.chainId).criteria).toEqual(runState(run.chainId).criteria);
+      expect(runState(run.chainId).criteria).toEqual([['CRIT-186'], ['CRIT-186']]);
+    }, 120000);
+
+    test('(b) an arrow-chain, with and without an inserted node, and a workflow complete with no Re-run', async () => {
+      const plain = await start({ command: `>>sv_a topic:"T186"${ARROW}>>sv_b` });
+      await plain.call({ user_response: 'A' });
+      const inserted = await start({ command: `>>sv_a${ARROW}>>sv_b` });
+      await inserted.call({ user_response: 'A', ...blocking });
+      await inserted.call({ user_response: 'investigated' });
+      const workflow = await start({
+        workflow: {
+          version: 1,
+          nodes: [
+            { id: 'x', promptId: 'sv_a' },
+            { id: 'y', promptId: 'sv_b' },
+          ],
+        },
+      });
+      await workflow.call({ user_response: 'A' });
+      for (const run of [plain, inserted, workflow]) {
+        const done = await run.call({ user_response: 'B' });
+        expect(done).toContain('Chain execution complete');
+        expect(done).not.toContain('Re-run:');
+        expect(done).not.toContain('>>prompt');
+      }
+    }, 120000);
+
+    test('positive control: a gated single prompt completes with its Re-run', async () => {
+      const run = await start({ command: '>>sv_a :: "CRIT-186s"' });
+      const done = await run.call({ user_response: 'out', gate_verdict: PASS });
+      expect(rerun(done)).toBe(`>>sv_a topic:"" :: 'CRIT-186s'`);
+    }, 120000);
+  });
+
+  /**
+   * P6.187 / R90. MEASURED 2026-09-27 on `6043612a`: a workflow `x`, `y` (gated `sv-drop`), `z`,
+   * with a blocking unknown raised on `x`. The FAIL on the inserted `inv-u-187a` (it inherits
+   * `sv-drop`, row 4.4) re-renders its review with "Remaining plan: `y`, `z`" — the nodes after the
+   * node under review, which IS the current node, so the list starts after it. Nothing after it
+   * is missing, so this is a pin, not a fix.
+   */
+  describe('P6.187: a review re-render lists the run nodes after the current one', () => {
+    const blocking = {
+      observations: [
+        { type: 'unknown_discovered', id: 'u-187a', statement: 'STATEMENT-u-187a', blocking: true },
+      ],
+    };
+    const listed = (text: string): string[] => {
+      const block = text.slice(text.indexOf('Remaining plan:'));
+      return [...block.split('\n\n')[0].matchAll(/^- `([^`]+)`/gm)].map((m) => m[1]);
+    };
+    /** The live nodes strictly after the run's current node, in run order. */
+    function after(chainId: string): string[] {
+      const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+      try {
+        const run = db
+          .prepare('SELECT session_id, current_node_id FROM chain_runs WHERE chain_id = ?')
+          .get(chainId) as { session_id: string; current_node_id: string };
+        const nodes = (
+          db
+            .prepare('SELECT node_id FROM chain_run_nodes WHERE session_id = ? ORDER BY position')
+            .all(run.session_id) as Array<{ node_id: string }>
+        ).map((row) => row.node_id);
+        return nodes.slice(nodes.indexOf(run.current_node_id) + 1);
+      } finally {
+        db.close();
+      }
+    }
+
+    test('twin: the retry render of an inserted node lists the nodes after it', async () => {
+      const run = await start({
+        workflow: {
+          version: 1,
+          nodes: [
+            { id: 'x', promptId: 'sv_a' },
+            { id: 'y', promptId: 'sv_b', inlineGateIds: ['sv-drop'] },
+            { id: 'z', promptId: 'sv_a' },
+          ],
+        },
+      });
+      await run.call({ user_response: 'A', ...blocking });
+      const retry = await run.call({ user_response: 'investigated', gate_verdict: FAIL });
+      expect(retry).toContain('Gate Review Required');
+      expect(runState(run.chainId).reviews).toEqual({ 'inv-u-187a': ['sv-drop'] });
+      expect(after(run.chainId)).toEqual(['y', 'z']);
+      expect(listed(retry)).toEqual(after(run.chainId));
+
+      // Control: a planned step's retry render, the unknown still open, lists what follows it.
+      await run.call({ user_response: 'investigated again', gate_verdict: PASS });
+      const planned = await run.call({ user_response: 'B', gate_verdict: FAIL });
+      expect(runState(run.chainId).reviews).toEqual({ y: ['sv-drop'] });
+      expect(after(run.chainId)).toEqual(['z']);
+      expect(listed(planned)).toEqual(after(run.chainId));
+    }, 120000);
+  });
+
+  /**
    * P6.144 / R66. MEASURED 2026-09-27 on `6dad55f3`: after `>>sv_a :: "sv-block"` and a FAIL sent
    * with the answer, the run held one record, `completed` with `prompt_id` null, and
    * `execution_history` listed `completed step 1`. The capture writer (`ledgerCapturedStep`) wrote
@@ -1745,6 +1872,34 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
         expect(rendered).not.toContain('## Context');
         expect(reviews).toEqual({});
       }, 120000);
+
+      /**
+       * P6.179 / R88. MEASURED 2026-09-27 on `ce5666f7` (shipped CAGEERF active): under `^ReACT`
+       * the remainder step `r1` rendered the ACTIVE framework's `## Context` while its run was
+       * graded on ReACT's phases, so a PASS with no sections opened nothing. A contributed step now
+       * resolves the run's framework decision, the one its grading reads.
+       */
+      describe("P6.179: a contributed step follows the run's framework decision", () => {
+        test('(a) under an override the remainder step declares the run framework and is guarded', async () => {
+          const { rendered, reviews } = await passWithoutSections(
+            `^ReACT >>sv_a${ARROW}>>sv_b`,
+            true
+          );
+          expect(rendered).toContain('## Reasoning');
+          expect(rendered).not.toContain('## Context');
+          expect(reviews).toEqual({ r1: ['__phase_guard__'] });
+        }, 120000);
+
+        test('(c) control: a planned step under the override is unchanged', async () => {
+          const { rendered, reviews } = await passWithoutSections(
+            `^ReACT >>sv_a${ARROW}>>sv_d`,
+            false
+          );
+          expect(rendered).toContain('## Reasoning');
+          expect(rendered).not.toContain('## Context');
+          expect(reviews).toEqual({ n2: ['__phase_guard__'] });
+        }, 120000);
+      });
     });
 
     /**

@@ -604,14 +604,11 @@ describe('ResponseAssembler – chain-path CTA methods', () => {
       findNextDelegatedStep: (
         context: ReturnType<typeof createChainContext>
       ) => { promptId: string } | undefined;
-      resolveCurrentPrompt: (
-        context: ReturnType<typeof createChainContext>
-      ) => { id?: string } | undefined;
     };
     const readers = assembler as unknown as PrivateReaders;
 
     // A 3-step chain after one insertion: node ordinals are draft=1, inv-x=2, analyze=3,
-    // review=4, while the parse-time stepNumbers are still 1..3. The two fallback readers
+    // review=4, while the parse-time stepNumbers are still 1..3. The fallback reader
     // used to look parse steps up by the NODE ordinal, naming the step one early.
     const mutatedSteps = [
       { stepNumber: 1, nodeId: 'draft', promptId: 'draft', args: {} },
@@ -645,13 +642,6 @@ describe('ResponseAssembler – chain-path CTA methods', () => {
       // successor review is the next step — wrong, the run's next node is analyze.
       const result = readers.findNextDelegatedStep(mutatedContext(2, 'inv-x'));
       expect(result).toBeUndefined();
-    });
-
-    it('resolveCurrentPrompt finds the completed final step by node id when its node ordinal exceeds every stepNumber', () => {
-      const context = mutatedContext(4, 'review');
-      (context.parsedCommand as { convertedPrompt?: unknown }).convertedPrompt = undefined;
-      const prompt = readers.resolveCurrentPrompt(context);
-      expect(prompt?.id).toBe('review');
     });
   });
 });

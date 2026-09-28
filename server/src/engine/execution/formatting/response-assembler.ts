@@ -5,6 +5,7 @@ import { SHELL_VERIFY_DEFAULT_MAX_ITERATIONS } from '../../gates/shell/types.js'
 import { handoffNodeToken } from '../delegation/handoff-contract.js';
 import { DelegationRenderer } from '../delegation/renderer.js';
 import { getHandoffFooterInstruction } from '../delegation/strategy.js';
+import { formatShellVerifyToken } from '../parsers/symbolic-operator-parser.js';
 import { isUnknownInterruptPending } from '../pipeline/decisions/index.js';
 import { isFrameworkInjected } from '../pipeline/decisions/injection/index.js';
 import { PHASE_GUARD_GATE_ID } from '../pipeline/stages/19-phase-guard-verification-stage.js';
@@ -1290,23 +1291,15 @@ export class ResponseAssembler {
   }
 
   /**
-   * Builds a usage CTA with re-run and chain suggestions.
-   * Shown for single prompt and chain completion scenarios.
+   * A completed run's re-run (P6.186, R89): the command that started it, when one prompt names it
+   * — a chain prompt, written with its operators so it re-parses to the same run. An arrow-chain or
+   * workflow run has no such prompt, and its last step, or its first, is not the run: no line.
    */
   private buildUsageCTA(context: ExecutionContext): string | null {
-    const prompt = this.resolveCurrentPrompt(context);
-    const promptId = this.resolvePromptIdForCTA(context, prompt);
-    if (promptId == null) return null;
-
-    const isChainCompletion = this.isFinalChainStep(context);
-    const invocation = this.buildInvocationString(context, prompt, !isChainCompletion);
-
-    const lines = ['---', `Re-run: \`${invocation}\``];
-    if (!isChainCompletion && !this.isAutoChainPrompt(prompt)) {
-      lines.push(`Chain: \`${invocation} --> >>next_step\``);
-    }
-
-    return lines.join('\n');
+    const prompt = context.parsedCommand?.convertedPrompt;
+    return prompt === undefined
+      ? null
+      : `---\nRe-run: \`${this.buildInvocationString(context, prompt)}\``;
   }
 
   /**
@@ -1445,75 +1438,19 @@ export class ResponseAssembler {
     lines.push(`Continue: \`chain_id="${chainId}", user_response="<your output>"\``);
   }
 
-  /** Appends re-run invocation line (always shown). */
+  /** Appends the re-run line; with no prompt to name there is none — never `>>prompt` (R89). */
   private appendRerunLine(lines: string[], context: ExecutionContext): void {
-    const prompt = this.resolveCurrentPrompt(context);
-    const promptId = this.resolvePromptIdForCTA(context, prompt);
-    if (promptId == null) return;
-
-    const invocation = this.buildInvocationString(context, prompt, true);
-    lines.push(`Re-run: \`${invocation}\``);
+    const prompt = context.parsedCommand?.convertedPrompt;
+    if (prompt !== undefined)
+      lines.push(`Re-run: \`${this.buildInvocationString(context, prompt)}\``);
   }
 
-  /** Resolves the prompt ID for CTA display from prompt or execution metadata. */
-  private resolvePromptIdForCTA(
-    context: ExecutionContext,
-    prompt?: ConvertedPrompt
-  ): string | undefined {
-    if (prompt?.id != null && prompt.id.length > 0) return prompt.id;
-    const metaId = context.executionResults?.metadata?.['promptId'];
-    return typeof metaId === 'string' && metaId.length > 0 ? metaId : undefined;
-  }
-
-  /** Checks whether a prompt defines built-in chain steps (auto-chain). */
-  private isAutoChainPrompt(prompt?: ConvertedPrompt): boolean {
-    return prompt != null && (prompt.chainSteps?.length ?? 0) > 0;
-  }
-
-  /**
-   * Resolves the ConvertedPrompt for the current execution.
-   * Single prompt: direct convertedPrompt. Chain completion: last step's prompt.
-   */
-  private resolveCurrentPrompt(context: ExecutionContext): ConvertedPrompt | undefined {
-    if (context.parsedCommand?.convertedPrompt != null) {
-      return context.parsedCommand.convertedPrompt;
-    }
-
-    const steps = context.parsedCommand?.steps;
-    const currentStep = context.sessionContext?.currentStep;
-    if (steps != null && currentStep != null && currentStep > 0) {
-      // By node (R77): an inserted node has no parse step, and the one at its ordinal is not it.
-      return parseStepForNode(steps, context.sessionContext?.currentNodeId, currentStep)
-        ?.convertedPrompt;
-    }
-
-    return undefined;
-  }
-
-  /**
-   * Builds the full invocation string from parsed context data.
-   * Includes user-specified operators when includeOperators is true.
-   */
-  private buildInvocationString(
-    context: ExecutionContext,
-    prompt?: ConvertedPrompt,
-    includeOperators = true
-  ): string {
+  /** The command that re-parses to this run (R89): its operators, the prompt and args, its gates. */
+  private buildInvocationString(context: ExecutionContext, prompt: ConvertedPrompt): string {
     const parts: string[] = [];
-    const promptId = prompt?.id ?? 'prompt';
-
-    if (includeOperators) {
-      this.appendOperatorPrefixes(parts, context);
-    }
-
-    const userArgs = context.parsedCommand?.promptArgs;
-    const argString = this.buildArgString(prompt, userArgs);
-    parts.push(`>>${promptId}${argString}`);
-
-    if (includeOperators) {
-      this.appendGateSuffixes(parts, context);
-    }
-
+    this.appendOperatorPrefixes(parts, context);
+    parts.push(`>>${prompt.id}${this.buildArgString(prompt, context.parsedCommand?.promptArgs)}`);
+    this.appendGateSuffixes(parts, context);
     return parts.join(' ');
   }
 
@@ -1557,19 +1494,22 @@ export class ResponseAssembler {
 
   /** Appends inline gate criteria and named gates as suffixes. */
   private appendGateSuffixes(parts: string[], context: ExecutionContext): void {
-    const inlineCriteria = context.parsedCommand?.inlineGateCriteria;
-    if (inlineCriteria != null && inlineCriteria.length > 0) {
-      for (const criteria of inlineCriteria) {
-        parts.push(`:: '${criteria}'`);
-      }
+    // A chain prompt's command criteria were folded onto its steps and left the command (R37);
+    // the anonymous gate operator the command was parsed into still carries them (P6.186).
+    const anonymousGate = context.parsedCommand?.operators?.operators.find(
+      (op): op is GateOperator => op.type === 'gate' && op.gateId === undefined
+    );
+    const commandCriteria =
+      context.parsedCommand?.inlineGateCriteria ?? anonymousGate?.parsedCriteria ?? [];
+    for (const criteria of commandCriteria) {
+      parts.push(`:: '${criteria}'`);
     }
-
-    const namedGates = context.parsedCommand?.namedInlineGates;
-    if (namedGates != null && namedGates.length > 0) {
-      for (const gate of namedGates) {
-        const criteriaText = gate.criteria[0] ?? '';
-        parts.push(`:: ${gate.gateId}:"${criteriaText}"`);
-      }
+    for (const { gateId, criteria, shellVerify } of context.parsedCommand?.namedInlineGates ?? []) {
+      parts.push(
+        shellVerify !== undefined
+          ? formatShellVerifyToken(shellVerify)
+          : `:: ${gateId}:"${criteria[0] ?? ''}"`
+      );
     }
   }
 
@@ -1600,11 +1540,13 @@ export class ResponseAssembler {
     arg: { name: string; required: boolean; defaultValue?: unknown },
     userArgs?: Record<string, unknown>
   ): string | null {
+    // JSON quoting is the escape set the argument parser decodes (`parseQuotedValue`), so a value
+    // carrying a quote or a backslash re-parses to itself (P6.178, R89).
     if (userArgs != null && arg.name in userArgs) {
-      return `${arg.name}:"${String(userArgs[arg.name])}"`;
+      return `${arg.name}:${JSON.stringify(String(userArgs[arg.name]))}`;
     }
     if (arg.defaultValue !== undefined) {
-      return `${arg.name}:"${String(arg.defaultValue)}"`;
+      return `${arg.name}:${JSON.stringify(String(arg.defaultValue))}`;
     }
     if (arg.required) {
       return `${arg.name}:"<${arg.name}>"`;

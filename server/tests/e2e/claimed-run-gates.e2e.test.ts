@@ -957,6 +957,104 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
   }, 180000);
 
   /**
+   * P6.183 / R85. MEASURED 2026-09-27 on `bfd6e110` with `gates.executeInlineGateDefinitions` on:
+   * a step prompt declaring an inline definition `{id: content-structure}` registered a temporary
+   * gate under the canonical id, and from then on EVERY run in the process — a later run of a
+   * prompt declaring nothing included — reviewed `content-structure` against the definition's
+   * criteria instead of the canonical guidance, because gate loading reads the temporary registry
+   * first. A definition named `Content Structure` with no id did the same through its slug. A
+   * non-colliding id (`ctl183`) registered beside the canonical gate. Both colliding paths are now
+   * refused (as of 2026-09-27 · flips when a temporary gate is scoped to the run that declared it,
+   * so shadowing could no longer reach another run).
+   */
+  test('P6.183 an inline definition may not shadow a canonical gate id, declared or slug-derived', async () => {
+    const roots = freshRoots();
+    writeFileSync(
+      path.join(roots.workspace, 'config.json'),
+      JSON.stringify({ gates: { executeInlineGateDefinitions: true } })
+    );
+    const server = await startServer(roots);
+    const author = async (args: Record<string, unknown>): Promise<void> => {
+      const result = await server.call('resource_manager', args);
+      if (result.isError) throw new Error(result.text);
+    };
+    const definitions: Record<string, Record<string, unknown> | undefined> = {
+      sv_c183: { id: 'content-structure', name: 'content-structure', guidance: 'DECL-183' },
+      sv_s183: { name: 'Content Structure', guidance: 'SLUG-183' },
+      sv_n183: { id: 'ctl183', name: 'ctl183', guidance: 'CTL-183' },
+      sv_p183: undefined,
+    };
+    for (const [id, definition] of Object.entries(definitions)) {
+      await author({
+        resource_type: 'prompt',
+        action: 'create',
+        id,
+        category: 'general',
+        name: id,
+        description: 'step for P6.183',
+        user_message_template: `BODY-${id}`,
+        gate_configuration: {
+          framework_gates: false,
+          ...(definition === undefined
+            ? {}
+            : {
+                inline_gate_definitions: [
+                  {
+                    ...definition,
+                    type: 'validation',
+                    scope: 'chain',
+                    description: 'e2e inline definition',
+                    pass_criteria: [definition['guidance']],
+                  },
+                ],
+              }),
+        },
+      });
+      await author({
+        resource_type: 'prompt',
+        action: 'create',
+        id: `${id}_chain`,
+        category: 'general',
+        name: `${id}_chain`,
+        description: 'two steps',
+        user_message_template: 'CHAIN183',
+        gate_configuration: { framework_gates: false },
+        chain_steps: ['A', 'B'].map((stepName) => ({ promptId: id, stepName })),
+      });
+    }
+    const markers = ['Use clear headings', 'DECL-183', 'SLUG-183', 'CTL-183'];
+    const failFirst = async (promptId: string) => {
+      const start = await server.call('prompt_engine', { command: `>>${promptId}_chain` });
+      const chainId = chainIdOf(start.text);
+      const failed = await server.call('prompt_engine', {
+        chain_id: chainId,
+        user_response: 'A out',
+        gate_verdict: FAIL,
+      });
+      return {
+        promptId,
+        reviews: runRow(roots, chainId)?.reviews,
+        failShown: markers.filter((marker) => failed.text.includes(marker)),
+      };
+    };
+    const canonical = { reviews: { a: ['content-structure'] }, failShown: ['Use clear headings'] };
+    // Positive control: a prompt declaring nothing is reviewed on the canonical guidance.
+    expect(await failFirst('sv_p183')).toMatchObject({ promptId: 'sv_p183', ...canonical });
+    // (a) A declared canonical id is refused: its run, and a later plain run, keep the canonical gate.
+    expect(await failFirst('sv_c183')).toMatchObject({ promptId: 'sv_c183', ...canonical });
+    expect(await failFirst('sv_p183')).toMatchObject({ promptId: 'sv_p183', ...canonical });
+    // (b) The same through a name whose slug is the canonical id.
+    expect(await failFirst('sv_s183')).toMatchObject({ promptId: 'sv_s183', ...canonical });
+    expect(await failFirst('sv_p183')).toMatchObject({ promptId: 'sv_p183', ...canonical });
+    // (c) Control: a non-colliding id registers beside the canonical gate.
+    expect(await failFirst('sv_n183')).toMatchObject({
+      promptId: 'sv_n183',
+      reviews: { a: ['content-structure', 'ctl183'] },
+      failShown: ['Use clear headings', 'CTL-183'],
+    });
+  }, 240000);
+
+  /**
    * P6.158. MEASURED 2026-09-27 on `7b2e30ce` with `gates.executeInlineGateDefinitions` on (and
    * off): the bundled `research_chain` declares `Source Citations` in the CHAIN prompt's own
    * `inline_gate_definitions` and names it on step 2 (`inlineGateIds`), but only a STEP prompt's

@@ -105,6 +105,12 @@ interface BaseChainStepExecutionInput {
    * command modifiers, so both answer "did this step decline the framework" alike (R79).
    */
   readonly runModifiers?: ExecutionModifiers;
+  /**
+   * The run's framework decision (`frameworkAuthority`), read for a step that carries no framework
+   * context of its own: a step a remainder contributed resolves its guidance and its declared
+   * sections from it, as stage 19 grades it (R88). Absent when the run applies no framework.
+   */
+  readonly runFrameworkId?: string;
 }
 
 /**

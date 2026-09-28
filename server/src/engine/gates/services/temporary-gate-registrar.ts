@@ -101,7 +101,13 @@ export class TemporaryGateRegistrar {
      * are registered at stage 11, before the session stage resolves anything — on the call that
      * STARTS a chain there is no run yet, and the parse-time node order is the run's order.
      */
-    private readonly runStepViewProvider?: RunStepViewProvider
+    private readonly runStepViewProvider?: RunStepViewProvider,
+    /**
+     * Whether an id names a canonical gate (P6.183, R85). An inline definition registering under
+     * one would replace that gate's criteria for every run in the process while it lived, since
+     * gate loading reads the temporary registry first; such a definition is refused instead.
+     */
+    private readonly isCanonicalGateId?: (gateId: string) => boolean
   ) {}
 
   /**
@@ -794,6 +800,16 @@ export class TemporaryGateRegistrar {
     const scope = readInlineScope(definition);
 
     try {
+      // Declared or slug-derived (`withDefinitionIds`), the id is the definition's by now.
+      if (declaredId !== undefined && this.isCanonicalGateId?.(declaredId) === true) {
+        this.logger.warn(
+          `[TemporaryGateRegistrar] Refusing inline gate definition '${name}': a temporary gate ` +
+            `may not shadow a canonical gate id ('${declaredId}'). Give it another id or name.`,
+          { promptId }
+        );
+        return undefined;
+      }
+
       const heldId =
         declaredId === undefined
           ? undefined

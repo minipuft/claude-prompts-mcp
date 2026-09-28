@@ -21,6 +21,8 @@ import {
 } from './types/operator-types.js';
 import { SHELL_VERIFY_DEFAULT_TIMEOUT } from '../../gates/constants.js';
 
+import type { ShellVerifyGate } from '../../gates/shell/types.js';
+
 import { Logger } from '#infra/logging/index.js';
 import { ValidationError } from '#shared/utils/index.js';
 import { mintSequentialIds } from '#shared/utils/node-order.js';
@@ -49,6 +51,23 @@ export type FrameworkIdLookup = (normalizedId: string) => boolean;
  */
 export function namedGateBindingKey(name: string, occurrence: number): string {
   return occurrence <= 1 ? name : `${name}#${occurrence}`;
+}
+
+/**
+ * The `:: verify:"…"` token that parses back to `shellVerify` (P6.178, R89): the inverse of the
+ * gate operator's verify branch plus `parseVerifyOptions`, so a re-run line re-parses to the same
+ * shell check instead of an LLM-judged gate named `shell-verify-<ms>`. Only the options the
+ * parser stored are written — an absent one was never typed, and writing its default would pin a
+ * value the preset would otherwise decide.
+ */
+export function formatShellVerifyToken(shellVerify: ShellVerifyGate): string {
+  const { command, preset, loop, maxIterations, timeout } = shellVerify;
+  const parts = [`:: verify:"${Array.isArray(command) ? command.join(' ') : command}"`];
+  if (preset !== undefined) parts.push(`:${preset}`);
+  if (loop !== undefined) parts.push(`loop:${String(loop)}`);
+  if (maxIterations !== undefined) parts.push(`max:${maxIterations}`);
+  if (timeout !== undefined) parts.push(`timeout:${Math.round(timeout / 1000)}`);
+  return parts.join(' ');
 }
 
 /**

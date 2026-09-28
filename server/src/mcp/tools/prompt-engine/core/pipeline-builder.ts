@@ -293,7 +293,8 @@ export class PipelineBuilder {
       temporaryGateRegistry,
       deps.gateReferenceResolver,
       deps.logger,
-      runStepViewProvider
+      runStepViewProvider,
+      (gateId) => deps.gateManager.has(gateId)
     );
     const gateStage = new GateEnhancementStage(
       gateEnhancementService,

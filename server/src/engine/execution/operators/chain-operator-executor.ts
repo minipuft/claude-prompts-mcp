@@ -53,7 +53,8 @@ export class ChainOperatorExecutor {
     private readonly gateGuidanceRenderer?: any,
     private readonly getFrameworkContext?: (
       promptId: string,
-      scope: StateStoreOptions | undefined
+      scope: StateStoreOptions | undefined,
+      frameworkId?: string
     ) => Promise<StepFrameworkContext | null>,
     private readonly collaborators?: ChainOperatorCollaborators
   ) {}
@@ -210,10 +211,7 @@ export class ChainOperatorExecutor {
       let frameworkType: string = DEFAULT_FRAMEWORK_ID;
       let category = 'general';
 
-      const reviewStepContext = await this.resolveFrameworkContext(
-        targetStep ?? undefined,
-        input.scope
-      );
+      const reviewStepContext = await this.resolveFrameworkContext(targetStep ?? undefined, input);
       if (reviewStepContext) {
         frameworkType = reviewStepContext.selectedFramework?.type || DEFAULT_FRAMEWORK_ID;
         category = reviewStepContext.category || 'general';
@@ -251,7 +249,7 @@ export class ChainOperatorExecutor {
     // Build framework guidance for gate reviews if enabled (skip on retry — already seen)
     let frameworkGuidance = '';
     if (!isRetry && frameworkInjectionEnabled && targetStep) {
-      const guidance = await this.buildFrameworkGuidance(targetStep, input.scope);
+      const guidance = await this.buildFrameworkGuidance(targetStep, input);
       if (guidance) {
         frameworkGuidance = guidance;
         this.logger.debug('[SymbolicChain] Added framework guidance to gate review step');
@@ -491,7 +489,7 @@ export class ChainOperatorExecutor {
     const gateGuidanceEnabled = this.isGateGuidanceEnabled(chainContext);
 
     if (!suppressFrameworkInjection && !hasFrameworkGuidance(convertedPrompt?.systemMessage)) {
-      const frameworkGuidance = await this.buildFrameworkGuidance(step, input.scope);
+      const frameworkGuidance = await this.buildFrameworkGuidance(step, input);
       if (frameworkGuidance) {
         lines.push(frameworkGuidance);
       }
@@ -686,9 +684,9 @@ export class ChainOperatorExecutor {
 
   private async buildFrameworkGuidance(
     step: ChainStepPrompt,
-    scope: StateStoreOptions | undefined
+    input: ChainStepExecutionInput
   ): Promise<string | null> {
-    const context = await this.resolveFrameworkContext(step, scope);
+    const context = await this.resolveFrameworkContext(step, input);
     const systemPrompt = context?.systemPrompt?.trim();
     const frameworkName = context?.selectedFramework?.name?.trim();
 
@@ -760,11 +758,12 @@ export class ChainOperatorExecutor {
     // than the guard grades.
     //
     // A contributed step carries no framework context, so it resolves its framework as its
-    // framework GUIDANCE does (`resolveFrameworkContext`: the active framework): a step shown a
-    // framework's guidance is declared that framework's sections, and the phase guard binds it as
-    // it binds a planned step (R79). Reading the step's own context alone declared nothing for it.
+    // framework GUIDANCE does (`resolveFrameworkContext`: the run's framework decision): a step
+    // shown a framework's guidance is declared that framework's sections, and the phase guard
+    // binds it as it binds a planned step (R79, R88). Reading the step's own context alone
+    // declared nothing for it.
     const frameworkContext = contributed
-      ? await this.resolveFrameworkContext(step, input.scope)
+      ? await this.resolveFrameworkContext(step, input)
       : step?.frameworkContext;
     const frameworkId = frameworkContext?.selectedFramework?.id ?? '';
     if (frameworkId === '') {
@@ -777,9 +776,18 @@ export class ChainOperatorExecutor {
     return provider(frameworkId);
   }
 
+  /**
+   * The framework a step renders under: its own resolved context, else the fallback resolver's.
+   *
+   * A contributed step asks the fallback for the RUN's framework decision (`runFrameworkId`), the
+   * one stage 19 grades it on (R88): resolving the active framework instead showed a step under
+   * an operator override one framework's headers and graded it on another's phases, so nothing
+   * blocked. With no run decision the fallback resolves the active framework, as before. Any
+   * other step with no context (an inserted one) keeps the active framework.
+   */
   private async resolveFrameworkContext(
     step: ChainStepPrompt | undefined,
-    scope: StateStoreOptions | undefined
+    input: ChainStepExecutionInput
   ): Promise<StepFrameworkContext | null> {
     if (!step) {
       return null;
@@ -799,7 +807,8 @@ export class ChainOperatorExecutor {
     }
 
     try {
-      return await this.getFrameworkContext(step.promptId, scope);
+      const runFrameworkId = step.contributed === true ? input.runFrameworkId : undefined;
+      return await this.getFrameworkContext(step.promptId, input.scope, runFrameworkId);
     } catch (error) {
       this.logger.debug('[ChainOperatorExecutor] Failed to resolve framework context', {
         promptId: step.promptId,
