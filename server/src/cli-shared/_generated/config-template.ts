@@ -136,8 +136,8 @@ export const CONFIG_JSONC_TEMPLATE: string = `// Configuration for the claude-pr
 //         — default: 3, minimum: 1, maximum: 100
 //         "frequency": 3,
 
-//         — Where to inject framework guidance: 'steps' (normal execution), 'gates' (gate
-//           reviews), or 'both'.
+//         — Where to inject framework guidance: 'steps' (every step render, including a step
+//           rendered for its gate review), 'gates' (gate reviews), or 'both'.
 //         — default: "steps"
 //         — one of: "steps", "gates", "both"
 //         "target": "steps",
@@ -150,8 +150,8 @@ export const CONFIG_JSONC_TEMPLATE: string = `// Configuration for the claude-pr
 //         — default: 0, minimum: 0, maximum: 100
 //         "frequency": 0,
 
-//         — Where to inject gate criteria: 'steps' (normal execution), 'gates' (gate reviews),
-//           or 'both'.
+//         — Where to inject gate criteria: 'steps' (every step render, including a step
+//           rendered for its gate review), 'gates' (gate reviews), or 'both'.
 //         — default: "both"
 //         — one of: "steps", "gates", "both"
 //         "target": "both",
@@ -168,8 +168,8 @@ export const CONFIG_JSONC_TEMPLATE: string = `// Configuration for the claude-pr
 //         — default: 0, minimum: 0, maximum: 100
 //         "frequency": 0,
 
-//         — Where to inject style guidance: 'steps' (normal execution), 'gates' (gate reviews),
-//           or 'both'.
+//         — Where to inject style guidance: 'steps' (every step render, including a step
+//           rendered for its gate review), 'gates' (gate reviews), or 'both'.
 //         — default: "steps"
 //         — one of: "steps", "gates", "both"
 //         "target": "steps",
