@@ -1084,14 +1084,20 @@ export class PromptExecutor {
   private async resolveFrameworkContextForPrompt(
     promptId: string,
     scope?: StateStoreOptions,
-    frameworkId?: string
+    frameworkId?: string,
+    fromOperator?: boolean
   ) {
     const prompt = this.convertedPrompts.find((p) => p.id === promptId);
     if (!prompt) {
       return null;
     }
 
-    const frameworkContext = await this.getFrameworkExecutionContext(prompt, scope, frameworkId);
+    const frameworkContext = await this.getFrameworkExecutionContext(
+      prompt,
+      scope,
+      frameworkId,
+      fromOperator === true
+    );
     if (!frameworkContext) {
       return {
         category: prompt.category,
@@ -1105,17 +1111,21 @@ export class PromptExecutor {
     };
   }
 
-  /** `frameworkId` is the run's decision when the caller has one; else the active framework. */
+  /**
+   * `frameworkId` is the run's decision when the caller has one; else the active framework. A
+   * decision from the `^Framework` operator (`fromOperator`) needs no system toggle (R149).
+   */
   private async getFrameworkExecutionContext(
     prompt: ConvertedPrompt,
     scope: StateStoreOptions | undefined,
-    frameworkId?: string
+    frameworkId?: string,
+    fromOperator = false
   ): Promise<FrameworkExecutionContext | null> {
     if (!this.frameworkManager || !this.frameworkStateStore) {
       return null;
     }
 
-    if (!this.frameworkStateStore.isFrameworkSystemEnabled(scope)) {
+    if (!fromOperator && !this.frameworkStateStore.isFrameworkSystemEnabled(scope)) {
       return null;
     }
 

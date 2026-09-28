@@ -98,6 +98,10 @@ prompt_engine(command: "@REACT >>my_prompt")
 `@<id>` is left as literal text. A word that names no framework is also left as literal text, which
 is what keeps `@docs/` or `@mention` in a command from being read as an operator.
 
+The override needs no system toggle: with the framework system disabled
+(`system_control(action:"framework", operation:"disable")`), `@REACT` still applies to every step
+the run renders, including a step a `remainder` or a blocking unknown adds mid-run.
+
 ### Disable for a Single Request
 
 Use modifiers to suppress framework injection:

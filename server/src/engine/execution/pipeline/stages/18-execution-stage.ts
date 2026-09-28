@@ -279,6 +279,9 @@ export class StepExecutionStage extends BasePipelineStage {
       ...(context.frameworkAuthority.getCachedFrameworkId() !== undefined
         ? { runFrameworkId: context.frameworkAuthority.getCachedFrameworkId() }
         : {}),
+      ...(context.frameworkAuthority.getCachedDecision()?.source === 'operator'
+        ? { runFrameworkFromOperator: true }
+        : {}),
     });
 
     context.executionResults = this.createExecutionResults(renderResult);
