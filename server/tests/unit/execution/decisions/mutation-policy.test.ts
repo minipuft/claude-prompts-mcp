@@ -1,11 +1,13 @@
 // @lifecycle canonical - Exhaustive branch coverage for the P4 adaptive chain-mutation decision.
-import { describe, expect, test } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 
 import {
   decideMutation,
   investigatedUnknownIds,
   MAX_INSERTIONS_PER_RUN,
 } from '../../../../src/engine/execution/pipeline/decisions/mutation/index.js';
+
+import { ChainSessionStore } from '../../../../src/modules/chains/manager.js';
 
 import type {
   ChainMutation,
@@ -452,5 +454,85 @@ describe('investigatedUnknownIds over remainders (R133)', () => {
     const ahead = [node('n1', 'planned'), node('n2', 'planned'), node('r1', 'remainder', 'u')];
     const ledger = [ledgerEntry({ id: 'u', blocking: true, discoveredAtStep: 2 })];
     expect([...investigatedUnknownIds(ledger, ahead, 'remainder')]).toEqual(['u']);
+  });
+});
+
+/**
+ * P6.252 (R134): the two ordering rules R127's and R133's ordinal comparison stands on, pinned on
+ * the store that enforces them — `ChainSessionStore.insertNodeAfter` and `replaceRemainder`. The
+ * comparator reads a node's ordinal as its insertion stamp; that holds only while nothing lands at
+ * or before the node the run stands on. Each pin drives the real store and then asks the
+ * comparator about the node it produced.
+ *
+ * as of 2026-09-28 · flips when a persisted insertion stamp lands (then the ordinal is no longer
+ * the stamp)
+ */
+describe('the ordering rules the ordinal stamp relies on (R134)', () => {
+  let store: ChainSessionStore | undefined;
+  const spies: Array<{ mockRestore(): void }> = [];
+
+  beforeEach(() => {
+    // No database: persistence is spied out, the node list is the store's own in-memory state.
+    const proto = ChainSessionStore.prototype as unknown as Record<string, () => unknown>;
+    spies.push(
+      jest.spyOn(proto, 'saveSessions').mockResolvedValue(undefined as never),
+      jest.spyOn(proto, 'persistSessionsOrThrow').mockResolvedValue(undefined as never),
+      jest.spyOn(proto, 'loadSessions').mockResolvedValue(undefined as never),
+      jest.spyOn(proto, 'startCleanupScheduler').mockImplementation(() => undefined)
+    );
+  });
+
+  afterEach(async () => {
+    await store?.cleanup();
+    store = undefined;
+    spies.splice(0).forEach((spy) => spy.mockRestore());
+  });
+
+  /** A three-step run standing on `n2` (ordinal 2), with `u` declared there. */
+  async function standingOnN2(): Promise<ChainSessionStore> {
+    store = new ChainSessionStore(
+      { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } as never,
+      { storeChainStepResult: jest.fn(), clearChainStepResults: jest.fn() } as never,
+      { cleanupIntervalMs: 60_000 }
+    );
+    await store.createSession('s-r134', 'chain-r134', 3);
+    await store.advanceStep('s-r134', 'n1');
+    return store;
+  }
+  const ids = (s: ChainSessionStore) =>
+    (s.getSession('s-r134')?.state.nodes ?? []).map((node) => node.id);
+  const nodesOf = (s: ChainSessionStore) => s.getSession('s-r134')?.state.nodes ?? [];
+  const declaredHere = [ledgerEntry({ id: 'u', blocking: true, discoveredAtStep: 2 })];
+
+  test('(a) insertNodeAfter refuses an insertion at or before the current node', async () => {
+    const s = await standingOnN2();
+    // Anchored at n1, the node would land at ordinal 2: at the current node, behind the stamp.
+    expect(
+      await s.insertNodeAfter('s-r134', 'n1', { stepName: 'Late', promptId: 'p', unknownId: 'u' })
+    ).toBeNull();
+    expect(ids(s)).toEqual(['n1', 'n2', 'n3']);
+    // Control: anchored at the current node it lands strictly after it, so the comparator
+    // reads it as added since `u`'s discovery at ordinal 2.
+    const placed = await s.insertNodeAfter('s-r134', 'n2', {
+      stepName: 'Investigate',
+      promptId: 'p',
+      unknownId: 'u',
+    });
+    expect(ids(s)).toEqual(['n1', 'n2', placed?.id, 'n3']);
+    expect([...investigatedUnknownIds(declaredHere, nodesOf(s), 'inserted')]).toEqual(['u']);
+  });
+
+  test('(b) a remainder replaces only the nodes strictly after the current one', async () => {
+    const s = await standingOnN2();
+    const outcome = await s.replaceRemainder(
+      's-r134',
+      [{ promptId: 'p-alt', stepName: 'Alternative' }],
+      'u',
+      'replace'
+    );
+    expect(outcome.kind).toBe('applied');
+    // n1 (behind) and n2 (current) survive; only n3 was replaced, at ordinal 3.
+    expect(ids(s)).toEqual(['n1', 'n2', 'alternative']);
+    expect([...investigatedUnknownIds(declaredHere, nodesOf(s), 'remainder')]).toEqual(['u']);
   });
 });
