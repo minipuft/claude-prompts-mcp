@@ -157,6 +157,9 @@ export interface ChainInterrupt {
   /** The open blocking unknown that motivated the interrupt. */
   readonly unknownId: string;
   readonly statement: string;
+  /** Every open blocking unknown, in ledger order: a completed run names each as unresolved
+   * (R105), while the mid-run interrupt is about {@link unknownId} alone. */
+  readonly openBlockingUnknowns: readonly { readonly id: string; readonly statement: string }[];
   /**
    * Steps the open blocking unknowns DECLARED they affect, via `target_step_id` (OQ-2).
    *

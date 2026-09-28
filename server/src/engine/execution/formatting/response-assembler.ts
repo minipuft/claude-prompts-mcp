@@ -1021,11 +1021,11 @@ export class ResponseAssembler {
       return null;
     }
 
-    // A completed run names the unknown it never resolved, and offers nothing to act on (R97).
+    // A completed run names every unknown it never resolved, and offers nothing to act on (R97, R105).
     if (this.isRunLatchedComplete(context)) {
-      return `\n---\n\n**Unresolved unknown**: \`${interrupt.unknownId}\` — ${interrupt.statement}`;
+      const named = interrupt.openBlockingUnknowns.map((u) => `\`${u.id}\` — ${u.statement}`);
+      return `\n---\n\n**Unresolved unknown**: ${named.join('\n\n**Unresolved unknown**: ')}`;
     }
-    const chainId = context.sessionContext?.chainId ?? '';
     const header = interrupt.paused ? 'Chain Paused — Blocking Unknown' : 'Blocking Unknown';
     const affected =
       interrupt.affectedStepIds.length > 0
@@ -1041,7 +1041,7 @@ export class ResponseAssembler {
       .map((verb) => `- ${verb}`)
       .join('\n');
 
-    return `\n---\n\n**${header}**\n\n${interrupt.statement}${affected}${remaining}\n\nResolve with \`chain_id="${chainId}"\` plus one of:\n\n${verbs}`;
+    return `\n---\n\n**${header}**\n\n${interrupt.statement}${affected}${remaining}\n\nResolve with \`chain_id="${context.sessionContext?.chainId ?? ''}"\` plus one of:\n\n${verbs}`;
   }
 
   /**
