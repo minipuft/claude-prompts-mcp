@@ -262,7 +262,8 @@ insert or skip -> rendering follows the mutated node list.
 - **Caps**: 1 insertion per unknown id, 3 insertions per run. A capped or non-qualifying
   observation mutates nothing — the call still succeeds, it just has no side effect on the graph.
 - **One insertion per call**: a call declaring several blocking unknowns inserts a step for the
-  first only. The rest stay open, and the interrupt names them as open with no investigation step;
+  first only, and the interrupt is about that same first one. The rest stay open, and the
+  interrupt names them as open with no investigation step;
   declaring one again on a later call inserts its step, within the caps.
 - **Skipped nodes are retired, not deleted**: the row stays (`milestone:"skipped"`), so the
   footer's step count and the ledger's row count share one ordinal scale across the whole run.

@@ -164,6 +164,20 @@ describe('decideInterrupt', () => {
     expect(decideInterrupt(buildInput({ ledger }))?.unknownId).toBe('fresh');
   });
 
+  test('P6.224: within one discovery step, the first declared is the one reported', () => {
+    // Guard: selectTriggeringUnknown's strict `>`. The mutation policy inserts for the first
+    // blocking discovery of a call, so the interrupt names that one, not the last (R119).
+    const ledger = [
+      entry({ id: 'older', blocking: true, discoveredAtStep: 1 }),
+      entry({ id: 'u-a', blocking: true, discoveredAtStep: 2 }),
+      entry({ id: 'u-b', blocking: true, discoveredAtStep: 2 }),
+    ];
+
+    const interrupt = decideInterrupt(buildInput({ ledger }));
+    expect(interrupt?.unknownId).toBe('u-a');
+    expect(interrupt?.statement).toBe('u-a statement');
+  });
+
   test('P6.208: openBlockingUnknowns lists every open blocking entry, in ledger order', () => {
     // Guard: the completed-run section names each of these (R105); a non-blocking entry and a
     // resolved one are not unresolved blockers.
