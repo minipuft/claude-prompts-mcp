@@ -1,4 +1,4 @@
-// @lifecycle test - P6.79 / P6.80 / R40: an arrow-chain segment or a workflow node naming a chain prompt runs that prompt's steps; P6.78 / R37: a command-level gate on a chain prompt binds each step; P6.97 / R43: a named inline gate belongs to the run that declared it; P6.99 / R44: a named gate on an arrow-chain segment binds that segment; P6.108 / R47: a run's temporary gates live exactly as long as the run; P6.104: a run's request gates reach every node they target; P6.107: a request gate id belongs to the run that holds it; P6.105: the arrow-chain source validates the expanded workflow; P6.110: one name in two arrow-chain segments is two gates; P6.113: a run re-sending a declared id keeps the id it registered; P6.117: a request gate target is checked against the declared node ids; P6.186: a completed run re-runs as the command that started it, or not at all; P6.194: an arrow-chain run re-runs as its original command, a workflow not at all; P6.187: a review re-render lists the run nodes after the current one, over Streamable HTTP.
+// @lifecycle test - P6.79 / P6.80 / R40: an arrow-chain segment or a workflow node naming a chain prompt runs that prompt's steps; P6.78 / R37: a command-level gate on a chain prompt binds each step; P6.97 / R43: a named inline gate belongs to the run that declared it; P6.99 / R44: a named gate on an arrow-chain segment binds that segment; P6.108 / R47: a run's temporary gates live exactly as long as the run; P6.104: a run's request gates reach every node they target; P6.107: a request gate id belongs to the run that holds it; P6.105: the arrow-chain source validates the expanded workflow; P6.110: one name in two arrow-chain segments is two gates; P6.113: a run re-sending a declared id keeps the id it registered; P6.117: a request gate target is checked against the declared node ids; P6.186: a completed run re-runs as the command that started it, or not at all; P6.194: an arrow-chain run re-runs as its original command, a workflow not at all; P6.187: a review re-render lists the run nodes after the current one; P6.195: an interrupt lists the nodes after the one its reply renders; P6.197: a completed run offers no interrupt verbs, over Streamable HTTP.
 /**
  * MEASURED 2026-09-25 on `427899fe` (authored `sv_chain` = sv_a/sv_b/sv_a, each step carrying the
  * blocking `sv-block`; run state read from `chain_runs.state`):
@@ -1272,6 +1272,59 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       expect(after(run.chainId)).toEqual([]);
       expect(answering).toContain('Remaining plan: none');
       expect(listed(answering)).toEqual([]);
+    }, 120000);
+  });
+
+  /**
+   * P6.197 / R97. MEASURED 2026-09-27 on `1d81798e`: `>>sv_a` arrow-chain `>>sv_b`, a blocking
+   * `u-197` raised on `n1` and never resolved, answered through to completion. The completing reply
+   * read "Chain execution complete" and then rendered the "Blocking Unknown" section with its
+   * verbs (answer the step, remainder, gate_action:abort, cancel), offering to act on a run that
+   * had ended.
+   */
+  describe('P6.197: a completed run offers no interrupt verbs and names an unresolved unknown', () => {
+    const VERBS = ['answer the step', 'remainder', 'gate_action:abort', 'cancel'];
+    const blocking = {
+      observations: [
+        { type: 'unknown_discovered', id: 'u-197', statement: 'STATEMENT-u-197', blocking: true },
+      ],
+    };
+    async function structured(chainId: string, args: Record<string, unknown>) {
+      const outcome = await client.callToolWithNotifications(
+        'prompt_engine',
+        { chain_id: chainId, ...args },
+        nextId++
+      );
+      const result = outcome.result as {
+        content?: Array<{ text?: string }>;
+        structuredContent?: { chain_interrupt?: { resume?: { verbs?: string[] } } };
+      };
+      return {
+        text: (result.content ?? []).map((part) => part.text ?? '').join('\n'),
+        verbs: result.structuredContent?.chain_interrupt?.resume?.verbs,
+      };
+    }
+
+    test('(a) the completing reply names u-197 as unresolved and offers none of the verbs', async () => {
+      const run = await start({ command: `>>sv_a${ARROW}>>sv_b` });
+      await run.call({ user_response: 'A', ...blocking });
+      await run.call({ user_response: 'investigated' });
+      const done = await structured(run.chainId, { user_response: 'B' });
+      expect(done.text).toContain('Chain execution complete');
+      expect(done.text).not.toContain('Blocking Unknown');
+      expect(done.text).toContain('Unresolved unknown');
+      expect(done.text).toContain('u-197');
+      expect(done.text).toContain('STATEMENT-u-197');
+      for (const verb of VERBS) expect(done.text).not.toContain(`- ${verb}`);
+      expect(done.verbs).toEqual([]);
+    }, 120000);
+
+    test('(b) control: a mid-run interrupt still renders its section and its verbs', async () => {
+      const run = await start({ command: `>>sv_a${ARROW}>>sv_b` });
+      const inserting = await structured(run.chainId, { user_response: 'A', ...blocking });
+      expect(inserting.text).toContain('**Blocking Unknown**');
+      for (const verb of VERBS) expect(inserting.text).toContain(`- ${verb}`);
+      expect(inserting.verbs).toEqual(VERBS);
     }, 120000);
   });
 

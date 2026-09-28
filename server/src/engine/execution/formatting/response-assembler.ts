@@ -75,9 +75,11 @@ const PAUSED_INTERRUPT_VERBS = [
  * One verb list per state, built once, rendered twice — the text section and `structuredContent`
  * must not be able to advertise different exits from the same hold.
  *
- * STATE-DEPENDENT, not additive: see {@link PAUSED_INTERRUPT_VERBS}.
+ * STATE-DEPENDENT, not additive: see {@link PAUSED_INTERRUPT_VERBS}. A run latched complete has
+ * nothing left to resume, so it offers none (R97).
  */
-function resolveInterruptVerbs(paused: boolean): string[] {
+function resolveInterruptVerbs(paused: boolean, complete: boolean): string[] {
+  if (complete) return [];
   return paused ? [...PAUSED_INTERRUPT_VERBS] : [...SOFT_INTERRUPT_VERBS];
 }
 
@@ -150,9 +152,7 @@ export class ResponseAssembler {
     // the payload — `buildGateReviewCTA` returns null for the synthetic review precisely so the
     // client is not shown a `gate_verdict` template for a hold that no verdict resolves.
     const interruptSection = this.buildInterruptSection(context);
-    if (interruptSection != null) {
-      sections.push(interruptSection);
-    }
+    if (interruptSection != null) sections.push(interruptSection);
 
     // Operator layer: inject handoff CTA when next step is delegated.
     // Detects from StepExecutionStage metadata OR parsed steps (when pendingReview blocked StepExecutionStage).
@@ -222,9 +222,7 @@ export class ResponseAssembler {
     // whose machine half reports a blocking unknown and whose human half does not is worse than
     // either alone.
     const interruptSection = this.buildInterruptSection(context);
-    if (interruptSection != null) {
-      sections.push(interruptSection);
-    }
+    if (interruptSection != null) sections.push(interruptSection);
 
     const nextAction = this.buildNextActionCTA(context, gateActive);
     if (nextAction) {
@@ -1023,6 +1021,10 @@ export class ResponseAssembler {
       return null;
     }
 
+    // A completed run names the unknown it never resolved, and offers nothing to act on (R97).
+    if (this.isRunLatchedComplete(context)) {
+      return `\n---\n\n**Unresolved unknown**: \`${interrupt.unknownId}\` — ${interrupt.statement}`;
+    }
     const chainId = context.sessionContext?.chainId ?? '';
     const header = interrupt.paused ? 'Chain Paused — Blocking Unknown' : 'Blocking Unknown';
     const affected =
@@ -1035,7 +1037,7 @@ export class ResponseAssembler {
             .map((node) => `- \`${node.id}\` — ${node.stepName} (${node.promptId})`)
             .join('\n')}`
         : '\n\nRemaining plan: none — this is the last step.';
-    const verbs = resolveInterruptVerbs(interrupt.paused)
+    const verbs = resolveInterruptVerbs(interrupt.paused, false)
       .map((verb) => `- ${verb}`)
       .join('\n');
 
@@ -1076,7 +1078,7 @@ export class ResponseAssembler {
       paused: interrupt.paused,
       resume: {
         chain_id: context.sessionContext?.chainId ?? '',
-        verbs: resolveInterruptVerbs(interrupt.paused),
+        verbs: resolveInterruptVerbs(interrupt.paused, this.isRunLatchedComplete(context)),
       },
     };
   }

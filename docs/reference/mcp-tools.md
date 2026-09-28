@@ -1765,6 +1765,10 @@ two are not subsets of one another in either direction:
 | Soft      | `answer the step`, `remainder`, `gate_action:abort`, `cancel`                                            |
 | Paused    | `gate_action:resume`, `gate_action:accept_alternative` (with `remainder`), `gate_action:abort`, `cancel` |
 
+A run that completes with a blocking unknown still open renders no interrupt section: its reply
+says the run completed and names the unknown as unresolved, and `resume.verbs` is empty, because
+nothing is left to resume.
+
 A paused run never offers "answer the step" — it issued no step. It never offers a bare
 `remainder` either: a remainder alone does not clear the hold, so the caller must spell it
 `gate_action:"accept_alternative"` and carry the remainder in the same call. On a soft interrupt
