@@ -299,30 +299,6 @@ export class ArgumentHistoryTracker {
   }
 
   /**
-   * Get statistics about tracked history
-   */
-  getStats(): {
-    totalEntries: number;
-    totalSessions: number;
-    averageEntriesPerChain: number;
-  } {
-    let totalEntries = 0;
-    this.chainHistory.forEach((entries) => {
-      totalEntries += entries.length;
-    });
-
-    // One history per session key (see `chainHistory`), so the map's size IS the session count.
-    const totalSessions = this.chainHistory.size;
-    const averageEntriesPerChain = totalSessions > 0 ? totalEntries / totalSessions : 0;
-
-    return {
-      totalEntries,
-      totalSessions,
-      averageEntriesPerChain,
-    };
-  }
-
-  /**
    * Save argument history to SQLite via DatabasePort.
    */
   private async saveToStore(): Promise<void> {
@@ -373,9 +349,13 @@ export class ArgumentHistoryTracker {
       // id to itself. It is ignored rather than migrated: `chains` is keyed by the same session
       // ids, so the map carried nothing `chains` does not already say.
 
-      const stats = this.getStats();
+      // One history per session key (see `chainHistory`), so the map's size IS the session count.
+      let entryCount = 0;
+      this.chainHistory.forEach((entries) => {
+        entryCount += entries.length;
+      });
       this.logger.info(
-        `Loaded argument history: ${stats.totalSessions} sessions, ${stats.totalEntries} entries`
+        `Loaded argument history: ${this.chainHistory.size} sessions, ${entryCount} entries`
       );
     } catch (error) {
       this.logger.error('Failed to load argument history:', error);

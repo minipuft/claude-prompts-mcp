@@ -1246,16 +1246,19 @@ describe('Tenant Isolation', () => {
       );
 
       const tracker = new ArgumentHistoryTracker(logger, 50, argHistoryStore() as never, scope);
-      await tracker.initialize();
+      // P6.257 (R138): the load log reads the map directly; it is the one reader the deleted
+      // `getStats()` had, so the counts are asserted on the line it writes.
+      const info = jest.spyOn(logger, 'info');
+      try {
+        await tracker.initialize();
+        expect(info).toHaveBeenCalledWith('Loaded argument history: 1 sessions, 1 entries');
+      } finally {
+        info.mockRestore();
+      }
 
       expect(tracker.getSessionHistory('s-249').map((e) => e.originalArgs)).toEqual([
         { topic: 'T249' },
       ]);
-      expect(tracker.getStats()).toEqual({
-        totalEntries: 1,
-        totalSessions: 1,
-        averageEntriesPerChain: 1,
-      });
     });
 
     test('(b) the blob a write persists carries its chains and no sessionToChain', async () => {
