@@ -1,7 +1,7 @@
 // @lifecycle canonical - Registers temporary gates from normalized specifications.
 import { mergeGateBody } from './gate-body-merge.js';
-import { parseGateVerdict } from '../core/gate-verdict-contract.js';
 import { formatCriteriaAsGuidance } from '../../execution/pipeline/criteria-guidance.js';
+import { parseGateVerdict } from '../core/gate-verdict-contract.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { GateBody } from './gate-body-merge.js';
