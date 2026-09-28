@@ -63,6 +63,8 @@ Controls how often injection occurs during chain execution:
 
 **Special case**: Gate review steps always receive gate-guidance regardless of frequency setting. The frequency only controls injection on normal execution steps.
 
+The step a frequency counts is the step the reply renders. A resume that passes step 1 renders step 2, so with `frequency: 3` it carries no framework block; a resume that fails step 1 renders step 1 again and is counted as step 1.
+
 ### Target
 
 Controls which execution contexts receive injection:

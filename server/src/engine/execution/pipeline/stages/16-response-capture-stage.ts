@@ -154,6 +154,10 @@ export class StepResponseCaptureStage extends BasePipelineStage {
      * - `gradeLateReport` — the phase guard's structural grade of a detached node's late report
      *   (`PhaseGuardVerificationStage.gradeLateReport`, row 3.8): this stage answers that call, so
      *   stage 19 never runs on it. Absent, a late report is reviewed by its gates alone.
+     * - `redecideInjection` — stage 14's injection decision taken again for the step the run
+     *   stands on after this stage moved it (`InjectionControlStage.redecideAt`, R144): stage 14
+     *   runs before the advance, so alone it decides for the step the call answers. Absent, the
+     *   stage 14 decision stands.
      */
     private readonly collaborators: {
       readonly gateEnhancementService?: GateEnhancementService;
@@ -166,6 +170,10 @@ export class StepResponseCaptureStage extends BasePipelineStage {
         review: GateReview | null,
         recordedOutput: string
       ) => Promise<GateReview | null>;
+      readonly redecideInjection?: (
+        context: ExecutionContext,
+        position: { readonly currentStep: number; readonly currentNodeId: string }
+      ) => void;
     } = {}
   ) {
     super(logger);
@@ -777,15 +785,37 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    * Called from every mutually-exclusive exit branch that can follow an advance within this
    * request (deferred-verdict early exit, pending-review-verdict early exit, and the full capture
    * fall-through) — exactly one fires per call, so this never runs twice for the same request.
-   * The interrupt is re-measured here for the same reason: see {@link remeasureInterrupt}.
+   * The interrupt is re-measured here for the same reason: see {@link remeasureInterrupt}; so is
+   * the injection decision, after the review, so it reads the review the rendered step carries.
    */
   private async ensurePostAdvanceReview(context: ExecutionContext): Promise<void> {
     this.remeasureInterrupt(context);
     const service = this.collaborators.gateEnhancementService;
-    if (service === undefined || context.sessionContext === undefined) {
+    if (service !== undefined && context.sessionContext !== undefined) {
+      await service.ensurePostAdvanceReview(context, context.sessionContext);
+    }
+    this.redecideInjection(context);
+  }
+
+  /**
+   * Hand stage 14 the node the run stands on AFTER the advance, so the injection decision is the
+   * rendered step's (R144). A run standing on no node renders no step, and keeps the decision.
+   */
+  private redecideInjection(context: ExecutionContext): void {
+    const redecide = this.collaborators.redecideInjection;
+    const sessionId = context.sessionContext?.sessionId;
+    if (redecide === undefined || sessionId === undefined) {
       return;
     }
-    await service.ensurePostAdvanceReview(context, context.sessionContext);
+    const session = this.chainSessionStore.getSession(sessionId, context.getScopeOptions());
+    const currentNodeId = session?.state.currentNodeId;
+    if (session === undefined || currentNodeId === null || currentNodeId === undefined) {
+      return;
+    }
+    redecide(context, {
+      currentStep: currentOrdinal(session.state.nodes, currentNodeId),
+      currentNodeId,
+    });
   }
 
   /**
