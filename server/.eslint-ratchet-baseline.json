@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-28T16:50:55.412Z",
+  "generatedAt": "2026-09-28T18:04:58.322Z",
   "eslintTarget": "src,scripts,eslint-rules",
   "totals": {
-    "errors": 2511,
+    "errors": 2507,
     "warnings": 721
   },
   "byRule": {
     "@typescript-eslint/strict-boolean-expressions": {
-      "errors": 1693,
+      "errors": 1690,
       "warnings": 0
     },
     "sonarjs/cognitive-complexity": {
@@ -28,7 +28,7 @@
       "warnings": 7
     },
     "@typescript-eslint/prefer-nullish-coalescing": {
-      "errors": 141,
+      "errors": 140,
       "warnings": 0
     },
     "import-x/order": {

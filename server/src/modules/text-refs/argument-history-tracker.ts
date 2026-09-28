@@ -21,7 +21,6 @@ const DEFAULT_STATE: PersistedArgumentHistory = {
   version: '1.0.0',
   lastUpdated: 0,
   chains: {},
-  sessionToChain: {},
 };
 
 /**
@@ -34,8 +33,8 @@ export class ArgumentHistoryTracker {
   /**
    * History key to entries. **The key is the SESSION id** (R116 third amendment): `trackExecution`
    * files an entry under its `sessionId`, and only a sessionless call — which no production caller
-   * makes — falls back to its `promptId`. The map, the persisted `chains` blob and `getStats`'s
-   * `totalChains` keep the older "chain" names because the blob shape is persisted.
+   * makes — falls back to its `promptId`. The map and the persisted `chains` blob keep the older
+   * "chain" name because the blob shape is persisted.
    *
    * An evicted session's history stays here and in the persisted blob, and nothing in this process
    * reads it: the one reader, `ChainSessionStore.getChainContext`, answers `{}` for a session it no
@@ -43,9 +42,6 @@ export class ArgumentHistoryTracker {
    * evictor's history or history is keyed by run).
    */
   private chainHistory: Map<string, ArgumentHistoryEntry[]> = new Map();
-
-  /** Session id to its history key, which `trackExecution` sets to the session id itself. */
-  private sessionToChain: Map<string, string> = new Map();
 
   /** Maximum entries per chain (FIFO cleanup) */
   private readonly maxEntriesPerChain: number;
@@ -183,11 +179,6 @@ export class ArgumentHistoryTracker {
       );
     }
 
-    // Update session-to-chain mapping
-    if (sessionId) {
-      this.sessionToChain.set(sessionId, historyKey);
-    }
-
     this.logger.debug(
       `Tracked execution: historyKey=${historyKey}, promptId=${promptId}, step=${stepNumber}, entryId=${entryId}`
     );
@@ -211,7 +202,7 @@ export class ArgumentHistoryTracker {
    * Get argument history for a session
    */
   getSessionHistory(sessionId: string): ArgumentHistoryEntry[] {
-    return this.getChainHistory(this.sessionToChain.get(sessionId) || sessionId);
+    return this.getChainHistory(sessionId);
   }
 
   /**
@@ -299,14 +290,8 @@ export class ArgumentHistoryTracker {
    * Clear history for a specific session
    */
   async clearSession(sessionId: string): Promise<void> {
-    const historyKey = this.sessionToChain.get(sessionId);
-
-    if (historyKey) {
-      this.chainHistory.delete(historyKey);
-      this.sessionToChain.delete(sessionId);
-      this.logger.debug(
-        `Cleared argument history for session ${sessionId} (history key ${historyKey})`
-      );
+    if (this.chainHistory.delete(sessionId)) {
+      this.logger.debug(`Cleared argument history for session ${sessionId}`);
       await this.saveToStore();
     }
   }
@@ -315,7 +300,6 @@ export class ArgumentHistoryTracker {
    * Get statistics about tracked history
    */
   getStats(): {
-    totalChains: number;
     totalEntries: number;
     totalSessions: number;
     averageEntriesPerChain: number;
@@ -325,12 +309,11 @@ export class ArgumentHistoryTracker {
       totalEntries += entries.length;
     });
 
-    const totalChains = this.chainHistory.size;
-    const totalSessions = this.sessionToChain.size;
-    const averageEntriesPerChain = totalChains > 0 ? totalEntries / totalChains : 0;
+    // One history per session key (see `chainHistory`), so the map's size IS the session count.
+    const totalSessions = this.chainHistory.size;
+    const averageEntriesPerChain = totalSessions > 0 ? totalEntries / totalSessions : 0;
 
     return {
-      totalChains,
       totalEntries,
       totalSessions,
       averageEntriesPerChain,
@@ -351,16 +334,10 @@ export class ArgumentHistoryTracker {
         chains[historyKey] = entries;
       });
 
-      const sessionToChain: Record<string, string> = {};
-      this.sessionToChain.forEach((historyKey, sessionId) => {
-        sessionToChain[sessionId] = historyKey;
-      });
-
       const persistedData: PersistedArgumentHistory = {
         version: '1.0.0',
         lastUpdated: Date.now(),
         chains,
-        sessionToChain,
       };
 
       await this.store.save(persistedData, this.scope);
@@ -390,14 +367,13 @@ export class ArgumentHistoryTracker {
         this.chainHistory.set(historyKey, entries);
       });
 
-      this.sessionToChain.clear();
-      Object.entries(persistedData.sessionToChain).forEach(([sessionId, historyKey]) => {
-        this.sessionToChain.set(sessionId, historyKey);
-      });
+      // A blob written before 2026-09-28 also carries `sessionToChain`, a map from each session
+      // id to itself. It is ignored rather than migrated: `chains` is keyed by the same session
+      // ids, so the map carried nothing `chains` does not already say.
 
       const stats = this.getStats();
       this.logger.info(
-        `Loaded argument history: ${stats.totalChains} chains, ${stats.totalEntries} entries`
+        `Loaded argument history: ${stats.totalSessions} sessions, ${stats.totalEntries} entries`
       );
     } catch (error) {
       this.logger.error('Failed to load argument history:', error);

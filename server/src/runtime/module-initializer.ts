@@ -548,7 +548,6 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
             version: '1.0.0',
             lastUpdated: 0,
             chains: {},
-            sessionToChain: {},
           }),
         },
         logger

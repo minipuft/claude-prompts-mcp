@@ -76,9 +76,7 @@ export interface PersistedArgumentHistory {
   /** Last update timestamp */
   lastUpdated: number;
 
-  /** Chain ID to entries mapping */
+  /** Session id to its entries (the persisted name predates the session key). A blob written
+   *  before 2026-09-28 also carries `sessionToChain`; the loader ignores it. */
   chains: Record<string, ArgumentHistoryEntry[]>;
-
-  /** Session ID to chain ID mapping */
-  sessionToChain: Record<string, string>;
 }

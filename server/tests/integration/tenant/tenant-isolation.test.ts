@@ -1212,4 +1212,63 @@ describe('Tenant Isolation', () => {
       expect(tenantBAfterClear?.sessionId).toBe('tenant-b-session');
     });
   });
+
+  /**
+   * P6.249 (R135). MEASURED 2026-09-28 on `00b973c01`: the persisted `arg_history` blob carried
+   * `sessionToChain`, a map every write set to `(sessionId, sessionId)` — it said nothing `chains`
+   * (keyed by the same session ids) did not. It is dropped from memory and from the blob; a blob
+   * written before then still carries it, and the loader ignores it (no version bump).
+   */
+  describe('P6.249: the argument-history blob without sessionToChain', () => {
+    const scope = { workspaceId: 'ws-p249' };
+    // The composition root's store, verbatim: `kv_state`, key `arg_history`.
+    const argHistoryStore = () =>
+      new SqliteStateStore<Record<string, unknown>>(
+        dbManager,
+        {
+          tableName: 'kv_state',
+          key: 'arg_history',
+          defaultState: () => ({ version: '1.0.0', lastUpdated: 0, chains: {} }),
+        },
+        logger
+      );
+
+    test('(a) an old blob carrying sessionToChain loads with its chains intact', async () => {
+      const entry = { entryId: 'e-249', timestamp: 1, promptId: 'p249', sessionId: 's-249' };
+      await argHistoryStore().save(
+        {
+          version: '1.0.0',
+          lastUpdated: 1,
+          chains: { 's-249': [{ ...entry, originalArgs: { topic: 'T249' } }] },
+          sessionToChain: { 's-249': 's-249' },
+        },
+        scope
+      );
+
+      const tracker = new ArgumentHistoryTracker(logger, 50, argHistoryStore() as never, scope);
+      await tracker.initialize();
+
+      expect(tracker.getSessionHistory('s-249').map((e) => e.originalArgs)).toEqual([
+        { topic: 'T249' },
+      ]);
+      expect(tracker.getStats()).toEqual({
+        totalEntries: 1,
+        totalSessions: 1,
+        averageEntriesPerChain: 1,
+      });
+    });
+
+    test('(b) the blob a write persists carries its chains and no sessionToChain', async () => {
+      const tracker = new ArgumentHistoryTracker(logger, 50, argHistoryStore() as never, {
+        workspaceId: 'ws-p249b',
+      });
+      await tracker.initialize();
+      await tracker.trackExecution({ promptId: 'p249', sessionId: 's-249b', originalArgs: {} });
+
+      const blob = await argHistoryStore().load({ workspaceId: 'ws-p249b' });
+      // Positive control: the write reached the row.
+      expect(Object.keys(blob['chains'] as object)).toEqual(['s-249b']);
+      expect(Object.keys(blob).sort()).toEqual(['chains', 'lastUpdated', 'version']);
+    });
+  });
 });
