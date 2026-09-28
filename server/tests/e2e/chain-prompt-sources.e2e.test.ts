@@ -2968,6 +2968,35 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
           expect(reviews).toEqual({});
         }, 120000);
       });
+
+      /**
+       * P6.181 pins R83: an INSERTED investigation step declares no sections and is not
+       * phase-guarded, while a contributed remainder step whose prompt declares them is. One run,
+       * so the positive control sits beside the pin: the same sectionless PASS that leaves the
+       * inserted step unreviewed opens the remainder step's `__phase_guard__`.
+       */
+      test('P6.181 (a) an inserted step is not phase-guarded; (b) positive control: the remainder step after it is', async () => {
+        const run = await start({ command: `>>sv_a${ARROW}>>sv_b` });
+        const inserted = await run.call({ user_response: 'A out', ...blockingUnknown });
+        expect(currentNode(run.chainId)).toBe('inv-u-160');
+        expect(inserted).not.toContain('**Required Sections**');
+        await run.call({
+          user_response: 'investigated',
+          gate_verdict: PASS,
+          ...remainder({ promptId: 'sv_d' }),
+        });
+        expect(currentNode(run.chainId)).not.toBe('inv-u-160');
+        expect(runState(run.chainId).reviews).toEqual({});
+
+        let rendered = '';
+        for (let hop = 0; hop < 3 && currentNode(run.chainId) !== 'r1'; hop++) {
+          rendered = await run.call({ user_response: 'out', gate_verdict: PASS });
+        }
+        expect(currentNode(run.chainId)).toBe('r1');
+        expect(rendered).toContain('**Required Sections**');
+        await run.call({ user_response: 'r1 out', gate_verdict: PASS });
+        expect(runState(run.chainId).reviews).toEqual({ r1: ['__phase_guard__'] });
+      }, 120000);
     });
 
     /**
