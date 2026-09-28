@@ -348,6 +348,87 @@ describe('Pull Command Integration', () => {
     expect(definitionBlock(after)).toBe(definitionBlock(before));
   });
 
+  /**
+   * P6.256 (R140). A pull writes `name`/`description` into `prompt.yaml` through the
+   * source-preserving serializer, not a whole-document dump, so a file a person wrote keeps its
+   * comments, key order and flow-style lists. The fixture is HAND-AUTHORED: a writer-seeded file
+   * would only prove idempotence. MEASURED 2026-09-28 on `6f31b733d`: the dump dropped both
+   * comments and re-rendered every line.
+   */
+  describe('P6.256 a pull edits only the field it pulled', () => {
+    const HAND_AUTHORED = [
+      '# Operator note: hand-maintained, keep this comment.',
+      'description: Original description # why this wording',
+      'category: test',
+      'id: commented-pull',
+      'name: Commented Pull',
+      'systemMessageFile: system-message.md',
+      'gateConfiguration:',
+      '  exclude: [alpha-gate, beta-gate]',
+      '# trailing comment, last line of the file',
+      '',
+    ].join('\n');
+
+    async function seedHandAuthored(): Promise<string> {
+      const promptDir = path.join(serverRoot, 'resources', 'prompts', 'test', 'commented-pull');
+      await mkdir(promptDir, { recursive: true });
+      await writeFile(path.join(promptDir, 'system-message.md'), 'Be helpful.');
+      const yamlPath = path.join(promptDir, 'prompt.yaml');
+      await writeFile(yamlPath, HAND_AUTHORED);
+      await writeSyncConfig(serverRoot, outputDir);
+      return yamlPath;
+    }
+
+    async function pull(): Promise<ReturnType<typeof silentOutput>> {
+      const pullOut = silentOutput();
+      const report = await runSkillsSyncCommand(
+        { command: 'pull', client: 'claude-code', scope: 'user' } as SkillsSyncOptions,
+        pullOut,
+        resolveSkillsSyncPaths()
+      );
+      expect(report.failures).toEqual([]);
+      return pullOut;
+    }
+
+    it('(a) after a description pull the file differs from the fixture on that line only', async () => {
+      const yamlPath = await seedHandAuthored();
+      const skillPath = await exportAndGetSkillPath('commented-pull');
+      const exported = await readFile(skillPath, 'utf-8');
+      expect(exported).toContain('description: Original description');
+      await writeFile(
+        skillPath,
+        exported.replace('description: Original description', 'description: Updated desc')
+      );
+
+      const pullOut = await pull();
+
+      expect(pullOut.logs.some((line) => line.includes('wrote description'))).toBe(true);
+      const after = await readFile(yamlPath, 'utf-8');
+      const beforeLines = HAND_AUTHORED.split('\n');
+      const afterLines = after.split('\n');
+      expect(afterLines.length).toBe(beforeLines.length);
+      const changed = beforeLines
+        .map((line, index) => ({ before: line, after: afterLines[index] }))
+        .filter((pair) => pair.before !== pair.after);
+      expect(changed).toEqual([
+        {
+          before: 'description: Original description # why this wording',
+          after: 'description: Updated desc # why this wording',
+        },
+      ]);
+    });
+
+    it('(b) control: a pull that changes nothing leaves the file byte-identical', async () => {
+      const yamlPath = await seedHandAuthored();
+      await exportAndGetSkillPath('commented-pull');
+
+      const pullOut = await pull();
+
+      expect(pullOut.logs.some((line) => line.includes('no prose changes'))).toBe(true);
+      expect(await readFile(yamlPath, 'utf-8')).toBe(HAND_AUTHORED);
+    });
+  });
+
   it('reports no changes when SKILL.md matches exported content', async () => {
     await writePromptResource(serverRoot, 'test', 'no-change', {
       name: 'No Change',
