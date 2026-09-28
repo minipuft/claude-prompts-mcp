@@ -276,7 +276,7 @@ a file, and names every file it leaves in place.
 
 Options:
       --preview           Print what the rollback would do; write and record nothing
-      --no-validate       Skip post-rename schema validation
+      --no-validate       Skip post-rollback schema validation
   -w, --workspace <path>  Workspace directory (default: MCP_WORKSPACE or cwd)
       --json              JSON output
 
@@ -295,6 +295,7 @@ Renames the resource directory and updates the id field in YAML.
 Warns about cross-references that may need manual updating.
 
 Options:
+      --no-validate       Skip post-rename schema validation
   -w, --workspace <path>  Workspace directory (default: MCP_WORKSPACE or cwd)
       --json              JSON output
 
@@ -598,6 +599,7 @@ export async function run(args?: string[]): Promise<void> {
         id: parsed.positionals[1],
         version: parsed.positionals[2],
         preview: parsed.flags['preview'] as boolean | undefined,
+        noValidate: parsed.flags['noValidate'] as boolean | undefined,
       });
       break;
     case 'rename':

@@ -227,13 +227,20 @@ cpm rollback gate code-quality 1 --json
 cpm rollback gate code-quality 1 --preview
 ```
 
+| Flag                     | Purpose                                  |
+| ------------------------ | ---------------------------------------- |
+| `--preview`              | Print the plan; write and record nothing |
+| `--no-validate`          | Skip post-rollback schema validation     |
+| `-w, --workspace <path>` | Workspace directory                      |
+| `--json`                 | JSON output                              |
+
 Saves the current state as a new version, restores the target version, then records the state that restore PRODUCED as the newest version — the same order the server records an edit in. Both rows carry the resource's bytes as they stood when the row was written, so either state can later be restored byte-exactly.
 
 **A version recorded since schema v29 restores its files byte for byte**, through the same planner `resource_manager rollback` uses: the recorded bytes are written back verbatim, so comments, key order, flow style, line endings, a byte-order mark and every non-ASCII character survive. Files whose recorded bytes already match are not written at all. **A rollback never deletes a file** — one the resource has now that the target version did not record stays, is listed by path, and means the resource is then not byte-identical to that version. A version that recorded no file tree still restores the older way: the recorded fields are merged over the entry file and every other key keeps its current value, which is what `not_restored` reports.
 
 Two states refuse and write nothing rather than restoring something else: a version row whose recorded bytes are missing from the object store, and a recorded path that resolves outside the resource's own directory.
 
-A restore is a write, so it is validated like every other `cpm` write, against the file it replaces. A restore that brings back an inline gate definition the server would drop — one the current file does not carry — is refused: the files are put back byte-identical, no restored version is recorded, and `--json` answers with `error`, `validation` and `rollback.performed` as the other commands do. A definition the current file already carries does not block the restore; it is printed as a warning, and `--json` carries every warning in `warnings`.
+A restore is a write, so it is validated like every other `cpm` write, against the file it replaces. A restore that brings back an inline gate definition the server would drop — one the current file does not carry — is refused: the files are put back byte-identical, no restored version is recorded, and `--json` answers with `error`, `validation` and `rollback.performed` as the other commands do. A definition the current file already carries does not block the restore; it is printed as a warning, and `--json` carries every warning in `warnings`. `--no-validate` skips that check, as it does for `rename`, `move` and `link-gate`: the restore is written and recorded unvalidated, and no warning is printed.
 
 `--preview` resolves exactly the plan a rollback would apply and prints it, writing no file and recording no version. `--json` adds `preview`, `files_written`, `files_unchanged` and `files_left_in_place` beside the existing fields.
 
@@ -473,7 +480,7 @@ set` no longer accepts the old spelling. `telemetry.mode`, `phaseGuards.mode` an
 
 ## Write Validation Behavior
 
-- `create`, `init`, `rename`, `move`, `toggle`, and `link-gate` run post-write schema validation by default.
+- `create`, `init`, `rename`, `move`, `toggle`, `link-gate`, and `rollback` run post-write schema validation by default.
 - When validation fails after a mutation, CLI reports a structured failure and restores previous files.
 - JSON mode returns an object with `error`, `validation`, and `rollback.performed`.
 - Use `--no-validate` for explicit bypass only.

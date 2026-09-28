@@ -277,5 +277,41 @@ describe('inline gate definitions the loader drops (P6.231)', () => {
       );
       expect(rollbackRows()).toEqual(['Rollback to v1']);
     });
+
+    /**
+     * P6.250 (R128). MEASURED 2026-09-28 on `9a6383f08`: `cpm rollback` accepted no `--no-validate`
+     * (the flag parsed and was never passed on), so a restore blocked by an error the differential
+     * does not exempt had no way through, unlike `rename`, `move` and `link-gate`.
+     */
+    it('P6.250 --no-validate writes the restore the check refuses, and records it', () => {
+      seedVersionHistory(workspace, 'prompt', 'test-prompt', [
+        {
+          version: 1,
+          snapshot: { ...baseSnapshot, gateConfiguration: DROPPED_GATE_CONFIGURATION },
+          description: 'Version 1',
+        },
+      ]);
+      const before = readFileSync(promptFile);
+
+      // Control: without the flag the P6.238 refusal stands.
+      const refused = run(['rollback', 'prompt', 'test-prompt', '1', '--workspace', workspace]);
+      expect(refused.exitCode).toBe(1);
+      expect(readFileSync(promptFile).equals(before)).toBe(true);
+      expect(rollbackRows()).toEqual([]);
+
+      const json = run([
+        'rollback', 'prompt', 'test-prompt', '1', '--workspace', workspace, '--json', '--no-validate',
+      ]);
+
+      expect(json.exitCode).toBe(0);
+      const restored = readFileSync(promptFile, 'utf8');
+      expect(restored).toContain('Restored text.');
+      expect(restored).toContain('Cites Sources');
+      expect((JSON.parse(json.output) as { warnings: string[] }).warnings).toEqual([]);
+      expect(rollbackRows()).toEqual(['Rollback to v1']);
+      expect(run(['rollback', '--help']).output).toMatch(
+        /--no-validate\s+Skip post-rollback schema validation/,
+      );
+    });
   });
 });
