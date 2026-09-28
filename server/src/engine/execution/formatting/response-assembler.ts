@@ -142,9 +142,7 @@ export class ResponseAssembler {
       sections.push(gateReviewCTA);
     } else {
       const finalMessage = this.buildFinalStepMessage(context);
-      if (finalMessage != null) {
-        sections.push(finalMessage);
-      }
+      if (finalMessage != null) sections.push(finalMessage);
     }
 
     // Row 2.4. After the gate CTA and before the footer: the interrupt is what the caller must
@@ -160,9 +158,7 @@ export class ResponseAssembler {
     // Detects from StepExecutionStage metadata OR parsed steps (when pendingReview blocked StepExecutionStage).
     if (this.isNextStepDelegated(context)) {
       const handoffCTA = this.buildHandoffSection(context);
-      if (handoffCTA != null) {
-        sections.push(handoffCTA);
-      }
+      if (handoffCTA != null) sections.push(handoffCTA);
     }
 
     const footer = this.buildChainFooter(context);
@@ -1291,15 +1287,19 @@ export class ResponseAssembler {
   }
 
   /**
-   * A completed run's re-run (P6.186, R89): the command that started it, when one prompt names it
-   * — a chain prompt, written with its operators so it re-parses to the same run. An arrow-chain or
-   * workflow run has no such prompt, and its last step, or its first, is not the run: no line.
+   * A completed run's re-run (R89): the command that re-parses to the same run. A chain prompt is
+   * written with its operators (P6.186); an arrow-chain run is its original command text, which the
+   * parser consumed whole and the blueprint keeps (P6.194). A workflow has no command text: no line.
    */
   private buildUsageCTA(context: ExecutionContext): string | null {
-    const prompt = context.parsedCommand?.convertedPrompt;
-    return prompt === undefined
-      ? null
-      : `---\nRe-run: \`${this.buildInvocationString(context, prompt)}\``;
+    const parsed = context.parsedCommand;
+    const command =
+      parsed?.convertedPrompt !== undefined
+        ? this.buildInvocationString(context, parsed.convertedPrompt)
+        : parsed?.metadata.parseStrategy === 'symbolic'
+          ? parsed.metadata.originalCommand
+          : undefined;
+    return command === undefined ? null : `---\nRe-run: \`${command}\``;
   }
 
   /**

@@ -1,4 +1,4 @@
-// @lifecycle test - P6.79 / P6.80 / R40: an arrow-chain segment or a workflow node naming a chain prompt runs that prompt's steps; P6.78 / R37: a command-level gate on a chain prompt binds each step; P6.97 / R43: a named inline gate belongs to the run that declared it; P6.99 / R44: a named gate on an arrow-chain segment binds that segment; P6.108 / R47: a run's temporary gates live exactly as long as the run; P6.104: a run's request gates reach every node they target; P6.107: a request gate id belongs to the run that holds it; P6.105: the arrow-chain source validates the expanded workflow; P6.110: one name in two arrow-chain segments is two gates; P6.113: a run re-sending a declared id keeps the id it registered; P6.117: a request gate target is checked against the declared node ids; P6.186: a completed run re-runs as the command that started it, or not at all; P6.187: a review re-render lists the run nodes after the current one, over Streamable HTTP.
+// @lifecycle test - P6.79 / P6.80 / R40: an arrow-chain segment or a workflow node naming a chain prompt runs that prompt's steps; P6.78 / R37: a command-level gate on a chain prompt binds each step; P6.97 / R43: a named inline gate belongs to the run that declared it; P6.99 / R44: a named gate on an arrow-chain segment binds that segment; P6.108 / R47: a run's temporary gates live exactly as long as the run; P6.104: a run's request gates reach every node they target; P6.107: a request gate id belongs to the run that holds it; P6.105: the arrow-chain source validates the expanded workflow; P6.110: one name in two arrow-chain segments is two gates; P6.113: a run re-sending a declared id keeps the id it registered; P6.117: a request gate target is checked against the declared node ids; P6.186: a completed run re-runs as the command that started it, or not at all; P6.194: an arrow-chain run re-runs as its original command, a workflow not at all; P6.187: a review re-render lists the run nodes after the current one, over Streamable HTTP.
 /**
  * MEASURED 2026-09-25 on `427899fe` (authored `sv_chain` = sv_a/sv_b/sv_a, each step carrying the
  * blocking `sv-block`; run state read from `chain_runs.state`):
@@ -1093,12 +1093,33 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       expect(runState(run.chainId).criteria).toEqual([['CRIT-186'], ['CRIT-186']]);
     }, 120000);
 
-    test('(b) an arrow-chain, with and without an inserted node, and a workflow complete with no Re-run', async () => {
-      const plain = await start({ command: `>>sv_a topic:"T186"${ARROW}>>sv_b` });
+    /**
+     * P6.194 / R89 (amended). MEASURED 2026-09-27 on `a6431875`: `>>sv_a topic:"T194"` arrow-chain
+     * `>>sv_b` completed with no `Re-run:`. The completing call restores the run from its blueprint,
+     * which keeps `metadata.originalCommand`; that text is what the parser consumed, so it renders.
+     */
+    test('P6.194 (a) an arrow-chain, with and without an inserted node, re-runs as the command that started it', async () => {
+      const plain = await start({ command: `>>sv_a topic:"T194"${ARROW}>>sv_b` });
       await plain.call({ user_response: 'A' });
       const inserted = await start({ command: `>>sv_a${ARROW}>>sv_b` });
       await inserted.call({ user_response: 'A', ...blocking });
       await inserted.call({ user_response: 'investigated' });
+      for (const [run, command] of [
+        [plain, `>>sv_a topic:"T194"${ARROW}>>sv_b`],
+        [inserted, `>>sv_a${ARROW}>>sv_b`],
+      ] as const) {
+        const done = await run.call({ user_response: 'B' });
+        expect(done).toContain('Chain execution complete');
+        expect(rerun(done)).toBe(command);
+        const again = await start({ command: rerun(done) ?? '' });
+        expect(runState(again.chainId).steps).toEqual(runState(run.chainId).steps);
+        expect(runState(again.chainId).args).toEqual(runState(run.chainId).args);
+      }
+      expect(runState(plain.chainId).steps).toEqual(['n1:sv_a:[]', 'n2:sv_b:[]']);
+      expect(runState(plain.chainId).args).toEqual([{ topic: 'T194' }, { topic: '' }]);
+    }, 120000);
+
+    test('P6.194 (b) a workflow completes with no Re-run and never >>prompt', async () => {
       const workflow = await start({
         workflow: {
           version: 1,
@@ -1109,12 +1130,10 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
         },
       });
       await workflow.call({ user_response: 'A' });
-      for (const run of [plain, inserted, workflow]) {
-        const done = await run.call({ user_response: 'B' });
-        expect(done).toContain('Chain execution complete');
-        expect(done).not.toContain('Re-run:');
-        expect(done).not.toContain('>>prompt');
-      }
+      const done = await workflow.call({ user_response: 'B' });
+      expect(done).toContain('Chain execution complete');
+      expect(done).not.toContain('Re-run:');
+      expect(done).not.toContain('>>prompt');
     }, 120000);
 
     test('positive control: a gated single prompt completes with its Re-run', async () => {
