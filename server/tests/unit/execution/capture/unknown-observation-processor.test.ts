@@ -247,6 +247,17 @@ describe('computeUnknownLedger — transition matrix', () => {
     expect(ledger[0]).not.toHaveProperty('resolvedAtStep');
   });
 
+  test("P6.234: a re-opened entry moves to the end, in the re-opening call's declaration order", () => {
+    // Guard: the move in computeUnknownLedger. A re-open declared AFTER a new unknown sits after
+    // it, so ledger position within one discovery step is declaration order (R122).
+    const ledger = computeUnknownLedger(
+      [resolvedEntry('cache-ttl'), resolvedEntry('other')],
+      [discovered('fresh', 'New question', true), discovered('cache-ttl', 'Back again', true)],
+      8
+    );
+    expect(ledger.map((entry) => entry.id)).toEqual(['other', 'fresh', 'cache-ttl']);
+  });
+
   test('entries in one batch apply in order, so a later one sees the earlier effect', () => {
     const ledger = computeUnknownLedger(
       [],

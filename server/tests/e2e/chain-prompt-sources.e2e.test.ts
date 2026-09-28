@@ -1138,6 +1138,25 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       expect(runState(run.chainId).args).toEqual([{ topic: 'T222' }, { topic: '' }]);
     }, 120000);
 
+    /**
+     * P6.233 / R112 (third amendment). MEASURED 2026-09-28 on `68aa97f6`: the JSON form of
+     * `>>sv_a` arrow-chain `>>sv_b` with outer `args` `{topic:"T233"}` completed with
+     * `Re-run: >>sv_a` arrow-chain `>>sv_b` — a line that starts the run WITHOUT `T233` on step 1.
+     * No spelling carries outer `args`, so such a run renders no `Re-run:` line (as of 2026-09-28 ·
+     * flips when a JSON-form re-run object spelling lands). P6.222 (a) is the control.
+     */
+    test('P6.233 (a) a JSON-form arrow-chain started with outer args renders no Re-run', async () => {
+      const inner = `>>sv_a${ARROW}>>sv_b`;
+      const run = await start({
+        command: JSON.stringify({ command: inner, args: { topic: 'T233' } }),
+      });
+      await run.call({ user_response: 'A' });
+      const done = await run.call({ user_response: 'B' });
+      expect(done).toContain('Chain execution complete');
+      expect(runState(run.chainId).args).toEqual([{ topic: 'T233' }, { topic: '' }]);
+      expect(done).not.toContain('Re-run:');
+    }, 120000);
+
     test('P6.194 (b) a workflow completes with no Re-run and never >>prompt', async () => {
       const workflow = await start({
         workflow: {
@@ -1421,7 +1440,11 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       blocking: true,
     });
     const entry = (id: string) => ({ id, statement: `STATEMENT-${id}` });
-    type Interrupt = { unknown?: { id: string }; open_blocking_unknowns?: unknown };
+    type Interrupt = {
+      unknown?: { id: string };
+      open_blocking_unknowns?: unknown;
+      uninvestigated_unknown_ids?: string[];
+    };
     async function callRun(chainId: string, args: Record<string, unknown>) {
       const outcome = await client.callToolWithNotifications(
         'prompt_engine',
@@ -1458,6 +1481,26 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       const done = await complete(run.chainId);
       expect(done.interrupt?.unknown?.id).toBe('u-216a');
       expect(done.interrupt?.open_blocking_unknowns).toEqual([entry('u-216a'), entry('u-216b')]);
+    }, 120000);
+
+    /**
+     * P6.235 / R114 (third amendment). MEASURED 2026-09-28 on `e2595c1f`: a completed run's
+     * payload still carried `uninvestigated_unknown_ids: [u-235b]` while its text lists every open
+     * unknown as unresolved and no step will ever investigate one. On completion it is empty.
+     */
+    test('P6.235 (a) a completed run carries no uninvestigated ids; mid-run is unchanged', async () => {
+      const run = await start({ command: `>>sv_a${ARROW}>>sv_b` });
+      const mid = await callRun(run.chainId, {
+        user_response: 'A',
+        observations: [unknown('u-235a'), unknown('u-235b')],
+      });
+      // (b) control: mid-run, the second is named as having no investigation step.
+      expect(mid.interrupt?.uninvestigated_unknown_ids).toEqual(['u-235b']);
+
+      const done = await complete(run.chainId);
+      expect(done.text).toContain('**Unresolved unknown**: `u-235b` — STATEMENT-u-235b');
+      expect(done.interrupt?.open_blocking_unknowns).toEqual([entry('u-235a'), entry('u-235b')]);
+      expect(done.interrupt?.uninvestigated_unknown_ids).toEqual([]);
     }, 120000);
 
     test('(b) control: one open blocking unknown lists exactly that one', async () => {
@@ -1537,6 +1580,11 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
    * call, the handed step read "Investigate: STATEMENT-u-224a" while the "Blocking Unknown" section
    * and `structuredContent.chain_interrupt.unknown` named `u-224b` — the interrupt took the last
    * of the batch, the insertion the first. Both now take the first the call declared.
+   *
+   * P6.234 / R122. MEASURED 2026-09-28 on `08322b72`: a call declaring `u-234new` and then
+   * re-opening `u-234old` (resolved on an earlier call) inserted `inv-u-234new` while the section
+   * and `unknown` named `u-234old` — the re-opened entry kept its earlier ledger position. A
+   * re-open now moves the entry to the end, so it counts as declared by the re-opening call.
    */
   describe('P6.217: two blocking unknowns declared in one call', () => {
     const LEFT_OUT = 'Open with no investigation step (one call inserts one';
@@ -1641,6 +1689,31 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       expect(mid.section).toContain(
         `${LEFT_OUT}, for the first blocking unknown it declares): u-224b`
       );
+    }, 120000);
+
+    test('P6.234 (a) a re-opened unknown declared after a new one: the interrupt names the new one', async () => {
+      const run = await start({ command: `>>sv_a${ARROW}>>sv_b${ARROW}>>sv_b` });
+      await callRun(run.chainId, { user_response: 'A', observations: [unknown('u-234old')] });
+      await callRun(run.chainId, {
+        user_response: 'investigated old',
+        observations: [
+          {
+            type: 'unknown_resolved',
+            id: 'u-234old',
+            statement: 'answered',
+            resolution: 'answered',
+          },
+        ],
+      });
+      // `u-234old` sits first in the ledger; this call re-opens it AFTER declaring `u-234new`.
+      const mid = await callRun(run.chainId, {
+        user_response: 'B',
+        observations: [unknown('u-234new'), unknown('u-234old')],
+      });
+      expect(inserted(run.chainId)).toEqual(['inv-u-234old', 'inv-u-234new']);
+      expect(mid.text).toContain('## Investigate: STATEMENT-u-234new');
+      expect(mid.section).toContain('**Blocking Unknown**\n\nSTATEMENT-u-234new\n');
+      expect(mid.unknownId).toBe('u-234new');
     }, 120000);
 
     test('(b) control: one blocking unknown gets its step and no such line', async () => {

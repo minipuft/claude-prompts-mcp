@@ -5,6 +5,10 @@ import {
   validateCategorySchema,
   validatePromptYaml,
 } from '../../../modules/prompts/prompt-schema.js';
+import {
+  describeInlineGate,
+  findInlineGateFieldProblems,
+} from '../../../modules/prompts/yaml-prompt-loader.js';
 
 import {
   FrameworkGateSchema,
@@ -28,6 +32,25 @@ export interface ResourceVerificationIssue {
   code: string;
   path: string;
   message: string;
+}
+
+/** The issue code of an inline gate definition the loader would drop. */
+export const UNLOADABLE_INLINE_GATE_CODE = 'inline_gate_unloadable';
+
+/** Checks beyond a resource's schema, each opted into by the caller that can act on it. */
+export interface ResourceVerificationChecks {
+  /**
+   * Report every prompt `gateConfiguration.inline_gate_definitions` entry the loader drops, by
+   * the loader's own list (`findInlineGateFieldProblems`), as an error naming the field (R117).
+   *
+   * Opt-in because a flat check is wrong for a write that edits an existing prompt: the MCP
+   * prompt write already refuses, before writing, only the definitions its edit introduced
+   * (`diagnosePromptWrite`), and then verifies the written file here — a flat check at that point
+   * would roll back an unrelated edit to a prompt that already carried one. The CLI adapter
+   * (`cli-shared/resource-validation.ts`) opts in, and `runValidatedMutation` keeps the CLI's
+   * mutations differential.
+   */
+  unloadableInlineGates?: boolean;
 }
 
 export interface ResourceVerificationResult {
@@ -86,6 +109,29 @@ function toIssues(messages: string[], code: string): ResourceVerificationIssue[]
 }
 
 /**
+ * The inline gate definitions of a prompt document the loader would drop, one issue per field
+ * `findInlineGateFieldProblems` names. A definition that is not an object is the schema's to
+ * report, so it is skipped here rather than reported twice.
+ */
+function findUnloadableInlineGates(data: unknown): ResourceVerificationIssue[] {
+  const gateConfiguration = (data as { gateConfiguration?: unknown } | null)?.gateConfiguration;
+  if (typeof gateConfiguration !== 'object' || gateConfiguration === null) return [];
+  const definitions = (gateConfiguration as { inline_gate_definitions?: unknown })
+    .inline_gate_definitions;
+  if (!Array.isArray(definitions)) return [];
+  return definitions.flatMap((definition: unknown, index) => {
+    if (typeof definition !== 'object' || definition === null) return [];
+    const body = definition as Record<string, unknown>;
+    const label = describeInlineGate(body, index);
+    return findInlineGateFieldProblems(body).map((problem) => ({
+      code: UNLOADABLE_INLINE_GATE_CODE,
+      path: `gateConfiguration.inline_gate_definitions[${index}]`,
+      message: `(${label}) ${problem}. The loader drops a definition missing it, so the gate would never load.`,
+    }));
+  });
+}
+
+/**
  * The element schemas a framework AUTHORING draft must satisfy, paired with the container name
  * the draft actually uses.
  *
@@ -120,16 +166,22 @@ export class ResourceVerificationService {
     resourceType: ResourceVerificationType,
     resourceId: string,
     filePath: string,
-    data: unknown
+    data: unknown,
+    checks: ResourceVerificationChecks = {}
   ): ResourceVerificationResult {
     const raw = this.validateResourceData(resourceType, data, resourceId);
-    return normalizeResult(raw, { resourceType, resourceId, filePath });
+    const result = normalizeResult(raw, { resourceType, resourceId, filePath });
+    if (resourceType !== 'prompts' || checks.unloadableInlineGates !== true) return result;
+    const unloadable = findUnloadableInlineGates(data);
+    if (unloadable.length === 0) return result;
+    return { ...result, valid: false, errors: [...result.errors, ...unloadable] };
   }
 
   validateFile(
     resourceType: ResourceVerificationType,
     resourceId: string,
-    filePath: string
+    filePath: string,
+    checks: ResourceVerificationChecks = {}
   ): ResourceVerificationResult {
     let data: unknown;
     try {
@@ -156,7 +208,7 @@ export class ResourceVerificationService {
       };
     }
 
-    return this.validateDocument(resourceType, resourceId, filePath, data);
+    return this.validateDocument(resourceType, resourceId, filePath, data, checks);
   }
 
   /**

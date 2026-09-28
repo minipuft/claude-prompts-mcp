@@ -27,11 +27,13 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative } from 'node:path';
 
 import {
+  type ResourceValidationIssue,
   type ResourceValidationResult,
   type ResourceValidationType,
   validateResourceFile,
 } from './resource-validation.js';
 
+import { UNLOADABLE_INLINE_GATE_CODE } from '#modules/resources/services/resource-verification-service.js';
 import { isExcludedCategoryDirectoryName } from '#shared/utils/prompt-layout.js';
 import { loadYamlFileSync } from '#shared/utils/yaml/index.js';
 import {
@@ -286,6 +288,37 @@ function validateMutationResult(
   return validator(options.resourceType, declaredResourceId(location), location.file);
 }
 
+/** Identity of an unloadable-inline-gate issue across a mutation: its definition and field. */
+function unloadableGateKey(issue: ResourceValidationIssue): string | undefined {
+  return issue.code === UNLOADABLE_INLINE_GATE_CODE ? `${issue.path} ${issue.message}` : undefined;
+}
+
+/**
+ * Differential for inline gate definitions the loader drops (R117 amended): one the resource
+ * already carried before the mutation is reported as a warning, never blocking, so an unrelated
+ * edit (a rename, a move, a gate link) of such a prompt still lands; only one the mutation
+ * introduced keeps the result invalid. Every other error stays as the validator reported it.
+ */
+function exemptPreExistingUnloadableGates(
+  before: ResourceValidationResult | null,
+  after: ResourceValidationResult
+): ResourceValidationResult {
+  if (before === null || after.valid) return after;
+  const held = new Set(before.errors.map(unloadableGateKey).filter((key) => key !== undefined));
+  const carried = after.errors.filter((issue) => {
+    const key = unloadableGateKey(issue);
+    return key !== undefined && held.has(key);
+  });
+  if (carried.length === 0) return after;
+  const errors = after.errors.filter((issue) => !carried.includes(issue));
+  return {
+    ...after,
+    valid: errors.length === 0,
+    errors,
+    warnings: [...after.warnings, ...carried],
+  };
+}
+
 /**
  * Run `mutate`, validate its result, and roll back on either kind of failure.
  *
@@ -305,6 +338,10 @@ export function runValidatedMutation<TMutation extends ResourceMutationResult>(
   const snapshot = validateMutation ? createMutationSnapshot(resourceRoot(options.location)) : null;
 
   try {
+    // The pre-mutation verdict, for the differential rule below; read before `mutate` rewrites it.
+    const before = validateMutation
+      ? validator(options.resourceType, declaredResourceId(options.location), options.location.file)
+      : null;
     let operation: TMutation;
     try {
       operation = options.mutate();
@@ -327,7 +364,10 @@ export function runValidatedMutation<TMutation extends ResourceMutationResult>(
       return { success: true, operation };
     }
 
-    const validation = validateMutationResult(options, validator, operation);
+    const validation = exemptPreExistingUnloadableGates(
+      before,
+      validateMutationResult(options, validator, operation)
+    );
 
     if (validation.valid) {
       return { success: true, operation, validation };

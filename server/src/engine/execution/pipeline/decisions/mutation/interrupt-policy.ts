@@ -88,7 +88,9 @@ export function decideInterrupt(input: DecideInterruptInput): ChainInterrupt | u
  * The most recent discovery step wins (`discoveredAtStep`), and within that step's batch the
  * FIRST the call declared (earlier ledger position, which is declaration order) — the same
  * unknown the mutation policy inserts an investigation step for, so the section, the payload's
- * `unknown` and the handed step name one unknown (R119). The rest of the batch stays open and is
+ * `unknown` and the handed step name one unknown (R119). A re-opened entry counts as declared by
+ * the re-opening call: `computeUnknownLedger` moves it to the end, so an older ledger position
+ * never outranks this call's declaration order (R122). The rest of the batch stays open and is
  * named by `uninvestigatedUnknownIds`. Ledger order alone would make an older still-open unknown
  * outrank the discovery that just arrived, so a run holding two blocking unknowns would keep
  * reporting the stale one while the fresh one — the reason THIS step stopped — never appeared in

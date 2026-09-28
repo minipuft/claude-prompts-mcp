@@ -226,9 +226,15 @@ const MAX_RUN_HISTORY = 10;
 /** What a removal released, queued until its persist returns (R93): see `releaseRemovedRuns`. */
 interface RunRelease {
   sessionIds: string[];
+  /** `keep` for an eviction (R116 amended): the claim moved the run, not what this workspace's
+   * runs of the chain received (as of 2026-09-28 · flips when argument history is keyed by run). */
+  argumentHistory: 'clear' | 'keep';
 }
 
-const emptyRunRelease = (): RunRelease => ({ sessionIds: [] });
+const emptyRunRelease = (argumentHistory: 'clear' | 'keep' = 'clear'): RunRelease => ({
+  sessionIds: [],
+  argumentHistory,
+});
 
 /**
  * Chain Session Store
@@ -650,8 +656,9 @@ export class ChainSessionStore implements ChainSessionService {
   private async writeSessions(): Promise<void> {
     const db = this.resolvedDbEngine;
     const sessions = Array.from(this.activeSessions.values());
-    // An evicted session releases what a removed one does, once this persist returns (R116).
-    const evicted = emptyRunRelease();
+    // An evicted session releases what a removed one does except its argument history, once this
+    // persist returns (R116 amended).
+    const evicted = emptyRunRelease('keep');
     if (!db) {
       // No DB engine wired — fall back to non-transactional save (test contexts).
       this.evictClaimedSessions(await this.runRegistry.save(sessions, this.runScope), evicted);
@@ -1317,14 +1324,14 @@ export class ChainSessionStore implements ChainSessionService {
    * the in-memory copy here is stale by definition, and keeping it would let this process
    * advance a run whose row it can no longer write. What the session held in this process (step
    * results, named outputs, run-scoped gates) is queued on `release`, which the persist drains
-   * only after it commits (R116).
+   * only after it commits (R116); its argument history stays (`release.argumentHistory: 'keep'`).
    */
   private evictClaimedSessions(sessionIds: readonly string[], release: RunRelease): void {
     for (const sessionId of sessionIds) {
       const session = this.activeSessions.get(sessionId);
       if (session === undefined) continue;
       this.removeSessionArtifacts(sessionId, release);
-      this.chainSessionMapping.get(session.chainId)?.delete(sessionId);
+      this.removeSessionFromRun(sessionId, session.chainId);
       this.logger.info(
         `[Handoff] Session ${sessionId} (${session.chainId}) claimed by another server; evicted`
       );
@@ -2596,15 +2603,7 @@ export class ChainSessionStore implements ChainSessionService {
     const release = emptyRunRelease();
     this.removeSessionArtifacts(sessionId, release);
 
-    // Remove from chain mapping
-    const chainSessions = this.chainSessionMapping.get(session.chainId);
-    if (chainSessions) {
-      chainSessions.delete(sessionId);
-      if (chainSessions.size === 0) {
-        this.chainSessionMapping.delete(session.chainId);
-        this.removeRunFromBaseTracking(session.chainId);
-      }
-    }
+    this.removeSessionFromRun(sessionId, session.chainId);
 
     await this.persistMutation(snapshot);
     // Listeners receive the removed session object, so they can still inspect its state.
@@ -2769,8 +2768,9 @@ export class ChainSessionStore implements ChainSessionService {
 
   /**
    * The side effects of a removal that no snapshot can undo, in the order they always ran:
-   * run-ended callbacks and argument history per session, then step results per session (keyed
-   * by session since R107, so a removal releases exactly the sessions it removed).
+   * run-ended callbacks and (unless an eviction keeps it) argument history per session, then
+   * step results per session (keyed by session since R107, so a removal releases exactly the
+   * sessions it removed).
    * Called only after `persistMutation` returns, so a rejected save releases nothing and its
    * retry releases exactly once — or, for a session another server claimed, after the persist
    * that evicted it commits (R116).
@@ -2778,7 +2778,7 @@ export class ChainSessionStore implements ChainSessionService {
   private async releaseRemovedRuns(release: RunRelease): Promise<void> {
     for (const sessionId of release.sessionIds) {
       this.notifyRunEnded(sessionId);
-      if (this.argumentHistoryTracker) {
+      if (this.argumentHistoryTracker && release.argumentHistory === 'clear') {
         try {
           await this.argumentHistoryTracker.clearSession(sessionId);
           this.logger.debug(`Cleared argument history for session ${sessionId}`);
@@ -2794,6 +2794,20 @@ export class ChainSessionStore implements ChainSessionService {
     for (const sessionId of release.sessionIds) {
       this.textReferenceStore.clearChainStepResults(sessionId);
     }
+  }
+
+  /**
+   * Take one session out of its run's membership. The run leaves every run index — its emptied
+   * `chainSessionMapping` set and its run-history entry — once no session holds it. The one
+   * removal path `clearSession` and eviction share (R120).
+   */
+  private removeSessionFromRun(sessionId: string, chainId: string): void {
+    const chainSessions = this.chainSessionMapping.get(chainId);
+    if (!chainSessions) return;
+    chainSessions.delete(sessionId);
+    if (chainSessions.size > 0) return;
+    this.chainSessionMapping.delete(chainId);
+    this.removeRunFromBaseTracking(chainId);
   }
 
   private removeRunFromBaseTracking(chainId: string): void {

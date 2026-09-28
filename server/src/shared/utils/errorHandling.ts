@@ -394,62 +394,6 @@ export interface Logger {
   debug: (message: string, ...args: any[]) => void;
 }
 
-/**
- * Validation helper functions
- */
-export class ValidationHelpers {
-  /**
-   * Create validation result from errors
-   */
-  static createValidationResult(
-    errors: Array<{
-      field: string;
-      message: string;
-      code: string;
-      suggestion?: string;
-      example?: string;
-    }>
-  ): ValidationResult {
-    const hasErrors = errors.length > 0;
-    const result: ValidationResult = {
-      valid: !hasErrors,
-    };
-    if (hasErrors) {
-      result.errors = errors;
-    }
-    return result;
-  }
-
-  /**
-   * Validate required fields with enhanced messages
-   */
-  static validateRequiredFields(
-    data: Record<string, unknown>,
-    requiredFields: string[]
-  ): ValidationResult {
-    const errors: ValidationResult['errors'] = [];
-
-    requiredFields.forEach((field) => {
-      if (
-        !(field in data) ||
-        data[field] === undefined ||
-        data[field] === null ||
-        data[field] === ''
-      ) {
-        errors.push({
-          field,
-          message: `Field '${field}' is required but was not provided`,
-          code: 'REQUIRED_FIELD_MISSING',
-          suggestion: `Please provide a value for '${field}'`,
-          example: `"${field}": "example_value"`,
-        });
-      }
-    });
-
-    return this.createValidationResult(errors || []);
-  }
-}
-
 // Standardized error handling (backwards compatible)
 export function handleError(
   error: unknown,

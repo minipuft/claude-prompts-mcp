@@ -977,6 +977,98 @@ describe('Tenant Isolation', () => {
         expect(store.getChainContext('p220b-kept')['previous_step_result']).toBe('KEPT-220');
       });
 
+      /**
+       * P6.229 (R120). MEASURED 2026-09-28 on `58ec70ae`: after the eviction the evicted run's chain
+       * id stayed in `getRunHistory(base)` and its emptied `chainSessionMapping` set survived, so
+       * `getSessionStats().totalChains` (served by the `metrics-pipeline` resource) still counted
+       * it. Eviction now leaves a run through the helper `clearSession` uses.
+       */
+      test('P6.229 (a) an evicted run leaves the run history and the chain count', async () => {
+        const chainsBefore = store.getSessionStats().totalChains;
+        const chainKept = await evictAfterClaim('p229a');
+
+        expect(store.getRunHistory('chain-p229a')).toEqual([]);
+        expect(store.hasActiveSessionForChain('chain-p229a#1')).toBe(false);
+        // Two runs started, one evicted: only the kept run's chain id is counted.
+        expect(store.getSessionStats().totalChains).toBe(chainsBefore + 1);
+        // (b) control: the run this server still owns keeps its history.
+        expect(store.getRunHistory('chain-p229ak')).toEqual([chainKept]);
+      });
+
+      test('P6.229 (a) same base: only the evicted run leaves, the surviving run stays', async () => {
+        const session = await store.createSession('p229b-gone', 'chain-p229b#1', 2, {}, scopeA);
+        await seed('p229b-kept', 'chain-p229b#2', scopeA, 'KEPT-229');
+        expect(store.getRunHistory('chain-p229b')).toEqual(['chain-p229b#1', 'chain-p229b#2']);
+
+        const minted = await store.mintHandoffToken(session.sessionId);
+        const claimer = new DirectChainRunRegistry(dbManager);
+        expect(
+          claimer.claimRunByToken(minted!.token, { continuityScopeId: 'pid-p229b' }).status
+        ).toBe('claimed');
+        await store.mintHandoffToken('p229b-kept');
+
+        expect(store.getSession('p229b-gone')).toBeUndefined();
+        expect(store.getRunHistory('chain-p229b')).toEqual(['chain-p229b#2']);
+        expect(store.getChainContext('p229b-kept')['previous_step_result']).toBe('KEPT-229');
+      });
+
+      /**
+       * P6.230 (R116 amended). MEASURED 2026-09-28 on `83a1a0f7`: the eviction drained the release
+       * a removal uses, so besides step results and named outputs it fired the run-ended callbacks
+       * (the run's temporary gates) AND cleared this process's argument history for the evicted
+       * session. An eviction now releases what the run held in this process and keeps the history
+       * (as of 2026-09-28 · flips when argument history is keyed by the run rather than read as
+       * "what this workspace's runs of this chain received").
+       */
+      test('P6.230 (a) an eviction releases the run but keeps its argument history', async () => {
+        await store.cleanup();
+        const tracker = new ArgumentHistoryTracker(logger);
+        const runEnded = jest.fn();
+        store = new ChainSessionStore(
+          logger,
+          refs,
+          { cleanupIntervalMs: 10_000, databasePort: dbManager },
+          tracker
+        );
+        store.onRunEnded(runEnded);
+        await tracker.trackExecution({
+          promptId: 'p230',
+          sessionId: 'p230a-gone',
+          originalArgs: { topic: 'T230' },
+        });
+
+        await evictAfterClaim('p230a');
+
+        expect(runEnded.mock.calls).toEqual([['p230a-gone']]);
+        // The seeded call and the step the store recorded both stay.
+        expect(
+          tracker
+            .getSessionHistory('p230a-gone')
+            .map((entry) => entry.stepResult ?? entry.originalArgs)
+        ).toEqual([{ topic: 'T230' }, 'GONE-220']);
+        expect(refs.buildChainVariables('p230a-gone', 'chain-p230a#1')).toEqual({
+          chain_id: 'chain-p230a#1',
+          step_results: {},
+        });
+      });
+
+      test('P6.230 (b) control: a clear still releases the argument history', async () => {
+        await store.cleanup();
+        const tracker = new ArgumentHistoryTracker(logger);
+        store = new ChainSessionStore(
+          logger,
+          refs,
+          { cleanupIntervalMs: 10_000, databasePort: dbManager },
+          tracker
+        );
+        await store.createSession('p230b', 'chain-p230b#1', 2, {}, scopeA);
+        await tracker.trackExecution({ promptId: 'p230', sessionId: 'p230b', originalArgs: {} });
+
+        await expect(store.clearSession('p230b')).resolves.toBe(true);
+
+        expect(tracker.getSessionHistory('p230b')).toHaveLength(0);
+      });
+
       test('(b) control: an unscoped clear releases every run it removed', async () => {
         const chainA = await seed('p201-a3', 'chain-p201z#1', scopeA, 'A-201');
         const chainB = await seed('p201-b3', 'chain-p201z#2', scopeB, 'B-201');
