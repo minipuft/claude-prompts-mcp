@@ -1603,6 +1603,66 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     expect(resumed.text).toContain('Progress 2/3');
   }, 180000);
 
+  /**
+   * P6.204 / R104. A run recorded before #414 could hold a named gate under a canonical id. Driven
+   * by planting one: server A runs `>>sv_chain :: g204:"NAMED-204"`, the recorded `g204` is
+   * rewritten to `content-structure` in every run table, and B claims the run with a FAIL.
+   * MEASURED 2026-09-27 on `001f35be`: the claim answered `isError: true` with the registry's raw
+   * "Error: A temporary gate may not shadow a canonical gate id ('content-structure')", and the
+   * run stayed on step a. The claim's named-gate restore already remaps a held id to a fresh
+   * `<id>-N` (R60); a canonical id is now held by its canonical gate, so it takes the same path.
+   */
+  async function claimPlantedCanonical(
+    roots: Roots,
+    plantedId: string
+  ): Promise<{ chainId: string; second: Server; failed: { isError: boolean; text: string } }> {
+    const first = await startServer(roots);
+    await authorResources(first);
+    const chainId = chainIdOf(
+      (await first.call('prompt_engine', { command: '>>sv_chain :: g204:"NAMED-204"' })).text
+    );
+    expect(runRow(roots, chainId)?.reviews).toEqual({ a: ['sv-block', 'g204'] });
+    const token = await mintToken(first, chainId);
+    const second = await startServer(roots);
+    await first.stop();
+    const db = new DatabaseSync(path.join(roots.runtimeRoot, 'runtime-state', 'state.db'));
+    try {
+      for (const table of ['chain_runs', 'chain_run_nodes', 'chain_sessions']) {
+        const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{
+          name: string;
+          type: string;
+        }>;
+        for (const { name } of columns.filter((column) => column.type === 'TEXT')) {
+          db.prepare(`UPDATE ${table} SET ${name} = REPLACE(${name}, 'g204', ?)`).run(plantedId);
+        }
+      }
+    } finally {
+      db.close();
+    }
+    const failed = await second.call('prompt_engine', {
+      claim_token: token,
+      user_response: 'A out',
+      gate_verdict: FAIL,
+    });
+    return { chainId, second, failed };
+  }
+
+  test('P6.204 (a) a claimed run recorded with a canonical-named gate restores it under a fresh id', async () => {
+    const roots = freshRoots();
+    const { chainId, failed } = await claimPlantedCanonical(roots, 'content-structure');
+    expect(failed.isError).toBe(false);
+    expect(failed.text).toContain('NAMED-204');
+    expect(runRow(roots, chainId)?.reviews).toEqual({ a: ['sv-block', 'content-structure-2'] });
+  }, 180000);
+
+  test('P6.204 (b) control: a planted id with no canonical gate restores under itself', async () => {
+    const roots = freshRoots();
+    const { chainId, failed } = await claimPlantedCanonical(roots, 'x204');
+    expect(failed.isError).toBe(false);
+    expect(failed.text).toContain('NAMED-204');
+    expect(runRow(roots, chainId)?.reviews).toEqual({ a: ['sv-block', 'x204'] });
+  }, 180000);
+
   test('P6.130 (b) control: an unclaimed run keeps its one row', async () => {
     const roots = freshRoots();
     const server = await startServer(roots);

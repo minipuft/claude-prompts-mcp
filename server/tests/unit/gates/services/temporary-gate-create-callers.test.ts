@@ -10,12 +10,15 @@
  * | inline definition | `temporary-gate-registrar.ts` `registerOneInlineDefinition` | `inline_gate_definitions[].id` | `resolveHeldForThisRun` | refused by name first (P6.183), then by the registry |
  * | named inline gate | `inline-gate-processor.ts` `createNamedInlineGate` | `:: name:"…"` | `declaredNamedGates` | refused by the registry |
  * | anonymous criteria | `inline-gate-processor.ts` `createInlineGate` | none | exempt: the registry mints `temp_…` | exempt: no caller-chosen id |
- * | claimed named gate | `inline-gate-processor.ts` `restoreRunGates` | the recorded id | `resolveDeclared` (P6.129, R60) | exempt: restores the id a create recorded |
+ * | claimed named gate | `inline-gate-processor.ts` `restoreRunGates` | the recorded id | `resolveDeclared` (P6.129, R60) | remapped to `<id>-N`, like a held id (P6.204, R104) |
  *
  * P6.193 / R94: gate loading reads the temporary registry first, keyed by id per process, so a
  * temporary gate under a canonical id replaced that gate's criteria for every run on the server.
  * `createTemporaryGate` refuses one whichever caller chose it; each caller is driven below with
- * its id made canonical, and a new caller fails until its column is filled.
+ * its id made canonical, and a new caller fails until its column is filled. The one exception is a
+ * claimed run recorded before that refusal (P6.204, R104): its restore registers the gate under a
+ * fresh `<id>-N` and remaps the run onto it. `restoreTemporaryGate`, which restores generated
+ * `temp_…` ids for anonymous criteria, throws for a canonical id.
  *
  * Each non-exempt row drives its real caller twice on one run holding the id: the second call must
  * not reach `createTemporaryGate` with that id. The call-site count is asserted against this
@@ -74,8 +77,11 @@ interface CreateCaller {
   readonly heldId?: string;
   /** One call of the caller on `runId` (undefined starts a run); returns the ids it registered. */
   readonly call?: (registry: TemporaryGateRegistry, runId?: string) => Promise<string[]>;
-  /** A canonical id: `'refused'` when driven below, else why the registry never sees one. */
-  readonly canonicalId: 'refused' | { readonly exempt: string };
+  /**
+   * A canonical id: `'refused'` or `'remapped'` (registered under `<id>-2` instead) when driven
+   * below, else why the registry never sees one.
+   */
+  readonly canonicalId: 'refused' | 'remapped' | { readonly exempt: string };
 }
 
 const CALLERS: readonly CreateCaller[] = [
@@ -129,10 +135,7 @@ const CALLERS: readonly CreateCaller[] = [
   {
     name: 'claimed named gate',
     site: 'engine/gates/services/inline-gate-processor.ts',
-    canonicalId: {
-      exempt:
-        'restores the id a run recorded (`restoreTemporaryGate`), which a create on the recording server refused if canonical',
-    },
+    canonicalId: 'remapped',
     heldId: 'g120',
     // A restore runs only on a resume, so the first call is already the run's.
     call: async (registry, runId) => {
@@ -246,9 +249,9 @@ describe('no createTemporaryGate caller registers under a canonical id (P6.193)'
   test('every caller is driven with a canonical id or exempt with a reason', () => {
     for (const caller of CALLERS) {
       const column = caller.canonicalId;
-      expect(column === 'refused' ? caller.call !== undefined : column.exempt.length > 0).toBe(
-        true
-      );
+      expect(
+        typeof column === 'string' ? caller.call !== undefined : column.exempt.length > 0
+      ).toBe(true);
     }
   });
 
@@ -260,6 +263,59 @@ describe('no createTemporaryGate caller registers under a canonical id (P6.193)'
     await caller.call!(open);
     expect(open.getTemporaryGate(caller.heldId!)).toBeDefined();
     expect(await shadowing([caller])).toEqual([]);
+  });
+
+  test.each(
+    CALLERS.filter((caller) => caller.canonicalId === 'remapped').map((c) => [c.name, c] as const)
+  )('%s: a canonical id registers under a fresh id instead (R104)', async (_name, caller) => {
+    const heldId = caller.heldId!;
+    const registry = new TemporaryGateRegistry(logger(), {
+      isCanonicalGateId: (id) => id === heldId,
+    });
+    expect(await caller.call!(registry)).toEqual([`${heldId}-2`]);
+    expect(registry.getTemporaryGate(heldId)).toBeUndefined();
+    // Control: with no canonical gate the same restore registers under the recorded id.
+    expect(await caller.call!(new TemporaryGateRegistry(logger()))).toEqual([heldId]);
+  });
+
+  test('restoring a generated id refuses a canonical one by name (R104)', () => {
+    const registry = new TemporaryGateRegistry(logger(), {
+      isCanonicalGateId: (id) => id === 'content-structure',
+    });
+    const definition = {
+      name: 'n',
+      type: 'validation' as const,
+      scope: 'execution' as const,
+      description: 'd',
+      guidance: 'g',
+      source: 'automatic' as const,
+    };
+    expect(() => registry.restoreTemporaryGate({ id: 'content-structure', ...definition })).toThrow(
+      "may not shadow a canonical gate id ('content-structure')"
+    );
+    expect(registry.getTemporaryGate('content-structure')).toBeUndefined();
+    // Control: a generated id restores.
+    expect(registry.restoreTemporaryGate({ id: 'temp_1_abc', ...definition })).toBe(true);
+  });
+
+  test('a gate reference that fails to resolve is logged with its message (R104)', async () => {
+    const log = logger();
+    const processor = new InlineGateProcessor(
+      new TemporaryGateRegistry(logger()),
+      {
+        resolve: async () => {
+          throw new Error('resolver down');
+        },
+      } as unknown as GateReferenceResolver,
+      log,
+      { remapRunGates: async () => undefined }
+    );
+    const parsed = { ...namedCommand(), namedInlineGates: [] } as ParsedCommand;
+    await processor.processInlineGates(callOf(undefined), parsed);
+    expect(log.warn).toHaveBeenCalledWith(
+      '[InlineGateProcessor] Failed to resolve gate reference',
+      { entry: 'g120', error: 'resolver down' }
+    );
   });
 
   test('the registry itself refuses a canonical id, naming it', () => {

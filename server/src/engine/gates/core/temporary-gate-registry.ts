@@ -133,11 +133,18 @@ export class TemporaryGateRegistry {
   createTemporaryGate(
     definition: Omit<TemporaryGateDefinition, 'id' | 'created_at'> & { id?: string },
     scopeId?: string,
-    options: { onIdCollision?: 'throw' | 'fresh-id' } = {}
+    options: {
+      onIdCollision?: 'throw' | 'fresh-id';
+      /**
+       * `'fresh-id'` registers a canonical id under the first free `<id>-N` instead of refusing
+       * it; only a claimed run's restore passes it, for a gate recorded before the refusal (R104).
+       */
+      onCanonicalId?: 'refuse' | 'fresh-id';
+    } = {}
   ): string {
     const refusal =
       definition.id === undefined ? undefined : this.canonicalIdRefusal(definition.id);
-    if (refusal !== undefined) {
+    if (refusal !== undefined && options.onCanonicalId !== 'fresh-id') {
       throw new Error(refusal);
     }
     return this.storeGate(
@@ -168,13 +175,18 @@ export class TemporaryGateRegistry {
    * {@link createTemporaryGate} never accepts from a caller — for a run resumed in a process that
    * never registered its gates (R54: a claimed handoff). The run's blueprint references its gates
    * by those ids, so any other id would leave them unresolved. Returns false, and registers
-   * nothing, when the id is already held.
+   * nothing, when the id is already held. Throws, naming it, for a canonical id (R104): its one
+   * caller restores generated `temp_…` ids, which no canonical gate carries.
    */
   restoreTemporaryGate(
     definition: Omit<TemporaryGateDefinition, 'created_at'>,
     scopeId?: string
   ): boolean {
     const { id, ...recorded } = definition;
+    const refusal = this.canonicalIdRefusal(id);
+    if (refusal !== undefined) {
+      throw new Error(refusal);
+    }
     if (this.temporaryGates.has(id)) {
       return false;
     }
@@ -540,10 +552,17 @@ export class TemporaryGateRegistry {
     return onIdCollision === 'fresh-id' ? this.firstFreeId(requested) : requested;
   }
 
-  /** `id` when unheld, else the first unheld `<id>-N` from 2 — the node-id suffix convention. */
+  /**
+   * `id` when unheld, else the first unheld `<id>-N` from 2 — the node-id suffix convention. A
+   * canonical id is held by its canonical gate.
+   */
   private firstFreeId(id: string): string {
     let candidate = id;
-    for (let suffix = 2; this.temporaryGates.has(candidate); suffix += 1) {
+    for (
+      let suffix = 2;
+      this.temporaryGates.has(candidate) || this.shadowsCanonicalGate(candidate);
+      suffix += 1
+    ) {
       candidate = `${id}-${suffix}`;
     }
     return candidate;

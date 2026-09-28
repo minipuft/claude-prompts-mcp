@@ -269,6 +269,9 @@ export class InlineGateProcessor {
         onHeld === 'fresh-id'
           ? this.temporaryGateRegistry.createTemporaryGate({ id, ...definition }, scopeId, {
               onIdCollision: 'fresh-id',
+              // A run recorded before the canonical-id refusal can hold a named gate under a
+              // canonical id: it restores under a fresh `<id>-N` and the remap follows (R104).
+              onCanonicalId: 'fresh-id',
             })
           : this.temporaryGateRegistry.restoreTemporaryGate({ id, ...definition }, scopeId)
             ? id
@@ -599,7 +602,7 @@ export class InlineGateProcessor {
       } catch (error) {
         this.logger.warn('[InlineGateProcessor] Failed to resolve gate reference', {
           entry: trimmed,
-          error,
+          error: error instanceof Error ? error.message : String(error),
         });
         inlineCriteria.push(trimmed);
       }
