@@ -509,6 +509,13 @@ describe('P6.196: a quote inside a gate criterion or verify command is refused b
     );
   });
 
+  test('(a) a possessive apostrophe before a space is refused too', async () => {
+    // Nothing is glued to the closing quote here; only its differing from the opening one shows it.
+    await expect(
+      parser.parseCommand(`>>analyze :: "check the users' data"`, basePrompts)
+    ).rejects.toThrow(/Operator "::" cannot take a criterion containing the quote character '/);
+  });
+
   test('(a) a named criterion closed by its own quote character mid-text is refused', async () => {
     await expect(
       parser.parseCommand(`>>analyze :: tone:"say "hi" first"`, basePrompts)
