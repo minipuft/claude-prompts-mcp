@@ -1143,6 +1143,62 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
   }, 180000);
 
   /**
+   * P6.202 / R103. MEASURED 2026-09-27 on `9a319ba9`, driven over `resource_manager create`: an
+   * inline definition omitting `pass_criteria` answered "Prompt Created, but post-write
+   * verification FAILED (mismatched: gateConfiguration)" while the gate loaded, because the
+   * loader serves `pass_criteria: []` and the verification compared the request as written. It
+   * now applies the loader's own defaults (`withInlineGateDefaults`) first. A definition omitting
+   * `scope` still reports the mismatch, and must: the loader has no default for `scope`, and
+   * drops that definition, so the served prompt has no gate.
+   */
+  test('P6.202 a create omitting a defaulted inline-gate field verifies; a dropped gate does not', async () => {
+    const roots = freshRoots();
+    const server = await startServer(roots);
+    const create = (id: string, definition: Record<string, unknown>) =>
+      server.call('resource_manager', {
+        resource_type: 'prompt',
+        action: 'create',
+        id,
+        category: 'general',
+        name: id,
+        description: 'step for P6.202',
+        user_message_template: `BODY-${id}`,
+        gate_configuration: { framework_gates: false, inline_gate_definitions: [definition] },
+      });
+    const full = {
+      name: 'g202',
+      type: 'validation',
+      scope: 'execution',
+      description: 'D-202',
+      guidance: 'G-202',
+      pass_criteria: ['P-202'],
+    };
+    const { pass_criteria: _omittedCriteria, ...noCriteria } = full;
+    const { scope: _omittedScope, ...noScope } = full;
+    const verificationFailed = /post-write verification FAILED.*\n.*mismatched: gateConfiguration/;
+
+    // (a) The loader fills `pass_criteria: []`: the create verifies, and the gate is served.
+    const defaulted = await create('sv_p202_criteria', noCriteria);
+    expect({ isError: defaulted.isError, text: defaulted.text }).toMatchObject({ isError: false });
+    expect(defaulted.text).not.toMatch(verificationFailed);
+    const inspected = await server.call('resource_manager', {
+      resource_type: 'prompt',
+      action: 'inspect',
+      id: 'sv_p202_criteria',
+    });
+    expect(inspected.text).toContain('"name":"g202"');
+    expect(inspected.text).toContain('"pass_criteria":[]');
+
+    // (b) Control: a definition the loader drops still reports the mismatch.
+    const dropped = await create('sv_p202_scope', noScope);
+    expect(dropped.isError).toBe(true);
+    expect(dropped.text).toMatch(verificationFailed);
+
+    // (b) Control: a complete definition verifies as before.
+    expect((await create('sv_p202_full', full)).isError).toBe(false);
+  }, 180000);
+
+  /**
    * P6.193 / R94. The two other paths choosing a temporary gate's id. MEASURED 2026-09-27 on
    * `20f40ca6` with `gates.executeInlineGateDefinitions` on, every run left open: a request gate
    * `{id: content-structure, criteria: [REQ-193]}` was reviewed as `content-structure` rendering

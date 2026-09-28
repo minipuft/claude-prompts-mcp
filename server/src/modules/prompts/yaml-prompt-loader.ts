@@ -198,6 +198,21 @@ function warnInlineGateDropped(
 }
 
 /**
+ * The values the loader fills in for a field an inline gate definition omits — the one list.
+ *
+ * `pass_criteria` is the only such field: `scope`, `description`, `guidance`, `name` and `type`
+ * have no default, and a definition missing one is dropped by `findInlineGateFieldProblems`
+ * instead. Exported for the `resource_manager` post-write verification, which compares what a
+ * write asked for against what this loader served and must apply the same defaults first (R103).
+ */
+export function withInlineGateDefaults(
+  definition: Record<string, unknown>
+): Record<string, unknown> {
+  const passCriteria = definition['pass_criteria'];
+  return { ...definition, pass_criteria: Array.isArray(passCriteria) ? passCriteria : [] };
+}
+
+/**
  * Assemble a validated definition into its typed shape.
  *
  * Assumes `findInlineGateFieldProblems` already returned empty for this object, which is what
@@ -211,7 +226,7 @@ function buildInlineGateDefinition(definition: Record<string, unknown>): InlineG
     scope: definition['scope'] as InlineGateDefinition['scope'],
     description: definition['description'] as string,
     guidance: definition['guidance'] as string,
-    pass_criteria: Array.isArray(definition['pass_criteria']) ? definition['pass_criteria'] : [],
+    pass_criteria: withInlineGateDefaults(definition)['pass_criteria'] as unknown[],
   };
 
   const id = definition['id'];

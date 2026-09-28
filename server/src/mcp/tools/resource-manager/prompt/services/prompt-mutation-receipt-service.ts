@@ -5,6 +5,7 @@ import { isDeepStrictEqual } from 'node:util';
 import type { PromptResourceContext } from '../core/context.js';
 import type { OperationResult } from '../core/types.js';
 
+import { withInlineGateDefaults } from '#modules/prompts/yaml-prompt-loader.js';
 import { canonicalPromptSnapshot } from '#modules/versioning/index.js';
 import { slugifyCategoryDirectory } from '#shared/utils/resource-ids.js';
 
@@ -164,6 +165,9 @@ export function normalizeReloadShape(snapshot: Record<string, unknown>): Record<
   if (typeof normalized['category'] === 'string') {
     normalized['category'] = slugifyCategoryDirectory(normalized['category']);
   }
+  if (normalized['gateConfiguration'] !== undefined) {
+    normalized['gateConfiguration'] = withLoaderGateDefaults(normalized['gateConfiguration']);
+  }
   if (Array.isArray(normalized['arguments'])) {
     normalized['arguments'] = normalized['arguments'].map((argument: unknown) => {
       if (argument === null || typeof argument !== 'object') return argument;
@@ -172,4 +176,24 @@ export function normalizeReloadShape(snapshot: Record<string, unknown>): Record<
     });
   }
   return normalized;
+}
+
+/**
+ * Apply the loader's inline-gate defaults (`withInlineGateDefaults`) to each definition, so a
+ * write that omitted `pass_criteria` compares equal to the `[]` the loader serves (R103). A
+ * definition the loader DROPS is left as written: its absence from the served prompt is a real
+ * mismatch, and this function must not hide it.
+ */
+function withLoaderGateDefaults(gateConfiguration: unknown): unknown {
+  if (gateConfiguration === null || typeof gateConfiguration !== 'object') return gateConfiguration;
+  const definitions = (gateConfiguration as Record<string, unknown>)['inline_gate_definitions'];
+  if (!Array.isArray(definitions)) return gateConfiguration;
+  return {
+    ...gateConfiguration,
+    inline_gate_definitions: definitions.map((definition: unknown) =>
+      definition !== null && typeof definition === 'object'
+        ? withInlineGateDefaults(definition as Record<string, unknown>)
+        : definition
+    ),
+  };
 }
