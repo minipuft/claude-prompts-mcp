@@ -80,6 +80,85 @@ function auditPersists(source: string): { mutators: string[]; violations: string
   return { mutators: mutators.sort(), violations };
 }
 
+/**
+ * P6.190 (R93). Side effects a snapshot cannot undo: a callback that fired, history or a step
+ * result written to another store, a hook or notification sent. A persisting method may reach one
+ * only AFTER its `persistMutation`, or a rejected save leaves the effect behind a rolled-back run.
+ * Named by channel, and closed over `this.<method>` calls, so a helper that reaches one counts.
+ */
+const IRREVERSIBLE_METHODS = new Set(['notifyRunEnded', 'notifySessionCleared']);
+const IRREVERSIBLE_CHANNELS: Record<string, ReadonlySet<string> | 'any'> = {
+  textReferenceStore: new Set(['storeChainStepResult', 'clearChainStepResults']),
+  argumentHistoryTracker: new Set(['trackExecution', 'clearSession']),
+  hookRegistry: 'any',
+  notificationEmitter: 'any',
+};
+
+/** `this.<channel>.<name>(…)` calls in `node` that reach an irreversible channel. */
+function effectCalls(node: ts.Node): Array<{ name: string; pos: number }> {
+  const calls: Array<{ name: string; pos: number }> = [];
+  const visit = (child: ts.Node): void => {
+    if (
+      ts.isCallExpression(child) &&
+      ts.isPropertyAccessExpression(child.expression) &&
+      ts.isPropertyAccessExpression(child.expression.expression) &&
+      child.expression.expression.expression.kind === ts.SyntaxKind.ThisKeyword
+    ) {
+      const channel = child.expression.expression.name.text;
+      const method = child.expression.name.text;
+      const allowed = IRREVERSIBLE_CHANNELS[channel];
+      if (allowed === 'any' || allowed?.has(method) === true) {
+        calls.push({ name: `${channel}.${method}`, pos: child.getStart() });
+      }
+    }
+    ts.forEachChild(child, visit);
+  };
+  visit(node);
+  return calls;
+}
+
+/** Every persisting method reaching an irreversible effect before its persist. */
+function auditEffectOrder(source: string): string[] {
+  const file = ts.createSourceFile('manager.ts', source, ts.ScriptTarget.Latest, true);
+  const bodies = new Map<string, ts.Node>();
+  const visit = (node: ts.Node): void => {
+    if (ts.isClassDeclaration(node) && node.name?.text === 'ChainSessionStore') {
+      for (const member of node.members) {
+        if (ts.isMethodDeclaration(member) && member.body !== undefined) {
+          bodies.set(member.name.getText(file), member.body);
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+
+  const irreversible = new Set(IRREVERSIBLE_METHODS);
+  for (const [name, body] of bodies) if (effectCalls(body).length > 0) irreversible.add(name);
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const [name, body] of bodies) {
+      if (irreversible.has(name)) continue;
+      if (thisCalls(body).some((call) => irreversible.has(call.name))) {
+        irreversible.add(name);
+        grew = true;
+      }
+    }
+  }
+
+  const violations: string[] = [];
+  for (const [name, body] of bodies) {
+    const persist = thisCalls(body).find((call) => call.name === 'persistMutation');
+    if (persist === undefined) continue;
+    const early = [
+      ...thisCalls(body).filter((call) => irreversible.has(call.name)),
+      ...effectCalls(body),
+    ].filter((call) => call.pos < persist.pos);
+    for (const call of early) violations.push(`${name}: ${call.name} runs before the persist`);
+  }
+  return violations.sort();
+}
+
 const source = readFileSync(MANAGER, 'utf8');
 
 describe('P6.185: every awaited mutator persists through persistMutation', () => {
@@ -135,6 +214,36 @@ describe('P6.185: every awaited mutator persists through persistMutation', () =>
     );
     expect(auditPersists(planted).violations).toEqual([
       'plantedBlind: persists with no snapshot taken before it',
+    ]);
+  });
+});
+
+describe('P6.190: nothing a snapshot cannot undo runs before the persist', () => {
+  const plant = (method: string): string =>
+    source.replace(
+      /export class ChainSessionStore[^{]*\{/,
+      (opening) => `${opening}\n  ${method}\n`
+    );
+
+  test('every persisting method releases, notifies and records only after its persist', () => {
+    expect(auditEffectOrder(source)).toEqual([]);
+  });
+
+  test('planted control: a callback fired before the persist is reported', () => {
+    const planted = plant(
+      "async plantedEarly(s: any): Promise<void> { this.notifyRunEnded('x'); const snap = this.snapshotRunMembership(); await this.persistMutation(snap); }"
+    );
+    expect(auditEffectOrder(planted)).toEqual([
+      'plantedEarly: notifyRunEnded runs before the persist',
+    ]);
+  });
+
+  test('planted control: an effect reached through a helper is reported', () => {
+    const planted = plant(
+      "private plantedHelper(): void { this.textReferenceStore.clearChainStepResults('c'); }\n  async plantedIndirect(): Promise<void> { const snap = this.snapshotRunMembership(); this.plantedHelper(); await this.persistMutation(snap); }"
+    );
+    expect(auditEffectOrder(planted)).toEqual([
+      'plantedIndirect: plantedHelper runs before the persist',
     ]);
   });
 });
