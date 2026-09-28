@@ -1718,7 +1718,7 @@ prompt_engine(
 - **One insertion per call.** A call that declares several blocking unknowns inserts a step for
   the first one only; the others stay open in the ledger with no step. The interrupt is about that
   same first one, and its section names the others on an `Open with no investigation step` line, and `structuredContent.chain_interrupt`
-  lists them in `open_blocking_unknowns`. Declare one again on a later call to insert its step
+  lists them in `open_blocking_unknowns` and names them in `uninvestigated_unknown_ids`. Declare one again on a later call to insert its step
   (within the caps), resolve it, or cover it in a `remainder`.
 - The current node can never be a skip target — only strictly-ahead, not-yet-executed nodes.
 - A run's terminal `execution_records` row carries two more terminal-row facts for this: how many
@@ -1759,6 +1759,7 @@ Either variant carries `structuredContent.chain_interrupt`:
       "statement": "TTL for the new cache layer is undecided",
     },
   ],
+  "uninvestigated_unknown_ids": [], // open blocking ids no inserted step investigates
   "affected_step_ids": ["review"], // declared target_step_id links only
   "remaining_nodes": [{ "id": "…", "promptId": "…", "stepName": "…" }], // after the rendered step
   "paused": false,
@@ -1791,7 +1792,9 @@ lists every one in `open_blocking_unknowns`, as every interrupt payload does.
 that call's blocking unknowns, the FIRST it declared: the same unknown the inserted investigation
 step investigates, and the one the text section names. `open_blocking_unknowns` lists every
 blocking unknown still open, in the order the run discovered them, so a run holding two reports
-both on the machine half as well as the text.
+both on the machine half as well as the text. `uninvestigated_unknown_ids` is the subset no
+inserted step investigates, in the same order: the ids the text's `Open with no investigation
+step` line names, empty when every open one has its step.
 
 A paused run never offers "answer the step" — it issued no step. It never offers a bare
 `remainder` either: a remainder alone does not clear the hold, so the caller must spell it

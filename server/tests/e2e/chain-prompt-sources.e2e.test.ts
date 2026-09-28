@@ -1536,15 +1536,28 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       const result = outcome.result as {
         content?: Array<{ text?: string }>;
         structuredContent?: {
-          chain_interrupt?: { remaining_nodes?: Array<{ id: string }>; unknown?: { id: string } };
+          chain_interrupt?: {
+            remaining_nodes?: Array<{ id: string }>;
+            unknown?: { id: string };
+            uninvestigated_unknown_ids?: string[];
+          };
         };
       };
       const text = (result.content ?? []).map((part) => part.text ?? '').join('\n');
+      const section = text.slice(text.indexOf('**Blocking Unknown**'));
       return {
         text,
-        section: text.slice(text.indexOf('**Blocking Unknown**')),
+        section,
         remaining: result.structuredContent?.chain_interrupt?.remaining_nodes?.map((n) => n.id),
         unknownId: result.structuredContent?.chain_interrupt?.unknown?.id,
+        uninvestigated: result.structuredContent?.chain_interrupt?.uninvestigated_unknown_ids,
+        // The ids the text's open-with-no-step line names, parsed back out of the reply.
+        lineIds:
+          section
+            .split('\n')
+            .find((line) => line.startsWith(LEFT_OUT))
+            ?.split('): ')[1]
+            ?.split(', ') ?? [],
       };
     }
     function inserted(chainId: string): string[] {
@@ -1584,6 +1597,16 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       expect(again.section).not.toContain(LEFT_OUT);
     }, 120000);
 
+    test('P6.225 (a) the structured list names the ids the text line names', async () => {
+      const run = await start({ command: `>>sv_a${ARROW}>>sv_b${ARROW}>>sv_b` });
+      const mid = await callRun(run.chainId, {
+        user_response: 'A',
+        observations: [unknown('u-225a'), unknown('u-225b'), unknown('u-225c')],
+      });
+      expect(mid.lineIds).toEqual(['u-225b', 'u-225c']);
+      expect(mid.uninvestigated).toEqual(mid.lineIds);
+    }, 120000);
+
     test('P6.224 (a) the interrupt names the unknown the inserted step investigates', async () => {
       const run = await start({ command: `>>sv_a${ARROW}>>sv_b` });
       const mid = await callRun(run.chainId, {
@@ -1610,6 +1633,9 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       expect(inserted(run.chainId)).toEqual(['inv-u-217c']);
       expect(mid.section).toContain('**Blocking Unknown**');
       expect(mid.section).not.toContain(LEFT_OUT);
+      // P6.225 (b) control: nothing is left without a step, on either half.
+      expect(mid.uninvestigated).toEqual([]);
+      expect(mid.lineIds).toEqual([]);
     }, 120000);
   });
 

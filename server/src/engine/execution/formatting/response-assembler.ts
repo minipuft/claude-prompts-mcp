@@ -1002,9 +1002,7 @@ export class ResponseAssembler {
    */
   private resolveBlockedReviewInstructions(context: ExecutionContext): string {
     const enhanced = context.gateInstructions ?? '';
-    if (enhanced.trim() !== '') {
-      return enhanced;
-    }
+    if (enhanced.trim() !== '') return enhanced;
 
     const results = context.executionResults;
     const isGateReviewRender = results?.metadata?.['gateReview'] !== undefined;
@@ -1067,9 +1065,11 @@ export class ResponseAssembler {
     return {
       kind: 'chain_interrupt',
       reason: interrupt.reason,
-      // `unknown` is the most recent (what this interrupt is about); the list is every open one.
+      // `unknown` is what this interrupt is about (the one the inserted step investigates, R119);
+      // the first list is every open one, the second the ids the text's open-with-no-step line names.
       unknown: { id: interrupt.unknownId, statement: interrupt.statement },
       open_blocking_unknowns: [...interrupt.openBlockingUnknowns], // already `{id, statement}`
+      uninvestigated_unknown_ids: [...interrupt.uninvestigatedUnknownIds],
       affected_step_ids: [...interrupt.affectedStepIds],
       // camelCase `promptId`/`stepName` inside these entries is the plan's declared shape, not
       // an oversight: they name IR node fields a caller would author back verbatim in a
