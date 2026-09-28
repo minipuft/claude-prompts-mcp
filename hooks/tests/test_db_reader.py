@@ -21,6 +21,8 @@ CRITERIA UNDER TEST (enumerated — a behaviour not listed here is not covered)
   B. resource_index     : prompts, gates, styles, frameworks — including the resource-type spelling
   C. chain liveness     : PID filtering, terminal-run exclusion, and the documented fallback
   D. view repair (v20)  : the primary read path returns rows, and terminal runs stay out of both
+  D2. loader columns    : the chain loader names exactly the columns it reads, and none of the
+                          renamed or added run columns (run_number, workspace_id, accepted_at_step)
   E. cross-client scope : recovery is keyed by the session's own recorded chain; the unscoped
                           newest-chain-of-any-live-PID scan (the 2026-08 leakage defect) is dead
 """
@@ -587,6 +589,98 @@ class TestExecutionViewIsLive:
         state_db.execute("DROP VIEW v_execution_status")
         state_db.commit()
         assert db_reader.load_active_chain_state("chain-demo") is None
+
+
+# ── D2. The columns the chain loader names (P6.162) ──────────────────────────
+
+
+class TestChainLoaderColumns:
+    """PIN (as of 2026-09-28 · flips when the chain loader names a column it does not read today).
+
+    Schema v33 renamed the run-number and workspace columns and v34 added `accepted_at_step` to
+    `chain_run_nodes`; the hook loader (`_load_from_execution_view`, `_load_from_session_table`)
+    names none of them, so those schema moves cannot break a hook. The pin records every column
+    the loader's OWN SQL reads through SQLite's authorizer (reads made inside the view body carry
+    the view's name as their source and are the view's definition, not the loader's), and compares
+    the whole set per path as one value. The control renames `run_status`, a column the loader
+    does read, in a scratch database, and the same check fails.
+    """
+
+    NOT_READ = frozenset({"run_number", "workspace_id", "accepted_at_step"})
+    VIEW_READS = frozenset(
+        {
+            ("v_execution_status", column)
+            for column in (
+                "run_owner_pid",
+                "chain_id",
+                "run_status",
+                "current_step",
+                "total_steps",
+                "last_activity",
+                "pending_gate_review",
+                "pending_shell_verification",
+                "updated_at",
+            )
+        }
+    )
+    SESSION_TABLE_READS = frozenset(
+        {("chain_sessions", column) for column in ("run_owner_pid", "chain_id", "state", "updated_at")}
+    )
+
+    @staticmethod
+    def _load_recording_reads(monkeypatch) -> tuple[dict | None, set[tuple[str, str]]]:
+        """Run the loader on a connection whose authorizer records the loader's own column reads."""
+        reads: set[tuple[str, str]] = set()
+        open_readonly = db_reader._connect_readonly
+
+        def record(action, table, column, _database, source):
+            if action == sqlite3.SQLITE_READ and source is None:
+                reads.add((table, column))
+            return sqlite3.SQLITE_OK
+
+        def connect_recording():
+            conn = open_readonly()
+            if conn is not None:
+                conn.set_authorizer(record)
+            return conn
+
+        monkeypatch.setattr(db_reader, "_connect_readonly", connect_recording)
+        return db_reader.load_active_chain_state("chain-demo"), reads
+
+    @classmethod
+    def _assert_pin(cls, state: dict | None, reads: set[tuple[str, str]], expected: frozenset) -> None:
+        assert state is not None and state["current_step"] == 2
+        assert {column for _table, column in reads} & cls.NOT_READ == set()
+        assert reads == expected
+
+    def test_the_view_path_names_only_its_eight_columns_and_the_sort_key(self, state_db, monkeypatch):
+        _insert_session(state_db, str(LIVE_PID), _chain_session_state(current=2, total=5))
+
+        state, reads = self._load_recording_reads(monkeypatch)
+
+        self._assert_pin(state, reads, self.VIEW_READS)
+
+    def test_the_session_table_path_names_only_its_three_columns_and_the_sort_key(self, state_db, monkeypatch):
+        _insert_session(state_db, str(LIVE_PID), _chain_session_state(current=2, total=5))
+        state_db.execute("DROP VIEW v_execution_status")
+        state_db.commit()
+
+        state, reads = self._load_recording_reads(monkeypatch)
+
+        self._assert_pin(state, reads, self.SESSION_TABLE_READS)
+
+    def test_control_renaming_a_column_the_loader_reads_fails_the_pin(self, state_db, monkeypatch):
+        """ALTER TABLE rewrites the view with the table, so the view now projects `run_state`: the
+        loader's view query fails, it falls back to the session table, and the view pin sees it."""
+        _insert_session(state_db, str(LIVE_PID), _chain_session_state(current=2, total=5))
+        state_db.execute("ALTER TABLE chain_sessions RENAME COLUMN run_status TO run_state")
+        state_db.commit()
+
+        state, reads = self._load_recording_reads(monkeypatch)
+
+        assert ("v_execution_status", "run_status") not in reads
+        with pytest.raises(AssertionError):
+            self._assert_pin(state, reads, self.VIEW_READS)
 
 
 # ── E. Cross-client scoping ───────────────────────────────────────────────────
