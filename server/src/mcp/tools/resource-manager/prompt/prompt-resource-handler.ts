@@ -344,7 +344,8 @@ export function createPromptResourceHandler(
   frameworkManager: FrameworkManager | undefined,
   onRefresh: () => Promise<void>,
   onRestart: (reason: string) => Promise<void>,
-  resourceFileLocator?: ResourceFileLocatorPort
+  resourceFileLocator?: ResourceFileLocatorPort,
+  isCanonicalGateId?: (gateId: string) => boolean
 ): PromptResourceHandler {
   const dependencies: PromptResourceDependencies = {
     logger,
@@ -354,6 +355,7 @@ export function createPromptResourceHandler(
     ...(frameworkStateStore ? { frameworkStateStore } : {}),
     ...(frameworkManager ? { frameworkManager } : {}),
     ...(resourceFileLocator !== undefined ? { resourceFileLocator } : {}),
+    ...(isCanonicalGateId !== undefined ? { isCanonicalGateId } : {}),
   };
 
   return new PromptResourceHandler(dependencies);

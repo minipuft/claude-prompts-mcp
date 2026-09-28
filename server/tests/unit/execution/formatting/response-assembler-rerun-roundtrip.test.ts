@@ -165,6 +165,9 @@ const rerunLine = (reply: string): string | undefined => /Re-run: `([^`]*)`/.exe
  * dropped, so the line re-ran a different run. A completion without a resolved prompt fell back to
  * the literal `>>prompt` whenever the reply's metadata named one, and one standing on a planned
  * node named that node's prompt (`>>b` for `>>a` arrow-chain `>>b`), which is not the run either.
+ *
+ * P6.194 / R89 (amended): an arrow-chain run re-runs as its original command text, which re-parses to
+ * the same steps, args and operators; a workflow submission has no command text and renders none.
  */
 describe('P6.186: a completed run re-runs as the command that started it, or not at all', () => {
   test('twin (a): a chain prompt re-runs with its gate, and the line round-trips', async () => {
@@ -175,14 +178,32 @@ describe('P6.186: a completed run re-runs as the command that started it, or not
   });
 
   test.each([null, 'n1', 'n2', 'inv-u-186'])(
-    'twin (b): an arrow-chain run standing on %s renders no Re-run and never >>prompt',
+    'P6.194 twin (a): an arrow-chain run standing on %s re-runs as its original command',
     async (currentNodeId) => {
-      const reply = completionReply(await parse('>>sv_a -' + '-> >>sv_pair'), currentNodeId);
-      expect(reply).toContain('Chain execution complete');
-      expect(reply).not.toContain('Re-run:');
-      expect(reply).not.toContain('>>prompt');
+      const command = '>>sv_a topic:"T1" -' + '-> >>sv_pair';
+      const first = await parse(command);
+      const rerun = rerunLine(completionReply(first, currentNodeId));
+      expect(rerun).toBe(command);
+      const again = await parse(rerun ?? '');
+      expect(again.steps?.map((step) => [step.promptId, step.args])).toEqual(
+        first.steps?.map((step) => [step.promptId, step.args])
+      );
+      expect(again.operators).toEqual(first.operators);
     }
   );
+
+  test('P6.194 twin (b): a workflow run renders no Re-run and never >>prompt', async () => {
+    const workflow = await parse('>>sv_a -' + '-> >>sv_pair');
+    workflow.metadata = {
+      ...workflow.metadata,
+      parseStrategy: 'workflow-ir',
+      originalCommand: '<workflow-ir>',
+    };
+    const reply = completionReply(workflow, 'n2');
+    expect(reply).toContain('Chain execution complete');
+    expect(reply).not.toContain('Re-run:');
+    expect(reply).not.toContain('>>prompt');
+  });
 
   test('positive control: a single prompt still renders its Re-run line', async () => {
     const context = new ExecutionContext({ command: 'unused' });

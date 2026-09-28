@@ -4,6 +4,7 @@ import { PRESERVED_PROMPT_YAML_KEYS } from '../operations/file-operations.js';
 import {
   UPDATE_FIELDS,
   diagnosePromptWrite,
+  type PromptWriteChecks,
   validateChainStepReferences,
   validatePromptId,
   validateToolDefinitions,
@@ -29,7 +30,10 @@ export type PromptDraftResult =
 
 /** Pure draft preparation shared by `validate` and `create`. */
 export class PromptDraftService {
-  constructor(private readonly promptsProvider: () => ConvertedPrompt[]) {}
+  constructor(
+    private readonly promptsProvider: () => ConvertedPrompt[],
+    private readonly writeChecks: PromptWriteChecks = {}
+  ) {}
 
   prepare(args: PromptDraftInput): PromptDraftResult {
     const errors = this.validateActionShape(args);
@@ -72,7 +76,7 @@ export class PromptDraftService {
     }
 
     const promptData = this.buildPromptData(args, canonicalId);
-    const diagnosis = diagnosePromptWrite(null, promptData);
+    const diagnosis = diagnosePromptWrite(null, promptData, this.writeChecks);
     errors.push(...diagnosis.blocking.map((defect) => defect.message));
 
     // A step naming a prompt that does not exist is a refusal, not a warning next to a saved

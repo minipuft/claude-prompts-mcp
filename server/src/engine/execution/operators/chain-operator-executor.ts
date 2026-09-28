@@ -782,8 +782,9 @@ export class ChainOperatorExecutor {
    * A contributed step asks the fallback for the RUN's framework decision (`runFrameworkId`), the
    * one stage 19 grades it on (R88): resolving the active framework instead showed a step under
    * an operator override one framework's headers and graded it on another's phases, so nothing
-   * blocked. With no run decision the fallback resolves the active framework, as before. Any
-   * other step with no context (an inserted one) keeps the active framework.
+   * blocked. An inserted step asks for it too (R92): under an override it was shown the ACTIVE
+   * framework's guidance in a run deciding another. With no run decision the fallback resolves the
+   * active framework, as before.
    */
   private async resolveFrameworkContext(
     step: ChainStepPrompt | undefined,
@@ -807,7 +808,8 @@ export class ChainOperatorExecutor {
     }
 
     try {
-      const runFrameworkId = step.contributed === true ? input.runFrameworkId : undefined;
+      const addedMidRun = step.contributed === true || step.inserted === true;
+      const runFrameworkId = addedMidRun ? input.runFrameworkId : undefined;
       return await this.getFrameworkContext(step.promptId, input.scope, runFrameworkId);
     } catch (error) {
       this.logger.debug('[ChainOperatorExecutor] Failed to resolve framework context', {

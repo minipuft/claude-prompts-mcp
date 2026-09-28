@@ -14,12 +14,13 @@ const createLogger = () => ({
 });
 
 /** Minimal in-memory stand-in for TemporaryGateRegistry, honouring id assignment and lookup. */
-const createRegistry = () => {
+const createRegistry = (canonical: (id: string) => boolean = () => false) => {
   const gates = new Map<string, Record<string, unknown>>();
   let autoId = 0;
 
   return {
     gates,
+    shadowsCanonicalGate: jest.fn(canonical),
     createTemporaryGate: jest.fn((definition: Record<string, unknown>) => {
       autoId += 1;
       const id = typeof definition['id'] === 'string' ? definition['id'] : `temp_${autoId}`;
@@ -127,17 +128,12 @@ describe('TemporaryGateRegistrar.registerInlineGateDefinitions', () => {
 
   describe('a canonical gate id is refused (P6.183, R85)', () => {
     const canonical = (id: string) => id.toLowerCase() === 'content-structure';
+    // The registry owns the predicate since P6.193; the registrar asks it first, by name.
     const guarded = (registry: unknown, logger: ReturnType<typeof createLogger>) =>
-      new TemporaryGateRegistrar(
-        registry as never,
-        undefined,
-        logger as never,
-        undefined,
-        canonical
-      );
+      new TemporaryGateRegistrar(registry as never, undefined, logger as never);
 
     it('a declared canonical id registers nothing and names the id', () => {
-      const registry = createRegistry();
+      const registry = createRegistry(canonical);
       const logger = createLogger();
       const ids = register(guarded(registry, logger), createContext() as never, [
         promptWith([validDefinition({ id: 'content-structure' })]),
@@ -150,7 +146,7 @@ describe('TemporaryGateRegistrar.registerInlineGateDefinitions', () => {
     });
 
     it('a name whose slug is a canonical id registers nothing', () => {
-      const registry = createRegistry();
+      const registry = createRegistry(canonical);
       const ids = register(guarded(registry, createLogger()), createContext() as never, [
         promptWith([validDefinition({ name: 'Content Structure' })]),
       ]);
@@ -159,7 +155,7 @@ describe('TemporaryGateRegistrar.registerInlineGateDefinitions', () => {
     });
 
     it("a chain prompt's step definition under a canonical id registers nothing", () => {
-      const registry = createRegistry();
+      const registry = createRegistry(canonical);
       const registered = guarded(registry, createLogger()).registerStepGateDefinitions(
         createContext() as never,
         [
@@ -176,7 +172,7 @@ describe('TemporaryGateRegistrar.registerInlineGateDefinitions', () => {
     });
 
     it('control: an id no canonical gate carries registers', () => {
-      const registry = createRegistry();
+      const registry = createRegistry(canonical);
       const ids = register(guarded(registry, createLogger()), createContext() as never, [
         promptWith([validDefinition({ id: 'ctl183' }), validDefinition()]),
       ]);

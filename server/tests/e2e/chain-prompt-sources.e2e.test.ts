@@ -1,4 +1,4 @@
-// @lifecycle test - P6.79 / P6.80 / R40: an arrow-chain segment or a workflow node naming a chain prompt runs that prompt's steps; P6.78 / R37: a command-level gate on a chain prompt binds each step; P6.97 / R43: a named inline gate belongs to the run that declared it; P6.99 / R44: a named gate on an arrow-chain segment binds that segment; P6.108 / R47: a run's temporary gates live exactly as long as the run; P6.104: a run's request gates reach every node they target; P6.107: a request gate id belongs to the run that holds it; P6.105: the arrow-chain source validates the expanded workflow; P6.110: one name in two arrow-chain segments is two gates; P6.113: a run re-sending a declared id keeps the id it registered; P6.117: a request gate target is checked against the declared node ids; P6.186: a completed run re-runs as the command that started it, or not at all; P6.187: a review re-render lists the run nodes after the current one, over Streamable HTTP.
+// @lifecycle test - P6.79 / P6.80 / R40: an arrow-chain segment or a workflow node naming a chain prompt runs that prompt's steps; P6.78 / R37: a command-level gate on a chain prompt binds each step; P6.97 / R43: a named inline gate belongs to the run that declared it; P6.99 / R44: a named gate on an arrow-chain segment binds that segment; P6.108 / R47: a run's temporary gates live exactly as long as the run; P6.104: a run's request gates reach every node they target; P6.107: a request gate id belongs to the run that holds it; P6.105: the arrow-chain source validates the expanded workflow; P6.110: one name in two arrow-chain segments is two gates; P6.113: a run re-sending a declared id keeps the id it registered; P6.117: a request gate target is checked against the declared node ids; P6.186: a completed run re-runs as the command that started it, or not at all; P6.194: an arrow-chain run re-runs as its original command, a workflow not at all; P6.187: a review re-render lists the run nodes after the current one; P6.195: an interrupt lists the nodes after the one its reply renders; P6.197: a completed run offers no interrupt verbs, over Streamable HTTP.
 /**
  * MEASURED 2026-09-25 on `427899fe` (authored `sv_chain` = sv_a/sv_b/sv_a, each step carrying the
  * blocking `sv-block`; run state read from `chain_runs.state`):
@@ -1093,12 +1093,33 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       expect(runState(run.chainId).criteria).toEqual([['CRIT-186'], ['CRIT-186']]);
     }, 120000);
 
-    test('(b) an arrow-chain, with and without an inserted node, and a workflow complete with no Re-run', async () => {
-      const plain = await start({ command: `>>sv_a topic:"T186"${ARROW}>>sv_b` });
+    /**
+     * P6.194 / R89 (amended). MEASURED 2026-09-27 on `a6431875`: `>>sv_a topic:"T194"` arrow-chain
+     * `>>sv_b` completed with no `Re-run:`. The completing call restores the run from its blueprint,
+     * which keeps `metadata.originalCommand`; that text is what the parser consumed, so it renders.
+     */
+    test('P6.194 (a) an arrow-chain, with and without an inserted node, re-runs as the command that started it', async () => {
+      const plain = await start({ command: `>>sv_a topic:"T194"${ARROW}>>sv_b` });
       await plain.call({ user_response: 'A' });
       const inserted = await start({ command: `>>sv_a${ARROW}>>sv_b` });
       await inserted.call({ user_response: 'A', ...blocking });
       await inserted.call({ user_response: 'investigated' });
+      for (const [run, command] of [
+        [plain, `>>sv_a topic:"T194"${ARROW}>>sv_b`],
+        [inserted, `>>sv_a${ARROW}>>sv_b`],
+      ] as const) {
+        const done = await run.call({ user_response: 'B' });
+        expect(done).toContain('Chain execution complete');
+        expect(rerun(done)).toBe(command);
+        const again = await start({ command: rerun(done) ?? '' });
+        expect(runState(again.chainId).steps).toEqual(runState(run.chainId).steps);
+        expect(runState(again.chainId).args).toEqual(runState(run.chainId).args);
+      }
+      expect(runState(plain.chainId).steps).toEqual(['n1:sv_a:[]', 'n2:sv_b:[]']);
+      expect(runState(plain.chainId).args).toEqual([{ topic: 'T194' }, { topic: '' }]);
+    }, 120000);
+
+    test('P6.194 (b) a workflow completes with no Re-run and never >>prompt', async () => {
       const workflow = await start({
         workflow: {
           version: 1,
@@ -1109,12 +1130,10 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
         },
       });
       await workflow.call({ user_response: 'A' });
-      for (const run of [plain, inserted, workflow]) {
-        const done = await run.call({ user_response: 'B' });
-        expect(done).toContain('Chain execution complete');
-        expect(done).not.toContain('Re-run:');
-        expect(done).not.toContain('>>prompt');
-      }
+      const done = await workflow.call({ user_response: 'B' });
+      expect(done).toContain('Chain execution complete');
+      expect(done).not.toContain('Re-run:');
+      expect(done).not.toContain('>>prompt');
     }, 120000);
 
     test('positive control: a gated single prompt completes with its Re-run', async () => {
@@ -1142,6 +1161,19 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       return [...block.split('\n\n')[0].matchAll(/^- `([^`]+)`/gm)].map((m) => m[1]);
     };
     /** The live nodes strictly after the run's current node, in run order. */
+    /** The node the run stands on, which is the node the last reply rendered. */
+    function currentNode(chainId: string): string {
+      const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+      try {
+        return (
+          db.prepare('SELECT current_node_id FROM chain_runs WHERE chain_id = ?').get(chainId) as {
+            current_node_id: string;
+          }
+        ).current_node_id;
+      } finally {
+        db.close();
+      }
+    }
     function after(chainId: string): string[] {
       const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
       try {
@@ -1183,6 +1215,116 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       expect(runState(run.chainId).reviews).toEqual({ y: ['sv-drop'] });
       expect(after(run.chainId)).toEqual(['z']);
       expect(listed(planned)).toEqual(after(run.chainId));
+    }, 120000);
+
+    /**
+     * P6.195 / R95. MEASURED 2026-09-27 on `0a40f109` (P6.187's concern, re-driven): the call that
+     * answers `x` with a blocking unknown renders the inserted `inv-u-195a` and listed
+     * "Remaining plan: `inv-u-195a`, `y`, `z`"; `>>sv_a` arrow-chain `>>sv_b`, answering its
+     * inserted node, rendered `n2` and listed `n2`. The interrupt was measured from the node the
+     * call answered, before the advance, while the retry render measures from the node it renders.
+     */
+    test('P6.195 (a) the inserting call lists the nodes after the inserted node it renders', async () => {
+      const run = await start({
+        workflow: {
+          version: 1,
+          nodes: [
+            { id: 'x', promptId: 'sv_a' },
+            { id: 'y', promptId: 'sv_b' },
+            { id: 'z', promptId: 'sv_a' },
+          ],
+        },
+      });
+      const inserting = await run.call({
+        user_response: 'A',
+        observations: [
+          {
+            type: 'unknown_discovered',
+            id: 'u-195a',
+            statement: 'STATEMENT-u-195a',
+            blocking: true,
+          },
+        ],
+      });
+      expect(inserting).toContain('STATEMENT-u-195a');
+      expect(currentNode(run.chainId)).toBe('inv-u-195a');
+      expect(after(run.chainId)).toEqual(['y', 'z']);
+      expect(listed(inserting)).toEqual(after(run.chainId));
+    }, 120000);
+
+    test('P6.195 (b) the call answering the inserted node lists nothing after the last node it renders', async () => {
+      const run = await start({ command: `>>sv_a${ARROW}>>sv_b` });
+      await run.call({
+        user_response: 'A',
+        observations: [
+          {
+            type: 'unknown_discovered',
+            id: 'u-195b',
+            statement: 'STATEMENT-u-195b',
+            blocking: true,
+          },
+        ],
+      });
+      const answering = await run.call({ user_response: 'investigated' });
+      expect(answering).toContain('BODY-sv_b');
+      expect(answering).toContain('STATEMENT-u-195b');
+      expect(currentNode(run.chainId)).toBe('n2');
+      expect(after(run.chainId)).toEqual([]);
+      expect(answering).toContain('Remaining plan: none');
+      expect(listed(answering)).toEqual([]);
+    }, 120000);
+  });
+
+  /**
+   * P6.197 / R97. MEASURED 2026-09-27 on `1d81798e`: `>>sv_a` arrow-chain `>>sv_b`, a blocking
+   * `u-197` raised on `n1` and never resolved, answered through to completion. The completing reply
+   * read "Chain execution complete" and then rendered the "Blocking Unknown" section with its
+   * verbs (answer the step, remainder, gate_action:abort, cancel), offering to act on a run that
+   * had ended.
+   */
+  describe('P6.197: a completed run offers no interrupt verbs and names an unresolved unknown', () => {
+    const VERBS = ['answer the step', 'remainder', 'gate_action:abort', 'cancel'];
+    const blocking = {
+      observations: [
+        { type: 'unknown_discovered', id: 'u-197', statement: 'STATEMENT-u-197', blocking: true },
+      ],
+    };
+    async function structured(chainId: string, args: Record<string, unknown>) {
+      const outcome = await client.callToolWithNotifications(
+        'prompt_engine',
+        { chain_id: chainId, ...args },
+        nextId++
+      );
+      const result = outcome.result as {
+        content?: Array<{ text?: string }>;
+        structuredContent?: { chain_interrupt?: { resume?: { verbs?: string[] } } };
+      };
+      return {
+        text: (result.content ?? []).map((part) => part.text ?? '').join('\n'),
+        verbs: result.structuredContent?.chain_interrupt?.resume?.verbs,
+      };
+    }
+
+    test('(a) the completing reply names u-197 as unresolved and offers none of the verbs', async () => {
+      const run = await start({ command: `>>sv_a${ARROW}>>sv_b` });
+      await run.call({ user_response: 'A', ...blocking });
+      await run.call({ user_response: 'investigated' });
+      const done = await structured(run.chainId, { user_response: 'B' });
+      expect(done.text).toContain('Chain execution complete');
+      expect(done.text).not.toContain('Blocking Unknown');
+      expect(done.text).toContain('Unresolved unknown');
+      expect(done.text).toContain('u-197');
+      expect(done.text).toContain('STATEMENT-u-197');
+      for (const verb of VERBS) expect(done.text).not.toContain(`- ${verb}`);
+      expect(done.verbs).toEqual([]);
+    }, 120000);
+
+    test('(b) control: a mid-run interrupt still renders its section and its verbs', async () => {
+      const run = await start({ command: `>>sv_a${ARROW}>>sv_b` });
+      const inserting = await structured(run.chainId, { user_response: 'A', ...blocking });
+      expect(inserting.text).toContain('**Blocking Unknown**');
+      for (const verb of VERBS) expect(inserting.text).toContain(`- ${verb}`);
+      expect(inserting.verbs).toEqual(VERBS);
     }, 120000);
   });
 
@@ -1898,6 +2040,37 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
           expect(rendered).toContain('## Reasoning');
           expect(rendered).not.toContain('## Context');
           expect(reviews).toEqual({ n2: ['__phase_guard__'] });
+        }, 120000);
+      });
+
+      /**
+       * P6.189 / R92. MEASURED 2026-09-27 on `2bfcf98f` (shipped CAGEERF active): under `^ReACT` the
+       * investigation step `inv-u-160` a blocking unknown inserted rendered the ACTIVE framework's
+       * guidance (`C.A.G.E.E.R.F Framework Active`) in a run deciding ReACT. An inserted step now
+       * resolves the run's framework decision as a contributed step does, and stays unguarded (R83).
+       */
+      describe("P6.189: an inserted step's framework guidance follows the run's decision", () => {
+        /** Raise a blocking unknown on step 1; the inserted step's render, and a sectionless PASS on it. */
+        async function insertedUnder(command: string) {
+          const run = await start({ command });
+          const inserted = await run.call({ user_response: 'A out', ...blockingUnknown });
+          expect(currentNode(run.chainId)).toBe('inv-u-160');
+          await run.call({ user_response: 'investigated', gate_verdict: PASS });
+          return { inserted, reviews: runState(run.chainId).reviews };
+        }
+
+        test('(a) under an override the inserted step names the run framework and stays unguarded', async () => {
+          const { inserted, reviews } = await insertedUnder(`^ReACT >>sv_a${ARROW}>>sv_b`);
+          expect(inserted).toContain('ReACT Framework Active');
+          expect(inserted).not.toContain('C.A.G.E.E.R.F');
+          expect(reviews).toEqual({});
+        }, 120000);
+
+        test('(b) control: with no override the inserted step keeps the active framework', async () => {
+          const { inserted, reviews } = await insertedUnder(`>>sv_a${ARROW}>>sv_b`);
+          expect(inserted).toContain('C.A.G.E.E.R.F Framework Active');
+          expect(inserted).not.toContain('ReACT');
+          expect(reviews).toEqual({});
         }, 120000);
       });
     });

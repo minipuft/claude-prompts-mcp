@@ -4,13 +4,18 @@
  * before any fresh-id decision, at the three callers that pass a caller-chosen id. MEASURED
  * 2026-09-27 on `327dcbce` (`rg -n "createTemporaryGate\(" src`): four callers.
  *
- * | caller | site | caller-chosen id | resolves through |
- * | --- | --- | --- | --- |
- * | request gate | `temporary-gate-registrar.ts` `registerTemporaryGates` | `gates[].id` | `resolveHeldForThisRun` |
- * | inline definition | `temporary-gate-registrar.ts` `registerOneInlineDefinition` | `inline_gate_definitions[].id` | `resolveHeldForThisRun` |
- * | named inline gate | `inline-gate-processor.ts` `createNamedInlineGate` | `:: name:"…"` | `declaredNamedGates` |
- * | anonymous criteria | `inline-gate-processor.ts` `createInlineGate` | none | exempt: the registry mints `temp_…` |
- * | claimed named gate | `inline-gate-processor.ts` `restoreRunGates` | the recorded id | `resolveDeclared` (P6.129, R60) |
+ * | caller | site | caller-chosen id | resolves through | a canonical id (P6.193) |
+ * | --- | --- | --- | --- | --- |
+ * | request gate | `temporary-gate-registrar.ts` `registerTemporaryGates` | `gates[].id` | `resolveHeldForThisRun` | refused by the registry |
+ * | inline definition | `temporary-gate-registrar.ts` `registerOneInlineDefinition` | `inline_gate_definitions[].id` | `resolveHeldForThisRun` | refused by name first (P6.183), then by the registry |
+ * | named inline gate | `inline-gate-processor.ts` `createNamedInlineGate` | `:: name:"…"` | `declaredNamedGates` | refused by the registry |
+ * | anonymous criteria | `inline-gate-processor.ts` `createInlineGate` | none | exempt: the registry mints `temp_…` | exempt: no caller-chosen id |
+ * | claimed named gate | `inline-gate-processor.ts` `restoreRunGates` | the recorded id | `resolveDeclared` (P6.129, R60) | exempt: restores the id a create recorded |
+ *
+ * P6.193 / R94: gate loading reads the temporary registry first, keyed by id per process, so a
+ * temporary gate under a canonical id replaced that gate's criteria for every run on the server.
+ * `createTemporaryGate` refuses one whichever caller chose it; each caller is driven below with
+ * its id made canonical, and a new caller fails until its column is filled.
  *
  * Each non-exempt row drives its real caller twice on one run holding the id: the second call must
  * not reach `createTemporaryGate` with that id. The call-site count is asserted against this
@@ -69,12 +74,15 @@ interface CreateCaller {
   readonly heldId?: string;
   /** One call of the caller on `runId` (undefined starts a run); returns the ids it registered. */
   readonly call?: (registry: TemporaryGateRegistry, runId?: string) => Promise<string[]>;
+  /** A canonical id: `'refused'` when driven below, else why the registry never sees one. */
+  readonly canonicalId: 'refused' | { readonly exempt: string };
 }
 
 const CALLERS: readonly CreateCaller[] = [
   {
     name: 'request gate',
     site: 'engine/gates/services/temporary-gate-registrar.ts',
+    canonicalId: 'refused',
     heldId: 'rg120',
     call: async (registry, runId) =>
       (
@@ -86,6 +94,7 @@ const CALLERS: readonly CreateCaller[] = [
   {
     name: 'inline definition',
     site: 'engine/gates/services/temporary-gate-registrar.ts',
+    canonicalId: 'refused',
     heldId: 'def120',
     call: async (registry, runId) =>
       new TemporaryGateRegistrar(registry, undefined, logger()).registerInlineGateDefinitions(
@@ -106,6 +115,7 @@ const CALLERS: readonly CreateCaller[] = [
   {
     name: 'named inline gate',
     site: 'engine/gates/services/inline-gate-processor.ts',
+    canonicalId: 'refused',
     heldId: 'g120',
     call: async (registry, runId) => {
       const processor = new InlineGateProcessor(registry, inlineResolver, logger(), {
@@ -119,6 +129,10 @@ const CALLERS: readonly CreateCaller[] = [
   {
     name: 'claimed named gate',
     site: 'engine/gates/services/inline-gate-processor.ts',
+    canonicalId: {
+      exempt:
+        'restores the id a run recorded (`restoreTemporaryGate`), which a create on the recording server refused if canonical',
+    },
     heldId: 'g120',
     // A restore runs only on a resume, so the first call is already the run's.
     call: async (registry, runId) => {
@@ -133,6 +147,7 @@ const CALLERS: readonly CreateCaller[] = [
   {
     name: 'anonymous criteria',
     site: 'engine/gates/services/inline-gate-processor.ts',
+    canonicalId: { exempt: 'passes no id' },
     exempt: 'passes no id: the registry mints `temp_…`, so there is no caller-chosen id to resolve',
   },
 ];
@@ -191,6 +206,7 @@ describe('every createTemporaryGate caller resolves a caller-chosen id through t
       name: 'planted-unresolved',
       site: 'planted',
       heldId: 'p120',
+      canonicalId: 'refused',
       call: async (registry) => [
         registry.createTemporaryGate(
           {
@@ -208,5 +224,61 @@ describe('every createTemporaryGate caller resolves a caller-chosen id through t
       ],
     };
     expect(await unresolved([...CALLERS, planted])).toEqual(['planted-unresolved']);
+  });
+});
+
+/** The callers whose call, with their id made canonical, still registered a gate under it. */
+async function shadowing(callers: readonly CreateCaller[]): Promise<string[]> {
+  const names: string[] = [];
+  for (const caller of callers) {
+    if (caller.call === undefined || caller.heldId === undefined) continue;
+    const heldId = caller.heldId;
+    const registry = new TemporaryGateRegistry(logger(), {
+      isCanonicalGateId: (id) => id.toLowerCase() === heldId,
+    });
+    await caller.call(registry).catch(() => []);
+    if (registry.getTemporaryGate(heldId) !== undefined) names.push(caller.name);
+  }
+  return names;
+}
+
+describe('no createTemporaryGate caller registers under a canonical id (P6.193)', () => {
+  test('every caller is driven with a canonical id or exempt with a reason', () => {
+    for (const caller of CALLERS) {
+      const column = caller.canonicalId;
+      expect(column === 'refused' ? caller.call !== undefined : column.exempt.length > 0).toBe(
+        true
+      );
+    }
+  });
+
+  test.each(
+    CALLERS.filter((caller) => caller.canonicalId === 'refused').map((c) => [c.name, c] as const)
+  )('%s: a canonical id registers no temporary gate under it', async (_name, caller) => {
+    // Positive control: with no canonical gate, the same call does register under the id.
+    const open = new TemporaryGateRegistry(logger());
+    await caller.call!(open);
+    expect(open.getTemporaryGate(caller.heldId!)).toBeDefined();
+    expect(await shadowing([caller])).toEqual([]);
+  });
+
+  test('the registry itself refuses a canonical id, naming it', () => {
+    const registry = new TemporaryGateRegistry(logger(), {
+      isCanonicalGateId: (id) => id === 'content-structure',
+    });
+    const definition = {
+      id: 'content-structure',
+      name: 'content-structure',
+      type: 'validation' as const,
+      scope: 'execution' as const,
+      description: 'd',
+      guidance: 'g',
+      source: 'manual' as const,
+    };
+    expect(() => registry.createTemporaryGate(definition)).toThrow(
+      "may not shadow a canonical gate id ('content-structure')"
+    );
+    // Control: an id with no canonical gate registers.
+    expect(registry.createTemporaryGate({ ...definition, id: 'ctl193' })).toBe('ctl193');
   });
 });

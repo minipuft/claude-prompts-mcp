@@ -996,3 +996,54 @@ describe('ChainSessionStore — adaptive mutation (P4 Tier 2)', () => {
     expect((manager as any).activeSessions.get('s1').state.currentNodeId).toBe('n2');
   });
 });
+
+/**
+ * P6.191 (R93, accepted scope). Stamped as of 2026-09-27 · flips when a mutator-level lock or
+ * per-field restore lands. `persistMutation` restores a WHOLE snapshot: a second mutator that
+ * interleaves between one mutator's snapshot and that mutator's rejected persist is rolled back
+ * with it, even though its own persist succeeded. This pins the accepted behaviour so a change to
+ * it is a decision, not an accident.
+ */
+describe('P6.191: interleaved mutators roll back together', () => {
+  test("a create interleaved inside another create's rejected persist is rolled back too", async () => {
+    const loadSpy = jest
+      .spyOn(ChainSessionStore.prototype as any, 'loadSessions')
+      .mockResolvedValue(undefined);
+    const schedulerSpy = jest
+      .spyOn(ChainSessionStore.prototype as any, 'startCleanupScheduler')
+      .mockImplementation(() => {});
+    let rejectFirst!: (error: Error) => void;
+    const saveSpy = jest
+      .spyOn(ChainSessionStore.prototype as any, 'saveSessions')
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((_resolve, reject) => {
+            rejectFirst = reject;
+          })
+      )
+      .mockResolvedValue(undefined);
+    const manager = new ChainSessionStore(createLogger(), new StubTextReferenceStore() as any, {
+      cleanupIntervalMs: 1000,
+    });
+    try {
+      const first = manager.createSession('p191-a', 'chain-p191a', 1);
+      // Let the first create reach its pending persist, holding its snapshot.
+      while (saveSpy.mock.calls.length === 0) await new Promise((r) => setImmediate(r));
+
+      await manager.createSession('p191-b', 'chain-p191b', 1);
+      expect(manager.hasActiveSession('p191-b')).toBe(true);
+
+      rejectFirst(new Error('P191 planted'));
+      await expect(first).rejects.toThrow(/P191 planted/);
+
+      expect(manager.hasActiveSession('p191-a')).toBe(false);
+      // The accepted scope: the second create persisted, yet the first one's restore dropped it.
+      expect(manager.hasActiveSession('p191-b')).toBe(false);
+    } finally {
+      await manager.cleanup();
+      saveSpy.mockRestore();
+      loadSpy.mockRestore();
+      schedulerSpy.mockRestore();
+    }
+  });
+});

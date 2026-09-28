@@ -75,9 +75,11 @@ const PAUSED_INTERRUPT_VERBS = [
  * One verb list per state, built once, rendered twice — the text section and `structuredContent`
  * must not be able to advertise different exits from the same hold.
  *
- * STATE-DEPENDENT, not additive: see {@link PAUSED_INTERRUPT_VERBS}.
+ * STATE-DEPENDENT, not additive: see {@link PAUSED_INTERRUPT_VERBS}. A run latched complete has
+ * nothing left to resume, so it offers none (R97).
  */
-function resolveInterruptVerbs(paused: boolean): string[] {
+function resolveInterruptVerbs(paused: boolean, complete: boolean): string[] {
+  if (complete) return [];
   return paused ? [...PAUSED_INTERRUPT_VERBS] : [...SOFT_INTERRUPT_VERBS];
 }
 
@@ -142,9 +144,7 @@ export class ResponseAssembler {
       sections.push(gateReviewCTA);
     } else {
       const finalMessage = this.buildFinalStepMessage(context);
-      if (finalMessage != null) {
-        sections.push(finalMessage);
-      }
+      if (finalMessage != null) sections.push(finalMessage);
     }
 
     // Row 2.4. After the gate CTA and before the footer: the interrupt is what the caller must
@@ -152,17 +152,13 @@ export class ResponseAssembler {
     // the payload — `buildGateReviewCTA` returns null for the synthetic review precisely so the
     // client is not shown a `gate_verdict` template for a hold that no verdict resolves.
     const interruptSection = this.buildInterruptSection(context);
-    if (interruptSection != null) {
-      sections.push(interruptSection);
-    }
+    if (interruptSection != null) sections.push(interruptSection);
 
     // Operator layer: inject handoff CTA when next step is delegated.
     // Detects from StepExecutionStage metadata OR parsed steps (when pendingReview blocked StepExecutionStage).
     if (this.isNextStepDelegated(context)) {
       const handoffCTA = this.buildHandoffSection(context);
-      if (handoffCTA != null) {
-        sections.push(handoffCTA);
-      }
+      if (handoffCTA != null) sections.push(handoffCTA);
     }
 
     const footer = this.buildChainFooter(context);
@@ -226,9 +222,7 @@ export class ResponseAssembler {
     // whose machine half reports a blocking unknown and whose human half does not is worse than
     // either alone.
     const interruptSection = this.buildInterruptSection(context);
-    if (interruptSection != null) {
-      sections.push(interruptSection);
-    }
+    if (interruptSection != null) sections.push(interruptSection);
 
     const nextAction = this.buildNextActionCTA(context, gateActive);
     if (nextAction) {
@@ -1027,6 +1021,10 @@ export class ResponseAssembler {
       return null;
     }
 
+    // A completed run names the unknown it never resolved, and offers nothing to act on (R97).
+    if (this.isRunLatchedComplete(context)) {
+      return `\n---\n\n**Unresolved unknown**: \`${interrupt.unknownId}\` — ${interrupt.statement}`;
+    }
     const chainId = context.sessionContext?.chainId ?? '';
     const header = interrupt.paused ? 'Chain Paused — Blocking Unknown' : 'Blocking Unknown';
     const affected =
@@ -1039,7 +1037,7 @@ export class ResponseAssembler {
             .map((node) => `- \`${node.id}\` — ${node.stepName} (${node.promptId})`)
             .join('\n')}`
         : '\n\nRemaining plan: none — this is the last step.';
-    const verbs = resolveInterruptVerbs(interrupt.paused)
+    const verbs = resolveInterruptVerbs(interrupt.paused, false)
       .map((verb) => `- ${verb}`)
       .join('\n');
 
@@ -1080,7 +1078,7 @@ export class ResponseAssembler {
       paused: interrupt.paused,
       resume: {
         chain_id: context.sessionContext?.chainId ?? '',
-        verbs: resolveInterruptVerbs(interrupt.paused),
+        verbs: resolveInterruptVerbs(interrupt.paused, this.isRunLatchedComplete(context)),
       },
     };
   }
@@ -1291,15 +1289,19 @@ export class ResponseAssembler {
   }
 
   /**
-   * A completed run's re-run (P6.186, R89): the command that started it, when one prompt names it
-   * — a chain prompt, written with its operators so it re-parses to the same run. An arrow-chain or
-   * workflow run has no such prompt, and its last step, or its first, is not the run: no line.
+   * A completed run's re-run (R89): the command that re-parses to the same run. A chain prompt is
+   * written with its operators (P6.186); an arrow-chain run is its original command text, which the
+   * parser consumed whole and the blueprint keeps (P6.194). A workflow has no command text: no line.
    */
   private buildUsageCTA(context: ExecutionContext): string | null {
-    const prompt = context.parsedCommand?.convertedPrompt;
-    return prompt === undefined
-      ? null
-      : `---\nRe-run: \`${this.buildInvocationString(context, prompt)}\``;
+    const parsed = context.parsedCommand;
+    const command =
+      parsed?.convertedPrompt !== undefined
+        ? this.buildInvocationString(context, parsed.convertedPrompt)
+        : parsed?.metadata.parseStrategy === 'symbolic'
+          ? parsed.metadata.originalCommand
+          : undefined;
+    return command === undefined ? null : `---\nRe-run: \`${command}\``;
   }
 
   /**

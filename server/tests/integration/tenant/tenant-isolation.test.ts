@@ -1,4 +1,13 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, test, jest } from '@jest/globals';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  test,
+  jest,
+} from '@jest/globals';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -8,6 +17,7 @@ import { SqliteEngine } from '../../../src/infra/database/index.js';
 import { SqliteStateStore } from '../../../src/infra/database/stores/sqlite-store.js';
 import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
 import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
+import { ArgumentHistoryTracker } from '../../../src/modules/text-refs/argument-history-tracker.js';
 import { STATE_DB_BUSY_TIMEOUT_MS } from '../../../src/shared/utils/runtime-state-location.js';
 
 import type { Logger } from '../../../src/infra/logging/index.js';
@@ -685,6 +695,160 @@ describe('Tenant Isolation', () => {
         const after = chainSessionStore.getSession('p185-c')!.state.nodes.map((node) => node.id);
         expect(after).toEqual(before);
         expect(rowNodes('p185-c')).toEqual(before);
+      });
+    });
+
+    /**
+     * P6.190 (R93). MEASURED 2026-09-27 on `379ca04a`: a `clearSession` whose save rejected put the
+     * run back in memory (P6.185), but the run's step results and argument history were already
+     * cleared and its run-ended and session-cleared callbacks had already fired: a snapshot cannot
+     * undo them. They now run only once the persist returns.
+     */
+    describe('P6.190: a clear whose save fails releases nothing', () => {
+      const constraint = () =>
+        Object.assign(new Error('P190 planted: UNIQUE constraint failed'), {
+          code: 'ERR_SQLITE_ERROR',
+          errcode: 2067,
+        });
+      let tracker: ArgumentHistoryTracker;
+      let store: ChainSessionStore;
+      let runEnded: jest.Mock;
+      let sessionCleared: jest.Mock;
+
+      beforeEach(() => {
+        tracker = new ArgumentHistoryTracker(logger);
+        store = new ChainSessionStore(
+          logger,
+          textReferenceManagerStub as any,
+          { cleanupIntervalMs: 10_000, databasePort: dbManager },
+          tracker
+        );
+        runEnded = jest.fn();
+        sessionCleared = jest.fn();
+        store.onRunEnded(runEnded);
+        store.onSessionCleared(sessionCleared as any);
+      });
+
+      afterEach(async () => {
+        await store.cleanup();
+      });
+
+      const seed = async (sessionId: string, chainId: string) => {
+        await store.createSession(sessionId, chainId, 2);
+        await tracker.trackExecution({ promptId: 'p190', sessionId, originalArgs: { topic: 'T' } });
+        expect(tracker.getSessionHistory(sessionId)).toHaveLength(1);
+        textReferenceManagerStub.clearChainStepResults.mockClear();
+      };
+
+      test('(a) a rejected clear keeps step results, history and callbacks; the retry releases once', async () => {
+        await seed('p190-a', 'chain-p190a#1');
+        const spy = jest
+          .spyOn(store as any, 'persistSessionsOrThrow')
+          .mockRejectedValueOnce(constraint());
+        try {
+          await expect(store.clearSession('p190-a')).rejects.toThrow(/P190 planted/);
+        } finally {
+          spy.mockRestore();
+        }
+        expect(store.getSession('p190-a')?.sessionId).toBe('p190-a');
+        expect(tracker.getSessionHistory('p190-a')).toHaveLength(1);
+        expect(textReferenceManagerStub.clearChainStepResults).not.toHaveBeenCalled();
+        expect(runEnded).not.toHaveBeenCalled();
+        expect(sessionCleared).not.toHaveBeenCalled();
+
+        await expect(store.clearSession('p190-a')).resolves.toBe(true);
+        expect(store.getSession('p190-a')).toBeUndefined();
+        expect(tracker.getSessionHistory('p190-a')).toHaveLength(0);
+        expect(textReferenceManagerStub.clearChainStepResults.mock.calls).toEqual([
+          ['chain-p190a#1'],
+        ]);
+        expect(runEnded.mock.calls).toEqual([['p190-a']]);
+        expect(sessionCleared).toHaveBeenCalledTimes(1);
+      });
+
+      test('(a) a rejected chain clear releases nothing either', async () => {
+        await seed('p190-c', 'chain-p190c#1');
+        const spy = jest
+          .spyOn(store as any, 'persistSessionsOrThrow')
+          .mockRejectedValueOnce(constraint());
+        try {
+          await expect(store.clearSessionsForChain('chain-p190c')).rejects.toThrow(/P190 planted/);
+        } finally {
+          spy.mockRestore();
+        }
+        expect(store.getSession('p190-c')?.sessionId).toBe('p190-c');
+        expect(tracker.getSessionHistory('p190-c')).toHaveLength(1);
+        expect(textReferenceManagerStub.clearChainStepResults).not.toHaveBeenCalled();
+        expect(runEnded).not.toHaveBeenCalled();
+
+        await store.clearSessionsForChain('chain-p190c');
+        expect(store.getSession('p190-c')).toBeUndefined();
+        expect(tracker.getSessionHistory('p190-c')).toHaveLength(0);
+        expect(runEnded.mock.calls).toEqual([['p190-c']]);
+      });
+
+      test('(a) a rejected create does not release the run its prune dropped', async () => {
+        await seed('p190-d1', 'chain-p190d#1');
+        for (let run = 2; run <= 10; run++) {
+          await store.createSession(`p190-d${run}`, `chain-p190d#${run}`, 1);
+        }
+        textReferenceManagerStub.clearChainStepResults.mockClear();
+        const spy = jest
+          .spyOn(store as any, 'persistSessionsOrThrow')
+          .mockRejectedValueOnce(constraint());
+        try {
+          await expect(store.createSession('p190-d11', 'chain-p190d#11', 1)).rejects.toThrow(
+            /P190 planted/
+          );
+        } finally {
+          spy.mockRestore();
+        }
+        expect(store.getSession('p190-d1')?.sessionId).toBe('p190-d1');
+        expect(tracker.getSessionHistory('p190-d1')).toHaveLength(1);
+        expect(textReferenceManagerStub.clearChainStepResults).not.toHaveBeenCalled();
+        expect(runEnded).not.toHaveBeenCalled();
+
+        await store.createSession('p190-d11', 'chain-p190d#11', 1);
+        expect(store.getSession('p190-d1')).toBeUndefined();
+        expect(tracker.getSessionHistory('p190-d1')).toHaveLength(0);
+        expect(textReferenceManagerStub.clearChainStepResults.mock.calls).toEqual([
+          ['chain-p190d#1'],
+        ]);
+        expect(runEnded.mock.calls).toEqual([['p190-d1']]);
+      });
+
+      test('(a) a rejected step capture records no result and no history', async () => {
+        await store.createSession('p190-e', 'chain-p190e#1', 2);
+        const nodeId = store.getSession('p190-e')!.state.nodes[0]!.id;
+        textReferenceManagerStub.storeChainStepResult.mockClear();
+        const spy = jest
+          .spyOn(store as any, 'persistSessionsOrThrow')
+          .mockRejectedValueOnce(constraint());
+        try {
+          await expect(store.updateSessionState('p190-e', nodeId, 'R-190')).rejects.toThrow(
+            /P190 planted/
+          );
+        } finally {
+          spy.mockRestore();
+        }
+        expect(textReferenceManagerStub.storeChainStepResult).not.toHaveBeenCalled();
+        expect(tracker.getSessionHistory('p190-e')).toHaveLength(0);
+
+        await expect(store.updateSessionState('p190-e', nodeId, 'R-190')).resolves.toBe(true);
+        expect(textReferenceManagerStub.storeChainStepResult).toHaveBeenCalledTimes(1);
+        expect(tracker.getSessionHistory('p190-e')).toHaveLength(1);
+      });
+
+      test('(b) control: a clean clear clears once and fires once', async () => {
+        await seed('p190-b', 'chain-p190b#1');
+        await expect(store.clearSession('p190-b')).resolves.toBe(true);
+        expect(store.getSession('p190-b')).toBeUndefined();
+        expect(tracker.getSessionHistory('p190-b')).toHaveLength(0);
+        expect(textReferenceManagerStub.clearChainStepResults.mock.calls).toEqual([
+          ['chain-p190b#1'],
+        ]);
+        expect(runEnded.mock.calls).toEqual([['p190-b']]);
+        expect(sessionCleared).toHaveBeenCalledTimes(1);
       });
     });
 

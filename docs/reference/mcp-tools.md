@@ -409,11 +409,20 @@ prompt_engine(command:"code_review", gates:[
 ])
 ````
 
+**A criterion or a `verify:` command cannot contain a quote character.** The text is delimited by
+`"` or `'`, and there is no escape, so `:: "it's fine"` is refused at parse, naming `::` and the
+quote. Reword the text without it: `:: "it is fine"`.
+
 **Named inline gates** (`:: id:"criteria"`) are useful when you want:
 
 - Trackable gate IDs in output (shows as "security" not "Inline Validation Criteria")
 - Multiple distinct validation criteria in one command
 - Self-documenting commands that LLMs can parse unambiguously
+
+A named inline gate, a full gate definition in `gates`, or a prompt's inline gate definition may
+not take a canonical gate's id (`:: content-structure:"…"`, `gates:[{id:"content-structure",
+criteria:[…]}]`). Registered, it would replace that gate's criteria for every run on the server;
+it is refused instead, with a logged warning naming the id, and the run keeps the canonical gate.
 
 ### Chain Step Targeting
 
@@ -1735,7 +1744,7 @@ Either variant carries `structuredContent.chain_interrupt`:
     "statement": "TTL for the new cache layer is undecided",
   },
   "affected_step_ids": ["review"], // declared target_step_id links only
-  "remaining_nodes": [{ "id": "…", "promptId": "…", "stepName": "…" }], // post-insert
+  "remaining_nodes": [{ "id": "…", "promptId": "…", "stepName": "…" }], // after the rendered step
   "paused": false,
   "resume": {
     "chain_id": "chain-draft#4",
@@ -1744,6 +1753,10 @@ Either variant carries `structuredContent.chain_interrupt`:
 }
 ```
 
+**`remaining_nodes` and `affected_step_ids` start after the step this reply renders.** On a soft
+interrupt that is the step the call advanced to (the inserted investigation step, on the call that
+inserts it), so the step you are handed now is never listed as still to come.
+
 **`resume.verbs` is state-dependent, not additive.** A PAUSED run lists a different set, and the
 two are not subsets of one another in either direction:
 
@@ -1751,6 +1764,10 @@ two are not subsets of one another in either direction:
 | --------- | -------------------------------------------------------------------------------------------------------- |
 | Soft      | `answer the step`, `remainder`, `gate_action:abort`, `cancel`                                            |
 | Paused    | `gate_action:resume`, `gate_action:accept_alternative` (with `remainder`), `gate_action:abort`, `cancel` |
+
+A run that completes with a blocking unknown still open renders no interrupt section: its reply
+says the run completed and names the unknown as unresolved, and `resume.verbs` is empty, because
+nothing is left to resume.
 
 A paused run never offers "answer the step" — it issued no step. It never offers a bare
 `remainder` either: a remainder alone does not clear the hold, so the caller must spell it

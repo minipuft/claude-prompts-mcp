@@ -142,6 +142,8 @@ function collectAffectedStepIds(input: DecideInterruptInput): readonly string[] 
 
 /**
  * The plan the caller is being invited to replace: every node strictly after the current one.
+ * The caller passes the node the reply RENDERS as current — stage 16 re-decides after an advance
+ * (R95) — so the rendered step is never listed as still to come.
  *
  * `currentOrdinal` is 1-based, so it is already the array index of the first node after the
  * current one — and it folds `currentNodeId === null` into `nodes.length + 1`, so a run that has

@@ -223,6 +223,14 @@ const DEFAULT_REVIEW_SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 const DEFAULT_CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
 const MAX_RUN_HISTORY = 10;
 
+/** What a removal released, queued until its persist returns (R93): see `releaseRemovedRuns`. */
+interface RunRelease {
+  sessionIds: string[];
+  chainIds: string[];
+}
+
+const emptyRunRelease = (): RunRelease => ({ sessionIds: [], chainIds: [] });
+
 /**
  * Chain Session Store
  *
@@ -398,7 +406,7 @@ export class ChainSessionStore implements ChainSessionService {
   /**
    * Register a callback invoked once a run ENDS: it reached a terminal status (completed, failed,
    * cancelled — {@link announceRunTerminal}) or its session was removed (clear, prune, stale
-   * sweep — {@link removeSessionArtifacts}). A removed run may already have ended, so a callback
+   * sweep — {@link releaseRemovedRuns}, once the removal persisted). A removed run may already have ended, so a callback
    * must tolerate a second call for the same session. Used to release what lives as long as a
    * run, such as its temporary gates (R47).
    */
@@ -948,12 +956,14 @@ export class ChainSessionStore implements ChainSessionService {
     this.chainSessionMapping.get(chainId)!.add(sessionId);
 
     const baseChainId = this.registerRunHistory(chainId);
-    await this.pruneExcessRuns(baseChainId);
+    const release = emptyRunRelease();
+    this.pruneExcessRuns(baseChainId, release);
 
     // The persist reserves the run number across every owner and may re-mint `session.chainId`
     // (R62): callers read the chain id off the returned session.
     this.unreservedRuns.add(sessionId);
     await this.persistMutation(snapshot);
+    await this.releaseRemovedRuns(release);
 
     this.logger.debug(
       `Created chain session ${sessionId} for chain ${chainId} with ${totalSteps} steps`
@@ -1562,6 +1572,10 @@ export class ChainSessionStore implements ChainSessionService {
     session.state.lastUpdated = Date.now();
     session.lastActivity = Date.now();
 
+    await this.persistMutation(snapshot);
+
+    // The result lands in stores a snapshot cannot roll back, so only once the rows hold the
+    // step's new milestone (R93).
     await this.persistStepResult(
       session,
       nodeId,
@@ -1569,8 +1583,6 @@ export class ChainSessionStore implements ChainSessionService {
       metadataRecord,
       metadataRecord.isPlaceholder
     );
-
-    await this.persistMutation(snapshot);
 
     return true;
   }
@@ -2572,11 +2584,9 @@ export class ChainSessionStore implements ChainSessionService {
       return false;
     }
 
-    // Notify listeners before removing session (so they can inspect session state)
-    await this.notifySessionCleared(sessionId, session);
-
     const snapshot = this.snapshotRunMembership();
-    await this.removeSessionArtifacts(sessionId);
+    const release = emptyRunRelease();
+    this.removeSessionArtifacts(sessionId, release);
 
     // Remove from chain mapping
     const chainSessions = this.chainSessionMapping.get(session.chainId);
@@ -2585,11 +2595,14 @@ export class ChainSessionStore implements ChainSessionService {
       if (chainSessions.size === 0) {
         this.chainSessionMapping.delete(session.chainId);
         this.removeRunFromBaseTracking(session.chainId);
-        this.textReferenceStore.clearChainStepResults(session.chainId);
+        release.chainIds.push(session.chainId);
       }
     }
 
     await this.persistMutation(snapshot);
+    // Listeners receive the removed session object, so they can still inspect its state.
+    await this.notifySessionCleared(sessionId, session);
+    await this.releaseRemovedRuns(release);
 
     if (this.logger) {
       this.logger.debug(`Cleared session ${sessionId} for chain ${session.chainId}`);
@@ -2610,13 +2623,15 @@ export class ChainSessionStore implements ChainSessionService {
     }
 
     const snapshot = this.snapshotRunMembership();
+    const release = emptyRunRelease();
     for (const runChainId of runChainIds) {
-      await this.removeRunChainSessionsForScope(runChainId, scopeFilter);
-      this.textReferenceStore.clearChainStepResults(runChainId);
+      this.removeRunChainSessionsForScope(runChainId, scopeFilter, release);
+      release.chainIds.push(runChainId);
       this.removeRunFromBaseTracking(runChainId);
     }
 
     await this.persistMutation(snapshot);
+    await this.releaseRemovedRuns(release);
 
     if (this.logger) {
       this.logger.debug(`Cleared all sessions for chain ${chainId}`);
@@ -2678,7 +2693,7 @@ export class ChainSessionStore implements ChainSessionService {
     return baseChainId;
   }
 
-  private async pruneExcessRuns(baseChainId: string): Promise<void> {
+  private pruneExcessRuns(baseChainId: string, release: RunRelease): void {
     const history = this.baseChainMapping.get(baseChainId);
     if (!history) {
       return;
@@ -2690,8 +2705,8 @@ export class ChainSessionStore implements ChainSessionService {
         break;
       }
 
-      const removedSessions = await this.removeRunChainSessions(removedChainId);
-      this.textReferenceStore.clearChainStepResults(removedChainId);
+      const removedSessions = this.removeRunChainSessions(removedChainId, release);
+      release.chainIds.push(removedChainId);
       this.removeRunFromBaseTracking(removedChainId);
 
       this.logger?.info(
@@ -2705,13 +2720,13 @@ export class ChainSessionStore implements ChainSessionService {
     }
   }
 
-  private async removeRunChainSessions(chainId: string): Promise<string[]> {
+  private removeRunChainSessions(chainId: string, release: RunRelease): string[] {
     const sessionIds = this.chainSessionMapping.get(chainId);
     const removedSessions: string[] = [];
 
     if (sessionIds) {
       for (const sessionId of sessionIds) {
-        await this.removeSessionArtifacts(sessionId);
+        this.removeSessionArtifacts(sessionId, release);
         removedSessions.push(sessionId);
       }
       this.chainSessionMapping.delete(chainId);
@@ -2734,22 +2749,41 @@ export class ChainSessionStore implements ChainSessionService {
     }
   }
 
-  private async removeSessionArtifacts(sessionId: string): Promise<void> {
-    this.notifyRunEnded(sessionId);
-    if (this.argumentHistoryTracker) {
-      try {
-        await this.argumentHistoryTracker.clearSession(sessionId);
-        this.logger.debug(`Cleared argument history for session ${sessionId}`);
-      } catch (error) {
-        this.logger.warn(
-          `Failed to clear argument history for session ${sessionId}: ${
-            error instanceof Error ? error.message : String(error)
-          }`
-        );
+  /**
+   * Drop a session from memory and queue what it releases on `release`. The queue runs only once
+   * the persist returns ({@link releaseRemovedRuns}), because a snapshot restores membership but
+   * cannot take back a callback that fired or history that was cleared (R93, P6.190).
+   */
+  private removeSessionArtifacts(sessionId: string, release: RunRelease): void {
+    release.sessionIds.push(sessionId);
+    this.activeSessions.delete(sessionId);
+  }
+
+  /**
+   * The side effects of a removal that no snapshot can undo, in the order they always ran:
+   * run-ended callbacks and argument history per session, then step results per run chain.
+   * Called only after `persistMutation` returns, so a rejected save releases nothing and its
+   * retry releases exactly once.
+   */
+  private async releaseRemovedRuns(release: RunRelease): Promise<void> {
+    for (const sessionId of release.sessionIds) {
+      this.notifyRunEnded(sessionId);
+      if (this.argumentHistoryTracker) {
+        try {
+          await this.argumentHistoryTracker.clearSession(sessionId);
+          this.logger.debug(`Cleared argument history for session ${sessionId}`);
+        } catch (error) {
+          this.logger.warn(
+            `Failed to clear argument history for session ${sessionId}: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
+        }
       }
     }
-
-    this.activeSessions.delete(sessionId);
+    for (const chainId of release.chainIds) {
+      this.textReferenceStore.clearChainStepResults(chainId);
+    }
   }
 
   private removeRunFromBaseTracking(chainId: string): void {
@@ -3064,12 +3098,13 @@ export class ChainSessionStore implements ChainSessionService {
    * Remove sessions for a chain that match the scope filter.
    * If no scope filter, removes all sessions for the chain (backward compatible).
    */
-  private async removeRunChainSessionsForScope(
+  private removeRunChainSessionsForScope(
     chainId: string,
-    scopeFilter: string | undefined
-  ): Promise<string[]> {
+    scopeFilter: string | undefined,
+    release: RunRelease
+  ): string[] {
     if (!scopeFilter) {
-      return this.removeRunChainSessions(chainId);
+      return this.removeRunChainSessions(chainId, release);
     }
 
     const sessionIds = this.chainSessionMapping.get(chainId);
@@ -3079,7 +3114,7 @@ export class ChainSessionStore implements ChainSessionService {
       for (const sessionId of [...sessionIds]) {
         const session = this.activeSessions.get(sessionId);
         if (session && this.matchesScope(session, scopeFilter)) {
-          await this.removeSessionArtifacts(sessionId);
+          this.removeSessionArtifacts(sessionId, release);
           sessionIds.delete(sessionId);
           removedSessions.push(sessionId);
         }

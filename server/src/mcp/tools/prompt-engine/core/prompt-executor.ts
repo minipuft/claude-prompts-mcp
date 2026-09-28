@@ -235,6 +235,7 @@ export class PromptExecutor {
     const temporaryGateRegistry = createTemporaryGateRegistry(logger, {
       maxMemoryGates: 100,
       defaultExpirationMs: 30 * 60 * 1000,
+      isCanonicalGateId: (gateId) => gateManager.has(gateId),
     });
 
     const gateProvider = new GateManagerProvider(gateManager, temporaryGateRegistry);
