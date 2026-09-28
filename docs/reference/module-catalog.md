@@ -9,8 +9,10 @@ remains in `server/.dependency-cruiser.cjs`.
 ## Boundaries
 
 Instability is dependency-cruiser's folder metric, outgoing over outgoing plus incoming
-dependencies for everything under the source path: near 0 with many importers, extend the module by
-adding to it and never by changing what it exports; near 1, it is a leaf that is cheap to change.
+dependencies for everything under the source path — a parent module's number therefore covers
+every child nested under it too, so `mcp-boundary` and `shared` aggregate their child modules:
+near 0 with many importers, extend the module by adding to it and never by changing what it
+exports; near 1, it is a leaf that is cheap to change.
 
 | Module | Source path | Kind | Lifecycle | Instability | Description | Docs | Public entry | Observed dependencies | Imported by |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -82,24 +84,28 @@ checks against the schema DDL so no `state.db` table exists without a declared s
 posture, scope and retention; a view is owned by the owner of the table it projects. Posture says
 whether rows survive a `SCHEMA_VERSION` recreate: `durable` rows exist nowhere else and are
 carried across it, while `derived` rows are rebuilt from a source outside the database and
-`ephemeral` rows are dropped because losing them is accepted.
+`ephemeral` rows are dropped because losing them is accepted. `Readers` counts the declaration's
+own `readers` array — repo-relative paths that read the table or view today, excluding the
+owner's own read-back, rendered even when it is `0` — and `Open finding` quotes the first
+sentence of the declaration's own `finding` when it names one, which is the contract's own
+declared defect and not a judgment this catalog makes.
 
-| Name | Kind | Owner module | Posture | Scope | Retention | Projects |
-| --- | --- | --- | --- | --- | --- | --- |
-| `schema_version` | table | `infra-database` | derived | none | maxRows: 1 | — |
-| `chain_sessions` | table | `chains` | derived | run-owner-pid | unbounded (justified: Holds only live runs; rows are DELETEd per-PID by cleanupStalePidRows when a server exits.) | — |
-| `kv_state` | table | `infra-database` | ephemeral | workspace | unbounded (justified: One row per (scope, key) discriminator, so growth is bounded by workspace count.) | — |
-| `resource_index` | table | `infra-database` | derived | none | unbounded (justified: One row per on-disk resource; bounded by the resource tree itself.) | — |
-| `skills_sync_manifests` | table | `skills-sync` | durable | client-scope | unbounded (justified: One row per exported resource per (client, scope); the owner rewrites the set on each export.) | — |
-| `version_history` | table | `versioning` | durable | workspace | maxRowsPerResource: 50 | — |
-| `objects` | table | `cli-shared` | durable | workspace | unbounded (justified: The referenced closure of version_history, which is itself capped at maxRowsPerResource: 50, times the files per resource, times a per-blob byte limit the write path enforces.) | — |
-| `version_entries` | table | `cli-shared` | durable | workspace | unbounded (justified: One row per (version row, file).) | — |
-| `resource_changes` | table | `infra-observability` | derived | workspace | maxRows: 1000 | — |
-| `chain_runs` | table | `chains` | ephemeral | run-owner-pid | unbounded (justified: One row per live run of one owning process.) | — |
-| `chain_run_nodes` | table | `chains` | ephemeral | run-owner-pid | unbounded (justified: One row per node of a live run; deleted with its run.) | — |
-| `execution_records` | table | `chains` | ephemeral | workspace | maxRows: 5000 | — |
-| `v_execution_status` | view | `chains` | — | — | — | `chain_sessions` |
-| `v_execution_history` | view | `chains` | — | — | — | `execution_records` |
+| Name | Kind | Owner module | Posture | Scope | Retention | Readers | Open finding | Projects |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `schema_version` | table | `infra-database` | derived | none | maxRows: 1 | 1 | — | — |
+| `chain_sessions` | table | `chains` | derived | run-owner-pid | unbounded (justified: Holds only live runs; rows are DELETEd per-PID by cleanupStalePidRows when a server exits.) | 2 | — | — |
+| `kv_state` | table | `infra-database` | ephemeral | workspace | unbounded (justified: One row per (scope, key) discriminator, so growth is bounded by workspace count.) | 4 | One open violation. | — |
+| `resource_index` | table | `infra-database` | derived | none | unbounded (justified: One row per on-disk resource; bounded by the resource tree itself.) | 2 | — | — |
+| `skills_sync_manifests` | table | `skills-sync` | durable | client-scope | unbounded (justified: One row per exported resource per (client, scope); the owner rewrites the set on each export.) | 1 | — | — |
+| `version_history` | table | `versioning` | durable | workspace | maxRowsPerResource: 50 | 2 | — | — |
+| `objects` | table | `cli-shared` | durable | workspace | unbounded (justified: The referenced closure of version_history, which is itself capped at maxRowsPerResource: 50, times the files per resource, times a per-blob byte limit the write path enforces.) | 1 | — | — |
+| `version_entries` | table | `cli-shared` | durable | workspace | unbounded (justified: One row per (version row, file).) | 1 | — | — |
+| `resource_changes` | table | `infra-observability` | derived | workspace | maxRows: 1000 | 0 | Written and read only by its owner, and currently sitting exactly at the 1000-row cap (actively evicting). | — |
+| `chain_runs` | table | `chains` | ephemeral | run-owner-pid | unbounded (justified: One row per live run of one owning process.) | 1 | — | — |
+| `chain_run_nodes` | table | `chains` | ephemeral | run-owner-pid | unbounded (justified: One row per node of a live run; deleted with its run.) | 1 | — | — |
+| `execution_records` | table | `chains` | ephemeral | workspace | maxRows: 5000 | 2 | F1 — queryBySession/queryByChain had zero callers, and the one documented consumer (v_execution_status) could not reach completed runs. | — |
+| `v_execution_status` | view | `chains` | — | — | — | 1 | Selects FROM chain_sessions, which is DELETEd per-PID at cleanup, so it structurally cannot report a completed run. | `chain_sessions` |
+| `v_execution_history` | view | `chains` | — | — | — | 1 | The declared reader does not actually read this view: measured 2026-08-11, execution-history-action-handler.ts sources rows via ExecutionRecordStore.queryRecent() against the raw table, and rg across src/ and hooks/ finds no other reader — only this contract entry and the DDL. | `execution_records` |
 
 ## Extension points
 

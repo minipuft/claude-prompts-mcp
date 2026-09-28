@@ -54,6 +54,13 @@ export interface RuntimeStateRow {
   readonly posture: string;
   readonly scope: string;
   readonly retention: string;
+  /** Count of the declaration's own `readers` array — repo-relative paths that read this table or
+   * view today, excluding the owner's own read-back. Rendered even when it is `0`: a zero-reader
+   * row is the finding the declaration exists to surface, not an absence to hide. */
+  readonly readers: string;
+  /** First sentence of the declaration's own `finding`, when it names one; `—` when absent. This
+   * is the contract's own declared defect — not a judgment this catalog makes. */
+  readonly openFinding: string;
   /** The table a view projects; `—` for a table. */
   readonly projects: string;
 }
@@ -223,6 +230,8 @@ export function collectRuntimeStateRows(
       ? '—'
       : (nearestSemanticDescriptor(owner, descriptors, serverRoot)?.id ?? '—');
   const ownerByTable = new Map(tables.map((contract) => [contract.table, contract.owner]));
+  const openFinding = (finding: string | undefined): string =>
+    finding === undefined ? '—' : firstSentence(finding);
   return [
     ...tables.map((contract) => ({
       name: contract.table,
@@ -231,6 +240,8 @@ export function collectRuntimeStateRows(
       posture: contract.posture,
       scope: contract.scope,
       retention: renderRetention(contract.retention, contract.retentionRationale),
+      readers: String(contract.readers.length),
+      openFinding: openFinding(contract.finding),
       projects: '—',
     })),
     ...views.map((contract) => ({
@@ -240,6 +251,8 @@ export function collectRuntimeStateRows(
       posture: '—',
       scope: '—',
       retention: '—',
+      readers: String(contract.readers.length),
+      openFinding: openFinding(contract.finding),
       projects: contract.sourceTable,
     })),
   ];
@@ -290,7 +303,7 @@ export function renderModuleCatalog(model: ModuleCatalogModel): string {
     const projects = row.projects === '—' ? '—' : `\`${row.projects}\``;
     return (
       `| \`${row.name}\` | ${row.kind} | ${owner} | ${row.posture} | ${row.scope} | ` +
-      `${escapeTableCell(row.retention)} | ${projects} |`
+      `${escapeTableCell(row.retention)} | ${row.readers} | ${escapeTableCell(row.openFinding)} | ${projects} |`
     );
   });
 
@@ -313,8 +326,10 @@ remains in \`server/.dependency-cruiser.cjs\`.
 ## Boundaries
 
 Instability is dependency-cruiser's folder metric, outgoing over outgoing plus incoming
-dependencies for everything under the source path: near 0 with many importers, extend the module by
-adding to it and never by changing what it exports; near 1, it is a leaf that is cheap to change.
+dependencies for everything under the source path — a parent module's number therefore covers
+every child nested under it too, so \`mcp-boundary\` and \`shared\` aggregate their child modules:
+near 0 with many importers, extend the module by adding to it and never by changing what it
+exports; near 1, it is a leaf that is cheap to change.
 
 | Module | Source path | Kind | Lifecycle | Instability | Description | Docs | Public entry | Observed dependencies | Imported by |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -337,10 +352,14 @@ checks against the schema DDL so no \`state.db\` table exists without a declared
 posture, scope and retention; a view is owned by the owner of the table it projects. Posture says
 whether rows survive a \`SCHEMA_VERSION\` recreate: \`durable\` rows exist nowhere else and are
 carried across it, while \`derived\` rows are rebuilt from a source outside the database and
-\`ephemeral\` rows are dropped because losing them is accepted.
+\`ephemeral\` rows are dropped because losing them is accepted. \`Readers\` counts the declaration's
+own \`readers\` array — repo-relative paths that read the table or view today, excluding the
+owner's own read-back, rendered even when it is \`0\` — and \`Open finding\` quotes the first
+sentence of the declaration's own \`finding\` when it names one, which is the contract's own
+declared defect and not a judgment this catalog makes.
 
-| Name | Kind | Owner module | Posture | Scope | Retention | Projects |
-| --- | --- | --- | --- | --- | --- | --- |
+| Name | Kind | Owner module | Posture | Scope | Retention | Readers | Open finding | Projects |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
 ${stateRows.join('\n')}
 
 ## Extension points
@@ -484,12 +503,22 @@ function selfTest(): void {
         retentionRationale: 'One row per alpha. Bounded by the alpha tree.',
         readers: [],
       },
+      {
+        table: 'beta_events',
+        owner: 'src/beta/store.ts',
+        posture: 'ephemeral',
+        scope: 'none',
+        retention: { maxRows: 10 },
+        readers: ['beta/consumer.ts', 'alpha/other.ts'],
+        finding:
+          'Two live readers remain until Tier 9 removes the duplicate channel. Retires then.',
+      },
     ],
     [{ view: 'v_alpha', sourceTable: 'alpha_runs', readers: [] }],
     descriptors,
     root
   );
-  assert.equal(state.length, 2);
+  assert.equal(state.length, 3);
   assert.equal(renderRetention({ maxRows: 1 }), 'maxRows: 1');
   assert.equal(renderRetention({ maxRowsPerResource: 50 }), 'maxRowsPerResource: 50');
   assert.equal(renderRetention({ maxAgeDays: 7 }), 'maxAgeDays: 7');
@@ -522,9 +551,20 @@ function selfTest(): void {
   );
   assert.match(
     rendered,
-    /\| `alpha_runs` \| table \| `alpha` \| durable \| workspace \| unbounded \(justified: One row per alpha\.\) \| — \|/u
+    /\| `alpha_runs` \| table \| `alpha` \| durable \| workspace \| unbounded \(justified: One row per alpha\.\) \| 0 \| — \| — \|/u
   );
-  assert.match(rendered, /\| `v_alpha` \| view \| `alpha` \| — \| — \| — \| `alpha_runs` \|/u);
+  assert.match(
+    rendered,
+    /\| `beta_events` \| table \| `beta` \| ephemeral \| none \| maxRows: 10 \| 2 \| Two live readers remain until Tier 9 removes the duplicate channel\. \| — \|/u
+  );
+  assert.match(
+    rendered,
+    /\| `v_alpha` \| view \| `alpha` \| — \| — \| — \| 0 \| — \| `alpha_runs` \|/u
+  );
+  assert.match(
+    rendered,
+    /\| Name \| Kind \| Owner module \| Posture \| Scope \| Retention \| Readers \| Open finding \| Projects \|/u
+  );
   assert.ok(
     rendered.indexOf('## Domain ownership') < rendered.indexOf('## Runtime state') &&
       rendered.indexOf('## Runtime state') < rendered.indexOf('## Observed boundary graph')
@@ -548,7 +588,7 @@ function selfTest(): void {
       rendered.indexOf('## Extension points') < rendered.indexOf('## Observed boundary graph')
   );
   assert.equal(rendered, renderModuleCatalog(model));
-  process.stdout.write('generate:module-catalog self-test — 21/21 cases passed\n');
+  process.stdout.write('generate:module-catalog self-test — 23/23 cases passed\n');
 }
 
 function main(): void {
