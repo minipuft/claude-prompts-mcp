@@ -478,6 +478,103 @@ describe('Clone Command Integration', () => {
     expect(promptDoc['chainSteps']).toHaveLength(2);
   });
 
+  /**
+   * P6.239 (R117, third amendment). MEASURED 2026-09-28 on `46b4568a`: a companion step whose
+   * `prompt.yaml` carried an inline gate definition with no `scope` imported as valid, while the
+   * loader drops that gate on every load. The import now opts into the check, differential
+   * against the file it overwrites: a definition the import brings is refused naming the field,
+   * one the overwritten file already carried is a warning.
+   */
+  describe('P6.239: an imported step whose inline gate the loader drops', () => {
+    const DROPPED_DEFINITION = {
+      name: 'Cites Sources',
+      type: 'validation',
+      description: 'Every claim names its source.',
+      guidance: 'Check each claim for a named source.',
+    };
+    const stepDoc = (withDropped: boolean) =>
+      yaml.dump({
+        id: 'draft',
+        name: 'draft',
+        description: 'draft step',
+        userMessageTemplate: 'Do the step.',
+        ...(withDropped
+          ? { gateConfiguration: { inline_gate_definitions: [DROPPED_DEFINITION] } }
+          : {}),
+      });
+    const writeSkill = async (withDropped: boolean) => {
+      const skillDir = path.join(tmpDir, 'source', 'gated-skill');
+      await mkdir(path.join(skillDir, 'resources', 'draft'), { recursive: true });
+      await writeFile(
+        path.join(skillDir, 'SKILL.md'),
+        buildSkillMd({ name: 'Gated Skill', description: 'Has a gated step' })
+      );
+      await writeFile(
+        path.join(skillDir, 'resources', 'draft', 'prompt.yaml'),
+        stepDoc(withDropped)
+      );
+      return path.join(skillDir, 'SKILL.md');
+    };
+    const targetDir = () => path.join(serverRoot, 'resources', 'prompts', 'testing', 'gated-skill');
+    const clone = (file: string, out: SkillsSyncOutput, force = false) =>
+      runSkillsSyncCommand(
+        {
+          command: 'clone',
+          file,
+          id: 'gated-skill',
+          category: 'testing',
+          force,
+        } as SkillsSyncOptions,
+        out,
+        resolveSkillsSyncPaths()
+      );
+    const warningsOf = () => {
+      const warnings: string[] = [];
+      return {
+        warnings,
+        out: {
+          ...silentOutput(),
+          warn: (...args: unknown[]) => warnings.push(args.map(String).join(' ')),
+        },
+      };
+    };
+
+    it('P6.239 (a) a fresh import carrying one is refused, naming the field', async () => {
+      const file = await writeSkill(true);
+
+      await expect(clone(file, silentOutput())).rejects.toThrow(
+        /Clone validation failed[\s\S]*inline_gate_definitions\[0\][\s\S]*scope \(must be one of/
+      );
+      expect(existsSync(path.join(targetDir(), 'draft', 'prompt.yaml'))).toBe(false);
+    });
+
+    it('P6.239 (b) an update keeping one the overwritten step already carried warns and lands', async () => {
+      const draftFile = path.join(targetDir(), 'draft', 'prompt.yaml');
+      await mkdir(path.dirname(draftFile), { recursive: true });
+      await writeFile(path.join(targetDir(), 'prompt.yaml'), 'id: gated-skill\nname: Old\n');
+      await writeFile(draftFile, stepDoc(true));
+      const file = await writeSkill(true);
+      const { warnings, out } = warningsOf();
+
+      await clone(file, out, true);
+
+      expect(await readFile(draftFile, 'utf-8')).toBe(stepDoc(true));
+      expect(warnings.filter((line) => line.includes('inline_gate_definitions'))).toEqual([
+        expect.stringMatching(/inline_gate_definitions\[0\]: .*scope \(must be one of/),
+      ]);
+    });
+
+    it('P6.239 (c) control: a clean import lands with no inline-gate warning', async () => {
+      const file = await writeSkill(false);
+      const { warnings, out } = warningsOf();
+
+      await clone(file, out);
+
+      expect(existsSync(path.join(targetDir(), 'draft', 'prompt.yaml'))).toBe(true);
+      expect(warnings.filter((line) => line.includes('inline_gate_definitions'))).toEqual([]);
+    });
+  });
+
   it('fails gracefully when --file is not provided', async () => {
     const out = silentOutput();
     await expect(
