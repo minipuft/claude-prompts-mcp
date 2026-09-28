@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @lifecycle canonical - Prevents unreached public instance methods on src/ classes from increasing (ratchet).
+// @lifecycle canonical - Prevents unreached public methods (instance and static) on src/ classes from increasing (ratchet).
 /**
  * Unreached Methods Ratchet
  *
@@ -12,10 +12,14 @@
  * This is the "declared, never called" member of the family `validate-state-field-writers.js`
  * lists, at the METHOD layer.
  *
- * WHAT COUNTS AS UNREACHED: a public (not `private`/`protected`, not `#private`) instance method,
- * declared on a class under `src/`, with no reference from `src/` outside its own body. Tests are
- * not in the program (`tsconfig.json` excludes them), so a method only a test calls IS reported —
- * a test caller proves the method works, not that production ever runs it.
+ * WHAT COUNTS AS UNREACHED: a public (not `private`/`protected`, not `#private`) method, instance
+ * or static, declared on a class under `src/`, with no reference from `src/` outside its own body.
+ * Tests are not in the program (`tsconfig.json` excludes them), so a method only a test calls IS
+ * reported — a test caller proves the method works, not that production ever runs it. Static
+ * methods are counted since P6.223 (R118): `McpToolRequestValidator.validate`, a static only a
+ * test called, passed every gate while this scan read instance methods alone (P6.211). A static
+ * method's key is the same `Class.method` shape; its structural pass checks the CONSTRUCTOR type
+ * (`typeof Class`), which is what a port reaching a static method is assigned from.
  *
  * HOW A REFERENCE IS RESOLVED — three passes, cheapest first, each closing a hole the others have:
  *
@@ -79,19 +83,24 @@ const TAG = '[unreached-methods]';
 // Detection
 // ---------------------------------------------------------------------------------------------
 
-/** Public, identifier-named instance methods of every class in the program. */
+/** Public, identifier-named instance and static methods of every class in the program. */
 function collectCandidates(project) {
   const candidates = [];
   for (const sourceFile of project.getSourceFiles()) {
     if (sourceFile.isDeclarationFile()) continue;
     for (const cls of sourceFile.getClasses()) {
-      for (const method of cls.getInstanceMethods()) {
+      const methods = [
+        ...cls.getInstanceMethods().map((method) => ({ method, isStatic: false })),
+        ...cls.getStaticMethods().map((method) => ({ method, isStatic: true })),
+      ];
+      for (const { method, isStatic } of methods) {
         if (method.hasModifier(SyntaxKind.PrivateKeyword)) continue;
         if (method.hasModifier(SyntaxKind.ProtectedKeyword)) continue;
         if (method.getNameNode().getKind() !== SyntaxKind.Identifier) continue;
         candidates.push({
           cls,
           method,
+          isStatic,
           key: `${cls.getName() ?? '<anonymous>'}.${method.getName()}`,
         });
       }
@@ -156,11 +165,15 @@ function containerType(container, checker) {
 function isReachedStructurally(candidate, referencedByName, checker) {
   const classNode = candidate.cls.compilerNode;
   if (!classNode.name) return false;
-  const instanceType = checker.getDeclaredTypeOfSymbol(checker.getSymbolAtLocation(classNode.name));
+  const classSymbol = checker.getSymbolAtLocation(classNode.name);
+  // A static method is reached through a port the constructor (`typeof Class`) is assigned to.
+  const ownerType = candidate.isStatic
+    ? checker.getTypeOfSymbol(classSymbol)
+    : checker.getDeclaredTypeOfSymbol(classSymbol);
   for (const declaration of referencedByName.get(candidate.method.getName()) ?? []) {
     if (declaration.parent === classNode) continue;
     const target = containerType(declaration.parent, checker);
-    if (target && checker.isTypeAssignableTo(instanceType, target)) return true;
+    if (target && checker.isTypeAssignableTo(ownerType, target)) return true;
   }
   return false;
 }
@@ -181,7 +194,7 @@ function isReachedByLanguageService(candidate) {
 }
 
 /**
- * Every unreached public instance method in `project`, sorted by key.
+ * Every unreached public method, instance or static, in `project`, sorted by key.
  * Throws when the program holds no candidate at all — a scan that observed nothing is not green.
  */
 export function findUnreachedMethods(project, rootDir) {
@@ -361,7 +374,7 @@ async function handleCheck() {
     baseline.methods ?? [],
     scan.unreached.map((f) => f.key)
   );
-  const summary = `${scan.unreached.length} unreached of ${scan.candidateCount} public instance methods, ${scan.elapsedMs} ms`;
+  const summary = `${scan.unreached.length} unreached of ${scan.candidateCount} public methods (instance and static), ${scan.elapsedMs} ms`;
 
   if (added.length === 0 && stale.length === 0) {
     console.log(`${TAG} OK: ${summary} (matches baseline)`);
@@ -400,6 +413,7 @@ const FIXTURE = `
 interface StructuralPort { viaPort(): void }
 interface DeclaredPort { viaImplements(): void }
 interface GenericPort<T> { take(): T }
+interface SubjectFactory { make(): Subject }
 
 export class Subject implements DeclaredPort {
   unreached(): void {}
@@ -409,6 +423,10 @@ export class Subject implements DeclaredPort {
   viaImplements(): void {}
   private hidden(): void {}
   shadowed(): void {}
+  static onlyTests(): void {}
+  static calledStatic(): void {}
+  static make(): Subject { return new Subject(); }
+  private static hiddenStatic(): void {}
 }
 
 export class Homonym { shadowed(): void {} }
@@ -426,6 +444,9 @@ function drive(port: StructuralPort, declared: DeclaredPort, generic: GenericPor
 
 const subject = new Subject();
 subject.oneCaller();
+Subject.calledStatic();
+const factory: SubjectFactory = Subject;
+factory.make();
 new Homonym().shadowed();
 drive(subject, subject, new Box('x'));
 `;
@@ -464,6 +485,16 @@ function runSelfTest() {
     !keys.has('Box.take')
   );
   check('a private method is out of scope', !keys.has('Subject.hidden'));
+  check(
+    'STATIC: a static method nothing but a test calls is reported',
+    keys.has('Subject.onlyTests')
+  );
+  check('TWIN: a static method with a caller is not reported', !keys.has('Subject.calledStatic'));
+  check(
+    'a static method reached through a port the constructor is assigned to is not reported',
+    !keys.has('Subject.make')
+  );
+  check('a private static method is out of scope', !keys.has('Subject.hiddenStatic'));
   check(
     'HOMONYM: a call on another class with the same method name does not reach this one',
     keys.has('Subject.shadowed') && !keys.has('Homonym.shadowed')
