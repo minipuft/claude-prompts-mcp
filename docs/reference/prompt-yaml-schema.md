@@ -158,6 +158,11 @@ dropped definition does not fail the load — the prompt still loads without tha
 loader logs a warning naming the prompt, the gate, and every offending field. Any field not in the
 table above is discarded silently; it is not part of the contract.
 
+`resource_manager` refuses to write such a definition: `validate`, `create`, `update` and an update
+`preview` answer with an error naming the definition and each missing or mistyped field, and
+nothing is written. A prompt already on disk with a dropped definition can still be edited; only a
+write that introduces one is refused.
+
 ```yaml
 gateConfiguration:
   inline_gate_definitions:

@@ -30,7 +30,7 @@
  */
 import { afterEach, describe, expect, test } from '@jest/globals';
 
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -1189,13 +1189,90 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     expect(inspected.text).toContain('"name":"g202"');
     expect(inspected.text).toContain('"pass_criteria":[]');
 
-    // (b) Control: a definition the loader drops still reports the mismatch.
+    // (b) Control: a definition the loader drops is not normalized into a match. Since P6.215
+    // (R108) the write is refused before anything lands, naming the field the loader requires.
     const dropped = await create('sv_p202_scope', noScope);
     expect(dropped.isError).toBe(true);
-    expect(dropped.text).toMatch(verificationFailed);
+    expect(dropped.text).toContain('inline_gate_definitions[0] (g202): scope (must be one of');
 
     // (b) Control: a complete definition verifies as before.
     expect((await create('sv_p202_full', full)).isError).toBe(false);
+  }, 180000);
+
+  /**
+   * P6.215 / R108. MEASURED 2026-09-28 on `51b16fd5`, driven over `resource_manager create`: an
+   * inline definition omitting `scope` was WRITTEN, and the reply read "post-write verification
+   * FAILED (mismatched: gateConfiguration)" because the loader dropped the gate ("Dropped inline
+   * gate definition … scope (must be one of …). The gate will not load."). `diagnosePromptWrite`
+   * now reads the loader's own `findInlineGateFieldProblems`, so validate, create, update and the
+   * update preview refuse the definition by field before anything is written.
+   */
+  test('P6.215 a write carrying an inline gate the loader would drop is refused by field', async () => {
+    const roots = freshRoots();
+    const server = await startServer(roots);
+    const gate = {
+      name: 'g215',
+      type: 'validation',
+      scope: 'execution',
+      description: 'D-215',
+      guidance: 'G-215',
+      pass_criteria: ['P-215'],
+    };
+    const { scope: _omittedScope, ...noScope } = gate;
+    const { guidance: _omittedGuidance, ...noGuidance } = gate;
+    const prompt = (action: string, id: string, definition: Record<string, unknown>) =>
+      server.call('resource_manager', {
+        resource_type: 'prompt',
+        action,
+        id,
+        category: 'general',
+        name: id,
+        description: 'step for P6.215',
+        user_message_template: `BODY-${id}`,
+        gate_configuration: { framework_gates: false, inline_gate_definitions: [definition] },
+      });
+    const refusedFor = (field: string) =>
+      `gateConfiguration.inline_gate_definitions[0] (g215): ${field} (must be`;
+    const promptFile = path.join(roots.workspace, 'resources', 'prompts', 'general');
+
+    // (a) validate and create refuse, naming the field; create writes nothing.
+    const validated = await prompt('validate', 'sv_p215_new', noScope);
+    expect(validated.isError).toBe(true);
+    expect(validated.text).toContain(refusedFor('scope'));
+    const created = await prompt('create', 'sv_p215_new', noScope);
+    expect(created.isError).toBe(true);
+    expect(created.text).toContain(refusedFor('scope'));
+    expect(created.text).not.toMatch(/post-write verification/);
+    expect(existsSync(path.join(promptFile, 'sv_p215_new'))).toBe(false);
+
+    // (c) Control: the complete definition validates, creates and loads.
+    expect((await prompt('validate', 'sv_p215', gate)).isError).toBe(false);
+    const complete = await prompt('create', 'sv_p215', gate);
+    expect({ isError: complete.isError, text: complete.text }).toMatchObject({ isError: false });
+    expect(complete.text).not.toMatch(/post-write verification FAILED/);
+    // Positive control for the absence asserted in (a): the path probe sees a written prompt.
+    expect(existsSync(path.join(promptFile, 'sv_p215'))).toBe(true);
+
+    // (b) update and its preview refuse the same, and the loaded gate is unchanged.
+    const update = (definition: Record<string, unknown>, preview: boolean) =>
+      server.call('resource_manager', {
+        resource_type: 'prompt',
+        ...(preview ? { action: 'preview', preview_action: 'update' } : { action: 'update' }),
+        id: 'sv_p215',
+        gate_configuration: { framework_gates: false, inline_gate_definitions: [definition] },
+      });
+    const previewed = await update(noGuidance, true);
+    expect(previewed.isError).toBe(true);
+    expect(previewed.text).toContain(refusedFor('guidance'));
+    const updated = await update(noGuidance, false);
+    expect(updated.isError).toBe(true);
+    expect(updated.text).toContain(refusedFor('guidance'));
+    const inspected = await server.call('resource_manager', {
+      resource_type: 'prompt',
+      action: 'inspect',
+      id: 'sv_p215',
+    });
+    expect(inspected.text).toContain('"guidance":"G-215"');
   }, 180000);
 
   /**
