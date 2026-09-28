@@ -197,6 +197,15 @@ prompt_engine(command:"research topic:'LLMs' :: 'cite sources, note confidence'"
 prompt_engine(command:"@ReACT analysis --> synthesis --> report :: 'include data'")
 ```
 
+#### JSON command form
+
+`command` also accepts a JSON object, `{"command": "<command>", "args": {…}}`: the inner
+`command` runs exactly as it would typed directly, operators included. The outer `args` fill the
+**first step only**: on an arrow-chain, `{"command": ">>a --> >>b", "args": {"topic": "x"}}`
+hands `topic` to `a` and leaves `b` with the arguments written on it in the inner command.
+A run started this way completes with the inner command on its `Re-run:` line, as the typed
+command does; the outer `args` are not part of that line.
+
 #### Quoting and escapes in argument values
 
 Quoted values are unescaped when parsed, so **a backslash inside a quoted value is an escape
@@ -1716,9 +1725,9 @@ prompt_engine(
 - **Caps**: 1 insertion per unknown id, 3 insertions per run. A capped or non-qualifying
   observation still applies to the ledger — it just mutates nothing in the node list.
 - **One insertion per call.** A call that declares several blocking unknowns inserts a step for
-  the first one only; the others stay open in the ledger with no step. The interrupt section names
-  them on an `Open with no investigation step` line, and `structuredContent.chain_interrupt`
-  lists them in `open_blocking_unknowns`. Declare one again on a later call to insert its step
+  the first one only; the others stay open in the ledger with no step. The interrupt is about that
+  same first one, and its section names the others on an `Open with no investigation step` line, and `structuredContent.chain_interrupt`
+  lists them in `open_blocking_unknowns` and names them in `uninvestigated_unknown_ids`. Declare one again on a later call to insert its step
   (within the caps), resolve it, or cover it in a `remainder`.
 - The current node can never be a skip target — only strictly-ahead, not-yet-executed nodes.
 - A run's terminal `execution_records` row carries two more terminal-row facts for this: how many
@@ -1759,6 +1768,7 @@ Either variant carries `structuredContent.chain_interrupt`:
       "statement": "TTL for the new cache layer is undecided",
     },
   ],
+  "uninvestigated_unknown_ids": [], // open blocking ids no inserted step investigates
   "affected_step_ids": ["review"], // declared target_step_id links only
   "remaining_nodes": [{ "id": "…", "promptId": "…", "stepName": "…" }], // after the rendered step
   "paused": false,
@@ -1786,10 +1796,14 @@ says the run completed and names every blocking unknown still open as unresolved
 `resume.verbs` is empty, because nothing is left to resume. `structuredContent.chain_interrupt`
 lists every one in `open_blocking_unknowns`, as every interrupt payload does.
 
-**`unknown` is the most recent; `open_blocking_unknowns` is all of them.** `unknown` names the
-open blocking unknown discovered most recently — the one this interrupt is about, which the text
-section names. `open_blocking_unknowns` lists every blocking unknown still open, in the order the
-run discovered them, so a run holding two reports both on the machine half as well as the text.
+**`unknown` is the one this interrupt is about; `open_blocking_unknowns` is all of them.**
+`unknown` names an open blocking unknown from the most recent call that declared one, and of
+that call's blocking unknowns, the FIRST it declared: the same unknown the inserted investigation
+step investigates, and the one the text section names. `open_blocking_unknowns` lists every
+blocking unknown still open, in the order the run discovered them, so a run holding two reports
+both on the machine half as well as the text. `uninvestigated_unknown_ids` is the subset no
+inserted step investigates, in the same order: the ids the text's `Open with no investigation
+step` line names, empty when every open one has its step.
 
 A paused run never offers "answer the step" — it issued no step. It never offers a bare
 `remainder` either: a remainder alone does not clear the hold, so the caller must spell it

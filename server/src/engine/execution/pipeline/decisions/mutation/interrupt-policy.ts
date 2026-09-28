@@ -85,11 +85,14 @@ export function decideInterrupt(input: DecideInterruptInput): ChainInterrupt | u
 /**
  * The open blocking entry the interrupt is ABOUT.
  *
- * The most recently discovered one wins (`discoveredAtStep`, ties broken by later ledger
- * position, which is discovery order within a step's batch). Ledger order alone would make an
- * older still-open unknown outrank the discovery that just arrived, so a run holding two
- * blocking unknowns would keep reporting the stale one while the fresh one — the reason THIS
- * step stopped — never appeared in a payload.
+ * The most recent discovery step wins (`discoveredAtStep`), and within that step's batch the
+ * FIRST the call declared (earlier ledger position, which is declaration order) — the same
+ * unknown the mutation policy inserts an investigation step for, so the section, the payload's
+ * `unknown` and the handed step name one unknown (R119). The rest of the batch stays open and is
+ * named by `uninvestigatedUnknownIds`. Ledger order alone would make an older still-open unknown
+ * outrank the discovery that just arrived, so a run holding two blocking unknowns would keep
+ * reporting the stale one while the fresh one — the reason THIS step stopped — never appeared in
+ * a payload.
  *
  * `blocking` is read off the LEDGER entry, not off an observation: `computeUnknownLedger` has
  * already resolved the `?? false` default, and restating it here would be a second copy of a
@@ -103,7 +106,7 @@ function selectTriggeringUnknown(
     if (entry.state !== 'active' || entry.blocking !== true) {
       continue;
     }
-    if (chosen === undefined || entry.discoveredAtStep >= chosen.discoveredAtStep) {
+    if (chosen === undefined || entry.discoveredAtStep > chosen.discoveredAtStep) {
       chosen = entry;
     }
   }

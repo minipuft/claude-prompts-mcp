@@ -1119,6 +1119,25 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       expect(runState(plain.chainId).args).toEqual([{ topic: 'T194' }, { topic: '' }]);
     }, 120000);
 
+    /**
+     * P6.222 / R112 amended. MEASURED 2026-09-28 on `04b951cb`: the JSON form of
+     * `>>sv_a topic:"T222"` arrow-chain `>>sv_b` completed with no `Re-run:` — the line keyed on
+     * `parseStrategy === 'symbolic'`. The JSON form's decoded command is one the parser consumed
+     * whole, so it renders as the symbolic form's does and re-parses to the same run.
+     */
+    test('P6.222 (a) a JSON-form arrow-chain re-runs as its decoded command', async () => {
+      const inner = `>>sv_a topic:"T222"${ARROW}>>sv_b`;
+      const run = await start({ command: JSON.stringify({ command: inner }) });
+      await run.call({ user_response: 'A' });
+      const done = await run.call({ user_response: 'B' });
+      expect(done).toContain('Chain execution complete');
+      expect(rerun(done)).toBe(inner);
+      const again = await start({ command: rerun(done) ?? '' });
+      expect(runState(again.chainId).steps).toEqual(runState(run.chainId).steps);
+      expect(runState(again.chainId).args).toEqual(runState(run.chainId).args);
+      expect(runState(run.chainId).args).toEqual([{ topic: 'T222' }, { topic: '' }]);
+    }, 120000);
+
     test('P6.194 (b) a workflow completes with no Re-run and never >>prompt', async () => {
       const workflow = await start({
         workflow: {
@@ -1365,11 +1384,12 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
         user_response: 'A',
         observations: [unknown('u-208a'), unknown('u-208b')],
       });
-      // (c) The mid-run interrupt still names the most recent one (the step body and the
-      // ledger above it list both).
+      // (c) The mid-run interrupt names the first one the call declared, the one its inserted
+      // step investigates (P6.224, R119); the second is named by id on the open-with-no-step line
+      // only (the ledger above the section lists both).
       const section = mid.slice(mid.indexOf('**Blocking Unknown**'));
-      expect(section).toMatch(/^\*\*Blocking Unknown\*\*\n\nSTATEMENT-u-208b\n/);
-      expect(section).not.toContain('u-208a');
+      expect(section).toMatch(/^\*\*Blocking Unknown\*\*\n\nSTATEMENT-u-208a\n/);
+      expect(section).not.toContain('STATEMENT-u-208b');
 
       const done = await complete(run.chainId);
       expect(done).not.toContain('Blocking Unknown');
@@ -1431,11 +1451,12 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
         user_response: 'A',
         observations: [unknown('u-216a'), unknown('u-216b')],
       });
-      expect(mid.interrupt?.unknown?.id).toBe('u-216b');
+      // P6.224 (R119): `unknown` is the first of the batch, the one the inserted step investigates.
+      expect(mid.interrupt?.unknown?.id).toBe('u-216a');
       expect(mid.interrupt?.open_blocking_unknowns).toEqual([entry('u-216a'), entry('u-216b')]);
 
       const done = await complete(run.chainId);
-      expect(done.interrupt?.unknown?.id).toBe('u-216b');
+      expect(done.interrupt?.unknown?.id).toBe('u-216a');
       expect(done.interrupt?.open_blocking_unknowns).toEqual([entry('u-216a'), entry('u-216b')]);
     }, 120000);
 
@@ -1511,6 +1532,11 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
    * `inv-u-217b`. One insertion per call is the policy's rule (`decideMutation` takes the first
    * blocking discovery; insert-precedence is pinned), so the interrupt now names the open blocking
    * unknowns no inserted step investigates.
+   *
+   * P6.224 / R119. MEASURED 2026-09-28 on `828f8dac`: with `u-224a` and `u-224b` declared in one
+   * call, the handed step read "Investigate: STATEMENT-u-224a" while the "Blocking Unknown" section
+   * and `structuredContent.chain_interrupt.unknown` named `u-224b` — the interrupt took the last
+   * of the batch, the insertion the first. Both now take the first the call declared.
    */
   describe('P6.217: two blocking unknowns declared in one call', () => {
     const LEFT_OUT = 'Open with no investigation step (one call inserts one';
@@ -1528,12 +1554,29 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       );
       const result = outcome.result as {
         content?: Array<{ text?: string }>;
-        structuredContent?: { chain_interrupt?: { remaining_nodes?: Array<{ id: string }> } };
+        structuredContent?: {
+          chain_interrupt?: {
+            remaining_nodes?: Array<{ id: string }>;
+            unknown?: { id: string };
+            uninvestigated_unknown_ids?: string[];
+          };
+        };
       };
       const text = (result.content ?? []).map((part) => part.text ?? '').join('\n');
+      const section = text.slice(text.indexOf('**Blocking Unknown**'));
       return {
-        section: text.slice(text.indexOf('**Blocking Unknown**')),
+        text,
+        section,
         remaining: result.structuredContent?.chain_interrupt?.remaining_nodes?.map((n) => n.id),
+        unknownId: result.structuredContent?.chain_interrupt?.unknown?.id,
+        uninvestigated: result.structuredContent?.chain_interrupt?.uninvestigated_unknown_ids,
+        // The ids the text's open-with-no-step line names, parsed back out of the reply.
+        lineIds:
+          section
+            .split('\n')
+            .find((line) => line.startsWith(LEFT_OUT))
+            ?.split('): ')[1]
+            ?.split(', ') ?? [],
       };
     }
     function inserted(chainId: string): string[] {
@@ -1573,6 +1616,33 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       expect(again.section).not.toContain(LEFT_OUT);
     }, 120000);
 
+    test('P6.225 (a) the structured list names the ids the text line names', async () => {
+      const run = await start({ command: `>>sv_a${ARROW}>>sv_b${ARROW}>>sv_b` });
+      const mid = await callRun(run.chainId, {
+        user_response: 'A',
+        observations: [unknown('u-225a'), unknown('u-225b'), unknown('u-225c')],
+      });
+      expect(mid.lineIds).toEqual(['u-225b', 'u-225c']);
+      expect(mid.uninvestigated).toEqual(mid.lineIds);
+    }, 120000);
+
+    test('P6.224 (a) the interrupt names the unknown the inserted step investigates', async () => {
+      const run = await start({ command: `>>sv_a${ARROW}>>sv_b` });
+      const mid = await callRun(run.chainId, {
+        user_response: 'A',
+        observations: [unknown('u-224a'), unknown('u-224b')],
+      });
+      // The handed step investigates the first declared…
+      expect(inserted(run.chainId)).toEqual(['inv-u-224a']);
+      expect(mid.text).toContain('## Investigate: STATEMENT-u-224a');
+      // …and so does the interrupt, on both halves; the second stays open and named on the line.
+      expect(mid.section).toContain('**Blocking Unknown**\n\nSTATEMENT-u-224a\n');
+      expect(mid.unknownId).toBe('u-224a');
+      expect(mid.section).toContain(
+        `${LEFT_OUT}, for the first blocking unknown it declares): u-224b`
+      );
+    }, 120000);
+
     test('(b) control: one blocking unknown gets its step and no such line', async () => {
       const run = await start({ command: `>>sv_a${ARROW}>>sv_b` });
       const mid = await callRun(run.chainId, {
@@ -1582,6 +1652,9 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       expect(inserted(run.chainId)).toEqual(['inv-u-217c']);
       expect(mid.section).toContain('**Blocking Unknown**');
       expect(mid.section).not.toContain(LEFT_OUT);
+      // P6.225 (b) control: nothing is left without a step, on either half.
+      expect(mid.uninvestigated).toEqual([]);
+      expect(mid.lineIds).toEqual([]);
     }, 120000);
   });
 

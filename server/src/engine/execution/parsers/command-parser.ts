@@ -114,6 +114,20 @@ function unwrapJsonCommand(
   };
 }
 
+/**
+ * The text a completed run re-runs from, when the parser consumed a command whole (P6.194,
+ * P6.222): the symbolic form's own text, or the JSON form's command decoded by the one decoder.
+ * Undefined for every other strategy, and with no parse — a workflow has no command text.
+ */
+export function rerunCommandText(
+  metadata: { readonly parseStrategy: string; readonly originalCommand: string } | undefined
+): string | undefined {
+  if (metadata?.parseStrategy === 'symbolic') return metadata.originalCommand;
+  return metadata?.parseStrategy === 'json'
+    ? unwrapJsonCommand(metadata.originalCommand)?.command
+    : undefined;
+}
+
 /** A `command` that is itself a JSON object: its `command` (and `args`), or its `prompt`. */
 function unwrapDoubleEncoded(command: string): { command: string; args?: unknown } | undefined {
   if (!command.trim().startsWith('{')) return undefined;

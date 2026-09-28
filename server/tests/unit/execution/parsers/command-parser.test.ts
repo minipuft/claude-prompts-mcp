@@ -615,6 +615,25 @@ describe('P6.218: the JSON command form carries its inner command operators', ()
     expect(wrapped.rawArgs).toBe('{"input":"I-218"}');
   });
 
+  /**
+   * P6.227 / R112 amended: a multi-step plan's outer `args` fill the FIRST step only, the rule
+   * `docs/reference/mcp-tools.md` §JSON command form states.
+   */
+  test('P6.227 outer args reach step 1 only; step 2 keeps its own args', async () => {
+    const inner = '>>analyze --> >>summarize input="S2-227"';
+    const symbolic = await parser.parseCommand(inner, basePrompts);
+    const wrapped = await parser.parseCommand(
+      json(inner, { args: { input: 'I-227' } }),
+      basePrompts
+    );
+    const steps = wrapped.executionPlan?.steps ?? [];
+    expect(steps).toHaveLength(2);
+    expect(steps[0]?.args).toBe('{"input":"I-227"}');
+    // Control: step 2's own args are the symbolic parse's, untouched by the outer args.
+    expect(symbolic.executionPlan?.steps[1]?.args).toContain('S2-227');
+    expect(steps[1]?.args).toBe(symbolic.executionPlan?.steps[1]?.args);
+  });
+
   test('(c) control: a JSON form with no operator carries no plan', async () => {
     const wrapped = await parser.parseCommand(json('>>analyze'), basePrompts);
     expect(wrapped.operators).toBeUndefined();

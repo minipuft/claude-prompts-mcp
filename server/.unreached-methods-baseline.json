@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-27T08:10:30.603Z",
-  "total": 8,
+  "generatedAt": "2026-09-28T10:22:13.332Z",
+  "total": 9,
   "methods": [
     "EnhancedLogger.initLogFile",
     "ExecutionRecordStore.queryByChain",
@@ -10,7 +10,8 @@
     "GateAccumulator.has",
     "GateStateStore.recordValidation",
     "PendingConfirmationTracker.clear",
-    "PendingConfirmationTracker.hasPending"
+    "PendingConfirmationTracker.hasPending",
+    "ValidationHelpers.validateRequiredFields"
   ],
   "reasons": {
     "GateStateStore.recordValidation": "kept per its own doc comment (gate-state-store.ts): the only caller, LightweightGateSystem.validateContent, was deleted with GateValidator when every criteria type moved to a pipeline stage, leaving getSystemHealth's totalValidations/successRate/lastValidationTime fields with no producer. Deleting the writer without the health fields would leave a reader describing a number nothing computes; revives when 20-gate-review-stage.ts wires in ground-truth results, or gets killed together with the health fields in a follow-up row (R36, P4.52, 2026-09-17).",
@@ -21,5 +22,12 @@
     "PendingConfirmationTracker.hasPending": "sole non-destructive test-observation window for pending-confirmation state: checkAndClearPending clears on match (single-use), so hasPending is the only way tests assert a pending confirmation exists without consuming it — 10 call sites in pending-confirmation-tracker.test.ts (P4.52, 2026-09-20).",
     "PendingConfirmationTracker.clear": "has its own dedicated behavioral test (multi-entry clear + hasPending verification), not merely incidental teardown; kept as tested capability alongside hasPending (P4.52, 2026-09-20).",
     "ExecutionRecordStore.queryByChain": "sole test-observation window for the `WHERE chain_id = ?` predicate and its tenant scoping (AC4/AC5, execution-record-store.integration.test.ts); the only production readers (analytics-action-handler.ts, execution-history-action-handler.ts) call queryRecent(), which never filters by chain_id or session_id in JS — verified, not just assumed. Both write and query sides are documented as intentional in-process consumers in this class's own header (P4.52, 2026-09-20)."
-  }
+  },
+  "overrideLog": [
+    {
+      "date": "2026-09-28T10:22:13.332Z",
+      "method": "ValidationHelpers.validateRequiredFields",
+      "reason": "static methods now counted (P6.223, R118): first static finding on the tree; the class is exported and imported by nobody (knip counts ValidationHelpers already) - a planner finding, kept pending that ruling"
+    }
+  ]
 }

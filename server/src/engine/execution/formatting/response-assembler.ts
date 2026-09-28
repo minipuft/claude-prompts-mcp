@@ -5,6 +5,7 @@ import { SHELL_VERIFY_DEFAULT_MAX_ITERATIONS } from '../../gates/shell/types.js'
 import { handoffNodeToken } from '../delegation/handoff-contract.js';
 import { DelegationRenderer } from '../delegation/renderer.js';
 import { getHandoffFooterInstruction } from '../delegation/strategy.js';
+import { rerunCommandText } from '../parsers/command-parser.js';
 import { formatShellVerifyToken } from '../parsers/symbolic-operator-parser.js';
 import { isUnknownInterruptPending } from '../pipeline/decisions/index.js';
 import { isFrameworkInjected } from '../pipeline/decisions/injection/index.js';
@@ -1002,9 +1003,7 @@ export class ResponseAssembler {
    */
   private resolveBlockedReviewInstructions(context: ExecutionContext): string {
     const enhanced = context.gateInstructions ?? '';
-    if (enhanced.trim() !== '') {
-      return enhanced;
-    }
+    if (enhanced.trim() !== '') return enhanced;
 
     const results = context.executionResults;
     const isGateReviewRender = results?.metadata?.['gateReview'] !== undefined;
@@ -1067,9 +1066,11 @@ export class ResponseAssembler {
     return {
       kind: 'chain_interrupt',
       reason: interrupt.reason,
-      // `unknown` is the most recent (what this interrupt is about); the list is every open one.
+      // `unknown` is what this interrupt is about (the one the inserted step investigates, R119);
+      // the first list is every open one, the second the ids the text's open-with-no-step line names.
       unknown: { id: interrupt.unknownId, statement: interrupt.statement },
       open_blocking_unknowns: [...interrupt.openBlockingUnknowns], // already `{id, statement}`
+      uninvestigated_unknown_ids: [...interrupt.uninvestigatedUnknownIds],
       affected_step_ids: [...interrupt.affectedStepIds],
       // camelCase `promptId`/`stepName` inside these entries is the plan's declared shape, not
       // an oversight: they name IR node fields a caller would author back verbatim in a
@@ -1294,17 +1295,15 @@ export class ResponseAssembler {
 
   /**
    * A completed run's re-run (R89): the command that re-parses to the same run. A chain prompt is
-   * written with its operators (P6.186); an arrow-chain run is its original command text, which the
-   * parser consumed whole and the blueprint keeps (P6.194). A workflow has no command text: no line.
+   * written with its operators (P6.186); an arrow-chain run is the command text the parser consumed
+   * whole and the blueprint keeps (P6.194), the JSON form's decoded (P6.222). A workflow: no line.
    */
   private buildUsageCTA(context: ExecutionContext): string | null {
     const parsed = context.parsedCommand;
     const command =
       parsed?.convertedPrompt !== undefined
         ? this.buildInvocationString(context, parsed.convertedPrompt)
-        : parsed?.metadata.parseStrategy === 'symbolic'
-          ? parsed.metadata.originalCommand
-          : undefined;
+        : rerunCommandText(parsed?.metadata);
     return command === undefined ? null : `---\nRe-run: \`${command}\``;
   }
 
