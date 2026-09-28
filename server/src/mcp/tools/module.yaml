@@ -5,3 +5,7 @@ lifecycle: canonical
 description: Registers and routes the three public MCP tools.
 children: internal
 publicEntry: index.ts
+extension:
+  - point: Pipeline stages
+    symbol: PipelineBuilder
+    how: Implement `PipelineStage` and add the instance to the `stages` array in `PipelineBuilder`; `PromptExecutionPipeline` runs that array in order and checks each stage's declared `requires`/`provides`, so it needs no edit.
