@@ -712,14 +712,13 @@ export class ChainSessionStore implements ChainSessionService {
     }
   }
 
-  /** Re-key a run no caller has addressed yet under its reserved chain id. */
+  /**
+   * Re-key a run no caller has addressed yet under its reserved chain id. The previous chain id
+   * leaves the run indexes only when no other session still holds it (R123).
+   */
   private renameNewRun(session: ChainSession, chainId: string): void {
     const previous = session.chainId;
-    this.chainSessionMapping.get(previous)?.delete(session.sessionId);
-    if (this.chainSessionMapping.get(previous)?.size === 0) {
-      this.chainSessionMapping.delete(previous);
-    }
-    this.removeRunFromBaseTracking(previous);
+    this.removeSessionFromRun(session.sessionId, previous);
     session.chainId = chainId;
     const sessionIds = this.chainSessionMapping.get(chainId) ?? new Set<string>();
     sessionIds.add(session.sessionId);
@@ -2799,7 +2798,7 @@ export class ChainSessionStore implements ChainSessionService {
   /**
    * Take one session out of its run's membership. The run leaves every run index — its emptied
    * `chainSessionMapping` set and its run-history entry — once no session holds it. The one
-   * removal path `clearSession` and eviction share (R120).
+   * removal path `clearSession`, eviction and a reserved rename share (R120, R123).
    */
   private removeSessionFromRun(sessionId: string, chainId: string): void {
     const chainSessions = this.chainSessionMapping.get(chainId);

@@ -1013,6 +1013,51 @@ describe('Tenant Isolation', () => {
       });
 
       /**
+       * P6.236 (R123). MEASURED 2026-09-28 on `46b4568a`: two sessions minted one run chain id in
+       * one scope; the persist reserved the second away to `#2`, and the rename dropped `#1` from
+       * the run history although the first session still held it. A reserved rename now leaves
+       * the previous chain id through the helper `clearSession` and eviction use.
+       */
+      test('P6.236 (a) a rename leaves the sibling that still holds the chain id in the history', async () => {
+        await seed('p236a-first', 'chain-p236a#1', scopeA, 'FIRST-236');
+        const renamed = await store.createSession('p236a-second', 'chain-p236a#1', 2, {}, scopeA);
+
+        expect(renamed.chainId).toBe('chain-p236a#2');
+        expect(store.hasActiveSessionForChain('chain-p236a#1')).toBe(true);
+        expect(store.getRunHistory('chain-p236a')).toEqual(['chain-p236a#1', 'chain-p236a#2']);
+      });
+
+      test('P6.236 (a) a base-wide clear after the rename reaches the sibling too', async () => {
+        await seed('p236c-first', 'chain-p236c#1', scopeA, 'FIRST-236');
+        await store.createSession('p236c-second', 'chain-p236c#1', 2, {}, scopeA);
+
+        // A clear by base chain id walks the run history to find every run.
+        await store.clearSessionsForChain('chain-p236c');
+
+        expect(store.getSession('p236c-first')).toBeUndefined();
+        expect(store.getSession('p236c-second')).toBeUndefined();
+        expect(store.getRunHistory('chain-p236c')).toEqual([]);
+      });
+
+      test('P6.236 (b) control: the last session to leave a chain id takes it out of the history', async () => {
+        const other = new ChainSessionStore(logger, new TextReferenceStore(logger), {
+          cleanupIntervalMs: 10_000,
+          databasePort: dbManager,
+        });
+        try {
+          await other.createSession('p236b-other', 'chain-p236b#1', 2, {}, scopeA);
+        } finally {
+          await other.cleanup();
+        }
+
+        const renamed = await store.createSession('p236b-here', 'chain-p236b#1', 2, {}, scopeA);
+
+        expect(renamed.chainId).toBe('chain-p236b#2');
+        expect(store.hasActiveSessionForChain('chain-p236b#1')).toBe(false);
+        expect(store.getRunHistory('chain-p236b')).toEqual(['chain-p236b#2']);
+      });
+
+      /**
        * P6.230 (R116 amended). MEASURED 2026-09-28 on `83a1a0f7`: the eviction drained the release
        * a removal uses, so besides step results and named outputs it fired the run-ended callbacks
        * (the run's temporary gates) AND cleared this process's argument history for the evicted
