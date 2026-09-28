@@ -1074,6 +1074,82 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
   });
 
   /**
+   * MEASURED 2026-09-28 on `6b6fff7aa` (driven, this harness, shipped `gateGuidance` frequency 0 =
+   * first step only, target both; stage 14's decision read from the `--verbose` log): a chain
+   * `[sv_a, sv_b, sv_a+sv-block]` answered on steps 1 and 2 rendered step 3 from a call whose
+   * gate-guidance decision was "Step 2 > 1 (first-only mode)", and step 3's block carried none of
+   * its own gate's guidance. The FAIL on step 3 decided "Gate review step (frequency bypassed)":
+   * stage 13 opens a gated step's review before stage 14 decides, so the call's context is
+   * `'gate_review'`, and the review render carried the gate's guidance. Stage 20 also hands the
+   * review render only the system-prompt decision, never the call's gate-guidance one.
+   *
+   * PIN (R147): a review render decides its own gate guidance and never follows the frequency;
+   * only a step block follows the call's gate-guidance decision.
+   */
+  describe("P6.151: a review render's gate guidance does not follow the call's frequency", () => {
+    /** Gate-guidance injection for `sv-block`: the gate's guidance under its own heading. */
+    const gateGuidanceFor = (text: string): boolean =>
+      text.includes('### sv-block\nGUIDANCE-sv-block');
+
+    beforeAll(async () => {
+      for (const [id, steps] of [
+        [
+          'sv_tail151',
+          [
+            { promptId: 'sv_a', stepName: 'A' },
+            { promptId: 'sv_b', stepName: 'B' },
+            { promptId: 'sv_a', stepName: 'C', inlineGateIds: ['sv-block'] },
+          ],
+        ],
+        [
+          'sv_short151',
+          [
+            { promptId: 'sv_a', stepName: 'A' },
+            { promptId: 'sv_b', stepName: 'B', inlineGateIds: ['sv-block'] },
+          ],
+        ],
+      ] as const) {
+        const created = await tool('resource_manager', {
+          resource_type: 'prompt',
+          action: 'create',
+          id,
+          category: 'general',
+          name: id,
+          description: 'e2e chain gated on its last step only',
+          user_message_template: 'CHAIN-OWN-TEMPLATE',
+          arguments: TOPIC,
+          gate_configuration: OPT_OUT,
+          chain_steps: steps,
+        });
+        if (created.isError) throw new Error(created.text);
+      }
+    }, 120000);
+
+    test('(a) gate guidance: a FAIL review render on step 3 carries it; the step 3 block before it did not', async () => {
+      const run = await start({ command: '>>sv_tail151' });
+      await run.call({ user_response: 'A out' });
+      const stepBlock = await run.call({ user_response: 'B out' });
+      expect(templates(stepBlock)).toEqual(['BODY-sv_a topic=']);
+      expect(stepBlock).toContain('Progress 3/3');
+      // Control: the call answering step 2 decided gate guidance "skip" (first step only), and the
+      // step block it rendered follows that decision.
+      expect(gateGuidanceFor(stepBlock)).toBe(false);
+
+      const review = await run.call({ user_response: 'C out', gate_verdict: FAIL });
+      expect(review).toContain('Gate Review Required');
+      // Twin: the review render carries gate guidance although step 3 is past the frequency.
+      expect(gateGuidanceFor(review)).toBe(true);
+    }, 120000);
+
+    test('(b) positive control: gate guidance in a step block the step 1 call renders is seen', async () => {
+      const run = await start({ command: '>>sv_short151' });
+      const stepBlock = await run.call({ user_response: 'A out' });
+      expect(templates(stepBlock)).toEqual(['BODY-sv_b topic=']);
+      expect(gateGuidanceFor(stepBlock)).toBe(true);
+    }, 120000);
+  });
+
+  /**
    * PIN (as of 2026-09-27 · flips when a gated single prompt stops opening a run). A single prompt
    * with an inline gate operator opens a run of ONE node, `n1` (R52), because the planner requires
    * a session for any `gate` operator (`ExecutionPlanner.requiresSession`, its operator clause — not
