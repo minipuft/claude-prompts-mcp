@@ -10,7 +10,8 @@
  *   PromptExecutor (orchestration)
  *     └── PipelineBuilder (factory)
  *           └── PromptExecutionPipeline (coordinator)
- *                 └── PipelineStage[] (22 stages)
+ *                 └── PipelineStage[] — the `stages` array below is the contract;
+ *                     its length is the stage count
  */
 
 import { describeUndeclaredParameterRefusal } from '../../shared/undeclared-parameters.js';
@@ -90,7 +91,8 @@ import { validateWorkflowIR } from '#modules/workflow-ir/validator.js';
  * Factory that constructs and wires the PromptExecutionPipeline.
  *
  * Receives a typed PipelineDependencies bag and produces a fully-wired
- * pipeline with all 23+ stages and intermediate services.
+ * pipeline with every stage (the `stages` array below is the contract; its
+ * length is the stage count) and its intermediate services.
  */
 export class PipelineBuilder {
   private readonly deps: PipelineDependencies;

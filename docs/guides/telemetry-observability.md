@@ -52,10 +52,10 @@ Note: `telemetry.mode` and `telemetry.exporterEndpoint` changes require server r
 
 ### Spans
 
-| Span Name                    | Type  | Description                                                  |
-| ---------------------------- | ----- | ------------------------------------------------------------ |
-| `prompt_engine.request`      | Root  | Wraps entire pipeline execution                              |
-| `pipeline.stage.<StageName>` | Child | Per-stage timing (18-22 stages depending on pipeline config) |
+| Span Name                    | Type  | Description                                                                                                       |
+| ---------------------------- | ----- | ----------------------------------------------------------------------------------------------------------------- |
+| `prompt_engine.request`      | Root  | Wraps entire pipeline execution                                                                                   |
+| `pipeline.stage.<StageName>` | Child | Per-stage timing: one span per stage that runs — all 21 stages, fewer when an earlier stage produces the response |
 
 ### Events
 

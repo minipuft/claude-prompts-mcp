@@ -230,39 +230,44 @@ function ownerCellPathFragments(ownerCell: string): string[] {
 // Checks
 // ---------------------------------------------------------------------------
 
+/**
+ * Why `symbol` does not resolve to exactly one exporting file inside the module at `modulePath`
+ * (relative to `server/src`, `.` for the root), or `null` when it does. Shared by every
+ * `module.yaml` field that names a symbol the module must define — `owns` here, `extension` in
+ * `validate:module-descriptors` — so the rule has one statement.
+ */
+export function describeDefinitionProblem(
+  symbol: string,
+  moduleId: string,
+  modulePath: string,
+  definitions: ReadonlyMap<string, readonly string[]>
+): string | null {
+  const paths = definitions.get(symbol) ?? [];
+  if (paths.length === 0) return `${symbol}, which no file under server/src exports`;
+  if (paths.length > 1) {
+    return `${symbol}, which ${paths.length} files export: ${paths.join(', ')}`;
+  }
+  const definedIn = paths[0] ?? '';
+  const prefix = modulePath === '.' ? '' : `${modulePath}/`;
+  if (!definedIn.startsWith(prefix)) {
+    return `${symbol}, defined outside module '${moduleId}' at src/${definedIn}`;
+  }
+  return null;
+}
+
 /** A. The symbol is exported by exactly one file, and that file lives in the declaring module. */
 function checkDefinition(
   record: OwnershipRecord,
   definitions: ReadonlyMap<string, readonly string[]>
 ): OwnershipProblem[] {
-  const paths = definitions.get(record.symbol) ?? [];
-  if (paths.length === 0) {
-    return [
-      {
-        path: record.descriptorPath,
-        message: `owns '${record.capability}' names ${record.symbol}, which no file under server/src exports`,
-      },
-    ];
-  }
-  if (paths.length > 1) {
-    return [
-      {
-        path: record.descriptorPath,
-        message: `owns '${record.capability}' names ${record.symbol}, which ${paths.length} files export: ${paths.join(', ')}`,
-      },
-    ];
-  }
-  const definedIn = paths[0] ?? '';
-  const prefix = record.modulePath === '.' ? '' : `${record.modulePath}/`;
-  if (!definedIn.startsWith(prefix)) {
-    return [
-      {
-        path: record.descriptorPath,
-        message: `owns '${record.capability}' names ${record.symbol}, defined outside module '${record.moduleId}' at src/${definedIn}`,
-      },
-    ];
-  }
-  return [];
+  const problem = describeDefinitionProblem(
+    record.symbol,
+    record.moduleId,
+    record.modulePath,
+    definitions
+  );
+  if (problem === null) return [];
+  return [{ path: record.descriptorPath, message: `owns '${record.capability}' names ${problem}` }];
 }
 
 /** B. One owner per symbol. Two capabilities in ONE descriptor is fine; two descriptors is not. */

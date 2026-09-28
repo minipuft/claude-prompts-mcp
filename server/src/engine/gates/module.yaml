@@ -15,3 +15,7 @@ owns:
     symbol: GateVerdictProcessor
   - capability: Inline gate parsing
     symbol: InlineGateProcessor
+extension:
+  - point: Gate definitions
+    symbol: GateDefinitionLoader
+    how: Add a `<id>/gate.yaml` directory under a gates resource root; `discoverGates` finds it and `GateRegistry` loads every discovered id.

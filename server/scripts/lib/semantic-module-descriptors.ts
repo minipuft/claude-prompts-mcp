@@ -34,6 +34,21 @@ const ModuleOwnershipEntrySchema = z
 export type ModuleOwnershipEntry = z.infer<typeof ModuleOwnershipEntrySchema>;
 
 /**
+ * A registry a contributor extends by ADDING — a directory entry, an array element — without
+ * editing the code that consumes it. `symbol` is the export that owns the registry, and
+ * `validate:module-descriptors` checks it is exported by exactly one file inside the module.
+ */
+const ModuleExtensionEntrySchema = z
+  .object({
+    point: z.string().trim().min(1),
+    symbol: z.string().regex(/^[A-Za-z_$][A-Za-z0-9_$]*$/, 'must be a bare identifier'),
+    how: z.string().trim().min(1),
+  })
+  .strict();
+
+export type ModuleExtensionEntry = z.infer<typeof ModuleExtensionEntrySchema>;
+
+/**
  * A symbol may own SEVERAL capabilities — `FrameworkManager` owns both framework selection and
  * framework validity — so only the (symbol, capability) pair has to be unique.
  */
@@ -49,6 +64,25 @@ function checkOwnershipUniqueness(
         code: 'custom',
         path: ['owns', index],
         message: `duplicate ownership entry: ${entry.symbol} already owns '${entry.capability}'`,
+      });
+    }
+    seen.add(key);
+  }
+}
+
+/** Same rule as `owns`: one symbol may own several points, so the (symbol, point) pair is the key. */
+function checkExtensionUniqueness(
+  extension: readonly ModuleExtensionEntry[] | undefined,
+  context: z.RefinementCtx
+): void {
+  const seen = new Set<string>();
+  for (const [index, entry] of (extension ?? []).entries()) {
+    const key = `${entry.symbol}\u0000${entry.point}`;
+    if (seen.has(key)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['extension', index],
+        message: `duplicate extension entry: ${entry.symbol} already declares '${entry.point}'`,
       });
     }
     seen.add(key);
@@ -71,10 +105,12 @@ export const ModuleDescriptorDocumentSchema = z
       .optional(),
     removeWhen: z.string().trim().min(1).optional(),
     owns: z.array(ModuleOwnershipEntrySchema).optional(),
+    extension: z.array(ModuleExtensionEntrySchema).optional(),
   })
   .strict()
   .superRefine((descriptor, context) => {
     checkOwnershipUniqueness(descriptor.owns, context);
+    checkExtensionUniqueness(descriptor.extension, context);
     const requiresRemoval = descriptor.lifecycle !== 'canonical';
     if (requiresRemoval && descriptor.replacement === undefined) {
       context.addIssue({
