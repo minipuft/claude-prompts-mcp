@@ -4,7 +4,7 @@
  * Tests that `cloneCommand()` correctly scaffolds canonical YAML resources
  * from arbitrary SKILL.md files. Uses real filesystem operations in temp dirs.
  */
-import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync, mkdtempSync } from 'node:fs';
 import * as os from 'node:os';
@@ -16,6 +16,7 @@ import {
   type SkillsSyncOptions,
   type SkillsSyncOutput,
 } from '../../../src/modules/skills-sync/service.js';
+import { ResourceVerificationService } from '../../../src/modules/resources/services/resource-verification-service.js';
 import { resolveSkillsSyncPaths } from '../../../src/runtime/skills-sync-paths.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -572,6 +573,63 @@ describe('Clone Command Integration', () => {
 
       expect(existsSync(path.join(targetDir(), 'draft', 'prompt.yaml'))).toBe(true);
       expect(warnings.filter((line) => line.includes('inline_gate_definitions'))).toEqual([]);
+    });
+  });
+
+  /**
+   * P6.244 (R130). MEASURED 2026-09-28 on `2a267d189`: the clone validated its primary file twice
+   * after the write — once from `localValidationTargets` and again as the `validate` step's return
+   * value — so a primary warning would print twice. The primary as the clone writes it is built
+   * from a fresh document that never carries an inline definition, so no warning can reach it;
+   * the property is measured as validation calls per written file instead, on the real service.
+   */
+  describe('P6.244: each cloned file is validated once', () => {
+    const cloneWithStep = async (force: boolean) => {
+      const skillDir = path.join(tmpDir, 'source', 'counted-skill');
+      await mkdir(path.join(skillDir, 'resources', 'draft'), { recursive: true });
+      await writeFile(
+        path.join(skillDir, 'SKILL.md'),
+        buildSkillMd({ name: 'Counted Skill', description: 'Has one step' })
+      );
+      await writeFile(
+        path.join(skillDir, 'resources', 'draft', 'prompt.yaml'),
+        yaml.dump({ id: 'draft', name: 'draft', description: 'd', userMessageTemplate: 'Do it.' })
+      );
+      const spy = jest.spyOn(ResourceVerificationService.prototype, 'validateFile');
+      try {
+        await runSkillsSyncCommand(
+          {
+            command: 'clone',
+            file: path.join(skillDir, 'SKILL.md'),
+            id: 'counted-skill',
+            category: 'testing',
+            force,
+          } as SkillsSyncOptions,
+          silentOutput(),
+          resolveSkillsSyncPaths()
+        );
+        return spy.mock.calls.map((call) => call[2]);
+      } finally {
+        spy.mockRestore();
+      }
+    };
+    const targetDir = () =>
+      path.join(serverRoot, 'resources', 'prompts', 'testing', 'counted-skill');
+    const count = (paths: string[], file: string) => paths.filter((p) => p === file).length;
+
+    it('P6.244 (a) a fresh clone validates the primary and the step once each', async () => {
+      const validated = await cloneWithStep(false);
+
+      expect(count(validated, path.join(targetDir(), 'prompt.yaml'))).toBe(1);
+      expect(count(validated, path.join(targetDir(), 'draft', 'prompt.yaml'))).toBe(1);
+    });
+
+    it('P6.244 (b) a forced clone adds only the pre-write verdict of each file it replaces', async () => {
+      await cloneWithStep(false);
+      const validated = await cloneWithStep(true);
+
+      expect(count(validated, path.join(targetDir(), 'prompt.yaml'))).toBe(2);
+      expect(count(validated, path.join(targetDir(), 'draft', 'prompt.yaml'))).toBe(2);
     });
   });
 

@@ -4863,11 +4863,6 @@ async function cloneCommand(
       await writeFile(primaryYamlPath, yaml.dump(yamlDoc, { lineWidth: 120 }));
       writtenPaths.add(primaryYamlPath);
       output.log(`  wrote ${yamlFileName}`);
-      localValidationTargets.push({
-        resourceType: resourceVerificationType,
-        resourceId,
-        filePath: primaryYamlPath,
-      });
 
       if (systemMessage) {
         const systemMessagePath = path.join(targetDir, 'system-message.md');
@@ -5019,14 +5014,18 @@ async function cloneCommand(
       return { validationTargets: localValidationTargets };
     },
     validate: async () => {
-      for (const target of validationTargets) {
-        verifyImported(target);
-      }
-      return verifyImported({
+      // The primary first, as it always ran, then every companion the mutation wrote; the
+      // primary's verdict is the one the transaction reads. It is validated here and only here
+      // (R130): it also sat in `validationTargets`, so any warning it carried printed twice.
+      const primaryVerdict = verifyImported({
         resourceType: resourceVerificationType,
         resourceId,
         filePath: path.join(targetDir, yamlFileName),
       });
+      for (const target of validationTargets) {
+        verifyImported(target);
+      }
+      return primaryVerdict;
     },
   });
 
