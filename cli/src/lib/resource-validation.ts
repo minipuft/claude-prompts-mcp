@@ -1,4 +1,4 @@
-import type { ResourceValidationResult } from '@cli-shared/index.js';
+import { formatValidationIssues, type ResourceValidationResult } from '@cli-shared/index.js';
 
 import { output, icons } from './output.js';
 
@@ -46,4 +46,17 @@ export function printValidationFailure(
   if (options.rolledBack) {
     console.error('  rollback: previous files restored');
   }
+}
+
+/**
+ * A successful mutation's warnings, formatted the way `cpm validate` formats an entry's issues
+ * (R124). A mutation run with `--no-validate` carries no verdict and so reports none.
+ */
+export function mutationWarnings(validation: ResourceValidationResult | undefined): string[] {
+  return validation === undefined ? [] : formatValidationIssues(validation.warnings);
+}
+
+/** Print a successful mutation's warnings in the lines `cpm validate` prints an entry's warnings. */
+export function printMutationWarnings(warnings: string[]): void {
+  for (const warning of warnings) console.error(`    ${icons.warn()}  ${warning}`);
 }

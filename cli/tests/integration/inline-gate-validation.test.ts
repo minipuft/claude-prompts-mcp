@@ -81,6 +81,70 @@ describe('inline gate definitions the loader drops (P6.231)', () => {
     );
   });
 
+  /**
+   * P6.237 (R124). MEASURED 2026-09-28 on `46b4568a`: `cpm rename`, `cpm move` and
+   * `cpm link-gate` of a prompt already carrying a dropped definition exited 0 and printed nothing
+   * about it: the differential demoted the error to a warning, and no success path printed
+   * warnings. Each now prints them the way `cpm validate` prints an entry's issues.
+   */
+  const STRUCTURAL_COMMANDS: { name: string; args: string[] }[] = [
+    { name: 'rename', args: ['rename', 'prompt', 'test-prompt', 'renamed-prompt'] },
+    { name: 'move', args: ['move', 'prompt', 'test-prompt', '--category', 'moved'] },
+    { name: 'link-gate', args: ['link-gate', 'test-prompt', 'test-gate'] },
+  ];
+  const SCOPE_WARNING = /^gateConfiguration\.inline_gate_definitions\[0\]: .*scope \(must be one of/;
+  // The fixture prompt also carries an unrelated advisory (no arguments), which every success
+  // path prints too; the twins read only the inline-gate warnings.
+  const inlineGateWarnings = (jsonOutput: string): string[] =>
+    (JSON.parse(jsonOutput) as { warnings: string[] }).warnings.filter((warning) =>
+      warning.includes('inline_gate_definitions'),
+    );
+
+  it.each(STRUCTURAL_COMMANDS)(
+    'P6.237 (a) cpm $name prints the pre-existing definition as a warning on success',
+    ({ args }) => {
+      carryDroppedDefinition();
+
+      const { output, exitCode } = run([...args, '--workspace', workspace]);
+
+      expect(exitCode).toBe(0);
+      const warningLines = output.split('\n').filter((line) => line.includes('inline_gate_definitions'));
+      expect(warningLines).toHaveLength(1);
+      expect(warningLines[0]?.trim()).toMatch(/scope \(must be one of/);
+    },
+  );
+
+  it.each(STRUCTURAL_COMMANDS)(
+    'P6.237 (a) cpm $name --json carries the warning in `warnings`',
+    ({ args }) => {
+      carryDroppedDefinition();
+
+      const { output, exitCode } = run([...args, '--workspace', workspace, '--json']);
+
+      expect(exitCode).toBe(0);
+      expect(inlineGateWarnings(output)).toEqual([expect.stringMatching(SCOPE_WARNING)]);
+    },
+  );
+
+  it.each(STRUCTURAL_COMMANDS)(
+    'P6.237 (b) control: cpm $name of a clean prompt prints no warning',
+    ({ args }) => {
+      const text = run([...args, '--workspace', workspace]);
+      expect(text.exitCode).toBe(0);
+      expect(text.output).not.toContain('inline_gate_definitions');
+
+      rmSync(workspace, { recursive: true, force: true });
+      cpSync(VERSIONED_WS, workspace, { recursive: true });
+      const json = run([...args, '--workspace', workspace, '--json']);
+      expect(json.exitCode).toBe(0);
+      expect(inlineGateWarnings(json.output)).toEqual([]);
+      // Positive control: the channel is live on this path — it carries the unrelated advisory.
+      expect((JSON.parse(json.output) as { warnings: string[] }).warnings).toEqual([
+        expect.stringContaining('no arguments defined'),
+      ]);
+    },
+  );
+
   it('(c) a mutation that introduces one is refused and rolled back', () => {
     const before = readFileSync(promptFile, 'utf8');
     const location = {

@@ -3,7 +3,11 @@ import { movePromptCategory, runValidatedMutation } from '@cli-shared/index.js';
 import { resolveWorkspace, resolveResourceDir, findResource } from '../lib/workspace.js';
 import { output } from '../lib/output.js';
 import { TYPE_MAP } from '../lib/types.js';
-import { printValidationFailure } from '../lib/resource-validation.js';
+import {
+  mutationWarnings,
+  printMutationWarnings,
+  printValidationFailure,
+} from '../lib/resource-validation.js';
 
 interface MoveOptions {
   workspace?: string;
@@ -69,11 +73,13 @@ export async function move(options: MoveOptions): Promise<number> {
     return 1;
   }
   const result = mutation.operation;
+  const warnings = mutationWarnings(mutation.validation);
 
   if (options.json) {
-    output({ id: options.id, oldCategory, newCategory: options.category, oldPath: result.oldPath, newPath: result.newPath }, { json: true });
+    output({ id: options.id, oldCategory, newCategory: options.category, oldPath: result.oldPath, newPath: result.newPath, warnings }, { json: true });
   } else {
     console.log(`Moved prompt '${options.id}': ${oldCategory} -> ${options.category}`);
+    printMutationWarnings(warnings);
     console.log(`Note: chain steps referencing '${oldCategory}/${options.id}' may need updating to '${options.category}/${options.id}'.`);
   }
   return 0;
