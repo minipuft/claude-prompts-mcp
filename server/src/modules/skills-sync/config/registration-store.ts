@@ -1,7 +1,8 @@
 // @lifecycle canonical - skills-sync registration config persistence helpers.
 import { readFile, writeFile } from 'node:fs/promises';
 
-import * as yaml from 'js-yaml';
+import { parseYamlOrThrow } from '#shared/utils/yaml/index.js';
+import { serializeYamlPreservingSource } from '#shared/utils/yaml/yaml-document-writer.js';
 
 export type RegistrationScope = 'user' | 'project';
 
@@ -34,8 +35,12 @@ const CONFIG_HEADER = `# Skills Sync Configuration
 # This file controls WHAT to export. The CLI handles HOW.
 `;
 
+/**
+ * Parsed with the `yaml` package, the same parser `serializeYamlPreservingSource` diffs against,
+ * so a value both sides read identically never registers as a change.
+ */
 function parseConfig(raw: string): SkillsSyncConfigFile {
-  const parsed = yaml.load(raw);
+  const parsed = parseYamlOrThrow<unknown>(raw);
   if (parsed == null || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return {};
   }
@@ -119,12 +124,13 @@ export async function applyRegistrationMutations(
     return mutationResult;
   }
 
-  const serialized = yaml.dump(config, {
-    lineWidth: 120,
-    noRefs: true,
-    sortKeys: false,
-  });
-  await writeFile(configPath, `${CONFIG_HEADER}\n${serialized}`, 'utf-8');
+  // `skills-sync.yaml` is operator-edited, so its comments and key order survive the write. A key
+  // added to a list is structural and takes the writer's document tier, which may re-pad a flow
+  // list's brackets; the fixed header is written only when there was no prior layout to keep.
+  const written = serializeYamlPreservingSource(config, raw);
+  const content =
+    written.fidelity === 'created' ? `${CONFIG_HEADER}\n${written.content}` : written.content;
+  await writeFile(configPath, content, 'utf-8');
 
   return mutationResult;
 }

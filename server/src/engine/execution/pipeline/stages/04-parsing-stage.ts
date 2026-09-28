@@ -278,7 +278,9 @@ export class CommandParsingStage extends BasePipelineStage {
       reasons: rejections.map((rejection) => rejection.reason),
     });
 
-    context.setResponse(buildWorkflowRejectionResponse(rejections));
+    context.setResponse(
+      buildWorkflowRejectionResponse(rejections, context.state.session.resumeChainId)
+    );
 
     this.logExit({ rejectedWorkflow: rejections.length });
   }
