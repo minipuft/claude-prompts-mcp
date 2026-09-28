@@ -197,6 +197,13 @@ prompt_engine(command:"research topic:'LLMs' :: 'cite sources, note confidence'"
 prompt_engine(command:"@ReACT analysis --> synthesis --> report :: 'include data'")
 ```
 
+#### JSON command form
+
+`command` also accepts a JSON object, `{"command": "<command>", "args": {…}}`: the inner
+`command` runs exactly as it would typed directly, operators included. The outer `args` fill the
+**first step only**: on an arrow-chain, `{"command": ">>a --> >>b", "args": {"topic": "x"}}`
+hands `topic` to `a` and leaves `b` with the arguments written on it in the inner command.
+
 #### Quoting and escapes in argument values
 
 Quoted values are unescaped when parsed, so **a backslash inside a quoted value is an escape
