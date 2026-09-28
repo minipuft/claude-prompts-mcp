@@ -62,46 +62,7 @@ flowchart LR
 
 ### How Requests Flow Through the System
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        MCP Protocol Layer                        │
-│  ┌─────────────┐  ┌──────────────┐  ┌─────────────┐             │
-│  │prompt_engine│  │resource_manager│ │system_control│            │
-│  └──────┬──────┘  └───────┬──────┘  └──────┬──────┘             │
-├─────────┼─────────────────┼────────────────┼────────────────────┤
-│         │                 │                │   Routing Layer     │
-│         │          ┌──────┴──────┐         │                     │
-│         │          │   Router    │         │                     │
-│         │          └──────┬──────┘         │                     │
-│         │     ┌───────────┼───────────┐    │                     │
-│         │     ▼           ▼           ▼    │                     │
-│         │ ┌───────┐ ┌─────────┐ ┌─────────┐│                     │
-│         │ │Prompt │ │  Gate   │ │Framework││                     │
-│         │ │Manager│ │ Manager │ │ Manager ││                     │
-│         │ └───────┘ └─────────┘ └─────────┘│                     │
-├─────────┼─────────────────────────────────┼────────────────────┤
-│         │                                  │   Execution Layer   │
-│         ▼                                  │                     │
-│  ┌──────────────────┐                      │                     │
-│  │PromptExecution   │                      │                     │
-│  │Pipeline (23 stg) │                      │                     │
-│  └────────┬─────────┘                      │                     │
-├───────────┼────────────────────────────────┼────────────────────┤
-│           │                                │   Service Layer     │
-│     ┌─────┴─────┬──────────┬───────────┬───┴───────┐            │
-│     ▼           ▼          ▼           ▼           ▼            │
-│ ┌───────┐  ┌─────────┐  ┌───────┐  ┌───────┐  ┌─────────┐      │
-│ │Prompts│  │Frameworks│  │ Gates │  │Styles │  │Sessions │      │
-│ │Registry│ │ Manager │  │Manager│  │Manager│  │ Manager │      │
-│ └───┬───┘  └────┬────┘  └───┬───┘  └───┬───┘  └────┬────┘      │
-├─────┼───────────┼───────────┼──────────┼───────────┼────────────┤
-│     │           │           │          │           │  Persistence│
-│     ▼           ▼           ▼          ▼           ▼             │
-│ prompts/    frameworks/  gates/    styles/    runtime-state/  │
-│ *.md,json   */method.yaml  */gate.yaml */style.yaml  state.db    │
-│             */phases.yaml  */guidance  */guidance   (SQLite)     │
-└─────────────────────────────────────────────────────────────────┘
-```
+The request path is MCP tool -> router/pipeline -> domain services -> persistence, and the observed import graph between modules is generated in the [module catalog](../reference/module-catalog.md#observed-boundary-graph); the `What Each Layer Does` table below names each layer's components.
 
 ### What Each Layer Does
 
@@ -283,38 +244,7 @@ See [Script Tools Guide](../guides/script-tools.md) for building script-enabled 
 
 The server exposes **3 MCP tools** to clients but internally uses **5 specialized managers**:
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    MCP Protocol (3 tools)                    │
-│  ┌─────────────┐  ┌──────────────┐  ┌──────────────┐        │
-│  │prompt_engine│  │resource_manager│ │system_control│       │
-│  └──────┬──────┘  └───────┬──────┘  └───────┬──────┘        │
-└─────────┼─────────────────┼─────────────────┼───────────────┘
-          │                 │                 │
-          ▼                 ▼                 ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    Internal Managers                         │
-│                                                              │
-│  prompt_engine ──► PromptExecutor ──► PipelineBuilder       │
-│                                        └► PromptExecution   │
-│                                           Pipeline (23 stg) │
-│                                                              │
-│  resource_manager ──► Router ──┬► PromptResourceHandler     │
-│                                │   └► lifecycle/discovery/  │
-│                                │      versioning processors │
-│                                ├► GateToolHandler           │
-│                                │   └► lifecycle/discovery/  │
-│                                │      versioning processors │
-│                                └► FrameworkToolHandler       │
-│                                    └► lifecycle/discovery/  │
-│                                       versioning/validation │
-│                                                              │
-│  system_control ──► SystemControl Router                    │
-│                      └► 11 action handlers                  │
-│                         (status, framework, gates, session, │
-│                          guide, analytics, config, etc.)    │
-└─────────────────────────────────────────────────────────────┘
-```
+The request path is MCP tool -> router/pipeline -> domain services -> persistence; the `Tool Responsibilities` table below names each tool's internal target, and the `mcp-tools` boundary row in the [module catalog](../reference/module-catalog.md#observed-boundary-graph) shows the observed import graph.
 
 ### Tool Responsibilities
 
@@ -322,7 +252,7 @@ The server exposes **3 MCP tools** to clients but internally uses **5 specialize
 | ------------------ | --------------------------------------------- | -------------------------------------------------------------------------------- |
 | `prompt_engine`    | Execute prompts and chains                    | PromptExecutor → PipelineBuilder → PromptExecutionPipeline                       |
 | `resource_manager` | CRUD for prompts, gates, frameworks           | Router → Handler → Processors (lifecycle/discovery/versioning per resource type) |
-| `system_control`   | System status, framework switching, analytics | SystemControl router → 11 specialized action handlers                            |
+| `system_control`   | System status, framework switching, analytics | SystemControl router → 12 specialized action handlers                            |
 
 ### Why This Design?
 
