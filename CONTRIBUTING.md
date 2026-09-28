@@ -118,7 +118,7 @@ stops it failing the suite.
 
 ## Documentation Standards
 
-Root-level `README.md` is governed by the [README Charter](docs/portfolio/readme-charter.md) — audience, voice rules, line budgets, Diátaxis section markers, and forbidden-word list. README PRs run `npm run validate:readme` and answer the charter block in the PR template.
+Root-level `README.md` is governed by the [README Charter](docs/portfolio/readme-charter.md) — audience, voice rules, line budgets, Diátaxis section markers, and forbidden-word list. README PRs run `npm run validate:readme`; CI runs the same check on every route that can change `README.md`, so the PR template carries no README section.
 
 Docs under `docs/` follow the Diátaxis split documented in [docs/README.md](docs/README.md): tutorials (learning), how-to (problem-solving), reference (lookup), concepts (understanding).
 

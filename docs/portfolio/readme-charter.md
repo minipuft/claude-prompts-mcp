@@ -188,7 +188,7 @@ Tests 1 and 6 are manual; 2–5 are partially automatable (line counts, forbidde
 
 ## 9. Re-audit Cadence
 
-- **Every README PR** — charter checklist on the PR template.
+- **Every README PR** — `npm run validate:readme`, locally and in CI on every route that can change `README.md`. The PR template carries no charter checklist: the six PRs before this change all answered it "Not applicable", and nothing read the answer.
 - **Every minor release** — walkthrough as a first-time user; log violations as issues with label `readme-charter`.
 - **Quarterly** — charter itself reviewed: has the audience changed? have priorities shifted?
 

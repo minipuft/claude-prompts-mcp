@@ -31,17 +31,6 @@
 <!-- Remaining work in plain reader terms, one line each; write "None" if none.
      No plan row ids — and note the Plan footer contract below. -->
 
-## README Charter Compliance
-
-<!-- Answer all 5 only if this PR touches README.md; otherwise write "Not applicable".
-     Charter: docs/portfolio/readme-charter.md -->
-
-1. Charter sections touched:
-2. Did `npm run validate:readme` pass locally?
-3. First 30 lines still contain the pitch table?
-4. Any new `<details>` blocks above the fold? (charter §4)
-5. Any new cross-link — what Diátaxis quadrant does it point to?
-
 <!--
 TWO-REGISTER BODY. Reader voice above; below, an optional collapsed archive:
   <details><summary>Appendix — session archive</summary> … </details>
