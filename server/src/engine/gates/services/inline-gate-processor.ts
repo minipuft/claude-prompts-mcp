@@ -217,6 +217,22 @@ export class InlineGateProcessor {
   }
 
   /**
+   * The refusals for this command's named inline gates that would register under a canonical gate
+   * id (R100). A `verify:` gate registers nothing, so it is not judged.
+   */
+  canonicalIdCollisions(parsedCommand: ParsedCommand): Array<{ readonly detail: string }> {
+    return (parsedCommand.namedInlineGates ?? []).flatMap((namedGate) => {
+      if (namedGate.shellVerify !== undefined || !isValidGateCriteria(namedGate.criteria)) {
+        return [];
+      }
+      const refusal = this.temporaryGateRegistry.canonicalIdRefusal(namedGate.gateId);
+      return refusal === undefined
+        ? []
+        : [{ detail: `named inline gate "${namedGate.gateId}": ${refusal}` }];
+    });
+  }
+
+  /**
    * Re-register the temporary gates a restored run's blueprint references and this process does
    * not hold (R54) — a run claimed from another server (the 2A handoff) is the one resume whose
    * gates were registered in a process that is not this one. Stage 05 skips processing on a
@@ -253,6 +269,9 @@ export class InlineGateProcessor {
         onHeld === 'fresh-id'
           ? this.temporaryGateRegistry.createTemporaryGate({ id, ...definition }, scopeId, {
               onIdCollision: 'fresh-id',
+              // A run recorded before the canonical-id refusal can hold a named gate under a
+              // canonical id: it restores under a fresh `<id>-N` and the remap follows (R104).
+              onCanonicalId: 'fresh-id',
             })
           : this.temporaryGateRegistry.restoreTemporaryGate({ id, ...definition }, scopeId)
             ? id
@@ -583,7 +602,7 @@ export class InlineGateProcessor {
       } catch (error) {
         this.logger.warn('[InlineGateProcessor] Failed to resolve gate reference', {
           entry: trimmed,
-          error,
+          error: error instanceof Error ? error.message : String(error),
         });
         inlineCriteria.push(trimmed);
       }

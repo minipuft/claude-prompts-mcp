@@ -285,10 +285,17 @@ export type WorkflowRejectionReason =
    * `mutually-exclusive-source`, outside the validator, through the same addressed channel.
    */
   | 'gate-target-passed'
+  /**
+   * A request gate or named inline gate would register under a canonical gate's id, replacing that
+   * gate's criteria for every run on the server (P6.193, R100). Produced before anything registers,
+   * by the stage that registers each kind (05 for a named gate, 11 for a request gate); a run-level
+   * refusal, addressed to no node.
+   */
+  | 'gate-id-canonical'
   | 'required-argument-missing'
   | 'unknown-visibility-item';
 
-/** One addressed rejection. At least one of `nodeId` / `edge` is set for every reason but the two run-level ones. */
+/** One addressed rejection. At least one of `nodeId` / `edge` is set for every reason but the three run-level ones. */
 export interface WorkflowRejection {
   readonly reason: WorkflowRejectionReason;
   /** The node this rejection is about, when it is about one. */

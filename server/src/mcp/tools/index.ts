@@ -31,6 +31,7 @@ import {
 import {
   buildPromptEngineSchema,
   buildSystemControlSchema,
+  customCheckSchema,
   resourceManagerInputSchema,
   type DescriptionResolver,
   type PromptEngineInput,
@@ -103,6 +104,11 @@ import { withRequestNotifications } from '#shared/utils/request-notification-sco
  */
 function readClientVersion(mcpServer: McpServer): Implementation | undefined {
   return mcpServer.server?.getClientVersion();
+}
+
+/** Whether a request gate is the `{name, description}` quick gate, by the tool's strict schema. */
+function isQuickGate(gate: unknown): gate is { name: string; description: string } {
+  return customCheckSchema.safeParse(gate).success;
 }
 
 /** Envelope key carrying client identity under protocol revision 2026-07-28. */
@@ -993,11 +999,13 @@ export class McpToolRouter {
                     return gate;
                   }
 
-                  // Check for CustomCheck type ({name, description} - simple inline gate)
-                  if ('name' in gate && 'description' in gate) {
+                  // A `{name, description}` quick gate is exactly that shape, read by the tool's
+                  // strict schema: a full definition carrying `name` and `description` beside an
+                  // `id` or `criteria` is not one, and keeps every key below (P6.203).
+                  if (isQuickGate(gate)) {
                     // Validate non-empty name and description
-                    const trimmedName = gate.name?.trim();
-                    const trimmedDescription = gate.description?.trim();
+                    const trimmedName = gate.name.trim();
+                    const trimmedDescription = gate.description.trim();
                     if (trimmedName && trimmedDescription) {
                       return {
                         name: trimmedName,

@@ -9,7 +9,8 @@ import type { ToolResponse } from '#shared/types/index.js';
  * (b) is "actionable", and a client that has to guess WHICH node failed fixes its submission one
  * error per round trip — the failure mode the rejection vocabulary exists to remove. One render
  * for every stage that refuses a command (04 for its shape and targets, 11 for a target a resume
- * can no longer reach, R65), so a client parses one shape whichever stage answered.
+ * can no longer reach, R65, and 05 and 11 for a named or request gate under a canonical gate id,
+ * R100), so a client parses one shape whichever stage answered.
  */
 export function buildWorkflowRejectionResponse(
   rejections: readonly WorkflowRejection[]

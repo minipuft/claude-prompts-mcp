@@ -1,5 +1,6 @@
 // @lifecycle canonical - Evaluates inline gates before heavy execution work.
 import { BasePipelineStage } from '../stage.js';
+import { buildWorkflowRejectionResponse } from '../workflow-rejection-response.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { InlineGateProcessor } from '../../../gates/services/inline-gate-processor.js';
@@ -12,7 +13,7 @@ import type { ExecutionContext } from '../../context/index.js';
  *
  * Dependencies: context.parsedCommand
  * Output: context.parsedCommand.inlineGateIds, registered temporary gates
- * Can Early Exit: No
+ * Can Early Exit: Yes (a named inline gate carrying a canonical gate's id, R100)
  */
 export class InlineGateExtractionStage extends BasePipelineStage {
   readonly name = 'InlineGateExtraction';
@@ -41,6 +42,21 @@ export class InlineGateExtractionStage extends BasePipelineStage {
         new Set([...context.state.gates.temporaryGateIds, ...restoredIds])
       );
       this.logExit({ restoredRunGates: restoredIds.length });
+      return;
+    }
+
+    // R100: refused before any gate registers, in the rejection shape every refusing stage shares.
+    const collisions = this.inlineGateProcessor.canonicalIdCollisions(parsedCommand);
+    if (collisions.length > 0) {
+      context.diagnostics.warn(this.name, 'Named inline gate refused', {
+        count: collisions.length,
+      });
+      context.setResponse(
+        buildWorkflowRejectionResponse(
+          collisions.map((refusal) => ({ reason: 'gate-id-canonical' as const, ...refusal }))
+        )
+      );
+      this.logExit({ refusedNamedGates: collisions.length });
       return;
     }
 

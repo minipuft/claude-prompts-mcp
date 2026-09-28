@@ -32,6 +32,8 @@ const createRegistry = () => {
   let autoId = 0;
   return {
     gates,
+    // No canonical gate here: no id is refused (R100).
+    canonicalIdRefusal: () => undefined,
     createTemporaryGate: jest.fn((definition: Record<string, unknown>) => {
       autoId += 1;
       const id = typeof definition['id'] === 'string' ? definition['id'] : `temp_${autoId}`;

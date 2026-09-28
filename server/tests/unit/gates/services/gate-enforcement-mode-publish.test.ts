@@ -39,6 +39,8 @@ const createLogger = () => ({
 const createRegistry = () => {
   const gates: Array<Record<string, unknown>> = [];
   return {
+    // No canonical gate here: no id is refused (R100).
+    canonicalIdRefusal: () => undefined,
     createTemporaryGate: jest.fn((definition: Record<string, unknown>) => {
       const id = String(definition['id']);
       gates.push({ ...definition, id });

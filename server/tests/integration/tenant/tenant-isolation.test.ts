@@ -18,6 +18,7 @@ import { SqliteStateStore } from '../../../src/infra/database/stores/sqlite-stor
 import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
 import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
 import { ArgumentHistoryTracker } from '../../../src/modules/text-refs/argument-history-tracker.js';
+import { TextReferenceStore } from '../../../src/modules/text-refs/index.js';
 import { STATE_DB_BUSY_TIMEOUT_MS } from '../../../src/shared/utils/runtime-state-location.js';
 
 import type { Logger } from '../../../src/infra/logging/index.js';
@@ -849,6 +850,75 @@ describe('Tenant Isolation', () => {
         ]);
         expect(runEnded.mock.calls).toEqual([['p190-b']]);
         expect(sessionCleared).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    /**
+     * P6.201 (R102). MEASURED 2026-09-27 on `9d7c50c6`: `clearSessionsForChain(base, {scope A})`
+     * released step results for EVERY run chain id in the base chain's history, including runs
+     * only another scope held, so tenant B's `stepN_result` variables vanished with A's clear. A
+     * run's step results are released only once the scoped clear removed its last session.
+     */
+    describe('P6.201: a scoped chain clear releases only the runs it removed', () => {
+      let refs: TextReferenceStore;
+      let store: ChainSessionStore;
+      const scopeA = { continuityScopeId: 'p201-a' };
+      const scopeB = { continuityScopeId: 'p201-b' };
+
+      beforeEach(() => {
+        refs = new TextReferenceStore(logger);
+        store = new ChainSessionStore(logger, refs, {
+          cleanupIntervalMs: 10_000,
+          databasePort: dbManager,
+        });
+      });
+
+      afterEach(async () => {
+        await store.cleanup();
+      });
+
+      const seed = async (sessionId: string, chainId: string, scope: object, result: string) => {
+        const session = await store.createSession(sessionId, chainId, 2, {}, scope);
+        const nodeId = session.state.nodes[0]!.id;
+        await expect(store.updateSessionState(sessionId, nodeId, result)).resolves.toBe(true);
+        return session.chainId;
+      };
+
+      test('(a) another scope keeps its step results and its run history', async () => {
+        const chainA = await seed('p201-a1', 'chain-p201x#1', scopeA, 'A-201');
+        const chainB = await seed('p201-b1', 'chain-p201x#2', scopeB, 'B-201');
+        expect(refs.buildChainVariables(chainB)['previous_step_result']).toBe('B-201');
+
+        await store.clearSessionsForChain('chain-p201x', scopeA);
+
+        expect(store.getSession('p201-a1')).toBeUndefined();
+        expect(refs.buildChainVariables(chainB)['previous_step_result']).toBe('B-201');
+        expect(store.getChainContext('p201-b1')['previous_step_result']).toBe('B-201');
+        expect(store.getRunHistory('chain-p201x')).toEqual([chainB]);
+        // (b) control: the scope that was cleared lost its own results.
+        expect(refs.buildChainVariables(chainA)['previous_step_result']).toBeUndefined();
+      });
+
+      test('(a) two scopes on one run chain id: the other scope keeps its results', async () => {
+        await seed('p201-a2', 'chain-p201y#1', scopeA, 'A-201');
+        await seed('p201-b2', 'chain-p201y#1', scopeB, 'B-201');
+
+        await store.clearSessionsForChain('chain-p201y#1', scopeA);
+
+        expect(store.getSession('p201-a2')).toBeUndefined();
+        expect(store.getChainContext('p201-b2')['previous_step_result']).toBe('B-201');
+        expect(store.getRunHistory('chain-p201y')).toEqual(['chain-p201y#1']);
+      });
+
+      test('(b) control: an unscoped clear releases every run it removed', async () => {
+        const chainA = await seed('p201-a3', 'chain-p201z#1', scopeA, 'A-201');
+        const chainB = await seed('p201-b3', 'chain-p201z#2', scopeB, 'B-201');
+
+        await store.clearSessionsForChain('chain-p201z');
+
+        expect(refs.buildChainVariables(chainA)['previous_step_result']).toBeUndefined();
+        expect(refs.buildChainVariables(chainB)['previous_step_result']).toBeUndefined();
+        expect(store.getRunHistory('chain-p201z')).toEqual([]);
       });
     });
 

@@ -1329,6 +1329,64 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
   });
 
   /**
+   * P6.208 / R105. MEASURED 2026-09-27 on `20bcbfae`: `>>sv_a` arrow-chain `>>sv_b` with two
+   * blocking unknowns declared on `n1` and never resolved, answered through to completion. The
+   * completing reply named only `u-208b`, the most recent (`decideInterrupt`'s selection). A
+   * completed run now names every open blocking unknown; a mid-run interrupt still names the
+   * most recent one.
+   */
+  describe('P6.208: a completed run names every unresolved blocking unknown', () => {
+    const unknown = (id: string) => ({
+      type: 'unknown_discovered',
+      id,
+      statement: `STATEMENT-${id}`,
+      blocking: true,
+    });
+    async function complete(chainId: string): Promise<string> {
+      for (let call = 0; call < 6; call++) {
+        const text = await callRun(chainId, { user_response: `R-${call}` });
+        if (text.includes('Chain execution complete')) return text;
+      }
+      throw new Error(`run ${chainId} did not complete in 6 calls`);
+    }
+    async function callRun(chainId: string, args: Record<string, unknown>): Promise<string> {
+      const outcome = await client.callToolWithNotifications(
+        'prompt_engine',
+        { chain_id: chainId, ...args },
+        nextId++
+      );
+      const result = outcome.result as { content?: Array<{ text?: string }> };
+      return (result.content ?? []).map((part) => part.text ?? '').join('\n');
+    }
+
+    test('(a) two open blocking unknowns are both named as unresolved', async () => {
+      const run = await start({ command: `>>sv_a${ARROW}>>sv_b` });
+      const mid = await callRun(run.chainId, {
+        user_response: 'A',
+        observations: [unknown('u-208a'), unknown('u-208b')],
+      });
+      // (c) The mid-run interrupt still names the most recent one (the step body and the
+      // ledger above it list both).
+      const section = mid.slice(mid.indexOf('**Blocking Unknown**'));
+      expect(section).toMatch(/^\*\*Blocking Unknown\*\*\n\nSTATEMENT-u-208b\n/);
+      expect(section).not.toContain('u-208a');
+
+      const done = await complete(run.chainId);
+      expect(done).not.toContain('Blocking Unknown');
+      for (const id of ['u-208a', 'u-208b']) {
+        expect(done).toContain(`\`${id}\` — STATEMENT-${id}`);
+      }
+    }, 120000);
+
+    test('(b) control: one open blocking unknown renders as before', async () => {
+      const run = await start({ command: `>>sv_a${ARROW}>>sv_b` });
+      await callRun(run.chainId, { user_response: 'A', observations: [unknown('u-208c')] });
+      const done = await complete(run.chainId);
+      expect(done).toContain('**Unresolved unknown**: `u-208c` — STATEMENT-u-208c');
+    }, 120000);
+  });
+
+  /**
    * P6.144 / R66. MEASURED 2026-09-27 on `6dad55f3`: after `>>sv_a :: "sv-block"` and a FAIL sent
    * with the answer, the run held one record, `completed` with `prompt_id` null, and
    * `execution_history` listed `completed step 1`. The capture writer (`ledgerCapturedStep`) wrote

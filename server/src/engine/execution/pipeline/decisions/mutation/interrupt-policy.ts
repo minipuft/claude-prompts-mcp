@@ -73,6 +73,9 @@ export function decideInterrupt(input: DecideInterruptInput): ChainInterrupt | u
     reason: 'blocking_unknown',
     unknownId: unknown.id,
     statement: unknown.statement,
+    openBlockingUnknowns: input.ledger
+      .filter((entry) => entry.state === 'active' && entry.blocking === true)
+      .map((entry) => ({ id: entry.id, statement: entry.statement })),
     affectedStepIds: collectAffectedStepIds(input),
     remainingNodes: summarizeRemainingNodes(input),
     paused: input.pauseOnBlocking === true,

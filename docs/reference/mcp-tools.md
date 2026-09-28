@@ -421,8 +421,12 @@ quote. Reword the text without it: `:: "it is fine"`.
 
 A named inline gate, a full gate definition in `gates`, or a prompt's inline gate definition may
 not take a canonical gate's id (`:: content-structure:"…"`, `gates:[{id:"content-structure",
-criteria:[…]}]`). Registered, it would replace that gate's criteria for every run on the server;
-it is refused instead, with a logged warning naming the id, and the run keeps the canonical gate.
+criteria:[…]}]`). Registered, it would replace that gate's criteria for every run on the server.
+A named inline gate or request gate under a canonical id refuses the whole call, before any run
+starts or advances, with a `[gate-id-canonical]` line naming the gate in the addressed rejection
+([Workflow IR](workflow-ir.md)); `gates:[{id:"content-structure"}]` alone is a reference to the
+canonical gate and is not refused. A prompt's inline gate definition under a canonical id is
+skipped with a logged warning naming the id, and the run keeps the canonical gate.
 
 ### Chain Step Targeting
 
@@ -1766,8 +1770,9 @@ two are not subsets of one another in either direction:
 | Paused    | `gate_action:resume`, `gate_action:accept_alternative` (with `remainder`), `gate_action:abort`, `cancel` |
 
 A run that completes with a blocking unknown still open renders no interrupt section: its reply
-says the run completed and names the unknown as unresolved, and `resume.verbs` is empty, because
-nothing is left to resume.
+says the run completed and names every blocking unknown still open as unresolved, and
+`resume.verbs` is empty, because nothing is left to resume. `structuredContent.chain_interrupt`
+still carries only the most recently discovered one, as `unknown`.
 
 A paused run never offers "answer the step" — it issued no step. It never offers a bare
 `remainder` either: a remainder alone does not clear the hold, so the caller must spell it

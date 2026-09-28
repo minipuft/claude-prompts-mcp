@@ -1143,6 +1143,62 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
   }, 180000);
 
   /**
+   * P6.202 / R103. MEASURED 2026-09-27 on `9a319ba9`, driven over `resource_manager create`: an
+   * inline definition omitting `pass_criteria` answered "Prompt Created, but post-write
+   * verification FAILED (mismatched: gateConfiguration)" while the gate loaded, because the
+   * loader serves `pass_criteria: []` and the verification compared the request as written. It
+   * now applies the loader's own defaults (`withInlineGateDefaults`) first. A definition omitting
+   * `scope` still reports the mismatch, and must: the loader has no default for `scope`, and
+   * drops that definition, so the served prompt has no gate.
+   */
+  test('P6.202 a create omitting a defaulted inline-gate field verifies; a dropped gate does not', async () => {
+    const roots = freshRoots();
+    const server = await startServer(roots);
+    const create = (id: string, definition: Record<string, unknown>) =>
+      server.call('resource_manager', {
+        resource_type: 'prompt',
+        action: 'create',
+        id,
+        category: 'general',
+        name: id,
+        description: 'step for P6.202',
+        user_message_template: `BODY-${id}`,
+        gate_configuration: { framework_gates: false, inline_gate_definitions: [definition] },
+      });
+    const full = {
+      name: 'g202',
+      type: 'validation',
+      scope: 'execution',
+      description: 'D-202',
+      guidance: 'G-202',
+      pass_criteria: ['P-202'],
+    };
+    const { pass_criteria: _omittedCriteria, ...noCriteria } = full;
+    const { scope: _omittedScope, ...noScope } = full;
+    const verificationFailed = /post-write verification FAILED.*\n.*mismatched: gateConfiguration/;
+
+    // (a) The loader fills `pass_criteria: []`: the create verifies, and the gate is served.
+    const defaulted = await create('sv_p202_criteria', noCriteria);
+    expect({ isError: defaulted.isError, text: defaulted.text }).toMatchObject({ isError: false });
+    expect(defaulted.text).not.toMatch(verificationFailed);
+    const inspected = await server.call('resource_manager', {
+      resource_type: 'prompt',
+      action: 'inspect',
+      id: 'sv_p202_criteria',
+    });
+    expect(inspected.text).toContain('"name":"g202"');
+    expect(inspected.text).toContain('"pass_criteria":[]');
+
+    // (b) Control: a definition the loader drops still reports the mismatch.
+    const dropped = await create('sv_p202_scope', noScope);
+    expect(dropped.isError).toBe(true);
+    expect(dropped.text).toMatch(verificationFailed);
+
+    // (b) Control: a complete definition verifies as before.
+    expect((await create('sv_p202_full', full)).isError).toBe(false);
+  }, 180000);
+
+  /**
    * P6.193 / R94. The two other paths choosing a temporary gate's id. MEASURED 2026-09-27 on
    * `20f40ca6` with `gates.executeInlineGateDefinitions` on, every run left open: a request gate
    * `{id: content-structure, criteria: [REQ-193]}` was reviewed as `content-structure` rendering
@@ -1150,10 +1206,28 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
    * named inline gate `:: content-structure:"NAMED-193"` did the same with NAMED-193. Gate loading
    * reads the temporary registry first, keyed by id per process. `createTemporaryGate` now refuses
    * a canonical id for every caller (the refusal is a server-log warning; the run keeps the
-   * canonical gate). A request gate carrying `name` and `description` as well never reached the
-   * registry under its id: it registered as `temp_…` and rendered its description only.
+   * canonical gate). A request gate carrying `name` and `description` as well lost its id before
+   * registration, fixed by P6.203 below.
    */
-  test('P6.193 a request gate or named inline gate may not shadow a canonical gate id', async () => {
+  /**
+   * A server with `gates.executeInlineGateDefinitions` on and a two-step chain `sv_p193_chain`
+   * whose steps carry the canonical `content-structure` gate. `failFirst` starts a run (left open,
+   * so any gate it registered stays held) and FAILs its first step; `refused` sends a call expected
+   * to be refused and reports whether any run was created.
+   */
+  async function p193Server(): Promise<{
+    roots: Roots;
+    server: Server;
+    failFirst: (start: Record<string, unknown>) => Promise<{
+      reviews: Record<string, string[]> | undefined;
+      failShown: string[];
+    }>;
+    refusedCall: (args: Record<string, unknown>) => Promise<{
+      isError: boolean;
+      refusal: string | undefined;
+      runsCreated: number;
+    }>;
+  }> {
     const roots = freshRoots();
     writeFileSync(
       path.join(roots.workspace, 'config.json'),
@@ -1185,8 +1259,15 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
       gate_configuration: { framework_gates: false },
       chain_steps: ['A', 'B'].map((stepName) => ({ promptId: 'sv_p193', stepName })),
     });
-    const markers = ['Use clear headings', 'REQ-193', 'NAMED-193', 'RQC-193', 'NMC-193'];
-    /** Start a run (left open, so any gate it registered stays held) and FAIL its first step. */
+    const markers = [
+      'Use clear headings',
+      'REQ-193',
+      'NAMED-193',
+      'RQC-193',
+      'NMC-193',
+      'X-203',
+      'QK-203',
+    ];
     const failFirst = async (start: Record<string, unknown>) => {
       const started = await server.call('prompt_engine', start);
       const chainId = chainIdOf(started.text);
@@ -1198,25 +1279,57 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
       return {
         reviews: runRow(roots, chainId)?.reviews,
         failShown: markers.filter((marker) => failed.text.includes(marker)),
-        startText: started.text,
       };
     };
-    const plain = { command: '>>sv_p193_chain' };
-    const canonical = { reviews: { a: ['content-structure'] }, failShown: ['Use clear headings'] };
+    const runCount = (): number => {
+      const db = new DatabaseSync(path.join(roots.runtimeRoot, 'runtime-state', 'state.db'));
+      try {
+        return (db.prepare('SELECT COUNT(*) AS n FROM chain_runs').get() as { n: number }).n;
+      } finally {
+        db.close();
+      }
+    };
+    const refusedCall = async (args: Record<string, unknown>) => {
+      const before = runCount();
+      const result = await server.call('prompt_engine', args);
+      return {
+        isError: result.isError,
+        refusal: /• \[gate-id-canonical\] workflow: (.*)/.exec(result.text)?.[1],
+        runsCreated: runCount() - before,
+      };
+    };
+    return { roots, server, failFirst, refusedCall };
+  }
+
+  const PLAIN_193 = { command: '>>sv_p193_chain' };
+  /** A reply refusing a gate under the canonical `content-structure` id, before any run exists. */
+  const REFUSED_210 = {
+    isError: true,
+    refusal: expect.stringContaining("may not shadow a canonical gate id ('content-structure')"),
+    runsCreated: 0,
+  };
+  const CANONICAL_193 = {
+    reviews: { a: ['content-structure'] },
+    failShown: ['Use clear headings'],
+  };
+
+  test('P6.193 a request gate or named inline gate may not shadow a canonical gate id', async () => {
+    const { failFirst, refusedCall } = await p193Server();
+    const plain = PLAIN_193;
+    const canonical = CANONICAL_193;
     // Positive control: a plain run is reviewed on the canonical guidance.
     expect(await failFirst(plain)).toMatchObject(canonical);
 
-    // (a) A request gate under the canonical id: its run, and a later plain run, keep the canonical
-    // gate. (A request gate carrying `name` and `description` loses its id before registration —
-    // see the note above — so the shape that reaches the registry is the one driven here.)
+    // (a) A request gate under the canonical id is refused in the reply (P6.210), and a later plain
+    // run keeps the canonical gate.
     const request = { ...plain, gates: [{ id: 'content-structure', criteria: ['REQ-193'] }] };
-    expect(await failFirst(request)).toMatchObject(canonical);
+    expect(await refusedCall(request)).toMatchObject(REFUSED_210);
     expect(await failFirst(plain)).toMatchObject(canonical);
 
     // (b) A named inline gate under the canonical id: the same.
     expect(
-      await failFirst({ command: '>>sv_p193_chain :: content-structure:"NAMED-193"' })
-    ).toMatchObject(canonical);
+      await refusedCall({ command: '>>sv_p193_chain :: content-structure:"NAMED-193"' })
+    ).toMatchObject(REFUSED_210);
     expect(await failFirst(plain)).toMatchObject(canonical);
 
     // (c) Control: a non-colliding request gate and named gate register beside the canonical one.
@@ -1229,6 +1342,83 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     expect(await failFirst({ command: '>>sv_p193_chain :: nmc193:"NMC-193"' })).toMatchObject({
       reviews: { a: ['nmc193', 'content-structure'] },
       failShown: ['Use clear headings', 'NMC-193'],
+    });
+  }, 240000);
+
+  /**
+   * P6.210 / R100. MEASURED 2026-09-27 on `b176a1e6`: `gates: [{id: 'content-structure', criteria:
+   * ['REQ']}]` and `>>sv_p193_chain :: content-structure:"NAMED"` each answered with the rendered
+   * prompt (`isError: false`), and only the server log said the gate was dropped. A request gate
+   * already refused on its content (an undeclared `target_step_id`) answers stage 04's addressed
+   * rejection, "❌ Workflow rejected … Nothing was executed and no run was created." with a
+   * `• [gate-target-missing] node "zz": …` line; a key the schema does not declare answers the
+   * SDK's "Input validation error". The canonical id is a content refusal, so it answers the first
+   * shape: stage 05 for a named gate and stage 11 for a request gate, before anything registers.
+   */
+  test('P6.210 a gate under a canonical id is refused in the reply, and no run starts', async () => {
+    const { roots, server, failFirst, refusedCall } = await p193Server();
+    // (a) The request gate: refused by name, no run.
+    expect(
+      await refusedCall({
+        ...PLAIN_193,
+        gates: [{ id: 'content-structure', criteria: ['REQ-210'] }],
+      })
+    ).toMatchObject({
+      ...REFUSED_210,
+      refusal: expect.stringMatching(/^request gate "content-structure": /),
+    });
+    // (b) The named inline gate: refused by name, no run.
+    expect(
+      await refusedCall({ command: '>>sv_p193_chain :: content-structure:"NAMED-210"' })
+    ).toMatchObject({
+      ...REFUSED_210,
+      refusal: expect.stringMatching(/^named inline gate "content-structure": /),
+    });
+    // (a) on a resume: the call is refused and the run stays on its first step.
+    const chainId = chainIdOf((await server.call('prompt_engine', PLAIN_193)).text);
+    const nodeOf = (): string | undefined =>
+      runRows(roots).find((row) => row.chainId === chainId)?.node;
+    expect(nodeOf()).toBe('a');
+    expect(
+      await refusedCall({
+        chain_id: chainId,
+        user_response: 'A out',
+        gate_verdict: PASS,
+        gates: [{ id: 'content-structure', criteria: ['REQ-210'] }],
+      })
+    ).toMatchObject(REFUSED_210);
+    expect(nodeOf()).toBe('a');
+    // (c) Control: the canonical id sent alone is a reference to that gate, not refused.
+    expect(await failFirst({ ...PLAIN_193, gates: [{ id: 'content-structure' }] })).toMatchObject(
+      CANONICAL_193
+    );
+  }, 240000);
+
+  /**
+   * P6.203 / R101. MEASURED 2026-09-27 on `388bf9d3`: a request gate carrying `name` and
+   * `description` beside its `id` and `criteria` registered as `temp_…` and rendered only its
+   * description. The `prompt_engine` handler read any gate holding both `name` and `description` as
+   * the `{name, description}` quick gate and dropped every other key; it now takes the quick-gate
+   * shape only when the gate matches the tool's strict quick-gate schema.
+   */
+  test('P6.203 a request gate carrying name and description keeps its id and criteria', async () => {
+    const { failFirst } = await p193Server();
+    // (a) The full definition registers under its id and renders its criteria.
+    expect(
+      await failFirst({
+        ...PLAIN_193,
+        gates: [{ id: 'rq203', name: 'rq203', description: 'd', criteria: ['X-203'] }],
+      })
+    ).toMatchObject({
+      reviews: { a: ['rq203', 'content-structure'] },
+      failShown: ['Use clear headings', 'X-203'],
+    });
+    // (b) Control: a `{name, description}` quick gate still registers as one, under a minted id.
+    expect(
+      await failFirst({ ...PLAIN_193, gates: [{ name: 'qk203', description: 'QK-203' }] })
+    ).toMatchObject({
+      reviews: { a: ['temp', 'content-structure'] },
+      failShown: ['Use clear headings', 'QK-203'],
     });
   }, 240000);
 
@@ -1467,6 +1657,66 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
       gate_verdict: PASS,
     });
     expect(resumed.text).toContain('Progress 2/3');
+  }, 180000);
+
+  /**
+   * P6.204 / R104. A run recorded before #414 could hold a named gate under a canonical id. Driven
+   * by planting one: server A runs `>>sv_chain :: g204:"NAMED-204"`, the recorded `g204` is
+   * rewritten to `content-structure` in every run table, and B claims the run with a FAIL.
+   * MEASURED 2026-09-27 on `001f35be`: the claim answered `isError: true` with the registry's raw
+   * "Error: A temporary gate may not shadow a canonical gate id ('content-structure')", and the
+   * run stayed on step a. The claim's named-gate restore already remaps a held id to a fresh
+   * `<id>-N` (R60); a canonical id is now held by its canonical gate, so it takes the same path.
+   */
+  async function claimPlantedCanonical(
+    roots: Roots,
+    plantedId: string
+  ): Promise<{ chainId: string; second: Server; failed: { isError: boolean; text: string } }> {
+    const first = await startServer(roots);
+    await authorResources(first);
+    const chainId = chainIdOf(
+      (await first.call('prompt_engine', { command: '>>sv_chain :: g204:"NAMED-204"' })).text
+    );
+    expect(runRow(roots, chainId)?.reviews).toEqual({ a: ['sv-block', 'g204'] });
+    const token = await mintToken(first, chainId);
+    const second = await startServer(roots);
+    await first.stop();
+    const db = new DatabaseSync(path.join(roots.runtimeRoot, 'runtime-state', 'state.db'));
+    try {
+      for (const table of ['chain_runs', 'chain_run_nodes', 'chain_sessions']) {
+        const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{
+          name: string;
+          type: string;
+        }>;
+        for (const { name } of columns.filter((column) => column.type === 'TEXT')) {
+          db.prepare(`UPDATE ${table} SET ${name} = REPLACE(${name}, 'g204', ?)`).run(plantedId);
+        }
+      }
+    } finally {
+      db.close();
+    }
+    const failed = await second.call('prompt_engine', {
+      claim_token: token,
+      user_response: 'A out',
+      gate_verdict: FAIL,
+    });
+    return { chainId, second, failed };
+  }
+
+  test('P6.204 (a) a claimed run recorded with a canonical-named gate restores it under a fresh id', async () => {
+    const roots = freshRoots();
+    const { chainId, failed } = await claimPlantedCanonical(roots, 'content-structure');
+    expect(failed.isError).toBe(false);
+    expect(failed.text).toContain('NAMED-204');
+    expect(runRow(roots, chainId)?.reviews).toEqual({ a: ['sv-block', 'content-structure-2'] });
+  }, 180000);
+
+  test('P6.204 (b) control: a planted id with no canonical gate restores under itself', async () => {
+    const roots = freshRoots();
+    const { chainId, failed } = await claimPlantedCanonical(roots, 'x204');
+    expect(failed.isError).toBe(false);
+    expect(failed.text).toContain('NAMED-204');
+    expect(runRow(roots, chainId)?.reviews).toEqual({ a: ['sv-block', 'x204'] });
   }, 180000);
 
   test('P6.130 (b) control: an unclaimed run keeps its one row', async () => {

@@ -18,7 +18,8 @@ type GateSystemSettingsProvider = () => GateSystemSettings | undefined;
  *
  * Dependencies: context.executionPlan, context.convertedPrompt or context.parsedCommand.steps
  * Output: Enhanced prompts with gate instructions, context.activeGateIds
- * Can Early Exit: Yes (a request gate targeting a step a resume can no longer reach, R65)
+ * Can Early Exit: Yes (a request gate targeting a step a resume can no longer reach, R65, or
+ * carrying a canonical gate's id, R100)
  */
 export class GateEnhancementStage extends BasePipelineStage {
   readonly name = 'GateEnhancement';
@@ -59,16 +60,19 @@ export class GateEnhancementStage extends BasePipelineStage {
 
     // R65: a resume's request gate targeting a step it can no longer reach is refused here, before
     // any registration, in stage 04's rejection shape — the registrar alone knows the run's
-    // position and the gates it holds.
-    const unreachable = this.registrar.unreachableStepTargets(context);
-    if (unreachable.length > 0) {
-      context.diagnostics.warn(this.name, 'Gate target refused', { count: unreachable.length });
-      context.setResponse(
-        buildWorkflowRejectionResponse(
-          unreachable.map((refusal) => ({ reason: 'gate-target-passed', ...refusal }))
-        )
-      );
-      this.logExit({ refusedGateTargets: unreachable.length });
+    // position and the gates it holds. R100: so is a request gate under a canonical gate's id.
+    const refused = [
+      ...this.registrar
+        .canonicalIdCollisions(context)
+        .map((refusal) => ({ reason: 'gate-id-canonical' as const, ...refusal })),
+      ...this.registrar
+        .unreachableStepTargets(context)
+        .map((refusal) => ({ reason: 'gate-target-passed' as const, ...refusal })),
+    ];
+    if (refused.length > 0) {
+      context.diagnostics.warn(this.name, 'Request gate refused', { count: refused.length });
+      context.setResponse(buildWorkflowRejectionResponse(refused));
+      this.logExit({ refusedRequestGates: refused.length });
       return;
     }
 

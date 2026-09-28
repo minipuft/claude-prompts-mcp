@@ -22,9 +22,11 @@ export const gateScopeSchema = z.enum(['execution', 'session', 'chain', 'step'],
 });
 
 /**
- * Zod schema for CustomCheck validation
+ * Zod schema for CustomCheck validation. Strict, like the tool-side quick gate: a gate carrying an
+ * `id` or `criteria` beside `name` and `description` is a full definition, never this shape
+ * (P6.203).
  */
-export const customCheckSchema = z.object(
+export const customCheckSchema = z.strictObject(
   {
     name: z.string().min(1, 'Custom check name cannot be empty'),
     description: z.string().min(1, 'Custom check description cannot be empty'),

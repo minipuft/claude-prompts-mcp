@@ -91,6 +91,7 @@ describe('decideInterrupt', () => {
       reason: 'blocking_unknown',
       unknownId: 'cache-ttl',
       statement: 'TTL is undecided',
+      openBlockingUnknowns: [{ id: 'cache-ttl', statement: 'TTL is undecided' }],
       affectedStepIds: [],
       remainingNodes: [
         { id: 'n3', promptId: 'p3', stepName: 'Review n3' },
@@ -159,6 +160,22 @@ describe('decideInterrupt', () => {
     ];
 
     expect(decideInterrupt(buildInput({ ledger }))?.unknownId).toBe('fresh');
+  });
+
+  test('P6.208: openBlockingUnknowns lists every open blocking entry, in ledger order', () => {
+    // Guard: the completed-run section names each of these (R105); a non-blocking entry and a
+    // resolved one are not unresolved blockers.
+    const ledger = [
+      entry({ id: 'fresh', blocking: true, discoveredAtStep: 3 }),
+      entry({ id: 'advisory', blocking: false }),
+      entry({ id: 'closed', blocking: true, state: 'resolved' }),
+      entry({ id: 'stale', blocking: true, discoveredAtStep: 1 }),
+    ];
+
+    expect(decideInterrupt(buildInput({ ledger }))?.openBlockingUnknowns).toEqual([
+      { id: 'fresh', statement: 'fresh statement' },
+      { id: 'stale', statement: 'stale statement' },
+    ]);
   });
 
   test('paused mirrors the pauseOnBlocking knob in both directions', () => {

@@ -2626,6 +2626,8 @@ export class ChainSessionStore implements ChainSessionService {
     const release = emptyRunRelease();
     for (const runChainId of runChainIds) {
       this.removeRunChainSessionsForScope(runChainId, scopeFilter, release);
+      // A run another scope still holds keeps its step results and history, as in `clearSession` (R102).
+      if (this.chainSessionMapping.has(runChainId)) continue;
       release.chainIds.push(runChainId);
       this.removeRunFromBaseTracking(runChainId);
     }
