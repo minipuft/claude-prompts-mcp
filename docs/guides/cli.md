@@ -61,6 +61,8 @@ node cli/dist/cpm.js --help
 
 Validate workspace resources against their Zod schemas.
 
+A prompt also fails when one of its `gateConfiguration.inline_gate_definitions` entries is one the loader would drop (a missing `scope`, `guidance`, `description`, `name` or `type`, or a value outside its allowed set): the error names the definition and the field. The structural commands (`rename`, `move`, `link-gate`) refuse only a definition their own edit introduced; one the prompt already carried does not block the edit, and `cpm validate` keeps reporting it.
+
 ```bash
 cpm validate --all --workspace ./my-workspace
 cpm validate --prompts -w server

@@ -12,13 +12,19 @@ export type ResourceValidationResult = ResourceVerificationResult;
 
 const verificationService = new ResourceVerificationService();
 
+/**
+ * The CLI reports an inline gate the loader would drop as an error (R117): `cpm validate` and
+ * `cpm init` fail on one, and `runValidatedMutation` refuses only one its mutation introduced.
+ */
+const CLI_CHECKS = { unloadableInlineGates: true } as const;
+
 export function validateResourceDocument(
   resourceType: ResourceValidationType,
   resourceId: string,
   filePath: string,
   data: unknown
 ): ResourceValidationResult {
-  return verificationService.validateDocument(resourceType, resourceId, filePath, data);
+  return verificationService.validateDocument(resourceType, resourceId, filePath, data, CLI_CHECKS);
 }
 
 export function validateResourceFile(
@@ -26,7 +32,7 @@ export function validateResourceFile(
   resourceId: string,
   filePath: string
 ): ResourceValidationResult {
-  return verificationService.validateFile(resourceType, resourceId, filePath);
+  return verificationService.validateFile(resourceType, resourceId, filePath, CLI_CHECKS);
 }
 
 export function formatValidationIssues(issues: ResourceValidationIssue[]): string[] {
