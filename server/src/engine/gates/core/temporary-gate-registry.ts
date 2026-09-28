@@ -135,11 +135,10 @@ export class TemporaryGateRegistry {
     scopeId?: string,
     options: { onIdCollision?: 'throw' | 'fresh-id' } = {}
   ): string {
-    if (definition.id !== undefined && this.shadowsCanonicalGate(definition.id)) {
-      throw new Error(
-        `A temporary gate may not shadow a canonical gate id ('${definition.id}'). ` +
-          'Give it another id or name.'
-      );
+    const refusal =
+      definition.id === undefined ? undefined : this.canonicalIdRefusal(definition.id);
+    if (refusal !== undefined) {
+      throw new Error(refusal);
     }
     return this.storeGate(
       this.chooseGateId(definition.id, options.onIdCollision),
@@ -151,6 +150,17 @@ export class TemporaryGateRegistry {
   /** Whether `gateId` names a canonical gate, which no temporary gate may register under. */
   shadowsCanonicalGate(gateId: string): boolean {
     return this.isCanonicalGateId?.(gateId) === true;
+  }
+
+  /**
+   * The refusal for a temporary gate under `gateId`, or undefined when it names no canonical gate:
+   * one sentence for the registry's own throw and for the reply refusals that answer a call before
+   * anything registers (R100).
+   */
+  canonicalIdRefusal(gateId: string): string | undefined {
+    return this.shadowsCanonicalGate(gateId)
+      ? `A temporary gate may not shadow a canonical gate id ('${gateId}'). Give it another id or name.`
+      : undefined;
   }
 
   /**

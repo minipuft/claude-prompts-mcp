@@ -217,6 +217,22 @@ export class InlineGateProcessor {
   }
 
   /**
+   * The refusals for this command's named inline gates that would register under a canonical gate
+   * id (R100). A `verify:` gate registers nothing, so it is not judged.
+   */
+  canonicalIdCollisions(parsedCommand: ParsedCommand): Array<{ readonly detail: string }> {
+    return (parsedCommand.namedInlineGates ?? []).flatMap((namedGate) => {
+      if (namedGate.shellVerify !== undefined || !isValidGateCriteria(namedGate.criteria)) {
+        return [];
+      }
+      const refusal = this.temporaryGateRegistry.canonicalIdRefusal(namedGate.gateId);
+      return refusal === undefined
+        ? []
+        : [{ detail: `named inline gate "${namedGate.gateId}": ${refusal}` }];
+    });
+  }
+
+  /**
    * Re-register the temporary gates a restored run's blueprint references and this process does
    * not hold (R54) — a run claimed from another server (the 2A handoff) is the one resume whose
    * gates were registered in a process that is not this one. Stage 05 skips processing on a

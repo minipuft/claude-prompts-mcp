@@ -28,6 +28,8 @@ const createRegistry = (overrides?: {
       createTemporaryGate,
       getTemporaryGate,
       resolveDeclared: jest.fn(),
+      // No canonical gate here: no named gate is refused (R100).
+      canonicalIdRefusal: () => undefined,
     } as unknown as TemporaryGateRegistry,
     createTemporaryGate,
     getTemporaryGate,

@@ -339,11 +339,14 @@ submission is fixed in one pass rather than one error per round trip.
 | `gate-target-missing`       | A gate's `target_step_id` names no declared node, or an inline gate id is empty.                                                                                                                                                                 |
 | `mutually-exclusive-source` | The call carried a workflow **and** a `command` or `chain_id`.                                                                                                                                                                                   |
 | `gate-target-passed`        | A resume's `gates` entry targets a node the run has already passed, or the node the call answers.                                                                                                                                                |
+| `gate-id-canonical`         | A `gates` entry carrying criteria or guidance, or a named inline gate, takes a canonical gate's id.                                                                                                                                              |
 
-Every reason but the last two is produced by validating one workflow in isolation.
+Every reason but the last three is produced by validating one workflow in isolation.
 `mutually-exclusive-source` is about the shape of the whole request, so it is raised by the parsing
 stage rather than the validator; `gate-target-passed` needs the running run's position, so the gate
-registrar raises it on a resume. Both reach you through the same addressed-rejection channel.
+registrar raises it on a resume; `gate-id-canonical` needs the server's canonical gates, so the
+stage that would register the gate raises it before anything registers. All three reach you through
+the same addressed-rejection channel.
 
 Id problems short-circuit the rest. With duplicate ids, "the node named X" is not a well-formed
 address, so every later rejection would be ambiguous about which node it meant.

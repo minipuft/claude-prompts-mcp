@@ -403,6 +403,24 @@ export class TemporaryGateRegistrar {
   }
 
   /**
+   * The refusals for this call's request gates that would register under a canonical gate id
+   * (R100): a gate carrying its own content beside that id, which the registry refuses. Read from
+   * the gates the client sent, so a restored run's recorded gates are not judged here; a gate
+   * sending the canonical id alone is a reference to that gate and is not refused.
+   */
+  canonicalIdCollisions(context: ExecutionContext): Array<{ readonly detail: string }> {
+    const registry = this.temporaryGateRegistry;
+    if (registry === undefined) return [];
+    return (context.mcpRequest.gates ?? []).flatMap((gate) => {
+      if (typeof gate !== 'object' || !('id' in gate) || typeof gate.id !== 'string') return [];
+      const refusal = registry.canonicalIdRefusal(gate.id);
+      return refusal === undefined || !this.gateInputContainsInlineContent(gate)
+        ? []
+        : [{ detail: `request gate "${gate.id}": ${refusal}` }];
+    });
+  }
+
+  /**
    * The request gates the run this call resumes already owns. Empty on the call that starts a
    * run: the session does not exist yet, and that call's own `gates` are the run's.
    */
