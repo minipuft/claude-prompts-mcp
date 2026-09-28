@@ -4370,6 +4370,15 @@ function describeBundledPullRefusal(
   );
 }
 
+/**
+ * Write a client's edited SKILL.md prose back into the canonical resource.
+ *
+ * No post-write verification, unlike `clone` (R132). A pull writes prose fields only — `name` and
+ * `description` into the YAML, the message and guidance sections into their markdown files — and
+ * never an inline gate definition, so a differential against the file it edits could refuse
+ * nothing the pull introduced. A definition the YAML already carries is re-serialized unchanged;
+ * the P6.245 twin in `tests/integration/skills-sync/pull-command.test.ts` pins that.
+ */
 async function pullCommand(
   opts: SkillsSyncOptions,
   output: SkillsSyncOutput,

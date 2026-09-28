@@ -295,6 +295,59 @@ describe('Pull Command Integration', () => {
     expect(doc['description']).toBe('Updated desc');
   });
 
+  /**
+   * P6.245 (R132). A pull writes prose only — `name`, `description`, the message and guidance
+   * files — so it runs no post-write verification: it cannot introduce an inline gate definition
+   * the loader would drop. Pinned driven: a pull over a prompt that already carries one succeeds,
+   * writes the edit, and leaves the definition byte-identical. MEASURED 2026-09-28 on `a3fe7159d`.
+   */
+  it('P6.245 a pull over a prompt carrying a droppable inline definition leaves it byte-identical', async () => {
+    const promptDir = await writePromptResource(serverRoot, 'test', 'gated-pull', {
+      name: 'Gated Pull',
+      description: 'Original description',
+      systemMessage: 'Be helpful.',
+    });
+    const yamlPath = path.join(promptDir, 'prompt.yaml');
+    const doc = yaml.load(await readFile(yamlPath, 'utf-8')) as Record<string, unknown>;
+    // No `scope`: the loader drops this gate on every load.
+    doc['gateConfiguration'] = {
+      inline_gate_definitions: [
+        {
+          name: 'Cites Sources',
+          type: 'validation',
+          description: 'Every claim names its source.',
+          guidance: 'Check each claim for a named source.',
+        },
+      ],
+    };
+    await writeFile(yamlPath, yaml.dump(doc, { lineWidth: 120 }));
+    const before = await readFile(yamlPath, 'utf-8');
+    const definitionBlock = (text: string) => text.slice(text.indexOf('gateConfiguration:'));
+    expect(definitionBlock(before)).toContain('inline_gate_definitions:');
+    await writeSyncConfig(serverRoot, outputDir);
+
+    const skillPath = await exportAndGetSkillPath('gated-pull');
+    const exported = await readFile(skillPath, 'utf-8');
+    expect(exported).toContain('description: Original description');
+    await writeFile(
+      skillPath,
+      exported.replace('description: Original description', 'description: Updated desc')
+    );
+
+    const pullOut = silentOutput();
+    const report = await runSkillsSyncCommand(
+      { command: 'pull', client: 'claude-code', scope: 'user' } as SkillsSyncOptions,
+      pullOut,
+      resolveSkillsSyncPaths()
+    );
+
+    expect(report.failures).toEqual([]);
+    const after = await readFile(yamlPath, 'utf-8');
+    // Control: the write happened.
+    expect((yaml.load(after) as Record<string, unknown>)['description']).toBe('Updated desc');
+    expect(definitionBlock(after)).toBe(definitionBlock(before));
+  });
+
   it('reports no changes when SKILL.md matches exported content', async () => {
     await writePromptResource(serverRoot, 'test', 'no-change', {
       name: 'No Change',
