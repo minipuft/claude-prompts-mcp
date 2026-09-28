@@ -233,6 +233,8 @@ Saves the current state as a new version, restores the target version, then reco
 
 Two states refuse and write nothing rather than restoring something else: a version row whose recorded bytes are missing from the object store, and a recorded path that resolves outside the resource's own directory.
 
+A restore is a write, so it is validated like every other `cpm` write, against the file it replaces. A restore that brings back an inline gate definition the server would drop — one the current file does not carry — is refused: the files are put back byte-identical, no restored version is recorded, and `--json` answers with `error`, `validation` and `rollback.performed` as the other commands do. A definition the current file already carries does not block the restore; it is printed as a warning, and `--json` carries every warning in `warnings`.
+
 `--preview` resolves exactly the plan a rollback would apply and prints it, writing no file and recording no version. `--json` adds `preview`, `files_written`, `files_unchanged` and `files_left_in_place` beside the existing fields.
 
 Every versioned type — prompt, gate and framework — projects through the SAME declaration

@@ -16,6 +16,8 @@ import { fileURLToPath } from 'node:url';
 
 import { runValidatedMutation } from '@cli-shared/resource-operations.js';
 
+import { seedVersionHistory } from '../helpers/seed-version-history.js';
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CLI = join(__dirname, '../../dist/cpm.js');
 const VERSIONED_WS = join(__dirname, '../fixtures/versioned-workspace');
@@ -168,5 +170,112 @@ describe('inline gate definitions the loader drops (P6.231)', () => {
       expect.stringContaining('scope (must be one of'),
     ]);
     expect(readFileSync(promptFile, 'utf8')).toBe(before);
+  });
+
+  /**
+   * P6.238 (R125). MEASURED 2026-09-28 on `f38340a1`: `cpm rollback` to a version whose snapshot
+   * carried a definition the loader drops wrote it with no check and exited 0, because the restore
+   * wrote the file itself and never validated. A restore is a write: it now runs the same
+   * validator and the same differential against the CURRENT file as every other CLI write.
+   */
+  describe('P6.238 cpm rollback', () => {
+    const DROPPED_GATE_CONFIGURATION = {
+      inline_gate_definitions: [
+        {
+          name: 'Cites Sources',
+          type: 'validation',
+          description: 'Every claim names its source.',
+          guidance: 'Check each claim for a named source.',
+        },
+      ],
+    };
+    const baseSnapshot = { id: 'test-prompt', name: 'Test Prompt', description: 'Restored text.' };
+    const rollbackRows = (): string[] => {
+      const history = run(['history', 'prompt', 'test-prompt', '--workspace', workspace, '--json']);
+      return (JSON.parse(history.output) as { versions: { description: string }[] }).versions
+        .map((version) => version.description)
+        .filter((description) => description.startsWith('Rollback to'));
+    };
+
+    it('(a) a restore that brings back a dropped definition is refused and the file is untouched', () => {
+      seedVersionHistory(workspace, 'prompt', 'test-prompt', [
+        {
+          version: 1,
+          snapshot: { ...baseSnapshot, gateConfiguration: DROPPED_GATE_CONFIGURATION },
+          description: 'Version 1',
+        },
+      ]);
+      const before = readFileSync(promptFile);
+
+      const { output, exitCode } = run([
+        'rollback', 'prompt', 'test-prompt', '1', '--workspace', workspace, '--json',
+      ]);
+
+      expect(exitCode).toBe(1);
+      const refusal = JSON.parse(output) as {
+        validation: { errors: { path: string; message: string }[] };
+        rollback: { performed: boolean };
+      };
+      expect(refusal.validation.errors).toEqual([
+        expect.objectContaining({
+          path: 'gateConfiguration.inline_gate_definitions[0]',
+          message: expect.stringMatching(/scope \(must be one of/),
+        }),
+      ]);
+      expect(refusal.rollback.performed).toBe(true);
+      expect(readFileSync(promptFile).equals(before)).toBe(true);
+      expect(rollbackRows()).toEqual([]);
+    });
+
+    it('(b) a restore over a file that already carries one warns and succeeds', () => {
+      carryDroppedDefinition();
+      seedVersionHistory(workspace, 'prompt', 'test-prompt', [
+        { version: 1, snapshot: baseSnapshot, description: 'Version 1' },
+      ]);
+
+      const text = run(['rollback', 'prompt', 'test-prompt', '1', '--workspace', workspace]);
+
+      expect(text.exitCode).toBe(0);
+      expect(readFileSync(promptFile, 'utf8')).toContain('Restored text.');
+      const warningLines = text.output
+        .split('\n')
+        .filter((line) => line.includes('inline_gate_definitions'));
+      expect(warningLines).toHaveLength(1);
+      expect(warningLines[0]?.trim()).toMatch(/scope \(must be one of/);
+      expect(rollbackRows()).toEqual(['Rollback to v1']);
+    });
+
+    it('(b) --json carries the warning in `warnings`', () => {
+      carryDroppedDefinition();
+      seedVersionHistory(workspace, 'prompt', 'test-prompt', [
+        { version: 1, snapshot: baseSnapshot, description: 'Version 1' },
+      ]);
+
+      const json = run([
+        'rollback', 'prompt', 'test-prompt', '1', '--workspace', workspace, '--json',
+      ]);
+
+      expect(json.exitCode).toBe(0);
+      expect(inlineGateWarnings(json.output)).toEqual([expect.stringMatching(SCOPE_WARNING)]);
+    });
+
+    it('(c) control: a clean rollback restores, records and prints no inline-gate warning', () => {
+      seedVersionHistory(workspace, 'prompt', 'test-prompt', [
+        { version: 1, snapshot: baseSnapshot, description: 'Version 1' },
+      ]);
+
+      const json = run([
+        'rollback', 'prompt', 'test-prompt', '1', '--workspace', workspace, '--json',
+      ]);
+
+      expect(json.exitCode).toBe(0);
+      expect(readFileSync(promptFile, 'utf8')).toContain('Restored text.');
+      expect(inlineGateWarnings(json.output)).toEqual([]);
+      // Positive control: the channel is live on this path — it carries the unrelated advisories.
+      expect((JSON.parse(json.output) as { warnings: string[] }).warnings).toEqual(
+        expect.arrayContaining([expect.stringContaining('no arguments defined')]),
+      );
+      expect(rollbackRows()).toEqual(['Rollback to v1']);
+    });
   });
 });

@@ -2,15 +2,24 @@ import {
   loadYamlFileSync,
   resolveConfiguredMaxVersions,
   rollbackVersion,
+  validateResourceFile,
+  type ResourceValidationResult,
 } from '@cli-shared/index.js';
+import { declaredResourceId } from '@cli-shared/resource-operations.js';
 // Directly, not through the `cli-shared` barrel: the barrel is what every other command imports,
 // and adding one more never-server-consumed re-export to it is knip debt with no reader.
 import { projectResourceSnapshot } from '@cli-shared/resource-snapshot.js';
+import { exemptPreExistingUnloadableGates } from '@modules/resources/services/resource-verification-service.js';
 import { describeRestorePlan } from '@modules/versioning/restore-plan.js';
 import { resourceFileSet } from '@shared/utils/resource-file-set.js';
 import { serializeYamlPreservingSource } from '@shared/utils/yaml/yaml-document-writer.js';
 import { resolveWorkspace, resolveResourceDir, findResource } from '../lib/workspace.js';
 import { output } from '../lib/output.js';
+import {
+  mutationWarnings,
+  printMutationWarnings,
+  printValidationFailure,
+} from '../lib/resource-validation.js';
 import { TYPE_MAP, TYPE_CONFIG, singularName, isVersionedType } from '../lib/types.js';
 
 interface RollbackOptions {
@@ -112,6 +121,26 @@ export async function rollback(options: RollbackOptions): Promise<number> {
   // as a callback so the prior-state row is written while the disk still holds the prior bytes and
   // the produced row is written once these bytes are on disk — before, the restored file was
   // described by no row at all and `cpm history` listed a state it could not restore.
+  //
+  // **A restore is a write (R125)**, so it is validated like every other CLI write, with the
+  // differential against the CURRENT file that `runValidatedMutation` applies: an unloadable inline
+  // definition the file already carries warns, one the restore brings back is refused. The check
+  // runs inside the write callback, after the files land and before the produced row is recorded,
+  // so a refusal throws into the version transaction, which puts every target back byte-identical
+  // and records nothing. `runValidatedMutation` itself cannot wrap it: its `mutate` is synchronous
+  // and the write here is awaited between the two version rows.
+  const priorVerdict = validateResourceFile(type, declaredResourceId(match), yamlPath);
+  let restoreVerdict: ResourceValidationResult | undefined;
+  const verifyRestore = (): void => {
+    restoreVerdict = exemptPreExistingUnloadableGates(
+      priorVerdict,
+      validateResourceFile(type, declaredResourceId(match), yamlPath),
+    );
+    if (!restoreVerdict.valid) {
+      throw new Error('Rollback produced an invalid resource; restored the previous files.');
+    }
+  };
+
   const notRestored: string[] = [];
   const applyRestore = async (
     snapshot: Record<string, unknown>,
@@ -140,6 +169,7 @@ export async function rollback(options: RollbackOptions): Promise<number> {
       serializeYamlPreservingSource(merged, readFileSync(yamlPath, 'utf8')).content,
       'utf8',
     );
+    verifyRestore();
 
     // Re-projected from what is now on disk, not handed back as the target row's snapshot. The
     // merge above leaves every key the snapshot does not carry at its current value, and it never
@@ -181,6 +211,7 @@ export async function rollback(options: RollbackOptions): Promise<number> {
         // Re-read from disk, because the byte restore replaced the file wholesale. `notRestored`
         // is cleared rather than left over: it is the merging path's report of snapshot keys the
         // entry file kept, and a byte restore has no such keys — every recorded file was replaced.
+        verifyRestore();
         const onDisk = loadYamlFileSync<Record<string, unknown>>(yamlPath) ?? currentData;
         notRestored.length = 0;
         return (await projectResourceSnapshot(resourceType, match.id, yamlPath, onDisk)).snapshot;
@@ -189,6 +220,14 @@ export async function rollback(options: RollbackOptions): Promise<number> {
     },
   );
 
+  if (!result.success && restoreVerdict !== undefined && !restoreVerdict.valid) {
+    printValidationFailure(restoreVerdict, {
+      json: options.json,
+      action: `rollback ${singularName(type)} '${options.id}' to v${targetVersion}`,
+      rolledBack: true,
+    });
+    return 1;
+  }
   if (!result.success) {
     console.error(result.error ?? 'Rollback failed.');
     return 1;
@@ -197,6 +236,7 @@ export async function rollback(options: RollbackOptions): Promise<number> {
   // The plan, when version N recorded its files. The SAME value a preview prints and an apply
   // executed — one call produced it, so the two cannot describe different actions.
   const plan = result.plan;
+  const warnings = mutationWarnings(restoreVerdict);
 
   if (options.json) {
     output(
@@ -212,6 +252,7 @@ export async function rollback(options: RollbackOptions): Promise<number> {
         // keys the merging writer left at their current value, and a byte restore replaces whole
         // files. It stays, truthfully, for a version that recorded no file tree.
         not_restored: notRestored,
+        warnings,
         ...(plan !== undefined
           ? {
               files_written: plan.write.map((file) => file.path),
@@ -247,6 +288,7 @@ export async function rollback(options: RollbackOptions): Promise<number> {
   if (plan !== undefined) {
     console.log(describeRestorePlan(plan));
   }
+  printMutationWarnings(warnings);
   if (notRestored.length > 0) {
     console.log(
       `Version ${targetVersion} recorded no ${notRestored.join(', ')} — left at the current value.`,

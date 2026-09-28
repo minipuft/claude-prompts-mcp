@@ -51,6 +51,17 @@ const HAND_AUTHORED_BODY = Buffer.concat([
   Buffer.from('\r\nEnd.\r\n', 'utf8'),
 ]);
 
+/** One inline definition with every field the loader requires except `scope` (P6.231's fixture). */
+const DROPPED_DEFINITION = [
+  'gateConfiguration:',
+  '  inline_gate_definitions:',
+  '    - name: Cites Sources',
+  '      type: validation',
+  '      description: Every claim names its source.',
+  '      guidance: Check each claim for a named source.',
+  '',
+].join('\n');
+
 interface CpmRun {
   status: number;
   stdout: string;
@@ -82,6 +93,10 @@ describe('cpm rollback restores recorded bytes (built binary)', () => {
   let tamperedTreeUnchanged = false;
   let missingObjectRun: CpmRun;
   let missingObjectTreeUnchanged = false;
+  let droppedRun: CpmRun;
+  let droppedEntryBefore: Buffer;
+  let droppedEntryAfter: Buffer;
+  let droppedTargetCarried = false;
 
   const callTool = async (args: Record<string, unknown>): Promise<string> => {
     if (!client) throw new Error('client not initialized');
@@ -210,6 +225,7 @@ describe('cpm rollback restores recorded bytes (built binary)', () => {
     await driveProjectionOnly();
     await driveTamperedPath();
     await driveMissingObject();
+    await driveDroppedDefinition();
   }, 180000);
 
   afterAll(async () => {
@@ -359,6 +375,38 @@ describe('cpm rollback restores recorded bytes (built binary)', () => {
       JSON.stringify(await treeOf(gateDir(id))) === JSON.stringify(before);
   }
 
+  // ── a byte restore is a write: validated against the current file (P6.238) ──
+
+  async function driveDroppedDefinition(): Promise<void> {
+    const id = 'cpm_dropped_definition_prompt';
+    const entry = path.join(workspace, 'resources', 'prompts', 'general', id, 'prompt.yaml');
+    await callTool({
+      resource_type: 'prompt',
+      action: 'create',
+      id,
+      category: 'general',
+      name: 'CPM Dropped Definition',
+      description: 'V1-DESC',
+      user_message_template: 'V1-BODY',
+    });
+    // A definition the file already carries is a warning to the server's write, so the update
+    // below records a version whose bytes hold it.
+    await writeFile(entry, `${await readFile(entry, 'utf8')}${DROPPED_DEFINITION}`, 'utf8');
+    await new Promise((resolve) => setTimeout(resolve, 6000));
+    const target = savedVersion(
+      await callTool({ resource_type: 'prompt', action: 'update', id, description: 'V2-DESC' })
+    );
+
+    // The current file no longer carries it, so restoring the target would bring it back.
+    const updated = await readFile(entry, 'utf8');
+    droppedTargetCarried = updated.includes(DROPPED_DEFINITION);
+    await writeFile(entry, updated.replace(DROPPED_DEFINITION, ''), 'utf8');
+
+    droppedEntryBefore = await readFile(entry);
+    droppedRun = cpm(['rollback', 'prompt', id, String(target), '--json']);
+    droppedEntryAfter = await readFile(entry);
+  }
+
   // ── assertions ─────────────────────────────────────────────────────────────
 
   it('restores a hand-written body byte for byte, invalid UTF-8 included', () => {
@@ -444,6 +492,23 @@ describe('cpm rollback restores recorded bytes (built binary)', () => {
     // Not the projection fallback: restoring something else is the failure the refusal exists for.
     expect(missingObjectRun.stderr).not.toContain('recorded no file tree');
     expect(missingObjectTreeUnchanged).toBe(true);
+  });
+
+  it('refuses a byte restore that brings back a definition the loader drops (P6.238)', () => {
+    // Positive control: the target version's bytes really carry the definition.
+    expect(droppedTargetCarried).toBe(true);
+    expect(droppedRun.status).toBe(1);
+    expect(droppedRun.json?.['validation']).toEqual(
+      expect.objectContaining({
+        errors: [
+          expect.objectContaining({
+            path: 'gateConfiguration.inline_gate_definitions[0]',
+            message: expect.stringMatching(/scope \(must be one of/),
+          }),
+        ],
+      })
+    );
+    expect(hashBytes(droppedEntryAfter)).toBe(hashBytes(droppedEntryBefore));
   });
 
   it('parses every entry file it left behind', async () => {
