@@ -104,6 +104,16 @@ repo/
 | `npm run generate:contracts`                | Regenerate MCP schemas from contracts                                           |
 | `npm run start:stdio` / `start:development` | STDIO / Streamable HTTP for manual testing                                      |
 
+`test:unit` and `test:coverage` run every unit file in one Node process
+(`maxWorkers: 1`), so heap retained across files adds up. It has grown past
+V8's default old-space ceiling on machines with less than about 14 GB of
+memory (2,240 MB measured on a 12 GB box), where the run aborts with
+`JavaScript heap out of memory` and exit 134; CI's 16 GB runners get a
+larger default and never showed it. Both scripts therefore set
+`--max-old-space-size=4096`, sized from a measured 2.9 GB peak resident set
+for the full unit run. The retention itself is open work; the ceiling only
+stops it failing the suite.
+
 </details>
 
 ## Documentation Standards
