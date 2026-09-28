@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-28T15:34:01.104Z",
+  "generatedAt": "2026-09-28T15:49:15.841Z",
   "eslintTarget": "src,scripts,eslint-rules",
   "totals": {
-    "errors": 2514,
+    "errors": 2513,
     "warnings": 721
   },
   "byRule": {
@@ -32,7 +32,7 @@
       "warnings": 0
     },
     "import-x/order": {
-      "errors": 5,
+      "errors": 4,
       "warnings": 0
     },
     "@typescript-eslint/explicit-module-boundary-types": {

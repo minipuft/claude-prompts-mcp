@@ -21,6 +21,7 @@ import { buildStructuredVerdictTemplate } from '../../formatting/response-assemb
 import {
   decideInterrupt,
   decideMutation,
+  investigatedUnknownIds,
   isInterruptResolutionAction,
   isUnknownInterruptPending,
   UNKNOWN_INTERRUPT_GATE_ID,
@@ -28,7 +29,7 @@ import {
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
-import type { ChainNode, GateReview, PendingGateReview } from '#shared/types/chain-execution.js';
+import type { GateReview, PendingGateReview } from '#shared/types/chain-execution.js';
 import type {
   ChainSession,
   SessionBlueprint,
@@ -883,7 +884,9 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       // bookkeeping: `origin`/`origin_unknown_id` reconstruct on a cold load, so a resumed run
       // enforces the same caps as one that never dropped out of memory.
       insertedCount: insertedNodes.length,
-      insertedUnknownIds: collectOriginUnknownIds(insertedNodes),
+      // Per declaration (R127): a re-opened unknown's step from before it was resolved is not
+      // counted, so it can get a new one.
+      insertedUnknownIds: [...investigatedUnknownIds(outcome.ledger, nodes)],
       // Read off the run's stored blueprint, not off `mcpRequest`: a Workflow IR is submitted on
       // the run's FIRST call and every later step is its own MCP call carrying only a chain_id.
       // The blueprint is the one run-scoped record of the submission that survives that gap, and
@@ -1173,18 +1176,6 @@ export class StepResponseCaptureStage extends BasePipelineStage {
 
     context.sessionContext = updatedSessionContext;
   }
-}
-
-/**
- * The unknown ids that already own an inserted node, for the per-unknown insertion cap.
- *
- * Reads `originUnknownId` off the node rather than parsing it back out of the node id:
- * `mintInsertionId` slugifies and collision-suffixes, so the id has no decodable inverse.
- */
-function collectOriginUnknownIds(insertedNodes: readonly ChainNode[]): string[] {
-  return insertedNodes
-    .map((node) => node.originUnknownId)
-    .filter((unknownId): unknownId is string => unknownId !== undefined);
 }
 
 /**

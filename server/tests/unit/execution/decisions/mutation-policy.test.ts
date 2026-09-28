@@ -3,6 +3,7 @@ import { describe, expect, test } from '@jest/globals';
 
 import {
   decideMutation,
+  investigatedUnknownIds,
   MAX_INSERTIONS_PER_RUN,
 } from '../../../../src/engine/execution/pipeline/decisions/mutation/index.js';
 
@@ -10,6 +11,7 @@ import type {
   ChainMutation,
   DecideMutationInput,
 } from '../../../../src/engine/execution/pipeline/decisions/mutation/index.js';
+import type { ChainNode } from '../../../../src/shared/types/chain-execution.js';
 import type {
   UnknownLedgerEntry,
   UnknownObservation,
@@ -327,5 +329,80 @@ describe('decideMutation', () => {
       unknownId: 'cache-ttl',
       statement: discovery.statement,
     });
+  });
+});
+
+/**
+ * P6.241 (R127): the per-unknown-id cap counts steps inserted since the unknown's CURRENT
+ * discovery. A re-open is a new declaration, so a step inserted before the unknown was resolved
+ * no longer answers it.
+ */
+describe('investigatedUnknownIds (R127)', () => {
+  const planned = (id: string): ChainNode => ({
+    id,
+    promptId: id,
+    stepName: id,
+    origin: 'planned',
+  });
+  const inserted = (id: string, unknownId: string): ChainNode => ({
+    id,
+    promptId: 'investigate_unknown',
+    stepName: 'Investigate',
+    origin: 'inserted',
+    originUnknownId: unknownId,
+  });
+  // Declared at n1 (ordinal 1) and investigated at ordinal 2; resolved; re-opened at n2
+  // (ordinal 3) beside a new unknown declared there, whose step sits at ordinal 4.
+  const nodes = [
+    planned('n1'),
+    inserted('inv-old', 'old'),
+    planned('n2'),
+    inserted('inv-new', 'new'),
+    planned('n3'),
+  ];
+  const ledger = [
+    ledgerEntry({ id: 'old', blocking: true, discoveredAtStep: 3 }),
+    ledgerEntry({ id: 'new', blocking: true, discoveredAtStep: 3 }),
+  ];
+
+  test('(a) a re-opened unknown whose only step predates the re-open gets a new step', () => {
+    expect([...investigatedUnknownIds(ledger, nodes)]).toEqual(['new']);
+    expectMutation(
+      decideMutation(
+        buildInput({
+          delta: [discover('old', { blocking: true })],
+          ledger,
+          nodes,
+          currentNodeId: 'inv-new',
+          insertedCount: 2,
+          insertedUnknownIds: [...investigatedUnknownIds(ledger, nodes)],
+        })
+      ),
+      {
+        kind: 'insert_investigation',
+        afterNodeId: 'inv-new',
+        unknownId: 'old',
+        statement: 'old is undecided',
+      }
+    );
+  });
+
+  test('(b) control: an unknown with a step since its discovery keeps the per-id cap', () => {
+    expectMutation(
+      decideMutation(
+        buildInput({
+          delta: [discover('new', { blocking: true })],
+          ledger,
+          nodes,
+          currentNodeId: 'inv-new',
+          insertedCount: 2,
+          insertedUnknownIds: [...investigatedUnknownIds(ledger, nodes)],
+        })
+      ),
+      { kind: 'none', reason: 'cap-reached' }
+    );
+    // And once the re-opened one has its new step, it is investigated again.
+    const withNew = [...nodes.slice(0, 4), inserted('inv-old-2', 'old'), planned('n3')];
+    expect([...investigatedUnknownIds(ledger, withNew)].sort()).toEqual(['new', 'old']);
   });
 });

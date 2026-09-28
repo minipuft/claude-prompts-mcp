@@ -1,6 +1,6 @@
 // @lifecycle canonical - Public exports for the P4 adaptive chain-mutation decision.
 
-export { decideMutation } from './mutation-policy.js';
+export { decideMutation, investigatedUnknownIds } from './mutation-policy.js';
 export {
   decideInterrupt,
   isInterruptResolutionAction,

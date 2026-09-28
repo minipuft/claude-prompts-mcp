@@ -220,6 +220,39 @@ describe('decideInterrupt', () => {
     ).toEqual([]);
   });
 
+  test('P6.241: a re-opened unknown whose only step predates the re-open is listed until it gets one', () => {
+    // Guard: `investigatedUnknownIds` compares each inserted node's ordinal with the entry's
+    // current `discoveredAtStep` (R127). `u-old` was investigated at ordinal 2, then resolved and
+    // re-opened at n2 (ordinal 3) beside `u-new`, whose step sits at ordinal 4.
+    const inserted = (id: string, unknownId: string): ChainNode => ({
+      id,
+      promptId: 'investigate_unknown',
+      stepName: 'Investigate',
+      origin: 'inserted',
+      originUnknownId: unknownId,
+    });
+    const ledger = [
+      entry({ id: 'u-old', blocking: true, discoveredAtStep: 3 }),
+      entry({ id: 'u-new', blocking: true, discoveredAtStep: 3 }),
+    ];
+    const reopened = [
+      NODES[0]!,
+      inserted('inv-u-old', 'u-old'),
+      NODES[1]!,
+      inserted('inv-u-new', 'u-new'),
+    ];
+    // Control: `u-new` has its step since its discovery and is not listed.
+    expect(
+      decideInterrupt(buildInput({ ledger, nodes: reopened, currentNodeId: 'inv-u-new' }))
+        ?.uninvestigatedUnknownIds
+    ).toEqual(['u-old']);
+    const withNewStep = [...reopened, inserted('inv-u-old-2', 'u-old'), NODES[2]!];
+    expect(
+      decideInterrupt(buildInput({ ledger, nodes: withNewStep, currentNodeId: 'inv-u-new' }))
+        ?.uninvestigatedUnknownIds
+    ).toEqual([]);
+  });
+
   test('paused mirrors the pauseOnBlocking knob in both directions', () => {
     // Guard: `input.pauseOnBlocking === true`. Absent and explicit-false are the same posture
     // here — unlike maxInsertions, this knob has no server default to narrow.
