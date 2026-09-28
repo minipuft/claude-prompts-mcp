@@ -580,3 +580,44 @@ describe('P6.206: the JSON command form is parsed through the same refusals', ()
     }
   });
 });
+
+/**
+ * P6.218 / R112. MEASURED 2026-09-28 on `1f54e885` through `parseCommand`: the JSON form parsed
+ * its inner command with the symbolic strategy and returned `operators` and `executionPlan`
+ * undefined for `:: "X-218"`, `@ReACT` and an arrow-chain. It now carries the inner parse's
+ * operators and plan whole, so stage 04 builds the same command from either spelling.
+ */
+describe('P6.218: the JSON command form carries its inner command operators', () => {
+  const parser = new UnifiedCommandParser(mockLogger, (id) => id.toLowerCase() === 'react');
+  const json = (command: string, extra: Record<string, unknown> = {}) =>
+    JSON.stringify({ command, ...extra });
+
+  test('(a)(b) operators and plan equal the symbolic form, for a criterion, a framework and a chain', async () => {
+    for (const inner of ['>>analyze :: "X-218"', '@ReACT >>analyze', '>>analyze --> >>summarize']) {
+      const symbolic = await parser.parseCommand(inner, basePrompts);
+      const wrapped = await parser.parseCommand(json(inner), basePrompts);
+      expect(symbolic.operators?.hasOperators).toBe(true);
+      expect({ inner, operators: wrapped.operators, plan: wrapped.executionPlan }).toEqual({
+        inner,
+        operators: symbolic.operators,
+        plan: symbolic.executionPlan,
+      });
+      expect(wrapped.format).toBe('json');
+    }
+  });
+
+  test('(a) outer args fill the first step of the carried plan', async () => {
+    const wrapped = await parser.parseCommand(
+      json('>>analyze :: "X-218"', { args: { input: 'I-218' } }),
+      basePrompts
+    );
+    expect(wrapped.executionPlan?.steps[0]?.args).toBe('{"input":"I-218"}');
+    expect(wrapped.rawArgs).toBe('{"input":"I-218"}');
+  });
+
+  test('(c) control: a JSON form with no operator carries no plan', async () => {
+    const wrapped = await parser.parseCommand(json('>>analyze'), basePrompts);
+    expect(wrapped.operators).toBeUndefined();
+    expect(wrapped.executionPlan).toBeUndefined();
+  });
+});

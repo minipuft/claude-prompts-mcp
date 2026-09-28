@@ -1453,6 +1453,56 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
   });
 
   /**
+   * P6.218 / R112. MEASURED 2026-09-28 on `1f54e885`: the JSON command form
+   * `{"command": "<inner>"}` parsed the inner command's operators and returned none of them, so
+   * `>>sv_a :: "X-218"` rendered no criterion and opened no review, `^ReACT >>sv_a` ran without
+   * the framework, and an arrow-chain ran its first prompt alone. The JSON form now carries the
+   * inner command's operators, so it runs exactly what the symbolic form runs.
+   */
+  describe('P6.218: the JSON command form keeps its operators', () => {
+    /** Chain ids and minted gate ids differ per run; everything else must match. */
+    const normalize = (text: string) =>
+      text.replace(/chain-[A-Za-z0-9_]+#\d+/g, 'CHAIN').replace(/temp_[A-Za-z0-9_]+/g, 'TEMP');
+    async function both(inner: string) {
+      const symbolic = await tool('prompt_engine', { command: inner });
+      const json = await tool('prompt_engine', { command: JSON.stringify({ command: inner }) });
+      return { symbolic, json };
+    }
+
+    test('(a) a JSON-form criterion renders and reviews exactly as the symbolic form', async () => {
+      const { symbolic, json } = await both('>>sv_a :: "X-218"');
+      // (c) control: the symbolic form carries the criterion.
+      expect(symbolic.text).toContain('X-218');
+      expect(json.isError).toBe(false);
+      expect(normalize(json.text)).toBe(normalize(symbolic.text));
+    }, 120000);
+
+    test('(a) with outer args, the criterion and the args both reach the render', async () => {
+      const json = await tool('prompt_engine', {
+        command: JSON.stringify({ command: '>>sv_a :: "X-218"', args: { topic: 'T-218' } }),
+      });
+      expect(json.isError).toBe(false);
+      expect(templates(json.text)).toEqual(['BODY-sv_a topic=T-218']);
+      expect(json.text).toContain('1. X-218');
+      expect(json.text).toContain('**Review Required**');
+    }, 120000);
+
+    test('(b) a JSON-form framework takes effect as the symbolic form', async () => {
+      const framework = await both('^ReACT >>sv_a');
+      expect(framework.symbolic.text).toContain('ReACT');
+      expect(normalize(framework.json.text)).toBe(normalize(framework.symbolic.text));
+    }, 120000);
+
+    test('(b) a JSON-form arrow-chain runs both prompts as the symbolic form', async () => {
+      const chain = await both(`>>sv_a${ARROW}>>sv_b`);
+      expect(chain.symbolic.text).toContain('Progress 1/2');
+      expect(normalize(chain.json.text)).toBe(normalize(chain.symbolic.text));
+      const chainOf = (text: string) => /chain_id[=:] ?"(chain-[A-Za-z0-9_#-]+)"/.exec(text)?.[1];
+      expect(runState(chainOf(chain.json.text) ?? '').steps).toEqual(['n1:sv_a:[]', 'n2:sv_b:[]']);
+    }, 120000);
+  });
+
+  /**
    * P6.144 / R66. MEASURED 2026-09-27 on `6dad55f3`: after `>>sv_a :: "sv-block"` and a FAIL sent
    * with the answer, the run held one record, `completed` with `prompt_id` null, and
    * `execution_history` listed `completed step 1`. The capture writer (`ledgerCapturedStep`) wrote
