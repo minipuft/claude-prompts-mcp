@@ -1270,5 +1270,55 @@ describe('Tenant Isolation', () => {
       expect(Object.keys(blob['chains'] as object)).toEqual(['s-249b']);
       expect(Object.keys(blob).sort()).toEqual(['chains', 'lastUpdated', 'version']);
     });
+
+    /**
+     * P6.251 (R135). MEASURED 2026-09-28 on `e4eed34dd`: `trackExecution` keyed history by
+     * `sessionId || promptId`, so a sessionless call filed under its prompt id, pooling every such
+     * run of a prompt into one history. Its one production caller (`ChainSessionStore
+     * .persistStepResult`) always passes `session.sessionId`. A sessionless call now records nothing.
+     */
+    test('P6.251 (a) a sessionless call records no history, in memory or in the blob', async () => {
+      const tracker = new ArgumentHistoryTracker(logger, 50, argHistoryStore() as never, {
+        workspaceId: 'ws-p251',
+      });
+      await tracker.initialize();
+      // Positive control first, on the same tracker: a sessioned call records and persists.
+      await tracker.trackExecution({
+        promptId: 'p251',
+        sessionId: 's-251',
+        originalArgs: { n: 1 },
+      });
+
+      expect(await tracker.trackExecution({ promptId: 'p251', originalArgs: { n: 2 } })).toBe(
+        undefined
+      );
+
+      expect(tracker.getChainHistory('p251')).toEqual([]);
+      expect(tracker.getStats().totalEntries).toBe(1);
+      const blob = await argHistoryStore().load({ workspaceId: 'ws-p251' });
+      expect(Object.keys(blob['chains'] as object)).toEqual(['s-251']);
+    });
+
+    test('P6.251 (b) control: a sessioned call records under its session as before', async () => {
+      const tracker = new ArgumentHistoryTracker(logger, 50, argHistoryStore() as never, {
+        workspaceId: 'ws-p251b',
+      });
+      await tracker.initialize();
+      const entryId = await tracker.trackExecution({
+        promptId: 'p251',
+        sessionId: 's-251b',
+        originalArgs: { topic: 'T251' },
+      });
+
+      expect(entryId).toMatch(/^entry_/);
+      expect(tracker.getSessionHistory('s-251b')).toEqual([
+        expect.objectContaining({
+          entryId,
+          promptId: 'p251',
+          sessionId: 's-251b',
+          originalArgs: { topic: 'T251' },
+        }),
+      ]);
+    });
   });
 });

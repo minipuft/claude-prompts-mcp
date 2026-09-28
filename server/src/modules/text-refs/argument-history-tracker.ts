@@ -32,9 +32,10 @@ const DEFAULT_STATE: PersistedArgumentHistory = {
 export class ArgumentHistoryTracker {
   /**
    * History key to entries. **The key is the SESSION id** (R116 third amendment): `trackExecution`
-   * files an entry under its `sessionId`, and only a sessionless call — which no production caller
-   * makes — falls back to its `promptId`. The map and the persisted `chains` blob keep the older
-   * "chain" name because the blob shape is persisted.
+   * files an entry under its `sessionId`, and a sessionless call records nothing (R135: no
+   * production caller makes one, and a prompt-id key would pool every sessionless run of a prompt
+   * into one history). The map and the persisted `chains` blob keep the older "chain" name because
+   * the blob shape is persisted.
    *
    * An evicted session's history stays here and in the persisted blob, and nothing in this process
    * reads it: the one reader, `ChainSessionStore.getChainContext`, answers `{}` for a session it no
@@ -113,7 +114,8 @@ export class ArgumentHistoryTracker {
    * Automatically enforces max entries limit per chain (FIFO).
    *
    * @param options - Tracking options
-   * @returns Unique entry ID
+   * @returns Unique entry ID, or `undefined` when the call carries no session id and so records
+   *   nothing
    */
   async trackExecution(options: {
     promptId: string;
@@ -125,7 +127,7 @@ export class ArgumentHistoryTracker {
     stepNumber?: number;
     stepResult?: string;
     metadata?: Record<string, any>;
-  }): Promise<string> {
+  }): Promise<string | undefined> {
     // Auto-initialize if not yet ready (guards against fire-and-forget init race)
     if (!this.initialized) {
       await this.initialize();
@@ -136,8 +138,12 @@ export class ArgumentHistoryTracker {
     // Generate unique entry ID
     const entryId = `entry_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
-    // The history key: the session id, or the prompt id for a sessionless call (see `chainHistory`).
-    const historyKey = sessionId || promptId;
+    // The history key is the session id (see `chainHistory`); a sessionless call has none.
+    if (sessionId === undefined || sessionId === '') {
+      this.logger.debug(`Argument history not tracked for ${promptId}: the call has no session id`);
+      return undefined;
+    }
+    const historyKey = sessionId;
 
     // Create entry
     const entry: ArgumentHistoryEntry = {
@@ -147,9 +153,7 @@ export class ArgumentHistoryTracker {
       originalArgs: { ...originalArgs }, // Defensive copy
     };
 
-    if (sessionId !== undefined) {
-      entry.sessionId = sessionId;
-    }
+    entry.sessionId = sessionId;
     if (nodeId !== undefined) {
       entry.nodeId = nodeId;
     }
@@ -190,8 +194,8 @@ export class ArgumentHistoryTracker {
   }
 
   /**
-   * Get the argument history filed under a session id — the key `trackExecution` files under, a
-   * sessionless call's prompt id aside (see `chainHistory`).
+   * Get the argument history filed under a session id — the key `trackExecution` files under
+   * (see `chainHistory`).
    */
   getChainHistory(sessionId: string): ArgumentHistoryEntry[] {
     const entries = this.chainHistory.get(sessionId) || [];
