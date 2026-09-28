@@ -9,6 +9,7 @@ import { describe, expect, jest, test } from '@jest/globals';
 import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
 import { TemporaryGateRegistry } from '../../../../src/engine/gates/core/temporary-gate-registry.js';
 import { InlineGateProcessor } from '../../../../src/engine/gates/services/inline-gate-processor.js';
+import { TemporaryGateRegistrar } from '../../../../src/engine/gates/services/temporary-gate-registrar.js';
 
 import type { ParsedCommand } from '../../../../src/engine/execution/context/index.js';
 import type { GateReferenceResolver } from '../../../../src/engine/gates/services/gate-reference-resolver.js';
@@ -243,5 +244,73 @@ describe('InlineGateProcessor.restoreRunGates', () => {
     const next = restoredOn(started, 'run-1');
     await processor.restoreRunGates(next.context, next.parsed);
     expect(next.context.state.gates.requestedOverrides).toBeUndefined();
+  });
+});
+
+/**
+ * P6.226 / R110 amended. A handed-back request gate recorded under a canonical id is rewritten to
+ * a fresh id at stage 05 (`restoreRequestGates`, via `freshIdFor`), and the run's reviews follow
+ * that id through the remap; stage 11 (`registerTemporaryGates`) registers the gate. The two are
+ * separate calls on one registry, so they agree only while nothing registers that id in between.
+ *
+ * STAMP: as of 2026-09-28 · flips when the registration moves to stage 05 or a per-call
+ * reservation lands. Until then twin (b) pins the window as ACCEPTED scope (R110 amended): a
+ * concurrent registration of the same `<id>-N` between the two stages registers this gate under
+ * a further-suffixed `<id>-N-2` while the remap still names the `<id>-N` stage 05 chose.
+ */
+describe('P6.226: the fresh id stage 05 hands back is the id stage 11 registers', () => {
+  const CANONICAL = 'content-structure';
+  const canonicalRegistry = () =>
+    new TemporaryGateRegistry(logger(), { isCanonicalGateId: (id) => id === CANONICAL });
+
+  async function claimWithRequestGate(registry: TemporaryGateRegistry) {
+    const started = await startRun(new TemporaryGateRegistry(logger()));
+    started.requestGates = [{ id: CANONICAL, criteria: ['REQ-226'] }];
+    const store = runGateStore();
+    const processor = new InlineGateProcessor(registry, resolver, logger(), store);
+    const claimed = restoredOn(started, 'run-1');
+    await processor.restoreRunGates(claimed.context, claimed.parsed);
+    const remap = store.remapRunGates.mock.calls[0]?.[1];
+    return { context: claimed.context, chosen: remap?.get(CANONICAL) };
+  }
+
+  test('(a) on an uncontended claim, stage 11 registers the id stage 05 chose', async () => {
+    const registry = canonicalRegistry();
+    const { context, chosen } = await claimWithRequestGate(registry);
+    expect(chosen).toBe(`${CANONICAL}-2`);
+
+    const registered = await new TemporaryGateRegistrar(
+      registry,
+      undefined,
+      logger()
+    ).registerTemporaryGates(context);
+
+    expect(registered.temporaryGateIds).toEqual([chosen]);
+    expect(registry.getTemporaryGate(chosen ?? '')?.pass_criteria).toEqual(['REQ-226']);
+  });
+
+  test('(b) the accepted window: a registration between the stages shifts the gate past the remap', async () => {
+    const registry = canonicalRegistry();
+    const { context, chosen } = await claimWithRequestGate(registry);
+    // Another call on this process takes the chosen id before stage 11 runs.
+    registry.createTemporaryGate({
+      id: chosen,
+      name: 'other',
+      type: 'validation',
+      scope: 'execution',
+      description: 'another call',
+      guidance: 'OTHER',
+      source: 'automatic',
+    });
+
+    const registered = await new TemporaryGateRegistrar(
+      registry,
+      undefined,
+      logger()
+    ).registerTemporaryGates(context);
+
+    expect(chosen).toBe(`${CANONICAL}-2`);
+    // Measured: stage 11 suffixes the id it was handed, so the gate lands on `-2-2`, not `-3`.
+    expect(registered.temporaryGateIds).toEqual([`${CANONICAL}-2-2`]);
   });
 });
