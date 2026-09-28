@@ -1275,28 +1275,21 @@ describe('Tenant Isolation', () => {
      * P6.251 (R135). MEASURED 2026-09-28 on `e4eed34dd`: `trackExecution` keyed history by
      * `sessionId || promptId`, so a sessionless call filed under its prompt id, pooling every such
      * run of a prompt into one history. Its one production caller (`ChainSessionStore
-     * .persistStepResult`) always passes `session.sessionId`. A sessionless call now records nothing.
+     * .persistStepResult`) always passes `session.sessionId`.
+     *
+     * P6.254 (R137): `sessionId` is required, so a sessionless call is a compile error rather than
+     * a runtime no-op. This pin is type-level and is never invoked: the tests-typecheck ratchet
+     * reads this file, and if `sessionId` became optional again the `@ts-expect-error` below would
+     * be unused, which is itself an error (TS2578) the ratchet counts.
      */
-    test('P6.251 (a) a sessionless call records no history, in memory or in the blob', async () => {
+    test('P6.254 (a) a call without a session id does not compile', () => {
       const tracker = new ArgumentHistoryTracker(logger, 50, argHistoryStore() as never, {
-        workspaceId: 'ws-p251',
+        workspaceId: 'ws-p254',
       });
-      await tracker.initialize();
-      // Positive control first, on the same tracker: a sessioned call records and persists.
-      await tracker.trackExecution({
-        promptId: 'p251',
-        sessionId: 's-251',
-        originalArgs: { n: 1 },
-      });
-
-      expect(await tracker.trackExecution({ promptId: 'p251', originalArgs: { n: 2 } })).toBe(
-        undefined
-      );
-
-      expect(tracker.getChainHistory('p251')).toEqual([]);
-      expect(tracker.getStats().totalEntries).toBe(1);
-      const blob = await argHistoryStore().load({ workspaceId: 'ws-p251' });
-      expect(Object.keys(blob['chains'] as object)).toEqual(['s-251']);
+      const sessionless = () =>
+        // @ts-expect-error -- `sessionId` is required (R137)
+        tracker.trackExecution({ promptId: 'p254', originalArgs: { n: 2 } });
+      expect(typeof sessionless).toBe('function');
     });
 
     test('P6.251 (b) control: a sessioned call records under its session as before', async () => {
