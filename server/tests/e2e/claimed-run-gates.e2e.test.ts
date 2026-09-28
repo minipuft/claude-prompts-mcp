@@ -1150,10 +1150,23 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
    * named inline gate `:: content-structure:"NAMED-193"` did the same with NAMED-193. Gate loading
    * reads the temporary registry first, keyed by id per process. `createTemporaryGate` now refuses
    * a canonical id for every caller (the refusal is a server-log warning; the run keeps the
-   * canonical gate). A request gate carrying `name` and `description` as well never reached the
-   * registry under its id: it registered as `temp_…` and rendered its description only.
+   * canonical gate). A request gate carrying `name` and `description` as well lost its id before
+   * registration, fixed by P6.203 below.
    */
-  test('P6.193 a request gate or named inline gate may not shadow a canonical gate id', async () => {
+  /**
+   * A server with `gates.executeInlineGateDefinitions` on and a two-step chain `sv_p193_chain`
+   * whose steps carry the canonical `content-structure` gate. `failFirst` starts a run (left open,
+   * so any gate it registered stays held) and FAILs its first step; `refused` sends a call expected
+   * to be refused and reports whether any run was created.
+   */
+  async function p193Server(): Promise<{
+    roots: Roots;
+    server: Server;
+    failFirst: (start: Record<string, unknown>) => Promise<{
+      reviews: Record<string, string[]> | undefined;
+      failShown: string[];
+    }>;
+  }> {
     const roots = freshRoots();
     writeFileSync(
       path.join(roots.workspace, 'config.json'),
@@ -1185,8 +1198,15 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
       gate_configuration: { framework_gates: false },
       chain_steps: ['A', 'B'].map((stepName) => ({ promptId: 'sv_p193', stepName })),
     });
-    const markers = ['Use clear headings', 'REQ-193', 'NAMED-193', 'RQC-193', 'NMC-193'];
-    /** Start a run (left open, so any gate it registered stays held) and FAIL its first step. */
+    const markers = [
+      'Use clear headings',
+      'REQ-193',
+      'NAMED-193',
+      'RQC-193',
+      'NMC-193',
+      'X-203',
+      'QK-203',
+    ];
     const failFirst = async (start: Record<string, unknown>) => {
       const started = await server.call('prompt_engine', start);
       const chainId = chainIdOf(started.text);
@@ -1198,17 +1218,26 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
       return {
         reviews: runRow(roots, chainId)?.reviews,
         failShown: markers.filter((marker) => failed.text.includes(marker)),
-        startText: started.text,
       };
     };
-    const plain = { command: '>>sv_p193_chain' };
-    const canonical = { reviews: { a: ['content-structure'] }, failShown: ['Use clear headings'] };
+    return { roots, server, failFirst };
+  }
+
+  const PLAIN_193 = { command: '>>sv_p193_chain' };
+  const CANONICAL_193 = {
+    reviews: { a: ['content-structure'] },
+    failShown: ['Use clear headings'],
+  };
+
+  test('P6.193 a request gate or named inline gate may not shadow a canonical gate id', async () => {
+    const { failFirst } = await p193Server();
+    const plain = PLAIN_193;
+    const canonical = CANONICAL_193;
     // Positive control: a plain run is reviewed on the canonical guidance.
     expect(await failFirst(plain)).toMatchObject(canonical);
 
     // (a) A request gate under the canonical id: its run, and a later plain run, keep the canonical
-    // gate. (A request gate carrying `name` and `description` loses its id before registration —
-    // see the note above — so the shape that reaches the registry is the one driven here.)
+    // gate.
     const request = { ...plain, gates: [{ id: 'content-structure', criteria: ['REQ-193'] }] };
     expect(await failFirst(request)).toMatchObject(canonical);
     expect(await failFirst(plain)).toMatchObject(canonical);
@@ -1229,6 +1258,34 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     expect(await failFirst({ command: '>>sv_p193_chain :: nmc193:"NMC-193"' })).toMatchObject({
       reviews: { a: ['nmc193', 'content-structure'] },
       failShown: ['Use clear headings', 'NMC-193'],
+    });
+  }, 240000);
+
+  /**
+   * P6.203 / R101. MEASURED 2026-09-27 on `388bf9d3`: a request gate carrying `name` and
+   * `description` beside its `id` and `criteria` registered as `temp_…` and rendered only its
+   * description. The `prompt_engine` handler read any gate holding both `name` and `description` as
+   * the `{name, description}` quick gate and dropped every other key; it now takes the quick-gate
+   * shape only when the gate matches the tool's strict quick-gate schema.
+   */
+  test('P6.203 a request gate carrying name and description keeps its id and criteria', async () => {
+    const { failFirst } = await p193Server();
+    // (a) The full definition registers under its id and renders its criteria.
+    expect(
+      await failFirst({
+        ...PLAIN_193,
+        gates: [{ id: 'rq203', name: 'rq203', description: 'd', criteria: ['X-203'] }],
+      })
+    ).toMatchObject({
+      reviews: { a: ['rq203', 'content-structure'] },
+      failShown: ['Use clear headings', 'X-203'],
+    });
+    // (b) Control: a `{name, description}` quick gate still registers as one, under a minted id.
+    expect(
+      await failFirst({ ...PLAIN_193, gates: [{ name: 'qk203', description: 'QK-203' }] })
+    ).toMatchObject({
+      reviews: { a: ['temp', 'content-structure'] },
+      failShown: ['Use clear headings', 'QK-203'],
     });
   }, 240000);
 
