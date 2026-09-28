@@ -1440,7 +1440,11 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       blocking: true,
     });
     const entry = (id: string) => ({ id, statement: `STATEMENT-${id}` });
-    type Interrupt = { unknown?: { id: string }; open_blocking_unknowns?: unknown };
+    type Interrupt = {
+      unknown?: { id: string };
+      open_blocking_unknowns?: unknown;
+      uninvestigated_unknown_ids?: string[];
+    };
     async function callRun(chainId: string, args: Record<string, unknown>) {
       const outcome = await client.callToolWithNotifications(
         'prompt_engine',
@@ -1477,6 +1481,26 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       const done = await complete(run.chainId);
       expect(done.interrupt?.unknown?.id).toBe('u-216a');
       expect(done.interrupt?.open_blocking_unknowns).toEqual([entry('u-216a'), entry('u-216b')]);
+    }, 120000);
+
+    /**
+     * P6.235 / R114 (third amendment). MEASURED 2026-09-28 on `e2595c1f`: a completed run's
+     * payload still carried `uninvestigated_unknown_ids: [u-235b]` while its text lists every open
+     * unknown as unresolved and no step will ever investigate one. On completion it is empty.
+     */
+    test('P6.235 (a) a completed run carries no uninvestigated ids; mid-run is unchanged', async () => {
+      const run = await start({ command: `>>sv_a${ARROW}>>sv_b` });
+      const mid = await callRun(run.chainId, {
+        user_response: 'A',
+        observations: [unknown('u-235a'), unknown('u-235b')],
+      });
+      // (b) control: mid-run, the second is named as having no investigation step.
+      expect(mid.interrupt?.uninvestigated_unknown_ids).toEqual(['u-235b']);
+
+      const done = await complete(run.chainId);
+      expect(done.text).toContain('**Unresolved unknown**: `u-235b` — STATEMENT-u-235b');
+      expect(done.interrupt?.open_blocking_unknowns).toEqual([entry('u-235a'), entry('u-235b')]);
+      expect(done.interrupt?.uninvestigated_unknown_ids).toEqual([]);
     }, 120000);
 
     test('(b) control: one open blocking unknown lists exactly that one', async () => {

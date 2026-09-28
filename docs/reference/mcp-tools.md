@@ -1795,7 +1795,8 @@ two are not subsets of one another in either direction:
 A run that completes with a blocking unknown still open renders no interrupt section: its reply
 says the run completed and names every blocking unknown still open as unresolved, and
 `resume.verbs` is empty, because nothing is left to resume. `structuredContent.chain_interrupt`
-lists every one in `open_blocking_unknowns`, as every interrupt payload does.
+lists every one in `open_blocking_unknowns`, as every interrupt payload does, and carries an
+empty `uninvestigated_unknown_ids`: no step will investigate any of them now.
 
 **`unknown` is the one this interrupt is about; `open_blocking_unknowns` is all of them.**
 `unknown` names an open blocking unknown from the most recent call that declared one, and of
@@ -1805,7 +1806,7 @@ the call that re-opens it, at its place in that call's order. `open_blocking_unk
 blocking unknown still open, in the order the run discovered them, so a run holding two reports
 both on the machine half as well as the text. `uninvestigated_unknown_ids` is the subset no
 inserted step investigates, in the same order: the ids the text's `Open with no investigation
-step` line names, empty when every open one has its step.
+step` line names, empty when every open one has its step or the run has completed.
 
 A paused run never offers "answer the step" — it issued no step. It never offers a bare
 `remainder` either: a remainder alone does not clear the hold, so the caller must spell it

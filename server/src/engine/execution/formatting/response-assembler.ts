@@ -1062,28 +1062,27 @@ export class ResponseAssembler {
   buildInterruptStructuredContent(context: ExecutionContext): Record<string, unknown> | undefined {
     const interrupt = context.state.session.chainInterrupt;
     if (interrupt === undefined) return undefined;
+    const latched = this.isRunLatchedComplete(context);
 
     return {
       kind: 'chain_interrupt',
       reason: interrupt.reason,
       // `unknown` is what this interrupt is about (the one the inserted step investigates, R119);
-      // the first list is every open one, the second the ids the text's open-with-no-step line names.
+      // the first list is every open one, the second the ids the text's open-with-no-step line names
+      // — empty on a completed run, whose text lists them as unresolved and no step will
+      // investigate one (R114 third amendment).
       unknown: { id: interrupt.unknownId, statement: interrupt.statement },
       open_blocking_unknowns: [...interrupt.openBlockingUnknowns], // already `{id, statement}`
-      uninvestigated_unknown_ids: [...interrupt.uninvestigatedUnknownIds],
+      uninvestigated_unknown_ids: latched ? [] : [...interrupt.uninvestigatedUnknownIds],
       affected_step_ids: [...interrupt.affectedStepIds],
       // camelCase `promptId`/`stepName` inside these entries is the plan's declared shape, not
       // an oversight: they name IR node fields a caller would author back verbatim in a
       // `remainder`, so converting them would hand the client a vocabulary it cannot resubmit.
-      remaining_nodes: interrupt.remainingNodes.map((node) => ({
-        id: node.id,
-        promptId: node.promptId,
-        stepName: node.stepName,
-      })),
+      remaining_nodes: [...interrupt.remainingNodes], // already `{id, promptId, stepName}`
       paused: interrupt.paused,
       resume: {
         chain_id: context.sessionContext?.chainId ?? '',
-        verbs: resolveInterruptVerbs(interrupt.paused, this.isRunLatchedComplete(context)),
+        verbs: resolveInterruptVerbs(interrupt.paused, latched),
       },
     };
   }
