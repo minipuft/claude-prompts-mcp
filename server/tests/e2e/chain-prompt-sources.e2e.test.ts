@@ -1138,6 +1138,25 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       expect(runState(run.chainId).args).toEqual([{ topic: 'T222' }, { topic: '' }]);
     }, 120000);
 
+    /**
+     * P6.233 / R112 (third amendment). MEASURED 2026-09-28 on `68aa97f6`: the JSON form of
+     * `>>sv_a` arrow-chain `>>sv_b` with outer `args` `{topic:"T233"}` completed with
+     * `Re-run: >>sv_a` arrow-chain `>>sv_b` — a line that starts the run WITHOUT `T233` on step 1.
+     * No spelling carries outer `args`, so such a run renders no `Re-run:` line (as of 2026-09-28 ·
+     * flips when a JSON-form re-run object spelling lands). P6.222 (a) is the control.
+     */
+    test('P6.233 (a) a JSON-form arrow-chain started with outer args renders no Re-run', async () => {
+      const inner = `>>sv_a${ARROW}>>sv_b`;
+      const run = await start({
+        command: JSON.stringify({ command: inner, args: { topic: 'T233' } }),
+      });
+      await run.call({ user_response: 'A' });
+      const done = await run.call({ user_response: 'B' });
+      expect(done).toContain('Chain execution complete');
+      expect(runState(run.chainId).args).toEqual([{ topic: 'T233' }, { topic: '' }]);
+      expect(done).not.toContain('Re-run:');
+    }, 120000);
+
     test('P6.194 (b) a workflow completes with no Re-run and never >>prompt', async () => {
       const workflow = await start({
         workflow: {

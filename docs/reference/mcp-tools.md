@@ -204,7 +204,8 @@ prompt_engine(command:"@ReACT analysis --> synthesis --> report :: 'include data
 **first step only**: on an arrow-chain, `{"command": ">>a --> >>b", "args": {"topic": "x"}}`
 hands `topic` to `a` and leaves `b` with the arguments written on it in the inner command.
 A run started this way completes with the inner command on its `Re-run:` line, as the typed
-command does; the outer `args` are not part of that line.
+command does. A run started with outer `args` completes with no `Re-run:` line: they filled the
+first step, and the inner command alone would start a different run.
 
 #### Quoting and escapes in argument values
 

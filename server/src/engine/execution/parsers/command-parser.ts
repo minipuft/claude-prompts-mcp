@@ -114,18 +114,24 @@ function unwrapJsonCommand(
   };
 }
 
+/** Whether the JSON form's outer `args` fill the first step (truthiness, as the strategy reads). */
+const jsonArgsGiven = (data: Record<string, unknown>): boolean => Boolean(data['args']);
+
 /**
  * The text a completed run re-runs from, when the parser consumed a command whole (P6.194,
  * P6.222): the symbolic form's own text, or the JSON form's command decoded by the one decoder.
- * Undefined for every other strategy, and with no parse — a workflow has no command text.
+ * Undefined for every other strategy, and with no parse — a workflow has no command text. Also
+ * undefined when the JSON form carried outer `args`: they filled step 1, so the inner command
+ * alone would start a different run (R112, as of 2026-09-28 · flips when a JSON-form re-run object
+ * spelling lands).
  */
 export function rerunCommandText(
   metadata: { readonly parseStrategy: string; readonly originalCommand: string } | undefined
 ): string | undefined {
   if (metadata?.parseStrategy === 'symbolic') return metadata.originalCommand;
-  return metadata?.parseStrategy === 'json'
-    ? unwrapJsonCommand(metadata.originalCommand)?.command
-    : undefined;
+  const decoded =
+    metadata?.parseStrategy === 'json' ? unwrapJsonCommand(metadata.originalCommand) : null;
+  return decoded === null || jsonArgsGiven(decoded.data) ? undefined : decoded.command;
 }
 
 /** A `command` that is itself a JSON object: its `command` (and `args`), or its `prompt`. */
@@ -506,12 +512,13 @@ export class UnifiedCommandParser {
         }
 
         const mods = innerResult.modifiers;
-        const rawArgs = data['args'] ? JSON.stringify(data['args']) : innerResult.rawArgs;
+        const argsGiven = jsonArgsGiven(data);
+        const rawArgs = argsGiven ? JSON.stringify(data['args']) : innerResult.rawArgs;
         const plan = innerResult.executionPlan;
         // The inner command's operators are the command's (R112): the same parse the symbolic
         // form gets, carried whole. Outer `args` fill the first step, as they fill `rawArgs`.
         const firstStep = plan?.steps[0];
-        if (data['args'] && firstStep !== undefined) firstStep.args = rawArgs;
+        if (argsGiven && firstStep !== undefined) firstStep.args = rawArgs;
         return {
           promptId: innerResult.promptId,
           rawArgs,
