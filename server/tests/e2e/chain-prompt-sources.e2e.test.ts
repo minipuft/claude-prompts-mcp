@@ -1537,6 +1537,11 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
    * call, the handed step read "Investigate: STATEMENT-u-224a" while the "Blocking Unknown" section
    * and `structuredContent.chain_interrupt.unknown` named `u-224b` — the interrupt took the last
    * of the batch, the insertion the first. Both now take the first the call declared.
+   *
+   * P6.234 / R122. MEASURED 2026-09-28 on `08322b72`: a call declaring `u-234new` and then
+   * re-opening `u-234old` (resolved on an earlier call) inserted `inv-u-234new` while the section
+   * and `unknown` named `u-234old` — the re-opened entry kept its earlier ledger position. A
+   * re-open now moves the entry to the end, so it counts as declared by the re-opening call.
    */
   describe('P6.217: two blocking unknowns declared in one call', () => {
     const LEFT_OUT = 'Open with no investigation step (one call inserts one';
@@ -1641,6 +1646,31 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       expect(mid.section).toContain(
         `${LEFT_OUT}, for the first blocking unknown it declares): u-224b`
       );
+    }, 120000);
+
+    test('P6.234 (a) a re-opened unknown declared after a new one: the interrupt names the new one', async () => {
+      const run = await start({ command: `>>sv_a${ARROW}>>sv_b${ARROW}>>sv_b` });
+      await callRun(run.chainId, { user_response: 'A', observations: [unknown('u-234old')] });
+      await callRun(run.chainId, {
+        user_response: 'investigated old',
+        observations: [
+          {
+            type: 'unknown_resolved',
+            id: 'u-234old',
+            statement: 'answered',
+            resolution: 'answered',
+          },
+        ],
+      });
+      // `u-234old` sits first in the ledger; this call re-opens it AFTER declaring `u-234new`.
+      const mid = await callRun(run.chainId, {
+        user_response: 'B',
+        observations: [unknown('u-234new'), unknown('u-234old')],
+      });
+      expect(inserted(run.chainId)).toEqual(['inv-u-234old', 'inv-u-234new']);
+      expect(mid.text).toContain('## Investigate: STATEMENT-u-234new');
+      expect(mid.section).toContain('**Blocking Unknown**\n\nSTATEMENT-u-234new\n');
+      expect(mid.unknownId).toBe('u-234new');
     }, 120000);
 
     test('(b) control: one blocking unknown gets its step and no such line', async () => {

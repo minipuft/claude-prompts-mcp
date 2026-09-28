@@ -35,7 +35,11 @@ export class UnknownObservationValidationError extends ValidationError {}
  * - discover + new id            -> append an active entry stamped at `stepNumber`
  * - discover + active id         -> restatement; refresh statement/blocking/targetStepId, keep discoveredAtStep
  * - discover + resolved id       -> re-open; the unknown genuinely returned, so this IS a new
- *                                   discovery event and re-stamps discoveredAtStep
+ *                                   discovery event: it re-stamps discoveredAtStep and moves the
+ *                                   entry to the END, so it counts as declared by this call in
+ *                                   this call's declaration order (R122) — ledger order within
+ *                                   one discovery step is declaration order, which is what the
+ *                                   interrupt and the mutation policy both select by
  * - resolve  + active id         -> close; resolution + resolutionStatement + resolvedAtStep
  * - resolve  + resolved id       -> idempotent refresh; resolvedAtStep keeps the first close
  * - resolve  + unknown id        -> validation error naming the id
@@ -67,7 +71,12 @@ export function computeUnknownLedger(
         byId.set(created.id, created);
         return;
       }
+      const reopens = existing.state === 'resolved';
       applyDiscoveryToExisting(existing, observation, stepNumber);
+      if (reopens) {
+        nextLedger.splice(nextLedger.indexOf(existing), 1);
+        nextLedger.push(existing);
+      }
       return;
     }
 

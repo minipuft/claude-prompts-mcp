@@ -218,7 +218,7 @@ a stable `id` — and surfaces it back into every later step's rendered context.
 | -------------------------------- | -------------------------------------------------------------------------------- |
 | Discover, new id                 | Appends an active entry stamped at the current step                              |
 | Discover, active id              | Idempotent refresh — statement/blocking update, `discoveredAtStep` unchanged     |
-| Discover, resolved id            | **Re-open** — the unknown returned; re-stamps `discoveredAtStep`                 |
+| Discover, resolved id            | **Re-open** — re-stamps `discoveredAtStep`, moves to the end (declared now)      |
 | Resolve, active id               | Closes the entry — records `resolution`, `resolutionStatement`, `resolvedAtStep` |
 | Resolve, resolved id             | Idempotent refresh — original `resolvedAtStep` is kept, not overwritten          |
 | Resolve, id with no ledger entry | Rejected — surfaces as a tool-result error, not a thrown exception               |

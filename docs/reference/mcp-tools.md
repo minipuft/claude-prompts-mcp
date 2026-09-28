@@ -1799,7 +1799,8 @@ lists every one in `open_blocking_unknowns`, as every interrupt payload does.
 **`unknown` is the one this interrupt is about; `open_blocking_unknowns` is all of them.**
 `unknown` names an open blocking unknown from the most recent call that declared one, and of
 that call's blocking unknowns, the FIRST it declared: the same unknown the inserted investigation
-step investigates, and the one the text section names. `open_blocking_unknowns` lists every
+step investigates, and the one the text section names. A re-opened unknown counts as declared by
+the call that re-opens it, at its place in that call's order. `open_blocking_unknowns` lists every
 blocking unknown still open, in the order the run discovered them, so a run holding two reports
 both on the machine half as well as the text. `uninvestigated_unknown_ids` is the subset no
 inserted step investigates, in the same order: the ids the text's `Open with no investigation
