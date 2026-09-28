@@ -88,7 +88,7 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
   });
 
   test('the v22 schema declares both run tables and no longer declares the retired blob', () => {
-    expect(engine.getSchemaVersion()).toBe(33);
+    expect(engine.getSchemaVersion()).toBe(34);
 
     const tables = engine
       .query<{ name: string }>(`SELECT name FROM sqlite_master WHERE type = 'table'`)
@@ -915,14 +915,21 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
 
     // replaceRemainder awaits its own persist — no manual persistSessions() here, which is what
     // makes this also a check that the write happened inside the call rather than later.
-    const row = engine.queryOne<{ position: number; origin: string; origin_unknown_id: string }>(
-      `SELECT position, origin, origin_unknown_id FROM chain_run_nodes
+    const row = engine.queryOne<{
+      position: number;
+      origin: string;
+      origin_unknown_id: string;
+      accepted_at_step: number | null;
+    }>(
+      `SELECT position, origin, origin_unknown_id, accepted_at_step FROM chain_run_nodes
         WHERE session_id = ? AND node_id = ?`,
       ['sess-rem-roundtrip', 'reconsider']
     );
     expect(row?.origin).toBe('remainder');
     expect(row?.origin_unknown_id).toBe('plan-shape');
     expect(row?.position).toBe(3);
+    // P6.253: accepted standing on n2, so the stamp is its ordinal, not the node's own position.
+    expect(row?.accepted_at_step).toBe(2);
     // The replaced node's row went with it: a stale row would resurrect the old plan on load.
     expect(
       engine.query('SELECT node_id FROM chain_run_nodes WHERE session_id = ? AND node_id = ?', [
@@ -942,6 +949,9 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
     // provenance the writer never lost.
     expect(after.state.nodes[2]?.origin).toBe('remainder');
     expect(after.state.nodes[2]?.originUnknownId).toBe('plan-shape');
+    expect(after.state.nodes[2]?.acceptedAtStep).toBe(2);
+    // Control: a planned node carries no stamp across the load.
+    expect(after.state.nodes[1]?.acceptedAtStep).toBeUndefined();
 
     await reader.cleanup();
   });

@@ -118,6 +118,11 @@ interface ChainRunNodeRow {
   origin: string | null;
   origin_unknown_id: string | null;
   /**
+   * v34 (P6.253): the ordinal the run stood on when a remainder node was accepted; NULL on every
+   * planned and inserted node. Optional for the reason `inline_gate_ids` is.
+   */
+  accepted_at_step?: number | null;
+  /**
    * A.5 (v27). What a caller-contributed node declared about itself: `delegated` is 0/1/NULL
    * (NULL = declared nothing), `args_json` a JSON object or NULL. Typed loosely for the same
    * reason `origin` is — this is what a SELECT hands back, and {@link reconstructNode} is the
@@ -161,8 +166,8 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
       `SELECT n.session_id, n.node_id, n.position, n.prompt_id, n.step_name, n.milestone,
               n.is_placeholder, n.rendered_at, n.responded_at, n.completed_at,
               n.declared_sections_json,
-              n.origin, n.origin_unknown_id, n.delegated, n.args_json, n.inline_gate_ids,
-              n.spawned_at
+              n.origin, n.origin_unknown_id, n.accepted_at_step, n.delegated, n.args_json,
+              n.inline_gate_ids, n.spawned_at
          FROM chain_run_nodes n
          JOIN chain_runs r ON r.session_id = n.session_id
         WHERE r.run_owner_pid = ?
@@ -245,9 +250,9 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
           `INSERT INTO chain_run_nodes (
              session_id, node_id, position, prompt_id, step_name, milestone,
              is_placeholder, rendered_at, responded_at, completed_at,
-             origin, origin_unknown_id, declared_sections_json, delegated, args_json,
-             inline_gate_ids, spawned_at, updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             origin, origin_unknown_id, accepted_at_step, declared_sections_json, delegated,
+             args_json, inline_gate_ids, spawned_at, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             session.sessionId,
             node.id,
@@ -264,6 +269,8 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
             // default would paper over.
             node.origin ?? 'planned',
             node.originUnknownId ?? null,
+            // P6.253: a remainder's acceptance stamp. NULL on every planned and inserted node.
+            node.acceptedAtStep ?? null,
             // Serialised only when the render recorded one. A step that declared nothing and a
             // step whose declaration was never recorded are the same row here, and both mean the
             // verification stage has no declared header to block on.
@@ -341,8 +348,8 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
     const nodeRows = this.db.query<ChainRunNodeRow>(
       `SELECT session_id, node_id, position, prompt_id, step_name, milestone,
               is_placeholder, rendered_at, responded_at, completed_at,
-              declared_sections_json, origin, origin_unknown_id, delegated, args_json,
-              inline_gate_ids, spawned_at
+              declared_sections_json, origin, origin_unknown_id, accepted_at_step, delegated,
+              args_json, inline_gate_ids, spawned_at
          FROM chain_run_nodes
         WHERE session_id = ?
         ORDER BY position`,
@@ -461,6 +468,11 @@ function reconstructNode(node: ChainRunNodeRow): ChainNode {
   // and the hook-projection tests pin the resulting key set.
   if (node.origin_unknown_id !== null) {
     reconstructed.originUnknownId = node.origin_unknown_id;
+  }
+  // P6.253: the per-unknown-id remainder cap reads this after a cold load or a claim, so both
+  // node SELECTs name the column.
+  if (node.accepted_at_step !== null && node.accepted_at_step !== undefined) {
+    reconstructed.acceptedAtStep = node.accepted_at_step;
   }
   // A.5: `delegated` and `args` are what a caller-contributed node declared about itself, and a
   // cold-loaded run has nowhere else to recover them from — `parsedCommand.steps` never had an

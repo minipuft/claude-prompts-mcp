@@ -160,11 +160,15 @@ function countRemainderUnknownIds(nodes: readonly ChainNode[]): number {
  *
  * A declared id is honoured when it is free and slugified/suffixed by `mintInsertionId` when it
  * is not; a spec with no id is minted from its `stepName`, exactly as an inserted node is.
+ *
+ * Every node carries `acceptedAtStep`, the ordinal the run stands on as it accepts them (R136):
+ * the per-unknown-id cap reads it, because an appended node's own ordinal is not when it came.
  */
 function mintRemainderNodes(
   specs: readonly RemainderNodeSpec[],
   existing: readonly ChainNode[],
-  unknownId: string
+  unknownId: string,
+  acceptedAtStep: number
 ): ChainNode[] {
   const taken = existing.map((node) => node.id);
   return specs.map((spec) => {
@@ -176,6 +180,7 @@ function mintRemainderNodes(
       stepName: spec.stepName,
       origin: 'remainder' as const,
       originUnknownId: unknownId,
+      acceptedAtStep,
       // A.5: the node's own declaration travels with it. Spread conditionally rather than bound
       // to `undefined`, because `exactOptionalPropertyTypes` rejects an explicit undefined and
       // the hook projection pins the resulting key set.
@@ -1936,7 +1941,7 @@ export class ChainSessionStore implements ChainSessionService {
     const snapshot = this.snapshotRun(session);
     const existing = session.state.nodes;
     const here = currentOrdinal(existing, session.state.currentNodeId);
-    const minted = mintRemainderNodes(nodes, existing, unknownId);
+    const minted = mintRemainderNodes(nodes, existing, unknownId, here);
 
     if (mode === 'replace') {
       // `here` is 1-based, so it is already the array index of the first node AFTER the current
@@ -1968,7 +1973,8 @@ export class ChainSessionStore implements ChainSessionService {
    *
    * Returns `undefined` when the submission may proceed. Both caps are recomputed from the
    * run's NODES rather than from in-memory bookkeeping, so a cold-loaded run enforces exactly
-   * what a hot one does — `origin`/`origin_unknown_id` are persisted columns for this reason.
+   * what a hot one does — `origin`/`origin_unknown_id`/`accepted_at_step` are persisted columns
+   * for this reason.
    */
   private refuseRemainder(
     session: ChainSession | undefined,

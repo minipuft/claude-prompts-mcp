@@ -749,8 +749,9 @@ export interface ChainSessionService {
    * observable-rejection vocabulary `MutationNoneReason` uses, because "the cap is spent" and
    * "the database is down" are different facts and a caller answers them differently.
    *
-   * Every applied node carries `origin: 'remainder'` and `originUnknownId: unknownId`, which is
-   * what makes both caps recomputable from persisted rows after a cold load.
+   * Every applied node carries `origin: 'remainder'`, `originUnknownId: unknownId` and
+   * `acceptedAtStep` (the ordinal the run stood on, R136), which is what makes both caps
+   * recomputable from persisted rows after a cold load.
    */
   replaceRemainder(
     sessionId: string,

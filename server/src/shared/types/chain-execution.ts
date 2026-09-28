@@ -606,6 +606,14 @@ export interface ChainNode {
    */
   originUnknownId?: string;
   /**
+   * The ordinal of the node the run stood on when this remainder was accepted (P6.253, R136).
+   * Present on `origin: 'remainder'` nodes only. An `append` places a remainder at the END of the
+   * run, so its own ordinal says nothing about when it was added; the per-unknown-id remainder
+   * cap compares this stamp to the entry's `discoveredAtStep` instead. An inserted node needs no
+   * stamp: it sits right after the node that declared its unknown, so its ordinal is one.
+   */
+  acceptedAtStep?: number;
+  /**
    * Resolved arguments for a node with no parse-time step (row A.5).
    *
    * `parsedCommand.steps` is where a planned step's authoring data lives, and a remainder node

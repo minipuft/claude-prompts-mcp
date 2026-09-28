@@ -338,8 +338,10 @@ as Workflow IR nodes and the server validates it against the same schema, valida
 `workflow` submission meets. The server never authors step content — the posture is unchanged, the
 model declares and the server validates. Accepted nodes are recorded with `origin:'remainder'` and
 the id of the unknown that motivated them. One remainder is accepted per unknown id, counted per
-declaration like the insertion cap: a re-opened unknown can get a new one once the run has walked
-past the remainder it got before it was resolved. A remainder sent on the call that answers an inserted
+declaration like the insertion cap: a re-opened unknown can get a new one, because a remainder
+accepted before it was resolved does not count, even while that remainder is still ahead of the
+run. Each remainder node records the step the run stood on when it was accepted, and the cap reads
+that rather than the node's position, since an `append` lands at the end of the run. A remainder sent on the call that answers an inserted
 investigation node is applied before that node's review is settled: a review the call opened, and
 not yet answered, is re-derived against the run the remainder leaves, so it never names a gate of a
 step a `replace` dropped. See

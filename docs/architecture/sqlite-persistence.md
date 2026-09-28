@@ -13,7 +13,7 @@ module wins and this file is stale.
 
 Not 11, and not 13. `tenants` was deleted at v19 (F10); `chain_run_registry` was deleted at v22
 (P3 Tier 4), replaced by the two per-row tables below; `objects` and `version_entries` were added
-at v29. The schema is at v33. SQLite auto-creates `sqlite_sequence` for
+at v29. The schema is at v34. SQLite auto-creates `sqlite_sequence` for
 any table declaring `AUTOINCREMENT`; it is never declared in `applySchema()` and is excluded via
 `SQLITE_INTERNAL_TABLES`. A startup assert written against a raw `sqlite_master` count throws on
 every boot.
@@ -157,6 +157,17 @@ lost that column too. The hooks loader still selects by chain id and PID livenes
 scopes' runs of one chain id apart by recency alone; `hooks/tests/test_db_reader.py` pins that.
 `chain_sessions` is `derived`, so the bump drops and recreates it; `DROPPED_ON_THIS_BUMP` stays
 empty.
+
+`chain_run_nodes.accepted_at_step INTEGER` arrived at v34 (P6.253). It holds the ordinal of the
+node a run stood on when a remainder node was accepted. The per-unknown-id remainder cap counts a
+remainder only when it was added since the unknown's current discovery, and it had read the node's
+own position as that moment. An `append` puts a remainder at the END of the run, so one accepted
+before the unknown was resolved still stood past its re-discovery and refused the re-opened unknown
+a new remainder. `run-registry` reads the column back onto the node and the comparator reads it for
+remainder nodes; an inserted node still counts by its position, which is exact because it lands
+right after the node that declared its unknown. Nullable with no DDL DEFAULT, NULL on every planned
+and inserted node. `chain_run_nodes` is `ephemeral`, so the bump drops and recreates it and no
+migration is written; `DROPPED_ON_THIS_BUMP` stays empty.
 
 ## Four Tables Are Durable — A Schema Bump Must Not Destroy Them
 

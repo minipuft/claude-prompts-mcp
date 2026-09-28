@@ -56,6 +56,20 @@ import { STATE_DB_WRITER_PRAGMAS } from '#shared/utils/runtime-state-location.js
 /**
  * Bump this when changing the embedded schema. Triggers drop-and-recreate.
  *
+ * v34: adds `accepted_at_step` to `chain_run_nodes` (P6.253, R136 — a remainder's acceptance
+ * stamp).
+ *
+ * The per-unknown-id remainder cap counts a remainder only when it was added since the unknown's
+ * current discovery, and it read a node's ORDINAL as when it was added. That holds for an inserted
+ * step, placed right after the node that declared its unknown, and not for an `append` remainder,
+ * placed at the end of the run: a remainder accepted before a re-open still stood ahead of the
+ * re-discovery and refused the re-opened unknown its new one. The column holds the ordinal of the
+ * node the run stood on when the remainder was accepted; `run-registry.reconstructNode` reads it
+ * back onto `ChainNode.acceptedAtStep`, which the comparator reads. Nullable INTEGER with NO DDL
+ * DEFAULT, for the reason `origin` has none; NULL on every planned and inserted node — partial
+ * population BY ROW TYPE. `chain_run_nodes` is `ephemeral`, so the bump drops and recreates it:
+ * `DROPPED_ON_THIS_BUMP` stays empty and `DROPPED_AT_VERSION` does not move.
+ *
  * v33: `chain_sessions` is keyed by `(run_owner_pid, chain_id, continuity_scope_id)` and drops
  * `run_number` (P6.147, R70 — one process serving two continuity scopes).
  *
@@ -405,7 +419,7 @@ import { STATE_DB_WRITER_PRAGMAS } from '#shared/utils/runtime-state-location.js
  * `respondedAt`, which changes the `substate_json` shape in `execution_records`. Rows written by
  * v15 would decode to a lifecycle value outside `StepLifecycle`, so they must not survive.
  */
-const SCHEMA_VERSION = 33;
+const SCHEMA_VERSION = 34;
 
 /**
  * Tables whose rows exist nowhere else and therefore survive a SCHEMA_VERSION bump.
@@ -1195,6 +1209,11 @@ export class SqliteEngine implements DatabasePort {
         -- exist there); non-NULL on inserted rows, which is what the per-unknown-id insertion
         -- cap counts. Not recoverable from node_id: mintInsertionId slugifies and suffixes.
         origin_unknown_id TEXT,
+        -- v34 (P6.253): the ordinal of the node the run stood on when a remainder was accepted.
+        -- An appended remainder sits at the END of the run, so its position is not when it came;
+        -- the per-unknown-id remainder cap reads this instead. NULL on planned and inserted rows.
+        -- Nullable with NO DDL DEFAULT, for the reason origin has none.
+        accepted_at_step INTEGER,
         -- v24: the phase-guard section headers this step's prompt actually declared, JSON array
         -- of verbatim header strings. Nullable with NO DDL DEFAULT, for the same reason origin
         -- has none: validate:no-phantom-columns exempts defaulted columns, so a default would
