@@ -202,10 +202,10 @@ advertises no resources at all:
      │              │              │              │              │
      ▼              ▼              ▼              ▼              ▼
 ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐
-│ Prompts  │  │  Gates   │  │Methodol- │  │ Sessions │  │ Metrics  │
-│ prompt/  │  │  gate/   │  │  ogies   │  │ session/ │  │ metrics/ │
-│ prompt/  │  │  gate/   │  │methodol- │  │ session/ │  │ pipeline │
-│   {id}   │  │   {id}   │  │  ogy/    │  │{chainId} │  │          │
+│ Prompts  │  │  Gates   │  │Framework │  │ Sessions │  │ Metrics  │
+│ prompt/  │  │  gate/   │  │framework/│  │ session/ │  │ metrics/ │
+│ prompt/  │  │  gate/   │  │framework/│  │ session/ │  │ pipeline │
+│   {id}   │  │   {id}   │  │   {id}   │  │{chainId} │  │          │
 └──────────┘  └──────────┘  └──────────┘  └──────────┘  └──────────┘
      │              │              │              │              │
      ▼              ▼              ▼              ▼              ▼
@@ -416,7 +416,7 @@ This view answers what happens, in what order, when a request executes: the pipe
 
 Every `prompt_engine` call flows through up to 21 stages. Stage file numbers `01-`…`21-` match this order, but the **`stages` array in `pipeline-builder.ts` is the contract** — the pipeline runs it front to back and does no reordering, so a renamed file changes nothing on its own.
 
-### Stage Execution Order
+#### Stage Execution Order
 
 The pipeline runs stages in this order (from the `stages` array in `pipeline-builder.ts`):
 
