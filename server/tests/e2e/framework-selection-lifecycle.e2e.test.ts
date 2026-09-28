@@ -497,3 +497,49 @@ describe('framework selection when the selected framework goes away (Streamable 
     expect(await session.countTools()).toBe(3);
   }, 90000);
 });
+
+/**
+ * P6.154 / R145. MEASURED 2026-09-28 on `1ace2bfef` (driven, Streamable HTTP): with ReACT
+ * selected, an `analysis` prompt's render lists the `framework-compliance` gate under
+ * "### Framework Compliance", followed by the ReACT guidance line alone, and names CAGEERF
+ * nowhere. The title is the gate definition's `name`
+ * (`resources/gates/framework-compliance/gate.yaml`), which names no framework.
+ *
+ * PIN (as of 2026-09-28 · flips when that `name` names a framework). The control switches the same
+ * server to CAGEERF: the render then names CAGEERF under the same title (its guidance opens with
+ * "**CAGEERF Framework Guidelines:**"), so the absence is something this probe can see.
+ */
+describe('P6.154: the framework-compliance title names no framework (Streamable HTTP)', () => {
+  const COMPLIANCE_PROMPT = 'p154_analysis';
+  const complianceTitles = (text: string): string[] =>
+    text.split('\n').filter((line) => /^### .*Compliance/.test(line));
+
+  it('a ReACT workspace reads the agnostic title and no CAGEERF; a CAGEERF control reads it', async () => {
+    const session = await start(startHttpSession, await newWorkspace());
+    const created = await session.callTool('resource_manager', {
+      resource_type: 'prompt',
+      action: 'create',
+      id: COMPLIANCE_PROMPT,
+      name: 'Compliance title probe',
+      // The compliance gate activates on an analysis-family category only.
+      category: 'analysis',
+      description: 'An analysis prompt the framework-compliance gate activates on',
+      user_message_template: 'P154-ANALYZE',
+    });
+    expect(created.isError).toBe(false);
+
+    await switchTo(session, 'react');
+    const react = await session.callTool('prompt_engine', { command: `>>${COMPLIANCE_PROMPT}` });
+    expect(react.isError).toBe(false);
+    expect(react.text).toContain('framework-compliance');
+    expect(complianceTitles(react.text)).toEqual(['### Framework Compliance']);
+    expect(react.text).toContain('- ReACT: Show clear Reasoning and Acting phases');
+    expect(react.text).not.toContain('CAGEERF');
+
+    await switchTo(session, 'cageerf');
+    const control = await session.callTool('prompt_engine', { command: `>>${COMPLIANCE_PROMPT}` });
+    expect(control.isError).toBe(false);
+    expect(complianceTitles(control.text)).toEqual(['### Framework Compliance']);
+    expect(control.text).toContain('**CAGEERF Framework Guidelines:**');
+  }, 90000);
+});
