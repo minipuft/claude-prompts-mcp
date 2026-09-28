@@ -405,7 +405,7 @@ export class ChainSessionStore implements ChainSessionService {
   /**
    * Register a callback invoked once a run ENDS: it reached a terminal status (completed, failed,
    * cancelled — {@link announceRunTerminal}) or its session was removed (clear, prune, stale
-   * sweep — {@link releaseRemovedRuns}, once the removal persisted). A removed run may already have ended, so a callback
+   * sweep, eviction after another server's claim — {@link releaseRemovedRuns}, once the removal persisted). A removed run may already have ended, so a callback
    * must tolerate a second call for the same session. Used to release what lives as long as a
    * run, such as its temporary gates (R47).
    */
@@ -650,10 +650,13 @@ export class ChainSessionStore implements ChainSessionService {
   private async writeSessions(): Promise<void> {
     const db = this.resolvedDbEngine;
     const sessions = Array.from(this.activeSessions.values());
+    // An evicted session releases what a removed one does, once this persist returns (R116).
+    const evicted = emptyRunRelease();
     if (!db) {
       // No DB engine wired — fall back to non-transactional save (test contexts).
-      this.evictClaimedSessions(await this.runRegistry.save(sessions, this.runScope));
+      this.evictClaimedSessions(await this.runRegistry.save(sessions, this.runScope), evicted);
       this.unreservedRuns.clear();
+      await this.releaseRemovedRuns(evicted);
       return;
     }
     // A run-number reservation reads `chain_runs` and then writes it: `immediate` makes the pair
@@ -665,7 +668,7 @@ export class ChainSessionStore implements ChainSessionService {
       const claimedElsewhere = await this.runRegistry.save(sessions, this.runScope);
       // Evict BEFORE the projection so the hook view does not re-advertise a run this
       // process no longer owns.
-      this.evictClaimedSessions(claimedElsewhere);
+      this.evictClaimedSessions(claimedElsewhere, evicted);
       this.projectToHookView(db);
       db.commit();
       if (reserving) this.unreservedRuns.clear();
@@ -673,6 +676,7 @@ export class ChainSessionStore implements ChainSessionService {
       db.rollback();
       throw txError;
     }
+    await this.releaseRemovedRuns(evicted);
   }
 
   /**
@@ -1311,13 +1315,15 @@ export class ChainSessionStore implements ChainSessionService {
   /**
    * Drop sessions another server has claimed (2A). The registry reports them from `save`;
    * the in-memory copy here is stale by definition, and keeping it would let this process
-   * advance a run whose row it can no longer write.
+   * advance a run whose row it can no longer write. What the session held in this process (step
+   * results, named outputs, run-scoped gates) is queued on `release`, which the persist drains
+   * only after it commits (R116).
    */
-  private evictClaimedSessions(sessionIds: readonly string[]): void {
+  private evictClaimedSessions(sessionIds: readonly string[], release: RunRelease): void {
     for (const sessionId of sessionIds) {
       const session = this.activeSessions.get(sessionId);
       if (session === undefined) continue;
-      this.activeSessions.delete(sessionId);
+      this.removeSessionArtifacts(sessionId, release);
       this.chainSessionMapping.get(session.chainId)?.delete(sessionId);
       this.logger.info(
         `[Handoff] Session ${sessionId} (${session.chainId}) claimed by another server; evicted`
@@ -2766,7 +2772,8 @@ export class ChainSessionStore implements ChainSessionService {
    * run-ended callbacks and argument history per session, then step results per session (keyed
    * by session since R107, so a removal releases exactly the sessions it removed).
    * Called only after `persistMutation` returns, so a rejected save releases nothing and its
-   * retry releases exactly once.
+   * retry releases exactly once — or, for a session another server claimed, after the persist
+   * that evicted it commits (R116).
    */
   private async releaseRemovedRuns(release: RunRelease): Promise<void> {
     for (const sessionId of release.sessionIds) {

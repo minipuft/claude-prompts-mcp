@@ -17,6 +17,7 @@ import { SqliteEngine } from '../../../src/infra/database/index.js';
 import { SqliteStateStore } from '../../../src/infra/database/stores/sqlite-store.js';
 import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
 import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
+import { DirectChainRunRegistry } from '../../../src/modules/chains/run-registry.js';
 import { ArgumentHistoryTracker } from '../../../src/modules/text-refs/argument-history-tracker.js';
 import { TextReferenceStore } from '../../../src/modules/text-refs/index.js';
 import { STATE_DB_BUSY_TIMEOUT_MS } from '../../../src/shared/utils/runtime-state-location.js';
@@ -932,6 +933,48 @@ describe('Tenant Isolation', () => {
           chain_id: 'chain-p214c#1',
           step_results: { 1: 'C-214' },
         });
+      });
+
+      /**
+       * P6.220 (R116). MEASURED 2026-09-28 on `6d442cb5`: after another server claimed a run and
+       * this server's next persist evicted it, `buildChainVariables` for the evicted session still
+       * returned `previous_step_result` and its named output — the eviction dropped the session
+       * but released nothing. It now queues the evicted session on the release a removal uses,
+       * drained once the persist that evicted it returns. The harness: two runs on this server,
+       * another server claims `<tag>-gone`, and any persist here evicts it.
+       */
+      const evictAfterClaim = async (tag: string) => {
+        const session = await store.createSession(`${tag}-gone`, `chain-${tag}#1`, 2, {}, scopeA);
+        const nodeId = session.state.nodes[0]!.id;
+        await store.updateSessionState(`${tag}-gone`, nodeId, 'GONE-220', {
+          outputMapping: { verdict: '$' },
+        });
+        const chainKept = await seed(`${tag}-kept`, `chain-${tag}k#1`, scopeA, 'KEPT-220');
+        expect(resultOf(`${tag}-gone`, `chain-${tag}#1`)).toBe('GONE-220');
+
+        const minted = await store.mintHandoffToken(`${tag}-gone`);
+        const claimer = new DirectChainRunRegistry(dbManager);
+        const claim = claimer.claimRunByToken(minted!.token, { continuityScopeId: `pid-${tag}` });
+        expect(claim.status).toBe('claimed');
+        await store.mintHandoffToken(`${tag}-kept`);
+        expect(store.getSession(`${tag}-gone`)).toBeUndefined();
+        return chainKept;
+      };
+
+      test('P6.220 (a) a session another server claimed leaves with its step results', async () => {
+        await evictAfterClaim('p220a');
+
+        expect(refs.buildChainVariables('p220a-gone', 'chain-p220a#1')).toEqual({
+          chain_id: 'chain-p220a#1',
+          step_results: {},
+        });
+      });
+
+      test('P6.220 (b) control: the session this server still owns keeps its results', async () => {
+        const chainKept = await evictAfterClaim('p220b');
+
+        expect(resultOf('p220b-kept', chainKept)).toBe('KEPT-220');
+        expect(store.getChainContext('p220b-kept')['previous_step_result']).toBe('KEPT-220');
       });
 
       test('(b) control: an unscoped clear releases every run it removed', async () => {
