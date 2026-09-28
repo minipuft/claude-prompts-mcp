@@ -57,6 +57,7 @@ import type { DatabasePort, StateStoreOptions } from '#shared/types/persistence.
 // the rules cannot drift between the capture seam that validates and the store that persists.
 import { computeUnknownLedger } from '#engine/execution/capture/unknown-observation-processor.js';
 import { resolveShownReview } from '#engine/execution/pipeline/decisions/gates/review-target.js';
+import { investigatedUnknownIds } from '#engine/execution/pipeline/decisions/mutation/mutation-policy.js';
 import {
   nodesHoldingRunOpen,
   isRunComplete,
@@ -1988,8 +1989,11 @@ export class ChainSessionStore implements ChainSessionService {
     }
 
     const existing = session.state.nodes;
-    const remainderNodes = existing.filter((node) => node.origin === 'remainder');
-    if (remainderNodes.some((node) => node.originUnknownId === unknownId)) {
+    // Per declaration (R133, the rule R127 set for insertions): a remainder accepted before the
+    // unknown was resolved does not spend its re-opened incarnation's one.
+    if (
+      investigatedUnknownIds(session.unknownsLedger ?? [], existing, 'remainder').has(unknownId)
+    ) {
       return 'cap-reached';
     }
     if (countRemainderUnknownIds(existing) >= MAX_REMAINDERS_PER_RUN) {

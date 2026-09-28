@@ -98,7 +98,6 @@ const createInMemoryStore = (): StateStore<PersistedArgumentHistory> => {
     version: '1.0.0',
     lastUpdated: 0,
     chains: {},
-    sessionToChain: {},
   };
   return {
     ensureInitialized: async () => undefined,

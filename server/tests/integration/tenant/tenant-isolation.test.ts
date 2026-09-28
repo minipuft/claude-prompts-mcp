@@ -1212,4 +1212,113 @@ describe('Tenant Isolation', () => {
       expect(tenantBAfterClear?.sessionId).toBe('tenant-b-session');
     });
   });
+
+  /**
+   * P6.249 (R135). MEASURED 2026-09-28 on `00b973c01`: the persisted `arg_history` blob carried
+   * `sessionToChain`, a map every write set to `(sessionId, sessionId)` — it said nothing `chains`
+   * (keyed by the same session ids) did not. It is dropped from memory and from the blob; a blob
+   * written before then still carries it, and the loader ignores it (no version bump).
+   */
+  describe('P6.249: the argument-history blob without sessionToChain', () => {
+    const scope = { workspaceId: 'ws-p249' };
+    // The composition root's store, verbatim: `kv_state`, key `arg_history`.
+    const argHistoryStore = () =>
+      new SqliteStateStore<Record<string, unknown>>(
+        dbManager,
+        {
+          tableName: 'kv_state',
+          key: 'arg_history',
+          defaultState: () => ({ version: '1.0.0', lastUpdated: 0, chains: {} }),
+        },
+        logger
+      );
+
+    test('(a) an old blob carrying sessionToChain loads with its chains intact', async () => {
+      const entry = { entryId: 'e-249', timestamp: 1, promptId: 'p249', sessionId: 's-249' };
+      await argHistoryStore().save(
+        {
+          version: '1.0.0',
+          lastUpdated: 1,
+          chains: { 's-249': [{ ...entry, originalArgs: { topic: 'T249' } }] },
+          sessionToChain: { 's-249': 's-249' },
+        },
+        scope
+      );
+
+      const tracker = new ArgumentHistoryTracker(logger, 50, argHistoryStore() as never, scope);
+      await tracker.initialize();
+
+      expect(tracker.getSessionHistory('s-249').map((e) => e.originalArgs)).toEqual([
+        { topic: 'T249' },
+      ]);
+      expect(tracker.getStats()).toEqual({
+        totalEntries: 1,
+        totalSessions: 1,
+        averageEntriesPerChain: 1,
+      });
+    });
+
+    test('(b) the blob a write persists carries its chains and no sessionToChain', async () => {
+      const tracker = new ArgumentHistoryTracker(logger, 50, argHistoryStore() as never, {
+        workspaceId: 'ws-p249b',
+      });
+      await tracker.initialize();
+      await tracker.trackExecution({ promptId: 'p249', sessionId: 's-249b', originalArgs: {} });
+
+      const blob = await argHistoryStore().load({ workspaceId: 'ws-p249b' });
+      // Positive control: the write reached the row.
+      expect(Object.keys(blob['chains'] as object)).toEqual(['s-249b']);
+      expect(Object.keys(blob).sort()).toEqual(['chains', 'lastUpdated', 'version']);
+    });
+
+    /**
+     * P6.251 (R135). MEASURED 2026-09-28 on `e4eed34dd`: `trackExecution` keyed history by
+     * `sessionId || promptId`, so a sessionless call filed under its prompt id, pooling every such
+     * run of a prompt into one history. Its one production caller (`ChainSessionStore
+     * .persistStepResult`) always passes `session.sessionId`. A sessionless call now records nothing.
+     */
+    test('P6.251 (a) a sessionless call records no history, in memory or in the blob', async () => {
+      const tracker = new ArgumentHistoryTracker(logger, 50, argHistoryStore() as never, {
+        workspaceId: 'ws-p251',
+      });
+      await tracker.initialize();
+      // Positive control first, on the same tracker: a sessioned call records and persists.
+      await tracker.trackExecution({
+        promptId: 'p251',
+        sessionId: 's-251',
+        originalArgs: { n: 1 },
+      });
+
+      expect(await tracker.trackExecution({ promptId: 'p251', originalArgs: { n: 2 } })).toBe(
+        undefined
+      );
+
+      expect(tracker.getChainHistory('p251')).toEqual([]);
+      expect(tracker.getStats().totalEntries).toBe(1);
+      const blob = await argHistoryStore().load({ workspaceId: 'ws-p251' });
+      expect(Object.keys(blob['chains'] as object)).toEqual(['s-251']);
+    });
+
+    test('P6.251 (b) control: a sessioned call records under its session as before', async () => {
+      const tracker = new ArgumentHistoryTracker(logger, 50, argHistoryStore() as never, {
+        workspaceId: 'ws-p251b',
+      });
+      await tracker.initialize();
+      const entryId = await tracker.trackExecution({
+        promptId: 'p251',
+        sessionId: 's-251b',
+        originalArgs: { topic: 'T251' },
+      });
+
+      expect(entryId).toMatch(/^entry_/);
+      expect(tracker.getSessionHistory('s-251b')).toEqual([
+        expect.objectContaining({
+          entryId,
+          promptId: 'p251',
+          sessionId: 's-251b',
+          originalArgs: { topic: 'T251' },
+        }),
+      ]);
+    });
+  });
 });

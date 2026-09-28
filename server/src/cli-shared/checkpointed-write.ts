@@ -20,6 +20,13 @@
  * on disk are once again exactly what that row describes. Only the PRODUCED row can lie about a
  * write that did not happen, and that row is inside the transaction.
  *
+ * A REFUSED write therefore may leave a bridge row too (R131): a `cpm rollback` whose restore fails
+ * validation, like any write whose `write` step throws, still records the out-of-band state it
+ * found. Deleting the bridge on refusal would make the history depend on a validation verdict
+ * rather than on what was on disk. Pinned by the P6.246 twins in
+ * `cli/tests/integration/inline-gate-validation.test.ts`: one bridge row and no rollback row over
+ * an unrecorded live state, zero rows over a recorded one.
+ *
  * WHY IT REUSES `ResourceMutationTransaction` RATHER THAN RESTATING IT. The guarantee `cpm` needs
  * after a failed record — the files go back byte-identical — is the one the server already has,
  * and a second implementation of it is a second thing to keep honest. The class reaches

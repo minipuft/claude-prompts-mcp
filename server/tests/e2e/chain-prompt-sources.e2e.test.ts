@@ -1756,6 +1756,100 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       expect(again.section).not.toContain(LEFT_OUT);
     }, 120000);
 
+    /**
+     * P6.248 (R133). MEASURED 2026-09-28 on `f72b47322`: `>>sv_a` arrow-chain `>>sv_b`, blocking
+     * `u-248` declared on `n1`, a `replace` remainder `[r1, r2]` accepted while answering
+     * `inv-u-248`, the unknown resolved on `r1` and re-opened on `r2` (inserting `inv-u-248-2`).
+     * A remainder for the re-opened unknown was then refused `cap-reached`: the per-id remainder
+     * cap counted every `origin: 'remainder'` node naming the id across the whole run, including
+     * the one accepted before the unknown was resolved. A remainder node now counts only when its
+     * ordinal is past the entry's current `discoveredAtStep`, the rule the insertion cap uses.
+     */
+    describe('P6.248: the remainder cap after a re-open', () => {
+      const replaceWith = (...ids: string[]) => ({
+        remainder: {
+          mode: 'replace',
+          nodes: ids.map((id, index) => ({ id, promptId: index % 2 === 0 ? 'sv_a' : 'sv_b' })),
+        },
+      });
+      const resolved = (id: string) => ({
+        type: 'unknown_resolved',
+        id,
+        statement: 'answered',
+        resolution: 'answered',
+      });
+      function runNodes(chainId: string): string[] {
+        const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+        try {
+          const rows = db
+            .prepare(
+              'SELECT n.node_id, n.origin FROM chain_run_nodes n ' +
+                'JOIN chain_runs r ON r.session_id = n.session_id WHERE r.chain_id = ? ' +
+                'ORDER BY n.position'
+            )
+            .all(chainId) as Array<{ node_id: string; origin: string }>;
+          return rows.map((row) => `${row.node_id}:${row.origin}`);
+        } finally {
+          db.close();
+        }
+      }
+      /** Declare `u-248`, rewrite the rest as `[r1, r2]`, resolve it on `r1`. */
+      async function remainderThenResolve(chainId: string) {
+        await callRun(chainId, { user_response: 'A', observations: [unknown('u-248')] });
+        const first = await callRun(chainId, {
+          user_response: 'investigated',
+          ...replaceWith('r1', 'r2'),
+        });
+        expect(first.text).not.toContain('remainder refused');
+        expect(runNodes(chainId)).toEqual([
+          'n1:planned',
+          'inv-u-248:inserted',
+          'r1:remainder',
+          'r2:remainder',
+        ]);
+        await callRun(chainId, { user_response: 'r1 out', observations: [resolved('u-248')] });
+      }
+
+      test('(a) a re-opened unknown whose earlier remainder is behind the run accepts a new one', async () => {
+        const run = await start({ command: `>>sv_a${ARROW}>>sv_b` });
+        await remainderThenResolve(run.chainId);
+        // Re-opened on `r2`: its earlier remainder now stands at or before the re-discovery.
+        await callRun(run.chainId, { user_response: 'r2 out', observations: [unknown('u-248')] });
+        expect(inserted(run.chainId)).toEqual(['inv-u-248', 'inv-u-248-2']);
+        const again = await callRun(run.chainId, {
+          user_response: 'investigated again',
+          ...replaceWith('r3'),
+        });
+        expect(again.text).not.toContain('remainder refused');
+        expect(runNodes(run.chainId)).toEqual([
+          'n1:planned',
+          'inv-u-248:inserted',
+          'r1:remainder',
+          'r2:remainder',
+          'inv-u-248-2:inserted',
+          'r3:remainder',
+        ]);
+      }, 120000);
+
+      test('(b) control: a second remainder for an unknown with a current one is refused', async () => {
+        const run = await start({ command: `>>sv_a${ARROW}>>sv_b` });
+        await callRun(run.chainId, { user_response: 'A', observations: [unknown('u-248')] });
+        await callRun(run.chainId, { user_response: 'investigated', ...replaceWith('r1', 'r2') });
+        // Still open, never resolved: its remainder is current, so the per-id cap holds.
+        const second = await callRun(run.chainId, {
+          user_response: 'r1 out',
+          ...replaceWith('r9'),
+        });
+        expect(second.text).toContain('remainder refused (cap-reached)');
+        expect(runNodes(run.chainId)).toEqual([
+          'n1:planned',
+          'inv-u-248:inserted',
+          'r1:remainder',
+          'r2:remainder',
+        ]);
+      }, 120000);
+    });
+
     test('(b) control: one blocking unknown gets its step and no such line', async () => {
       const run = await start({ command: `>>sv_a${ARROW}>>sv_b` });
       const mid = await callRun(run.chainId, {

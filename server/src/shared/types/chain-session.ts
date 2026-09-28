@@ -219,7 +219,8 @@ export interface RemainderNodeSpec {
  * - `empty-remainder`      — the submission carried no nodes. Distinguished from a successful
  *                            no-op because "replace the remainder with nothing" is a request to
  *                            truncate the run, which this method does not perform.
- * - `cap-reached`          — this unknown id already spent its one remainder, or the run has
+ * - `cap-reached`          — this unknown id already spent its one remainder since its current
+ *                            discovery (R133: a re-open is a new declaration), or the run has
  *                            spent its per-run ceiling.
  * - `node-already-started` — a node in the range `'replace'` would remove has already been
  *                            rendered to the client and cannot be un-shown (the OQ-P4-2

@@ -30,6 +30,11 @@ interface RollbackOptions {
   version?: string;
   /** Resolve what the rollback would do and print it, writing no file and recording no version. */
   preview?: boolean;
+  /**
+   * Skip the restore's validation, as `--no-validate` does for `rename`, `move` and `link-gate`
+   * (R128): the one way past a restore blocked by an error the differential does not exempt.
+   */
+  noValidate?: boolean;
 }
 
 export async function rollback(options: RollbackOptions): Promise<number> {
@@ -129,9 +134,13 @@ export async function rollback(options: RollbackOptions): Promise<number> {
   // so a refusal throws into the version transaction, which puts every target back byte-identical
   // and records nothing. `runValidatedMutation` itself cannot wrap it: its `mutate` is synchronous
   // and the write here is awaited between the two version rows.
-  const priorVerdict = validateResourceFile(type, declaredResourceId(match), yamlPath);
+  const validate = options.noValidate !== true;
+  const priorVerdict = validate
+    ? validateResourceFile(type, declaredResourceId(match), yamlPath)
+    : undefined;
   let restoreVerdict: ResourceValidationResult | undefined;
   const verifyRestore = (): void => {
+    if (priorVerdict === undefined) return;
     restoreVerdict = exemptPreExistingUnloadableGates(
       priorVerdict,
       validateResourceFile(type, declaredResourceId(match), yamlPath),

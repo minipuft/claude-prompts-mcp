@@ -4370,6 +4370,15 @@ function describeBundledPullRefusal(
   );
 }
 
+/**
+ * Write a client's edited SKILL.md prose back into the canonical resource.
+ *
+ * No post-write verification, unlike `clone` (R132). A pull writes prose fields only — `name` and
+ * `description` into the YAML, the message and guidance sections into their markdown files — and
+ * never an inline gate definition, so a differential against the file it edits could refuse
+ * nothing the pull introduced. A definition the YAML already carries is re-serialized unchanged;
+ * the P6.245 twin in `tests/integration/skills-sync/pull-command.test.ts` pins that.
+ */
 async function pullCommand(
   opts: SkillsSyncOptions,
   output: SkillsSyncOutput,
@@ -4863,11 +4872,6 @@ async function cloneCommand(
       await writeFile(primaryYamlPath, yaml.dump(yamlDoc, { lineWidth: 120 }));
       writtenPaths.add(primaryYamlPath);
       output.log(`  wrote ${yamlFileName}`);
-      localValidationTargets.push({
-        resourceType: resourceVerificationType,
-        resourceId,
-        filePath: primaryYamlPath,
-      });
 
       if (systemMessage) {
         const systemMessagePath = path.join(targetDir, 'system-message.md');
@@ -5019,14 +5023,18 @@ async function cloneCommand(
       return { validationTargets: localValidationTargets };
     },
     validate: async () => {
-      for (const target of validationTargets) {
-        verifyImported(target);
-      }
-      return verifyImported({
+      // The primary first, as it always ran, then every companion the mutation wrote; the
+      // primary's verdict is the one the transaction reads. It is validated here and only here
+      // (R130): it also sat in `validationTargets`, so any warning it carried printed twice.
+      const primaryVerdict = verifyImported({
         resourceType: resourceVerificationType,
         resourceId,
         filePath: path.join(targetDir, yamlFileName),
       });
+      for (const target of validationTargets) {
+        verifyImported(target);
+      }
+      return primaryVerdict;
     },
   });
 

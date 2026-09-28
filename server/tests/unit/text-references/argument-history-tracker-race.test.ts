@@ -51,7 +51,6 @@ const createInMemoryStore = (): StateStore<PersistedArgumentHistory> & {
         version: '1.0.0',
         lastUpdated: 0,
         chains: {},
-        sessionToChain: {},
       },
     save: async (state: PersistedArgumentHistory, options?: StateStoreOptions) => {
       storage.set(keyFor(options), JSON.parse(JSON.stringify(state)) as PersistedArgumentHistory);

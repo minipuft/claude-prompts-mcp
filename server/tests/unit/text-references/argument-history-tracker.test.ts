@@ -17,7 +17,7 @@ const createLogger = (): Logger =>
 /** No-op StateStore stub: these cases exercise in-memory behavior, not persistence. */
 const createNoopStore = (): StateStore<PersistedArgumentHistory> => ({
   ensureInitialized: async () => undefined,
-  load: async () => ({ version: '1.0.0', lastUpdated: 0, chains: {}, sessionToChain: {} }),
+  load: async () => ({ version: '1.0.0', lastUpdated: 0, chains: {} }),
   save: async () => undefined,
   exists: async () => false,
   delete: async () => undefined,
