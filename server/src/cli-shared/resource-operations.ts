@@ -7,7 +7,8 @@
  *
  * Comment-preservation strategy:
  *   - rename, move, toggle: regex replacement on raw file content (preserves all YAML comments)
- *   - linkGate: full parse→serialize (comments lost, but user is adding structural content)
+ *   - linkGate: serializeYamlPreservingSource (the user adds structural content, so it takes the
+ *     writer's document tier: comments and key order survive, layout around the edit may shift)
  *
  * Pure functions using only node:fs and node:path + cli-shared YAML utils.
  */
