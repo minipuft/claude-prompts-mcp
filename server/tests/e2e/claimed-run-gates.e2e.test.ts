@@ -1390,6 +1390,55 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     failShown: ['Use clear headings'],
   };
 
+  /**
+   * P6.212 / R109. A whole-call refusal at stage 11 runs after stage 05 registered the call's named
+   * gates, which was read as leaving them registered with no run. MEASURED 2026-09-28 on
+   * `f10c8f55` (driven, flag on): nothing lingers. Stage 05 adds them to
+   * `state.gates.temporaryGateIds`, the call creates no run to adopt them, and stage 02's cleanup
+   * (`releaseUnowned`, run in the pipeline's `finally`) removes them once the refusal is set.
+   * Pinned here: with that release removed, (a) reads `nmc212-2`. Observed through the id the next
+   * declaration of the same name registers under: a gate still held pushes it to `<name>-2` (the
+   * positive control below), a released one does not.
+   */
+  test('P6.212 a call refused at stage 11 leaves no gate it registered', async () => {
+    const { server, failFirst, refusedCall } = await p193Server();
+    const reviewsOf = async (start: Record<string, unknown>) => (await failFirst(start)).reviews;
+
+    // Positive control: a live run holding `hld212` pushes the next declaration to `hld212-2`.
+    expect(await reviewsOf({ command: '>>sv_p193_chain :: hld212:"HLD-212"' })).toEqual({
+      a: ['hld212', 'content-structure'],
+    });
+    expect(await reviewsOf({ command: '>>sv_p193_chain :: hld212:"HLD-212"' })).toEqual({
+      a: ['hld212-2', 'content-structure'],
+    });
+
+    // (a) A NON-colliding named gate beside a colliding request gate: refused whole, and the next
+    // declaration of `nmc212` registers under its own name, so nothing from the refused call is held.
+    expect(
+      await refusedCall({
+        command: '>>sv_p193_chain :: nmc212:"NMC-212"',
+        gates: [{ id: 'content-structure', criteria: ['REQ-212'] }],
+      })
+    ).toMatchObject(REFUSED_210);
+    expect(await reviewsOf({ command: '>>sv_p193_chain :: nmc212:"NMC-212"' })).toEqual({
+      a: ['nmc212', 'content-structure'],
+    });
+
+    // (b)(c) A resume refused for a passed target (R65) leaves the run's own gate held.
+    const started = await server.call('prompt_engine', {
+      command: '>>sv_p193_chain :: rsm212:"RSM-212"',
+    });
+    const refusedResume = await server.call('prompt_engine', {
+      chain_id: chainIdOf(started.text),
+      user_response: 'A out',
+      gates: [{ name: 'tgt212', criteria: ['TGT-212'], target_step_id: 'a' }],
+    });
+    expect(refusedResume.text).toContain('[gate-target-passed] node "a"');
+    expect(await reviewsOf({ command: '>>sv_p193_chain :: rsm212:"RSM-212"' })).toEqual({
+      a: ['rsm212-2', 'content-structure'],
+    });
+  }, 180000);
+
   test('P6.193 a request gate or named inline gate may not shadow a canonical gate id', async () => {
     const { failFirst, refusedCall } = await p193Server();
     const plain = PLAIN_193;
