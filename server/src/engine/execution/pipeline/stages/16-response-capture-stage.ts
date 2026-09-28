@@ -886,7 +886,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       insertedCount: insertedNodes.length,
       // Per declaration (R127): a re-opened unknown's step from before it was resolved is not
       // counted, so it can get a new one.
-      insertedUnknownIds: [...investigatedUnknownIds(outcome.ledger, nodes)],
+      insertedUnknownIds: [...investigatedUnknownIds(outcome.ledger, nodes, 'inserted')],
       // Read off the run's stored blueprint, not off `mcpRequest`: a Workflow IR is submitted on
       // the run's FIRST call and every later step is its own MCP call carrying only a chain_id.
       // The blueprint is the one run-scoped record of the submission that survives that gap, and

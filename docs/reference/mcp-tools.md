@@ -1826,7 +1826,8 @@ policy is advisory by construction: you declare, the server reacts.
 The nodes are Workflow IR nodes and are held to the same schema, the same validator and the same
 caps as a `workflow` submission — including `maxNodes` counted as executed PLUS submitted, so
 rewriting the tail repeatedly cannot buy back spent budget. One accepted remainder per unknown id,
-and a per-run ceiling.
+counted per declaration like the insertion cap: once a re-opened unknown's run has walked past the
+remainder it got before it was resolved, it can get a new one. And a per-run ceiling.
 
 ```bash
 # soft interrupt: the remainder alone is the acceptance

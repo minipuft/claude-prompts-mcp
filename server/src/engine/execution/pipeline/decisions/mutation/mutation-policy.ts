@@ -45,26 +45,31 @@ export function decideMutation(input: DecideMutationInput): ChainMutation {
 }
 
 /**
- * The ledger's unknown ids an inserted investigation step answers SINCE their current discovery
- * (R127) — the per-unknown-id cap's input and the interrupt's "no investigation step" test, one
- * rule for both.
+ * The ledger's unknown ids a node of `origin` answers SINCE their current discovery (R127, R133)
+ * — the one comparison behind three questions: the per-unknown-id insertion cap and the
+ * interrupt's "no investigation step" test (`'inserted'`), and the per-unknown-id remainder cap
+ * (`'remainder'`, read by `ChainSessionStore.replaceRemainder`).
  *
- * A re-open is a new declaration (R122), so a step inserted before the unknown was resolved does
- * not answer it once it is re-opened. The comparison is by ordinal: an investigation step goes in
- * after the node its unknown was declared at, and nothing is ever inserted at or before the node
- * a run stands on, so a step standing at an ordinal PAST the entry's `discoveredAtStep` was
- * inserted by or after that discovery, while one at or before it predates it. An inserted node
- * whose unknown is no longer in the ledger still counts for its id: nothing re-declares an id the
- * ledger does not hold without re-stamping it.
+ * A re-open is a new declaration (R122), so a node added before the unknown was resolved does
+ * not answer it once it is re-opened. The comparison is by ordinal: nodes go in strictly after
+ * the node a run stands on, and nothing is ever inserted at or before it, so a node standing at an
+ * ordinal PAST the entry's `discoveredAtStep` may have been added by or after that discovery,
+ * while one at or before it predates it. An inserted step sits right after the node that declared
+ * its unknown, so for `'inserted'` the ordinal is an exact stamp. A remainder may stand further
+ * out — `append` adds at the end of the run — so a remainder accepted before the re-open still
+ * counts while the run has not yet walked past it (as of 2026-09-28 · flips when a persisted
+ * insertion stamp lands). A node whose unknown is no longer in the ledger still counts for its
+ * id: nothing re-declares an id the ledger does not hold without re-stamping it.
  */
 export function investigatedUnknownIds(
   ledger: readonly UnknownLedgerEntry[],
-  nodes: readonly ChainNode[]
+  nodes: readonly ChainNode[],
+  origin: 'inserted' | 'remainder'
 ): ReadonlySet<string> {
   const investigated = new Set<string>();
   nodes.forEach((node, index) => {
     const unknownId = node.originUnknownId;
-    if (node.origin !== 'inserted' || unknownId === undefined) {
+    if (node.origin !== origin || unknownId === undefined) {
       return;
     }
     const entry = ledger.find((candidate) => candidate.id === unknownId);

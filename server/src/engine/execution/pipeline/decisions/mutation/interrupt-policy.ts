@@ -160,7 +160,7 @@ function collectUninvestigatedUnknownIds(
   open: readonly UnknownLedgerEntry[],
   nodes: readonly ChainNode[]
 ): readonly string[] {
-  const investigated = investigatedUnknownIds(open, nodes);
+  const investigated = investigatedUnknownIds(open, nodes, 'inserted');
   return open.filter((entry) => !investigated.has(entry.id)).map((entry) => entry.id);
 }
 

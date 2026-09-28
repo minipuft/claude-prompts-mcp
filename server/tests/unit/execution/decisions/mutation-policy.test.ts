@@ -366,7 +366,7 @@ describe('investigatedUnknownIds (R127)', () => {
   ];
 
   test('(a) a re-opened unknown whose only step predates the re-open gets a new step', () => {
-    expect([...investigatedUnknownIds(ledger, nodes)]).toEqual(['new']);
+    expect([...investigatedUnknownIds(ledger, nodes, 'inserted')]).toEqual(['new']);
     expectMutation(
       decideMutation(
         buildInput({
@@ -375,7 +375,7 @@ describe('investigatedUnknownIds (R127)', () => {
           nodes,
           currentNodeId: 'inv-new',
           insertedCount: 2,
-          insertedUnknownIds: [...investigatedUnknownIds(ledger, nodes)],
+          insertedUnknownIds: [...investigatedUnknownIds(ledger, nodes, 'inserted')],
         })
       ),
       {
@@ -396,13 +396,61 @@ describe('investigatedUnknownIds (R127)', () => {
           nodes,
           currentNodeId: 'inv-new',
           insertedCount: 2,
-          insertedUnknownIds: [...investigatedUnknownIds(ledger, nodes)],
+          insertedUnknownIds: [...investigatedUnknownIds(ledger, nodes, 'inserted')],
         })
       ),
       { kind: 'none', reason: 'cap-reached' }
     );
     // And once the re-opened one has its new step, it is investigated again.
     const withNew = [...nodes.slice(0, 4), inserted('inv-old-2', 'old'), planned('n3')];
-    expect([...investigatedUnknownIds(ledger, withNew)].sort()).toEqual(['new', 'old']);
+    expect([...investigatedUnknownIds(ledger, withNew, 'inserted')].sort()).toEqual(['new', 'old']);
+  });
+});
+
+/**
+ * P6.248 (R133): the per-unknown-id REMAINDER cap reads the same comparison, over
+ * `origin: 'remainder'` nodes. Driven end to end in `chain-prompt-sources.e2e.test.ts` (P6.248).
+ */
+describe('investigatedUnknownIds over remainders (R133)', () => {
+  const node = (id: string, origin: ChainNode['origin'], unknownId?: string): ChainNode => ({
+    id,
+    promptId: id,
+    stepName: id,
+    origin,
+    ...(unknownId === undefined ? {} : { originUnknownId: unknownId }),
+  });
+  // `u` declared at n1, investigated at 2, rewritten as [r1, r2], resolved, re-opened at r2 (4).
+  const nodes = [
+    node('n1', 'planned'),
+    node('inv-u', 'inserted', 'u'),
+    node('r1', 'remainder', 'u'),
+    node('r2', 'remainder', 'u'),
+    node('inv-u-2', 'inserted', 'u'),
+  ];
+
+  test('(a) a remainder at or before the current discovery does not spend the re-opened one', () => {
+    const ledger = [ledgerEntry({ id: 'u', blocking: true, discoveredAtStep: 4 })];
+    expect([...investigatedUnknownIds(ledger, nodes, 'remainder')]).toEqual([]);
+    // The origin is part of the question: the insertion at ordinal 5 answers `u`, for insertions.
+    expect([...investigatedUnknownIds(ledger, nodes, 'inserted')]).toEqual(['u']);
+  });
+
+  test('(b) control: a remainder past the current discovery keeps the per-id cap', () => {
+    const ledger = [ledgerEntry({ id: 'u', blocking: true, discoveredAtStep: 1 })];
+    expect([...investigatedUnknownIds(ledger, nodes, 'remainder')]).toEqual(['u']);
+    // And an id the ledger no longer holds still counts its remainder.
+    expect([...investigatedUnknownIds([], nodes, 'remainder')]).toEqual(['u']);
+  });
+
+  /**
+   * The ordinal is an exact stamp for an insertion, not for an `append`: an appended remainder
+   * stands at the end of the run, so one accepted before the re-open still counts while the run
+   * has not walked past it. As of 2026-09-28 · flips when a persisted insertion stamp lands (then
+   * the ordinal is no longer the stamp).
+   */
+  test('(c) an earlier remainder still ahead of the run counts against the re-opened unknown', () => {
+    const ahead = [node('n1', 'planned'), node('n2', 'planned'), node('r1', 'remainder', 'u')];
+    const ledger = [ledgerEntry({ id: 'u', blocking: true, discoveredAtStep: 2 })];
+    expect([...investigatedUnknownIds(ledger, ahead, 'remainder')]).toEqual(['u']);
   });
 });
