@@ -19,12 +19,6 @@ import { parseStepForNode } from '#shared/utils/node-order.js';
 
 type InjectionConfigProvider = () => InjectionConfig;
 
-/** The run position a decision is computed for: the step the call renders. */
-export interface InjectionPosition {
-  readonly currentStep: number;
-  readonly currentNodeId?: string | null | undefined;
-}
-
 /**
  * Pipeline Stage 14: Injection Control
  *
@@ -75,50 +69,6 @@ export class InjectionControlStage extends BasePipelineStage {
     // INJECT — the configured frequency (`frameworks.systemPromptFrequency`) and target were
     // silently bypassed for steps 2..N and every gate-review retry.
 
-    const injectionState = this.decideFor(context, {
-      currentStep: context.sessionContext?.currentStep ?? 1,
-      currentNodeId: context.sessionContext?.currentNodeId,
-    });
-
-    this.logExit({
-      systemPrompt: injectionState.systemPrompt?.inject,
-      gateGuidance: injectionState.gateGuidance?.inject,
-      styleGuidance: injectionState.styleGuidance?.inject,
-      currentStep: injectionState.currentStep,
-      source: {
-        systemPrompt: injectionState.systemPrompt?.source,
-        gateGuidance: injectionState.gateGuidance?.source,
-        styleGuidance: injectionState.styleGuidance?.source,
-      },
-    });
-  }
-
-  /**
-   * Decide again for the step the run stands on after stage 16 moved it (R144).
-   *
-   * This stage runs before the capture stage decides whether the call advances, so on an
-   * advancing resume it decided for the step the call ANSWERS, while the reply renders the next
-   * one: a PASS on step 1 rendered step 2 with step 1's frequency verdict. Stage 16 calls this
-   * once the run has moved, so the decision its consumers (execution, review, formatting) read is
-   * the rendered step's. A call that did not move stands where it was, and deciding again for the
-   * same position gives the same answer.
-   */
-  redecideAt(context: ExecutionContext, position: InjectionPosition): void {
-    const injectionState = this.decideFor(context, position);
-    this.logger.debug('[InjectionControl] Re-decided for the rendered step', {
-      currentStep: injectionState.currentStep,
-      systemPrompt: injectionState.systemPrompt?.inject,
-    });
-  }
-
-  /**
-   * Decide every injection type for one run position and store it on the context, the
-   * authoritative source every downstream stage reads.
-   */
-  private decideFor(
-    context: ExecutionContext,
-    position: InjectionPosition
-  ): ReturnType<InjectionDecisionService['decideAll']> {
     // Create authority if not already created
     if (!this.injectionService) {
       const config = this.getInjectionConfig();
@@ -130,8 +80,11 @@ export class InjectionControlStage extends BasePipelineStage {
     const sessionOverrides = this.getSessionOverrides();
     this.injectionService.syncRuntimeOverrides(sessionOverrides ?? new Map());
 
+    // Build decision input from context
     const overrideRecord = this.toSessionOverrideRecord(sessionOverrides);
-    const input = this.buildDecisionInput(context, position, overrideRecord);
+    const input = this.buildDecisionInput(context, overrideRecord);
+
+    // Get decisions for all injection types
     const injectionState = this.injectionService.decideAll(input);
 
     // Persist active session overrides for downstream diagnostics/status
@@ -139,20 +92,32 @@ export class InjectionControlStage extends BasePipelineStage {
       injectionState.sessionOverrides = overrideRecord;
     }
 
+    // Store injection decisions in state (authoritative source for downstream stages)
     context.state.injection = injectionState;
-    return injectionState;
+
+    this.logExit({
+      systemPrompt: injectionState.systemPrompt?.inject,
+      gateGuidance: injectionState.gateGuidance?.inject,
+      styleGuidance: injectionState.styleGuidance?.inject,
+      currentStep: input.currentStep,
+      source: {
+        systemPrompt: injectionState.systemPrompt?.source,
+        gateGuidance: injectionState.gateGuidance?.source,
+        styleGuidance: injectionState.styleGuidance?.source,
+      },
+    });
   }
 
   /**
-   * Build the decision input from execution context, for the given run position.
+   * Build the decision input from execution context.
    */
   private buildDecisionInput(
     context: ExecutionContext,
-    position: InjectionPosition,
     sessionOverrides?: Partial<Record<InjectionType, boolean>>
   ): Omit<InjectionDecisionInput, 'injectionType'> {
+    const currentStep = context.sessionContext?.currentStep ?? 1;
     const input: Omit<InjectionDecisionInput, 'injectionType'> = {
-      currentStep: position.currentStep,
+      currentStep,
       executionContext: context.sessionContext?.pendingReview ? 'gate_review' : 'step',
     };
 
@@ -181,7 +146,7 @@ export class InjectionControlStage extends BasePipelineStage {
       input.promptId = promptId;
     }
 
-    const promptInjection = this.getPromptInjection(context, position);
+    const promptInjection = this.getPromptInjection(context);
     if (promptInjection !== undefined) {
       input.promptInjection = promptInjection;
     }
@@ -191,7 +156,7 @@ export class InjectionControlStage extends BasePipelineStage {
       input.modifiers = modifiers;
     }
 
-    const stepType = this.getStepType(context, position);
+    const stepType = this.getStepType(context);
     if (stepType) {
       input.stepType = stepType;
     }
@@ -268,12 +233,9 @@ export class InjectionControlStage extends BasePipelineStage {
    * entry prompt: each step is a different prompt, and a step's own declaration is what the
    * prompt tier is meant to express. Mirrors how `getStepType` indexes the step list.
    */
-  private getPromptInjection(
-    context: ExecutionContext,
-    position: InjectionPosition
-  ): PromptInjectionConfig | undefined {
+  private getPromptInjection(context: ExecutionContext): PromptInjectionConfig | undefined {
     if (context.hasChainCommand()) {
-      return this.resolveCurrentChainStep(context, position)?.convertedPrompt?.injection;
+      return this.resolveCurrentChainStep(context)?.convertedPrompt?.injection;
     }
 
     return context.parsedCommand?.convertedPrompt?.injection;
@@ -291,14 +253,11 @@ export class InjectionControlStage extends BasePipelineStage {
    * declares no prompt-tier injection of its own, and reading a neighbour's block would be a
    * silent misattribution rather than a missing declaration.
    */
-  private resolveCurrentChainStep(
-    context: ExecutionContext,
-    position: InjectionPosition
-  ): ChainStepPrompt | undefined {
+  private resolveCurrentChainStep(context: ExecutionContext): ChainStepPrompt | undefined {
     return parseStepForNode(
       context.parsedCommand?.steps ?? [],
-      position.currentNodeId,
-      position.currentStep
+      context.sessionContext?.currentNodeId,
+      context.sessionContext?.currentStep ?? 1
     );
   }
 
@@ -306,12 +265,12 @@ export class InjectionControlStage extends BasePipelineStage {
    * Get the step type from the context.
    * Step type can be defined in step metadata.
    */
-  private getStepType(context: ExecutionContext, position: InjectionPosition): string | undefined {
+  private getStepType(context: ExecutionContext): string | undefined {
     if (!context.hasChainCommand()) {
       return undefined;
     }
 
-    const step = this.resolveCurrentChainStep(context, position);
+    const step = this.resolveCurrentChainStep(context);
 
     // Try to get step type from metadata
     if (step?.metadata?.['stepType']) {

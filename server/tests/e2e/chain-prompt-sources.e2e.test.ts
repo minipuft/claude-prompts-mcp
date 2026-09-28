@@ -1000,44 +1000,6 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
   });
 
   /**
-   * MEASURED 2026-09-28 on `a7f5d22aa` (driven over Streamable HTTP, shipped injection defaults:
-   * framework system prompt every 3 steps, target `steps`; stage 14 read from the server's debug
-   * log): stage 14 decided for the step the run stood on BEFORE stage 16 moved it. A PASS on step 1
-   * of `>>sv_chain` decided `currentStep: 1, systemPrompt: true` and rendered step 2 with the
-   * framework block, which the frequency gives step 1 and step 4 only. A FAIL on step 1 decided
-   * for step 1 and re-rendered step 1's review, so the answered and the rendered step agreed there.
-   *
-   * Now (R144) stage 16 hands stage 14 the node the run stands on after the advance, and the
-   * decision every later stage reads is the rendered step's.
-   */
-  describe('P6.153: the injection decision on a resume is the rendered step', () => {
-    /** The framework system prompt's own opening line, on a start render and a resume render alike. */
-    const FRAMEWORK_BLOCK = 'You are operating under the C.A.G.E.E.R.F Framework';
-
-    test('(a) a PASS on step 1 renders step 2 without the framework block step 1 carries', async () => {
-      const run = await start({ command: '>>sv_chain' });
-      expect(run.text).toContain(FRAMEWORK_BLOCK);
-
-      const second = await run.call({ user_response: 'A out', gate_verdict: PASS });
-      expect(second).toContain('BODY-sv_b');
-      expect(second).not.toContain(FRAMEWORK_BLOCK);
-    }, 120000);
-
-    test('(b) the other side of the boundary: answering step 3 renders step 4 with it', async () => {
-      const run = await start({ command: '>>sv_big' });
-      expect(run.text).toContain(FRAMEWORK_BLOCK);
-
-      const renders: boolean[] = [];
-      for (const answer of ['S1 out', 'S2 out', 'S3 out']) {
-        const next = await run.call({ user_response: answer });
-        expect(next).toContain('BODY-sv_a');
-        renders.push(next.includes(FRAMEWORK_BLOCK));
-      }
-      expect(renders).toEqual([false, false, true]);
-    }, 120000);
-  });
-
-  /**
    * PIN (as of 2026-09-27 · flips when a gated single prompt stops opening a run). A single prompt
    * with an inline gate operator opens a run of ONE node, `n1` (R52), because the planner requires
    * a session for any `gate` operator (`ExecutionPlanner.requiresSession`, its operator clause — not
