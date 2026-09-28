@@ -1796,14 +1796,17 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
    */
   async function claimPlantedCanonical(
     roots: Roots,
-    plantedId: string
+    plantedId: string,
+    start: { args: Record<string, unknown>; recordedId: string; reviews: string[] } = {
+      args: { command: '>>sv_chain :: g204:"NAMED-204"' },
+      recordedId: 'g204',
+      reviews: ['sv-block', 'g204'],
+    }
   ): Promise<{ chainId: string; second: Server; failed: { isError: boolean; text: string } }> {
     const first = await startServer(roots);
     await authorResources(first);
-    const chainId = chainIdOf(
-      (await first.call('prompt_engine', { command: '>>sv_chain :: g204:"NAMED-204"' })).text
-    );
-    expect(runRow(roots, chainId)?.reviews).toEqual({ a: ['sv-block', 'g204'] });
+    const chainId = chainIdOf((await first.call('prompt_engine', start.args)).text);
+    expect(runRow(roots, chainId)?.reviews).toEqual({ a: start.reviews });
     const token = await mintToken(first, chainId);
     const second = await startServer(roots);
     await first.stop();
@@ -1815,7 +1818,10 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
           type: string;
         }>;
         for (const { name } of columns.filter((column) => column.type === 'TEXT')) {
-          db.prepare(`UPDATE ${table} SET ${name} = REPLACE(${name}, 'g204', ?)`).run(plantedId);
+          db.prepare(`UPDATE ${table} SET ${name} = REPLACE(${name}, ?, ?)`).run(
+            start.recordedId,
+            plantedId
+          );
         }
       }
     } finally {
@@ -1843,6 +1849,40 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     expect(failed.isError).toBe(false);
     expect(failed.text).toContain('NAMED-204');
     expect(runRow(roots, chainId)?.reviews).toEqual({ a: ['sv-block', 'x204'] });
+  }, 180000);
+
+  /**
+   * P6.213 / R110. A run recorded before the canonical-id refusal can hold a REQUEST gate under a
+   * canonical id; a claim hands it back to stage 11 (`parsedCommand.requestGates`), whose registry
+   * refuses the id. MEASURED 2026-09-28 on `e824fbd6`: the claim answered `isError:false`, the
+   * recorded REQ-213 was gone, and the review rendered the CANONICAL `content-structure`
+   * guidelines in its place under the recorded id. Now the restore hands it back under
+   * `content-structure-2` and the run's reviews follow through `remapRunGates`.
+   */
+  const REQUEST_213 = {
+    args: { command: '>>sv_chain', gates: [{ id: 'rq213', criteria: ['REQ-213'] }] },
+    recordedId: 'rq213',
+    reviews: ['rq213', 'sv-block'],
+  };
+
+  test('P6.213 (a) a claimed run recorded with a canonical-named request gate restores it under a fresh id', async () => {
+    const roots = freshRoots();
+    const { chainId, failed } = await claimPlantedCanonical(
+      roots,
+      'content-structure',
+      REQUEST_213
+    );
+    expect(failed.isError).toBe(false);
+    expect(failed.text).toContain('REQ-213');
+    expect(runRow(roots, chainId)?.reviews).toEqual({ a: ['content-structure-2', 'sv-block'] });
+  }, 180000);
+
+  test('P6.213 (b) control: a planted request gate id with no canonical gate restores under itself', async () => {
+    const roots = freshRoots();
+    const { chainId, failed } = await claimPlantedCanonical(roots, 'x213', REQUEST_213);
+    expect(failed.isError).toBe(false);
+    expect(failed.text).toContain('REQ-213');
+    expect(runRow(roots, chainId)?.reviews).toEqual({ a: ['x213', 'sv-block'] });
   }, 180000);
 
   test('P6.130 (b) control: an unclaimed run keeps its one row', async () => {
