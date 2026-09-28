@@ -977,6 +977,41 @@ describe('Tenant Isolation', () => {
         expect(store.getChainContext('p220b-kept')['previous_step_result']).toBe('KEPT-220');
       });
 
+      /**
+       * P6.229 (R120). MEASURED 2026-09-28 on `58ec70ae`: after the eviction the evicted run's chain
+       * id stayed in `getRunHistory(base)` and its emptied `chainSessionMapping` set survived, so
+       * `getSessionStats().totalChains` (served by the `metrics-pipeline` resource) still counted
+       * it. Eviction now leaves a run through the helper `clearSession` uses.
+       */
+      test('P6.229 (a) an evicted run leaves the run history and the chain count', async () => {
+        const chainsBefore = store.getSessionStats().totalChains;
+        const chainKept = await evictAfterClaim('p229a');
+
+        expect(store.getRunHistory('chain-p229a')).toEqual([]);
+        expect(store.hasActiveSessionForChain('chain-p229a#1')).toBe(false);
+        // Two runs started, one evicted: only the kept run's chain id is counted.
+        expect(store.getSessionStats().totalChains).toBe(chainsBefore + 1);
+        // (b) control: the run this server still owns keeps its history.
+        expect(store.getRunHistory('chain-p229ak')).toEqual([chainKept]);
+      });
+
+      test('P6.229 (a) same base: only the evicted run leaves, the surviving run stays', async () => {
+        const session = await store.createSession('p229b-gone', 'chain-p229b#1', 2, {}, scopeA);
+        await seed('p229b-kept', 'chain-p229b#2', scopeA, 'KEPT-229');
+        expect(store.getRunHistory('chain-p229b')).toEqual(['chain-p229b#1', 'chain-p229b#2']);
+
+        const minted = await store.mintHandoffToken(session.sessionId);
+        const claimer = new DirectChainRunRegistry(dbManager);
+        expect(
+          claimer.claimRunByToken(minted!.token, { continuityScopeId: 'pid-p229b' }).status
+        ).toBe('claimed');
+        await store.mintHandoffToken('p229b-kept');
+
+        expect(store.getSession('p229b-gone')).toBeUndefined();
+        expect(store.getRunHistory('chain-p229b')).toEqual(['chain-p229b#2']);
+        expect(store.getChainContext('p229b-kept')['previous_step_result']).toBe('KEPT-229');
+      });
+
       test('(b) control: an unscoped clear releases every run it removed', async () => {
         const chainA = await seed('p201-a3', 'chain-p201z#1', scopeA, 'A-201');
         const chainB = await seed('p201-b3', 'chain-p201z#2', scopeB, 'B-201');

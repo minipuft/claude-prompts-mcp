@@ -1324,7 +1324,7 @@ export class ChainSessionStore implements ChainSessionService {
       const session = this.activeSessions.get(sessionId);
       if (session === undefined) continue;
       this.removeSessionArtifacts(sessionId, release);
-      this.chainSessionMapping.get(session.chainId)?.delete(sessionId);
+      this.removeSessionFromRun(sessionId, session.chainId);
       this.logger.info(
         `[Handoff] Session ${sessionId} (${session.chainId}) claimed by another server; evicted`
       );
@@ -2596,15 +2596,7 @@ export class ChainSessionStore implements ChainSessionService {
     const release = emptyRunRelease();
     this.removeSessionArtifacts(sessionId, release);
 
-    // Remove from chain mapping
-    const chainSessions = this.chainSessionMapping.get(session.chainId);
-    if (chainSessions) {
-      chainSessions.delete(sessionId);
-      if (chainSessions.size === 0) {
-        this.chainSessionMapping.delete(session.chainId);
-        this.removeRunFromBaseTracking(session.chainId);
-      }
-    }
+    this.removeSessionFromRun(sessionId, session.chainId);
 
     await this.persistMutation(snapshot);
     // Listeners receive the removed session object, so they can still inspect its state.
@@ -2794,6 +2786,20 @@ export class ChainSessionStore implements ChainSessionService {
     for (const sessionId of release.sessionIds) {
       this.textReferenceStore.clearChainStepResults(sessionId);
     }
+  }
+
+  /**
+   * Take one session out of its run's membership. The run leaves every run index — its emptied
+   * `chainSessionMapping` set and its run-history entry — once no session holds it. The one
+   * removal path `clearSession` and eviction share (R120).
+   */
+  private removeSessionFromRun(sessionId: string, chainId: string): void {
+    const chainSessions = this.chainSessionMapping.get(chainId);
+    if (!chainSessions) return;
+    chainSessions.delete(sessionId);
+    if (chainSessions.size > 0) return;
+    this.chainSessionMapping.delete(chainId);
+    this.removeRunFromBaseTracking(chainId);
   }
 
   private removeRunFromBaseTracking(chainId: string): void {
