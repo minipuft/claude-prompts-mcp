@@ -10,6 +10,7 @@ import {
 } from '@jest/globals';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import * as os from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -1112,6 +1113,56 @@ describe('Tenant Isolation', () => {
         await expect(store.clearSession('p230b')).resolves.toBe(true);
 
         expect(tracker.getSessionHistory('p230b')).toHaveLength(0);
+      });
+
+      /**
+       * P6.243 (R116, third amendment). The eviction keeps the evicted session's argument history
+       * (P6.230), keyed by its SESSION id, and nothing in this process reads it: the tracker's one
+       * production reader is `ChainSessionStore.getChainContext`, which answers `{}` for a session
+       * it no longer holds before it asks the tracker. Stamped: as of 2026-09-28 · flips when a
+       * claimer loads the evictor's history or history is keyed by run.
+       */
+      test('P6.243 an evicted session keeps its history and nothing in this process reads it', async () => {
+        await store.cleanup();
+        const tracker = new ArgumentHistoryTracker(logger);
+        store = new ChainSessionStore(
+          logger,
+          refs,
+          { cleanupIntervalMs: 10_000, databasePort: dbManager },
+          tracker
+        );
+        await tracker.trackExecution({
+          promptId: 'p243',
+          sessionId: 'p243a-gone',
+          originalArgs: { topic: 'T243' },
+        });
+        await evictAfterClaim('p243a');
+        const reads = jest.spyOn(tracker, 'buildReviewContext');
+
+        // Positive control: a session this process holds IS read, through `buildReviewContext`.
+        expect(store.getChainContext('p243a-kept')['previous_step_result']).toBe('KEPT-220');
+        expect(reads.mock.calls.map((call) => call[0])).toEqual(['p243a-kept']);
+
+        // The evicted session's history is kept, and reading its context never reaches it.
+        expect(tracker.getSessionHistory('p243a-gone')).not.toHaveLength(0);
+        expect(store.getChainContext('p243a-gone')).toEqual({});
+        expect(reads.mock.calls.map((call) => call[0])).toEqual(['p243a-kept']);
+
+        // And that is the only production reader: every read of the tracker in `src/`.
+        const srcRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../src');
+        const files = (await fs.readdir(srcRoot, { recursive: true }))
+          .filter((file) => file.endsWith('.ts'))
+          .filter((file) => !file.endsWith('argument-history-tracker.ts'));
+        const readers: string[] = [];
+        for (const file of files) {
+          const text = await fs.readFile(path.join(srcRoot, file), 'utf8');
+          const pattern =
+            /argumentHistoryTracker\??\.(buildReviewContext|getSessionHistory|getChainHistory|getLatestArguments)\b/g;
+          for (const match of text.matchAll(pattern)) {
+            readers.push(`${file.split(path.sep).join('/')}:${match[1]}`);
+          }
+        }
+        expect(readers).toEqual(['modules/chains/manager.ts:buildReviewContext']);
       });
 
       test('(b) control: an unscoped clear releases every run it removed', async () => {
