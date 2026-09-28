@@ -540,3 +540,43 @@ describe('P6.196: a quote inside a gate criterion or verify command is refused b
     expect(JSON.stringify(single.operators)).toContain('"parsedCriteria":["single quoted"]');
   });
 });
+
+/**
+ * P6.206 / R106. MEASURED 2026-09-27 on `a8e012c5` through `parseCommand`: the P6.196 quote check
+ * read the JSON form's JSON text, where every quote is escaped, so `{"command": ">>analyze ::
+ * \"it's fine\""}` was refused naming `"`, not `'`, and so was every JSON-form criterion,
+ * even `:: plain` (the closing JSON quote read as glued to it). The reserved-operator check read
+ * the JSON text's tokens, which the tokenizer never scans, so `{"command": ">>analyze + >>analyze"}`
+ * parsed with the `+` silently dropped. Both refusals now read the decoded inner command.
+ */
+describe('P6.206: the JSON command form is parsed through the same refusals', () => {
+  const parser = new UnifiedCommandParser(mockLogger);
+  const json = (command: string) => JSON.stringify({ command });
+
+  test('(a) a JSON-form criterion holding an apostrophe is refused, naming :: and the quote', async () => {
+    await expect(
+      parser.parseCommand(json(`>>analyze :: "it's fine"`), basePrompts)
+    ).rejects.toThrow(/Operator "::" cannot take a criterion containing the quote character '\./);
+    // Double-encoded: the inner JSON object is decoded before the check too.
+    await expect(
+      parser.parseCommand(json(json(`>>analyze :: "it's fine"`)), basePrompts)
+    ).rejects.toThrow(/Operator "::" cannot take a criterion containing the quote character '\./);
+  });
+
+  test('(a) a reserved operator in the JSON form is refused', async () => {
+    await expect(parser.parseCommand(json('>>analyze + >>summarize'), basePrompts)).rejects.toThrow(
+      /Operator "\+" is reserved/
+    );
+  });
+
+  test('(b) control: the JSON form with a plain criterion parses', async () => {
+    for (const criterion of ['"plain"', "'plain'", 'plain']) {
+      const result = await parser.parseCommand(json(`>>analyze :: ${criterion}`), basePrompts);
+      expect({ criterion, promptId: result.promptId, format: result.format }).toEqual({
+        criterion,
+        promptId: 'analyze',
+        format: 'json',
+      });
+    }
+  });
+});

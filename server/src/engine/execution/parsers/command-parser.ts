@@ -80,6 +80,59 @@ function rejectReservedOperators(tokens: TokenizedCommand): void {
 }
 
 /**
+ * Decode the JSON command form, `{"command": ">>prompt", "args": {...}}` or `{"prompt": ...}`,
+ * including a `command` that is itself a JSON-encoded object (a client double-escaping its
+ * payload). Returns null for anything that is not that form. The one decoder: the JSON strategy
+ * parses its result and `parseCommand` runs the operator refusals on it.
+ */
+function unwrapJsonCommand(
+  command: string
+): { data: Record<string, unknown>; command: string; confidence: number } | null {
+  const parseResult = safeJsonParse(command);
+  if (!parseResult.success || !parseResult.data) {
+    return null;
+  }
+  const data = parseResult.data as Record<string, unknown>;
+  // Truthiness, as the strategy always read these two keys.
+  const commandGiven = Boolean(data['command']);
+  const promptGiven = Boolean(data['prompt']);
+  const outer = commandGiven ? data['command'] : data['prompt'];
+  if (!commandGiven && !promptGiven) {
+    return null;
+  }
+  const confidence = commandGiven ? 0.9 : 0.85;
+  const inner = unwrapDoubleEncoded(String(outer));
+  if (inner === undefined) {
+    return { data, command: String(outer), confidence };
+  }
+  // Args from the inner object fill the outer only when the outer has none.
+  const merged = inner.args !== undefined && data['args'] === undefined;
+  return {
+    data: merged ? { ...data, args: inner.args } : data,
+    command: inner.command,
+    confidence,
+  };
+}
+
+/** A `command` that is itself a JSON object: its `command` (and `args`), or its `prompt`. */
+function unwrapDoubleEncoded(command: string): { command: string; args?: unknown } | undefined {
+  if (!command.trim().startsWith('{')) return undefined;
+  const innerParse = safeJsonParse(command);
+  if (
+    innerParse.success !== true ||
+    innerParse.data === null ||
+    typeof innerParse.data !== 'object'
+  ) {
+    return undefined;
+  }
+  const innerData = innerParse.data as Record<string, unknown>;
+  const innerCommand = innerData['command'];
+  if (typeof innerCommand === 'string') return { command: innerCommand, args: innerData['args'] };
+  const innerPrompt = innerData['prompt'];
+  return typeof innerPrompt === 'string' ? { command: innerPrompt } : undefined;
+}
+
+/**
  * Parsing strategy interface
  */
 interface ParsingStrategy {
@@ -188,9 +241,10 @@ export class UnifiedCommandParser {
     // Tokenize once — strategies consume tokens instead of re-detecting operators
     const tokens = tokenizeCommand(preprocessed);
 
-    // Reserved operators are documented but not executable — fail loudly rather than drop them
-    rejectReservedOperators(tokens);
-    rejectQuoteInGateText(preprocessed);
+    // Reserved operators are documented but not executable — fail loudly rather than drop them.
+    // Both refusals read the command the strategies will parse: for the JSON form that is the
+    // decoded inner command, whose quotes the JSON text escapes (R106).
+    this.rejectUnparseableOperators(preprocessed, tokens);
 
     // Try each strategy in order of confidence (now operating on preprocessed command)
     const sortedStrategies = [...this.strategies].sort((a, b) => b.confidence - a.confidence);
@@ -370,6 +424,24 @@ export class UnifiedCommandParser {
   }
 
   /**
+   * Run the operator refusals on the text the strategies parse. For the JSON form that is the
+   * decoded inner command: read off the JSON text, an escaped quote looked glued to every
+   * criterion and a reserved operator was never tokenized (R106).
+   */
+  private rejectUnparseableOperators(command: string, tokens: TokenizedCommand): void {
+    if (tokens.format !== 'json') {
+      rejectReservedOperators(tokens);
+      rejectQuoteInGateText(command);
+      return;
+    }
+    const unwrapped = unwrapJsonCommand(command);
+    if (unwrapped === null) return;
+    const inner = this.extractModifier(unwrapped.command).command;
+    rejectReservedOperators(tokenizeCommand(inner));
+    rejectQuoteInGateText(inner);
+  }
+
+  /**
    * JSON command strategy: {"command": ">>prompt", "args": {...}}
    */
   private createJsonCommandStrategy(): ParsingStrategy {
@@ -378,60 +450,14 @@ export class UnifiedCommandParser {
       confidence: 0.85,
       canHandle: (_command: string, tokens: TokenizedCommand) => tokens.format === 'json',
       parse: (command: string, _tokens: TokenizedCommand): CommandParseResult | null => {
-        const parseResult = safeJsonParse(command);
-        if (!parseResult.success || !parseResult.data) {
+        const unwrapped = unwrapJsonCommand(command);
+        if (unwrapped === null) {
           return null;
         }
-
-        let data = parseResult.data;
-
-        // Handle different JSON formats
-        // No initializers: every branch below assigns both, and the final `else` returns.
-        // Dead initializers hid that invariant; definite-assignment analysis now enforces it.
-        let actualCommand: string;
-        let confidence: number;
-
-        if (data.command) {
-          actualCommand = data.command;
-          confidence = 0.9;
-        } else if (data.prompt) {
-          actualCommand = data.prompt;
-          confidence = 0.85;
-        } else {
-          return null;
-        }
-
-        // Handle double-encoded JSON (command field is itself a JSON string)
-        // This can happen when clients double-escape JSON payloads
-        if (typeof actualCommand === 'string' && actualCommand.trim().startsWith('{')) {
-          const innerParse = safeJsonParse(actualCommand);
-          if (
-            innerParse.success === true &&
-            innerParse.data !== null &&
-            typeof innerParse.data === 'object'
-          ) {
-            // Extract command from the inner JSON object with proper type guards
-            const innerData = innerParse.data as Record<string, unknown>;
-            const innerCommand = innerData['command'];
-            const innerPrompt = innerData['prompt'];
-            const innerArgs = innerData['args'];
-
-            if (typeof innerCommand === 'string') {
-              actualCommand = innerCommand;
-              // Merge args if present in inner object and not in outer
-              // Use bracket notation with type assertion for data.args access
-              const outerData = data as Record<string, unknown>;
-              if (innerArgs !== undefined && outerData['args'] === undefined) {
-                data = { ...outerData, args: innerArgs };
-              }
-            } else if (typeof innerPrompt === 'string') {
-              actualCommand = innerPrompt;
-            }
-          }
-        }
+        const { data, confidence } = unwrapped;
 
         const { command: innerCommand, modifier: modifierToken } = this.extractModifier(
-          String(actualCommand)
+          unwrapped.command
         );
 
         // Recursively parse the inner command - tokenize and try both strategies
@@ -461,14 +487,14 @@ export class UnifiedCommandParser {
           if (innerResult.metadata) {
             innerResult.metadata.modifierToken = modifierToken;
             innerResult.metadata.originalCommand =
-              typeof data.command === 'string' ? data.command : command;
+              typeof data['command'] === 'string' ? data['command'] : command;
           }
         }
 
         const mods = innerResult.modifiers;
         return {
           promptId: innerResult.promptId,
-          rawArgs: data.args ? JSON.stringify(data.args) : innerResult.rawArgs,
+          rawArgs: data['args'] ? JSON.stringify(data['args']) : innerResult.rawArgs,
           format: 'json',
           confidence,
           ...(mods !== undefined && { modifiers: mods }),
