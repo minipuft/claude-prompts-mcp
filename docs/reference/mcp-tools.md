@@ -1715,6 +1715,11 @@ prompt_engine(
 
 - **Caps**: 1 insertion per unknown id, 3 insertions per run. A capped or non-qualifying
   observation still applies to the ledger — it just mutates nothing in the node list.
+- **One insertion per call.** A call that declares several blocking unknowns inserts a step for
+  the first one only; the others stay open in the ledger with no step. The interrupt section names
+  them on an `Open with no investigation step` line, and `structuredContent.chain_interrupt`
+  lists them in `open_blocking_unknowns`. Declare one again on a later call to insert its step
+  (within the caps), resolve it, or cover it in a `remainder`.
 - The current node can never be a skip target — only strictly-ahead, not-yet-executed nodes.
 - A run's terminal `execution_records` row carries two more terminal-row facts for this: how many
   nodes were inserted and how many were skipped over the run's life (`nodes_inserted`,
@@ -1747,6 +1752,13 @@ Either variant carries `structuredContent.chain_interrupt`:
     "id": "cache-ttl",
     "statement": "TTL for the new cache layer is undecided",
   },
+  "open_blocking_unknowns": [
+    // every open blocking unknown, in ledger order
+    {
+      "id": "cache-ttl",
+      "statement": "TTL for the new cache layer is undecided",
+    },
+  ],
   "affected_step_ids": ["review"], // declared target_step_id links only
   "remaining_nodes": [{ "id": "…", "promptId": "…", "stepName": "…" }], // after the rendered step
   "paused": false,
@@ -1772,7 +1784,12 @@ two are not subsets of one another in either direction:
 A run that completes with a blocking unknown still open renders no interrupt section: its reply
 says the run completed and names every blocking unknown still open as unresolved, and
 `resume.verbs` is empty, because nothing is left to resume. `structuredContent.chain_interrupt`
-still carries only the most recently discovered one, as `unknown`.
+lists every one in `open_blocking_unknowns`, as every interrupt payload does.
+
+**`unknown` is the most recent; `open_blocking_unknowns` is all of them.** `unknown` names the
+open blocking unknown discovered most recently — the one this interrupt is about, which the text
+section names. `open_blocking_unknowns` lists every blocking unknown still open, in the order the
+run discovered them, so a run holding two reports both on the machine half as well as the text.
 
 A paused run never offers "answer the step" — it issued no step. It never offers a bare
 `remainder` either: a remainder alone does not clear the hold, so the caller must spell it

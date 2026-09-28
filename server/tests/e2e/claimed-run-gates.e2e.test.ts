@@ -30,7 +30,7 @@
  */
 import { afterEach, describe, expect, test } from '@jest/globals';
 
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -1189,13 +1189,90 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     expect(inspected.text).toContain('"name":"g202"');
     expect(inspected.text).toContain('"pass_criteria":[]');
 
-    // (b) Control: a definition the loader drops still reports the mismatch.
+    // (b) Control: a definition the loader drops is not normalized into a match. Since P6.215
+    // (R108) the write is refused before anything lands, naming the field the loader requires.
     const dropped = await create('sv_p202_scope', noScope);
     expect(dropped.isError).toBe(true);
-    expect(dropped.text).toMatch(verificationFailed);
+    expect(dropped.text).toContain('inline_gate_definitions[0] (g202): scope (must be one of');
 
     // (b) Control: a complete definition verifies as before.
     expect((await create('sv_p202_full', full)).isError).toBe(false);
+  }, 180000);
+
+  /**
+   * P6.215 / R108. MEASURED 2026-09-28 on `51b16fd5`, driven over `resource_manager create`: an
+   * inline definition omitting `scope` was WRITTEN, and the reply read "post-write verification
+   * FAILED (mismatched: gateConfiguration)" because the loader dropped the gate ("Dropped inline
+   * gate definition … scope (must be one of …). The gate will not load."). `diagnosePromptWrite`
+   * now reads the loader's own `findInlineGateFieldProblems`, so validate, create, update and the
+   * update preview refuse the definition by field before anything is written.
+   */
+  test('P6.215 a write carrying an inline gate the loader would drop is refused by field', async () => {
+    const roots = freshRoots();
+    const server = await startServer(roots);
+    const gate = {
+      name: 'g215',
+      type: 'validation',
+      scope: 'execution',
+      description: 'D-215',
+      guidance: 'G-215',
+      pass_criteria: ['P-215'],
+    };
+    const { scope: _omittedScope, ...noScope } = gate;
+    const { guidance: _omittedGuidance, ...noGuidance } = gate;
+    const prompt = (action: string, id: string, definition: Record<string, unknown>) =>
+      server.call('resource_manager', {
+        resource_type: 'prompt',
+        action,
+        id,
+        category: 'general',
+        name: id,
+        description: 'step for P6.215',
+        user_message_template: `BODY-${id}`,
+        gate_configuration: { framework_gates: false, inline_gate_definitions: [definition] },
+      });
+    const refusedFor = (field: string) =>
+      `gateConfiguration.inline_gate_definitions[0] (g215): ${field} (must be`;
+    const promptFile = path.join(roots.workspace, 'resources', 'prompts', 'general');
+
+    // (a) validate and create refuse, naming the field; create writes nothing.
+    const validated = await prompt('validate', 'sv_p215_new', noScope);
+    expect(validated.isError).toBe(true);
+    expect(validated.text).toContain(refusedFor('scope'));
+    const created = await prompt('create', 'sv_p215_new', noScope);
+    expect(created.isError).toBe(true);
+    expect(created.text).toContain(refusedFor('scope'));
+    expect(created.text).not.toMatch(/post-write verification/);
+    expect(existsSync(path.join(promptFile, 'sv_p215_new'))).toBe(false);
+
+    // (c) Control: the complete definition validates, creates and loads.
+    expect((await prompt('validate', 'sv_p215', gate)).isError).toBe(false);
+    const complete = await prompt('create', 'sv_p215', gate);
+    expect({ isError: complete.isError, text: complete.text }).toMatchObject({ isError: false });
+    expect(complete.text).not.toMatch(/post-write verification FAILED/);
+    // Positive control for the absence asserted in (a): the path probe sees a written prompt.
+    expect(existsSync(path.join(promptFile, 'sv_p215'))).toBe(true);
+
+    // (b) update and its preview refuse the same, and the loaded gate is unchanged.
+    const update = (definition: Record<string, unknown>, preview: boolean) =>
+      server.call('resource_manager', {
+        resource_type: 'prompt',
+        ...(preview ? { action: 'preview', preview_action: 'update' } : { action: 'update' }),
+        id: 'sv_p215',
+        gate_configuration: { framework_gates: false, inline_gate_definitions: [definition] },
+      });
+    const previewed = await update(noGuidance, true);
+    expect(previewed.isError).toBe(true);
+    expect(previewed.text).toContain(refusedFor('guidance'));
+    const updated = await update(noGuidance, false);
+    expect(updated.isError).toBe(true);
+    expect(updated.text).toContain(refusedFor('guidance'));
+    const inspected = await server.call('resource_manager', {
+      resource_type: 'prompt',
+      action: 'inspect',
+      id: 'sv_p215',
+    });
+    expect(inspected.text).toContain('"guidance":"G-215"');
   }, 180000);
 
   /**
@@ -1312,6 +1389,55 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     reviews: { a: ['content-structure'] },
     failShown: ['Use clear headings'],
   };
+
+  /**
+   * P6.212 / R109. A whole-call refusal at stage 11 runs after stage 05 registered the call's named
+   * gates, which was read as leaving them registered with no run. MEASURED 2026-09-28 on
+   * `f10c8f55` (driven, flag on): nothing lingers. Stage 05 adds them to
+   * `state.gates.temporaryGateIds`, the call creates no run to adopt them, and stage 02's cleanup
+   * (`releaseUnowned`, run in the pipeline's `finally`) removes them once the refusal is set.
+   * Pinned here: with that release removed, (a) reads `nmc212-2`. Observed through the id the next
+   * declaration of the same name registers under: a gate still held pushes it to `<name>-2` (the
+   * positive control below), a released one does not.
+   */
+  test('P6.212 a call refused at stage 11 leaves no gate it registered', async () => {
+    const { server, failFirst, refusedCall } = await p193Server();
+    const reviewsOf = async (start: Record<string, unknown>) => (await failFirst(start)).reviews;
+
+    // Positive control: a live run holding `hld212` pushes the next declaration to `hld212-2`.
+    expect(await reviewsOf({ command: '>>sv_p193_chain :: hld212:"HLD-212"' })).toEqual({
+      a: ['hld212', 'content-structure'],
+    });
+    expect(await reviewsOf({ command: '>>sv_p193_chain :: hld212:"HLD-212"' })).toEqual({
+      a: ['hld212-2', 'content-structure'],
+    });
+
+    // (a) A NON-colliding named gate beside a colliding request gate: refused whole, and the next
+    // declaration of `nmc212` registers under its own name, so nothing from the refused call is held.
+    expect(
+      await refusedCall({
+        command: '>>sv_p193_chain :: nmc212:"NMC-212"',
+        gates: [{ id: 'content-structure', criteria: ['REQ-212'] }],
+      })
+    ).toMatchObject(REFUSED_210);
+    expect(await reviewsOf({ command: '>>sv_p193_chain :: nmc212:"NMC-212"' })).toEqual({
+      a: ['nmc212', 'content-structure'],
+    });
+
+    // (b)(c) A resume refused for a passed target (R65) leaves the run's own gate held.
+    const started = await server.call('prompt_engine', {
+      command: '>>sv_p193_chain :: rsm212:"RSM-212"',
+    });
+    const refusedResume = await server.call('prompt_engine', {
+      chain_id: chainIdOf(started.text),
+      user_response: 'A out',
+      gates: [{ name: 'tgt212', criteria: ['TGT-212'], target_step_id: 'a' }],
+    });
+    expect(refusedResume.text).toContain('[gate-target-passed] node "a"');
+    expect(await reviewsOf({ command: '>>sv_p193_chain :: rsm212:"RSM-212"' })).toEqual({
+      a: ['rsm212-2', 'content-structure'],
+    });
+  }, 180000);
 
   test('P6.193 a request gate or named inline gate may not shadow a canonical gate id', async () => {
     const { failFirst, refusedCall } = await p193Server();
@@ -1670,14 +1796,17 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
    */
   async function claimPlantedCanonical(
     roots: Roots,
-    plantedId: string
+    plantedId: string,
+    start: { args: Record<string, unknown>; recordedId: string; reviews: string[] } = {
+      args: { command: '>>sv_chain :: g204:"NAMED-204"' },
+      recordedId: 'g204',
+      reviews: ['sv-block', 'g204'],
+    }
   ): Promise<{ chainId: string; second: Server; failed: { isError: boolean; text: string } }> {
     const first = await startServer(roots);
     await authorResources(first);
-    const chainId = chainIdOf(
-      (await first.call('prompt_engine', { command: '>>sv_chain :: g204:"NAMED-204"' })).text
-    );
-    expect(runRow(roots, chainId)?.reviews).toEqual({ a: ['sv-block', 'g204'] });
+    const chainId = chainIdOf((await first.call('prompt_engine', start.args)).text);
+    expect(runRow(roots, chainId)?.reviews).toEqual({ a: start.reviews });
     const token = await mintToken(first, chainId);
     const second = await startServer(roots);
     await first.stop();
@@ -1689,7 +1818,10 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
           type: string;
         }>;
         for (const { name } of columns.filter((column) => column.type === 'TEXT')) {
-          db.prepare(`UPDATE ${table} SET ${name} = REPLACE(${name}, 'g204', ?)`).run(plantedId);
+          db.prepare(`UPDATE ${table} SET ${name} = REPLACE(${name}, ?, ?)`).run(
+            start.recordedId,
+            plantedId
+          );
         }
       }
     } finally {
@@ -1717,6 +1849,40 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     expect(failed.isError).toBe(false);
     expect(failed.text).toContain('NAMED-204');
     expect(runRow(roots, chainId)?.reviews).toEqual({ a: ['sv-block', 'x204'] });
+  }, 180000);
+
+  /**
+   * P6.213 / R110. A run recorded before the canonical-id refusal can hold a REQUEST gate under a
+   * canonical id; a claim hands it back to stage 11 (`parsedCommand.requestGates`), whose registry
+   * refuses the id. MEASURED 2026-09-28 on `e824fbd6`: the claim answered `isError:false`, the
+   * recorded REQ-213 was gone, and the review rendered the CANONICAL `content-structure`
+   * guidelines in its place under the recorded id. Now the restore hands it back under
+   * `content-structure-2` and the run's reviews follow through `remapRunGates`.
+   */
+  const REQUEST_213 = {
+    args: { command: '>>sv_chain', gates: [{ id: 'rq213', criteria: ['REQ-213'] }] },
+    recordedId: 'rq213',
+    reviews: ['rq213', 'sv-block'],
+  };
+
+  test('P6.213 (a) a claimed run recorded with a canonical-named request gate restores it under a fresh id', async () => {
+    const roots = freshRoots();
+    const { chainId, failed } = await claimPlantedCanonical(
+      roots,
+      'content-structure',
+      REQUEST_213
+    );
+    expect(failed.isError).toBe(false);
+    expect(failed.text).toContain('REQ-213');
+    expect(runRow(roots, chainId)?.reviews).toEqual({ a: ['content-structure-2', 'sv-block'] });
+  }, 180000);
+
+  test('P6.213 (b) control: a planted request gate id with no canonical gate restores under itself', async () => {
+    const roots = freshRoots();
+    const { chainId, failed } = await claimPlantedCanonical(roots, 'x213', REQUEST_213);
+    expect(failed.isError).toBe(false);
+    expect(failed.text).toContain('REQ-213');
+    expect(runRow(roots, chainId)?.reviews).toEqual({ a: ['x213', 'sv-block'] });
   }, 180000);
 
   test('P6.130 (b) control: an unclaimed run keeps its one row', async () => {

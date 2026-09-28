@@ -123,10 +123,9 @@ export class CommandParsingStage extends BasePipelineStage {
         this.promptsProvider()
       );
 
-      if (
-        parseResult.format === 'symbolic' &&
-        (parseResult as SymbolicCommandParseResult).executionPlan
-      ) {
+      // Routed on what the parse PRODUCED, not how the command was spelled: the JSON form
+      // carries its inner command's execution plan too (R112).
+      if (parseResult.executionPlan !== undefined) {
         const symbolic = await this.symbolicCommandBuilder.buildSymbolicCommand(
           parseResult as SymbolicCommandParseResult,
           (idOrName) => this.findConvertedPrompt(idOrName),

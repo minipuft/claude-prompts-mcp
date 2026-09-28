@@ -1,19 +1,15 @@
-// @lifecycle canonical - Validates execution requests against canonical schemas.
+// @lifecycle canonical - Validates the individual McpToolRequest fields the engine reads.
 /**
  * MCP Tool Request Validator
  *
- * Provides comprehensive validation for McpToolRequest objects with
- * detailed error handling and type safety.
+ * Field-level checks (command, chain id, gate verdict) for callers inside the engine. The request
+ * as a whole is validated by the `prompt_engine` tool schema (`mcp/tools/schemas/`).
  */
-import { ZodError } from 'zod/v4';
-
-import { mcpToolRequestSchema } from './schemas.js';
 import { isValidGateVerdict } from '../../gates/core/gate-verdict-contract.js';
 
 import type { McpToolRequest } from '#shared/types/execution.js';
 
 import { CHAIN_ID_FORMAT_MESSAGE, isChainId } from '#shared/utils/chain-id-codec.js';
-import { recordParameterIssue } from '#shared/utils/index.js';
 
 /**
  * Validator for McpToolRequest with comprehensive error handling
@@ -23,37 +19,6 @@ type MutableMcpToolRequest = {
 };
 
 export class McpToolRequestValidator {
-  /**
-   * Validates an unknown input against the McpToolRequest schema
-   *
-   * @param raw - Raw input to validate
-   * @returns Validated and typed McpToolRequest
-   * @throws {Error} If validation fails with detailed error messages
-   */
-  static validate(raw: unknown): McpToolRequest {
-    try {
-      const result = mcpToolRequestSchema.parse(raw) as MutableMcpToolRequest & {};
-      const sanitized: MutableMcpToolRequest = result;
-
-      // Freeze to enforce immutability
-      return Object.freeze(sanitized);
-    } catch (error) {
-      if (error instanceof ZodError) {
-        const errorMessages = error.issues
-          .map((err) => `${err.path.join('.')}: ${err.message}`)
-          .join('; ');
-        recordParameterIssue('prompt_engine', 'mcp_request', errorMessages, {
-          issues: error.issues.map((err) => ({
-            path: err.path.join('.') || '(root)',
-            code: err.code,
-          })),
-        });
-        throw new Error(`McpToolRequest validation failed: ${errorMessages}`, { cause: error });
-      }
-      throw error;
-    }
-  }
-
   /**
    * Type guard to check if a value is a valid command string
    *

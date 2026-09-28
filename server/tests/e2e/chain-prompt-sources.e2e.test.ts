@@ -1387,6 +1387,205 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
   });
 
   /**
+   * P6.216 / R111. MEASURED 2026-09-28 on `1f54e885`: the P6.208 run (two blocking unknowns
+   * declared on `n1`, never resolved) answered through to completion. The text named both, while
+   * `structuredContent.chain_interrupt` carried only `unknown: u-216b` — a client reading the
+   * machine half saw one open unknown where the run held two. `open_blocking_unknowns` now lists
+   * every open blocking entry in ledger order on every interrupt payload, beside `unknown`.
+   */
+  describe('P6.216: the structured interrupt lists every open blocking unknown', () => {
+    const unknown = (id: string) => ({
+      type: 'unknown_discovered',
+      id,
+      statement: `STATEMENT-${id}`,
+      blocking: true,
+    });
+    const entry = (id: string) => ({ id, statement: `STATEMENT-${id}` });
+    type Interrupt = { unknown?: { id: string }; open_blocking_unknowns?: unknown };
+    async function callRun(chainId: string, args: Record<string, unknown>) {
+      const outcome = await client.callToolWithNotifications(
+        'prompt_engine',
+        { chain_id: chainId, ...args },
+        nextId++
+      );
+      const result = outcome.result as {
+        content?: Array<{ text?: string }>;
+        structuredContent?: { chain_interrupt?: Interrupt };
+      };
+      return {
+        text: (result.content ?? []).map((part) => part.text ?? '').join('\n'),
+        interrupt: result.structuredContent?.chain_interrupt,
+      };
+    }
+    async function complete(chainId: string) {
+      for (let call = 0; call < 6; call++) {
+        const reply = await callRun(chainId, { user_response: `R-${call}` });
+        if (reply.text.includes('Chain execution complete')) return reply;
+      }
+      throw new Error(`run ${chainId} did not complete in 6 calls`);
+    }
+
+    test('(a) mid-run and on completion, both open unknowns are listed in ledger order', async () => {
+      const run = await start({ command: `>>sv_a${ARROW}>>sv_b` });
+      const mid = await callRun(run.chainId, {
+        user_response: 'A',
+        observations: [unknown('u-216a'), unknown('u-216b')],
+      });
+      expect(mid.interrupt?.unknown?.id).toBe('u-216b');
+      expect(mid.interrupt?.open_blocking_unknowns).toEqual([entry('u-216a'), entry('u-216b')]);
+
+      const done = await complete(run.chainId);
+      expect(done.interrupt?.unknown?.id).toBe('u-216b');
+      expect(done.interrupt?.open_blocking_unknowns).toEqual([entry('u-216a'), entry('u-216b')]);
+    }, 120000);
+
+    test('(b) control: one open blocking unknown lists exactly that one', async () => {
+      const run = await start({ command: `>>sv_a${ARROW}>>sv_b` });
+      const mid = await callRun(run.chainId, {
+        user_response: 'A',
+        observations: [unknown('u-216c')],
+      });
+      expect(mid.interrupt?.unknown?.id).toBe('u-216c');
+      expect(mid.interrupt?.open_blocking_unknowns).toEqual([entry('u-216c')]);
+      const done = await complete(run.chainId);
+      expect(done.interrupt?.open_blocking_unknowns).toEqual([entry('u-216c')]);
+    }, 120000);
+  });
+
+  /**
+   * P6.218 / R112. MEASURED 2026-09-28 on `1f54e885`: the JSON command form
+   * `{"command": "<inner>"}` parsed the inner command's operators and returned none of them, so
+   * `>>sv_a :: "X-218"` rendered no criterion and opened no review, `^ReACT >>sv_a` ran without
+   * the framework, and an arrow-chain ran its first prompt alone. The JSON form now carries the
+   * inner command's operators, so it runs exactly what the symbolic form runs.
+   */
+  describe('P6.218: the JSON command form keeps its operators', () => {
+    /** Chain ids and minted gate ids differ per run; everything else must match. */
+    const normalize = (text: string) =>
+      text.replace(/chain-[A-Za-z0-9_]+#\d+/g, 'CHAIN').replace(/temp_[A-Za-z0-9_]+/g, 'TEMP');
+    async function both(inner: string) {
+      const symbolic = await tool('prompt_engine', { command: inner });
+      const json = await tool('prompt_engine', { command: JSON.stringify({ command: inner }) });
+      return { symbolic, json };
+    }
+
+    test('(a) a JSON-form criterion renders and reviews exactly as the symbolic form', async () => {
+      const { symbolic, json } = await both('>>sv_a :: "X-218"');
+      // (c) control: the symbolic form carries the criterion.
+      expect(symbolic.text).toContain('X-218');
+      expect(json.isError).toBe(false);
+      expect(normalize(json.text)).toBe(normalize(symbolic.text));
+    }, 120000);
+
+    test('(a) with outer args, the criterion and the args both reach the render', async () => {
+      const json = await tool('prompt_engine', {
+        command: JSON.stringify({ command: '>>sv_a :: "X-218"', args: { topic: 'T-218' } }),
+      });
+      expect(json.isError).toBe(false);
+      expect(templates(json.text)).toEqual(['BODY-sv_a topic=T-218']);
+      expect(json.text).toContain('1. X-218');
+      expect(json.text).toContain('**Review Required**');
+    }, 120000);
+
+    test('(b) a JSON-form framework takes effect as the symbolic form', async () => {
+      const framework = await both('^ReACT >>sv_a');
+      expect(framework.symbolic.text).toContain('ReACT');
+      expect(normalize(framework.json.text)).toBe(normalize(framework.symbolic.text));
+    }, 120000);
+
+    test('(b) a JSON-form arrow-chain runs both prompts as the symbolic form', async () => {
+      const chain = await both(`>>sv_a${ARROW}>>sv_b`);
+      expect(chain.symbolic.text).toContain('Progress 1/2');
+      expect(normalize(chain.json.text)).toBe(normalize(chain.symbolic.text));
+      const chainOf = (text: string) => /chain_id[=:] ?"(chain-[A-Za-z0-9_#-]+)"/.exec(text)?.[1];
+      expect(runState(chainOf(chain.json.text) ?? '').steps).toEqual(['n1:sv_a:[]', 'n2:sv_b:[]']);
+    }, 120000);
+  });
+
+  /**
+   * P6.217 / R114. MEASURED 2026-09-28 on `cd2957a6`: `>>sv_a` arrow-chain `>>sv_b`, blocking
+   * `u-217a` and `u-217b` declared in ONE call on `n1`. The run inserted one step, `inv-u-217a`
+   * (the first declared), `remaining_nodes` read `[n2]`, and the ledger held both open; the reply
+   * handed over "Investigate: STATEMENT-u-217a" under a "Blocking Unknown" section naming
+   * `u-217b`, which never got a step. Declaring `u-217b` again on a later call inserted
+   * `inv-u-217b`. One insertion per call is the policy's rule (`decideMutation` takes the first
+   * blocking discovery; insert-precedence is pinned), so the interrupt now names the open blocking
+   * unknowns no inserted step investigates.
+   */
+  describe('P6.217: two blocking unknowns declared in one call', () => {
+    const LEFT_OUT = 'Open with no investigation step (one call inserts one';
+    const unknown = (id: string) => ({
+      type: 'unknown_discovered',
+      id,
+      statement: `STATEMENT-${id}`,
+      blocking: true,
+    });
+    async function callRun(chainId: string, args: Record<string, unknown>) {
+      const outcome = await client.callToolWithNotifications(
+        'prompt_engine',
+        { chain_id: chainId, ...args },
+        nextId++
+      );
+      const result = outcome.result as {
+        content?: Array<{ text?: string }>;
+        structuredContent?: { chain_interrupt?: { remaining_nodes?: Array<{ id: string }> } };
+      };
+      const text = (result.content ?? []).map((part) => part.text ?? '').join('\n');
+      return {
+        section: text.slice(text.indexOf('**Blocking Unknown**')),
+        remaining: result.structuredContent?.chain_interrupt?.remaining_nodes?.map((n) => n.id),
+      };
+    }
+    function inserted(chainId: string): string[] {
+      const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+      try {
+        const rows = db
+          .prepare(
+            "SELECT n.node_id FROM chain_run_nodes n JOIN chain_runs r ON r.session_id = n.session_id WHERE r.chain_id = ? AND n.origin = 'inserted' ORDER BY n.position"
+          )
+          .all(chainId) as Array<{ node_id: string }>;
+        return rows.map((row) => row.node_id);
+      } finally {
+        db.close();
+      }
+    }
+
+    test('(a) one step is inserted, and the interrupt names the unknown left without one', async () => {
+      const run = await start({ command: `>>sv_a${ARROW}>>sv_b` });
+      const mid = await callRun(run.chainId, {
+        user_response: 'A',
+        observations: [unknown('u-217a'), unknown('u-217b')],
+      });
+      expect(inserted(run.chainId)).toEqual(['inv-u-217a']);
+      expect(mid.remaining).toEqual(['n2']);
+      expect(mid.section).toContain(
+        `${LEFT_OUT}, for the first blocking unknown it declares): u-217b`
+      );
+
+      // Declared again on a later call, it gets its own step and leaves the list.
+      await callRun(run.chainId, { user_response: 'investigated a' });
+      const again = await callRun(run.chainId, {
+        user_response: 'B',
+        observations: [unknown('u-217b')],
+      });
+      expect(inserted(run.chainId)).toEqual(['inv-u-217a', 'inv-u-217b']);
+      expect(again.section).toContain('**Blocking Unknown**');
+      expect(again.section).not.toContain(LEFT_OUT);
+    }, 120000);
+
+    test('(b) control: one blocking unknown gets its step and no such line', async () => {
+      const run = await start({ command: `>>sv_a${ARROW}>>sv_b` });
+      const mid = await callRun(run.chainId, {
+        user_response: 'A',
+        observations: [unknown('u-217c')],
+      });
+      expect(inserted(run.chainId)).toEqual(['inv-u-217c']);
+      expect(mid.section).toContain('**Blocking Unknown**');
+      expect(mid.section).not.toContain(LEFT_OUT);
+    }, 120000);
+  });
+
+  /**
    * P6.144 / R66. MEASURED 2026-09-27 on `6dad55f3`: after `>>sv_a :: "sv-block"` and a FAIL sent
    * with the answer, the run held one record, `completed` with `prompt_id` null, and
    * `execution_history` listed `completed step 1`. The capture writer (`ledgerCapturedStep`) wrote

@@ -11,10 +11,11 @@ const logger = createLogger({
 describe('TextReferenceStore.buildChainVariables', () => {
   test('exposes step results and chain metadata', () => {
     const manager = new TextReferenceStore(logger);
-    manager.storeChainStepResult('chain-1', 'n1', 'draft summary');
-    manager.storeChainStepResult('chain-1', 'n2', 'final answer');
+    manager.storeChainStepResult('session-1', 'n1', 'draft summary');
+    manager.storeChainStepResult('session-1', 'n2', 'final answer');
 
-    const variables = manager.buildChainVariables('chain-1');
+    // Results are read under the session id; the chain id is only published (R107).
+    const variables = manager.buildChainVariables('session-1', 'chain-1');
 
     expect(variables.step1_result).toBe('draft summary');
     expect(variables.step2_result).toBe('final answer');
@@ -30,7 +31,7 @@ describe('TextReferenceStore.buildChainVariables', () => {
     manager.storeChainStepResult('chain-2', 'review', 'reviewed', undefined, 2);
     manager.storeChainStepResult('chain-2', 'draft', 'drafted', undefined, 1);
 
-    const variables = manager.buildChainVariables('chain-2');
+    const variables = manager.buildChainVariables('chain-2', 'chain-2');
 
     // `step${ordinal + 1}_result` reproduces the pre-node-identity naming exactly, where the
     // container key WAS the 1-based ordinal. (That it starts at step2_result for step 1 is a
@@ -59,7 +60,7 @@ describe('TextReferenceStore named outputs — reserved namespace', () => {
       outputMapping: { findings: 'output' },
     });
 
-    const variables = manager.buildChainVariables('chain-ns');
+    const variables = manager.buildChainVariables('chain-ns', 'chain-ns');
 
     expect(variables.outputs).toEqual({ findings: 'ANALYSIS_BODY' });
     expect(variables.findings).toBeUndefined();
@@ -70,7 +71,7 @@ describe('TextReferenceStore named outputs — reserved namespace', () => {
     const manager = new TextReferenceStore(logger);
     manager.storeChainStepResult('chain-plain', 'analyze', 'ANALYSIS_BODY');
 
-    const variables = manager.buildChainVariables('chain-plain');
+    const variables = manager.buildChainVariables('chain-plain', 'chain-plain');
 
     // Absence, not `{}`: matches `previous_step_results` / `unknowns_ledger`, so a template can
     // branch on presence and a chain declaring nothing renders as it did before the namespace.
@@ -85,7 +86,10 @@ describe('TextReferenceStore named outputs — reserved namespace', () => {
       outputMapping: { security_audit: 'output', security_verdict: 'verdict' },
     });
 
-    const outputs = manager.buildChainVariables('chain-two-key').outputs as Record<string, string>;
+    const outputs = manager.buildChainVariables('chain-two-key', 'chain-two-key').outputs as Record<
+      string,
+      string
+    >;
 
     expect(outputs.security_audit).toBe('AUDIT_BODY');
     expect(outputs.security_verdict).toBe('AUDIT_BODY');
@@ -108,7 +112,7 @@ describe('TextReferenceStore named outputs — reserved namespace', () => {
       1
     );
 
-    expect(manager.buildChainVariables('chain-merge').outputs).toEqual({
+    expect(manager.buildChainVariables('chain-merge', 'chain-merge').outputs).toEqual({
       findings: 'SECOND_BODY',
       summary: 'SECOND_BODY',
     });
@@ -120,10 +124,13 @@ describe('TextReferenceStore named outputs — reserved namespace', () => {
       outputMapping: { findings: 'output' },
     });
 
-    const first = manager.buildChainVariables('chain-copy').outputs as Record<string, string>;
+    const first = manager.buildChainVariables('chain-copy', 'chain-copy').outputs as Record<
+      string,
+      string
+    >;
     first.findings = 'TAMPERED';
 
-    expect(manager.buildChainVariables('chain-copy').outputs).toEqual({
+    expect(manager.buildChainVariables('chain-copy', 'chain-copy').outputs).toEqual({
       findings: 'ANALYSIS_BODY',
     });
   });
@@ -135,6 +142,8 @@ describe('TextReferenceStore named outputs — reserved namespace', () => {
     });
     manager.clearChainStepResults('chain-clear');
 
-    expect(Object.keys(manager.buildChainVariables('chain-clear'))).not.toContain('outputs');
+    expect(Object.keys(manager.buildChainVariables('chain-clear', 'chain-clear'))).not.toContain(
+      'outputs'
+    );
   });
 });

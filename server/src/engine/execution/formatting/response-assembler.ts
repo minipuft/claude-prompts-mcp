@@ -83,6 +83,14 @@ function resolveInterruptVerbs(paused: boolean, complete: boolean): string[] {
   return paused ? [...PAUSED_INTERRUPT_VERBS] : [...SOFT_INTERRUPT_VERBS];
 }
 
+/** One call inserts at most one investigation step (R114); an interrupt names the rest. */
+const UNINVESTIGATED_LABEL =
+  'Open with no investigation step (one call inserts one, for the first blocking unknown it declares)';
+
+/** A `label: a, b` line under the interrupt header, or nothing when the list is empty. */
+const listLine = (label: string, items: readonly string[]): string =>
+  items.length > 0 ? `\n\n${label}: ${items.join(', ')}` : '';
+
 /**
  * Assembles response content sections for different execution types.
  *
@@ -1017,9 +1025,7 @@ export class ResponseAssembler {
    */
   private buildInterruptSection(context: ExecutionContext): string | null {
     const interrupt = context.state.session.chainInterrupt;
-    if (interrupt === undefined) {
-      return null;
-    }
+    if (interrupt === undefined) return null;
 
     // A completed run names every unknown it never resolved, and offers nothing to act on (R97, R105).
     if (this.isRunLatchedComplete(context)) {
@@ -1027,10 +1033,8 @@ export class ResponseAssembler {
       return `\n---\n\n**Unresolved unknown**: ${named.join('\n\n**Unresolved unknown**: ')}`;
     }
     const header = interrupt.paused ? 'Chain Paused — Blocking Unknown' : 'Blocking Unknown';
-    const affected =
-      interrupt.affectedStepIds.length > 0
-        ? `\n\nAffected steps (declared): ${interrupt.affectedStepIds.join(', ')}`
-        : '';
+    const affected = listLine('Affected steps (declared)', interrupt.affectedStepIds);
+    const uninvestigated = listLine(UNINVESTIGATED_LABEL, interrupt.uninvestigatedUnknownIds);
     const remaining =
       interrupt.remainingNodes.length > 0
         ? `\n\nRemaining plan:\n${interrupt.remainingNodes
@@ -1041,7 +1045,7 @@ export class ResponseAssembler {
       .map((verb) => `- ${verb}`)
       .join('\n');
 
-    return `\n---\n\n**${header}**\n\n${interrupt.statement}${affected}${remaining}\n\nResolve with \`chain_id="${context.sessionContext?.chainId ?? ''}"\` plus one of:\n\n${verbs}`;
+    return `\n---\n\n**${header}**\n\n${interrupt.statement}${uninvestigated}${affected}${remaining}\n\nResolve with \`chain_id="${context.sessionContext?.chainId ?? ''}"\` plus one of:\n\n${verbs}`;
   }
 
   /**
@@ -1058,14 +1062,14 @@ export class ResponseAssembler {
    */
   buildInterruptStructuredContent(context: ExecutionContext): Record<string, unknown> | undefined {
     const interrupt = context.state.session.chainInterrupt;
-    if (interrupt === undefined) {
-      return undefined;
-    }
+    if (interrupt === undefined) return undefined;
 
     return {
       kind: 'chain_interrupt',
       reason: interrupt.reason,
+      // `unknown` is the most recent (what this interrupt is about); the list is every open one.
       unknown: { id: interrupt.unknownId, statement: interrupt.statement },
+      open_blocking_unknowns: [...interrupt.openBlockingUnknowns], // already `{id, statement}`
       affected_step_ids: [...interrupt.affectedStepIds],
       // camelCase `promptId`/`stepName` inside these entries is the plan's declared shape, not
       // an oversight: they name IR node fields a caller would author back verbatim in a

@@ -282,6 +282,12 @@ export const PromptGateConfigurationSchema = z
             name: z.string().min(1),
             /** Gate type - 'validation' or 'guidance' standard, but allows custom types */
             type: z.string().min(1),
+            /**
+             * `scope`, `description` and `guidance` are REQUIRED: optional here only so a file
+             * missing one still parses and loads the rest of the prompt. The loader drops such a
+             * definition (`findInlineGateFieldProblems`), and `resource_manager` refuses to write
+             * one (`diagnosePromptWrite`, R108).
+             */
             scope: z.enum(['execution', 'session', 'chain', 'step']).optional(),
             description: z.string().optional(),
             guidance: z.string().optional(),

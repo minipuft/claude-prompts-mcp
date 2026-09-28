@@ -411,7 +411,7 @@ describe('P6 named outputs — reserved namespace + the chain_history leak', () 
     store.storeChainStepResult('chain-named', 'analyze', NAMED_OUTPUT, {
       outputMapping: { findings: 'output' },
     });
-    return { ...store.buildChainVariables('chain-named'), chain_id: 'chain-named' };
+    return { ...store.buildChainVariables('chain-named', 'chain-named'), chain_id: 'chain-named' };
   };
 
   const namedOutputSteps = (

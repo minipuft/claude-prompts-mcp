@@ -3,6 +3,7 @@ import { namedGateBindingKey } from '../../execution/parsers/symbolic-operator-p
 import { formatCriteriaAsGuidance } from '../../execution/pipeline/criteria-guidance.js';
 import { loadShellPresets } from '../config/index.js';
 import { SHELL_VERIFY_DEFAULTS } from '../constants.js';
+import { gateInputContainsInlineContent } from './temporary-gate-registrar.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { ChainSessionService } from '#shared/types/chain-session.js';
@@ -283,13 +284,15 @@ export class InlineGateProcessor {
     };
 
     const remap = this.restoreNamedGates(parsedCommand, restore, runId);
+    for (const [recordedId, freshId] of this.restoreRequestGates(context, parsedCommand, runId)) {
+      remap.set(recordedId, freshId);
+    }
     // The run's open reviews and its inline-id reads follow the remap too (R60 amended), composed
     // onto the map an earlier claimer persisted on the run (R69) — even when this one is empty.
     await this.runGateStore.remapRunGates(runId, remap);
     await this.restoreAnonymousGates(parsedCommand, restore, (key) =>
       this.temporaryGateRegistry.resolveDeclared(key, runId, restored)
     );
-    this.restoreRequestGates(context, parsedCommand, runId);
     return restored;
   }
 
@@ -393,20 +396,42 @@ export class InlineGateProcessor {
     }
   }
 
-  /** The start call's request gates, handed back to stage 11 while the run owns none of them. */
+  /**
+   * The start call's request gates, handed back to stage 11 while the run owns none of them. One a
+   * run recorded under a canonical id (before the refusal, R100) is handed back under the fresh
+   * `<id>-N` it registers under, as a named gate restores (R104, R110). Returns that remap, recorded
+   * id to handed-back id, for the run's reviews to follow.
+   */
   private restoreRequestGates(
     context: ExecutionContext,
     parsedCommand: ParsedCommand,
     runId: string
-  ): void {
+  ): Map<string, string> {
+    const remap = new Map<string, string>();
     const requestGates = parsedCommand.requestGates ?? [];
     const runOwnsRequestGates = this.temporaryGateRegistry
       .getRunGates(runId)
       .some((gate) => gate.origin === 'request');
-    if (requestGates.length > 0 && !runOwnsRequestGates) {
-      const current = context.state.gates.requestedOverrides?.gates ?? [];
-      context.state.gates.requestedOverrides = { gates: [...requestGates, ...current] };
+    if (requestGates.length === 0 || runOwnsRequestGates) {
+      return remap;
     }
+    const handedBack = requestGates.map((gate) => {
+      if (
+        typeof gate !== 'object' ||
+        !('id' in gate) ||
+        typeof gate.id !== 'string' ||
+        !this.temporaryGateRegistry.shadowsCanonicalGate(gate.id) ||
+        !gateInputContainsInlineContent(gate)
+      ) {
+        return gate;
+      }
+      const freshId = remap.get(gate.id) ?? this.temporaryGateRegistry.freshIdFor(gate.id);
+      remap.set(gate.id, freshId);
+      return { ...gate, id: freshId };
+    });
+    const current = context.state.gates.requestedOverrides?.gates ?? [];
+    context.state.gates.requestedOverrides = { gates: [...handedBack, ...current] };
+    return remap;
   }
 
   private async applyGateCriteria(

@@ -760,9 +760,7 @@ describe('Tenant Isolation', () => {
         await expect(store.clearSession('p190-a')).resolves.toBe(true);
         expect(store.getSession('p190-a')).toBeUndefined();
         expect(tracker.getSessionHistory('p190-a')).toHaveLength(0);
-        expect(textReferenceManagerStub.clearChainStepResults.mock.calls).toEqual([
-          ['chain-p190a#1'],
-        ]);
+        expect(textReferenceManagerStub.clearChainStepResults.mock.calls).toEqual([['p190-a']]);
         expect(runEnded.mock.calls).toEqual([['p190-a']]);
         expect(sessionCleared).toHaveBeenCalledTimes(1);
       });
@@ -812,9 +810,7 @@ describe('Tenant Isolation', () => {
         await store.createSession('p190-d11', 'chain-p190d#11', 1);
         expect(store.getSession('p190-d1')).toBeUndefined();
         expect(tracker.getSessionHistory('p190-d1')).toHaveLength(0);
-        expect(textReferenceManagerStub.clearChainStepResults.mock.calls).toEqual([
-          ['chain-p190d#1'],
-        ]);
+        expect(textReferenceManagerStub.clearChainStepResults.mock.calls).toEqual([['p190-d1']]);
         expect(runEnded.mock.calls).toEqual([['p190-d1']]);
       });
 
@@ -845,9 +841,7 @@ describe('Tenant Isolation', () => {
         await expect(store.clearSession('p190-b')).resolves.toBe(true);
         expect(store.getSession('p190-b')).toBeUndefined();
         expect(tracker.getSessionHistory('p190-b')).toHaveLength(0);
-        expect(textReferenceManagerStub.clearChainStepResults.mock.calls).toEqual([
-          ['chain-p190b#1'],
-        ]);
+        expect(textReferenceManagerStub.clearChainStepResults.mock.calls).toEqual([['p190-b']]);
         expect(runEnded.mock.calls).toEqual([['p190-b']]);
         expect(sessionCleared).toHaveBeenCalledTimes(1);
       });
@@ -856,8 +850,12 @@ describe('Tenant Isolation', () => {
     /**
      * P6.201 (R102). MEASURED 2026-09-27 on `9d7c50c6`: `clearSessionsForChain(base, {scope A})`
      * released step results for EVERY run chain id in the base chain's history, including runs
-     * only another scope held, so tenant B's `stepN_result` variables vanished with A's clear. A
-     * run's step results are released only once the scoped clear removed its last session.
+     * only another scope held, so tenant B's `stepN_result` variables vanished with A's clear.
+     *
+     * P6.214 (R107). MEASURED 2026-09-28 on `76f9dad3`: two scopes holding one run chain id read
+     * each other's `step1_result` (A read `B-214`), because the text-reference store was keyed by
+     * run chain id. It is keyed by session id now, so a scoped clear releases exactly the sessions
+     * it removed.
      */
     describe('P6.201: a scoped chain clear releases only the runs it removed', () => {
       let refs: TextReferenceStore;
@@ -883,23 +881,25 @@ describe('Tenant Isolation', () => {
         await expect(store.updateSessionState(sessionId, nodeId, result)).resolves.toBe(true);
         return session.chainId;
       };
+      const resultOf = (sessionId: string, chainId: string) =>
+        refs.buildChainVariables(sessionId, chainId)['previous_step_result'];
 
       test('(a) another scope keeps its step results and its run history', async () => {
         const chainA = await seed('p201-a1', 'chain-p201x#1', scopeA, 'A-201');
         const chainB = await seed('p201-b1', 'chain-p201x#2', scopeB, 'B-201');
-        expect(refs.buildChainVariables(chainB)['previous_step_result']).toBe('B-201');
+        expect(resultOf('p201-b1', chainB)).toBe('B-201');
 
         await store.clearSessionsForChain('chain-p201x', scopeA);
 
         expect(store.getSession('p201-a1')).toBeUndefined();
-        expect(refs.buildChainVariables(chainB)['previous_step_result']).toBe('B-201');
+        expect(resultOf('p201-b1', chainB)).toBe('B-201');
         expect(store.getChainContext('p201-b1')['previous_step_result']).toBe('B-201');
         expect(store.getRunHistory('chain-p201x')).toEqual([chainB]);
         // (b) control: the scope that was cleared lost its own results.
-        expect(refs.buildChainVariables(chainA)['previous_step_result']).toBeUndefined();
+        expect(resultOf('p201-a1', chainA)).toBeUndefined();
       });
 
-      test('(a) two scopes on one run chain id: the other scope keeps its results', async () => {
+      test('(a) two scopes on one run chain id: the clear releases exactly the removed session', async () => {
         await seed('p201-a2', 'chain-p201y#1', scopeA, 'A-201');
         await seed('p201-b2', 'chain-p201y#1', scopeB, 'B-201');
 
@@ -908,6 +908,30 @@ describe('Tenant Isolation', () => {
         expect(store.getSession('p201-a2')).toBeUndefined();
         expect(store.getChainContext('p201-b2')['previous_step_result']).toBe('B-201');
         expect(store.getRunHistory('chain-p201y')).toEqual(['chain-p201y#1']);
+        // R107: A's results went with A's session, although B still holds the run chain id.
+        expect(resultOf('p201-a2', 'chain-p201y#1')).toBeUndefined();
+      });
+
+      test('P6.214 (a) two scopes on one run chain id read only their own step results', async () => {
+        await seed('p214-a', 'chain-p214#1', scopeA, 'A-214');
+        await seed('p214-b', 'chain-p214#1', scopeB, 'B-214');
+
+        expect(store.getChainContext('p214-a')['previous_step_result']).toBe('A-214');
+        // `step2_result` for the first node is the store's preserved positional quirk.
+        expect(store.getChainContext('p214-a')['step2_result']).toBe('A-214');
+        expect(store.getChainContext('p214-b')['previous_step_result']).toBe('B-214');
+        expect(store.getChainContext('p214-b')['step2_result']).toBe('B-214');
+      });
+
+      test('P6.214 (b) control: one scope alone renders the same chain variables as before', async () => {
+        const chainId = await seed('p214-c', 'chain-p214c#1', scopeA, 'C-214');
+
+        expect(refs.buildChainVariables('p214-c', chainId)).toEqual({
+          step2_result: 'C-214',
+          previous_step_result: 'C-214',
+          chain_id: 'chain-p214c#1',
+          step_results: { 1: 'C-214' },
+        });
       });
 
       test('(b) control: an unscoped clear releases every run it removed', async () => {
@@ -916,8 +940,8 @@ describe('Tenant Isolation', () => {
 
         await store.clearSessionsForChain('chain-p201z');
 
-        expect(refs.buildChainVariables(chainA)['previous_step_result']).toBeUndefined();
-        expect(refs.buildChainVariables(chainB)['previous_step_result']).toBeUndefined();
+        expect(resultOf('p201-a3', chainA)).toBeUndefined();
+        expect(resultOf('p201-b3', chainB)).toBeUndefined();
         expect(store.getRunHistory('chain-p201z')).toEqual([]);
       });
     });
