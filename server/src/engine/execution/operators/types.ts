@@ -45,9 +45,16 @@ export interface ChainStepPrompt {
    * True on a step a `remainder` contributed (`origin: 'remainder'`), set where the step is built
    * from its node (`node-step-projection.synthesizeStep`). Such a step has no plan and no framework
    * context of its own, so its render reads the run's modifiers and resolves its framework as its
-   * guidance does (R79). An inserted step is not marked: whether it declares sections is open.
+   * guidance does (R79).
    */
   readonly contributed?: true;
+  /**
+   * True on a step the adaptive mutation policy inserted (`origin: 'inserted'`), set where the step
+   * is built from its node. It has no framework context of its own either: its guidance resolves
+   * the run's framework decision as a contributed step's does (R92), while it declares no sections
+   * and opens no phase guard (R83).
+   */
+  readonly inserted?: true;
   /**
    * Whether the run waits for this step's worker (`node`, the default) or continues past it
    * (`run`, detached delegation — Tier 4). A DECLARATION: `markDelegatedStepPrompts` (stage 06)

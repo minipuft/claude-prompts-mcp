@@ -62,6 +62,12 @@ export interface PromptResourceDependencies {
    * Absent, a version row is recorded without a file tree — today's behaviour.
    */
   resourceFileLocator?: ResourceFileLocatorPort;
+  /**
+   * Whether an id names a canonical gate (P6.192, R94): `create`, `update` and `validate` refuse
+   * an inline gate definition registering under one. Threaded from the composition root, which
+   * holds the gate manager; absent, no definition is checked.
+   */
+  isCanonicalGateId?: (gateId: string) => boolean;
 }
 
 export interface PromptResourceData {

@@ -277,7 +277,8 @@ export class McpToolRouter {
       this.frameworkManager,
       onRefresh,
       onRestart,
-      this.resourceFileLocator
+      this.resourceFileLocator,
+      (gateId) => this.gateManager.has(gateId)
     );
 
     // The loader's quarantine, bound by REFERENCE. Every later load writes through this same

@@ -776,13 +776,40 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    * Called from every mutually-exclusive exit branch that can follow an advance within this
    * request (deferred-verdict early exit, pending-review-verdict early exit, and the full capture
    * fall-through) — exactly one fires per call, so this never runs twice for the same request.
+   * The interrupt is re-measured here for the same reason: see {@link remeasureInterrupt}.
    */
   private async ensurePostAdvanceReview(context: ExecutionContext): Promise<void> {
+    this.remeasureInterrupt(context);
     const service = this.collaborators.gateEnhancementService;
     if (service === undefined || context.sessionContext === undefined) {
       return;
     }
     await service.ensurePostAdvanceReview(context, context.sessionContext);
+  }
+
+  /**
+   * Re-decide this call's interrupt from the node the run stands on AFTER the advance (P6.195,
+   * R95). `raiseInterrupt` decides before the capture advances, so on an advancing call its
+   * "remaining" counted the node the reply renders; the retry render, which does not advance,
+   * already excluded it. Re-deciding here gives both one meaning: the nodes after the rendered one.
+   * A call that did not advance stands where it did, and re-deciding changes nothing.
+   */
+  private remeasureInterrupt(context: ExecutionContext): void {
+    const raised = context.state.session.chainInterrupt;
+    const sessionId = context.sessionContext?.sessionId;
+    const session =
+      sessionId === undefined
+        ? undefined
+        : this.chainSessionStore.getSession(sessionId, context.getScopeOptions());
+    if (raised === undefined || session === undefined) {
+      return;
+    }
+    context.state.session.chainInterrupt = decideInterrupt({
+      ledger: session.unknownsLedger ?? [],
+      nodes: session.state.nodes,
+      currentNodeId: session.state.currentNodeId,
+      pauseOnBlocking: raised.paused,
+    });
   }
 
   /**

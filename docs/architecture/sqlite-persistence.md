@@ -532,6 +532,12 @@ reaches the caller (R87): each takes a copy of what it is about to change, and
 `working` in memory, so a retried cancel writes rather than answering "already cancelled" from a
 change the rows never received. A held lock keeps the change in memory, because the next persist
 writes it.
+What a copy cannot take back runs only after the persist returns (R93): clearing a removed run's
+step results and argument history, the run-ended and session-cleared callbacks, and recording a
+captured step's result. A clear or a create whose save rejects therefore releases nothing, and its
+retry releases once. Two mutators interleaving between one's copy and its rejected persist roll
+back together (accepted, as of 2026-09-27 · flips when a mutator-level lock or per-field restore
+lands).
 
 **Both connections set `busy_timeout` from one constant**, `STATE_DB_BUSY_TIMEOUT_MS` in
 `shared/utils/runtime-state-location.ts`, beside the two path segments and for the same reason: the

@@ -98,12 +98,20 @@ export class TemporaryGateRegistry {
   private gateOwners: Map<string, string>;
   private maxMemoryGates: number;
   private defaultExpirationMs: number;
+  private isCanonicalGateId: ((gateId: string) => boolean) | undefined;
 
   constructor(
     logger: Logger,
     options: {
       maxMemoryGates?: number;
       defaultExpirationMs?: number;
+      /**
+       * Whether an id names a canonical gate (P6.193, R94). Gate loading reads this registry
+       * first and it is keyed by id per process, so a temporary gate under a canonical id would
+       * replace that gate's criteria for every run while it lived: `createTemporaryGate` refuses
+       * one, whichever caller chose the id. Absent, no id is refused.
+       */
+      isCanonicalGateId?: (gateId: string) => boolean;
     } = {}
   ) {
     this.logger = logger;
@@ -114,6 +122,7 @@ export class TemporaryGateRegistry {
     this.gateOwners = new Map();
     this.maxMemoryGates = options.maxMemoryGates || 1000;
     this.defaultExpirationMs = options.defaultExpirationMs || 3600000; // 1 hour
+    this.isCanonicalGateId = options.isCanonicalGateId;
 
     this.logger.debug('[TEMP GATE REGISTRY] Initialized with max gates:', this.maxMemoryGates);
   }
@@ -126,11 +135,22 @@ export class TemporaryGateRegistry {
     scopeId?: string,
     options: { onIdCollision?: 'throw' | 'fresh-id' } = {}
   ): string {
+    if (definition.id !== undefined && this.shadowsCanonicalGate(definition.id)) {
+      throw new Error(
+        `A temporary gate may not shadow a canonical gate id ('${definition.id}'). ` +
+          'Give it another id or name.'
+      );
+    }
     return this.storeGate(
       this.chooseGateId(definition.id, options.onIdCollision),
       definition,
       scopeId
     );
+  }
+
+  /** Whether `gateId` names a canonical gate, which no temporary gate may register under. */
+  shadowsCanonicalGate(gateId: string): boolean {
+    return this.isCanonicalGateId?.(gateId) === true;
   }
 
   /**
@@ -553,10 +573,7 @@ export class TemporaryGateRegistry {
  */
 export function createTemporaryGateRegistry(
   logger: Logger,
-  options?: {
-    maxMemoryGates?: number;
-    defaultExpirationMs?: number;
-  }
+  options?: ConstructorParameters<typeof TemporaryGateRegistry>[1]
 ): TemporaryGateRegistry {
   return new TemporaryGateRegistry(logger, options);
 }

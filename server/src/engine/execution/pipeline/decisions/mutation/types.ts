@@ -164,8 +164,10 @@ export interface ChainInterrupt {
    * heuristic: the server reacts to what an observation declares, never to what it mentions.
    */
   readonly affectedStepIds: readonly string[];
-  /** The run's nodes strictly after the current one, in run order, AFTER any insertion applied
-   * on this same call. This is the plan the caller is being invited to replace. */
+  /** The run's nodes strictly after the node the reply renders, in run order, AFTER any
+   * insertion applied on this same call — on a call that advances, the node it advances to, so
+   * the retry render and the advancing reply mean one thing (R95). This is the plan the caller is
+   * being invited to replace. */
   readonly remainingNodes: readonly InterruptNodeSummary[];
   /** Mirrors `budget.pauseOnBlocking` (D-2). `true` means the run is holding on the synthetic
    * {@link UNKNOWN_INTERRUPT_GATE_ID} review; `false` means the interrupt is advisory and the

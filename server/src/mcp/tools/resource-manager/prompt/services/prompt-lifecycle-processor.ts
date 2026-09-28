@@ -34,6 +34,7 @@ import {
   type PromptWriteDefect,
   applyChainStepOperation,
   diagnosePromptWrite,
+  type PromptWriteChecks,
   resolveUnsetFields,
   validateChainStepReferences,
   validateRequiredFields,
@@ -72,8 +73,17 @@ export class PromptLifecycleProcessor {
     this.comparisonEngine = context.comparisonEngine;
     this.textDiffService = context.textDiffService;
     this.fileOperations = context.fileOperations;
-    this.draftService = new PromptDraftService(() => this.getConvertedPrompts());
+    this.draftService = new PromptDraftService(
+      () => this.getConvertedPrompts(),
+      this.writeChecks()
+    );
     this.receiptService = new PromptMutationReceiptService(context);
+  }
+
+  /** The checks a produced prompt answers to beyond its own text (P6.192). */
+  private writeChecks(): PromptWriteChecks {
+    const { isCanonicalGateId } = this.context.dependencies;
+    return isCanonicalGateId !== undefined ? { isCanonicalGateId } : {};
   }
 
   async validatePrompt(args: PromptDraftInput): Promise<ToolResponse> {
@@ -644,7 +654,7 @@ export class PromptLifecycleProcessor {
     // consumes nothing — the write path's own `ResourceVerificationService` check
     // (file-operations.ts:183) only fires after a version has already been spent, and it cannot see
     // a template-syntax error at all because YAML schema validation does not compile Nunjucks.
-    const diagnosis = diagnosePromptWrite(beforeContent, promptData);
+    const diagnosis = diagnosePromptWrite(beforeContent, promptData, this.writeChecks());
     if (diagnosis.blocking.length > 0) {
       const details = diagnosis.blocking.map((defect) => `• ${defect.message}`).join('\n');
       return this.blockedUpdate(

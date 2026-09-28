@@ -71,6 +71,38 @@ export function formatShellVerifyToken(shellVerify: ShellVerifyGate): string {
 }
 
 /**
+ * Refuse a gate criterion or verify command that holds a quote character (P6.196, R96).
+ *
+ * The gate grammar delimits the text with `"` or `'` and has no escape, so a quote inside it ended
+ * the text early: `:: "it's fine"` parsed as the criterion `it`, with ` s fine"` left in the args,
+ * and nothing said so. A quote inside shows as a closing quote that differs from the opening one,
+ * or as a closing quote with more text glued to it. Thrown before any strategy runs, in the shape
+ * of `rejectReservedOperators`, so the refusal reaches the caller instead of a strategy fallback.
+ */
+export function rejectQuoteInGateText(command: string): void {
+  for (const match of command.matchAll(OPERATOR_PATTERNS.gate.pattern)) {
+    const text = match[3] ?? match[4] ?? match[5] ?? '';
+    const end = match.index + match[0].length;
+    const next = command.charAt(end);
+    const close = command.charAt(end - 1);
+    // Unquoted (`:: don't`): a quote right after the text. Quoted: the closing quote differs
+    // from the opening one, or text is glued to it — either way the closing quote was inside.
+    const quote =
+      match[5] !== undefined
+        ? (/["']/.exec(next)?.[0] ?? '')
+        : command[end - text.length - 2] !== close || /[\w"']/.test(next)
+          ? close
+          : '';
+    if (quote !== '') {
+      const kind = match[2] === 'verify' ? 'verify command' : 'criterion';
+      throw new ValidationError(
+        `Operator "${match[1] ?? '::'}" cannot take a ${kind} containing the quote character ${quote}. The text is delimited by " or ' and has no escape: reword it without ${quote}.`
+      );
+    }
+  }
+}
+
+/**
  * Parser responsible for detecting and structuring symbolic command operators.
  *
  * The parser keeps regex-based detection isolated from the unified parser so that
