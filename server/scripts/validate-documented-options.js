@@ -70,6 +70,7 @@ const NOT_OUR_OPTIONS = new Set([
   '--test', // truncation of jest's --testPathPattern
   '--run', // truncation of jest's --runInBand (the token stops at the capital I)
   '--experimental-vm-modules', // node runtime flag; jest needs it for ESM test files
+  '--max-old-space-size', // node/V8 heap ceiling; test:unit and test:coverage set it (CONTRIBUTING)
   '--prefix', // npm --prefix server run build
   // Generic placeholder in "All flags accept both `--flag=value` and `--flag value`".
   '--flag',
