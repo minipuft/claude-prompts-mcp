@@ -16,13 +16,17 @@
  *       `const <id> = [this.]create<Name>Stage(`. A factory defined as a method in the same file
  *       resolves through its `return new <Class>(`; any other factory resolves to its name minus
  *       `create`. This yields N and the ordered class names.
- *   (b) the fenced box under `### Stage Execution Order` in `docs/architecture/overview.md`: N rows
- *       numbered 1…N in order, each naming its class with the `Stage` suffix stripped.
+ *   (b) the fenced box under a `### Stage Execution Order` or `#### Stage Execution Order`
+ *       heading in `docs/architecture/overview.md`: N rows numbered 1…N in order, each naming its
+ *       class with the `Stage` suffix stripped. The heading level itself is not checked — only
+ *       that it is H3 or H4 and its text matches exactly.
  *   (c) `server/src/engine/execution/pipeline/stages/`: exactly N `NN-*.ts` files with contiguous
  *       prefixes 01…N, file NN exporting class NN or its `create<Class>` factory.
  *   (d) every "N stage(s)" / "(N stg)" numeral in CLAUDE.md, AGENTS.md, README.md and
  *       docs/**\/*.md equals N, except the sites in NUMERAL_ALLOWLIST, each with a reason. An
- *       allowlist entry that no longer matches anything is itself a violation.
+ *       allowlist entry that no longer matches anything is itself a violation. The same file read
+ *       for (a) — pipeline-builder.ts's own comments — is checked too, widened to "N+ stage(s)"
+ *       ("23+ stages" is still a numeral claim about the array's length, just phrased as a floor).
  *
  * REFUSES RATHER THAN PASSES
  * This is a text parser over a bounded shape, not a TypeScript parser. If the array is missing,
@@ -69,11 +73,13 @@ const NUMERAL_DOCS_DIR = 'docs';
 const MIN_STAGES = 10;
 
 const STAGES_OPEN = /const\s+stages\s*:\s*readonly\s+PipelineStage\[\]\s*=\s*\[/;
-const TABLE_HEADING = /^###\s+Stage Execution Order\s*$/;
+const TABLE_HEADING = /^#{3,4}\s+Stage Execution Order\s*$/;
 const TABLE_ROW = /^│\s*(\d+)\.\s+([A-Za-z][A-Za-z0-9]*)\*?(?:\s|│)/;
 const STAGE_FILE = /^(\d{2})-.*\.ts$/;
 const TEST_FILE = /\.(test|spec)\.ts$/;
 const NUMERAL_SHAPES = [/\b(\d+) stages?\b/g, /\((\d+) stg\)/g];
+/** Widened for BUILDER_PATH only: "23+ stages" is still a numeral claim about the array length. */
+const BUILDER_NUMERAL_SHAPES = [/\b(\d+)\+? stages?\b/g, /\((\d+) stg\)/g];
 
 /**
  * Numeral sites that are not claims about the length of the `stages` array.
@@ -192,17 +198,21 @@ function resolveStageClasses(builderSource) {
 
 const stripStage = (className) => className.replace(/Stage$/, '');
 
-/** Rows of the stage box under `### Stage Execution Order`. Throws Refusal when absent. */
+/** Rows of the stage box under an H3 or H4 `Stage Execution Order` heading. Throws Refusal when absent. */
 function parseDocTable(overviewSource) {
   const lines = overviewSource.split('\n');
   const heading = lines.findIndex((l) => TABLE_HEADING.test(l));
   if (heading === -1) {
-    throw new Refusal(`${OVERVIEW_PATH}: no \`### Stage Execution Order\` heading`);
+    throw new Refusal(
+      `${OVERVIEW_PATH}: no \`### Stage Execution Order\` / \`#### Stage Execution Order\` heading`
+    );
   }
   const fenceOpen = lines.findIndex((l, i) => i > heading && /^\s*```/.test(l));
   const fenceClose = lines.findIndex((l, i) => i > fenceOpen && /^\s*```/.test(l));
   if (fenceOpen === -1 || fenceClose === -1) {
-    throw new Refusal(`${OVERVIEW_PATH}: no fenced box under \`### Stage Execution Order\``);
+    throw new Refusal(
+      `${OVERVIEW_PATH}: no fenced box under the \`Stage Execution Order\` heading`
+    );
   }
   const rows = [];
   for (let i = fenceOpen + 1; i < fenceClose; i++) {
@@ -286,13 +296,17 @@ function checkStageFiles(files, classes) {
   return { violations, shapes };
 }
 
-/** `docs` is `[{ file, text }]`. Every numeral must equal `n` unless an allowlist entry covers it. */
+/**
+ * `docs` is `[{ file, text, shapes? }]` — `shapes` defaults to NUMERAL_SHAPES; the BUILDER_PATH
+ * entry passes BUILDER_NUMERAL_SHAPES so a comment's "N+" phrasing is checked too. Every numeral
+ * must equal `n` unless an allowlist entry covers it.
+ */
 function checkNumerals(docs, n, allowlist) {
   const violations = [];
   const used = new Set();
-  for (const { file, text } of docs) {
+  for (const { file, text, shapes = NUMERAL_SHAPES } of docs) {
     text.split('\n').forEach((line, i) => {
-      for (const shape of NUMERAL_SHAPES) {
+      for (const shape of shapes) {
         for (const match of line.matchAll(shape)) {
           if (Number(match[1]) === n) continue;
           const excuse = allowlist.findIndex((a) => a.file === file && line.includes(a.contains));
@@ -362,7 +376,11 @@ function validate({ builderSource, overviewSource, stageFiles, docs, allowlist }
     violations: [
       ...checkDocTable(rows, classes),
       ...files.violations,
-      ...checkNumerals(docs, classes.length, allowlist),
+      ...checkNumerals(
+        [...docs, { file: BUILDER_PATH, text: builderSource, shapes: BUILDER_NUMERAL_SHAPES }],
+        classes.length,
+        allowlist
+      ),
     ],
   };
 }
@@ -384,13 +402,14 @@ const FIXTURE_NAMES = [
   'Lima',
 ];
 
-function fixture() {
+function fixture(headingLevel = 3) {
   const decls = FIXTURE_NAMES.map((name, i) => {
     if (i === 2) return `    const ${name.toLowerCase()}Stage = createCharlieStage(deps);`;
     if (i === 3) return `    const ${name.toLowerCase()}Stage = this.createDeltaStage();`;
     return `    const ${name.toLowerCase()}Stage = new ${name}Stage(deps);`;
   });
   const builderSource = [
+    `// Wiring produces all ${FIXTURE_NAMES.length} stages.`,
     'class Builder {',
     '  build() {',
     ...decls,
@@ -406,7 +425,7 @@ function fixture() {
   ].join('\n');
   const classes = FIXTURE_NAMES.map((n, i) => (i === 3 ? 'DeltaResolutionStage' : `${n}Stage`));
   const overviewSource = [
-    '### Stage Execution Order',
+    `${'#'.repeat(headingLevel)} Stage Execution Order`,
     '',
     '```',
     '┌──┐',
@@ -493,6 +512,33 @@ function runSelfTest() {
       label: 'a "(N stg)" numeral off by one fails',
       input: { ...fixture(), docs: [{ file: 'README.md', text: 'engine (11 stg)' }] },
       expect: (r) => assert.ok(r.violations.some((v) => v.where === 'README.md:1')),
+    },
+    {
+      label: 'a pipeline-builder.ts comment claiming N+1 stages fails, naming file:line',
+      input: (() => {
+        const f = fixture();
+        return {
+          ...f,
+          builderSource: f.builderSource.replace(
+            `// Wiring produces all ${FIXTURE_NAMES.length} stages.`,
+            `// Wiring produces all ${FIXTURE_NAMES.length + 1}+ stages.`
+          ),
+        };
+      })(),
+      expect: (r) => assert.ok(r.violations.some((v) => v.where === `${BUILDER_PATH}:1`)),
+    },
+    {
+      label: 'an H4 "Stage Execution Order" heading is accepted',
+      input: fixture(4),
+      expect: (r) => {
+        assert.strictEqual(r.refused, null);
+        assert.deepStrictEqual(r.violations, []);
+      },
+    },
+    {
+      label: 'an H2 "Stage Execution Order" heading is refused, not silently skipped',
+      input: fixture(2),
+      expect: (r) => assert.match(r.refused ?? '', /no `### Stage Execution Order`/),
     },
     {
       label: 'a stale allowlist entry fails',
