@@ -1545,4 +1545,86 @@ describe('Export Command Integration', () => {
       expect(skill).not.toContain('Omitted');
     });
   });
+
+  // ── P6.259: registration writes keep the operator's skills-sync.yaml ───────
+
+  describe('P6.259 an export registers a key without rewriting the rest of skills-sync.yaml', () => {
+    /**
+     * R140. `applyRegistrationMutations` wrote the whole config back with `yaml.dump` behind a
+     * fixed header, so every comment, the key order and every flow-style list were lost on the
+     * first export that registered a key. This fixture is hand-authored, never produced by the
+     * writer under test: a leading comment, `overrides` before `registrations`, `codex` before
+     * `claude-code`, a flow-style list with a trailing comment, and a trailing last-line comment.
+     */
+    function handAuthoredConfig(): string {
+      return [
+        '# Skills for this workspace, edited by hand: keep these notes.',
+        'overrides:',
+        '  claude-code:',
+        '    outputDir:',
+        `      user: ${outputDir}`,
+        `      project: ${outputDir}`,
+        'registrations:',
+        '  codex:',
+        '    project: [prompt:alpha/one, prompt:beta/two] # flow style on purpose',
+        '  claude-code:',
+        '    user:',
+        '      - prompt:general/kept',
+        '# end of registrations',
+        '',
+      ].join('\n');
+    }
+
+    async function exportOne(id: string) {
+      const out = silentOutput();
+      await runSkillsSyncCommand(
+        { command: 'export', client: 'claude-code', scope: 'user', id } as SkillsSyncOptions,
+        out,
+        resolveSkillsSyncPaths()
+      );
+      return out;
+    }
+
+    it('(a) registering one key keeps every comment, the key order and the flow list', async () => {
+      await writePrompt('general', 'kept');
+      await writePrompt('general', 'plain');
+      const configPath = path.join(serverRoot, 'skills-sync.yaml');
+      const fixture = handAuthoredConfig();
+      await writeFile(configPath, fixture);
+
+      const out = await exportOne('plain');
+      expect(out.logs.join('\n')).toContain('Updated skills-sync.yaml registrations (+1 key(s))');
+
+      // Measured by diff against the fixture, line by line. A key appended to a list is a
+      // STRUCTURAL edit, so `serializeYamlPreservingSource` takes its document tier, not its
+      // byte-exact CST tier: beside the added entry that tier pads the untouched flow list's
+      // brackets and puts a blank line before the trailing comment. Both are pinned here as
+      // measured, so a change to either tier is seen. Every comment, the key order and the
+      // flow style survive; `yaml.dump` kept none of them.
+      const before = fixture.split('\n');
+      const expected = [
+        ...before.slice(0, 8),
+        '    project: [ prompt:alpha/one, prompt:beta/two ] # flow style on purpose',
+        ...before.slice(9, 12),
+        '      - prompt:general/plain',
+        '',
+        ...before.slice(12),
+      ];
+      expect((await readFile(configPath, 'utf-8')).split('\n')).toEqual(expected);
+    });
+
+    it('(b) control: an export that registers nothing leaves the file byte-identical', async () => {
+      // This control never reaches the writer: `applyRegistrationMutations` returns before
+      // serializing when no key is added. It proves the export leaves the file alone; the
+      // writer's fidelity rests on (a), the twin that reaches it.
+      await writePrompt('general', 'kept');
+      const configPath = path.join(serverRoot, 'skills-sync.yaml');
+      const fixture = handAuthoredConfig();
+      await writeFile(configPath, fixture);
+
+      const out = await exportOne('kept');
+      expect(out.logs.join('\n')).not.toContain('Updated skills-sync.yaml registrations');
+      expect(await readFile(configPath, 'utf-8')).toBe(fixture);
+    });
+  });
 });
