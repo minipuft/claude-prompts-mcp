@@ -65,3 +65,9 @@ Plan: `plans/architecture-docs-sync-2026-09-27.md`. Rulings live in the plan's t
 - DEV-T1-8 amended: the 1.8 worker reports the foreign `git checkout --` hit its two files TWICE, each time silently dropping part of its edits (whole script; then one comment fix; then one fixture line), caught only by re-reading and diffing. 1.5's handoff had reported one event. The memory `feedback_shared_tree_checkout_foreign_paths` and the 1.9 brief now name `checkout`/`restore`/`stash` on any path as forbidden in shared-tree mode.
 - Worker feedback (accepted for the next shared-tree slice): in shared-tree mode a worker re-reads and re-diffs its files after ANY external notification before reporting done; and the planner should weigh per-row branches even for small rows — the class of loss is uncommitted-interval only, and a branch per row closes it.
 - Planner writeback fix: row 1.9's Change text carried an unescaped `|` inside an `rg` alternation, which split the row into the wrong columns (the `feedback_table_row_insert_anchor` shape: a table row that renders wrong vanishes from the row parser while every gate stays green). Escaped as `\|`.
+
+## 2026-09-27 · handoff 1.9 (sonnet) and boundary start
+
+- Accepted after re-running the stage validator and reading the box; committed `fbdb1a4d2` together with the CHANGELOG bullets (Added ×2, Documentation ×1). DEV-T1-10: the worker filled all four rows of the box column rather than the two the brief named, matching the sibling columns and the real `framework/{id}` URI — accepted; the brief's "two lines" was a miscount of the box's grammar.
+- Boundary snapshot is `fbdb1a4d2`, tree clean. Already green on it: `typecheck`, `lint:ratchet` (2533/733, no regression), `typecheck:tests:ratchet` (341, no regression). Running: `test:all`, `validate:all`.
+- `git diff origin/main --stat` reviewed for out-of-slice edits before the PR (recorded below when measured).
