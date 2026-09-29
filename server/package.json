@@ -196,7 +196,7 @@
     "validate:renovate-extraction:self-test": "node scripts/validate-renovate-extraction.js --self-test",
     "validate:push-scope:self-test": "node ../scripts/classify-validation-scope.js --self-test",
     "setup:python": "cd .. && pip install -r requirements-dev.txt",
-    "validate:python": "cd .. && ruff check hooks/ && ruff format --check hooks/ && pyrefly check --baseline hooks/.pyrefly-baseline.json && python3 -m pytest hooks/tests",
+    "validate:python": "cd .. && ruff check hooks/ && ruff format --check hooks/ && pyrefly check --baseline hooks/.pyrefly-baseline.json && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest hooks/tests",
     "validate:all": "node scripts/run-validation-suite.js",
     "verify:action-metadata": "tsx scripts/verify-action-inventory.ts",
     "dev:graph": "madge --ts-config ./tsconfig.json --extensions ts src --image graph.svg",

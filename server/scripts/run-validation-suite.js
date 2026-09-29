@@ -196,7 +196,8 @@ export const SUITE = [
     reads: ['file', 'spawn', 'walk'],
     converse: 'unexamined',
   },
-  // ruff and pytest write .ruff_cache/ and hooks/__pycache__/, both gitignored. The only
+  // ruff and pytest write their caches under .cache/ (gitignored); pytest runs with
+  // PYTHONDONTWRITEBYTECODE=1, so it writes no __pycache__ directory under hooks/. The only
   // member of the suite that writes anything at all.
   {
     script: 'validate:python',
