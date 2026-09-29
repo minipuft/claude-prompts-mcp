@@ -66,6 +66,7 @@ function createContext() {
         raw: 'GATE_REVIEW: PASS - fine',
         source: 'gate_verdict' as const,
       }),
+      resolveReviewMaxAttempts: () => undefined,
       createReview: async (_sessionId: string, kind: string, nodeId: string) => ({
         nodeId,
         kind,
@@ -126,6 +127,35 @@ describe('GateVerdictProcessor defers every advance it decides', () => {
     // applied, so "not called" is evidence about timing rather than about a store nobody wired.
     await processor.applyDeferredAdvance(context, result.deferredAdvance!);
     expect(store.advanceStep).toHaveBeenCalledWith('session-1', 'node-1');
+  });
+
+  test('R167: a review a verdict opens carries the budget of the one step-path resolver', async () => {
+    const context = createContext();
+    const authority = (
+      context as never as {
+        gateEnforcement: {
+          resolveReviewMaxAttempts: (...args: unknown[]) => number | undefined;
+          createReview: (...args: unknown[]) => unknown;
+        };
+      }
+    ).gateEnforcement;
+    const resolve = jest.spyOn(authority, 'resolveReviewMaxAttempts').mockReturnValue(3);
+    const createReview = jest.spyOn(authority, 'createReview');
+
+    await processor.processReviewVerdict(
+      context,
+      session,
+      { sessionId: 'session-1', currentStep: 1 } as never,
+      'an answer'
+    );
+
+    expect(resolve).toHaveBeenCalledWith(context, 'node-1', 1);
+    expect(createReview).toHaveBeenCalledWith(
+      'session-1',
+      'gate',
+      'node-1',
+      expect.objectContaining({ gateIds: ['g1'], maxAttempts: 3 })
+    );
   });
 
   test('R19: a PASS with no answer and no open review is refused and opens no review', async () => {

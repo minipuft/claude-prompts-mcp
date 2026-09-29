@@ -56,7 +56,7 @@ export interface ConvertedPrompt {
   chainSteps?: ChainStep[];
   /**
    * Run-level budget declared by this chain's YAML (Tier A), same shape a submitted Workflow IR
-   * carries. Projected onto `ParsedCommand.budget` by the stage-04 chain projection, which is
+   * carries. Projected onto `ParsedCommand.budget` by `projectChainPromptSteps`, which is
    * what makes an IR-only knob (`maxInsertions`, and later `pauseOnBlocking`) reach a template
    * chain. `edges` is deliberately NOT carried: the loader has already linearized them into
    * `chainSteps` order, so nothing downstream of the loader ever sees an edge.

@@ -192,17 +192,19 @@ export class ChainOperatorExecutor {
       }
     }
 
-    // On retry, abbreviate task content — the LLM already has the full task above
-    if (isRetry) {
-      originalContent =
-        '## Review Context\n\nReview the original task and your output above against the gate criteria.\n\n---\n';
-    }
-
     // Build gate guidance using proper renderer for framework-aware, category-aware rendering.
     // Not for an exhausted review (P6.45): the guidance asks for a verdict, which that review
     // refuses (R9). Its render carries the "Retry Limit Reached" moves instead, as the
     // assembler's CTA and footer already do (P6.23).
     const reviewExhausted = input.review.phase === 'exhausted';
+
+    // On retry, abbreviate task content — the LLM already has the full task above. An exhausted
+    // review lists no criteria, so it asks for no review against them (R165).
+    if (isRetry) {
+      originalContent = reviewExhausted
+        ? ''
+        : '## Review Context\n\nReview the original task and your output above against the gate criteria.\n\n---\n';
+    }
     let gateGuidance = '';
     if (reviewExhausted) {
       this.logger.debug('[SymbolicChain] Gate guidance withheld: the review is exhausted');

@@ -1556,6 +1556,411 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
   });
 
   /**
+   * P6.68 / R164. MEASURED 2026-09-29 on `4cf50720`: `>>p :: "CRIT"` answered with a PASS, and
+   * `>>p :: verify:"true"` or `%clean >>p :: "CRIT"` answered, each left the run `completed` and
+   * replied "Execution complete." with `Continue: chain_id=…, user_response=…` above its `Re-run:`.
+   * The single-prompt reply offered the continue move whenever no gate action was primary, never
+   * asking whether the run had ended. A completed run's reply offers the re-run only; a chain
+   * run's completion never carried the line.
+   */
+  describe('P6.68: the reply that completes a run offers no Continue', () => {
+    const runStatus = (chainId: string): string | undefined => {
+      const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+      try {
+        return (
+          db.prepare('SELECT run_status FROM chain_runs WHERE chain_id = ?').get(chainId) as
+            { run_status: string } | undefined
+        )?.run_status;
+      } finally {
+        db.close();
+      }
+    };
+
+    test('a gated single prompt completed by its PASS offers the Re-run and no Continue', async () => {
+      const run = await start({ command: '>>sv_a :: "CRIT-P668"' });
+      const done = await run.call({ user_response: 'out', gate_verdict: PASS });
+      expect(runStatus(run.chainId)).toBe('completed');
+      expect(done).toContain('Execution complete.');
+      expect(done).toContain(`Re-run: \`>>sv_a topic:"" :: 'CRIT-P668'\``);
+      expect(done).not.toContain('Continue:');
+    }, 120000);
+
+    test('a chain prompt completed by its last PASS offers no Continue', async () => {
+      const run = await start({ command: '>>sv_pair :: "CRIT-P668c"' });
+      await run.call({ user_response: 'A', gate_verdict: PASS });
+      const done = await run.call({ user_response: 'B', gate_verdict: PASS });
+      expect(runStatus(run.chainId)).toBe('completed');
+      expect(done).toContain('Chain execution complete');
+      expect(done).not.toContain('Continue:');
+    }, 120000);
+
+    test('control: a working run whose reply carries no gate action still offers Continue', async () => {
+      const run = await start({ command: '>>sv_a :: verify:"false"' });
+      expect(runStatus(run.chainId)).toBe('working');
+      expect(run.text).toContain(`Continue: \`chain_id="${run.chainId}", user_response=`);
+    }, 120000);
+  });
+
+  /**
+   * P6.72 / R165. MEASURED 2026-09-29 on `e43416c8`: a step with a blocking gate and a command
+   * criterion, answered with no declared sections and failed twice, exhausted its review (2/2).
+   * The exhausted render withheld the gate guidance and every criterion (P6.45), yet still said
+   * "Review … against the gate criteria", "Inline Gate Priority: … Fix them", listed the fix hints
+   * and quoted the last review ("misses CRIT-…", a criterion the render no longer lists). An
+   * exhausted review takes only a `gate_action`: its render carries the moves and nothing that
+   * asks for a fix against criteria it dropped.
+   */
+  describe('P6.72: an exhausted review render names nothing it no longer lists', () => {
+    const phase = (chainId: string): Record<string, string> => {
+      const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+      try {
+        const row = db.prepare('SELECT state FROM chain_runs WHERE chain_id = ?').get(chainId) as
+          { state: string } | undefined;
+        const reviews = (
+          JSON.parse(row?.state ?? '{}') as {
+            reviews?: Record<string, { phase: string }>;
+          }
+        ).reviews;
+        return Object.fromEntries(
+          Object.entries(reviews ?? {}).map(([node, review]) => [node, review.phase])
+        );
+      } finally {
+        db.close();
+      }
+    };
+    const FIX_LINES = [
+      'against the gate criteria',
+      'Inline Gate Priority',
+      'Ensure your response includes',
+      'Last Review',
+    ];
+
+    beforeAll(async () => {
+      const authored = await tool('resource_manager', {
+        resource_type: 'prompt',
+        action: 'create',
+        id: 'sv_p672',
+        category: 'general',
+        name: 'sv_p672',
+        description: 'e2e chain of default-gated steps, the first blocking-gated',
+        user_message_template: 'CHAIN-OWN-TEMPLATE',
+        gate_configuration: OPT_OUT,
+        chain_steps: [
+          { promptId: 'sv_d', stepName: 'A', inlineGateIds: ['sv-block'] },
+          { promptId: 'sv_e', stepName: 'B' },
+        ],
+      });
+      if (authored.isError) throw new Error(authored.text);
+    }, 120000);
+
+    async function failTwice(criterion: string): Promise<{ inBudget: string; spent: string }> {
+      const run = await start({ command: `>>sv_p672 :: "${criterion}"` });
+      const verdict = `GATE_REVIEW: FAIL - misses ${criterion}`;
+      const inBudget = await run.call({ user_response: 'no sections', gate_verdict: verdict });
+      expect(phase(run.chainId)).toEqual({ a: 'awaiting-verdict' });
+      const spent = await run.call({ user_response: 'still none', gate_verdict: verdict });
+      expect(phase(run.chainId)).toEqual({ a: 'exhausted' });
+      return { inBudget, spent };
+    }
+
+    test('the exhausted render carries the moves and no fix line, hint or quoted criterion', async () => {
+      const { spent } = await failTwice('CRIT-P672A');
+      expect(spent).toContain('Retry Limit Reached');
+      expect(spent).toContain('gate_action="retry" | gate_action="skip"');
+      for (const line of FIX_LINES) expect(spent).not.toContain(line);
+      expect(spent).not.toContain('CRIT-P672A');
+      expect(spent).not.toContain('GUIDANCE-sv-block');
+    }, 120000);
+
+    test('control: the in-budget retry render still carries its criteria, hints and last review', async () => {
+      const { inBudget } = await failTwice('CRIT-P672B');
+      expect(inBudget).not.toContain('Retry Limit Reached');
+      for (const line of FIX_LINES) expect(inBudget).toContain(line);
+      expect(inBudget).toContain('CRIT-P672B');
+      expect(inBudget).toContain('GUIDANCE-sv-block');
+    }, 120000);
+  });
+
+  /**
+   * P6.90 / R166 PIN (as of 2026-09-29 · flips when any path opens a review with an empty
+   * `gateIds`). MEASURED 2026-09-25 on `a99a6ba1`: a FAIL on a gateless step opened a review with
+   * `gateIds: []` and its exhaustion printed "failed after 2 attempts: ****". MEASURED 2026-09-29
+   * on `ab6a0e12`: the bare FAIL, the answered FAIL and a gateless single prompt's FAIL are each
+   * refused by name (R38) and open no review, so no exhausted render has an empty list to print.
+   */
+  describe('P6.90: no exhausted render prints an empty bold gate list', () => {
+    const reviewPhases = (chainId: string): Record<string, [string[], string]> => {
+      const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+      try {
+        const row = db.prepare('SELECT state FROM chain_runs WHERE chain_id = ?').get(chainId) as
+          { state: string } | undefined;
+        const reviews = (
+          JSON.parse(row?.state ?? '{}') as {
+            reviews?: Record<string, { gateIds: string[]; phase: string }>;
+          }
+        ).reviews;
+        return Object.fromEntries(
+          Object.entries(reviews ?? {}).map(([node, r]) => [node, [r.gateIds, r.phase]])
+        );
+      } finally {
+        db.close();
+      }
+    };
+
+    test('a FAIL on a gateless step is refused on every call and opens no review', async () => {
+      const run = await start({ command: '>>sv_pair' });
+      const replies = [
+        await tool('prompt_engine', { chain_id: run.chainId, gate_verdict: FAIL }),
+        await tool('prompt_engine', {
+          chain_id: run.chainId,
+          user_response: 'A',
+          gate_verdict: FAIL,
+        }),
+        await tool('prompt_engine', {
+          chain_id: run.chainId,
+          user_response: 'A',
+          gate_verdict: FAIL,
+        }),
+      ];
+      for (const reply of replies) {
+        expect(reply.isError).toBe(true);
+        expect(reply.text).toContain(
+          'Step 1 carries no gates, so a FAIL verdict has nothing to grade'
+        );
+        expect(reply.text).not.toContain('****');
+      }
+      expect(reviewPhases(run.chainId)).toEqual({});
+    }, 120000);
+
+    test('control: an exhausted review of a gated step prints its bolded gate list', async () => {
+      const run = await start({ command: '>>sv_chain' });
+      await run.call({ user_response: 'A out', gate_verdict: FAIL });
+      const spent = await run.call({ user_response: 'A again', gate_verdict: FAIL });
+      expect(reviewPhases(run.chainId)).toEqual({ a: [['sv-block'], 'exhausted'] });
+      expect(spent).toContain('failed after 2 attempts: **sv-block**');
+      expect(spent).not.toContain('****');
+    }, 120000);
+  });
+
+  /**
+   * P6.87 / R167. MEASURED 2026-09-29 on `48d96158`: a gate declaring `retry_config.max_attempts`
+   * 3, activated by category, exhausted a CHAIN step's review (opened at render, the step path)
+   * after 3 FAILs, and a SINGLE prompt's review (opened by its first FAIL, the verdict path) after
+   * 2 — the verdict path passed no budget, so the review took the built-in default. Now both paths
+   * read `GateEnforcementAuthority.resolveReviewMaxAttempts`.
+   *
+   * PIN (as of 2026-09-29 · flips when a gate's `retry_config` is read for a gate that re-enters a
+   * resumed call as `prompt-config`): the verdict path still exhausts that single prompt after 2.
+   * On the call that opens its review the prompt's persisted gate list re-enters as planned
+   * (`prompt-config`), and the accumulator carries a gate's retry limit only for a `registry-auto`
+   * entry, so the one resolver has no gate limit to read there. The limit-2 twin cannot tell the
+   * two apart (the default is 2); the limit-3 control is what says the probe reads a limit.
+   */
+  describe('P6.87: a review exhausts after the same FAILs on the step and the verdict path', () => {
+    const review = (chainId: string): [number, number, string] | undefined => {
+      const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+      try {
+        const row = db.prepare('SELECT state FROM chain_runs WHERE chain_id = ?').get(chainId) as
+          { state: string } | undefined;
+        const reviews = (
+          JSON.parse(row?.state ?? '{}') as {
+            reviews?: Record<string, { attemptCount: number; maxAttempts: number; phase: string }>;
+          }
+        ).reviews;
+        const only = Object.values(reviews ?? {})[0];
+        return only === undefined ? undefined : [only.attemptCount, only.maxAttempts, only.phase];
+      } finally {
+        db.close();
+      }
+    };
+
+    /** The FAIL on which the run's one review reached `exhausted`, and the state after each. */
+    async function failUntilExhausted(command: string): Promise<{
+      openedAtStart: boolean;
+      trail: Array<[number, number, string] | undefined>;
+    }> {
+      const run = await start({ command });
+      const openedAtStart = review(run.chainId) !== undefined;
+      const trail: Array<[number, number, string] | undefined> = [];
+      for (let attempt = 1; attempt <= 4; attempt++) {
+        await run.call({ user_response: `answer ${attempt}`, gate_verdict: FAIL });
+        trail.push(review(run.chainId));
+        if (trail.at(-1)?.[2] === 'exhausted') break;
+      }
+      return { openedAtStart, trail };
+    }
+
+    beforeAll(async () => {
+      const author = async (args: Record<string, unknown>): Promise<void> => {
+        const result = await tool('resource_manager', args);
+        if (result.isError) throw new Error(result.text);
+      };
+      await author({
+        resource_type: 'gate',
+        action: 'create',
+        id: 'p87-plain',
+        name: 'p87-plain',
+        description: 'blocking, no retry_config: opens the single prompt a session',
+        guidance: 'GUIDANCE-p87-plain',
+        enforcement_mode: 'blocking',
+      });
+      for (const limit of [2, 3]) {
+        const category = `p87cat${limit}`;
+        await author({
+          resource_type: 'gate',
+          action: 'create',
+          id: `p87-lim${limit}`,
+          name: `p87-lim${limit}`,
+          description: `blocking, retry limit ${limit}`,
+          guidance: `GUIDANCE-p87-lim${limit}`,
+          enforcement_mode: 'blocking',
+          retry_config: { max_attempts: limit },
+          activation: { prompt_categories: [category] },
+        });
+        await author({
+          resource_type: 'prompt',
+          action: 'create',
+          id: `p87_single${limit}`,
+          category,
+          name: `p87_single${limit}`,
+          description: 'single prompt: its review opens on the verdict path',
+          user_message_template: `BODY-p87-single-${limit}`,
+          gate_configuration: { include: ['p87-plain'], exclude: ['content-structure'] },
+        });
+        await author({
+          resource_type: 'prompt',
+          action: 'create',
+          id: `p87_step${limit}`,
+          category,
+          name: `p87_step${limit}`,
+          description: 'chain step: its review opens on the step path',
+          user_message_template: `BODY-p87-step-${limit}`,
+          gate_configuration: { exclude: ['content-structure'] },
+        });
+        await author({
+          resource_type: 'prompt',
+          action: 'create',
+          id: `p87_chain${limit}`,
+          category: 'general',
+          name: `p87_chain${limit}`,
+          description: 'one-step chain',
+          user_message_template: 'CHAIN-OWN-TEMPLATE',
+          gate_configuration: OPT_OUT,
+          chain_steps: [{ promptId: `p87_step${limit}`, stepName: 'A' }],
+        });
+      }
+    }, 120000);
+
+    test('a gate limit of 2 exhausts after 2 FAILs on both paths', async () => {
+      const step = await failUntilExhausted('>>p87_chain2');
+      const verdict = await failUntilExhausted('>>p87_single2');
+      expect(step).toEqual({
+        openedAtStart: true,
+        trail: [
+          [1, 2, 'awaiting-verdict'],
+          [2, 2, 'exhausted'],
+        ],
+      });
+      expect(verdict).toEqual({
+        openedAtStart: false,
+        trail: [
+          [1, 2, 'awaiting-verdict'],
+          [2, 2, 'exhausted'],
+        ],
+      });
+    }, 180000);
+
+    test('control: a gate limit of 3 exhausts the step path after 3 FAILs', async () => {
+      expect(await failUntilExhausted('>>p87_chain3')).toEqual({
+        openedAtStart: true,
+        trail: [
+          [1, 3, 'awaiting-verdict'],
+          [2, 3, 'awaiting-verdict'],
+          [3, 3, 'exhausted'],
+        ],
+      });
+    }, 180000);
+
+    test('pin: the verdict path still reads no gate limit for a resumed single prompt', async () => {
+      expect(await failUntilExhausted('>>p87_single3')).toEqual({
+        openedAtStart: false,
+        trail: [
+          [1, 2, 'awaiting-verdict'],
+          [2, 2, 'exhausted'],
+        ],
+      });
+    }, 180000);
+  });
+
+  /**
+   * P6.89 / R169. MEASURED 2026-09-29 on `610b3696`: a bare call carrying `gate_action` "retry",
+   * "skip" or "abort" on a run holding no review and no shell check answered `isError: false`
+   * with the current step re-rendered, the run state unchanged — neither applied nor refused, so
+   * an "abort" left a run the client believed stopped. Now each is refused by name, in the
+   * refusal family of the in-budget action (P6.76), and records nothing.
+   */
+  describe('P6.89: a gate_action with nothing pending is refused by name', () => {
+    /** The run's row as stored, less the write timestamp every call may touch. */
+    const stored = (chainId: string): unknown => {
+      const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+      try {
+        const row = db
+          .prepare('SELECT run_status, current_node_id, state FROM chain_runs WHERE chain_id = ?')
+          .get(chainId) as { run_status: string; current_node_id: string; state: string };
+        const { stateLastUpdated: _touched, ...state } = JSON.parse(row.state) as Record<
+          string,
+          unknown
+        >;
+        return { status: row.run_status, node: row.current_node_id, state };
+      } finally {
+        db.close();
+      }
+    };
+
+    test.each([
+      ['retry', ''],
+      ['skip', ''],
+      ['abort', ' To stop the run, send cancel: true.'],
+    ])(
+      '"%s" on a run holding nothing is refused and records nothing',
+      async (action, stop) => {
+        const run = await start({ command: '>>sv_pair' });
+        const before = stored(run.chainId);
+        const reply = await tool('prompt_engine', { chain_id: run.chainId, gate_action: action });
+        expect(reply).toEqual({
+          isError: true,
+          text: `❌ gate_action "${action}" has nothing to act on: this run holds no gate review and no shell check.${stop} Nothing was recorded.`,
+        });
+        expect(stored(run.chainId)).toEqual(before);
+        expect(before).toMatchObject({ status: 'working', node: 'a' });
+      },
+      120000
+    );
+
+    test('control: "retry" on an exhausted review reopens it', async () => {
+      const run = await start({ command: '>>sv_chain' });
+      await run.call({ user_response: 'A out', gate_verdict: FAIL });
+      await run.call({ user_response: 'A again', gate_verdict: FAIL });
+      const review = (): unknown =>
+        (stored(run.chainId) as { state: { reviews: Record<string, unknown> } }).state.reviews;
+      expect(review()).toMatchObject({ a: { attemptCount: 2, phase: 'exhausted' } });
+      const reply = await tool('prompt_engine', { chain_id: run.chainId, gate_action: 'retry' });
+      expect(reply.isError).toBe(false);
+      expect(reply.text).toContain('Gate Review Required');
+      expect(reply.text).not.toContain('has nothing to act on');
+      expect(review()).toMatchObject({ a: { attemptCount: 0, phase: 'awaiting-verdict' } });
+    }, 120000);
+
+    test('control: "retry" on a pending shell check is left to the check', async () => {
+      const run = await start({ command: '>>sv_a :: verify:"false"' });
+      const reply = await tool('prompt_engine', { chain_id: run.chainId, gate_action: 'retry' });
+      expect(reply.isError).toBe(false);
+      expect(reply.text).toContain('Shell Verification — Attempts Reset');
+      expect(reply.text).not.toContain('has nothing to act on');
+    }, 120000);
+  });
+
+  /**
    * P6.186 / R89. MEASURED 2026-09-27 on `97c33a89`: `>>sv_a` arrow-chain `>>sv_b`, completed with
    * and without an inserted node, and a two-node workflow each printed "Chain execution complete"
    * and no `Re-run:`, while `>>sv_pair :: "CRIT-P"` completed with `Re-run: >>sv_pair topic:""` —
