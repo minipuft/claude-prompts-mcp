@@ -169,6 +169,8 @@ describe('gate-review render of a current-step review is byte-identical (row 3.5
     `);
   });
 
+  // R165 (P6.72): the moves only. The retry abbreviation, the inline fix line and the hint the
+  // review holds are not rendered: they ask for a fix against criteria the render withholds.
   test('an exhausted review offers the three gate actions', async () => {
     expect(
       await render({
@@ -178,19 +180,7 @@ describe('gate-review render of a current-step review is byte-identical (row 3.5
         history: [{ timestamp: 1, status: 'fail', reasoning: 'x'.repeat(250) }],
       })
     ).toMatchInlineSnapshot(`
-      "## Review Context
-
-      Review the original task and your output above against the gate criteria.
-
-      ---
-
-
-      **Inline Gate Priority:** These inline gates triggered the review. Fix them before checking framework standards.
-
-      **Inline Fix Guidance:**
-      - only hint
-
-
+      "
       ## ⚠️ Retry Limit Reached
 
       The following gates failed after 3 attempts: **code-quality, security**

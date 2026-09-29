@@ -75,6 +75,21 @@ export function renderReviewSupplements(
   facts: ReviewRenderFacts,
   inlineGateFocus: boolean
 ): string[] {
+  // An exhausted review takes only a `gate_action` and lists no criteria (P6.45), so it carries
+  // no fix line, no hint and no quoted review that could name a criterion it dropped (R165).
+  if (facts.exhausted !== undefined) {
+    return [
+      `\n## ⚠️ Retry Limit Reached\n\n` +
+        `The following gates failed after ${facts.exhausted.maxAttempts} attempts: **${facts.exhausted.failedGates}**\n\n` +
+        `### Choose an action:\n\n` +
+        `| Action | Description |\n` +
+        `|--------|-------------|\n` +
+        `| \`gate_action: "retry"\` | Reset retry count and try again with improvements |\n` +
+        `| \`gate_action: "skip"\` | Skip this gate check and continue the chain |\n` +
+        `| \`gate_action: "abort"\` | Stop chain execution entirely |\n\n` +
+        `**To continue**, include one of the above in your next call.`,
+    ];
+  }
   const sections: string[] = [];
   if (inlineGateFocus) {
     sections.push(
@@ -87,19 +102,6 @@ export function renderReviewSupplements(
   }
   if (facts.lastReasoning !== undefined) {
     sections.push(`**Last Review:** ${facts.lastReasoning}`);
-  }
-  if (facts.exhausted !== undefined) {
-    sections.push(
-      `\n## ⚠️ Retry Limit Reached\n\n` +
-        `The following gates failed after ${facts.exhausted.maxAttempts} attempts: **${facts.exhausted.failedGates}**\n\n` +
-        `### Choose an action:\n\n` +
-        `| Action | Description |\n` +
-        `|--------|-------------|\n` +
-        `| \`gate_action: "retry"\` | Reset retry count and try again with improvements |\n` +
-        `| \`gate_action: "skip"\` | Skip this gate check and continue the chain |\n` +
-        `| \`gate_action: "abort"\` | Stop chain execution entirely |\n\n` +
-        `**To continue**, include one of the above in your next call.`
-    );
   }
   return sections;
 }

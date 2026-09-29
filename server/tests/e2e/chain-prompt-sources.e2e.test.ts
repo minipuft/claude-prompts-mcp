@@ -1602,6 +1602,86 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
   });
 
   /**
+   * P6.72 / R165. MEASURED 2026-09-29 on `e43416c8`: a step with a blocking gate and a command
+   * criterion, answered with no declared sections and failed twice, exhausted its review (2/2).
+   * The exhausted render withheld the gate guidance and every criterion (P6.45), yet still said
+   * "Review … against the gate criteria", "Inline Gate Priority: … Fix them", listed the fix hints
+   * and quoted the last review ("misses CRIT-…", a criterion the render no longer lists). An
+   * exhausted review takes only a `gate_action`: its render carries the moves and nothing that
+   * asks for a fix against criteria it dropped.
+   */
+  describe('P6.72: an exhausted review render names nothing it no longer lists', () => {
+    const phase = (chainId: string): Record<string, string> => {
+      const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+      try {
+        const row = db.prepare('SELECT state FROM chain_runs WHERE chain_id = ?').get(chainId) as
+          { state: string } | undefined;
+        const reviews = (
+          JSON.parse(row?.state ?? '{}') as {
+            reviews?: Record<string, { phase: string }>;
+          }
+        ).reviews;
+        return Object.fromEntries(
+          Object.entries(reviews ?? {}).map(([node, review]) => [node, review.phase])
+        );
+      } finally {
+        db.close();
+      }
+    };
+    const FIX_LINES = [
+      'against the gate criteria',
+      'Inline Gate Priority',
+      'Ensure your response includes',
+      'Last Review',
+    ];
+
+    beforeAll(async () => {
+      const authored = await tool('resource_manager', {
+        resource_type: 'prompt',
+        action: 'create',
+        id: 'sv_p672',
+        category: 'general',
+        name: 'sv_p672',
+        description: 'e2e chain of default-gated steps, the first blocking-gated',
+        user_message_template: 'CHAIN-OWN-TEMPLATE',
+        gate_configuration: OPT_OUT,
+        chain_steps: [
+          { promptId: 'sv_d', stepName: 'A', inlineGateIds: ['sv-block'] },
+          { promptId: 'sv_e', stepName: 'B' },
+        ],
+      });
+      if (authored.isError) throw new Error(authored.text);
+    }, 120000);
+
+    async function failTwice(criterion: string): Promise<{ inBudget: string; spent: string }> {
+      const run = await start({ command: `>>sv_p672 :: "${criterion}"` });
+      const verdict = `GATE_REVIEW: FAIL - misses ${criterion}`;
+      const inBudget = await run.call({ user_response: 'no sections', gate_verdict: verdict });
+      expect(phase(run.chainId)).toEqual({ a: 'awaiting-verdict' });
+      const spent = await run.call({ user_response: 'still none', gate_verdict: verdict });
+      expect(phase(run.chainId)).toEqual({ a: 'exhausted' });
+      return { inBudget, spent };
+    }
+
+    test('the exhausted render carries the moves and no fix line, hint or quoted criterion', async () => {
+      const { spent } = await failTwice('CRIT-P672A');
+      expect(spent).toContain('Retry Limit Reached');
+      expect(spent).toContain('gate_action="retry" | gate_action="skip"');
+      for (const line of FIX_LINES) expect(spent).not.toContain(line);
+      expect(spent).not.toContain('CRIT-P672A');
+      expect(spent).not.toContain('GUIDANCE-sv-block');
+    }, 120000);
+
+    test('control: the in-budget retry render still carries its criteria, hints and last review', async () => {
+      const { inBudget } = await failTwice('CRIT-P672B');
+      expect(inBudget).not.toContain('Retry Limit Reached');
+      for (const line of FIX_LINES) expect(inBudget).toContain(line);
+      expect(inBudget).toContain('CRIT-P672B');
+      expect(inBudget).toContain('GUIDANCE-sv-block');
+    }, 120000);
+  });
+
+  /**
    * P6.186 / R89. MEASURED 2026-09-27 on `97c33a89`: `>>sv_a` arrow-chain `>>sv_b`, completed with
    * and without an inserted node, and a two-node workflow each printed "Chain execution complete"
    * and no `Re-run:`, while `>>sv_pair :: "CRIT-P"` completed with `Re-run: >>sv_pair topic:""` —
