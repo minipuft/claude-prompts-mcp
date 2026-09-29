@@ -304,8 +304,8 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    * only the retry-exhaustion half answers the step review — and only while that review is
    * exhausted, the one phase that accepts it. In budget, the processor refuses it by name rather
    * than let it reach the verdict path, where it came back as the same review, neither applied
-   * nor refused (P6.76). With neither, the action is left to the stages after this one (a pending
-   * shell check takes it at any attempt).
+   * nor refused (P6.76). With no review and no shell check it is refused by name too (R169); with
+   * a shell check pending, the action is left to the stage that owns it (at any attempt).
    *
    * @returns true when the call was answered and the stage must stop.
    */
@@ -334,6 +334,10 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     }
     if (this.verdictProcessor.refusesInBudgetAction(context, session, gateAction)) {
       this.logExit({ gateAction, refused: 'review in budget' });
+      return true;
+    }
+    if (this.verdictProcessor.refusesUnheldAction(context, session, gateAction)) {
+      this.logExit({ gateAction, refused: 'nothing pending' });
       return true;
     }
     return false;

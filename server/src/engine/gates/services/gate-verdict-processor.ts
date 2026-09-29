@@ -473,6 +473,34 @@ export class GateVerdictProcessor {
   }
 
   /**
+   * Refuse, by name, a `gate_action` sent while the run holds nothing it could act on — no review
+   * and no pending shell check (R169) — and record nothing. Before this the action fell through
+   * to the verdict path and the call re-rendered the step with `isError: false`, neither applied
+   * nor refused: a client that sent `retry` read the step as its retry, and one that sent `abort`
+   * read a run it believed stopped. The same refusal family as {@link refusesInBudgetAction}.
+   *
+   * @returns true when the call was refused and its response is set.
+   */
+  refusesUnheldAction(
+    context: ExecutionContext,
+    session: ChainSession,
+    gateAction: GateAction
+  ): boolean {
+    if (
+      Object.keys(session.reviews ?? {}).length > 0 ||
+      this.chainSessionStore.getPendingShellVerification(session.sessionId) !== undefined
+    ) {
+      return false;
+    }
+    const stop = gateAction === 'abort' ? ' To stop the run, send cancel: true.' : '';
+    const message =
+      `❌ gate_action "${gateAction}" has nothing to act on: this run holds no gate review and ` +
+      `no shell check.${stop} Nothing was recorded.`;
+    context.setResponse({ content: [{ type: 'text', text: message }], isError: true });
+    return true;
+  }
+
+  /**
    * Announce the step the run just moved past, with the output it was captured with (R25). The
    * one emitter of `step_complete` for a run's own advance; a skipped step is `failed`: its gates
    * failed, and the run moves past it anyway.

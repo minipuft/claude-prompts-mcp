@@ -1893,6 +1893,74 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
   });
 
   /**
+   * P6.89 / R169. MEASURED 2026-09-29 on `610b3696`: a bare call carrying `gate_action` "retry",
+   * "skip" or "abort" on a run holding no review and no shell check answered `isError: false`
+   * with the current step re-rendered, the run state unchanged — neither applied nor refused, so
+   * an "abort" left a run the client believed stopped. Now each is refused by name, in the
+   * refusal family of the in-budget action (P6.76), and records nothing.
+   */
+  describe('P6.89: a gate_action with nothing pending is refused by name', () => {
+    /** The run's row as stored, less the write timestamp every call may touch. */
+    const stored = (chainId: string): unknown => {
+      const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+      try {
+        const row = db
+          .prepare('SELECT run_status, current_node_id, state FROM chain_runs WHERE chain_id = ?')
+          .get(chainId) as { run_status: string; current_node_id: string; state: string };
+        const { stateLastUpdated: _touched, ...state } = JSON.parse(row.state) as Record<
+          string,
+          unknown
+        >;
+        return { status: row.run_status, node: row.current_node_id, state };
+      } finally {
+        db.close();
+      }
+    };
+
+    test.each([
+      ['retry', ''],
+      ['skip', ''],
+      ['abort', ' To stop the run, send cancel: true.'],
+    ])(
+      '"%s" on a run holding nothing is refused and records nothing',
+      async (action, stop) => {
+        const run = await start({ command: '>>sv_pair' });
+        const before = stored(run.chainId);
+        const reply = await tool('prompt_engine', { chain_id: run.chainId, gate_action: action });
+        expect(reply).toEqual({
+          isError: true,
+          text: `❌ gate_action "${action}" has nothing to act on: this run holds no gate review and no shell check.${stop} Nothing was recorded.`,
+        });
+        expect(stored(run.chainId)).toEqual(before);
+        expect(before).toMatchObject({ status: 'working', node: 'a' });
+      },
+      120000
+    );
+
+    test('control: "retry" on an exhausted review reopens it', async () => {
+      const run = await start({ command: '>>sv_chain' });
+      await run.call({ user_response: 'A out', gate_verdict: FAIL });
+      await run.call({ user_response: 'A again', gate_verdict: FAIL });
+      const review = (): unknown =>
+        (stored(run.chainId) as { state: { reviews: Record<string, unknown> } }).state.reviews;
+      expect(review()).toMatchObject({ a: { attemptCount: 2, phase: 'exhausted' } });
+      const reply = await tool('prompt_engine', { chain_id: run.chainId, gate_action: 'retry' });
+      expect(reply.isError).toBe(false);
+      expect(reply.text).toContain('Gate Review Required');
+      expect(reply.text).not.toContain('has nothing to act on');
+      expect(review()).toMatchObject({ a: { attemptCount: 0, phase: 'awaiting-verdict' } });
+    }, 120000);
+
+    test('control: "retry" on a pending shell check is left to the check', async () => {
+      const run = await start({ command: '>>sv_a :: verify:"false"' });
+      const reply = await tool('prompt_engine', { chain_id: run.chainId, gate_action: 'retry' });
+      expect(reply.isError).toBe(false);
+      expect(reply.text).toContain('Shell Verification — Attempts Reset');
+      expect(reply.text).not.toContain('has nothing to act on');
+    }, 120000);
+  });
+
+  /**
    * P6.186 / R89. MEASURED 2026-09-27 on `97c33a89`: `>>sv_a` arrow-chain `>>sv_b`, completed with
    * and without an inserted node, and a two-node workflow each printed "Chain execution complete"
    * and no `Re-run:`, while `>>sv_pair :: "CRIT-P"` completed with `Re-run: >>sv_pair topic:""` —
