@@ -79,6 +79,8 @@ Controls which execution contexts receive injection:
 | `gates` | Gate review responses only                                       | Rarely useful alone                                                                                                      |
 | `both`  | Both steps and gate reviews                                      | Default for gate-guidance — criteria needed during both generation and review                                            |
 
+A retry review (the render after a `FAIL` verdict) keeps the framework block above a body shortened to a pointer at the task already shown ("Review the original task and your output above"): the block is the run's framework, which the retry is still answering under, while the task text is already in the conversation from the first render, so repeating it would only spend tokens.
+
 ### Enable/Disable
 
 | Setting                                      | Controls                                      |

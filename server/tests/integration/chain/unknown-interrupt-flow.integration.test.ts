@@ -172,8 +172,9 @@ describe('mid-chain blocking-unknown interrupt (rows 2.1-2.3)', () => {
       affectedStepIds: ['final-review'],
       paused: false,
     });
-    // The insertion already landed, so the remaining plan the caller is invited to replace
-    // includes the investigation node.
+    // The insertion already landed, so the interrupt records the investigation node among the
+    // remaining nodes. This harness never drives the advance or the rendered reply, so it shows
+    // the record, not that the caller was shown it (row 2.4 pins the rendering).
     expect(
       context.state.session.chainInterrupt?.remainingNodes.map((node) => node.promptId)
     ).toEqual(['investigate_unknown', 'body', 'review']);
@@ -219,6 +220,20 @@ describe('mid-chain blocking-unknown interrupt (rows 2.1-2.3)', () => {
     expect(stepReviewIn(store, 'sess-1')?.gateIds).toEqual([UNKNOWN_INTERRUPT_GATE_ID]);
     // Stage 18 reads context, not the store — both must say the run is holding.
     expect(context.sessionContext?.pendingReview?.gateIds).toEqual([UNKNOWN_INTERRUPT_GATE_ID]);
+  });
+
+  test('a paused insertion lists the same remaining plan as the unpaused one', async () => {
+    await declarePauseOnBlocking();
+    const context = await declareBlockingUnknown();
+
+    const interrupt = context.state.session.chainInterrupt;
+    expect(interrupt?.paused).toBe(true);
+    // Control: the unpaused run (first test above) lists this same array, investigation node first.
+    expect(interrupt?.remainingNodes.map((node) => node.promptId)).toEqual([
+      'investigate_unknown',
+      'body',
+      'review',
+    ]);
   });
 
   // ---- row 2.2 -------------------------------------------------------------------------
