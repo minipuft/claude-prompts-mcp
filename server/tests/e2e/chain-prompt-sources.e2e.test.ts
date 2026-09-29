@@ -1007,8 +1007,8 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
    * same way; accepting it there would not reach the review, whose gate set is fixed when it opens.
    *
    * Now (R146) a FAIL resume that opens the current node's review accepts a gate on that node, and
-   * the retry render carries it; a gate on a node the run passed, or sent while the node's review
-   * is already open, is refused by name.
+   * the retry render carries it; a gate on a node the run passed is refused by name. A gate sent
+   * while the node's review is already open joins that review (R154, P6.268 below).
    */
   describe('P6.149: a FAIL resume accepts a gate on the node it re-renders', () => {
     const failWithGate = (
@@ -1057,17 +1057,94 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       expect(refused.text).not.toContain('TGT-149-B');
       expect(rawRunState(run.chainId)).toBe(before);
     }, 120000);
+  });
 
-    test('(c) control: a FAIL graded against an already open review is refused by name', async () => {
+  /**
+   * MEASURED 2026-09-28 on `ea62d3975` (driven, this harness): a `>>sv_chain` run whose `b` review
+   * was already open (answered with `user_response` alone), resumed with a FAIL verdict alone and a
+   * gate targeting `b`, was refused "names the step whose open review this call grades; that review
+   * keeps the gates it opened with"; the review stayed `['sv-block']`.
+   *
+   * Now (R154) the gate joins the open review: the FAIL's re-render carries it, the next verdict
+   * grades it, an id the review already holds is a no-op, and a gate on another node keeps its
+   * refusal.
+   */
+  describe('P6.268: a gate sent while its step review is open joins that review', () => {
+    /** A request gate on `b`; each test names its own id, since a registered id belongs to one run. */
+    const onB = (id: string) => ({ id, name: id, criteria: ['TGT-268-J'], target_step_id: 'b' });
+
+    /** A `>>sv_chain` run standing at `b` with `b`'s review open and ungraded. */
+    async function openReviewOnB() {
       const run = await start({ command: '>>sv_chain' });
       await run.call({ user_response: 'A out', gate_verdict: PASS });
       await run.call({ user_response: 'B out' });
+      expect(runState(run.chainId).reviews).toEqual({ b: ['sv-block'] });
+      return run;
+    }
+
+    test('(a) a verdict-only FAIL with a gate on b joins the review; the retry passes and advances', async () => {
+      const run = await openReviewOnB();
+
+      const joined = await tool('prompt_engine', {
+        chain_id: run.chainId,
+        gate_verdict: FAIL,
+        gates: [onB('j268a')],
+      });
+      expect(joined.isError).toBe(false);
+      expect(joined.text).not.toContain('gate-target-passed');
+      expect(joined.text).toContain('### j268a\n1. TGT-268-J');
+      expect(joined.text).toContain('### sv-block');
+      expect(runState(run.chainId).reviews).toEqual({ b: ['sv-block', 'j268a'] });
+
+      const passed = await run.call({ user_response: 'B again', gate_verdict: PASS });
+      expect(passed).toContain('BODY-sv_a');
+      expect(passed).toContain('Progress 3/3');
+      expect(runState(run.chainId).reviews).toEqual({});
+    }, 120000);
+
+    test('(a) the next FAIL grades the joined gate', async () => {
+      const run = await openReviewOnB();
+      await tool('prompt_engine', {
+        chain_id: run.chainId,
+        gate_verdict: FAIL,
+        gates: [onB('j268g')],
+      });
+
+      const graded = await run.call({ user_response: 'B again', gate_verdict: FAIL });
+      expect(graded).toContain('The following gates failed after 2 attempts: **sv-block, j268g**');
+    }, 120000);
+
+    test('(b) a gate id the review already holds is a no-op, not a refusal', async () => {
+      const run = await openReviewOnB();
+      await tool('prompt_engine', {
+        chain_id: run.chainId,
+        gate_verdict: FAIL,
+        gates: [onB('j268b')],
+      });
+
+      const again = await tool('prompt_engine', {
+        chain_id: run.chainId,
+        user_response: 'B again',
+        gate_verdict: FAIL,
+        gates: [onB('j268b')],
+      });
+      expect(again.isError).toBe(false);
+      expect(again.text).not.toContain('gate-target-passed');
+      expect(runState(run.chainId).reviews).toEqual({ b: ['sv-block', 'j268b'] });
+    }, 120000);
+
+    test('(c) control: a gate on a node other than the reviewed one keeps its refusal', async () => {
+      const run = await openReviewOnB();
       const before = rawRunState(run.chainId);
 
-      const refused = await failWithGate(run.chainId, undefined, 'b', 'TGT-149-C');
+      const refused = await tool('prompt_engine', {
+        chain_id: run.chainId,
+        gate_verdict: FAIL,
+        gates: [{ ...onB('o268'), target_step_id: 'a' }],
+      });
       expect(refused.isError).toBe(true);
       expect(refused.text).toContain(
-        '[gate-target-passed] node "b": target_step_id "b" names the step whose open review this call grades; that review keeps the gates it opened with'
+        '[gate-target-passed] node "a": target_step_id "a" names a step the run has already passed'
       );
       expect(rawRunState(run.chainId)).toBe(before);
     }, 120000);

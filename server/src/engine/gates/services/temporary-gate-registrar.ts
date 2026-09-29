@@ -385,9 +385,9 @@ export class TemporaryGateRegistrar {
    * run (its first node is the step it renders, R59), on a restart, and on a run that has ended
    * (the session stage answers that one). A target the run does not declare is stage 04's refusal.
    * A call submitting a FAIL verdict re-renders the node it answers, so a gate on that node is not
-   * late and is accepted for the retry (R146) — when this call opens that node's review. A review
-   * already open keeps the gates it opened with, so a gate sent then is refused as never firing;
-   * a node the run has passed stays refused.
+   * late and is accepted for the retry (R146). When that node's review is already open, the gate
+   * joins it (R154, `GateEnforcementAuthority.joinSentGates`); a node the run has passed stays
+   * refused.
    */
   unreachableStepTargets(context: ExecutionContext): StepTargetRefusal[] {
     const view = this.resolveRunView(context);
@@ -1113,7 +1113,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * The refusal for one request gate whose target a resume can no longer reach, or undefined. PURE.
  * A run standing on no node has passed them all; a position this view cannot place judges nothing.
  * `retry`: the call submits a FAIL, which re-renders the node it answers; a gate on that node
- * reaches the retry when this call opens the node's review (R146).
+ * reaches the retry, in the review this call opens (R146) or the open one it joins (R154).
  */
 function unreachableTargetRejection(
   gate: Exclude<RawGateInput, string>,
@@ -1124,8 +1124,7 @@ function unreachableTargetRejection(
   const current = currentOrdinalOf(view);
   const target = stepTargetOf(gate, view.nodeIds);
   if (current === -1 || target === undefined || target.position === -1) return undefined;
-  const reviewOpen = view.currentNodeReviewOpen === true;
-  if (target.position > current || (retry && !reviewOpen && target.position === current)) {
+  if (target.position > current || (retry && target.position === current)) {
     return undefined;
   }
   const nodeId = declaredAddress(target.nodeId, lastStepOf);
@@ -1135,11 +1134,9 @@ function unreachableTargetRejection(
   const why =
     target.position < current
       ? 'names a step the run has already passed'
-      : retry && reviewOpen
-        ? 'names the step whose open review this call grades; that review keeps the gates it opened with'
-        : next === null
-          ? 'names the step this call answers; the run has no later step'
-          : `names the step this call answers; target "${declaredAddress(next, lastStepOf)}" or later`;
+      : next === null
+        ? 'names the step this call answers; the run has no later step'
+        : `names the step this call answers; target "${declaredAddress(next, lastStepOf)}" or later`;
   return {
     nodeId,
     detail: `${named} ${why}. A gate there could never fire; the run did not advance.`,
