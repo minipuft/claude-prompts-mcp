@@ -33,8 +33,9 @@ export {
 // `yaml-document-writer.js` is deliberately NOT re-exported here. It pulls in the `yaml` package,
 // which costs 263,576 B unminified, and this barrel is on the `cpm` bundle's import graph through
 // `cli-shared/resource-operations.ts`. Re-exporting it took that bundle from 683,130 B to
-// 958,782 B against a 690,000 B budget — for a symbol no CLI command calls. Import the module
-// directly; the four resource writers already do.
+// 958,782 B against a 690,000 B budget. `yaml-parser.js` above now imports the same package, so
+// the barrel carries it either way. Import the module directly, as every caller does: `linkGate`
+// and `cpm rollback`, the skills-sync pull and registration store, and the four resource writers.
 
 // File operations
 export {
