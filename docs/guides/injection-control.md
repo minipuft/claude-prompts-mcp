@@ -67,6 +67,8 @@ On a resume that passes a step, the system prompt and style count the step the r
 
 Gate guidance counts **gated** steps, not positions: a step with no gates does not advance its frequency, so the first gated step of a chain gets its own gate guidance under the first-step-only default even when ungated steps ran before it. A step with nothing to guide should not use up the one render that shows a gated step its criteria.
 
+A chain whose every step carries a blocking gate shows its gates' guidance on every render whatever the frequency: the call answering a gated step decides while that step's review is open, and a gate review is never thinned, so a render that will ask for its step's verdict names the gates it grades. The frequency thins gate guidance only on a gated step rendered by a call that answered an ungated one.
+
 ### Target
 
 Controls which execution contexts receive injection:

@@ -770,3 +770,157 @@ describe('R158: the framework toggle decides a run at its first call (Streamable
     expect(run.contributedAnswered.text).toContain(STRUCTURAL_REVIEW);
   }, 120000);
 });
+
+/**
+ * P6.272 / R156 (amended). MEASURED 2026-09-29 on `abadca951` (driven, Streamable HTTP): on a
+ * chain whose every step carries a blocking gate, the gate-guidance frequency (first step only,
+ * every step, every 2nd step) changed nothing: every render carried the gate's guidance. The call
+ * answering a gated step decides while that step's review is open, and a gate review is never
+ * thinned by the frequency, so the step it renders next names the gates it will be graded on.
+ *
+ * PIN: in a fully blocking-gated chain every render carries its gate's guidance at every
+ * frequency. CONTROL: the frequency still thins a gated step rendered by a call that answered an
+ * ungated step (the P6.151 shape: a request gate on step 1 makes step 3 the second gated step).
+ */
+describe('P6.272: gate-guidance frequency never thins a fully blocking-gated chain (Streamable HTTP)', () => {
+  const FREQUENCIES = [0, 1, 2] as const;
+  const PASS = 'GATE_REVIEW: PASS - ok';
+  const OPT_OUT = { exclude: ['content-structure'], framework_gates: false };
+
+  /** A server whose config sets the gate-guidance frequency, with three plain step prompts. */
+  async function serverAt(frequency: number) {
+    const workspace = await newWorkspace();
+    const configPath = workspace.env['MCP_CONFIG_PATH'] as string;
+    const config = JSON.parse(readFileSync(configPath, 'utf8')) as {
+      frameworks?: Record<string, unknown>;
+    };
+    config.frameworks = {
+      ...config.frameworks,
+      injection: { gateGuidance: { frequency, target: 'both' } },
+    };
+    await writeFile(configPath, JSON.stringify(config, null, 2));
+    const session = await start(startHttpSession, workspace);
+    for (const id of ['p272_a', 'p272_b', 'p272_c']) {
+      const created = await session.callTool('resource_manager', {
+        resource_type: 'prompt',
+        action: 'create',
+        id,
+        name: id,
+        category: 'general',
+        description: 'A plain chain step',
+        user_message_template: `BODY-${id}`,
+        gate_configuration: OPT_OUT,
+      });
+      expect(created.isError).toBe(false);
+    }
+    return session;
+  }
+
+  async function createChain(
+    session: McpSession,
+    id: string,
+    steps: Array<Record<string, unknown>>
+  ): Promise<void> {
+    const created = await session.callTool('resource_manager', {
+      resource_type: 'prompt',
+      action: 'create',
+      id,
+      name: id,
+      category: 'general',
+      description: 'P6.272 chain',
+      user_message_template: 'CHAIN',
+      gate_configuration: OPT_OUT,
+      chain_steps: steps,
+    });
+    expect(created.isError).toBe(false);
+  }
+
+  const chainIdOf = (text: string) => /chain_id[=:] ?"(chain-[A-Za-z0-9_#-]+)"/.exec(text)?.[1];
+
+  it('pin: every render of a fully blocking-gated chain carries its guidance, at every frequency', async () => {
+    const observed: Record<number, boolean[]> = {};
+    for (const frequency of FREQUENCIES) {
+      const session = await serverAt(frequency);
+      const gateId = `p272-block-f${frequency}`;
+      const gate = await session.callTool('resource_manager', {
+        resource_type: 'gate',
+        action: 'create',
+        id: gateId,
+        name: gateId,
+        description: 'blocking',
+        guidance: `GUIDANCE-${gateId}`,
+        enforcement_mode: 'blocking',
+      });
+      expect(gate.isError).toBe(false);
+      await createChain(session, 'p272_gated', [
+        { promptId: 'p272_a', stepName: 'A', inlineGateIds: [gateId] },
+        { promptId: 'p272_b', stepName: 'B', inlineGateIds: [gateId] },
+        { promptId: 'p272_c', stepName: 'C', inlineGateIds: [gateId] },
+      ]);
+      const first = await session.callTool('prompt_engine', { command: '>>p272_gated' });
+      const chainId = chainIdOf(first.text);
+      const call = (answer: string) =>
+        session.callTool('prompt_engine', {
+          chain_id: chainId,
+          user_response: answer,
+          gate_verdict: PASS,
+        });
+      const second = await call('A out');
+      const third = await call('B out');
+      expect(third.text).toContain('BODY-p272_c');
+      observed[frequency] = [first, second, third].map((render) =>
+        render.text.includes(`GUIDANCE-${gateId}`)
+      );
+    }
+    const everyRender = [true, true, true];
+    expect(observed).toEqual({ 0: everyRender, 1: everyRender, 2: everyRender });
+  }, 180000);
+
+  it('control: a gated step rendered by a call that answered an ungated step follows the frequency', async () => {
+    const observed: Record<number, boolean> = {};
+    for (const frequency of FREQUENCIES) {
+      const session = await serverAt(frequency);
+      const gateId = `p272-late-f${frequency}`;
+      const gate = await session.callTool('resource_manager', {
+        resource_type: 'gate',
+        action: 'create',
+        id: gateId,
+        name: gateId,
+        description: 'blocking',
+        guidance: `GUIDANCE-${gateId}`,
+        enforcement_mode: 'blocking',
+      });
+      expect(gate.isError).toBe(false);
+      await createChain(session, 'p272_late', [
+        { promptId: 'p272_a', stepName: 'A' },
+        { promptId: 'p272_b', stepName: 'B' },
+        { promptId: 'p272_c', stepName: 'C', inlineGateIds: [gateId] },
+      ]);
+      const first = await session.callTool('prompt_engine', {
+        command: '>>p272_late',
+        gates: [
+          {
+            id: `p272-req-f${frequency}`,
+            name: 'request',
+            criteria: [`CRIT-272-${frequency}`],
+            target_step_id: 'a',
+          },
+        ],
+      });
+      const chainId = chainIdOf(first.text);
+      await session.callTool('prompt_engine', {
+        chain_id: chainId,
+        user_response: 'A out',
+        gate_verdict: PASS,
+      });
+      const stepBlock = await session.callTool('prompt_engine', {
+        chain_id: chainId,
+        user_response: 'B out',
+      });
+      expect(stepBlock.text).toContain('BODY-p272_c');
+      observed[frequency] = stepBlock.text.includes(`GUIDANCE-${gateId}`);
+    }
+    // Step 3 is the run's second gated step: first-only and every-2nd skip it, every-step shows it.
+    expect(observed).toEqual({ 0: false, 1: true, 2: false });
+  }, 180000);
+});
