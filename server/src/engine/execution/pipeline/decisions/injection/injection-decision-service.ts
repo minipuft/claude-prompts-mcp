@@ -232,7 +232,9 @@ export class InjectionDecisionService {
 
       const frequencyDecision = this.checkFrequency(
         input.injectionType,
-        input.currentStep,
+        input.injectionType === 'gate-guidance'
+          ? (input.gatedRenderOrdinal ?? input.currentStep)
+          : input.currentStep,
         input.totalSteps,
         resolved.config.frequency,
         timestamp,

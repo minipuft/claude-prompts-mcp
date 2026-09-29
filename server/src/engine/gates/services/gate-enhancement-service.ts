@@ -392,6 +392,7 @@ export class GateEnhancementService {
     };
 
     let totalGatesApplied = 0;
+    context.state.gates.gatedStepNumbers = [];
     for (const step of steps) {
       totalGatesApplied += await this.applyGatesToStep(step, stepInput);
     }
@@ -497,6 +498,10 @@ export class GateEnhancementService {
     if (gateIds.length === 0) {
       return 0;
     }
+    context.state.gates.gatedStepNumbers = [
+      ...(context.state.gates.gatedStepNumbers ?? []),
+      step.stepNumber,
+    ];
 
     return await this.enhanceStepPrompt(step, prompt, gateIds, stepFrameworkId, input);
   }

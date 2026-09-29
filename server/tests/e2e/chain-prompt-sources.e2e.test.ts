@@ -1203,13 +1203,18 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
     }, 120000);
 
     test('(a) gate guidance: a FAIL review render on step 3 carries it; the step 3 block before it did not', async () => {
-      const run = await start({ command: '>>sv_tail151' });
-      await run.call({ user_response: 'A out' });
+      // A request gate on `a` makes step 1 the chain's first gated step without reaching step 3
+      // (a targeted gate is not accumulated), so step 3 is its SECOND gated render (R155).
+      const run = await start({
+        command: '>>sv_tail151',
+        gates: [{ id: 'g151', name: 'g151', criteria: ['CRIT-151'], target_step_id: 'a' }],
+      });
+      await run.call({ user_response: 'A out', gate_verdict: PASS });
       const stepBlock = await run.call({ user_response: 'B out' });
       expect(templates(stepBlock)).toEqual(['BODY-sv_a topic=']);
       expect(stepBlock).toContain('Progress 3/3');
-      // Control: the call answering step 2 decided gate guidance "skip" (first step only), and the
-      // step block it rendered follows that decision.
+      // Control: the call answering step 2 decided gate guidance "skip" (first gated render only),
+      // and the step block it rendered follows that decision.
       expect(gateGuidanceFor(stepBlock)).toBe(false);
 
       const review = await run.call({ user_response: 'C out', gate_verdict: FAIL });
@@ -1223,6 +1228,62 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       const stepBlock = await run.call({ user_response: 'A out' });
       expect(templates(stepBlock)).toEqual(['BODY-sv_b topic=']);
       expect(gateGuidanceFor(stepBlock)).toBe(true);
+    }, 120000);
+  });
+
+  /**
+   * MEASURED 2026-09-28 on `61699a705` (driven, shipped `gateGuidance` frequency first step only;
+   * decisions read from the `--verbose` log): on `[sv_a, sv_b, sv_a with sv-block]` the call
+   * answering step 2 decided gate guidance "Step 2 > 1 (first-only mode)", and the step 3 block it
+   * rendered carried none of `sv-block`'s guidance. The counter was the run position, which the
+   * two ungated steps had advanced.
+   *
+   * Now (R155) the gate-guidance frequency counts GATED steps: the call answering an ungated step
+   * decides as the chain's next gated render, so the first gated step's own guidance renders
+   * whatever came before it. The system prompt and style keep the position counter.
+   */
+  describe('P6.271: a gated step after ungated steps renders its own gate guidance', () => {
+    /** Gate-guidance injection for `sv-block`: the gate's guidance under its own heading. */
+    const gateGuidanceFor = (text: string): boolean =>
+      text.includes('### sv-block\nGUIDANCE-sv-block');
+
+    beforeAll(async () => {
+      const created = await tool('resource_manager', {
+        resource_type: 'prompt',
+        action: 'create',
+        id: 'sv_late271',
+        category: 'general',
+        name: 'sv_late271',
+        description: 'e2e chain gated on its last step only',
+        user_message_template: 'CHAIN-OWN-TEMPLATE',
+        arguments: TOPIC,
+        gate_configuration: OPT_OUT,
+        chain_steps: [
+          { promptId: 'sv_a', stepName: 'A' },
+          { promptId: 'sv_b', stepName: 'B' },
+          { promptId: 'sv_a', stepName: 'C', inlineGateIds: ['sv-block'] },
+        ],
+      });
+      if (created.isError) throw new Error(created.text);
+    }, 120000);
+
+    test('(a) gate guidance: the step 3 block the step 2 call renders carries its gate guidance', async () => {
+      const run = await start({ command: '>>sv_late271' });
+      await run.call({ user_response: 'A out' });
+      const stepBlock = await run.call({ user_response: 'B out' });
+      expect(templates(stepBlock)).toEqual(['BODY-sv_a topic=']);
+      expect(stepBlock).toContain('Progress 3/3');
+      expect(gateGuidanceFor(stepBlock)).toBe(true);
+    }, 120000);
+
+    test('(b) control: gate guidance: the ungated steps before it render none', async () => {
+      const run = await start({ command: '>>sv_late271' });
+      const second = await run.call({ user_response: 'A out' });
+      expect(templates(second)).toEqual(['BODY-sv_b topic=']);
+      for (const ungated of [run.text, second]) {
+        expect(ungated).not.toContain('## Inline Gates');
+        expect(ungated).not.toMatch(/GUIDANCE-/);
+      }
     }, 120000);
   });
 

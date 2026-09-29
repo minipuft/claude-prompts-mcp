@@ -222,6 +222,12 @@ export interface PipelineInternalState {
      */
     reviewGateIds?: string[];
     /**
+     * The parse-time step numbers whose applicable gate set is not empty, from this call's chain
+     * walk. Writer: `GateEnhancementService.applyGatesToStep`. Reader: stage 14, which counts the
+     * gated steps before the one it decides for, the gate-guidance frequency's counter (R155).
+     */
+    gatedStepNumbers?: number[];
+    /**
      * The gate walk of a stepless run a remainder grew (R71): its base step, then each step a
      * remainder contributed, in run order, with the gate instructions stage 11 wrote on them.
      * Writer: `GateEnhancementService.resolveGateContext`, only for such a run — `parsedCommand.steps`

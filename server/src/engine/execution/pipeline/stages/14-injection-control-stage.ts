@@ -171,6 +171,11 @@ export class InjectionControlStage extends BasePipelineStage {
       input.totalSteps = totalSteps;
     }
 
+    const gatedRenderOrdinal = this.gatedRenderOrdinal(context, position);
+    if (gatedRenderOrdinal !== undefined) {
+      input.gatedRenderOrdinal = gatedRenderOrdinal;
+    }
+
     const gateStatuses = this.buildGateStatusMap(context);
     if (gateStatuses) {
       input.gateStatuses = gateStatuses;
@@ -216,6 +221,25 @@ export class InjectionControlStage extends BasePipelineStage {
     }
 
     return input;
+  }
+
+  /**
+   * The gate-guidance frequency's counter for this position (R155): one more than the gated steps
+   * before it in the chain walk. The decision taken while answering a step dresses the step the
+   * reply renders next (R151), so an ungated step answered before the first gated one decides as
+   * the first gated render, and the gated step's own guidance renders whatever came before it.
+   * Undefined when no walk ran or the position has no parse-time step (an inserted node).
+   */
+  private gatedRenderOrdinal(
+    context: ExecutionContext,
+    position: InjectionPosition
+  ): number | undefined {
+    const gated = context.state.gates.gatedStepNumbers;
+    const step = this.resolveCurrentChainStep(context, position);
+    if (gated === undefined || step === undefined) {
+      return undefined;
+    }
+    return gated.filter((stepNumber) => stepNumber < step.stepNumber).length + 1;
   }
 
   /**
