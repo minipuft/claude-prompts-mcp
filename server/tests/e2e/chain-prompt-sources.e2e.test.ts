@@ -1213,6 +1213,34 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
   });
 
   /**
+   * MEASURED 2026-09-28 on `57b6f6833` (driven over Streamable HTTP, shipped defaults, the
+   * executor's debug log read): a FAIL on step 1 of `>>sv_chain` decided `systemPrompt: true`,
+   * stage 20 handed that decision to the review render (`frameworkInjectionEnabled: true`), and
+   * the review still carried no framework block. `renderGateReviewStep` built the block only when
+   * the review was not a retry, and every FAIL re-render is one (its attempt count is above 0).
+   *
+   * Now (R152) the review render carries the block whenever the call's decision injects it; the
+   * frequency, not the attempt count, is what spares a later step's review.
+   */
+  describe("P6.265: a review re-render carries the framework block when the call's decision injects it", () => {
+    test('(a) a FAIL on step 1, whose decision injects, renders the block in its review', async () => {
+      const run = await start({ command: '>>sv_chain' });
+      const review = await run.call({ user_response: 'A out', gate_verdict: FAIL });
+      expect(review).toContain('Gate Review Required');
+      expect(review).toContain('## 🎯 C.A.G.E.E.R.F Framework Active');
+    }, 120000);
+
+    test('(b) control: a FAIL on step 2, whose decision skips, renders no framework block', async () => {
+      const run = await start({ command: '>>sv_chain' });
+      await run.call({ user_response: 'A out', gate_verdict: PASS });
+      const review = await run.call({ user_response: 'B out', gate_verdict: FAIL });
+      expect(review).toContain('Gate Review Required');
+      expect(review).toContain('GUIDANCE-sv-block');
+      expect(review).not.toContain('Framework Active');
+    }, 120000);
+  });
+
+  /**
    * PIN (as of 2026-09-27 · flips when a gated single prompt stops opening a run). A single prompt
    * with an inline gate operator opens a run of ONE node, `n1` (R52), because the planner requires
    * a session for any `gate` operator (`ExecutionPlanner.requiresSession`, its operator clause — not

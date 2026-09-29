@@ -247,9 +247,12 @@ export class ChainOperatorExecutor {
     // Attempt display is handled by ResponseAssembler.buildGateReviewCTA()
     const supplementalSections = renderReviewSupplements(review, hasInlineGateFocus);
 
-    // Build framework guidance for gate reviews if enabled (skip on retry — already seen)
+    // Framework guidance for the review, whenever the call's decision injects it — retries
+    // included (R152): a FAIL re-render is the step's render for this call, and a step carries the
+    // same framework block whether it renders normally or as a review. The frequency, not the
+    // attempt count, is what spares a later step the block.
     let frameworkGuidance = '';
-    if (!isRetry && frameworkInjectionEnabled && targetStep) {
+    if (frameworkInjectionEnabled && targetStep) {
       const guidance = await this.buildFrameworkGuidance(targetStep, input);
       if (guidance) {
         frameworkGuidance = guidance;
@@ -267,11 +270,9 @@ export class ChainOperatorExecutor {
     // gate review upfront and 18-execution-stage skips the normal render entirely for a
     // blocking-gate step, so this was the only chain path that never declared its headers.
     //
-    // Declared UNCONDITIONALLY, retries included — this deliberately does NOT mirror the
-    // `!isRetry` gate on frameworkGuidance a few lines above. frameworkGuidance is dropped on
-    // retry because the model has already seen it; the header vocabulary is the opposite case.
-    // A retry exists because the model's prior attempt failed a structural check (a declared
-    // header was missing or malformed), so retry is exactly the turn where the model most
+    // Declared on retries too, as the framework guidance above is (R152). A retry exists
+    // because the model's prior attempt failed a structural check (a declared header was
+    // missing or malformed), so retry is exactly the turn where the model most
     // needs the vocabulary restated — omitting it here would tell the step to fix its
     // structure without telling it the structure. `isFinalStep`/`gateGuidanceEnabled` reuse
     // the target step's own coordinates (`targetIndex`) and the chain-wide gate-guidance
