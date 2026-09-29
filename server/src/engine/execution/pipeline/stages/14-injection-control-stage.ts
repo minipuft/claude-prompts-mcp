@@ -106,7 +106,7 @@ export class InjectionControlStage extends BasePipelineStage {
    * call that did not move stands where it was, and deciding again gives the same answer.
    */
   redecideAt(context: ExecutionContext, position: InjectionPosition): void {
-    const answeredGateGuidance = context.state.injection?.gateGuidance;
+    const answeredGateGuidance = context.state.injection.gateGuidance;
     const injectionState = this.decideFor(context, position);
     if (answeredGateGuidance === undefined) {
       delete injectionState.gateGuidance;
