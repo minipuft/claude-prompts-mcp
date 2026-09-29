@@ -111,8 +111,19 @@ memory (2,240 MB measured on a 12 GB box), where the run aborts with
 `JavaScript heap out of memory` and exit 134; CI's 16 GB runners get a
 larger default and never showed it. Both scripts therefore set
 `--max-old-space-size=4096`, sized from a measured 2.9 GB peak resident set
-for the full unit run. The retention itself is open work; the ceiling only
-stops it failing the suite.
+for the full unit run. The ceiling only stops the retention failing the suite.
+
+What is retained was measured on 2026-09-29 (335 files): the heap left after
+each file, with a garbage collection forced between files, climbs from 41 MB
+to 2,096 MB, about 6 MB per file, and drops by more than 1 MB after only 8
+files. The largest steps are the files that import the largest module graphs
+(the composition root in `tests/unit/runtime/`, 44 to 80 MB each; the ESLint
+rule tests, 61 MB), and a file that only imports `Application` keeps 89 of the
+97 MB the full shutdown-order test keeps. So each file's loaded modules stay
+resident under Jest's ESM runtime; no single file leaks a server, database or
+timer that a teardown could free. _As of 2026-09-29 · measured 2,096 MB
+retained heap, 3.0 GB peak resident set · flips when the retained heap crosses
+the 4,096 MB ceiling._
 
 </details>
 
