@@ -310,6 +310,15 @@ describe('Streamable HTTP notification delivery', () => {
   }, 60000);
 
   test('a concurrent client receives its own events and none of the other call’s', async () => {
+    // The run is started under CAGEERF, the framework its answer is written for: the test above
+    // left `react` active, and since R170 an answer failing its run's phase guards holds the step
+    // and announces nothing. A run keeps the framework of its first call (R158), so the
+    // concurrent switch below does not change what this step is graded on.
+    await callTool('system_control', {
+      action: 'framework',
+      operation: 'switch',
+      framework: 'cageerf',
+    });
     const start = await callTool('prompt_engine', {
       command: '>>quick_decision topic:"concurrent isolation"',
     });
@@ -326,7 +335,7 @@ describe('Streamable HTTP notification delivery', () => {
       callTool('system_control', {
         action: 'framework',
         operation: 'switch',
-        framework: 'cageerf',
+        framework: 'react',
       }),
     ]);
 

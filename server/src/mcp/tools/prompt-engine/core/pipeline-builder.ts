@@ -361,6 +361,7 @@ export class PipelineBuilder {
 
     // Phase guard verification stage — built before stage 16, which hands it a detached node's
     // late report to grade (row 3.8): stage 16 answers that call, so stage 19 never runs on it.
+    // Stage 16 also takes its grade of an ordinary answer before the advance (R170).
     const phaseGuardVerificationStage = createPhaseGuardVerificationStage(
       () => deps.frameworkManager,
       // Resolved by the config loader, not here: the literal that used to sit on this line was
@@ -398,6 +399,9 @@ export class PipelineBuilder {
         // R144: the same stage 14 instance decides again once this stage has moved the run.
         redecideInjection: (context, position) =>
           injectionControlStage.redecideAt(context, position),
+        // R170: the same stage 19 instance grades the answer before this stage decides the
+        // advance; stage 19 then opens its review from that grade, never grading twice.
+        gradeAnswer: (context) => phaseGuardVerificationStage.gradeAnswer(context),
       }
     );
 

@@ -120,7 +120,10 @@ export class InjectionDecisionService {
    * Decide for all injection types at once.
    * Useful for pipeline stages that need all decisions.
    */
-  decideAll(input: Omit<InjectionDecisionInput, 'injectionType'>): InjectionState {
+  decideAll(
+    input: Omit<InjectionDecisionInput, 'injectionType'>,
+    types: readonly InjectionType[] = INJECTION_TYPES
+  ): InjectionState {
     const state: InjectionState = {};
     if (input.currentStep !== undefined) {
       state.currentStep = input.currentStep;
@@ -132,7 +135,7 @@ export class InjectionDecisionService {
       state.executionContext = input.executionContext;
     }
 
-    for (const type of INJECTION_TYPES) {
+    for (const type of types) {
       const decision = this.decide({ ...input, injectionType: type });
 
       switch (type) {

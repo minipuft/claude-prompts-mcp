@@ -50,7 +50,10 @@ scenarios:
   # ── Gate verdict round-trip (plan row 0.5.13) ──────────────────────────────
   #
   # These deliberately DROP `%clean`. The scenario above suppresses gates so the resume claim is
-  # the only variable; here the pending gate IS the claim, so it must be left on. Both rows assert
+  # the only variable; here the pending gate IS the claim, so it must be left on. The answer
+  # carries the CAGEERF sections the step declares: since R170 an answer failing its phase guard
+  # holds the step whatever the verdict says, so a one-line answer would test the phase guard,
+  # not the verdict. Before R170 the run advanced past the failing answer and the claim held. Both rows assert
   # `Progress 2/3` rather than `ok: true` — measured 2026-08-11, a resume that cannot advance
   # still returns success (see `chain-gated-resume-without-verdict` below), so success is not
   # evidence the verdict was honored.
@@ -67,7 +70,20 @@ scenarios:
       - tool: prompt_engine
         args:
           chain_id: '${cid}'
-          user_response: 'Options: PostgreSQL, SQLite, DuckDB.'
+          user_response: |-
+            Options: PostgreSQL, SQLite, DuckDB.
+
+            ## Context
+            The ask is to choose one option for the stated need, and the answer below lists the viable candidates with enough detail to weigh them.
+
+            ## Analysis
+            Each candidate differs in operating cost, maturity and fit; the list names them so the next step can compare them on those terms.
+
+            ## Goals
+            Name every viable option in one line each, so the comparison step starts from a complete list.
+
+            ## Execution
+            List the options, give each a one-line description, and leave the weighing to the step that follows this one.
           gate_verdict:
             overall: 'PASS'
             rationale: 'listed three options with one-line descriptions'
@@ -90,7 +106,20 @@ scenarios:
       - tool: prompt_engine
         args:
           chain_id: '${cid}'
-          user_response: 'Options: Redis, Memcached, Dragonfly.'
+          user_response: |-
+            Options: Redis, Memcached, Dragonfly.
+
+            ## Context
+            The ask is to choose one option for the stated need, and the answer below lists the viable candidates with enough detail to weigh them.
+
+            ## Analysis
+            Each candidate differs in operating cost, maturity and fit; the list names them so the next step can compare them on those terms.
+
+            ## Goals
+            Name every viable option in one line each, so the comparison step starts from a complete list.
+
+            ## Execution
+            List the options, give each a one-line description, and leave the weighing to the step that follows this one.
           gate_verdict: 'GATE_REVIEW: PASS - three options listed'
     expect: { text_contains: 'Progress 2/3' }
 

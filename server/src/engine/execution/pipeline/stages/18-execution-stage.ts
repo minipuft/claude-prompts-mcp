@@ -62,6 +62,16 @@ export class StepExecutionStage extends BasePipelineStage {
       return;
     }
 
+    // An answer its phase guard held (R170) left the run on the step it answered: that step's
+    // structural review, which stage 19 opens from the same grade, is the whole reply.
+    if (context.state.gates.answerGrade?.kind === 'evaluated') {
+      const heldNodeId = context.state.gates.answerGrade.holdsNodeId;
+      if (heldNodeId !== undefined) {
+        this.logExit({ skipped: 'Answer held by its phase guard', heldNodeId });
+        return;
+      }
+    }
+
     if (!context.executionPlan) {
       this.handleError(new Error('Execution plan missing before step execution'));
     }
@@ -271,6 +281,11 @@ export class StepExecutionStage extends BasePipelineStage {
         ...(Object.keys(normalizedStepArgs).length > 0 ? { input: normalizedStepArgs } : {}),
         suppressFrameworkInjection, // Pass injection decision to chain executor
         injectionState: context.state.injection, // Also pass full injection state
+        // The run's selected style text; the render appends it where the rendered step's style
+        // decision in `injectionState` says inject, as it reads the system prompt's (R162).
+        ...(context.state.framework.selectedStyleGuidance !== undefined
+          ? { selectedStyleGuidance: context.state.framework.selectedStyleGuidance }
+          : {}),
       },
       additionalGateIds: executionPlan.gates,
       scope: scopeOptions,
@@ -475,6 +490,7 @@ export class StepExecutionStage extends BasePipelineStage {
         callToAction: renderResult.callToAction,
         nextStepDelegated: renderResult.nextStepDelegated,
         currentStepDelegated: renderResult.currentStepDelegated,
+        asksVerdict: renderResult.asksVerdict,
       },
       generatedAt: Date.now(),
     };

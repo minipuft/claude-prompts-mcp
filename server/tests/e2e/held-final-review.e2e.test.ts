@@ -1,17 +1,18 @@
-// @lifecycle test - P6.34 / P6.30: a run whose final answer opens a review after the walk past its last node, over Streamable HTTP.
+// @lifecycle test - P6.34 / P6.30: a run whose final answer opens a structural review holds on its last node, over Streamable HTTP.
 /**
  * The held-final shape (row 3.9, measured in #390): a two-step chain whose one-line final answer
- * opens a structural review AFTER the capture walked the run past its last node. The run then
- * stands on no node (`current_node_id` NULL), stays `working`, and one review is open. Driven here
- * end to end under the shipped defaults (CAGEERF + default gates) against `documentation_change`,
- * the bundled two-step chain, reading `chain_runs` for the run's own facts.
+ * opened a structural review AFTER the capture walked the run past its last node, so the run stood
+ * on no node (`current_node_id` NULL). Since R170 (P6.274) the answer is graded before the run
+ * moves: the run holds ON its last node, stays `working`, and one review is open. Driven here end
+ * to end under the shipped defaults (CAGEERF + default gates) against `documentation_change`, the
+ * bundled two-step chain, reading `chain_runs` for the run's own facts.
  *
  * MEASURED 2026-09-25 on `380b4a5e` (P6.30): every leg below holds. A bare `chain_id` resume of
  * the held-final run is answered by the pending review's render — stage 18 skips on
  * `pendingReview` and stage 20 renders the review (re-rendering the final step's body with it) —
  * not by the held-run notice. With both of those routed past (a mutant), the notice answers
- * instead and leg (d) goes red. The notice is reached today only through the detached router
- * while a detached report is also owed: the last case here.
+ * instead and leg (d) goes red. The notice is reached only through the detached router while a
+ * detached report is also owed: the last case here.
  */
 import { afterEach, describe, expect, test } from '@jest/globals';
 
@@ -35,6 +36,8 @@ const STEP_COMPLETE = 'notifications/chain/step_complete';
 const PASS = 'GATE_REVIEW: PASS - the step meets its gates';
 const FAIL = 'GATE_REVIEW: FAIL - the step misses its gates';
 const HELD_NOTICE = 'Every step has run, but the run stays open';
+/** `documentation_change`'s final node. */
+const FINAL_NODE = 'semantic-and-voice-review-step-2-of-2';
 
 interface ToolOutcome {
   text: string;
@@ -133,11 +136,7 @@ describe('Streamable HTTP: the held-final shape (P6.34)', () => {
     const first = await call({ user_response: cageerfAnswer('Step 1'), gate_verdict: PASS });
     expect(first.text).toContain('Progress 2/2');
     // CONTROL: a full step-1 answer walks onto step 2 with nothing held.
-    expect(session.run()).toEqual({
-      status: 'working',
-      currentNodeId: 'semantic-and-voice-review-step-2-of-2',
-      reviews: [],
-    });
+    expect(session.run()).toEqual({ status: 'working', currentNodeId: FINAL_NODE, reviews: [] });
 
     const opened = await call({ user_response: 'one line', gate_verdict: PASS });
     return { call, session, opened };
@@ -149,9 +148,11 @@ describe('Streamable HTTP: the held-final shape (P6.34)', () => {
     expect(opened.text).toContain('Structural Review Required');
     expect(opened.text).toContain('→ Final step 2/2 — awaiting gate verdict');
     expect(count(opened, CHAIN_COMPLETE)).toBe(0);
+    // Since R170 the answer is graded before the run moves, so the run holds ON its last node
+    // rather than walking past it with the review open (`currentNodeId` was null before).
     expect(session.run()).toEqual({
       status: 'working',
-      currentNodeId: null,
+      currentNodeId: FINAL_NODE,
       reviews: [{ kind: 'structural', phase: 'awaiting-verdict' }],
     });
   }, 180000);
@@ -204,17 +205,21 @@ describe('Streamable HTTP: the held-final shape (P6.34)', () => {
     expect(count(resumed, STEP_COMPLETE)).toBe(0);
     expect(session.run()).toEqual({
       status: 'working',
-      currentNodeId: null,
+      currentNodeId: FINAL_NODE,
       reviews: [{ kind: 'structural', phase: 'awaiting-verdict' }],
     });
   }, 180000);
 
   /**
-   * P6.30 driven: `First → A (await: run) → C`, A moved past and owed its report, C's one-line
-   * answer opening its structural review past the last node. The held-run notice names BOTH holds,
-   * each with its own move. Before P6.30 it named the owed report only.
+   * P6.30 driven: `First → A (await: run) → C`, A moved past and owed its report. Before R170, C's
+   * one-line answer sent with a PASS walked the run past its last node with C's structural review
+   * open, and the held-run notice named both holds. Since R170 that answer holds the run ON C, so
+   * the review answers a bare resume; once the review passes, the run walks past its last node and
+   * the notice names the hold still open — A's owed report, with its move. The notice naming a
+   * structural review beside an owed report is no longer reachable over the transport this way;
+   * `describeHeldRun`'s unit suite covers every hold kind.
    */
-  test('P6.30: the held-run notice names an owed report and an open structural review', async () => {
+  test('P6.30: the held-run notice names the owed report once the structural review of the last step passes', async () => {
     const session = await startSession();
     for (const id of ['hr_first', 'hr_a', 'hr_c']) {
       const created = await session.tool('resource_manager', {
@@ -253,19 +258,20 @@ describe('Streamable HTTP: the held-final shape (P6.34)', () => {
     expect(opened.text).toContain('Structural Review Required');
     expect(session.run()).toEqual({
       status: 'working',
-      currentNodeId: null,
+      currentNodeId: 'c',
       reviews: [{ kind: 'structural', phase: 'awaiting-verdict' }],
     });
 
-    const held = await call({});
-    expect(held.text).toContain(
-      `${HELD_NOTICE} until its detached node(s) report: a (step 2); and until its structural ` +
-        'review of step 3 is answered.'
-    );
-    expect(held.text).toContain(
-      'The structural review of step 3 is still open: resume with chain_id and gate_verdict.'
-    );
+    // The review holding C answers a bare resume, not the notice.
+    const resumed = await call({});
+    expect(resumed.text).toContain('Structural Review Required');
+    expect(resumed.text).not.toContain(HELD_NOTICE);
+
+    const held = await call({ gate_verdict: PASS });
+    expect(session.run()).toEqual({ status: 'working', currentNodeId: null, reviews: [] });
+    expect(held.text).toContain(`${HELD_NOTICE} until its detached node(s) report: a (step 2).`);
     expect(held.text).toContain('node: a');
+    expect(held.text).not.toContain('structural review');
     expect(held.text).not.toContain('detached review(s)');
     expect(count(held, CHAIN_COMPLETE)).toBe(0);
   }, 180000);

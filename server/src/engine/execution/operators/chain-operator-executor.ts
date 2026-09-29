@@ -5,6 +5,7 @@ import { GATE_ATTESTATION_LINE } from '../../gates/guidance/GateGuidanceRenderer
 import { buildDelegatedStepCallToAction, buildDelegatedStepLines } from '../delegation/brief.js';
 import { handoffNodeToken } from '../delegation/handoff-contract.js';
 import { DelegationRenderer } from '../delegation/renderer.js';
+import { withResponseStyle } from '../formatting/response-style.js';
 import {
   describeReviewForRender,
   renderReviewSupplements,
@@ -282,8 +283,7 @@ export class ChainOperatorExecutor {
     const isTargetFinalStep = targetIndex === stepPrompts.length - 1;
     const declaredSections = await this.resolveDeclaredSections(targetStep, input);
     const responseFormatSection = this.buildResponseFormatSection(
-      isTargetFinalStep,
-      gateGuidanceEnabled,
+      { coverage: gateGuidanceEnabled, verdictLine: isTargetFinalStep },
       declaredSections
     );
 
@@ -498,30 +498,26 @@ export class ChainOperatorExecutor {
       }
     }
 
-    if (convertedPrompt?.systemMessage) {
-      lines.push(`> ${convertedPrompt.systemMessage}`);
+    const systemMessage = this.withRenderedStepStyle(convertedPrompt?.systemMessage, chainContext);
+    if (systemMessage !== undefined && systemMessage !== '') {
+      lines.push(`> ${systemMessage}`);
     }
 
     lines.push(renderedTemplate.trim());
 
-    // Add gate instructions if stored in step metadata (from GateEnhancementStage).
-    // Skipped for a delegated CURRENT step: the brief owns the gate text there, under the
+    // A gated step's render names the gates it grades and asks for its verdict, every time
+    // (R171): gate enhancement wrote those gates' instructions on the step, and the gate-guidance
+    // frequency never thins them, because this render asks for the verdict they grade. Skipped
+    // for a delegated CURRENT step: the brief owns the gate text there, under the
     // `### Quality Gates` heading the hook contract requires (S2/S4) — pushing it here too
     // would duplicate it inside the brief body.
-    if (
-      gateGuidanceEnabled &&
-      step.delegated !== true &&
-      step.metadata?.['gateInstructions'] &&
-      typeof step.metadata['gateInstructions'] === 'string'
-    ) {
-      lines.push(step.metadata['gateInstructions']);
-    } else if (!gateGuidanceEnabled && step.metadata?.['gateInstructions']) {
-      this.logger.debug(
-        '[SymbolicChain] Skipped gate instructions (gate-guidance injection disabled)',
-        {
-          step: step.stepNumber,
-        }
-      );
+    const stepGateInstructions =
+      typeof step.metadata?.['gateInstructions'] === 'string'
+        ? step.metadata['gateInstructions']
+        : '';
+    const asksVerdict = stepGateInstructions.trim() !== '';
+    if (asksVerdict && step.delegated !== true) {
+      lines.push(stepGateInstructions);
     }
 
     // R-1: a CURRENT delegated step renders as a self-contained EXECUTION BRIEF — everything a
@@ -560,7 +556,12 @@ export class ChainOperatorExecutor {
     // by FREQUENCY is a different question and deliberately does not withhold them: the step was
     // given the framework, just not a second copy of its system prompt.
     const declaredSections = await this.resolveDeclaredSections(step, input);
-    lines.push(this.buildResponseFormatSection(isFinalStep, gateGuidanceEnabled, declaredSections));
+    lines.push(
+      this.buildResponseFormatSection(
+        { coverage: asksVerdict, verdictLine: asksVerdict },
+        declaredSections
+      )
+    );
 
     // NEXT-step delegation gets a one-line ADVISORY, never a full handoff (S7): the old full CTA
     // here described step N+1 while "Pass ALL content above" pointed at step N's content — an
@@ -578,7 +579,7 @@ export class ChainOperatorExecutor {
           )
         : !isFinalStep
           ? `Use the resume shortcut below and include your step output in user_response${
-              gateGuidanceEnabled ? ' (add gate_verdict if a gate asks you to self-review)' : ''
+              asksVerdict ? ' and your gate_verdict' : ''
             } so Step ${stepNumber + 1} can begin.`
           : 'Deliver the final response to the user (no user_response needed once the chain completes).';
 
@@ -593,6 +594,7 @@ export class ChainOperatorExecutor {
       callToAction,
       nextStepDelegated: nextStep?.delegated === true || undefined,
       ...(isCurrentDelegated ? { currentStepDelegated: true } : {}),
+      ...(asksVerdict ? { asksVerdict: true } : {}),
       // What this render actually told the model. Reported rather than re-derived: the
       // verification stage may only block on a header the prompt named, and asking phases.yaml
       // after the fact cannot answer that — it is the same source the guard already reads.
@@ -649,6 +651,24 @@ export class ChainOperatorExecutor {
       { gateGuidance?: { inject?: boolean } } | undefined;
 
     return injectionState?.gateGuidance?.inject !== false;
+  }
+
+  /**
+   * The step's system message with the run's selected style guidance appended when the RENDERED
+   * step's style decision says inject (R162 amended) — read here, where the system prompt's
+   * decision is read, because on a resume that decision exists only after stage 16 moved the
+   * run. A first call's prompts already carry the line (stage 15), which appends nothing twice.
+   */
+  private withRenderedStepStyle(
+    systemMessage: string | undefined,
+    chainContext: Record<string, unknown>
+  ): string | undefined {
+    const styleGuidance = chainContext['selectedStyleGuidance'];
+    const injectionState = chainContext['injectionState'] as InjectionState | undefined;
+    if (typeof styleGuidance !== 'string' || injectionState?.styleGuidance?.inject !== true) {
+      return systemMessage;
+    }
+    return withResponseStyle(systemMessage, styleGuidance);
   }
 
   /**
@@ -1124,11 +1144,14 @@ export class ChainOperatorExecutor {
   }
 
   /**
-   * Build Required Response Format section for structured delivery verification.
+   * Build Required Response Format section for structured delivery verification. `coverage` adds
+   * the per-gate lines and `verdictLine` the overall verdict line. A normal render passes its
+   * step's verdict request for both: every render of a gated step asks, and no render of an
+   * ungated one does, since it has no gate to grade (R171). A review render keeps its own
+   * rule: its verdict block above asks, and the line closes only its final step.
    */
   private buildResponseFormatSection(
-    isFinalStep: boolean,
-    gateGuidanceEnabled: boolean,
+    request: { readonly coverage: boolean; readonly verdictLine: boolean },
     declaredSections: readonly DeclaredSection[] = []
   ): string {
     const lines: string[] = [
@@ -1155,7 +1178,7 @@ export class ChainOperatorExecutor {
       lines.push('');
     }
 
-    if (gateGuidanceEnabled) {
+    if (request.coverage) {
       lines.push(
         '**Gate Coverage**:',
         '- [1] PASS|FAIL: rationale',
@@ -1164,7 +1187,7 @@ export class ChainOperatorExecutor {
       );
     }
 
-    if (isFinalStep) {
+    if (request.verdictLine) {
       lines.push('**GATE_REVIEW: PASS|FAIL - overall assessment**');
     }
 

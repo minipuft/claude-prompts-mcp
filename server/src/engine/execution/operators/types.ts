@@ -173,6 +173,11 @@ export interface ChainStepRenderResult {
    */
   currentStepDelegated?: boolean;
   /**
+   * True when THIS rendered step carries gates, so the render named them and asked for the step's
+   * verdict (R171). Read by the footer, whose `Next:` line then names `gate_verdict` too.
+   */
+  asksVerdict?: boolean;
+  /**
    * Phase-guard section headers this render actually declared to the model, verbatim. Recorded
    * into the run so `19-phase-guard-verification-stage` can tell a header the prompt asked for
    * from one it never mentioned — the two are indistinguishable if both sides re-read
