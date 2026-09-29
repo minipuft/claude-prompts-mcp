@@ -1,6 +1,7 @@
 // @lifecycle canonical - Registers temporary gates from normalized specifications.
 import { mergeGateBody } from './gate-body-merge.js';
 import { formatCriteriaAsGuidance } from '../../execution/pipeline/criteria-guidance.js';
+import { parseGateVerdict } from '../core/gate-verdict-contract.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { GateBody } from './gate-body-merge.js';
@@ -383,6 +384,10 @@ export class TemporaryGateRegistrar {
    * sent it; `target_step_number` is judged as the node it names. Empty on the call that starts a
    * run (its first node is the step it renders, R59), on a restart, and on a run that has ended
    * (the session stage answers that one). A target the run does not declare is stage 04's refusal.
+   * A call submitting a FAIL verdict re-renders the node it answers, so a gate on that node is not
+   * late and is accepted for the retry (R146) — when this call opens that node's review. A review
+   * already open keeps the gates it opened with, so a gate sent then is refused as never firing;
+   * a node the run has passed stays refused.
    */
   unreachableStepTargets(context: ExecutionContext): StepTargetRefusal[] {
     const view = this.resolveRunView(context);
@@ -391,9 +396,14 @@ export class TemporaryGateRegistrar {
     }
     const lastStepOf = context.parsedCommand?.declaredNodes?.lastStepOf ?? {};
     const gates = (context.state.gates.requestedOverrides?.gates ?? []) as RawGateInput[];
+    const raw = context.getGateVerdict();
+    const verdict =
+      context.gateEnforcement?.parseVerdict(raw, 'gate_verdict') ??
+      parseGateVerdict(raw, 'gate_verdict');
+    const retry = verdict?.verdict === 'FAIL';
     return gates.flatMap((gate) => {
       if (typeof gate !== 'object') return [];
-      const rejection = unreachableTargetRejection(gate, view, lastStepOf);
+      const rejection = unreachableTargetRejection(gate, view, lastStepOf, retry);
       const held =
         rejection !== undefined &&
         typeof gate.id === 'string' &&
@@ -1102,16 +1112,22 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /**
  * The refusal for one request gate whose target a resume can no longer reach, or undefined. PURE.
  * A run standing on no node has passed them all; a position this view cannot place judges nothing.
+ * `retry`: the call submits a FAIL, which re-renders the node it answers; a gate on that node
+ * reaches the retry when this call opens the node's review (R146).
  */
 function unreachableTargetRejection(
   gate: Exclude<RawGateInput, string>,
   view: RunStepView,
-  lastStepOf: Readonly<Record<string, string>>
+  lastStepOf: Readonly<Record<string, string>>,
+  retry: boolean
 ): StepTargetRefusal | undefined {
   const current = currentOrdinalOf(view);
   const target = stepTargetOf(gate, view.nodeIds);
   if (current === -1 || target === undefined || target.position === -1) return undefined;
-  if (target.position > current) return undefined;
+  const reviewOpen = view.currentNodeReviewOpen === true;
+  if (target.position > current || (retry && !reviewOpen && target.position === current)) {
+    return undefined;
+  }
   const nodeId = declaredAddress(target.nodeId, lastStepOf);
   const named =
     target.form === 'id' ? `target_step_id "${nodeId}"` : `target_step_number ${target.number}`;
@@ -1119,9 +1135,11 @@ function unreachableTargetRejection(
   const why =
     target.position < current
       ? 'names a step the run has already passed'
-      : next === null
-        ? 'names the step this call answers; the run has no later step'
-        : `names the step this call answers; target "${declaredAddress(next, lastStepOf)}" or later`;
+      : retry && reviewOpen
+        ? 'names the step whose open review this call grades; that review keeps the gates it opened with'
+        : next === null
+          ? 'names the step this call answers; the run has no later step'
+          : `names the step this call answers; target "${declaredAddress(next, lastStepOf)}" or later`;
   return {
     nodeId,
     detail: `${named} ${why}. A gate there could never fire; the run did not advance.`,

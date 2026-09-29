@@ -1000,6 +1000,156 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
   });
 
   /**
+   * MEASURED 2026-09-28 on `6b6fff7aa` (driven, this harness): a `>>sv_chain` run standing at `b`,
+   * resumed with `user_response` plus a FAIL verdict and a gate targeting `b`, was refused "names
+   * the step this call answers; target \"c\" or later", although a FAIL re-renders `b` for the
+   * retry. The same gate sent with a verdict alone, after `b`'s review had opened, was refused the
+   * same way; accepting it there would not reach the review, whose gate set is fixed when it opens.
+   *
+   * Now (R146) a FAIL resume that opens the current node's review accepts a gate on that node, and
+   * the retry render carries it; a gate on a node the run passed, or sent while the node's review
+   * is already open, is refused by name.
+   */
+  describe('P6.149: a FAIL resume accepts a gate on the node it re-renders', () => {
+    const failWithGate = (
+      chainId: string,
+      answer: string | undefined,
+      target: string,
+      marker: string
+    ) =>
+      tool('prompt_engine', {
+        chain_id: chainId,
+        ...(answer === undefined ? {} : { user_response: answer }),
+        gate_verdict: FAIL,
+        gates: [
+          {
+            id: marker.toLowerCase(),
+            name: marker.toLowerCase(),
+            criteria: [marker],
+            target_step_id: target,
+          },
+        ],
+      });
+
+    test('(a) the retry render of the current node carries the gate, and its review holds it', async () => {
+      const run = await start({ command: '>>sv_chain' });
+      await run.call({ user_response: 'A out', gate_verdict: PASS });
+
+      const retried = await failWithGate(run.chainId, 'B out', 'b', 'TGT-149-A');
+      expect(retried.isError).toBe(false);
+      expect(retried.text).not.toContain('gate-target-passed');
+      expect(retried.text).toContain('Gate Review Required');
+      expect(retried.text).toContain('TGT-149-A');
+      expect(retried.text).toContain('### sv-block');
+      expect(runState(run.chainId).reviews['b']).toHaveLength(2);
+    }, 120000);
+
+    test('(b) control: the same FAIL resume aiming at a passed node is refused as before', async () => {
+      const run = await start({ command: '>>sv_chain' });
+      await run.call({ user_response: 'A out', gate_verdict: PASS });
+      const before = rawRunState(run.chainId);
+
+      const refused = await failWithGate(run.chainId, 'B out', 'a', 'TGT-149-B');
+      expect(refused.isError).toBe(true);
+      expect(refused.text).toContain(
+        '[gate-target-passed] node "a": target_step_id "a" names a step the run has already passed'
+      );
+      expect(refused.text).not.toContain('TGT-149-B');
+      expect(rawRunState(run.chainId)).toBe(before);
+    }, 120000);
+
+    test('(c) control: a FAIL graded against an already open review is refused by name', async () => {
+      const run = await start({ command: '>>sv_chain' });
+      await run.call({ user_response: 'A out', gate_verdict: PASS });
+      await run.call({ user_response: 'B out' });
+      const before = rawRunState(run.chainId);
+
+      const refused = await failWithGate(run.chainId, undefined, 'b', 'TGT-149-C');
+      expect(refused.isError).toBe(true);
+      expect(refused.text).toContain(
+        '[gate-target-passed] node "b": target_step_id "b" names the step whose open review this call grades; that review keeps the gates it opened with'
+      );
+      expect(rawRunState(run.chainId)).toBe(before);
+    }, 120000);
+  });
+
+  /**
+   * MEASURED 2026-09-28 on `6b6fff7aa` (driven, this harness, shipped `gateGuidance` frequency 0 =
+   * first step only, target both; stage 14's decision read from the `--verbose` log): a chain
+   * `[sv_a, sv_b, sv_a+sv-block]` answered on steps 1 and 2 rendered step 3 from a call whose
+   * gate-guidance decision was "Step 2 > 1 (first-only mode)", and step 3's block carried none of
+   * its own gate's guidance. The FAIL on step 3 decided "Gate review step (frequency bypassed)":
+   * stage 13 opens a gated step's review before stage 14 decides, so the call's context is
+   * `'gate_review'`, and the review render carried the gate's guidance. Stage 20 also hands the
+   * review render only the system-prompt decision, never the call's gate-guidance one.
+   *
+   * PIN (R147): a review render decides its own gate guidance and never follows the frequency;
+   * only a step block follows the call's gate-guidance decision.
+   */
+  describe("P6.151: a review render's gate guidance does not follow the call's frequency", () => {
+    /** Gate-guidance injection for `sv-block`: the gate's guidance under its own heading. */
+    const gateGuidanceFor = (text: string): boolean =>
+      text.includes('### sv-block\nGUIDANCE-sv-block');
+
+    beforeAll(async () => {
+      for (const [id, steps] of [
+        [
+          'sv_tail151',
+          [
+            { promptId: 'sv_a', stepName: 'A' },
+            { promptId: 'sv_b', stepName: 'B' },
+            { promptId: 'sv_a', stepName: 'C', inlineGateIds: ['sv-block'] },
+          ],
+        ],
+        [
+          'sv_short151',
+          [
+            { promptId: 'sv_a', stepName: 'A' },
+            { promptId: 'sv_b', stepName: 'B', inlineGateIds: ['sv-block'] },
+          ],
+        ],
+      ] as const) {
+        const created = await tool('resource_manager', {
+          resource_type: 'prompt',
+          action: 'create',
+          id,
+          category: 'general',
+          name: id,
+          description: 'e2e chain gated on its last step only',
+          user_message_template: 'CHAIN-OWN-TEMPLATE',
+          arguments: TOPIC,
+          gate_configuration: OPT_OUT,
+          chain_steps: steps,
+        });
+        if (created.isError) throw new Error(created.text);
+      }
+    }, 120000);
+
+    test('(a) gate guidance: a FAIL review render on step 3 carries it; the step 3 block before it did not', async () => {
+      const run = await start({ command: '>>sv_tail151' });
+      await run.call({ user_response: 'A out' });
+      const stepBlock = await run.call({ user_response: 'B out' });
+      expect(templates(stepBlock)).toEqual(['BODY-sv_a topic=']);
+      expect(stepBlock).toContain('Progress 3/3');
+      // Control: the call answering step 2 decided gate guidance "skip" (first step only), and the
+      // step block it rendered follows that decision.
+      expect(gateGuidanceFor(stepBlock)).toBe(false);
+
+      const review = await run.call({ user_response: 'C out', gate_verdict: FAIL });
+      expect(review).toContain('Gate Review Required');
+      // Twin: the review render carries gate guidance although step 3 is past the frequency.
+      expect(gateGuidanceFor(review)).toBe(true);
+    }, 120000);
+
+    test('(b) positive control: gate guidance in a step block the step 1 call renders is seen', async () => {
+      const run = await start({ command: '>>sv_short151' });
+      const stepBlock = await run.call({ user_response: 'A out' });
+      expect(templates(stepBlock)).toEqual(['BODY-sv_b topic=']);
+      expect(gateGuidanceFor(stepBlock)).toBe(true);
+    }, 120000);
+  });
+
+  /**
    * PIN (as of 2026-09-27 · flips when a gated single prompt stops opening a run). A single prompt
    * with an inline gate operator opens a run of ONE node, `n1` (R52), because the planner requires
    * a session for any `gate` operator (`ExecutionPlanner.requiresSession`, its operator clause — not
@@ -1365,6 +1515,53 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       expect(after(run.chainId)).toEqual([]);
       expect(answering).toContain('Remaining plan: none');
       expect(listed(answering)).toEqual([]);
+    }, 120000);
+  });
+
+  /**
+   * P6.184 / R150 pins R86. MEASURED 2026-09-28 on `f2c12e359` (driven, `system_control session
+   * inspect`): a completed `>>sv_a topic:"T1"` arrow-chain `>>sv_b topic:"T2"` run lists no
+   * `currentStepArgs` and no `input`, while mid-run step 2 lists `{"topic":"T2"}` under both.
+   * `getChainContext` reads them from `getCurrentStepArgs`, which looks the step up by node; a run
+   * standing on no node looks up ordinal N plus 1, which names no parse step. The early return in
+   * `refuseRemainder` answers a remainder, not this path.
+   */
+  describe('P6.184: a completed run exposes no current step args', () => {
+    /** The run's context variables, as `system_control session inspect` lists them. */
+    async function inspectContext(chainId: string): Promise<string> {
+      const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+      let sessionId: string | undefined;
+      try {
+        sessionId = (
+          db.prepare('SELECT session_id FROM chain_runs WHERE chain_id = ?').get(chainId) as
+            { session_id: string } | undefined
+        )?.session_id;
+      } finally {
+        db.close();
+      }
+      if (sessionId === undefined) throw new Error(`no chain_runs row for ${chainId}`);
+      const inspected = await tool('system_control', {
+        action: 'session',
+        operation: 'inspect',
+        session_id: sessionId,
+      });
+      expect(inspected.isError).toBe(false);
+      return inspected.text.split('### 📄 Context Variables')[1] ?? '';
+    }
+
+    test('(a) mid-run the current step args are listed; (b) once complete they are not', async () => {
+      const run = await start({ command: `>>sv_a topic:"T1"${ARROW}>>sv_b topic:"T2"` });
+      await run.call({ user_response: 'A out' });
+      const running = await inspectContext(run.chainId);
+      expect(running).toContain('- `currentStepArgs`: {"topic":"T2"}');
+      expect(running).toContain('- `input`: {"topic":"T2"}');
+
+      const done = await run.call({ user_response: 'B out' });
+      expect(done).toContain('Chain execution complete');
+      const completed = await inspectContext(run.chainId);
+      expect(completed).toContain('- `current_node_id`: null');
+      expect(completed).not.toContain('`currentStepArgs`');
+      expect(completed).not.toContain('`input`');
     }, 120000);
   });
 
@@ -2662,6 +2859,65 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
         await run.call({ user_response: 'investigated', gate_verdict: FAIL });
         expect(runState(run.chainId).reviews).toEqual({ 'inv-u-160': ['sv-drop'] });
       }, 120000);
+
+      /**
+       * P6.182 pins R84, as of 2026-09-28 · flips when the owner exempts inserted nodes from
+       * inherited gates (P6.12/P6.98). The unknown names `n2` as its `target_step_id`, and the
+       * answering call's `replace` drops `n2`: the inserted node then carries the live walk's
+       * untargeted gates (`sv-block`, from the `r1-*` steps), which is what a later call computes,
+       * and none of the dropped step's. Control: the same unknown with no remainder inherits `n2`'s.
+       */
+      describe('P6.182: an inserted node whose target the same call dropped', () => {
+        async function insertTargeted() {
+          const run = await start({ command: `>>sv_a${ARROW}>>sv_b :: sv-drop` });
+          await run.call({
+            user_response: 'A out',
+            observations: [
+              {
+                type: 'unknown_discovered',
+                id: 'u-182',
+                statement: 'the rest of the plan is undecided',
+                blocking: true,
+                target_step_id: 'n2',
+              },
+            ],
+          });
+          expect(currentNode(run.chainId)).toBe('inv-u-182');
+          return run;
+        }
+
+        test("(a) inherits the live walk's untargeted gates, and the next call grades them", async () => {
+          const run = await insertTargeted();
+          const replaced = await run.call({
+            user_response: 'investigated',
+            remainder: { mode: 'replace', nodes: [{ id: 'r1', promptId: 'sv_chain' }] },
+          });
+          expect(runNodes(run.chainId).map((node) => node.split(':')[0])).toEqual([
+            'n1',
+            'inv-u-182',
+            'r1-a',
+            'r1-b',
+            'r1-c',
+          ]);
+          expect(runState(run.chainId).reviews).toEqual({ 'inv-u-182': ['sv-block'] });
+          expect(replaced).not.toContain('sv-drop');
+
+          const failed = await run.call({
+            user_response: 'investigated again',
+            gate_verdict: FAIL,
+          });
+          expect(currentNode(run.chainId)).toBe('inv-u-182');
+          expect(runState(run.chainId).reviews).toEqual({ 'inv-u-182': ['sv-block'] });
+          expect(failed).toContain('### sv-block');
+          expect(failed).not.toContain('sv-drop');
+        }, 120000);
+
+        test('(b) control: with no remainder it inherits the gates of the step it targets', async () => {
+          const run = await insertTargeted();
+          await run.call({ user_response: 'investigated', gate_verdict: FAIL });
+          expect(runState(run.chainId).reviews).toEqual({ 'inv-u-182': ['sv-drop'] });
+        }, 120000);
+      });
     });
 
     /**
@@ -2771,6 +3027,35 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
           expect(reviews).toEqual({});
         }, 120000);
       });
+
+      /**
+       * P6.181 pins R83: an INSERTED investigation step declares no sections and is not
+       * phase-guarded, while a contributed remainder step whose prompt declares them is. One run,
+       * so the positive control sits beside the pin: the same sectionless PASS that leaves the
+       * inserted step unreviewed opens the remainder step's `__phase_guard__`.
+       */
+      test('P6.181 (a) an inserted step is not phase-guarded; (b) positive control: the remainder step after it is', async () => {
+        const run = await start({ command: `>>sv_a${ARROW}>>sv_b` });
+        const inserted = await run.call({ user_response: 'A out', ...blockingUnknown });
+        expect(currentNode(run.chainId)).toBe('inv-u-160');
+        expect(inserted).not.toContain('**Required Sections**');
+        await run.call({
+          user_response: 'investigated',
+          gate_verdict: PASS,
+          ...remainder({ promptId: 'sv_d' }),
+        });
+        expect(currentNode(run.chainId)).not.toBe('inv-u-160');
+        expect(runState(run.chainId).reviews).toEqual({});
+
+        let rendered = '';
+        for (let hop = 0; hop < 3 && currentNode(run.chainId) !== 'r1'; hop++) {
+          rendered = await run.call({ user_response: 'out', gate_verdict: PASS });
+        }
+        expect(currentNode(run.chainId)).toBe('r1');
+        expect(rendered).toContain('**Required Sections**');
+        await run.call({ user_response: 'r1 out', gate_verdict: PASS });
+        expect(runState(run.chainId).reviews).toEqual({ r1: ['__phase_guard__'] });
+      }, 120000);
     });
 
     /**

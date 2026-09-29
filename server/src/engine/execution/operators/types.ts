@@ -118,6 +118,11 @@ interface BaseChainStepExecutionInput {
    * sections from it, as stage 19 grades it (R88). Absent when the run applies no framework.
    */
   readonly runFrameworkId?: string;
+  /**
+   * True when `runFrameworkId` came from the command's `^Framework` operator. An override applies
+   * whether or not the framework system is enabled (R149), as it does for a planned step.
+   */
+  readonly runFrameworkFromOperator?: boolean;
 }
 
 /**

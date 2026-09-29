@@ -56,6 +56,11 @@ export interface RunStepView {
    */
   readonly complete?: boolean;
   /**
+   * True when a review of the current node is open. Its gate set was fixed when it opened, so a
+   * gate a later call aims at that node does not join it (R146, P6.149).
+   */
+  readonly currentNodeReviewOpen?: boolean;
+  /**
    * Provenance of the node the run is standing at — present ONLY when the mutation policy
    * INSERTED that node mid-run (P5-F4, closing the last surviving P4-F3 shape).
    *
@@ -125,6 +130,9 @@ export function createRunStepViewProvider(store: ChainSessionService): RunStepVi
       skippedNodeIds,
       currentNodeId: session.state.currentNodeId,
       complete: isRunComplete(session),
+      currentNodeReviewOpen:
+        typeof session.state.currentNodeId === 'string' &&
+        store.getReview(session.sessionId, session.state.currentNodeId) !== undefined,
     };
 
     const currentNodeOrigin = resolveInsertedNodeOrigin(session);

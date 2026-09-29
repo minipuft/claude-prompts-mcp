@@ -134,6 +134,10 @@ gateConfiguration:
 shown the framework's guidance, but it is never told to emit the section headers and its answer is
 not graded for them.
 
+On a chain prompt, `include` and `exclude` do not reach its steps: every step, whether planned or
+added by a `remainder`, resolves its gates from its own prompt's `gateConfiguration`, and a chain
+run resolves no gate set from the chain prompt itself.
+
 ### Inline Gate Definitions
 
 A prompt may define a gate inline rather than referencing a registered one. This is narrower than a
