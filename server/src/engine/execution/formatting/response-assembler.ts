@@ -1324,7 +1324,9 @@ export class ResponseAssembler {
     this.appendVerifyBudget(lines, context);
     this.appendLoopHint(lines, context);
 
-    if (!hasPrimaryAction) {
+    // A completed run has nothing to continue: the reply that completes it offers the re-run only
+    // (R164). The chain path's completion message already reads the same latch.
+    if (!hasPrimaryAction && !this.isRunLatchedComplete(context)) {
       this.appendSessionAction(lines, context);
     }
 

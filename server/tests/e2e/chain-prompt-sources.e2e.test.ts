@@ -1556,6 +1556,52 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
   });
 
   /**
+   * P6.68 / R164. MEASURED 2026-09-29 on `4cf50720`: `>>p :: "CRIT"` answered with a PASS, and
+   * `>>p :: verify:"true"` or `%clean >>p :: "CRIT"` answered, each left the run `completed` and
+   * replied "Execution complete." with `Continue: chain_id=…, user_response=…` above its `Re-run:`.
+   * The single-prompt reply offered the continue move whenever no gate action was primary, never
+   * asking whether the run had ended. A completed run's reply offers the re-run only; a chain
+   * run's completion never carried the line.
+   */
+  describe('P6.68: the reply that completes a run offers no Continue', () => {
+    const runStatus = (chainId: string): string | undefined => {
+      const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+      try {
+        return (
+          db.prepare('SELECT run_status FROM chain_runs WHERE chain_id = ?').get(chainId) as
+            { run_status: string } | undefined
+        )?.run_status;
+      } finally {
+        db.close();
+      }
+    };
+
+    test('a gated single prompt completed by its PASS offers the Re-run and no Continue', async () => {
+      const run = await start({ command: '>>sv_a :: "CRIT-P668"' });
+      const done = await run.call({ user_response: 'out', gate_verdict: PASS });
+      expect(runStatus(run.chainId)).toBe('completed');
+      expect(done).toContain('Execution complete.');
+      expect(done).toContain(`Re-run: \`>>sv_a topic:"" :: 'CRIT-P668'\``);
+      expect(done).not.toContain('Continue:');
+    }, 120000);
+
+    test('a chain prompt completed by its last PASS offers no Continue', async () => {
+      const run = await start({ command: '>>sv_pair :: "CRIT-P668c"' });
+      await run.call({ user_response: 'A', gate_verdict: PASS });
+      const done = await run.call({ user_response: 'B', gate_verdict: PASS });
+      expect(runStatus(run.chainId)).toBe('completed');
+      expect(done).toContain('Chain execution complete');
+      expect(done).not.toContain('Continue:');
+    }, 120000);
+
+    test('control: a working run whose reply carries no gate action still offers Continue', async () => {
+      const run = await start({ command: '>>sv_a :: verify:"false"' });
+      expect(runStatus(run.chainId)).toBe('working');
+      expect(run.text).toContain(`Continue: \`chain_id="${run.chainId}", user_response=`);
+    }, 120000);
+  });
+
+  /**
    * P6.186 / R89. MEASURED 2026-09-27 on `97c33a89`: `>>sv_a` arrow-chain `>>sv_b`, completed with
    * and without an inserted node, and a two-node workflow each printed "Chain execution complete"
    * and no `Re-run:`, while `>>sv_pair :: "CRIT-P"` completed with `Re-run: >>sv_pair topic:""` —
