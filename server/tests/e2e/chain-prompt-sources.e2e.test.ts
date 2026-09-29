@@ -1743,6 +1743,156 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
   });
 
   /**
+   * P6.87 / R167. MEASURED 2026-09-29 on `48d96158`: a gate declaring `retry_config.max_attempts`
+   * 3, activated by category, exhausted a CHAIN step's review (opened at render, the step path)
+   * after 3 FAILs, and a SINGLE prompt's review (opened by its first FAIL, the verdict path) after
+   * 2 — the verdict path passed no budget, so the review took the built-in default. Now both paths
+   * read `GateEnforcementAuthority.resolveReviewMaxAttempts`.
+   *
+   * PIN (as of 2026-09-29 · flips when a gate's `retry_config` is read for a gate that re-enters a
+   * resumed call as `prompt-config`): the verdict path still exhausts that single prompt after 2.
+   * On the call that opens its review the prompt's persisted gate list re-enters as planned
+   * (`prompt-config`), and the accumulator carries a gate's retry limit only for a `registry-auto`
+   * entry, so the one resolver has no gate limit to read there. The limit-2 twin cannot tell the
+   * two apart (the default is 2); the limit-3 control is what says the probe reads a limit.
+   */
+  describe('P6.87: a review exhausts after the same FAILs on the step and the verdict path', () => {
+    const review = (chainId: string): [number, number, string] | undefined => {
+      const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+      try {
+        const row = db.prepare('SELECT state FROM chain_runs WHERE chain_id = ?').get(chainId) as
+          { state: string } | undefined;
+        const reviews = (
+          JSON.parse(row?.state ?? '{}') as {
+            reviews?: Record<string, { attemptCount: number; maxAttempts: number; phase: string }>;
+          }
+        ).reviews;
+        const only = Object.values(reviews ?? {})[0];
+        return only === undefined ? undefined : [only.attemptCount, only.maxAttempts, only.phase];
+      } finally {
+        db.close();
+      }
+    };
+
+    /** The FAIL on which the run's one review reached `exhausted`, and the state after each. */
+    async function failUntilExhausted(command: string): Promise<{
+      openedAtStart: boolean;
+      trail: Array<[number, number, string] | undefined>;
+    }> {
+      const run = await start({ command });
+      const openedAtStart = review(run.chainId) !== undefined;
+      const trail: Array<[number, number, string] | undefined> = [];
+      for (let attempt = 1; attempt <= 4; attempt++) {
+        await run.call({ user_response: `answer ${attempt}`, gate_verdict: FAIL });
+        trail.push(review(run.chainId));
+        if (trail.at(-1)?.[2] === 'exhausted') break;
+      }
+      return { openedAtStart, trail };
+    }
+
+    beforeAll(async () => {
+      const author = async (args: Record<string, unknown>): Promise<void> => {
+        const result = await tool('resource_manager', args);
+        if (result.isError) throw new Error(result.text);
+      };
+      await author({
+        resource_type: 'gate',
+        action: 'create',
+        id: 'p87-plain',
+        name: 'p87-plain',
+        description: 'blocking, no retry_config: opens the single prompt a session',
+        guidance: 'GUIDANCE-p87-plain',
+        enforcement_mode: 'blocking',
+      });
+      for (const limit of [2, 3]) {
+        const category = `p87cat${limit}`;
+        await author({
+          resource_type: 'gate',
+          action: 'create',
+          id: `p87-lim${limit}`,
+          name: `p87-lim${limit}`,
+          description: `blocking, retry limit ${limit}`,
+          guidance: `GUIDANCE-p87-lim${limit}`,
+          enforcement_mode: 'blocking',
+          retry_config: { max_attempts: limit },
+          activation: { prompt_categories: [category] },
+        });
+        await author({
+          resource_type: 'prompt',
+          action: 'create',
+          id: `p87_single${limit}`,
+          category,
+          name: `p87_single${limit}`,
+          description: 'single prompt: its review opens on the verdict path',
+          user_message_template: `BODY-p87-single-${limit}`,
+          gate_configuration: { include: ['p87-plain'], exclude: ['content-structure'] },
+        });
+        await author({
+          resource_type: 'prompt',
+          action: 'create',
+          id: `p87_step${limit}`,
+          category,
+          name: `p87_step${limit}`,
+          description: 'chain step: its review opens on the step path',
+          user_message_template: `BODY-p87-step-${limit}`,
+          gate_configuration: { exclude: ['content-structure'] },
+        });
+        await author({
+          resource_type: 'prompt',
+          action: 'create',
+          id: `p87_chain${limit}`,
+          category: 'general',
+          name: `p87_chain${limit}`,
+          description: 'one-step chain',
+          user_message_template: 'CHAIN-OWN-TEMPLATE',
+          gate_configuration: OPT_OUT,
+          chain_steps: [{ promptId: `p87_step${limit}`, stepName: 'A' }],
+        });
+      }
+    }, 120000);
+
+    test('a gate limit of 2 exhausts after 2 FAILs on both paths', async () => {
+      const step = await failUntilExhausted('>>p87_chain2');
+      const verdict = await failUntilExhausted('>>p87_single2');
+      expect(step).toEqual({
+        openedAtStart: true,
+        trail: [
+          [1, 2, 'awaiting-verdict'],
+          [2, 2, 'exhausted'],
+        ],
+      });
+      expect(verdict).toEqual({
+        openedAtStart: false,
+        trail: [
+          [1, 2, 'awaiting-verdict'],
+          [2, 2, 'exhausted'],
+        ],
+      });
+    }, 180000);
+
+    test('control: a gate limit of 3 exhausts the step path after 3 FAILs', async () => {
+      expect(await failUntilExhausted('>>p87_chain3')).toEqual({
+        openedAtStart: true,
+        trail: [
+          [1, 3, 'awaiting-verdict'],
+          [2, 3, 'awaiting-verdict'],
+          [3, 3, 'exhausted'],
+        ],
+      });
+    }, 180000);
+
+    test('pin: the verdict path still reads no gate limit for a resumed single prompt', async () => {
+      expect(await failUntilExhausted('>>p87_single3')).toEqual({
+        openedAtStart: false,
+        trail: [
+          [1, 2, 'awaiting-verdict'],
+          [2, 2, 'exhausted'],
+        ],
+      });
+    }, 180000);
+  });
+
+  /**
    * P6.186 / R89. MEASURED 2026-09-27 on `97c33a89`: `>>sv_a` arrow-chain `>>sv_b`, completed with
    * and without an inserted node, and a two-node workflow each printed "Chain execution complete"
    * and no `Re-run:`, while `>>sv_pair :: "CRIT-P"` completed with `Re-run: >>sv_pair topic:""` —

@@ -321,6 +321,22 @@ export class GateEnforcementAuthority {
   }
 
   /**
+   * The attempt budget of a review opened on `nodeId` — the one resolver every review-opening
+   * path reads (R167): the step's own `retries`, else the largest `retry_config.max_attempts`
+   * across this call's gates, else `undefined` (the built-in default). The step path, a detached
+   * node's review and the review a verdict opens when none was open all resolve it here, so a
+   * gate's limit exhausts after the same number of FAILs whichever path opened its review.
+   */
+  resolveReviewMaxAttempts(
+    context: ExecutionContext,
+    nodeId: string,
+    ordinal: number
+  ): number | undefined {
+    const step = parseStepForNode(context.parsedCommand?.steps ?? [], nodeId, ordinal);
+    return step?.retries ?? context.gates.getMaxRetryLimit();
+  }
+
+  /**
    * Create the review of the step `sessionContext` stands on, scoped to `gateIds`. Shared by the
    * pre-advance call (`SessionManagementStage`, the step a request STARTED on) and the
    * post-advance call (`GateEnhancementService.ensurePostAdvanceReview`, the step a request just
@@ -359,8 +375,7 @@ export class GateEnforcementAuthority {
       );
     }
 
-    // maxAttempts priority: step-level > gate-level > default.
-    const maxAttempts = currentStep?.retries ?? context.gates.getMaxRetryLimit();
+    const maxAttempts = this.resolveReviewMaxAttempts(context, nodeId, currentStepNumber);
     const pendingReview = await this.createReview(sessionContext.sessionId, 'gate', nodeId, {
       gateIds,
       instructions: context.gateInstructions ?? '',
@@ -435,10 +450,7 @@ export class GateEnforcementAuthority {
     if (gateIds.length === 0) {
       return null;
     }
-    const stepRetries = context.parsedCommand?.steps?.find(
-      (step) => step.nodeId === node.nodeId
-    )?.retries;
-    const maxAttempts = stepRetries ?? context.gates.getMaxRetryLimit();
+    const maxAttempts = this.resolveReviewMaxAttempts(context, node.nodeId, node.stepNumber);
     return this.createReview(sessionId, 'detached', node.nodeId, {
       gateIds,
       instructions: '',

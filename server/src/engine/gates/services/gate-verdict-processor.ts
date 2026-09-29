@@ -625,11 +625,20 @@ export class GateVerdictProcessor {
       ...(trailerNodeId !== undefined ? { trailerNodeId } : {}),
       ...(authority !== undefined && !bare
         ? {
-            open: async (nodeId: string) =>
-              authority.createReview(session.sessionId, 'gate', nodeId, {
+            open: async (nodeId: string) => {
+              // The step path's budget, from the one resolver (R167). A review opened here used
+              // to pass none, and so always took the built-in default.
+              const maxAttempts = authority.resolveReviewMaxAttempts(
+                context,
+                nodeId,
+                ordinalOf(session.state.nodes, nodeId)
+              );
+              return authority.createReview(session.sessionId, 'gate', nodeId, {
                 gateIds: stepReviewGateIds(context),
                 instructions: context.gateInstructions ?? '',
-              }),
+                ...(maxAttempts !== undefined ? { maxAttempts } : {}),
+              });
+            },
           }
         : {}),
     });
