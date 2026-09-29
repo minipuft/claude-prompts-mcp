@@ -445,10 +445,10 @@ The pipeline runs stages in this order (from the `stages` array in `pipeline-bui
 ├─────────────────────────────────────────────────────────────────────┤
 │                        EXECUTE & FORMAT                             │
 ├─────────────────────────────────────────────────────────────────────┤
-│16. StepResponseCapture       Capture previous step results          │
+│16. StepResponseCapture       Capture answer, grade it, then advance │
 │17. ShellVerification*        Run shell commands to validate work    │
 │18. StepExecution             Execute prompts with Nunjucks          │
-│19. PhaseGuardVerification*   Check framework phase guards          │
+│19. PhaseGuardVerification*   Open review from stage 16's grade     │
 │20. GateReview                Validate gate verdicts (PASS/FAIL)     │
 │21. ResponseFormatting        Assemble response + usage CTA          │
 └─────────────────────────────────────────────────────────────────────┘
@@ -563,9 +563,9 @@ Assertions (structural, deterministic) and LLM quality gates (subjective) check 
 node's late report) and `phase` (`awaiting-verdict`, `awaiting-replacement` or `exhausted`), plus
 its gates, prompts, attempt counter and history. Every open review of a run lives in
 `ChainSession.reviews`, keyed by that node id; there is no second slot. The graded node is not
-always the one the run stands on: a structural review grades the step a capture just walked
-past, a detached node's review opens on its late report, and a final-step review outlives the
-walk past the last node. The store keeps at most one non-detached review per run, beside any
+always the one the run stands on: a detached node's review opens on its late report, and a
+final-step review outlives the walk past the last node. A structural review is not one of these
+exceptions: the answer it grades holds the run on its step (below). The store keeps at most one non-detached review per run, beside any
 number of detached ones.
 
 - **One creation path**: `GateEnforcementAuthority.createReview(sessionId, kind, nodeId, …)`
@@ -604,6 +604,15 @@ Required", and one `gate_verdict` answers both. When the graded node has no gate
 assertions open a `structural` review of their own, on the phase guard's budget.
 `composeStructuralReview` (`execution/pipeline/decisions/gates/structural-review-composition.ts`)
 decides which: an unknown-interrupt hold, or a review of a different node, is never merged into.
+
+**Graded before the advance** (R170): stage 16 evaluates, stage 19 opens, stage 20 renders.
+After stage 16 captures an answer it calls stage 19's `gradeAnswer` (wired by the pipeline
+builder), which runs `evaluatePhaseGuards` once and keeps the grade on the call's context. A
+grade that fails in `enforce` mode on the captured node holds the run on that step, whatever the
+gate verdict said: a PASS is still recorded and closes the gate review, but the advance is not
+taken. Stage 18 renders nothing for a held step, stage 19 opens the structural review from the
+same grade (it grades on its own only on a call stage 16 did not grade), and stage 20 renders
+that review as the whole reply. The retry answers the held step alone and advances one step.
 
 **A detached node's late report** is graded the same way, against the recorded output rather
 than the text of the call. Stage 16 lands the report and calls stage 19's `gradeLateReport`,

@@ -37,6 +37,7 @@ import type {
   UnknownObservation,
 } from '#shared/types/chain-session.js';
 import type { ChainSessionService, ToolResponse } from '#shared/types/index.js';
+import type { AnswerGrade } from '../../../frameworks/phase-guards/index.js';
 import type { GateEnhancementService } from '../../../gates/services/gate-enhancement-service.js';
 import type {
   DetachedReviewVerdictResult,
@@ -158,6 +159,9 @@ export class StepResponseCaptureStage extends BasePipelineStage {
      *   stands on after this stage moved it (`InjectionControlStage.redecideAt`, R144): stage 14
      *   runs before the advance, so alone it decides for the step the call answers. Absent, the
      *   stage 14 decision stands.
+     * - `gradeAnswer` — the phase guard's grade of the answer this call captured
+     *   (`PhaseGuardVerificationStage.gradeAnswer`, R170), taken before the advance so a failing
+     *   answer holds its step. Absent, nothing holds here and stage 19 grades after the render.
      */
     private readonly collaborators: {
       readonly gateEnhancementService?: GateEnhancementService;
@@ -174,6 +178,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
         context: ExecutionContext,
         position: { readonly currentStep: number; readonly currentNodeId: string }
       ) => void;
+      readonly gradeAnswer?: (context: ExecutionContext) => AnswerGrade;
     } = {}
   ) {
     super(logger);
@@ -287,15 +292,19 @@ export class StepResponseCaptureStage extends BasePipelineStage {
           verdictResult.deferredAdvance?.nodeId === currentNodeIdAtStart,
       }
     );
-    if (captured !== undefined) {
+    // The answer is graded BEFORE the run moves (R170): one that fails its phase guard holds the
+    // run on the step it answered, whatever the verdict said — the verdict is recorded, the
+    // advance is not taken, and stage 19 opens the structural review from the same grade.
+    const heldNodeId = this.gradeAnswer(context);
+    if (captured !== undefined && captured.nodeId !== heldNodeId) {
       await this.verdictProcessor.applyDeferredAdvance(context, captured);
     }
 
-    await this.settleVerdict(context, sessionId, session, verdictResult);
+    await this.settleVerdict(context, sessionId, session, verdictResult, heldNodeId);
 
-    await this.ensurePostAdvanceReview(context);
+    await this.ensurePostAdvanceReview(context, heldNodeId);
 
-    this.logExit({ captured: true });
+    this.logExit({ captured: true, ...(heldNodeId !== undefined ? { heldNodeId } : {}) });
   }
 
   /**
@@ -407,16 +416,18 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    *
    * The advance passes the node the answered review graded. Applying it after the capture's own
    * advance is harmless — `advanceStep` no-ops on a node the run has already passed, and a no-op
-   * announces nothing.
+   * announces nothing. An advance past `heldNodeId` is not taken: that answer failed its grade
+   * (R170), so the run stays on it whatever the verdict decided.
    */
   private async settleVerdict(
     context: ExecutionContext,
     sessionId: string,
     session: NonNullable<ReturnType<ChainSessionService['getSession']>>,
-    result: VerdictProcessingResult
+    result: VerdictProcessingResult,
+    heldNodeId?: string
   ): Promise<void> {
     this.stepCaptureService.ledgerSubmittedVerdict(context, sessionId, session);
-    if (result.deferredAdvance !== undefined) {
+    if (result.deferredAdvance !== undefined && result.deferredAdvance.nodeId !== heldNodeId) {
       await this.verdictProcessor.applyDeferredAdvance(context, result.deferredAdvance);
     }
   }
@@ -814,13 +825,31 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    * The interrupt is re-measured here for the same reason: see {@link remeasureInterrupt}; so is
    * the injection decision, after the review, so it reads the review the rendered step carries.
    */
-  private async ensurePostAdvanceReview(context: ExecutionContext): Promise<void> {
+  private async ensurePostAdvanceReview(
+    context: ExecutionContext,
+    heldNodeId?: string
+  ): Promise<void> {
     this.remeasureInterrupt(context);
     const service = this.collaborators.gateEnhancementService;
-    if (service !== undefined && context.sessionContext !== undefined) {
+    // A held answer moved nothing: its step's review is the structural one stage 19 opens, and a
+    // gate review opened here would ask again for the verdict this call already gave.
+    if (service !== undefined && context.sessionContext !== undefined && heldNodeId === undefined) {
       await service.ensurePostAdvanceReview(context, context.sessionContext);
     }
     this.redecideInjection(context);
+  }
+
+  /**
+   * Grade the answer this call captured, through the phase guard's grader the builder wires
+   * (`PhaseGuardVerificationStage.gradeAnswer`, R170). The grade and every rule in it are the
+   * phase guard's; this stage reads only the node it holds.
+   *
+   * @returns the node the run must stay on, or undefined when nothing holds it (no grader wired,
+   *   nothing graded, the answer passed, `warn` mode, or no captured node).
+   */
+  private gradeAnswer(context: ExecutionContext): string | undefined {
+    const grade = this.collaborators.gradeAnswer?.(context);
+    return grade?.kind === 'evaluated' ? grade.holdsNodeId : undefined;
   }
 
   /**

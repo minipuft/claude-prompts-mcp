@@ -26,6 +26,7 @@ import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
+import { cageerfAnswer } from './helpers/cageerf-answer.js';
 import { createHermeticRoots } from './helpers/child-env.js';
 import {
   getAvailablePort,
@@ -3407,7 +3408,12 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       ]);
       const first = await run.call({ user_response: 'B out' });
       expect(first).toContain('Progress 4/7');
-      const second = await run.call({ user_response: 'scan out', gate_verdict: PASS });
+      // A full answer: the step renders under CAGEERF, and since R170 an answer failing its phase
+      // guard holds the step, which a one-line 'scan out' did.
+      const second = await run.call({
+        user_response: cageerfAnswer('scan out'),
+        gate_verdict: PASS,
+      });
       expect(second).toContain('Progress 5/7');
       expect(second).not.toContain('Error');
     }, 120000);

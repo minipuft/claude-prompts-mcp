@@ -62,6 +62,16 @@ export class StepExecutionStage extends BasePipelineStage {
       return;
     }
 
+    // An answer its phase guard held (R170) left the run on the step it answered: that step's
+    // structural review, which stage 19 opens from the same grade, is the whole reply.
+    if (context.state.gates.answerGrade?.kind === 'evaluated') {
+      const heldNodeId = context.state.gates.answerGrade.holdsNodeId;
+      if (heldNodeId !== undefined) {
+        this.logExit({ skipped: 'Answer held by its phase guard', heldNodeId });
+        return;
+      }
+    }
+
     if (!context.executionPlan) {
       this.handleError(new Error('Execution plan missing before step execution'));
     }

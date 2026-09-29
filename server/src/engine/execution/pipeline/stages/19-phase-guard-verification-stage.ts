@@ -11,12 +11,17 @@
  * so the existing gate lifecycle handles persistence, advancement blocking, retry tracking,
  * and review rendering. Phase guards do NOT independently short-circuit via setResponse().
  *
+ * Grading moved ahead of the advance (R170): StepResponseCaptureStage calls {@link
+ * PhaseGuardVerificationStage.gradeAnswer} after it captured the answer and before it moves the
+ * run, and a failing grade holds the run on the answered step. The grade is kept on the call's
+ * context; this stage reads it and never grades the same call twice. A call stage 16 did not grade
+ * on is graded here.
+ *
  * Flow:
- * 1. Check if framework active AND framework has phases with guards
- * 2. If no guards → pass through (no-op)
- * 3. Evaluate user_response against phase markers/guards
- * 4. If all pass → merge guard summary into the graded step's own review (if any)
- * 5. If any fail → merge into the open gate review, else create PendingGateReview (R103)
+ * 1. Grade (or read this call's grade): framework active, guards declared, user_response present
+ * 2. If nothing was graded → pass through (no-op)
+ * 3. If all pass → merge guard summary into the graded step's own review (if any)
+ * 4. If any fail → merge into the open gate review, else create PendingGateReview (R103)
  */
 
 import { resolveGuardedProcessingSteps } from '../../../frameworks/declared-sections.js';
@@ -33,6 +38,7 @@ import type { GateReview, PendingGateReview } from '#shared/types/chain-executio
 import type { ChainSessionService } from '#shared/types/chain-session.js';
 import type { PhaseGuardsConfig } from '#shared/types/core-config.js';
 import type { FrameworkGuideProvider } from '../../../frameworks/declared-sections.js';
+import type { AnswerGrade } from '../../../frameworks/phase-guards/index.js';
 import type { ExecutionContext } from '../../context/index.js';
 
 import { isRunComplete } from '#shared/types/chain-session.js';
@@ -68,85 +74,25 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
   async execute(context: ExecutionContext): Promise<void> {
     this.logEntry(context);
 
-    // 1. Get phase guard config — skip if mode is "off"
-    const config = this.configProvider();
-    if (config.mode === 'off') {
-      this.logExit({ skipped: 'Phase guards disabled (mode: off)' });
+    // The grade stage 16 took before it decided the advance, when it took one (R170): this stage
+    // opens the review from that grade and never grades the same call twice.
+    const grade = context.state.gates.answerGrade ?? this.gradeAnswer(context);
+    if (grade.kind === 'skipped') {
+      this.logExit({ skipped: grade.reason });
       return;
     }
-
-    // 2. Need a chain session for gate lifecycle integration
+    const { result, reviewedStep } = grade;
     const sessionId = context.sessionContext?.sessionId;
-    if (!sessionId) {
+    if (sessionId === undefined) {
       this.logExit({ skipped: 'No chain session (phase guards require chain context)' });
       return;
     }
-
-    // 3. Check if framework is active (fallback to authority for chain continuation)
-    const frameworkId = this.resolveFrameworkId(context);
-    if (!frameworkId) {
-      this.logExit({ skipped: 'No active framework' });
-      return;
-    }
-
-    // 4. Get framework phases with guards
-    const phases = resolveGuardedProcessingSteps(this.frameworkRegistryProvider, frameworkId);
-    if (phases.length === 0) {
-      this.logExit({ skipped: 'No phases with guards' });
-      return;
-    }
-
-    // 5. Get the LLM's previous response (user_response from chain continuation)
-    const outputText = this.extractOutputText(context);
-    if (!outputText) {
-      this.logExit({ skipped: 'No user_response to evaluate' });
-      return;
-    }
-
-    // 6. Skip if the graded step's review already carries a structural finding (avoid duplicate
-    // reviews). Read by the node this call CAPTURED, never the shown review (R16): that one may
-    // grade an earlier step, and skipping on it left this step's answer ungraded. A call that
-    // captured nothing has no review to read.
-    const reviewedStep = this.resolveReviewedStepIdentity(context);
+    // Read now, not when graded: the review of the graded step as it stands after this call's
+    // verdict, capture and render.
     const gradedReview =
-      'nodeId' in reviewedStep
-        ? this.chainSessionStore.getReview(sessionId, reviewedStep.nodeId)
-        : undefined;
-    if (gradedReview?.gateIds.includes(PHASE_GUARD_GATE_ID)) {
-      this.logExit({ skipped: 'Phase guard review already pending' });
-      return;
-    }
-
-    // 6b. Skip if this call's verdict closed the structural review of the node it would grade.
-    // Without this, a PASS closes N's review → this stage re-evaluates the same user_response
-    // (N's re-answer, or nothing captured at all) → fails → recreates N's review → loop. A NEXT
-    // step captured on the verdict's call is its own answer and is graded (row 3.15).
-    const clearedNodeId = context.state.gates.phaseGuardReviewClearedNodeId;
-    const capturedNodeId = 'nodeId' in reviewedStep ? reviewedStep.nodeId : undefined;
-    if (clearedNodeId !== undefined && (capturedNodeId ?? clearedNodeId) === clearedNodeId) {
-      this.logExit({ skipped: 'Phase guard review cleared by verdict this turn' });
-      return;
-    }
-
-    // 6c. A guard may only block on a header the prompt actually declared (Tier 3.1 / OQ-4).
-    // The declaration is read back from what the render RECORDED, never re-derived from
-    // `phases.yaml` — that is the source these guards already come from, so re-deriving would
-    // make declared and guarded identical by construction and this filter a no-op. A phase whose
-    // header was never declared is evaluated for diagnostics but cannot block: the model was not
-    // told about it, so failing it is unsatisfiable. No record at all therefore blocks nothing,
-    // which can only make enforcement rarer, never stricter.
-    const blockingPhases = this.resolveBlockingPhases(
-      context,
-      phases,
-      context.state.session.capturedStep?.nodeId
-    );
-    if (blockingPhases.length === 0) {
-      this.logExit({ skipped: 'No declared headers to enforce' });
-      return;
-    }
-
-    // 7. Evaluate phase guards
-    const result = evaluatePhaseGuards(outputText, blockingPhases);
+      reviewedStep === undefined
+        ? undefined
+        : this.chainSessionStore.getReview(sessionId, reviewedStep.nodeId);
 
     if (result.allPassed) {
       // Phase guards passed — merge structural verification into pending gate review.
@@ -160,14 +106,13 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
     }
 
     // 8. Handle failures — create PendingGateReview via gate lifecycle
-    const maxAttempts = config.maxRetries + 1;
     context.diagnostics.warn(this.name, 'Phase guard failures detected', {
       failedPhases: result.failedPhases,
-      maxAttempts,
-      mode: config.mode,
+      maxAttempts: grade.maxAttempts,
+      mode: grade.mode,
     });
 
-    if (config.mode === 'warn') {
+    if (grade.mode === 'warn') {
       // Warn: log warning, don't block
       context.state.gates.advisoryWarnings.push(
         `[PhaseGuard] ${result.failedPhases.join(', ')} failed structural checks`
@@ -179,7 +124,7 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
     // A call that captured no step graded no node's answer: the failure is said, and no review
     // opens (R28) — with no captured node there is nothing to grade against or to hold. A
     // detached node's late report is graded by its own review (`gradeLateReport`), not here.
-    if (!('nodeId' in reviewedStep)) {
+    if (reviewedStep === undefined) {
       context.diagnostics.warn(this.name, 'Structural failure on a call that captured no step', {
         failedPhases: result.failedPhases,
       });
@@ -203,13 +148,13 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
       // splitter could never match → the model kept adding the wrong header → loop.
       retryHints: buildRetryHints(result),
       failedPhases: result.failedPhases,
-      mode: config.mode,
-      previousResponse: outputText,
+      mode: grade.mode,
+      previousResponse: grade.outputText,
       // WHICH step this review graded (row 2.11). Without it the renderer falls through to
-      // `current_step`, which by this point in the pipeline names the step the run ADVANCED
+      // `current_step`, which by this point in the pipeline may name the step the run ADVANCED
       // to — so the review quoted step N+1's task above step N's missing sections.
       reviewedStep,
-      maxAttempts,
+      maxAttempts: grade.maxAttempts,
       createdAt: Date.now(),
     });
 
@@ -227,6 +172,109 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
       failedPhases: result.failedPhases,
       maxAttempts: review.maxAttempts,
     });
+  }
+
+  /**
+   * Grade the answer this call captured against the framework's phase guards, ONCE per call, and
+   * keep the grade on the call's context (R170).
+   *
+   * StepResponseCaptureStage calls this (through the builder's wiring) after it captured the
+   * answer and before it decides the advance, so an answer that fails in `enforce` mode holds the
+   * run on the step it answered (`holdsNodeId`) whatever a gate verdict said; {@link execute}
+   * then opens the structural review from the same grade. A call stage 16 does not grade on is
+   * graded by {@link execute} itself. The evaluation is `evaluatePhaseGuards`, a pure function of
+   * the phase-guards module; this method only decides which phases may block and over what text.
+   */
+  gradeAnswer(context: ExecutionContext): AnswerGrade {
+    const grade = this.takeGrade(context);
+    context.state.gates.answerGrade = grade;
+    if (grade.kind === 'evaluated') {
+      this.logger.info('[PhaseGuardVerification] Graded the answer', {
+        nodeId: grade.reviewedStep?.nodeId,
+        allPassed: grade.result.allPassed,
+        holdsNodeId: grade.holdsNodeId,
+      });
+    }
+    return grade;
+  }
+
+  private takeGrade(context: ExecutionContext): AnswerGrade {
+    // 1. Get phase guard config — skip if mode is "off"
+    const config = this.configProvider();
+    if (config.mode === 'off') {
+      return { kind: 'skipped', reason: 'Phase guards disabled (mode: off)' };
+    }
+
+    // 2. Need a chain session for gate lifecycle integration
+    const sessionId = context.sessionContext?.sessionId;
+    if (!sessionId) {
+      return { kind: 'skipped', reason: 'No chain session (phase guards require chain context)' };
+    }
+
+    // 3. Check if framework is active (fallback to authority for chain continuation)
+    const frameworkId = this.resolveFrameworkId(context);
+    if (!frameworkId) {
+      return { kind: 'skipped', reason: 'No active framework' };
+    }
+
+    // 4. Get framework phases with guards
+    const phases = resolveGuardedProcessingSteps(this.frameworkRegistryProvider, frameworkId);
+    if (phases.length === 0) {
+      return { kind: 'skipped', reason: 'No phases with guards' };
+    }
+
+    // 5. Get the LLM's previous response (user_response from chain continuation)
+    const outputText = this.extractOutputText(context);
+    if (!outputText) {
+      return { kind: 'skipped', reason: 'No user_response to evaluate' };
+    }
+
+    // 6. Skip if the graded step's review already carries a structural finding (avoid duplicate
+    // reviews). Read by the node this call CAPTURED, never the shown review (R16): that one may
+    // grade an earlier step, and skipping on it left this step's answer ungraded. A call that
+    // captured nothing has no review to read.
+    const reviewedStep = this.resolveReviewedStepIdentity(context);
+    const gradedReview =
+      reviewedStep === undefined
+        ? undefined
+        : this.chainSessionStore.getReview(sessionId, reviewedStep.nodeId);
+    if (gradedReview?.gateIds.includes(PHASE_GUARD_GATE_ID)) {
+      return { kind: 'skipped', reason: 'Phase guard review already pending' };
+    }
+
+    // 6b. Skip if this call's verdict closed the structural review of the node it would grade.
+    // Without this, a PASS closes N's review → this stage re-evaluates the same user_response
+    // (N's re-answer, or nothing captured at all) → fails → recreates N's review → loop. A NEXT
+    // step captured on the verdict's call is its own answer and is graded (row 3.15).
+    const clearedNodeId = context.state.gates.phaseGuardReviewClearedNodeId;
+    if (clearedNodeId !== undefined && (reviewedStep?.nodeId ?? clearedNodeId) === clearedNodeId) {
+      return { kind: 'skipped', reason: 'Phase guard review cleared by verdict this turn' };
+    }
+
+    // 6c. A guard may only block on a header the prompt actually declared (Tier 3.1 / OQ-4).
+    // The declaration is read back from what the render RECORDED, never re-derived from
+    // `phases.yaml` — that is the source these guards already come from, so re-deriving would
+    // make declared and guarded identical by construction and this filter a no-op. A phase whose
+    // header was never declared is evaluated for diagnostics but cannot block: the model was not
+    // told about it, so failing it is unsatisfiable. No record at all therefore blocks nothing,
+    // which can only make enforcement rarer, never stricter.
+    const blockingPhases = this.resolveBlockingPhases(context, phases, reviewedStep?.nodeId);
+    if (blockingPhases.length === 0) {
+      return { kind: 'skipped', reason: 'No declared headers to enforce' };
+    }
+
+    // 7. Evaluate phase guards
+    const result = evaluatePhaseGuards(outputText, blockingPhases);
+    const holds = !result.allPassed && config.mode === 'enforce' && reviewedStep !== undefined;
+    return {
+      kind: 'evaluated',
+      result,
+      outputText,
+      mode: config.mode,
+      maxAttempts: config.maxRetries + 1,
+      reviewedStep,
+      ...(holds ? { holdsNodeId: reviewedStep.nodeId } : {}),
+    };
   }
 
   /**
@@ -485,9 +533,9 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
    */
   private resolveReviewedStepIdentity(
     context: ExecutionContext
-  ): { stepNumber: number; nodeId: string } | Record<string, never> {
+  ): { stepNumber: number; nodeId: string } | undefined {
     const captured = context.state.session.capturedStep;
-    if (captured === undefined) return {};
+    if (captured === undefined) return undefined;
     return { stepNumber: captured.ordinal, nodeId: captured.nodeId };
   }
 

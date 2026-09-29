@@ -686,10 +686,22 @@ describe('P6.198: a framework override needs no system toggle on a step added mi
  * steps read the toggle on every call.
  */
 describe('R158: the framework toggle decides a run at its first call (Streamable HTTP)', () => {
-  const SECTIONS = ['Context', 'Analysis', 'Goals', 'Execution']
+  /**
+   * A full answer under the run's framework, `radiant` (this file's configured default): every
+   * required section, carrying a term its guard asks for. Since R170 an answer failing its phase
+   * guard holds the run, so a step this describe means to pass must conform; the CAGEERF headers
+   * it sent before failed radiant's guards and only moved on because the run advanced ungraded.
+   */
+  const SECTIONS = [
+    ['Reference the Vision', 'the album vision and its atmosphere'],
+    ['Articulate Goals', 'the goal and the mood it must reach'],
+    ['Draw the Palette', 'an OKLCH palette read from the album light'],
+    ['Infuse Atmosphere & Motion', 'motion that follows the audio energy'],
+    ['Anchor to Surfaces', 'each token on its surface and focal selector'],
+    ['Test in the Living Client', 'verify the result live over CDP'],
+  ]
     .map(
-      (header) =>
-        `## ${header}\n${`The ${header.toLowerCase()} of this answer, in full. `.repeat(6)}`
+      ([header, topic]) => `## ${header}\n${`This section covers ${topic}, in full. `.repeat(4)}`
     )
     .join('\n\n');
   const PASS = 'GATE_REVIEW: PASS - ok';
@@ -743,6 +755,11 @@ describe('R158: the framework toggle decides a run at its first call (Streamable
     const second = await call({ user_response: `A1 out\n${SECTIONS}`, gate_verdict: PASS });
     if (disable === 'after-first-call') await disableSystem();
     const sectionless = await call({ user_response: 'plain answer two', gate_verdict: PASS });
+    // Graded under a framework, the sectionless answer holds step 2 (R170): answer it again in
+    // full, so the next call answers step 3 in both variants.
+    if (disable === 'after-first-call') {
+      await call({ user_response: `A2 out\n${SECTIONS}`, gate_verdict: PASS });
+    }
     const inserted = await call({
       user_response: `A3 out\n${SECTIONS}`,
       gate_verdict: PASS,

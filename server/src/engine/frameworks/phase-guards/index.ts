@@ -14,6 +14,7 @@ export {
 export { splitBySectionHeaders } from './section-splitter.js';
 export type { OutputSection } from './section-splitter.js';
 export type {
+  AnswerGrade,
   PhaseGuardCheckResult,
   PhaseGuardEvaluationResult,
   PhaseGuardResult,

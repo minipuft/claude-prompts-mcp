@@ -6,9 +6,10 @@
  *
  * Three flows live here, each beside a twin that differs in one input:
  *
- * - a structural review of step 1 opens after the capture already moved the run onto step 2, and
- *   a verdict on its own call answers step 1's review and leaves step 2 owed; with no review
- *   open, the same bare verdict is refused and names the step to answer first;
+ * - a structural review of step 1 holds the run on step 1 even when the answer came with a PASS
+ *   (R170: the answer is graded before the run advances), and a verdict on its own call answers
+ *   step 1's review and leaves step 2 owed; with no review open, the same bare verdict is refused
+ *   and names the step to answer first;
  * - the final step's verdict closes the run, and `chain/complete` is the run's last notification;
  * - a FAIL past the retry budget offers the retry prompt and names only `gate_action` moves, a
  *   further verdict is refused, retry reopens the review, and skip accepts the step's recorded
@@ -118,24 +119,26 @@ describe('Streamable HTTP: a gate review is a record of one node (shipped defaul
     }
   }
 
-  describe('a structural review of step 1 is answered on step 1 while the run stands on step 2', () => {
+  describe('a structural review of step 1 is answered on step 1 while the run holds on step 1', () => {
     test('the verdict closes step 1 review and step 2 is still owed', async () => {
       const call = await startRun();
 
-      // The one-line answer passes its gate review, the capture moves the run onto step 2, and
-      // the phase guard then opens a structural review of the step it just left.
+      // The one-line answer passes its gate review, but it is graded before the run moves
+      // (R170): the phase guard fails it, the run holds on step 1, and its structural review is
+      // the whole reply. Before R170 the capture had already moved the run onto step 2.
       const opened = await call({ user_response: 'one line', gate_verdict: PASS });
       expect(opened.isError).toBe(false);
-      expect(opened.methods).toContain(STEP_COMPLETE); // the stream is read
+      expect(opened.methods).not.toContain(STEP_COMPLETE);
       expect(opened.text).toContain('Structural Review Required');
-      expect(opened.text).toContain('→ Progress 2/3');
+      expect(opened.text).not.toContain(STEP_2_BODY);
+      expect(opened.text).toContain('→ Progress 1/3');
 
       const answered = await call({ gate_verdict: PASS });
       expect(answered.isError).toBe(false);
+      expect(answered.methods).toContain(STEP_COMPLETE); // the stream is read
       expect(answered.text).not.toContain('Review Required');
       expect(answered.text).toContain(STEP_2_BODY);
       expect(answered.text).toContain('→ Progress 2/3');
-      expect(answered.methods).not.toContain(STEP_COMPLETE);
 
       // Step 2 is answered next, and only that moves the run on.
       const step2 = await call({ user_response: cageerfAnswer('Step 2'), gate_verdict: PASS });

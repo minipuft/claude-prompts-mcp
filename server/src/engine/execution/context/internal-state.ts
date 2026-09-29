@@ -7,6 +7,7 @@ import type {
   ScriptExecutionResult,
   ToolResponse,
 } from '#shared/types/index.js';
+import type { AnswerGrade } from '../../frameworks/phase-guards/index.js';
 import type { PendingShellVerification, ShellVerifyResult } from '../../gates/shell/index.js';
 import type { GateEnforcementMode } from '../../gates/types.js';
 import type { ChainStepPrompt } from '../operators/types.js';
@@ -301,6 +302,15 @@ export interface PipelineInternalState {
      * different node captured on the same call is still graded.
      */
     phaseGuardReviewClearedNodeId?: string;
+    /**
+     * This call's grade of the answer it captured, taken once (R170). Writer:
+     * `PhaseGuardVerificationStage.gradeAnswer` — called by StepResponseCaptureStage before it
+     * decides the advance, else by stage 19 itself. Readers: stage 16 (a `holdsNodeId` keeps the
+     * run on the answered step), stage 18 (renders nothing for a held step: its review is the
+     * reply) and stage 19 (opens the structural review from it, never grading again). Per call,
+     * never on a stage instance: HTTP builds a fresh pipeline per request.
+     */
+    answerGrade?: AnswerGrade;
     /**
      * Pending shell verification gate for Ralph Wiggum loop execution.
      * Tracks command, attempt count, and previous results across iterations.
