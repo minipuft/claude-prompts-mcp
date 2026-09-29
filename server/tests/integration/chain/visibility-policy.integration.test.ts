@@ -356,13 +356,9 @@ describe('P5 visibility — the no-declarations guarantee', () => {
         '',
         '### Required Response Format',
         '',
+        // The step carries no gates, so it asks for no verdict (R171): no gate coverage and no
+        // `GATE_REVIEW` line, which this ungated final step printed before P6.286.
         '**Summary**: What was implemented (2-3 sentences)',
-        '',
-        '**Gate Coverage**:',
-        '- [1] PASS|FAIL: rationale',
-        '- [2] PASS|FAIL: rationale',
-        '',
-        '**GATE_REVIEW: PASS|FAIL - overall assessment**',
       ].join('\n')
     );
     expect(render.callToAction).toBe(

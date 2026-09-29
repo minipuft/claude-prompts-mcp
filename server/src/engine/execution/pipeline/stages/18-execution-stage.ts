@@ -485,6 +485,7 @@ export class StepExecutionStage extends BasePipelineStage {
         callToAction: renderResult.callToAction,
         nextStepDelegated: renderResult.nextStepDelegated,
         currentStepDelegated: renderResult.currentStepDelegated,
+        asksVerdict: renderResult.asksVerdict,
       },
       generatedAt: Date.now(),
     };

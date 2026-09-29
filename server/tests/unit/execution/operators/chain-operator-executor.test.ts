@@ -401,7 +401,10 @@ describe('ChainOperatorExecutor', () => {
     expect(result.content).not.toContain('### Original Request Intent');
   });
 
-  test('renders response format section with gate coverage when gates enabled', async () => {
+  // R171: a gated step's render (gate enhancement wrote its gate instructions on the step) names
+  // its gates and asks for its verdict whether or not it is the last step; an ungated render
+  // asks for no verdict, the last one included.
+  test('renders response format section with gate coverage and the verdict line for a gated step', async () => {
     const gateRenderer = {
       renderGuidance: jest.fn().mockResolvedValue('## Gate Guidance'),
     };
@@ -415,7 +418,9 @@ describe('ChainOperatorExecutor', () => {
           promptId: 'analyze',
           args: { code: 'format test' },
           inlineGateIds: ['code-quality'],
+          metadata: { gateInstructions: 'GATE-INSTRUCTIONS code-quality' },
         },
+        { stepNumber: 2, promptId: 'analyze', args: { code: 'next' } },
       ],
       currentStepIndex: 0,
       chainContext: {
@@ -423,13 +428,16 @@ describe('ChainOperatorExecutor', () => {
       },
     });
 
+    expect(result.content).toContain('GATE-INSTRUCTIONS code-quality');
     expect(result.content).toContain('### Required Response Format');
     expect(result.content).toContain('**Summary**: What was implemented');
     expect(result.content).toContain('**Gate Coverage**:');
     expect(result.content).toContain('[1] PASS|FAIL: rationale');
+    expect(result.content).toContain('**GATE_REVIEW: PASS|FAIL - overall assessment**');
+    expect(result.asksVerdict).toBe(true);
   });
 
-  test('renders GATE_REVIEW line in response format on final step', async () => {
+  test('renders no verdict request for an ungated step, the final step included', async () => {
     const result = await executor.renderStep({
       executionType: 'normal',
       stepPrompts: [{ stepNumber: 1, promptId: 'analyze', args: { code: 'final step' } }],
@@ -437,7 +445,9 @@ describe('ChainOperatorExecutor', () => {
     });
 
     expect(result.content).toContain('### Required Response Format');
-    expect(result.content).toContain('**GATE_REVIEW: PASS|FAIL - overall assessment**');
+    expect(result.content).not.toContain('**Gate Coverage**');
+    expect(result.content).not.toContain('GATE_REVIEW');
+    expect(result.asksVerdict).toBeUndefined();
   });
 
   test('prefers current_step metadata when selecting review step context', async () => {

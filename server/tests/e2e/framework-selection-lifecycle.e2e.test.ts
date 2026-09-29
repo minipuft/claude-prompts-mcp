@@ -921,7 +921,7 @@ describe('P6.272: gate-guidance frequency never thins a fully blocking-gated cha
     expect(observed).toEqual({ 0: everyRender, 1: everyRender, 2: everyRender });
   }, 180000);
 
-  it('control: a gated step rendered by a call that answered an ungated step follows the frequency', async () => {
+  it('control: a gated step rendered by a call that answered an ungated step names its gates at every frequency', async () => {
     const observed: Record<number, boolean> = {};
     for (const frequency of FREQUENCIES) {
       const session = await serverAt(frequency);
@@ -965,7 +965,70 @@ describe('P6.272: gate-guidance frequency never thins a fully blocking-gated cha
       expect(stepBlock.text).toContain('BODY-p272_c');
       observed[frequency] = stepBlock.text.includes(`GUIDANCE-${gateId}`);
     }
-    // Step 3 is the run's second gated step: first-only and every-2nd skip it, every-step shows it.
-    expect(observed).toEqual({ 0: false, 1: true, 2: false });
+    // Step 3 is the run's second gated step, and its render asks for its verdict, so it names its
+    // gate at every frequency (R171). Before P6.286 first-only and every-2nd thinned it
+    // ({0: false, 1: true, 2: false}) while the render still asked for the verdict.
+    expect(observed).toEqual({ 0: true, 1: true, 2: true });
   }, 180000);
+
+  /**
+   * P6.286 / R171. MEASURED 2026-09-29 on `a859f7353` (driven, Streamable HTTP): a gated step
+   * after an ungated one was thinned by frequencies 0 and 2 while its render still asked for a
+   * verdict; a gated step that was not the last printed no `GATE_REVIEW: PASS|FAIL` line; the
+   * `Next:` line named `gate_verdict` only on a review render; and an ungated LAST step printed
+   * the gate coverage lines and the verdict line though it had no gate to grade. Now a normal
+   * render of a gated step names its gates and asks for its verdict (the verdict line and a
+   * `Next:` naming `gate_verdict`), and an ungated render does neither. Gate guidance only: the
+   * system prompt and style are not read here.
+   */
+  it('P6.286: every render of a gated step names its gates and asks for its verdict; an ungated render does neither', async () => {
+    const observed: Record<number, Array<[string, boolean, boolean, boolean]>> = {};
+    for (const frequency of FREQUENCIES) {
+      const session = await serverAt(frequency);
+      const gateId = `p286-block-f${frequency}`;
+      const gate = await session.callTool('resource_manager', {
+        resource_type: 'gate',
+        action: 'create',
+        id: gateId,
+        name: gateId,
+        description: 'blocking',
+        guidance: `GUIDANCE-${gateId}`,
+        enforcement_mode: 'blocking',
+      });
+      expect(gate.isError).toBe(false);
+      // Ungated, gated after an ungated step, gated after a gated one, ungated and last.
+      await createChain(session, 'p286_mixed', [
+        { promptId: 'p272_a', stepName: 'A' },
+        { promptId: 'p272_b', stepName: 'B', inlineGateIds: [gateId] },
+        { promptId: 'p272_c', stepName: 'C', inlineGateIds: [gateId] },
+        { promptId: 'p272_a', stepName: 'D' },
+      ]);
+      const first = await session.callTool('prompt_engine', { command: '>>p286_mixed' });
+      const chainId = chainIdOf(first.text);
+      const call = (answer: string, verdict: boolean) =>
+        session.callTool('prompt_engine', {
+          chain_id: chainId,
+          user_response: answer,
+          ...(verdict ? { gate_verdict: PASS } : {}),
+        });
+      const renders = [first, await call('A out', false)];
+      renders.push(await call('B out', true));
+      renders.push(await call('C out', true));
+      observed[frequency] = renders.map((render) => [
+        /BODY-p272_[abc]/.exec(render.text)?.[0] ?? 'none',
+        render.text.includes(`GUIDANCE-${gateId}`),
+        render.text.includes('**GATE_REVIEW: PASS|FAIL') &&
+          render.text.includes('**Gate Coverage**'),
+        /Next: .*gate_verdict=/.test(render.text),
+      ]);
+    }
+    // [body, names its gate, verdict line with gate coverage, Next: names gate_verdict]
+    const everyFrequency: Array<[string, boolean, boolean, boolean]> = [
+      ['BODY-p272_a', false, false, false],
+      ['BODY-p272_b', true, true, true],
+      ['BODY-p272_c', true, true, true],
+      ['BODY-p272_a', false, false, false],
+    ];
+    expect(observed).toEqual({ 0: everyFrequency, 1: everyFrequency, 2: everyFrequency });
+  }, 240000);
 });

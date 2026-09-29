@@ -516,8 +516,9 @@ export class ResponseAssembler {
       // One payload states one state (R96). A finished run has no next step, and a run holding
       // its FINAL step for a verdict has none either: the review above says how to answer it,
       // and a `Next:` asking for more step output would invite a step the run does not have.
-    } else if (hasPendingReview) {
-      // Gate review (only when not delegating)
+    } else if (hasPendingReview || this.renderAsksVerdict(context)) {
+      // Gate review, or a gated step's render: every render of a gated step asks for its verdict
+      // the same way (R171) — only when not delegating
       lines.push(
         `Next: chain_id="${chainIdentifier}", user_response="<your step output>", gate_verdict="GATE_REVIEW: PASS|FAIL - <why>"`
       );
@@ -688,6 +689,11 @@ export class ResponseAssembler {
    * `renderStep` has actually run and stamped `currentStepDelegated` on the render result — there
    * is no earlier parse-time signal to fall back to.
    */
+  /** The rendered step carries gates and its render asked for the verdict (R171). */
+  private renderAsksVerdict(context: ExecutionContext): boolean {
+    return context.executionResults?.metadata?.['asksVerdict'] === true;
+  }
+
   private isCurrentStepDelegated(context: ExecutionContext): boolean {
     const metadata = context.executionResults?.metadata ?? {};
     return metadata['currentStepDelegated'] === true;

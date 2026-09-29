@@ -1161,8 +1161,9 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
    * `'gate_review'`, and the review render carried the gate's guidance. Stage 20 also hands the
    * review render only the system-prompt decision, never the call's gate-guidance one.
    *
-   * PIN (R147): a review render decides its own gate guidance and never follows the frequency;
-   * only a step block follows the call's gate-guidance decision.
+   * PIN (R147): a review render decides its own gate guidance and never follows the frequency.
+   * Since R171 (P6.286) a gated step block does not follow it either: every render of a gated
+   * step names its gates, so the step 3 block that was thinned here now carries its guidance.
    */
   describe("P6.151: a review render's gate guidance does not follow the call's frequency", () => {
     /** Gate-guidance injection for `sv-block`: the gate's guidance under its own heading. */
@@ -1203,7 +1204,7 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       }
     }, 120000);
 
-    test('(a) gate guidance: a FAIL review render on step 3 carries it; the step 3 block before it did not', async () => {
+    test('(a) gate guidance: a FAIL review render on step 3 carries it, as the step 3 block before it does', async () => {
       // A request gate on `a` makes step 1 the chain's first gated step without reaching step 3
       // (a targeted gate is not accumulated), so step 3 is its SECOND gated render (R155).
       const run = await start({
@@ -1214,9 +1215,10 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       const stepBlock = await run.call({ user_response: 'B out' });
       expect(templates(stepBlock)).toEqual(['BODY-sv_a topic=']);
       expect(stepBlock).toContain('Progress 3/3');
-      // Control: the call answering step 2 decided gate guidance "skip" (first gated render only),
-      // and the step block it rendered follows that decision.
-      expect(gateGuidanceFor(stepBlock)).toBe(false);
+      // The call answering step 2 decided gate guidance "skip" (first gated render only), and until
+      // P6.286 the step block followed it: a gated render asking for its verdict named no gate.
+      // Since R171 a gated render names its gates at every frequency.
+      expect(gateGuidanceFor(stepBlock)).toBe(true);
 
       const review = await run.call({ user_response: 'C out', gate_verdict: FAIL });
       expect(review).toContain('Gate Review Required');
