@@ -2859,6 +2859,65 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
         await run.call({ user_response: 'investigated', gate_verdict: FAIL });
         expect(runState(run.chainId).reviews).toEqual({ 'inv-u-160': ['sv-drop'] });
       }, 120000);
+
+      /**
+       * P6.182 pins R84, as of 2026-09-28 · flips when the owner exempts inserted nodes from
+       * inherited gates (P6.12/P6.98). The unknown names `n2` as its `target_step_id`, and the
+       * answering call's `replace` drops `n2`: the inserted node then carries the live walk's
+       * untargeted gates (`sv-block`, from the `r1-*` steps), which is what a later call computes,
+       * and none of the dropped step's. Control: the same unknown with no remainder inherits `n2`'s.
+       */
+      describe('P6.182: an inserted node whose target the same call dropped', () => {
+        async function insertTargeted() {
+          const run = await start({ command: `>>sv_a${ARROW}>>sv_b :: sv-drop` });
+          await run.call({
+            user_response: 'A out',
+            observations: [
+              {
+                type: 'unknown_discovered',
+                id: 'u-182',
+                statement: 'the rest of the plan is undecided',
+                blocking: true,
+                target_step_id: 'n2',
+              },
+            ],
+          });
+          expect(currentNode(run.chainId)).toBe('inv-u-182');
+          return run;
+        }
+
+        test("(a) inherits the live walk's untargeted gates, and the next call grades them", async () => {
+          const run = await insertTargeted();
+          const replaced = await run.call({
+            user_response: 'investigated',
+            remainder: { mode: 'replace', nodes: [{ id: 'r1', promptId: 'sv_chain' }] },
+          });
+          expect(runNodes(run.chainId).map((node) => node.split(':')[0])).toEqual([
+            'n1',
+            'inv-u-182',
+            'r1-a',
+            'r1-b',
+            'r1-c',
+          ]);
+          expect(runState(run.chainId).reviews).toEqual({ 'inv-u-182': ['sv-block'] });
+          expect(replaced).not.toContain('sv-drop');
+
+          const failed = await run.call({
+            user_response: 'investigated again',
+            gate_verdict: FAIL,
+          });
+          expect(currentNode(run.chainId)).toBe('inv-u-182');
+          expect(runState(run.chainId).reviews).toEqual({ 'inv-u-182': ['sv-block'] });
+          expect(failed).toContain('### sv-block');
+          expect(failed).not.toContain('sv-drop');
+        }, 120000);
+
+        test('(b) control: with no remainder it inherits the gates of the step it targets', async () => {
+          const run = await insertTargeted();
+          await run.call({ user_response: 'investigated', gate_verdict: FAIL });
+          expect(runState(run.chainId).reviews).toEqual({ 'inv-u-182': ['sv-drop'] });
+        }, 120000);
+      });
     });
 
     /**
