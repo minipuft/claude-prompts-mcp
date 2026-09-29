@@ -1288,6 +1288,68 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
   });
 
   /**
+   * MEASURED 2026-09-28 on `7bcb826f8` (driven, `prompts/get` over Streamable HTTP, both prompts
+   * `mcp_prompt_mode: launch`): the launcher envelope of chain prompt `sv_c273`, whose own
+   * `gateConfiguration.include` is `[sv-inc273]`, said "Quality gates that will be enforced:
+   * sv-inc273"; a chain run resolves no gate set from the chain prompt (R148, P6.171), so that
+   * gate is enforced nowhere.
+   *
+   * Now (R157) a chain prompt's envelope lists none of its own `include`; a single prompt's
+   * envelope still lists its own.
+   */
+  describe("P6.273: a chain prompt's launcher envelope claims no gate from its own include", () => {
+    const envelopeOf = async (name: string): Promise<string> => {
+      const result = (await client.request('prompts/get', { name, arguments: {} }, nextId++, {
+        toolName: name,
+      })) as { messages: Array<{ content?: { text?: string } }> };
+      return result.messages[0]?.content?.text ?? '';
+    };
+
+    beforeAll(async () => {
+      for (const args of [
+        { resource_type: 'gate', id: 'sv-inc273', guidance: 'GUIDANCE-sv-inc273' },
+        { resource_type: 'gate', id: 'sv-step273', guidance: 'GUIDANCE-sv-step273' },
+        {
+          resource_type: 'prompt',
+          id: 'sv_a273',
+          user_message_template: 'BODY-sv_a273',
+          gate_configuration: { include: ['sv-step273'] },
+        },
+        {
+          resource_type: 'prompt',
+          id: 'sv_c273',
+          user_message_template: 'CHAIN-OWN-TEMPLATE',
+          gate_configuration: { include: ['sv-inc273'] },
+          chain_steps: [{ promptId: 'sv_a273', stepName: 'A' }],
+        },
+      ]) {
+        const created = await tool('resource_manager', {
+          action: 'create',
+          name: args.id,
+          description: `e2e launcher ${args.id}`,
+          ...(args.resource_type === 'gate'
+            ? { enforcement_mode: 'blocking' }
+            : { category: 'general', mcp_prompt_mode: 'launch' }),
+          ...args,
+        });
+        if (created.isError) throw new Error(created.text);
+      }
+    }, 120000);
+
+    test('(a) the chain prompt envelope routes to prompt_engine and lists no enforced gate', async () => {
+      const envelope = await envelopeOf('sv_c273');
+      expect(envelope).toContain('prompt_engine(command: ">>sv_c273")');
+      expect(envelope).not.toContain('Quality gates that will be enforced');
+      expect(envelope).not.toContain('sv-inc273');
+    }, 120000);
+
+    test("(b) control: a single prompt's envelope still lists its own include", async () => {
+      const envelope = await envelopeOf('sv_a273');
+      expect(envelope).toContain('Quality gates that will be enforced:\n  • sv-step273');
+    }, 120000);
+  });
+
+  /**
    * MEASURED 2026-09-28 on `c813fe1cc` (driven over Streamable HTTP, shipped injection defaults:
    * framework system prompt every 3 steps, gate and style guidance on the first step only; stage
    * 14 read from the server's debug log): stage 14 decided every injection type for the step the

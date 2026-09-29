@@ -17,6 +17,8 @@
 import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { PromptArgument } from '#shared/types/index.js';
 
+import { isChainPrompt } from '#shared/utils/chainUtils.js';
+
 /** A single MCP prompt message (the shape returned by `prompts/get`). */
 export interface LauncherMessage {
   role: 'user';
@@ -32,8 +34,15 @@ function renderArgumentHints(args: PromptArgument[]): string[] {
   });
 }
 
-/** Hint lines for gates that will be enforced, from the prompt's `gateConfiguration.include`. */
+/**
+ * Hint lines for gates that will be enforced, from the prompt's `gateConfiguration.include`. None
+ * for a chain prompt (R157): a chain run resolves no gate set from the chain prompt itself, each
+ * step resolving from its own prompt (R148), so its `include` is enforced nowhere.
+ */
 function renderGateHints(prompt: ConvertedPrompt): string[] {
+  if (isChainPrompt(prompt)) {
+    return [];
+  }
   return (prompt.gateConfiguration?.include ?? []).map((gateId) => `  • ${gateId}`);
 }
 
