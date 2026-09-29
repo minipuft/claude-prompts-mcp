@@ -1682,6 +1682,67 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
   });
 
   /**
+   * P6.90 / R166 PIN (as of 2026-09-29 · flips when any path opens a review with an empty
+   * `gateIds`). MEASURED 2026-09-25 on `a99a6ba1`: a FAIL on a gateless step opened a review with
+   * `gateIds: []` and its exhaustion printed "failed after 2 attempts: ****". MEASURED 2026-09-29
+   * on `ab6a0e12`: the bare FAIL, the answered FAIL and a gateless single prompt's FAIL are each
+   * refused by name (R38) and open no review, so no exhausted render has an empty list to print.
+   */
+  describe('P6.90: no exhausted render prints an empty bold gate list', () => {
+    const reviewPhases = (chainId: string): Record<string, [string[], string]> => {
+      const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+      try {
+        const row = db.prepare('SELECT state FROM chain_runs WHERE chain_id = ?').get(chainId) as
+          { state: string } | undefined;
+        const reviews = (
+          JSON.parse(row?.state ?? '{}') as {
+            reviews?: Record<string, { gateIds: string[]; phase: string }>;
+          }
+        ).reviews;
+        return Object.fromEntries(
+          Object.entries(reviews ?? {}).map(([node, r]) => [node, [r.gateIds, r.phase]])
+        );
+      } finally {
+        db.close();
+      }
+    };
+
+    test('a FAIL on a gateless step is refused on every call and opens no review', async () => {
+      const run = await start({ command: '>>sv_pair' });
+      const replies = [
+        await tool('prompt_engine', { chain_id: run.chainId, gate_verdict: FAIL }),
+        await tool('prompt_engine', {
+          chain_id: run.chainId,
+          user_response: 'A',
+          gate_verdict: FAIL,
+        }),
+        await tool('prompt_engine', {
+          chain_id: run.chainId,
+          user_response: 'A',
+          gate_verdict: FAIL,
+        }),
+      ];
+      for (const reply of replies) {
+        expect(reply.isError).toBe(true);
+        expect(reply.text).toContain(
+          'Step 1 carries no gates, so a FAIL verdict has nothing to grade'
+        );
+        expect(reply.text).not.toContain('****');
+      }
+      expect(reviewPhases(run.chainId)).toEqual({});
+    }, 120000);
+
+    test('control: an exhausted review of a gated step prints its bolded gate list', async () => {
+      const run = await start({ command: '>>sv_chain' });
+      await run.call({ user_response: 'A out', gate_verdict: FAIL });
+      const spent = await run.call({ user_response: 'A again', gate_verdict: FAIL });
+      expect(reviewPhases(run.chainId)).toEqual({ a: [['sv-block'], 'exhausted'] });
+      expect(spent).toContain('failed after 2 attempts: **sv-block**');
+      expect(spent).not.toContain('****');
+    }, 120000);
+  });
+
+  /**
    * P6.186 / R89. MEASURED 2026-09-27 on `97c33a89`: `>>sv_a` arrow-chain `>>sv_b`, completed with
    * and without an inserted node, and a two-node workflow each printed "Chain execution complete"
    * and no `Re-run:`, while `>>sv_pair :: "CRIT-P"` completed with `Re-run: >>sv_pair topic:""` —
