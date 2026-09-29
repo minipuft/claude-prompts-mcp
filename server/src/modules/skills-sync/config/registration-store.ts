@@ -83,6 +83,9 @@ function addResourceKeys(
     added++;
   }
 
+  // A scope that gained nothing keeps its authored list: one batch spans every exported client,
+  // and a key registered for one must not re-sort another's hand-ordered list.
+  if (added === 0) return 0;
   scoped[scope] = [...nextSet].sort();
   return added;
 }

@@ -1627,4 +1627,87 @@ describe('Export Command Integration', () => {
       expect(await readFile(configPath, 'utf-8')).toBe(fixture);
     });
   });
+
+  // ── P6.262: a scope that received no key keeps its authored order ──────────
+
+  describe('P6.262 an export leaves a scope it added nothing to in its authored order', () => {
+    /**
+     * `addResourceKeys` re-sorted every scope in the batch, including one that received no key,
+     * whenever another scope in the same batch received one: `client: 'all'` exports to every
+     * registered client, so registering a key for one client re-sorted another client's
+     * hand-ordered list. Hand-authored fixture: both lists out of order, every client given its
+     * own output directory, the three clients not under test registered `all` (never mutated).
+     */
+    function twoScopeConfig(): string {
+      const clients = ['claude-code', 'cursor', 'codex', 'opencode', 'agent-plugins'];
+      return [
+        '# Skills for this workspace, edited by hand.',
+        'overrides:',
+        ...clients.flatMap((client) => [
+          `  ${client}:`,
+          '    outputDir:',
+          `      user: ${path.join(outputDir, client)}`,
+          `      project: ${path.join(outputDir, client)}`,
+        ]),
+        'registrations:',
+        '  codex:',
+        '    user:',
+        '      - prompt:general/plain',
+        '      - prompt:general/kept',
+        '  claude-code:',
+        '    user:',
+        '      - prompt:general/zeta',
+        '      - prompt:general/kept',
+        '  cursor: all',
+        '  opencode: all',
+        '  agent-plugins: all',
+        '',
+      ].join('\n');
+    }
+
+    it('(a) the scope that received nothing is byte-identical; the one that received a key is sorted', async () => {
+      await writePrompt('general', 'plain');
+      const configPath = path.join(serverRoot, 'skills-sync.yaml');
+      const fixture = twoScopeConfig();
+      await writeFile(configPath, fixture);
+
+      const out = silentOutput();
+      await runSkillsSyncCommand(
+        { command: 'export', client: 'all', scope: 'user', id: 'plain' } as SkillsSyncOptions,
+        out,
+        resolveSkillsSyncPaths()
+      );
+      // The drive reached the writer: codex exported `plain` (already registered, so nothing
+      // added) and claude-code registered it (one key added) in the same batch.
+      expect(await exists(path.join(outputDir, 'codex', 'plain', 'SKILL.md'))).toBe(true);
+      expect(await exists(path.join(outputDir, 'claude-code', 'plain', 'SKILL.md'))).toBe(true);
+      expect(out.logs.join('\n')).toContain('Updated skills-sync.yaml registrations (+1 key(s))');
+
+      const lines = (await readFile(configPath, 'utf-8')).split('\n');
+      const codexAt = lines.lastIndexOf('  codex:');
+      const claudeAt = lines.lastIndexOf('  claude-code:');
+      // Codex received nothing: its authored order survives.
+      expect(lines.slice(codexAt, codexAt + 4)).toEqual([
+        '  codex:',
+        '    user:',
+        '      - prompt:general/plain',
+        '      - prompt:general/kept',
+      ]);
+      // Control: claude-code received `plain`, and its list is sorted as before.
+      expect(lines.slice(claudeAt, claudeAt + 5)).toEqual([
+        '  claude-code:',
+        '    user:',
+        '      - prompt:general/kept',
+        '      - prompt:general/plain',
+        '      - prompt:general/zeta',
+      ]);
+      // Nothing else moved: the whole file is the fixture with that one list rewritten.
+      const expected = fixture.replace(
+        '      - prompt:general/zeta\n      - prompt:general/kept\n',
+        '      - prompt:general/kept\n      - prompt:general/plain\n      - prompt:general/zeta\n'
+      );
+      expect(expected).not.toBe(fixture);
+      expect(lines.join('\n')).toBe(expected);
+    });
+  });
 });
