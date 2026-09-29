@@ -117,10 +117,10 @@ export class ExecutionPlanner {
       declaredArtifacts,
     });
 
-    // Check for framework override from symbolic operators
-    const hasFrameworkOverride = Boolean(
-      parsedCommand?.executionPlan?.frameworkOverride ?? parsedCommand?.executionPlan
-    );
+    // A `^Framework` operator. Only the override itself: a symbolic command carries an
+    // `executionPlan` whether or not it names a framework, and counting that made every symbolic
+    // run require a framework with the framework system disabled (R158).
+    const hasFrameworkOverride = Boolean(parsedCommand?.executionPlan?.frameworkOverride);
 
     const baseRequiresFramework = this.requiresFramework(frameworkEnabled, hasFrameworkOverride);
     const requiresFramework = resolveFrameworkRequirement(

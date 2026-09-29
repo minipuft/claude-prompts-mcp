@@ -1128,11 +1128,14 @@ export class GateEnhancementService {
   }
 
   private buildDecisionInput(context: ExecutionContext): FrameworkDecisionInput {
-    let globalActiveFramework = context.frameworkContext?.selectedFramework?.id;
-
-    if (!globalActiveFramework) {
-      globalActiveFramework = this.activeFrameworkIdProvider(context.getScopeOptions());
-    }
+    // The framework toggle decides a run's framework at its first call (R158): the plan records
+    // it as `requiresFramework`, and a resumed run restores that plan from its blueprint, so a
+    // toggle switched mid-run changes nothing for the run and a run started with it off gets none.
+    const globalActiveFramework =
+      context.executionPlan?.requiresFramework === false
+        ? undefined
+        : (context.frameworkContext?.selectedFramework?.id ??
+          this.activeFrameworkIdProvider(context.getScopeOptions()));
 
     const result: FrameworkDecisionInput = {};
     if (context.executionPlan?.modifiers !== undefined) {

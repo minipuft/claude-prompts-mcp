@@ -646,3 +646,115 @@ describe('P6.198: a framework override needs no system toggle on a step added mi
     expect(run.contributed.text).not.toContain('Framework Active');
   }, 120000);
 });
+
+/**
+ * R158 (P6.270, P6.269). The framework toggle decides a run's framework at its first call, and
+ * the run keeps that decision for its life. MEASURED 2026-09-29 on `1efa6988a` (driven, Streamable
+ * HTTP, no override): with the system disabled BEFORE the run, every planned step still rendered
+ * the active framework (its block, its required sections, a framework-compliance review) and stage
+ * 19 graded a sectionless answer on one; with the system disabled after the first call, the
+ * planned steps kept the framework while the inserted and remainder steps lost it and stage 19
+ * stopped grading the remainder. Planned steps read a decision that ignored the toggle; added
+ * steps read the toggle on every call.
+ */
+describe('R158: the framework toggle decides a run at its first call (Streamable HTTP)', () => {
+  const SECTIONS = ['Context', 'Analysis', 'Goals', 'Execution']
+    .map(
+      (header) =>
+        `## ${header}\n${`The ${header.toLowerCase()} of this answer, in full. `.repeat(6)}`
+    )
+    .join('\n\n');
+  const PASS = 'GATE_REVIEW: PASS - ok';
+  /** What any framework renders: its block, its required sections, its guideline gate. */
+  const FRAMEWORK_MARKERS = [
+    'Framework Active',
+    '**Required Sections**',
+    'Framework Guidelines',
+    'Framework Compliance',
+  ];
+  const STRUCTURAL_REVIEW = '**Structural Review Required**';
+  const rendersNoFramework = (text: string) =>
+    FRAMEWORK_MARKERS.filter((marker) => text.includes(marker));
+
+  /**
+   * Four planned steps, a blocking unknown on step 3 inserting an investigation step, and a
+   * remainder `r1`. Steps 2 and `r1` are answered with no sections, which stage 19 grades only
+   * when the run applies a framework.
+   */
+  async function runToggled(disable: 'before-start' | 'after-first-call') {
+    const session = await start(startHttpSession, await newWorkspace());
+    for (const id of ['r158_s', 'r158_b', 'r158_a']) {
+      const created = await session.callTool('resource_manager', {
+        resource_type: 'prompt',
+        action: 'create',
+        id,
+        name: id,
+        category: 'general',
+        description: 'A step rendering under the run framework',
+        user_message_template: `BODY-${id}`,
+      });
+      expect(created.isError).toBe(false);
+    }
+    const disableSystem = async () => {
+      const disabled = await session.callTool('system_control', {
+        action: 'framework',
+        operation: 'disable',
+        reason: 'R158',
+      });
+      expect(disabled.isError).toBe(false);
+    };
+    if (disable === 'before-start') await disableSystem();
+
+    const first = await session.callTool('prompt_engine', {
+      command: '>>r158_s --> >>r158_s --> >>r158_s --> >>r158_b',
+    });
+    expect(first.isError).toBe(false);
+    const chainId = /chain_id[=:] ?"(chain-[A-Za-z0-9_#-]+)"/.exec(first.text)?.[1];
+    const call = (args: Record<string, unknown>) =>
+      session.callTool('prompt_engine', { chain_id: chainId, ...args });
+    const second = await call({ user_response: `A1 out\n${SECTIONS}`, gate_verdict: PASS });
+    if (disable === 'after-first-call') await disableSystem();
+    const sectionless = await call({ user_response: 'plain answer two', gate_verdict: PASS });
+    const inserted = await call({
+      user_response: `A3 out\n${SECTIONS}`,
+      gate_verdict: PASS,
+      observations: [
+        { type: 'unknown_discovered', id: 'u-158', statement: 'rest undecided', blocking: true },
+      ],
+    });
+    const fourth = await call({
+      user_response: 'investigated',
+      gate_verdict: PASS,
+      remainder: { mode: 'append', nodes: [{ id: 'r1', promptId: 'r158_a' }] },
+    });
+    const contributed = await call({ user_response: `B out\n${SECTIONS}`, gate_verdict: PASS });
+    const contributedAnswered = await call({ user_response: 'plain r1', gate_verdict: PASS });
+    return { first, second, sectionless, inserted, fourth, contributed, contributedAnswered };
+  }
+
+  it('P6.270 (a) a run started with the system off renders no framework on any step and grades no phase', async () => {
+    const run = await runToggled('before-start');
+    expect(run.inserted.text).toContain('## Investigate: rest undecided');
+    expect(run.contributed.text).toContain('BODY-r158_a');
+    for (const render of [
+      run.first,
+      run.second,
+      run.sectionless,
+      run.inserted,
+      run.fourth,
+      run.contributed,
+    ]) {
+      expect(rendersNoFramework(render.text)).toEqual([]);
+    }
+    expect(run.sectionless.text).not.toContain(STRUCTURAL_REVIEW);
+    expect(run.contributedAnswered.text).not.toContain(STRUCTURAL_REVIEW);
+  }, 120000);
+
+  it('P6.270 (b) control: a run started with the system on keeps its framework on planned steps after it is switched off', async () => {
+    const run = await runToggled('after-first-call');
+    expect(run.first.text).toContain('Framework Active');
+    expect(run.sectionless.text).toContain('**Required Sections**');
+    expect(run.fourth.text).toContain('BODY-r158_b');
+    expect(run.fourth.text).toContain('**Required Sections**');
+  }, 120000);
+});
