@@ -353,8 +353,11 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
    * block exactly when an ungated chain's step 2, rendered normally by stage 18 on the same kind
    * of resume call, does: the three are pinned as one value. The ungated step 1 is the positive
    * control that the probe sees the block at all.
+   *
+   * R151 (2026-09-28): the system prompt is decided for the step the call RENDERS, so under the
+   * shipped every-3-steps frequency all three step 2 renders carry no block, still equally.
    */
-  test('P6.143 the claimed and the same-process step 2 carry the framework block equally, as the call decided', async () => {
+  test('P6.143 the claimed and the same-process step 2 carry the framework block equally, as the rendered step decides', async () => {
     const block = (text: string): boolean => text.includes('C.A.G.E.E.R.F');
     const claimed = await claimOnSecondServer(freshRoots(), {
       command: GATED_COMMAND,
@@ -387,9 +390,9 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     expect(ungatedStep2.isError).toBe(false);
     const normal = block(ungatedStep2.text);
     expect({ claimed: block(claimed.firstReply), same: block(same.text), normal }).toEqual({
-      claimed: true,
-      same: true,
-      normal: true,
+      claimed: false,
+      same: false,
+      normal: false,
     });
   }, 240000);
 

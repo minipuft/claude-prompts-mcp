@@ -1150,6 +1150,69 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
   });
 
   /**
+   * MEASURED 2026-09-28 on `c813fe1cc` (driven over Streamable HTTP, shipped injection defaults:
+   * framework system prompt every 3 steps, gate and style guidance on the first step only; stage
+   * 14 read from the server's debug log): stage 14 decided every injection type for the step the
+   * call ANSWERED, before stage 16 moved the run. A PASS on step 1 of `>>sv_chain` rendered step 2
+   * with the framework block, which the frequency gives steps 1 and 4 only.
+   *
+   * Now (R151) stage 16 hands stage 14 the node the run stands on after the advance, and the
+   * system prompt and style are decided for that rendered step. Gate guidance keeps the answered
+   * step's decision: under first-step-only frequency that is what carries a step's own criteria
+   * onto the step 2 render (the P6.78, P6.97, P6.99, P6.108, P6.110 and P6.129 pins).
+   */
+  describe('P6.264: on a resume the system prompt follows the rendered step, gate guidance the answered one', () => {
+    /** The framework system prompt's own opening line, on a start render and a resume render alike. */
+    const FRAMEWORK_BLOCK = 'You are operating under the C.A.G.E.E.R.F Framework';
+    /** Gate-guidance injection for `sv-block`: the gate's guidance under its own heading. */
+    const gateGuidanceFor = (text: string): boolean =>
+      text.includes('### sv-block\nGUIDANCE-sv-block');
+
+    test('(a) system prompt: a PASS on step 1 renders step 2 without the block step 1 carries', async () => {
+      const run = await start({ command: '>>sv_chain' });
+      expect(run.text).toContain(FRAMEWORK_BLOCK);
+
+      const second = await run.call({ user_response: 'A out', gate_verdict: PASS });
+      expect(templates(second)).toEqual(['BODY-sv_b topic=']);
+      expect(second).not.toContain(FRAMEWORK_BLOCK);
+    }, 120000);
+
+    test('(a) the other side of the boundary: answering step 3 renders step 4 with the block', async () => {
+      const run = await start({ command: '>>sv_big' });
+      expect(run.text).toContain(FRAMEWORK_BLOCK);
+
+      const renders: boolean[] = [];
+      for (const answer of ['S1 out', 'S2 out', 'S3 out']) {
+        const next = await run.call({ user_response: answer });
+        expect(templates(next)).toEqual(['BODY-sv_a topic=']);
+        renders.push(next.includes(FRAMEWORK_BLOCK));
+      }
+      expect(renders).toEqual([false, false, true]);
+    }, 120000);
+
+    test("(b) gate guidance: the same PASS renders step 2 with its gate's guidance, as step 1 decided", async () => {
+      const run = await start({ command: '>>sv_chain' });
+      expect(gateGuidanceFor(run.text)).toBe(true);
+
+      const second = await run.call({ user_response: 'A out', gate_verdict: PASS });
+      expect(templates(second)).toEqual(['BODY-sv_b topic=']);
+      expect(gateGuidanceFor(second)).toBe(true);
+    }, 120000);
+
+    test('(c) a FAIL on step 1 re-renders step 1 and moves no decision', async () => {
+      const run = await start({ command: '>>sv_chain' });
+      const review = await run.call({ user_response: 'A out', gate_verdict: FAIL });
+      expect(review).toContain('Gate Review Required');
+      expect(gateGuidanceFor(review)).toBe(true);
+
+      const second = await run.call({ user_response: 'A out again', gate_verdict: PASS });
+      expect(templates(second)).toEqual(['BODY-sv_b topic=']);
+      expect(second).not.toContain(FRAMEWORK_BLOCK);
+      expect(gateGuidanceFor(second)).toBe(true);
+    }, 120000);
+  });
+
+  /**
    * PIN (as of 2026-09-27 · flips when a gated single prompt stops opening a run). A single prompt
    * with an inline gate operator opens a run of ONE node, `n1` (R52), because the planner requires
    * a session for any `gate` operator (`ExecutionPlanner.requiresSession`, its operator clause — not
@@ -3002,26 +3065,36 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
        * investigation step `inv-u-160` a blocking unknown inserted rendered the ACTIVE framework's
        * guidance (`C.A.G.E.E.R.F Framework Active`) in a run deciding ReACT. An inserted step now
        * resolves the run's framework decision as a contributed step does, and stays unguarded (R83).
+       *
+       * The unknown is raised on step 3 so the inserted step renders at position 4: the framework
+       * block follows the rendered step's frequency (R151, every 3 steps by default), and position
+       * 2 would render no block under either framework.
        */
       describe("P6.189: an inserted step's framework guidance follows the run's decision", () => {
-        /** Raise a blocking unknown on step 1; the inserted step's render, and a sectionless PASS on it. */
+        /** Raise a blocking unknown on step 3; the inserted step's render, and a sectionless PASS on it. */
         async function insertedUnder(command: string) {
           const run = await start({ command });
-          const inserted = await run.call({ user_response: 'A out', ...blockingUnknown });
+          await run.call({ user_response: 'A1 out' });
+          await run.call({ user_response: 'A2 out' });
+          const inserted = await run.call({ user_response: 'A3 out', ...blockingUnknown });
           expect(currentNode(run.chainId)).toBe('inv-u-160');
           await run.call({ user_response: 'investigated', gate_verdict: PASS });
           return { inserted, reviews: runState(run.chainId).reviews };
         }
 
         test('(a) under an override the inserted step names the run framework and stays unguarded', async () => {
-          const { inserted, reviews } = await insertedUnder(`^ReACT >>sv_a${ARROW}>>sv_b`);
+          const { inserted, reviews } = await insertedUnder(
+            `^ReACT >>sv_a${ARROW}>>sv_a${ARROW}>>sv_a${ARROW}>>sv_b`
+          );
           expect(inserted).toContain('ReACT Framework Active');
           expect(inserted).not.toContain('C.A.G.E.E.R.F');
           expect(reviews).toEqual({});
         }, 120000);
 
         test('(b) control: with no override the inserted step keeps the active framework', async () => {
-          const { inserted, reviews } = await insertedUnder(`>>sv_a${ARROW}>>sv_b`);
+          const { inserted, reviews } = await insertedUnder(
+            `>>sv_a${ARROW}>>sv_a${ARROW}>>sv_a${ARROW}>>sv_b`
+          );
           expect(inserted).toContain('C.A.G.E.E.R.F Framework Active');
           expect(inserted).not.toContain('ReACT');
           expect(reviews).toEqual({});
