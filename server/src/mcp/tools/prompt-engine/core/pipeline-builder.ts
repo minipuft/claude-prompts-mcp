@@ -395,6 +395,9 @@ export class PipelineBuilder {
             review,
             recordedOutput
           ),
+        // R144: the same stage 14 instance decides again once this stage has moved the run.
+        redecideInjection: (context, position) =>
+          injectionControlStage.redecideAt(context, position),
       }
     );
 

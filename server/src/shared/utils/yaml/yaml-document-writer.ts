@@ -23,6 +23,11 @@
  * CST equivalent that does not amount to hand-building tokens, and falls back to the document
  * layer, which still keeps comments but may re-wrap a long scalar. The tier is reported rather
  * than hidden, so a caller that cares can assert which one ran.
+ *
+ * The document tier makes two more measured normalizations beside the re-wrap: it re-pads an
+ * untouched flow list (`[a, b]` to `[ a, b ]`) and inserts a blank line before a trailing comment.
+ * Both are accepted: closing them is a CST-level list edit, a writer rewrite across ten call sites,
+ * and no client has reported either. The skills-sync export twin pins the exact diff.
  */
 
 import { readFileSync } from 'node:fs';

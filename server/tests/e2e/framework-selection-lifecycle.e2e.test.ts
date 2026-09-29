@@ -598,6 +598,11 @@ describe('P6.198: a framework override needs no system toggle on a step added mi
     const chainId = /chain_id[=:] ?"(chain-[A-Za-z0-9_#-]+)"/.exec(planned.text)?.[1];
     const call = (args: Record<string, unknown>) =>
       session.callTool('prompt_engine', { chain_id: chainId, ...args });
+    // Two planned answers first: the unknown raised on step 3 inserts its step at position 4,
+    // where the every-3-steps frequency injects the framework block for the rendered step (R151).
+    for (const answer of ['A1 out', 'A2 out']) {
+      await call({ user_response: `${answer}\n${SECTIONS}`, gate_verdict: PASS });
+    }
     const inserted = await call({
       user_response: `A out\n${SECTIONS}`,
       gate_verdict: PASS,
@@ -615,7 +620,9 @@ describe('P6.198: a framework override needs no system toggle on a step added mi
   }
 
   it('(a) under ^ReACT the planned, inserted and remainder steps all render ReACT', async () => {
-    const run = await runWithAddedSteps('^ReACT >>p198_s1 --> >>p198_b');
+    const run = await runWithAddedSteps(
+      '^ReACT >>p198_s1 --> >>p198_s1 --> >>p198_s1 --> >>p198_b'
+    );
     expect(run.planned.text).toContain('ReACT Framework Active');
     expect(run.inserted.text).toContain('## Investigate: rest undecided');
     expect(run.inserted.text).toContain('ReACT Framework Active');
@@ -630,7 +637,7 @@ describe('P6.198: a framework override needs no system toggle on a step added mi
     // active framework today (measured 2026-09-28, reported as a finding, not ruled here). The
     // one difference from (a) is the operator, so the bypass is keyed on the override alone:
     // the run still decides the active framework here, and an added step must not render it.
-    const run = await runWithAddedSteps('>>p198_s1 --> >>p198_b');
+    const run = await runWithAddedSteps('>>p198_s1 --> >>p198_s1 --> >>p198_s1 --> >>p198_b');
     expect(run.inserted.text).toContain('## Investigate: rest undecided');
     expect(run.inserted.text).not.toContain('Framework Active');
     expect(run.contributed.text).not.toContain('BODY-p198_b');
