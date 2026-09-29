@@ -646,3 +646,281 @@ describe('P6.198: a framework override needs no system toggle on a step added mi
     expect(run.contributed.text).not.toContain('Framework Active');
   }, 120000);
 });
+
+/**
+ * R158 (P6.270, P6.269). The framework toggle decides a run's framework at its first call, and
+ * the run keeps that decision for its life. MEASURED 2026-09-29 on `1efa6988a` (driven, Streamable
+ * HTTP, no override): with the system disabled BEFORE the run, every planned step still rendered
+ * the active framework (its block, its required sections, a framework-compliance review) and stage
+ * 19 graded a sectionless answer on one; with the system disabled after the first call, the
+ * planned steps kept the framework while the inserted and remainder steps lost it and stage 19
+ * stopped grading the remainder. Planned steps read a decision that ignored the toggle; added
+ * steps read the toggle on every call.
+ */
+describe('R158: the framework toggle decides a run at its first call (Streamable HTTP)', () => {
+  const SECTIONS = ['Context', 'Analysis', 'Goals', 'Execution']
+    .map(
+      (header) =>
+        `## ${header}\n${`The ${header.toLowerCase()} of this answer, in full. `.repeat(6)}`
+    )
+    .join('\n\n');
+  const PASS = 'GATE_REVIEW: PASS - ok';
+  /** What any framework renders: its block, its required sections, its guideline gate. */
+  const FRAMEWORK_MARKERS = [
+    'Framework Active',
+    '**Required Sections**',
+    'Framework Guidelines',
+    'Framework Compliance',
+  ];
+  const STRUCTURAL_REVIEW = '**Structural Review Required**';
+  const rendersNoFramework = (text: string) =>
+    FRAMEWORK_MARKERS.filter((marker) => text.includes(marker));
+
+  /**
+   * Four planned steps, a blocking unknown on step 3 inserting an investigation step, and a
+   * remainder `r1`. Steps 2 and `r1` are answered with no sections, which stage 19 grades only
+   * when the run applies a framework.
+   */
+  async function runToggled(disable: 'before-start' | 'after-first-call') {
+    const session = await start(startHttpSession, await newWorkspace());
+    for (const id of ['r158_s', 'r158_b', 'r158_a']) {
+      const created = await session.callTool('resource_manager', {
+        resource_type: 'prompt',
+        action: 'create',
+        id,
+        name: id,
+        category: 'general',
+        description: 'A step rendering under the run framework',
+        user_message_template: `BODY-${id}`,
+      });
+      expect(created.isError).toBe(false);
+    }
+    const disableSystem = async () => {
+      const disabled = await session.callTool('system_control', {
+        action: 'framework',
+        operation: 'disable',
+        reason: 'R158',
+      });
+      expect(disabled.isError).toBe(false);
+    };
+    if (disable === 'before-start') await disableSystem();
+
+    const first = await session.callTool('prompt_engine', {
+      command: '>>r158_s --> >>r158_s --> >>r158_s --> >>r158_b',
+    });
+    expect(first.isError).toBe(false);
+    const chainId = /chain_id[=:] ?"(chain-[A-Za-z0-9_#-]+)"/.exec(first.text)?.[1];
+    const call = (args: Record<string, unknown>) =>
+      session.callTool('prompt_engine', { chain_id: chainId, ...args });
+    const second = await call({ user_response: `A1 out\n${SECTIONS}`, gate_verdict: PASS });
+    if (disable === 'after-first-call') await disableSystem();
+    const sectionless = await call({ user_response: 'plain answer two', gate_verdict: PASS });
+    const inserted = await call({
+      user_response: `A3 out\n${SECTIONS}`,
+      gate_verdict: PASS,
+      observations: [
+        { type: 'unknown_discovered', id: 'u-158', statement: 'rest undecided', blocking: true },
+      ],
+    });
+    const fourth = await call({
+      user_response: 'investigated',
+      gate_verdict: PASS,
+      remainder: { mode: 'append', nodes: [{ id: 'r1', promptId: 'r158_a' }] },
+    });
+    const contributed = await call({ user_response: `B out\n${SECTIONS}`, gate_verdict: PASS });
+    const contributedAnswered = await call({ user_response: 'plain r1', gate_verdict: PASS });
+    return { first, second, sectionless, inserted, fourth, contributed, contributedAnswered };
+  }
+
+  it('P6.270 (a) a run started with the system off renders no framework on any step and grades no phase', async () => {
+    const run = await runToggled('before-start');
+    expect(run.inserted.text).toContain('## Investigate: rest undecided');
+    expect(run.contributed.text).toContain('BODY-r158_a');
+    for (const render of [
+      run.first,
+      run.second,
+      run.sectionless,
+      run.inserted,
+      run.fourth,
+      run.contributed,
+    ]) {
+      expect(rendersNoFramework(render.text)).toEqual([]);
+    }
+    expect(run.sectionless.text).not.toContain(STRUCTURAL_REVIEW);
+    expect(run.contributedAnswered.text).not.toContain(STRUCTURAL_REVIEW);
+  }, 120000);
+
+  it('P6.270 (b) control: a run started with the system on keeps its framework on planned steps after it is switched off', async () => {
+    const run = await runToggled('after-first-call');
+    expect(run.first.text).toContain('Framework Active');
+    expect(run.sectionless.text).toContain('**Required Sections**');
+    expect(run.fourth.text).toContain('BODY-r158_b');
+    expect(run.fourth.text).toContain('**Required Sections**');
+  }, 120000);
+
+  it('P6.269 a run started with the system on keeps its framework on added steps and in the phase grading after it is switched off', async () => {
+    const run = await runToggled('after-first-call');
+    // Stage 19 grades a planned step answered after the switch on the run's framework.
+    expect(run.sectionless.text).toContain(STRUCTURAL_REVIEW);
+    expect(run.inserted.text).toContain('## Investigate: rest undecided');
+    expect(run.inserted.text).toContain('Framework Active');
+    expect(run.contributed.text).toContain('BODY-r158_a');
+    expect(run.contributed.text).toContain('**Required Sections**');
+    // ...and the remainder step, whose sections the added-step fallback declared.
+    expect(run.contributedAnswered.text).toContain(STRUCTURAL_REVIEW);
+  }, 120000);
+});
+
+/**
+ * P6.272 / R156 (amended). MEASURED 2026-09-29 on `abadca951` (driven, Streamable HTTP): on a
+ * chain whose every step carries a blocking gate, the gate-guidance frequency (first step only,
+ * every step, every 2nd step) changed nothing: every render carried the gate's guidance. The call
+ * answering a gated step decides while that step's review is open, and a gate review is never
+ * thinned by the frequency, so the step it renders next names the gates it will be graded on.
+ *
+ * PIN: in a fully blocking-gated chain every render carries its gate's guidance at every
+ * frequency. CONTROL: the frequency still thins a gated step rendered by a call that answered an
+ * ungated step (the P6.151 shape: a request gate on step 1 makes step 3 the second gated step).
+ */
+describe('P6.272: gate-guidance frequency never thins a fully blocking-gated chain (Streamable HTTP)', () => {
+  const FREQUENCIES = [0, 1, 2] as const;
+  const PASS = 'GATE_REVIEW: PASS - ok';
+  const OPT_OUT = { exclude: ['content-structure'], framework_gates: false };
+
+  /** A server whose config sets the gate-guidance frequency, with three plain step prompts. */
+  async function serverAt(frequency: number) {
+    const workspace = await newWorkspace();
+    const configPath = workspace.env['MCP_CONFIG_PATH'] as string;
+    const config = JSON.parse(readFileSync(configPath, 'utf8')) as {
+      frameworks?: Record<string, unknown>;
+    };
+    config.frameworks = {
+      ...config.frameworks,
+      injection: { gateGuidance: { frequency, target: 'both' } },
+    };
+    await writeFile(configPath, JSON.stringify(config, null, 2));
+    const session = await start(startHttpSession, workspace);
+    for (const id of ['p272_a', 'p272_b', 'p272_c']) {
+      const created = await session.callTool('resource_manager', {
+        resource_type: 'prompt',
+        action: 'create',
+        id,
+        name: id,
+        category: 'general',
+        description: 'A plain chain step',
+        user_message_template: `BODY-${id}`,
+        gate_configuration: OPT_OUT,
+      });
+      expect(created.isError).toBe(false);
+    }
+    return session;
+  }
+
+  async function createChain(
+    session: McpSession,
+    id: string,
+    steps: Array<Record<string, unknown>>
+  ): Promise<void> {
+    const created = await session.callTool('resource_manager', {
+      resource_type: 'prompt',
+      action: 'create',
+      id,
+      name: id,
+      category: 'general',
+      description: 'P6.272 chain',
+      user_message_template: 'CHAIN',
+      gate_configuration: OPT_OUT,
+      chain_steps: steps,
+    });
+    expect(created.isError).toBe(false);
+  }
+
+  const chainIdOf = (text: string) => /chain_id[=:] ?"(chain-[A-Za-z0-9_#-]+)"/.exec(text)?.[1];
+
+  it('pin: every render of a fully blocking-gated chain carries its guidance, at every frequency', async () => {
+    const observed: Record<number, boolean[]> = {};
+    for (const frequency of FREQUENCIES) {
+      const session = await serverAt(frequency);
+      const gateId = `p272-block-f${frequency}`;
+      const gate = await session.callTool('resource_manager', {
+        resource_type: 'gate',
+        action: 'create',
+        id: gateId,
+        name: gateId,
+        description: 'blocking',
+        guidance: `GUIDANCE-${gateId}`,
+        enforcement_mode: 'blocking',
+      });
+      expect(gate.isError).toBe(false);
+      await createChain(session, 'p272_gated', [
+        { promptId: 'p272_a', stepName: 'A', inlineGateIds: [gateId] },
+        { promptId: 'p272_b', stepName: 'B', inlineGateIds: [gateId] },
+        { promptId: 'p272_c', stepName: 'C', inlineGateIds: [gateId] },
+      ]);
+      const first = await session.callTool('prompt_engine', { command: '>>p272_gated' });
+      const chainId = chainIdOf(first.text);
+      const call = (answer: string) =>
+        session.callTool('prompt_engine', {
+          chain_id: chainId,
+          user_response: answer,
+          gate_verdict: PASS,
+        });
+      const second = await call('A out');
+      const third = await call('B out');
+      expect(third.text).toContain('BODY-p272_c');
+      observed[frequency] = [first, second, third].map((render) =>
+        render.text.includes(`GUIDANCE-${gateId}`)
+      );
+    }
+    const everyRender = [true, true, true];
+    expect(observed).toEqual({ 0: everyRender, 1: everyRender, 2: everyRender });
+  }, 180000);
+
+  it('control: a gated step rendered by a call that answered an ungated step follows the frequency', async () => {
+    const observed: Record<number, boolean> = {};
+    for (const frequency of FREQUENCIES) {
+      const session = await serverAt(frequency);
+      const gateId = `p272-late-f${frequency}`;
+      const gate = await session.callTool('resource_manager', {
+        resource_type: 'gate',
+        action: 'create',
+        id: gateId,
+        name: gateId,
+        description: 'blocking',
+        guidance: `GUIDANCE-${gateId}`,
+        enforcement_mode: 'blocking',
+      });
+      expect(gate.isError).toBe(false);
+      await createChain(session, 'p272_late', [
+        { promptId: 'p272_a', stepName: 'A' },
+        { promptId: 'p272_b', stepName: 'B' },
+        { promptId: 'p272_c', stepName: 'C', inlineGateIds: [gateId] },
+      ]);
+      const first = await session.callTool('prompt_engine', {
+        command: '>>p272_late',
+        gates: [
+          {
+            id: `p272-req-f${frequency}`,
+            name: 'request',
+            criteria: [`CRIT-272-${frequency}`],
+            target_step_id: 'a',
+          },
+        ],
+      });
+      const chainId = chainIdOf(first.text);
+      await session.callTool('prompt_engine', {
+        chain_id: chainId,
+        user_response: 'A out',
+        gate_verdict: PASS,
+      });
+      const stepBlock = await session.callTool('prompt_engine', {
+        chain_id: chainId,
+        user_response: 'B out',
+      });
+      expect(stepBlock.text).toContain('BODY-p272_c');
+      observed[frequency] = stepBlock.text.includes(`GUIDANCE-${gateId}`);
+    }
+    // Step 3 is the run's second gated step: first-only and every-2nd skip it, every-step shows it.
+    expect(observed).toEqual({ 0: false, 1: true, 2: false });
+  }, 180000);
+});

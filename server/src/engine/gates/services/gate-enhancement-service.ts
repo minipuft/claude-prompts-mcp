@@ -1,5 +1,6 @@
 // @lifecycle canonical - Core gate enhancement logic for prompt enrichment.
 import { DEFAULT_FRAMEWORK_GATE_ID, GateSetResolver } from './gate-set-resolver.js';
+import { liveNodeIds } from './run-step-view.js';
 import {
   planNodeDrivenRender,
   steplessBaseStep,
@@ -391,6 +392,7 @@ export class GateEnhancementService {
     };
 
     let totalGatesApplied = 0;
+    context.state.gates.gatedStepNumbers = [];
     for (const step of steps) {
       totalGatesApplied += await this.applyGatesToStep(step, stepInput);
     }
@@ -496,6 +498,10 @@ export class GateEnhancementService {
     if (gateIds.length === 0) {
       return 0;
     }
+    context.state.gates.gatedStepNumbers = [
+      ...(context.state.gates.gatedStepNumbers ?? []),
+      step.stepNumber,
+    ];
 
     return await this.enhanceStepPrompt(step, prompt, gateIds, stepFrameworkId, input);
   }
@@ -1061,9 +1067,10 @@ export class GateEnhancementService {
    * it, firing it against work its author never saw. The ordinal branch remains for gates and
    * chains that carry no node id at all (P3 D10 keeps `nodeId` optional).
    *
-   * A gate whose target node has been RETIRED (`milestone='skipped'`) fires nowhere: its step
-   * will not execute, and letting it fall through to the ordinal branch would attach it to
-   * whatever step now sits at that position.
+   * A gate whose target node is no longer LIVE fires nowhere (R84): RETIRED (`milestone='skipped'`)
+   * or gone from the run, which a `replace` remainder does to the nodes it drops. Its step will not
+   * execute, and letting it fall through would attach it to whatever step now sits at that
+   * position, or to a node inserted to unblock it.
    *
    * `nodeId: null` is NOT `nodeId: undefined`. `null` means "this target has no node identity and
    * none can be inherited", so every node-addressed gate must drop; `undefined` means "this step
@@ -1088,8 +1095,8 @@ export class GateEnhancementService {
 
       const targetNodeId = tempGate.target_step_id;
       if (targetNodeId !== undefined) {
-        if (runStepView?.skippedNodeIds.includes(targetNodeId) === true) {
-          this.logger.debug('[GateEnhancementService] Gate target node is skipped — not firing', {
+        if (runStepView !== undefined && !liveNodeIds(runStepView).includes(targetNodeId)) {
+          this.logger.debug('[GateEnhancementService] Gate target node is not live — not firing', {
             gateId,
             targetNodeId,
           });
@@ -1121,11 +1128,14 @@ export class GateEnhancementService {
   }
 
   private buildDecisionInput(context: ExecutionContext): FrameworkDecisionInput {
-    let globalActiveFramework = context.frameworkContext?.selectedFramework?.id;
-
-    if (!globalActiveFramework) {
-      globalActiveFramework = this.activeFrameworkIdProvider(context.getScopeOptions());
-    }
+    // The framework toggle decides a run's framework at its first call (R158): the plan records
+    // it as `requiresFramework`, and a resumed run restores that plan from its blueprint, so a
+    // toggle switched mid-run changes nothing for the run and a run started with it off gets none.
+    const globalActiveFramework =
+      context.executionPlan?.requiresFramework === false
+        ? undefined
+        : (context.frameworkContext?.selectedFramework?.id ??
+          this.activeFrameworkIdProvider(context.getScopeOptions()));
 
     const result: FrameworkDecisionInput = {};
     if (context.executionPlan?.modifiers !== undefined) {

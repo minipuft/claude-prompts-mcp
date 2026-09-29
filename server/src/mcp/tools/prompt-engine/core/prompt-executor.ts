@@ -1084,20 +1084,14 @@ export class PromptExecutor {
   private async resolveFrameworkContextForPrompt(
     promptId: string,
     scope?: StateStoreOptions,
-    frameworkId?: string,
-    fromOperator?: boolean
+    frameworkId?: string
   ) {
     const prompt = this.convertedPrompts.find((p) => p.id === promptId);
     if (!prompt) {
       return null;
     }
 
-    const frameworkContext = await this.getFrameworkExecutionContext(
-      prompt,
-      scope,
-      frameworkId,
-      fromOperator === true
-    );
+    const frameworkContext = await this.getFrameworkExecutionContext(prompt, scope, frameworkId);
     if (!frameworkContext) {
       return {
         category: prompt.category,
@@ -1112,20 +1106,21 @@ export class PromptExecutor {
   }
 
   /**
-   * `frameworkId` is the run's decision when the caller has one; else the active framework. A
-   * decision from the `^Framework` operator (`fromOperator`) needs no system toggle (R149).
+   * `frameworkId` is the run's decision when the caller has one; else the active framework. A run's
+   * decision needs no system toggle: an override applies with the system off (R149), and without
+   * one the toggle was read when the run decided (R158), so reading it again here dropped the
+   * framework from a step added after the system was switched off mid-run.
    */
   private async getFrameworkExecutionContext(
     prompt: ConvertedPrompt,
     scope: StateStoreOptions | undefined,
-    frameworkId?: string,
-    fromOperator = false
+    frameworkId?: string
   ): Promise<FrameworkExecutionContext | null> {
     if (!this.frameworkManager || !this.frameworkStateStore) {
       return null;
     }
 
-    if (!fromOperator && !this.frameworkStateStore.isFrameworkSystemEnabled(scope)) {
+    if (frameworkId === undefined && !this.frameworkStateStore.isFrameworkSystemEnabled(scope)) {
       return null;
     }
 

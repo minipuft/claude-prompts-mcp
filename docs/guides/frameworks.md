@@ -102,6 +102,12 @@ The override needs no system toggle: with the framework system disabled
 (`system_control(action:"framework", operation:"disable")`), `@REACT` still applies to every step
 the run renders, including a step a `remainder` or a blocking unknown adds mid-run.
 
+Without an override the toggle is read once, when a run starts: a run started with the system
+disabled renders no framework on any step and no phase guard grades it, while a run already under
+way when the system is disabled keeps its framework on every step, planned or added, and in the
+phase guard's grading. A run's framework is a run-level decision made at its first call, so every
+step of one run answers to the same framework.
+
 ### Disable for a Single Request
 
 Use modifiers to suppress framework injection:

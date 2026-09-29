@@ -1,6 +1,7 @@
 // @lifecycle canonical - Assembles response content for pipeline formatting stage.
 import { declaresFrameworkSections } from '../../frameworks/declared-sections.js';
 import { JUDGE_OUTPUT_PLACEHOLDER } from '../../gates/core/review-utils.js';
+import { liveNodeIds } from '../../gates/services/run-step-view.js';
 import { SHELL_VERIFY_DEFAULT_MAX_ITERATIONS } from '../../gates/shell/types.js';
 import { handoffNodeToken } from '../delegation/handoff-contract.js';
 import { DelegationRenderer } from '../delegation/renderer.js';
@@ -777,8 +778,8 @@ export class ResponseAssembler {
    * finished run silently fall back to the positional offset and render a handoff for a step the
    * run already passed.
    *
-   * Retired nodes are filtered out before the successor is taken, for the same reason
-   * `filterGatesForTarget` refuses to fire a gate whose target was skipped: a step that will not
+   * Only live nodes (`liveNodeIds`) are walked for the successor, for the same reason
+   * `filterGatesForTarget` refuses to fire a gate whose target is not live: a step that will not
    * execute cannot be the step being handed off to.
    */
   private resolveNextRunNodeId(context: ExecutionContext): string | null | undefined {
@@ -787,7 +788,7 @@ export class ResponseAssembler {
       return undefined;
     }
 
-    const liveNodeIds = view.nodeIds.filter((nodeId) => !view.skippedNodeIds.includes(nodeId));
+    const liveNodes = liveNodeIds(view);
     const currentNodeId = view.currentNodeId ?? context.sessionContext?.currentNodeId;
     if (currentNodeId === null) {
       return null;
@@ -796,12 +797,12 @@ export class ResponseAssembler {
       return undefined;
     }
 
-    const currentIndex = liveNodeIds.indexOf(currentNodeId);
+    const currentIndex = liveNodes.indexOf(currentNodeId);
     if (currentIndex < 0) {
       // The run is standing somewhere this view cannot place — do not invent a successor.
       return undefined;
     }
-    return liveNodeIds[currentIndex + 1] ?? null;
+    return liveNodes[currentIndex + 1] ?? null;
   }
 
   /**

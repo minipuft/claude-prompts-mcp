@@ -130,6 +130,12 @@ export interface InjectionDecisionInput {
   injectionType: InjectionType;
   /** Current step number in chain (1-based). Undefined for single prompts. */
   currentStep?: number;
+  /**
+   * The counter the GATE-GUIDANCE frequency reads instead of `currentStep` (R155): the render's
+   * place among the chain's gated steps, so an ungated step does not advance it. Undefined when
+   * the caller cannot place the step; the frequency then counts `currentStep`.
+   */
+  gatedRenderOrdinal?: number;
   /** Total steps in chain. Undefined for single prompts. */
   totalSteps?: number;
   /** Previous step result. Undefined for first step or single prompts. */

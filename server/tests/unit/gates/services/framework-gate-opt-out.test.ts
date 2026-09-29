@@ -113,7 +113,8 @@ const resolveGateIds = async (scenario: Scenario = {}): Promise<readonly string[
   context.executionPlan = {
     strategy: 'single',
     gates: [PLANNED_GATE],
-    requiresFramework: false,
+    // Planned with the framework system on: a plan that requires none decides no framework (R158).
+    requiresFramework: true,
     requiresSession: false,
     llmValidationEnabled: false,
     ...(scenario.modifiers === undefined ? {} : { modifiers: scenario.modifiers }),
@@ -344,7 +345,8 @@ const resolveChainStepGateIds = async (
   context.executionPlan = {
     strategy: 'chain',
     gates: [PLANNED_GATE],
-    requiresFramework: false,
+    // Planned with the framework system on: a plan that requires none decides no framework (R158).
+    requiresFramework: true,
     requiresSession: true,
     llmValidationEnabled: false,
   } as never;

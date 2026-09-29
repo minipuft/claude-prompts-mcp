@@ -257,7 +257,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     // Answer the review this call's verdict addresses — one path, one recorded attempt (P4.116).
     const verdictResult = await this.verdictProcessor.processReviewVerdict(
       context,
-      session,
+      await this.joinSentGates(context, session),
       sessionContext,
       context.mcpRequest.user_response?.trim(),
       this.resolveVerdictTrailer(context, currentNodeIdAtStart, currentStepAtStart)
@@ -337,6 +337,28 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       return true;
     }
     return false;
+  }
+
+  /**
+   * The run as the verdict must read it after this call's gates joined the open review of the step
+   * it stands on (R154). The decision is `GateEnforcementAuthority.joinSentGates`'s; this stage
+   * only hands it that review and re-reads the run when it changed.
+   */
+  private async joinSentGates(
+    context: ExecutionContext,
+    session: ChainSession
+  ): Promise<ChainSession> {
+    const nodeId = session.state.currentNodeId;
+    const review = typeof nodeId === 'string' ? session.reviews?.[nodeId] : undefined;
+    const authority = context.gateEnforcement;
+    if (review?.kind !== 'gate' || authority === undefined) {
+      return session;
+    }
+    const joined = await authority.joinSentGates(context, session.sessionId, review);
+    return joined === review
+      ? session
+      : (this.chainSessionStore.getSession(session.sessionId, context.getScopeOptions()) ??
+          session);
   }
 
   /** The run's step review — the one a call without a trailer addresses (`resolveReviewTarget`). */

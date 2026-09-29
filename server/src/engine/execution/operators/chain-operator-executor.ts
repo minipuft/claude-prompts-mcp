@@ -54,8 +54,7 @@ export class ChainOperatorExecutor {
     private readonly getFrameworkContext?: (
       promptId: string,
       scope: StateStoreOptions | undefined,
-      frameworkId?: string,
-      fromOperator?: boolean
+      frameworkId?: string
     ) => Promise<StepFrameworkContext | null>,
     private readonly collaborators?: ChainOperatorCollaborators
   ) {}
@@ -812,13 +811,7 @@ export class ChainOperatorExecutor {
     try {
       const addedMidRun = step.contributed === true || step.inserted === true;
       const runFrameworkId = addedMidRun ? input.runFrameworkId : undefined;
-      const fromOperator = addedMidRun && input.runFrameworkFromOperator === true;
-      return await this.getFrameworkContext(
-        step.promptId,
-        input.scope,
-        runFrameworkId,
-        fromOperator
-      );
+      return await this.getFrameworkContext(step.promptId, input.scope, runFrameworkId);
     } catch (error) {
       this.logger.debug('[ChainOperatorExecutor] Failed to resolve framework context', {
         promptId: step.promptId,

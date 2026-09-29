@@ -56,11 +56,6 @@ export interface RunStepView {
    */
   readonly complete?: boolean;
   /**
-   * True when a review of the current node is open. Its gate set was fixed when it opened, so a
-   * gate a later call aims at that node does not join it (R146, P6.149).
-   */
-  readonly currentNodeReviewOpen?: boolean;
-  /**
    * Provenance of the node the run is standing at — present ONLY when the mutation policy
    * INSERTED that node mid-run (P5-F4, closing the last surviving P4-F3 shape).
    *
@@ -93,6 +88,14 @@ export interface InsertedNodeOrigin {
    * then nothing to inherit, which is a distinct outcome from inheriting an empty set.
    */
   readonly unknownTargetNodeId?: string;
+}
+
+/**
+ * The run's LIVE nodes, in run order: every node it holds that is not retired (`skipped`). A node a
+ * `replace` remainder dropped is not among `nodeIds` at all. PURE.
+ */
+export function liveNodeIds(view: RunStepView): string[] {
+  return view.nodeIds.filter((nodeId) => !view.skippedNodeIds.includes(nodeId));
 }
 
 /** Resolves the run behind a chain id. Returns undefined when there is no run (yet). */
@@ -130,9 +133,6 @@ export function createRunStepViewProvider(store: ChainSessionService): RunStepVi
       skippedNodeIds,
       currentNodeId: session.state.currentNodeId,
       complete: isRunComplete(session),
-      currentNodeReviewOpen:
-        typeof session.state.currentNodeId === 'string' &&
-        store.getReview(session.sessionId, session.state.currentNodeId) !== undefined,
     };
 
     const currentNodeOrigin = resolveInsertedNodeOrigin(session);

@@ -380,6 +380,43 @@ export class GateEnforcementAuthority {
   }
 
   /**
+   * Add this call's request gates to the open review of the step they were resolved for (R154).
+   * A FAIL re-renders that review, so a gate sent with it is shown before a verdict grades it: it
+   * joins the review, which carries it from this call on. The gates are this call's temporary
+   * gates in the step's resolved set (`reviewGateIds`) — the set the review opens with when no
+   * review is open yet (R146). An id the review already holds is a no-op; attempts, history and
+   * hints are kept. Any other verdict joins nothing: a PASS would close the review ungraded.
+   *
+   * @returns the stored review, or `review` itself when nothing joined.
+   */
+  async joinSentGates(
+    context: ExecutionContext,
+    sessionId: string,
+    review: GateReview
+  ): Promise<GateReview> {
+    if (this.parseVerdict(context.getGateVerdict(), 'gate_verdict')?.verdict !== 'FAIL') {
+      return review;
+    }
+    const sent = new Set(context.state.gates.temporaryGateIds);
+    const added = (context.state.gates.reviewGateIds ?? []).filter(
+      (id) => sent.has(id) && !review.gateIds.includes(id)
+    );
+    if (added.length === 0) {
+      return review;
+    }
+    const joined: GateReview = {
+      ...review,
+      gateIds: [...review.gateIds, ...added],
+      prompts: [...review.prompts, ...(await this.buildReviewPrompts(added))],
+      ...(review.gateTiers !== undefined
+        ? { gateTiers: { ...review.gateTiers, ...(await this.deriveGateTiers(added)) } }
+        : {}),
+    };
+    await this.chainSessionStore.setReview(sessionId, joined);
+    return joined;
+  }
+
+  /**
    * Open the gate review of a detached node's late result (row 4.8) on that node, the way
    * {@link createReviewForStep} opens a step's (same prompts, same `maxAttempts` precedence, step
    * retries first), plus the gate tiers the verdict template needs. It awaits a verdict graded

@@ -1007,8 +1007,8 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
    * same way; accepting it there would not reach the review, whose gate set is fixed when it opens.
    *
    * Now (R146) a FAIL resume that opens the current node's review accepts a gate on that node, and
-   * the retry render carries it; a gate on a node the run passed, or sent while the node's review
-   * is already open, is refused by name.
+   * the retry render carries it; a gate on a node the run passed is refused by name. A gate sent
+   * while the node's review is already open joins that review (R154, P6.268 below).
    */
   describe('P6.149: a FAIL resume accepts a gate on the node it re-renders', () => {
     const failWithGate = (
@@ -1057,17 +1057,94 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       expect(refused.text).not.toContain('TGT-149-B');
       expect(rawRunState(run.chainId)).toBe(before);
     }, 120000);
+  });
 
-    test('(c) control: a FAIL graded against an already open review is refused by name', async () => {
+  /**
+   * MEASURED 2026-09-28 on `ea62d3975` (driven, this harness): a `>>sv_chain` run whose `b` review
+   * was already open (answered with `user_response` alone), resumed with a FAIL verdict alone and a
+   * gate targeting `b`, was refused "names the step whose open review this call grades; that review
+   * keeps the gates it opened with"; the review stayed `['sv-block']`.
+   *
+   * Now (R154) the gate joins the open review: the FAIL's re-render carries it, the next verdict
+   * grades it, an id the review already holds is a no-op, and a gate on another node keeps its
+   * refusal.
+   */
+  describe('P6.268: a gate sent while its step review is open joins that review', () => {
+    /** A request gate on `b`; each test names its own id, since a registered id belongs to one run. */
+    const onB = (id: string) => ({ id, name: id, criteria: ['TGT-268-J'], target_step_id: 'b' });
+
+    /** A `>>sv_chain` run standing at `b` with `b`'s review open and ungraded. */
+    async function openReviewOnB() {
       const run = await start({ command: '>>sv_chain' });
       await run.call({ user_response: 'A out', gate_verdict: PASS });
       await run.call({ user_response: 'B out' });
+      expect(runState(run.chainId).reviews).toEqual({ b: ['sv-block'] });
+      return run;
+    }
+
+    test('(a) a verdict-only FAIL with a gate on b joins the review; the retry passes and advances', async () => {
+      const run = await openReviewOnB();
+
+      const joined = await tool('prompt_engine', {
+        chain_id: run.chainId,
+        gate_verdict: FAIL,
+        gates: [onB('j268a')],
+      });
+      expect(joined.isError).toBe(false);
+      expect(joined.text).not.toContain('gate-target-passed');
+      expect(joined.text).toContain('### j268a\n1. TGT-268-J');
+      expect(joined.text).toContain('### sv-block');
+      expect(runState(run.chainId).reviews).toEqual({ b: ['sv-block', 'j268a'] });
+
+      const passed = await run.call({ user_response: 'B again', gate_verdict: PASS });
+      expect(passed).toContain('BODY-sv_a');
+      expect(passed).toContain('Progress 3/3');
+      expect(runState(run.chainId).reviews).toEqual({});
+    }, 120000);
+
+    test('(a) the next FAIL grades the joined gate', async () => {
+      const run = await openReviewOnB();
+      await tool('prompt_engine', {
+        chain_id: run.chainId,
+        gate_verdict: FAIL,
+        gates: [onB('j268g')],
+      });
+
+      const graded = await run.call({ user_response: 'B again', gate_verdict: FAIL });
+      expect(graded).toContain('The following gates failed after 2 attempts: **sv-block, j268g**');
+    }, 120000);
+
+    test('(b) a gate id the review already holds is a no-op, not a refusal', async () => {
+      const run = await openReviewOnB();
+      await tool('prompt_engine', {
+        chain_id: run.chainId,
+        gate_verdict: FAIL,
+        gates: [onB('j268b')],
+      });
+
+      const again = await tool('prompt_engine', {
+        chain_id: run.chainId,
+        user_response: 'B again',
+        gate_verdict: FAIL,
+        gates: [onB('j268b')],
+      });
+      expect(again.isError).toBe(false);
+      expect(again.text).not.toContain('gate-target-passed');
+      expect(runState(run.chainId).reviews).toEqual({ b: ['sv-block', 'j268b'] });
+    }, 120000);
+
+    test('(c) control: a gate on a node other than the reviewed one keeps its refusal', async () => {
+      const run = await openReviewOnB();
       const before = rawRunState(run.chainId);
 
-      const refused = await failWithGate(run.chainId, undefined, 'b', 'TGT-149-C');
+      const refused = await tool('prompt_engine', {
+        chain_id: run.chainId,
+        gate_verdict: FAIL,
+        gates: [{ ...onB('o268'), target_step_id: 'a' }],
+      });
       expect(refused.isError).toBe(true);
       expect(refused.text).toContain(
-        '[gate-target-passed] node "b": target_step_id "b" names the step whose open review this call grades; that review keeps the gates it opened with'
+        '[gate-target-passed] node "a": target_step_id "a" names a step the run has already passed'
       );
       expect(rawRunState(run.chainId)).toBe(before);
     }, 120000);
@@ -1126,13 +1203,18 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
     }, 120000);
 
     test('(a) gate guidance: a FAIL review render on step 3 carries it; the step 3 block before it did not', async () => {
-      const run = await start({ command: '>>sv_tail151' });
-      await run.call({ user_response: 'A out' });
+      // A request gate on `a` makes step 1 the chain's first gated step without reaching step 3
+      // (a targeted gate is not accumulated), so step 3 is its SECOND gated render (R155).
+      const run = await start({
+        command: '>>sv_tail151',
+        gates: [{ id: 'g151', name: 'g151', criteria: ['CRIT-151'], target_step_id: 'a' }],
+      });
+      await run.call({ user_response: 'A out', gate_verdict: PASS });
       const stepBlock = await run.call({ user_response: 'B out' });
       expect(templates(stepBlock)).toEqual(['BODY-sv_a topic=']);
       expect(stepBlock).toContain('Progress 3/3');
-      // Control: the call answering step 2 decided gate guidance "skip" (first step only), and the
-      // step block it rendered follows that decision.
+      // Control: the call answering step 2 decided gate guidance "skip" (first gated render only),
+      // and the step block it rendered follows that decision.
       expect(gateGuidanceFor(stepBlock)).toBe(false);
 
       const review = await run.call({ user_response: 'C out', gate_verdict: FAIL });
@@ -1146,6 +1228,124 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       const stepBlock = await run.call({ user_response: 'A out' });
       expect(templates(stepBlock)).toEqual(['BODY-sv_b topic=']);
       expect(gateGuidanceFor(stepBlock)).toBe(true);
+    }, 120000);
+  });
+
+  /**
+   * MEASURED 2026-09-28 on `61699a705` (driven, shipped `gateGuidance` frequency first step only;
+   * decisions read from the `--verbose` log): on `[sv_a, sv_b, sv_a with sv-block]` the call
+   * answering step 2 decided gate guidance "Step 2 > 1 (first-only mode)", and the step 3 block it
+   * rendered carried none of `sv-block`'s guidance. The counter was the run position, which the
+   * two ungated steps had advanced.
+   *
+   * Now (R155) the gate-guidance frequency counts GATED steps: the call answering an ungated step
+   * decides as the chain's next gated render, so the first gated step's own guidance renders
+   * whatever came before it. The system prompt and style keep the position counter.
+   */
+  describe('P6.271: a gated step after ungated steps renders its own gate guidance', () => {
+    /** Gate-guidance injection for `sv-block`: the gate's guidance under its own heading. */
+    const gateGuidanceFor = (text: string): boolean =>
+      text.includes('### sv-block\nGUIDANCE-sv-block');
+
+    beforeAll(async () => {
+      const created = await tool('resource_manager', {
+        resource_type: 'prompt',
+        action: 'create',
+        id: 'sv_late271',
+        category: 'general',
+        name: 'sv_late271',
+        description: 'e2e chain gated on its last step only',
+        user_message_template: 'CHAIN-OWN-TEMPLATE',
+        arguments: TOPIC,
+        gate_configuration: OPT_OUT,
+        chain_steps: [
+          { promptId: 'sv_a', stepName: 'A' },
+          { promptId: 'sv_b', stepName: 'B' },
+          { promptId: 'sv_a', stepName: 'C', inlineGateIds: ['sv-block'] },
+        ],
+      });
+      if (created.isError) throw new Error(created.text);
+    }, 120000);
+
+    test('(a) gate guidance: the step 3 block the step 2 call renders carries its gate guidance', async () => {
+      const run = await start({ command: '>>sv_late271' });
+      await run.call({ user_response: 'A out' });
+      const stepBlock = await run.call({ user_response: 'B out' });
+      expect(templates(stepBlock)).toEqual(['BODY-sv_a topic=']);
+      expect(stepBlock).toContain('Progress 3/3');
+      expect(gateGuidanceFor(stepBlock)).toBe(true);
+    }, 120000);
+
+    test('(b) control: gate guidance: the ungated steps before it render none', async () => {
+      const run = await start({ command: '>>sv_late271' });
+      const second = await run.call({ user_response: 'A out' });
+      expect(templates(second)).toEqual(['BODY-sv_b topic=']);
+      for (const ungated of [run.text, second]) {
+        expect(ungated).not.toContain('## Inline Gates');
+        expect(ungated).not.toMatch(/GUIDANCE-/);
+      }
+    }, 120000);
+  });
+
+  /**
+   * MEASURED 2026-09-28 on `7bcb826f8` (driven, `prompts/get` over Streamable HTTP, both prompts
+   * `mcp_prompt_mode: launch`): the launcher envelope of chain prompt `sv_c273`, whose own
+   * `gateConfiguration.include` is `[sv-inc273]`, said "Quality gates that will be enforced:
+   * sv-inc273"; a chain run resolves no gate set from the chain prompt (R148, P6.171), so that
+   * gate is enforced nowhere.
+   *
+   * Now (R157) a chain prompt's envelope lists none of its own `include`; a single prompt's
+   * envelope still lists its own.
+   */
+  describe("P6.273: a chain prompt's launcher envelope claims no gate from its own include", () => {
+    const envelopeOf = async (name: string): Promise<string> => {
+      const result = (await client.request('prompts/get', { name, arguments: {} }, nextId++, {
+        toolName: name,
+      })) as { messages: Array<{ content?: { text?: string } }> };
+      return result.messages[0]?.content?.text ?? '';
+    };
+
+    beforeAll(async () => {
+      for (const args of [
+        { resource_type: 'gate', id: 'sv-inc273', guidance: 'GUIDANCE-sv-inc273' },
+        { resource_type: 'gate', id: 'sv-step273', guidance: 'GUIDANCE-sv-step273' },
+        {
+          resource_type: 'prompt',
+          id: 'sv_a273',
+          user_message_template: 'BODY-sv_a273',
+          gate_configuration: { include: ['sv-step273'] },
+        },
+        {
+          resource_type: 'prompt',
+          id: 'sv_c273',
+          user_message_template: 'CHAIN-OWN-TEMPLATE',
+          gate_configuration: { include: ['sv-inc273'] },
+          chain_steps: [{ promptId: 'sv_a273', stepName: 'A' }],
+        },
+      ]) {
+        const created = await tool('resource_manager', {
+          action: 'create',
+          name: args.id,
+          description: `e2e launcher ${args.id}`,
+          ...(args.resource_type === 'gate'
+            ? { enforcement_mode: 'blocking' }
+            : { category: 'general', mcp_prompt_mode: 'launch' }),
+          ...args,
+        });
+        if (created.isError) throw new Error(created.text);
+      }
+    }, 120000);
+
+    test('(a) the chain prompt envelope routes to prompt_engine and lists no enforced gate', async () => {
+      const envelope = await envelopeOf('sv_c273');
+      expect(envelope).toContain('prompt_engine(command: ">>sv_c273")');
+      expect(envelope).not.toContain('Quality gates that will be enforced');
+      expect(envelope).not.toContain('sv-inc273');
+    }, 120000);
+
+    test("(b) control: a single prompt's envelope still lists its own include", async () => {
+      const envelope = await envelopeOf('sv_a273');
+      expect(envelope).toContain('Quality gates that will be enforced:\n  • sv-step273');
     }, 120000);
   });
 
@@ -2957,10 +3157,26 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
        * answering call's `replace` drops `n2`: the inserted node then carries the live walk's
        * untargeted gates (`sv-block`, from the `r1-*` steps), which is what a later call computes,
        * and none of the dropped step's. Control: the same unknown with no remainder inherits `n2`'s.
+       *
+       * P6.275 (R84 amended). MEASURED 2026-09-28 on `ea62d3975`: a REQUEST gate targeting `n2`
+       * survived the `replace` that dropped `n2` (review `['tgt182', 'sv-block']`), because a target
+       * was retired only when skipped. Now a target that is not among the run's live nodes, skipped
+       * or replaced away, fires nowhere; on a surviving target the gate is still inherited.
        */
       describe('P6.182: an inserted node whose target the same call dropped', () => {
-        async function insertTargeted() {
-          const run = await start({ command: `>>sv_a${ARROW}>>sv_b :: sv-drop` });
+        /** A request gate on `n2`; each test names its own id, since an id belongs to one run. */
+        const onN2 = (id: string) => ({
+          id,
+          name: id,
+          criteria: ['TGT-275'],
+          target_step_id: 'n2',
+        });
+
+        async function insertTargeted(gateId: string) {
+          const run = await start({
+            command: `>>sv_a${ARROW}>>sv_b :: sv-drop`,
+            gates: [onN2(gateId)],
+          });
           await run.call({
             user_response: 'A out',
             observations: [
@@ -2978,7 +3194,7 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
         }
 
         test("(a) inherits the live walk's untargeted gates, and the next call grades them", async () => {
-          const run = await insertTargeted();
+          const run = await insertTargeted('tgt275a');
           const replaced = await run.call({
             user_response: 'investigated',
             remainder: { mode: 'replace', nodes: [{ id: 'r1', promptId: 'sv_chain' }] },
@@ -2992,6 +3208,7 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
           ]);
           expect(runState(run.chainId).reviews).toEqual({ 'inv-u-182': ['sv-block'] });
           expect(replaced).not.toContain('sv-drop');
+          expect(replaced).not.toContain('TGT-275');
 
           const failed = await run.call({
             user_response: 'investigated again',
@@ -3001,12 +3218,14 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
           expect(runState(run.chainId).reviews).toEqual({ 'inv-u-182': ['sv-block'] });
           expect(failed).toContain('### sv-block');
           expect(failed).not.toContain('sv-drop');
+          expect(failed).not.toContain('TGT-275');
         }, 120000);
 
         test('(b) control: with no remainder it inherits the gates of the step it targets', async () => {
-          const run = await insertTargeted();
-          await run.call({ user_response: 'investigated', gate_verdict: FAIL });
-          expect(runState(run.chainId).reviews).toEqual({ 'inv-u-182': ['sv-drop'] });
+          const run = await insertTargeted('tgt275b');
+          const failed = await run.call({ user_response: 'investigated', gate_verdict: FAIL });
+          expect(runState(run.chainId).reviews).toEqual({ 'inv-u-182': ['tgt275b', 'sv-drop'] });
+          expect(failed).toContain('TGT-275');
         }, 120000);
       });
     });
