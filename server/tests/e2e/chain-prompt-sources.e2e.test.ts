@@ -3034,10 +3034,26 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
        * answering call's `replace` drops `n2`: the inserted node then carries the live walk's
        * untargeted gates (`sv-block`, from the `r1-*` steps), which is what a later call computes,
        * and none of the dropped step's. Control: the same unknown with no remainder inherits `n2`'s.
+       *
+       * P6.275 (R84 amended). MEASURED 2026-09-28 on `ea62d3975`: a REQUEST gate targeting `n2`
+       * survived the `replace` that dropped `n2` (review `['tgt182', 'sv-block']`), because a target
+       * was retired only when skipped. Now a target that is not among the run's live nodes, skipped
+       * or replaced away, fires nowhere; on a surviving target the gate is still inherited.
        */
       describe('P6.182: an inserted node whose target the same call dropped', () => {
-        async function insertTargeted() {
-          const run = await start({ command: `>>sv_a${ARROW}>>sv_b :: sv-drop` });
+        /** A request gate on `n2`; each test names its own id, since an id belongs to one run. */
+        const onN2 = (id: string) => ({
+          id,
+          name: id,
+          criteria: ['TGT-275'],
+          target_step_id: 'n2',
+        });
+
+        async function insertTargeted(gateId: string) {
+          const run = await start({
+            command: `>>sv_a${ARROW}>>sv_b :: sv-drop`,
+            gates: [onN2(gateId)],
+          });
           await run.call({
             user_response: 'A out',
             observations: [
@@ -3055,7 +3071,7 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
         }
 
         test("(a) inherits the live walk's untargeted gates, and the next call grades them", async () => {
-          const run = await insertTargeted();
+          const run = await insertTargeted('tgt275a');
           const replaced = await run.call({
             user_response: 'investigated',
             remainder: { mode: 'replace', nodes: [{ id: 'r1', promptId: 'sv_chain' }] },
@@ -3069,6 +3085,7 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
           ]);
           expect(runState(run.chainId).reviews).toEqual({ 'inv-u-182': ['sv-block'] });
           expect(replaced).not.toContain('sv-drop');
+          expect(replaced).not.toContain('TGT-275');
 
           const failed = await run.call({
             user_response: 'investigated again',
@@ -3078,12 +3095,14 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
           expect(runState(run.chainId).reviews).toEqual({ 'inv-u-182': ['sv-block'] });
           expect(failed).toContain('### sv-block');
           expect(failed).not.toContain('sv-drop');
+          expect(failed).not.toContain('TGT-275');
         }, 120000);
 
         test('(b) control: with no remainder it inherits the gates of the step it targets', async () => {
-          const run = await insertTargeted();
-          await run.call({ user_response: 'investigated', gate_verdict: FAIL });
-          expect(runState(run.chainId).reviews).toEqual({ 'inv-u-182': ['sv-drop'] });
+          const run = await insertTargeted('tgt275b');
+          const failed = await run.call({ user_response: 'investigated', gate_verdict: FAIL });
+          expect(runState(run.chainId).reviews).toEqual({ 'inv-u-182': ['tgt275b', 'sv-drop'] });
+          expect(failed).toContain('TGT-275');
         }, 120000);
       });
     });

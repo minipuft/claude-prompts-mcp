@@ -90,6 +90,14 @@ export interface InsertedNodeOrigin {
   readonly unknownTargetNodeId?: string;
 }
 
+/**
+ * The run's LIVE nodes, in run order: every node it holds that is not retired (`skipped`). A node a
+ * `replace` remainder dropped is not among `nodeIds` at all. PURE.
+ */
+export function liveNodeIds(view: RunStepView): string[] {
+  return view.nodeIds.filter((nodeId) => !view.skippedNodeIds.includes(nodeId));
+}
+
 /** Resolves the run behind a chain id. Returns undefined when there is no run (yet). */
 export type RunStepViewProvider = (
   chainId: string,
