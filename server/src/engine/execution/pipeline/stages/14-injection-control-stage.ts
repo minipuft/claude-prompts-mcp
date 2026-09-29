@@ -1,5 +1,6 @@
 // @lifecycle canonical - Controls all injection decisions using the modular injection system.
 import {
+  INJECTION_TYPES,
   InjectionDecisionService,
   type InjectionDecisionInput,
   type InjectionConfig,
@@ -18,6 +19,9 @@ import type { ChainStepPrompt } from '../../operators/types.js';
 import { parseStepForNode } from '#shared/utils/node-order.js';
 
 type InjectionConfigProvider = () => InjectionConfig;
+
+/** The types a resume decides again for the step it renders (R151); gate guidance is not one. */
+const RENDERED_STEP_TYPES: readonly InjectionType[] = ['system-prompt', 'style-guidance'];
 
 /** The run position a decision is computed for: the step the call renders. */
 export interface InjectionPosition {
@@ -107,10 +111,9 @@ export class InjectionControlStage extends BasePipelineStage {
    */
   redecideAt(context: ExecutionContext, position: InjectionPosition): void {
     const answeredGateGuidance = context.state.injection.gateGuidance;
-    const injectionState = this.decideFor(context, position);
-    if (answeredGateGuidance === undefined) {
-      delete injectionState.gateGuidance;
-    } else {
+    // Gate guidance is not decided again: a decision for the rendered step had no reader (R172).
+    const injectionState = this.decideFor(context, position, RENDERED_STEP_TYPES);
+    if (answeredGateGuidance !== undefined) {
       injectionState.gateGuidance = answeredGateGuidance;
     }
     this.logger.debug('[InjectionControl] Re-decided for the rendered step', {
@@ -127,7 +130,8 @@ export class InjectionControlStage extends BasePipelineStage {
    */
   private decideFor(
     context: ExecutionContext,
-    position: InjectionPosition
+    position: InjectionPosition,
+    types: readonly InjectionType[] = INJECTION_TYPES
   ): ReturnType<InjectionDecisionService['decideAll']> {
     // Create authority if not already created
     if (!this.injectionService) {
@@ -141,8 +145,8 @@ export class InjectionControlStage extends BasePipelineStage {
     this.injectionService.syncRuntimeOverrides(sessionOverrides ?? new Map());
 
     const overrideRecord = this.toSessionOverrideRecord(sessionOverrides);
-    const input = this.buildDecisionInput(context, position, overrideRecord);
-    const injectionState = this.injectionService.decideAll(input);
+    const input = this.buildDecisionInput(context, position, types, overrideRecord);
+    const injectionState = this.injectionService.decideAll(input, types);
 
     // Persist active session overrides for downstream diagnostics/status
     if (overrideRecord) {
@@ -159,6 +163,7 @@ export class InjectionControlStage extends BasePipelineStage {
   private buildDecisionInput(
     context: ExecutionContext,
     position: InjectionPosition,
+    types: readonly InjectionType[],
     sessionOverrides?: Partial<Record<InjectionType, boolean>>
   ): Omit<InjectionDecisionInput, 'injectionType'> {
     const input: Omit<InjectionDecisionInput, 'injectionType'> = {
@@ -171,7 +176,10 @@ export class InjectionControlStage extends BasePipelineStage {
       input.totalSteps = totalSteps;
     }
 
-    const gatedRenderOrdinal = this.gatedRenderOrdinal(context, position);
+    // Read by the gate-guidance decision alone.
+    const gatedRenderOrdinal = types.includes('gate-guidance')
+      ? this.gatedRenderOrdinal(context, position)
+      : undefined;
     if (gatedRenderOrdinal !== undefined) {
       input.gatedRenderOrdinal = gatedRenderOrdinal;
     }
