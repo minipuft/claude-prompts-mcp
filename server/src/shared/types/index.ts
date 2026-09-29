@@ -849,7 +849,8 @@ export interface PromptData {
   edges?: Array<{ from: string; to: string }>;
   /**
    * Run-level budget declared by this chain (Tier A), same shape a submitted Workflow IR carries.
-   * Projected onto `ParsedCommand.budget` by the stage-04 chain projection.
+   * Projected onto `ParsedCommand.budget` by `projectChainPromptSteps`, the field a submitted
+   * Workflow IR's budget also lands in, so both inputs reach the run through one reader.
    */
   budget?: import('./chain-session.js').DeclaredRunBudget;
   /** Whether to register this prompt with MCP. Overrides category default. */
