@@ -1,4 +1,5 @@
 // @lifecycle canonical - Injects prompt guidance metadata into the execution context.
+import { withResponseStyle } from '../../formatting/response-style.js';
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
@@ -42,8 +43,12 @@ export class PromptGuidanceStage extends BasePipelineStage {
   async execute(context: ExecutionContext): Promise<void> {
     this.logEntry(context);
 
-    // Skip if session blueprint restored (resuming a chain)
+    // Skip if session blueprint restored (resuming a chain). The selected style's guidance text is
+    // resolved first, because a resume's step render appends it where the RENDERED step's style
+    // decision says inject (R162 amended): that decision exists only after stage 16 moved the
+    // run, so it is read at the render, never here.
     if (context.state.session.isBlueprintRestored) {
+      this.recordSelectedStyleGuidance(context);
       this.logExit({ skipped: 'Session blueprint restored' });
       return;
     }
@@ -133,6 +138,21 @@ export class PromptGuidanceStage extends BasePipelineStage {
   }
 
   /**
+   * On a resume, record the run's selected style guidance text for the step render, applying
+   * nothing: whether it renders is the rendered step's style decision, read by the renderer.
+   */
+  private recordSelectedStyleGuidance(context: ExecutionContext): void {
+    const style =
+      context.parsedCommand?.executionPlan?.styleSelection ??
+      context.state.framework.clientSelectedStyle;
+    if (style === undefined || style === '') return;
+    const styleGuidance = this.getStyleGuidance(style);
+    if (styleGuidance !== null) {
+      context.state.framework.selectedStyleGuidance = styleGuidance;
+    }
+  }
+
+  /**
    * Apply style enhancement to the prompt based on selected style.
    */
   private applyStyleEnhancement(context: ExecutionContext, style: string): void {
@@ -158,7 +178,7 @@ export class PromptGuidanceStage extends BasePipelineStage {
     // Enhance single prompts
     if (context.hasSinglePromptCommand()) {
       const prompt = context.requireConvertedPrompt();
-      const enhancedSystemMessage = this.enhanceWithStyle(prompt.systemMessage, styleGuidance);
+      const enhancedSystemMessage = withResponseStyle(prompt.systemMessage, styleGuidance);
       context.parsedCommand.convertedPrompt = {
         ...prompt,
         systemMessage: enhancedSystemMessage,
@@ -170,7 +190,7 @@ export class PromptGuidanceStage extends BasePipelineStage {
       const steps = context.requireChainSteps();
       for (const step of steps) {
         if (step.convertedPrompt) {
-          const enhancedSystemMessage = this.enhanceWithStyle(
+          const enhancedSystemMessage = withResponseStyle(
             step.convertedPrompt.systemMessage,
             styleGuidance
           );
@@ -194,19 +214,6 @@ export class PromptGuidanceStage extends BasePipelineStage {
       return null;
     }
     return this.styleManager.getStyleGuidance(style) ?? null;
-  }
-
-  /**
-   * Enhance a system message with style guidance.
-   */
-  private enhanceWithStyle(systemMessage: string | undefined, styleGuidance: string): string {
-    const base = systemMessage ?? '';
-    if (base.includes(styleGuidance)) {
-      return base; // Already contains guidance
-    }
-    return base
-      ? `${base}\n\n**Response Style:** ${styleGuidance}`
-      : `**Response Style:** ${styleGuidance}`;
   }
 
   private async applyGuidanceToChain(context: ExecutionContext): Promise<number> {

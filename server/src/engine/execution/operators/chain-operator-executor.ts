@@ -5,6 +5,7 @@ import { GATE_ATTESTATION_LINE } from '../../gates/guidance/GateGuidanceRenderer
 import { buildDelegatedStepCallToAction, buildDelegatedStepLines } from '../delegation/brief.js';
 import { handoffNodeToken } from '../delegation/handoff-contract.js';
 import { DelegationRenderer } from '../delegation/renderer.js';
+import { withResponseStyle } from '../formatting/response-style.js';
 import {
   describeReviewForRender,
   renderReviewSupplements,
@@ -497,8 +498,9 @@ export class ChainOperatorExecutor {
       }
     }
 
-    if (convertedPrompt?.systemMessage) {
-      lines.push(`> ${convertedPrompt.systemMessage}`);
+    const systemMessage = this.withRenderedStepStyle(convertedPrompt?.systemMessage, chainContext);
+    if (systemMessage !== undefined && systemMessage !== '') {
+      lines.push(`> ${systemMessage}`);
     }
 
     lines.push(renderedTemplate.trim());
@@ -649,6 +651,24 @@ export class ChainOperatorExecutor {
       { gateGuidance?: { inject?: boolean } } | undefined;
 
     return injectionState?.gateGuidance?.inject !== false;
+  }
+
+  /**
+   * The step's system message with the run's selected style guidance appended when the RENDERED
+   * step's style decision says inject (R162 amended) — read here, where the system prompt's
+   * decision is read, because on a resume that decision exists only after stage 16 moved the
+   * run. A first call's prompts already carry the line (stage 15), which appends nothing twice.
+   */
+  private withRenderedStepStyle(
+    systemMessage: string | undefined,
+    chainContext: Record<string, unknown>
+  ): string | undefined {
+    const styleGuidance = chainContext['selectedStyleGuidance'];
+    const injectionState = chainContext['injectionState'] as InjectionState | undefined;
+    if (typeof styleGuidance !== 'string' || injectionState?.styleGuidance?.inject !== true) {
+      return systemMessage;
+    }
+    return withResponseStyle(systemMessage, styleGuidance);
   }
 
   /**

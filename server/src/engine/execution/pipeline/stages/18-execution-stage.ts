@@ -281,6 +281,11 @@ export class StepExecutionStage extends BasePipelineStage {
         ...(Object.keys(normalizedStepArgs).length > 0 ? { input: normalizedStepArgs } : {}),
         suppressFrameworkInjection, // Pass injection decision to chain executor
         injectionState: context.state.injection, // Also pass full injection state
+        // The run's selected style text; the render appends it where the rendered step's style
+        // decision in `injectionState` says inject, as it reads the system prompt's (R162).
+        ...(context.state.framework.selectedStyleGuidance !== undefined
+          ? { selectedStyleGuidance: context.state.framework.selectedStyleGuidance }
+          : {}),
       },
       additionalGateIds: executionPlan.gates,
       scope: scopeOptions,

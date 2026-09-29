@@ -63,7 +63,7 @@ Controls how often injection occurs during chain execution:
 
 **Special case**: Gate review steps always receive gate-guidance regardless of frequency setting. The frequency only controls injection on normal execution steps.
 
-On a resume that passes a step, the system prompt and style count the step the reply renders (with `frequency: 3`, passing step 1 renders step 2 with no framework block) while gate guidance keeps the decision of the step the call answered, because under the first-step-only gate-guidance default that decision is what carries step 2's own gate criteria onto the render that asks for its verdict; a resume that fails a step re-renders it, so both count the same step.
+On a resume that passes a step, the system prompt and style count the step the reply renders (with `frequency: 3`, passing step 1 renders step 2 with no framework block) while gate guidance keeps the decision of the step the call answered, because under the first-step-only gate-guidance default that decision is what carries step 2's own gate criteria onto the render that asks for its verdict; a resume that fails a step re-renders it, so both count the same step. A resume's step render shows a selected style (`#analytical`) wherever that rendered step's style decision says inject, as a `**Response Style:**` line under the step's system message, the same place the first call puts it.
 
 Gate guidance counts **gated** steps, not positions: a step with no gates does not advance its frequency, so the first gated step of a chain gets its own gate guidance under the first-step-only default even when ungated steps ran before it. A step with nothing to guide should not use up the one render that shows a gated step its criteria.
 
