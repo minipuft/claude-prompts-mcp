@@ -400,9 +400,6 @@ export class GateReviewStage extends BasePipelineStage {
         ...(context.frameworkAuthority.getCachedFrameworkId() !== undefined
           ? { runFrameworkId: context.frameworkAuthority.getCachedFrameworkId() }
           : {}),
-        ...(context.frameworkAuthority.getCachedDecision()?.source === 'operator'
-          ? { runFrameworkFromOperator: true }
-          : {}),
       });
 
       this.recordReviewedDeclaration(sessionId, renderResult);

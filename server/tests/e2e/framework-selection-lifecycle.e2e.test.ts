@@ -757,4 +757,16 @@ describe('R158: the framework toggle decides a run at its first call (Streamable
     expect(run.fourth.text).toContain('BODY-r158_b');
     expect(run.fourth.text).toContain('**Required Sections**');
   }, 120000);
+
+  it('P6.269 a run started with the system on keeps its framework on added steps and in the phase grading after it is switched off', async () => {
+    const run = await runToggled('after-first-call');
+    // Stage 19 grades a planned step answered after the switch on the run's framework.
+    expect(run.sectionless.text).toContain(STRUCTURAL_REVIEW);
+    expect(run.inserted.text).toContain('## Investigate: rest undecided');
+    expect(run.inserted.text).toContain('Framework Active');
+    expect(run.contributed.text).toContain('BODY-r158_a');
+    expect(run.contributed.text).toContain('**Required Sections**');
+    // ...and the remainder step, whose sections the added-step fallback declared.
+    expect(run.contributedAnswered.text).toContain(STRUCTURAL_REVIEW);
+  }, 120000);
 });

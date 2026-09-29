@@ -116,13 +116,10 @@ interface BaseChainStepExecutionInput {
    * The run's framework decision (`frameworkAuthority`), read for a step that carries no framework
    * context of its own: a step a remainder contributed resolves its guidance and its declared
    * sections from it, as stage 19 grades it (R88). Absent when the run applies no framework.
+   * The framework toggle was read when the run decided (R158), so a step added after the toggle
+   * changed renders this framework as the run's planned steps do.
    */
   readonly runFrameworkId?: string;
-  /**
-   * True when `runFrameworkId` came from the command's `^Framework` operator. An override applies
-   * whether or not the framework system is enabled (R149), as it does for a planned step.
-   */
-  readonly runFrameworkFromOperator?: boolean;
 }
 
 /**
