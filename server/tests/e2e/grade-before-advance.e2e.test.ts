@@ -14,11 +14,13 @@
  */
 import { afterAll, beforeAll, describe, expect, test } from '@jest/globals';
 
+import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 
-import { createHermeticRoots } from './helpers/child-env.js';
+import { buildServerEnv, createHermeticRoots } from './helpers/child-env.js';
 import { cageerfAnswer } from './helpers/cageerf-answer.js';
 import {
   getAvailablePort,
@@ -27,6 +29,9 @@ import {
   startServerWithHttp,
   waitForHealth,
 } from './helpers/http-mcp-client.js';
+
+const SERVER_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const DIST_ENTRY = path.join(SERVER_ROOT, 'dist', 'index.js');
 
 const PASS = 'GATE_REVIEW: PASS - ok';
 /** Assembled, so no command literal in this file carries the operator as prose. */
@@ -41,6 +46,64 @@ interface RunRow {
   current: string | null;
   reviews: Record<string, string[]>;
 }
+
+const withStateDb = <T>(runtimeRoot: string, read: (db: DatabaseSync) => T): T => {
+  const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+  try {
+    return read(db);
+  } finally {
+    db.close();
+  }
+};
+
+/** The run's current node and its open reviews (gate ids per node), read from its own row. */
+const readRun = (runtimeRoot: string, chainId: string): RunRow =>
+  withStateDb(runtimeRoot, (db) => {
+    const row = db
+      .prepare('SELECT state, current_node_id FROM chain_runs WHERE chain_id = ?')
+      .get(chainId) as { state: string; current_node_id: string | null } | undefined;
+    if (row === undefined) throw new Error(`no run for ${chainId}`);
+    const state = JSON.parse(row.state) as { reviews?: Record<string, { gateIds: string[] }> };
+    return {
+      current: row.current_node_id,
+      reviews: Object.fromEntries(
+        Object.entries(state.reviews ?? {}).map(([nodeId, review]) => [nodeId, review.gateIds])
+      ),
+    };
+  });
+
+/** The fixture every twin shares: three gated steps g1..g3 and three ungated steps u1..u3. */
+const authorFixtures = async (
+  tool: (name: string, args: Record<string, unknown>) => Promise<{ isError: boolean; text: string }>
+): Promise<void> => {
+  const author = async (args: Record<string, unknown>): Promise<void> => {
+    const result = await tool('resource_manager', args);
+    if (result.isError) throw new Error(result.text);
+  };
+  for (const id of ['g1', 'g2', 'g3']) {
+    await author({
+      resource_type: 'prompt',
+      action: 'create',
+      id,
+      category: 'general',
+      name: id,
+      description: `e2e gated step ${id}`,
+      user_message_template: `BODY-${id}`,
+    });
+  }
+  for (const id of ['u1', 'u2', 'u3']) {
+    await author({
+      resource_type: 'prompt',
+      action: 'create',
+      id,
+      category: 'general',
+      name: id,
+      description: `e2e ungated step ${id}`,
+      user_message_template: `BODY-${id}`,
+      gate_configuration: UNGATED,
+    });
+  }
+};
 
 describe('Streamable HTTP: an answer is graded before the run advances (P6.274, R170)', () => {
   const cleanup: Array<() => void | Promise<void>> = [];
@@ -58,29 +121,9 @@ describe('Streamable HTTP: an answer is graded before the run advances (P6.274, 
     };
   };
 
-  const withDb = <T>(read: (db: DatabaseSync) => T): T => {
-    const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
-    try {
-      return read(db);
-    } finally {
-      db.close();
-    }
-  };
+  const withDb = <T>(read: (db: DatabaseSync) => T): T => withStateDb(runtimeRoot, read);
 
-  const run = (chainId: string): RunRow =>
-    withDb((db) => {
-      const row = db
-        .prepare('SELECT state, current_node_id FROM chain_runs WHERE chain_id = ?')
-        .get(chainId) as { state: string; current_node_id: string | null } | undefined;
-      if (row === undefined) throw new Error(`no run for ${chainId}`);
-      const state = JSON.parse(row.state) as { reviews?: Record<string, { gateIds: string[] }> };
-      return {
-        current: row.current_node_id,
-        reviews: Object.fromEntries(
-          Object.entries(state.reviews ?? {}).map(([nodeId, review]) => [nodeId, review.gateIds])
-        ),
-      };
-    });
+  const run = (chainId: string): RunRow => readRun(runtimeRoot, chainId);
 
   /**
    * Each node's answer flags, in run order: responded, completed. `rendered_at` is left out: it is
@@ -167,33 +210,7 @@ describe('Streamable HTTP: an answer is graded before the run advances (P6.274, 
     await waitForHealth(baseUrl, { timeout: 45000, interval: 200 });
     client = new ModernMcpClient(baseUrl, 'grade-before-advance-e2e');
 
-    const author = async (args: Record<string, unknown>): Promise<void> => {
-      const result = await tool('resource_manager', args);
-      if (result.isError) throw new Error(result.text);
-    };
-    for (const id of ['g1', 'g2', 'g3']) {
-      await author({
-        resource_type: 'prompt',
-        action: 'create',
-        id,
-        category: 'general',
-        name: id,
-        description: `e2e gated step ${id}`,
-        user_message_template: `BODY-${id}`,
-      });
-    }
-    for (const id of ['u1', 'u2', 'u3']) {
-      await author({
-        resource_type: 'prompt',
-        action: 'create',
-        id,
-        category: 'general',
-        name: id,
-        description: `e2e ungated step ${id}`,
-        user_message_template: `BODY-${id}`,
-        gate_configuration: UNGATED,
-      });
-    }
+    await authorFixtures(tool);
   }, 90000);
 
   afterAll(async () => {
@@ -263,5 +280,141 @@ describe('Streamable HTTP: an answer is graded before the run advances (P6.274, 
 
     expect({ onStart, onAnswer }).toEqual({ onStart: 0, onAnswer: 1 });
     expect(run(chainId)).toEqual({ current: 'n1', reviews: { n1: ['__phase_guard__'] } });
+  });
+});
+
+describe('STDIO: an answer is graded before the run advances (P6.303, R170 transport parity)', () => {
+  const cleanup: Array<() => void | Promise<void>> = [];
+  let runtimeRoot: string;
+  let proc: ChildProcess;
+  let nextId = 1;
+  let stderr = '';
+  const pending = new Map<number, (message: Record<string, unknown>) => void>();
+
+  const request = (method: string, params: Record<string, unknown>): Promise<unknown> => {
+    const id = nextId++;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error(`STDIO ${method} (id ${id}) got no answer in 45s\n${stderr}`));
+      }, 45000);
+      pending.set(id, (message) => {
+        clearTimeout(timer);
+        pending.delete(id);
+        if (message['error'] != null) reject(new Error(JSON.stringify(message['error'])));
+        else resolve(message['result']);
+      });
+      proc.stdin?.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`);
+    });
+  };
+
+  const tool = async (name: string, args: Record<string, unknown>) => {
+    const result = (await request('tools/call', { name, arguments: args })) as
+      { isError?: boolean; content?: Array<{ text?: string }> } | undefined;
+    return {
+      isError: result?.isError === true,
+      text: (result?.content ?? []).map((part) => part.text ?? '').join('\n'),
+    };
+  };
+
+  const run = (chainId: string): RunRow => readRun(runtimeRoot, chainId);
+  const start = async (command: string): Promise<string> => {
+    const result = await tool('prompt_engine', { command });
+    const chainId = /chain_id[=:] ?"(chain-[A-Za-z0-9_#-]+)"/.exec(result.text)?.[1];
+    if (chainId === undefined) throw new Error(`no chain id in: ${result.text}`);
+    return chainId;
+  };
+  const answer = (chainId: string, userResponse: string, verdict?: string) =>
+    tool('prompt_engine', {
+      chain_id: chainId,
+      user_response: userResponse,
+      ...(verdict !== undefined ? { gate_verdict: verdict } : {}),
+    });
+  const gatedRunAtStep2 = async (): Promise<string> => {
+    const chainId = await start(['>>g1', '>>g2', '>>g3'].join(ARROW));
+    await answer(chainId, cageerfAnswer('step one'), PASS);
+    expect(run(chainId).current).toBe('n2');
+    return chainId;
+  };
+
+  beforeAll(async () => {
+    const roots = createHermeticRoots('grade-before-advance-stdio-e2e');
+    cleanup.push(roots.cleanup);
+    runtimeRoot = roots.runtimeRoot;
+    const workspace = path.join(roots.root, 'workspace');
+    mkdirSync(workspace, { recursive: true });
+    proc = spawn('node', [DIST_ENTRY, '--transport=stdio', '--quiet'], {
+      cwd: SERVER_ROOT,
+      env: buildServerEnv({
+        HOME: roots.home,
+        MCP_WORKSPACE: workspace,
+        MCP_RUNTIME_ROOT: runtimeRoot,
+      }),
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    cleanup.push(() => killServer(proc));
+    proc.stderr?.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+    let buffer = '';
+    proc.stdout?.on('data', (chunk: Buffer) => {
+      buffer += chunk.toString();
+      let newline = buffer.indexOf('\n');
+      while (newline !== -1) {
+        const line = buffer.slice(0, newline).trim();
+        buffer = buffer.slice(newline + 1);
+        newline = buffer.indexOf('\n');
+        if (!line.startsWith('{')) continue;
+        const message = JSON.parse(line) as Record<string, unknown>;
+        if (typeof message['id'] === 'number') pending.get(message['id'])?.(message);
+      }
+    });
+    await request('initialize', {
+      protocolVersion: '2024-11-05',
+      capabilities: {},
+      clientInfo: { name: 'grade-before-advance-stdio-e2e', version: '1.0.0' },
+    });
+    proc.stdin?.write(
+      `${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })}\n`
+    );
+    await authorFixtures(tool);
+  }, 90000);
+
+  afterAll(async () => {
+    for (const step of cleanup.reverse()) await step();
+  });
+
+  test('(a) over STDIO a PASS on a step whose answer fails its phase guard holds the run on that step', async () => {
+    const chainId = await gatedRunAtStep2();
+
+    const reply = await answer(chainId, SECTIONLESS, PASS);
+
+    expect(reply.isError).toBe(false);
+    expect(reply.text).toContain(STRUCTURAL);
+    expect(reply.text).toContain('BODY-g2');
+    expect(reply.text).not.toContain('BODY-g3');
+    expect(run(chainId)).toEqual({ current: 'n2', reviews: { n2: ['__phase_guard__'] } });
+  });
+
+  test('(b) over STDIO the retry advances exactly one step', async () => {
+    const chainId = await gatedRunAtStep2();
+    await answer(chainId, SECTIONLESS, PASS);
+
+    const retry = await answer(chainId, cageerfAnswer('step two again'), PASS);
+
+    expect(retry.isError).toBe(false);
+    expect(retry.text).toContain('BODY-g3');
+    expect(retry.text).not.toContain('BODY-g2');
+    expect(retry.text).not.toContain(STRUCTURAL);
+    expect(run(chainId)).toEqual({ current: 'n3', reviews: {} });
+  });
+
+  test('(c) control over STDIO: a PASS on a conforming answer advances', async () => {
+    const chainId = await gatedRunAtStep2();
+
+    const reply = await answer(chainId, cageerfAnswer('step two'), PASS);
+
+    expect(reply.text).toContain('BODY-g3');
+    expect(reply.text).not.toContain(STRUCTURAL);
+    expect(run(chainId)).toEqual({ current: 'n3', reviews: {} });
   });
 });
