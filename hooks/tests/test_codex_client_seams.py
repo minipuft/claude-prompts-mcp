@@ -137,3 +137,6 @@ class TestCodexModelStrategy:
 
     def test_claude_default_behavior_unchanged(self):
         assert model_strategies.get_model_hint(self._context()) == "sonnet"
+
+
+# P6.77 scratch line: a commit touching hooks runs validate:python through pre-commit.
