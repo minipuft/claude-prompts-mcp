@@ -27,6 +27,14 @@ describe('FrameworkGuidanceFilter', () => {
     expect(frameworks).toEqual(['CUSTOM', 'OTHER']);
   });
 
+  test('heads the matched line whatever the casing of the identifier', () => {
+    const filtered = filterFrameworkGuidance('- ReACT: Reason\n- CAGEERF: Plan', 'react', [
+      'REACT',
+      'CAGEERF',
+    ]);
+    expect(filtered).toBe('**ReACT Framework Guidelines:**\n- Reason');
+  });
+
   test('does not fallback to default frameworks when none are provided', () => {
     const filtered = filterFrameworkGuidance(DEFAULT_GUIDANCE, 'CAGEERF');
     expect(filtered).toBe(DEFAULT_GUIDANCE);

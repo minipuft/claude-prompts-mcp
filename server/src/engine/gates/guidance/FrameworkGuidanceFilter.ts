@@ -57,12 +57,17 @@ export function filterFrameworkGuidance(
   }
 
   if (filteredLines.some((line) => matchesFrameworkLine(line, resolvedFrameworkName))) {
-    let result = filteredLines.join('\n');
-    result = result.replace(
-      `- ${resolvedFrameworkName}: `,
-      `**${resolvedFrameworkName} Framework Guidelines:**\n- `
-    );
-    return result;
+    // Case-insensitive, like the line match above: the identifiers arrive upper-cased (`REACT`)
+    // while guidance authors its own casing (`- ReACT:`), and a case-sensitive replace left ReACT
+    // alone without the heading every other framework's guidance renders under.
+    const result = filteredLines.join('\n');
+    const marker = `- ${resolvedFrameworkName}: `;
+    const at = result.toLowerCase().indexOf(marker.toLowerCase());
+    if (at < 0) {
+      return result;
+    }
+    const authoredName = result.slice(at + 2, at + marker.length - 2);
+    return `${result.slice(0, at)}**${authoredName} Framework Guidelines:**\n- ${result.slice(at + marker.length)}`;
   }
 
   return guidance;

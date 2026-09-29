@@ -508,11 +508,34 @@ describe('framework selection when the selected framework goes away (Streamable 
  * PIN (as of 2026-09-28 · flips when that `name` names a framework). The control switches the same
  * server to CAGEERF: the render then names CAGEERF under the same title (its guidance opens with
  * "**CAGEERF Framework Guidelines:**"), so the absence is something this probe can see.
+ *
+ * P6.267 / R160. MEASURED 2026-09-29 on `296c8716b`: the section's shape is not authored per
+ * framework; every framework's line comes from the one shared `guidance.md`, and the filter heads
+ * it "**<name> Framework Guidelines:**". ReACT alone rendered its line bare, because the heading
+ * replace matched the upper-cased identifier (`REACT`) case-sensitively against the authored
+ * `- ReACT:`. Both renders now carry the same section shape, compared as one value.
  */
 describe('P6.154: the framework-compliance title names no framework (Streamable HTTP)', () => {
   const COMPLIANCE_PROMPT = 'p154_analysis';
   const complianceTitles = (text: string): string[] =>
     text.split('\n').filter((line) => /^### .*Compliance/.test(line));
+  /** The compliance section's lines, up to its first blank line, reduced to their kind. */
+  const complianceShape = (text: string): string[] => {
+    const lines = text.split('\n');
+    const start = lines.findIndex((line) => line === '### Framework Compliance');
+    const end = lines.findIndex((line, i) => i > start && line.trim() === '');
+    return lines
+      .slice(start, end)
+      .map((line) =>
+        line.startsWith('### ')
+          ? 'title'
+          : /^\*\*.+ Framework Guidelines:\*\*$/.test(line)
+            ? 'guidelines-heading'
+            : line.startsWith('- ')
+              ? 'item'
+              : line
+      );
+  };
 
   it('a ReACT workspace reads the agnostic title and no CAGEERF; a CAGEERF control reads it', async () => {
     const session = await start(startHttpSession, await newWorkspace());
@@ -533,7 +556,9 @@ describe('P6.154: the framework-compliance title names no framework (Streamable 
     expect(react.isError).toBe(false);
     expect(react.text).toContain('framework-compliance');
     expect(complianceTitles(react.text)).toEqual(['### Framework Compliance']);
-    expect(react.text).toContain('- ReACT: Show clear Reasoning and Acting phases');
+    expect(react.text).toContain(
+      '**ReACT Framework Guidelines:**\n- Show clear Reasoning and Acting phases'
+    );
     expect(react.text).not.toContain('CAGEERF');
 
     await switchTo(session, 'cageerf');
@@ -541,6 +566,9 @@ describe('P6.154: the framework-compliance title names no framework (Streamable 
     expect(control.isError).toBe(false);
     expect(complianceTitles(control.text)).toEqual(['### Framework Compliance']);
     expect(control.text).toContain('**CAGEERF Framework Guidelines:**');
+    // P6.267: one section shape under either framework.
+    expect(complianceShape(react.text)).toEqual(['title', 'guidelines-heading', 'item']);
+    expect(complianceShape(control.text)).toEqual(complianceShape(react.text));
   }, 90000);
 });
 
