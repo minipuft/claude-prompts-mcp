@@ -9,6 +9,7 @@ import { GateMetricsRecorder } from '../../../../src/engine/gates/services/gate-
 import { TemporaryGateRegistrar } from '../../../../src/engine/gates/services/temporary-gate-registrar.js';
 
 import type { RunStepView } from '../../../../src/engine/gates/services/run-step-view.js';
+import type { PendingGateReview } from '../../../../src/shared/types/chain-execution.js';
 
 /**
  * P4-F3: a gate bound to ONE node entered EVERY step's review, because the review feed read the
@@ -16,8 +17,8 @@ import type { RunStepView } from '../../../../src/engine/gates/services/run-step
  * per-step slice — leaving `accumulatedGateIds` (injection input + run-wide inheritance) alone.
  *
  * Two halves are tested here because the defect needs both to close: the WRITER must publish the
- * slice for the step the run is standing at, and the READERS must prefer it while still falling
- * back to the accumulator so the single-prompt path is untouched.
+ * slice for the step the run is standing at. Mandatory verdict actions read the actual pending
+ * review's gate IDs; scope and accumulator arrays alone remain guidance, not review authority.
  */
 
 const createLogger = () => ({
@@ -420,10 +421,14 @@ describe('gate review scoping (P4-F3)', () => {
     });
   });
 
-  describe('reader: the CTA prefers the scope and falls back to the accumulator', () => {
+  describe('reader: the actual pending review owns the verdict CTA', () => {
     const assembler = new ResponseAssembler();
 
-    const renderCTA = (state: { accumulated?: string[]; review?: string[] }): string => {
+    const renderCTA = (state: {
+      accumulated?: string[];
+      review?: string[];
+      pendingReview?: PendingGateReview;
+    }): string => {
       const context = new ExecutionContext({ command: '>>test-prompt' } as never);
       context.executionResults = { content: 'out', metadata: {}, generatedAt: 0 } as never;
       context.executionPlan = {
@@ -459,6 +464,7 @@ describe('gate review scoping (P4-F3)', () => {
         isChainExecution: true,
         currentStep: 1,
         totalSteps: 3,
+        ...(state.pendingReview === undefined ? {} : { pendingReview: state.pendingReview }),
       };
       if (state.accumulated !== undefined) {
         context.state.gates.accumulatedGateIds = state.accumulated;
@@ -469,36 +475,58 @@ describe('gate review scoping (P4-F3)', () => {
       return assembler.formatSinglePromptResponse(context, {} as never);
     };
 
-    test('(d) with no reviewGateIds the render is byte-identical to the accumulator render', () => {
-      // The single-prompt path writes no scope; its output must not move at all.
-      const fallback = renderCTA({ accumulated: ['intent-quality', 'code-quality'] });
-      const explicit = renderCTA({
-        accumulated: ['intent-quality', 'code-quality'],
-        review: ['intent-quality', 'code-quality'],
-      });
-
-      expect(fallback).toContain('**Gates**: intent-quality, code-quality');
-      expect(fallback).toBe(explicit);
+    const pendingReview = (gateIds: string[]): PendingGateReview => ({
+      combinedPrompt: 'Review the output',
+      gateIds,
+      prompts: [],
+      createdAt: 0,
+      attemptCount: 0,
+      maxAttempts: 2,
     });
 
-    test('a narrower scope wins over the accumulator', () => {
+    test.each([undefined, [], ['intent-quality', 'code-quality'], ['other-scope']])(
+      'gate arrays with scope %j cannot demand a verdict without an actual review',
+      (review) => {
+        const rendered = renderCTA({ accumulated: ['intent-quality', 'code-quality'], review });
+        expect(rendered).not.toContain('**Review Required**');
+        expect(rendered).not.toContain('gate_verdict');
+        expect(rendered).toContain('Continue:');
+        expect(rendered).toContain('Re-run:');
+      }
+    );
+
+    test('the pending review wins over conflicting scope and accumulated IDs', () => {
       const rendered = renderCTA({
-        accumulated: ['intent-quality', 'code-quality'],
-        review: ['code-quality'],
+        accumulated: ['accumulated-only'],
+        review: ['scope-only'],
+        pendingReview: {
+          ...pendingReview(['code-quality', 'prose-hygiene']),
+          gateTiers: { 'code-quality': 'check', 'prose-hygiene': 'reminder' },
+          checkResults: [{ gateId: 'code-quality', passed: false, summary: 'Check failed' }],
+        },
       });
 
-      expect(rendered).toContain('**Gates**: code-quality');
-      expect(rendered).not.toContain('intent-quality');
-      // Verdict indices are positional over the list that is rendered, and nothing joins them
-      // back to a gate id (`parseGateVerdicts` keeps a bare integer), so a shorter list renumbers
-      // safely rather than mismatching.
+      expect(rendered).toContain('**Review Required**');
+      expect(rendered).toContain('**Gates**: code-quality, prose-hygiene');
+      expect(rendered).not.toContain('accumulated-only');
+      expect(rendered).not.toContain('scope-only');
+      expect(rendered).toContain('gate_verdict=');
       expect(rendered).toContain('"index": 1');
       expect(rendered).not.toContain('"index": 2');
+      expect(rendered).toContain('"passed": false');
+      expect(rendered).toContain('"reminders": {"satisfied": ["prose-hygiene"]');
     });
 
-    test('an empty scope suppresses the review CTA the accumulator would have raised', () => {
-      const rendered = renderCTA({ accumulated: ['intent-quality'], review: [] });
-      expect(rendered).not.toContain('**Review Required**');
+    test('an empty scope cannot suppress an actual pending review', () => {
+      const rendered = renderCTA({
+        accumulated: ['accumulated-only'],
+        review: [],
+        pendingReview: pendingReview(['code-quality']),
+      });
+      expect(rendered).toContain('**Review Required**');
+      expect(rendered).toContain('**Gates**: code-quality');
+      expect(rendered).toContain('gate_verdict=');
+      expect(rendered).not.toContain('accumulated-only');
     });
   });
 

@@ -16,6 +16,7 @@ import { ChainOperatorExecutor } from '../../../../src/engine/execution/operator
 
 import type { Logger } from '../../../../src/infra/logging/index.js';
 import type { ConvertedPrompt } from '../../../../src/engine/execution/types.js';
+import type { ChainStepPrompt } from '../../../../src/engine/execution/operators/types.js';
 
 const logger = {
   debug: jest.fn(),
@@ -96,6 +97,49 @@ const render = async (over: Record<string, unknown> = {}): Promise<string> => {
 };
 
 describe('gate-review render of a current-step review is byte-identical (row 3.5)', () => {
+  test('authored framework guidance prevents a second injected framework on the initial worker review', async () => {
+    const systemMessage =
+      'AUTHORED_SYSTEM_SENTINEL. Apply the C.A.G.E.E.R.F framework systematically';
+    const prompt = { ...prompts[0]!, systemMessage };
+    const step: ChainStepPrompt = {
+      stepNumber: 1,
+      nodeId: 'n2',
+      promptId: prompt.id,
+      args: { code: 'alpha' },
+      convertedPrompt: prompt,
+      delegated: true,
+      frameworkContext: {
+        selectedFramework: { id: 'cageerf', name: 'C.A.G.E.E.R.F Framework', type: 'CAGEERF' },
+        systemPrompt: 'INJECTED_FRAMEWORK_SENTINEL',
+      } as never,
+    };
+    const executor = new ChainOperatorExecutor(logger, [prompt]);
+    const review = await executor.renderStep({
+      executionType: 'gate_review',
+      stepPrompts: [step],
+      chainContext: { current_step: 1 },
+      review: currentStepReview() as never,
+    });
+    expect(review.content.split('AUTHORED_SYSTEM_SENTINEL')).toHaveLength(2);
+    expect(review.content).not.toContain('INJECTED_FRAMEWORK_SENTINEL');
+    const normal = await executor.renderStep({
+      executionType: 'normal',
+      stepPrompts: [step],
+      currentStepIndex: 0,
+    });
+    expect(normal.content.split('AUTHORED_SYSTEM_SENTINEL')).toHaveLength(2);
+    expect(normal.content).not.toContain('INJECTED_FRAMEWORK_SENTINEL');
+    const control = await executor.renderStep({
+      executionType: 'gate_review',
+      stepPrompts: [
+        { ...step, convertedPrompt: { ...prompt, systemMessage: 'AUTHORED_SYSTEM_SENTINEL' } },
+      ],
+      chainContext: { current_step: 1 },
+      review: currentStepReview() as never,
+    });
+    expect(control.content).toContain('INJECTED_FRAMEWORK_SENTINEL');
+  });
+
   test('first attempt', async () => {
     expect(await render()).toMatchInlineSnapshot(`
       "## Original Task Instructions

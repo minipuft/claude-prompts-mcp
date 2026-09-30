@@ -368,6 +368,10 @@ export class GateReviewStage extends BasePipelineStage {
       // review it hides the very gates the review asks a verdict on.
       const chainContext = {
         ...this.chainSessionStore.getChainContext(sessionId, context.getScopeOptions()),
+        // The current request owns dispatch identity, just as on stage 18's normal render.
+        // Keep it on this render context: persisting it would pin a later client to this one.
+        requestIdentityContext: context.state.identity.context,
+        clientProfile: context.state.identity.context?.clientProfile,
         injectionState: { systemPrompt: context.state.injection.systemPrompt },
       };
       // Node-driven, for the same reason stage 18 is (P4 row 3.4 / DEV-T3-7). The review body is
@@ -404,25 +408,7 @@ export class GateReviewStage extends BasePipelineStage {
 
       this.recordReviewedDeclaration(sessionId, renderResult);
 
-      // Resolve judge gates and compose context-isolated prompt if any gates use judge mode.
-      // ResponseAssembler renders it into the review reply (P4.133).
-      let judgeMetadata: JudgeReviewMetadata | undefined;
-      if (this.gateDefinitionProvider && pendingReview.gateIds.length > 0) {
-        const gatesConfig = this.gatesConfigProvider?.();
-        const { judgeGates } = await resolveJudgeGates(
-          pendingReview.gateIds,
-          this.gateDefinitionProvider,
-          gatesConfig?.evaluation
-        );
-        if (judgeGates.length > 0) {
-          const judgeResult = composeJudgeReviewPrompt(judgeGates, JUDGE_OUTPUT_PLACEHOLDER);
-          judgeMetadata = {
-            judgePrompt: judgeResult.judgePrompt,
-            judgeGateIds: judgeResult.judgeGateIds,
-            ...(judgeResult.modelHint !== undefined ? { modelHint: judgeResult.modelHint } : {}),
-          };
-        }
-      }
+      const judgeMetadata = await this.renderJudgeMetadata(pendingReview);
 
       context.executionResults = {
         content: [renderResult.content, carriedRender, shellSection]
@@ -463,6 +449,24 @@ export class GateReviewStage extends BasePipelineStage {
     } catch (error) {
       this.handleError(error, 'Failed to render gate review step');
     }
+  }
+
+  /** Compose the existing context-isolated judge prompt for the assembler (P4.133). */
+  private async renderJudgeMetadata(review: GateReview): Promise<JudgeReviewMetadata | undefined> {
+    if (this.gateDefinitionProvider === null || review.gateIds.length === 0) return undefined;
+    const gatesConfig = this.gatesConfigProvider?.();
+    const { judgeGates } = await resolveJudgeGates(
+      review.gateIds,
+      this.gateDefinitionProvider,
+      gatesConfig?.evaluation
+    );
+    if (judgeGates.length === 0) return undefined;
+    const result = composeJudgeReviewPrompt(judgeGates, JUDGE_OUTPUT_PLACEHOLDER);
+    return {
+      judgePrompt: result.judgePrompt,
+      judgeGateIds: result.judgeGateIds,
+      ...(result.modelHint !== undefined ? { modelHint: result.modelHint } : {}),
+    };
   }
 
   /**

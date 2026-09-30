@@ -1,16 +1,17 @@
 id: strategic_worker
 name: Strategic Worker
-description: >-
+description: >
   Worker brief (single-shot): one task row owned end to end under a planner
   session. Sibling search, then the probed pre-flight trio (domain, defined,
   contracts), then the implementation, then the row's own artifact check — the
   check reads what the row wrote, never the full suite, because green is
   required once at the planner's PR boundary. Commits the row's files to its own
-  branch, or nothing at all under the shared-tree mode, and returns exactly five
-  headings — done, concerns, deviations, findings, feedback — as the whole of the
-  channel back, since the planner cannot read a worker's transcript. Edits only
-  the files the row names, moves no git refs, and leaves no TODO behind.
-  Dispatched by >>strategic_implement; a compiled delegated node carries this id.
+  branch, or nothing at all under the shared-tree mode, and returns a
+  five-heading work product — done, concerns, deviations, findings, feedback —
+  followed by any requested delegated HANDOFF RESULT transport envelope, since
+  the planner cannot read a worker's transcript. Edits only the files the row
+  names, moves no git refs, and leaves no TODO behind. Dispatched by
+  >>strategic_implement; a compiled delegated node carries this id.
 category: development
 systemMessageFile: system-message.md
 userMessageTemplateFile: user-message.md
@@ -40,9 +41,9 @@ arguments:
   - name: branch_mode
     type: string
     description: >-
-      own-branch (default) — commit the row's files to <initiative>/<row> and the
-      planner merges; shared-tree — commit nothing, leave edits in the planner's
-      worktree for it to commit per concern.
+      own-branch (default) — commit the row's files to <initiative>/<row> and
+      the planner merges; shared-tree — commit nothing, leave edits in the
+      planner's worktree for it to commit per concern.
     required: false
 artifacts:
   fromArgument: files
@@ -50,4 +51,5 @@ gateConfiguration:
   framework_gates: false
   # Row 1.2 dropped the exclusion list, so the RADIANT creed gate re-attaches on category
   # `development` under an active framework — and the worker brief is not a visual surface.
-  exclude: [creed-fidelity]
+  exclude:
+    - creed-fidelity

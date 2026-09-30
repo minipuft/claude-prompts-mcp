@@ -312,6 +312,7 @@ export class GateEnhancementService {
       const gateService = this.requireGateService();
 
       const gateCtx: GateContext = {
+        criteriaExecution: 'guidance-only',
         promptId: prompt.id,
         explicitGateIds: [...inlineGateIds, ...registeredGates.canonicalGateIds],
       };
@@ -1351,7 +1352,7 @@ function stepGateContext(
   inlineGateIds: string[] | undefined,
   frameworkId: string | undefined
 ): GateContext {
-  const gateCtx: GateContext = { promptId: prompt.id };
+  const gateCtx: GateContext = { promptId: prompt.id, criteriaExecution: 'pipeline' };
   if (inlineGateIds !== undefined) {
     gateCtx.explicitGateIds = inlineGateIds;
   }

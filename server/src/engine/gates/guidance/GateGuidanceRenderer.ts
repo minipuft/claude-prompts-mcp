@@ -27,12 +27,15 @@ export interface GateGuidanceConfig {
 }
 
 /**
- * Closing attestation line shared by every gate-guidance render path — the canonical renderer
- * here and the fallback in chain-operator-executor.ts. Exported so the fallback imports this
- * literal instead of carrying its own copy that can drift (row 0.9, gate-checks-and-reminders).
+ * Closing attestation line for chain criteria delivery — the canonical renderer here and the
+ * fallback in chain-operator-executor.ts. Guidance-only delivery carries an advisory caveat.
+ * Exported so the fallback imports this literal instead of carrying its own copy that can drift.
  */
 export const GATE_ATTESTATION_LINE =
   "Attest reminders in the verdict's `reminders` field; checks are recorded by the engine.";
+
+const GATE_ADVISORY_LINE =
+  'Use these gates as advisory guidance. Their criteria are not executed for single prompts.';
 
 export interface GateGuidanceRendererOptions {
   gateLoader: GateDefinitionProvider;
@@ -66,6 +69,12 @@ interface ReminderEntry {
   /** Position in the caller's `gateIds`, the final tiebreak so ordering stays stable. */
   inputOrder: number;
 }
+
+type GateGuidanceEntry =
+  | { kind: 'check'; line: string }
+  | { kind: 'reminder'; reminder: ReminderEntry }
+  | { kind: 'suppressed' }
+  | { kind: 'skipped' };
 
 /** Ordering weight for a reminder's severity; an unset severity sorts as `medium`. */
 function severityWeight(severity: LightweightGateDefinition['severity']): number {
@@ -119,6 +128,7 @@ export class GateGuidanceRenderer {
     }
 
     const { harnessCovers, reminderTokenBudget } = this.resolveGuidanceConfig();
+    const criteriaExecute = context.criteriaExecution === 'pipeline';
     const checkLines: string[] = [];
     const reminders: ReminderEntry[] = [];
     const explicitSet = new Set(context.explicitGateIds ?? []);
@@ -126,53 +136,26 @@ export class GateGuidanceRenderer {
 
     for (const [inputOrder, gateId] of gateIds.entries()) {
       try {
-        const gate = await this.loadGateDefinition(gateId);
-        if (!gate) {
-          this.logger.debug('[GATE GUIDANCE RENDERER] Failed to load gate:', gateId);
-          continue;
-        }
-
-        const isExplicit = explicitSet.has(gateId);
-        const inline = this.isInlineGate(gateId, gate) || isExplicit;
-
-        if (!inline && !this.isGateActive(gate, context, isExplicit)) {
-          this.logger.debug('[GATE GUIDANCE RENDERER] Skipped gate (not applicable):', gateId);
-          continue;
-        }
-
-        // A check has a runtime evaluator, so the engine records its verdict from the run.
-        // Emitting its guidance would ask the agent to self-attest something already measured,
-        // so a check contributes exactly one line naming what it runs — and is never suppressed
-        // and never budgeted.
-        if (deriveGateTier(gate) === 'check') {
-          checkLines.push(formatCheckLine(gate.name, gate.pass_criteria ?? []));
-          this.logger.debug('[GATE GUIDANCE RENDERER] Added check line for gate:', gateId);
-          continue;
-        }
-
-        // harnessCovers suppresses reminders only, and it outranks the prompt author: a gate
-        // named explicitly in the command is still dropped when the operator's config says the
-        // harness already covers its subject (ruling B2). A reminder with no `subject` names no
-        // coverable topic, so it is never suppressed.
-        if (gate.subject && harnessCovers.includes(gate.subject)) {
-          suppressedCount += 1;
-          this.logger.debug(
-            '[GATE GUIDANCE RENDERER] Suppressed reminder covered by harness:',
-            gateId,
-            gate.subject
-          );
-          continue;
-        }
-
-        const rendered = this.formatGateGuidance(gate, context);
-        reminders.push({
-          gate,
-          explicit: isExplicit,
-          rendered,
-          tokens: Math.ceil(rendered.length / REMINDER_CHARS_PER_TOKEN),
+        const entry = await this.collectGateGuidance(
+          gateId,
           inputOrder,
-        });
-        this.logger.debug('[GATE GUIDANCE RENDERER] Added guidance for gate:', gateId);
+          context,
+          explicitSet.has(gateId),
+          harnessCovers
+        );
+        switch (entry.kind) {
+          case 'check':
+            checkLines.push(entry.line);
+            break;
+          case 'reminder':
+            reminders.push(entry.reminder);
+            break;
+          case 'suppressed':
+            suppressedCount += 1;
+            break;
+          case 'skipped':
+            break;
+        }
       } catch (error) {
         this.logger.warn('[GATE GUIDANCE RENDERER] Failed to load gate:', gateId, error);
       }
@@ -204,7 +187,7 @@ export class GateGuidanceRenderer {
       sections.push([...new Set(reminderLines)].join('\n\n'));
     }
 
-    sections.push('\n\n' + GATE_ATTESTATION_LINE);
+    sections.push('\n\n' + (criteriaExecute ? GATE_ATTESTATION_LINE : GATE_ADVISORY_LINE));
 
     sections.push('\n\n---');
 
@@ -219,6 +202,67 @@ export class GateGuidanceRenderer {
     });
 
     return supplementalGuidance;
+  }
+
+  /** Resolve one gate's delivery without mixing classification with section assembly. */
+  private async collectGateGuidance(
+    gateId: string,
+    inputOrder: number,
+    context: GateContext,
+    isExplicit: boolean,
+    harnessCovers: readonly string[]
+  ): Promise<GateGuidanceEntry> {
+    const gate = await this.loadGateDefinition(gateId);
+    if (gate === null) {
+      this.logger.debug('[GATE GUIDANCE RENDERER] Failed to load gate:', gateId);
+      return { kind: 'skipped' };
+    }
+
+    const inline = this.isInlineGate(gateId, gate) || isExplicit;
+    if (!inline && !this.isGateActive(gate, context, isExplicit)) {
+      this.logger.debug('[GATE GUIDANCE RENDERER] Skipped gate (not applicable):', gateId);
+      return { kind: 'skipped' };
+    }
+
+    // Check lines are never suppressed or budgeted. Their classification does not establish
+    // execution: single prompts keep the configured command visible with an explicit caveat.
+    if (deriveGateTier(gate) === 'check') {
+      const checkLine = formatCheckLine(gate.name, gate.pass_criteria ?? []);
+      this.logger.debug('[GATE GUIDANCE RENDERER] Added check line for gate:', gateId);
+      return {
+        kind: 'check',
+        line:
+          context.criteriaExecution === 'pipeline' ? checkLine : `${checkLine} (not executed here)`,
+      };
+    }
+
+    // Harness coverage outranks explicit reminder requests (B2); a missing subject is not
+    // coverable. Checks took their separate branch above and are unaffected.
+    if (
+      gate.subject !== undefined &&
+      gate.subject.length > 0 &&
+      harnessCovers.includes(gate.subject)
+    ) {
+      this.logger.debug(
+        '[GATE GUIDANCE RENDERER] Suppressed reminder covered by harness:',
+        gateId,
+        gate.subject
+      );
+      return { kind: 'suppressed' };
+    }
+
+    const rendered = this.formatGateGuidance(gate, context);
+    this.logger.debug('[GATE GUIDANCE RENDERER] Added guidance for gate:', gateId);
+    return {
+      kind: 'reminder',
+      reminder: {
+        gate,
+        explicit: isExplicit,
+        rendered,
+        tokens: Math.ceil(rendered.length / REMINDER_CHARS_PER_TOKEN),
+        inputOrder,
+      },
+    };
   }
 
   /**

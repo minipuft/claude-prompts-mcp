@@ -25,6 +25,8 @@ import { afterEach, describe, expect, test } from '@jest/globals';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
+import type { GateReview } from '../../src/shared/types/chain-execution.js';
+
 import { createHermeticRoots } from './helpers/child-env.js';
 import {
   getAvailablePort,
@@ -36,7 +38,7 @@ import {
 
 interface Session {
   call(args: Record<string, unknown>): Promise<string>;
-  attemptCount(): number | undefined;
+  review(): GateReview | undefined;
   stop(): Promise<void>;
 }
 
@@ -85,16 +87,17 @@ describe('Streamable HTTP: a gate review states one state', () => {
         const result = outcome.result as { content?: Array<{ text?: string }> } | undefined;
         return (result?.content ?? []).map((part) => part.text ?? '').join('\n');
       },
-      attemptCount: () => {
-        const db = new DatabaseSync(path.join(roots.runtimeRoot, 'runtime-state', 'state.db'));
+      review: () => {
+        const db = new DatabaseSync(path.join(roots.runtimeRoot, 'runtime-state', 'state.db'), {
+          readOnly: true,
+        });
         try {
           const row = db.prepare('SELECT state FROM chain_runs').get() as { state: string };
           // The residual persists every review in `reviews`, keyed by node; this run has one.
           const state = JSON.parse(row.state) as {
-            reviews?: Record<string, { kind?: string; attemptCount?: number }>;
+            reviews?: Record<string, GateReview>;
           };
-          return Object.values(state.reviews ?? {}).find((review) => review.kind !== 'detached')
-            ?.attemptCount;
+          return Object.values(state.reviews ?? {}).find((review) => review.kind !== 'detached');
         } finally {
           db.close();
         }
@@ -152,7 +155,7 @@ describe('Streamable HTTP: a gate review states one state', () => {
   test('P4.116: one call carrying the answer and a FAIL spends one attempt', async () => {
     const session = await startSession();
     const chainId = chainIdOf(await session.call(gatedSinglePrompt));
-    expect(session.attemptCount()).toBeUndefined();
+    expect(session.review()).toBeUndefined();
 
     const reply = await session.call({
       chain_id: chainId,
@@ -160,7 +163,10 @@ describe('Streamable HTTP: a gate review states one state', () => {
       gate_verdict: 'GATE_REVIEW: FAIL - misses a constraint',
     });
 
-    expect(session.attemptCount()).toBe(1);
+    expect(session.review()?.attemptCount).toBe(1);
+    expect(session.review()?.gateTiers?.['pr-security']).toBe('reminder');
+    expect(reply).toContain('"reminders"');
+    expect(reply).not.toContain('"per_gate"');
     expect(reply).not.toContain('Retry Limit Reached');
   }, 180000);
 
@@ -172,14 +178,14 @@ describe('Streamable HTTP: a gate review states one state', () => {
       chain_id: chainId,
       gate_verdict: 'GATE_REVIEW: FAIL - misses a constraint',
     });
-    expect(session.attemptCount()).toBe(1);
+    expect(session.review()?.attemptCount).toBe(1);
 
     const reply = await session.call({
       chain_id: chainId,
       user_response: 'review output',
       gate_verdict: 'GATE_REVIEW: FAIL - still misses it',
     });
-    expect(session.attemptCount()).toBe(2);
+    expect(session.review()?.attemptCount).toBe(2);
     expect(reply).toContain('Retry Limit Reached');
   }, 180000);
 });

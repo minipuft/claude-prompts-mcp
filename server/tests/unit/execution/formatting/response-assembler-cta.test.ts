@@ -151,12 +151,61 @@ function createSinglePromptContext(overrides: {
   return context;
 }
 
+const reviewFor = (gateIds: string[]) => ({
+  combinedPrompt: '',
+  gateIds,
+  prompts: [],
+  createdAt: 0,
+  attemptCount: 0,
+  maxAttempts: 2,
+});
+
 describe('ResponseAssembler – operator-aware CTA system', () => {
   describe('gate verdict CTA (primary action)', () => {
-    test('renders Review Required with gate IDs and chain_id when gates are accumulated', () => {
+    test('advisory gate IDs without a pending review do not demand a verdict', () => {
+      const context = createSinglePromptContext({
+        accumulatedGateIds: ['intent-quality'],
+        chainId: 'chain-advisory#1',
+      });
+      const result = assembler.formatSinglePromptResponse(context, {} as any);
+      expect(result).not.toContain('Review Required');
+      expect(result).not.toContain('gate_verdict');
+      expect(result).toContain('Continue:');
+    });
+
+    test('the pending review owns its gate IDs even when accumulated IDs differ', () => {
+      const context = createSinglePromptContext({
+        accumulatedGateIds: ['other-node'],
+        chainId: 'chain-owned#1',
+        pendingReview: reviewFor(['owned-gate']),
+      });
+      const result = assembler.formatSinglePromptResponse(context, {} as any);
+      expect(result).toContain('Review Required');
+      expect(result).toContain('owned-gate');
+      expect(result).not.toContain('other-node');
+    });
+
+    test('completed single response has no Continue or review action and retains Re-run', () => {
+      const context = createSinglePromptContext({
+        chainId: 'chain-terminal#1',
+        accumulatedGateIds: ['old-gate'],
+        pendingReview: reviewFor(['old-gate']),
+      });
+      context.state.session.chainComplete = true;
+      context.executionResults!.content = 'Execution complete.';
+      const result = assembler.formatSinglePromptResponse(context, {} as any);
+      expect(result).toContain('Execution complete.');
+      expect(result).toContain('Re-run:');
+      expect(result).not.toContain('Continue:');
+      expect(result).not.toContain('Review Required');
+      expect(result).not.toContain('gate_verdict');
+    });
+
+    test('renders Review Required with the actual review gate IDs and chain_id', () => {
       const context = createSinglePromptContext({
         accumulatedGateIds: ['intent-quality', 'code-quality'],
         chainId: 'chain-test#1',
+        pendingReview: reviewFor(['intent-quality', 'code-quality']),
       });
 
       const result = assembler.formatSinglePromptResponse(context, {} as any);
@@ -203,6 +252,7 @@ describe('ResponseAssembler – operator-aware CTA system', () => {
       const context = createSinglePromptContext({
         accumulatedGateIds: ['intent-quality'],
         chainId: 'chain-test#3',
+        pendingReview: reviewFor(['intent-quality']),
       });
 
       const result = assembler.formatSinglePromptResponse(context, {} as any);
@@ -220,7 +270,7 @@ describe('ResponseAssembler – operator-aware CTA system', () => {
         chainId: 'chain-test#9',
         pendingReview: {
           combinedPrompt: '',
-          gateIds: [],
+          gateIds: ['pr-security'],
           prompts: [],
           createdAt: 0,
           attemptCount: 2,
@@ -316,6 +366,7 @@ describe('ResponseAssembler – operator-aware CTA system', () => {
       const context = createSinglePromptContext({
         accumulatedGateIds: ['verify-test'],
         chainId: 'chain-both#1',
+        pendingReview: reviewFor(['verify-test']),
         namedInlineGates: [
           {
             gateId: 'verify-test',
@@ -408,6 +459,7 @@ describe('ResponseAssembler – operator-aware CTA system', () => {
       const context = createSinglePromptContext({
         accumulatedGateIds: ['intent-quality'],
         chainId: 'chain-rerun#1',
+        pendingReview: reviewFor(['intent-quality']),
       });
 
       const result = assembler.formatSinglePromptResponse(context, {} as any);
@@ -418,10 +470,11 @@ describe('ResponseAssembler – operator-aware CTA system', () => {
   });
 
   describe('composition model', () => {
-    test('full composition: gate + verify + loop + re-run (no session)', () => {
+    test('full composition: actual review + verify + loop + re-run', () => {
       const context = createSinglePromptContext({
         accumulatedGateIds: ['verify-gate'],
         chainId: 'chain-full#1',
+        pendingReview: reviewFor(['verify-gate']),
         namedInlineGates: [
           {
             gateId: 'verify-gate',
@@ -715,7 +768,7 @@ describe('ResponseAssembler – operator-aware CTA system', () => {
       expect(result).toContain(
         '"reminders": {"satisfied": ["code-quality"], "not_applicable": []}'
       );
-      expect(result).toContain('Checks are recorded by the engine; attest reminders in one field');
+      expect(result).toContain('No criterion results are recorded for this review');
     });
 
     test('a recorded result pre-fills passed and the rationale slot', () => {

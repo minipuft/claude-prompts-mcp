@@ -32,6 +32,11 @@ export interface GateDefinition {
  * Context information for gate activation and rendering
  */
 export interface GateContext {
+  /**
+   * Whether this render belongs to the chain criteria pipeline. Single prompts only receive
+   * guidance; an absent value must not promise that criteria execute or results are recorded.
+   */
+  criteriaExecution?: 'guidance-only' | 'pipeline';
   framework?: string;
   category?: string;
   promptId?: string;

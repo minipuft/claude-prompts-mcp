@@ -344,10 +344,37 @@ describe('additional delegation strategies', () => {
       expect(result).not.toContain('Parameters:');
     }
     const withModel = new CodexStrategy().formatToolCall(undefined, 'codex-high', 'blocking');
-    expect(withModel).toContain('Parameters:');
-    expect(withModel).toContain('model: "codex-high"');
+    expect(withModel).not.toContain('Parameters:');
+    expect(withModel).not.toContain('model:');
     expect(withModel).not.toContain('agent_type');
   });
+
+  test.each([undefined, 'heavy', 'standard', 'fast'] as const)(
+    'Codex tier %s remains advisory and omits an executable model override',
+    (subagentModel) => {
+      const result = new DelegationRenderer().renderCurrentStepHandoff({
+        stepNumber: 1,
+        totalSteps: 2,
+        promptName: 'worker',
+        gateCount: 0,
+        hasGates: false,
+        mode: 'blocking',
+        nodeToken: 'worker',
+        ...(subagentModel === undefined ? {} : { subagentModel }),
+        clientProfile: {
+          clientFamily: 'codex',
+          clientId: 'codex-cli',
+          clientVersion: 'test',
+          delegationProfile: 'spawn_agent_v1',
+        },
+      });
+      expect(result).toContain('Tool: spawn_agent');
+      expect(result).toContain('Inherit the current model by default');
+      expect(result).not.toMatch(/model:\s*"|codex-(high|standard|fast)/);
+      if (subagentModel !== undefined)
+        expect(result).toContain(`Capability tier: ${subagentModel} (advisory only)`);
+    }
+  );
 
   test('delegation profile metadata reports footer prefixes + experimental cursor status', () => {
     expect(getHandoffFooterPrefix('spawn_agent_v1')).toContain('Codex agent capability');

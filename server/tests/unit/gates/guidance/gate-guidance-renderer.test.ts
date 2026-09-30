@@ -81,6 +81,7 @@ describe('GateGuidanceRenderer (loader integration)', () => {
     });
 
     const guidance = await renderer.renderGuidance(['inline_gate_clarity', 'framework_quality'], {
+      criteriaExecution: 'pipeline',
       framework: 'CAGEERF',
       category: 'analysis',
     });
@@ -235,6 +236,7 @@ describe('GateGuidanceRenderer (loader integration)', () => {
       const renderer = new GateGuidanceRenderer(logger as any, { gateLoader: loader as any });
 
       const guidance = await renderer.renderGuidance(['framework_gate_two'], {
+        criteriaExecution: 'pipeline',
         framework: 'CAGEERF',
       });
 
@@ -334,7 +336,7 @@ describe('GateGuidanceRenderer tier partition, harnessCovers, and reminder budge
         gatesConfigProvider: () => ({ harnessCovers: ['security', 'plain'] }),
       });
 
-      const guidance = await renderer.renderGuidance(['plain'], {});
+      const guidance = await renderer.renderGuidance(['plain'], { criteriaExecution: 'pipeline' });
 
       expect(guidance).toContain('plain guidance body.');
     });
@@ -493,7 +495,7 @@ describe('GateGuidanceRenderer tier partition, harnessCovers, and reminder budge
       gateLoader: loaderFor({ plain: reminderGate('plain') }) as any,
     });
 
-    const guidance = await renderer.renderGuidance(['plain'], {});
+    const guidance = await renderer.renderGuidance(['plain'], { criteriaExecution: 'pipeline' });
 
     expect(guidance).not.toContain('Post-Execution Review Guidelines');
     expect(guidance).not.toContain(
@@ -503,6 +505,30 @@ describe('GateGuidanceRenderer tier partition, harnessCovers, and reminder budge
       "Attest reminders in the verdict's `reminders` field; checks are recorded by the engine."
     );
   });
+
+  test.each([undefined, 'guidance-only'] as const)(
+    'delivery policy %s does not promise executed criteria or demand a verdict',
+    async (criteriaExecution) => {
+      const renderer = new GateGuidanceRenderer(logger as any, {
+        gateLoader: loaderFor({
+          plain: reminderGate('plain'),
+          check: reminderGate('check', {
+            pass_criteria: [{ type: 'shell_verify', shell_command: ['node', '--version'] }],
+          }),
+        }) as any,
+      });
+      const guidance = await renderer.renderGuidance(
+        ['plain', 'check'],
+        criteriaExecution === undefined ? {} : { criteriaExecution }
+      );
+      expect(guidance).toContain('### Checks');
+      expect(guidance).toContain('### Reminders');
+      expect(guidance).toContain('not executed here');
+      expect(guidance).toContain('advisory guidance');
+      expect(guidance).not.toContain('verdict');
+      expect(guidance).not.toContain('recorded by the engine');
+    }
+  );
 });
 
 /**

@@ -554,7 +554,11 @@ describe('P6.154: the framework-compliance title names no framework (Streamable 
     await switchTo(session, 'react');
     const react = await session.callTool('prompt_engine', { command: `>>${COMPLIANCE_PROMPT}` });
     expect(react.isError).toBe(false);
-    expect(react.text).toContain('framework-compliance');
+    expect(react.text).toContain(
+      'Use these gates as advisory guidance. Their criteria are not executed for single prompts.'
+    );
+    expect(react.text).not.toContain('**Review Required**');
+    expect(react.text).not.toContain('gate_verdict');
     expect(complianceTitles(react.text)).toEqual(['### Framework Compliance']);
     expect(react.text).toContain(
       '**ReACT Framework Guidelines:**\n- Show clear Reasoning and Acting phases'

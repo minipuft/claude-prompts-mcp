@@ -30,7 +30,10 @@
 import { afterEach, describe, expect, test } from '@jest/globals';
 
 import { mkdirSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
+
+import type { GateReview } from '../../src/shared/types/chain-execution.js';
 
 import { createHermeticRoots } from './helpers/child-env.js';
 import { cageerfAnswer } from './helpers/cageerf-answer.js';
@@ -58,6 +61,13 @@ interface ToolOutcome {
 
 interface Session {
   callTool(name: string, args: Record<string, unknown>): Promise<ToolOutcome>;
+  run(chainId: string): {
+    status: string;
+    node: string | null;
+    reviews: Record<string, GateReview>;
+    nodes: Array<{ node_id: string; prompt_id: string; milestone: string }>;
+    records: Array<{ status: string; gate_verdicts_json: string }>;
+  };
   stop(): Promise<void>;
 }
 
@@ -69,6 +79,49 @@ async function startSession(env: Record<string, string>): Promise<Session> {
   const client = new ModernMcpClient(baseUrl, 'gate-enforcement-mode-e2e');
   let nextId = 1;
   return {
+    run: (chainId) => {
+      const db = new DatabaseSync(
+        path.join(env['MCP_RUNTIME_ROOT']!, 'runtime-state', 'state.db'),
+        { readOnly: true }
+      );
+      try {
+        const row = db
+          .prepare(
+            'SELECT session_id, run_status, current_node_id, state FROM chain_runs WHERE chain_id = ?'
+          )
+          .get(chainId) as
+          | {
+              session_id: string;
+              run_status: string;
+              current_node_id: string | null;
+              state: string;
+            }
+          | undefined;
+        if (row === undefined) throw new Error(`Missing persisted run ${chainId}`);
+        return {
+          status: row.run_status,
+          node: row.current_node_id,
+          reviews:
+            (JSON.parse(row.state) as { reviews?: Record<string, GateReview> }).reviews ?? {},
+          nodes: db
+            .prepare(
+              'SELECT node_id, prompt_id, milestone FROM chain_run_nodes WHERE session_id = ? ORDER BY position'
+            )
+            .all(row.session_id) as Array<{
+            node_id: string;
+            prompt_id: string;
+            milestone: string;
+          }>,
+          records: db
+            .prepare(
+              'SELECT status, gate_verdicts_json FROM execution_records WHERE session_id = ?'
+            )
+            .all(row.session_id) as Array<{ status: string; gate_verdicts_json: string }>,
+        };
+      } finally {
+        db.close();
+      }
+    },
     callTool: async (name, args) => {
       const outcome = await client.callToolWithNotifications(name, args, nextId++);
       const result = outcome.result as
@@ -119,6 +172,7 @@ describe('Streamable HTTP: a FAIL follows the gate declared enforcement_mode', (
         description: `e2e gate ${id}`,
         guidance: `GUIDANCE-${id}`,
         enforcement_mode: mode,
+        pass_criteria: [{ type: 'inline_guidance' }],
       });
       expect(created.isError).toBe(false);
     }
@@ -169,6 +223,185 @@ describe('Streamable HTTP: a FAIL follows the gate declared enforcement_mode', (
       gate_verdict: verdict,
     });
   }
+
+  test('advisory single omits a verdict and completes without a mandatory review', async () => {
+    const session = await authoredSession();
+    const start = await session.callTool('prompt_engine', {
+      command: '>>em_a',
+      gates: [ADVISE_GATE],
+    });
+    const chainId = chainIdOf(start.text);
+    expect(start.text).toContain('advisory guidance');
+    expect(start.text).not.toContain('Review Required');
+    expect(start.text).not.toContain('gate_verdict=');
+    expect(session.run(chainId).reviews).toEqual({});
+    const done = await session.callTool('prompt_engine', {
+      chain_id: chainId,
+      user_response: cageerfAnswer('answer'),
+    });
+    expect(done.isError).toBe(false);
+    expect(done.text).toContain('Execution complete.');
+    const persisted = session.run(chainId);
+    expect(persisted.status).toBe('completed');
+    expect(persisted.node).toBeNull();
+    expect(persisted.reviews).toEqual({});
+    expect(persisted.records.some((row) => row.status === 'completed')).toBe(true);
+  }, 180000);
+
+  test.each(['omitted', 'FAIL', 'PASS'] as const)(
+    'explicit blocking chain: %s verdict agrees with persisted hold and history',
+    async (verdict) => {
+      const session = await authoredSession();
+      const id = `em_review_${verdict.toLowerCase()}`;
+      const created = await session.callTool('resource_manager', {
+        resource_type: 'prompt',
+        action: 'create',
+        id,
+        name: id,
+        category: 'general',
+        description: 'Bounded blocking review control',
+        user_message_template: 'chain',
+        gate_configuration: OPT_OUT,
+        chain_steps: [
+          { promptId: 'em_a', stepName: 'A', inlineGateIds: [BLOCK_GATE] },
+          { promptId: 'em_b', stepName: 'B' },
+        ],
+      });
+      expect(created.isError).toBe(false);
+      const start = await session.callTool('prompt_engine', { command: `>>${id}` });
+      const chainId = chainIdOf(start.text);
+      const initial = session.run(chainId);
+      const firstNode = initial.nodes[0]!.node_id;
+      expect(initial.node).toBe(firstNode);
+      expect(initial.reviews[firstNode]?.gateTiers?.[BLOCK_GATE]).toBe('reminder');
+      const reply = await session.callTool('prompt_engine', {
+        chain_id: chainId,
+        user_response: cageerfAnswer('step A'),
+        ...(verdict === 'omitted'
+          ? {}
+          : {
+              gate_verdict:
+                verdict === 'PASS'
+                  ? {
+                      overall: 'PASS',
+                      rationale: 'bounded control',
+                      reminders: { satisfied: [BLOCK_GATE], not_applicable: [] },
+                    }
+                  : 'GATE_REVIEW: FAIL - bounded control',
+            }),
+      });
+      expect(reply.isError).toBe(false);
+      const persisted = session.run(chainId);
+      if (verdict === 'PASS') {
+        expect(persisted.node).toBe(persisted.nodes[1]!.node_id);
+        expect(persisted.reviews[firstNode]).toBeUndefined();
+        expect(reply.text).toContain(STEP_B_MARKER);
+        const recorded = persisted.records.flatMap(
+          (row) => JSON.parse(row.gate_verdicts_json) as unknown[]
+        );
+        expect(recorded).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ gateId: BLOCK_GATE, verdict: 'PASS', tier: 'reminder' }),
+          ])
+        );
+      } else {
+        expect(persisted.node).toBe(firstNode);
+        expect(persisted.status).not.toBe('completed');
+        expect(persisted.reviews[firstNode]?.phase).toBe('awaiting-verdict');
+        expect(persisted.reviews[firstNode]?.attemptCount).toBe(verdict === 'FAIL' ? 1 : 0);
+        expect(persisted.reviews[firstNode]?.history).toHaveLength(verdict === 'FAIL' ? 1 : 0);
+        expect(reply.text).toContain('Gate Review Required');
+        expect(reply.text).not.toContain(STEP_B_MARKER);
+        expect(reply.text).not.toContain('Chain complete');
+      }
+    },
+    180000
+  );
+
+  test('deferred single review classifies loaded reminders and checks without inventing criterion results', async () => {
+    const session = await authoredSession();
+    const created = await session.callTool('resource_manager', {
+      resource_type: 'gate',
+      action: 'create',
+      id: 'em-check',
+      name: 'Configured Check',
+      description: 'A single prompt must not execute this check',
+      guidance: 'Inspect the result',
+      enforcement_mode: 'blocking',
+      pass_criteria: [{ type: 'shell_verify', shell_command: ['node', '--version'] }],
+    });
+    expect(created.isError).toBe(false);
+    const start = await session.callTool('prompt_engine', {
+      command: '>>em_a',
+      gates: [BLOCK_GATE, 'em-check'],
+    });
+    const chainId = chainIdOf(start.text);
+    expect(session.run(chainId).reviews).toEqual({});
+    const failed = await session.callTool('prompt_engine', {
+      chain_id: chainId,
+      user_response: cageerfAnswer('single output'),
+      gate_verdict: 'GATE_REVIEW: FAIL - needs acceptance',
+    });
+    expect(failed.isError).toBe(false);
+    const persisted = session.run(chainId);
+    const review = persisted.reviews[persisted.nodes[0]!.node_id]!;
+    expect(persisted.status).not.toBe('completed');
+    expect(persisted.node).toBe(review.nodeId);
+    expect(review.gateTiers).toEqual({ [BLOCK_GATE]: 'reminder', 'em-check': 'check' });
+    expect(review.checkResults).toBeUndefined();
+    expect(failed.text).toContain('Review Required');
+    expect(failed.text).toContain('No criterion results are recorded');
+    expect(failed.text).toContain(`"satisfied": ["${BLOCK_GATE}"]`);
+    expect(failed.text).toContain('"index": 2');
+    expect(failed.text).not.toContain('"index": 1');
+    expect(review.history).toHaveLength(1);
+  }, 180000);
+
+  test('terminal single response agrees with persisted completion and offers only Re-run', async () => {
+    const session = await authoredSession();
+    const start = await session.callTool('prompt_engine', {
+      command: '>>em_a',
+      gates: [ADVISE_GATE],
+    });
+    const chainId = chainIdOf(start.text);
+    const done = await session.callTool('prompt_engine', {
+      chain_id: chainId,
+      user_response: cageerfAnswer('done'),
+    });
+    expect(done.text).toContain('Execution complete.');
+    expect(done.text).toContain('Re-run:');
+    expect(done.text).not.toContain('Continue:');
+    expect(done.text).not.toContain('Review Required');
+    expect(done.text).not.toContain('gate_verdict=');
+    const persisted = session.run(chainId);
+    expect(persisted.status).toBe('completed');
+    expect(persisted.node).toBeNull();
+    expect(persisted.reviews).toEqual({});
+    expect(persisted.records.some((row) => row.status === 'completed')).toBe(true);
+  }, 180000);
+
+  test('terminal compiled chain has no continuation and retains completed node history', async () => {
+    const session = await authoredSession();
+    const start = await session.callTool('prompt_engine', { command: '>>em_a --> >>em_b' });
+    const chainId = chainIdOf(start.text);
+    await session.callTool('prompt_engine', {
+      chain_id: chainId,
+      user_response: cageerfAnswer('A'),
+    });
+    const done = await session.callTool('prompt_engine', {
+      chain_id: chainId,
+      user_response: cageerfAnswer('B'),
+    });
+    expect(done.isError).toBe(false);
+    expect(done.text).toContain('Chain complete');
+    expect(done.text).not.toContain('Continue:');
+    expect(done.text).not.toContain('Next: chain_id=');
+    const persisted = session.run(chainId);
+    expect(persisted.status).toBe('completed');
+    expect(persisted.node).toBeNull();
+    expect(persisted.reviews).toEqual({});
+    expect(persisted.nodes.map((node) => node.milestone)).toEqual(['completed', 'completed']);
+  }, 180000);
 
   test('blocking holds, advisory advances with a warning, and the warning is the gate', async () => {
     const session = await authoredSession();

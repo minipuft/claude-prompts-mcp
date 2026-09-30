@@ -41,6 +41,7 @@ export class DelegationRenderer {
     const strategy = this.resolveStrategy(payload);
     const model = strategy.resolveModel(payload);
     const toolCall = strategy.formatToolCall(payload.agentType, model, payload.mode);
+    const modelHint = strategy.formatModelHint?.(payload);
     const constraints = strategy.formatConstraints();
 
     const verdictHint = payload.hasGates
@@ -74,6 +75,7 @@ export class DelegationRenderer {
       SECTION_DELIMITER,
       '',
       toolCall,
+      ...(modelHint === undefined ? [] : [modelHint]),
       `\u2192 Prompt: Pass the EXECUTION BRIEF above (everything between the BRIEF delimiters) as the agent's prompt`,
       ...resultLines,
       '',
