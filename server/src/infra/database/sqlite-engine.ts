@@ -14,8 +14,9 @@
  * Schema Strategy:
  * The complete schema is embedded in this file (SSOT). On startup:
  * - Fresh DB: create all tables from embedded schema
- * - Matching version: skip (fast path)
- * - Version mismatch: snapshot durable tables, drop all, recreate, restore
+ * - Matching version: refresh views and run existing startup checks
+ * - Older version: snapshot durable tables, drop all, recreate, restore
+ * - Newer or malformed authority: refuse before WAL, schema or repair mutation
  *
  * Most of state.db is reconstructible: resource_index (including tools) is rebuilt
  * from YAML on startup, chain sessions and framework state are interrupted by the
@@ -203,10 +204,10 @@ import { STATE_DB_WRITER_PRAGMAS } from '#shared/utils/runtime-state-location.js
  * constraints being live.
  *
  * `version_history` is `durable`, so its rows ride the snapshot/restore round-trip and come back
- * with `tree_hash` NULL by column intersection. A v28-era server opening a v29 database drops both
- * new tables (they are not in ITS `DURABLE_TABLE_NAMES`) and keeps `version_history` intact: the
- * downgrade costs byte-exact restore, never history, and the startup check repairs the rows whose
- * trees it took with it.
+ * with `tree_hash` NULL by column intersection. Older, unguarded servers can drop tables their
+ * `DURABLE_TABLE_NAMES` does not know. This engine refuses a newer schema before mutation;
+ * incompatible legacy writers must still be retired or isolated. The startup check repairs
+ * surviving history rows whose trees a legacy downgrade already removed.
  *
  * `DROPPED_ON_THIS_BUMP` stays empty and `DROPPED_AT_VERSION` does not move: nothing is discarded.
  *
@@ -625,6 +626,9 @@ export class SqliteEngine implements DatabasePort {
       // Open file-backed database (creates file if not exists)
       this.db = new DatabaseSync(this.dbPath);
 
+      // Refuse incompatible or malformed authority before even changing the journal mode.
+      this.getSupportedSchemaVersion();
+
       // Enable WAL mode for concurrent reader access (Python hooks, skills-sync CLI)
       this.db.exec('PRAGMA journal_mode=WAL');
 
@@ -637,7 +641,7 @@ export class SqliteEngine implements DatabasePort {
         this.db.exec(pragma);
       }
 
-      // Ensure schema is current (creates or recreates if version mismatch)
+      // Ensure schema is current (creates fresh or recreates an older version)
       const schemaOutcome = this.ensureSchema();
       this.assertSchemaMatchesContracts();
 
@@ -657,6 +661,16 @@ export class SqliteEngine implements DatabasePort {
       enforceRetention(this, this.logger);
       this.logger.info('SQLite database initialized successfully');
     } catch (error) {
+      this.initialized = false;
+      try {
+        this.db?.close();
+      } catch (closeError) {
+        this.logger.warn(
+          `Failed to close SQLite database after initialization failure: ${String(closeError)}`
+        );
+      } finally {
+        this.db = null;
+      }
       const msg = error instanceof Error ? error.message : String(error);
       const stack = error instanceof Error ? error.stack : undefined;
       this.logger.error(`Failed to initialize SQLite database: ${msg}`);
@@ -761,7 +775,7 @@ export class SqliteEngine implements DatabasePort {
   /**
    * Ensure database schema is current.
    *
-   * Strategy: embedded schema is the SSOT. On version mismatch, snapshot DURABLE_TABLES,
+   * Strategy: embedded schema is the SSOT. On an older version, snapshot DURABLE_TABLES,
    * drop everything, recreate from the embedded schema, then restore the snapshot. The
    * snapshot/restore round-trip is what lets durable rows survive while still letting
    * their DDL evolve — preserving the table in place instead would freeze its shape,
@@ -772,7 +786,7 @@ export class SqliteEngine implements DatabasePort {
    * nothing to do in the second case, and `false` said both.
    */
   private ensureSchema(): 'current' | 'created' | 'recreated' {
-    const currentVersion = this.getSchemaVersion();
+    const currentVersion = this.getSupportedSchemaVersion();
 
     if (currentVersion === SCHEMA_VERSION) {
       // Tables are current, but views must still refresh: a stale view survives every
@@ -1557,17 +1571,58 @@ export class SqliteEngine implements DatabasePort {
   /**
    * Get current schema version.
    *
-   * The single reader of `schema_version`: `ensureSchema` calls it rather than keeping a private
-   * byte-identical twin, which is what it did until P4.91.
+   * Missing authority means fresh only when no application schema exists. An existing authority
+   * must contain exactly one positive integer; failed reads and malformed rows refuse startup.
    */
   getSchemaVersion(): number {
     try {
-      const result = this.queryOne<{ version: number }>(
-        'SELECT MAX(version) as version FROM schema_version'
+      const authority = this.queryOne<{ type: string }>(
+        "SELECT type FROM sqlite_master WHERE name = 'schema_version'"
       );
-      return result?.version ?? 0;
-    } catch {
-      return 0;
+      if (authority === null) {
+        const existing = this.queryOne<{ name: string }>(
+          "SELECT name FROM sqlite_master WHERE type IN ('table', 'view') AND name NOT GLOB 'sqlite_*' LIMIT 1"
+        );
+        if (existing !== null) {
+          throw new Error(
+            `schema_version is absent but application schema exists (${existing.name})`
+          );
+        }
+        return 0;
+      }
+      if (authority.type !== 'table') {
+        throw new Error('schema_version must be a table');
+      }
+      const rows = this.query<{ version: unknown }>('SELECT version FROM schema_version');
+      const version = rows[0]?.version;
+      if (
+        rows.length !== 1 ||
+        typeof version !== 'number' ||
+        !Number.isSafeInteger(version) ||
+        version <= 0
+      ) {
+        throw new Error('schema_version must contain exactly one positive safe integer version');
+      }
+      return version;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Cannot read schema authority at ${this.dbPath} (supported schema ${SCHEMA_VERSION}): ${msg}. ` +
+          'Use a compatible runtime to inspect/recover this database, or set MCP_RUNTIME_ROOT to an isolated directory.',
+        { cause: error }
+      );
     }
+  }
+
+  private getSupportedSchemaVersion(): number {
+    const version = this.getSchemaVersion();
+    if (version > SCHEMA_VERSION) {
+      throw new Error(
+        `Database at ${this.dbPath} has schema ${version}, newer than supported schema ${SCHEMA_VERSION}. ` +
+          'Use a compatible server runtime, or set MCP_RUNTIME_ROOT to an isolated directory. ' +
+          'Retire or isolate incompatible writers before recovering the shared database.'
+      );
+    }
+    return version;
   }
 }

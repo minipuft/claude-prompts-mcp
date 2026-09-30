@@ -467,12 +467,28 @@ rename — "rename touches history" otherwise invites a speculative fix.
 fabricate file bytes that never existed on disk, which is worse than a NULL. Old rows keep
 restoring the way they always did.
 
-**Downgrade is defined, and it costs fidelity rather than history.** A v28-era server opening a
-v29 database snapshots durable tables using ITS `DURABLE_TABLE_NAMES`, which does not contain the
-two new tables, so `dropAllTables` destroys every object and entry while `version_history` survives
-with `tree_hash` dropped by column intersection. **Lost: byte-exact restore. Not lost: any
-history.** No version-floor refusal guards this on purpose — it would turn a recoverable
-degradation into a server that will not start. Re-upgrading is repaired by the startup check.
+## Schema Compatibility and Initialization
+
+**An engine refuses a newer database rather than recreating it.** Its durable-table inventory
+cannot preserve tables introduced by a later generation. `SqliteEngine` checks compatibility before
+changing WAL mode, tables, views or repair state, on both STDIO and Streamable HTTP startup. The
+error names the database path, observed and supported versions, and the compatible-runtime or
+isolated-`MCP_RUNTIME_ROOT` remedy. This changes startup policy without a schema-version bump.
+
+`schema_version` must be a table containing exactly one positive safe-integer version. Empty or
+multiple records, invalid values, wrong shape and unreadable authority refuse initialization. Missing
+authority means a fresh database only when no application tables or views exist. Fresh creation,
+current-version reopening and older-version upgrades remain supported; upgrades carry the declared
+durable tables through snapshot/drop/recreate/restore. Failure clears initialization state and closes
+the handle; if closing also fails, the original initialization error remains the reported failure.
+
+**The check belongs to initialization, not every operation.** An already-open process does not
+revalidate a schema another writer replaces. Legacy binaries without this guard can still recreate
+a newer database and discard durable tables they do not know. Isolate or retire incompatible writers;
+changing client homes alone does not isolate a shared runtime root. Forward upgrading can preserve
+surviving history, but cannot recreate missing historical object bytes. Recovery requires a coherent
+backup and durable-table inventory, then verification on a copy before coordinated compatible writers
+resume. See [Recover a shared runtime](../guides/troubleshooting.md#recover-a-shared-runtime-after-schema-incompatibility).
 
 ## A Version Number Is an Identity, and Schema v28 Enforces It
 

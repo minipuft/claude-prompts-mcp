@@ -10,8 +10,18 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 
-import { jest, describe, it, expect, beforeAll, afterAll } from '@jest/globals';
+import {
+  jest,
+  describe,
+  it,
+  expect,
+  beforeAll,
+  afterAll,
+  beforeEach,
+  afterEach,
+} from '@jest/globals';
 
 import { SqliteEngine, SqliteStateStore } from '../../../src/infra/database/index.js';
 import { testScratchPath } from '../../helpers/scratch-path.js';
@@ -188,6 +198,134 @@ describe('SQLite State Backend', () => {
         organization_id: 'org-canonical',
         workspace_id: 'workspace-canonical',
       });
+    });
+  });
+});
+
+describe('Schema authority refusal', () => {
+  let testDir: string;
+  let supportedVersion: number;
+  beforeEach(async () => {
+    testDir = testScratchPath('sqlite-schema-refusal');
+    await fs.mkdir(testDir, { recursive: true });
+    const fresh = await SqliteEngine.getInstance(mockLogger as never, {
+      dbPath: path.join(testDir, 'supported.db'),
+    });
+    await fresh.initialize();
+    supportedVersion = fresh.getSchemaVersion();
+    await fresh.shutdown();
+  });
+  afterEach(async () => {
+    await SqliteEngine.shutdownInstance();
+    await fs.rm(testDir, { recursive: true, force: true });
+  });
+
+  it('refuses malformed authority without writes and closes the real failed connection', async () => {
+    const fixtures = [
+      ['empty', 'CREATE TABLE schema_version(version);', /positive safe integer/],
+      [
+        'multiple',
+        'CREATE TABLE schema_version(version); INSERT INTO schema_version VALUES(32),(33);',
+        /positive safe integer/,
+      ],
+      ['wrong-object', 'CREATE VIEW schema_version AS SELECT 33 AS version;', /must be a table/],
+      [
+        'wrong-column',
+        'CREATE TABLE schema_version(other); INSERT INTO schema_version VALUES(33);',
+        /no such column/,
+      ],
+      ['missing', '', /schema_version is absent but application schema exists/],
+      [
+        'unsafe-integer',
+        'CREATE TABLE schema_version(version); INSERT INTO schema_version VALUES(9007199254740992);',
+        /too large to be represented as a JavaScript number/,
+      ],
+      ...['NULL', "'invalid'", '0', '-1', '1.5'].map<[string, string, RegExp]>((value) => [
+        value,
+        `CREATE TABLE schema_version(version); INSERT INTO schema_version VALUES(${value});`,
+        /positive safe integer/,
+      ]),
+    ] satisfies Array<[string, string, RegExp]>;
+    for (const [name, sql, reason] of fixtures) {
+      const dbPath = path.join(testDir, `${encodeURIComponent(name)}.db`);
+      const seed = new DatabaseSync(dbPath);
+      try {
+        seed.exec(
+          `${sql} CREATE TABLE sentinel(payload BLOB); INSERT INTO sentinel VALUES(x'00ff');`
+        );
+      } finally {
+        seed.close();
+      }
+      const before = await fs.readFile(dbPath);
+      const engine = await SqliteEngine.getInstance(mockLogger as never, { dbPath });
+      const close = jest.spyOn(DatabaseSync.prototype, 'close');
+      try {
+        await expect(engine.initialize()).rejects.toThrow(reason);
+        expect(engine.isInitialized()).toBe(false);
+        expect(() => engine.getDb()).toThrow('Database not initialized');
+        expect(close).toHaveBeenCalledTimes(1);
+        const closed = close.mock.contexts[0];
+        if (!(closed instanceof DatabaseSync))
+          throw new Error(`No native close observed for ${name}`);
+        expect(() => closed.prepare('SELECT 1')).toThrow();
+        expect(await fs.readFile(dbPath)).toEqual(before);
+      } finally {
+        close.mockRestore();
+        await engine.shutdown();
+      }
+    }
+  });
+
+  it('refuses unreadable authority without overwriting a corrupt database', async () => {
+    const dbPath = path.join(testDir, 'corrupt.db');
+    const before = Buffer.from('not a sqlite database');
+    await fs.writeFile(dbPath, before);
+    const engine = await SqliteEngine.getInstance(mockLogger as never, { dbPath });
+    await expect(engine.initialize()).rejects.toThrow(`Cannot read schema authority at ${dbPath}`);
+    expect(engine.isInitialized()).toBe(false);
+    expect(() => engine.getDb()).toThrow('Database not initialized');
+    expect(await fs.readFile(dbPath)).toEqual(before);
+  });
+
+  it('preserves the schema refusal when closing its failed connection also throws', async () => {
+    const dbPath = path.join(testDir, 'close-error.db');
+    const seed = new DatabaseSync(dbPath);
+    seed.exec('CREATE TABLE schema_version(version);');
+    seed.prepare('INSERT INTO schema_version VALUES(?)').run(supportedVersion + 1);
+    seed.close();
+    const before = await fs.readFile(dbPath);
+    const engine = await SqliteEngine.getInstance(mockLogger as never, { dbPath });
+    const nativeClose = DatabaseSync.prototype.close;
+    let failedHandle: DatabaseSync | undefined;
+    const close = jest.spyOn(DatabaseSync.prototype, 'close').mockImplementationOnce(function (
+      this: DatabaseSync
+    ) {
+      failedHandle = this;
+      throw new Error('injected close failure');
+    });
+    try {
+      await expect(engine.initialize()).rejects.toThrow(
+        `has schema ${supportedVersion + 1}, newer than supported schema ${supportedVersion}`
+      );
+      expect(engine.isInitialized()).toBe(false);
+      expect(() => engine.getDb()).toThrow('Database not initialized');
+      expect(await fs.readFile(dbPath)).toEqual(before);
+    } finally {
+      close.mockRestore();
+      if (failedHandle !== undefined) nativeClose.call(failedHandle);
+    }
+  });
+
+  it('creates the current schema in an existing empty database', async () => {
+    const dbPath = path.join(testDir, 'empty.db');
+    new DatabaseSync(dbPath).close();
+    const engine = await SqliteEngine.getInstance(mockLogger as never, { dbPath });
+    await engine.initialize();
+    expect(engine.getSchemaVersion()).toBe(supportedVersion);
+    expect(engine.query(`SELECT * FROM version_history`)).toEqual([]);
+    engine.run(`INSERT INTO resource_index (id, type, name) VALUES ('fresh', 'prompt', 'Fresh')`);
+    expect(engine.queryOne<{ id: string }>(`SELECT id FROM resource_index`)).toEqual({
+      id: 'fresh',
     });
   });
 });
