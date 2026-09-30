@@ -1,6 +1,7 @@
 # Gates Guide
 
-Gates are quality validation mechanisms that ensure Claude's outputs meet specific criteria before proceeding.
+Gates provide review guidance or evaluate criteria. What they enforce depends on the execution
+shape and the gate's declared enforcement mode.
 
 ## Enforcement Modes
 
@@ -16,8 +17,9 @@ Every gate in a `gate.yaml` declares one or more `pass_criteria` entries; the `t
 > [!IMPORTANT]
 > **Single prompts do not run criteria.** Stage 20 renders synthetic gate-review steps and
 > requires chain steps to do it, so a gated single prompt runs no `pass_criteria` at all — not
-> `shell_verify`, not `script_tool`. Its gates still reach the model as review guidance; they just
-> carry no ground truth. Declare ground-truth criteria on gates you attach to chains.
+> `shell_verify`, not `script_tool`. Its initial gate guidance is advisory, even if a gate
+> declares `enforcement_mode: blocking`: no gate review holds that initial response. Declare
+> ground-truth criteria on gates you attach to chains.
 >
 > **A criterion that cannot be enforced is now refused at load.** `shell_verify` without a
 > `shell_command`, and `script_tool` without a `script_tool_id`, fail gate loading with a message
@@ -39,6 +41,22 @@ Every gate in a `gate.yaml` declares one or more `pass_criteria` entries; the `t
 
 > [!NOTE]
 > The former `content_check` and `pattern_check` types have been renamed to `inline_guidance` (commit `380655e4`). Neither had a runtime enforcement path wired — both rendered guidance text and relied on the agent's `GATE_REVIEW` self-report. The rename makes the actual behavior honest. See [Phase Guards Guide](./phase-guards.md) for `framework_compliance` and the schema header in `server/src/engine/gates/core/gate-schema.ts` for the canonical taxonomy.
+
+### Single prompts and pending reviews
+
+A single prompt's first response does not require `gate_verdict`. Returning its output through
+`chain_id` and `user_response` can complete the run without one. Gate guidance alone is not a
+durable review hold.
+
+A submitted `FAIL` can open a real review of that single prompt. A blocking gate then keeps the
+run on its node until the review is resolved. The response requests a verdict or, after retry
+exhaustion, a review action from that pending review's own gate list. An advisory failure can
+advance with a warning when the answer has been captured.
+
+Opening a review does not add single-prompt criteria execution. The review classifies loaded
+gates as checks or reminders, but a check classification does not establish a recorded result.
+Use an explicitly blocking gate on a [chain step](../concepts/chains-lifecycle.md#gate-reviews)
+when acceptance must hold the step from its first render.
 
 ### Declared Headers — A Guard Cannot Block on What the Prompt Never Said
 
@@ -81,13 +99,13 @@ Criteria gates use inline text criteria that Claude evaluates against its own ou
 >>write-docs :: "use active voice" :: "include code examples"
 ```
 
-### How It Works
+### How It Works in a Chain
 
 1. Claude executes the prompt
 2. Gate criteria are injected into the response context
 3. Claude self-evaluates: `GATE_REVIEW: PASS|FAIL - reason`
-4. If FAIL, automatic retry with feedback (up to 2 attempts)
-5. After max retries, user decides via `gate_action`
+4. A blocking FAIL holds the step for correction within its retry budget
+5. After retry exhaustion, resolve the review with an accepted `gate_action`
 
 ## Shell Verification Gates (Ground Truth)
 
@@ -337,7 +355,9 @@ User gates are hot-reloaded. Editing `gate.yaml` or `guidance.md` in workspace g
 ## Gate Responses
 
 > [!WARNING]
-> The response format is strict: `GATE_REVIEW: PASS - reason` or `GATE_REVIEW: FAIL - reason`. Omitting the prefix or using a different format causes the gate to hang waiting for a verdict.
+> Follow the action shown for the pending review. Prefer the structured `gate_verdict` below;
+> the legacy strings `GATE_REVIEW: PASS - reason` and `GATE_REVIEW: FAIL - reason` are also
+> accepted. Initial advisory single-prompt guidance does not require a verdict.
 
 ### Pass Response
 
@@ -372,9 +392,10 @@ command, or pass `force_restart`. To end a run that is not sitting at a gate, us
 
 ## Verdicts and reminders
 
-A check-tier gate (`shell_verify` / `script_tool`) has already run by the time a review reaches
-the model: the engine recorded its pass/fail from the actual criterion, not from a self-report.
-A `PASS` verdict that walks past a recorded failure is refused, by gate id, rather than accepted:
+When a chain criterion runs, the engine records its result and the review template includes
+that evidence. A deferred single-prompt review can name a check-tier gate without executing it;
+its response says that no criterion results are recorded. A `PASS` verdict that contradicts an
+actual recorded failure is refused by gate id:
 
 ```
 Gate verdict refused: <gate-id[, gate-id...]> recorded a failing check (<summary[; summary...]>).
@@ -383,16 +404,25 @@ Fix the cause and resubmit; the check re-runs on the next review.
 
 The structured verdict's `per_gate` field carries one entry per check-tier gate under review —
 never one for a reminder, since a reminder has no recorded result to enter. Reminder-tier gates
-are instead attested once for the whole review, through the `reminders` field:
+are instead attested once for the whole review, through the `reminders` field. Submit this
+complete object as `gate_verdict` for a reminder-only review:
 
 ```json
 {
-  "satisfied": ["code-quality"],
-  "not_applicable": [
-    { "id": "security-awareness", "reason": "no network code touched" }
-  ]
+  "overall": "PASS",
+  "rationale": "Required review completed.",
+  "reminders": {
+    "satisfied": ["code-quality"],
+    "not_applicable": [
+      { "id": "security-awareness", "reason": "no network code touched" }
+    ]
+  }
 }
 ```
+
+Use only reminder IDs advertised by that review. `satisfied` is an array of IDs;
+`not_applicable` is an array of `{id, reason}` objects, with a reason for each exemption.
+Neither field is a map keyed by gate ID. Reminder attestations are distinct from executed checks.
 
 The legacy string form carries the same attestation as one `REMINDERS:` line, directly after the
 verdict line:

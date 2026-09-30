@@ -300,6 +300,8 @@ export class GateEnforcementAuthority {
    * ({@link createReviewForStep}), a detached node's on its late report ({@link openDetachedReview}),
    * and the review a verdict opens when none was open (the verdict processor's deferred entry).
    * The store never derives the key from where the run stands (R8).
+   * Tiers are populated here before any renderer sees the review, including stepless runs
+   * that never reach stage 20. Caller-supplied classifications retain priority.
    */
   async createReview(
     sessionId: string,
@@ -308,13 +310,20 @@ export class GateEnforcementAuthority {
     options: CreateReviewOptions & Pick<GateReview, 'reviewedOutput' | 'gateTiers'>
   ): Promise<GateReview> {
     const { reviewedOutput, gateTiers, ...reviewOptions } = options;
+    const unclassifiedGateIds = reviewOptions.gateIds.filter(
+      (gateId) => gateTiers?.[gateId] === undefined
+    );
+    const resolvedGateTiers = {
+      ...(await this.deriveGateTiers(unclassifiedGateIds)),
+      ...gateTiers,
+    };
     const review: GateReview = {
       ...(await this.createPendingReview(reviewOptions)),
       nodeId,
       kind,
       phase: 'awaiting-verdict',
       ...(reviewedOutput !== undefined ? { reviewedOutput } : {}),
-      ...(gateTiers !== undefined ? { gateTiers } : {}),
+      gateTiers: resolvedGateTiers,
     };
     await this.chainSessionStore.setReview(sessionId, review);
     return review;
@@ -457,7 +466,6 @@ export class GateEnforcementAuthority {
       ...(maxAttempts !== undefined ? { maxAttempts } : {}),
       metadata: { ...node, sessionId },
       reviewedOutput,
-      gateTiers: await this.deriveGateTiers(gateIds),
     });
   }
 
@@ -484,7 +492,10 @@ export class GateEnforcementAuthority {
 
   /** Tier per gate (`deriveGateTier`); a gate the loader cannot load contributes no entry. */
   private async deriveGateTiers(gateIds: string[]): Promise<Record<string, 'check' | 'reminder'>> {
-    const definitions = this.gateLoader ? await this.gateLoader.loadGates(gateIds) : [];
+    const definitions =
+      this.gateLoader !== undefined && gateIds.length > 0
+        ? await this.gateLoader.loadGates(gateIds)
+        : [];
     return Object.fromEntries(definitions.map((def) => [def.id, deriveGateTier(def)]));
   }
 

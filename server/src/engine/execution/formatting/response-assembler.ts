@@ -1139,9 +1139,8 @@ export class ResponseAssembler {
    * synchronous, and giving it one to answer a question the gate-review stage has already
    * answered would put a second reader on the gate registry for no new fact.
    *
-   * An id with no recorded tier answers `check`, which is the pre-B4 shape — every advertised
-   * gate gets a `per_gate` slot. That keeps a run whose review has not reached stage 20 (the
-   * single-prompt CTA) rendering exactly what it rendered before.
+   * An id with no recorded tier answers `check` so it stays visible in the verdict template.
+   * Classification alone establishes no criterion result; those come from `checkResults`.
    */
   private resolveGateTiers(context: ExecutionContext): ReadonlyMap<string, GateTier> {
     const tiers = context.sessionContext?.pendingReview?.gateTiers;
@@ -1320,20 +1319,16 @@ export class ResponseAssembler {
    */
   private buildNextActionCTA(context: ExecutionContext, gateActive = true): string | null {
     const lines: string[] = ['---'];
-    let hasPrimaryAction = false;
+    if (!this.isRunLatchedComplete(context)) {
+      const hasPrimaryAction = gateActive && this.appendGateAction(lines, context);
 
-    if (gateActive && this.appendGateAction(lines, context)) {
-      hasPrimaryAction = true;
-    }
+      this.appendVerifyHint(lines, context);
+      this.appendVerifyBudget(lines, context);
+      this.appendLoopHint(lines, context);
 
-    this.appendVerifyHint(lines, context);
-    this.appendVerifyBudget(lines, context);
-    this.appendLoopHint(lines, context);
-
-    // A completed run has nothing to continue: the reply that completes it offers the re-run only
-    // (R164). The chain path's completion message already reads the same latch.
-    if (!hasPrimaryAction && !this.isRunLatchedComplete(context)) {
-      this.appendSessionAction(lines, context);
+      if (!hasPrimaryAction) {
+        this.appendSessionAction(lines, context);
+      }
     }
 
     this.appendRerunLine(lines, context);
@@ -1341,29 +1336,29 @@ export class ResponseAssembler {
     return lines.length > 1 ? lines.join('\n') : null;
   }
 
-  /** Appends gate verdict CTA when gates are active and a session exists. */
+  /** Appends the action accepted by the actual pending review, including deferred singles. */
   private appendGateAction(lines: string[], context: ExecutionContext): boolean {
     const chainId = context.sessionContext?.chainId;
-    // Review is scoped to the step being rendered (P4-F3): a gate bound to another node has no
-    // business in this step's verdict template. `accumulatedGateIds` is the fallback, not the
-    // preference — the single-prompt path writes no `reviewGateIds`, and its output must stay
-    // byte-identical.
-    const gateIds =
-      context.state.gates.reviewGateIds ?? context.state.gates.accumulatedGateIds ?? [];
+    const pendingReview = context.sessionContext?.pendingReview;
+    if (pendingReview === undefined) return false;
+
+    // Accumulated gates describe guidance, not a durable hold. The review owns the gates this
+    // action answers, even when the run-wide or current-step gate lists differ.
+    const gateIds = pendingReview.gateIds;
     if (gateIds.length === 0 || chainId == null || chainId.length === 0) return false;
 
-    const pendingReview = context.sessionContext?.pendingReview;
     // An exhausted review refuses every verdict (R9): offer the moves it accepts, no template.
-    if (pendingReview?.phase === 'exhausted') {
+    if (pendingReview.phase === 'exhausted') {
       lines.push('**Review Retry Limit Reached**', '', `**Gates**: ${gateIds.join(', ')}`, '');
       lines.push(EXHAUSTED_REVIEW_CHOICE, '', exhaustedReviewMoves(chainId));
       return true;
     }
+    const checkResults = this.resolveCheckResults(context);
     const structuredTemplate = buildStructuredVerdictTemplate(
       gateIds,
-      pendingReview?.prompts ?? [],
+      pendingReview.prompts,
       this.resolveGateTiers(context),
-      this.resolveCheckResults(context)
+      checkResults
     );
 
     lines.push('**Review Required**');
@@ -1373,7 +1368,11 @@ export class ResponseAssembler {
     // Names what the two halves of the template are for. "Review your output against the gate
     // criteria" asked for a self-grade on every gate, which is what produced five "not
     // applicable" rationales per run and no caught defect (ruling B4).
-    lines.push('Checks are recorded by the engine; attest reminders in one field, then submit:');
+    lines.push(
+      checkResults.size > 0
+        ? 'Recorded check results appear in the template; attest reminders in one field, then submit:'
+        : 'No criterion results are recorded for this review; attest reminders in one field, then submit:'
+    );
     lines.push('');
     lines.push('```');
     lines.push(`chain_id="${chainId}"`);
@@ -1443,7 +1442,7 @@ export class ResponseAssembler {
     lines.push(`Loop mode: autonomous retry (max ${max} iterations)`);
   }
 
-  /** Appends session resume CTA when session exists but no gates. */
+  /** Appends session resume CTA when an active session has no pending review action. */
   private appendSessionAction(lines: string[], context: ExecutionContext): void {
     const chainId = context.sessionContext?.chainId;
     if (chainId == null || chainId.length === 0) return;

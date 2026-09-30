@@ -140,110 +140,34 @@ export class ChainOperatorExecutor {
     const reviewVisibility = this.resolveStepVisibility(stepPrompts, targetIndex);
     const reviewWithheld = new Set<VisibilityItem>(reviewVisibility.withheld);
 
-    // Get original content from last step if available
-    let originalContent = '';
-    if (targetStep) {
-      // Not an assert like `renderNormalStep`'s: this renders the ALREADY-EXECUTED step's content
-      // as review context, and that step's own render refused an unresolvable id before the run
-      // could reach a review. Missing here means the catalog moved mid-run; the review still
-      // renders, with no original content to quote.
-      const convertedPrompt =
-        targetStep.convertedPrompt ||
-        this.convertedPrompts.find((p) => p.id === targetStep.promptId);
+    const convertedPrompt =
+      targetStep?.convertedPrompt ??
+      this.convertedPrompts.find((p) => p.id === targetStep?.promptId);
+    // Only the initial delegated review dispatches a worker. Its authored instructions must
+    // travel with the task; retry reviews keep their abbreviated, parent-facing context.
+    const workerSystemMessage =
+      targetStep?.delegated === true && !isRetry
+        ? this.withRenderedStepStyle(convertedPrompt?.systemMessage, chainContext)
+        : undefined;
 
-      if (convertedPrompt) {
-        // Prioritize currentStepArgs from chainContext (pipeline integration)
-        // Fall back to targetStep.args for backward compatibility
-        const ownArgs =
-          (chainContext['currentStepArgs'] as Record<string, unknown> | undefined) ??
-          targetStep?.args;
-        const stepArgs = this.normalizeStepArgs(ownArgs ?? {}, convertedPrompt);
-        const templateContext: Record<string, unknown> = { ...chainContext, ...stepArgs };
-        this.applyWithheldToTemplateContext(
-          templateContext,
-          reviewWithheld,
-          stepPrompts,
-          targetIndex
-        );
-
-        const renderedTemplate = await this.renderTemplateString(
-          convertedPrompt.userMessageTemplate,
-          templateContext,
-          targetStep.promptId,
-          convertedPrompt.promptDir
-        );
-
-        const intentForReview = this.buildOriginalIntentSection(chainContext, ownArgs);
-        // Second `buildUnknownsSection` call site (the other is the normal step render). Both
-        // respect the decision — a withhold honoured on one render path and not the other is
-        // not a withhold.
-        const unknownsForReview = reviewWithheld.has('unknowns_ledger')
-          ? null
-          : this.buildUnknownsSection(chainContext);
-        originalContent = [
-          '## Original Task Instructions',
-          '',
-          ...(intentForReview ? [intentForReview, ''] : []),
-          ...(unknownsForReview ? [unknownsForReview, ''] : []),
-          renderedTemplate,
-          '',
-          '---',
-          '',
-        ].join('\n');
-      }
-    }
-
-    // Build gate guidance using proper renderer for framework-aware, category-aware rendering.
-    // Not for an exhausted review (P6.45): the guidance asks for a verdict, which that review
-    // refuses (R9). Its render carries the "Retry Limit Reached" moves instead, as the
-    // assembler's CTA and footer already do (P6.23).
-    const reviewExhausted = input.review.phase === 'exhausted';
-
-    // On retry, abbreviate task content — the LLM already has the full task above. An exhausted
-    // review lists no criteria, so it asks for no review against them (R165).
-    if (isRetry) {
-      originalContent = reviewExhausted
-        ? ''
-        : '## Review Context\n\nReview the original task and your output above against the gate criteria.\n\n---\n';
-    }
-    let gateGuidance = '';
-    if (reviewExhausted) {
-      this.logger.debug('[SymbolicChain] Gate guidance withheld: the review is exhausted');
-    } else if (gateGuidanceEnabled && gateIdsToRender.length > 0) {
-      // Get framework and category context if available
-      let frameworkType: string = DEFAULT_FRAMEWORK_ID;
-      let category = 'general';
-
-      const reviewStepContext = await this.resolveFrameworkContext(targetStep ?? undefined, input);
-      if (reviewStepContext) {
-        frameworkType = reviewStepContext.selectedFramework?.type || DEFAULT_FRAMEWORK_ID;
-        category = reviewStepContext.category || 'general';
-      }
-
-      // Use GateGuidanceRenderer to properly render gates (handles temp gates, framework filtering, etc.)
-      if (this.gateGuidanceRenderer) {
-        try {
-          gateGuidance = await this.gateGuidanceRenderer.renderGuidance(gateIdsToRender, {
-            framework: frameworkType,
-            category,
-            promptId: targetStep?.promptId,
-            explicitGateIds,
-          });
-        } catch (error) {
-          this.logger.warn(
-            '[SymbolicChain] Gate guidance rendering failed, using fallback:',
-            error
-          );
-          gateGuidance = this.renderSimpleGateGuidance(gateIdsToRender, inlineGuidanceText);
-        }
-      } else {
-        gateGuidance = this.renderSimpleGateGuidance(gateIdsToRender, inlineGuidanceText);
-      }
-    } else if (gateGuidanceEnabled && inlineGuidanceText) {
-      gateGuidance = this.renderSimpleGateGuidance([], inlineGuidanceText);
-    } else if (!gateGuidanceEnabled) {
-      this.logger.debug('[SymbolicChain] Gate guidance injection suppressed by decision');
-    }
+    const originalContent = await this.renderReviewedTask({
+      targetStep,
+      convertedPrompt,
+      chainContext,
+      stepPrompts,
+      targetIndex,
+      reviewWithheld,
+      isRetry,
+      reviewExhausted: input.review.phase === 'exhausted',
+    });
+    const gateGuidance = await this.renderReviewGateGuidance({
+      input,
+      targetStep,
+      gateGuidanceEnabled,
+      gateIdsToRender,
+      explicitGateIds,
+      inlineGuidanceText,
+    });
 
     // Retry hints, the last review and the retry-limit prompt, read off the review record.
     // Attempt display is handled by ResponseAssembler.buildGateReviewCTA()
@@ -254,7 +178,7 @@ export class ChainOperatorExecutor {
     // same framework block whether it renders normally or as a review. The frequency, not the
     // attempt count, is what spares a later step the block.
     let frameworkGuidance = '';
-    if (frameworkInjectionEnabled && targetStep) {
+    if (frameworkInjectionEnabled && targetStep && !hasFrameworkGuidance(workerSystemMessage)) {
       const guidance = await this.buildFrameworkGuidance(targetStep, input);
       if (guidance) {
         frameworkGuidance = guidance;
@@ -316,7 +240,11 @@ export class ChainOperatorExecutor {
               reviewWithheld
             ),
             manifest: reviewVisibility.manifest,
-            workerLines: [frameworkGuidance, reviewPrompt].filter((part) => part.trim().length > 0),
+            workerLines: [
+              frameworkGuidance,
+              ...((workerSystemMessage ?? '').length > 0 ? [`> ${workerSystemMessage}`] : []),
+              reviewPrompt,
+            ].filter((part) => part.trim().length > 0),
             gateGuidanceEnabled,
           }).lines
         : null;
@@ -347,6 +275,108 @@ export class ChainOperatorExecutor {
           }
         : {}),
     };
+  }
+
+  /** Re-render the reviewed task under its original visibility; retries quote prior context. */
+  private async renderReviewedTask({
+    targetStep,
+    convertedPrompt,
+    chainContext,
+    stepPrompts,
+    targetIndex,
+    reviewWithheld,
+    isRetry,
+    reviewExhausted,
+  }: {
+    targetStep: ChainStepPrompt | undefined;
+    convertedPrompt: ConvertedPrompt | undefined;
+    chainContext: Record<string, unknown>;
+    stepPrompts: readonly ChainStepPrompt[];
+    targetIndex: number;
+    reviewWithheld: ReadonlySet<VisibilityItem>;
+    isRetry: boolean;
+    reviewExhausted: boolean;
+  }): Promise<string> {
+    // An exhausted review offers only gate actions; its omitted criteria cannot be reviewed.
+    if (isRetry && reviewExhausted) return '';
+    if (isRetry) {
+      return '## Review Context\n\nReview the original task and your output above against the gate criteria.\n\n---\n';
+    }
+    // The catalog may have moved after execution; a review still renders without a task quote.
+    if (targetStep === undefined || convertedPrompt === undefined) return '';
+    const ownArgs =
+      (chainContext['currentStepArgs'] as Record<string, unknown> | undefined) ?? targetStep.args;
+    const stepArgs = this.normalizeStepArgs(ownArgs ?? {}, convertedPrompt);
+    const templateContext: Record<string, unknown> = { ...chainContext, ...stepArgs };
+    this.applyWithheldToTemplateContext(templateContext, reviewWithheld, stepPrompts, targetIndex);
+    const renderedTemplate = await this.renderTemplateString(
+      convertedPrompt.userMessageTemplate,
+      templateContext,
+      targetStep.promptId,
+      convertedPrompt.promptDir
+    );
+    const intent = this.buildOriginalIntentSection(chainContext, ownArgs);
+    const unknowns = reviewWithheld.has('unknowns_ledger')
+      ? null
+      : this.buildUnknownsSection(chainContext);
+    return [
+      '## Original Task Instructions',
+      '',
+      ...(intent === null ? [] : [intent, '']),
+      ...(unknowns === null ? [] : [unknowns, '']),
+      renderedTemplate,
+      '',
+      '---',
+      '',
+    ].join('\n');
+  }
+
+  /** Render only guidance the review can act on, using the existing gate renderer/fallback. */
+  private async renderReviewGateGuidance({
+    input,
+    targetStep,
+    gateGuidanceEnabled,
+    gateIdsToRender,
+    explicitGateIds,
+    inlineGuidanceText,
+  }: {
+    input: GateReviewInput;
+    targetStep: ChainStepPrompt | undefined;
+    gateGuidanceEnabled: boolean;
+    gateIdsToRender: readonly string[];
+    explicitGateIds: readonly string[];
+    inlineGuidanceText: string | undefined;
+  }): Promise<string> {
+    if (input.review.phase === 'exhausted') {
+      this.logger.debug('[SymbolicChain] Gate guidance withheld: the review is exhausted');
+      return '';
+    }
+    if (!gateGuidanceEnabled) {
+      this.logger.debug('[SymbolicChain] Gate guidance injection suppressed by decision');
+      return '';
+    }
+    if (gateIdsToRender.length === 0) {
+      return (inlineGuidanceText ?? '').length === 0
+        ? ''
+        : this.renderSimpleGateGuidance([], inlineGuidanceText);
+    }
+    const reviewStepContext = await this.resolveFrameworkContext(targetStep, input);
+    if (this.gateGuidanceRenderer == null) {
+      return this.renderSimpleGateGuidance(gateIdsToRender, inlineGuidanceText);
+    }
+    try {
+      const guidance: string = await this.gateGuidanceRenderer.renderGuidance(gateIdsToRender, {
+        criteriaExecution: 'pipeline',
+        framework: reviewStepContext?.selectedFramework?.type || DEFAULT_FRAMEWORK_ID,
+        category: reviewStepContext?.category || 'general',
+        promptId: targetStep?.promptId,
+        explicitGateIds,
+      });
+      return guidance;
+    } catch (error) {
+      this.logger.warn('[SymbolicChain] Gate guidance rendering failed, using fallback:', error);
+      return this.renderSimpleGateGuidance(gateIdsToRender, inlineGuidanceText);
+    }
   }
 
   /**

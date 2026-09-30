@@ -90,6 +90,65 @@ and the server starts on built-in defaults.
 
 ---
 
+### Recover a shared runtime after schema incompatibility
+
+Use this procedure for `has schema ..., newer than supported schema ...`, `Cannot read schema
+authority ...`, or a running server reporting a missing database column. An initialized process can
+still fail after a different engine generation replaces the schema; a healthy status response alone
+does not establish database compatibility.
+
+1. Identify the database path and every server or CLI writer using it, including their executable
+   generation. Read `SELECT version FROM schema_version;` with a read-only SQLite connection and
+   compare it with the version the intended engine supports. The table requires exactly one positive
+   safe integer; `PRAGMA user_version` is not this server's version authority. If it is already
+   compatible, investigate stale processes rather than forcing a recreate.
+2. Take a SQLite-consistent online backup before recovery. Copying only `state.db` can omit committed
+   WAL contents. For example, choose a new backup filename and use Python's SQLite backup API with
+   the source opened read-only:
+
+   ```bash
+   STATE_DB=/absolute/runtime-root/runtime-state/state.db \
+   RECOVERY_BACKUP=/absolute/backup-directory/state-before-recovery.db python3 - <<'PY'
+   import os
+   import sqlite3
+   from pathlib import Path
+
+   source = Path(os.environ['STATE_DB']).resolve()
+   target = Path(os.environ['RECOVERY_BACKUP']).resolve()
+   if target.exists():
+       raise SystemExit('Choose a new backup filename')
+   with sqlite3.connect(source.as_uri() + '?mode=ro', uri=True) as src:
+       with sqlite3.connect(target) as dst:
+           src.backup(dst)
+   PY
+   ```
+
+   If SQLite cannot read the source, retain the original files and available backups for recovery;
+   do not rewrite the version record to bypass refusal.
+
+3. Inventory the backup's tables, columns and durable contents. Compare `skills_sync_manifests`,
+   `version_history`, `objects` and `version_entries` with the
+   [table contracts](../../server/src/infra/database/table-contracts.ts), and retain unknown tables
+   for investigation. Check available earlier backups. A missing table does not prove it previously
+   held rows; historical bytes can be recovered only from a trustworthy surviving source.
+4. Test the intended compatible engine on a separate copy under its own `MCP_RUNTIME_ROOT`, with
+   resources and configuration resolved independently. A forward upgrade preserves known durable
+   rows through the engine-owned transition; it rebuilds derived tables and discards declared
+   ephemeral state, including chain runs, execution records and `kv_state` settings/argument history.
+   Compare durable values and scope, required columns, and a real prompt execution before accepting
+   the result. Do not delete the original database or patch only the column named by an error.
+5. Coordinate owners before changing the shared file: stop writers and stale clients, account for
+   writes since the online backup, and take a final coherent backup. Apply the verified forward
+   transition with one compatible engine generation, then compare the same inventory and reconnect
+   compatible clients. An unpatched older binary still needs retirement or an isolated runtime root;
+   updating another binary does not add protection to it.
+
+The [schema compatibility policy](../architecture/sqlite-persistence.md#schema-compatibility-and-initialization)
+explains refusal and preservation. Every old-engine smoke fixture needs its own `MCP_RUNTIME_ROOT`;
+changing `HOME` or a client's home does not isolate state when the same workspace remains selected.
+
+---
+
 ## MCP Client Issues
 
 ### Client Won't Connect
@@ -191,8 +250,10 @@ The script — not the caller — is what needs editing.
 **Fix**:
 
 1. Check write permissions on `runtime-state/` directory
-2. Delete `state.db` and restart (sessions will reset)
-3. In CI, use HTTP transport (`--transport=streamable-http`) to avoid STDIO restrictions
+2. Inspect schema compatibility and preserve a coherent backup using
+   [Recover a shared runtime](#recover-a-shared-runtime-after-schema-incompatibility)
+3. Coordinate compatible writers before restarting clients; both transports use the same persistence
+   engine
 
 > [!NOTE]
 > For chain concepts and session management, see [Chains Lifecycle](../concepts/chains-lifecycle.md). For chain step configuration, see [Chain Schema Reference](../reference/chain-schema.md).

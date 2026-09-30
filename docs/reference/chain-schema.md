@@ -118,26 +118,41 @@ chainSteps:
 
 ### Subagent Model
 
-Controls which model tier a delegated step uses. The hint is client-agnostic — each delegation strategy maps it to the appropriate model:
+Requests a capability tier for a delegated step. The client strategy determines how the hint
+affects dispatch:
 
-| Hint       | Claude Code | Codex          | Others         |
-| ---------- | ----------- | -------------- | -------------- |
-| `heavy`    | opus        | codex-high     | Client decides |
-| `standard` | sonnet      | codex-standard | Client decides |
-| `fast`     | haiku       | codex-fast     | Client decides |
+| Hint       | Claude Code model argument | Codex                             | Others         |
+| ---------- | -------------------------- | --------------------------------- | -------------- |
+| `heavy`    | opus                       | Advisory tier; inherit host model | Client decides |
+| `standard` | sonnet                     | Advisory tier; inherit host model | Client decides |
+| `fast`     | haiku                      | Advisory tier; inherit host model | Client decides |
 
-**Resolution priority**: step-level `subagentModel` > prompt-level `subagentModel` > strategy default.
+**Hint priority**: step-level `subagentModel` > prompt-level `subagentModel` > strategy default.
+Claude Code mappings above describe emitted tool arguments; other clients use their own model
+selection behavior.
+
+#### Codex model selection
+
+Codex handoffs inherit the host's current model by default. Declaring `heavy`, `standard`, or
+`fast` adds advisory prose outside the invocation parameters, such as
+`Capability tier: heavy (advisory only)`. The generated `spawn_agent` instructions omit a
+`model` parameter for these hints and when no tier is declared.
+
+The server has no static catalog of the host's callable models. If the client chooses an
+override, it must use a model ID supported by its dispatch tool. The tier hint alone does not
+select that ID. The [worker response format](../concepts/chains-lifecycle.md#worker-response-format)
+is independent of model selection.
 
 **Declaring `subagentModel` marks the step delegated on ANY chain invocation**, not only after an
 explicit `==>` operator. A plain `>>chain` call renders the same delegation CTA and handoff
 envelope for a step carrying `subagentModel` as a command that spells `==>` before it — the
-resolution priority above is unchanged either way. `agentType` alone does not trigger this;
+hint priority above is unchanged either way. `agentType` alone does not trigger this;
 declaring it without `subagentModel` picks which agent a `==>`-delegated step uses without making
 an otherwise-plain step delegated.
 
 ### Agent Type
 
-`subagentModel` picks how capable the sub-agent is; `agentType` picks _which_ agent it is. Set it
+`subagentModel` requests a capability tier; `agentType` picks _which_ agent it is. Set it
 when a step needs a specific specialist rather than the host's general executor.
 
 **Resolution priority**: step-level `agentType` > prompt-level `agentType` > the host's default.
@@ -202,11 +217,11 @@ chainSteps:
   - promptId: fetch_data
     stepName: "Fetch (1/2)"
     retries: 2
-    subagentModel: fast # lightweight model for data fetching
+    subagentModel: fast # request the fast capability tier
 
   - promptId: summarize_data
     stepName: "Summarize (2/2)"
-    subagentModel: heavy # heavy model for synthesis
+    subagentModel: heavy # request the heavy capability tier
     agentType: code-reviewer # a specific host agent instead of the default
     inputMapping:
       content: steps.Fetch (1/2).result

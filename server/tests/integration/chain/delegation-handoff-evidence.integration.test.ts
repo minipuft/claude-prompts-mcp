@@ -24,17 +24,25 @@
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 
 import { DatabaseSync } from 'node:sqlite';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { RemainderProcessor } from '../../../src/engine/execution/capture/remainder-processor.js';
 import { StepCaptureService } from '../../../src/engine/execution/capture/step-capture-service.js';
 import { UnknownObservationProcessor } from '../../../src/engine/execution/capture/unknown-observation-processor.js';
 import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
-import { BRIEF_START } from '../../../src/engine/execution/delegation/brief.js';
+import { BRIEF_START, BRIEF_END } from '../../../src/engine/execution/delegation/brief.js';
+import { resolveDeclaredSections } from '../../../src/engine/frameworks/declared-sections.js';
+import {
+  createFrameworkManager,
+  type FrameworkManager,
+} from '../../../src/engine/frameworks/framework-manager.js';
 import { ResponseAssembler } from '../../../src/engine/execution/formatting/response-assembler.js';
 import { ChainOperatorExecutor } from '../../../src/engine/execution/operators/chain-operator-executor.js';
 import { ChainBlueprintResolver } from '../../../src/engine/execution/parsers/chain-blueprint-resolver.js';
 import { GateEnforcementAuthority } from '../../../src/engine/execution/pipeline/decisions/gates/gate-enforcement-authority.js';
 import { PromptExecutionPipeline } from '../../../src/engine/execution/pipeline/prompt-execution-pipeline.js';
+import { IdentityResolutionStage } from '../../../src/engine/execution/pipeline/stages/03-identity-resolution-stage.js';
 import { SessionManagementStage } from '../../../src/engine/execution/pipeline/stages/13-session-stage.js';
 import { StepResponseCaptureStage } from '../../../src/engine/execution/pipeline/stages/16-response-capture-stage.js';
 import { StepExecutionStage } from '../../../src/engine/execution/pipeline/stages/18-execution-stage.js';
@@ -46,6 +54,8 @@ import { GateVerdictProcessor } from '../../../src/engine/gates/services/gate-ve
 import { ResponseFormatter } from '../../../src/mcp/tools/prompt-engine/processors/response-formatter.js';
 import { ExecutionRecordStore } from '../../../src/modules/chains/execution-record-store.js';
 import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
+import { PromptLoader } from '../../../src/modules/prompts/loader.js';
+import { PromptConverter } from '../../../src/modules/prompts/converter.js';
 import { DEFAULT_WORKFLOW_CAPS } from '../../../src/modules/workflow-ir/node-schema.js';
 import { validateWorkflowIR } from '../../../src/modules/workflow-ir/validator.js';
 import { runFakeWorker } from '../../helpers/delegation/fake-worker.js';
@@ -53,6 +63,7 @@ import { runFakeWorker } from '../../helpers/delegation/fake-worker.js';
 import type { HandoffEvidenceMode } from '../../../src/engine/execution/delegation/handoff-contract.js';
 import type { PipelineStage } from '../../../src/engine/execution/pipeline/stage.js';
 import type { ConvertedPrompt } from '../../../src/engine/execution/types.js';
+import type { ChainStepPrompt } from '../../../src/engine/execution/operators/types.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
 import type { DatabasePort } from '../../../src/shared/types/persistence.js';
 
@@ -228,7 +239,9 @@ const buildPipeline = (options: {
   sessionStore: ChainSessionStore;
   recordStore: ExecutionRecordStore;
   logger: Logger;
-  steps?: ReturnType<typeof parsedChainSteps>;
+  steps?: ReturnType<typeof parsedChainSteps> | ChainStepPrompt[];
+  /** Real identity/framework owners; parser/planner/gate-selection adapters supply fixture inputs. */
+  nativeWorker?: { prompt: ConvertedPrompt; frameworks: FrameworkManager };
   /** Omitted = the collaborators bag carries no mode, which is the shipped default (`required`). */
   evidenceMode?: HandoffEvidenceMode;
   /**
@@ -252,22 +265,42 @@ const buildPipeline = (options: {
     steps = parsedChainSteps(true, options.phaseGuards === true),
     evidenceMode,
   } = options;
+  const prompts = options.nativeWorker === undefined ? PROMPTS : [options.nativeWorker.prompt];
+  const frameworks = options.nativeWorker?.frameworks;
   const chainExecutor = new ChainOperatorExecutor(
     logger as never,
-    PROMPTS,
+    prompts,
     undefined,
     undefined,
-    options.phaseGuards === true
+    frameworks !== undefined
       ? {
-          declaredSectionsProvider: (frameworkId: string) =>
-            frameworkId === GUARD_FRAMEWORK_ID
-              ? [{ header: GUARDED_HEADER, required: true, phaseId: 'context', criteria: [] }]
-              : [],
+          declaredSectionsProvider: (id) => resolveDeclaredSections(() => frameworks, id),
         }
-      : undefined
+      : options.phaseGuards === true
+        ? {
+            declaredSectionsProvider: (frameworkId: string) =>
+              frameworkId === GUARD_FRAMEWORK_ID
+                ? [{ header: GUARDED_HEADER, required: true, phaseId: 'context', criteria: [] }]
+                : [],
+          }
+        : undefined
   );
 
   const realStages: Record<string, PipelineStage> = {
+    ...(frameworks === undefined
+      ? {}
+      : {
+          IdentityResolution: new IdentityResolutionStage(
+            () => ({ mode: 'permissive', allowPerRequestOverride: false, transportMode: 'stdio' }),
+            logger
+          ),
+          PhaseGuardVerification: new PhaseGuardVerificationStage(
+            () => frameworks,
+            () => ({ mode: 'enforce', maxRetries: 2 }),
+            sessionStore,
+            logger
+          ),
+        }),
     SessionManagement: new SessionManagementStage(sessionStore, logger),
     StepResponseCapture: new StepResponseCaptureStage(
       new GateVerdictProcessor(sessionStore, logger),
@@ -310,6 +343,17 @@ const buildPipeline = (options: {
     const real = realStages[name];
     if (real !== undefined) return real;
 
+    if (name === 'FrameworkResolution' && frameworks !== undefined) {
+      return {
+        name,
+        execute: async (context) => {
+          context.frameworkContext = frameworks.generateExecutionContext(prompts[0]!, {
+            userPreference: 'cageerf',
+          });
+        },
+      };
+    }
+
     if (name === 'PhaseGuardVerification' && options.phaseGuards === true) {
       return new PhaseGuardVerificationStage(
         guardedFrameworkRegistry as never,
@@ -341,11 +385,11 @@ const buildPipeline = (options: {
           }
           context.parsedCommand = {
             commandType: 'chain',
-            promptId: 'draft',
+            promptId: steps[0]?.promptId ?? 'draft',
             chainId: 'chain-delegation-handoff-evidence',
             steps,
             promptArgs: {},
-            convertedPrompt: PROMPTS[0],
+            convertedPrompt: prompts[0],
           } as never;
         },
       };
@@ -457,6 +501,145 @@ describe('delegation handoff evidence at resume (Tier 2 row 2.7)', () => {
          ORDER BY execution_id ASC`
       )
       .all(sessionId) as Array<{ step_number: number | null; handoff_evidence: string | null }>;
+
+  // These cases add real identity resolution, resource loading, FrameworkManager/CAGEERF and
+  // phase guards to the lifecycle harness. Parsing/planning/gate-selection adapters provide
+  // fixture inputs; they never populate client identity or manufacture authored instructions.
+  const nativeWorkerHarness = async () => {
+    const promptsRoot = fileURLToPath(new URL('../../../resources/prompts/', import.meta.url));
+    const loader = new PromptLoader(logger);
+    const loaded = loader.loadYamlPrompt(
+      path.join(promptsRoot, 'development/strategic_worker'),
+      path.join(promptsRoot, 'development')
+    );
+    if (loaded === null) throw new Error('Shipped strategic_worker resource did not load');
+    const [prompt] = await new PromptConverter(logger, loader).convertMarkdownPromptsToJson(
+      [loaded.promptData],
+      path.join(promptsRoot, 'development')
+    );
+    if (prompt === undefined || prompt.systemMessage === undefined)
+      throw new Error('Worker authored system was not converted');
+    const frameworks = await createFrameworkManager(logger);
+    expect(frameworks.getFramework('cageerf')).toBeDefined();
+    expect(resolveDeclaredSections(() => frameworks, 'cageerf').length).toBeGreaterThan(0);
+    const steps: ChainStepPrompt[] = [1, 2].map((stepNumber) => ({
+      stepNumber,
+      nodeId: `native-worker-${stepNumber}`,
+      promptId: prompt.id,
+      delegated: true,
+      args: {
+        task: `Bounded row ${stepNumber}`,
+        files: 'server/tests/integration/chain/delegation-handoff-evidence.integration.test.ts',
+      },
+      convertedPrompt: prompt,
+      metadata: { gateInstructions: STEP_GATE_TEXT },
+      frameworkContext: frameworks.generateExecutionContext(prompt, { userPreference: 'cageerf' }),
+    }));
+    const pipeline = buildPipeline({
+      sessionStore,
+      recordStore,
+      logger,
+      steps,
+      nativeWorker: { prompt, frameworks },
+    });
+    const call = (request: Parameters<PromptExecutionPipeline['execute']>[0]) =>
+      pipeline.execute({
+        ...request,
+        _extra: { clientInfo: { name: 'codex-cli', version: 'native-control' } },
+      });
+    return { prompt, call };
+  };
+  const briefBody = (reply: string) => reply.split(BRIEF_START)[1]?.split(BRIEF_END)[0] ?? '';
+  const workerProduct =
+    '## done\nartifacts: server/tests/integration/chain/delegation-handoff-evidence.integration.test.ts\n\n## concerns\nnone\n\n## deviations\nnone\n\n## findings\nverified\n\n## feedback\nclear brief';
+
+  test('trusted Codex identity reaches the first blocking worker review and the next normal delegated brief', async () => {
+    const { call } = await nativeWorkerHarness();
+    const initial = text(await call({ command: '>>strategic_worker' }));
+    const brief = briefBody(initial);
+    expect(initial).toContain('Tool: spawn_agent');
+    expect(initial).not.toContain('Tool: Task');
+    const session = sessionStore.getSession(onlySession().sessionId)!;
+    const next = text(
+      await call({
+        chain_id: session.chainId,
+        user_response: runFakeWorker(brief, { body: workerProduct }),
+        gate_verdict: passVerdict,
+      })
+    );
+    expect(next).toContain('Tool: spawn_agent');
+    expect(next).not.toContain('Tool: Task');
+    expect(next).toContain('node: native-worker-2');
+    expect(next).not.toContain('Structural Review Required');
+    expect(sessionStore.getSession(session.sessionId)?.state.currentNodeId).toBe('native-worker-2');
+    expect(capturedRows(session.sessionId)[0]?.handoff_evidence).toBe('ok');
+  });
+
+  test('real authored worker system appears once with five headings and its mandatory trailer, without declared framework sections', async () => {
+    const { prompt, call } = await nativeWorkerHarness();
+    const initial = text(await call({ command: '>>strategic_worker' }));
+    const authored = prompt.systemMessage!.split('\n')[0]!;
+    const brief = briefBody(initial);
+    expect(brief.split(authored)).toHaveLength(2);
+    expect(brief).toContain('exactly five headings');
+    expect(brief).toContain('done · concerns · deviations · findings · feedback');
+    expect(brief).toContain('This transport envelope is mandatory');
+    expect(brief).toContain('HANDOFF RESULT');
+    expect(brief).toContain('node: native-worker-1');
+    expect(brief).not.toContain('**Summary**:');
+    expect(brief).not.toContain('**Gate Coverage**:');
+    expect(initial.slice(initial.indexOf(BRIEF_END))).toContain('**Summary**:');
+    expect(initial.slice(initial.indexOf(BRIEF_END))).toContain('**Gate Coverage**:');
+    const session = sessionStore.getSession(onlySession().sessionId)!;
+    expect(session.state.stepStates?.get('native-worker-1')?.declaredSections).toEqual([]);
+    const next = text(
+      await call({
+        chain_id: session.chainId,
+        user_response: runFakeWorker(brief, { body: workerProduct }),
+        gate_verdict: passVerdict,
+      })
+    );
+    expect(briefBody(next).split(authored)).toHaveLength(2);
+    expect(session.state.stepStates?.get('native-worker-2')?.declaredSections).toEqual([]);
+    expect(next).not.toContain('Structural Review Required');
+  });
+
+  test('a native delegated retry stays abbreviated and never redispatches authored worker instructions', async () => {
+    const { prompt, call } = await nativeWorkerHarness();
+    const initial = text(await call({ command: '>>strategic_worker' }));
+    const reply = text(
+      await call({
+        chain_id: onlySession().chainId,
+        user_response: runFakeWorker(briefBody(initial), { body: workerProduct }),
+        gate_verdict: 'GATE_REVIEW: FAIL - needs correction',
+      })
+    );
+    expect(reply).toContain('Review Context');
+    expect(reply).not.toContain(BRIEF_START);
+    expect(reply).not.toContain('HANDOFF INSTRUCTIONS');
+    expect(reply).not.toContain(prompt.systemMessage!.split('\n')[0]!);
+    expect(onlySession().state.currentNodeId).toBe('native-worker-1');
+  });
+
+  test.each([{ omitTrailer: true }, { overrideToken: 'wrong-worker' }])(
+    'native worker transport refuses malformed evidence %j without capture or advance',
+    async (failure) => {
+      const { call } = await nativeWorkerHarness();
+      const initial = text(await call({ command: '>>strategic_worker' }));
+      const session = onlySession();
+      const refused = await call({
+        chain_id: session.chainId,
+        user_response: runFakeWorker(briefBody(initial), { body: workerProduct, ...failure }),
+        gate_verdict: passVerdict,
+      });
+      expect(refused.isError).toBe(true);
+      expect(text(refused)).toContain('native-worker-1');
+      expect(sessionStore.getSession(session.sessionId)?.state.currentNodeId).toBe(
+        'native-worker-1'
+      );
+      expect(capturedRows(session.sessionId)).toEqual([]);
+    }
+  );
 
   /**
    * Start the chain and resume step 1 (plain, non-delegated), which advances onto step 2 and

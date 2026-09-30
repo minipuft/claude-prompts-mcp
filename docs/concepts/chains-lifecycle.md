@@ -157,7 +157,7 @@ A gate review is a record of one node's output. It is keyed by the node whose an
 and that node is not always the one the run stands on. Each open review of a run is kept per
 node, so a detached step's review and the current step's review never share a slot.
 
-- **A step's review** opens when the step renders with gates, and grades the answer that comes
+- **A chain step's review** opens when the step renders with gates, and grades the answer that comes
   back for that step. Send the answer and its `gate_verdict` on one call, or the answer first and
   the verdict on the next.
 - **A structural review** opens when an answer is missing its framework's required sections. The
@@ -169,6 +169,18 @@ node, so a detached step's review and the current step's review never share a sl
   [Detached steps](#detached-steps-await-run)).
 - **The final step's review** holds the run open past its last node. The run completes on the
   call that closes it.
+
+A single prompt's initial gate guidance is advisory and opens no gate review, even when a gate
+declares blocking enforcement. A submitted FAIL can open a deferred review; see
+[Single prompts and pending reviews](../guides/gates.md#single-prompts-and-pending-reviews).
+Required review actions and verdict templates follow the actual pending review's own gate list.
+Its check/reminder classifications come from loaded definitions; classification alone is not
+evidence that a criterion ran.
+
+An explicitly blocking chain review holds its node when the answer arrives without a verdict
+or with a FAIL. An accepted PASS clears the review and advances once the answer is captured.
+The server records these transitions; it does not decide from prose whether repository work is
+finished.
 
 **Retry budget.** Each FAIL on a blocking review spends one attempt of the review's budget, shown
 as `attempt n/m` (a gate's `retry_config.max_attempts`, 2 for the default gates; a structural
@@ -182,29 +194,34 @@ and nothing is recorded. Resolve it with `gate_action`:
 | `"skip"`      | Closes the review without a verdict. The step renders again with no review; a detached step's result stands. |
 | `"abort"`     | Stops the run. A detached step's review refuses it; use `cancel: true`.                                      |
 
-An advisory or informational gate's FAIL spends the attempt and closes the review, and the run
-moves on.
+With a captured answer, an advisory or informational gate's FAIL advances with a warning.
+A verdict without the step's answer does not advance it.
 
 ---
 
 ## Completion Semantics
 
-A chain **completes on its final step's PASS gate verdict**, not one call earlier. Concretely:
+A run completes after its final answer is captured and no review, verification, or owed detached
+result holds it open. A blocking final review therefore requires acceptance; an ungated chain
+can complete without a verdict. Concretely:
 
-- The footer on the final step, before its verdict is submitted, states the run is awaiting that
+- The footer on a final step held for review states the run is awaiting its
   verdict — it does not claim completion early.
 - The run's status transitions to `completed` only once no review is open on any of its nodes
   and every detached step it rendered has reported. Completion is decided once per call, after
   the call's answer is graded, so an answer that opens a review cannot complete the run.
-- `notifications/chain/complete` is sent on the call that closes the run's last open review. It
-  is the run's last notification: it follows that call's final verdict, and it is never sent on
-  the call that returns the final answer for review.
+- `notifications/chain/complete` is sent on the call that finishes the run, after the answer and
+  applicable verdict are processed. It is not sent while a final review still holds the run open.
 - A pending inline shell verification (`:: verify:`) holds the run like an open review: when it
   fails on the last step, the run stays `working` and completes on the call whose re-run passes,
   which carries `chain/complete`.
 - The first step is ledgered in `execution_records` on the chain-start call, so
   `system_control(action: "execution_history")` reports the step as planned and executed from the
   first response onward rather than undercounting by one.
+
+Completed single prompts and chains offer Re-run to start fresh. They do not request Continue,
+another step output, or a gate verdict. A genuine pending review still shows its accepted next
+action, including on a final step that has not completed.
 
 ---
 
@@ -458,6 +475,9 @@ not have this effect — see [Subagent Model](../reference/chain-schema.md#subag
 The brief renders between `══...EXECUTION BRIEF...══` delimiters, followed by HANDOFF
 INSTRUCTIONS that point the parent at the delimited block as the sub-agent's prompt. It carries:
 
+- **Authored system instructions** — included once in an initial delegated gate-review brief
+  and in a normal delegated brief. If they already contain framework guidance, that render
+  omits a second framework block.
 - **Template content** — the step's rendered prompt and args, identical to what an inline step
   would render.
 - **`### Quality Gates`** — the step's own gate text. The heading is load-bearing: Python hooks
@@ -486,6 +506,39 @@ INSTRUCTIONS that point the parent at the delimited block as the sub-agent's pro
   is the step's node id when the chain declares one, otherwise `n` followed by the step's number
   (`n2` for step 2 in a chain with no node ids) — one derivation, shared by the brief and the
   resume-side check below.
+
+The initial gated brief uses the current request's resolved client identity, just as a normal
+delegated brief does. A resolved Codex profile receives native `spawn_agent` guidance on both paths; its
+[model tier hints remain advisory](../reference/chain-schema.md#codex-model-selection).
+Review retries deliberately abbreviate the task to Review Context and feedback. They do not
+emit another EXECUTION BRIEF, repeat the authored worker system instructions, or request a new
+worker dispatch.
+
+#### Worker response format
+
+For `strategic_worker`, the authored work product has five headings, in order: `done`,
+`concerns`, `deviations`, `findings`, `feedback`. Apply framework reasoning within those
+headings. The prompt's `framework_gates: false` prevents additional required framework
+sections; it still allows framework guidance.
+
+A requested fenced `HANDOFF RESULT` block is a separate, mandatory transport envelope. Append
+it after `feedback`, echo the supplied `node:` token exactly, and include a proposed gate review
+when the brief requests one. If a separate protocol demands a verdict line, put it before the
+final envelope. Summary and Gate Coverage instructions outside the delimited brief belong to
+the parent and add no worker headings.
+
+The end of a reply looks like this, using the node token from its own brief:
+
+````markdown
+## feedback
+
+Clear brief.
+
+```
+HANDOFF RESULT
+node: step-review
+```
+````
 
 **The step immediately before a delegated step gets a one-line advisory**
 (`⚡ Note: Step N ... is delegated`) instead of a full handoff — everything the worker needs is

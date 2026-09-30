@@ -58,6 +58,10 @@ export class CompositionalGateService implements GateService {
         promptId: context.promptId ?? prompt.id,
       };
 
+      if (context.criteriaExecution !== undefined) {
+        guidanceContext.criteriaExecution = context.criteriaExecution;
+      }
+
       if (context.framework) {
         guidanceContext.framework = context.framework;
       }

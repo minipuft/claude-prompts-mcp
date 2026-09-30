@@ -2499,7 +2499,11 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       expect(json.isError).toBe(false);
       expect(templates(json.text)).toEqual(['BODY-sv_a topic=T-218']);
       expect(json.text).toContain('1. X-218');
-      expect(json.text).toContain('**Review Required**');
+      expect(json.text).toContain(
+        'Use these gates as advisory guidance. Their criteria are not executed for single prompts.'
+      );
+      expect(json.text).not.toContain('**Review Required**');
+      expect(json.text).not.toContain('gate_verdict');
     }, 120000);
 
     test('(b) a JSON-form framework takes effect as the symbolic form', async () => {
@@ -3911,12 +3915,13 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
 
     /**
      * P6.168 / R78 control: a one-node run that nothing grew keeps the single-prompt route. The
-     * reply from its task context on is pinned byte for byte as the route rendered it on
-     * `9262bbdf`, before the route read the run's nodes (the framework preamble above it is the
-     * framework's text, not the route's).
+     * task-context content stays on that route, with advisory reminders and an active-session
+     * continuation. Gate guidance alone opens no review and claims no recorded checks.
      */
     test('P6.168 (c) control: a one-node run with no growth renders through the single-prompt route', async () => {
       const run = await start({ command: '>>sv_a :: "CRIT-ONE"' });
+      expect(runNodes(run.chainId)).toHaveLength(1);
+      expect(runState(run.chainId).reviews).toEqual({});
       const fromTask = run.text
         .slice(run.text.indexOf('## Task Context'))
         .replace(/temp_\d+_[a-z0-9]+/g, 'TEMP')
@@ -3935,27 +3940,12 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
           '',
           '1. CRIT-ONE',
           '',
-          "Attest reminders in the verdict's `reminders` field; checks are recorded by the engine.",
+          'Use these gates as advisory guidance. Their criteria are not executed for single prompts.',
           '',
           '---',
           '',
           '---',
-          '**Review Required**',
-          '',
-          '**Gates**: TEMP',
-          '',
-          'Checks are recorded by the engine; attest reminders in one field, then submit:',
-          '',
-          '```',
-          'chain_id="CHAIN"',
-          'gate_verdict={',
-          '  "overall": "PASS",',
-          '  "rationale": "<overall assessment>",',
-          '  "per_gate": [',
-          '    {"index": 1, "passed": true, "rationale": "TEMP: <why>"}',
-          '  ]',
-          '}',
-          '```',
+          'Continue: `chain_id="CHAIN", user_response="<your output>"`',
           'Re-run: `>>sv_a topic:"" :: \'CRIT-ONE\'`',
         ].join('\n')
       );

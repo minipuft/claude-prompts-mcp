@@ -7,8 +7,11 @@ import type { DelegationMode, DelegationPayload } from './types.js';
 export interface DelegationStrategy {
   readonly clientId: string;
 
-  /** Map semantic capability hint to a client-specific model name. */
+  /** Resolve an executable model name when the host strategy has a supported mapping. */
   resolveModel(payload: DelegationPayload): string | undefined;
+
+  /** Optional advisory prose, rendered separately from tool invocation parameters. */
+  formatModelHint?(payload: DelegationPayload): string;
 
   /**
    * Format the tool invocation block (tool name + parameters). `agentType` is undefined when
@@ -171,22 +174,31 @@ export class ClaudeCodeStrategy implements DelegationStrategy {
 export class CodexStrategy implements DelegationStrategy {
   readonly clientId = 'codex';
 
-  resolveModel(payload: DelegationPayload): string | undefined {
-    if (payload.subagentModel === 'heavy') {
-      return 'codex-high';
-    }
-    if (payload.subagentModel === 'fast') {
-      return 'codex-fast';
-    }
-    return 'codex-standard';
+  resolveModel(_payload: DelegationPayload): string | undefined {
+    // Client profiles identify a dispatch mechanism, not the host's callable model catalog.
+    return undefined;
+  }
+
+  formatModelHint(payload: DelegationPayload): string {
+    const inheritance =
+      "Inherit the current model by default; any override must use a model ID supported by the host's dispatch tool.";
+    return payload.subagentModel === undefined
+      ? `→ Model selection: ${inheritance}`
+      : `→ Capability tier: ${payload.subagentModel} (advisory only). ${inheritance}`;
   }
 
   formatToolCall(
     agentType: string | undefined,
-    model: string | undefined,
+    _model: string | undefined,
     mode: DelegationMode
   ): string {
-    return formatHandoffBlock('→ Tool: spawn_agent (preferred)', agentType, model, 'model', mode);
+    return formatHandoffBlock(
+      '→ Tool: spawn_agent (preferred)',
+      agentType,
+      undefined,
+      'model',
+      mode
+    );
   }
 
   formatConstraints(): string {

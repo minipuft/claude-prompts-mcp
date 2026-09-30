@@ -32,6 +32,7 @@
 
 import * as fs from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -239,6 +240,85 @@ describe('every durable table survives a schema recreate', () => {
     expect(reopened.query(`SELECT * FROM resource_index`)).toHaveLength(0);
 
     await reopened.shutdown();
+  });
+
+  it('refuses a newer schema without changing durable rows, unknown tables, views, or journal mode', async () => {
+    const engine = await SqliteEngine.getInstance(logger as never, { dbPath });
+    await engine.initialize();
+    const currentVersion = engine.getSchemaVersion();
+    for (const table of SEEDED_TABLES) {
+      const seed = SEEDS[table]!;
+      engine.run(seed.sql, [...seed.params]);
+    }
+    await engine.shutdown();
+
+    const future = new DatabaseSync(dbPath);
+    try {
+      future.exec('PRAGMA journal_mode=DELETE');
+      future.prepare('UPDATE schema_version SET version = ?').run(currentVersion + 1);
+      future.exec(`CREATE TABLE future_ledger (payload BLOB NOT NULL);
+        INSERT INTO future_ledger VALUES (x'00ffefbbbf');
+        CREATE VIEW future_view AS SELECT payload FROM future_ledger`);
+    } finally {
+      future.close();
+    }
+    const snapshot = () => {
+      const db = new DatabaseSync(dbPath, { readOnly: true });
+      try {
+        return {
+          schema: db.prepare('SELECT type, name, sql FROM sqlite_master ORDER BY type, name').all(),
+          journal: db.prepare('PRAGMA journal_mode').get(),
+          rows: Object.fromEntries(
+            [...SEEDED_TABLES, 'schema_version', 'future_ledger'].map((table) => [
+              table,
+              normalise(db.prepare(`SELECT * FROM "${table}"`).all()),
+            ])
+          ),
+        };
+      } finally {
+        db.close();
+      }
+    };
+    const before = snapshot();
+    const fileBefore = await fs.readFile(dbPath);
+    expect(before.journal).toEqual({ journal_mode: 'delete' });
+    for (const table of SEEDED_TABLES) expect(before.rows[table]).toHaveLength(1);
+    expect(before.rows['future_ledger']).toEqual([{ payload: [0, 255, 239, 187, 191] }]);
+
+    const refused = await SqliteEngine.getInstance(logger as never, { dbPath });
+    const error: unknown = await refused.initialize().catch((failure: unknown) => failure);
+    expect(await fs.readFile(dbPath)).toEqual(fileBefore);
+    expect(snapshot()).toEqual(before);
+    expect(error).toHaveProperty(
+      'message',
+      expect.stringContaining(
+        `Database at ${dbPath} has schema ${currentVersion + 1}, newer than supported schema ${currentVersion}`
+      )
+    );
+    expect(refused.isInitialized()).toBe(false);
+    expect(() => refused.getDb()).toThrow('Database not initialized');
+  });
+
+  it('reopens a current schema with durable and derived rows intact', async () => {
+    const engine = await SqliteEngine.getInstance(logger as never, { dbPath });
+    await engine.initialize();
+    const currentVersion = engine.getSchemaVersion();
+    for (const table of SEEDED_TABLES) {
+      const seed = SEEDS[table]!;
+      engine.run(seed.sql, [...seed.params]);
+    }
+    engine.run(
+      `INSERT INTO resource_index (id, type, name) VALUES ('current', 'prompt', 'Current')`
+    );
+    const tables = [...SEEDED_TABLES, 'resource_index'];
+    const before = tables.map((table) => normalise(engine.query(`SELECT * FROM "${table}"`)));
+    await engine.shutdown();
+    const reopened = await SqliteEngine.getInstance(logger as never, { dbPath });
+    await reopened.initialize();
+    expect(reopened.getSchemaVersion()).toBe(currentVersion);
+    expect(tables.map((table) => normalise(reopened.query(`SELECT * FROM "${table}"`)))).toEqual(
+      before
+    );
   });
 
   describe('the restore order foreign keys require', () => {
