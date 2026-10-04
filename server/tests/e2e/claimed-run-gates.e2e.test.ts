@@ -1427,13 +1427,16 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
       a: ['nmc212', 'content-structure'],
     });
 
-    // (b)(c) A resume refused for a passed target (R65) leaves the run's own gate held.
+    // (b)(c) A resume refused for an unreachable target (R65) leaves the run's own gate held. The
+    // PASS is what makes `a` unreachable: with no verdict the gate would join `a`'s open review
+    // (R173, P6.279).
     const started = await server.call('prompt_engine', {
       command: '>>sv_p193_chain :: rsm212:"RSM-212"',
     });
     const refusedResume = await server.call('prompt_engine', {
       chain_id: chainIdOf(started.text),
       user_response: 'A out',
+      gate_verdict: PASS,
       gates: [{ name: 'tgt212', criteria: ['TGT-212'], target_step_id: 'a' }],
     });
     expect(refusedResume.text).toContain('[gate-target-passed] node "a"');

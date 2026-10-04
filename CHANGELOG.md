@@ -131,6 +131,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A gate sent with no verdict while its step's review is open now joins that review.** A resume carrying only `gates` for the step under review was refused as never able to fire, although the same gate sent with a FAIL joined the review. It now joins the same way: the review re-renders listing the gate, the next verdict grades it, and no retry attempt is spent, since no verdict was given. An id the review already holds changes nothing, and a gate aimed at a step the run has passed is still refused.
 - Advisory single prompts request a gate verdict only when an actual pending review exists;
   first-render guidance does not imply review enforcement.
 - Initial Codex delegated briefs preserve the worker identity and system instructions.

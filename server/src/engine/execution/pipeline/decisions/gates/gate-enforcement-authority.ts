@@ -28,6 +28,7 @@ import type { GateDefinitionProvider } from '../../../../gates/core/gate-loader.
 import type { LightweightGateDefinition } from '../../../../gates/types.js';
 import type { ExecutionContext, SessionContext } from '../../../context/index.js';
 
+import { acceptsVerdictlessJoin } from '#shared/types/chain-session.js';
 import { parseStepForNode } from '#shared/utils/node-order.js';
 
 // VerdictPattern type is now imported from gates/config
@@ -409,7 +410,9 @@ export class GateEnforcementAuthority {
    * joins the review, which carries it from this call on. The gates are this call's temporary
    * gates in the step's resolved set (`reviewGateIds`) — the set the review opens with when no
    * review is open yet (R146). An id the review already holds is a no-op; attempts, history and
-   * hints are kept. Any other verdict joins nothing: a PASS would close the review ungraded.
+   * hints are kept. A call with no verdict joins too while the review awaits one (R173): it
+   * re-renders the review, and the next verdict grades what joined. Any other verdict joins
+   * nothing: a PASS would close the review ungraded.
    *
    * @returns the stored review, or `review` itself when nothing joined.
    */
@@ -418,7 +421,12 @@ export class GateEnforcementAuthority {
     sessionId: string,
     review: GateReview
   ): Promise<GateReview> {
-    if (this.parseVerdict(context.getGateVerdict(), 'gate_verdict')?.verdict !== 'FAIL') {
+    const raw = context.getGateVerdict();
+    const joins =
+      raw === undefined
+        ? acceptsVerdictlessJoin(review)
+        : this.parseVerdict(raw, 'gate_verdict')?.verdict === 'FAIL';
+    if (!joins) {
       return review;
     }
     const sent = new Set(context.state.gates.temporaryGateIds);
