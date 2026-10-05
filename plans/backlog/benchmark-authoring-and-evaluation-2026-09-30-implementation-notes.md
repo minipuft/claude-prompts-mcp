@@ -1,3 +1,10 @@
+---
+title: Benchmark authoring and evaluation implementation notes
+date: 2026-09-30
+status: backlog
+tags: []
+---
+
 # Benchmark authoring and evaluation — implementation notes
 
 ## 2026-09-30 — future plan saved
