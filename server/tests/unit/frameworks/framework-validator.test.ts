@@ -21,7 +21,6 @@ describe('FrameworkValidator', () => {
     description: 'test framework',
     systemPromptTemplate: 'Prompt',
     executionGuidelines: [],
-    applicableTypes: [],
     priority: 1,
     enabled: true,
     ...overrides,

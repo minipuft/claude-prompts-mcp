@@ -73,7 +73,6 @@ describe('System Control framework action scope propagation', () => {
           description: 'Test',
           priority: 1,
           enabled: true,
-          applicableTypes: [],
           executionGuidelines: [],
         },
       ]),

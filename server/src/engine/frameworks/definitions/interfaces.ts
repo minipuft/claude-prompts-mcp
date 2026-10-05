@@ -9,7 +9,6 @@
 
 // Re-export all framework interfaces from the consolidated types
 export type {
-  ArgumentGuidance,
   ExecutionStep,
   FrameworkGuide,
   JudgePromptDefinition,

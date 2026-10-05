@@ -41,13 +41,12 @@ function buildFrameworkContext(id: string): FrameworkExecutionContext {
       type: id.toUpperCase(),
       systemPromptTemplate: '',
       executionGuidelines: [],
-      applicableTypes: [],
       priority: 0,
       enabled: true,
     },
     systemPrompt: `Apply ${id}.`,
     executionGuidelines: [],
-    metadata: { selectionReason: 'test', confidence: 1, appliedAt: new Date() },
+    metadata: { confidence: 1, appliedAt: new Date() },
   };
 }
 

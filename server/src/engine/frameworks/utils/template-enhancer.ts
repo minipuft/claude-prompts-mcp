@@ -97,13 +97,11 @@ export function convertProcessingSteps(steps: ProcessingStepDefinition[]): Proce
  * Creates a FrameworkEnhancement from a framework definition
  * @param definition - Framework definition from YAML/JSON
  * @param _context - Execution context (currently unused, for future extensions)
- * @param confidence - Confidence score for the enhancement (default: 0.9)
  * @returns FrameworkEnhancement object
  */
 export function createFrameworkEnhancement(
   definition: FrameworkDefinitionForEnhancement,
-  _context: Record<string, unknown> = {},
-  confidence = 0.9
+  _context: Record<string, unknown> = {}
 ): FrameworkEnhancement {
   const processingSteps = definition.phases?.processingSteps ?? [];
   const templateSuggestions = definition.templateSuggestions ?? [];
@@ -114,12 +112,6 @@ export function createFrameworkEnhancement(
     processingEnhancements: convertProcessingSteps(processingSteps),
     frameworkGates: convertFrameworkGates(frameworkGates),
     templateSuggestions: convertTemplateSuggestions(templateSuggestions),
-    enhancementMetadata: {
-      frameworkType: definition.type,
-      confidence,
-      applicabilityReason: `${definition.type} framework provides systematic approach`,
-      appliedAt: new Date(),
-    },
   };
 }
 

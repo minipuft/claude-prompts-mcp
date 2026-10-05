@@ -58,7 +58,6 @@ export interface FrameworkDefinition {
   type: FrameworkType;
   systemPromptTemplate: string;
   executionGuidelines: string[];
-  applicableTypes: string[];
   priority: number;
   enabled: boolean;
   /**
@@ -80,7 +79,6 @@ export interface FrameworkExecutionContext {
   systemPrompt: string;
   executionGuidelines: string[];
   metadata: {
-    selectionReason: string;
     confidence: number;
     appliedAt: Date;
   };
@@ -106,25 +104,11 @@ export interface FrameworkSelectionCriteria {
  * Guidance for creating new prompts based on framework
  */
 export interface PromptCreationGuidance {
-  // Structure guidance for different framework sections
-  structureGuidance: {
-    systemPromptSuggestions: string[];
-    userTemplateSuggestions: string[];
-    argumentSuggestions: ArgumentGuidance[];
-  };
-
   // Framework-specific prompt elements
   frameworkElements: {
     requiredSections: string[];
     optionalSections: string[];
     sectionDescriptions: Record<string, string>;
-  };
-
-  // Quality improvement suggestions
-  qualityGuidance: {
-    clarityEnhancements: string[];
-    completenessChecks: string[];
-    specificityImprovements: string[];
   };
 }
 
@@ -156,12 +140,6 @@ export interface ProcessingGuidance {
 export interface StepGuidance {
   // Framework-specific step sequence
   stepSequence: ExecutionStep[];
-
-  // Step-specific enhancements
-  stepEnhancements: Record<string, string[]>;
-
-  // Quality gates for each step
-  stepValidation: Record<string, string[]>;
 }
 
 /**
@@ -179,27 +157,11 @@ export interface FrameworkEnhancement {
 
   // Template structure suggestions
   templateSuggestions: TemplateEnhancement[];
-
-  // Execution metadata
-  enhancementMetadata: {
-    frameworkType: string;
-    confidence: number;
-    applicabilityReason: string;
-    appliedAt: Date;
-  };
 }
 
 /**
  * Core interfaces for guidance components
  */
-export interface ArgumentGuidance {
-  name: string;
-  type: string;
-  description: string;
-  frameworkReason: string;
-  examples: string[];
-}
-
 export interface ProcessingStep {
   id: string;
   name: string;
@@ -411,25 +373,4 @@ export abstract class BaseFrameworkGuide implements FrameworkGuide {
   abstract validateFrameworkCompliance(prompt: ConvertedPrompt): FrameworkValidation;
 
   abstract getSystemPromptGuidance(context: Record<string, any>): string;
-
-  /**
-   * Helper method to extract combined text from prompt
-   */
-  protected getCombinedText(prompt: ConvertedPrompt): string {
-    return [prompt.systemMessage || '', prompt.userMessageTemplate || '', prompt.description || '']
-      .filter((text) => text.trim())
-      .join(' ');
-  }
-
-  /**
-   * Helper method to create enhancement metadata
-   */
-  protected createEnhancementMetadata(confidence: number, reason: string) {
-    return {
-      frameworkType: this.type,
-      confidence,
-      applicabilityReason: reason,
-      appliedAt: new Date(),
-    };
-  }
 }

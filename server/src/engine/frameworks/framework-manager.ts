@@ -412,7 +412,6 @@ export class FrameworkManager extends BaseResourceHandler<
       systemPrompt,
       executionGuidelines: [...selectedFramework.executionGuidelines],
       metadata: {
-        selectionReason: this.getSelectionReason(selectedFramework, criteria),
         confidence: 1.0,
         appliedAt: new Date(),
       },
@@ -626,7 +625,6 @@ export class FrameworkManager extends BaseResourceHandler<
         type: guide.type,
         systemPromptTemplate,
         executionGuidelines: this.getExecutionGuidelines(guide),
-        applicableTypes: this.getApplicableTypes(guide),
         priority: this.getFrameworkPriority(guide),
         enabled: true,
         // Carried, not re-derived (P4.18, ruling R7): the loader stamped the root it read the
@@ -679,24 +677,6 @@ Apply this framework systematically to ensure comprehensive and structured respo
   }
 
   /**
-   * Get applicable types for framework
-   */
-  private getApplicableTypes(guide: FrameworkGuide): string[] {
-    switch (guide.type) {
-      case 'CAGEERF':
-        return ['chain', 'template'];
-      case 'ReACT':
-        return ['chain'];
-      case '5W1H':
-        return ['template', 'chain'];
-      case 'SCAMPER':
-        return ['template'];
-      default:
-        return ['template'];
-    }
-  }
-
-  /**
    * Get framework priority
    */
   private getFrameworkPriority(guide: FrameworkGuide): number {
@@ -740,19 +720,6 @@ Apply this framework systematically to ensure comprehensive and structured respo
     }
 
     return systemPrompt;
-  }
-
-  /**
-   * Get selection reason for context metadata
-   */
-  private getSelectionReason(
-    _framework: FrameworkDefinition,
-    criteria: FrameworkSelectionCriteria
-  ): string {
-    if (criteria.userPreference && criteria.userPreference !== 'AUTO') {
-      return `User preference: ${criteria.userPreference}`;
-    }
-    return 'Default framework selection';
   }
 }
 
