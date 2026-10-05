@@ -61,7 +61,14 @@ export type CreationFields = Record<CreationType, Record<string, JsonSchema>>;
 
 // These are control/routing inputs, not authored resource contents. Framework identity is id;
 // its `framework` parameter is a selector. full_restart controls process lifecycle after writes.
-const CONTROL_FIELDS = new Set(['resource_type', 'action', 'full_restart', 'framework']);
+// skip_version suppresses version recording for the write; it says nothing about the resource.
+const CONTROL_FIELDS = new Set([
+  'resource_type',
+  'action',
+  'full_restart',
+  'framework',
+  'skip_version',
+]);
 const ALIASES: Record<CreationType, Record<string, string>> = {
   prompt: {
     systemMessage: 'system_message',
