@@ -48,6 +48,14 @@ and not driven. Nothing here is scheduled. An item is picked up by opening it as
 
 ## Smaller findings
 
+- From slice 38: `isSameInlineGate` compares a hand-written field list over a temporary gate, the
+  shape row 1.6 fixed elsewhere, so a new field is ignored when a re-declared inline gate is
+  judged unchanged. `framework:switch` does not list `operation`, unlike the other `framework:*`
+  commands. The published description of `skip_version` still says "on update". The new
+  `scripts/lib/parameter-reads/` files have no type declarations, unlike their siblings. A server
+  still running pre-v35 code against a shared `state.db` writes the old projection key until it
+  restarts, and updated hooks read no pending review for those rows.
+
 - A held-final resume may re-render the last step's template above its review (was P6.63); a
   review render after an inserted or skipped node may name the wrong step's arguments (was P6.73,
   likely closed by a later ruling). Neither re-driven.
