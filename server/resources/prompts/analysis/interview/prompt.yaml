@@ -2,17 +2,13 @@ id: interview
 name: Interview
 category: analysis
 description: >-
-  A stop the planner calls on its own judgment, before a guess becomes a build.
-  Fire it when a taste or metaphor word is about to become a mechanism, a second
-  character complaint lands on one surface, a reference is named ambiguously, a
-  muse or technique pass ends on a fork that would change the build, or a
-  planner-authored bound is about to be judged against the owner's grade. Asks
-  the whole open frontier in one round, each question numbered with a
-  recommended answer and a class, and closes with a rulings block (D1..Dn) for
-  the plan's implementation notes. With `exit` set, it hands off to
-  research_chain, design_muse or tech_recommendation instead, emitting that
-  prompt's arguments and the reason the stop routed there. Protocol:
-  /unknowns Move 3.
+  Evidence-first analysis for taste-to-mechanism, repeated character complaints,
+  ambiguous references, open forks, and self-authored bounds. Probe facts and
+  reuse settled rulings first; ask a focused consequential question or small
+  frontier only when needed. Scope and taste can require answers. Continue
+  independent authorized work; full grilling is manual/deep discovery. Routes to
+  research_chain, design_muse, or tech_recommendation when evidence is missing.
+  Protocol: /unknowns Move 3.
 systemMessageFile: system-message.md
 userMessageTemplateFile: user-message.md
 arguments:
@@ -50,9 +46,8 @@ arguments:
     type: string
     required: false
     description: >-
-      The operator's stated position: exploring | converging | committed.
-      Exploring turns the round into candidate rulings to react to; committed
-      asks nothing and records rulings from the stated position.
+      Operator position: exploring | converging | committed. Reuse settled
+      rulings; ask unresolved consequential choices.
     validation:
       pattern: '^(|exploring|converging|committed)$'
 gateConfiguration:
@@ -73,6 +68,9 @@ gateConfiguration:
         - Facts (repo, filesystem, docs) are probed by the planner, never asked of the operator
       pass_criteria:
         - Every numbered question has a ➡ recommended answer
-        - Every numbered question names a class from architecture, contract, scope, taste
-        - No question in the round depends on the answer to another question in the same round
-        - The output ends in a rulings block, or, for a non-interview exit, that prompt's arguments plus a one-line routing reason
+        - Every numbered question names a class from architecture, contract,
+          scope, taste
+        - No question in the round depends on the answer to another question in
+          the same round
+        - The output ends in a rulings block, or, for a non-interview exit, that
+          prompt's arguments plus a one-line routing reason
