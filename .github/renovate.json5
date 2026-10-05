@@ -120,6 +120,12 @@
       groupName: null,
       reviewers: ["minipuft"],
       automerge: false,
+      // A major update gets no branch or PR until its checkbox is ticked in the Dependency
+      // Dashboard issue, so it costs no CI run until someone chooses to review it. Only a
+      // branch that does not exist yet waits; a major PR already open is unaffected.
+      // Package rules apply after `vulnerabilityAlerts`, so a vulnerability fix whose version
+      // jump is itself a major waits for the checkbox too; Renovate has no matcher to exempt it.
+      dependencyDashboardApproval: true,
     },
     {
       // TypeScript 7 replaces the JavaScript compiler API used by this repository's
