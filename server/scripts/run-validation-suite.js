@@ -201,6 +201,13 @@ export const SUITE = [
     converse: 'unexamined',
   },
   {
+    script: 'validate:authoring-contracts',
+    io: 'read',
+    reads: ['file', 'spawn', 'walk'],
+    converse:
+      'CHECKED both ways — canonical create-command fields must appear in builder schemas, registered prompt arguments and actual adapter output; obsolete fields and incompatible types fail too. Self-test proves missing fields, lost values and empty enumeration fail; isolated Jest mutations additionally exercise edges/budget removal, argument removal, type drift, wrong output keys/actions, unsafe auto-create and nested modern chain field loss. Nested domain semantics and authoring prose remain owned elsewhere.',
+  },
+  {
     script: 'validate:contracts',
     io: 'read',
     reads: ['file', 'spawn', 'walk'],

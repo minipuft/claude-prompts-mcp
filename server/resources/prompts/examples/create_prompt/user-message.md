@@ -4,43 +4,44 @@
 
 ## Canonical Validation
 
-The local adapter only maps author-facing camelCase fields to the canonical resource-manager contract. Structural validation belongs to `resource_manager`.
-
-{% if tool_prompt_builder_result %}
-{{ tool_prompt_builder_result.text }}
-
-The draft has only been previewed. Nothing should be created until the user confirms the validated draft. After confirmation, call `resource_manager` with the same payload and change `action` from `validate` to `create`.
-{% else %}
-The adapter prepared this non-mutating validation call:
+`valid` means the adapter prepared a call, not that the resource is valid. Supplied canonical fields and nested definitions are forwarded unchanged; legacy camelCase aliases remain accepted, with canonical values taking precedence.
 
 ```json
 {{ tool_prompt_builder.auto_execute.params | dump(2) }}
 ```
 
+{% if tool_prompt_builder_result %}
+{{ tool_prompt_builder_result.text }}
+{% else %}
+Run the prepared `resource_manager` validation call. Validation writes no files or versions.
 {% endif %}
 
+Read the canonical validation result, fix errors, and show the complete draft. Create only when authorized; if this task already authorizes creation, do not ask again. Use the same payload with `action:"create"` only after validation succeeds. Verify the write receipt and smoke-render the loaded prompt.
 {% else %}
 Design a prompt for:
 
 - **Name:** {{ name }}
 - **Purpose:** {{ purpose }}
-- **Type:** {{ prompt_type | default("template") }}
+- **Mode:** {{ prompt_type | default("template") }}
 
-Use this bounded workflow:
+1. Inspect related registered prompts with `resource_manager(resource_type:"prompt", action:"inspect", id:<reference>, detail:"full")`. Reuse their conventions and existing child prompts where appropriate.
+2. Draft one complete canonical `resource_manager(resource_type:"prompt", action:"validate", ...)` payload. At least one content form is needed: `user_message_template`, `system_message`, or non-empty `chain_steps`. System and user instructions may coexist, and a chain may have an entry template.
+3. Declare typed `arguments` including required/default/validation settings where needed. A script prompt supplies complete inline `tools` definitions (id, name, executable script content, runtime, trigger, schema); author-controlled file paths and bare tool IDs are not definitions.
+4. Configure only capabilities the purpose needs: `gate_configuration`, `composer`, `injection`, `register_with_mcp` and `mcp_prompt_mode`, `subagent_model` and `agent_type`, or `artifacts`. Inspect current resources and consult the current MCP contract for nested shapes; do not invent parameters or duplicate domain validators.
+5. Validate without mutation, resolve errors, and present the complete draft. Create when authorized using the same payload with `action:"create"`. Existing task authorization is sufficient; otherwise obtain approval of the concrete draft.
+6. Inspect the write receipt: actual resource root, affected files, refresh/loaded state, current version, and category ship status. Reload if needed and smoke-render before reporting completion.
 
-1. Inspect related prompts and reuse established vocabulary.
-2. Draft one canonical payload for `resource_manager(resource_type:"prompt", action:"validate", ...)`.
-3. Use exactly one content form: `user_message_template`, non-empty `chain_steps`, or `system_message`. A chain may also have an entry template when justified.
-4. Define arguments as typed objects. If the prompt owns a script tool, include the complete tool definition (`id`, `name`, executable `script`, runtime/trigger settings, and JSON Schema); do not provide tool IDs or author-controlled file paths.
-5. Run `validate`. Present errors/warnings and the normalized draft. Do not write if validation fails.
-6. Ask for confirmation of the validated draft. Only then run the same payload with `action:"create"`.
-7. Return the write receipt: resource root, affected files, category ship status, refresh status, loaded state, and current version. Smoke-render the prompt after creation.
+## Reusable workflows
 
-For an existing prompt, do not recreate it. Use:
+Chain/workflow design produces a prompt with `chain_steps`, optional `edges`, and `budget`; workflow is an authoring mode, not a resource type. Choose stable node `id`s and `stepName`s. Preserve needed node settings such as args, input/output mappings, retries, framework, inline gates, model/agent, delegated/await, and visibility. Dependency edges compile into an ordered chain; they do not provide conditional branches.
 
-`inspect(detail:"full") → preview(preview_action:"update", expected_version:<current>) → approval → update(expected_version:<current>) → reload → render smoke test → receipt`
+Use existing external `promptId` references only after checking they exist. For new owned children, reference `<chain_id>/<child>` with one child path segment. Creating the parent scaffolds child stubs. Inspect each child by its loaded ID, fill its content, arguments, tools and gates through MCP, then validate the complete assembled workflow with reload/render checks before claiming it is finished. A scaffold is a starting point, not completed authored work.
 
-Do not publish, announce, or otherwise make authored material public without explicit confirmation.
+A persistent chain definition is distinct from `prompt_engine(workflow:{version:1,nodes:...,edges:...,budget:...})`, which submits a workflow run. Detached/delegated workers are spawned by the client using its own agent capabilities; the server sequences and validates their handoffs.
 
-Output the proposed validation payload as JSON, followed by only the unresolved design decisions.
+Output the proposed validation payload and the decisions still needed.
 {% endif %}
+
+## Existing prompt maintenance
+
+Use `inspect(detail:"full") → preview(preview_action:"update", expected_version:<current>) → update(expected_version:<current>) → receipt → reload/render`. Review the concrete preview and honor existing authorization. Do not recreate an existing ID. Public publication needs its own authorization.

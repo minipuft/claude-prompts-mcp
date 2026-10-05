@@ -143,10 +143,17 @@ Instead of expecting users to memorize `resource_manager` parameters, we provide
 - `>>create_prompt` — Prompt/chain authoring
 - `>>create_framework` — Framework authoring
 
-**Two-Phase UX**:
+**Authoring lifecycle**:
 
-1. **Design phase**: Partial args → template shows guidance and examples
-2. **Validation phase**: Complete args → script validates → auto-executes creation
+1. **Design**: Partial args render guidance and examples.
+2. **Prepare**: Complete inputs map into a draft. `create_prompt` calls canonical non-mutating
+   validation; gate/framework builders return non-executing create parameters.
+3. **Create**: The client submits the reviewed draft when authorized, then verifies the write
+   receipt and loaded resource. Server validation owns resource validity.
+
+Separating preparation from mutation keeps an adapter's readiness result from claiming domain
+validity or silently writing a resource. The [authoring contract guard](../guides/mcp-contract-maintenance.md#bundled-authoring-contract-parity)
+checks these projections against canonical fields and actual script output.
 
 **Why Meta-Prompts?**
 

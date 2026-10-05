@@ -484,7 +484,11 @@ User Input → ScriptExecution → ScriptAutoExecute → Template Context
 | **ScriptExecution**   | User args match tool's `schema.json` | Script result → `{{tool_<id>}}`            |
 | **ScriptAutoExecute** | Script returns `auto_execute` block  | MCP tool response → `{{tool_<id>_result}}` |
 
-**Use case**: Meta-prompts like `>>create_gate` that validate input and auto-create resources.
+**Bundled authoring**: `>>create_prompt` uses auto-execute only for the non-mutating
+`resource_manager` validation action. `>>create_gate` and `>>create_framework` return draft create
+parameters without auto-executing them. The client submits an authorized draft; the canonical
+resource handler owns validation and writes. Custom script tools may still emit `auto_execute`
+for supported MCP calls.
 
 See [Script Tools Guide](../guides/script-tools.md) for building script-enabled prompts.
 
@@ -949,7 +953,7 @@ This view answers which rules apply everywhere rather than to one component or o
 | -------------------------- | ------------------------------------------------------------- |
 | MCP command syntax         | [MCP Tooling Guide](../reference/mcp-tools.md)                |
 | Quality gates & validation | [Gates](../guides/gates.md)                                   |
-| Multi-step workflows       | [Chains](../guides/chains.md)                                 |
-| Prompt templates           | [Prompt Authoring Guide](../guides/prompt-authoring-guide.md) |
+| Multi-step workflows       | [Chains Lifecycle](../concepts/chains-lifecycle.md)           |
+| Prompt templates           | [Build Your First Prompt](../tutorials/build-first-prompt.md) |
 | Common issues              | [Troubleshooting](../guides/troubleshooting.md)               |
 | Design decisions           | [Design Decisions](../portfolio/design-decisions.md)          |

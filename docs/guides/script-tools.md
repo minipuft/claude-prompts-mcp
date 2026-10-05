@@ -139,7 +139,9 @@ Approve by re-running the same command, or by naming the tool as `tool:<id>`.
 
 ## Auto-Execute: Chain Scripts to MCP Tools
 
-Scripts can trigger MCP tools automatically. This enables **wizard workflows**: validate input in a script, then invoke `resource_manager`, `prompt_engine`, etc.
+Scripts can trigger MCP tools automatically, for example to compute inputs and then invoke
+`resource_manager` or `prompt_engine`. The target MCP tool still owns its domain validation;
+a script's readiness result does not replace that validation.
 
 ### Response Format
 
@@ -151,10 +153,13 @@ Return this JSON structure to trigger auto-execution:
   "auto_execute": {
     "tool": "resource_manager",
     "params": {
-      "resource_type": "framework",
-      "action": "create",
-      "id": "my-framework",
-      "name": "My Framework"
+      "resource_type": "prompt",
+      "action": "validate",
+      "id": "my_prompt",
+      "name": "My Prompt",
+      "description": "A reusable greeting",
+      "category": "examples",
+      "user_message_template": "Hello {{name}}"
     }
   },
   "warnings": [],
@@ -194,7 +199,9 @@ Parameters: {{ tool_builder.auto_execute.params | dump }}
 
 ## Real-World Example: Framework Builder
 
-The `create_framework` prompt uses auto-execute to create new frameworks.
+The bundled `create_framework` builder prepares a create draft without executing it. This keeps
+field mapping in the adapter and resource validation and persistence in `resource_manager`.
+Custom script tools can still use the general `auto_execute` response described above.
 
 ### Directory Structure
 
@@ -205,64 +212,61 @@ resources/prompts/examples/create_framework/
 └── tools/
     └── framework_builder/
         ├── tool.yaml      # trigger: schema_match
-        ├── schema.json    # Validates framework structure
-        └── script.py      # Returns auto_execute for resource_manager
+        ├── schema.json    # Input types and draft-trigger fields
+        └── script.py      # Returns draft parameters, no auto_execute
 ```
 
-### The Script (Simplified)
+### Prepared Output
 
-```python
-#!/usr/bin/env python3
-import json, sys
+The builder maps supplied canonical fields, preserving false, zero, empty collections and nested
+values. Its `valid:true` reports adapter readiness only. For example, a draft response includes:
 
-def validate(data):
-    errors = []
-    if not data.get("id"):
-        errors.append("Missing: id")
-    if len(data.get("phases", [])) < 2:
-        errors.append("Need at least 2 phases")
-
-    if errors:
-        return {"valid": False, "errors": errors}
-
-    return {
-        "valid": True,
-        "auto_execute": {
-            "tool": "resource_manager",
-            "params": {
-                "resource_type": "framework",
-                "action": "create",
-                **data
-            }
-        }
+```json
+{
+  "valid": true,
+  "validation_scope": "adapter readiness only; resource_manager owns resource validation",
+  "draft": {
+    "tool": "resource_manager",
+    "params": {
+      "resource_type": "framework",
+      "action": "create",
+      "id": "focus",
+      "name": "FOCUS Framework",
+      "description": "Targeted problem solving",
+      "system_prompt_guidance": "Identify the problem, act, then review the result."
     }
-
-print(json.dumps(validate(json.load(sys.stdin))))
+  }
+}
 ```
+
+This response is a mapping example, not a canonically valid framework: phase and gate
+configuration still need authoring. The complete field mapper is the
+[shipped builder](../../server/resources/prompts/examples/create_framework/tools/framework_builder/script.py).
+Its input schema and registered prompt arguments expose current creation fields; framework type
+and version are derived by the server.
 
 ### Usage
 
-**Design mode** — Get guidance on creating a framework:
+Start in design mode with partial inputs:
 
 ```
-prompt_engine(command: ">>create_framework", options: {
-  name: "FOCUS",
-  concept: "targeted problem solving"
+prompt_engine(command: ">>create_framework", inputs: {
+  "name": "FOCUS",
+  "concept": "targeted problem solving"
 })
 ```
 
-**Creation mode** — Pass all fields, script validates and creates:
+Fill the complete draft, including phases and framework gates, and pass it in `inputs` to prepare
+`draft.params`. Review those parameters, then submit the draft through `resource_manager` when
+creation is authorized. Existing task authorization is sufficient; otherwise obtain approval of
+the concrete draft. Creation performs canonical validation; inspect the successful write receipt
+and loaded framework before reporting completion. Gate/framework creation has no separate
+`validate` action or creation preview.
 
-```
-prompt_engine(command: ">>create_framework", options: {
-  "id": "focus",
-  "name": "FOCUS Framework",
-  "system_prompt_guidance": "Apply FOCUS:\n\n**Find**: Identify...",
-  "phases": [
-    {"id": "find", "name": "Find", "description": "Identify the problem"}
-  ]
-})
-```
+`create_prompt` follows the same design/preparation split, but its builder emits an
+`auto_execute` call with `action:"validate"`, which writes no files or versions. After canonical
+validation succeeds, the client submits `action:"create"` when authorized. `create_gate` returns
+a non-executing create draft like `create_framework`.
 
 ---
 
@@ -270,7 +274,10 @@ prompt_engine(command: ">>create_framework", options: {
 
 Build "wizard" prompts that guide users through complex creation workflows. The template shows different content based on whether the script triggered.
 
-### Two-Phase UX
+### Custom Auto-Execute UX
+
+A custom script may return `auto_execute` when its operation should run immediately. The bundled
+creation prompts use the draft lifecycle above instead.
 
 | Phase            | Trigger                                       | Template Shows                            |
 | ---------------- | --------------------------------------------- | ----------------------------------------- |
@@ -333,9 +340,9 @@ Then retry with the corrected values.
 
 ### Working Examples
 
-These meta-prompts demonstrate the pattern:
+These bundled meta-prompts use draft preparation before an authorized create call:
 
-| Prompt               | Creates       | Location                                       |
+| Prompt               | Authors       | Location                                       |
 | -------------------- | ------------- | ---------------------------------------------- |
 | `>>create_gate`      | Quality gates | `resources/prompts/examples/create_gate/`      |
 | `>>create_prompt`    | New prompts   | `resources/prompts/examples/create_prompt/`    |

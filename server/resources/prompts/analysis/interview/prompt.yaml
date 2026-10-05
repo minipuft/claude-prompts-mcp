@@ -1,0 +1,76 @@
+id: interview
+name: Interview
+category: analysis
+description: >-
+  Evidence-first analysis for taste-to-mechanism, repeated character complaints,
+  ambiguous references, open forks, and self-authored bounds. Probe facts and
+  reuse settled rulings first; ask a focused consequential question or small
+  frontier only when needed. Scope and taste can require answers. Continue
+  independent authorized work; full grilling is manual/deep discovery. Routes to
+  research_chain, design_muse, or tech_recommendation when evidence is missing.
+  Protocol: /unknowns Move 3.
+systemMessageFile: system-message.md
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: decision
+    type: string
+    required: true
+    description: >-
+      What is about to be built or decided — the step this stop holds back (e.g.
+      'turn the "foam" metaphor into the surface shader's edge law').
+  - name: trigger
+    type: string
+    required: true
+    description: >-
+      Why the stop fired. One of: taste-word-becomes-mechanism |
+      second-character-complaint | ambiguous-reference | open-fork |
+      self-authored-bound | other.
+    validation:
+      pattern: '^(taste-word-becomes-mechanism|second-character-complaint|ambiguous-reference|open-fork|self-authored-bound|other)$'
+  - name: frontier
+    type: string
+    required: false
+    description: >-
+      Questions already known, numbered, each with its recommended answer. The
+      prompt completes the frontier; it does not discard these.
+  - name: exit
+    type: string
+    required: false
+    description: >-
+      Where the stop goes: interview (default) | research_chain | design_muse |
+      tech_recommendation. A non-interview exit emits that prompt's arguments
+      instead of a question round.
+    validation:
+      pattern: '^(|interview|research_chain|design_muse|tech_recommendation)$'
+  - name: position
+    type: string
+    required: false
+    description: >-
+      Operator position: exploring | converging | committed. Reuse settled
+      rulings; ask unresolved consequential choices.
+    validation:
+      pattern: '^(|exploring|converging|committed)$'
+gateConfiguration:
+  framework_gates: true
+  inline_gate_definitions:
+    - id: frontier-shape
+      name: Frontier Shape
+      type: validation
+      scope: execution
+      severity: high
+      description: >-
+        Every frontier question carries a recommended answer and a class; no
+        question depends on another in the same round.
+      guidance: |-
+        - Each question is numbered and carries ➡ a recommended answer with its reasoning
+        - Each question names its class: architecture | contract | scope | taste
+        - A question whose answer depends on another question open this round waits for a later round
+        - Facts (repo, filesystem, docs) are probed by the planner, never asked of the operator
+      pass_criteria:
+        - Every numbered question has a ➡ recommended answer
+        - Every numbered question names a class from architecture, contract,
+          scope, taste
+        - No question in the round depends on the answer to another question in
+          the same round
+        - The output ends in a rulings block, or, for a non-interview exit, that
+          prompt's arguments plus a one-line routing reason

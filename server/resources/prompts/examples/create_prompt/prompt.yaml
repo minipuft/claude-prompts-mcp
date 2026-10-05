@@ -1,14 +1,174 @@
 id: create_prompt
 name: Create Prompt
 description: >-
-  Designs, previews, confirms, and creates canonical prompts through
-  resource_manager without duplicating validation.
+  Designs current prompt resources with canonical server validation and reusable
+  workflow scaffolding; prepares non-mutating validation before authorized
+  creation.
 category: prompt-authoring
 userMessageTemplateFile: user-message.md
 arguments:
+  - name: id
+    type: string
+    description: Stable authored resource identifier
+    required: false
   - name: name
     type: string
-    description: Prompt name for design or creation
+    description: Human-readable resource name
+    required: false
+  - name: description
+    type: string
+    description: What the resource does and when to use it
+    required: false
+  - name: category
+    type: string
+    description: '[Prompt] Category tag for the prompt.'
+    required: false
+  - name: user_message_template
+    type: string
+    description: '[Prompt] Prompt body/template with Nunjucks placeholders.'
+    required: false
+  - name: system_message
+    type: string
+    description: '[Prompt] Optional system message for the prompt.'
+    required: false
+  - name: arguments
+    type: array
+    description: "[Prompt] Argument definitions for the prompt. `type` is one of
+      string|number|boolean|array|object. `required` and `defaultValue` are
+      persisted to the prompt's YAML; `validation` accepts
+      pattern/minLength/maxLength and is what arms required-argument enforcement
+      at execution."
+    required: false
+  - name: chain_steps
+    type: array
+    description: '[Prompt] Chain steps definition for multi-step prompts. Each
+      entry: promptId and stepName required; optional id (kebab-case, minted
+      from stepName when omitted), args, inputMapping, outputMapping,
+      visibility, subagentModel, agentType, framework, retries, inlineGateIds,
+      inlineGateCriteria, delegated, await (node|run — run makes the step
+      detached). Extra keys pass through uninterpreted.'
+    required: false
+  - name: tools
+    type: array
+    description: '[Prompt] Script tools to create with the prompt. Each tool creates
+      files in tools/{id}/ subdirectory. Required: id, name, script. Optional:
+      description, runtime (python|node|shell|auto), schema (JSON Schema
+      object), trigger (schema_match|explicit|always|never), confirm, strict,
+      timeout. Element shape is not constrained at this boundary — it is
+      validated against the script tool schema when written.'
+    required: false
+  - name: gate_configuration
+    type: object
+    description: "[Prompt] Gate configuration: include (array), exclude (array),
+      framework_gates (boolean — whether this prompt runs its framework's gates;
+      unrelated to the top-level framework_gates parameter, which defines
+      them)."
+    required: false
+  - name: composer
+    type: object
+    description: '[Prompt] Interactive composer metadata. inputArgument must name a
+      declared string argument; clients may map their current draft only when
+      this field is present.'
+    required: false
+  - name: injection
+    type: object
+    description: "[Prompt] Prompt-level injection control. Keys: system-prompt,
+      gate-guidance, style-guidance; each takes {enabled?: boolean, frequency?:
+      {mode: every|first-only|never, interval?: number}, target?:
+      steps|gates|both}. A prompt's own declaration outranks the chain or
+      category it runs inside. Omit to leave the prompt's existing block
+      untouched."
+    required: false
+  - name: register_with_mcp
+    type: boolean
+    description: '[Prompt | Category] Whether prompts register as native MCP
+      prompts. On resource_type prompt — FREEZE HAZARD: this value is normally
+      resolved prompt -> category -> global -> default true; setting it writes
+      an explicit prompt-level value that overrides all three permanently, so
+      the prompt stops following any later change to its category or global
+      default. Omit unless this prompt must differ from its category. On
+      resource_type category it writes registerWithMcp into category.yaml, which
+      is that middle level — no freeze hazard, since every prompt in the
+      category still inherits it unless it declares its own.'
+    required: false
+  - name: mcp_prompt_mode
+    type: string
+    description: '[Prompt | Category] Native MCP prompt behaviour: expand (plain
+      template text) or launch (route through prompt_engine). On resource_type
+      prompt — FREEZE HAZARD: normally resolved prompt -> category -> default
+      expand; an explicit value overrides both permanently and the prompt stops
+      following any later change to its category default. Omit unless this
+      prompt must differ from its category. On resource_type category it writes
+      mcpPromptMode into category.yaml, the default every prompt in the category
+      inherits.'
+    required: false
+  - name: subagent_model
+    type: string
+    description: "[Prompt] Client-agnostic capability hint for this prompt's ==>
+      delegated steps."
+    required: false
+  - name: agent_type
+    type: string
+    description: "[Prompt] Default host agent for this prompt's ==> delegated steps.
+      A step's own agentType overrides it; neither present leaves the choice to
+      the client (Claude Code: general-purpose)."
+    required: false
+  - name: edges
+    type: array
+    description: '[Prompt] Dependency edges between this chain''s steps, each `{from,
+      to}` naming a step id — an explicit step `id`, or the kebab-case slug
+      minted from `stepName`. Ordering constraints, not control flow: the loader
+      linearizes them into `chainSteps` order at load time. An edge naming a
+      step the chain does not declare, or a cycle, is refused and the write is
+      rolled back — so a `chain_steps` rewrite that drops a step an edge still
+      names must send the corrected `edges` in the SAME call, which is validated
+      as one state. Send `unset: ["edges"]` to drop every edge and keep the
+      authored step order.'
+    required: false
+  - name: budget
+    type: object
+    description: '[Prompt] Run-level budget for a chain, the same shape and the same
+      caps a submitted Workflow IR declares. A declared structural cap may only
+      NARROW the server default, so a value above it is refused here rather than
+      silently clamped, and an unrecognized key is refused rather than dropped.
+      `pauseOnBlocking: true` HOLDS the run on a blocking unknown until a
+      `gate_action` verb clears it. Send `unset: ["budget"]` to drop the
+      declaration and run on the server defaults.'
+    required: false
+  - name: artifacts
+    type: object
+    description: '[Prompt] What this prompt''s run touches, in the fixed
+      artifact-kind vocabulary (source, test, docs, readme, plan, changelog,
+      config, prompt, gate, pr-body). `produces` names kinds it always yields;
+      `fromArgument` names one declared argument whose value carries the paths
+      this run touches, and must match an argument the prompt declares — the two
+      union. This is the only channel a run has for declaring artifacts, and
+      artifact-scoped gates attach from it. Send `unset: ["artifacts"]` to
+      declare nothing.'
+    required: false
+  - name: systemMessage
+    type: string
+    description: Legacy alias for system_message; canonical value wins when both are
+      supplied
+    required: false
+  - name: userMessageTemplate
+    type: string
+    description: Legacy alias for user_message_template; canonical value wins when
+      both are supplied
+    required: false
+  - name: gateConfiguration
+    type: object
+    description: Legacy alias for gate_configuration; canonical value wins when both
+      are supplied
+    required: false
+  - name: chainSteps
+    type: array
+    description: Legacy alias for chain_steps; canonical value wins when both are supplied
+    required: false
+  - name: registerWithMcp
+    type: boolean
+    description: Legacy alias for register_with_mcp; canonical value wins when both
+      are supplied
     required: false
   - name: purpose
     type: string
@@ -16,47 +176,7 @@ arguments:
     required: false
   - name: prompt_type
     type: string
-    description: 'Design mode: template, script, chain, or system-only'
-    required: false
-  - name: id
-    type: string
-    description: Stable prompt identifier
-    required: false
-  - name: category
-    type: string
-    description: Prompt category
-    required: false
-  - name: description
-    type: string
-    description: What the prompt does
-    required: false
-  - name: systemMessage
-    type: string
-    description: Inline system message
-    required: false
-  - name: userMessageTemplate
-    type: string
-    description: Inline Nunjucks user-message template
-    required: false
-  - name: arguments
-    type: array
-    description: Typed prompt argument definitions
-    required: false
-  - name: gateConfiguration
-    type: object
-    description: Gate configuration
-    required: false
-  - name: chainSteps
-    type: array
-    description: Chain step definitions
-    required: false
-  - name: registerWithMcp
-    type: boolean
-    description: Expose through native MCP prompts
-    required: false
-  - name: tools
-    type: array
-    description: Complete inline script-tool definitions
+    description: 'Design mode: template, script, chain/workflow, or system-only'
     required: false
 tools:
   - prompt_builder

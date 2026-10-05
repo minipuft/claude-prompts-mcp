@@ -1,82 +1,118 @@
 id: create_framework
 name: Create Framework
-description: Guided framework creation with examples from CAGEERF, ReACT. Outputs structured JSON for resource_manager.
+description: Designs current framework resources with canonical server
+  validation and non-executing drafts before authorized creation.
 category: framework-authoring
 userMessageTemplateFile: user-message.md
 
-# Script tools for validation and auto-execution
-tools:
-  - framework_builder
-
 arguments:
-  # Design workflow arguments
-  - name: name
-    type: string
-    description: Framework name (e.g., "CRISP", "FOCUS", "ITERATE")
-    required: false
-  - name: concept
-    type: string
-    description: Core concept/approach in 1-2 sentences
-    required: false
-  - name: phase_count
-    type: number
-    description: Number of phases (default 5-7, range 3-10)
-    required: false
-
-  # Validation workflow - flat args matching schema.json for script tool detection
   - name: id
     type: string
-    description: Lowercase-hyphenated identifier (e.g., 'focus', 'iterate')
+    description: Stable authored resource identifier
     required: false
-  - name: type
+  - name: name
     type: string
-    description: Framework type identifier in UPPERCASE (e.g., 'CAGEERF', 'ITERATE')
+    description: Human-readable resource name
     required: false
-  - name: version
+  - name: description
     type: string
-    description: Semantic version (e.g., '1.0.0')
-    required: false
-  - name: enabled
-    type: boolean
-    description: Whether the framework is enabled (set to true)
+    description: What the resource does and when to use it
     required: false
   - name: system_prompt_guidance
     type: string
-    description: 'Multiline guidance with **Phase**: format for injection'
+    description: '[Framework] System prompt guidance injected when active.'
     required: false
   - name: phases
     type: array
-    description: 'Array of phase objects [{id, name, description}]'
-    required: false
-  - name: framework_gates
-    type: array
-    description: Quality gates with validationCriteria
-    required: false
-  - name: processing_steps
-    type: array
-    description: Ordered processing steps
-    required: false
-  - name: execution_steps
-    type: array
-    description: Execution steps with dependencies
-    required: false
-  - name: template_enhancements
-    type: object
-    description: Template enhancement configuration
-    required: false
-  - name: execution_flow
-    type: object
-    description: Pre/post processing hooks
-    required: false
-  - name: quality_indicators
-    type: object
-    description: Keywords/patterns for quality detection per phase
+    description: '[Framework] Phase definitions: id, name, description, prompts. The
+      advanced fields this description used to fold in are declared as their own
+      parameters below. Element shape is not constrained at this boundary; the
+      framework loader rejects a malformed entry when phases.yaml is read back.'
     required: false
   - name: gates
     type: object
-    description: 'Gate configuration {include, exclude}'
+    description: '[Framework] Gate configuration: include, exclude arrays.'
+    required: false
+  - name: tool_descriptions
+    type: object
+    description: '[Framework] Tool description overlays when active.'
+    required: false
+  - name: enabled
+    type: boolean
+    description: '[Framework] Whether the framework is enabled.'
+    required: false
+  - name: framework_gates
+    type: array
+    description: '[Framework] Quality gates for this framework, written to
+      framework.yaml. REQUIRED to create a framework. Each entry: id and name
+      (both required), description, frameworkArea, priority
+      (critical|high|medium|low), validationCriteria (array<string>), criteria,
+      severity.'
+    required: false
+  - name: template_suggestions
+    type: array
+    description: '[Framework] Prompt-enhancement suggestions, written to
+      framework.yaml. Each entry: section (system|user) and type
+      (addition|structure|modification) required; description, content,
+      frameworkJustification, impact (high|medium|low).'
+    required: false
+  - name: framework_elements
+    type: object
+    description: '[Framework] Section structure expected of a prompt, written to
+      framework.yaml as frameworkElements: requiredSections (array<string>),
+      optionalSections, sectionDescriptions (object).'
+    required: false
+  - name: argument_suggestions
+    type: array
+    description: '[Framework] Arguments this framework suggests a prompt declare,
+      written to framework.yaml as argumentSuggestions. Each entry: name, type
+      (string|array|object|boolean|number), description, frameworkReason,
+      examples.'
     required: false
   - name: judge_prompt
     type: string
-    description: Custom judge prompt content for %judge modifier
+    description: '[Framework] Judge-prompt body, written to the file judgePromptFile names.'
     required: false
+  - name: processing_steps
+    type: array
+    description: '[Framework] Ordered template-processing steps, written to
+      phases.yaml. Each entry: id, name, description, frameworkBasis, order
+      (positive int), required (boolean); optional section_header and guards.'
+    required: false
+  - name: execution_steps
+    type: array
+    description: '[Framework] Execution steps with dependencies, written to
+      phases.yaml. Each entry: id, name, action, frameworkPhase,
+      expected_output; optional dependencies (array<string>).'
+    required: false
+  - name: execution_type_enhancements
+    type: object
+    description: '[Framework] Per-execution-type step overlays (chain vs single),
+      written to phases.yaml.'
+    required: false
+  - name: template_enhancements
+    type: object
+    description: '[Framework] Written to phases.yaml: systemPromptAdditions,
+      userPromptModifications, contextualHints (each array<string>).'
+    required: false
+  - name: execution_flow
+    type: object
+    description: '[Framework] Hooks around execution, written to phases.yaml:
+      preProcessingSteps, postProcessingSteps, validationSteps (each
+      array<string>).'
+    required: false
+  - name: quality_indicators
+    type: object
+    description: '[Framework] Per-phase keywords and patterns for compliance
+      scoring, written to phases.yaml.'
+    required: false
+  - name: concept
+    type: string
+    description: Core concept or approach in one or two sentences
+    required: false
+  - name: phase_count
+    type: number
+    description: Desired phase count; derive phases from the concept
+    required: false
+tools:
+  - framework_builder
