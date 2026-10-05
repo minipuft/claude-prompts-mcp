@@ -14,6 +14,10 @@ and not driven. Nothing here is scheduled. An item is picked up by opening it as
 
 ## Defects a client can observe
 
+- **A chain prompt's own included gates reach none of its steps** (slice 41 finding, R205). The
+  bundled `implementation_plan` declares `code-quality` and `plan-quality`; neither is rendered or
+  reviewed on any step. Measured on both transports.
+
 - **A gate's declared retry limit is ignored for most gates** (was P6.294, ruling R189). It is read
   only for gates armed automatically from the registry; gates a prompt includes, gates a step
   lists and every resumed single prompt get the built-in limit of 2. Bundled gates declare 1, 2 or
@@ -47,6 +51,12 @@ and not driven. Nothing here is scheduled. An item is picked up by opening it as
   finding), so over HTTP it can check the wrong workspace's switch. Read.
 
 ## Smaller findings
+
+- From slice 41: inline gate definitions in a step's prompt are handed to every step as one flat
+  list when `executeInlineGateDefinitions` is on (off by default). A gate from a step prompt's
+  include list shows guidance on the review render only, where a category gate shows it on both.
+  The published description of `confirm` names delete and rollback and not tool removal.
+  `implementation_plan` includes `path-verification`, which is not a bundled gate.
 
 - From slice 40: `executionTypeEnhancements` is declared in five shipped `phases.yaml` files and
   in the schemas, and no code reads it. `PromptExecutor.initializeStyleManager` catches any style
