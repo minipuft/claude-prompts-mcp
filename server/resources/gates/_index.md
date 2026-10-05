@@ -2,7 +2,7 @@
 
 # Gate Index
 
-26 gates across 5 groups.
+27 gates across 5 groups.
 
 For the full enforcement-mode taxonomy (`inline_guidance` / `framework_compliance` / `shell_verify` / `script_tool`) and how each `pass_criteria.type` actually behaves at runtime, see [docs/guides/gates.md](../../../docs/guides/gates.md#enforcement-modes).
 
@@ -23,6 +23,7 @@ For the full enforcement-mode taxonomy (`inline_guidance` / `framework_complianc
 | `workflow-integration` | reminder | high | workflow, implementation | integration | 219 | Validates that replaced systems are fully removed, integration points are tested, and no orphaned references remain. Ensures clean state before marking work complete. |
 | `workflow-preflight` | reminder | high | workflow, refactoring | preflight | 372 | Validates that the mandatory pre-flight checklist from refactoring.md was completed before implementation begins. Checks domain ownership, complexity, layer identification, naming, and dependency analysis. |
 | `pr-performance` | reminder | medium (advisory) | artifacts: source · explicit only | performance | 388 | Flags performance concerns without blocking. Warns but allows merge. |
+| `showcase-asset-continuity` | reminder | medium (advisory) | explicit only | showcase-asset-continuity | 966 | Opt-in stage-aware visual-review reminder: reuse owner authorization/root locks, review replaceable assets and actual motion evidence; no automatic taste check. |
 | `workflow-changelog` | reminder | medium | artifacts: changelog | changelog | 147 | Validates that CHANGELOG.md [Unreleased] section was updated during implementation. Changes should be documented as they happen, not at release. |
 | `workflow-growth` | reminder | medium | workflow, implementation | growth | 291 | Validates that the task explicitly declares its learning outcome. Every task must state whether it produced novel patterns, confirmed existing ones, or found nothing new. Silence is not acceptable. |
 | `api-documentation` | reminder | — | artifacts: docs, readme | api-docs | 77 | Ensures API documentation includes all required sections and follows best practices |
@@ -65,4 +66,4 @@ For the full enforcement-mode taxonomy (`inline_guidance` / `framework_complianc
 
 ---
 
-*Generated: 2026-09-22*
+*Generated: 2026-10-05*
