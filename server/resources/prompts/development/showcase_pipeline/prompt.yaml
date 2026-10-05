@@ -1,0 +1,119 @@
+id: showcase_pipeline
+name: Showcase Pipeline
+description: 'Seven-step silent motion production: reference inspiration,
+  evidence-backed story, color/storyboard treatment, motion/editing contract,
+  renderer decision, bounded client implementation and actual render review.'
+category: development
+systemMessageFile: system-message.md
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: brief
+    type: string
+    description: Audience, product goals, actual interaction and desired silent film
+      outcome.
+    required: true
+  - name: constraints
+    type: string
+    description: Duration, dimensions, accessibility, renderer and evidence limits.
+    required: false
+    defaultValue: Silent motion film; evidence-backed product claims; client-owned
+      rendering; no publishing.
+  - name: output_root
+    type: string
+    description: Caller-owned production artifact directory.
+    required: false
+    defaultValue: media/showcase/output
+  - name: files
+    type: string
+    description: Exact renderer/source files implementation may edit; empty means
+      discovery-only.
+    required: false
+    defaultValue: ''
+  - name: moodboard
+    type: string
+    description: Existing logo/reference path or URL.
+    required: false
+  - name: seed_refs
+    type: string
+    description: Optional reference works or creators to examine.
+    required: false
+gateConfiguration:
+  framework_gates: false
+chainSteps:
+  - promptId: design_muse
+    args:
+      mode: brainstorm
+      challenge: Develop source-grounded visual directions for the original request
+        brief. Read the complete brief, constraints and existing references in
+        Original Request Intent; the planner chooses the direction before
+        downstream production.
+    inputMapping:
+      challenge: brief
+      constraints: constraints
+      moodboard: moodboard
+      seed_refs: seed_refs
+    id: reference
+    stepName: Reference Direction
+  - promptId: showcase_story
+    inputMapping:
+      brief: brief
+      constraints: constraints
+      context: previous_step_result
+      output_root: output_root
+    delegated: true
+    id: story
+    stepName: Silent Story
+  - promptId: showcase_treatment
+    inputMapping:
+      brief: brief
+      constraints: constraints
+      context: previous_step_result
+      output_root: output_root
+    delegated: true
+    id: treatment
+    stepName: Visual Treatment
+  - promptId: showcase_motion
+    inputMapping:
+      brief: brief
+      constraints: constraints
+      context: previous_step_result
+      output_root: output_root
+    delegated: true
+    id: motion
+    stepName: Motion Contract
+  - promptId: tech_recommendation
+    args:
+      subject: Choose deterministic silent motion rendering from the authored story,
+        color and timing contract. Conclude with a complete re-issuable
+        implementation brief incorporating the selected engine, explicit owned
+        files, input manifest, rendering commands, tests and artifact outputs.
+        This full decision becomes the strategic_worker's task.
+    inputMapping:
+      context: previous_step_result
+    id: technique
+    stepName: Renderer Decision
+  - promptId: strategic_worker
+    args:
+      branch_mode: shared-tree
+      row_id: showcase-render
+    inputMapping:
+      task: previous_step_result
+      files: files
+    delegated: true
+    id: implementation
+    stepName: Render Implementation
+  - promptId: showcase_review
+    inputMapping:
+      brief: brief
+      constraints: constraints
+      context: previous_step_result
+      motion_contract: step5_result
+      output_root: output_root
+    delegated: true
+    id: review
+    stepName: Finish Review
+artifacts:
+  produces:
+    - source
+    - docs
+    - plan
