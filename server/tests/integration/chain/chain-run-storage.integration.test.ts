@@ -88,7 +88,7 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
   });
 
   test('the v22 schema declares both run tables and no longer declares the retired blob', () => {
-    expect(engine.getSchemaVersion()).toBe(34);
+    expect(engine.getSchemaVersion()).toBe(35);
 
     const tables = engine
       .query<{ name: string }>(`SELECT name FROM sqlite_master WHERE type = 'table'`)
@@ -435,45 +435,6 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
       // CONTROL: the review the call wrote is there, keyed by its node.
       expect(Object.keys(session.reviews ?? {})).toEqual(['n1']);
       await store.cleanup();
-    });
-
-    test('a run persisted before `reviews` existed loads its reviews into the store (legacy residual)', async () => {
-      const writer = newStore();
-      await writer.createSession('sess-lg', 'chain-lg#1', 3, {}, threeNodes());
-      await persist(writer);
-      await writer.cleanup();
-      // Rewrite the residual into the pre-3.1 shape: the current-step slot and 4.8's detached map.
-      const legacy = { ...residualOf('sess-lg') };
-      legacy.pendingGateReview = review('slot-gate');
-      legacy.detachedGateReviews = {
-        rev: review('node-gate', { metadata: { phase: 'awaiting-replacement' }, attemptCount: 1 }),
-      };
-      engine.run('UPDATE chain_runs SET state = ? WHERE session_id = ?', [
-        JSON.stringify(legacy),
-        'sess-lg',
-      ]);
-
-      const reader = await coldLoad();
-      const loaded = reader.getSession('sess-lg') as ChainSession;
-      expect(loaded.reviews?.['n1']).toMatchObject({
-        nodeId: 'n1',
-        kind: 'gate',
-        phase: 'awaiting-verdict',
-        gateIds: ['slot-gate'],
-      });
-      expect(loaded.reviews?.['rev']).toMatchObject({
-        nodeId: 'rev',
-        kind: 'detached',
-        phase: 'awaiting-replacement',
-        attemptCount: 1,
-      });
-      // One-way: the next write persists only the new shape.
-      await persist(reader);
-      const rewritten = residualOf('sess-lg');
-      expect(Object.keys(rewritten.reviews as object).sort()).toEqual(['n1', 'rev']);
-      expect(rewritten).not.toHaveProperty('pendingGateReview');
-      expect(rewritten).not.toHaveProperty('detachedGateReviews');
-      await reader.cleanup();
     });
   });
 

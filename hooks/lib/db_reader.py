@@ -304,7 +304,7 @@ def _load_from_execution_view(conn: sqlite3.Connection, chain_id: str) -> dict |
     try:
         cursor = conn.execute(
             "SELECT run_owner_pid, chain_id, run_status, current_step, total_steps, "
-            "last_activity, pending_gate_review, pending_shell_verification "
+            "last_activity, current_step_review, pending_shell_verification "
             "FROM v_execution_status "
             "WHERE chain_id = ? "
             "AND (run_status IS NULL "
@@ -340,7 +340,7 @@ def _view_row_to_hook_state(row: sqlite3.Row) -> dict | None:
     current = row["current_step"] or 0
     total = row["total_steps"] or 0
 
-    pending_gate_review = _parse_json_field(row["pending_gate_review"])
+    current_step_review = _parse_json_field(row["current_step_review"])
     pending_shell_verification = _parse_json_field(row["pending_shell_verification"])
 
     if not _is_projected_run_visible(current, total):
@@ -357,11 +357,11 @@ def _view_row_to_hook_state(row: sqlite3.Row) -> dict | None:
         "shell_verify_attempts": 0,
     }
 
-    if isinstance(pending_gate_review, dict):
-        gate_ids = pending_gate_review.get("gateIds", [])
+    if isinstance(current_step_review, dict):
+        gate_ids = current_step_review.get("gateIds", [])
         if gate_ids:
             result["pending_gate"] = label_gate_ids(gate_ids)
-        result["shell_verify_attempts"] = pending_gate_review.get("attemptCount", 0)
+        result["shell_verify_attempts"] = current_step_review.get("attemptCount", 0)
 
     if isinstance(pending_shell_verification, dict):
         cmd_info = pending_shell_verification.get("shellVerify", {})
@@ -471,7 +471,7 @@ def _session_to_hook_state(session: dict) -> dict | None:
         "shell_verify_attempts": 0,
     }
 
-    gate_review = session.get("pendingGateReview")
+    gate_review = session.get("currentStepReview")
     if gate_review and isinstance(gate_review, dict):
         gate_ids = gate_review.get("gateIds", [])
         if gate_ids:

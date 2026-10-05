@@ -104,7 +104,7 @@ def _chain_session_state(
     current: int = 1,
     total: int = 3,
     run_status: str = "working",
-    pending_gate_review: dict | None = None,
+    current_step_review: dict | None = None,
     pending_shell_verification: dict | None = None,
     chain_id: str = "chain-demo",
 ) -> str:
@@ -122,7 +122,7 @@ def _chain_session_state(
             "currentStep": current,
             "totalSteps": total,
             "lastActivity": 1000,
-            "pendingGateReview": pending_gate_review,
+            "currentStepReview": current_step_review,
             "pendingShellVerification": pending_shell_verification,
             "runStatus": run_status,
             "runCompletedAt": None,
@@ -432,7 +432,7 @@ class TestActiveChainState:
             _chain_session_state(
                 current=3,
                 total=3,
-                pending_gate_review={"gateIds": ["code-quality", "test-coverage"], "attemptCount": 2},
+                current_step_review={"gateIds": ["code-quality", "test-coverage"], "attemptCount": 2},
             ),
         )
 
@@ -513,7 +513,7 @@ class TestHeldPastTheLastNode:
 
     @pytest.mark.parametrize(
         "pending",
-        [{"pending_shell_verification": SHELL}, {"pending_gate_review": DETACHED_REVIEW}],
+        [{"pending_shell_verification": SHELL}, {"current_step_review": DETACHED_REVIEW}],
         ids=["shell-verification", "detached-review"],
     )
     def test_a_held_run_past_its_last_node_is_kept_on_both_paths(self, state_db, pending):
@@ -617,7 +617,7 @@ class TestChainLoaderColumns:
                 "current_step",
                 "total_steps",
                 "last_activity",
-                "pending_gate_review",
+                "current_step_review",
                 "pending_shell_verification",
                 "updated_at",
             )
@@ -812,6 +812,59 @@ class TestRecoverableChainLoaderFallback:
         state_db.commit()
 
         assert db_reader.load_recoverable_chain_state(self.SESSION) is None
+
+
+class TestLoaderReturnedShape:
+    """PIN (P6.20, R193, as of 2026-10-04 · flips when the hook module API is meant to change).
+
+    The projection key a loader reads a held review from is internal to state.db; the dict both
+    loaders RETURN to hook callers is the protected surface (CLAUDE.md §Public API Contract). This
+    pins that dict as ONE value per loader and per read path, with a review held so the
+    review-derived fields (`pending_gate`, `shell_verify_attempts`) carry values rather than
+    defaults. Renaming the key must leave every one of the four unchanged.
+    """
+
+    SESSION = "sess-returned-shape"
+    EXPECTED: ClassVar[dict[str, object]] = {
+        "chain_id": "chain-demo",
+        "current_step": 2,
+        "total_steps": 3,
+        "pending_gate": "code-quality",
+        "gate_criteria": [],
+        "last_prompt_id": "",
+        "pending_shell_verify": None,
+        "shell_verify_attempts": 1,
+    }
+
+    @staticmethod
+    def _insert_held_run(state_db: sqlite3.Connection, read_path: str) -> None:
+        _insert_session(
+            state_db,
+            str(LIVE_PID),
+            _chain_session_state(
+                current=2,
+                total=3,
+                current_step_review={"gateIds": ["code-quality"], "attemptCount": 1},
+            ),
+        )
+        if read_path == "session_table":
+            state_db.execute("DROP VIEW v_execution_status")
+            state_db.commit()
+
+    @pytest.mark.parametrize("read_path", ["view", "session_table"])
+    def test_the_active_loader_returns_the_same_dict(self, state_db, read_path):
+        self._insert_held_run(state_db, read_path)
+
+        assert db_reader.load_active_chain_state("chain-demo") == self.EXPECTED
+
+    @pytest.mark.parametrize("read_path", ["view", "session_table"])
+    def test_the_recoverable_loader_returns_the_same_dict(self, state_db, read_path):
+        from session_state import save_session_state
+
+        save_session_state(self.SESSION, {"chain_id": "chain-demo", "current_step": 1, "total_steps": 3})
+        self._insert_held_run(state_db, read_path)
+
+        assert db_reader.load_recoverable_chain_state(self.SESSION) == self.EXPECTED
 
 
 # ── E. Cross-client scoping ───────────────────────────────────────────────────
