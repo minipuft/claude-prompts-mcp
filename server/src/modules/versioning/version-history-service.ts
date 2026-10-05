@@ -153,11 +153,6 @@ export class VersionHistoryService {
     return currentRequestStateScope() ?? this.scope;
   }
 
-  /** Tenant key for this call's rows — the workspace, falling back to the shared default. */
-  private resolveTenantId(): string {
-    return resolveContinuityScopeId(this.effectiveScope());
-  }
-
   /**
    * Tenant key for a READ that may deliberately target another workspace.
    *
@@ -173,7 +168,7 @@ export class VersionHistoryService {
    * restored the other workspace's version.
    */
   private resolveReadTenantId(readScopeOverride?: string): string {
-    return readScopeOverride ?? this.resolveTenantId();
+    return readScopeOverride ?? resolveContinuityScopeId(this.effectiveScope());
   }
 
   /**
@@ -249,7 +244,7 @@ export class VersionHistoryService {
 
     try {
       const db = this.getDb();
-      const tenantId = this.resolveTenantId();
+      const tenantId = resolveContinuityScopeId(this.effectiveScope());
 
       // `MAX(version)` and the INSERT that consumes it are ONE unit, under the write lock.
       //
@@ -673,7 +668,7 @@ export class VersionHistoryService {
       return { status: 'projection-only', reason: 'versioning is disabled' };
     }
     const db = this.getDb();
-    const tenantId = this.resolveTenantId();
+    const tenantId = resolveContinuityScopeId(this.effectiveScope());
 
     const row = db.queryOne<{ id: number; tree_hash: string | null; tree_origin: string | null }>(
       `SELECT id, tree_hash, tree_origin FROM version_history
@@ -791,7 +786,7 @@ export class VersionHistoryService {
 
     try {
       const db = this.getDb();
-      const tenantId = this.resolveTenantId();
+      const tenantId = resolveContinuityScopeId(this.effectiveScope());
       const params = [tenantId, resourceType, resourceId, resourceId];
 
       // One transaction, IMMEDIATE: the count this reports, the delete it reports on, and the

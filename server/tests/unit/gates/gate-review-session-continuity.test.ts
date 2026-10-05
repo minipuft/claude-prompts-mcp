@@ -48,6 +48,7 @@ class StubChainSessionStore implements ChainSessionStore {
       executionOrder: [],
       startTime: Date.now(),
       lastActivity: Date.now(),
+      runStatus: 'working',
       originalArgs,
     };
     this.sessions.set(sessionId, session);

@@ -301,7 +301,7 @@ export const CONFIG_JSONC_TEMPLATE: string = `// Configuration for the claude-pr
 //   — Claude Code hook behavior (affects prompt-suggest.py output).
 //   "hooks": {
 //     — Show detailed multi-line output instead of compact single-line. Useful for debugging or
-//       verbose mode. An absent key resolves to \`false\` in \`hooks/lib/config_loader.py\`.
+//       verbose mode. An absent key resolves to \`true\` in \`hooks/lib/config_loader.py\`.
 //     — default: true
 //     "expandedOutput": true,
 //   },

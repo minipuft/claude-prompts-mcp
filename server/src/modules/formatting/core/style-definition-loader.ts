@@ -516,16 +516,37 @@ export function createStyleDefinitionLoader(
 // ============================================================================
 
 let defaultLoader: StyleDefinitionLoader | null = null;
+/** True once a consumer was handed a loader built with no config: the package's own directories. */
+let unconfiguredHandedOut = false;
 
 /**
- * Get the default StyleDefinitionLoader instance
- * Creates one if it doesn't exist
+ * Get the process-default style loader.
+ *
+ * A caller that SUPPLIES config is the composition root (`initializeModules`) asserting the
+ * resolved directories, and the loader is built from that config. A caller that omits it is a
+ * consumer (`PromptExecutor`, the tool-description overlays) asking for whatever was established;
+ * with nothing established it gets a loader over the package's own directories.
+ *
+ * Order is enforced, not assumed: configuring after a consumer already took that unconfigured
+ * loader throws. Before, the config was dropped whenever anything had touched the singleton
+ * first, so style directory resolution silently depended on call order.
  */
 export function getDefaultStyleDefinitionLoader(
   config?: StyleDefinitionLoaderConfig
 ): StyleDefinitionLoader {
-  if (!defaultLoader) {
+  if (config !== undefined) {
+    if (unconfiguredHandedOut) {
+      throw new Error(
+        '[StyleDefinitionLoader] Configured after a consumer already took the unconfigured ' +
+          'default loader. The composition root must configure it before any consumer asks.'
+      );
+    }
     defaultLoader = new StyleDefinitionLoader(config);
+    return defaultLoader;
+  }
+  if (!defaultLoader) {
+    defaultLoader = new StyleDefinitionLoader();
+    unconfiguredHandedOut = true;
   }
   return defaultLoader;
 }
@@ -535,4 +556,5 @@ export function getDefaultStyleDefinitionLoader(
  */
 export function resetDefaultStyleDefinitionLoader(): void {
   defaultLoader = null;
+  unconfiguredHandedOut = false;
 }

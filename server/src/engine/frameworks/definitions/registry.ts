@@ -83,9 +83,10 @@ export class FrameworkRegistry {
     //
     // Share the configured default singleton unless a caller explicitly supplied its own config.
     // Constructing a private loader unconditionally made this a FOURTH resolver for the framework
-    // directory: `framework-manager.ts:128` calls `createFrameworkRegistry(logger)` with no
+    // directory: `FrameworkManager.initialize` calls `createFrameworkRegistry(logger)` with no
     // config, so this loader fell back to `resolveFrameworksDir()` and read the package tree while
-    // `module-initializer.ts:219` configured the singleton with the PathResolver-resolved dir.
+    // `initializeModules` configured the singleton with the PathResolver-resolved dir. The
+    // singleton now refuses that config once a consumer has taken its unconfigured loader.
     //
     // Framework reads therefore ignored `MCP_RESOURCES_PATH` in exactly the way writes did, and
     // the two agreed only because both were wrong. Fixing the write path alone (T1.10) turned that

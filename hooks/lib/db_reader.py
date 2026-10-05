@@ -297,9 +297,8 @@ def _load_from_execution_view(conn: sqlite3.Connection, chain_id: str) -> dict |
 
     Boundary check uses run_status (Tier 2): rows with run_status in
     {completed, failed, cancelled} are excluded so the hook never reports a
-    terminal chain as active. Rows with NULL run_status are retained (legacy
-    rows from before Tier 2 landed) and reach the same in-progress check as
-    the session-table fallback.
+    terminal chain as active. The column is NOT NULL, so every row carries a
+    status and there is no unset phase to admit.
     """
     try:
         cursor = conn.execute(
@@ -307,8 +306,7 @@ def _load_from_execution_view(conn: sqlite3.Connection, chain_id: str) -> dict |
             "last_activity, current_step_review, pending_shell_verification "
             "FROM v_execution_status "
             "WHERE chain_id = ? "
-            "AND (run_status IS NULL "
-            "OR run_status NOT IN ('completed', 'failed', 'cancelled')) "
+            "AND run_status NOT IN ('completed', 'failed', 'cancelled') "
             "ORDER BY last_activity DESC, updated_at DESC",
             (chain_id,),
         )

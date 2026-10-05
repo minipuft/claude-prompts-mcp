@@ -7,7 +7,6 @@
  * to create step sequences and enhancements.
  */
 
-import type { ContentAnalysisResult } from '#shared/types/index.js';
 import type { PhaseGuard } from '../definitions/framework-schema.js';
 import type {
   ProcessingGuidance,
@@ -155,55 +154,15 @@ export function createProcessingGuidance(
 }
 
 /**
- * Creates StepGuidance from phases definition with semantic analysis
+ * Creates StepGuidance from the phases definition
  * @param phases - Phases definition from YAML
- * @param semanticAnalysis - Semantic analysis result
  * @returns StepGuidance object
  */
-export function createStepGuidance(
-  phases: PhasesDefinition,
-  semanticAnalysis?: ContentAnalysisResult
-): StepGuidance {
+export function createStepGuidance(phases: PhasesDefinition): StepGuidance {
   // #todo: Expose executionSteps via a “framework_steps” toolcall (akin to %judge) so the client LLM can request structured steps for the user query; currently guidance-only.
   const executionSteps = phases.executionSteps ? generateExecutionSteps(phases.executionSteps) : [];
 
-  const stepEnhancements: Record<string, string[]> = {};
-  const stepValidation: Record<string, string[]> = {};
-
-  // Apply execution type-specific enhancements based on semantic analysis
-  if (semanticAnalysis && phases.executionTypeEnhancements?.chain) {
-    const chainEnhancements = phases.executionTypeEnhancements.chain;
-
-    if (
-      semanticAnalysis.executionType === 'chain' &&
-      semanticAnalysis.executionCharacteristics.advancedChainFeatures?.requiresAdvancedExecution &&
-      chainEnhancements.advancedChain
-    ) {
-      // Apply advanced chain enhancements
-      for (const [stepId, enhancements] of Object.entries(chainEnhancements.advancedChain)) {
-        stepEnhancements[stepId] = enhancements;
-        stepValidation[stepId] = [
-          'Workflow completeness check',
-          'State transition validation',
-          'Error handling verification',
-        ];
-      }
-    } else if (semanticAnalysis.executionType === 'chain' && chainEnhancements.simpleChain) {
-      // Apply simple chain enhancements
-      for (const [stepId, enhancements] of Object.entries(chainEnhancements.simpleChain)) {
-        stepEnhancements[stepId] = enhancements;
-        stepValidation[stepId] = [
-          'Step sequence validation',
-          'Data flow verification',
-          'Checkpoint adequacy assessment',
-        ];
-      }
-    }
-  }
-
   return {
     stepSequence: executionSteps,
-    stepEnhancements,
-    stepValidation,
   };
 }

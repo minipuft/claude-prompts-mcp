@@ -218,18 +218,19 @@ class TestSchemaParity:
         seeded = state_db.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
         assert seeded == version
 
-    def test_run_status_is_not_null_so_the_reader_null_branch_is_unreachable(self, state_db):
-        """`_load_from_execution_view` retains rows with NULL run_status as a legacy allowance.
+    def test_run_status_is_not_null_because_the_reader_has_no_null_branch(self, state_db):
+        """`_load_from_execution_view` filters `run_status NOT IN (terminal)` with no NULL branch.
 
-        The column is declared NOT NULL and `v_execution_status` selects it straight off
-        `chain_sessions` with no outer join, so no row can reach that branch. Recorded as a test
-        rather than a comment: if the DDL ever relaxes the constraint, the branch becomes live and
-        this assertion says so.
+        In SQL a NULL `run_status` fails that filter, so a NULL row would vanish from the hooks
+        rather than read as active. The column is declared NOT NULL and `v_execution_status`
+        selects it straight off `chain_sessions` with no outer join, so no such row exists.
+        Recorded as a test: if the DDL ever relaxes the constraint, this assertion says so before
+        an unset status hides a live run from every hook.
         """
         columns = state_db.execute("PRAGMA table_info(chain_sessions)").fetchall()
         run_status = next(col for col in columns if col[1] == "run_status")
         notnull = run_status[3]
-        assert notnull == 1, "run_status is now nullable — the NULL branch in _load_from_execution_view is live again"
+        assert notnull == 1, "run_status is now nullable — a NULL row would be dropped by _load_from_execution_view"
 
 
 # ── B. resource_index reads ───────────────────────────────────────────────────

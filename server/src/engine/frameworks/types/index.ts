@@ -9,7 +9,6 @@
 
 // Framework guide types
 export type {
-  ArgumentGuidance,
   ExecutionStep,
   FrameworkDefinition,
   FrameworkExecutionContext,
@@ -42,13 +41,3 @@ export type {
   SystemPromptInjectionResult,
   TemplateProcessingGuidance,
 } from './prompt-guidance-types.js';
-
-// Integration types
-export type {
-  FrameworkAlignmentResult,
-  FrameworkSwitchRecommendation,
-  FrameworkSwitchingConfig,
-  FrameworkUsageInsights,
-  FrameworkUsageMetrics,
-  IntegratedAnalysisResult,
-} from './semantic-integration-types.js';

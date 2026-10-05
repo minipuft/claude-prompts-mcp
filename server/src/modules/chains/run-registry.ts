@@ -225,7 +225,7 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
           runOwnerPid,
           organizationId,
           workspaceId,
-          session.runStatus ?? 'working',
+          session.runStatus,
           session.state.currentNodeId,
           JSON.stringify(toResidual(session)),
           session.startTime,

@@ -100,10 +100,21 @@ jobs:
         with:
           node-version-file: ".node-version"
           cache: npm
-          cache-dependency-path: server/package-lock.json
+          cache-dependency-path: |
+            server/package-lock.json
+            package-lock.json
 
       - name: Install dependencies
         if: needs.classify.outputs.scope == 'full'
+        run: npm ci --prefer-offline --no-audit
+
+      # `typecheck:cli` (a member of validate:all) runs `npm -w cli run typecheck` from the repo
+      # root, so it resolves `tsc` and `@types/node` from the root workspace install, which the
+      # server install above does not provide. Same step the CLI job runs for the same typecheck;
+      # without it the member found no `@types/node` here (TS2688) and exited 2.
+      - name: Install dependencies (root workspaces, for typecheck:cli)
+        if: needs.classify.outputs.scope == 'full'
+        working-directory: .
         run: npm ci --prefer-offline --no-audit
 
       # Pins live in requirements-dev.txt, which is the single installable source both this

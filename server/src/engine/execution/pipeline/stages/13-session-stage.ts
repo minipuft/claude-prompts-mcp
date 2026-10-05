@@ -198,7 +198,7 @@ export class SessionManagementStage extends BasePipelineStage {
     this.logExit({
       skipped: 'Run already complete',
       chainId: session.chainId,
-      runStatus: session.runStatus ?? 'working',
+      runStatus: session.runStatus,
     });
     return true;
   }
@@ -212,12 +212,11 @@ export class SessionManagementStage extends BasePipelineStage {
    */
   private buildAlreadyCompleteResponse(session: ChainSession): ToolResponse {
     const totalSteps = totalOf(session.state.nodes);
-    const status = session.runStatus ?? 'completed';
     const lines = [
       `✓ Chain run already complete.`,
       ``,
       `Chain: ${session.chainId}`,
-      `Status: ${status}`,
+      `Status: ${session.runStatus}`,
       `Steps: ${totalSteps}/${totalSteps}`,
       ``,
       `No user_response or gate_verdict is needed. Start a fresh run with the chain command, or pass force_restart to re-run this chain.`,

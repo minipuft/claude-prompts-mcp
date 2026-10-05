@@ -70,67 +70,11 @@ export class GenericFrameworkGuide extends BaseFrameworkGuide {
    * Guide prompt creation using the framework's structure
    */
   guidePromptCreation(_intent: string, _context?: Record<string, unknown>): PromptCreationGuidance {
-    const elements = this.definition.frameworkElements;
-    const argumentSuggestions = this.definition.argumentSuggestions || [];
-
-    // Build structure guidance from framework elements
-    const systemPromptSuggestions: string[] = [];
-    const userTemplateSuggestions: string[] = [];
-
-    if (elements) {
-      // Generate suggestions based on required sections
-      for (const section of elements.requiredSections) {
-        const desc = elements.sectionDescriptions[section];
-        if (desc) {
-          systemPromptSuggestions.push(`Establish ${section.toLowerCase()}: ${desc}`);
-          userTemplateSuggestions.push(`Include ${section.toLowerCase()} in the request`);
-        }
-      }
-    }
-
-    // Add template suggestions if available
-    const templateSuggestions = this.definition.templateSuggestions || [];
-    for (const suggestion of templateSuggestions) {
-      if (suggestion.section === 'system') {
-        systemPromptSuggestions.push(suggestion.content);
-      } else if (suggestion.section === 'user') {
-        userTemplateSuggestions.push(suggestion.content);
-      }
-    }
-
     return {
-      structureGuidance: {
-        systemPromptSuggestions,
-        userTemplateSuggestions,
-        argumentSuggestions: argumentSuggestions.map((arg) => ({
-          name: arg.name,
-          type: arg.type,
-          description: arg.description,
-          frameworkReason: arg.frameworkReason,
-          examples: arg.examples,
-        })),
-      },
-      frameworkElements: elements || {
+      frameworkElements: this.definition.frameworkElements || {
         requiredSections: [],
         optionalSections: [],
         sectionDescriptions: {},
-      },
-      qualityGuidance: {
-        clarityEnhancements: [
-          'Use specific, concrete language rather than abstract concepts',
-          'Define technical terms and domain-specific vocabulary',
-          'Provide examples to illustrate complex concepts',
-        ],
-        completenessChecks: elements
-          ? [`Ensure all ${this.type} phases are addressed`].concat(
-              elements.requiredSections.map((s) => `Verify ${s.toLowerCase()} is complete`)
-            )
-          : [],
-        specificityImprovements: [
-          'Replace general terms with specific metrics',
-          'Add quantifiable success criteria',
-          'Include timeline and resource constraints',
-        ],
       },
     };
   }
@@ -167,20 +111,18 @@ export class GenericFrameworkGuide extends BaseFrameworkGuide {
    */
   guideExecutionSteps(
     _prompt: ConvertedPrompt,
-    semanticAnalysis: ContentAnalysisResult
+    _semanticAnalysis: ContentAnalysisResult
   ): StepGuidance {
     const phases = this.definition.phases;
 
     if (!phases) {
       return {
         stepSequence: [],
-        stepEnhancements: {},
-        stepValidation: {},
       };
     }
 
     // Use the step generator utility to create step guidance
-    return createStepGuidance(phases, semanticAnalysis);
+    return createStepGuidance(phases);
   }
 
   /**
@@ -210,10 +152,6 @@ export class GenericFrameworkGuide extends BaseFrameworkGuide {
       processingEnhancements,
       frameworkGates,
       templateSuggestions,
-      enhancementMetadata: this.createEnhancementMetadata(
-        0.9,
-        `${this.type} framework provides systematic approach`
-      ),
     };
   }
 

@@ -28,8 +28,8 @@ import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.j
 /**
  * Guess the tenant this process would write `version_history` under, absent other evidence.
  *
- * Mirrors the SHAPE of `VersionHistoryService.resolveTenantId()` on the server —
- * `resolveContinuityScopeId(scope)` — but cannot mirror its INPUT: the server's `scope` there
+ * Ends in the same `resolveContinuityScopeId(scope)` call `VersionHistoryService` makes on the
+ * server, but cannot mirror its INPUT: the server's `scope` there
  * comes from `identity.launchDefaults`, resolved at ITS launch from `--workspace-id`, its
  * config file, or its own `CLAUDE_PROJECT_DIR`/cwd (`applyRuntimeIdentityOverrides`,
  * `runtime/context.ts`) — none of which this process can observe. What it CAN observe: the

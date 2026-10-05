@@ -129,7 +129,7 @@ const guardFrameworkContext = {
   selectedFramework: { id: GUARD_FRAMEWORK_ID, name: 'Guard FW', type: GUARD_FRAMEWORK_ID },
   systemPrompt: '',
   executionGuidelines: [],
-  metadata: { selectionReason: 'test', confidence: 1, appliedAt: new Date() },
+  metadata: { confidence: 1, appliedAt: new Date() },
 };
 
 /** `>>draft ==> >>review`: step 1 plain, step 2 DELEGATED and carrying its own gate text. */

@@ -83,6 +83,16 @@ export const SUITE = [
       "CHECKED — a planted type error in a new scripts/*.ts file (scripts/_planted_row05.ts, `const x: number = 'not a number'`) is reported by file name and the run exits non-zero; deleting the file returns the run to exit 0",
   },
   {
+    // The cli workspace compiles `server/src/shared/**` and `cli-shared/**` against its OWN
+    // target (ES2020 lib), which the server's typecheck (a newer lib) cannot see. A library member
+    // newer than that target used in a shared file typechecks here and fails only in CI's `CLI`
+    // job; running it as a member makes the failure local.
+    script: 'typecheck:cli',
+    io: 'read',
+    reads: ['spawn'],
+    converse: 'unexamined',
+  },
+  {
     script: 'typecheck:tests:ratchet',
     io: 'read',
     reads: ['file', 'spawn'],
