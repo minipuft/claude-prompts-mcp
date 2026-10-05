@@ -706,7 +706,9 @@ describe('ResourceManagerRouter', () => {
             resource_type: 'gate',
             action,
             id: 'test-gate',
-            confirm: true,
+            // Only the actions that declare `confirm` may send it; the guard under test is the
+            // source_workspace one, which sits behind the parameter refusal.
+            ...(action === 'rollback' || action === 'delete' ? { confirm: true } : {}),
             source_workspace: 'other-checkout',
           } as ResourceManagerInput,
           {}

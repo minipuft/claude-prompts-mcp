@@ -110,6 +110,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`resource_manager` refuses `confirm` on a gate, framework or category `update`, instead of accepting it and ignoring it.** `confirm` exists to approve a deletion, and only a call that deletes something you sent no replacement for takes one: `delete`, `rollback`, and a prompt `update` with `tool_operation:"remove"`, which deletes the tool's `tools/{id}/` directory. A gate, framework or category `update` deletes nothing, so there was nothing to confirm and the refusal now names `confirm` instead of reporting success for a parameter nothing read. Drop `confirm` from those calls; prompt `update` still takes it.
 - **Compatibility change:** Startup refuses newer or malformed `state.db` schema authority before
   journal or schema changes. Use a compatible engine or an isolated `MCP_RUNTIME_ROOT`; take a
   coherent backup and test a forward upgrade on a copy before recovering a shared runtime.

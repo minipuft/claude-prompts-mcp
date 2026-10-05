@@ -834,6 +834,7 @@ export const resource_managerCommands: ToolCommand[] = [
       'unset',
       'tool_operation',
       'tool_ids',
+      'confirm',
       'chain_step_operation',
       'chain_step_index',
       'chain_step_data',
