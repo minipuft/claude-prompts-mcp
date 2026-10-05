@@ -29,8 +29,10 @@
  *
  * WHAT COUNTS AS A READ — a property read off the argument object, not a name:
  *
- *   - `args.x`, `args['x']`, `(args as T).x`, `const { x } = args`, and the same through an alias
+ *   - `args.x`, `args['x']`, `(args as T).x`, and the same through an alias
  *     (`const supplied = args as Record<…>`);
+ *   - `const { x } = args` and a destructured parameter `({ x })`, only when the binding `x` is
+ *     used — destructuring a key and never touching it reads nothing;
  *   - `args[key]` inside `for (const key of LIST)` or `Object.entries(MAP)`, where LIST/MAP is a
  *     constant in the file or imported from a scanned one: every listed key (a field registry);
  *   - `this.method(args)` and `this.field.method(args)` follow `args` into that method, when the
@@ -69,6 +71,7 @@ import { fileURLToPath } from 'node:url';
 import { Node, Project, SyntaxKind } from 'ts-morph';
 
 import {
+  destructuredKeys,
   fieldCall,
   fieldClass,
   findClass,
@@ -550,9 +553,7 @@ function pipelineRequestReads(project, directory) {
       const initializer = declaration.getInitializer();
       if (!Node.isObjectBindingPattern(bound) || initializer === undefined) continue;
       if (!isRequest(unwrap(initializer))) continue;
-      for (const element of bound.getElements()) {
-        reads.add((element.getPropertyNameNode() ?? element.getNameNode()).getText());
-      }
+      for (const key of destructuredKeys(bound)) reads.add(key);
     }
   }
   return reads;

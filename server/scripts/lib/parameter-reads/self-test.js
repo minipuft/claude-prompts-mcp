@@ -127,6 +127,65 @@ function selfTestSystemControl(subject) {
   return failures.map((failure) => `system_control: ${failure}`);
 }
 
+/**
+ * `used`: whether each destructured key's binding is used. The three shapes a key is destructured
+ * in: off the argument object, under another name, and in a method's parameter list.
+ */
+function bindingFixture(subject, { used }) {
+  const project = new Project({ useInMemoryFileSystem: true });
+  project.createSourceFile('/router.ts', FIXTURE_ROUTER);
+  project.createSourceFile(
+    '/handler.ts',
+    `
+export class DemoHandler {
+  async execute(args: any) {
+    switch (args.operation) {
+      case 'local': {
+        const { id } = args;
+        return ${used ? 'id' : "'id is named here and used nowhere'"};
+      }
+      case 'renamed': {
+        const { label: shown } = args;
+        return ${used ? '{ shown }' : "'label'"};
+      }
+      case 'parameter':
+        return this.show(args);
+      default:
+        throw new Error('unknown');
+    }
+  }
+  private show({ detail }: any) {
+    return ${used ? 'detail' : "'detail'"};
+  }
+}
+`
+  );
+  return runSystemControl(subject, project, [
+    { id: 'demo:local', parameters: ['action', 'operation', 'id'] },
+    { id: 'demo:renamed', parameters: ['action', 'operation', 'label'] },
+    { id: 'demo:parameter', parameters: ['action', 'operation', 'detail'] },
+  ]);
+}
+
+function selfTestUnusedBindings(subject) {
+  const failures = [];
+  // Planted: each key is destructured and its binding never used — the `const { id } = args` blind
+  // spot (#366). Destructuring alone reads nothing.
+  const planted = bindingFixture(subject, { used: false });
+  const expected = ['demo:local/id', 'demo:parameter/detail', 'demo:renamed/label'];
+  if (JSON.stringify(keys(planted)) !== JSON.stringify(expected)) {
+    failures.push(
+      `planted: expected ${expected.join(', ')}, got ${keys(planted).join(', ') || 'none'}`
+    );
+  }
+  // Twin, differing only in using each binding (a shorthand property counts as a use).
+  const fixed = bindingFixture(subject, { used: true });
+  if (fixed.findings.length !== 0) failures.push(`fixed twin: got ${keys(fixed).join(', ')}`);
+  if (fixed.verified !== 6)
+    failures.push(`fixed twin: expected 6 proven reads, got ${fixed.verified}`);
+  return failures.map((failure) => `unused binding: ${failure}`);
+}
+
 /** `helperReads`: whether the helper reads `severity`. `routerCopies`: whether `reason` is copied. */
 function resourceManagerFixture(subject, { helperReads, routerCopies }) {
   const project = new Project({ useInMemoryFileSystem: true });
@@ -244,8 +303,11 @@ function selfTestResourceManager(subject) {
   return failures.map((failure) => `resource_manager: ${failure}`);
 }
 
-/** `planted`: registration drops `inputs`, and no stage reads the `gates` request field. */
-function promptEngineFixture(subject, { planted }) {
+/**
+ * `planted`: registration drops `inputs`, and no stage reads the `gates` request field.
+ * `optionsUnused`: the stage destructures `options` off the request and never uses it.
+ */
+function promptEngineFixture(subject, { planted, optionsUnused = false }) {
   const project = new Project({ useInMemoryFileSystem: true });
   project.createSourceFile(
     '/index.ts',
@@ -296,7 +358,7 @@ export class Executor {
 export class Stage {
   execute(context: any) {
     const { options } = context.mcpRequest;
-    return [context.mcpRequest.command, options, context.mcpRequest.inputs${
+    return [context.mcpRequest.command, ${optionsUnused ? "'options'" : 'options'}, context.mcpRequest.inputs${
       planted ? ', context.state.gates, "\'gates\' is named here"' : ', context.mcpRequest.gates'
     }];
   }
@@ -331,6 +393,13 @@ function selfTestPromptEngine(subject) {
   if (fixed.findings.length !== 0) failures.push(`fixed twin: got ${keys(fixed).join(', ')}`);
   if (fixed.verified !== 5)
     failures.push(`fixed twin: expected 5 proven reads, got ${fixed.verified}`);
+  // Planted: the only stage reading `options` destructures it off the request and never uses it.
+  const unused = promptEngineFixture(subject, { planted: false, optionsUnused: true });
+  if (JSON.stringify(keys(unused)) !== JSON.stringify(['call/options'])) {
+    failures.push(
+      `unused binding: expected call/options, got ${keys(unused).join(', ') || 'none'}`
+    );
+  }
   return failures.map((failure) => `prompt_engine: ${failure}`);
 }
 
@@ -359,6 +428,7 @@ export function selfTest(subject) {
   const failures = [
     ...selfTestExceptions(subject),
     ...selfTestSystemControl(subject),
+    ...selfTestUnusedBindings(subject),
     ...selfTestResourceManager(subject),
     ...selfTestPromptEngine(subject),
   ];

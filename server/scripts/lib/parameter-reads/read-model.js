@@ -45,6 +45,25 @@ export function thisMethodName(call) {
   return callee.getName();
 }
 
+/**
+ * The keys an object binding pattern reads: an element counts only when the name it binds is used
+ * somewhere — `const { id } = args` with `id` never referenced reads nothing. A nested pattern
+ * counts when any name inside it is used. A shorthand property (`{ id }`) is a use.
+ */
+export function destructuredKeys(pattern) {
+  return pattern
+    .getElements()
+    .filter((element) => bindingUsed(element.getNameNode()))
+    .map((element) => (element.getPropertyNameNode() ?? element.getNameNode()).getText());
+}
+
+function bindingUsed(nameNode) {
+  if (Node.isIdentifier(nameNode)) return nameNode.findReferencesAsNodes().length > 0;
+  return nameNode
+    .getElements()
+    .some((element) => !Node.isOmittedExpression(element) && bindingUsed(element.getNameNode()));
+}
+
 /** The keys a method reads from its parameter at `index`. */
 export function readsOfMethod(context, classDeclaration, methodName, index) {
   const cacheKey = `${classDeclaration.getName()}.${methodName}#${index}`;
@@ -59,9 +78,7 @@ export function readsOfMethod(context, classDeclaration, methodName, index) {
   if (parameter !== undefined) {
     const nameNode = parameter.getNameNode();
     if (Node.isObjectBindingPattern(nameNode)) {
-      for (const element of nameNode.getElements()) {
-        reads.add((element.getPropertyNameNode() ?? element.getNameNode()).getText());
-      }
+      for (const key of destructuredKeys(nameNode)) reads.add(key);
     } else {
       const body = method.getBody();
       if (body !== undefined) {
@@ -193,9 +210,7 @@ export function readsIn(context, classDeclaration, roots, parameterName, exclude
       node.getInitializer() !== undefined &&
       isParameterRef(node.getInitializer(), parameterName)
     ) {
-      for (const element of node.getNameNode().getElements()) {
-        reads.add((element.getPropertyNameNode() ?? element.getNameNode()).getText());
-      }
+      for (const key of destructuredKeys(node.getNameNode())) reads.add(key);
     } else if (Node.isCallExpression(node)) {
       const methodName = thisMethodName(node);
       const field =
