@@ -10,9 +10,18 @@ function resolveFrameworks(frameworks?: readonly string[]): readonly string[] {
   return frameworks && frameworks.length > 0 ? frameworks : [];
 }
 
+/**
+ * Where `<prefix><framework>:` first occurs in `text`, or -1. The one comparison every site in
+ * this filter makes, and it ignores case: identifiers arrive upper-cased (`REACT`, from
+ * `PromptExecutor`'s identifier provider) while guidance authors its own casing (`- ReACT:`).
+ * A site that compared case-sensitively saw ReACT's line as absent (P6.267, P6.290).
+ */
+function findFrameworkLabel(text: string, framework: string, prefix = ''): number {
+  return text.toLowerCase().indexOf(`${prefix}${framework}:`.toLowerCase());
+}
+
 function matchesFrameworkLine(line: string, framework: string): boolean {
-  const trimmed = line.trimStart().toLowerCase();
-  return trimmed.startsWith(`- ${framework.toLowerCase()}:`);
+  return findFrameworkLabel(line.trimStart(), framework, '- ') === 0;
 }
 
 function matchesAnyFramework(line: string, frameworks: readonly string[]): boolean {
@@ -31,16 +40,12 @@ export function filterFrameworkGuidance(
   if (frameworks.length === 0) {
     return guidance;
   }
-  const resolvedFrameworkName =
-    frameworks.find((framework) => framework.toLowerCase() === activeFramework.toLowerCase()) ??
-    activeFramework;
-
   const lines = guidance.split('\n');
   const filteredLines: string[] = [];
   let foundRelevantSection = false;
 
   for (const line of lines) {
-    if (matchesFrameworkLine(line, resolvedFrameworkName)) {
+    if (matchesFrameworkLine(line, activeFramework)) {
       foundRelevantSection = true;
       filteredLines.push(line);
       continue;
@@ -56,21 +61,18 @@ export function filterFrameworkGuidance(
     }
   }
 
-  if (filteredLines.some((line) => matchesFrameworkLine(line, resolvedFrameworkName))) {
-    // Case-insensitive, like the line match above: the identifiers arrive upper-cased (`REACT`)
-    // while guidance authors its own casing (`- ReACT:`), and a case-sensitive replace left ReACT
-    // alone without the heading every other framework's guidance renders under.
-    const result = filteredLines.join('\n');
-    const marker = `- ${resolvedFrameworkName}: `;
-    const at = result.toLowerCase().indexOf(marker.toLowerCase());
-    if (at < 0) {
-      return result;
-    }
-    const authoredName = result.slice(at + 2, at + marker.length - 2);
-    return `${result.slice(0, at)}**${authoredName} Framework Guidelines:**\n- ${result.slice(at + marker.length)}`;
+  const headed = filteredLines.findIndex((line) => matchesFrameworkLine(line, activeFramework));
+  if (headed < 0) {
+    return guidance;
   }
-
-  return guidance;
+  // The heading keeps the name as the guidance authors it, whatever casing the id arrived in.
+  const line = filteredLines[headed] ?? '';
+  const item = line.trimStart();
+  const authoredName = item.slice(2, item.indexOf(':'));
+  const rest = item.slice(item.indexOf(':') + 1).trimStart();
+  filteredLines[headed] =
+    `${line.slice(0, line.length - item.length)}**${authoredName} Framework Guidelines:**\n- ${rest}`;
+  return filteredLines.join('\n');
 }
 
 /**
@@ -84,9 +86,7 @@ export function hasFrameworkSpecificContent(
   if (frameworks.length === 0) {
     return false;
   }
-  return frameworks.some(
-    (framework) => guidance.includes(`- ${framework}:`) || guidance.includes(`${framework}:`)
-  );
+  return frameworks.some((framework) => findFrameworkLabel(guidance, framework) >= 0);
 }
 
 /**
@@ -100,5 +100,5 @@ export function getFrameworksInGuidance(
   if (frameworks.length === 0) {
     return [];
   }
-  return frameworks.filter((framework) => guidance.includes(`${framework}:`));
+  return frameworks.filter((framework) => findFrameworkLabel(guidance, framework) >= 0);
 }
