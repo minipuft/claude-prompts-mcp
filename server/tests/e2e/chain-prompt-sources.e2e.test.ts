@@ -2091,11 +2091,20 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
    * `sv-drop`, row 4.4) re-renders its review with "Remaining plan: `y`, `z`" — the nodes after the
    * node under review, which IS the current node, so the list starts after it. Nothing after it
    * is missing, so this is a pin, not a fix.
+   *
+   * R194 (P6.12): `sv-drop` is `y`'s own gate, so the inserted node inherits it only from an
+   * unknown that names `y` as the step it blocks; one naming no step inherits no step's gates.
    */
   describe('P6.187: a review re-render lists the run nodes after the current one', () => {
     const blocking = {
       observations: [
-        { type: 'unknown_discovered', id: 'u-187a', statement: 'STATEMENT-u-187a', blocking: true },
+        {
+          type: 'unknown_discovered',
+          id: 'u-187a',
+          statement: 'STATEMENT-u-187a',
+          blocking: true,
+          target_step_id: 'y',
+        },
       ],
     };
     const listed = (text: string): string[] => {
@@ -3164,9 +3173,19 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
    * inserted node's ordinal is the NEXT planned step, never the inserted one.
    */
   describe('P6.176: an inserted node is never read as the planned step at its ordinal', () => {
+    /**
+     * The unknown names `y` as the step it blocks, so the inserted node inherits `y`'s own gate
+     * (R194: a step's gate reaches an inserted node only through the step the unknown names).
+     */
     const blocking = (id: string) => ({
       observations: [
-        { type: 'unknown_discovered', id, statement: `STATEMENT-${id}`, blocking: true },
+        {
+          type: 'unknown_discovered',
+          id,
+          statement: `STATEMENT-${id}`,
+          blocking: true,
+          target_step_id: 'y',
+        },
       ],
     });
     function review(chainId: string, nodeId: string): { gateIds?: string[]; maxAttempts?: number } {
@@ -3538,9 +3557,17 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
      * remainder, against the run the remainder left.
      */
     describe("P6.170: an inserted node's review follows the remainder its answering call applied", () => {
+      /**
+       * R194 (P6.12): `sv-drop` is `n2`'s own gate, so the unknown names `n2` as the step it
+       * blocks; an unknown naming no step inherits no step's gates, which would leave both twins
+       * reading an empty review whether or not the remainder is applied first.
+       */
+      const blockingN2 = {
+        observations: [{ ...blockingUnknown.observations[0], target_step_id: 'n2' }],
+      };
       async function insertInvestigation() {
         const run = await start({ command: `>>sv_a${ARROW}>>sv_b :: sv-drop` });
-        await run.call({ user_response: 'A out', ...blockingUnknown });
+        await run.call({ user_response: 'A out', ...blockingN2 });
         expect(currentNode(run.chainId)).toBe('inv-u-160');
         return run;
       }
@@ -3558,7 +3585,8 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
           'r1-b:sv_b:remainder',
           'r1-c:sv_a:remainder',
         ]);
-        expect(runState(run.chainId).reviews).toEqual({ 'inv-u-160': ['sv-block'] });
+        // The live walk's gates are the `r1-*` steps' own (R194), so nothing is inherited.
+        expect(runState(run.chainId).reviews).toEqual({});
         expect(replaced.text).not.toContain('sv-drop');
       }, 120000);
 
@@ -3569,11 +3597,11 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       }, 120000);
 
       /**
-       * P6.182 pins R84, as of 2026-09-28 · flips when the owner exempts inserted nodes from
-       * inherited gates (P6.12/P6.98). The unknown names `n2` as its `target_step_id`, and the
-       * answering call's `replace` drops `n2`: the inserted node then carries the live walk's
-       * untargeted gates (`sv-block`, from the `r1-*` steps), which is what a later call computes,
-       * and none of the dropped step's. Control: the same unknown with no remainder inherits `n2`'s.
+       * P6.182 pins R84. The unknown names `n2` as its `target_step_id`, and the answering call's
+       * `replace` drops `n2`: the inserted node then carries none of the dropped step's gates. It
+       * carries none of the `r1-*` steps' either: `sv-block` is each of those steps' own gate, and
+       * a step's gate stays on that step (R194, P6.12, which flipped this pin on 2026-10-05; it
+       * read `['sv-block']` before). Control: the same unknown with no remainder inherits `n2`'s.
        *
        * P6.275 (R84 amended). MEASURED 2026-09-28 on `ea62d3975`: a REQUEST gate targeting `n2`
        * survived the `replace` that dropped `n2` (review `['tgt182', 'sv-block']`), because a target
@@ -3610,7 +3638,7 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
           return run;
         }
 
-        test("(a) inherits the live walk's untargeted gates, and the next call grades them", async () => {
+        test("(a) inherits no gate of the dropped step or of the live walk's steps", async () => {
           const run = await insertTargeted('tgt275a');
           const replaced = await run.call({
             user_response: 'investigated',
@@ -3623,19 +3651,11 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
             'r1-b',
             'r1-c',
           ]);
-          expect(runState(run.chainId).reviews).toEqual({ 'inv-u-182': ['sv-block'] });
+          // No review held the inserted node, so the answering call moved onto `r1-a`.
+          expect(runState(run.chainId).reviews).toEqual({});
+          expect(currentNode(run.chainId)).toBe('r1-a');
           expect(replaced).not.toContain('sv-drop');
           expect(replaced).not.toContain('TGT-275');
-
-          const failed = await run.call({
-            user_response: 'investigated again',
-            gate_verdict: FAIL,
-          });
-          expect(currentNode(run.chainId)).toBe('inv-u-182');
-          expect(runState(run.chainId).reviews).toEqual({ 'inv-u-182': ['sv-block'] });
-          expect(failed).toContain('### sv-block');
-          expect(failed).not.toContain('sv-drop');
-          expect(failed).not.toContain('TGT-275');
         }, 120000);
 
         test('(b) control: with no remainder it inherits the gates of the step it targets', async () => {
@@ -4047,8 +4067,8 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       ]);
     }, 120000);
 
-    // Pinned on the steps' bound gates only: a review or render on n2-* still lists the first
-    // segment's gate through the forward accumulation P6.98 leaves to the owner's ruling.
+    // Pinned on the steps' bound gates; that a review or render on n2-* lists none of the first
+    // segment's gates (R194) is pinned in `gates-only-review-join.e2e.test.ts` (P6.12, P6.98).
     test("(b) a named gate on the first segment does not bind the chain-prompt segment's steps", async () => {
       const run = await start({ command: `>>sv_a :: g99f:"LEAD-99"${ARROW}>>sv_chain` });
       expect(runState(run.chainId).steps).toEqual([
@@ -4093,14 +4113,11 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       const second = await run.call({ user_response: 'A fixed', gate_verdict: PASS });
       expect(templates(second)).toEqual(['BODY-sv_b topic=']);
       expect(second).toContain('TWO-110');
-      // Step 2's render and review also list step 1's `g110` through the forward accumulation
-      // P6.98 leaves to the owner's ruling (as P6.99 (b) pins), so step 2 is pinned on its bound
-      // gate and on its review carrying `g110-2`.
+      // Step 1's `g110` stays on step 1 (R194, P6.12): step 2's review holds its own gate only.
       const failedSecond = await run.call({ user_response: 'B out', gate_verdict: FAIL });
       expect(failedSecond).toContain('TWO-110');
-      const reviews = runState(run.chainId).reviews;
-      expect(Object.keys(reviews)).toEqual(['n2']);
-      expect(reviews['n2']).toContain('g110-2');
+      expect(failedSecond).not.toContain('ONE-110');
+      expect(runState(run.chainId).reviews).toEqual({ n2: ['g110-2'] });
     }, 120000);
 
     test('(b) control: one name in one segment binds that segment only', async () => {
@@ -4218,17 +4235,20 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       expect(runState(second.chainId).reviews).toEqual({ b: ['sv-block', 'g108d-2'] });
     }, 120000);
 
-    // P6.98 twin, pinned as it holds: step 3 still renders and reviews the earlier segments'
-    // step gates, which live as long as the run. The mechanism is the chain accumulator step N
-    // inherits from steps 1..N-1 (P4.110), not the gate lifetime; that is P6.12, the owner's.
-    test('(e) the forward accumulation is not the gate lifetime', async () => {
+    // P6.98 twin. The earlier segments' step gates still live as long as the run, but a gate
+    // written on a step reaches no later step (R194, P6.12; this pin asserted the opposite until
+    // 2026-10-05): step 2 renders its own gate only, and step 3 renders neither.
+    test("(e) a live step gate does not reach a later step's render", async () => {
       const run = await start({
         command: `>>sv_a :: "XA-108E"${ARROW}>>sv_b :: "YB-108E"${ARROW}>>sv_a`,
       });
-      await run.call({ user_response: 'A out', gate_verdict: PASS });
+      const step2 = await run.call({ user_response: 'A out', gate_verdict: PASS });
+      expect(step2).toContain('YB-108E');
+      expect(step2).not.toContain('XA-108E');
       const step3 = await run.call({ user_response: 'B out', gate_verdict: PASS });
-      expect(step3).toContain('XA-108E');
-      expect(step3).toContain('YB-108E');
+      expect(templates(step3)).toEqual(['BODY-sv_a topic=']);
+      expect(step3).not.toContain('XA-108E');
+      expect(step3).not.toContain('YB-108E');
     }, 120000);
   });
 
