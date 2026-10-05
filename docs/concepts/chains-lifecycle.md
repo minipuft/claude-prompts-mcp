@@ -302,14 +302,19 @@ step at the inserted step's position (`validate:step-lookup-by-node` refuses one
 **A gate written on a step stays on that step.** An inline gate on one step (`>>a :: "criteria"`, a
 named `:: id:"…"` on a segment, or a chain prompt step's `inlineGateIds`) renders in that step's
 Inline Gates and is reviewed in that step's review only; it does not appear in a later step's
-render or review. A registered gate the request names in `gates` with no step target, a framework
-gate, and a gate a step's own prompt includes keep reaching every step they reached before; a gate with `target_step_id`, `target_step_number` or `apply_to_steps`
-reaches the steps it names.
+render or review. So does a gate a step's own prompt supplies: one its `gateConfiguration.include`
+names, or one its category activates. In `>>a --> >>b --> >>c` where `b`'s prompt includes
+`code-quality` and the other two do not, `code-quality` renders and is reviewed on `b` only, and a
+step whose own prompt also supplies it holds it on that step too. A registered gate the request
+names in `gates` with no step target and a framework gate keep reaching every step they reached
+before; a gate with `target_step_id`, `target_step_number` or `apply_to_steps` reaches the steps it
+names.
 
-**A step's own gate declarations bind its own set.** A chain accumulates the run's gates as it
-walks — step N sees what steps 1..N-1 collected for the run, plus anything the caller supplied — but
-the set a step is actually given is filtered through that step's own `gateConfiguration` before it
-renders.
+**A step's own gate declarations bind its own set.** A chain walks its steps in run order, and
+step N is offered the run-wide gates (anything the caller supplied, and framework gates) beside
+the gates its own resolution accepts; a gate an earlier step wrote or its prompt supplied stays on
+that earlier step. The set a step is actually given is filtered through that step's own
+`gateConfiguration` before it renders.
 So `exclude` on one step removes a gate for that step alone, whatever put it in the run, while a
 sibling that did not exclude it keeps it. The one thing `exclude` cannot remove is a gate the
 CALLER named in the `gates` parameter: that outranks a prompt author's preference, exactly as it
@@ -320,8 +325,8 @@ skipped never fires. A step-targeted gate also enters gate REVIEW only on the st
 an untargeted gate still reviews every step, run-wide inheritance unchanged. Known residual: a
 mutation-inserted node standing as the current step matches no parse-time step, so review falls
 back to run-wide for that step. So an inserted investigation node inherits the run-wide gates, plus
-the gates written on the step its unknown names in `target_step_id`; an unknown that names no step
-passes on no step's own gates. A FAIL on it opens a review as on any step that carries a gate. What
+the gates written on, or supplied by the prompt of, the step its unknown names in `target_step_id`;
+an unknown that names no step passes on no step's own gates. A FAIL on it opens a review as on any step that carries a gate. What
 it is spared is structural friction: it
 declares no framework sections and no phase guard binds it, because its only output is
 observations, and grading their shape would work against the point of inserting one. When the call
