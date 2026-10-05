@@ -105,6 +105,14 @@ interface ChainStepEnhancementInput {
   readonly currentStepKey: CurrentStepKey;
   readonly stepDefinitionIds: ReadonlyMap<string, string>;
   readonly stepBindings: StepGateBindings;
+  /** The chain prompt's own gates, on the run's final step only (R1); undefined on every other. */
+  readonly chainPromptResolution?: GateResolutionResult | undefined;
+}
+
+/** The chain prompt's own gates and the run's final step, which they belong to (R1 to R3). */
+interface ChainPromptGates {
+  readonly finalStep: ChainStepPrompt;
+  readonly resolution: GateResolutionResult;
 }
 
 /**
@@ -119,8 +127,9 @@ interface StepAddress {
 /**
  * Gate id to the steps whose own resolution supplied it: a gate written on a step (R194, P6.12),
  * or one the step's own prompt supplies through its `gateConfiguration`, its inline gate
- * definitions or its category (R204, P6.310), belongs to that step. A gate absent from the map is
- * run-wide or carries its own target.
+ * definitions or its category (R204, P6.310), belongs to that step. The chain prompt's own gates
+ * belong to the run's final step (R1). A gate absent from the map is run-wide or carries its own
+ * target.
  */
 type StepGateBindings = ReadonlyMap<string, readonly StepAddress[]>;
 
@@ -432,12 +441,18 @@ export class GateEnhancementService {
     };
 
     // Each step is filtered against the bindings of the steps walked before it: the accumulator
-    // at step N holds only what the call held before the walk and what steps 1..N-1 accepted.
+    // at step N holds only what the call held before the walk and what steps 1..N-1 accepted. The
+    // final step also records the chain prompt's own gates, which are bound to it alone (R1).
     let totalGatesApplied = 0;
-    let stepBindings: StepGateBindings = NO_STEP_BINDINGS;
+    const chainGates = await this.chainPromptGates(context, steps, runStepView, frameworkGateIds);
+    let stepBindings = chainPromptBindings(chainGates, runWide);
     context.state.gates.gatedStepNumbers = [];
     for (const step of steps) {
-      const outcome = await this.applyGatesToStep(step, { ...stepInput, stepBindings });
+      const outcome = await this.applyGatesToStep(step, {
+        ...stepInput,
+        stepBindings,
+        chainPromptResolution: step === chainGates?.finalStep ? chainGates.resolution : undefined,
+      });
       totalGatesApplied += outcome.applied;
       stepBindings = withStepGates(stepBindings, step, outcome.accepted, runWide);
     }
@@ -528,6 +543,10 @@ export class GateEnhancementService {
       context,
       walkedStepResolutionInput(step, prompt, stepFrameworkId, input)
     );
+    // Recorded after the step's own resolution, so the step's own gates keep their place first.
+    if (input.chainPromptResolution !== undefined) {
+      this.recordIntoAccumulator(context, input.chainPromptResolution);
+    }
 
     const gateIds = this.stepApplicableGateIds(step, input, activeFrameworkId, resolution);
 
@@ -839,7 +858,14 @@ export class GateEnhancementService {
     input: GateResolutionInput
   ): Promise<GateResolutionResult> {
     const resolution = await this.buildGateSetResolver().resolve(input);
+    this.recordIntoAccumulator(context, resolution);
+    // Returned, not discarded: `acceptsUnrankedGate` is how anything that adds a gate AFTER this
+    // point asks whether this resolution's vetoes allow it.
+    return resolution;
+  }
 
+  /** Record a resolution's accepted gates in the accumulator, with their registry enrichment. */
+  private recordIntoAccumulator(context: ExecutionContext, resolution: GateResolutionResult): void {
     const registryGateIds: string[] = [];
     for (const gate of resolution.accepted) {
       if (gate.source === 'registry-auto') {
@@ -863,10 +889,6 @@ export class GateEnhancementService {
         unregistered: Object.fromEntries(resolution.unregistered),
       });
     }
-
-    // Returned, not discarded: `acceptsUnrankedGate` is how anything that adds a gate AFTER this
-    // point asks whether this resolution's vetoes allow it.
-    return resolution;
   }
 
   private addGatesToAccumulator(
@@ -1095,7 +1117,13 @@ export class GateEnhancementService {
       seedGateIds: new Set(settings.seedGateIds),
       frameworkGateIds: settings.frameworkGateIds,
     };
-    let stepBindings: StepGateBindings = NO_STEP_BINDINGS;
+    const chainGates = await this.chainPromptGates(
+      context,
+      gateContext.steps,
+      runStepView,
+      settings.frameworkGateIds
+    );
+    let stepBindings = chainPromptBindings(chainGates, runWide);
     for (const step of gateContext.steps) {
       const prompt = step.convertedPrompt;
       if (prompt === undefined || this.shouldSkip(step.executionPlan?.modifiers)) {
@@ -1106,9 +1134,36 @@ export class GateEnhancementService {
         walkedStepResolutionInput(step, prompt, frameworkId, settings)
       );
       resolution.accepted.forEach((gate) => accumulated.add(gate.id));
+      if (step === chainGates?.finalStep) {
+        chainGates.resolution.accepted.forEach((gate) => accumulated.add(gate.id));
+      }
       stepBindings = withStepGates(stepBindings, step, resolution.accepted, runWide);
     }
     return this.inheritedReviewGateIds([...accumulated], runStepView, stepBindings);
+  }
+
+  /**
+   * The chain prompt's own gates and the run's final step (R1 to R5), or undefined when the call
+   * names no chain prompt (an arrow chain, a stepless run) or no walked step is live.
+   *
+   * Its own gates are what its `gateConfiguration.include` and its category select, less its
+   * `exclude` (R2). The planner put them in the chain plan and the walk never read that plan, so
+   * they reached no step. Framework gates are withheld here: they still come from each step's own
+   * resolution, as before. Resolved, not recorded: the walk records them on the final step, after
+   * that step's own resolution, and the inherited re-derivation adds them at the same point.
+   */
+  private async chainPromptGates(
+    context: ExecutionContext,
+    steps: readonly ChainStepPrompt[],
+    runStepView: RunStepView | undefined,
+    frameworkGateIds: ReadonlySet<string>
+  ): Promise<ChainPromptGates | undefined> {
+    const finalStep = finalWalkedStep(steps, runStepView);
+    const input = chainPromptResolutionInput(context, frameworkGateIds);
+    if (finalStep === undefined || input === undefined) {
+      return undefined;
+    }
+    return { finalStep, resolution: await this.buildGateSetResolver().resolve(input) };
   }
 
   /**
@@ -1377,6 +1432,73 @@ function withStepGates(
     }
   }
   return next;
+}
+
+/**
+ * The bindings every walk starts from: the chain prompt's own gates bound to the run's final step
+ * (R1), so the one filter passes them there and on no other step. PURE.
+ */
+function chainPromptBindings(
+  chainGates: ChainPromptGates | undefined,
+  runWide: RunWideGates
+): StepGateBindings {
+  return chainGates === undefined
+    ? NO_STEP_BINDINGS
+    : withStepGates(
+        NO_STEP_BINDINGS,
+        chainGates.finalStep,
+        chainGates.resolution.accepted,
+        runWide
+      );
+}
+
+/**
+ * The run's final step: the last walked step whose node is live (R3). PURE.
+ *
+ * The walk is in run order and holds no inserted node, so a `remainder` that extends the run moves
+ * the final step to its last node, and an inserted node is never final. A node the mutation policy
+ * retired will not run, so it is passed over. With no run yet every step is live.
+ */
+function finalWalkedStep(
+  steps: readonly ChainStepPrompt[],
+  view: RunStepView | undefined
+): ChainStepPrompt | undefined {
+  const live = view === undefined ? undefined : liveNodeIds(view);
+  return [...steps]
+    .reverse()
+    .find(
+      (step) =>
+        live === undefined ||
+        typeof step.nodeId !== 'string' ||
+        step.nodeId.length === 0 ||
+        live.includes(step.nodeId)
+    );
+}
+
+/**
+ * The resolution input for the chain prompt's own gates, or undefined when the call names no
+ * chain prompt. PURE.
+ *
+ * Framework gates are vetoed (`frameworkGatesEnabled: false`, with the known framework ids): they
+ * are no chain prompt's own, and an accepted one no step binds would reach every step.
+ */
+function chainPromptResolutionInput(
+  context: ExecutionContext,
+  frameworkGateIds: ReadonlySet<string>
+): GateResolutionInput | undefined {
+  const prompt = context.parsedCommand?.convertedPrompt;
+  if (prompt?.chainSteps === undefined || prompt.chainSteps.length === 0) {
+    return undefined;
+  }
+  return {
+    prompt,
+    category: prompt.category,
+    modifiers: context.executionPlan?.modifiers,
+    frameworkInjected: false,
+    frameworkGatesEnabled: false,
+    knownFrameworkGateIds: [...frameworkGateIds],
+    autoAssignCategoryGates: prompt.category.length > 0,
+  };
 }
 
 /** No parse step has ordinal 0, so a target with neither node id nor ordinal matches none. */

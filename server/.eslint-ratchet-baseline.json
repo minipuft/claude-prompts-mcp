@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-05T11:32:14.436Z",
+  "generatedAt": "2026-10-05T22:32:41.334Z",
   "eslintTarget": "src,scripts,eslint-rules",
   "totals": {
     "errors": 2457,
-    "warnings": 718
+    "warnings": 719
   },
   "byRule": {
     "@typescript-eslint/strict-boolean-expressions": {
@@ -83,6 +83,10 @@
       "errors": 0,
       "warnings": 11
     },
+    "max-lines": {
+      "errors": 0,
+      "warnings": 2
+    },
     "@typescript-eslint/no-floating-promises": {
       "errors": 7,
       "warnings": 0
@@ -94,10 +98,21 @@
     "@typescript-eslint/no-misused-promises": {
       "errors": 5,
       "warnings": 0
-    },
-    "max-lines": {
-      "errors": 0,
-      "warnings": 1
     }
-  }
+  },
+  "overrideLog": [
+    {
+      "date": "2026-10-05T22:32:41.334Z",
+      "ruleId": "max-lines",
+      "reason": "gate-enhancement-service.ts passes 1000 counted lines with the chain prompt's own gates bound to the run's final step (R1); one responsibility, the chain gate walk, so no split",
+      "before": {
+        "errors": 0,
+        "warnings": 1
+      },
+      "after": {
+        "errors": 0,
+        "warnings": 2
+      }
+    }
+  ]
 }
