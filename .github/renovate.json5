@@ -29,6 +29,16 @@
   // override this schedule below.
   schedule: ["* 0-5 * * 1"],
 
+  // Renovate's default (`true`) still updates EXISTING branches outside the schedule: a push
+  // to main rebased every open Renovate branch that fell behind or conflicted, at any hour.
+  // `false` stops that, so open Renovate PRs change only inside the Monday 00:00-05:59 UTC
+  // window (a rebase requested from the Dependency Dashboard or the `rebase` label still
+  // runs). The same switch holds back the two automerging rules below, which keep
+  // `rebaseWhen: "behind-base-branch"`: an automerge candidate is rebased onto a new main,
+  // and so can merge, only inside the window. A conflicted branch also waits for the window.
+  // Vulnerability alerts and the MCP SDK rule carry their own `at any time` schedule.
+  updateNotScheduled: false,
+
   // Rebase a branch only when it conflicts, not on every main merge. The default `auto`
   // resolves to `behind-base-branch` here because `main` requires up-to-date branches, so
   // every merge to main re-ran the full CI on every open Renovate branch (148 CI runs on 7
