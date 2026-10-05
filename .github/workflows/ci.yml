@@ -259,11 +259,14 @@ jobs:
 
   # ============================================================
   # Stage 2: Build (single Node LTS, upload artifact)
-  # Build once, share with test matrix
+  # Build once, share with the test jobs. Runs BESIDE lint, not after it: the test
+  # jobs only need `dist/`, so serializing build behind a 3-minute lint put lint on
+  # the critical path for nothing. A lint failure still fails the PR through the
+  # required `Lint & Validate` context; it no longer also holds the tests back.
   # ============================================================
   build:
     name: Build
-    needs: [classify, lint]
+    needs: classify
     if: always()
     runs-on: ubuntu-latest
     defaults:
@@ -274,9 +277,7 @@ jobs:
         working-directory: .
         run: |
           echo "classifier result: ${{ needs.classify.result }}"
-          echo "lint result: ${{ needs.lint.result }}"
           [ "${{ needs.classify.result }}" = "success" ]
-          [ "${{ needs.lint.result }}" = "success" ]
 
       - name: Record intentional lightweight pass
         if: needs.classify.result == 'success' && needs.classify.outputs.scope != 'full'
@@ -346,8 +347,12 @@ jobs:
           retention-days: 1
 
   # ============================================================
-  # Stage 3: Test matrix (LTS versions only)
-  # Download artifact, run tests on multiple Node versions
+  # Stage 3: Test jobs (LTS versions only), run in parallel
+  # Download artifact, run tests on multiple Node versions.
+  #
+  # `test` (unit + integration) and `e2e` are separate jobs so the ~5.5 minute e2e run
+  # overlaps the unit/integration run instead of following it. They install and download
+  # the same inputs; the duplicated setup (~0.5 min) is what the overlap costs.
   # ============================================================
   test:
     name: Test (Node ${{ matrix.node }})
@@ -365,6 +370,8 @@ jobs:
       # local dev box ran .node-version's 24 — so `validate:all` was never once executed on the
       # version that ships, and the resolved 22.x moved under CI without a commit. Both jobs
       # read .node-version now; the floor is proven here and nowhere else.
+      #
+      # Keep the `e2e` job's matrix in step with this one.
       matrix:
         node: ["22.13.0", "24"]
     defaults:
@@ -399,11 +406,16 @@ jobs:
           name: dist
           path: server/dist/
 
+      # The unit suite runs once per leg. On the 22.13.0 leg that single run is the coverage
+      # run (`jest --coverage tests/unit`): jest exits non-zero on a failing test AND on a
+      # missed coverage threshold, so it is the unit gate and the threshold check in one. A
+      # plain `test:ci` run before it executed the same suite twice (measured: 2.8 + 3.2 min).
       - name: Unit tests
+        if: matrix.node != '22.13.0'
         run: npm run test:ci
         timeout-minutes: 15
 
-      - name: Coverage threshold check
+      - name: Unit tests with coverage threshold
         if: matrix.node == '22.13.0'
         run: npm run test:coverage
         timeout-minutes: 15
@@ -417,21 +429,63 @@ jobs:
         run: npm run test:integration
         timeout-minutes: 15
 
+  e2e:
+    name: E2E (Node ${{ matrix.node }})
+    needs: [classify, build]
+    if: ${{ needs.classify.outputs.scope == 'full' && needs.build.result == 'success' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      # Same versions as the `test` job, for the same reasons recorded there.
+      matrix:
+        node: ["22.13.0", "24"]
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: |
+            server/package-lock.json
+            package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline --no-audit
+
+      # Kept from when e2e ran inside the `test` job, where this install had already happened.
+      # Whether any e2e spec reads the root tree is unmeasured; dropping it is a separate change.
+      - name: Install dependencies (root workspaces)
+        working-directory: .
+        run: npm ci --prefer-offline --no-audit
+
+      - name: Download build artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: server/dist/
+
       - name: E2E tests
         run: npm run test:e2e
 
   # ============================================================
-  # Stage 4: Matrix aggregator
+  # Stage 4: Test aggregator
   #
-  # `Test (Node 22.x)` is a check-run name derived from a matrix value, so it changes
-  # whenever the matrix changes — requiring it would re-create the "required context
-  # nothing reports" bug the moment a Node version is added or dropped. This job's name
-  # is a literal, so it is stable, and `needs.test.result` is only `success` when every
-  # matrix leg succeeded. Require this one, never the interpolated ones.
+  # `Test (Node 22.x)` and `E2E (Node 22.x)` are check-run names derived from a matrix
+  # value, so they change whenever the matrix changes — requiring them would re-create the
+  # "required context nothing reports" bug the moment a Node version is added or dropped.
+  # This job's name is a literal, so it is stable, and `needs.<job>.result` is only
+  # `success` when every matrix leg succeeded. Require this one, never the interpolated
+  # ones. It aggregates BOTH test jobs: a red e2e leg must fail this context.
   # ============================================================
   test-suite:
     name: Test Suite
-    needs: [classify, test]
+    needs: [classify, test, e2e]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -439,10 +493,12 @@ jobs:
         run: |
           echo "classifier result: ${{ needs.classify.result }}"
           echo "validation scope: ${{ needs.classify.outputs.scope }}"
-          echo "test matrix aggregate result: ${{ needs.test.result }}"
+          echo "unit/integration matrix aggregate result: ${{ needs.test.result }}"
+          echo "e2e matrix aggregate result: ${{ needs.e2e.result }}"
           [ "${{ needs.classify.result }}" = "success" ] || exit 1
           if [ "${{ needs.classify.outputs.scope }}" = "full" ]; then
             [ "${{ needs.test.result }}" = "success" ] || exit 1
+            [ "${{ needs.e2e.result }}" = "success" ] || exit 1
           fi
 
   # ============================================================

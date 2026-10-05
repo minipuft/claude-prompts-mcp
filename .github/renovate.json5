@@ -29,6 +29,19 @@
   // override this schedule below.
   schedule: ["* 0-5 * * 1"],
 
+  // Rebase a branch only when it conflicts, not on every main merge. The default `auto`
+  // resolves to `behind-base-branch` here because `main` requires up-to-date branches, so
+  // every merge to main re-ran the full CI on every open Renovate branch (148 CI runs on 7
+  // Renovate branches against 33 on non-bot branches, 2026-09-25 onward). The rebase now
+  // happens once, when a PR is actually updated for merge.
+  //
+  // Not in the shared preset (`validate:renovate-preset-agreement` compares only keys the
+  // preset sets), so this is a local addition, not a declared override. The two automerging
+  // rules below keep `behind-base-branch`: Renovate documents that `conflicted` plus
+  // required up-to-date branches makes automerge impossible once a PR falls behind without
+  // conflicting, which would strand them.
+  rebaseWhen: "conflicted",
+
   // Renovate owns the merge decision for the narrowly eligible rules below. GitHub
   // platform automerge can merge while Renovate's stability-days status is pending,
   // so it must remain disabled for minimumReleaseAge to be an effective guard.
@@ -89,6 +102,7 @@
       matchUpdateTypes: ["minor", "patch", "pin", "digest"],
       minimumReleaseAge: "14 days",
       automerge: true,
+      rebaseWhen: "behind-base-branch",
     },
     {
       description: "Isolate major updates for manual review",
@@ -251,6 +265,7 @@
     minimumReleaseAge: "3 days",
     minimumReleaseAgeBehaviour: "timestamp-optional",
     automerge: true,
+    rebaseWhen: "behind-base-branch",
     commitMessageAction: "refresh",
   },
 
