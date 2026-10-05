@@ -379,6 +379,15 @@ export const isRunComplete = (session: RunHoldFacts & { runStatus?: ChainRunStat
   (session.state.currentNodeId === null && !isRunHeldOpen(session));
 
 /**
+ * True when a call carrying request gates and no verdict joins `review` (R173): a step's gate
+ * review awaiting a verdict, so the next verdict grades what joined. The run-step view reads it to
+ * accept such a gate on the reviewed node and `GateEnforcementAuthority.joinSentGates` to join it,
+ * so the acceptance and the join cannot disagree. PURE.
+ */
+export const acceptsVerdictlessJoin = (review: GateReview | undefined): boolean =>
+  review?.kind === 'gate' && review.phase === 'awaiting-verdict';
+
+/**
  * True when a run has walked past its last node but may not complete yet: a detached
  * (`await: run`) node it spawned has not reported (Tier 4), or a review of one of its nodes is
  * still open. Such a run is NOT complete — its status stays non-terminal, and a resume reaches it

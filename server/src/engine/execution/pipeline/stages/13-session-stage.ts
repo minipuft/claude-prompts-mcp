@@ -398,6 +398,14 @@ export class SessionManagementStage extends BasePipelineStage {
 
     const parsedClone = this.cloneParsedCommand(context.parsedCommand);
     const planClone = this.cloneExecutionPlan(context.executionPlan);
+    // The run's framework is decided once, here at its first call (R176): every resume decides
+    // from this record, so switching the active framework later moves none of the run's steps.
+    const runFrameworkId = context.frameworkAuthority.getCachedFrameworkId();
+    if (runFrameworkId === undefined) {
+      delete planClone.runFrameworkId;
+    } else {
+      planClone.runFrameworkId = runFrameworkId;
+    }
     const requestGates = temporaryRequestGates(
       context.state.gates.requestedOverrides?.gates,
       context.state.gates.canonicalGateIdsFromTemporary

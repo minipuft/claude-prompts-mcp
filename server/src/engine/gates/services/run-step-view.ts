@@ -15,7 +15,7 @@ import type { ChainNode } from '#shared/types/chain-execution.js';
 import type { ChainSession, ChainSessionService } from '#shared/types/index.js';
 import type { StateStoreOptions } from '#shared/types/persistence.js';
 
-import { isRunComplete } from '#shared/types/chain-session.js';
+import { acceptsVerdictlessJoin, isRunComplete } from '#shared/types/chain-session.js';
 
 export interface RunStepView {
   /**
@@ -55,6 +55,11 @@ export interface RunStepView {
    * stage's already-complete reply, so no step target of that call is judged against its position.
    */
   readonly complete?: boolean;
+  /**
+   * True when the current node's gate review awaits a verdict (`acceptsVerdictlessJoin`): a call
+   * sending a gate on that node with no verdict joins the review, so the gate is not late (R173).
+   */
+  readonly currentNodeReviewJoinable?: boolean;
   /**
    * Provenance of the node the run is standing at — present ONLY when the mutation policy
    * INSERTED that node mid-run (P5-F4, closing the last surviving P4-F3 shape).
@@ -133,6 +138,9 @@ export function createRunStepViewProvider(store: ChainSessionService): RunStepVi
       skippedNodeIds,
       currentNodeId: session.state.currentNodeId,
       complete: isRunComplete(session),
+      currentNodeReviewJoinable:
+        typeof session.state.currentNodeId === 'string' &&
+        acceptsVerdictlessJoin(store.getReview(session.sessionId, session.state.currentNodeId)),
     };
 
     const currentNodeOrigin = resolveInsertedNodeOrigin(session);

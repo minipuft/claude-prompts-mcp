@@ -659,4 +659,11 @@ export interface ExecutionPlan {
   requiresSession: boolean;
   category?: string;
   modifiers?: ExecutionModifiers;
+  /**
+   * The framework a run decided at its first call, recorded in its blueprint (R176). A resumed run
+   * restores it and decides from it, never from the active framework again, so switching the active
+   * framework mid-run changes none of the run's steps. Absent when the run decided none, and on
+   * every plan the planner produces: only the session stage writes it, into the blueprint's copy.
+   */
+  runFrameworkId?: string;
 }

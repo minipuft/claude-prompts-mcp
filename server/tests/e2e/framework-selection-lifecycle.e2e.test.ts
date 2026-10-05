@@ -21,6 +21,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 
 import { buildServerEnv, createHermeticRoots } from './helpers/child-env.js';
@@ -276,6 +277,35 @@ async function switchTo(session: McpSession, frameworkId: string): Promise<void>
   });
   expect(switched.isError).toBe(false);
 }
+
+/**
+ * A full answer under `radiant` (this file's configured default): every required section, carrying
+ * a term its guard asks for. Since R170 an answer failing its phase guard holds the run, so a step
+ * a twin means to pass must conform; CAGEERF headers failed radiant's guards and only moved on while
+ * the run advanced ungraded.
+ */
+const RADIANT_SECTIONS = [
+  ['Reference the Vision', 'the album vision and its atmosphere'],
+  ['Articulate Goals', 'the goal and the mood it must reach'],
+  ['Draw the Palette', 'an OKLCH palette read from the album light'],
+  ['Infuse Atmosphere & Motion', 'motion that follows the audio energy'],
+  ['Anchor to Surfaces', 'each token on its surface and focal selector'],
+  ['Test in the Living Client', 'verify the result live over CDP'],
+]
+  .map(([header, topic]) => `## ${header}\n${`This section covers ${topic}, in full. `.repeat(4)}`)
+  .join('\n\n');
+
+/**
+ * What any framework renders: its block, its required sections, its guideline gate. Headings and
+ * section headers, never a framework's bare name: the framework-compliance guidance lists every
+ * framework by name under any of them.
+ */
+const FRAMEWORK_MARKERS = [
+  'Framework Active',
+  '**Required Sections**',
+  'Framework Guidelines',
+  'Framework Compliance',
+];
 
 const cleanups: Array<() => Promise<void>> = [];
 
@@ -690,32 +720,8 @@ describe('P6.198: a framework override needs no system toggle on a step added mi
  * steps read the toggle on every call.
  */
 describe('R158: the framework toggle decides a run at its first call (Streamable HTTP)', () => {
-  /**
-   * A full answer under the run's framework, `radiant` (this file's configured default): every
-   * required section, carrying a term its guard asks for. Since R170 an answer failing its phase
-   * guard holds the run, so a step this describe means to pass must conform; the CAGEERF headers
-   * it sent before failed radiant's guards and only moved on because the run advanced ungraded.
-   */
-  const SECTIONS = [
-    ['Reference the Vision', 'the album vision and its atmosphere'],
-    ['Articulate Goals', 'the goal and the mood it must reach'],
-    ['Draw the Palette', 'an OKLCH palette read from the album light'],
-    ['Infuse Atmosphere & Motion', 'motion that follows the audio energy'],
-    ['Anchor to Surfaces', 'each token on its surface and focal selector'],
-    ['Test in the Living Client', 'verify the result live over CDP'],
-  ]
-    .map(
-      ([header, topic]) => `## ${header}\n${`This section covers ${topic}, in full. `.repeat(4)}`
-    )
-    .join('\n\n');
+  const SECTIONS = RADIANT_SECTIONS;
   const PASS = 'GATE_REVIEW: PASS - ok';
-  /** What any framework renders: its block, its required sections, its guideline gate. */
-  const FRAMEWORK_MARKERS = [
-    'Framework Active',
-    '**Required Sections**',
-    'Framework Guidelines',
-    'Framework Compliance',
-  ];
   const STRUCTURAL_REVIEW = '**Structural Review Required**';
   const rendersNoFramework = (text: string) =>
     FRAMEWORK_MARKERS.filter((marker) => text.includes(marker));
@@ -819,6 +825,226 @@ describe('R158: the framework toggle decides a run at its first call (Streamable
     expect(run.contributedAnswered.text).toContain(STRUCTURAL_REVIEW);
   }, 120000);
 });
+
+/**
+ * P6.283. Since P6.270 a run started with the framework system disabled renders no framework, and
+ * that holds for a one-step run too: a plain `>>prompt` call (no chain) made with the system
+ * disabled renders no framework marker of any kind. Before the pin nothing covered it; P6.198
+ * had found the same call rendering the active framework's sections.
+ *
+ * PIN: the disabled single prompt renders none of the framework markers. CONTROL: the same prompt
+ * on a server with the system enabled renders the active framework's block and its sections, so
+ * the probe is shown to see a framework and the absence above means something.
+ */
+describe.each([
+  ['Streamable HTTP', startHttpSession],
+  ['STDIO', startStdioSession],
+] as const)(
+  'P6.283: a single prompt run honors the framework system toggle (%s)',
+  (_transport, starter) => {
+    async function sessionWithPrompt(): Promise<McpSession> {
+      const session = await start(starter, await newWorkspace());
+      const created = await session.callTool('resource_manager', {
+        resource_type: 'prompt',
+        action: 'create',
+        id: 'p283_single',
+        name: 'p283_single',
+        category: 'general',
+        description: 'A single prompt rendering under the active framework',
+        user_message_template: 'BODY-p283_single',
+      });
+      expect(created.isError).toBe(false);
+      return session;
+    }
+
+    /** What radiant, the configured default, renders into a single prompt: system prompt, sections. */
+    const RADIANT_MARKERS = [
+      'operating under the RADIANT Design Framework',
+      '`## Reference the Vision`',
+      '**Required Sections**',
+    ];
+    const found = (text: string, markers: readonly string[]) =>
+      markers.filter((marker) => text.includes(marker));
+
+    it('P6.283: a single prompt run with the framework system disabled renders no framework', async () => {
+      const session = await sessionWithPrompt();
+      const disabled = await session.callTool('system_control', {
+        action: 'framework',
+        operation: 'disable',
+        reason: 'P6.283',
+      });
+      expect(disabled.isError).toBe(false);
+
+      const run = await session.callTool('prompt_engine', { command: '>>p283_single' });
+
+      expect(run.isError).toBe(false);
+      expect(run.text).toContain('BODY-p283_single');
+      expect(found(run.text, FRAMEWORK_MARKERS)).toEqual([]);
+      expect(found(run.text, RADIANT_MARKERS)).toEqual([]);
+    }, 120000);
+
+    it('P6.283 control: the same prompt with the framework system enabled renders its framework', async () => {
+      const session = await sessionWithPrompt();
+
+      const run = await session.callTool('prompt_engine', { command: '>>p283_single' });
+
+      expect(run.isError).toBe(false);
+      expect(run.text).toContain('BODY-p283_single');
+      expect(found(run.text, RADIANT_MARKERS)).toEqual(RADIANT_MARKERS);
+    }, 120000);
+  }
+);
+
+/**
+ * P6.284 / R176. MEASURED 2026-10-04 on `dbcc722c5` (driven by the twins below before the fix, both
+ * transports): a run started under `radiant` (this file's configured default) kept radiant on its
+ * planned steps after the active framework was switched to ReACT through `system_control`, but the
+ * steps it added later (the inserted investigation step and the remainder `r1`) rendered ReACT,
+ * and the phase guard graded under ReACT. The run's framework decision was recomputed on every call
+ * from the active framework; only the framework toggle had been made run-level (R158).
+ *
+ * Now the run records the framework it decided at its first call and every later call decides
+ * from that record: switching the active framework changes no step of a run already started,
+ * planned or added, while a run started after the switch takes the new framework.
+ */
+describe.each([
+  ['Streamable HTTP', startHttpSession],
+  ['STDIO', startStdioSession],
+] as const)(
+  'P6.284: switching the active framework mid-run leaves a started run alone (%s)',
+  (_transport, starter) => {
+    const PASS = 'GATE_REVIEW: PASS - ok';
+    const STRUCTURAL_REVIEW = '**Structural Review Required**';
+    /** What radiant, the run's framework, renders: its block and its first required section. */
+    const RADIANT_MARKERS = ['RADIANT Design Framework Active', '`## Reference the Vision`'];
+    /**
+     * What ReACT, the framework switched to, renders: its block and every required section. Not
+     * the bare name: the framework-compliance guidance lists every framework by name under any.
+     */
+    const REACT_MARKERS = [
+      'ReACT Framework Active',
+      'operating under the ReACT Framework',
+      '`## Reasoning`',
+      '`## Action`',
+      '`## Observation`',
+    ];
+    const found = (text: string, markers: readonly string[]) =>
+      markers.filter((marker) => text.includes(marker));
+
+    async function sessionWithPrompts() {
+      const workspace = await newWorkspace();
+      const session = await start(starter, workspace);
+      for (const id of ['p284_s', 'p284_b', 'p284_a']) {
+        const created = await session.callTool('resource_manager', {
+          resource_type: 'prompt',
+          action: 'create',
+          id,
+          name: id,
+          category: 'general',
+          description: 'A step rendering under the run framework',
+          user_message_template: `BODY-${id}`,
+        });
+        expect(created.isError).toBe(false);
+      }
+      return { session, runtimeRoot: workspace.env['MCP_RUNTIME_ROOT'] ?? '' };
+    }
+
+    /** The framework the run's stored blueprint records as decided at its first call. */
+    const recordedFramework = (runtimeRoot: string, chainId: string): unknown => {
+      const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
+      try {
+        const row = db.prepare('SELECT state FROM chain_runs WHERE chain_id = ?').get(chainId) as
+          { state: string } | undefined;
+        const state = JSON.parse(row?.state ?? '{}') as {
+          blueprint?: { executionPlan?: { runFrameworkId?: unknown } };
+        };
+        return state.blueprint?.executionPlan?.runFrameworkId;
+      } finally {
+        db.close();
+      }
+    };
+
+    /**
+     * Four planned steps under radiant; ReACT switched in after the first answer; a blocking unknown
+     * on step 3 inserting an investigation step, and a remainder `r1`. Every answer conforms to
+     * radiant, the framework the run started under.
+     */
+    async function runSwitchedMidRun(session: McpSession) {
+      const first = await session.callTool('prompt_engine', {
+        command: '>>p284_s --> >>p284_s --> >>p284_s --> >>p284_b',
+      });
+      expect(first.isError).toBe(false);
+      const chainId = /chain_id[=:] ?"(chain-[A-Za-z0-9_#-]+)"/.exec(first.text)?.[1];
+      const call = (args: Record<string, unknown>) =>
+        session.callTool('prompt_engine', { chain_id: chainId, ...args });
+      const answer = (label: string) => `${label}\n${RADIANT_SECTIONS}`;
+      const second = await call({ user_response: answer('A1 out'), gate_verdict: PASS });
+      await switchTo(session, 'react');
+      expect(await activeFramework(session)).toBe('react');
+      const third = await call({ user_response: answer('A2 out'), gate_verdict: PASS });
+      const inserted = await call({
+        user_response: answer('A3 out'),
+        gate_verdict: PASS,
+        observations: [
+          { type: 'unknown_discovered', id: 'u-284', statement: 'rest undecided', blocking: true },
+        ],
+      });
+      const fourth = await call({
+        user_response: answer('investigated'),
+        gate_verdict: PASS,
+        remainder: { mode: 'append', nodes: [{ id: 'r1', promptId: 'p284_a' }] },
+      });
+      const contributed = await call({ user_response: answer('B out'), gate_verdict: PASS });
+      const contributedAnswered = await call({
+        user_response: answer('r1 out'),
+        gate_verdict: PASS,
+      });
+      const renders = { first, second, third, inserted, fourth, contributed, contributedAnswered };
+      return { chainId: chainId ?? '', renders };
+    }
+
+    it('(a) every render of a run started before the switch carries its framework and none of the new one', async () => {
+      const { session, runtimeRoot } = await sessionWithPrompts();
+      const { chainId, renders: run } = await runSwitchedMidRun(session);
+      // The run state, not only the text: the run records radiant, while ReACT is now active.
+      expect(recordedFramework(runtimeRoot, chainId)).toBe('radiant');
+      expect(await activeFramework(session)).toBe('react');
+      expect(run.third.text).toContain('BODY-p284_s');
+      expect(run.inserted.text).toContain('## Investigate: rest undecided');
+      expect(run.fourth.text).toContain('BODY-p284_b');
+      expect(run.contributed.text).toContain('BODY-p284_a');
+      const renders = { ...run };
+      for (const [name, render] of Object.entries(renders)) {
+        expect({ name, react: found(render.text, REACT_MARKERS) }).toEqual({ name, react: [] });
+      }
+      // Radiant on the first render, on a planned step rendered after the switch and on both added
+      // steps. The block renders only where the injection frequency puts it (steps 1 and 4: the
+      // inserted step); every step declares radiant's sections.
+      expect(found(run.first.text, RADIANT_MARKERS)).toEqual(RADIANT_MARKERS);
+      expect(run.third.text).toContain('`## Reference the Vision`');
+      expect(run.inserted.text).toContain('RADIANT Design Framework Active');
+      expect(run.contributed.text).toContain('`## Reference the Vision`');
+      // The phase guard grades radiant answers under radiant: none is held for review.
+      for (const render of [run.third, run.inserted, run.fourth, run.contributed]) {
+        expect(render.text).not.toContain(STRUCTURAL_REVIEW);
+      }
+      expect(run.contributedAnswered.text).not.toContain(STRUCTURAL_REVIEW);
+    }, 150000);
+
+    it('(b) control: a run started after the switch renders the new framework', async () => {
+      const { session } = await sessionWithPrompts();
+      await switchTo(session, 'react');
+
+      const fresh = await session.callTool('prompt_engine', {
+        command: '>>p284_s --> >>p284_b',
+      });
+
+      expect(fresh.isError).toBe(false);
+      expect(found(fresh.text, REACT_MARKERS)).toEqual(REACT_MARKERS);
+      expect(found(fresh.text, RADIANT_MARKERS)).toEqual([]);
+    }, 120000);
+  }
+);
 
 /**
  * P6.272 / R156 (amended). MEASURED 2026-09-29 on `abadca951` (driven, Streamable HTTP): on a

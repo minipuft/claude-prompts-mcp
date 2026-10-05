@@ -386,8 +386,8 @@ export class TemporaryGateRegistrar {
    * (the session stage answers that one). A target the run does not declare is stage 04's refusal.
    * A call submitting a FAIL verdict re-renders the node it answers, so a gate on that node is not
    * late and is accepted for the retry (R146). When that node's review is already open, the gate
-   * joins it (R154, `GateEnforcementAuthority.joinSentGates`); a node the run has passed stays
-   * refused.
+   * joins it (R154, `GateEnforcementAuthority.joinSentGates`), and so does a gate sent with no
+   * verdict while that review awaits one (R173); a node the run has passed stays refused.
    */
   unreachableStepTargets(context: ExecutionContext): StepTargetRefusal[] {
     const view = this.resolveRunView(context);
@@ -400,7 +400,10 @@ export class TemporaryGateRegistrar {
     const verdict =
       context.gateEnforcement?.parseVerdict(raw, 'gate_verdict') ??
       parseGateVerdict(raw, 'gate_verdict');
-    const retry = verdict?.verdict === 'FAIL';
+    // A FAIL re-renders the node it answers (R146, R154); a call with no verdict at all joins the
+    // node's open gate review, which it re-renders (R173). A PASS closes the review: still late.
+    const retry =
+      verdict?.verdict === 'FAIL' || (raw === undefined && view.currentNodeReviewJoinable === true);
     return gates.flatMap((gate) => {
       if (typeof gate !== 'object') return [];
       const rejection = unreachableTargetRejection(gate, view, lastStepOf, retry);
@@ -1112,8 +1115,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /**
  * The refusal for one request gate whose target a resume can no longer reach, or undefined. PURE.
  * A run standing on no node has passed them all; a position this view cannot place judges nothing.
- * `retry`: the call submits a FAIL, which re-renders the node it answers; a gate on that node
- * reaches the retry, in the review this call opens (R146) or the open one it joins (R154).
+ * `retry`: the call re-renders the node it answers — a FAIL, or no verdict while that node's gate
+ * review awaits one; a gate on that node reaches the re-render, in the review a FAIL opens (R146)
+ * or the open one it joins (R154, R173).
  */
 function unreachableTargetRejection(
   gate: Exclude<RawGateInput, string>,

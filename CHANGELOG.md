@@ -131,6 +131,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Switching the active framework mid-run no longer changes the framework of a run already under way.** A run started under one framework kept it on its planned steps after `system_control` switched the active framework, but the steps it added later (an investigation step or a `remainder` step) rendered the new framework, and the phase guard graded answers against the new framework's sections, holding a run whose answers followed the framework it started under. A run now records the framework its first call decided and keeps it on every step; a run started after the switch takes the new framework.
+- **A gate sent with no verdict while its step's review is open now joins that review.** A resume carrying only `gates` for the step under review was refused as never able to fire, although the same gate sent with a FAIL joined the review. It now joins the same way: the review re-renders listing the gate, the next verdict grades it, and no retry attempt is spent, since no verdict was given. An id the review already holds changes nothing, and a gate aimed at a step the run has passed is still refused.
 - Advisory single prompts request a gate verdict only when an actual pending review exists;
   first-render guidance does not imply review enforcement.
 - Initial Codex delegated briefs preserve the worker identity and system instructions.
