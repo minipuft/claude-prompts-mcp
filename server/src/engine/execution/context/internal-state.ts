@@ -250,9 +250,10 @@ export interface PipelineInternalState {
       readonly stepDefinitionIds: ReadonlyMap<string, string>;
       readonly seedGateIds: readonly string[];
       /**
-       * Each gate a step of the walk declared inline, with the steps that declared it (R194): such
-       * a gate is that step's and reaches no other. A gate the call held before the walk (a
-       * request or framework gate) is run-wide and absent here, even when a step also names it.
+       * Each gate a step of the walk's own resolution accepted, with the steps that accepted it: a
+       * gate the step declared inline (R194) or its own prompt supplied (R204) is that step's and
+       * reaches no other. A gate the call held before the walk (a request or framework gate), or a
+       * framework gate no step wrote inline, is run-wide and absent here.
        */
       readonly stepBindings: ReadonlyMap<
         string,

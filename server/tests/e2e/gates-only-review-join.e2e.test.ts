@@ -1,4 +1,4 @@
-// @lifecycle test - P6.279 / R173: a call carrying `gates` and no verdict, sent while its step's review is open, joins that review without counting an attempt; P6.12 / R194: a gate written on a step stays on that step; both over Streamable HTTP and STDIO.
+// @lifecycle test - P6.279 / R173: a call carrying `gates` and no verdict, sent while its step's review is open, joins that review without counting an attempt; P6.12 / R194: a gate written on a step stays on that step; P6.310 / R204: so does a gate the step's own prompt supplies; all over Streamable HTTP and STDIO.
 /**
  * MEASURED 2026-10-04 on `c97d80159` (this harness, both transports): a `>>gj_chain` run standing
  * at `b` with `b`'s review open (answered with `user_response` alone, attempt 0) and resumed with
@@ -150,6 +150,64 @@ const authorFixtures = async (tool: Tool): Promise<void> => {
       gate_configuration: OPT_OUT,
     });
   }
+  // P6.310: a step prompt's own gate (`gp-x`, from `gp_b`'s include list, and `gp-cat`, from
+  // `gp_k`'s category), and a chain prompt's own gate (`gp-y`, from `gp_chain`'s include list).
+  for (const id of ['gp-x', 'gp-y']) {
+    await author({
+      resource_type: 'gate',
+      action: 'create',
+      id,
+      name: id,
+      description: `blocking e2e gate ${id}`,
+      guidance: `GUIDANCE-${id}`,
+      enforcement_mode: 'blocking',
+    });
+  }
+  await author({
+    resource_type: 'gate',
+    action: 'create',
+    id: 'gp-cat',
+    name: 'gp-cat',
+    description: 'blocking e2e gate a category supplies',
+    guidance: 'GUIDANCE-gp-cat',
+    enforcement_mode: 'blocking',
+    activation: { prompt_categories: ['gpcat'] },
+  });
+  await author({
+    resource_type: 'prompt',
+    action: 'create',
+    id: 'gp_b',
+    category: 'general',
+    name: 'gp_b',
+    description: 'e2e step whose prompt includes gp-x',
+    user_message_template: 'BODY-gp_b',
+    gate_configuration: { ...OPT_OUT, include: ['gp-x'] },
+  });
+  await author({
+    resource_type: 'prompt',
+    action: 'create',
+    id: 'gp_k',
+    category: 'gpcat',
+    name: 'gp_k',
+    description: 'e2e step whose category supplies gp-cat',
+    user_message_template: 'BODY-gp_k',
+    gate_configuration: OPT_OUT,
+  });
+  await author({
+    resource_type: 'prompt',
+    action: 'create',
+    id: 'gp_chain',
+    category: 'general',
+    name: 'gp_chain',
+    description: 'e2e chain whose own prompt includes gp-y',
+    user_message_template: 'CHAIN-GP-TEMPLATE',
+    gate_configuration: { ...OPT_OUT, include: ['gp-y'] },
+    chain_steps: [
+      { promptId: 'gr_a', stepName: 'A' },
+      { promptId: 'gp_b', stepName: 'B' },
+      { promptId: 'gr_c', stepName: 'C' },
+    ],
+  });
   await author({
     resource_type: 'prompt',
     action: 'create',
@@ -240,6 +298,10 @@ const XA = 'CRIT-XA-12';
 const YB = 'CRIT-YB-12';
 /** The guidance of `gr-req`, a registered gate a request names by id. */
 const RQ = 'GUIDANCE-gr-req';
+/** The guidance of the gates a prompt supplies (P6.310). */
+const GPX = 'GUIDANCE-gp-x';
+const GPY = 'GUIDANCE-gp-y';
+const GPCAT = 'GUIDANCE-gp-cat';
 /** Shape (a): a gate written on step A of three. */
 const SHAPE_A = [`>>gr_a :: "${XA}"`, '>>gr_b', '>>gr_c'].join(ARROW);
 /** Shape (b): a gate on each of the first two steps, the third step A's prompt again. */
@@ -261,7 +323,9 @@ interface ReachStep {
 const gateReach = (tool: Tool, runtimeRoot: () => string) => {
   // A gate's criterion renders as a numbered line; the command echo (`Re-run:`) is not one.
   const criteriaIn = (text: string): string[] =>
-    [XA, YB, RQ].filter((marker) => new RegExp(`^(\\d+\\. )?${marker}$`, 'm').test(text));
+    [XA, YB, RQ, GPX, GPY, GPCAT].filter((marker) =>
+      new RegExp(`^(\\d+\\. )?${marker}$`, 'm').test(text)
+    );
 
   return async (
     args: Record<string, unknown>,
@@ -372,6 +436,51 @@ const reachInserted = (unknownId: string, gateId: string): ReachStep[] => [
   { current: 'n3', rendered: [], reviews: {} },
   { current: null, rendered: [], reviews: {} },
 ];
+
+/**
+ * P6.310 (R204): a gate a step's own prompt supplies stays on that step. MEASURED 2026-10-05 on
+ * `f1f74afdb` (this harness, both transports, identical): in `>>gr_a` then `>>gp_b` then `>>gr_c`,
+ * `gp_b`'s include list put `gp-x` on step 2 and, through the walk's accumulator, on step 3 too:
+ * step 3's answer opened `{n3: ['gp-x']}` and rendered its guidance. A category's gate did the
+ * same (`gp-cat`, `>>gp_k` as step 2), and in `>>gp_b` then `>>gr_a` then `>>gp_b` the middle step
+ * reviewed `gp-x` although its prompt supplies nothing.
+ */
+const PROMPT_OWN = ['>>gr_a', '>>gp_b', '>>gr_c'].join(ARROW);
+const PROMPT_CATEGORY = ['>>gr_a', '>>gp_k', '>>gr_c'].join(ARROW);
+const PROMPT_TWICE = ['>>gp_b', '>>gr_a', '>>gp_b'].join(ARROW);
+
+/** Step 2's prompt supplies `gate` (rendered as `guidance`); steps 1 and 3 carry none. */
+const reachOwnPrompt = (
+  gate: string,
+  guidance: string,
+  nodes: readonly [string, string, string] = ['n1', 'n2', 'n3'],
+  firstRender: string[] = []
+): ReachStep[] => [
+  { current: nodes[0], rendered: [], reviews: {} },
+  { current: nodes[1], rendered: firstRender, reviews: {} },
+  { current: nodes[1], rendered: [guidance], reviews: { [nodes[1]]: [gate] } },
+  { current: nodes[2], rendered: [], reviews: {} },
+  { current: null, rendered: [], reviews: {} },
+];
+
+/** Two steps' prompts both include `gp-x`: each holds it on its own step; the middle step none. */
+const REACH_TWICE: ReachStep[] = [
+  { current: 'n1', rendered: [GPX], reviews: { n1: ['gp-x'] } },
+  { current: 'n1', rendered: [GPX], reviews: { n1: ['gp-x'] } },
+  { current: 'n2', rendered: [], reviews: {} },
+  { current: 'n3', rendered: [], reviews: {} },
+  { current: 'n3', rendered: [GPX], reviews: { n3: ['gp-x'] } },
+  { current: null, rendered: [], reviews: {} },
+];
+
+/**
+ * Control: `>>gp_chain`, whose own prompt includes `gp-y` and whose step `b` is `gp_b`. Step `b`'s
+ * prompt gate stays on `b`. The chain prompt's own include list is not a step's, so this row binds
+ * nothing of it; MEASURED before and after this row, it reaches no step at all (no render, no
+ * review), because the chain walk never resolves the chain prompt's `gateConfiguration`. Pinned as
+ * measured: wiring it to every step is a separate change, and this value moves when it lands.
+ */
+const REACH_CHAIN_PROMPT = reachOwnPrompt('gp-x', GPX, ['a', 'b', 'c']);
 
 describe('Streamable HTTP: a gates-only call joins its step open review (P6.279, R173)', () => {
   const cleanup: Array<() => void | Promise<void>> = [];
@@ -484,6 +593,23 @@ describe('Streamable HTTP: a gates-only call joins its step open review (P6.279,
     const steps = await reach({ command: SHAPE_A, gates: ['gr-req'] }, ['XA']);
     expect(steps).toEqual(reachRequest('gr-req'));
   }, 120000);
+
+  test("P6.310 (a) a gate a step's prompt includes renders and is reviewed on that step only", async () => {
+    expect(await reach({ command: PROMPT_OWN }, [])).toEqual(reachOwnPrompt('gp-x', GPX));
+  }, 120000);
+
+  test("P6.310 (a) a gate a step's category supplies stays on that step", async () => {
+    const steps = await reach({ command: PROMPT_CATEGORY }, []);
+    expect(steps).toEqual(reachOwnPrompt('gp-cat', GPCAT, ['n1', 'n2', 'n3'], [GPCAT]));
+  }, 120000);
+
+  test('P6.310 (b) two steps whose prompts include one gate each hold it on their own step', async () => {
+    expect(await reach({ command: PROMPT_TWICE }, [])).toEqual(REACH_TWICE);
+  }, 120000);
+
+  test("P6.310 control: a chain prompt's step keeps its prompt gate; the chain's own include reaches no step", async () => {
+    expect(await reach({ command: '>>gp_chain' }, [])).toEqual(REACH_CHAIN_PROMPT);
+  }, 120000);
 });
 
 describe('STDIO: a gates-only call joins its step open review (P6.279, R173 transport parity)', () => {
@@ -592,5 +718,22 @@ describe('STDIO: a gates-only call joins its step open review (P6.279, R173 tran
   test('P6.12 control over STDIO: a request gate with no target still reaches every step', async () => {
     const steps = await reach({ command: SHAPE_A, gates: ['gr-req'] }, ['XA']);
     expect(steps).toEqual(reachRequest('gr-req'));
+  }, 120000);
+
+  test("P6.310 (a) over STDIO a gate a step's prompt includes renders and is reviewed on that step only", async () => {
+    expect(await reach({ command: PROMPT_OWN }, [])).toEqual(reachOwnPrompt('gp-x', GPX));
+  }, 120000);
+
+  test("P6.310 (a) over STDIO a gate a step's category supplies stays on that step", async () => {
+    const steps = await reach({ command: PROMPT_CATEGORY }, []);
+    expect(steps).toEqual(reachOwnPrompt('gp-cat', GPCAT, ['n1', 'n2', 'n3'], [GPCAT]));
+  }, 120000);
+
+  test('P6.310 (b) over STDIO two steps whose prompts include one gate each hold it on their own step', async () => {
+    expect(await reach({ command: PROMPT_TWICE }, [])).toEqual(REACH_TWICE);
+  }, 120000);
+
+  test("P6.310 control over STDIO: a chain prompt's step keeps its prompt gate; the chain's own include reaches no step", async () => {
+    expect(await reach({ command: '>>gp_chain' }, [])).toEqual(REACH_CHAIN_PROMPT);
   }, 120000);
 });

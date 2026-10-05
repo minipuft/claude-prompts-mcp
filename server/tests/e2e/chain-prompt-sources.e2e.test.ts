@@ -3217,10 +3217,19 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
      * `**topic**: TB` (the planned `n2`'s argument) under "Original Request Intent", then
      * `## Investigate: ` and "Ledger id: ``" — `getChainContext` read the blueprint step at the
      * inserted node's ordinal and its args replaced the node's own.
+     *
+     * The unknown names `n3`, so the inserted node inherits `n3`'s own category gate and has a
+     * review to render. Before R204 it named `y` (no node of this chain) and got that gate only
+     * because a step's category gate reached every later node through the walk's accumulator.
      */
     test("(a) an inserted node's review quotes its own statement and ledger id", async () => {
       const run = await start({ command: `>>sv_a${ARROW}>>sv_b topic:"TB"${ARROW}>>sv_d` });
-      await run.call({ user_response: 'A out', ...blocking('u-176a') });
+      const blocksN3 = blocking('u-176a');
+      const [unknown] = blocksN3.observations;
+      await run.call({
+        user_response: 'A out',
+        observations: [{ ...unknown, target_step_id: 'n3' }],
+      });
       const review = await run.call({ user_response: 'investigated' });
       expect(review).toContain('## Original Task Instructions');
       expect(review).toContain('## Investigate: STATEMENT-u-176a');

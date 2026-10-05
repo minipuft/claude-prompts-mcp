@@ -13,6 +13,7 @@ import {
   PARAMETER_OWNERS,
   describeParameterRefusal,
 } from '../../../../src/mcp/tools/resource-manager/core/parameter-ownership.js';
+import { resource_managerCommands } from '../../../../src/mcp/contracts/schemas/_generated/resource_manager.generated.js';
 import { resourceManagerInputSchema } from '../../../../src/mcp/tools/schemas/resource-manager.schema.js';
 import { MockLogger } from '../../../helpers/test-helpers.js';
 
@@ -41,6 +42,21 @@ const probeFor = (parameter: string): unknown => PROBE_VALUE[parameter] ?? 'prob
 const readersOf = (parameter: string, type: ResourceType): string[] => [
   ...(PARAMETER_ACTIONS.get(parameter)?.get(type) ?? []),
 ];
+
+/**
+ * `confirm: true` for the actions whose contract declares `confirm` (`<type>:<action>` or
+ * `common:<action>`), and nothing elsewhere. A call that sends `confirm` where no command declares
+ * it is refused by name, so a helper that sent it on every action tested the refusal instead of
+ * the parameter under test.
+ */
+const confirmWhereDeclared = (type: ResourceType, action: string): { confirm?: true } =>
+  resource_managerCommands.some(
+    (command) =>
+      [`${type}:${action}`, `common:${action}`].includes(command.id) &&
+      command.parameters?.includes('confirm')
+  )
+    ? { confirm: true }
+    : {};
 
 const firstReader = (parameter: string, type: ResourceType): string =>
   readersOf(parameter, type)[0] ?? 'update';
@@ -216,7 +232,7 @@ describe('resource_manager parameter ownership', () => {
             {
               resource_type: owner,
               action: firstReader(parameter, owner),
-              confirm: true,
+              ...confirmWhereDeclared(owner, firstReader(parameter, owner)),
               id: 'target',
               [parameter]: probeFor(parameter),
             } as unknown as ResourceManagerInput,
@@ -342,7 +358,7 @@ describe('resource_manager parameter ownership', () => {
             resource_type: owner,
             action,
             id: 'target',
-            confirm: true,
+            ...confirmWhereDeclared(owner, action),
             [parameter]: probeFor(parameter),
           } as unknown as ResourceManagerInput,
           {}
@@ -381,7 +397,7 @@ describe('resource_manager parameter ownership', () => {
                 resource_type: owner,
                 action,
                 id: 'target',
-                confirm: true,
+                ...confirmWhereDeclared(owner, action),
                 [parameter]: probeFor(parameter),
               } as unknown as ResourceManagerInput,
               {}
@@ -402,7 +418,7 @@ describe('resource_manager parameter ownership', () => {
                 resource_type: owner,
                 action,
                 id: 'target',
-                confirm: true,
+                ...confirmWhereDeclared(owner, action),
                 [parameter]: probeFor(parameter),
               } as unknown as ResourceManagerInput,
               {}
@@ -535,13 +551,17 @@ describe('resource_manager parameter ownership', () => {
       ];
 
       /**
-       * Two declared parameters carry an ACTION-scoped refusal of their own, both documented and
-       * both unrelated to this class. Paired with the action each is valid on rather than skipped:
+       * Three declared parameters carry an ACTION-scoped refusal of their own, all documented and
+       * all unrelated to this class. Paired with the action each is valid on rather than skipped:
        * a control that quietly drops the awkward members stops being a control.
        */
       const VALID_CALL: Readonly<Record<string, { action: string; probe?: unknown }>> = {
         // Honoured by `history` and `compare`; every other action refuses it by name.
         source_workspace: { action: 'history' },
+        // Declared on `delete` and `rollback` (and on prompt `update`, where it confirms a tool
+        // removal); gate, framework and category `update` delete nothing and refuse it (P6.309).
+        // The destructive guard needs the real boolean, not the string probe.
+        confirm: { action: 'rollback', probe: true },
         // Only meaningful with `action:"preview"`, and `delete` is previewable for all four types.
         preview_action: { action: 'preview', probe: 'delete' },
       };

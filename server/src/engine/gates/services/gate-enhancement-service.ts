@@ -16,7 +16,11 @@ import type { ChainNode } from '#shared/types/chain-execution.js';
 import type { GateSystemSettings } from '#shared/types/index.js';
 import type { GateMetricsRecorder } from './gate-metrics-recorder.js';
 import type { GateService } from './gate-service-interface.js';
-import type { GateResolutionInput, GateResolutionResult } from './gate-set-resolver.js';
+import type {
+  GateResolutionInput,
+  GateResolutionResult,
+  ResolvedGate,
+} from './gate-set-resolver.js';
 import type { RunStepView, RunStepViewProvider } from './run-step-view.js';
 import type { RegisteredGateResult, StepGateDefinition } from './temporary-gate-registrar.js';
 import type { ExecutionContext, SessionContext } from '../../execution/context/index.js';
@@ -113,10 +117,30 @@ interface StepAddress {
 }
 
 /**
- * Gate id to the steps that declared it inline (R194, P6.12): a gate written on a step belongs to
- * that step. A gate absent from the map is run-wide or carries its own target.
+ * Gate id to the steps whose own resolution supplied it: a gate written on a step (R194, P6.12),
+ * or one the step's own prompt supplies through its `gateConfiguration`, its inline gate
+ * definitions or its category (R204, P6.310), belongs to that step. A gate absent from the map is
+ * run-wide or carries its own target.
  */
 type StepGateBindings = ReadonlyMap<string, readonly StepAddress[]>;
+
+/**
+ * The gates a chain walk leaves run-wide whichever step also supplies them: what the call held
+ * before the walk (request and framework gates), and the framework's own gates, unless a step
+ * wrote one inline.
+ */
+interface RunWideGates {
+  readonly seedGateIds: ReadonlySet<string>;
+  readonly frameworkGateIds: ReadonlySet<string>;
+}
+
+/** What one step of the chain walk produced: the gates it applied, and its own accepted gates. */
+interface StepWalkOutcome {
+  readonly applied: number;
+  readonly accepted: readonly ResolvedGate[];
+}
+
+const NOTHING_WALKED: StepWalkOutcome = { applied: 0, accepted: [] };
 
 const NO_STEP_BINDINGS: StepGateBindings = new Map();
 
@@ -394,7 +418,7 @@ export class GateEnhancementService {
     this.addGatesToAccumulator(context, registeredGates.temporaryGateIds, 'temporary-request');
     this.addGatesToAccumulator(context, registeredGates.canonicalGateIds, 'framework-guide');
     const seedGateIds = [...context.gates.getAll()];
-    const stepBindings = stepGateBindings(steps, stepDefinitionIds, seedGateIds);
+    const runWide: RunWideGates = { seedGateIds: new Set(seedGateIds), frameworkGateIds };
     const stepInput: ChainStepEnhancementInput = {
       context,
       gateService,
@@ -404,8 +428,19 @@ export class GateEnhancementService {
       runStepView,
       currentStepKey: this.resolveCurrentStepKey(runStepView),
       stepDefinitionIds,
-      stepBindings,
+      stepBindings: NO_STEP_BINDINGS,
     };
+
+    // Each step is filtered against the bindings of the steps walked before it: the accumulator
+    // at step N holds only what the call held before the walk and what steps 1..N-1 accepted.
+    let totalGatesApplied = 0;
+    let stepBindings: StepGateBindings = NO_STEP_BINDINGS;
+    context.state.gates.gatedStepNumbers = [];
+    for (const step of steps) {
+      const outcome = await this.applyGatesToStep(step, { ...stepInput, stepBindings });
+      totalGatesApplied += outcome.applied;
+      stepBindings = withStepGates(stepBindings, step, outcome.accepted, runWide);
+    }
     context.state.gates.chainWalkSettings = {
       gatesConfig,
       frameworkGateIds,
@@ -414,12 +449,6 @@ export class GateEnhancementService {
       seedGateIds,
       stepBindings,
     };
-
-    let totalGatesApplied = 0;
-    context.state.gates.gatedStepNumbers = [];
-    for (const step of steps) {
-      totalGatesApplied += await this.applyGatesToStep(step, stepInput);
-    }
 
     this.publishChainGateState(context, runStepView, stepBindings, totalGatesApplied);
     // The mode is the STEP's, not the run's: `reviewGateIds` is what this step is reviewed
@@ -461,7 +490,8 @@ export class GateEnhancementService {
   }
 
   /**
-   * Enhance ONE step of the chain walk; returns how many gates it applied.
+   * Enhance ONE step of the chain walk; returns how many gates it applied, and the gates its own
+   * resolution accepted, which the walk binds to this step.
    *
    * Zero covers all three ways a step applies none: no converted prompt, a modifier-skipped step,
    * and an empty applicable set — plus a failed enhancement, which must not count toward the
@@ -470,14 +500,14 @@ export class GateEnhancementService {
   private async applyGatesToStep(
     step: ChainStepPrompt,
     input: ChainStepEnhancementInput
-  ): Promise<number> {
+  ): Promise<StepWalkOutcome> {
     const { context } = input;
     const prompt = step.convertedPrompt;
     if (prompt === undefined) {
       this.logger.warn(
         `[GateEnhancementService] Skipping step ${step.stepNumber} - no convertedPrompt`
       );
-      return 0;
+      return NOTHING_WALKED;
     }
 
     if (this.shouldSkip(step.executionPlan?.modifiers)) {
@@ -489,7 +519,7 @@ export class GateEnhancementService {
       if (this.isCurrentStep(step, input.currentStepKey)) {
         context.state.gates.reviewGateIds = [];
       }
-      return 0;
+      return NOTHING_WALKED;
     }
 
     const activeFrameworkId = this.getActiveFrameworkId(context);
@@ -520,14 +550,15 @@ export class GateEnhancementService {
     }
 
     if (gateIds.length === 0) {
-      return 0;
+      return { applied: 0, accepted: resolution.accepted };
     }
     context.state.gates.gatedStepNumbers = [
       ...(context.state.gates.gatedStepNumbers ?? []),
       step.stepNumber,
     ];
 
-    return await this.enhanceStepPrompt(step, prompt, gateIds, stepFrameworkId, input);
+    const applied = await this.enhanceStepPrompt(step, prompt, gateIds, stepFrameworkId, input);
+    return { applied, accepted: resolution.accepted };
   }
 
   /**
@@ -545,7 +576,8 @@ export class GateEnhancementService {
     // P4.110. The accumulator is intentionally NOT reset between steps: it holds what steps
     // 1..N-1 resolved, and `enhanceChainSteps` seeds the caller's gates into it before the walk.
     // Of the gates earlier steps picked up, only the run-wide ones reach step N: a gate an earlier
-    // step declared inline stays on that step (R194), which `filterGatesByStepTarget` decides.
+    // step declared inline (R194) or its own prompt supplied (R204) stays on that step, which
+    // `filterGatesByStepTarget` decides.
     // Both are ids this step's own resolution never saw, so reading the accumulator raw
     // routed them AROUND this step's vetoes — a step's `exclude` could not remove a gate the run
     // had already put there, though the identical declaration on a single prompt removes it.
@@ -1059,6 +1091,11 @@ export class GateEnhancementService {
     const resolver = this.buildGateSetResolver();
     const activeFrameworkId = this.getActiveFrameworkId(context);
     const accumulated = new Set(settings.seedGateIds);
+    const runWide: RunWideGates = {
+      seedGateIds: new Set(settings.seedGateIds),
+      frameworkGateIds: settings.frameworkGateIds,
+    };
+    let stepBindings: StepGateBindings = NO_STEP_BINDINGS;
     for (const step of gateContext.steps) {
       const prompt = step.convertedPrompt;
       if (prompt === undefined || this.shouldSkip(step.executionPlan?.modifiers)) {
@@ -1069,12 +1106,8 @@ export class GateEnhancementService {
         walkedStepResolutionInput(step, prompt, frameworkId, settings)
       );
       resolution.accepted.forEach((gate) => accumulated.add(gate.id));
+      stepBindings = withStepGates(stepBindings, step, resolution.accepted, runWide);
     }
-    const stepBindings = stepGateBindings(
-      gateContext.steps,
-      settings.stepDefinitionIds,
-      settings.seedGateIds
-    );
     return this.inheritedReviewGateIds([...accumulated], runStepView, stepBindings);
   }
 
@@ -1095,8 +1128,9 @@ export class GateEnhancementService {
    * With no target to inherit (`unknownTargetNodeId` absent — the unknown named none, or its
    * ledger entry is gone) the node address is `null`, which drops every step-addressed gate and
    * keeps the untargeted ones. Run-wide inheritance is untouched either way: the ruling scopes
-   * only TARGETED gates, exactly as Tier 4 does for planned steps. A gate a step declared inline is
-   * targeted in this sense (R194): it is inherited from that step and from no other.
+   * only TARGETED gates, exactly as Tier 4 does for planned steps. A gate a step declared inline
+   * (R194), or its own prompt supplied (R204), is targeted in this sense: it is inherited from that
+   * step and from no other.
    */
   private inheritedReviewGateIds(
     gateIds: string[],
@@ -1128,9 +1162,9 @@ export class GateEnhancementService {
    * is the right answer. Collapsing the two would let an inherited scope with no target silently
    * widen to every node-addressed gate.
    *
-   * A gate a step declared inline (`stepBindings`, R194) is addressed by that declaration: it
-   * reaches the steps that wrote it and no other, so the render, the review, the post-advance
-   * review and an inherited review all read the one answer given here.
+   * A gate a step declared inline (R194) or its own prompt supplied (R204) is addressed by the
+   * step (`stepBindings`): it reaches the steps that supplied it and no other, so the render, the
+   * review, the post-advance review and an inherited review all read the one answer given here.
    */
   private filterGatesForTarget(
     gateIds: string[],
@@ -1146,7 +1180,7 @@ export class GateEnhancementService {
     });
   }
 
-  /** Whether a gate that no step declared inline fires on `target`, by its own declared target. */
+  /** Whether a gate no step binds fires on `target`, by its own declared target. */
   private acceptsTemporaryGateTarget(
     gateId: string,
     target: { readonly nodeId?: string | null; readonly stepNumber?: number },
@@ -1313,32 +1347,36 @@ function resolvedInlineGateIds(
 }
 
 /**
- * Each gate the walk's steps declared inline, with the steps that declared it (R194, P6.12). PURE.
+ * `bindings` with every gate one walked step's own resolution accepted bound to that step (R194,
+ * R204). PURE.
  *
- * A gate written on a step belongs to that step: it renders and is reviewed there, and reaches no
- * later step through the cumulative accumulator. An id in `runWideGateIds` (what the call held
- * before the walk: request gates and framework gates) stays run-wide even where a step also
- * names it, since the request asked for it on every step.
+ * A step's own resolution sees its inline gates (R194, P6.12) and what its own prompt supplies: its
+ * `gateConfiguration`, its inline gate definitions and its category's gates (R204, P6.310). Each
+ * such gate belongs to the step: it renders and is reviewed there, and reaches no later step
+ * through the cumulative accumulator. Two steps supplying one gate each hold it on their own step.
+ *
+ * Left run-wide: what the call held before the walk (request and framework gates), since the
+ * request asked for it on every step, and the framework's gates unless the step wrote one inline.
  */
-function stepGateBindings(
-  steps: readonly ChainStepPrompt[],
-  stepDefinitionIds: ReadonlyMap<string, string>,
-  runWideGateIds: readonly string[]
-): Map<string, StepAddress[]> {
-  const runWide = new Set(runWideGateIds);
-  const bindings = new Map<string, StepAddress[]>();
-  for (const step of steps) {
-    const address: StepAddress =
-      typeof step.nodeId === 'string' && step.nodeId.length > 0
-        ? { nodeId: step.nodeId, stepNumber: step.stepNumber }
-        : { stepNumber: step.stepNumber };
-    for (const gateId of resolvedInlineGateIds(step, stepDefinitionIds) ?? []) {
-      if (!runWide.has(gateId)) {
-        bindings.set(gateId, [...(bindings.get(gateId) ?? []), address]);
-      }
+function withStepGates(
+  bindings: StepGateBindings,
+  step: ChainStepPrompt,
+  accepted: readonly ResolvedGate[],
+  runWide: RunWideGates
+): StepGateBindings {
+  const address: StepAddress =
+    typeof step.nodeId === 'string' && step.nodeId.length > 0
+      ? { nodeId: step.nodeId, stepNumber: step.stepNumber }
+      : { stepNumber: step.stepNumber };
+  const next = new Map(bindings);
+  for (const gate of accepted) {
+    const frameworkWide =
+      runWide.frameworkGateIds.has(gate.id) && gate.source !== 'inline-operator';
+    if (!runWide.seedGateIds.has(gate.id) && !frameworkWide) {
+      next.set(gate.id, [...(next.get(gate.id) ?? []), address]);
     }
   }
-  return bindings;
+  return next;
 }
 
 /** No parse step has ordinal 0, so a target with neither node id nor ordinal matches none. */

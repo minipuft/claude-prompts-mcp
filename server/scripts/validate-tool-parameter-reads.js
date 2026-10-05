@@ -771,22 +771,7 @@ export function checkBindings(bindings) {
  * for a caller who sends it elsewhere. An entry that no longer reports is itself a finding —
  * delete it in the commit that fixed it.
  */
-const AWAITING_RULING = [
-  {
-    tool: 'resource_manager',
-    command: 'prompt:update',
-    parameter: 'confirm',
-    asOf: '2026-10-05',
-    why:
-      'PromptLifecycleProcessor.updatePrompt requires confirm: true for tool_operation "remove", ' +
-      'which deletes tools/{id}/ directories. Declaring it on prompt:update makes the per-action refusal refuse confirm ' +
-      'on gate, framework and category update, where it is accepted and ignored today (64 unit ' +
-      'tests send confirm: true on every action, measured).',
-    flipsWhen:
-      'the owner rules whether confirm on a non-prompt update is refused; declare it on ' +
-      'prompt:update and delete this entry in that commit',
-  },
-];
+const AWAITING_RULING = [];
 
 /** Splits `findings` into real ones and those an entry excuses; an unmatched entry is stale. */
 export function applyExceptions(tool, findings, entries) {

@@ -113,12 +113,15 @@ const BODY_GATE_ID = 'temp_1';
 const FINAL_GATE_ID = 'temp_2';
 
 /**
- * A gate id that is NOT a temporary gate: it reaches the accumulator through the step's planned
- * gates, so `filterGatesByStepTarget` finds no registry entry and lets it through on every step.
- * This is what "run-wide inheritance" means after scoping, and the guard against a filter that
- * quietly narrows everything.
+ * A gate id that is NOT a temporary gate: it reaches the accumulator through every step's planned
+ * gates, so every planned step reviews it, which guards against a filter that quietly narrows
+ * everything. Each step's own plan supplies it, so it is each step's gate (R204): an inserted node
+ * inherits it only through the step its unknown names.
  */
 const RUN_WIDE_GATE = 'run-wide-gate';
+
+/** A gate the call held before the walk, as a request gate is: run-wide on every node (R204). */
+const HELD_GATE = 'held-gate';
 
 const stepPrompt = (
   nodeId: string,
@@ -153,6 +156,8 @@ const reviewGatesFor = async (options: {
   view: RunStepView | undefined;
   /** Node ids whose parse-time step carries `modifiers: { clean: true }` — row 4.5. */
   skipNodeIds?: readonly string[];
+  /** Gates the call holds before the walk, as a request gate is. */
+  heldGates?: readonly string[];
 }): Promise<{ review: string[] | undefined; accumulated: string[] | undefined }> => {
   const gateSpecs = options.gateSpecs ?? [];
   const skipNodeIds = options.skipNodeIds ?? [];
@@ -206,6 +211,7 @@ const reviewGatesFor = async (options: {
     llmValidationEnabled: false,
   } as never;
   context.parsedCommand = { commandType: 'chain', steps } as never;
+  context.gates.addAll(options.heldGates ?? [], 'temporary-request');
 
   await stage.execute(context);
 
@@ -363,15 +369,17 @@ describe('gate review scoping (P4-F3)', () => {
       );
     });
 
-    test('(f) an unknown that named no target inherits nothing — untargeted gates only', async () => {
+    test('(f) an unknown that named no target inherits nothing — run-wide gates only', async () => {
       const result = await reviewGatesFor({
         gateSpecs: [BODY_GATE, FINAL_GATE],
         plannedGates: [RUN_WIDE_GATE],
+        heldGates: [HELD_GATE],
         view: insertedRunView({ originUnknownId: 'cache-ttl' }),
       });
 
-      // Nothing to inherit is NOT "inherit everything": every node-addressed gate drops.
-      expect(result.review).toEqual([RUN_WIDE_GATE]);
+      // Nothing to inherit is NOT "inherit everything": every step's gate drops, including one
+      // every step's own plan supplies (R204), while a gate the call held before the walk flows.
+      expect(result.review).toEqual([HELD_GATE]);
     });
 
     test('(g) the skipped-node veto still applies to an inherited target', async () => {

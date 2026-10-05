@@ -744,6 +744,8 @@ All resource types support these actions:
 | `rollback` | Restore previous version | `id`, `version`, `confirm:true`      | `preview_action:"rollback"` to preview |
 | `compare`  | Compare two versions     | `id`, `from_version`, `to_version`   |                                        |
 
+> **`confirm` rule:** `confirm:true` is declared exactly where a call deletes something you sent no replacement for: `delete`, `rollback`, and a prompt `update` with `tool_operation:"remove"`. Everywhere else, including gate, framework and category `update`, which delete nothing, `confirm` is refused by name.
+
 > **Note:** For `list` and `inspect`, prefer [MCP Resources](#mcp-resources--token-efficient-discovery) (4-30x more token efficient). Use tool actions as fallback when filtering is needed or client doesn't support resources.
 
 ### Prompts
