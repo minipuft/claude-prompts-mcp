@@ -171,7 +171,10 @@ and `gather` is declared first, so it goes first. Reversing the two edges change
 
 ## Budget
 
-Split by enforcement posture, and the split is the contract.
+The table describes an explicit `prompt_engine(workflow:...)` submission. A saved YAML chain
+accepts the same declaration schema, but its loader drops `maxNodes` and `maxFanOut` without
+checking the chain's counts against those declared limits. See
+[saved-chain budget semantics](chain-schema.md#budget).
 
 | Field                 | Posture      | Default | Behavior                                                                     |
 | --------------------- | ------------ | ------- | ---------------------------------------------------------------------------- |
@@ -203,12 +206,13 @@ Enforcing it would mean enforcing against a server-side estimate, which is a num
 to be trusted and wrong often enough to be harmful. It is recorded so a run's declared intent is
 auditable beside its measured telemetry, and nothing routes on it.
 
-**Where the two durable fields live.** `maxInsertions` and `declaredCostCeiling` are carried on the
-run's stored blueprint, which survives a restart and a cold load from rows. The two structural caps
-are not: they are answered from the submission itself at validation time and have no reader
-afterwards, so persisting them would store two fields nothing ever consults. `maxInsertions` is
-read on every later step of the run — each step is its own call, and the budget has to outlive the
-call that declared it.
+**Fields retained after submission.** `maxInsertions`, `declaredCostCeiling`, and
+`pauseOnBlocking` are carried on the run's stored blueprint, which survives a restart and a cold
+load from rows. `maxNodes` and `maxFanOut` are checked against the submitted structure before
+compilation and are then dropped; later steps do not read them. YAML normalization retains the
+same three runtime fields, but does not perform those submission-specific structural comparisons.
+`maxInsertions` and `pauseOnBlocking` are read on later calls; `declaredCostCeiling` remains a
+recorded declaration.
 
 `maxInsertions: 0` is a real value and is not the same as omitting the field: `0` opts the run out
 of adaptive insertion entirely, while omission means "server default".

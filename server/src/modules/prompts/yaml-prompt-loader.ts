@@ -648,7 +648,7 @@ export function yamlToPromptData(yaml: PromptYaml, filePath?: string): PromptDat
  * representation: `pauseOnBlocking` declared in `prompt.yaml` has to arrive at stage 16 exactly
  * as it does from a submitted IR.
  */
-function normalizeChainBudget(
+export function normalizeChainBudget(
   budget: PromptYaml['budget']
 ): NonNullable<PromptData['budget']> | undefined {
   if (budget === undefined) return undefined;

@@ -88,8 +88,6 @@ Operators:
 | Forks          | 27                      |
 | Iteration Time | 5-10 min → <1 min (10x) |
 
-![Demo: Hot-reload in action](placeholder-demo.gif)
-
 ---
 
 ## The Recursive Part
@@ -117,12 +115,17 @@ No manual editing. No restart. The tool improves its own prompts.
 >>create_gate name:"API Docs"
 ```
 
-Two-phase UX:
+The authoring prompts guide a draft before it is written:
 
-1. **Design phase** — Missing fields? Template shows guidance and examples
-2. **Validation phase** — All fields present? Script validates → auto-creates
+1. **Design**: Partial inputs show guidance and supported fields.
+2. **Prepare**: `create_prompt` submits a non-mutating canonical validation call;
+   `create_gate` and `create_framework` return draft create parameters without executing them.
+3. **Create**: The client submits the reviewed draft when authorized, resolves server refusals,
+   and verifies the write receipt and loaded resource.
 
-Same pattern for `>>create_prompt` and `>>create_framework`. Zero API memorization.
+The server owns resource validation. Builders map fields and preserve nested definitions;
+a contract guard detects drift as that surface changes. See the
+[authoring lifecycle reference](../reference/mcp-tools.md#script-tool-execution).
 
 ---
 

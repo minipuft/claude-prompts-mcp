@@ -641,38 +641,53 @@ prompt_engine(command:">>guide gates")     # Gate syntax reference
 
 Prompts can include script tools that auto-trigger when user args match the tool's JSON schema. This enables wizard-style meta-prompts.
 
-**Two-Phase UX:**
+**Bundled creation lifecycle:**
 
-| Phase            | What Happens                                         | Example                                                                                   |
-| ---------------- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| **Design**       | Args don't match schema → Template shows guidance    | `>>create_gate name:"Code Quality"`                                                       |
-| **Validation**   | Args match schema → Script runs, results in template | `>>create_gate id:"code-quality" name:"Code Quality" type:"validation" description:"..."` |
-| **Auto-Execute** | Script returns `valid: true` → MCP tool called       | Creates gate via `resource_manager`                                                       |
+| Phase       | What happens                                                                                 | Example                                                                                                                            |
+| ----------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| **Design**  | Partial inputs render guidance and the supported fields                                      | `>>create_gate name:"Code Quality"`                                                                                                |
+| **Prepare** | Inputs match the builder schema; its script maps supplied fields into a draft                | `>>create_gate id:"code-quality" name:"Code Quality" description:"Checks code quality" guidance:"Check naming, errors, and tests"` |
+| **Create**  | The client submits the reviewed draft through `resource_manager` when creation is authorized | `resource_manager(resource_type:"gate", action:"create", ...)`                                                                     |
 
-**Design phase** (missing required fields — shows guidance):
+The three bundled authoring prompts differ at preparation:
 
-```bash
-prompt_engine(command:">>create_gate name:'Code Quality'")
-# Result: Template renders design guidance with field descriptions
-```
+| Prompt               | Builder result                                                      | Server validation                                                                              |
+| -------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `>>create_prompt`    | `auto_execute` calls `resource_manager` with `action:"validate"`    | Validates the complete prompt draft without files or versions; create separately after success |
+| `>>create_gate`      | Non-executing `draft` containing a gate `action:"create"` call      | Validates when the client submits creation                                                     |
+| `>>create_framework` | Non-executing `draft` containing a framework `action:"create"` call | Validates when the client submits creation                                                     |
 
-**Validation phase** (all required fields — script runs):
+Builder `valid:true` means adapter readiness, not resource validity. Gate/framework creation has
+no `validate` action or creation preview. Review the concrete draft, reuse existing task
+authorization, and inspect the successful write receipt and loaded resource before reporting
+creation. Existing prompts use `inspect(detail:"full") → preview(preview_action:"update") → update`
+with the inspected `expected_version`; this maintenance preview is separate from new-resource
+validation.
 
-```bash
-prompt_engine(command:">>create_gate id:'code-quality' name:'Code Quality' type:'validation' description:'Ensures code meets standards' guidance:'Check naming, error handling, tests'")
-# Result: Script validates → returns {valid: true, auto_execute: {...}} → gate created
-```
+Builders expose current canonical creation fields and preserve nested definitions. The prompt
+builder also accepts `systemMessage`, `userMessageTemplate`, `gateConfiguration`, `chainSteps`,
+and `registerWithMcp`; the gate builder accepts `enforcementMode`. Canonical snake_case inputs
+take precedence when both forms are supplied. Framework type and version are server-derived.
 
-**Available meta-prompts:**
+### Reusable Workflow Authoring
 
-- `>>create_gate` — Quality gate authoring
-- `>>create_prompt` — Prompt/chain authoring
-- `>>create_framework` — Framework authoring
+`>>create_prompt prompt_type:"workflow"` designs a persistent prompt with `chain_steps`, optional
+`edges` and `budget`, and applicable `artifacts`, gates, injection and delegation defaults.
+Saved-chain `maxNodes`/`maxFanOut` declarations are persisted but do not enforce narrowed execution
+limits; see [budget semantics](chain-schema.md#budget). Steps
+carry stable `id`s, `args`, input/output mappings, retries, framework, inline gates, visibility,
+model/agent settings, `delegated`, and `await`. See the [chain schema](chain-schema.md) for fields.
 
-`>>create_prompt` uses a stricter lifecycle than the older auto-create examples: design →
-`resource_manager(action:"validate")` → user confirmation → `action:"create"` → render smoke
-test. Its adapter only maps author-facing field names; canonical validation and writes remain in
-`resource_manager`.
+Existing external `promptId` references must resolve. A new owned reference
+`<chain_id>/<child>` with one child segment scaffolds a placeholder child when the parent is
+created. Inspect the loaded child ID, fill its content and settings through MCP, and reload/render
+the assembled workflow before treating the scaffold as complete. See
+[step reference resolution](../concepts/chains-lifecycle.md#step-references-must-resolve).
+
+Dependency edges compile into an ordered chain; they supply neither conditional branching nor a
+parallel DAG scheduler. `prompt_engine(workflow:{version:1,nodes:...,edges:...,budget:...})`
+submits a runtime run rather than creating a catalog resource. The client spawns delegated or
+detached workers using its agent capabilities. See [Workflow IR](workflow-ir.md).
 
 See [Script Tools Guide](../guides/script-tools.md) for building your own.
 
@@ -1153,30 +1168,31 @@ resource_manager(resource_type:"category", action:"delete", id:"analysis", confi
 
 **Prompt Parameters:**
 
-| Parameter               | Purpose                                                                                                                                                        |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `category`              | Prompt category tag                                                                                                                                            |
-| `user_message_template` | Prompt body with `{{variables}}`                                                                                                                               |
-| `system_message`        | Optional system message                                                                                                                                        |
-| `arguments`             | Array of `{name, type?, required?, description?, defaultValue?, validation?}`                                                                                  |
-| `argument_updates`      | Update-only per-field overlay onto existing arguments by `name` — see [Argument Updates](#argument-updates-partial-argument-edit)                              |
-| `patch`                 | Anchored replacements for `update` — see [Patch Mode](#patch-mode-partial-update)                                                                              |
-| `preview_action`        | With `action:"preview"`: which mutation to render — `update` (prompt only), `rollback`, or `delete`. Writes nothing, consumes no version                       |
-| `expected_version`      | Prompt update concurrency token from `inspect`; stale values refuse before versioning or writing                                                               |
-| `unset`                 | Update-only: CLEAR the named fields — see [Removing a field](#removing-a-field-unset)                                                                          |
-| `chain_steps`           | Chain step definitions — every `promptId` must name a registered prompt or the write is refused                                                                |
-| `chain_step_operation`  | `add \| remove \| reorder \| update` — omit it to replace the whole array                                                                                      |
-| `budget`                | Chain run-level budget — `maxNodes`, `maxFanOut`, `maxInsertions`, `declaredCostCeiling`, `pauseOnBlocking`. A declared cap may only narrow the server default |
-| `artifacts`             | What this run touches — `produces` (artifact kinds) and `fromArgument` (a declared argument carrying paths). Artifact-scoped gates attach from it              |
-| `edges`                 | Chain dependency edges — `{from, to}` naming step ids. Send with `chain_steps` when a rewrite invalidates one; see [Chain edges](#chain-edges)                 |
-| `tool_operation`        | Update-only: `add` unions with the current tool binding, `remove` unbinds AND deletes — see [Removing a field](#removing-a-field-unset)                        |
-| `tool_ids`              | Tool ids for `tool_operation:"remove"`; refused without it                                                                                                     |
-| `gate_configuration`    | Gate include/exclude lists                                                                                                                                     |
-| `injection`             | Prompt-level injection control — `system-prompt`, `gate-guidance`, `style-guidance`                                                                            |
-| `register_with_mcp`     | Register as a native MCP prompt — **freezes the prompt against its category/global default**                                                                   |
-| `mcp_prompt_mode`       | `expand` (plain text) or `launch` (route through `prompt_engine`) — **same freeze**                                                                            |
-| `subagent_model`        | `heavy \| standard \| fast` capability hint for `==>` delegated steps                                                                                          |
-| `agent_type`            | Default host agent for this prompt's `==>` delegated steps                                                                                                     |
+| Parameter               | Purpose                                                                                                                                                                           |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `category`              | Prompt category tag                                                                                                                                                               |
+| `user_message_template` | Prompt body with `{{variables}}`                                                                                                                                                  |
+| `system_message`        | Optional system message                                                                                                                                                           |
+| `arguments`             | Array of `{name, type?, required?, description?, defaultValue?, validation?}`                                                                                                     |
+| `composer`              | `{inputArgument}` mapping a client composer draft into a declared text argument                                                                                                   |
+| `argument_updates`      | Update-only per-field overlay onto existing arguments by `name` — see [Argument Updates](#argument-updates-partial-argument-edit)                                                 |
+| `patch`                 | Anchored replacements for `update` — see [Patch Mode](#patch-mode-partial-update)                                                                                                 |
+| `preview_action`        | With `action:"preview"`: which mutation to render — `update` (prompt only), `rollback`, or `delete`. Writes nothing, consumes no version                                          |
+| `expected_version`      | Prompt update concurrency token from `inspect`; stale values refuse before versioning or writing                                                                                  |
+| `unset`                 | Update-only: CLEAR the named fields — see [Removing a field](#removing-a-field-unset)                                                                                             |
+| `chain_steps`           | Chain steps; external `promptId`s must resolve, while owned one-level child references scaffold stubs                                                                             |
+| `chain_step_operation`  | `add \| remove \| reorder \| update` — omit it to replace the whole array                                                                                                         |
+| `budget`                | Stored chain budget; `maxInsertions`/`pauseOnBlocking` affect execution, cost is recorded, and `maxNodes`/`maxFanOut` are declarations only. See [Budget](chain-schema.md#budget) |
+| `artifacts`             | What this run touches — `produces` (artifact kinds) and `fromArgument` (a declared argument carrying paths). Artifact-scoped gates attach from it                                 |
+| `edges`                 | Chain dependency edges — `{from, to}` naming step ids. Send with `chain_steps` when a rewrite invalidates one; see [Chain edges](#chain-edges)                                    |
+| `tool_operation`        | Update-only: `add` unions with the current tool binding, `remove` unbinds AND deletes — see [Removing a field](#removing-a-field-unset)                                           |
+| `tool_ids`              | Tool ids for `tool_operation:"remove"`; refused without it                                                                                                                        |
+| `gate_configuration`    | Gate include/exclude lists                                                                                                                                                        |
+| `injection`             | Prompt-level injection control — `system-prompt`, `gate-guidance`, `style-guidance`                                                                                               |
+| `register_with_mcp`     | Register as a native MCP prompt — **freezes the prompt against its category/global default**                                                                                      |
+| `mcp_prompt_mode`       | `expand` (plain text) or `launch` (route through `prompt_engine`) — **same freeze**                                                                                               |
+| `subagent_model`        | `heavy \| standard \| fast` capability hint for `==>` delegated steps                                                                                                             |
+| `agent_type`            | Default host agent for this prompt's `==>` delegated steps                                                                                                                        |
 
 `type` accepts `string \| number \| boolean \| object \| array`. `required:true` alone does not
 block execution — enforcement only arms when the argument also declares a `validation` block
@@ -1232,6 +1248,12 @@ re-send them with `edges:` on an `update`.
 | `guidance`               | Gate criteria content                                                          |
 | `pass_criteria`          | Array of success conditions                                                    |
 | `activation`             | When gate activates (categories, frameworks)                                   |
+
+`pass_criteria` supports `inline_guidance` (declarative client assessment),
+`framework_compliance`, `shell_verify` (command exit-status verification under operator allowlists),
+and `script_tool` (registered script execution). These modes use the canonical criterion fields;
+legacy output-regexp or minimum-length checks are not supported criterion types. See
+[Gate Definitions](../guides/gates.md) for execution controls and examples.
 
 Omitting `severity`, `enforcement_mode` or `block_response_on_fail` on an update leaves the gate's
 current value alone; it does not reset to the default. `block_response_on_fail: false` is a value,

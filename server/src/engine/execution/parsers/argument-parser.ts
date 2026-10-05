@@ -570,8 +570,10 @@ export class ArgumentParser {
       }
     }
 
-    // No value found - return empty, let template conditionals handle it
-    return { value: '', source: 'empty_fallback' };
+    // An omitted optional typed value is absence, not a string supplied by the user.
+    // Keep text fallbacks for templates; real defaults above retain their authored values.
+    const value = !arg.required && arg.type !== undefined && arg.type !== 'string' ? undefined : '';
+    return { value, source: 'empty_fallback' };
   }
 
   /**
@@ -614,6 +616,11 @@ export class ArgumentParser {
     argDef: PromptArgument
   ): { value: any; wasCoerced: boolean } {
     const argType = argDef.type?.toLowerCase();
+
+    // Preserve an explicit blank so validation can distinguish it from omission.
+    if (value.trim() === '' && (argType === 'array' || argType === 'object')) {
+      return { value, wasCoerced: false };
+    }
 
     // Coerce based on explicit type field
     if (argType === 'number') {

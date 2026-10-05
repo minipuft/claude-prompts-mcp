@@ -80,15 +80,24 @@ edges:
 
 ### Budget
 
-`maxInsertions` and `declaredCostCeiling` survive validation and ride the run; `maxNodes` and
-`maxFanOut` are answered from the submission itself and are dropped afterwards rather than kept as
-write-only fields. A declared cap may only NARROW the server default — a chain asking for a wider
-one fails to load rather than being silently clamped.
+Persisted YAML and a submitted [Workflow IR](workflow-ir.md#budget) use the same budget field
+schema, but structural declarations have different readers:
+
+| Field                 | Saved YAML chain                                                                                                      | Explicit Workflow IR submission                                       |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `maxNodes`            | Stored in YAML; dropped by loader normalization, so the declared node cap does not constrain the chain's execution    | Compared with the submission's expanded node count before compilation |
+| `maxFanOut`           | Stored in YAML; dropped by loader normalization, so the declared fan-out cap does not constrain the chain's execution | Compared with outgoing edge counts before compilation                 |
+| `maxInsertions`       | Carried into the run; narrows its adaptive insertion ceiling                                                          | Same runtime policy                                                   |
+| `declaredCostCeiling` | Carried into the run as a recorded declaration; not enforced                                                          | Same recorded declaration                                             |
+| `pauseOnBlocking`     | Carried into the run; controls blocking-unknown pauses                                                                | Same runtime policy                                                   |
 
 `budget` is authorable through `resource_manager` on `create` and `update`, and clearable with
-`unset: ["budget"]`. The tool applies `workflowBudgetSchema` itself, so the narrow-only bound and
-the strict key set are the loader's own: a cap above the server default, or a misspelled key, is
-refused at the call rather than clamped or dropped.
+`unset: ["budget"]`. `workflowBudgetSchema` checks the declaration's shape and rejects unknown
+keys or structural cap values above the server defaults. That field validation does not compare
+a saved YAML chain's actual node count or fan-out against its declared `maxNodes`/`maxFanOut`.
+`normalizeChainBudget` retains only `maxInsertions`, `declaredCostCeiling`, and `pauseOnBlocking`
+for execution. Explicit IR submission performs the structural count checks before its compiler
+drops those two fields.
 
 `pauseOnBlocking` (default `false`) decides what a blocking unknown does to the run: `false` raises
 a soft interrupt beside the inserted investigation step and keeps going, `true` HOLDS the run until

@@ -109,6 +109,8 @@
     "scaffold:module:self-test": "tsx scripts/scaffold-module.ts --self-test",
     "validate:filesize": "node scripts/validate-filesize.js",
     "generate:contracts": "tsx scripts/generate-contracts.ts",
+    "validate:authoring-contracts": "tsx scripts/validate-authoring-contracts.ts",
+    "validate:authoring-contracts:self-test": "tsx scripts/validate-authoring-contracts.ts --self-test",
     "validate:contracts": "tsx scripts/generate-contracts.ts --check",
     "validate:contracts:self-test": "tsx scripts/generate-contracts.ts --self-test",
     "skills:export": "tsx scripts/skills-sync.ts export",

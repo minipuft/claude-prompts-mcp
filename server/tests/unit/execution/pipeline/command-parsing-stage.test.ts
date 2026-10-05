@@ -1,12 +1,11 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
+import { ArgumentParser } from '../../../../src/engine/execution/parsers/argument-parser.js';
+
 import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
 import { CommandParsingStage } from '../../../../src/engine/execution/pipeline/stages/04-parsing-stage.js';
 
-import type {
-  ArgumentParser,
-  ArgumentParsingResult,
-} from '../../../../src/engine/execution/parsers/argument-parser.js';
+import type { ArgumentParsingResult } from '../../../../src/engine/execution/parsers/argument-parser.js';
 import type { UnifiedCommandParser } from '../../../../src/engine/execution/parsers/command-parser.js';
 import type { SymbolicCommandBuilder } from '../../../../src/engine/execution/parsers/symbolic-command-builder.js';
 import type { SymbolicCommandParseResult } from '../../../../src/engine/execution/parsers/types/operator-types.js';
@@ -473,4 +472,60 @@ describe('CommandParsingStage', () => {
     // Criterion 3: explicit id wins over slug.
     expect(context.parsedCommand?.steps?.[1].nodeId).toBe('review-explicit');
   });
+});
+
+describe('CommandParsingStage optional typed authoring inputs', () => {
+  test.each([
+    { name: 'Authoring smoke' },
+    { name: 'Authoring smoke', items: [], settings: {}, count: 0, enabled: false },
+  ])(
+    'validates omitted optional collections after the real typed-input merge: %j',
+    async (inputs) => {
+      const logger = createLogger();
+      const prompt: ConvertedPrompt = {
+        id: 'create_prompt',
+        name: 'Create Prompt',
+        description: '',
+        category: 'examples',
+        userMessageTemplate: '{{name}}',
+        arguments: [
+          { name: 'name', type: 'string', required: false },
+          { name: 'items', type: 'array', required: false },
+          { name: 'settings', type: 'object', required: false },
+          { name: 'count', type: 'number', required: false },
+          { name: 'enabled', type: 'boolean', required: false },
+        ],
+      };
+      const parseResult = {
+        promptId: prompt.id,
+        rawArgs: '',
+        format: 'simple' as const,
+        commandType: 'single' as const,
+        confidence: 1,
+        metadata: {
+          originalCommand: '>>create_prompt',
+          parseStrategy: 'simple',
+          detectedFormat: 'simple',
+          warnings: [],
+        },
+      };
+      const commandParser = {
+        parseCommand: jest
+          .fn<UnifiedCommandParser['parseCommand']>()
+          .mockResolvedValue(parseResult),
+      };
+      const parser = new ArgumentParser(logger);
+      const stage = new CommandParsingStage(
+        commandParser as unknown as UnifiedCommandParser,
+        parser,
+        () => [prompt],
+        logger,
+        createMockSymbolicCommandBuilder()
+      );
+      const context = new ExecutionContext({ command: '>>create_prompt', inputs });
+      context.state.normalization.requestInputs = inputs;
+      await expect(stage.execute(context)).resolves.toBeUndefined();
+      expect(context.getPromptArgs()).toEqual(inputs);
+    }
+  );
 });

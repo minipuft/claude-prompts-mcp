@@ -2,7 +2,7 @@ import { describe, expect, test, jest } from '@jest/globals';
 
 import { ArgumentParser } from '../../../../src/engine/execution/parsers/argument-parser.js';
 
-import type { ConvertedPrompt } from '../../../../src/shared/types/index.js';
+import type { ConvertedPrompt, PromptArgument } from '../../../../src/shared/types/index.js';
 
 const createLogger = () => ({
   info: jest.fn(),
@@ -337,5 +337,76 @@ describe('ArgumentParser prose-vs-delimiter disambiguation', () => {
     expect(result.metadata.parsingStrategy).toBe('keyvalue');
     expect(result.processedArgs.topic).toBe('MCP parsers');
     expect(result.processedArgs).not.toHaveProperty('bug');
+  });
+});
+
+describe('ArgumentParser optional typed arguments', () => {
+  const prompt = (): ConvertedPrompt => ({
+    id: 'authoring',
+    name: 'Authoring',
+    description: '',
+    category: 'examples',
+    userMessageTemplate: '{{name}}',
+    arguments: [
+      { name: 'name', type: 'string', required: false, validation: { minLength: 0 } },
+      { name: 'legacy', required: false },
+      { name: 'items', type: 'array', required: false },
+      { name: 'settings', type: 'object', required: false },
+      { name: 'count', type: 'number', required: false },
+      { name: 'enabled', type: 'boolean', required: false },
+    ],
+  });
+
+  test.each(['', 'name:"probe"', 'free text'])(
+    'leaves omitted optional typed values absent: %s',
+    async (rawArgs) => {
+      const parser = new ArgumentParser(createLogger());
+      const result = await parser.parseArguments(rawArgs, prompt(), {});
+      for (const name of ['items', 'settings', 'count', 'enabled']) {
+        expect(result.processedArgs[name]).toBeUndefined();
+      }
+      expect(result.processedArgs.legacy).toBe('');
+      expect(() => parser.validateResolvedArguments(prompt(), result.processedArgs)).not.toThrow();
+    }
+  );
+
+  test.each(['items', 'settings'])('rejects an explicitly supplied blank %s', async (name) => {
+    const parser = new ArgumentParser(createLogger());
+    await expect(parser.parseArguments(`${name}:""`, prompt(), {})).rejects.toThrow('must be an');
+  });
+
+  test('preserves real contextual defaults and authored false, zero, empty arrays and objects', async () => {
+    const parser = new ArgumentParser(createLogger());
+    const withDefaults = prompt();
+    const defaults: Record<string, unknown> = { items: [], settings: {}, count: 0, enabled: false };
+    withDefaults.arguments = withDefaults.arguments.map((argument: PromptArgument) => ({
+      ...argument,
+      ...(defaults[argument.name] !== undefined ? { defaultValue: defaults[argument.name] } : {}),
+    }));
+    const result = await parser.parseArguments('', withDefaults, {
+      promptDefaults: { name: 'default name' },
+    });
+    expect(result.processedArgs).toEqual({
+      name: 'default name',
+      legacy: '',
+      items: [],
+      settings: {},
+      count: 0,
+      enabled: false,
+    });
+    expect(() =>
+      parser.validateResolvedArguments(withDefaults, result.processedArgs)
+    ).not.toThrow();
+    const supplied = await parser.parseArguments(
+      'items:"[]" settings:"{}" count:"0" enabled:"false"',
+      prompt(),
+      {}
+    );
+    expect(supplied.processedArgs).toMatchObject({
+      items: [],
+      settings: {},
+      count: 0,
+      enabled: false,
+    });
   });
 });

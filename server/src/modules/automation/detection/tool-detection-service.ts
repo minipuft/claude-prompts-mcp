@@ -287,12 +287,10 @@ export class ToolDetectionService implements ToolDetectionServicePort {
 
   /**
    * Check if a value is an empty placeholder from prompt template defaults.
-   * Empty strings and empty arrays are considered placeholders.
+   * Undefined values and empty strings are absent; supplied arrays and null are authored values.
    */
   private isEmptyPlaceholder(value: unknown): boolean {
-    if (value === '') return true;
-    if (Array.isArray(value) && value.length === 0) return true;
-    return false;
+    return value === undefined || value === '';
   }
 
   /**

@@ -123,6 +123,13 @@ function scriptDeclaredFlags() {
     const match = hit.match(/'(--[a-z][a-z0-9-]+)'/);
     if (match) flags.add(match[1]);
   }
+  // A script that declares its flags in a `parseArgs` options table (scripts/codex-server.mjs)
+  // is read the same way the CLI parsers are. Only files that call `parseArgs(` are read, so an
+  // unrelated `{ type: ... }` object elsewhere in a script cannot widen the flag set.
+  const parseArgsScripts = runRg(['-l', 'parseArgs\\(', ...trackedScope(SCRIPT_DIRS)]);
+  for (const file of parseArgsScripts.split('\n').filter(Boolean)) {
+    for (const flag of parsedFlagsFrom(file)) flags.add(flag);
+  }
   return flags;
 }
 

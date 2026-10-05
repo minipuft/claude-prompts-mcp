@@ -1,164 +1,71 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Gate Builder Input",
-  "description": "Schema for gate definitions matching the gate.yaml structure",
+  "title": "Gate Authoring Draft",
+  "description": "Adapter input shape only; resource validity is decided by resource_manager. Nested definitions pass through unchanged.",
   "type": "object",
   "properties": {
     "id": {
       "type": "string",
-      "pattern": "^[a-z][a-z0-9-]*$",
-      "description": "Lowercase-hyphenated identifier (e.g., 'code-quality', 'api-docs')"
+      "description": "Stable authored resource identifier"
     },
     "name": {
       "type": "string",
-      "minLength": 1,
-      "description": "Human-readable gate name"
+      "description": "Human-readable resource name"
     },
     "type": {
       "type": "string",
-      "enum": ["validation", "guidance"],
-      "description": "Gate type: validation (pass/fail) or guidance (advisory)"
+      "description": "[Gate] Gate type: validation (pass/fail) or guidance (advisory). Default: validation. Writes the gate.yaml key 'type'."
+    },
+    "gate_type": {
+      "type": "string",
+      "description": "[Gate] Gate classification. Default: custom. Writes the gate.yaml key 'gate_type'; 'framework' marks a gate that requires an active framework and is filtered out when framework gates are disabled."
     },
     "description": {
       "type": "string",
-      "minLength": 10,
-      "description": "Brief description of what the gate validates"
-    },
-    "guidanceFile": {
-      "type": "string",
-      "description": "Path to guidance.md file"
+      "description": "What the resource does and when to use it"
     },
     "guidance": {
       "type": "string",
-      "description": "Inline guidance content (alternative to guidanceFile)"
-    },
-    "severity": {
-      "type": "string",
-      "enum": ["critical", "high", "medium", "low"],
-      "default": "medium",
-      "description": "Gate severity level"
-    },
-    "enforcementMode": {
-      "type": "string",
-      "enum": ["blocking", "advisory", "informational"],
-      "description": "How the gate is enforced"
+      "description": "[Gate] Gate guidance content - the criteria or instructions."
     },
     "pass_criteria": {
       "type": "array",
-      "description": "Validation criteria definitions",
-      "items": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "inline_guidance",
-              "llm_self_check",
-              "framework_compliance",
-              "shell_verify",
-              "script_tool"
-            ],
-            "description": "Type of validation check"
-          },
-          "min_length": {
-            "type": "integer",
-            "minimum": 0,
-            "description": "Minimum content length"
-          },
-          "max_length": {
-            "type": "integer",
-            "minimum": 0,
-            "description": "Maximum content length"
-          },
-          "required_patterns": {
-            "type": "array",
-            "items": { "type": "string" },
-            "description": "Patterns that must be present"
-          },
-          "forbidden_patterns": {
-            "type": "array",
-            "items": { "type": "string" },
-            "description": "Patterns that must not be present"
-          },
-          "regex_patterns": {
-            "type": "array",
-            "items": { "type": "string" },
-            "description": "Regex patterns to match"
-          },
-          "keyword_count": {
-            "type": "object",
-            "additionalProperties": { "type": "integer" },
-            "description": "Required keyword frequencies"
-          },
-          "prompt_template": {
-            "type": "string",
-            "description": "LLM prompt template for self-check"
-          },
-          "pass_threshold": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 1,
-            "description": "Pass threshold for LLM check"
-          },
-          "framework": {
-            "type": "string",
-            "description": "Framework ID for compliance check"
-          },
-          "min_compliance_score": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 1,
-            "description": "Minimum compliance score"
-          }
-        },
-        "required": ["type"]
-      }
-    },
-    "retry_config": {
-      "type": "object",
-      "description": "Retry behavior configuration",
-      "properties": {
-        "max_attempts": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 5,
-          "default": 2,
-          "description": "Maximum retry attempts"
-        },
-        "improvement_hints": {
-          "type": "boolean",
-          "default": true,
-          "description": "Include improvement hints"
-        },
-        "preserve_context": {
-          "type": "boolean",
-          "default": true,
-          "description": "Preserve context between retries"
-        }
-      }
+      "description": "[Gate] Structured pass criteria definitions. Each entry is an object, not a bare string: optional type (inline_guidance|framework_compliance|shell_verify|script_tool) plus the fields that type reads — framework compliance's framework/min_compliance_score/severity/quality_indicators, shell verification's shell_command/shell_timeout/shell_working_dir/shell_env/shell_max_attempts/shell_preset/shell_stdin_source/shell_response_env_var, or script tool's script_tool_id/script_tool_input/script_tool_timeout/script_tool_working_dir.",
+      "items": {}
     },
     "activation": {
       "type": "object",
-      "description": "When to activate the gate",
-      "properties": {
-        "prompt_categories": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "Categories that trigger this gate"
-        },
-        "frameworks": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "Frameworks that trigger this gate"
-        },
-        "explicit_request": {
-          "type": "boolean",
-          "default": false,
-          "description": "Only activate when explicitly requested"
-        }
-      }
+      "description": "[Gate] Activation rules: prompt_categories, frameworks, explicit_request."
+    },
+    "retry_config": {
+      "type": "object",
+      "description": "[Gate] Retry configuration: max_attempts, improvement_hints."
+    },
+    "subject": {
+      "type": "string",
+      "description": "[Gate] Free kebab-case tag naming what this gate reminds about (e.g. 'code-quality'). An installation's `gates.harnessCovers` (config.jsonc, or config.json) suppresses reminder-tier gates whose subject it lists; check-tier gates (shell_verify, script_tool) are never suppressed. Lowercase letters, digits and hyphens only."
+    },
+    "severity": {
+      "type": "string",
+      "description": "[Gate] Severity for prioritization. Default: medium. Omitted on update, an existing gate keeps its current value."
+    },
+    "enforcement_mode": {
+      "type": "string",
+      "description": "[Gate] What a FAIL does: blocking holds the chain step, advisory advances and names the failure in the reply, informational advances silently. Absent, the gate holds a chain step. When a FAIL verdict names gates in per_gate, only those gates decide; otherwise the strictest gate on the step does."
+    },
+    "block_response_on_fail": {
+      "type": "boolean",
+      "description": "[Gate] Withhold the step output when this gate is marked FAIL, returning the gate review in its place. Writes the gate.yaml key 'blockResponseOnFail'. Omitted on update, an existing gate keeps its current value; send `false` to clear it."
+    },
+    "evaluation": {
+      "type": "object",
+      "description": "[Gate] Who reviews this gate: `mode: \"self\"` (the model that wrote the output) or `mode: \"judge\"` (a context-isolated reviewer that sees only the output and the criteria). `model` is a hint for which model the judge runs on; `strict` asks for failures first, and defaults to true under `judge`. Writes the gate.yaml key 'evaluation' whole, so a supplied block replaces the existing one. Omitted on update, an existing gate keeps its current block; send `{\"mode\": \"self\"}` to return the gate to self-review. An unrecognized key inside the block is refused by path."
+    },
+    "enforcementMode": {
+      "type": "string",
+      "description": "Legacy alias for enforcement_mode; canonical value wins when both are supplied"
     }
   },
-  "required": ["id", "name", "type", "description"],
+  "required": ["id", "name", "description"],
   "additionalProperties": false
 }
