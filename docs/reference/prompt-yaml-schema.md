@@ -134,9 +134,11 @@ gateConfiguration:
 shown the framework's guidance, but it is never told to emit the section headers and its answer is
 not graded for them.
 
-On a chain prompt, `include` and `exclude` do not reach its steps: every step, whether planned or
-added by a `remainder`, resolves its gates from its own prompt's `gateConfiguration`, and a chain
-run resolves no gate set from the chain prompt itself.
+On a chain prompt, `include` and `exclude` decide the chain's own gates, not its steps': every
+step, whether planned or added by a `remainder`, resolves its gates from its own prompt's
+`gateConfiguration`. The chain's own gates (what its `include` names and its category activates,
+less its `exclude`) are reviewed once, on the run's final step, beside that step's own gates
+([Chains Lifecycle](../concepts/chains-lifecycle.md)).
 
 ### Inline Gate Definitions
 
