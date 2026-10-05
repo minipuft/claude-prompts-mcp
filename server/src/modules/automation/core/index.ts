@@ -20,8 +20,6 @@ export {
 export {
   ScriptToolDefinitionLoader,
   createScriptToolDefinitionLoader,
-  getDefaultScriptToolDefinitionLoader,
-  resetDefaultScriptToolDefinitionLoader,
 } from './script-definition-loader.js';
 
 // Workspace script loader (unified loader for prompt-local and workspace scripts)

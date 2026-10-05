@@ -581,28 +581,40 @@ export function createRuntimeFrameworkLoader(
 // ============================================================================
 
 let defaultLoader: RuntimeFrameworkLoader | null = null;
+/** True once a consumer was handed a loader built with no config: the package's own directories. */
+let unconfiguredHandedOut = false;
 
 /**
- * Get the default runtime framework loader instance
+ * Get the process-default runtime framework loader.
  *
- * Creates a singleton instance on first call.
+ * A caller that SUPPLIES config is the composition root (`initializeModules`) asserting the
+ * resolved directories, and the loader is built from that config. A caller that omits it is a
+ * consumer asking for whatever was established; with nothing established it gets a loader over
+ * the package's own directories (`resolveFrameworksDir()`), which is what tests and tooling that
+ * run no composition root read.
+ *
+ * Order is enforced, not assumed: configuring after a consumer already took that unconfigured
+ * loader throws. That consumer keeps its loader (`FrameworkRegistry` holds the one it finds at
+ * construction), so accepting the config would leave it reading the package tree while every
+ * later caller read the resolved roots, and a workspace framework would exist for one and not
+ * the other.
  */
 export function getDefaultRuntimeLoader(
   config?: RuntimeFrameworkLoaderConfig
 ): RuntimeFrameworkLoader {
-  // A caller that SUPPLIES config is the composition root asserting the resolved directories;
-  // a caller that omits it is a consumer asking for whatever was established. The old form
-  // (`if (!defaultLoader)`) discarded config whenever anything had already touched the singleton,
-  // so framework directory resolution silently depended on call order — and the losing branch
-  // falls back to `resolveFrameworksDir()`, which finds the package tree.
-  //
-  // That made reads ignore `MCP_RESOURCES_PATH` exactly as writes did. The two agreed only
-  // because both were wrong, which is why it stayed invisible until the write path was fixed
-  // (T1.10): correcting one side alone turned a silent mismatch into a failed registration.
-  //
-  // `module-initializer.ts:219` is the only caller that passes config.
-  if (!defaultLoader || config !== undefined) {
+  if (config !== undefined) {
+    if (unconfiguredHandedOut) {
+      throw new Error(
+        '[RuntimeFrameworkLoader] Configured after a consumer already took the unconfigured ' +
+          'default loader. The composition root must configure it before any consumer asks.'
+      );
+    }
     defaultLoader = new RuntimeFrameworkLoader(config);
+    return defaultLoader;
+  }
+  if (!defaultLoader) {
+    defaultLoader = new RuntimeFrameworkLoader();
+    unconfiguredHandedOut = true;
   }
   return defaultLoader;
 }
@@ -612,4 +624,5 @@ export function getDefaultRuntimeLoader(
  */
 export function resetDefaultRuntimeLoader(): void {
   defaultLoader = null;
+  unconfiguredHandedOut = false;
 }

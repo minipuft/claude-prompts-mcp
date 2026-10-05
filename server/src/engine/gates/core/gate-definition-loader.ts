@@ -505,27 +505,3 @@ export function createGateDefinitionLoader(
 ): GateDefinitionLoader {
   return new GateDefinitionLoader(config);
 }
-
-// ============================================================================
-// Default Instance Management (singleton pattern)
-// ============================================================================
-
-let defaultLoader: GateDefinitionLoader | null = null;
-
-/**
- * Get the default GateDefinitionLoader instance
- * Creates one if it doesn't exist
- */
-export function getDefaultGateDefinitionLoader(): GateDefinitionLoader {
-  if (!defaultLoader) {
-    defaultLoader = new GateDefinitionLoader();
-  }
-  return defaultLoader;
-}
-
-/**
- * Reset the default loader (useful for testing)
- */
-export function resetDefaultGateDefinitionLoader(): void {
-  defaultLoader = null;
-}

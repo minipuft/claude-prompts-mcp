@@ -15,8 +15,6 @@ import { join } from 'node:path';
 import {
   ScriptToolDefinitionLoader,
   createScriptToolDefinitionLoader,
-  getDefaultScriptToolDefinitionLoader,
-  resetDefaultScriptToolDefinitionLoader,
 } from '../../../../src/modules/automation/core/script-definition-loader.js';
 
 describe('ScriptToolDefinitionLoader', () => {
@@ -24,10 +22,6 @@ describe('ScriptToolDefinitionLoader', () => {
 
   beforeEach(() => {
     loader = createScriptToolDefinitionLoader({ debug: false, enableCache: true });
-  });
-
-  afterEach(() => {
-    resetDefaultScriptToolDefinitionLoader();
   });
 
   describe('discoverTools', () => {
@@ -238,23 +232,6 @@ describe('ScriptToolDefinitionLoader', () => {
         debug: true,
       });
       expect(loader).toBeInstanceOf(ScriptToolDefinitionLoader);
-    });
-  });
-
-  describe('default instance management', () => {
-    it('should return same instance on multiple calls', () => {
-      const instance1 = getDefaultScriptToolDefinitionLoader();
-      const instance2 = getDefaultScriptToolDefinitionLoader();
-
-      expect(instance1).toBe(instance2);
-    });
-
-    it('should create new instance after reset', () => {
-      const instance1 = getDefaultScriptToolDefinitionLoader();
-      resetDefaultScriptToolDefinitionLoader();
-      const instance2 = getDefaultScriptToolDefinitionLoader();
-
-      expect(instance1).not.toBe(instance2);
     });
   });
 

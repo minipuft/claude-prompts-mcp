@@ -518,27 +518,3 @@ export function createScriptToolDefinitionLoader(
 ): ScriptToolDefinitionLoader {
   return new ScriptToolDefinitionLoader(config);
 }
-
-// ============================================================================
-// Default Instance Management (singleton pattern)
-// ============================================================================
-
-let defaultLoader: ScriptToolDefinitionLoader | null = null;
-
-/**
- * Get the default ScriptToolDefinitionLoader instance.
- * Creates one if it doesn't exist.
- */
-export function getDefaultScriptToolDefinitionLoader(): ScriptToolDefinitionLoader {
-  if (!defaultLoader) {
-    defaultLoader = new ScriptToolDefinitionLoader();
-  }
-  return defaultLoader;
-}
-
-/**
- * Reset the default loader (useful for testing).
- */
-export function resetDefaultScriptToolDefinitionLoader(): void {
-  defaultLoader = null;
-}

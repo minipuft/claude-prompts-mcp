@@ -32,8 +32,6 @@ export {
 export {
   GateDefinitionLoader,
   createGateDefinitionLoader,
-  getDefaultGateDefinitionLoader,
-  resetDefaultGateDefinitionLoader,
   type GateDefinitionLoaderConfig,
   type GateSchemaValidationResult,
 } from './gate-definition-loader.js';
