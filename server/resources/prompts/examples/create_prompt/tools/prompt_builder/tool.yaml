@@ -1,8 +1,8 @@
 id: prompt_builder
 name: Prompt Builder Adapter
-description: >-
-  Maps a complete authoring draft to resource_manager action validate; canonical
-  validation remains server-owned.
+description: Maps complete prompt authoring fields to a non-mutating
+  resource_manager validate call. valid means adapter readiness only; canonical
+  resource validation remains server-owned.
 script: script.py
 runtime: python
 timeout: 30000

@@ -47,6 +47,54 @@ describe('ToolDetectionService', () => {
     ...overrides,
   });
 
+  describe('extractInputs authored empty values', () => {
+    const values = {
+      columns: [],
+      settings: {},
+      enabled: false,
+      count: 0,
+      absent: undefined,
+      nullish: null,
+      text: '',
+    };
+
+    it.each([true, false])(
+      'preserves supplied arrays, objects, null, false and zero with schema properties=%s',
+      (hasProperties) => {
+        const tool = createMockTool({
+          inputSchema: hasProperties
+            ? {
+                type: 'object',
+                properties: {
+                  columns: { type: 'array' },
+                  settings: { type: 'object' },
+                  enabled: { type: 'boolean' },
+                  count: { type: 'number' },
+                  absent: {},
+                  nullish: { type: ['object', 'null'] },
+                  text: { type: 'string' },
+                },
+              }
+            : { type: 'object' },
+        });
+        expect(service.extractInputs(values, tool)).toEqual({
+          columns: [],
+          settings: {},
+          enabled: false,
+          count: 0,
+          nullish: null,
+        });
+      }
+    );
+
+    it('keeps an empty array supplied through a naming alias', () => {
+      const tool = createMockTool({
+        inputSchema: { type: 'object', properties: { chainSteps: { type: 'array' } } },
+      });
+      expect(service.extractInputs({ chain_steps: [] }, tool)).toEqual({ chainSteps: [] });
+    });
+  });
+
   describe('detectTools', () => {
     it('should return empty array when no tools are provided', () => {
       // Note: detectTools signature is (input, args, availableTools)

@@ -1,13 +1,20 @@
 // @lifecycle canonical - Verifies refreshed prompt mutations and builds addressable receipts.
 
+import { readFile } from 'node:fs/promises';
+import { basename, resolve } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 
 import type { PromptResourceContext } from '../core/context.js';
 import type { OperationResult } from '../core/types.js';
 
-import { withInlineGateDefaults } from '#modules/prompts/yaml-prompt-loader.js';
+import {
+  normalizeChainBudget,
+  withInlineGateDefaults,
+} from '#modules/prompts/yaml-prompt-loader.js';
 import { canonicalPromptSnapshot } from '#modules/versioning/index.js';
+import { resolveContainedPath } from '#shared/utils/path-containment.js';
 import { slugifyCategoryDirectory } from '#shared/utils/resource-ids.js';
+import { parseYaml } from '#shared/utils/yaml/yaml-parser.js';
 
 export interface PromptMutationReceipt {
   resource_type: 'prompt';
@@ -72,6 +79,40 @@ export class PromptMutationReceiptService {
       refreshResult = { loadedAfterRefresh: null, refreshStatus: 'restart_pending' };
     } else {
       refreshResult = await this.refreshAndVerify(input);
+    }
+
+    // Structural caps leave the loaded budget by design. Prove their authored values from
+    // this operation's own parent file, rather than treating a scaffold or tool path as proof.
+    const declaredCaps = structuralBudgetCaps(input.expectedPrompt['budget']);
+    if (Object.keys(declaredCaps).length > 0) {
+      try {
+        const parentYaml = resolveContainedPath(
+          this.context.dependencies.configManager.getResolvedPromptsDirectory(),
+          `${slugifyCategoryDirectory(String(input.expectedPrompt['category'] ?? 'general'))}/${input.id}/prompt.yaml`
+        );
+        if (!(input.operation.affectedFiles ?? []).some((file) => resolve(file) === parentYaml)) {
+          throw new Error('the affected files do not name the authored parent prompt.yaml');
+        }
+        const parsed = parseYaml<unknown>(await readFile(parentYaml, 'utf8'), {
+          filename: parentYaml,
+        });
+        if (!parsed.success || !isRecord(parsed.data) || parsed.data['id'] !== basename(input.id)) {
+          throw new Error('the affected parent prompt.yaml does not identify this prompt');
+        }
+        const storedCaps = structuralBudgetCaps(parsed.data['budget']);
+        const mismatched = Object.keys(declaredCaps).filter(
+          (field) => !isDeepStrictEqual(declaredCaps[field], storedCaps[field])
+        );
+        if (mismatched.length > 0) {
+          throw new Error(`authored budget mismatch: ${mismatched.join(', ')}`);
+        }
+      } catch (error) {
+        refreshResult = {
+          loadedAfterRefresh: false,
+          refreshStatus: 'verification_failed',
+          verificationError: `Prompt '${input.id}' was written but its authored budget could not be verified: ${error instanceof Error ? error.message : String(error)}`,
+        };
+      }
     }
 
     const history = await this.context.versionHistoryService.loadHistory('prompt', input.id);
@@ -175,6 +216,13 @@ export function normalizeReloadShape(snapshot: Record<string, unknown>): Record<
       return { ...fields, required: fields['required'] ?? false };
     });
   }
+  // Reuse the loader's owner for the runtime view; the public service separately proves
+  // structural declarations in the file, so normalization cannot conceal a lost authored cap.
+  const budget = normalizeChainBudget(
+    normalized['budget'] as Parameters<typeof normalizeChainBudget>[0]
+  );
+  if (budget === undefined) delete normalized['budget'];
+  else normalized['budget'] = budget;
   return normalized;
 }
 
@@ -196,4 +244,17 @@ function withLoaderGateDefaults(gateConfiguration: unknown): unknown {
         : definition
     ),
   };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function structuralBudgetCaps(budget: unknown): Record<string, unknown> {
+  if (!isRecord(budget)) return {};
+  return Object.fromEntries(
+    ['maxNodes', 'maxFanOut']
+      .filter((field) => budget[field] !== undefined)
+      .map((field) => [field, budget[field]])
+  );
 }

@@ -144,6 +144,10 @@ npm run validate:tool-parameter-reads
 npm run typecheck && npm run build && npm test
 ```
 
+For a creation-field change, also update the corresponding bundled `create_*` authoring resource
+through MCP and run `npm run validate:authoring-contracts`. The guard checks that the user-facing
+builder can supply what the canonical command accepts; see [Bundled Authoring Contract Parity](#bundled-authoring-contract-parity).
+
 ### Step 6: Test End-to-End
 
 ```bash
@@ -162,6 +166,8 @@ Before committing parameter changes:
 - [ ] Updated router.ts to pass through parameter
 - [ ] Ran `npm run generate:contracts`
 - [ ] Ran `npm run validate:tool-parameter-reads` — every parameter a command declares is read
+- [ ] Updated affected `create_*` arguments, builder schema, mapping and guidance through MCP
+- [ ] Ran `npm run validate:authoring-contracts` for creation-field changes
 - [ ] Ran `npm run typecheck && npm run build`
 - [ ] Tested MCP tool with new parameter
 - [ ] Updated `docs/reference/mcp-tools.md`
@@ -219,6 +225,42 @@ git diff --name-only | grep "_generated"
 # Verify all layers use consistent names
 grep -rn "version" src/mcp/tools/ --include="*.ts" | grep -v test
 ```
+
+## Bundled Authoring Contract Parity
+
+The three `create_*` prompts project the canonical creation surface. `validate:authoring-contracts`
+reads the `prompt:create`, `gate:create`, and `framework:create` parameter lists from
+`tooling/contracts/resource-manager.json` and types from the hand-written
+`resourceManagerInputSchema`. Routing/control inputs (`resource_type`, `action`, `full_restart`,
+and the framework selector `framework`) are excluded from authored fields.
+
+It compares those fields with each builder's `schema.json` and registered `prompt.yaml`
+arguments, then runs the actual bundled scripts and checks that inputs survive mapping. Each base
+draft also passes the exported canonical transport schema, so nested shape changes fail through
+the schema owner. Probes include false, zero, empty values accepted by the transport, supported
+enum values, nested chain fields, and legacy aliases with canonical precedence. Missing or obsolete fields, type drift,
+lost mappings, wrong emitted parameters/actions, and premature automatic creation fail with the
+prompt, builder, and parameter named. Nested domain validation stays with `resource_manager`;
+the check does not validate authoring prose or prove a resource is domain-valid.
+
+```bash
+# From server/; also registered in validate:all
+npm run validate:authoring-contracts
+npm run validate:authoring-contracts:self-test
+```
+
+When creation fields change, update the canonical contract/schema and regenerate metadata,
+then use MCP to update the affected author's arguments, builder schema, field mapping, and
+guidance. Prefer canonical names; retain supported aliases at the adapter boundary. Run the
+guard, its focused mutation tests, and the required validation suite before considering the
+contract change complete. The existing bundled-script-tool fixture suite shares the enumeration
+and parameter-ownership checks, so a new bundled tool needs a fixture rather than silently
+escaping coverage.
+
+Preparation also has a checked lifecycle: prompt builders may auto-execute `validate` only;
+gate/framework builders return a non-executing `draft` with create parameters. Their
+`valid:true` describes adapter readiness. Gate/framework creation has no separate validation or
+creation-preview action; the canonical server validates their submitted writes.
 
 ## Declared Parameters Must Be Read
 

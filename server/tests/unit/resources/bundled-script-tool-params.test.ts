@@ -1,5 +1,5 @@
 /**
- * Every bundled script tool's `auto_execute.params` names parameters `resource_manager` declares.
+ * Every bundled script tool's `auto_execute.params` or `draft.params` names parameters `resource_manager` declares.
  *
  * A script tool's output is the ONE caller of `resource_manager` that nothing typechecks: the
  * auto-execute stage hands `auto_execute.params` straight to the router
@@ -23,12 +23,15 @@
  */
 
 import { describe, expect, it } from '@jest/globals';
-import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import * as yaml from 'js-yaml';
+import {
+  bundledScriptTools,
+  EXAMPLES_DIR,
+  runTool,
+} from '../../../scripts/validate-authoring-contracts.js';
 
 import {
   DECLARED_PARAMETERS,
@@ -37,19 +40,10 @@ import {
 
 import type { ResourceType } from '../../../src/mcp/tools/resource-manager/core/types.js';
 
-const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
-const EXAMPLES_DIR = path.join(SERVER_ROOT, 'resources', 'prompts', 'examples');
 const FIXTURES_PATH = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
   'bundled-script-tool-fixtures.json'
 );
-
-interface ToolOnDisk {
-  id: string;
-  dir: string;
-  runtime: string;
-  script: string;
-}
 
 interface Fixture {
   /** Whether this tool's output drives `resource_manager`. Stated, never inferred from absence. */
@@ -57,51 +51,8 @@ interface Fixture {
   input: Record<string, unknown>;
 }
 
-/** Every `tools/{id}/` directory under the bundled example prompts, read from disk. */
-function bundledScriptTools(): ToolOnDisk[] {
-  const found: ToolOnDisk[] = [];
-  for (const promptEntry of readdirSync(EXAMPLES_DIR, { withFileTypes: true })) {
-    if (!promptEntry.isDirectory()) continue;
-    const toolsDir = path.join(EXAMPLES_DIR, promptEntry.name, 'tools');
-    if (!existsSync(toolsDir)) continue;
-    for (const toolEntry of readdirSync(toolsDir, { withFileTypes: true })) {
-      if (!toolEntry.isDirectory()) continue;
-      const dir = path.join(toolsDir, toolEntry.name);
-      const manifestPath = path.join(dir, 'tool.yaml');
-      if (!existsSync(manifestPath)) continue;
-      const manifest = yaml.load(readFileSync(manifestPath, 'utf8')) as {
-        id?: string;
-        runtime?: string;
-        script?: string;
-      };
-      found.push({
-        id: manifest.id ?? toolEntry.name,
-        dir,
-        runtime: manifest.runtime ?? 'python',
-        script: manifest.script ?? 'script.py',
-      });
-    }
-  }
-  return found.sort((a, b) => a.id.localeCompare(b.id));
-}
-
-const TOOLS = bundledScriptTools();
+const TOOLS = bundledScriptTools(EXAMPLES_DIR);
 const FIXTURES = JSON.parse(readFileSync(FIXTURES_PATH, 'utf8')) as Record<string, Fixture>;
-
-interface ScriptOutput {
-  valid?: boolean;
-  errors?: string[];
-  auto_execute?: { tool?: string; params?: Record<string, unknown> };
-}
-
-function runTool(tool: ToolOnDisk, input: unknown): ScriptOutput {
-  const interpreter = tool.runtime === 'python' ? 'python3' : 'node';
-  const stdout = execFileSync(interpreter, [path.join(tool.dir, tool.script)], {
-    input: JSON.stringify(input),
-    encoding: 'utf8',
-  });
-  return JSON.parse(stdout) as ScriptOutput;
-}
 
 describe('bundled script tools emit only parameters resource_manager declares', () => {
   it('finds the tools on disk', () => {
@@ -125,7 +76,7 @@ describe('bundled script tools emit only parameters resource_manager declares', 
         if (fixture === undefined) throw new Error(`no fixture for ${tool.id}`);
         const output = runTool(tool, fixture.input);
         expect(output.errors ?? []).toEqual([]);
-        if (fixture.emitsResourceManagerCall) expect(output.valid).toBe(true);
+        if (fixture.emitsResourceManagerCall || output.draft) expect(output.valid).toBe(true);
       });
 
       it('agrees with its fixture about whether it calls resource_manager', () => {
@@ -135,10 +86,13 @@ describe('bundled script tools emit only parameters resource_manager declares', 
         expect(calls).toBe(fixture.emitsResourceManagerCall);
       });
 
-      if (FIXTURES[tool.id]?.emitsResourceManagerCall === true) {
+      if (
+        FIXTURES[tool.id]?.emitsResourceManagerCall === true ||
+        ['gate_builder', 'framework_builder'].includes(tool.id)
+      ) {
         it('emits no parameter resource_manager would refuse', () => {
           const output = runTool(tool, FIXTURES[tool.id]!.input);
-          const params = output.auto_execute?.params ?? {};
+          const params = output.auto_execute?.params ?? output.draft?.params ?? {};
 
           // Non-empty is part of the claim: an empty params object refuses nothing.
           expect(Object.keys(params).length).toBeGreaterThan(0);
