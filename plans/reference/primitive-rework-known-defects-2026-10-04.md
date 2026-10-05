@@ -48,6 +48,14 @@ and not driven. Nothing here is scheduled. An item is picked up by opening it as
 
 ## Smaller findings
 
+- From slice 40: `executionTypeEnhancements` is declared in five shipped `phases.yaml` files and
+  in the schemas, and no code reads it. `PromptExecutor.initializeStyleManager` catches any style
+  loader failure and falls back to hardcoded styles with a warning, which would hide a broken
+  loader. Stage 18 derives "finished" a second way when the store has no session. No check
+  catches a column that is written and never read. `createFrameworkEnhancement` and
+  `guidePromptCreation` have no caller. The parameter-reads check counts a router guard as a read
+  for every command, so a declared parameter the router guards can never be reported unread.
+
 - From slice 39: a request gate given as a criteria object with no target is bound to the
   current step even when it declares `scope: chain`; only a registered gate named by id reaches
   every step. A bare PASS on a review holding both a step's gates and its structural check closes
