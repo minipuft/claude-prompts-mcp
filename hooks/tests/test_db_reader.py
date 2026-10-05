@@ -743,6 +743,77 @@ class TestChainLoaderFallback:
         assert db_reader.load_active_chain_state("chain-demo") is None
 
 
+class TestRecoverableChainLoaderFallback:
+    """PIN (P6.287, as of 2026-10-04 · flips when a hook is meant to surface a broken view).
+
+    `load_recoverable_chain_state` carries the same view-to-table fall-through as the active
+    loader, behind one extra gate: the conversation must have recorded the chain in
+    hooks-state.db, and the loader keys its state.db read by that chain. A view query that raises
+    `OperationalError` still serves the state from the session row, and when neither source is
+    readable the loader returns None without raising. The control makes the two paths
+    distinguishable: the column says `working` while the state JSON says `completed`, so the
+    view serves the row and the session table refuses it.
+    """
+
+    SESSION = "sess-recoverable-fallback"
+
+    def _record_session_chain(self) -> None:
+        from session_state import save_session_state
+
+        save_session_state(self.SESSION, {"chain_id": "chain-demo", "current_step": 1, "total_steps": 3})
+
+    @staticmethod
+    def _shell_state(run_status: str = "working") -> str:
+        return _chain_session_state(
+            current=2,
+            total=5,
+            run_status=run_status,
+            pending_shell_verification={"shellVerify": {"command": "npm test"}, "attemptCount": 2},
+        )
+
+    def test_a_renamed_view_column_still_returns_the_state_from_the_session_row(self, state_db):
+        self._record_session_chain()
+        _insert_session(state_db, str(LIVE_PID), self._shell_state())
+        state_db.execute("ALTER TABLE chain_sessions RENAME COLUMN run_status TO run_state")
+        state_db.commit()
+        with pytest.raises(sqlite3.OperationalError):
+            state_db.execute("SELECT run_status FROM v_execution_status").fetchall()
+
+        state = db_reader.load_recoverable_chain_state(self.SESSION)
+
+        assert state == {
+            "chain_id": "chain-demo",
+            "current_step": 2,
+            "total_steps": 5,
+            "pending_gate": None,
+            "gate_criteria": [],
+            "last_prompt_id": "",
+            "pending_shell_verify": "npm test",
+            "shell_verify_attempts": 2,
+        }
+
+    def test_control_an_intact_view_serves_the_row_the_session_table_would_refuse(self, state_db):
+        self._record_session_chain()
+        _insert_session(state_db, str(LIVE_PID), self._shell_state(run_status="completed"), run_status="working")
+
+        via_view = db_reader.load_recoverable_chain_state(self.SESSION)
+        state_db.execute("ALTER TABLE chain_sessions RENAME COLUMN run_status TO run_state")
+        state_db.commit()
+        via_table = db_reader.load_recoverable_chain_state(self.SESSION)
+
+        assert via_view is not None and via_view["current_step"] == 2
+        assert via_table is None
+
+    def test_view_and_session_table_both_unreadable_returns_none_without_raising(self, state_db):
+        self._record_session_chain()
+        _insert_session(state_db, str(LIVE_PID), self._shell_state())
+        state_db.execute("DROP VIEW v_execution_status")
+        state_db.execute("ALTER TABLE chain_sessions RENAME TO chain_sessions_gone")
+        state_db.commit()
+
+        assert db_reader.load_recoverable_chain_state(self.SESSION) is None
+
+
 # ── E. Cross-client scoping ───────────────────────────────────────────────────
 
 
