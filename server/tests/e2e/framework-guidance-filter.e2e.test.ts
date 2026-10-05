@@ -1,4 +1,4 @@
-// @lifecycle test - P6.290 / R178: the gate guidance filter matches a framework whatever casing its id arrives in, over Streamable HTTP and STDIO.
+// @lifecycle test - P6.290 / R178 and P6.291 / R179: the gate guidance filter matches a framework whatever casing its id arrives in, and keeps the generic lines for every framework, over Streamable HTTP and STDIO.
 /**
  * P6.290 / R178. MEASURED 2026-10-04 on `ebe8936fb` (this harness's fixtures, Streamable HTTP): a
  * gate whose guidance names frameworks only in their authored casing (`- ReACT:`, `- Radiant:`)
@@ -11,11 +11,18 @@
  * Now every comparison in the filter ignores case: under ReACT the gate renders ReACT's line
  * alone, under its authored heading. Control: under CAGEERF, which the guidance never names, the
  * render keeps both lines unheaded, so the probe can see the unfiltered shape it rules out.
+ *
+ * P6.291 / R179. MEASURED 2026-10-04 on `c45809f4e` (Streamable HTTP): the shipped
+ * `framework-compliance` section carried its three generic lines under SCAMPER, the framework its
+ * guidance lists last, and under no other: the filter kept a line naming no framework only after
+ * the active framework's line. Now every framework's section is its headed line followed by every
+ * generic line, and a workspace copy of the gate whose guidance lists the frameworks in reverse
+ * renders the same section under the first-listed and the last-listed framework.
  */
 import { afterAll, beforeAll, describe, expect, test } from '@jest/globals';
 
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -38,6 +45,34 @@ type Tool = (
 
 const MIXED_GATE = 'p290-mixed';
 const MIXED_PROMPT = 'p290_probe';
+const COMPLIANCE_PROMPT = 'p291_probe';
+const SHIPPED_COMPLIANCE = path.join(SERVER_ROOT, 'resources', 'gates', 'framework-compliance');
+const SHIPPED_GUIDANCE = readFileSync(path.join(SHIPPED_COMPLIANCE, 'guidance.md'), 'utf8').trim();
+/** The shipped guidance's own lines: each framework's, and the generic ones naming none. */
+const FRAMEWORK_LINES = SHIPPED_GUIDANCE.split('\n').filter((line) => /^- [^:]+: /.test(line));
+const GENERIC_LINES = SHIPPED_GUIDANCE.split('\n').filter(
+  (line) => !FRAMEWORK_LINES.includes(line)
+);
+
+/**
+ * A workspace copy of the compliance gate, titled `Framework Compliance Reordered`, whose guidance
+ * lists the frameworks in reverse. Written before the server starts; it activates exactly as the
+ * shipped gate does, so one render carries both sections.
+ */
+const writeReorderedComplianceGate = (workspace: string): void => {
+  const dir = path.join(workspace, 'resources', 'gates', 'fc-reordered');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    path.join(dir, 'gate.yaml'),
+    readFileSync(path.join(SHIPPED_COMPLIANCE, 'gate.yaml'), 'utf8')
+      .replace(/^id: framework-compliance$/m, 'id: fc-reordered')
+      .replace(/^name: Framework Compliance$/m, 'name: Framework Compliance Reordered')
+  );
+  writeFileSync(
+    path.join(dir, 'guidance.md'),
+    `${[...FRAMEWORK_LINES].reverse().concat(GENERIC_LINES).join('\n')}\n`
+  );
+};
 
 /** The fixtures every transport authors: a gate naming two frameworks in mixed case, a prompt. */
 const authorFixtures = async (tool: Tool): Promise<void> => {
@@ -62,6 +97,16 @@ const authorFixtures = async (tool: Tool): Promise<void> => {
     description: 'renders the mixed-case gate',
     user_message_template: 'P290-BODY',
     gate_configuration: { framework_gates: false },
+  });
+  // The compliance gate activates on an analysis-family category under a framework context.
+  await author({
+    resource_type: 'prompt',
+    action: 'create',
+    id: COMPLIANCE_PROMPT,
+    category: 'analysis',
+    name: COMPLIANCE_PROMPT,
+    description: 'renders the shipped compliance gate and its reordered copy',
+    user_message_template: 'P291-BODY',
   });
 };
 
@@ -107,7 +152,32 @@ const harness = (tool: Tool) => {
     );
   };
 
-  return { filteredUnder, unfilteredUnderUnnamed };
+  /** One `### <title>` section's lines below the title, up to its first blank line. */
+  const sectionBody = (text: string, title: string): string[] => {
+    const lines = text.split('\n');
+    const start = lines.indexOf(`### ${title}`);
+    expect(start).toBeGreaterThanOrEqual(0);
+    const end = lines.findIndex((line, i) => i > start && line.trim() === '');
+    return lines.slice(start + 1, end);
+  };
+
+  /** Twin: the framework's headed line, then every generic line; the reordered copy agrees. */
+  const genericLinesKeptUnder = async (framework: string, heading: string) => {
+    await switchTo(framework);
+    const rendered = await tool('prompt_engine', { command: `>>${COMPLIANCE_PROMPT}` });
+    expect(rendered.isError).toBe(false);
+    const shipped = sectionBody(rendered.text, 'Framework Compliance');
+    const ownLine = FRAMEWORK_LINES.find((line) => line.startsWith(`- ${heading}: `));
+    expect(ownLine).toBeDefined();
+    expect(shipped).toEqual([
+      `**${heading} Framework Guidelines:**`,
+      `- ${ownLine?.slice(`- ${heading}: `.length)}`,
+      ...GENERIC_LINES,
+    ]);
+    expect(sectionBody(rendered.text, 'Framework Compliance Reordered')).toEqual(shipped);
+  };
+
+  return { filteredUnder, unfilteredUnderUnnamed, genericLinesKeptUnder };
 };
 
 describe('Streamable HTTP: the guidance filter matches a framework in any casing (P6.290, R178)', () => {
@@ -131,6 +201,7 @@ describe('Streamable HTTP: the guidance filter matches a framework in any casing
     cleanup.push(roots.cleanup);
     const workspace = path.join(roots.root, 'workspace');
     mkdirSync(workspace, { recursive: true });
+    writeReorderedComplianceGate(workspace);
     const port = await getAvailablePort();
     const baseUrl = `http://127.0.0.1:${port}`;
     const proc = startServerWithHttp(port, {
@@ -156,6 +227,14 @@ describe('Streamable HTTP: the guidance filter matches a framework in any casing
 
   test('control: under CAGEERF, which the guidance never names, both lines stay unheaded', async () => {
     await twins.unfilteredUnderUnnamed();
+  }, 120000);
+
+  test('P6.291: under CAGEERF, listed first, the compliance section keeps every generic line', async () => {
+    await twins.genericLinesKeptUnder('cageerf', 'CAGEERF');
+  }, 120000);
+
+  test('P6.291: under SCAMPER, listed last, the compliance section is shaped the same', async () => {
+    await twins.genericLinesKeptUnder('scamper', 'SCAMPER');
   }, 120000);
 });
 
@@ -197,6 +276,7 @@ describe('STDIO: the guidance filter matches a framework in any casing (P6.290, 
     cleanup.push(roots.cleanup);
     const workspace = path.join(roots.root, 'workspace');
     mkdirSync(workspace, { recursive: true });
+    writeReorderedComplianceGate(workspace);
     proc = spawn('node', [DIST_ENTRY, '--transport=stdio', '--quiet'], {
       cwd: SERVER_ROOT,
       env: buildServerEnv({
@@ -244,5 +324,13 @@ describe('STDIO: the guidance filter matches a framework in any casing (P6.290, 
 
   test('control over STDIO: under CAGEERF both lines stay unheaded', async () => {
     await twins.unfilteredUnderUnnamed();
+  }, 120000);
+
+  test('P6.291 over STDIO: under CAGEERF, listed first, the compliance section keeps every generic line', async () => {
+    await twins.genericLinesKeptUnder('cageerf', 'CAGEERF');
+  }, 120000);
+
+  test('P6.291 over STDIO: under SCAMPER, listed last, the compliance section is shaped the same', async () => {
+    await twins.genericLinesKeptUnder('scamper', 'SCAMPER');
   }, 120000);
 });

@@ -40,26 +40,19 @@ export function filterFrameworkGuidance(
   if (frameworks.length === 0) {
     return guidance;
   }
-  const lines = guidance.split('\n');
-  const filteredLines: string[] = [];
-  let foundRelevantSection = false;
-
-  for (const line of lines) {
-    if (matchesFrameworkLine(line, activeFramework)) {
-      foundRelevantSection = true;
-      filteredLines.push(line);
-      continue;
-    }
-
-    if (line.startsWith('- ') && matchesAnyFramework(line, frameworks)) {
-      foundRelevantSection = false;
-      continue;
-    }
-
-    if (!line.startsWith('- ') || foundRelevantSection) {
-      filteredLines.push(line);
-    }
-  }
+  // Only another framework's own line is dropped. A line naming no framework is guidance for
+  // every framework, which a framework's line adds to rather than replaces (R179). It used to be
+  // kept only after the active framework's line, so the generic lines authored after the
+  // last-listed framework reached that framework alone, and the order of the list decided who
+  // got them (P6.291).
+  const filteredLines = guidance
+    .split('\n')
+    .filter(
+      (line) =>
+        matchesFrameworkLine(line, activeFramework) ||
+        !line.startsWith('- ') ||
+        !matchesAnyFramework(line, frameworks)
+    );
 
   const headed = filteredLines.findIndex((line) => matchesFrameworkLine(line, activeFramework));
   if (headed < 0) {

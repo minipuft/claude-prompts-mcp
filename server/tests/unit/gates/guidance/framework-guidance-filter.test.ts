@@ -119,3 +119,51 @@ describe('FrameworkGuidanceFilter compares framework ids case-insensitively at e
     }
   );
 });
+
+/**
+ * P6.291 / R179. MEASURED 2026-10-04 on `c45809f4e` (driven, Streamable HTTP): the shipped
+ * `framework-compliance` guidance's three generic lines rendered under SCAMPER alone, the framework
+ * listed last; CAGEERF, ReACT and 5W1H rendered their own line only. The filter kept a `- ` line
+ * naming no framework only after the active framework's line, so the list's order decided which
+ * framework received the generic guidance.
+ */
+describe('FrameworkGuidanceFilter keeps the generic lines for every framework (P6.291)', () => {
+  const GUIDANCE = readFileSync(
+    path.join(
+      path.dirname(fileURLToPath(import.meta.url)),
+      '..',
+      '..',
+      '..',
+      '..',
+      'resources',
+      'gates',
+      'framework-compliance',
+      'guidance.md'
+    ),
+    'utf8'
+  ).trim();
+  const IDS = ['CAGEERF', 'REACT', '5W1H', 'SCAMPER'];
+  const lines = GUIDANCE.split('\n');
+  const frameworkLines = lines.filter((line) => /^- [^:]+: /.test(line));
+  const genericLines = lines.filter((line) => !frameworkLines.includes(line));
+  const reordered = [...frameworkLines].reverse().concat(genericLines).join('\n');
+
+  test('the shipped guidance lists four frameworks and three generic lines', () => {
+    expect(frameworkLines).toHaveLength(4);
+    expect(genericLines).toHaveLength(3);
+  });
+
+  test.each(IDS)('%s: its own line, headed, then every generic line', (id) => {
+    const filtered = filterFrameworkGuidance(GUIDANCE, id, IDS).split('\n');
+    expect(filtered[0]).toMatch(/^\*\*.+ Framework Guidelines:\*\*$/);
+    expect(filtered.slice(2)).toEqual(genericLines);
+    expect(filtered).toHaveLength(2 + genericLines.length);
+  });
+
+  test.each(IDS)('%s: reordering the frameworks in the guidance changes nothing', (id) => {
+    expect(reordered).not.toBe(GUIDANCE);
+    expect(filterFrameworkGuidance(reordered, id, IDS)).toBe(
+      filterFrameworkGuidance(GUIDANCE, id, IDS)
+    );
+  });
+});
