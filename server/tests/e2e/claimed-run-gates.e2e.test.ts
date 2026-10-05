@@ -189,6 +189,35 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     }
   }
 
+  /**
+   * Whether `nodeId`'s open review holds exactly the temporary gates that node's own blueprint
+   * step declares. The command-level anonymous criterion is folded onto every step, one temporary
+   * gate per step (R37), and each stays on the step that holds it (R194, P6.12).
+   */
+  function reviewHoldsOwnTemps(roots: Roots, chainId: string, nodeId: string): boolean {
+    const db = new DatabaseSync(path.join(roots.runtimeRoot, 'runtime-state', 'state.db'));
+    try {
+      const row = db.prepare('SELECT state FROM chain_runs WHERE chain_id = ?').get(chainId) as
+        { state: string } | undefined;
+      const state = JSON.parse(row?.state ?? '{}') as {
+        blueprint?: {
+          parsedCommand?: { steps?: Array<{ nodeId: string; inlineGateIds?: string[] }> };
+        };
+        reviews?: Record<string, { gateIds: string[] }>;
+      };
+      const temps = (ids: readonly string[]): string[] =>
+        ids.filter((id) => /^temp_\d+_[a-z0-9]+$/.test(id));
+      const step = state.blueprint?.parsedCommand?.steps?.find((s) => s.nodeId === nodeId);
+      const own = temps(step?.inlineGateIds ?? []);
+      return (
+        own.length > 0 &&
+        JSON.stringify(temps(state.reviews?.[nodeId]?.gateIds ?? [])) === JSON.stringify(own)
+      );
+    } finally {
+      db.close();
+    }
+  }
+
   const chainIdOf = (text: string): string => {
     const chainId = /chain_id[=:] ?"(chain-[A-Za-z0-9_#-]+)"/.exec(text)?.[1];
     if (chainId === undefined) throw new Error(`no chain id in: ${text.slice(0, 400)}`);
@@ -307,9 +336,13 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     });
     expect(failed.text).toContain('Gate Review Required');
     expect(markersIn(failed.text)).toEqual(MARKERS);
+    // Step b's own gates: the request gate targeting it, its YAML gate, the named gate and its
+    // own copy of the anonymous criterion. Steps a's and c's copies stay on a and c (R194, P6.12;
+    // this read three `temp` until 2026-10-05).
     expect(runRow(roots, chainId)?.reviews).toEqual({
-      b: ['rq112', 'sv-block', 'g112', 'temp', 'temp', 'temp'],
+      b: ['rq112', 'sv-block', 'g112', 'temp'],
     });
+    expect(reviewHoldsOwnTemps(roots, chainId, 'b')).toBe(true);
   }, 180000);
 
   test('(b) control: the same resume in the process that started the run is unchanged', async () => {
@@ -333,10 +366,11 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
       gate_verdict: FAIL,
     });
     // No `g112-2` and no second `rq112`: every id the blueprint references is held, so the
-    // restore registers nothing.
+    // restore registers nothing. The same review as the claim in (a).
     expect(runRow(roots, chainId)?.reviews).toEqual({
-      b: ['rq112', 'sv-block', 'g112', 'temp', 'temp', 'temp'],
+      b: ['rq112', 'sv-block', 'g112', 'temp'],
     });
+    expect(reviewHoldsOwnTemps(roots, chainId, 'b')).toBe(true);
   }, 180000);
 
   /**
