@@ -31,7 +31,7 @@ import type { GateDefinitionProvider } from '../core/gate-loader.js';
 import type { TemporaryGateRegistry } from '../core/temporary-gate-registry.js';
 import type { GateManager } from '../gate-manager.js';
 
-import { mintNodeIds } from '#shared/utils/node-order.js';
+import { mintNodeIds, parseStepForNode } from '#shared/utils/node-order.js';
 
 /** Resolves a prompt id to its converted prompt; undefined when no such prompt is loaded. */
 export type PromptLookup = (promptId: string) => ConvertedPrompt | undefined;
@@ -103,7 +103,10 @@ interface ChainStepEnhancementInput {
   readonly stepBindings: StepGateBindings;
 }
 
-/** Where a step gate was written: its node id when the step has one, and its parse ordinal. */
+/**
+ * Where a step gate was written: the step's node id when it has one, and its parse ordinal, which
+ * `parseStepForNode` reads only for a chain whose steps carry no node ids.
+ */
 interface StepAddress {
   readonly nodeId?: string;
   readonly stepNumber: number;
@@ -1338,10 +1341,17 @@ function stepGateBindings(
   return bindings;
 }
 
+/** No parse step has ordinal 0, so a target with neither node id nor ordinal matches none. */
+const NO_ORDINAL = 0;
+
 /**
- * Whether `target` is one of the steps a gate was declared on. PURE. Node id first, ordinal for a
- * step with no node id, and `nodeId: null` (an inherited scope with no target) matches no step,
- * the same precedence `filterGatesForTarget` gives a declared target.
+ * Whether `target` is one of the steps a gate was declared on. PURE.
+ *
+ * Resolved by the node the target stands for, through `parseStepForNode`: a step that carries a
+ * node id is matched by it and never by position, because an inserted node takes the ordinal of
+ * the planned step after it, and the run position of a planned step moves with every insertion
+ * ahead of it. The ordinal answers only for steps that carry no node id at all. `nodeId: null`
+ * (an inherited scope with no target) matches no step.
  */
 function isBoundToTarget(
   addresses: readonly StepAddress[],
@@ -1350,13 +1360,9 @@ function isBoundToTarget(
   if (target.nodeId === null) {
     return false;
   }
-  const targetNodeId =
+  const nodeId =
     typeof target.nodeId === 'string' && target.nodeId.length > 0 ? target.nodeId : undefined;
-  return addresses.some((address) =>
-    targetNodeId !== undefined && address.nodeId !== undefined
-      ? address.nodeId === targetNodeId
-      : address.stepNumber === target.stepNumber
-  );
+  return parseStepForNode(addresses, nodeId, target.stepNumber ?? NO_ORDINAL) !== undefined;
 }
 
 /**

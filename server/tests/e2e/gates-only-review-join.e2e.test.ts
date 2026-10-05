@@ -265,7 +265,9 @@ const gateReach = (tool: Tool, runtimeRoot: () => string) => {
 
   return async (
     args: Record<string, unknown>,
-    gateNames: readonly string[]
+    gateNames: readonly string[],
+    /** Sent with the first answer only: an observation that changes the run. */
+    firstAnswer: Record<string, unknown> = {}
   ): Promise<ReachStep[]> => {
     const names = new Map<string, string>();
     const name = (gateId: string): string => {
@@ -290,7 +292,11 @@ const gateReach = (tool: Tool, runtimeRoot: () => string) => {
     const steps = [observe(chainId, started.text)];
     for (let calls = 0; steps[steps.length - 1]?.current !== null && calls < 12; calls++) {
       const node = steps[steps.length - 1]?.current ?? '';
-      const held = await tool('prompt_engine', { chain_id: chainId, user_response: `${node} out` });
+      const held = await tool('prompt_engine', {
+        chain_id: chainId,
+        user_response: `${node} out`,
+        ...(calls === 0 ? firstAnswer : {}),
+      });
       steps.push(observe(chainId, held.text));
       if (readRun(runtimeRoot(), chainId).reviews[node] !== undefined) {
         const passed = await tool('prompt_engine', {
@@ -339,6 +345,31 @@ const reachRequest = (id: string): ReachStep[] => [
   { current: 'n2', rendered: [RQ], reviews: { n2: [id] } },
   { current: 'n3', rendered: [], reviews: {} },
   { current: 'n3', rendered: [RQ], reviews: { n3: [id] } },
+  { current: null, rendered: [], reviews: {} },
+];
+
+/**
+ * Shape (c): step 2 writes its own gate, and step 1's answer raises a blocking unknown naming no
+ * step, so the mutation policy inserts a node BEFORE it: step 2 moves to the third position.
+ * A request gate targeting `n2` makes the advance onto it open its review on the post-advance
+ * path, which addresses the step by the node the run stands on and by its NEW position (3), not
+ * the parse ordinal (2) the gate was written at. Step 2's gate renders and is reviewed on `n2`
+ * alone, never on the inserted node now standing at ordinal 2 (`validate:step-lookup-by-node`).
+ */
+const SHAPE_C = ['>>gr_a', `>>gr_b :: "${YB}"`, '>>gr_c'].join(ARROW);
+const insertedRun = (gateId: string) => ({
+  command: SHAPE_C,
+  gates: [{ id: gateId, name: gateId, criteria: ['CRIT-TG-12'], target_step_id: 'n2' }],
+});
+const insertBefore2 = (id: string) => ({
+  observations: [{ type: 'unknown_discovered', id, statement: `STATEMENT-${id}`, blocking: true }],
+});
+const reachInserted = (unknownId: string, gateId: string): ReachStep[] => [
+  { current: 'n1', rendered: [], reviews: {} },
+  { current: `inv-${unknownId}`, rendered: [], reviews: {} },
+  { current: 'n2', rendered: [YB], reviews: { n2: [gateId, 'YB'] } },
+  { current: 'n2', rendered: [YB], reviews: { n2: [gateId, 'YB'] } },
+  { current: 'n3', rendered: [], reviews: {} },
   { current: null, rendered: [], reviews: {} },
 ];
 
@@ -444,6 +475,11 @@ describe('Streamable HTTP: a gates-only call joins its step open review (P6.279,
     expect(await reach({ command: SHAPE_B }, ['XA', 'YB'])).toEqual(REACH_B);
   }, 120000);
 
+  test('P6.12 (c) a step gate moved by an inserted node stays on the step that wrote it', async () => {
+    const steps = await reach(insertedRun('t12h'), ['YB'], insertBefore2('u12h'));
+    expect(steps).toEqual(reachInserted('u12h', 't12h'));
+  }, 120000);
+
   test('P6.12 control: a request gate with no target still reaches every step', async () => {
     const steps = await reach({ command: SHAPE_A, gates: ['gr-req'] }, ['XA']);
     expect(steps).toEqual(reachRequest('gr-req'));
@@ -546,6 +582,11 @@ describe('STDIO: a gates-only call joins its step open review (P6.279, R173 tran
 
   test("P6.98 (b) over STDIO each step's own gate stays on that step", async () => {
     expect(await reach({ command: SHAPE_B }, ['XA', 'YB'])).toEqual(REACH_B);
+  }, 120000);
+
+  test('P6.12 (c) over STDIO a step gate moved by an inserted node stays on the step that wrote it', async () => {
+    const steps = await reach(insertedRun('t12s'), ['YB'], insertBefore2('u12s'));
+    expect(steps).toEqual(reachInserted('u12s', 't12s'));
   }, 120000);
 
   test('P6.12 control over STDIO: a request gate with no target still reaches every step', async () => {
