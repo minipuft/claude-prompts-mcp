@@ -30,7 +30,7 @@ exports; near 1, it is a leaf that is cheap to change.
 | `infra-http` | `src/infra/http` | protocol | canonical | 0.81 | Provides HTTP infrastructure used by the Streamable HTTP transport. | — | `index.ts` | infra-config<br>infra-logging<br>shared-types | runtime |
 | `infra-logging` | `src/infra/logging` | shared | canonical | 0.03 | Provides structured logging primitives and configuration. | — | `index.ts` | shared-types | engine-execution<br>engine-frameworks<br>engine-gates<br>infra-config<br>infra-database<br>infra-http<br>infra-observability<br>runtime<br>server-source |
 | `infra-observability` | `src/infra/observability` | domain | canonical | 0.86 | Provides tracing and operational telemetry infrastructure. | — | — | infra-database<br>infra-hooks<br>infra-logging<br>shared-types<br>shared-utils | runtime |
-| `mcp-boundary` | `src/mcp` | layer | canonical | 0.97 | Model Context Protocol contracts, transports, metadata, and tool adapters. | — | — | — | — |
+| `mcp-boundary` | `src/mcp` | layer | canonical | 0.98 | Model Context Protocol contracts, transports, metadata, and tool adapters. | — | — | — | — |
 | `mcp-contracts` | `src/mcp/contracts` | protocol | canonical | 0.14 | Defines runtime-facing MCP contract metadata and generated schemas. | — | — | mcp-metadata | mcp-metadata<br>mcp-tools |
 | `mcp-http` | `src/mcp/http` | protocol | canonical | 0.92 | Implements the Streamable HTTP MCP transport boundary. | — | — | engine-execution<br>mcp-tools<br>prompts<br>shared-types<br>shared-utils | runtime |
 | `mcp-metadata` | `src/mcp/metadata` | protocol | canonical | 0.50 | Builds MCP server and capability metadata. | `server/src/mcp/metadata/README.md` | — | mcp-contracts<br>shared-types<br>shared-utils | mcp-contracts<br>mcp-tools |
