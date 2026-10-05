@@ -99,12 +99,14 @@ export class LightweightGateSystem {
    * set. A control built on it would never have engaged — both methods were
    * removed as dead code (R36, unreached-methods baseline, 2026-09-17).
    */
-  isGateSystemEnabled(): boolean {
+  isGateSystemEnabled(scope?: StateStoreOptions): boolean {
     // If no gate system manager is set, default to enabled for backwards compatibility
     if (!this.gateStateStore) {
       return true;
     }
-    return this.gateStateStore.isGateSystemEnabled(this.workspaceScope);
+    // A request's own scope when the caller has one (gate enhancement, P6.292): over HTTP a
+    // workspace header's toggle is that workspace's, not the launch workspace's.
+    return this.gateStateStore.isGateSystemEnabled(scope ?? this.workspaceScope);
   }
 
   /**

@@ -104,14 +104,31 @@ repo/
 | `npm run generate:contracts`                | Regenerate MCP schemas from contracts                                           |
 | `npm run start:stdio` / `start:development` | STDIO / Streamable HTTP for manual testing                                      |
 
-`test:unit` and `test:coverage` run every unit file in one Node process
-(`maxWorkers: 1`), so heap retained across files adds up. It has grown past
-V8's default old-space ceiling on machines with less than about 14 GB of
-memory (2,240 MB measured on a 12 GB box), where the run aborts with
-`JavaScript heap out of memory` and exit 134; CI's 16 GB runners get a
-larger default and never showed it. Both scripts therefore set
-`--max-old-space-size=4096`, sized from a measured 2.9 GB peak resident set
-for the full unit run. The ceiling only stops the retention failing the suite.
+`test:unit` and `test:coverage` run every unit file through one Jest worker
+(`-w 1`), recycled when its heap passes 1,024 MB (the idle memory limit set in
+the script), because heap retained across files adds up: in one process it outgrew V8's
+default old-space ceiling on machines with less than about 14 GB of memory
+(2,240 MB measured on a 12 GB box), where the run aborted with
+`JavaScript heap out of memory` and exit 134. The scripts used to hide that
+behind a raised 4,096 MB heap ceiling (one process, 2.8 GB to 3.6 GB
+resident); the recycled worker keeps the heap bounded instead, so no
+script raises the ceiling any more.
+
+Measured 2026-10-04 on the 12 GB box, full unit suite (336 files, 6,012 passed,
+1 skipped in every run), peak resident set from `/usr/bin/time -v`:
+
+| Script          | Runner                                 | Wall time | Peak resident set |
+| --------------- | -------------------------------------- | --------- | ----------------- |
+| `test:unit`     | one process, 4,096 MB ceiling (before) | 2:02      | 2,836 MB          |
+| `test:unit`     | one recycled worker (now)              | 1:41      | 1,295 MB          |
+| `test:coverage` | one process, 4,096 MB ceiling (before) | 2:41      | 3,588 MB          |
+| `test:coverage` | one recycled worker (now)              | 2:06      | 1,419 MB          |
+
+The coverage run still meets the floors in `jest.config.cjs`
+(`coverageThreshold`): 62.56 percent of statements against 35. CI calls both
+scripts by name (`test:ci` and `test:coverage` in `ci.yml`) and passes no heap
+flag of its own. _As of 2026-10-04 · measured peaks above · flips when a
+recycled run exits 134 or its wall time passes the single-process run._
 
 What is retained was measured on 2026-09-29 (335 files): the heap left after
 each file, with a garbage collection forced between files, climbs from 41 MB
@@ -121,9 +138,9 @@ files. The largest steps are the files that import the largest module graphs
 rule tests, 61 MB), and a file that only imports `Application` keeps 89 of the
 97 MB the full shutdown-order test keeps. So each file's loaded modules stay
 resident under Jest's ESM runtime; no single file leaks a server, database or
-timer that a teardown could free. _As of 2026-09-29 · measured 2,096 MB
-retained heap, 3.0 GB peak resident set · flips when the retained heap crosses
-the 4,096 MB ceiling._
+timer that a teardown could free. The recycled worker bounds that growth
+rather than removing it. _As of 2026-09-29 · measured 2,096 MB retained heap
+in one process · flips when a per-file retention fix lands._
 
 </details>
 

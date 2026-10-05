@@ -301,7 +301,8 @@ export class PipelineBuilder {
       gateEnhancementService,
       temporaryGateRegistrar,
       () => deps.configManager.getGatesConfig(),
-      deps.logger
+      deps.logger,
+      (scope) => deps.lightweightGateSystem.isGateSystemEnabled(scope)
     );
 
     const sessionStage = new SessionManagementStage(deps.chainSessionStore, deps.logger);

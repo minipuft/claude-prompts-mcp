@@ -143,12 +143,8 @@ export class ChainOperatorExecutor {
     const convertedPrompt =
       targetStep?.convertedPrompt ??
       this.convertedPrompts.find((p) => p.id === targetStep?.promptId);
-    // Only the initial delegated review dispatches a worker. Its authored instructions must
-    // travel with the task; retry reviews keep their abbreviated, parent-facing context.
-    const workerSystemMessage =
-      targetStep?.delegated === true && !isRetry
-        ? this.withRenderedStepStyle(convertedPrompt?.systemMessage, chainContext)
-        : undefined;
+    const systemMessage = this.reviewSystemMessage(targetStep, chainContext, isRetry);
+    const systemMessageLines = (systemMessage ?? '') === '' ? [] : [`> ${systemMessage}`];
 
     const originalContent = await this.renderReviewedTask({
       targetStep,
@@ -178,7 +174,7 @@ export class ChainOperatorExecutor {
     // same framework block whether it renders normally or as a review. The frequency, not the
     // attempt count, is what spares a later step the block.
     let frameworkGuidance = '';
-    if (frameworkInjectionEnabled && targetStep && !hasFrameworkGuidance(workerSystemMessage)) {
+    if (frameworkInjectionEnabled && targetStep && !hasFrameworkGuidance(systemMessage)) {
       const guidance = await this.buildFrameworkGuidance(targetStep, input);
       if (guidance) {
         frameworkGuidance = guidance;
@@ -240,17 +236,15 @@ export class ChainOperatorExecutor {
               reviewWithheld
             ),
             manifest: reviewVisibility.manifest,
-            workerLines: [
-              frameworkGuidance,
-              ...((workerSystemMessage ?? '').length > 0 ? [`> ${workerSystemMessage}`] : []),
-              reviewPrompt,
-            ].filter((part) => part.trim().length > 0),
+            workerLines: [frameworkGuidance, ...systemMessageLines, reviewPrompt].filter(
+              (part) => part.trim().length > 0
+            ),
             gateGuidanceEnabled,
           }).lines
         : null;
 
     const contentParts = [
-      ...(reviewBriefLines ?? [frameworkGuidance, reviewPrompt]),
+      ...(reviewBriefLines ?? [frameworkGuidance, ...systemMessageLines, reviewPrompt]),
       gateGuidance,
       supplementalSections.join('\n\n'),
       responseFormatSection,
@@ -275,6 +269,26 @@ export class ChainOperatorExecutor {
           }
         : {}),
     };
+  }
+
+  /**
+   * The step's system message a first-attempt review carries, as the step's normal render does
+   * (R180): the review grades work that message shaped. A retry abbreviates the task to "review
+   * the original task above" and carries none. A delegated review hands the step's own copy to the
+   * worker inside the brief, as its normal delegated render does. Any other review is the parent's,
+   * and quotes the AUTHOR's text from the catalog: on a run's first call the step's copy also
+   * carries the injected framework guidance, which the review shows in its own framework block.
+   */
+  private reviewSystemMessage(
+    step: ChainStepPrompt | undefined,
+    chainContext: Record<string, unknown>,
+    isRetry: boolean
+  ): string | undefined {
+    if (step === undefined || isRetry) return undefined;
+    const authored = this.convertedPrompts.find((p) => p.id === step.promptId);
+    return step.delegated === true
+      ? this.withRenderedStepStyle((step.convertedPrompt ?? authored)?.systemMessage, chainContext)
+      : (authored ?? step.convertedPrompt)?.systemMessage;
   }
 
   /** Re-render the reviewed task under its original visibility; retries quote prior context. */
