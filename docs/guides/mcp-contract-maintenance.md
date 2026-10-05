@@ -161,7 +161,8 @@ Before committing parameter changes:
 - [ ] Updated types.ts if parameter is new
 - [ ] Updated router.ts to pass through parameter
 - [ ] Ran `npm run generate:contracts`
-- [ ] Ran `npm run validate:tool-parameter-reads` — every parameter a command declares is read
+- [ ] Ran `npm run validate:tool-parameter-reads` — every parameter a command declares is read,
+      and every parameter its code uses is declared
 - [ ] Ran `npm run typecheck && npm run build`
 - [ ] Tested MCP tool with new parameter
 - [ ] Updated `docs/reference/mcp-tools.md`
@@ -237,8 +238,8 @@ and fails naming the command and parameter that nothing reads:
 | `resource_manager` | The router's per-type copy (`gateArgs`, through renames), the handler's `case`, the processor | An argument the processor hands on whole to anything outside the tool's classes                    |
 | `prompt_engine`    | The registration allowlist (`normalizedArgs`), then `PromptExecutor.executePromptCommand`     | The pipeline request: a copied field needs an `mcpRequest.<field>` reader under `engine/execution` |
 
-A **read** is a property read off the argument object: `args.x`, `args['x']`, `const { x } = args`,
-the same through an alias, or `args[key]` in a loop over a constant list or map of field names.
+A **read** is a property read off the argument object: `args.x`, `args['x']`, `const { x } = args`
+when `x` is then used, the same through an alias, or `args[key]` in a loop over a constant list or map of field names.
 `this.method(args)` and `this.field.method(args)` follow the arguments into that method.
 A value copied into an object counts only if the method it is handed to reads it back. A name in a
 string, a comment, or an error message is not a read.
@@ -248,6 +249,15 @@ a type-owned parameter only for its owners (`PARAMETER_OWNERS`). When the check 
 parameter where the command dispatches, or drop it from that command's list. Dropping it from the
 last command that declares it takes the name off the tool, which needs an owner ruling; such
 findings wait, stamped, in the script's `AWAITING_RULING` list until the owner rules.
+
+The check also runs in reverse: every parameter a command's own path **uses** must be declared on
+a command that resolves to it, because the per-action refusal reads the same lists and a caller
+learns a parameter from them. The path here is narrower than above: the operation's or action's
+own `case` and the processor it hands the arguments to, plus a router guard scoped to the action
+by a positive `SET.has(action)` (the `confirm` guard on `delete` and `rollback`). A presence test
+(`args.x !== undefined`) is not a use; it is how code refuses a key. Declaring a parameter on one
+type's command (`skip_version` on `prompt:create`) makes the per-action refusal refuse it on the
+types that do not read it (`category:create`).
 
 ## Description Semantics
 

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
 /**
- * Fails when an MCP tool command declares a parameter the code it dispatches to never reads.
+ * Fails when an MCP tool command declares a parameter the code it dispatches to never reads, and
+ * when that code reads a parameter its command does not declare (the reverse direction).
  *
  * THE CLASS. The undeclared-key refusal stops a key the contract does not name. It cannot see the
  * opposite gap: a key the contract DOES name for a command, which nothing then reads. Every tool
@@ -42,9 +43,21 @@
  *
  * A string literal, a comment, or an error message naming the parameter is NOT a read.
  *
- * WHAT THIS DELIBERATELY DOES NOT CATCH, as of 2026-09-23:
+ * THE REVERSE DIRECTION (row 2.8): every parameter the command's own path USES must be declared
+ * on a command that resolves to it. The contract's per-command lists are what the per-action
+ * refusal reads and what a caller is told; a read they omit is a parameter nobody can learn of
+ * (the router required `confirm` on rollback while `common:rollback` never named it). The path is
+ * narrower than the forward read model: the operation's or action's own `case` and the processor
+ * it hands the arguments to, plus a router guard scoped to the action by a positive
+ * `SET.has(action)`. A presence test (`args.x !== undefined`) is not a use — it is how code
+ * refuses a key.
  *
- *   - The reverse: code reading a key the command does not declare (P4.146).
+ * WHAT THIS DELIBERATELY DOES NOT CATCH, as of 2026-10-05:
+ *
+ *   - In the reverse direction: handler code outside the dispatch `switch` (it runs for every
+ *     operation and its own guards are not modelled), an action whose handler has no per-operation
+ *     `case` (`skills_sync` hands every argument to one service), a router guard not scoped by a
+ *     positive `SET.has(action)`, and a key used only behind a presence test.
  *   - Whether a value that crossed the boundary is honoured beyond it.
  *   - A read through computed access other than a field registry, or through a module function
  *     handed `args` whole. Either reports a false finding, never a false pass.
@@ -76,6 +89,7 @@ import {
   fieldClass,
   findClass,
   findMethod,
+  guardedActions,
   isParameterRef,
   readsIn,
   readsOfMethod,
@@ -153,6 +167,7 @@ const systemControlAdapter = {
 
   bind({ project, routerPath, commands }) {
     const context = { cache: new Map(), project };
+    const values = { cache: new Map(), project, valuesOnly: true };
     const classes = handlerClassesByAction(project, routerPath);
     return commands.map((command) => {
       const [action, operation] = command.id.split(':');
@@ -179,6 +194,7 @@ const systemControlAdapter = {
       }
 
       let roots = [body];
+      let pathRoots = [body];
       const excluded = new Set();
       const dispatch = body
         .getDescendantsOfKind(SyntaxKind.SwitchStatement)
@@ -195,13 +211,28 @@ const systemControlAdapter = {
         }
         excluded.add(dispatch.getCaseBlock());
         roots = [body, ...selected];
+        pathRoots = selected;
       }
 
+      const reads = readsIn(context, handler, roots, parameterName, excluded);
+      const entry = entryOf(handler, 'execute');
       return {
         ...binding,
-        entry: entryOf(handler, 'execute'),
+        entry,
         qualifier: operation === undefined ? '' : ` for operation '${operation}'`,
-        reads: readsIn(context, handler, roots, parameterName, excluded),
+        reads,
+        // The reverse direction reads only the operation's own case: code outside the switch
+        // runs for every operation, and which of them its reads serve is not modelled. An
+        // operation with no case of its own (skills_sync hands every argument to one service,
+        // which dispatches past the boundary) has nothing to attribute, so it is not checked.
+        readKeys:
+          operation !== undefined && dispatch === undefined
+            ? undefined
+            : new Map(
+                [...readsIn(values, handler, pathRoots, parameterName)]
+                  .filter((key) => !this.exempt.has(key))
+                  .map((key) => [key, entry.symbol])
+              ),
       };
     });
   },
@@ -342,7 +373,7 @@ function forwardedKeys(body, sourceName, targetName) {
  * (`this.lifecycle.handleUpdate(args)`). The processor is where the parameter is owned, so the
  * read model continues into it; past the processor, `args` handed on whole is not followed.
  */
-function dispatchReads(context, project, handler, action) {
+function dispatchReads(context, project, handler, action, values = context) {
   const handle = findMethod(handler, 'handleAction');
   const parameterName = handle?.getParameters()[0]?.getName();
   const body = handle?.getBody();
@@ -366,6 +397,8 @@ function dispatchReads(context, project, handler, action) {
     parameterName,
     new Set([dispatch.getCaseBlock()])
   );
+  // What this action's own path reads — its case and the processor — for the reverse direction.
+  const pathReads = readsIn(values, handler, selected, parameterName);
   const entries = [];
   for (const call of selected.flatMap((clause) =>
     clause.getDescendantsOfKind(SyntaxKind.CallExpression)
@@ -379,9 +412,11 @@ function dispatchReads(context, project, handler, action) {
     if (processor === undefined) return { problem: `this.${target.field} resolves to no class` };
     entries.push(entryOf(processor, target.method));
     for (const key of readsOfMethod(context, processor, target.method, index)) reads.add(key);
+    for (const key of readsOfMethod(values, processor, target.method, index)) pathReads.add(key);
   }
   return {
     reads,
+    pathReads,
     entry: entries.length === 1 ? entries[0] : entryOf(handler, 'handleAction'),
   };
 }
@@ -413,6 +448,7 @@ const resourceManagerAdapter = {
 
   bind({ project, routerPath, commands }) {
     const context = { cache: new Map(), project };
+    const values = { cache: new Map(), project, valuesOnly: true };
     const router = project
       .getSourceFileOrThrow(routerPath)
       .getClasses()
@@ -423,11 +459,23 @@ const resourceManagerAdapter = {
     // Reads the router itself decides on — the destructive-action `confirm` guard, the
     // `source_workspace` refusal — ahead of any route. A read in a message or a log is not one.
     const routerBody = router.getMethodOrThrow('handleAction').getBody();
-    const decided = sourcesIn(
-      routerBody,
-      router.getMethodOrThrow('handleAction').getParameters()[0].getName(),
-      routerBody.getDescendantsOfKind(SyntaxKind.IfStatement).map((guard) => guard.getExpression())
-    );
+    const routerArgs = router.getMethodOrThrow('handleAction').getParameters()[0].getName();
+    const guards = routerBody
+      .getDescendantsOfKind(SyntaxKind.IfStatement)
+      .map((guard) => guard.getExpression());
+    const decided = sourcesIn(routerBody, routerArgs, guards);
+    // The reverse direction needs the narrower fact: which actions a guard REQUIRES a parameter
+    // on (`DESTRUCTIVE_ACTIONS.has(action) && args.confirm !== true`). A guard that reads a key to
+    // refuse it (`source_workspace` outside the read actions) requires nothing.
+    const required = new Map();
+    for (const guard of guards) {
+      for (const action of guardedActions(guard)) {
+        const keys = required.get(action) ?? new Set();
+        for (const key of sourcesIn(routerBody, routerArgs, [guard])) keys.add(key);
+        required.set(action, keys);
+      }
+    }
+    const guardSymbol = `${router.getName()}.handleAction`;
 
     const bindings = [];
     for (const command of commands) {
@@ -461,7 +509,7 @@ const resourceManagerAdapter = {
           });
           continue;
         }
-        const dispatched = dispatchReads(context, project, route.handler, action);
+        const dispatched = dispatchReads(context, project, route.handler, action, values);
         if (dispatched.problem !== undefined) {
           bindings.push({
             ...binding,
@@ -477,10 +525,19 @@ const resourceManagerAdapter = {
           else if (keys === undefined) dropped.add(parameter);
           else if ([...keys].some((key) => dispatched.reads.has(key))) reads.add(parameter);
         }
+        const readKeys = new Map();
+        for (const [parameter, keys] of route.forwarded) {
+          if ([...keys].some((key) => dispatched.pathReads.has(key))) {
+            readKeys.set(parameter, dispatched.entry.symbol);
+          }
+        }
+        for (const parameter of required.get(action) ?? []) readKeys.set(parameter, guardSymbol);
+        for (const parameter of this.exempt) readKeys.delete(parameter);
         bindings.push({
           ...binding,
           entry: dispatched.entry,
           reads,
+          readKeys,
           dropped: { symbol: route.symbol, parameters: dropped },
         });
       }
@@ -617,14 +674,22 @@ const promptEngineAdapter = {
       if (keys === undefined) dropped.add(parameter);
       else if ([...keys].some(readsOf)) reads.add(parameter);
     }
+    const registrationSymbol = `${host.getName()} (prompt_engine registration)`;
     const binding = {
       entry: entryOf(executor, 'executePromptCommand'),
       qualifier: ' or, once copied into its pipeline request, by engine/execution',
       reads,
-      dropped: { symbol: `${host.getName()} (prompt_engine registration)`, parameters: dropped },
+      dropped: { symbol: registrationSymbol, parameters: dropped },
     };
     return [
-      { ...binding, command: 'call', declaredBy: 'the contract', parameters: all },
+      {
+        ...binding,
+        command: 'call',
+        declaredBy: 'the contract',
+        parameters: all,
+        // What the registration copies on: anything it copies is read, declared or not.
+        readKeys: new Map([...forwarded.keys()].map((key) => [key, registrationSymbol])),
+      },
       ...commands.map((command) => ({
         ...binding,
         command: command.id,
@@ -638,11 +703,15 @@ const promptEngineAdapter = {
 const ADAPTERS = [systemControlAdapter, resourceManagerAdapter, promptEngineAdapter];
 
 /**
- * Every (command, parameter) a binding declares and its entry does not read.
+ * Every (command, parameter) a binding declares and its entry does not read — and, the reverse,
+ * every parameter its code reads that no command for it declares.
  *
  * A binding is one contract command resolved to the code that must read its parameters:
- * `{ command, declaredBy, parameters, entry: {file, symbol}, qualifier, reads }`, or
+ * `{ command, declaredBy, parameters, entry: {file, symbol}, qualifier, reads, readKeys }`, or
  * `{ command, problem }` when the command resolves to no code at all — a finding, not a skip.
+ * `readKeys` (parameter → the symbol that reads it) is what the code reads, declared or not;
+ * several contract commands can resolve to one `command` (`prompt:delete` from `common:delete`),
+ * so the reverse half compares it against the union of their declarations.
  */
 export function checkBindings(bindings) {
   const findings = [];
@@ -669,16 +738,55 @@ export function checkBindings(bindings) {
       });
     }
   }
+
+  const declaredFor = new Map();
+  for (const binding of bindings) {
+    if (binding.problem !== undefined) continue;
+    const declared = declaredFor.get(binding.command) ?? new Set();
+    for (const parameter of binding.parameters) declared.add(parameter);
+    declaredFor.set(binding.command, declared);
+  }
+  const reported = new Set();
+  for (const binding of bindings) {
+    if (binding.problem !== undefined || binding.readKeys === undefined) continue;
+    for (const [parameter, symbol] of binding.readKeys) {
+      const key = `${binding.command}/${parameter}`;
+      if (declaredFor.get(binding.command).has(parameter) || reported.has(key)) continue;
+      reported.add(key);
+      findings.push({
+        command: binding.command,
+        parameter,
+        reverse: true,
+        reason: `read by ${symbol} and declared by no command for ${binding.command}`,
+      });
+    }
+  }
   return { findings, verified };
 }
 
 /**
- * Findings whose only fix removes the parameter from the tool entirely: no other command of its
- * type declares it, so dropping it from this command's list leaves a declared name nothing may
- * send. Owner ruling R4 (2026-09-23) makes that a ruling of its own, so each waits here, stamped.
- * An entry that no longer reports is itself a finding — delete it in the commit that fixed it.
+ * Findings whose only fix is a contract change the owner decides, each stamped with the date it
+ * was measured and the observation that retires it. Forward: the fix removes the parameter from
+ * the tool entirely (R4, 2026-09-23). Reverse: declaring the read changes what the tool refuses
+ * for a caller who sends it elsewhere. An entry that no longer reports is itself a finding —
+ * delete it in the commit that fixed it.
  */
-const AWAITING_RULING = [];
+const AWAITING_RULING = [
+  {
+    tool: 'resource_manager',
+    command: 'prompt:update',
+    parameter: 'confirm',
+    asOf: '2026-10-05',
+    why:
+      'PromptLifecycleProcessor.updatePrompt requires confirm: true for tool_operation "remove", ' +
+      'which deletes tools/{id}/ directories. Declaring it on prompt:update makes the per-action refusal refuse confirm ' +
+      'on gate, framework and category update, where it is accepted and ignored today (64 unit ' +
+      'tests send confirm: true on every action, measured).',
+    flipsWhen:
+      'the owner rules whether confirm on a non-prompt update is refused; declare it on ' +
+      'prompt:update and delete this entry in that commit',
+  },
+];
 
 /** Splits `findings` into real ones and those an entry excuses; an unmatched entry is stale. */
 export function applyExceptions(tool, findings, entries) {
@@ -698,16 +806,23 @@ function report(adapter, findings, verified) {
       `❌ ${adapter.tool} ${finding.command}: '${finding.parameter}' — ${finding.reason}`
     );
   }
-  if (findings.length > 0) {
+  if (findings.some((finding) => finding.reverse !== true)) {
     console.error(
       `   A declared parameter the handler ignores is accepted and answers success for something ` +
         `that never ran. Read it where the operation dispatches, or drop it from the command's ` +
         `\`parameters\` in tooling/contracts/${adapter.contract}.`
     );
   }
+  if (findings.some((finding) => finding.reverse === true)) {
+    console.error(
+      `   A parameter the handler uses but its command never declares is one no caller can learn ` +
+        `of, and the per-action refusal reads the same lists. Declare it on the command in ` +
+        `tooling/contracts/${adapter.contract}, or stop reading it.`
+    );
+  }
   console.log(
-    `[validate-tool-parameter-reads] ${adapter.tool}: ${findings.length} unread declared ` +
-      `parameter(s), ${verified} proven read(s)`
+    `[validate-tool-parameter-reads] ${adapter.tool}: ${findings.length} unread declared or ` +
+      `undeclared read parameter(s), ${verified} proven read(s)`
   );
 }
 

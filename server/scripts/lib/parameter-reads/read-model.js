@@ -158,6 +158,40 @@ function iteratedKeys(argument) {
   return [];
 }
 
+/**
+ * The actions a guard condition requires its reads on: the members of every `SET.has(action)` it
+ * tests positively, where SET is a module constant `new Set([...string literals])` (in this file
+ * or imported from one the scan loaded). A negated test (`!SET.has(action)`) scopes a refusal or
+ * an exception, not a requirement, and contributes nothing.
+ */
+export function guardedActions(condition) {
+  const actions = [];
+  for (const call of [condition, ...condition.getDescendantsOfKind(SyntaxKind.CallExpression)]) {
+    if (!Node.isCallExpression(call)) continue;
+    const callee = call.getExpression();
+    if (!Node.isPropertyAccessExpression(callee) || callee.getName() !== 'has') continue;
+    if (!/(^|\.)action$/.test(call.getArguments()[0]?.getText() ?? '')) continue;
+    if (isNegated(call) || !Node.isIdentifier(callee.getExpression())) continue;
+    const set = constantInitializer(callee.getExpression());
+    const members = Node.isNewExpression(set) ? unwrap(set.getArguments()[0]) : undefined;
+    if (!Node.isArrayLiteralExpression(members)) continue;
+    for (const element of members.getElements()) {
+      if (Node.isStringLiteral(element)) actions.push(element.getLiteralValue());
+    }
+  }
+  return actions;
+}
+
+function isNegated(node) {
+  let current = node;
+  while (Node.isParenthesizedExpression(current.getParent())) current = current.getParent();
+  const parent = current.getParent();
+  return (
+    Node.isPrefixUnaryExpression(parent) &&
+    parent.getOperatorToken() === SyntaxKind.ExclamationToken
+  );
+}
+
 /** A module-level constant's initializer, following one named import into a loaded file. */
 function constantInitializer(identifier) {
   const name = identifier.getText();
@@ -184,23 +218,54 @@ function fieldTarget(context, classDeclaration, call) {
   return owner === undefined ? undefined : { owner, method: target.method };
 }
 
-/** Every key read off `parameterName` within `roots`, skipping any node in `excluded`. */
+/**
+ * `args.x !== undefined` (or `=== undefined`, `!= null`, `== null`): a test of whether `x` was
+ * SENT, not a use of its value. It is how code refuses a key (`if (args.patch !== undefined)
+ * errors.push('patch is update-only')`), so under `context.valuesOnly` it is not a read.
+ */
+function isPresenceTest(readNode) {
+  let node = readNode;
+  while (Node.isParenthesizedExpression(node.getParent())) node = node.getParent();
+  const parent = node.getParent();
+  if (!Node.isBinaryExpression(parent)) return false;
+  const operator = parent.getOperatorToken().getKind();
+  const equality = [
+    SyntaxKind.EqualsEqualsEqualsToken,
+    SyntaxKind.ExclamationEqualsEqualsToken,
+    SyntaxKind.EqualsEqualsToken,
+    SyntaxKind.ExclamationEqualsToken,
+  ];
+  if (!equality.includes(operator)) return false;
+  const other = parent.getLeft() === node ? parent.getRight() : parent.getLeft();
+  return other.getText() === 'undefined' || other.getKind() === SyntaxKind.NullKeyword;
+}
+
+/**
+ * Every key read off `parameterName` within `roots`, skipping any node in `excluded`. With
+ * `context.valuesOnly`, a presence test is not a read (the reverse direction's question: which
+ * keys does this code USE, so that its command must declare them).
+ */
 export function readsIn(context, classDeclaration, roots, parameterName, excluded = new Set()) {
   const reads = new Set();
   const visit = (node) => {
     if (excluded.has(node)) return;
+    const presence = context.valuesOnly === true && isPresenceTest(node);
 
     if (
       Node.isPropertyAccessExpression(node) &&
       isParameterRef(node.getExpression(), parameterName)
     ) {
-      if (survives(context, classDeclaration, node)) reads.add(node.getName());
+      if (!presence && survives(context, classDeclaration, node)) reads.add(node.getName());
     } else if (
       Node.isElementAccessExpression(node) &&
       isParameterRef(node.getExpression(), parameterName)
     ) {
       const argument = node.getArgumentExpression();
-      if (Node.isStringLiteral(argument) && survives(context, classDeclaration, node)) {
+      if (
+        !presence &&
+        Node.isStringLiteral(argument) &&
+        survives(context, classDeclaration, node)
+      ) {
         reads.add(argument.getLiteralValue());
       }
       for (const key of iteratedKeys(argument)) reads.add(key);

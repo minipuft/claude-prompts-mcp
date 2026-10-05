@@ -186,6 +186,170 @@ function selfTestUnusedBindings(subject) {
   return failures.map((failure) => `unused binding: ${failure}`);
 }
 
+/**
+ * The reverse direction: a key the code reads that its command does not declare. `declared`:
+ * whether each command declares what its code reads.
+ */
+function reverseFixture(subject, { declared }) {
+  const project = new Project({ useInMemoryFileSystem: true });
+  project.createSourceFile('/ownership.ts', `export const PARAMETER_OWNERS = {};`);
+  project.createSourceFile('/types.ts', `export const DESTRUCTIVE = new Set<string>(['remove']);`);
+  project.createSourceFile(
+    '/router.ts',
+    `
+import { DESTRUCTIVE } from './types.js';
+const READ_ONLY = new Set<string>(['create']);
+export class Router {
+  private readonly demoHandler: DemoHandler;
+  async handleAction(args: any) {
+    const { action } = args;
+    if (DESTRUCTIVE.has(action) && args.confirm !== true) throw new Error('confirm');
+    // A refusal: it reads 'source' to refuse it, on every action outside READ_ONLY.
+    if (args.source !== undefined && !READ_ONLY.has(action)) throw new Error('read-only');
+    return this.routeToResource(args.resource_type, args);
+  }
+  private routeToResource(type: string, args: any) {
+    switch (type) {
+      case 'demo':
+        return this.routeToDemo(args);
+      default:
+        throw new Error('unknown');
+    }
+  }
+  private routeToDemo(args: any) {
+    const demoArgs: any = { action: args.action, id: args.id };
+    if (args.skip_version !== undefined) demoArgs.skipVersion = args.skip_version;
+    if (args.patch !== undefined) demoArgs.patch = args.patch;
+    return this.demoHandler.handleAction(demoArgs, {});
+  }
+}
+`
+  );
+  project.createSourceFile(
+    '/handler.ts',
+    `
+export class DemoHandler {
+  private readonly lifecycle: DemoProcessor;
+  async handleAction(args: any, _context: unknown) {
+    switch (args.action) {
+      case 'create':
+        return this.lifecycle.handleCreate(args);
+      case 'remove':
+        return this.lifecycle.handleRemove(args);
+      default:
+        throw new Error('unknown');
+    }
+  }
+}
+export class DemoProcessor {
+  handleCreate(args: any) {
+    // A presence test refuses a key; it does not use it, so 'patch' needs no declaration here.
+    if (args.patch !== undefined) throw new Error('patch is update-only');
+    return [args.id, args.skipVersion === true];
+  }
+  handleRemove(args: any) {
+    return args.id;
+  }
+}
+`
+  );
+  return subject.checkBindings(
+    subject.adapters.resourceManager.bind({
+      project,
+      routerPath: '/router.ts',
+      commands: [
+        {
+          id: 'demo:create',
+          parameters: ['resource_type', 'action', 'id', ...(declared ? ['skip_version'] : [])],
+        },
+        {
+          id: 'common:remove',
+          parameters: ['resource_type', 'action', 'id', ...(declared ? ['confirm'] : [])],
+        },
+      ],
+    })
+  );
+}
+
+/**
+ * system_control's half: the `list` operation reads `limit`, which only `show` declares.
+ * `noCase`: the handler hands every operation's arguments to one service call instead, so no read
+ * belongs to an operation and nothing is attributed.
+ */
+function reverseSystemControlFixture(subject, { declared, noCase = false }) {
+  const project = new Project({ useInMemoryFileSystem: true });
+  project.createSourceFile('/router.ts', FIXTURE_ROUTER);
+  project.createSourceFile(
+    '/handler.ts',
+    noCase
+      ? `
+export class DemoHandler {
+  private readonly service: unknown;
+  async execute(args: any) {
+    return run({ operation: args.operation, limit: args.limit });
+  }
+}
+`
+      : `
+export class DemoHandler {
+  async execute(args: any) {
+    switch (args.operation) {
+      case 'show':
+      case 'list':
+        return [args.limit];
+      default:
+        throw new Error('unknown');
+    }
+  }
+}
+`
+  );
+  return runSystemControl(subject, project, [
+    { id: 'demo:show', parameters: ['action', 'operation', 'limit'] },
+    { id: 'demo:list', parameters: ['action', 'operation', ...(declared ? ['limit'] : [])] },
+  ]);
+}
+
+function selfTestReverse(subject) {
+  const failures = [];
+  // Planted: `create` reads `skip_version` (renamed `skipVersion` by the router) and the router's
+  // destructive guard reads `confirm` on `remove`; neither command declares it. `source` is read
+  // only to refuse it, which declares nothing. The system_control `list` operation falls through
+  // to `show`'s case and reads `limit`, which only `show` declares.
+  const planted = reverseFixture(subject, { declared: false });
+  const expected = ['demo:create/skip_version', 'demo:remove/confirm'];
+  if (JSON.stringify(keys(planted)) !== JSON.stringify(expected)) {
+    failures.push(
+      `planted: expected ${expected.join(', ')}, got ${keys(planted).join(', ') || 'none'}`
+    );
+  }
+  const named = planted.findings.find((finding) => finding.parameter === 'confirm');
+  if (named !== undefined && !named.reason.includes('Router.handleAction')) {
+    failures.push(`planted: 'confirm' should name the router guard that reads it: ${named.reason}`);
+  }
+  const fixed = reverseFixture(subject, { declared: true });
+  if (fixed.findings.length !== 0) failures.push(`fixed twin: got ${keys(fixed).join(', ')}`);
+  if (fixed.verified !== 4)
+    failures.push(`fixed twin: expected 4 proven reads, got ${fixed.verified}`);
+
+  const plantedOperation = reverseSystemControlFixture(subject, { declared: false });
+  if (JSON.stringify(keys(plantedOperation)) !== JSON.stringify(['demo:list/limit'])) {
+    failures.push(
+      `planted operation: expected demo:list/limit, got ${keys(plantedOperation).join(', ') || 'none'}`
+    );
+  }
+  const fixedOperation = reverseSystemControlFixture(subject, { declared: true });
+  if (fixedOperation.findings.length !== 0) {
+    failures.push(`fixed operation twin: got ${keys(fixedOperation).join(', ')}`);
+  }
+  // The same undeclared `limit` with no per-operation case: not attributable, so not reported.
+  const noCase = reverseSystemControlFixture(subject, { declared: false, noCase: true });
+  if (noCase.findings.length !== 0) {
+    failures.push(`no-case handler: expected none, got ${keys(noCase).join(', ')}`);
+  }
+  return failures.map((failure) => `reverse: ${failure}`);
+}
+
 /** `helperReads`: whether the helper reads `severity`. `routerCopies`: whether `reason` is copied. */
 function resourceManagerFixture(subject, { helperReads, routerCopies }) {
   const project = new Project({ useInMemoryFileSystem: true });
@@ -306,8 +470,12 @@ function selfTestResourceManager(subject) {
 /**
  * `planted`: registration drops `inputs`, and no stage reads the `gates` request field.
  * `optionsUnused`: the stage destructures `options` off the request and never uses it.
+ * `copiesUndeclared`: the registration copies `dry_run`, which the contract does not declare.
  */
-function promptEngineFixture(subject, { planted, optionsUnused = false }) {
+function promptEngineFixture(
+  subject,
+  { planted, optionsUnused = false, copiesUndeclared = false }
+) {
   const project = new Project({ useInMemoryFileSystem: true });
   project.createSourceFile(
     '/index.ts',
@@ -322,6 +490,7 @@ export class Tools {
         ...(args.cancel !== undefined ? { cancel: args.cancel } : {}),
         ...(args.options != null ? { options: args.options } : {}),
         ${planted ? '' : '...(args.inputs != null ? { inputs: args.inputs } : {}),'}
+        ${copiesUndeclared ? '...(args.dry_run ? { dry_run: args.dry_run } : {}),' : ''}
       };
       if (args.gates != null) {
         normalizedArgs.gates = args.gates.map((gate: unknown) => gate);
@@ -400,6 +569,11 @@ function selfTestPromptEngine(subject) {
       `unused binding: expected call/options, got ${keys(unused).join(', ') || 'none'}`
     );
   }
+  // Planted, the reverse direction: the registration copies `dry_run`, which no contract declares.
+  const undeclared = promptEngineFixture(subject, { planted: false, copiesUndeclared: true });
+  if (JSON.stringify(keys(undeclared)) !== JSON.stringify(['call/dry_run'])) {
+    failures.push(`reverse: expected call/dry_run, got ${keys(undeclared).join(', ') || 'none'}`);
+  }
   return failures.map((failure) => `prompt_engine: ${failure}`);
 }
 
@@ -429,6 +603,7 @@ export function selfTest(subject) {
     ...selfTestExceptions(subject),
     ...selfTestSystemControl(subject),
     ...selfTestUnusedBindings(subject),
+    ...selfTestReverse(subject),
     ...selfTestResourceManager(subject),
     ...selfTestPromptEngine(subject),
   ];
