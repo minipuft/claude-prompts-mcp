@@ -334,9 +334,11 @@ export interface ChainSession {
   /**
    * SEP-1686-aligned run-level status. Sticky on terminal values
    * ('completed' | 'failed' | 'cancelled') — once set, transitions are refused.
-   * Defaults to 'working' on createSession.
+   * `createSession` sets 'working' and a load reads `chain_runs.run_status` (NOT NULL), so every
+   * run carries one: there is no fourth, unset phase to default. Whether the run has FINISHED is
+   * not this field alone — {@link isRunComplete} decides that.
    */
-  runStatus?: ChainRunStatus;
+  runStatus: ChainRunStatus;
   /** Timestamp set when runStatus transitions to 'completed' (or other terminal). */
   runCompletedAt?: number;
   /** Run-scoped unknowns ledger, populated via applyUnknownObservations. */
@@ -359,8 +361,8 @@ export const TERMINAL_RUN_STATUSES: readonly ChainRunStatus[] = [
   'cancelled',
 ] as const;
 
-export const isTerminalRunStatus = (status: ChainRunStatus | undefined): boolean =>
-  status !== undefined && (TERMINAL_RUN_STATUSES as readonly string[]).includes(status);
+export const isTerminalRunStatus = (status: ChainRunStatus): boolean =>
+  (TERMINAL_RUN_STATUSES as readonly string[]).includes(status);
 
 /**
  * True when a run has finished: its status is terminal, or it has advanced past its last node
@@ -374,7 +376,7 @@ export const isTerminalRunStatus = (status: ChainRunStatus | undefined): boolean
  * session loaded from a pre-latch blob. An open review holds the run through
  * {@link nodesHoldingRunOpen}, the one derivation — no second review clause here.
  */
-export const isRunComplete = (session: RunHoldFacts & { runStatus?: ChainRunStatus }): boolean =>
+export const isRunComplete = (session: RunHoldFacts & { runStatus: ChainRunStatus }): boolean =>
   isTerminalRunStatus(session.runStatus) ||
   (session.state.currentNodeId === null && !isRunHeldOpen(session));
 

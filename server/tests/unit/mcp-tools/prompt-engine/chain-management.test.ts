@@ -35,6 +35,7 @@ const createChainSession = (overrides: Partial<ChainSession> = {}): ChainSession
   lastActivity: Date.now(),
   originalArgs: {},
   lifecycle: 'canonical',
+  runStatus: 'working',
   ...overrides,
 });
 

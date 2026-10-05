@@ -807,7 +807,7 @@ export class ChainSessionStore implements ChainSessionService {
     for (const session of this.activeSessions.values()) {
       if (session.lifecycle !== 'canonical') continue;
       if (!this.isSessionActiveForHooks(session)) continue;
-      const runStatus: ChainRunStatus = session.runStatus ?? 'working';
+      const runStatus = session.runStatus;
       const shownNodeId = resolveShownReview(session);
       rows.push({
         sessionId: session.sessionId,
@@ -1216,7 +1216,7 @@ export class ChainSessionStore implements ChainSessionService {
       return false;
     }
 
-    const currentStatus: ChainRunStatus = session.runStatus ?? 'working';
+    const currentStatus = session.runStatus;
 
     if (currentStatus === target) {
       return true;
@@ -1354,7 +1354,7 @@ export class ChainSessionStore implements ChainSessionService {
   ): Promise<{ token: string; chainId: string; sessionId: string } | undefined> {
     const session = this.getSessionForMutation(sessionId, scope);
     if (session === undefined) return undefined;
-    if (isTerminalRunStatus(session.runStatus ?? 'working')) {
+    if (isTerminalRunStatus(session.runStatus)) {
       this.logger.warn(`[Handoff] Refusing to mint for terminal session ${sessionId}`);
       return undefined;
     }
@@ -1436,7 +1436,7 @@ export class ChainSessionStore implements ChainSessionService {
       return false;
     }
 
-    const currentStatus: ChainRunStatus = session.runStatus ?? 'working';
+    const currentStatus = session.runStatus;
     if (currentStatus === 'cancelled') {
       return true;
     }
@@ -1777,7 +1777,7 @@ export class ChainSessionStore implements ChainSessionService {
 
     if (isTerminalRunStatus(session.runStatus)) {
       this.logger.warn(
-        `[ChainMutation] Refusing to insert after ${afterNodeId}: session ${sessionId} is terminal ('${session.runStatus ?? 'unknown'}')`
+        `[ChainMutation] Refusing to insert after ${afterNodeId}: session ${sessionId} is terminal ('${session.runStatus}')`
       );
       return null;
     }
@@ -3003,7 +3003,7 @@ export class ChainSessionStore implements ChainSessionService {
     }
     if (isTerminalRunStatus(session.runStatus)) {
       this.logger.warn(
-        `[ChainSessionStore] Refusing to promote session ${session.sessionId} (${reason}): runStatus '${session.runStatus ?? 'unknown'}' is terminal`
+        `[ChainSessionStore] Refusing to promote session ${session.sessionId} (${reason}): runStatus '${session.runStatus}' is terminal`
       );
       return;
     }

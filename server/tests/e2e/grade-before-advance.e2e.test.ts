@@ -131,6 +131,32 @@ const hookReviews = (view: HookView): Record<keyof HookView, unknown> => ({
   loader: view.loader?.['pending_gate'],
 });
 
+/** Whether each of `db_reader`'s read paths returns the run at all (P6.1). */
+const hookSees = (view: HookView): Record<keyof HookView, boolean> => ({
+  view: view.view !== null,
+  sessionTable: view.sessionTable !== null,
+  loader: view.loader !== null,
+});
+
+/**
+ * An unfinished run as its own row and every hook read path see it, then the same run once its
+ * last step is answered (P6.1): `isRunComplete` decides "finished" for the projection the hooks
+ * read, and `chain_runs.run_status` is NOT NULL, so there is no unset fourth phase to default.
+ */
+const UNFINISHED_THEN_FINISHED = {
+  unfinished: { status: 'working', seen: { view: true, sessionTable: true, loader: true } },
+  finished: { status: 'completed', seen: { view: false, sessionTable: false, loader: false } },
+};
+
+/** The run's `run_status`, read from its own row. */
+const readRunStatus = (runtimeRoot: string, chainId: string): string =>
+  withStateDb(runtimeRoot, (db) => {
+    const row = db.prepare('SELECT run_status FROM chain_runs WHERE chain_id = ?').get(chainId) as
+      { run_status: string } | undefined;
+    if (row === undefined) throw new Error(`no run for ${chainId}`);
+    return row.run_status;
+  });
+
 /** The fixture every twin shares: three gated steps g1..g3 and three ungated steps u1..u3. */
 const authorFixtures = async (
   tool: (name: string, args: Record<string, unknown>) => Promise<{ isError: boolean; text: string }>
@@ -329,6 +355,23 @@ describe('Streamable HTTP: an answer is graded before the run advances (P6.274, 
     expect(readHookView(runtimeRoot, chainId).loader?.['current_step']).toBe(2);
   });
 
+  test('(g) a hook reads an unfinished run on every path and a finished one on none (P6.1)', async () => {
+    const { chainId } = await start(['>>u1', '>>u2'].join(ARROW));
+    await answer(chainId, SECTIONLESS);
+    const unfinished = {
+      status: readRunStatus(runtimeRoot, chainId),
+      seen: hookSees(readHookView(runtimeRoot, chainId)),
+    };
+
+    await answer(chainId, SECTIONLESS);
+
+    const finished = {
+      status: readRunStatus(runtimeRoot, chainId),
+      seen: hookSees(readHookView(runtimeRoot, chainId)),
+    };
+    expect({ unfinished, finished }).toEqual(UNFINISHED_THEN_FINISHED);
+  });
+
   test('(d) control: an ungated step answered with no sections advances as before', async () => {
     const { chainId } = await start(['>>u1', '>>u2', '>>u3'].join(ARROW));
     await answer(chainId, SECTIONLESS);
@@ -488,6 +531,23 @@ describe('STDIO: an answer is graded before the run advances (P6.303, R170 trans
     expect(before).toEqual(HOOK_REVIEW_NONE);
     expect(hookReviews(readHookView(runtimeRoot, chainId))).toEqual(HOOK_REVIEW_HELD);
     expect(readHookView(runtimeRoot, chainId).loader?.['current_step']).toBe(2);
+  });
+
+  test('(e) over STDIO a hook reads an unfinished run on every path and a finished one on none (P6.1)', async () => {
+    const chainId = await start(['>>u1', '>>u2'].join(ARROW));
+    await answer(chainId, SECTIONLESS);
+    const unfinished = {
+      status: readRunStatus(runtimeRoot, chainId),
+      seen: hookSees(readHookView(runtimeRoot, chainId)),
+    };
+
+    await answer(chainId, SECTIONLESS);
+
+    const finished = {
+      status: readRunStatus(runtimeRoot, chainId),
+      seen: hookSees(readHookView(runtimeRoot, chainId)),
+    };
+    expect({ unfinished, finished }).toEqual(UNFINISHED_THEN_FINISHED);
   });
 
   test('(c) control over STDIO: a PASS on a conforming answer advances', async () => {

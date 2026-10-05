@@ -79,13 +79,13 @@ describe('isRunComplete / isRunHeldOpen', () => {
   test('a run past its end that owes a detached report is held, not complete', () => {
     const state = pastEnd(states([['rev', spawned()]]));
     expect(isRunHeldOpen({ state })).toBe(true);
-    expect(isRunComplete({ state })).toBe(false);
+    expect(isRunComplete({ runStatus: 'working', state })).toBe(false);
   });
 
   test('a run past its end that owes nothing is complete (control)', () => {
     const state = pastEnd(states([['rev', spawned({ state: 'completed' })]]));
     expect(isRunHeldOpen({ state })).toBe(false);
-    expect(isRunComplete({ state })).toBe(true);
+    expect(isRunComplete({ runStatus: 'working', state })).toBe(true);
   });
 
   test('a reported node whose gate review is open still holds the run (row 4.8)', () => {
@@ -94,7 +94,7 @@ describe('isRunComplete / isRunHeldOpen', () => {
     const reviews = { rev: { kind: 'detached' as const } };
     expect(nodesHoldingRunOpen({ state, reviews })).toEqual(['rev']);
     expect(isRunHeldOpen({ state, reviews })).toBe(true);
-    expect(isRunComplete({ state, reviews })).toBe(false);
+    expect(isRunComplete({ runStatus: 'working', state, reviews })).toBe(false);
     // A node both owed and under review is named once.
     const owedToo = pastEnd(states([['rev', spawned()]]));
     expect(nodesHoldingRunOpen({ state: owedToo, reviews })).toEqual(['rev']);
@@ -103,20 +103,22 @@ describe('isRunComplete / isRunHeldOpen', () => {
     expect(nodesHoldingRunOpen({ state, reviews: { last: { kind: 'gate' as const } } })).toEqual([
       'last',
     ]);
-    expect(isRunComplete({ state, reviews: { last: { kind: 'gate' as const } } })).toBe(false);
+    expect(
+      isRunComplete({ runStatus: 'working', state, reviews: { last: { kind: 'gate' as const } } })
+    ).toBe(false);
   });
 
   test('a pending shell verification holds its node; a snapshot with no node holds nothing (R15)', () => {
     const state = pastEnd(states([['rev', spawned({ state: 'completed' })]]));
     const verifying = { pendingShellVerification: { nodeId: 'n3' } };
     expect(nodesHoldingRunOpen({ state, ...verifying })).toEqual(['n3']);
-    expect(isRunComplete({ state, ...verifying })).toBe(false);
+    expect(isRunComplete({ runStatus: 'working', state, ...verifying })).toBe(false);
     // Named once when the same node also has an open review.
     expect(
       nodesHoldingRunOpen({ state, reviews: { n3: { kind: 'gate' as const } }, ...verifying })
     ).toEqual(['n3']);
     // Legacy fallback (as of 2026-09-23): a pre-`nodeId` snapshot holds nothing.
-    expect(isRunComplete({ state, pendingShellVerification: {} })).toBe(true);
+    expect(isRunComplete({ runStatus: 'working', state, pendingShellVerification: {} })).toBe(true);
   });
 
   test('a terminal status is complete regardless of what is owed', () => {
