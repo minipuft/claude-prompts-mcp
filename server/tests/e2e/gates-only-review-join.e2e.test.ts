@@ -1,4 +1,4 @@
-// @lifecycle test - P6.279 / R173: a call carrying `gates` and no verdict, sent while its step's review is open, joins that review without counting an attempt; P6.12 / R194: a gate written on a step stays on that step; P6.310 / R204: so does a gate the step's own prompt supplies; all over Streamable HTTP and STDIO.
+// @lifecycle test - P6.279 / R173: a call carrying `gates` and no verdict, sent while its step's review is open, joins that review without counting an attempt; P6.12 / R194: a gate written on a step stays on that step; P6.310 / R204: so does a gate the step's own prompt supplies; R1: a chain prompt's own gates are reviewed on its final step; all over Streamable HTTP and STDIO.
 /**
  * MEASURED 2026-10-04 on `c97d80159` (this harness, both transports): a `>>gj_chain` run standing
  * at `b` with `b`'s review open (answered with `user_response` alone, attempt 0) and resumed with
@@ -208,6 +208,54 @@ const authorFixtures = async (tool: Tool): Promise<void> => {
       { promptId: 'gr_c', stepName: 'C' },
     ],
   });
+  // A chain prompt's own gates (R1 to R5): `gc_chain`'s include list names `gp-y` and its
+  // category `gpcat` activates `gp-cat`, over three gateless steps; `gc_chain_own`'s last step
+  // is `gp_b`, whose own prompt includes `gp-x`; `gc_nest` is a gateless chain whose second step
+  // is the chain `gc_chain` itself (R4).
+  await author({
+    resource_type: 'prompt',
+    action: 'create',
+    id: 'gc_chain',
+    category: 'gpcat',
+    name: 'gc_chain',
+    description: 'e2e chain whose own prompt includes gp-y and whose category supplies gp-cat',
+    user_message_template: 'CHAIN-GC-TEMPLATE',
+    gate_configuration: { ...OPT_OUT, include: ['gp-y'] },
+    chain_steps: [
+      { promptId: 'gr_a', stepName: 'A' },
+      { promptId: 'gr_b', stepName: 'B' },
+      { promptId: 'gr_c', stepName: 'C' },
+    ],
+  });
+  await author({
+    resource_type: 'prompt',
+    action: 'create',
+    id: 'gc_chain_own',
+    category: 'general',
+    name: 'gc_chain_own',
+    description: 'e2e chain whose own prompt includes gp-y and whose last step includes gp-x',
+    user_message_template: 'CHAIN-GCO-TEMPLATE',
+    gate_configuration: { ...OPT_OUT, include: ['gp-y'] },
+    chain_steps: [
+      { promptId: 'gr_a', stepName: 'A' },
+      { promptId: 'gr_b', stepName: 'B' },
+      { promptId: 'gp_b', stepName: 'C' },
+    ],
+  });
+  await author({
+    resource_type: 'prompt',
+    action: 'create',
+    id: 'gc_nest',
+    category: 'general',
+    name: 'gc_nest',
+    description: 'e2e chain whose second step is the chain gc_chain',
+    user_message_template: 'CHAIN-NEST-TEMPLATE',
+    gate_configuration: OPT_OUT,
+    chain_steps: [
+      { promptId: 'gr_a', stepName: 'A' },
+      { promptId: 'gc_chain', stepName: 'N' },
+    ],
+  });
   await author({
     resource_type: 'prompt',
     action: 'create',
@@ -330,9 +378,18 @@ const gateReach = (tool: Tool, runtimeRoot: () => string) => {
   return async (
     args: Record<string, unknown>,
     gateNames: readonly string[],
-    /** Sent with the first answer only: an observation that changes the run. */
-    firstAnswer: Record<string, unknown> = {}
+    /**
+     * Sent with one call only, keyed `answer:<node>` (the answer to that node) or `pass:<node>`
+     * (the PASS of its open review): an observation or a remainder that changes the run.
+     */
+    extras: Readonly<Record<string, Record<string, unknown>>> = {}
   ): Promise<ReachStep[]> => {
+    const sent = new Set<string>();
+    const extra = (key: string): Record<string, unknown> => {
+      if (sent.has(key)) return {};
+      sent.add(key);
+      return extras[key] ?? {};
+    };
     const names = new Map<string, string>();
     const name = (gateId: string): string => {
       if (!gateId.startsWith('temp_')) return gateId;
@@ -359,7 +416,7 @@ const gateReach = (tool: Tool, runtimeRoot: () => string) => {
       const held = await tool('prompt_engine', {
         chain_id: chainId,
         user_response: `${node} out`,
-        ...(calls === 0 ? firstAnswer : {}),
+        ...extra(`answer:${node}`),
       });
       steps.push(observe(chainId, held.text));
       if (readRun(runtimeRoot(), chainId).reviews[node] !== undefined) {
@@ -367,6 +424,7 @@ const gateReach = (tool: Tool, runtimeRoot: () => string) => {
           chain_id: chainId,
           user_response: `${node} out`,
           gate_verdict: PASS,
+          ...extra(`pass:${node}`),
         });
         steps.push(observe(chainId, passed.text));
       }
@@ -474,13 +532,101 @@ const REACH_TWICE: ReachStep[] = [
 ];
 
 /**
- * Control: `>>gp_chain`, whose own prompt includes `gp-y` and whose step `b` is `gp_b`. Step `b`'s
- * prompt gate stays on `b`. The chain prompt's own include list is not a step's, so this row binds
- * nothing of it; MEASURED before and after this row, it reaches no step at all (no render, no
- * review), because the chain walk never resolves the chain prompt's `gateConfiguration`. Pinned as
- * measured: wiring it to every step is a separate change, and this value moves when it lands.
+ * `>>gp_chain`, whose own prompt includes `gp-y` and whose step `b` is `gp_b`: step `b`'s prompt
+ * gate stays on `b`, and the chain prompt's own gate is reviewed on its final step `c` alone (R1).
+ * Until R1 this control pinned `gp-y` reaching no step at all.
  */
-const REACH_CHAIN_PROMPT = reachOwnPrompt('gp-x', GPX, ['a', 'b', 'c']);
+const REACH_CHAIN_PROMPT: ReachStep[] = [
+  ...reachOwnPrompt('gp-x', GPX, ['a', 'b', 'c']).slice(0, 4),
+  { current: 'c', rendered: [GPY], reviews: { c: ['gp-y'] } },
+  { current: null, rendered: [], reviews: {} },
+];
+
+/**
+ * A chain prompt's own gates, R1 to R5. MEASURED 2026-10-05 on `2a76be905` (this harness, both
+ * transports, identical): `>>gc_chain`, whose include list names `gp-y` and whose category
+ * activates `gp-cat`, rendered and reviewed neither on any step, and neither did `>>gc_chain_own`'s
+ * `gp-y`, whose last step reviewed only its own `gp-x`. The planner resolved them into the chain
+ * plan and the chain walk never read it. Now they are bound to the run's final node: it reviews
+ * them beside its own gates, in one review, and no other step or inserted node carries them. As
+ * for any gate a prompt's include list names, their guidance shows on the review render, not on
+ * the final step's first render.
+ */
+const CHAIN_OWN = ['gp-y', 'gp-cat'];
+const CHAIN_OWN_GUIDANCE = [GPY, GPCAT];
+const ungated = (current: string | null): ReachStep => ({ current, rendered: [], reviews: {} });
+const finalReview = (node: string): ReachStep => ({
+  current: node,
+  rendered: CHAIN_OWN_GUIDANCE,
+  reviews: { [node]: CHAIN_OWN },
+});
+
+/** (a) Three gateless steps: only the final step `c` holds the chain's gates. */
+const REACH_FINAL = [ungated('a'), ungated('b'), ungated('c'), finalReview('c'), ungated(null)];
+
+/** (b) The final step's own prompt gate `gp-x` and the chain's `gp-y` share one review on `c`. */
+const REACH_FINAL_OWN: ReachStep[] = [
+  ungated('a'),
+  ungated('b'),
+  ungated('c'),
+  { current: 'c', rendered: [GPX, GPY], reviews: { c: ['gp-x', 'gp-y'] } },
+  ungated(null),
+];
+
+/** The remainder that appends `r1` after the run's last node, sent while an unknown blocks. */
+const appendR1 = { remainder: { mode: 'append', nodes: [{ id: 'r1', promptId: 'gr_a' }] } };
+
+/**
+ * (c) The unknown raised on `a` inserts `inv-<id>` before `b`, and answering that node appends `r1`
+ * after `c`: the gates move to `r1`, the new final node, and `c` no longer carries them.
+ */
+const reachAppended = (unknownId: string): ReachStep[] => [
+  ungated('a'),
+  ungated(`inv-${unknownId}`),
+  ungated('b'),
+  ungated('c'),
+  ungated('r1'),
+  finalReview('r1'),
+  ungated(null),
+];
+
+/**
+ * (c) The gates were reviewed and PASSed on `c` while it was final, and that PASS raised the
+ * unknown: its node is inserted after `c`, and answering it appends `r1`. MEASURED: `r1` is the
+ * final node now, so it is reviewed against the chain's gates again. No re-review is designed.
+ */
+const reachAppendedAfterPass = (unknownId: string): ReachStep[] => [
+  ungated('a'),
+  ungated('b'),
+  ungated('c'),
+  finalReview('c'),
+  ungated(`inv-${unknownId}`),
+  ungated('r1'),
+  finalReview('r1'),
+  ungated(null),
+];
+
+/** (d) The unknown raised on `b` inserts a node before `c`: the gates stay on `c`. */
+const reachInsertedBeforeFinal = (unknownId: string): ReachStep[] => [
+  ungated('a'),
+  ungated('b'),
+  ungated(`inv-${unknownId}`),
+  ungated('c'),
+  finalReview('c'),
+  ungated(null),
+];
+
+/**
+ * (e) Control: an arrow chain has no chain prompt, so its first step's prompt is not read as one.
+ * `gp_b`'s own `gp-x` stays on `n1` and the final step `n2` carries nothing, as before R1.
+ */
+const ARROW_CONTROL = ['>>gp_b', '>>gr_a'].join(ARROW);
+const REACH_ARROW_CONTROL: ReachStep[] = [
+  { current: 'n1', rendered: [GPX], reviews: { n1: ['gp-x'] } },
+  { current: 'n1', rendered: [GPX], reviews: { n1: ['gp-x'] } },
+  ungated('n2'),
+  ungated(null),
+];
 
 describe('Streamable HTTP: a gates-only call joins its step open review (P6.279, R173)', () => {
   const cleanup: Array<() => void | Promise<void>> = [];
@@ -585,7 +731,7 @@ describe('Streamable HTTP: a gates-only call joins its step open review (P6.279,
   }, 120000);
 
   test('P6.12 (c) a step gate moved by an inserted node stays on the step that wrote it', async () => {
-    const steps = await reach(insertedRun('t12h'), ['YB'], insertBefore2('u12h'));
+    const steps = await reach(insertedRun('t12h'), ['YB'], { 'answer:n1': insertBefore2('u12h') });
     expect(steps).toEqual(reachInserted('u12h', 't12h'));
   }, 120000);
 
@@ -607,8 +753,41 @@ describe('Streamable HTTP: a gates-only call joins its step open review (P6.279,
     expect(await reach({ command: PROMPT_TWICE }, [])).toEqual(REACH_TWICE);
   }, 120000);
 
-  test("P6.310 control: a chain prompt's step keeps its prompt gate; the chain's own include reaches no step", async () => {
+  test("P6.310 control: a chain prompt's step keeps its prompt gate; the chain's own gate is its final step's", async () => {
     expect(await reach({ command: '>>gp_chain' }, [])).toEqual(REACH_CHAIN_PROMPT);
+  }, 120000);
+
+  test("R1 (a) a chain prompt's own gates are reviewed on its final step only", async () => {
+    expect(await reach({ command: '>>gc_chain' }, [])).toEqual(REACH_FINAL);
+  }, 120000);
+
+  test("R5 (b) the final step's own gate and the chain prompt's share one review", async () => {
+    expect(await reach({ command: '>>gc_chain_own' }, [])).toEqual(REACH_FINAL_OWN);
+  }, 120000);
+
+  test('R3 (c) a remainder that extends the run moves them to its new final node', async () => {
+    const steps = await reach({ command: '>>gc_chain' }, [], {
+      'answer:a': insertBefore2('rch'),
+      'answer:inv-rch': appendR1,
+    });
+    expect(steps).toEqual(reachAppended('rch'));
+  }, 120000);
+
+  test('R3 (c) after they passed on the old final node, the appended node is reviewed again', async () => {
+    const steps = await reach({ command: '>>gc_chain' }, [], {
+      'pass:c': insertBefore2('rph'),
+      'answer:inv-rph': appendR1,
+    });
+    expect(steps).toEqual(reachAppendedAfterPass('rph'));
+  }, 120000);
+
+  test('R3 (d) a node inserted before the final step does not take them', async () => {
+    const steps = await reach({ command: '>>gc_chain' }, [], { 'answer:b': insertBefore2('rdh') });
+    expect(steps).toEqual(reachInsertedBeforeFinal('rdh'));
+  }, 120000);
+
+  test("R1 control (e): an arrow chain's first step is no chain prompt", async () => {
+    expect(await reach({ command: ARROW_CONTROL }, [])).toEqual(REACH_ARROW_CONTROL);
   }, 120000);
 });
 
@@ -711,7 +890,7 @@ describe('STDIO: a gates-only call joins its step open review (P6.279, R173 tran
   }, 120000);
 
   test('P6.12 (c) over STDIO a step gate moved by an inserted node stays on the step that wrote it', async () => {
-    const steps = await reach(insertedRun('t12s'), ['YB'], insertBefore2('u12s'));
+    const steps = await reach(insertedRun('t12s'), ['YB'], { 'answer:n1': insertBefore2('u12s') });
     expect(steps).toEqual(reachInserted('u12s', 't12s'));
   }, 120000);
 
@@ -733,7 +912,40 @@ describe('STDIO: a gates-only call joins its step open review (P6.279, R173 tran
     expect(await reach({ command: PROMPT_TWICE }, [])).toEqual(REACH_TWICE);
   }, 120000);
 
-  test("P6.310 control over STDIO: a chain prompt's step keeps its prompt gate; the chain's own include reaches no step", async () => {
+  test("P6.310 control over STDIO: a chain prompt's step keeps its prompt gate; the chain's own gate is its final step's", async () => {
     expect(await reach({ command: '>>gp_chain' }, [])).toEqual(REACH_CHAIN_PROMPT);
+  }, 120000);
+
+  test("R1 (a) over STDIO a chain prompt's own gates are reviewed on its final step only", async () => {
+    expect(await reach({ command: '>>gc_chain' }, [])).toEqual(REACH_FINAL);
+  }, 120000);
+
+  test("R5 (b) over STDIO the final step's own gate and the chain prompt's share one review", async () => {
+    expect(await reach({ command: '>>gc_chain_own' }, [])).toEqual(REACH_FINAL_OWN);
+  }, 120000);
+
+  test('R3 (c) over STDIO a remainder that extends the run moves them to its new final node', async () => {
+    const steps = await reach({ command: '>>gc_chain' }, [], {
+      'answer:a': insertBefore2('rcs'),
+      'answer:inv-rcs': appendR1,
+    });
+    expect(steps).toEqual(reachAppended('rcs'));
+  }, 120000);
+
+  test('R3 (c) over STDIO after they passed on the old final node, the appended node is reviewed again', async () => {
+    const steps = await reach({ command: '>>gc_chain' }, [], {
+      'pass:c': insertBefore2('rps'),
+      'answer:inv-rps': appendR1,
+    });
+    expect(steps).toEqual(reachAppendedAfterPass('rps'));
+  }, 120000);
+
+  test('R3 (d) over STDIO a node inserted before the final step does not take them', async () => {
+    const steps = await reach({ command: '>>gc_chain' }, [], { 'answer:b': insertBefore2('rds') });
+    expect(steps).toEqual(reachInsertedBeforeFinal('rds'));
+  }, 120000);
+
+  test("R1 control (e) over STDIO: an arrow chain's first step is no chain prompt", async () => {
+    expect(await reach({ command: ARROW_CONTROL }, [])).toEqual(REACH_ARROW_CONTROL);
   }, 120000);
 });

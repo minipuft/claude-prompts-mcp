@@ -35,15 +35,23 @@ function renderArgumentHints(args: PromptArgument[]): string[] {
 }
 
 /**
- * Hint lines for gates that will be enforced, from the prompt's `gateConfiguration.include`. None
- * for a chain prompt (R157): a chain run resolves no gate set from the chain prompt itself, each
- * step resolving from its own prompt (R148), so its `include` is enforced nowhere.
+ * Hint lines for gates that will be enforced, from the prompt's `gateConfiguration.include`. A
+ * chain prompt's own gates are reviewed on the chain's final step (R1), so its list is its include
+ * less its exclude; the gates its category activates are not listed, since this layer holds no
+ * gate registry to ask.
  */
 function renderGateHints(prompt: ConvertedPrompt): string[] {
-  if (isChainPrompt(prompt)) {
-    return [];
-  }
-  return (prompt.gateConfiguration?.include ?? []).map((gateId) => `  • ${gateId}`);
+  const include = prompt.gateConfiguration?.include ?? [];
+  const exclude = new Set(prompt.gateConfiguration?.exclude ?? []);
+  const own = isChainPrompt(prompt) ? include.filter((gateId) => !exclude.has(gateId)) : include;
+  return own.map((gateId) => `  • ${gateId}`);
+}
+
+/** The gate list's heading; a chain prompt's names the step that reviews them. */
+function gateHeading(prompt: ConvertedPrompt): string {
+  return isChainPrompt(prompt)
+    ? "Quality gates that will be enforced, reviewed on the chain's final step:"
+    : 'Quality gates that will be enforced:';
 }
 
 /** Serialize provided slash-command args into the prompt_engine `options` channel. */
@@ -73,7 +81,7 @@ export function buildLauncherMessages(
 
   const gateHints = renderGateHints(prompt);
   if (gateHints.length > 0) {
-    lines.push('', 'Quality gates that will be enforced:', ...gateHints);
+    lines.push('', gateHeading(prompt), ...gateHints);
   }
 
   return [{ role: 'user', content: { type: 'text', text: lines.join('\n') } }];

@@ -1297,10 +1297,12 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
    * sv-inc273"; a chain run resolves no gate set from the chain prompt (R148, P6.171), so that
    * gate is enforced nowhere.
    *
-   * Now (R157) a chain prompt's envelope lists none of its own `include`; a single prompt's
-   * envelope still lists its own.
+   * R157 then removed the list for a chain prompt. Since R1 a chain prompt's own gates ARE
+   * enforced, reviewed once on the chain's final step, so (R6) its envelope lists its own include
+   * again, under a heading that says so; a single prompt's envelope is unchanged, and a chain
+   * prompt with no gates of its own still carries no list.
    */
-  describe("P6.273: a chain prompt's launcher envelope claims no gate from its own include", () => {
+  describe("P6.273: a chain prompt's launcher envelope lists its own gates for the final step", () => {
     const envelopeOf = async (name: string): Promise<string> => {
       const result = (await client.request('prompts/get', { name, arguments: {} }, nextId++, {
         toolName: name,
@@ -1325,6 +1327,12 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
           gate_configuration: { include: ['sv-inc273'] },
           chain_steps: [{ promptId: 'sv_a273', stepName: 'A' }],
         },
+        {
+          resource_type: 'prompt',
+          id: 'sv_n273',
+          user_message_template: 'CHAIN-NONE-TEMPLATE',
+          chain_steps: [{ promptId: 'sv_a273', stepName: 'A' }],
+        },
       ]) {
         const created = await tool('resource_manager', {
           action: 'create',
@@ -1339,16 +1347,24 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       }
     }, 120000);
 
-    test('(a) the chain prompt envelope routes to prompt_engine and lists no enforced gate', async () => {
+    test("(a) the chain prompt envelope lists its own include, reviewed on the chain's final step", async () => {
       const envelope = await envelopeOf('sv_c273');
       expect(envelope).toContain('prompt_engine(command: ">>sv_c273")');
-      expect(envelope).not.toContain('Quality gates that will be enforced');
-      expect(envelope).not.toContain('sv-inc273');
+      expect(envelope).toContain(
+        "Quality gates that will be enforced, reviewed on the chain's final step:\n  • sv-inc273"
+      );
+      expect(envelope).not.toContain('sv-step273');
     }, 120000);
 
     test("(b) control: a single prompt's envelope still lists its own include", async () => {
       const envelope = await envelopeOf('sv_a273');
       expect(envelope).toContain('Quality gates that will be enforced:\n  • sv-step273');
+    }, 120000);
+
+    test('(c) control: a chain prompt with no gates of its own carries no gate list', async () => {
+      const envelope = await envelopeOf('sv_n273');
+      expect(envelope).toContain('prompt_engine(command: ">>sv_n273")');
+      expect(envelope).not.toContain('Quality gates');
     }, 120000);
   });
 

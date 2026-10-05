@@ -252,8 +252,9 @@ export interface PipelineInternalState {
       /**
        * Each gate a step of the walk's own resolution accepted, with the steps that accepted it: a
        * gate the step declared inline (R194) or its own prompt supplied (R204) is that step's and
-       * reaches no other. A gate the call held before the walk (a request or framework gate), or a
-       * framework gate no step wrote inline, is run-wide and absent here.
+       * reaches no other. The chain prompt's own gates are bound to the run's final step (R1). A
+       * gate the call held before the walk (a request or framework gate), or a framework gate no
+       * step wrote inline, is run-wide and absent here.
        */
       readonly stepBindings: ReadonlyMap<
         string,

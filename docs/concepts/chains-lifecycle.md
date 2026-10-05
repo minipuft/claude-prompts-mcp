@@ -310,6 +310,19 @@ names in `gates` with no step target and a framework gate keep reaching every st
 before; a gate with `target_step_id`, `target_step_number` or `apply_to_steps` reaches the steps it
 names.
 
+**A chain prompt's own gates are reviewed once, on its final step.** The gates the chain prompt
+itself declares (the prompt that owns `chainSteps`: what its `gateConfiguration.include` names and
+what its category activates, less its `exclude`) grade the chain's finished output. They are held
+in the final step's review together with that step's own gates, in one review, and appear on no
+other step. The bundled `implementation_plan` includes `code-quality` and `plan-quality`: its fifth
+step's review holds both beside its own gates, and its first four steps review neither. The final
+step is the run's last node when it is reached: a `remainder` that appends nodes moves them to the
+new last node, an investigation step inserted before the final step does not take them, and a step
+whose prompt is itself a chain inside a chain prompt is one step that holds that chain's gates. The
+final step's first render does not list them; its review does. Framework gates still come from each
+step, and an arrow chain (`>>a --> >>b`) has no chain prompt, so its first step's gates stay on that
+step.
+
 **A step's own gate declarations bind its own set.** A chain walks its steps in run order, and
 step N is offered the run-wide gates (anything the caller supplied, and framework gates) beside
 the gates its own resolution accepts; a gate an earlier step wrote or its prompt supplied stays on

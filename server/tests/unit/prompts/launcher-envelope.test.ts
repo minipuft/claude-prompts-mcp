@@ -67,6 +67,35 @@ describe('buildLauncherMessages', () => {
     expect(text).toContain('• security-review');
   });
 
+  test("a chain prompt lists its own include, less its exclude, as reviewed on the chain's final step", () => {
+    const text = textOf(
+      buildLauncherMessages(
+        makePrompt({
+          chainSteps: [{ promptId: 'step_a', stepName: 'A' }],
+          gateConfiguration: {
+            include: ['plan-quality', 'code-quality'],
+            exclude: ['code-quality'],
+          },
+        }),
+        {}
+      )
+    );
+
+    expect(text).toContain(
+      "Quality gates that will be enforced, reviewed on the chain's final step:\n  • plan-quality"
+    );
+    expect(text).not.toContain('code-quality');
+  });
+
+  test('control: a chain prompt with no gates of its own carries no gate list', () => {
+    const text = textOf(
+      buildLauncherMessages(makePrompt({ chainSteps: [{ promptId: 'step_a', stepName: 'A' }] }), {})
+    );
+
+    expect(text).toContain('prompt_engine(command: ">>hiring_manager_code_eval")');
+    expect(text).not.toContain('Quality gates');
+  });
+
   test('omits the Arguments and gates sections when none are declared', () => {
     const text = textOf(buildLauncherMessages(makePrompt(), {}));
 

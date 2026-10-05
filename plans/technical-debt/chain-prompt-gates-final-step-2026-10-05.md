@@ -1,0 +1,64 @@
+---
+title: A chain prompt's own gates run once, on the chain's final step
+type: implementation
+status: done
+date: 2026-10-05
+tags: [gates, chains]
+initiative_branch: fix/chain-prompt-gates-final-step
+branch_mode: shared-tree
+worker_cap: 1
+publish: "push+merge (2026-10-05, owner in chat: the recommended approach is the right implementation, continue with it)"
+tracking: none
+tracking_reason: one-slice fix
+---
+
+# A chain prompt's own gates run once, on the chain's final step
+
+## Now
+
+_Rewritten 2026-10-05 (#445)._ **Done.** A chain prompt's own gates are reviewed once, on the
+chain's final step, over both transports, and its launcher message says so. Every row is terminal.
+**Next decision, the owner's:** whether `implementation_plan` should keep declaring `code-quality`,
+a gate about generated code, now that it is reviewed on a step that produces a plan; and whether
+the chain walk is split out of `gate-enhancement-service.ts`, which crossed 1,000 lines here.
+
+## Scope
+
+A chain prompt (the prompt that owns `chainSteps`) can declare gates for itself in its
+`gateConfiguration`. Measured on 2026-10-05 over Streamable HTTP and STDIO: those gates reach no
+step. The bundled `implementation_plan` declares `code-quality` and `plan-quality`, and neither is
+rendered or reviewed on any of its five steps. The chain's plan records them and the step walk
+never reads them.
+
+**Objective:** a chain prompt's own gates are rendered and reviewed on the chain's final step, and
+on no other step.
+
+**Not in scope:** gates written on a step or supplied by a step's own prompt (they stay on that
+step, #442 and #444); request-level gates and framework gates (they still reach every step);
+inline gate definitions executed under `executeInlineGateDefinitions`; ad hoc arrow chains, which
+have no chain prompt.
+
+## Rulings
+
+| ID  | Date       | Ruling                                                                                                                                                                                                                                                                                                                                                                                          |
+| --- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R1  | 2026-10-05 | **OWNER**, in chat, choosing between "once, on the final step" and "on every step": the final step. A gate on a chain prompt grades the chain's finished output; no intermediate step is graded against a gate it did not ask for.                                                                                                                                                              |
+| R2  | 2026-10-05 | Planner: "the chain prompt's own gates" are the ids its `gateConfiguration.include` lists and the gates its category activates for it, less its `exclude`; its `framework_gates` switch keeps today's meaning.                                                                                                                                                                                  |
+| R3  | 2026-10-05 | Planner: "the final step" is the last node of the run's node order at the time that node is rendered and reviewed, resolved by node id, never by position. If a `remainder` replaces or extends the tail, the gates follow to the new last node. An inserted investigation node is never the final step unless it is last.                                                                      |
+| R4  | 2026-10-05 | Planner: a step whose prompt is itself a chain follows the same rule for its own expansion (its gates land on the last node it expands to) if the existing expansion makes that a small change; otherwise the nested case is reported and left as measured.                                                                                                                                     |
+| R5  | 2026-10-05 | Planner: the final step's review holds the union of its own gates and the chain prompt's gates in one review, as a step with several gates does today. No new review kind.                                                                                                                                                                                                                      |
+| R6  | 2026-10-05 | Planner, on the worker's finding: the launcher message stopped listing a chain prompt's gates when they were never enforced; now that they are, it lists them again and says where they are reviewed. It reads the include list less the exclude, not the resolver's answer, because the prompt module holds no gate manager; gates only a chain's category activates are therefore not listed. |
+
+## Tasks
+
+| ID  | Status                                                                                                                                                                                                                                                                                                | Files                                                                                                                 | Change                                                                                                                                                             | Bound                       | Depends | Verification                                                                                                                                                                             | Tier                                                                                                                           |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| 1.1 | ✓ DONE (2026-10-05 · #445 · `56acf3f1e`: the chain prompt's own gates are resolved once and bound to the last walked step whose node is live, through the existing bindings and filter; five shapes per transport, 12 red before, 35 of 35 after; unbound and bound-to-every-step mutations both red) | `server/src/engine/gates/services/gate-enhancement-service.ts`; `server/tests/e2e/gates-only-review-join.e2e.test.ts` | bind the chain prompt's own gates to the last node of the run in the chain walk's step bindings, so `filterGatesForTarget` passes them there only                  | ≤ 3 source files, ~60 lines | —       | driven twin over both transports, one value per run; red before, green after; a mutation that drops the binding turns it red; `validate:step-lookup-by-node` green with no new exception | opus · high · wrong approach (where the chain plan's gates are lost before the walk, and which node is last after a remainder) |
+| 1.2 | ✓ DONE (2026-10-05 · #445 · `97437279e`: `>>implementation_plan` driven before and after, steps 1 to 4 unchanged, step 5's review gains `code-quality` and `plan-quality`; the lifecycle page and the prompt schema reference corrected; one pin that asserted the absence rewritten)                 | `CHANGELOG.md`; `docs/concepts/chains-lifecycle.md`; existing tests that pinned the old absence                       | drive the bundled chain before and after; rewrite pins that asserted no chain-level gate; changelog entry under Changed; the reach paragraph in the lifecycle page | ≤ 4 files                   | 1.1     | the before and after run values; each rewritten pin named with its reason                                                                                                                | same worker                                                                                                                    |
+| 1.3 | ✓ DONE (2026-10-05 · #445 · `b0709e350`: a chain prompt's launcher message lists its included gates less its excludes and says they are reviewed on the chain's final step; a gateless chain prompt carries no list; the stale changelog entry is replaced)                                           | `server/src/modules/prompts/launcher-envelope.ts`; its unit test; `chain-prompt-sources.e2e.test.ts`                  | the launcher message is a consumer of the changed fact (R6)                                                                                                        | ≤ 4 files                   | 1.1     | unit and e2e pins red before, green after; an exclude-ignoring mutation red                                                                                                              | same worker                                                                                                                    |
+
+## Dispatch
+
+| Rows    | Tier | Effort                                                              | Failure shape  | Branch mode                                                                   |
+| ------- | ---- | ------------------------------------------------------------------- | -------------- | ----------------------------------------------------------------------------- |
+| 1.1+1.2 | opus | high (the `worker-high` agent definition, model overridden to opus) | wrong approach | shared-tree (`fix/chain-prompt-gates-final-step`), one worker commits per row |
