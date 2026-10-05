@@ -132,6 +132,7 @@ function createStage(options: {
   gatesConfigProvider?: () => any;
   gateLoader?: GateLoader;
   gateManagerProvider?: () => GateManager;
+  gateSystemEnabled?: (scope: unknown) => boolean;
 }): GateEnhancementStage {
   const logger = options.logger ?? createLogger();
   const metricsRecorder = new GateMetricsRecorder(undefined);
@@ -153,7 +154,8 @@ function createStage(options: {
     enhancementService,
     registrar,
     options.gatesConfigProvider,
-    logger
+    logger,
+    options.gateSystemEnabled
   );
 }
 
@@ -287,6 +289,59 @@ describe('GateEnhancementStage', () => {
     await stage.execute(context);
 
     expect(gateService.enhancePrompt as jest.Mock).not.toHaveBeenCalled();
+  });
+
+  /**
+   * P6.292: the runtime switch (`system_control gates disable`) skips the stage as the config flag
+   * does, read for the request's own scope. Before, only the config flag was read, so a chain
+   * started with the switch off still selected gates and opened a review nothing could close.
+   */
+  const runtimeSwitchContext = (): ExecutionContext => {
+    const context = new ExecutionContext({ command: '>>demo' });
+    context.executionPlan = {
+      strategy: 'prompt',
+      gates: ['quality'],
+      requiresFramework: false,
+      requiresSession: false,
+      llmValidationEnabled: false,
+      category: 'analysis',
+    } as any;
+    context.parsedCommand = { commandType: 'single', convertedPrompt: samplePrompt } as any;
+    context.state.identity.continuityScopeId = 'ws-p292';
+    return context;
+  };
+
+  test('skips gate enhancement when the runtime gate switch is off for the request scope', async () => {
+    const gateService = createGateService();
+    const scopes: unknown[] = [];
+    const stage = createStage({
+      gateService,
+      gatesConfigProvider: () => baseGatesConfig,
+      gateSystemEnabled: (scope) => {
+        scopes.push(scope);
+        return false;
+      },
+    });
+
+    const context = runtimeSwitchContext();
+    await stage.execute(context);
+
+    expect(gateService.enhancePrompt as jest.Mock).not.toHaveBeenCalled();
+    expect(scopes).toEqual([context.getScopeOptions()]);
+    expect(scopes[0]).toBeDefined();
+  });
+
+  test('control: with the runtime gate switch on, the same request is enhanced', async () => {
+    const gateService = createGateService();
+    const stage = createStage({
+      gateService,
+      gatesConfigProvider: () => baseGatesConfig,
+      gateSystemEnabled: () => true,
+    });
+
+    await stage.execute(runtimeSwitchContext());
+
+    expect(gateService.enhancePrompt as jest.Mock).toHaveBeenCalled();
   });
 
   test('applies gates per chain step and stores step-level instructions', async () => {

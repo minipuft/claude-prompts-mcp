@@ -5,11 +5,14 @@ import { buildWorkflowRejectionResponse } from '../workflow-rejection-response.j
 
 import type { Logger } from '#infra/logging/index.js';
 import type { GateSystemSettings } from '#shared/types/index.js';
+import type { StateStoreOptions } from '#shared/types/persistence.js';
 import type { GateEnhancementService } from '../../../gates/services/gate-enhancement-service.js';
 import type { TemporaryGateRegistrar } from '../../../gates/services/temporary-gate-registrar.js';
 import type { ExecutionContext } from '../../context/index.js';
 
 type GateSystemSettingsProvider = () => GateSystemSettings | undefined;
+/** The runtime gate switch (`system_control gates`), read for a request's scope. */
+type GateSystemSwitch = (scope: StateStoreOptions | undefined) => boolean;
 
 /**
  * Pipeline Stage 11: Gate Enhancement
@@ -28,7 +31,8 @@ export class GateEnhancementStage extends BasePipelineStage {
     private readonly enhancementService: GateEnhancementService,
     private readonly registrar: TemporaryGateRegistrar,
     private readonly gatesConfigProvider: GateSystemSettingsProvider | undefined,
-    logger: Logger
+    logger: Logger,
+    private readonly gateSystemEnabled?: GateSystemSwitch
   ) {
     super(logger);
   }
@@ -44,6 +48,15 @@ export class GateEnhancementStage extends BasePipelineStage {
     const gatesConfig = this.gatesConfigProvider?.();
     if (gatesConfig?.enabled === false) {
       this.logExit({ skipped: 'Gate system disabled by configuration' });
+      return;
+    }
+
+    // The runtime switch too, for this request's scope. Reading only the config flag let a chain
+    // started with the switch off select its gates anyway: stage 13 opened a review on its first
+    // step and asked for a `gate_verdict` the tool refuses while the switch is off, so no answer
+    // could ever move the run (P6.292).
+    if (this.gateSystemEnabled?.(context.getScopeOptions()) === false) {
+      this.logExit({ skipped: 'Gate system disabled at runtime' });
       return;
     }
 
