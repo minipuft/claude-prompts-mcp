@@ -108,6 +108,12 @@ way when the system is disabled keeps its framework on every step, planned or ad
 phase guard's grading. A run's framework is a run-level decision made at its first call, so every
 step of one run answers to the same framework.
 
+Switching the active framework (`system_control(action:"framework", operation:"switch")`) follows
+the same rule: a run already under way keeps the framework its first call decided on every step,
+planned or added, and in the phase guard's grading, while a run started after the switch takes the
+new framework. The decision is recorded with the run, so the active framework is read only when a
+run starts.
+
 ### Disable for a Single Request
 
 Use modifiers to suppress framework injection:
