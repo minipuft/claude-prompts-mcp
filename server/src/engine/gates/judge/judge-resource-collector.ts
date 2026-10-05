@@ -25,6 +25,12 @@ type PromptsProvider = () => ConvertedPrompt[];
 type FrameworkResourceProvider = () => Promise<ConvertedPrompt[]> | ConvertedPrompt[];
 
 /**
+ * Answers "is this id a framework?" — the live `FrameworkManager.getFramework` lookup, so a
+ * workspace-defined framework counts the same as a shipped one.
+ */
+type FrameworkLookup = (id: string) => unknown;
+
+/**
  * Collects all available resources from styles, frameworks, and gates
  * for the judge selection menu.
  *
@@ -36,7 +42,8 @@ export class JudgeResourceCollector {
     private readonly gateLoader: GateDefinitionProvider | null,
     private readonly logger: Logger,
     private readonly frameworksProvider?: FrameworkResourceProvider | null,
-    private readonly styleManager?: StyleManagerPort | null
+    private readonly styleManager?: StyleManagerPort | null,
+    private readonly frameworkLookup?: FrameworkLookup | null
   ) {}
 
   /**
@@ -77,13 +84,8 @@ export class JudgeResourceCollector {
   }
 
   private isFrameworkPromptId(id: string): boolean {
-    const normalized = id.toLowerCase();
-    return (
-      normalized.includes('cageerf') ||
-      normalized.includes('react') ||
-      normalized.includes('5w1h') ||
-      normalized.includes('scamper')
-    );
+    const framework = this.frameworkLookup?.(id);
+    return framework !== undefined && framework !== null;
   }
 
   private async collectFrameworkResources(): Promise<ConvertedPrompt[]> {

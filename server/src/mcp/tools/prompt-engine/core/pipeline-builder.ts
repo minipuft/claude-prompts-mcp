@@ -258,7 +258,9 @@ export class PipelineBuilder {
       deps.lightweightGateSystem.gateLoader,
       deps.logger,
       frameworksProvider,
-      deps.styleManager ?? null
+      deps.styleManager ?? null,
+      // Per call, no cache: the manager can be late-bound or reloaded after this stage is built.
+      (frameworkId) => deps.frameworkManager?.getFramework(frameworkId)
     );
     const judgeMenuFormatter = new JudgeMenuFormatter(deps.logger, judgePromptProvider);
     const judgeSelectionStage = new JudgeSelectionStage(
