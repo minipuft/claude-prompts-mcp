@@ -828,7 +828,7 @@ export class ChainSessionStore implements ChainSessionService {
           lastActivity: session.lastActivity,
           // The key is the hooks' contract (`hooks/lib/db_reader.py`); the value is the review
           // the client is shown, read by the node `resolveShownReview` names.
-          pendingGateReview:
+          currentStepReview:
             shownNodeId === undefined ? null : (session.reviews?.[shownNodeId] ?? null),
           pendingShellVerification: session.pendingShellVerification ?? null,
           runStatus,

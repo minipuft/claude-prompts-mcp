@@ -48,7 +48,7 @@ def label_gate_ids(gate_ids: list[str]) -> str:
     """Render pending-review ids for a human: synthetic ids become their label.
 
     One function for both producers of `pending_gate` — the response-text parser below and
-    `db_reader`'s two `pendingGateReview.gateIds` readbacks — so a hook's reminder and a hook's
+    `db_reader`'s two `currentStepReview.gateIds` readbacks — so a hook's reminder and a hook's
     denial cannot name the same hold differently.
     """
     return ", ".join(
@@ -98,7 +98,7 @@ def _fallback_interrupt_exits() -> list[str]:
     """Parameter-level exits for an interrupt whose verb list was not captured.
 
     Reached on the db_reader path (compact recovery reconstructs a hold from
-    `chain_sessions.pendingGateReview`, where no response text exists) and on a response whose
+    `chain_sessions.currentStepReview`, where no response text exists) and on a response whose
     interrupt section moved. Derived from the same generated artifact `gate-enforce.py` reads,
     minus `gate_verdict`: a verdict answers a GATE, and no verdict clears this hold.
     """

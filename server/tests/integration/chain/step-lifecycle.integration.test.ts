@@ -54,7 +54,11 @@ import { GateReviewStage } from '../../../src/engine/execution/pipeline/stages/2
 import { ResponseFormattingStage } from '../../../src/engine/execution/pipeline/stages/21-formatting-stage.js';
 import { StepCaptureService } from '../../../src/engine/execution/capture/step-capture-service.js';
 import { UnknownObservationProcessor } from '../../../src/engine/execution/capture/unknown-observation-processor.js';
+import { TemporaryGateRegistry } from '../../../src/engine/gates/core/temporary-gate-registry.js';
+import { GateEnhancementService } from '../../../src/engine/gates/services/gate-enhancement-service.js';
+import { GateMetricsRecorder } from '../../../src/engine/gates/services/gate-metrics-recorder.js';
 import { GateVerdictProcessor } from '../../../src/engine/gates/services/gate-verdict-processor.js';
+import { createRunStepViewProvider } from '../../../src/engine/gates/services/run-step-view.js';
 import { ResponseFormatter } from '../../../src/mcp/tools/prompt-engine/processors/response-formatter.js';
 import { ExecutionRecordStore } from '../../../src/modules/chains/execution-record-store.js';
 import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
@@ -169,14 +173,16 @@ const GUARDED_FRAMEWORK_REGISTRY = {
     }),
   }),
 };
-const parsedFrameworkChain = () =>
-  parsedChainSteps().map((step) => ({
+const underFramework = (steps: ReturnType<typeof parsedChainSteps>) =>
+  steps.map((step) => ({
     ...step,
     frameworkContext: {
       selectedFramework: { id: 'cageerf', name: 'CAGEERF' },
       systemPrompt: 'Apply CAGEERF.',
     } as never,
   }));
+const parsedFrameworkChain = () => underFramework(parsedChainSteps());
+const parsedThreeStepFrameworkChain = () => underFramework(parsedThreeStepChain());
 
 const createInMemoryDb = (): { db: DatabaseSync; port: DatabasePort } => {
   const db = new DatabaseSync(':memory:');
@@ -276,8 +282,30 @@ const buildPipeline = (options: {
   blockingGates?: () => boolean;
   /** The framework this request resolves; absent means none, so the phase guard skips. */
   activeFramework?: () => string | undefined;
+  /**
+   * The gates stage 11 selects for this request: every id, and the set its per-step walk scopes
+   * to the step the call STARTS on (`reviewGateIds`). Absent, the one run-wide `GATE_ID` and no
+   * step scoping.
+   */
+  gateSelection?: () => { accumulated: string[]; review?: string[] } | undefined;
+  /** Where a test registers a step-targeted gate; absent, an empty registry of the pipeline's own. */
+  gateRegistry?: TemporaryGateRegistry;
 }): PromptExecutionPipeline => {
   const { sessionStore, recordStore, logger } = options;
+  // The post-advance review (`ensurePostAdvanceReview`, P6.25) runs on the real service, wired to
+  // stage 16 exactly as `pipeline-builder.ts` wires it. It opens a review only for a gate the
+  // registry holds with a step target, so a test that registers none drives the same path as
+  // before it was wired.
+  const gateEnhancementService = new GateEnhancementService(
+    null,
+    options.gateRegistry ?? new TemporaryGateRegistry(logger),
+    () => undefined,
+    () => undefined,
+    undefined,
+    new GateMetricsRecorder(undefined),
+    logger,
+    createRunStepViewProvider(sessionStore)
+  );
   // A framework's section headers, declared only for a step that names a framework — every
   // parsed chain here but `parsedFrameworkChain` names none, so their renders are unchanged.
   const chainExecutor = new ChainOperatorExecutor(logger as never, PROMPTS, undefined, undefined, {
@@ -294,7 +322,8 @@ const buildPipeline = (options: {
       new StepCaptureService(sessionStore, logger, recordStore),
       sessionStore,
       new UnknownObservationProcessor(sessionStore, logger),
-      logger
+      logger,
+      { gateEnhancementService }
     ),
     StepExecution: new StepExecutionStage(
       chainExecutor,
@@ -374,7 +403,11 @@ const buildPipeline = (options: {
         name,
         execute: async (context: ExecutionContext) => {
           context.state.gates.hasBlockingGates = options.blockingGates?.() ?? true;
-          context.state.gates.accumulatedGateIds = [GATE_ID];
+          const selection = options.gateSelection?.();
+          context.state.gates.accumulatedGateIds = selection?.accumulated ?? [GATE_ID];
+          if (selection?.review !== undefined) {
+            context.state.gates.reviewGateIds = selection.review;
+          }
           context.state.gates.enforcementMode = 'blocking';
           context.gateInstructions = 'Check the step output against the gate.';
         },
@@ -417,11 +450,16 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
   let activeFramework: string | undefined;
   /** The logger every stage writes to; a stage's exit reason is its last `debug` metadata. */
   let logger: Logger;
+  /** The pipeline's temporary gates: where a test registers a step-targeted gate. */
+  let gateRegistry: TemporaryGateRegistry;
+  /** What the stage 11 stub selects; undefined keeps the run-wide `GATE_ID`. */
+  let gateSelection: { accumulated: string[]; review?: string[] } | undefined;
 
   beforeEach(() => {
     parsedSteps = parsedChainSteps;
     blockingGates = true;
     activeFramework = undefined;
+    gateSelection = undefined;
     const created = createInMemoryDb();
     db = created.db;
     logger = createLogger();
@@ -444,6 +482,7 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
     sessionStore = new ChainSessionStore(logger, new StubTextReferenceStore() as any, {
       cleanupIntervalMs: 60_000,
     });
+    gateRegistry = new TemporaryGateRegistry(logger);
 
     pipeline = buildPipeline({
       sessionStore,
@@ -452,6 +491,8 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
       steps: () => parsedSteps(),
       blockingGates: () => blockingGates,
       activeFramework: () => activeFramework,
+      gateSelection: () => gateSelection,
+      gateRegistry,
     });
   });
 
@@ -1194,6 +1235,8 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
    */
   describe('a verdict answers the review of the node it grades (row 3.3)', () => {
     const passOnly = 'GATE_REVIEW: PASS - the sections are there now';
+    const sectionedAnswer =
+      '## Context\nThe situation, stated.\n\n## Analysis\nThe options, weighed.';
     const reviews = () => (onlySession() as unknown as ChainSession).reviews ?? {};
 
     test('a review opened on step 1 while the run stands on step 2 is answered on step 1', async () => {
@@ -1313,6 +1356,53 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
       // Step 1's review still open holds step 3's capture.
       expect(onlySession().state.currentNodeId).toBe('review');
       expect(onlySession().runStatus).not.toBe('completed');
+    });
+
+    /**
+     * P6.25: two step reviews open through the pipeline, with no review written by hand. Step 1's
+     * one-line answer is captured and the run advances onto step 2; stage 16's
+     * `ensurePostAdvanceReview` opens step 2's review for the gate that targets it, then stage 19
+     * grades step 1's answer and opens its structural review. Both open on ONE call because an
+     * open review of an earlier node holds every later advance (`reviewHolding`). A trailer naming
+     * step 1 answers its review and leaves step 2's open.
+     */
+    test("two step reviews open through the pipeline: step 2's after the advance, step 1's on its grade", async () => {
+      parsedSteps = parsedThreeStepFrameworkChain;
+      activeFramework = 'cageerf';
+      const step2Gate = gateRegistry.createTemporaryGate({
+        id: 'analyze-check',
+        name: 'Analyze check',
+        type: 'validation',
+        scope: 'chain',
+        description: 'Checks step 2.',
+        guidance: 'Check step 2.',
+        source: 'manual',
+        target_step_id: 'analyze',
+      });
+      // Stage 11's walk scopes no gate to step 1, the step the first two calls start on.
+      gateSelection = { accumulated: [step2Gate], review: [] };
+      await pipeline.execute({ command: `>>draft --> >>analyze --> >>review` });
+      const chainId = onlySession().chainId;
+      expect(reviews()).toEqual({});
+
+      await pipeline.execute({ chain_id: chainId, user_response: 'one line' });
+
+      expect(onlySession().state.currentNodeId).toBe('analyze');
+      expect(reviews()['analyze']).toMatchObject({ kind: 'gate', gateIds: [step2Gate] });
+      expect(reviews()['draft']).toMatchObject({
+        kind: 'structural',
+        gateIds: ['__phase_guard__'],
+      });
+
+      await pipeline.execute({
+        chain_id: chainId,
+        user_response: `${sectionedAnswer}\n\nHANDOFF RESULT\nnode: draft`,
+        gate_verdict: passOnly,
+      } as any);
+
+      expect(Object.keys(reviews())).toEqual(['analyze']);
+      expect(reviews()['analyze']?.attemptCount).toBe(0);
+      expect(onlySession().state.currentNodeId).toBe('analyze');
     });
 
     /**

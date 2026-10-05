@@ -57,6 +57,17 @@ import { STATE_DB_WRITER_PRAGMAS } from '#shared/utils/runtime-state-location.js
 /**
  * Bump this when changing the embedded schema. Triggers drop-and-recreate.
  *
+ * v35: the hook projection key in the `chain_sessions` state document becomes `currentStepReview`,
+ * and its `v_execution_status` column `current_step_review` (P6.20, R193; the old names are in
+ * `docs/architecture/sqlite-persistence.md`). The key holds the review of the step the run stands
+ * on (`resolveShownReview`), not a per-run slot; that slot was deleted at row 3.6 and the key
+ * still carried its name. The Python readers (`hooks/lib/db_reader.py`) move in the same
+ * commit, and the dicts their loaders return to hooks do not change. The view alone is recreated
+ * on every boot; the bump is what drops the rows a process wrote under the old key, since
+ * `chain_sessions` is `derived` and `chain_runs`/`chain_run_nodes` are `ephemeral`. It also
+ * retires the pre-3.1 residual reader in `run-registry.ts`: no `chain_runs` row older than this
+ * bump survives it. `DROPPED_ON_THIS_BUMP` stays empty and `DROPPED_AT_VERSION` does not move.
+ *
  * v34: adds `accepted_at_step` to `chain_run_nodes` (P6.253, R136 — a remainder's acceptance
  * stamp).
  *
@@ -420,7 +431,7 @@ import { STATE_DB_WRITER_PRAGMAS } from '#shared/utils/runtime-state-location.js
  * `respondedAt`, which changes the `substate_json` shape in `execution_records`. Rows written by
  * v15 would decode to a lifecycle value outside `StepLifecycle`, so they must not survive.
  */
-const SCHEMA_VERSION = 34;
+const SCHEMA_VERSION = 35;
 
 /**
  * Tables whose rows exist nowhere else and therefore survive a SCHEMA_VERSION bump.
@@ -1394,7 +1405,7 @@ export class SqliteEngine implements DatabasePort {
         json_extract(cs.state, '$.currentStep') AS current_step,
         json_extract(cs.state, '$.totalSteps') AS total_steps,
         json_extract(cs.state, '$.lastActivity') AS last_activity,
-        json_extract(cs.state, '$.pendingGateReview') AS pending_gate_review,
+        json_extract(cs.state, '$.currentStepReview') AS current_step_review,
         json_extract(cs.state, '$.pendingShellVerification') AS pending_shell_verification,
         cs.run_owner_pid,
         cs.organization_id,

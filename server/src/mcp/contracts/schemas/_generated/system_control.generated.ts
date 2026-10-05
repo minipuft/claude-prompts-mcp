@@ -313,7 +313,7 @@ export const system_controlCommands: ToolCommand[] = [
   {
     id: 'status',
     summary: 'Runtime status overview (framework, gates, health).',
-    parameters: ['action', 'include_metrics'],
+    parameters: ['action', 'operation', 'include_metrics'],
     status: 'working',
   },
   {

@@ -168,8 +168,8 @@ describe('chain_sessions hook projection — byte parity', () => {
     expect(Object.keys(row.state).sort()).toEqual([
       'chainId',
       'currentStep',
+      'currentStepReview',
       'lastActivity',
-      'pendingGateReview',
       'pendingShellVerification',
       'runCompletedAt',
       'runStatus',
@@ -236,8 +236,8 @@ describe('chain_sessions hook projection — byte parity', () => {
     expect(Object.keys(row.state).sort()).toEqual([
       'chainId',
       'currentStep',
+      'currentStepReview',
       'lastActivity',
-      'pendingGateReview',
       'pendingShellVerification',
       'runCompletedAt',
       'runStatus',
@@ -341,7 +341,7 @@ describe('chain_sessions hook projection — byte parity', () => {
     const row = latestHookRow(db)!;
     expect(countHookRows(db)).toBe(rowsBefore + 1);
     expect(row.state['currentStep']).toBe(3);
-    expect(row.state['pendingGateReview']).toBeNull();
+    expect(row.state['currentStepReview']).toBeNull();
     expect(row.state['pendingShellVerification']).toBeNull();
   });
 
@@ -376,7 +376,7 @@ describe('chain_sessions hook projection — byte parity', () => {
     const row = latestHookRow(db)!;
     expect(row.state['currentStep']).toBe(2);
     expect(row.state['totalSteps']).toBe(2);
-    expect(row.state['pendingGateReview']).not.toBeNull();
+    expect(row.state['currentStepReview']).not.toBeNull();
   });
 
   test('getSessionStats counts a chain’s steps, not how far along it is', async () => {

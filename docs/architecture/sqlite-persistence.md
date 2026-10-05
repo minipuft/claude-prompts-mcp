@@ -13,7 +13,7 @@ module wins and this file is stale.
 
 Not 11, and not 13. `tenants` was deleted at v19 (F10); `chain_run_registry` was deleted at v22
 (P3 Tier 4), replaced by the two per-row tables below; `objects` and `version_entries` were added
-at v29. The schema is at v34. SQLite auto-creates `sqlite_sequence` for
+at v29. The schema is at v35. SQLite auto-creates `sqlite_sequence` for
 any table declaring `AUTOINCREMENT`; it is never declared in `applySchema()` and is excluded via
 `SQLITE_INTERNAL_TABLES`. A startup assert written against a raw `sqlite_master` count throws on
 every boot.
@@ -168,6 +168,17 @@ remainder nodes; an inserted node still counts by its position, which is exact b
 right after the node that declared its unknown. Nullable with no DDL DEFAULT, NULL on every planned
 and inserted node. `chain_run_nodes` is `ephemeral`, so the bump drops and recreates it and no
 migration is written; `DROPPED_ON_THIS_BUMP` stays empty.
+
+At v35 (P6.20) the hook projection key in the `chain_sessions` state document became
+`currentStepReview` (it was `pendingGateReview`), and `v_execution_status.pending_gate_review`
+became `current_step_review`. The key holds the review of the step the run stands on, read by the
+node `resolveShownReview` names; the old name was the per-run review slot that row 3.6 deleted.
+`hooks/lib/db_reader.py` reads the new names in the same commit, and the dicts
+`load_active_chain_state` and `load_recoverable_chain_state` return are unchanged. No column
+changed, and the view is recreated on every boot, but the bump drops the rows a process wrote
+under the old key. `chain_sessions` is `derived`, and `chain_runs` is `ephemeral`, so no
+`chain_runs` row older than v35 survives. That is what retired the pre-3.1 residual reader in
+`run-registry.ts`. `DROPPED_ON_THIS_BUMP` stays empty.
 
 ## Four Tables Are Durable — A Schema Bump Must Not Destroy Them
 

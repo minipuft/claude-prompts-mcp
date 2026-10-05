@@ -170,7 +170,7 @@ class TestInterruptHoldMatrix:
         assert UNKNOWN_INTERRUPT_LABEL in reason
 
     def test_denial_falls_back_to_contract_parameters_when_no_verbs_were_captured(self, monkeypatch, capsys):
-        """The db_reader path: a hold reconstructed from `pendingGateReview` has no response text.
+        """The db_reader path: a hold reconstructed from `currentStepReview` has no response text.
 
         The message still has to name exits, and the ones it names come from the same generated
         artifact rather than from a second hardcoded model.
@@ -213,7 +213,7 @@ class TestSyntheticIdLabel:
                 "chainId": "chain-demo#1",
                 "currentStep": 1,
                 "totalSteps": 3,
-                "pendingGateReview": {"gateIds": [UNKNOWN_INTERRUPT_GATE_ID], "attemptCount": 0},
+                "currentStepReview": {"gateIds": [UNKNOWN_INTERRUPT_GATE_ID], "attemptCount": 0},
             }
         )
         assert result is not None

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
 /**
- * Fails when an MCP tool command declares a parameter the code it dispatches to never reads.
+ * Fails when an MCP tool command declares a parameter the code it dispatches to never reads, and
+ * when that code reads a parameter its command does not declare (the reverse direction).
  *
  * THE CLASS. The undeclared-key refusal stops a key the contract does not name. It cannot see the
  * opposite gap: a key the contract DOES name for a command, which nothing then reads. Every tool
@@ -29,8 +30,10 @@
  *
  * WHAT COUNTS AS A READ — a property read off the argument object, not a name:
  *
- *   - `args.x`, `args['x']`, `(args as T).x`, `const { x } = args`, and the same through an alias
+ *   - `args.x`, `args['x']`, `(args as T).x`, and the same through an alias
  *     (`const supplied = args as Record<…>`);
+ *   - `const { x } = args` and a destructured parameter `({ x })`, only when the binding `x` is
+ *     used — destructuring a key and never touching it reads nothing;
  *   - `args[key]` inside `for (const key of LIST)` or `Object.entries(MAP)`, where LIST/MAP is a
  *     constant in the file or imported from a scanned one: every listed key (a field registry);
  *   - `this.method(args)` and `this.field.method(args)` follow `args` into that method, when the
@@ -40,9 +43,21 @@
  *
  * A string literal, a comment, or an error message naming the parameter is NOT a read.
  *
- * WHAT THIS DELIBERATELY DOES NOT CATCH, as of 2026-09-23:
+ * THE REVERSE DIRECTION (row 2.8): every parameter the command's own path USES must be declared
+ * on a command that resolves to it. The contract's per-command lists are what the per-action
+ * refusal reads and what a caller is told; a read they omit is a parameter nobody can learn of
+ * (the router required `confirm` on rollback while `common:rollback` never named it). The path is
+ * narrower than the forward read model: the operation's or action's own `case` and the processor
+ * it hands the arguments to, plus a router guard scoped to the action by a positive
+ * `SET.has(action)`. A presence test (`args.x !== undefined`) is not a use — it is how code
+ * refuses a key.
  *
- *   - The reverse: code reading a key the command does not declare (P4.146).
+ * WHAT THIS DELIBERATELY DOES NOT CATCH, as of 2026-10-05:
+ *
+ *   - In the reverse direction: handler code outside the dispatch `switch` (it runs for every
+ *     operation and its own guards are not modelled), an action whose handler has no per-operation
+ *     `case` (`skills_sync` hands every argument to one service), a router guard not scoped by a
+ *     positive `SET.has(action)`, and a key used only behind a presence test.
  *   - Whether a value that crossed the boundary is honoured beyond it.
  *   - A read through computed access other than a field registry, or through a module function
  *     handed `args` whole. Either reports a false finding, never a false pass.
@@ -68,235 +83,24 @@ import { fileURLToPath } from 'node:url';
 
 import { Node, Project, SyntaxKind } from 'ts-morph';
 
+import {
+  destructuredKeys,
+  fieldCall,
+  fieldClass,
+  findClass,
+  findMethod,
+  guardedActions,
+  isParameterRef,
+  readsIn,
+  readsOfMethod,
+  thisMethodName,
+  unwrap,
+} from './lib/parameter-reads/read-model.js';
+import { selfTest } from './lib/parameter-reads/self-test.js';
+
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CONTRACTS_DIR = path.join(SERVER_ROOT, 'tooling', 'contracts');
 const TOOLS_DIR = path.join(SERVER_ROOT, 'src', 'mcp', 'tools');
-
-/** `(args as T)`, `args!`, `<T>args` → `args`. */
-function unwrap(node) {
-  let current = node;
-  while (
-    Node.isParenthesizedExpression(current) ||
-    Node.isAsExpression(current) ||
-    Node.isNonNullExpression(current) ||
-    Node.isTypeAssertion(current) ||
-    Node.isSatisfiesExpression(current)
-  ) {
-    current = current.getExpression();
-  }
-  return current;
-}
-
-function isParameterRef(node, parameterName) {
-  const inner = unwrap(node);
-  return Node.isIdentifier(inner) && inner.getText() === parameterName;
-}
-
-function findMethod(classDeclaration, name) {
-  let current = classDeclaration;
-  while (current !== undefined) {
-    const method = current.getMethod(name);
-    if (method !== undefined) return method;
-    current = current.getBaseClass();
-  }
-  return undefined;
-}
-
-/** `this.name(...)` → `name`; anything else → `undefined`. */
-function thisMethodName(call) {
-  const callee = call.getExpression();
-  if (!Node.isPropertyAccessExpression(callee)) return undefined;
-  if (callee.getExpression().getKind() !== SyntaxKind.ThisKeyword) return undefined;
-  return callee.getName();
-}
-
-/** The keys a method reads from its parameter at `index`. */
-function readsOfMethod(context, classDeclaration, methodName, index) {
-  const cacheKey = `${classDeclaration.getName()}.${methodName}#${index}`;
-  const cached = context.cache.get(cacheKey);
-  if (cached !== undefined) return cached;
-  // Recursion guard: a cycle reads nothing new on the second visit.
-  context.cache.set(cacheKey, new Set());
-
-  const method = findMethod(classDeclaration, methodName);
-  const parameter = method?.getParameters()[index];
-  const reads = new Set();
-  if (parameter !== undefined) {
-    const nameNode = parameter.getNameNode();
-    if (Node.isObjectBindingPattern(nameNode)) {
-      for (const element of nameNode.getElements()) {
-        reads.add((element.getPropertyNameNode() ?? element.getNameNode()).getText());
-      }
-    } else {
-      const body = method.getBody();
-      if (body !== undefined) {
-        for (const key of readsIn(context, classDeclaration, [body], parameter.getName())) {
-          reads.add(key);
-        }
-      }
-    }
-  }
-  context.cache.set(cacheKey, reads);
-  return reads;
-}
-
-/**
- * Whether a read of `key` survives the expression it sits in: a value copied into an object
- * literal handed to one of the handler's own methods survives only if that method reads it back.
- */
-function survives(context, classDeclaration, readNode) {
-  let valueNode = readNode;
-  while (
-    Node.isParenthesizedExpression(valueNode.getParent()) ||
-    Node.isAsExpression(valueNode.getParent())
-  ) {
-    valueNode = valueNode.getParent();
-  }
-  const assignment = valueNode.getParent();
-  if (!Node.isPropertyAssignment(assignment) || assignment.getInitializer() !== valueNode) {
-    return true;
-  }
-  const literal = assignment.getParent();
-  const call = literal?.getParent();
-  if (!Node.isObjectLiteralExpression(literal) || !Node.isCallExpression(call)) return true;
-  const methodName = thisMethodName(call);
-  if (methodName === undefined) return true;
-  const index = call.getArguments().indexOf(literal);
-  return readsOfMethod(context, classDeclaration, methodName, index).has(assignment.getName());
-}
-
-/**
- * `args[key]` inside `for (const key of LIST)`, `for (const [key] of Object.entries(MAP))` or
- * `Object.keys(MAP)`, where LIST is a module-level array of string literals and MAP an object
- * literal (in this file or imported from one the scan loaded): every listed key is read. How a
- * processor copies a registry of optional fields rather than naming each one.
- */
-function iteratedKeys(argument) {
-  if (!Node.isIdentifier(argument)) return [];
-  const loop = argument.getAncestors().find((ancestor) => {
-    if (!Node.isForOfStatement(ancestor)) return false;
-    const declaration = ancestor.getInitializer().getDeclarations?.()[0];
-    const bound = declaration?.getNameNode();
-    if (Node.isIdentifier(bound)) return bound.getText() === argument.getText();
-    return (
-      Node.isArrayBindingPattern(bound) && bound.getElements()[0]?.getText() === argument.getText()
-    );
-  });
-  if (loop === undefined) return [];
-  let source = unwrap(loop.getExpression());
-  if (
-    Node.isCallExpression(source) &&
-    /^Object\.(entries|keys)$/.test(source.getExpression().getText())
-  ) {
-    source = unwrap(source.getArguments()[0]);
-  }
-  const literal = Node.isIdentifier(source) ? constantInitializer(source) : undefined;
-  if (Node.isArrayLiteralExpression(literal)) {
-    return literal
-      .getElements()
-      .filter((element) => Node.isStringLiteral(element))
-      .map((element) => element.getLiteralValue());
-  }
-  if (Node.isObjectLiteralExpression(literal)) {
-    return literal
-      .getProperties()
-      .filter((property) => Node.isPropertyAssignment(property))
-      .map((property) => property.getName().replace(/^['"]|['"]$/g, ''));
-  }
-  return [];
-}
-
-/** A module-level constant's initializer, following one named import into a loaded file. */
-function constantInitializer(identifier) {
-  const name = identifier.getText();
-  const file = identifier.getSourceFile();
-  let declaration = file.getVariableDeclaration(name);
-  if (declaration === undefined) {
-    const imported = file
-      .getImportDeclarations()
-      .find((candidate) => candidate.getNamedImports().some((named) => named.getName() === name));
-    declaration = imported?.getModuleSpecifierSourceFile()?.getVariableDeclaration(name);
-  }
-  return declaration === undefined ? undefined : unwrap(declaration.getInitializer());
-}
-
-/**
- * `this.<field>.<method>(…)` where the field holds another class of the tool being scanned: the
- * call continues into that class. `undefined` when the call is not that shape, or no class the
- * scan loaded answers for the field — the boundary.
- */
-function fieldTarget(context, classDeclaration, call) {
-  const target = fieldCall(call);
-  if (target === undefined || context.project === undefined) return undefined;
-  const owner = fieldClass(context.project, classDeclaration, target.field);
-  return owner === undefined ? undefined : { owner, method: target.method };
-}
-
-/** Every key read off `parameterName` within `roots`, skipping any node in `excluded`. */
-function readsIn(context, classDeclaration, roots, parameterName, excluded = new Set()) {
-  const reads = new Set();
-  const visit = (node) => {
-    if (excluded.has(node)) return;
-
-    if (
-      Node.isPropertyAccessExpression(node) &&
-      isParameterRef(node.getExpression(), parameterName)
-    ) {
-      if (survives(context, classDeclaration, node)) reads.add(node.getName());
-    } else if (
-      Node.isElementAccessExpression(node) &&
-      isParameterRef(node.getExpression(), parameterName)
-    ) {
-      const argument = node.getArgumentExpression();
-      if (Node.isStringLiteral(argument) && survives(context, classDeclaration, node)) {
-        reads.add(argument.getLiteralValue());
-      }
-      for (const key of iteratedKeys(argument)) reads.add(key);
-    } else if (
-      Node.isVariableDeclaration(node) &&
-      Node.isObjectBindingPattern(node.getNameNode()) &&
-      node.getInitializer() !== undefined &&
-      isParameterRef(node.getInitializer(), parameterName)
-    ) {
-      for (const element of node.getNameNode().getElements()) {
-        reads.add((element.getPropertyNameNode() ?? element.getNameNode()).getText());
-      }
-    } else if (Node.isCallExpression(node)) {
-      const methodName = thisMethodName(node);
-      const field =
-        methodName === undefined ? fieldTarget(context, classDeclaration, node) : undefined;
-      node.getArguments().forEach((argument, index) => {
-        if (!isParameterRef(argument, parameterName)) return;
-        // Handed whole to something outside the handler's classes: its boundary.
-        if (field !== undefined) {
-          for (const key of readsOfMethod(context, field.owner, field.method, index))
-            reads.add(key);
-          return;
-        }
-        if (methodName === undefined) return;
-        for (const key of readsOfMethod(context, classDeclaration, methodName, index)) {
-          reads.add(key);
-        }
-      });
-    }
-
-    node.forEachChild(visit);
-  };
-  for (const root of roots) visit(root);
-  // `const supplied = args as Record<string, unknown>` reads through `supplied` too.
-  for (const root of roots) {
-    for (const alias of root.getDescendantsOfKind(SyntaxKind.VariableDeclaration)) {
-      const initializer = alias.getInitializer();
-      if (!Node.isIdentifier(alias.getNameNode()) || initializer === undefined) continue;
-      if (!isParameterRef(initializer, parameterName) || alias.getName() === parameterName)
-        continue;
-      for (const key of readsIn(context, classDeclaration, [root], alias.getName(), excluded)) {
-        reads.add(key);
-      }
-    }
-  }
-  return reads;
-}
 
 function stringLabel(clause) {
   if (!Node.isCaseClause(clause)) return undefined;
@@ -338,13 +142,6 @@ function handlerClassesByAction(project, routerPath) {
   return classes;
 }
 
-function findClass(project, name) {
-  return project
-    .getSourceFiles()
-    .flatMap((file) => file.getClasses())
-    .find((candidate) => candidate.getName() === name);
-}
-
 function entryOf(classDeclaration, methodName) {
   return {
     file: path.relative(SERVER_ROOT, classDeclaration.getSourceFile().getFilePath()),
@@ -370,6 +167,7 @@ const systemControlAdapter = {
 
   bind({ project, routerPath, commands }) {
     const context = { cache: new Map(), project };
+    const values = { cache: new Map(), project, valuesOnly: true };
     const classes = handlerClassesByAction(project, routerPath);
     return commands.map((command) => {
       const [action, operation] = command.id.split(':');
@@ -396,6 +194,7 @@ const systemControlAdapter = {
       }
 
       let roots = [body];
+      let pathRoots = [body];
       const excluded = new Set();
       const dispatch = body
         .getDescendantsOfKind(SyntaxKind.SwitchStatement)
@@ -412,13 +211,28 @@ const systemControlAdapter = {
         }
         excluded.add(dispatch.getCaseBlock());
         roots = [body, ...selected];
+        pathRoots = selected;
       }
 
+      const reads = readsIn(context, handler, roots, parameterName, excluded);
+      const entry = entryOf(handler, 'execute');
       return {
         ...binding,
-        entry: entryOf(handler, 'execute'),
+        entry,
         qualifier: operation === undefined ? '' : ` for operation '${operation}'`,
-        reads: readsIn(context, handler, roots, parameterName, excluded),
+        reads,
+        // The reverse direction reads only the operation's own case: code outside the switch
+        // runs for every operation, and which of them its reads serve is not modelled. An
+        // operation with no case of its own (skills_sync hands every argument to one service,
+        // which dispatches past the boundary) has nothing to attribute, so it is not checked.
+        readKeys:
+          operation !== undefined && dispatch === undefined
+            ? undefined
+            : new Map(
+                [...readsIn(values, handler, pathRoots, parameterName)]
+                  .filter((key) => !this.exempt.has(key))
+                  .map((key) => [key, entry.symbol])
+              ),
       };
     });
   },
@@ -553,39 +367,13 @@ function forwardedKeys(body, sourceName, targetName) {
   return forwarded;
 }
 
-/** The class a `this.<field>` holds: its declared type, or the class implementing that port. */
-function fieldClass(project, classDeclaration, fieldName) {
-  const property = classDeclaration.getProperty(fieldName);
-  const typeName = property?.getTypeNode()?.getText();
-  if (typeName === undefined) return undefined;
-  return (
-    findClass(project, typeName) ??
-    project
-      .getSourceFiles()
-      .flatMap((file) => file.getClasses())
-      .find((candidate) =>
-        candidate.getImplements().some((clause) => clause.getText() === typeName)
-      )
-  );
-}
-
-/** `this.<field>.<method>(…)` → `{ field, method }`; anything else → `undefined`. */
-function fieldCall(call) {
-  const callee = call.getExpression();
-  if (!Node.isPropertyAccessExpression(callee)) return undefined;
-  const owner = callee.getExpression();
-  if (!Node.isPropertyAccessExpression(owner)) return undefined;
-  if (owner.getExpression().getKind() !== SyntaxKind.ThisKeyword) return undefined;
-  return { field: owner.getName(), method: callee.getName() };
-}
-
 /**
  * The keys read on dispatch of `action` by a per-type handler whose `handleAction(args)` switches
  * on the action: reads in the handler itself, plus those of each processor it hands `args` to
  * (`this.lifecycle.handleUpdate(args)`). The processor is where the parameter is owned, so the
  * read model continues into it; past the processor, `args` handed on whole is not followed.
  */
-function dispatchReads(context, project, handler, action) {
+function dispatchReads(context, project, handler, action, values = context) {
   const handle = findMethod(handler, 'handleAction');
   const parameterName = handle?.getParameters()[0]?.getName();
   const body = handle?.getBody();
@@ -609,6 +397,8 @@ function dispatchReads(context, project, handler, action) {
     parameterName,
     new Set([dispatch.getCaseBlock()])
   );
+  // What this action's own path reads — its case and the processor — for the reverse direction.
+  const pathReads = readsIn(values, handler, selected, parameterName);
   const entries = [];
   for (const call of selected.flatMap((clause) =>
     clause.getDescendantsOfKind(SyntaxKind.CallExpression)
@@ -622,9 +412,11 @@ function dispatchReads(context, project, handler, action) {
     if (processor === undefined) return { problem: `this.${target.field} resolves to no class` };
     entries.push(entryOf(processor, target.method));
     for (const key of readsOfMethod(context, processor, target.method, index)) reads.add(key);
+    for (const key of readsOfMethod(values, processor, target.method, index)) pathReads.add(key);
   }
   return {
     reads,
+    pathReads,
     entry: entries.length === 1 ? entries[0] : entryOf(handler, 'handleAction'),
   };
 }
@@ -656,6 +448,7 @@ const resourceManagerAdapter = {
 
   bind({ project, routerPath, commands }) {
     const context = { cache: new Map(), project };
+    const values = { cache: new Map(), project, valuesOnly: true };
     const router = project
       .getSourceFileOrThrow(routerPath)
       .getClasses()
@@ -666,11 +459,23 @@ const resourceManagerAdapter = {
     // Reads the router itself decides on — the destructive-action `confirm` guard, the
     // `source_workspace` refusal — ahead of any route. A read in a message or a log is not one.
     const routerBody = router.getMethodOrThrow('handleAction').getBody();
-    const decided = sourcesIn(
-      routerBody,
-      router.getMethodOrThrow('handleAction').getParameters()[0].getName(),
-      routerBody.getDescendantsOfKind(SyntaxKind.IfStatement).map((guard) => guard.getExpression())
-    );
+    const routerArgs = router.getMethodOrThrow('handleAction').getParameters()[0].getName();
+    const guards = routerBody
+      .getDescendantsOfKind(SyntaxKind.IfStatement)
+      .map((guard) => guard.getExpression());
+    const decided = sourcesIn(routerBody, routerArgs, guards);
+    // The reverse direction needs the narrower fact: which actions a guard REQUIRES a parameter
+    // on (`DESTRUCTIVE_ACTIONS.has(action) && args.confirm !== true`). A guard that reads a key to
+    // refuse it (`source_workspace` outside the read actions) requires nothing.
+    const required = new Map();
+    for (const guard of guards) {
+      for (const action of guardedActions(guard)) {
+        const keys = required.get(action) ?? new Set();
+        for (const key of sourcesIn(routerBody, routerArgs, [guard])) keys.add(key);
+        required.set(action, keys);
+      }
+    }
+    const guardSymbol = `${router.getName()}.handleAction`;
 
     const bindings = [];
     for (const command of commands) {
@@ -704,7 +509,7 @@ const resourceManagerAdapter = {
           });
           continue;
         }
-        const dispatched = dispatchReads(context, project, route.handler, action);
+        const dispatched = dispatchReads(context, project, route.handler, action, values);
         if (dispatched.problem !== undefined) {
           bindings.push({
             ...binding,
@@ -720,10 +525,19 @@ const resourceManagerAdapter = {
           else if (keys === undefined) dropped.add(parameter);
           else if ([...keys].some((key) => dispatched.reads.has(key))) reads.add(parameter);
         }
+        const readKeys = new Map();
+        for (const [parameter, keys] of route.forwarded) {
+          if ([...keys].some((key) => dispatched.pathReads.has(key))) {
+            readKeys.set(parameter, dispatched.entry.symbol);
+          }
+        }
+        for (const parameter of required.get(action) ?? []) readKeys.set(parameter, guardSymbol);
+        for (const parameter of this.exempt) readKeys.delete(parameter);
         bindings.push({
           ...binding,
           entry: dispatched.entry,
           reads,
+          readKeys,
           dropped: { symbol: route.symbol, parameters: dropped },
         });
       }
@@ -796,9 +610,7 @@ function pipelineRequestReads(project, directory) {
       const initializer = declaration.getInitializer();
       if (!Node.isObjectBindingPattern(bound) || initializer === undefined) continue;
       if (!isRequest(unwrap(initializer))) continue;
-      for (const element of bound.getElements()) {
-        reads.add((element.getPropertyNameNode() ?? element.getNameNode()).getText());
-      }
+      for (const key of destructuredKeys(bound)) reads.add(key);
     }
   }
   return reads;
@@ -862,14 +674,22 @@ const promptEngineAdapter = {
       if (keys === undefined) dropped.add(parameter);
       else if ([...keys].some(readsOf)) reads.add(parameter);
     }
+    const registrationSymbol = `${host.getName()} (prompt_engine registration)`;
     const binding = {
       entry: entryOf(executor, 'executePromptCommand'),
       qualifier: ' or, once copied into its pipeline request, by engine/execution',
       reads,
-      dropped: { symbol: `${host.getName()} (prompt_engine registration)`, parameters: dropped },
+      dropped: { symbol: registrationSymbol, parameters: dropped },
     };
     return [
-      { ...binding, command: 'call', declaredBy: 'the contract', parameters: all },
+      {
+        ...binding,
+        command: 'call',
+        declaredBy: 'the contract',
+        parameters: all,
+        // What the registration copies on: anything it copies is read, declared or not.
+        readKeys: new Map([...forwarded.keys()].map((key) => [key, registrationSymbol])),
+      },
       ...commands.map((command) => ({
         ...binding,
         command: command.id,
@@ -883,11 +703,15 @@ const promptEngineAdapter = {
 const ADAPTERS = [systemControlAdapter, resourceManagerAdapter, promptEngineAdapter];
 
 /**
- * Every (command, parameter) a binding declares and its entry does not read.
+ * Every (command, parameter) a binding declares and its entry does not read — and, the reverse,
+ * every parameter its code reads that no command for it declares.
  *
  * A binding is one contract command resolved to the code that must read its parameters:
- * `{ command, declaredBy, parameters, entry: {file, symbol}, qualifier, reads }`, or
+ * `{ command, declaredBy, parameters, entry: {file, symbol}, qualifier, reads, readKeys }`, or
  * `{ command, problem }` when the command resolves to no code at all — a finding, not a skip.
+ * `readKeys` (parameter → the symbol that reads it) is what the code reads, declared or not;
+ * several contract commands can resolve to one `command` (`prompt:delete` from `common:delete`),
+ * so the reverse half compares it against the union of their declarations.
  */
 export function checkBindings(bindings) {
   const findings = [];
@@ -914,16 +738,55 @@ export function checkBindings(bindings) {
       });
     }
   }
+
+  const declaredFor = new Map();
+  for (const binding of bindings) {
+    if (binding.problem !== undefined) continue;
+    const declared = declaredFor.get(binding.command) ?? new Set();
+    for (const parameter of binding.parameters) declared.add(parameter);
+    declaredFor.set(binding.command, declared);
+  }
+  const reported = new Set();
+  for (const binding of bindings) {
+    if (binding.problem !== undefined || binding.readKeys === undefined) continue;
+    for (const [parameter, symbol] of binding.readKeys) {
+      const key = `${binding.command}/${parameter}`;
+      if (declaredFor.get(binding.command).has(parameter) || reported.has(key)) continue;
+      reported.add(key);
+      findings.push({
+        command: binding.command,
+        parameter,
+        reverse: true,
+        reason: `read by ${symbol} and declared by no command for ${binding.command}`,
+      });
+    }
+  }
   return { findings, verified };
 }
 
 /**
- * Findings whose only fix removes the parameter from the tool entirely: no other command of its
- * type declares it, so dropping it from this command's list leaves a declared name nothing may
- * send. Owner ruling R4 (2026-09-23) makes that a ruling of its own, so each waits here, stamped.
- * An entry that no longer reports is itself a finding — delete it in the commit that fixed it.
+ * Findings whose only fix is a contract change the owner decides, each stamped with the date it
+ * was measured and the observation that retires it. Forward: the fix removes the parameter from
+ * the tool entirely (R4, 2026-09-23). Reverse: declaring the read changes what the tool refuses
+ * for a caller who sends it elsewhere. An entry that no longer reports is itself a finding —
+ * delete it in the commit that fixed it.
  */
-const AWAITING_RULING = [];
+const AWAITING_RULING = [
+  {
+    tool: 'resource_manager',
+    command: 'prompt:update',
+    parameter: 'confirm',
+    asOf: '2026-10-05',
+    why:
+      'PromptLifecycleProcessor.updatePrompt requires confirm: true for tool_operation "remove", ' +
+      'which deletes tools/{id}/ directories. Declaring it on prompt:update makes the per-action refusal refuse confirm ' +
+      'on gate, framework and category update, where it is accepted and ignored today (64 unit ' +
+      'tests send confirm: true on every action, measured).',
+    flipsWhen:
+      'the owner rules whether confirm on a non-prompt update is refused; declare it on ' +
+      'prompt:update and delete this entry in that commit',
+  },
+];
 
 /** Splits `findings` into real ones and those an entry excuses; an unmatched entry is stale. */
 export function applyExceptions(tool, findings, entries) {
@@ -943,16 +806,23 @@ function report(adapter, findings, verified) {
       `❌ ${adapter.tool} ${finding.command}: '${finding.parameter}' — ${finding.reason}`
     );
   }
-  if (findings.length > 0) {
+  if (findings.some((finding) => finding.reverse !== true)) {
     console.error(
       `   A declared parameter the handler ignores is accepted and answers success for something ` +
         `that never ran. Read it where the operation dispatches, or drop it from the command's ` +
         `\`parameters\` in tooling/contracts/${adapter.contract}.`
     );
   }
+  if (findings.some((finding) => finding.reverse === true)) {
+    console.error(
+      `   A parameter the handler uses but its command never declares is one no caller can learn ` +
+        `of, and the per-action refusal reads the same lists. Declare it on the command in ` +
+        `tooling/contracts/${adapter.contract}, or stop reading it.`
+    );
+  }
   console.log(
-    `[validate-tool-parameter-reads] ${adapter.tool}: ${findings.length} unread declared ` +
-      `parameter(s), ${verified} proven read(s)`
+    `[validate-tool-parameter-reads] ${adapter.tool}: ${findings.length} unread declared or ` +
+      `undeclared read parameter(s), ${verified} proven read(s)`
   );
 }
 
@@ -1007,359 +877,16 @@ function runLive() {
   return ADAPTERS.map(checkTool).some((status) => status !== 0) ? 1 : 0;
 }
 
-const FIXTURE_ROUTER = `
-export class Router {
-  getActionHandler(action: string) {
-    switch (action) {
-      case 'demo':
-        return new DemoHandler(this);
-      default:
-        throw new Error('unknown');
-    }
-  }
-}
-`;
-
-/** `persistOnEnable`: whether `enable` forwards `persist`. `offReads`: whether `off` reads it back. */
-function fixtureHandler({ persistOnEnable, offReads }) {
-  return `
-class Base {
-  protected note(message: string) { return message; }
-}
-export class DemoHandler extends Base {
-  async execute(args: any) {
-    const operation = args.operation;
-    switch (operation) {
-      case 'enable':
-        this.note("'persist' is named here, in the enable case, and read nowhere");
-        return this.enable({ reason: args.reason${persistOnEnable ? ', persist: args.persist' : ''} });
-      case 'disable':
-        return this.disable({ reason: args.reason, persist: (args as { persist?: boolean }).persist });
-      case 'list':
-      case 'default':
-        return this.list(args);
-      default:
-        throw new Error("Unknown operation. 'persist' is spelled like this.");
-    }
-  }
-  private enable(options: { reason?: string; persist?: boolean }) {
-    return this.note(String(options.reason) + String(options.persist));
-  }
-  private disable(options: { reason?: string; persist?: boolean }) {
-    return ${offReads ? 'String(options.reason) + String(options.persist)' : "this.note(String(options.reason)) // 'persist' dropped"};
-  }
-  private list(input: any) {
-    const { show_details } = input;
-    return show_details;
-  }
-}
-`;
+function runSelfTest() {
+  return selfTest({
+    checkBindings,
+    applyExceptions,
+    adapters: {
+      systemControl: systemControlAdapter,
+      resourceManager: resourceManagerAdapter,
+      promptEngine: promptEngineAdapter,
+    },
+  });
 }
 
-const FIXTURE_COMMANDS = [
-  { id: 'demo:enable', parameters: ['action', 'operation', 'reason', 'persist'] },
-  { id: 'demo:disable', parameters: ['action', 'operation', 'reason', 'persist'] },
-  { id: 'demo:list', parameters: ['action', 'operation', 'show_details'] },
-];
-
-function runSystemControl(project, commands) {
-  return checkBindings(systemControlAdapter.bind({ project, routerPath: '/router.ts', commands }));
-}
-
-function runFixture(options) {
-  const project = new Project({ useInMemoryFileSystem: true });
-  project.createSourceFile('/router.ts', FIXTURE_ROUTER);
-  project.createSourceFile('/handler.ts', fixtureHandler(options));
-  return runSystemControl(project, FIXTURE_COMMANDS);
-}
-
-const keys = (result) => result.findings.map((f) => `${f.command}/${f.parameter}`).sort();
-
-function selfTestSystemControl() {
-  const failures = [];
-
-  // Planted: `enable` never copies `persist` (the #357 shape) and `disable` copies it into an
-  // object its callee ignores (the `status` include_history shape). The error message and the
-  // comment name `persist` — a name-based check would count those as reads.
-  const planted = runFixture({ persistOnEnable: false, offReads: false });
-  const expected = ['demo:disable/persist', 'demo:enable/persist'];
-  if (JSON.stringify(keys(planted)) !== JSON.stringify(expected)) {
-    failures.push(
-      `planted: expected ${expected.join(', ')}, got ${keys(planted).join(', ') || 'none'}`
-    );
-  }
-
-  // Twin, differing only in those two reads: must be clean, and prove every read it found —
-  // operation + reason + persist for enable and disable, operation + show_details for list.
-  const fixed = runFixture({ persistOnEnable: true, offReads: true });
-  if (fixed.findings.length !== 0)
-    failures.push(`fixed twin: expected none, got ${keys(fixed).join(', ')}`);
-  if (fixed.verified !== 8)
-    failures.push(`fixed twin: expected 8 proven reads, got ${fixed.verified}`);
-
-  // A command whose operation has no case and no default is a finding, not a skip.
-  const orphan = runSystemControl(
-    (() => {
-      const project = new Project({ useInMemoryFileSystem: true });
-      project.createSourceFile('/router.ts', FIXTURE_ROUTER);
-      project.createSourceFile(
-        '/handler.ts',
-        fixtureHandler({ persistOnEnable: true, offReads: true }).replace(
-          /default:\n\s*throw new Error\([^)]*\);/,
-          ''
-        )
-      );
-      return project;
-    })(),
-    [{ id: 'demo:missing', parameters: ['action', 'operation'] }]
-  );
-  if (orphan.findings.length !== 1 || orphan.findings[0].parameter !== 'operation') {
-    failures.push(
-      `orphan operation: expected one 'operation' finding, got ${keys(orphan).join(', ') || 'none'}`
-    );
-  }
-
-  return failures.map((failure) => `system_control: ${failure}`);
-}
-
-/** `helperReads`: whether the helper reads `severity`. `routerCopies`: whether `reason` is copied. */
-function resourceManagerFixture({ helperReads, routerCopies }) {
-  const project = new Project({ useInMemoryFileSystem: true });
-  project.createSourceFile(
-    '/ownership.ts',
-    `export const PARAMETER_OWNERS = { severity: ['demo'], detail: ['other'] };`
-  );
-  project.createSourceFile(
-    '/router.ts',
-    `
-export class Router {
-  private readonly demoHandler: DemoHandler;
-  async handleAction(args: any) {
-    if (args.confirm !== true) throw new Error('confirm');
-    this.log({ id: args.id, note: "'reason' is logged by name here" });
-    return this.routeToResource(args.resource_type, args);
-  }
-  private routeToResource(type: string, args: any) {
-    switch (type) {
-      case 'demo':
-        return this.routeToDemo(args);
-      default:
-        throw new Error('unknown');
-    }
-  }
-  private routeToDemo(args: any) {
-    const demoArgs: any = { action: args.action, id: args.id };
-    demoArgs.note = "'reason' is spelled here, in a copied value, and copied nowhere";
-    if (args.enforcement_mode) demoArgs.enforcementMode = args.enforcement_mode;
-    if (args.severity) demoArgs.severity = args.severity;
-    ${routerCopies ? 'if (args.reason) demoArgs.reason = args.reason;' : ''}
-    return this.demoHandler.handleAction(demoArgs, {});
-  }
-  private log(entry: unknown) { return entry; }
-}
-`
-  );
-  project.createSourceFile(
-    '/handler.ts',
-    `
-export class DemoHandler {
-  private readonly lifecycle: DemoProcessor;
-  async handleAction(args: any, _context: unknown) {
-    const action = args.action;
-    switch (action) {
-      case 'update':
-        return this.lifecycle.handleUpdate(args);
-      case 'inspect':
-        return this.lifecycle.handleInspect(args);
-      default:
-        throw new Error("Unknown action. 'severity' is spelled like this.");
-    }
-  }
-}
-export class DemoProcessor {
-  private readonly helper: DemoHelper;
-  handleUpdate(args: any) {
-    const { id } = args;
-    this.note("'severity' is named here, on update, and read nowhere");
-    return this.helper.apply(id, args);
-  }
-  handleInspect(args: any) {
-    return args.id;
-  }
-  private note(message: string) { return message; }
-}
-export class DemoHelper {
-  apply(id: string, input: any) {
-    return [id, input.enforcementMode${helperReads ? ', input.severity, input.reason' : ''}];
-  }
-}
-`
-  );
-  return checkBindings(
-    resourceManagerAdapter.bind({
-      project,
-      routerPath: '/router.ts',
-      commands: [
-        {
-          id: 'demo:update',
-          parameters: ['resource_type', 'action', 'id', 'severity', 'enforcement_mode', 'reason'],
-        },
-        {
-          id: 'common:inspect',
-          parameters: ['resource_type', 'action', 'id', 'detail', 'confirm'],
-        },
-      ],
-    })
-  );
-}
-
-function selfTestResourceManager() {
-  const failures = [];
-  // Planted: the helper the processor hands `args` to never reads `severity` (named only in a
-  // string, twice), and the router never copies `reason` (named only in a log line). `detail` is
-  // owned by another type, so `common:inspect` does not declare it for `demo`; `confirm` is the
-  // router's own guard; `enforcement_mode` reaches the helper renamed as `enforcementMode`.
-  const planted = resourceManagerFixture({ helperReads: false, routerCopies: false });
-  const expected = ['demo:update/reason', 'demo:update/severity'];
-  if (JSON.stringify(keys(planted)) !== JSON.stringify(expected)) {
-    failures.push(`planted: expected ${expected.join(', ')}, got ${keys(planted).join(', ')}`);
-  }
-  const dropped = planted.findings.find((finding) => finding.parameter === 'reason');
-  if (dropped !== undefined && !dropped.reason.includes('dropped by Router.routeToDemo')) {
-    failures.push(
-      `planted: 'reason' should be reported as dropped by the router: ${dropped.reason}`
-    );
-  }
-  // Twin, differing only in those two reads: clean, with every read proven — id, severity,
-  // enforcement_mode, reason on update; id and confirm on inspect.
-  const fixed = resourceManagerFixture({ helperReads: true, routerCopies: true });
-  if (fixed.findings.length !== 0) failures.push(`fixed twin: got ${keys(fixed).join(', ')}`);
-  if (fixed.verified !== 6)
-    failures.push(`fixed twin: expected 6 proven reads, got ${fixed.verified}`);
-  return failures.map((failure) => `resource_manager: ${failure}`);
-}
-
-/** `planted`: registration drops `inputs`, and no stage reads the `gates` request field. */
-function promptEngineFixture({ planted }) {
-  const project = new Project({ useInMemoryFileSystem: true });
-  project.createSourceFile(
-    '/index.ts',
-    `
-export class Tools {
-  private promptExecutor!: Executor;
-  register(target: any) {
-    target.registerTool('prompt_engine', {}, async (args: any, extra: unknown) => {
-      const trimmedCommand = args.command?.trim();
-      const normalizedArgs: any = {
-        ...(trimmedCommand ? { command: trimmedCommand } : {}),
-        ...(args.cancel !== undefined ? { cancel: args.cancel } : {}),
-        ...(args.options != null ? { options: args.options } : {}),
-        ${planted ? '' : '...(args.inputs != null ? { inputs: args.inputs } : {}),'}
-      };
-      if (args.gates != null) {
-        normalizedArgs.gates = args.gates.map((gate: unknown) => gate);
-      }
-      this.note("'inputs' is named here and copied nowhere");
-      return this.promptExecutor.executePromptCommand(normalizedArgs, extra);
-    });
-  }
-  private note(message: string) { return message; }
-}
-`
-  );
-  project.createSourceFile(
-    '/executor.ts',
-    `
-export class Executor {
-  async executePromptCommand(args: any, extra: any) {
-    if (args.cancel === true) return this.handleCancel();
-    const request = {
-      ...(args.command && { command: args.command }),
-      ...(args.options && { options: args.options }),
-      ...(args.inputs && { inputs: args.inputs }),
-      ...(args.gates !== undefined && { gates: args.gates }),
-    } as any;
-    return this.pipeline.execute(request, extra);
-  }
-  private handleCancel() { return 'cancelled'; }
-}
-`
-  );
-  project.createSourceFile(
-    '/engine/stage.ts',
-    `
-export class Stage {
-  execute(context: any) {
-    const { options } = context.mcpRequest;
-    return [context.mcpRequest.command, options, context.mcpRequest.inputs${
-      planted ? ', context.state.gates, "\'gates\' is named here"' : ', context.mcpRequest.gates'
-    }];
-  }
-}
-`
-  );
-  return checkBindings(
-    promptEngineAdapter.bind({
-      project,
-      routerPath: '/index.ts',
-      commands: [],
-      contract: {
-        parameters: ['command', 'cancel', 'options', 'inputs', 'gates'].map((name) => ({ name })),
-      },
-      pipelinePath: '/engine',
-    })
-  );
-}
-
-function selfTestPromptEngine() {
-  const failures = [];
-  // Planted: the registration allowlist never copies `inputs` (the hop `remainder`, `handoff` and
-  // `claim_token` were each lost at), and `gates` reaches the pipeline request but no stage reads
-  // it — the stage reads a `gates` off another object instead. Both are named in string literals.
-  // `cancel` is consumed by the executor itself.
-  const planted = promptEngineFixture({ planted: true });
-  const expected = ['call/gates', 'call/inputs'];
-  if (JSON.stringify(keys(planted)) !== JSON.stringify(expected)) {
-    failures.push(`planted: expected ${expected.join(', ')}, got ${keys(planted).join(', ')}`);
-  }
-  const fixed = promptEngineFixture({ planted: false });
-  if (fixed.findings.length !== 0) failures.push(`fixed twin: got ${keys(fixed).join(', ')}`);
-  if (fixed.verified !== 5)
-    failures.push(`fixed twin: expected 5 proven reads, got ${fixed.verified}`);
-  return failures.map((failure) => `prompt_engine: ${failure}`);
-}
-
-function selfTestExceptions() {
-  const entries = [
-    { tool: 'demo', command: 'a:b', parameter: 'x' },
-    { tool: 'demo', command: 'a:b', parameter: 'gone' },
-    { tool: 'other', command: 'a:b', parameter: 'y' },
-  ];
-  const findings = [
-    { command: 'a:b', parameter: 'x' },
-    { command: 'a:b', parameter: 'y' },
-  ];
-  const result = applyExceptions('demo', findings, entries);
-  const shape = JSON.stringify([
-    result.findings.map((f) => f.parameter),
-    result.excused.map((f) => f.parameter),
-    result.stale.map((e) => e.parameter),
-  ]);
-  return shape === JSON.stringify([['y'], ['x'], ['gone']])
-    ? []
-    : [`exceptions: an entry must excuse only its own tool's finding and go stale alone: ${shape}`];
-}
-
-function selfTest() {
-  const failures = [
-    ...selfTestExceptions(),
-    ...selfTestSystemControl(),
-    ...selfTestResourceManager(),
-    ...selfTestPromptEngine(),
-  ];
-  for (const failure of failures) console.error(`❌ self-test: ${failure}`);
-  if (failures.length === 0) console.log('[validate-tool-parameter-reads] self-test OK');
-  return failures.length > 0 ? 1 : 0;
-}
-
-process.exit(process.argv.includes('--self-test') ? selfTest() : runLive());
+process.exit(process.argv.includes('--self-test') ? runSelfTest() : runLive());
