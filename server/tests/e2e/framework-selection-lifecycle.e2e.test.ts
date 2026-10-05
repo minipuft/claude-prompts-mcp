@@ -295,6 +295,18 @@ const RADIANT_SECTIONS = [
   .map(([header, topic]) => `## ${header}\n${`This section covers ${topic}, in full. `.repeat(4)}`)
   .join('\n\n');
 
+/**
+ * What any framework renders: its block, its required sections, its guideline gate. Headings and
+ * section headers, never a framework's bare name: the framework-compliance guidance lists every
+ * framework by name under any of them.
+ */
+const FRAMEWORK_MARKERS = [
+  'Framework Active',
+  '**Required Sections**',
+  'Framework Guidelines',
+  'Framework Compliance',
+];
+
 const cleanups: Array<() => Promise<void>> = [];
 
 afterEach(async () => {
@@ -710,13 +722,6 @@ describe('P6.198: a framework override needs no system toggle on a step added mi
 describe('R158: the framework toggle decides a run at its first call (Streamable HTTP)', () => {
   const SECTIONS = RADIANT_SECTIONS;
   const PASS = 'GATE_REVIEW: PASS - ok';
-  /** What any framework renders: its block, its required sections, its guideline gate. */
-  const FRAMEWORK_MARKERS = [
-    'Framework Active',
-    '**Required Sections**',
-    'Framework Guidelines',
-    'Framework Compliance',
-  ];
   const STRUCTURAL_REVIEW = '**Structural Review Required**';
   const rendersNoFramework = (text: string) =>
     FRAMEWORK_MARKERS.filter((marker) => text.includes(marker));
@@ -820,6 +825,75 @@ describe('R158: the framework toggle decides a run at its first call (Streamable
     expect(run.contributedAnswered.text).toContain(STRUCTURAL_REVIEW);
   }, 120000);
 });
+
+/**
+ * P6.283. Since P6.270 a run started with the framework system disabled renders no framework, and
+ * that holds for a one-step run too: a plain `>>prompt` call (no chain) made with the system
+ * disabled renders no framework marker of any kind. Before the pin nothing covered it; P6.198
+ * had found the same call rendering the active framework's sections.
+ *
+ * PIN: the disabled single prompt renders none of the framework markers. CONTROL: the same prompt
+ * on a server with the system enabled renders the active framework's block and its sections, so
+ * the probe is shown to see a framework and the absence above means something.
+ */
+describe.each([
+  ['Streamable HTTP', startHttpSession],
+  ['STDIO', startStdioSession],
+] as const)(
+  'P6.283: a single prompt run honors the framework system toggle (%s)',
+  (_transport, starter) => {
+    async function sessionWithPrompt(): Promise<McpSession> {
+      const session = await start(starter, await newWorkspace());
+      const created = await session.callTool('resource_manager', {
+        resource_type: 'prompt',
+        action: 'create',
+        id: 'p283_single',
+        name: 'p283_single',
+        category: 'general',
+        description: 'A single prompt rendering under the active framework',
+        user_message_template: 'BODY-p283_single',
+      });
+      expect(created.isError).toBe(false);
+      return session;
+    }
+
+    /** What radiant, the configured default, renders into a single prompt: system prompt, sections. */
+    const RADIANT_MARKERS = [
+      'operating under the RADIANT Design Framework',
+      '`## Reference the Vision`',
+      '**Required Sections**',
+    ];
+    const found = (text: string, markers: readonly string[]) =>
+      markers.filter((marker) => text.includes(marker));
+
+    it('P6.283: a single prompt run with the framework system disabled renders no framework', async () => {
+      const session = await sessionWithPrompt();
+      const disabled = await session.callTool('system_control', {
+        action: 'framework',
+        operation: 'disable',
+        reason: 'P6.283',
+      });
+      expect(disabled.isError).toBe(false);
+
+      const run = await session.callTool('prompt_engine', { command: '>>p283_single' });
+
+      expect(run.isError).toBe(false);
+      expect(run.text).toContain('BODY-p283_single');
+      expect(found(run.text, FRAMEWORK_MARKERS)).toEqual([]);
+      expect(found(run.text, RADIANT_MARKERS)).toEqual([]);
+    }, 120000);
+
+    it('P6.283 control: the same prompt with the framework system enabled renders its framework', async () => {
+      const session = await sessionWithPrompt();
+
+      const run = await session.callTool('prompt_engine', { command: '>>p283_single' });
+
+      expect(run.isError).toBe(false);
+      expect(run.text).toContain('BODY-p283_single');
+      expect(found(run.text, RADIANT_MARKERS)).toEqual(RADIANT_MARKERS);
+    }, 120000);
+  }
+);
 
 /**
  * P6.284 / R176. MEASURED 2026-10-04 on `dbcc722c5` (driven by the twins below before the fix, both
