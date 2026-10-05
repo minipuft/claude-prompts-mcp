@@ -153,27 +153,31 @@ A framework's `toolDescriptions` entry is guidance, not a replacement. The serve
 
 ## Creating a Custom Framework
 
-Use the built-in `>>create_framework` prompt to design and validate a new framework:
+Use the built-in `>>create_framework` prompt to design a framework and prepare its create call:
 
 ```
-prompt_engine(command: ">>create_framework", options: {
+prompt_engine(command: ">>create_framework", inputs: {
   "name": "My Framework",
   "concept": "A framework for systematic API design"
 })
 ```
 
-The prompt guides you through designing phases, then validates against a **5-tier completeness score** (100% required):
+The prompt guides phase design and exposes current framework creation fields: gates, section
+requirements, argument/template suggestions, processing and execution steps, tool guidance,
+quality indicators, and optional judge settings. Its builder forwards supplied nested definitions
+without a separate completeness score; `valid:true` means the draft is ready to submit, not that
+the framework passed server validation. The server derives framework type and version.
 
-| Tier           | Weight | What It Checks                                                      |
-| -------------- | ------ | ------------------------------------------------------------------- |
-| **Foundation** | 30%    | id, name, system prompt guidance, phases (min 2)                    |
-| **Quality**    | 20%    | Framework gates with validation criteria                            |
-| **Authoring**  | 25%    | Required sections, argument suggestions, template hints             |
-| **Execution**  | 15%    | Processing steps with assertions, execution steps with dependencies |
-| **Advanced**   | 10%    | Tool description overlays, quality indicators, judge prompt         |
+Review the returned non-executing `draft.params`, then submit it through
+`resource_manager(resource_type:"framework", action:"create", ...)` when creation is authorized.
+Creation performs canonical validation; resolve refusals, inspect the write receipt and loaded
+framework, and smoke-render with `^<framework_id> >>your_prompt`. There is no framework
+`validate` action or creation preview. Existing authorization is sufficient; otherwise obtain
+approval of the concrete draft.
 
-> [!TIP]
-> Study the CAGEERF definition at `server/resources/frameworks/cageerf/` for a complete reference implementation covering all 5 tiers.
+Study `server/resources/frameworks/cageerf/` for examples of these capabilities. Select fields
+that serve the framework's purpose rather than filling a universal five-tier rubric. See
+[the script builder example](script-tools.md#real-world-example-framework-builder).
 
 ### File Structure
 

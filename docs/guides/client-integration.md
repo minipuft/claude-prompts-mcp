@@ -55,15 +55,15 @@ This guide shows you how to configure the `--client` launch flag so the server e
 
 3. **Restart your client so it relaunches the MCP server**
 
-4. **Verify profile resolution**
+4. **Verify the MCP connection**
 
    Run:
 
    ```text
-   system_control(action:"whoami")
+   system_control(action:"status")
    ```
 
-   Confirm `clientProfile` matches your chosen preset.
+   Confirm the attached server responds. This checks the connection; verify the client preset through the launch flag and handoff behavior below.
 
 5. **Verify handoff behavior**
 
@@ -82,6 +82,7 @@ This guide shows you how to configure the `--client` launch flag so the server e
 
 ## See Also
 
+- [Codex Development](codex-development.md) — refresh the local plugin with hooks active, or select engine-only and published modes
 - [Client Capabilities Reference](../reference/client-capabilities.md) — preset matrix and limitations
 - [Identity Scope](identity-scope.md) — profile resolution order and transport-level identity behavior
-- [MCP Tools](../reference/mcp-tools.md) — `system_control(action:"whoami")` reference
+- [MCP Tools](../reference/mcp-tools.md) — `system_control(action:"status")` reference
