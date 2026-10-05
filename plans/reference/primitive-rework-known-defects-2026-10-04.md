@@ -48,6 +48,14 @@ and not driven. Nothing here is scheduled. An item is picked up by opening it as
 
 ## Smaller findings
 
+- From slice 39: a request gate given as a criteria object with no target is bound to the
+  current step even when it declares `scope: chain`; only a registered gate named by id reaches
+  every step. A bare PASS on a review holding both a step's gates and its structural check closes
+  all of it, although the answer that failed the structural check was never sent again. A bare
+  PASS can still advance past an earlier open review in code; no client sequence reaches that
+  state, and one test pins it. `inlineDefinitionGateIds` is one flat list, so the first step also
+  resolves the inline definitions of later steps' prompts.
+
 - From slice 38: `isSameInlineGate` compares a hand-written field list over a temporary gate, the
   shape row 1.6 fixed elsewhere, so a new field is ignored when a re-declared inline gate is
   judged unchanged. `framework:switch` does not list `operation`, unlike the other `framework:*`

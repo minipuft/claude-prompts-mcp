@@ -241,7 +241,7 @@ export interface PipelineInternalState {
      * call held before the walk. Writer: `GateEnhancementService.enhanceChainSteps` (stage 11).
      * Reader: `GateEnhancementService.inheritedReviewGateIdsNow`, which walks the run again after
      * stage 16 applied a `remainder`, so an inserted node's review is computed against the run the
-     * remainder left (R81).
+     * remainder left (R81). Also read by `ensurePostAdvanceReview`, for `stepBindings`.
      */
     chainWalkSettings?: {
       readonly gatesConfig: GateSystemSettings | undefined;
@@ -249,6 +249,15 @@ export interface PipelineInternalState {
       readonly inlineDefinitionGateIds: readonly string[];
       readonly stepDefinitionIds: ReadonlyMap<string, string>;
       readonly seedGateIds: readonly string[];
+      /**
+       * Each gate a step of the walk declared inline, with the steps that declared it (R194): such
+       * a gate is that step's and reaches no other. A gate the call held before the walk (a
+       * request or framework gate) is run-wide and absent here, even when a step also names it.
+       */
+      readonly stepBindings: ReadonlyMap<
+        string,
+        ReadonlyArray<{ readonly nodeId?: string; readonly stepNumber: number }>
+      >;
     };
     /**
      * Gate IDs each DETACHED (`await: run`) step is reviewed against, keyed by its parse-time

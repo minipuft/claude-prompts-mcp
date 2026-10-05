@@ -312,6 +312,15 @@ const buildPipeline = (options: {
     declaredSectionsProvider: () => FRAMEWORK_SECTIONS,
   });
 
+  // Stage 19 is built before stage 16 because stage 16 takes its grader, as `pipeline-builder.ts`
+  // wires it (R170): an answer that fails its phase guard holds the step it answered.
+  const phaseGuardVerificationStage = new PhaseGuardVerificationStage(
+    () => GUARDED_FRAMEWORK_REGISTRY as never,
+    () => ({ mode: 'enforce', maxRetries: 2 }),
+    sessionStore,
+    logger
+  );
+
   const realStages: Record<string, PipelineStage> = {
     SessionManagement: new SessionManagementStage(sessionStore, logger),
     StepResponseCapture: new StepResponseCaptureStage(
@@ -323,7 +332,10 @@ const buildPipeline = (options: {
       sessionStore,
       new UnknownObservationProcessor(sessionStore, logger),
       logger,
-      { gateEnhancementService }
+      {
+        gateEnhancementService,
+        gradeAnswer: (context) => phaseGuardVerificationStage.gradeAnswer(context),
+      }
     ),
     StepExecution: new StepExecutionStage(
       chainExecutor,
@@ -333,12 +345,7 @@ const buildPipeline = (options: {
       undefined,
       recordStore
     ),
-    PhaseGuardVerification: new PhaseGuardVerificationStage(
-      () => GUARDED_FRAMEWORK_REGISTRY as never,
-      () => ({ mode: 'enforce', maxRetries: 2 }),
-      sessionStore,
-      logger
-    ),
+    PhaseGuardVerification: phaseGuardVerificationStage,
     GateReview: new GateReviewStage(chainExecutor, sessionStore, null, logger, undefined, {
       executionRecordStore: recordStore,
     }),
@@ -1228,10 +1235,14 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
 
   /**
    * Row 3.3: a verdict answers the review of the node that review GRADES, found through
-   * `resolveReviewTarget` — never a node derived from where the run stands. A structural review
-   * of step 1 opens after the capture already walked the run onto step 2; its PASS must close
-   * step 1's review and leave the run on step 2, still owing step 2's answer. Answered by
-   * position, the PASS walked the run past step 2 and completed it unanswered.
+   * `resolveReviewTarget` — never a node derived from where the run stands. Answered by position,
+   * a PASS walked the run past the step it should land on and completed it unanswered.
+   *
+   * P6.308 (2026-10-05). The harness grades an answer before the advance, as production does
+   * (R170), so a one-line answer HOLDS the step it answered. Three tests here opened step 1's
+   * structural review while the run stood on step 2, a state only an unwired grade produced and
+   * no client drive reaches (measured over Streamable HTTP); they are converted or removed by name
+   * in the P6.308 handoff.
    */
   describe('a verdict answers the review of the node it grades (row 3.3)', () => {
     const passOnly = 'GATE_REVIEW: PASS - the sections are there now';
@@ -1239,7 +1250,7 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
       '## Context\nThe situation, stated.\n\n## Analysis\nThe options, weighed.';
     const reviews = () => (onlySession() as unknown as ChainSession).reviews ?? {};
 
-    test('a review opened on step 1 while the run stands on step 2 is answered on step 1', async () => {
+    test("a bare PASS on step 1's held structural review lands on step 2, not past it", async () => {
       parsedSteps = parsedFrameworkChain;
       activeFramework = 'cageerf';
       blockingGates = false;
@@ -1247,7 +1258,7 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
       const chainId = onlySession().chainId;
 
       await pipeline.execute({ chain_id: chainId, user_response: 'one line' });
-      expect(onlySession().state.currentNodeId).toBe('review');
+      expect(onlySession().state.currentNodeId).toBe('draft');
       expect(Object.keys(reviews())).toEqual(['draft']);
 
       await pipeline.execute({ chain_id: chainId, gate_verdict: passOnly } as any);
@@ -1255,63 +1266,6 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
       expect(reviews()).toEqual({});
       expect(onlySession().state.currentNodeId).toBe('review');
       expect(onlySession().runStatus).not.toBe('completed');
-    });
-
-    test("the same PASS carrying step 2's answer closes step 1's review and still captures step 2", async () => {
-      parsedSteps = parsedFrameworkChain;
-      activeFramework = 'cageerf';
-      blockingGates = false;
-      await pipeline.execute({ command: `>>draft --> >>review` });
-      const chainId = onlySession().chainId;
-      await pipeline.execute({ chain_id: chainId, user_response: 'one line' });
-      expect(Object.keys(reviews())).toEqual(['draft']);
-
-      await pipeline.execute({
-        chain_id: chainId,
-        user_response: '## Context\nThe situation, stated.\n\n## Analysis\nThe options, weighed.',
-        gate_verdict: passOnly,
-      } as any);
-
-      // Step 1's PASS decided no advance of step 2: the capture advanced it, completing the run.
-      expect(reviews()).toEqual({});
-      expect(onlySession().state.currentNodeId).toBeNull();
-      expect(onlySession().runStatus).toBe('completed');
-    });
-
-    /**
-     * Rows 3.5 / 3.10 (R14): the store keeps one review per node, and an open review of an
-     * EARLIER node holds a capture (`reviewHolding`). Step 1's review still open after a FAIL
-     * holds step 2's capture: the answer is kept, the run does not walk past step 2, and step 1's
-     * review stays open beside it. Read only by the captured node's own review, the capture would
-     * advance and complete the run with step 1 still under review.
-     */
-    test("a FAIL on step 1's review carrying step 2's answer captures step 2 and leaves the run on it", async () => {
-      parsedSteps = parsedFrameworkChain;
-      activeFramework = 'cageerf';
-      blockingGates = false;
-      await pipeline.execute({ command: `>>draft --> >>review` });
-      const chainId = onlySession().chainId;
-      await pipeline.execute({ chain_id: chainId, user_response: 'one line' });
-      expect(Object.keys(reviews())).toEqual(['draft']);
-
-      await pipeline.execute({
-        chain_id: chainId,
-        user_response: '## Context\nThe situation, stated.\n\n## Analysis\nThe options, weighed.',
-        gate_verdict: 'GATE_REVIEW: FAIL - step 1 still lacks its sections',
-      } as any);
-
-      expect(Object.keys(reviews())).toEqual(['draft']);
-      expect(reviews()['draft']?.attemptCount).toBe(1);
-      expect(onlySession().state.currentNodeId).toBe('review');
-      expect(onlySession().runStatus).not.toBe('completed');
-      expect(sessionStore.getStepState(onlySession().sessionId, 'review')?.isPlaceholder).toBe(
-        false
-      );
-
-      // A later PASS on step 1 closes its review and opens nothing in its place.
-      await pipeline.execute({ chain_id: chainId, gate_verdict: passOnly } as any);
-      expect(reviews()).toEqual({});
-      expect(onlySession().state.currentNodeId).toBe('review');
     });
 
     /**
@@ -1359,14 +1313,18 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
     });
 
     /**
-     * P6.25: two step reviews open through the pipeline, with no review written by hand. Step 1's
-     * one-line answer is captured and the run advances onto step 2; stage 16's
-     * `ensurePostAdvanceReview` opens step 2's review for the gate that targets it, then stage 19
-     * grades step 1's answer and opens its structural review. Both open on ONE call because an
-     * open review of an earlier node holds every later advance (`reviewHolding`). A trailer naming
-     * step 1 answers its review and leaves step 2's open.
+     * P6.308: the run never stands past an open review of an earlier step (`reviewHolding`).
+     * Every call is read as ONE value: where the run stands, its open reviews by kind, and the
+     * open reviews of nodes before the one it stands on, which must stay empty. A gate targets
+     * step 2, so the post-advance path (`ensurePostAdvanceReview`, P6.25) opens step 2's review
+     * once step 1 is answered in full.
+     *
+     * With the grade unwired (the harness before P6.308), step 1's one-line answer advanced the
+     * run onto step 2 and stage 19 then opened step 1's structural review behind it, beside step
+     * 2's gate review; a bare PASS then answered step 2's and walked the run on to step 3 with
+     * step 1's still open (the P6.25 handoff). Graded before the advance, the answer holds step 1.
      */
-    test("two step reviews open through the pipeline: step 2's after the advance, step 1's on its grade", async () => {
+    test('an answer failing its phase guard holds its step; the run never stands past an open review', async () => {
       parsedSteps = parsedThreeStepFrameworkChain;
       activeFramework = 'cageerf';
       const step2Gate = gateRegistry.createTemporaryGate({
@@ -1379,30 +1337,46 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
         source: 'manual',
         target_step_id: 'analyze',
       });
-      // Stage 11's walk scopes no gate to step 1, the step the first two calls start on.
+      // Stage 11's walk scopes no gate to the step a call starts on.
       gateSelection = { accumulated: [step2Gate], review: [] };
       await pipeline.execute({ command: `>>draft --> >>analyze --> >>review` });
       const chainId = onlySession().chainId;
-      expect(reviews()).toEqual({});
 
-      await pipeline.execute({ chain_id: chainId, user_response: 'one line' });
-
-      expect(onlySession().state.currentNodeId).toBe('analyze');
-      expect(reviews()['analyze']).toMatchObject({ kind: 'gate', gateIds: [step2Gate] });
-      expect(reviews()['draft']).toMatchObject({
-        kind: 'structural',
-        gateIds: ['__phase_guard__'],
+      /** Open reviews of nodes BEFORE the one the run stands on: the invariant's subject. */
+      const behindRun = (): string[] => {
+        const session = onlySession() as unknown as ChainSession;
+        const order = session.state.nodes.map((node) => node.id);
+        const current = session.state.currentNodeId;
+        const position = current === null ? order.length : order.indexOf(current);
+        return Object.values(session.reviews ?? {})
+          .filter((review) => review.kind !== 'detached' && order.indexOf(review.nodeId) < position)
+          .map((review) => review.nodeId);
+      };
+      const observe = () => ({
+        current: onlySession().state.currentNodeId,
+        reviews: Object.fromEntries(
+          Object.entries(reviews()).map(([nodeId, review]) => [nodeId, review.kind])
+        ),
+        behind: behindRun(),
       });
+      const calls: Array<Record<string, unknown>> = [
+        { user_response: 'one line' },
+        { gate_verdict: passOnly },
+        { user_response: 'one line' },
+        { user_response: sectionedAnswer, gate_verdict: passOnly },
+      ];
+      const observed = [];
+      for (const call of calls) {
+        await pipeline.execute({ chain_id: chainId, ...call } as any);
+        observed.push(observe());
+      }
 
-      await pipeline.execute({
-        chain_id: chainId,
-        user_response: `${sectionedAnswer}\n\nHANDOFF RESULT\nnode: draft`,
-        gate_verdict: passOnly,
-      } as any);
-
-      expect(Object.keys(reviews())).toEqual(['analyze']);
-      expect(reviews()['analyze']?.attemptCount).toBe(0);
-      expect(onlySession().state.currentNodeId).toBe('analyze');
+      expect(observed).toEqual([
+        { current: 'draft', reviews: { draft: 'structural' }, behind: [] },
+        { current: 'analyze', reviews: { analyze: 'gate' }, behind: [] },
+        { current: 'analyze', reviews: { analyze: 'gate' }, behind: [] },
+        { current: 'review', reviews: {}, behind: [] },
+      ]);
     });
 
     /**
@@ -1532,54 +1506,16 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
 
     /**
      * Row 3.15: a PASS closing step N's structural review names THAT node, and stage 19 skips
-     * grading only it. The next step's answer sent on the verdict's own call is captured there
-     * and is graded like any answer; skipped on a per-call boolean, it went ungraded.
+     * grading only it. Its two tests sent step 2's answer with step 1's PASS while step 1's review
+     * was open behind the run, which only the unwired grade produced (P6.308); graded before the
+     * advance, the run stands on step 1, so the answer on that call is step 1's re-answer, the
+     * case this control pins.
      */
     describe('a verdict closing a structural review leaves the next step graded (row 3.15)', () => {
-      const sectioned = '## Context\nThe situation, stated.\n\n## Analysis\nThe options, weighed.';
       const stage19Exit = () =>
         (logger.debug as jest.Mock).mock.calls
           .filter((call) => call[0] === '[PhaseGuardVerification] Complete')
           .at(-1)?.[1];
-      /** Step 1 answered in one line, so stage 19 opens its structural review; then the verdict. */
-      const passStep1With = async (step2Answer: string) => {
-        parsedSteps = () =>
-          parsedThreeStepChain().map((step) => ({
-            ...step,
-            frameworkContext: parsedFrameworkChain()[0]?.frameworkContext,
-          }));
-        activeFramework = 'cageerf';
-        blockingGates = false;
-        await pipeline.execute({ command: `>>draft --> >>analyze --> >>review` });
-        const { chainId } = onlySession();
-        await pipeline.execute({ chain_id: chainId, user_response: 'one line' });
-        expect(onlySession().state.currentNodeId).toBe('analyze');
-        expect(reviews()['draft']?.gateIds).toEqual(['__phase_guard__']);
-
-        await pipeline.execute({
-          chain_id: chainId,
-          user_response: step2Answer,
-          gate_verdict: passOnly,
-        } as any);
-        return reviews();
-      };
-
-      test("step 2's one-line answer sent with step 1's PASS opens step 2's structural review", async () => {
-        const after = await passStep1With('one line');
-
-        expect(Object.keys(after)).toEqual(['analyze']);
-        expect(after['analyze']?.gateIds).toEqual(['__phase_guard__']);
-        expect(after['analyze']?.metadata?.['failedPhases']).toEqual(['context', 'analysis']);
-        expect(stage19Exit()).toMatchObject({ passed: false, createdPendingReview: true });
-      });
-
-      test("TWIN: step 2's sectioned answer sent with step 1's PASS is graded and passes", async () => {
-        const after = await passStep1With(sectioned);
-
-        expect(after).toEqual({});
-        expect(stage19Exit()).toEqual({ passed: true, phases: 2, mergedIntoGateReview: false });
-        expect(onlySession().state.currentNodeId).toBe('review');
-      });
 
       test("CONTROL: a PASS on step 1's held review with its own re-answer grades nothing", async () => {
         parsedSteps = parsedFrameworkChain;
