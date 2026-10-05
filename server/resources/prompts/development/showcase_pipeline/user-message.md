@@ -1,1 +1,0 @@
-Produce a silent outward-facing motion showcase for {{brief}}. Respect {{constraints}}. Write production artifacts only under {{output_root}} and implement only the exact caller-owned files: {{files | default('none: discovery-only')}}. The client executes these seven steps and the planner judges handoffs.
