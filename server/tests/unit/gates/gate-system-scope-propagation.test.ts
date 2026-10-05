@@ -72,6 +72,19 @@ describe('LightweightGateSystem scope propagation', () => {
     expect(spy.enabledScopes[0]).toEqual({ workspaceId: 'ws-alpha' });
   });
 
+  test('reads the scope a caller passes over the configured one (P6.292)', () => {
+    const gateSystem = createGateSystem();
+    const spy = createSpyStore();
+
+    gateSystem.setGateStateStore(spy.store, { workspaceId: 'ws-alpha' });
+
+    // Gate enhancement reads the switch for the REQUEST's scope: over HTTP a workspace header's
+    // toggle is that workspace's row, not the launch workspace's.
+    gateSystem.isGateSystemEnabled({ workspaceId: 'ws-request' });
+
+    expect(spy.enabledScopes).toEqual([{ workspaceId: 'ws-request' }]);
+  });
+
   test('omits scope when none is configured, rather than inventing one', () => {
     const gateSystem = createGateSystem();
     const spy = createSpyStore();

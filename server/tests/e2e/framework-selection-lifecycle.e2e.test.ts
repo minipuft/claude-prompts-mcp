@@ -544,6 +544,9 @@ describe('framework selection when the selected framework goes away (Streamable 
  * it "**<name> Framework Guidelines:**". ReACT alone rendered its line bare, because the heading
  * replace matched the upper-cased identifier (`REACT`) case-sensitively against the authored
  * `- ReACT:`. Both renders now carry the same section shape, compared as one value.
+ *
+ * P6.291 / R179 (2026-10-04): the shape grew the guidance's three generic lines, which only the
+ * last-listed framework (SCAMPER) used to receive.
  */
 describe('P6.154: the framework-compliance title names no framework (Streamable HTTP)', () => {
   const COMPLIANCE_PROMPT = 'p154_analysis';
@@ -600,8 +603,16 @@ describe('P6.154: the framework-compliance title names no framework (Streamable 
     expect(control.isError).toBe(false);
     expect(complianceTitles(control.text)).toEqual(['### Framework Compliance']);
     expect(control.text).toContain('**CAGEERF Framework Guidelines:**');
-    // P6.267: one section shape under either framework.
-    expect(complianceShape(react.text)).toEqual(['title', 'guidelines-heading', 'item']);
+    // P6.267: one section shape under either framework. P6.291: that shape is the framework's
+    // own line followed by the guidance's three generic lines, for every framework.
+    expect(complianceShape(react.text)).toEqual([
+      'title',
+      'guidelines-heading',
+      'item',
+      'item',
+      'item',
+      'item',
+    ]);
     expect(complianceShape(control.text)).toEqual(complianceShape(react.text));
   }, 90000);
 });
